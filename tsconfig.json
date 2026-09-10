@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "composite": false,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@sqlbraid/core": ["packages/core/src/index.ts"],
+      "@sqlbraid/template": ["packages/template/src/index.ts"],
+      "@sqlbraid/schema": ["packages/schema/src/index.ts"],
+      "@sqlbraid/compiler": ["packages/compiler/src/index.ts"],
+      "@sqlbraid/ast": ["packages/ast/src/index.ts"],
+      "@sqlbraid/runtime": ["packages/runtime/src/index.ts"],
+      "@sqlbraid/operations": ["packages/operations/src/index.ts"],
+      "@sqlbraid/language-server": ["packages/language-server/src/index.ts"]
+      ,"@sqlbraid/cli": ["packages/cli/src/index.ts"]
+    }
+  },
+  "include": ["packages/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

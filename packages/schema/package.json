@@ -1,0 +1,11 @@
+{
+  "name": "@sqlbraid/schema",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "../../dist/packages/schema/src/index.d.ts",
+      "import": "../../dist/packages/schema/src/index.js"
+    }
+  }
+}

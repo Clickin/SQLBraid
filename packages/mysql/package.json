@@ -1,0 +1,9 @@
+{
+  "name": "@sqlbraid/mysql",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": { "types": "../../dist/packages/mysql/src/index.d.ts", "import": "../../dist/packages/mysql/src/index.js" },
+    "./mysql2": { "types": "../../dist/packages/mysql/src/mysql2.d.ts", "import": "../../dist/packages/mysql/src/mysql2.js" }
+  }
+}

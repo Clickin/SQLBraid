@@ -1,0 +1,11 @@
+{
+  "name": "@sqlbraid/operations",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "../../dist/packages/operations/src/index.d.ts",
+      "import": "../../dist/packages/operations/src/index.js"
+    }
+  }
+}

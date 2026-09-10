@@ -1,0 +1,14 @@
+{
+  "name": "@sqlbraid/runtime",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "../../dist/packages/runtime/src/index.d.ts",
+      "import": "../../dist/packages/runtime/src/index.js"
+    }
+  }
+}

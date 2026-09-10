@@ -1,0 +1,9 @@
+{
+  "name": "@sqlbraid/postgres",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": { "types": "../../dist/packages/postgres/src/index.d.ts", "import": "../../dist/packages/postgres/src/index.js" },
+    "./pg": { "types": "../../dist/packages/postgres/src/pg.d.ts", "import": "../../dist/packages/postgres/src/pg.js" }
+  }
+}

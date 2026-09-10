@@ -1,0 +1,15 @@
+{
+  "name": "@sqlbraid/language-server",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@sqlbraid/compiler": "workspace:*",
+    "@sqlbraid/schema": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "../../dist/packages/language-server/src/index.d.ts",
+      "import": "../../dist/packages/language-server/src/index.js"
+    }
+  }
+}

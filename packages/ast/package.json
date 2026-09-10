@@ -1,0 +1,11 @@
+{
+  "name": "@sqlbraid/ast",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "../../dist/packages/ast/src/index.d.ts",
+      "import": "../../dist/packages/ast/src/index.js"
+    }
+  }
+}

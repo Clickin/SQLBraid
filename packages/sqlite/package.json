@@ -1,0 +1,9 @@
+{
+  "name": "@sqlbraid/sqlite",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": { "types": "../../dist/packages/sqlite/src/index.d.ts", "import": "../../dist/packages/sqlite/src/index.js" },
+    "./node-sqlite": { "types": "../../dist/packages/sqlite/src/node-sqlite.d.ts", "import": "../../dist/packages/sqlite/src/node-sqlite.js" }
+  }
+}
