@@ -2,10 +2,15 @@
   "name": "@sqlbraid/ast",
   "version": "0.1.0",
   "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "dependencies": {
+    "@sqlbraid/schema": "workspace:*"
+  },
   "exports": {
     ".": {
-      "types": "../../dist/packages/ast/src/index.d.ts",
-      "import": "../../dist/packages/ast/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   }
 }

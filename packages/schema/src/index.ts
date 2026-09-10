@@ -6,7 +6,7 @@ export interface ServerEvidence {
   readonly version?: string;
   readonly majorVersion?: number;
   readonly product?: string;
-  readonly capabilities?: Readonly<Record<string, boolean | string | number>>;
+  readonly capabilities?: Readonly<Record<string, boolean | string | number | readonly string[]>>;
   readonly [key: string]: unknown;
 }
 
@@ -17,6 +17,7 @@ export interface SnapshotMetadata {
   readonly typePolicyHash?: string;
   readonly grammarRevision?: string;
   readonly introspectionScope?: string;
+  readonly completeness?: "complete" | "partial" | "unknown";
   readonly [key: string]: unknown;
 }
 
@@ -92,6 +93,7 @@ export interface RoutineArgument {
   readonly type: string;
   readonly tsType?: string;
   readonly nullable?: boolean;
+  readonly hasDefault?: boolean;
   readonly [key: string]: unknown;
 }
 
@@ -140,6 +142,11 @@ export interface SnapshotDrift {
   readonly after: unknown;
 }
 
+export interface SchemaInspector {
+  readonly dialect: string;
+  inspect(): Promise<SchemaSnapshot>;
+}
+
 export class SnapshotValidationError extends Error {
   readonly diagnostics: readonly SnapshotDiagnostic[];
 
@@ -150,51 +157,147 @@ export class SnapshotValidationError extends Error {
   }
 }
 
-function sortedRecord<T>(record: Readonly<Record<string, T>>): Record<string, T> {
-  return Object.fromEntries(Object.keys(record).sort().map((key) => [key, record[key]]));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeSnapshot(snapshot: SchemaSnapshot): SchemaSnapshot {
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function compareKeys(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function add(diagnostics: SnapshotDiagnostic[], code: string, message: string, path: string): void {
+  diagnostics.push({ code, message, path });
+}
+
+function scanSnapshotValues(value: unknown, path: string, diagnostics: SnapshotDiagnostic[]): void {
+  if (typeof value === "number" && !Number.isFinite(value)) { add(diagnostics, "SNAPSHOT_NUMBER", "Snapshot numbers must be finite.", path); return; }
+  if (typeof value === "bigint" || typeof value === "function" || typeof value === "symbol") { add(diagnostics, "SNAPSHOT_VALUE", `Unsupported snapshot value: ${typeof value}.`, path); return; }
+  if (Array.isArray(value)) { value.forEach((entry, index) => scanSnapshotValues(entry, `${path}[${index}]`, diagnostics)); return; }
+  if (isRecord(value)) for (const [key, entry] of Object.entries(value)) scanSnapshotValues(entry, path ? `${path}.${key}` : key, diagnostics);
+}
+
+function validateColumn(value: unknown, path: string, diagnostics: SnapshotDiagnostic[]): void {
+  if (!isRecord(value)) { add(diagnostics, "SNAPSHOT_COLUMN", "Column must be an object.", path); return; }
+  if (typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_COLUMN_NAME", "Column name must be non-empty.", `${path}.name`);
+  if (!isFiniteNumber(value.ordinal) || !Number.isInteger(value.ordinal) || value.ordinal < 0) add(diagnostics, "SNAPSHOT_COLUMN_ORDINAL", "Column ordinal must be a non-negative integer.", `${path}.ordinal`);
+  if (typeof value.type !== "string" || !value.type) add(diagnostics, "SNAPSHOT_COLUMN_TYPE", "Column type must be non-empty.", `${path}.type`);
+  if (typeof value.nullable !== "boolean") add(diagnostics, "SNAPSHOT_COLUMN_NULLABLE", "Column nullable must be boolean.", `${path}.nullable`);
+}
+
+function validateRelation(value: unknown, path: string, diagnostics: SnapshotDiagnostic[]): void {
+  if (!isRecord(value)) { add(diagnostics, "SNAPSHOT_RELATION", "Relation must be an object.", path); return; }
+  if (typeof value.identity !== "string" || !value.identity) add(diagnostics, "SNAPSHOT_RELATION_ID", "Relation identity must be non-empty.", `${path}.identity`);
+  if (typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_RELATION_NAME", "Relation name must be non-empty.", `${path}.name`);
+  if (!["table", "view", "materialized", "foreign", "virtual", "unknown"].includes(String(value.kind))) add(diagnostics, "SNAPSHOT_RELATION_KIND", "Relation kind is invalid.", `${path}.kind`);
+  if (!Array.isArray(value.columns)) { add(diagnostics, "SNAPSHOT_RELATION_COLUMNS", "Relation columns must be an array.", `${path}.columns`); return; }
+  const names = new Set<string>();
+  const ordinals = new Set<number>();
+  value.columns.forEach((column, index) => {
+    validateColumn(column, `${path}.columns[${index}]`, diagnostics);
+    if (!isRecord(column)) return;
+    if (typeof column.name === "string" && names.has(column.name)) add(diagnostics, "SNAPSHOT_DUPLICATE_COLUMN", `Duplicate column: ${column.name}.`, `${path}.columns[${index}].name`);
+    if (typeof column.name === "string") names.add(column.name);
+    if (isFiniteNumber(column.ordinal) && ordinals.has(column.ordinal)) add(diagnostics, "SNAPSHOT_DUPLICATE_ORDINAL", `Duplicate column ordinal: ${column.ordinal}.`, `${path}.columns[${index}].ordinal`);
+    if (isFiniteNumber(column.ordinal)) ordinals.add(column.ordinal);
+  });
+}
+
+function validateRoutine(value: unknown, path: string, diagnostics: SnapshotDiagnostic[]): void {
+  if (!isRecord(value)) { add(diagnostics, "SNAPSHOT_ROUTINE", "Routine must be an object.", path); return; }
+  if (typeof value.identity !== "string" || !value.identity) add(diagnostics, "SNAPSHOT_ROUTINE_ID", "Routine identity must be non-empty.", `${path}.identity`);
+  if (typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_ROUTINE_NAME", "Routine name must be non-empty.", `${path}.name`);
+  if (!["function", "procedure", "aggregate", "window"].includes(String(value.kind))) add(diagnostics, "SNAPSHOT_ROUTINE_KIND", "Routine kind is invalid.", `${path}.kind`);
+  if (!Array.isArray(value.arguments)) add(diagnostics, "SNAPSHOT_ROUTINE_ARGS", "Routine arguments must be an array.", `${path}.arguments`);
+  else value.arguments.forEach((argument, index) => {
+    if (!isRecord(argument)) { add(diagnostics, "SNAPSHOT_ARGUMENT", "Routine argument must be an object.", `${path}.arguments[${index}]`); return; }
+    if (!["in", "out", "inout", "variadic"].includes(String(argument.mode))) add(diagnostics, "SNAPSHOT_ARGUMENT_MODE", "Routine argument mode is invalid.", `${path}.arguments[${index}].mode`);
+    if (typeof argument.type !== "string" || !argument.type) add(diagnostics, "SNAPSHOT_ARGUMENT_TYPE", "Routine argument type must be non-empty.", `${path}.arguments[${index}].type`);
+  });
+  if (!isRecord(value.result)) add(diagnostics, "SNAPSHOT_RESULT", "Routine result must be an object.", `${path}.result`);
+  else if (["table", "record", "set"].includes(String(value.result.kind)) && value.result.columns !== undefined) {
+    if (!Array.isArray(value.result.columns)) add(diagnostics, "SNAPSHOT_RESULT_COLUMNS", "Routine result columns must be an array.", `${path}.result.columns`);
+    else value.result.columns.forEach((column, index) => validateColumn(column, `${path}.result.columns[${index}]`, diagnostics));
+  }
+}
+
+function sortedRecord<T>(record: Readonly<Record<string, T>>): Record<string, T> {
+  return Object.fromEntries(Object.keys(record).sort(compareKeys).map((key) => [key, record[key]]));
+}
+
+function normalizeSnapshot(snapshot: SchemaSnapshot, includeVolatile: boolean): SchemaSnapshot {
   const relations: Record<string, RelationSnapshot> = {};
-  for (const [key, relation] of Object.entries(snapshot.relations).sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [key, relation] of Object.entries(snapshot.relations).sort(([left], [right]) => compareKeys(left, right))) {
     relations[key] = {
       ...relation,
-      columns: [...relation.columns].sort((left, right) => left.ordinal - right.ordinal),
-      constraints: relation.constraints ? [...relation.constraints].sort((left, right) => left.name.localeCompare(right.name)) : undefined,
-      indexes: relation.indexes ? [...relation.indexes].sort((left, right) => left.name.localeCompare(right.name)) : undefined,
+      columns: [...relation.columns].sort((left, right) => left.ordinal - right.ordinal || compareKeys(left.name, right.name)),
+      constraints: relation.constraints ? [...relation.constraints].sort((left, right) => compareKeys(left.name, right.name)) : undefined,
+      indexes: relation.indexes ? [...relation.indexes].sort((left, right) => compareKeys(left.name, right.name)) : undefined,
     };
   }
   const routines: Record<string, readonly RoutineSnapshot[]> = {};
-  for (const [key, values] of Object.entries(snapshot.routines).sort(([left], [right]) => left.localeCompare(right))) routines[key] = [...values].sort((left, right) => left.identity.localeCompare(right.identity));
-  return { ...snapshot, namespaces: sortedRecord(snapshot.namespaces), types: sortedRecord(snapshot.types), relations, routines };
+  for (const [key, values] of Object.entries(snapshot.routines).sort(([left], [right]) => compareKeys(left, right))) routines[key] = [...values].sort((left, right) => compareKeys(left.identity, right.identity));
+  const metadata = includeVolatile ? snapshot.metadata : Object.fromEntries(Object.entries(snapshot.metadata).filter(([key]) => !["generatedAt", "observedAt", "capturedAt"].includes(key)).sort(([left], [right]) => compareKeys(left, right)));
+  return { ...snapshot, metadata, namespaces: sortedRecord(snapshot.namespaces), types: sortedRecord(snapshot.types), relations, routines };
 }
 
 function canonicalValue(value: unknown): string {
-  if (value === null || typeof value === "boolean" || typeof value === "number" || typeof value === "string") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalValue).join(",")}]`;
-  if (typeof value === "object" && value !== null) {
-    const entries = Object.entries(value).filter(([, entry]) => entry !== undefined).sort(([left], [right]) => left.localeCompare(right));
-    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalValue(entry)}`).join(",")}}`;
+  if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("Snapshot contains a non-finite number.");
+    return JSON.stringify(value);
   }
+  if (Array.isArray(value)) return `[${value.map(canonicalValue).join(",")}]`;
+  if (isRecord(value)) return `{${Object.entries(value).filter(([, entry]) => entry !== undefined).sort(([left], [right]) => compareKeys(left, right)).map(([key, entry]) => `${JSON.stringify(key)}:${canonicalValue(entry)}`).join(",")}}`;
   throw new TypeError(`Snapshot contains unsupported value: ${typeof value}`);
 }
 
 export function validateSnapshot(snapshot: unknown): asserts snapshot is SchemaSnapshot {
   const diagnostics: SnapshotDiagnostic[] = [];
-  if (!snapshot || typeof snapshot !== "object") throw new SnapshotValidationError([{ code: "SNAPSHOT_OBJECT", message: "Snapshot must be an object." }]);
-  const candidate = snapshot as Partial<SchemaSnapshot>;
-  if (candidate.formatVersion !== CURRENT_FORMAT_VERSION) diagnostics.push({ code: "SNAPSHOT_VERSION", message: `Unsupported snapshot format version: ${String(candidate.formatVersion)}.`, path: "formatVersion" });
-  if (typeof candidate.dialect !== "string" || !candidate.dialect) diagnostics.push({ code: "SNAPSHOT_DIALECT", message: "Snapshot dialect must be a non-empty string.", path: "dialect" });
-  if (typeof candidate.dialectVersion !== "string" || !candidate.dialectVersion) diagnostics.push({ code: "SNAPSHOT_DIALECT_VERSION", message: "Snapshot dialectVersion must be a non-empty string.", path: "dialectVersion" });
-  for (const field of ["server", "namespaces", "types", "relations", "routines", "metadata"] as const) {
-    if (!candidate[field] || typeof candidate[field] !== "object") diagnostics.push({ code: "SNAPSHOT_FIELD", message: `Snapshot field ${field} must be an object.`, path: field });
+  if (!isRecord(snapshot)) throw new SnapshotValidationError([{ code: "SNAPSHOT_OBJECT", message: "Snapshot must be an object." }]);
+  scanSnapshotValues(snapshot, "", diagnostics);
+  if (snapshot.formatVersion !== CURRENT_FORMAT_VERSION) add(diagnostics, "SNAPSHOT_VERSION", `Unsupported snapshot format version: ${String(snapshot.formatVersion)}.`, "formatVersion");
+  if (typeof snapshot.dialect !== "string" || !snapshot.dialect) add(diagnostics, "SNAPSHOT_DIALECT", "Snapshot dialect must be a non-empty string.", "dialect");
+  if (typeof snapshot.dialectVersion !== "string" || !snapshot.dialectVersion) add(diagnostics, "SNAPSHOT_DIALECT_VERSION", "Snapshot dialectVersion must be a non-empty string.", "dialectVersion");
+  for (const field of ["server", "namespaces", "types", "relations", "routines", "metadata"] as const) if (!isRecord(snapshot[field])) add(diagnostics, "SNAPSHOT_FIELD", `Snapshot field ${field} must be an object.`, field);
+  if (isRecord(snapshot.namespaces)) for (const [key, value] of Object.entries(snapshot.namespaces)) if (!isRecord(value) || typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_NAMESPACE", `Invalid namespace entry: ${key}.`, `namespaces.${key}`);
+  const identities = new Set<string>();
+  if (isRecord(snapshot.types)) for (const [key, value] of Object.entries(snapshot.types)) {
+    if (!isRecord(value)) { add(diagnostics, "SNAPSHOT_TYPE", "Type entry must be an object.", `types.${key}`); continue; }
+    if (typeof value.identity !== "string" || !value.identity || typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_TYPE_ID", "Type identity and name must be non-empty.", `types.${key}`);
+    else if (identities.has(value.identity)) add(diagnostics, "SNAPSHOT_DUPLICATE_IDENTITY", `Duplicate type identity: ${value.identity}.`, `types.${key}.identity`);
+    else identities.add(value.identity);
+    if (!["scalar", "enum", "domain", "composite", "array", "range", "multirange", "opaque", "unknown"].includes(String(value.kind))) add(diagnostics, "SNAPSHOT_TYPE_KIND", "Type kind is invalid.", `types.${key}.kind`);
+    if (value.values !== undefined && (!Array.isArray(value.values) || value.values.some((entry) => typeof entry !== "string"))) add(diagnostics, "SNAPSHOT_TYPE_VALUES", "Type values must be an array of strings.", `types.${key}.values`);
+  }
+  const relationIdentities = new Set<string>();
+  if (isRecord(snapshot.relations)) for (const [key, value] of Object.entries(snapshot.relations)) {
+    validateRelation(value, `relations.${key}`, diagnostics);
+    if (isRecord(value) && typeof value.identity === "string") {
+      if (relationIdentities.has(value.identity)) add(diagnostics, "SNAPSHOT_DUPLICATE_IDENTITY", `Duplicate relation identity: ${value.identity}.`, `relations.${key}.identity`);
+      relationIdentities.add(value.identity);
+    }
+  }
+  if (isRecord(snapshot.routines)) for (const [key, value] of Object.entries(snapshot.routines)) {
+    if (!Array.isArray(value)) { add(diagnostics, "SNAPSHOT_ROUTINES", "Routine entry must be an array.", `routines.${key}`); continue; }
+    const routineIdentities = new Set<string>();
+    value.forEach((routine, index) => {
+      validateRoutine(routine, `routines.${key}[${index}]`, diagnostics);
+      if (isRecord(routine) && typeof routine.identity === "string") {
+        if (routineIdentities.has(routine.identity)) add(diagnostics, "SNAPSHOT_DUPLICATE_IDENTITY", `Duplicate routine identity: ${routine.identity}.`, `routines.${key}[${index}].identity`);
+        routineIdentities.add(routine.identity);
+      }
+    });
   }
   if (diagnostics.length) throw new SnapshotValidationError(diagnostics);
 }
 
 export function canonicalizeSnapshot(snapshot: SchemaSnapshot): string {
   validateSnapshot(snapshot);
-  return canonicalValue(normalizeSnapshot(snapshot));
+  return canonicalValue(normalizeSnapshot(snapshot, false));
 }
 
 export function hashSnapshot(snapshot: SchemaSnapshot): string {
@@ -212,6 +315,14 @@ export function migrateSnapshot(snapshot: unknown, targetVersion = CURRENT_FORMA
   return structuredClone(snapshot);
 }
 
+export function parseSnapshotJson(text: string): SchemaSnapshot {
+  let value: unknown;
+  try { value = JSON.parse(text); }
+  catch (error) { throw new SnapshotValidationError([{ code: "SNAPSHOT_JSON", message: error instanceof Error ? error.message : String(error) }]); }
+  validateSnapshot(value);
+  return value;
+}
+
 function collectDrift(before: unknown, after: unknown, path: string, output: SnapshotDrift[]): void {
   if (Object.is(before, after)) return;
   if (Array.isArray(before) && Array.isArray(after)) {
@@ -219,9 +330,9 @@ function collectDrift(before: unknown, after: unknown, path: string, output: Sna
     for (let index = 0; index < length; index += 1) collectDrift(before[index], after[index], `${path}[${index}]`, output);
     return;
   }
-  if (typeof before === "object" && before !== null && typeof after === "object" && after !== null && !Array.isArray(before) && !Array.isArray(after)) {
+  if (isRecord(before) && isRecord(after)) {
     const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
-    for (const key of [...keys].sort()) collectDrift((before as Record<string, unknown>)[key], (after as Record<string, unknown>)[key], path ? `${path}.${key}` : key, output);
+    for (const key of [...keys].sort(compareKeys)) collectDrift(before[key], after[key], path ? `${path}.${key}` : key, output);
     return;
   }
   output.push({ path, before, after });
@@ -231,6 +342,6 @@ export function diffSnapshots(before: SchemaSnapshot, after: SchemaSnapshot): re
   validateSnapshot(before);
   validateSnapshot(after);
   const output: SnapshotDrift[] = [];
-  collectDrift(JSON.parse(canonicalizeSnapshot(before)), JSON.parse(canonicalizeSnapshot(after)), "", output);
+  collectDrift(JSON.parse(canonicalValue(normalizeSnapshot(before, false))), JSON.parse(canonicalValue(normalizeSnapshot(after, false))), "", output);
   return output;
 }

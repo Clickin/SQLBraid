@@ -1,21 +1,73 @@
-import type { QueryExecutor, QueryExecutionResult, RenderedQuery } from "../../core/src/index.js";
-import { createDatabase } from "../../runtime/src/index.js";
+import type { QueryExecutor, QueryExecutionResult, RenderedQuery, TypePolicy } from "@sqlbraid/core";
+import { createDatabase } from "@sqlbraid/runtime";
+import { typePolicy as defaultTypePolicy } from "./type-policy.js";
+
+export interface PgFieldLike {
+  readonly name: string;
+  readonly dataTypeID?: number;
+  readonly dataType?: string;
+}
+
+export interface PgResultLike {
+  readonly rows: readonly unknown[];
+  readonly rowCount?: number;
+  readonly fields?: readonly PgFieldLike[];
+  readonly command?: string;
+}
 
 export interface PgClientLike {
-  query(config: { readonly text: string; readonly values: readonly unknown[] }): Promise<{ readonly rows: readonly unknown[]; readonly rowCount?: number }>;
-  query(text: string, values?: readonly unknown[]): Promise<{ readonly rows: readonly unknown[]; readonly rowCount?: number }>;
+  query(config: { readonly text: string; readonly values: readonly unknown[] }): Promise<PgResultLike>;
+  query(text: string, values?: readonly unknown[]): Promise<PgResultLike>;
   release?(): void;
 }
 
-export function createPgExecutor(client: PgClientLike): QueryExecutor {
+const oidTypes: Readonly<Record<number, string>> = { 20: "int8", 21: "int2", 23: "int4", 16: "bool", 25: "text", 1700: "numeric" };
+
+function plainRow(value: unknown, fields: readonly PgFieldLike[], policy: TypePolicy): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { value };
+  const row: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    const field = fields.find((candidate) => candidate.name === key);
+    const databaseType = field?.dataType ?? (field?.dataTypeID === undefined ? undefined : oidTypes[field.dataTypeID]);
+    row[key] = databaseType ? policy.decode(databaseType, entry) : entry;
+  }
+  return row;
+}
+
+function assertUniqueFields(fields: readonly PgFieldLike[]): void {
+  const names = new Set<string>();
+  for (const field of fields) {
+    if (names.has(field.name)) throw new Error(`BRAID_RESULT_COLUMNS: duplicate PostgreSQL result label ${field.name}.`);
+    names.add(field.name);
+  }
+}
+
+export function createPgExecutor(client: PgClientLike, options: { readonly typePolicy?: TypePolicy } = {}): QueryExecutor {
+  const policy = options.typePolicy ?? defaultTypePolicy;
+  const runControl = async (text: string): Promise<void> => { await client.query({ text, values: [] }); };
   return {
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
       const result = await client.query({ text: rendered.text, values: rendered.values });
-      return { rows: result.rows as readonly Row[], rowCount: result.rowCount };
+      assertUniqueFields(result.fields ?? []);
+      const rows = result.rows.map((row) => plainRow(row, result.fields ?? [], policy));
+      const rowBearing = (result.fields?.length ?? 0) > 0 || result.rows.length > 0 || result.command === "SELECT";
+      return rowBearing ? { rows: rows as readonly Row[], rowCount: result.rowCount, kind: "rows" } : { rows: [], rowCount: result.rowCount, kind: "command", command: { affectedRows: result.rowCount } };
     },
+    async call<Row>(rendered: RenderedQuery) {
+      const result = await client.query({ text: rendered.text, values: rendered.values });
+      assertUniqueFields(result.fields ?? []);
+      const rows = result.rows.map((row) => plainRow(row, result.fields ?? [], policy));
+      return { output: {}, resultSets: [{ rows: rows as readonly Row[] }] };
+    },
+    begin: () => runControl("BEGIN"),
+    commit: () => runControl("COMMIT"),
+    rollback: () => runControl("ROLLBACK"),
+    savepoint: (name) => runControl(`SAVEPOINT ${name}`),
+    rollbackTo: (name) => runControl(`ROLLBACK TO SAVEPOINT ${name}`),
+    releaseSavepoint: (name) => runControl(`RELEASE SAVEPOINT ${name}`),
   };
 }
 
-export function createPgDatabase<Row = unknown>(client: PgClientLike) {
-  return createDatabase<Row>(createPgExecutor(client));
+export function createPgDatabase(client: PgClientLike, options: { readonly typePolicy?: TypePolicy } = {}) {
+  return createDatabase(createPgExecutor(client, options));
 }

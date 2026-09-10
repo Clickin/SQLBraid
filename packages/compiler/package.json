@@ -2,14 +2,19 @@
   "name": "@sqlbraid/compiler",
   "version": "0.1.0",
   "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
   "dependencies": {
+    "@sqlbraid/ast": "workspace:*",
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/schema": "workspace:*",
     "@sqlbraid/template": "workspace:*",
-    "@sqlbraid/schema": "workspace:*"
+    "typescript": "^5.7.2"
   },
   "exports": {
     ".": {
-      "types": "../../dist/packages/compiler/src/index.d.ts",
-      "import": "../../dist/packages/compiler/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   }
 }

@@ -2,13 +2,15 @@
   "name": "@sqlbraid/template",
   "version": "0.1.0",
   "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
   "dependencies": {
     "@sqlbraid/core": "workspace:*"
   },
   "exports": {
     ".": {
-      "types": "../../dist/packages/template/src/index.d.ts",
-      "import": "../../dist/packages/template/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   }
 }

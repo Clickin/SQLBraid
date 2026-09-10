@@ -1,4 +1,4 @@
-import type { TypePolicy } from "../../core/src/index.js";
+import type { TypePolicy } from "@sqlbraid/core";
 
 const mappings = [
   { databaseType: "INT", inputType: "number", outputType: "number", nullable: true },
@@ -10,8 +10,8 @@ const mappings = [
 
 export const typePolicy: TypePolicy = {
   id: "mysql-default",
-  hash: "mysql-default-v1",
+  hash: "mysql-default-v2",
   mappings,
-  decode: (_databaseType, value) => value,
+  decode: (databaseType, value) => databaseType === "DECIMAL" && value !== null && value !== undefined ? String(value) : value,
   encode: (_databaseType, value) => value,
 };

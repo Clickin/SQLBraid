@@ -2,10 +2,12 @@
   "name": "@sqlbraid/core",
   "version": "0.1.0",
   "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
   "exports": {
     ".": {
-      "types": "../../dist/packages/core/src/index.d.ts",
-      "import": "../../dist/packages/core/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   }
 }

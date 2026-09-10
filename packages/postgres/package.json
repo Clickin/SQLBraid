@@ -2,8 +2,22 @@
   "name": "@sqlbraid/postgres",
   "version": "0.1.0",
   "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/schema": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
   "exports": {
-    ".": { "types": "../../dist/packages/postgres/src/index.d.ts", "import": "../../dist/packages/postgres/src/index.js" },
-    "./pg": { "types": "../../dist/packages/postgres/src/pg.d.ts", "import": "../../dist/packages/postgres/src/pg.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./pg": {
+      "types": "./dist/pg.d.ts",
+      "import": "./dist/pg.js"
+    }
   }
 }

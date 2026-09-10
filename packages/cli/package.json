@@ -2,15 +2,19 @@
   "name": "@sqlbraid/cli",
   "version": "0.1.0",
   "type": "module",
-  "bin": { "sqlbraid": "dist/index.js" },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "bin": { "sqlbraid": "./dist/index.js" },
   "dependencies": {
     "@sqlbraid/compiler": "workspace:*",
-    "@sqlbraid/operations": "workspace:*"
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/operations": "workspace:*",
+    "@sqlbraid/schema": "workspace:*"
   },
   "exports": {
     ".": {
-      "types": "../../dist/packages/cli/src/index.d.ts",
-      "import": "../../dist/packages/cli/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   }
 }

@@ -1,4 +1,4 @@
-import type { TypePolicy } from "../../core/src/index.js";
+import type { TypePolicy } from "@sqlbraid/core";
 
 const mappings = [
   { databaseType: "INTEGER", inputType: "number | bigint", outputType: "number | bigint", nullable: true },
@@ -10,7 +10,7 @@ const mappings = [
 
 export const typePolicy: TypePolicy = {
   id: "sqlite-default",
-  hash: "sqlite-default-v1",
+  hash: "sqlite-default-v2",
   mappings,
   decode: (_databaseType, value) => value,
   encode: (_databaseType, value) => value,

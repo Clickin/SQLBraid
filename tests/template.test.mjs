@@ -27,12 +27,11 @@ test('preserves ordinary comments and quotes explicit identifiers', () => {
   assert.deepEqual(rendered.values, []);
 });
 
-test('trims the final assignment comma and renders empty lists safely', () => {
+test('trims the final assignment comma and rejects ambiguous empty lists', () => {
   const patch = { email: 'a@example.com', status: undefined };
   const query = sql`UPDATE users /*@braid set*/ /*@braid if ${patch.email !== undefined}*/ email = ${patch.email}, /*@braid end*/ /*@braid if ${patch.status !== undefined}*/ status = ${patch.status}, /*@braid end*/ /*@braid end*/ WHERE id = ${1}`;
   assert.match(query.render().text, /SET\s+email = \$1\s+WHERE/);
-  const list = sql`SELECT * FROM users WHERE id IN (${sql.list([])})`;
-  assert.equal(list.render().text, 'SELECT * FROM users WHERE id IN (NULL)');
+  assert.throws(() => sql.list([]), (error) => error.code === 'BRAID_EMPTY_LIST');
 });
 
 test('choose selects the first true branch and nested fragments preserve bind order', () => {

@@ -7,7 +7,7 @@ test('local where analysis avoids variant expansion', () => {
   const query = sql`SELECT 1 /*@braid where*/ /*@braid if ${enabled}*/ AND id = ${1} /*@braid end*/ /*@braid end*/`;
   const analysis = analyzeStructuralVariants(query.ir);
   assert.equal(analysis.localClauseAnalysis, true);
-  assert.equal(analysis.estimatedVariants, 2);
+  assert.equal(analysis.estimatedVariants, 'linear');
   assert.equal(query.render().variantFingerprint, 'if:0:1');
 });
 

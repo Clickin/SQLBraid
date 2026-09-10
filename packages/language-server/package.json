@@ -2,14 +2,21 @@
   "name": "@sqlbraid/language-server",
   "version": "0.1.0",
   "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "bin": { "sqlbraid-language-server": "./dist/server.js" },
   "dependencies": {
     "@sqlbraid/compiler": "workspace:*",
     "@sqlbraid/schema": "workspace:*"
   },
   "exports": {
     ".": {
-      "types": "../../dist/packages/language-server/src/index.d.ts",
-      "import": "../../dist/packages/language-server/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./stdio": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     }
   }
 }

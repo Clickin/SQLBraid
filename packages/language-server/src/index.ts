@@ -1,5 +1,5 @@
-import { createVirtualOverlay, discoverQueries, sourcePosition, type CompileDiagnostic, type OverlayOptions } from "../../compiler/src/index.js";
-import type { SchemaSnapshot } from "../../schema/src/index.js";
+import { checkSource, createVirtualOverlay, discoverQueries, sourcePosition, type CompileDiagnostic, type OverlayOptions } from "@sqlbraid/compiler";
+import type { SchemaSnapshot } from "@sqlbraid/schema";
 
 export interface HoverResult {
   readonly contents: string;
@@ -25,7 +25,7 @@ export interface SqlBraidLanguageService {
 
 export function createLanguageService(options: LanguageServiceOptions): SqlBraidLanguageService {
   function diagnostics(sourceText: string, fileName: string): readonly CompileDiagnostic[] {
-    return createVirtualOverlay(sourceText, fileName, options).diagnostics;
+    return checkSource(sourceText, fileName, options);
   }
 
   function hover(sourceText: string, fileName: string, offset: number): HoverResult | undefined {
@@ -51,3 +51,4 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
 }
 
 export { sourcePosition, discoverQueries };
+export { startStdioLanguageServer } from "./server.js";

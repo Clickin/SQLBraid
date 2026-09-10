@@ -12,17 +12,31 @@ export interface RenderLimits {
   readonly maxNestingDepth?: number;
 }
 
+export type QueryResultKind = "rows" | "command" | "call" | "unknown";
+
 export interface RenderedQuery {
   readonly text: string;
   readonly values: readonly unknown[];
+  readonly bindingMap?: readonly { readonly placeholder: number; readonly interpolation?: number }[];
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
+  readonly resultKind?: QueryResultKind;
+}
+
+export interface DialectLexicalProfile {
+  readonly lineCommentPrefixes: readonly string[];
+  readonly supportsNestedBlockComments?: boolean;
+  readonly supportsDollarQuotes?: boolean;
+  readonly supportsBacktickIdentifiers?: boolean;
+  readonly supportsBracketIdentifiers?: boolean;
+  readonly backslashEscapes?: boolean;
 }
 
 export interface Dialect {
   readonly id: string;
   placeholder(index: number): string;
   quoteIdentifier(identifier: string): string;
+  readonly lexicalProfile?: DialectLexicalProfile;
 }
 
 export interface TypeMapping {
@@ -131,18 +145,36 @@ export interface SqlFragment {
   readonly [SQL_FRAGMENT]: true;
   readonly ir: TemplateIr;
   readonly values: readonly unknown[];
+  readonly dialectId: string;
 }
 
-export interface Query<Row = unknown> {
+export interface Query<Row = unknown, Kind extends QueryResultKind = "rows"> {
   readonly ir: TemplateIr;
   readonly values: readonly unknown[];
+  readonly resultKind: Kind;
   render(): RenderedQuery;
   readonly __row?: Row;
+}
+
+export type RowQuery<Row = unknown> = Query<Row, "rows">;
+export type CommandQuery<Result = unknown> = Query<Result, "command">;
+export type CallQuery<Row = unknown> = Query<Row, "call">;
+
+export type UnverifiedQuery<Expected> = Query<unknown, "unknown"> & {
+  readonly __expectedContract?: Expected;
+};
+
+export interface CommandResult {
+  readonly affectedRows?: number;
+  readonly insertId?: number | bigint | string;
+  readonly [key: string]: unknown;
 }
 
 export interface QueryExecutionResult<Row = unknown> {
   readonly rows: readonly Row[];
   readonly rowCount?: number;
+  readonly kind?: "rows" | "command";
+  readonly command?: CommandResult;
 }
 
 export interface RoutineResultSet<Row = unknown> {
@@ -156,28 +188,42 @@ export interface RoutineCallResult<Row = unknown> {
 
 export interface QueryExecutor {
   query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>>;
+  stream?<Row>(rendered: RenderedQuery, signal?: AbortSignal): AsyncIterable<Row>;
   call?<Row>(rendered: RenderedQuery): Promise<RoutineCallResult<Row>>;
   begin?(): Promise<void>;
   commit?(): Promise<void>;
   rollback?(): Promise<void>;
+  savepoint?(name: string): Promise<void>;
+  rollbackTo?(name: string): Promise<void>;
+  releaseSavepoint?(name: string): Promise<void>;
 }
 
-export interface Database<Row = unknown> {
-  all<Q extends Query<Row>>(query: Q): Promise<readonly Row[]>;
-  one<Q extends Query<Row>>(query: Q): Promise<Row>;
-  maybeOne<Q extends Query<Row>>(query: Q): Promise<Row | undefined>;
-  execute<Q extends Query<Row>>(query: Q): Promise<QueryExecutionResult<Row>>;
-  call<Q extends Query<Row>>(query: Q): Promise<RoutineCallResult<Row>>;
-  batch<Q extends Query<Row>>(queries: readonly Q[]): Promise<readonly QueryExecutionResult<Row>[]>;
-  transaction<T>(callback: (database: Database<Row>) => Promise<T>): Promise<T>;
+export interface PreparedQuery<Row> {
+  readonly name: string;
+  execute(): Promise<QueryExecutionResult<Row>>;
+  all(): Promise<readonly Row[]>;
+  one(): Promise<Row>;
+  maybeOne(): Promise<Row | undefined>;
 }
 
-export type QueryRow<Q> = Q extends Query<infer Row> ? Row : never;
+export interface Database {
+  all<Row>(query: RowQuery<Row>): Promise<readonly Row[]>;
+  one<Row>(query: RowQuery<Row>): Promise<Row>;
+  maybeOne<Row>(query: RowQuery<Row>): Promise<Row | undefined>;
+  execute<Result, Kind extends QueryResultKind>(query: Query<Result, Kind>): Promise<QueryExecutionResult<Result>>;
+  call<Row>(query: CallQuery<Row>): Promise<RoutineCallResult<Row>>;
+  batch<const Queries extends readonly Query<unknown, QueryResultKind>[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: QueryExecutionResult<QueryRow<Queries[K]>> }>;
+  prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row>;
+  stream<Row>(query: RowQuery<Row>, options?: { readonly signal?: AbortSignal }): AsyncIterable<Row>;
+  transaction<T>(callback: (database: Database) => Promise<T>): Promise<T>;
+}
+
+export type QueryRow<Q> = Q extends Query<infer Row, QueryResultKind> ? Row : never;
 export type QueryResult<Q> = readonly QueryRow<Q>[];
 
-export interface SqlTag<Row = unknown> {
-  (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<Row>;
-  <Contract>(strings: TemplateStringsArray, ...values: readonly unknown[]): Query<Contract>;
+export interface SqlTag {
+  (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown>;
+  <Expected>(strings: TemplateStringsArray, ...values: readonly unknown[]): UnverifiedQuery<Expected>;
   fragment: (strings: TemplateStringsArray, ...values: readonly unknown[]) => SqlFragment;
   empty: SqlFragment;
   ident: (identifier: string | readonly string[]) => SqlFragment;

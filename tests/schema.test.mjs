@@ -38,3 +38,9 @@ test('schema drift reports exact changed paths', () => {
   const changed = { ...snapshot, relations: { ...snapshot.relations, 'public.users': { ...snapshot.relations['public.users'], columns: [{ ...snapshot.relations['public.users'].columns[0], nullable: true }] } } };
   assert.deepEqual(diffSnapshots(snapshot, changed).map((entry) => entry.path), ['relations.public.users.columns[0].nullable']);
 });
+
+test('semantic identity ignores observation timestamps', () => {
+  const later = { ...snapshot, metadata: { ...snapshot.metadata, generatedAt: 'later' } };
+  assert.equal(hashSnapshot(snapshot), hashSnapshot(later));
+  assert.deepEqual(diffSnapshots(snapshot, later), []);
+});

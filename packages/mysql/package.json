@@ -2,8 +2,22 @@
   "name": "@sqlbraid/mysql",
   "version": "0.1.0",
   "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/schema": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
   "exports": {
-    ".": { "types": "../../dist/packages/mysql/src/index.d.ts", "import": "../../dist/packages/mysql/src/index.js" },
-    "./mysql2": { "types": "../../dist/packages/mysql/src/mysql2.d.ts", "import": "../../dist/packages/mysql/src/mysql2.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./mysql2": {
+      "types": "./dist/mysql2.d.ts",
+      "import": "./dist/mysql2.js"
+    }
   }
 }

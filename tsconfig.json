@@ -11,6 +11,7 @@
     "rootDir": ".",
     "composite": false,
     "skipLibCheck": true,
+    "noEmitOnError": true,
     "baseUrl": ".",
     "paths": {
       "@sqlbraid/core": ["packages/core/src/index.ts"],
@@ -20,8 +21,14 @@
       "@sqlbraid/ast": ["packages/ast/src/index.ts"],
       "@sqlbraid/runtime": ["packages/runtime/src/index.ts"],
       "@sqlbraid/operations": ["packages/operations/src/index.ts"],
-      "@sqlbraid/language-server": ["packages/language-server/src/index.ts"]
-      ,"@sqlbraid/cli": ["packages/cli/src/index.ts"]
+      "@sqlbraid/language-server": ["packages/language-server/src/index.ts"],
+      "@sqlbraid/cli": ["packages/cli/src/index.ts"],
+      "@sqlbraid/postgres": ["packages/postgres/src/index.ts"],
+      "@sqlbraid/postgres/pg": ["packages/postgres/src/pg.ts"],
+      "@sqlbraid/mysql": ["packages/mysql/src/index.ts"],
+      "@sqlbraid/mysql/mysql2": ["packages/mysql/src/mysql2.ts"],
+      "@sqlbraid/sqlite": ["packages/sqlite/src/index.ts"],
+      "@sqlbraid/sqlite/node-sqlite": ["packages/sqlite/src/node-sqlite.ts"]
     }
   },
   "include": ["packages/**/*.ts"],

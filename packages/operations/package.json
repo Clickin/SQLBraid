@@ -2,10 +2,16 @@
   "name": "@sqlbraid/operations",
   "version": "0.1.0",
   "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "dependencies": {
+    "@sqlbraid/ast": "workspace:*",
+    "@sqlbraid/core": "workspace:*"
+  },
   "exports": {
     ".": {
-      "types": "../../dist/packages/operations/src/index.d.ts",
-      "import": "../../dist/packages/operations/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   }
 }

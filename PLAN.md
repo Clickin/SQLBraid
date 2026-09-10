@@ -837,7 +837,8 @@ The overlay must:
 - avoid treating directive conditions as database binds
 - preserve TypeScript control-flow narrowing implied by `@braid if` / `when`
 
-For condition-based narrowing, generate overlay-only TS control flow representing the directive:
+For guarded templates, the safe path is a compiler transform, not a runtime tag trick.
+Generate the same branch control flow in the virtual checker source and emitted JavaScript:
 
 Conceptually:
 
@@ -863,7 +864,12 @@ name: string | null
 
 merely because the original source lacks a real JavaScript `if`. The directive condition must narrow the guarded expression for checking.
 
-### 8.3 CLI type check
+The transform must not rewrite the user's source file. A bare JavaScript tagged template
+still evaluates every interpolation before the tag is called, so it is not a lazy-safe
+guarded mode. Untransformed guarded templates must fail the standard build/check path or
+be explicitly documented as eager compatibility mode.
+
+## 8.3 CLI type check
 
 Provide:
 

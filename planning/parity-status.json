@@ -1,0 +1,41 @@
+{
+  "referenceCommit": "38ea32b2a16fd79c5c6a58efbdf57446593584bd",
+  "baselineCommit": "166cd2ec6e9de7953d5ea9090513a1987993b9bb",
+  "implementationCommit": "working-tree",
+  "capabilities": [
+    {"id":"template.lexical-directives","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.template-scanner"],"openFindings":[]},
+    {"id":"template.guarded-lowering","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.guarded-runtime"],"openFindings":["requires build/emit transform; bare JS tag remains eager"]},
+    {"id":"template.trim-and-limits","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.trim","remediation.structural-limits"],"openFindings":[]},
+    {"id":"compiler.static-select","dialect":"postgres","metadata":"verified","parse":"verified","inference":"exact","runtime":"simulated","consumer":"verified","tests":["parser.basic-select","compiler.downstream-row"],"openFindings":["snapshot must be supplied for relation evidence"]},
+    {"id":"runtime.sqlite-returning","dialect":"sqlite","metadata":"verified","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.sqlite-returning"],"openFindings":[]},
+    {"id":"runtime.postgres-codec","dialect":"postgres","metadata":"verified","parse":"absent","inference":"conservative","runtime":"simulated","consumer":"verified","tests":["remediation.pg-int8"],"openFindings":["live pg protocol matrix not run"]},
+    {"id":"runtime.mysql-command-result","dialect":"mysql","metadata":"verified","parse":"absent","inference":"conservative","runtime":"simulated","consumer":"verified","tests":["adapters.mysql-command"],"openFindings":["live mysql2 matrix not run"]},
+    {"id":"runtime.transaction-scope","dialect":"all","metadata":"absent","parse":"absent","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.transaction-isolation"],"openFindings":["pool lease ownership is not implemented"]},
+    {"id":"operations.standard-schema-v1","dialect":"all","metadata":"absent","parse":"absent","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.standard-schema"],"openFindings":[]},
+    {"id":"operations.shape-fingerprint","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.shape-fingerprint"],"openFindings":["compiler artifact does not yet encode evaluated structural identifiers"]},
+    {"id":"snapshot.codec-and-drift","dialect":"all","metadata":"verified","parse":"absent","inference":"conservative","runtime":"simulated","consumer":"verified","tests":["schema.snapshot"],"openFindings":["live inspectors are not implemented"]},
+    {"id":"language-server.stdio","dialect":"all","metadata":"verified","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.lsp-stdio"],"openFindings":["incremental project TS bridge and cancellation are incomplete"]}
+  ],
+  "findings": {
+    "SB-01":"partial",
+    "SB-02":"implemented",
+    "SB-03":"partial",
+    "SB-04":"implemented",
+    "SB-05":"implemented",
+    "SB-06":"implemented",
+    "SB-07":"partial",
+    "SB-08":"partial",
+    "SB-09":"partial",
+    "SB-10":"partial",
+    "SB-11":"partial",
+    "SB-12":"partial",
+    "SB-13":"implemented",
+    "SB-14":"partial",
+    "SB-15":"implemented",
+    "SB-16":"implemented",
+    "SB-17":"partial",
+    "SB-18":"partial",
+    "SB-19":"partial",
+    "SB-20":"absent"
+  }
+}

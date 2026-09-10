@@ -116,25 +116,44 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  packages/ast: {}
+  packages/ast:
+    dependencies:
+      '@sqlbraid/schema':
+        specifier: workspace:*
+        version: link:../schema
 
   packages/cli:
     dependencies:
       '@sqlbraid/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
       '@sqlbraid/operations':
         specifier: workspace:*
         version: link:../operations
+      '@sqlbraid/schema':
+        specifier: workspace:*
+        version: link:../schema
 
   packages/compiler:
     dependencies:
+      '@sqlbraid/ast':
+        specifier: workspace:*
+        version: link:../ast
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
       '@sqlbraid/schema':
         specifier: workspace:*
         version: link:../schema
       '@sqlbraid/template':
         specifier: workspace:*
         version: link:../template
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
   packages/core: {}
 
@@ -147,11 +166,44 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
-  packages/mysql: {}
+  packages/mysql:
+    dependencies:
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sqlbraid/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@sqlbraid/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@sqlbraid/template':
+        specifier: workspace:*
+        version: link:../template
 
-  packages/operations: {}
+  packages/operations:
+    dependencies:
+      '@sqlbraid/ast':
+        specifier: workspace:*
+        version: link:../ast
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
 
-  packages/postgres: {}
+  packages/postgres:
+    dependencies:
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sqlbraid/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@sqlbraid/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@sqlbraid/template':
+        specifier: workspace:*
+        version: link:../template
 
   packages/runtime:
     dependencies:
@@ -161,7 +213,23 @@ importers:
 
   packages/schema: {}
 
-  packages/sqlite: {}
+  packages/sqlite:
+    dependencies:
+      '@sqlbraid/ast':
+        specifier: workspace:*
+        version: link:../ast
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sqlbraid/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@sqlbraid/schema':
+        specifier: workspace:*
+        version: link:../schema
+      '@sqlbraid/template':
+        specifier: workspace:*
+        version: link:../template
 
   packages/template:
     dependencies:
