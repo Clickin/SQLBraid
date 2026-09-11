@@ -3,7 +3,7 @@
 Reference: `external SQL reference@38ea32b2a16fd79c5c6a58efbdf57446593584bd`  
 Baseline: `166cd2ec6e9de7953d5ea9090513a1987993b9bb`
 
-Implementation commit: `d6157d3`
+Implementation commit: `d6157d3b834f5c00c4c5f0c1885409b121fee2cf`
 
 ## Closed in this working tree
 
