@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 import { checkProject, checkSource, createVirtualOverlay, discoverQueries, emitSource, type TypeScriptCheckOptions } from "@sqlbraid/compiler";
@@ -57,19 +58,22 @@ async function main(argv: readonly string[]): Promise<void> {
   if (!file) usage();
   const source = targetFile ? await readFile(targetFile, "utf8") : "";
   const snapshot = await loadSnapshot(option(argv, "--snapshot"));
+  const nodeTypes = resolve(process.cwd(), "node_modules/@types/node");
+  const workspacePackages = resolve(process.cwd(), "packages");
   const options: TypeScriptCheckOptions = {
     moduleSpecifiers: ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite"],
     snapshot,
     compilerOptions: {
       baseUrl: process.cwd(),
-      types: ["node"],
-      typeRoots: [resolve(process.cwd(), "node_modules/@types")],
-      paths: {
-        "@sqlbraid/*": ["packages/*/src/index.ts"],
-        "@sqlbraid/postgres/pg": ["packages/postgres/src/pg.ts"],
-        "@sqlbraid/mysql/mysql2": ["packages/mysql/src/mysql2.ts"],
-        "@sqlbraid/sqlite/node-sqlite": ["packages/sqlite/src/node-sqlite.ts"],
-      },
+      ...(existsSync(nodeTypes) ? { types: ["node"], typeRoots: [resolve(process.cwd(), "node_modules/@types")] } : {}),
+      ...(existsSync(workspacePackages) ? {
+        paths: {
+          "@sqlbraid/*": ["packages/*/src/index.ts"],
+          "@sqlbraid/postgres/pg": ["packages/postgres/src/pg.ts"],
+          "@sqlbraid/mysql/mysql2": ["packages/mysql/src/mysql2.ts"],
+          "@sqlbraid/sqlite/node-sqlite": ["packages/sqlite/src/node-sqlite.ts"],
+        },
+      } : {}),
     },
   };
   const discovered = targetFile ? discoverQueries(source, file, options) : { queries: [], diagnostics: [] };

@@ -15,6 +15,7 @@ export interface Mysql2ResultHeader extends CommandResult {
 
 export interface Mysql2ConnectionLike {
   execute(sql: string, values?: readonly unknown[]): Promise<readonly [unknown, readonly Mysql2FieldLike[] | undefined]>;
+  query?(sql: string, values?: readonly unknown[]): Promise<readonly [unknown, readonly Mysql2FieldLike[] | undefined]>;
   beginTransaction?(): Promise<void>;
   commit?(): Promise<void>;
   rollback?(): Promise<void>;
@@ -44,7 +45,7 @@ function assertUniqueFields(fields: readonly Mysql2FieldLike[]): void {
 
 export function createMysql2Executor(connection: Mysql2ConnectionLike, options: { readonly typePolicy?: TypePolicy } = {}): QueryExecutor {
   const policy = options.typePolicy ?? defaultTypePolicy;
-  const control = async (sql: string): Promise<void> => { await connection.execute(sql, []); };
+  const control = async (sql: string): Promise<void> => { await (connection.query ?? connection.execute).call(connection, sql, []); };
   return {
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
       const [payload, rawFields] = await connection.execute(rendered.text, rendered.values);

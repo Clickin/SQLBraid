@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { analyzeStructuralVariants, renderVariants, sql } from '../dist/packages/template/src/index.js';
+import { test } from 'vitest';
+import { analyzeStructuralVariants, renderVariants, sql } from '../packages/template/dist/index.js';
 
 test('local where analysis avoids variant expansion', () => {
   const enabled = true;

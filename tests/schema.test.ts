@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { canonicalizeSnapshot, diffSnapshots, hashSnapshot, validateSnapshot } from '../dist/packages/schema/src/index.js';
+import { test } from 'vitest';
+import { canonicalizeSnapshot, diffSnapshots, hashSnapshot, validateSnapshot } from '../packages/schema/dist/index.js';
 
 const snapshot = {
   formatVersion: 1,

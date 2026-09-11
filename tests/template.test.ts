@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { sql } from '../dist/packages/template/src/index.js';
+import { test } from 'vitest';
+import { sql } from '../packages/template/dist/index.js';
 
 test('renders dynamic where and binds active values in order', () => {
   const name = 'Ada';

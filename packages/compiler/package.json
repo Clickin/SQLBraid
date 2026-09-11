@@ -9,7 +9,7 @@
     "@sqlbraid/core": "workspace:*",
     "@sqlbraid/schema": "workspace:*",
     "@sqlbraid/template": "workspace:*",
-    "typescript": "^5.7.2"
+    "typescript": "5.9.3"
   },
   "exports": {
     ".": {

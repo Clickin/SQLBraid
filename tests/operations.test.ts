@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { classifySemantics, createManifest, fingerprintQuery, validateRows, ResultValidationError } from '../dist/packages/operations/src/index.js';
-import { sql } from '../dist/packages/postgres/src/index.js';
+import { test } from 'vitest';
+import { classifySemantics, createManifest, fingerprintQuery, validateRows, ResultValidationError } from '../packages/operations/dist/index.js';
+import { sql } from '../packages/postgres/dist/index.js';
 
 test('semantics fail closed for unknown statements and classify reads', () => {
   assert.equal(classifySemantics('SELECT id FROM users').operation, 'read');

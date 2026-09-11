@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { createPgDatabase } from '../dist/packages/postgres/src/pg.js';
-import { createMysql2Database } from '../dist/packages/mysql/src/mysql2.js';
-import { createNodeSqliteDatabase } from '../dist/packages/sqlite/src/node-sqlite.js';
-import { sql } from '../dist/packages/postgres/src/index.js';
-import { sql as mysqlSql } from '../dist/packages/mysql/src/index.js';
-import { sql as sqliteSql } from '../dist/packages/sqlite/src/index.js';
+import { test } from 'vitest';
+import { createPgDatabase } from '../packages/postgres/dist/pg.js';
+import { createMysql2Database } from '../packages/mysql/dist/mysql2.js';
+import { createNodeSqliteDatabase } from '../packages/sqlite/dist/node-sqlite.js';
+import { sql } from '../packages/postgres/dist/index.js';
+import { sql as mysqlSql } from '../packages/mysql/dist/index.js';
+import { sql as sqliteSql } from '../packages/sqlite/dist/index.js';
 
 test('postgres adapter preserves plain rows and rendered binds', async () => {
   let request;

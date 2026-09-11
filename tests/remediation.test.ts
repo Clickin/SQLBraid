@@ -5,19 +5,20 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { PassThrough } from 'node:stream';
 import { once } from 'node:events';
-import test from 'node:test';
-import { parseSql, resolveStatement, lexSql } from '../dist/packages/ast/src/index.js';
-import { checkSource, discoverQueries, emitSource } from '../dist/packages/compiler/src/index.js';
-import { classifySemantics, fingerprintQuery, templateFamilyFingerprint, validateRows, ResultValidationError } from '../dist/packages/operations/src/index.js';
-import { createPgDatabase } from '../dist/packages/postgres/src/pg.js';
-import { createPostgresInspector } from '../dist/packages/postgres/src/inspector.js';
-import { createNodeSqliteDatabase } from '../dist/packages/sqlite/src/node-sqlite.js';
-import { createSqliteInspector } from '../dist/packages/sqlite/src/inspector.js';
-import { createMysqlInspector } from '../dist/packages/mysql/src/inspector.js';
-import { createSqlTag } from '../dist/packages/template/src/index.js';
-import { sql as postgres } from '../dist/packages/postgres/src/index.js';
-import { sql as sqlite } from '../dist/packages/sqlite/src/index.js';
-import { startStdioLanguageServer } from '../dist/packages/language-server/src/server.js';
+import { test } from 'vitest';
+import { parseSql, resolveStatement, lexSql } from '../packages/ast/dist/index.js';
+import { checkSource, discoverQueries, emitSource } from '../packages/compiler/dist/index.js';
+import { classifySemantics, fingerprintQuery, templateFamilyFingerprint, validateRows, ResultValidationError } from '../packages/operations/dist/index.js';
+import { createPgDatabase } from '../packages/postgres/dist/pg.js';
+import { createPostgresInspector } from '../packages/postgres/src/inspector.ts';
+import { createNodeSqliteDatabase } from '../packages/sqlite/dist/node-sqlite.js';
+import { createSqliteInspector } from '../packages/sqlite/src/inspector.ts';
+import { createMysqlInspector } from '../packages/mysql/src/inspector.ts';
+import { createDatabase } from '../packages/runtime/dist/index.js';
+import { createSqlTag } from '../packages/template/dist/index.js';
+import { sql as postgres } from '../packages/postgres/dist/index.js';
+import { sql as sqlite } from '../packages/sqlite/dist/index.js';
+import { startStdioLanguageServer } from '../packages/language-server/dist/server.js';
 
 const snapshot = {
   formatVersion: 1,
@@ -142,7 +143,7 @@ test('emitted guarded JavaScript evaluates only the active branch', async () => 
   const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-runtime-'));
   try {
     const file = join(directory, 'guarded-runtime.mjs');
-    writeFileSync(file, emitted);
+    writeFileSync(file, emitted.replace(/\n\/\/#[^\n]*sourceMappingURL[^\n]*/u, ""));
     const module = await import(pathToFileURL(file).href);
     let calls = 0;
     const inactive = module.build(null, () => { calls += 1; return 7; }).render();
@@ -251,7 +252,7 @@ test('PostgreSQL inspector records relation and routine metadata', async () => {
 
 test('prepared queries reject shape drift and streams honor adapter capability', async () => {
   let second = false;
-  const db = (await import('../dist/packages/runtime/src/index.js')).createDatabase({
+  const db = createDatabase({
     async query(rendered) { return { rows: [{ text: rendered.text }] }; },
     async *stream(rendered) { yield { text: rendered.text }; },
   });

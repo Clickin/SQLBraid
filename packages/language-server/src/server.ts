@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { pathToFileURL } from "node:url";
 import type { Readable, Writable } from "node:stream";
 import { createLanguageService, type LanguageServiceOptions, type SqlBraidLanguageService } from "./index.js";

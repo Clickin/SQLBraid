@@ -18,13 +18,22 @@ Baseline: `166cd2ec6e9de7953d5ea9090513a1987993b9bb`
 - Stdio LSP initialize/document diagnostics/hover/completion transport.
 - SQLite/PostgreSQL/MySQL inspector seams and offline snapshot loading.
 - Prepared-query shape locking and typed streaming seam.
+- tsdown package builds with explicit package entries, external dependencies, and preserved CLI/server shebangs.
+- Vitest project migration covering the existing regression matrix and native SQLite tests.
+- Testcontainers PostgreSQL/MySQL global setup with exact images and serial DB projects.
+- W01 single-executor ownership, same-tick transaction ordering, nested savepoint cleanup, leaked transaction handles, root-handle misuse, and rollback cleanup errors.
 
 ## Verification run
 
-- `pnpm test` — 44 tests passed.
-- `pnpm run build` — TypeScript emit and package-local artifact copy passed.
-- Packed consumer smoke — PostgreSQL root and `/pg` imports succeeded outside the workspace; packed consumer type-check rejects `unknown` downstream properties.
-- Native SQLite smoke — ordinary SELECT, comment-prefixed SELECT, and INSERT RETURNING returned rows.
+- `pnpm install --frozen-lockfile` — passed with pnpm 12.3.4.
+- `pnpm run typecheck` — passed with TypeScript 5.9.3.
+- `pnpm run build` — tsdown 0.23.0 emitted ESM JavaScript, declarations, JavaScript maps, and declaration maps for all 12 packages; publint and ATTW passed during the build.
+- `pnpm test` — 49 tests passed: 48 unit tests plus 1 native SQLite W01 test.
+- `pnpm run test:db:sqlite` — 1 test passed on `node:sqlite` SQLite 3.53.4; independent observer state after the rollback race was `["B"]`.
+- `pnpm run test:db:postgres` — 1 test passed on `postgres:16.4-alpine` / PostgreSQL 16.4; independent observer state after the rollback race was `["B"]`.
+- `pnpm run test:db:mysql` — 1 test passed on `mysql:8.4.2` / Oracle MySQL 8.4.2; independent observer state after the rollback race was `["B"]`.
+- `pnpm run test:consumer` — Vitest consumer test plus packed consumer validation passed for all 12 packages, including ESM imports, type resolution, CLI execution, and monorepo-path leakage checks.
+- The pre-fix same-tick root transaction regression reproduced the race: both `BEGIN` calls reached the executor before the first transaction completed.
 
 ## Open gates
 

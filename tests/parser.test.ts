@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { parseSql, resolveStatement } from '../dist/packages/ast/src/index.js';
+import { test } from 'vitest';
+import { parseSql, resolveStatement } from '../packages/ast/dist/index.js';
 
 const snapshot = {
   formatVersion: 1,

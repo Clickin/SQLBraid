@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { createVirtualOverlay, discoverQueries } from '../dist/packages/compiler/src/index.js';
+import { test } from 'vitest';
+import { createVirtualOverlay, discoverQueries } from '../packages/compiler/dist/index.js';
 
 const source = `import { sql as dbSql } from '@sqlbraid/template';\nconst name: string | null = 'Ada';\nconst query = dbSql\`SELECT id FROM users /*@braid where*/ /*@braid if \${name != null}*/ AND name = \${name} /*@braid end*/ /*@braid end*/\`;`;
 

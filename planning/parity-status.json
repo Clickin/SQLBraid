@@ -2,6 +2,31 @@
   "referenceCommit": "38ea32b2a16fd79c5c6a58efbdf57446593584bd",
   "baselineCommit": "166cd2ec6e9de7953d5ea9090513a1987993b9bb",
   "implementationCommit": "working-tree",
+  "toolchain": {
+    "node": "24.21.0",
+    "pnpm": "12.3.4",
+    "typescript": "5.9.3",
+    "tsdown": "0.23.0",
+    "vitest": "5.0.0",
+    "vite": "7.0.0",
+    "testcontainers": "12.1.0",
+    "build": "passed",
+    "packageValidation": { "packedPackages": 12, "publint": "passed", "attw": "passed" }
+  },
+  "databases": {
+    "postgres": { "image": "postgres:16.4-alpine", "version": "16.4", "w01": "passed", "observerState": ["B"] },
+    "mysql": { "image": "mysql:8.4.2", "version": "8.4.2", "w01": "passed", "observerState": ["B"] },
+    "sqlite": { "engine": "node:sqlite", "version": "3.53.4", "w01": "passed", "observerState": ["B"] }
+  },
+  "verification": {
+    "installFrozen": "passed",
+    "typecheck": "passed",
+    "unit": { "tests": 48, "passed": 48 },
+    "sqlite": { "tests": 1, "passed": 1 },
+    "postgres": { "tests": 1, "passed": 1 },
+    "mysql": { "tests": 1, "passed": 1 },
+    "consumer": { "tests": 1, "passed": 1, "packedPackages": 12 }
+  },
   "capabilities": [
     {"id":"template.lexical-directives","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.template-scanner"],"openFindings":[]},
     {"id":"template.guarded-lowering","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.guarded-runtime"],"openFindings":["requires build/emit transform; bare JS tag remains eager"]},
@@ -10,7 +35,7 @@
     {"id":"runtime.sqlite-returning","dialect":"sqlite","metadata":"verified","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.sqlite-returning"],"openFindings":[]},
     {"id":"runtime.postgres-codec","dialect":"postgres","metadata":"verified","parse":"absent","inference":"conservative","runtime":"simulated","consumer":"verified","tests":["remediation.pg-int8"],"openFindings":["live pg protocol matrix not run"]},
     {"id":"runtime.mysql-command-result","dialect":"mysql","metadata":"verified","parse":"absent","inference":"conservative","runtime":"simulated","consumer":"verified","tests":["adapters.mysql-command"],"openFindings":["live mysql2 matrix not run"]},
-    {"id":"runtime.transaction-scope","dialect":"all","metadata":"absent","parse":"absent","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.transaction-isolation"],"openFindings":["pool lease ownership is not implemented"]},
+    {"id":"runtime.transaction-scope","dialect":"all","metadata":"absent","parse":"absent","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.transaction-isolation","db.w01.sqlite","db.w01.postgres","db.w01.mysql"],"openFindings":["pool lease ownership is not implemented"]},
     {"id":"operations.standard-schema-v1","dialect":"all","metadata":"absent","parse":"absent","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.standard-schema"],"openFindings":[]},
     {"id":"operations.shape-fingerprint","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.shape-fingerprint"],"openFindings":["compiler artifact does not yet encode evaluated structural identifiers"]},
     {"id":"snapshot.codec-and-drift","dialect":"all","metadata":"verified","parse":"absent","inference":"conservative","runtime":"simulated","consumer":"verified","tests":["schema.snapshot"],"openFindings":["live inspectors are not implemented"]},

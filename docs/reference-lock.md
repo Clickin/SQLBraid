@@ -28,4 +28,4 @@
 - SQLite ordinary-table dynamic storage typing remains conservative; the adapter does not infer a narrower type from declared affinity alone.
 - Unsupported SQL grammar and missing snapshot evidence are errors/unknown, never exact inferred rows.
 
-Detailed finding status is tracked in `planning/parity-status.json` and the executable regression matrix in `tests/remediation.test.mjs`.
+Detailed finding status is tracked in `planning/parity-status.json` and the executable regression matrix in `tests/remediation.test.ts`.

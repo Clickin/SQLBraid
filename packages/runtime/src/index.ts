@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { CallQuery, Database, PreparedQuery, Query, QueryExecutionResult, QueryExecutor, QueryResultKind, QueryRow, RoutineCallResult, RowQuery } from "@sqlbraid/core";
 
 export class DatabaseCardinalityError extends Error {
@@ -32,9 +33,8 @@ export class DatabaseResultError extends Error {
 }
 
 interface ScopeState {
-  active: boolean;
-  idle: Promise<void>;
-  release?: () => void;
+  tail: Promise<void>;
+  owner?: symbol;
 }
 
 interface DatabaseOptions {
@@ -51,8 +51,19 @@ function cleanupError(error: unknown, cleanup: unknown): unknown {
   return new AggregateError([error, cleanup], "Transaction failed and cleanup also failed.");
 }
 
+const transactionContext = new AsyncLocalStorage<{ readonly state: ScopeState; readonly owner: symbol }>();
+
+function acquireRoot(state: ScopeState): Promise<() => void> {
+  const context = transactionContext.getStore();
+  if (context?.state === state && state.owner === context.owner) throw new DatabaseScopeError("BRAID_TX_SCOPE", "The root database handle cannot be used from its own transaction callback.");
+  const { promise: turn, resolve: release } = Promise.withResolvers<void>();
+  const previous = state.tail;
+  state.tail = previous.then(() => turn);
+  return previous.then(() => release);
+}
+
 export function createDatabase(executor: QueryExecutor): Database {
-  return createScopedDatabase(executor, { active: false, idle: Promise.resolve() }, { transaction: false, preparedNames: new Set<string>() });
+  return createScopedDatabase(executor, { tail: Promise.resolve() }, { transaction: false, preparedNames: new Set<string>() });
 }
 
 function createScopedDatabase(executor: QueryExecutor, state: ScopeState, options: DatabaseOptions): ScopedDatabase {
@@ -60,21 +71,22 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
   const assertOpen = (): void => {
     if (closed) throw new DatabaseScopeError("BRAID_TX_CLOSED", "Transaction database is no longer usable.");
   };
-  const waitForUse = async (): Promise<void> => {
+  const acquireForUse = (): Promise<(() => void) | undefined> => {
     assertOpen();
-    if (!options.transaction && state.active) await state.idle;
-    assertOpen();
+    return options.transaction ? Promise.resolve(undefined) : acquireRoot(state);
   };
 
   const database: ScopedDatabase = {
     async execute<Result, Kind extends QueryResultKind>(query: Query<Result, Kind>): Promise<QueryExecutionResult<Result>> {
-      await waitForUse();
-      return executor.query<Result>(query.render());
+      const release = await acquireForUse();
+      try { return await executor.query<Result>(query.render()); } finally { release?.(); }
     },
     async call<Row>(query: CallQuery<Row>): Promise<RoutineCallResult<Row>> {
-      await waitForUse();
-      if (!executor.call) throw new Error("Executor does not support routine calls.");
-      return executor.call<Row>(query.render());
+      const release = await acquireForUse();
+      try {
+        if (!executor.call) throw new Error("Executor does not support routine calls.");
+        return await executor.call<Row>(query.render());
+      } finally { release?.(); }
     },
     async all<Row>(query: RowQuery<Row>): Promise<readonly Row[]> {
       const result = await database.execute<Row, "rows">(query);
@@ -92,10 +104,12 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
       return rows[0];
     },
     async batch<const Queries extends readonly Query<unknown, QueryResultKind>[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: QueryExecutionResult<QueryRow<Queries[K]>> }> {
-      await waitForUse();
-      const results: QueryExecutionResult<unknown>[] = [];
-      for (const query of queries) results.push(await executor.query<unknown>(query.render()));
-      return results as { readonly [K in keyof Queries]: QueryExecutionResult<QueryRow<Queries[K]>> };
+      const release = await acquireForUse();
+      try {
+        const results: QueryExecutionResult<unknown>[] = [];
+        for (const query of queries) results.push(await executor.query<unknown>(query.render()));
+        return results as { readonly [K in keyof Queries]: QueryExecutionResult<QueryRow<Queries[K]>> };
+      } finally { release?.(); }
     },
     prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row> {
       if (!name.trim()) throw new Error("BRAID_PREPARED_NAME: prepared query name must not be empty.");
@@ -122,18 +136,20 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
       const streamExecutor = executor.stream;
       if (!streamExecutor) throw new Error("BRAID_STREAM_UNSUPPORTED: this adapter does not expose a streaming protocol.");
       return (async function* (): AsyncGenerator<Row> {
-        await waitForUse();
-        const rendered = query.render();
-        const source = streamExecutor<Row>(rendered, options.signal);
-        for await (const row of source) {
-          if (options.signal?.aborted) throw options.signal.reason ?? new Error("Stream aborted.");
-          yield row;
-        }
+        const release = await acquireForUse();
+        try {
+          const rendered = query.render();
+          const source = streamExecutor<Row>(rendered, options.signal);
+          for await (const row of source) {
+            if (options.signal?.aborted) throw options.signal.reason ?? new Error("Stream aborted.");
+            yield row;
+          }
+        } finally { release?.(); }
       })();
     },
     async transaction<T>(callback: (transactionDatabase: Database) => Promise<T>): Promise<T> {
       if (options.transaction) {
-        await waitForUse();
+        assertOpen();
         if (!executor.savepoint || !executor.rollbackTo || !executor.releaseSavepoint) throw new DatabaseScopeError("BRAID_TX_SCOPE", "Nested transactions require savepoint support.");
         const name = `braid_sp_${Math.random().toString(36).slice(2)}`;
         await executor.savepoint(name);
@@ -143,22 +159,27 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
           await executor.releaseSavepoint(name);
           return result;
         } catch (error) {
-          try { await executor.rollbackTo(name); } catch (cleanup) { throw cleanupError(error, cleanup); }
+          let cleanup: unknown;
+          try { await executor.rollbackTo(name); } catch (failure) { cleanup = failure; }
+          if (cleanup === undefined) {
+            try { await executor.releaseSavepoint(name); } catch (failure) { cleanup = failure; }
+          }
+          if (cleanup !== undefined) throw cleanupError(error, cleanup);
           throw error;
         } finally {
           nested.close();
         }
       }
-      await waitForUse();
       if (!executor.begin || !executor.commit || !executor.rollback) throw new Error("Executor does not support transactions.");
-      state.active = true;
-      state.idle = new Promise<void>((resolve) => { state.release = resolve; });
+      const release = await acquireRoot(state);
       const transactionDatabase = createScopedDatabase(executor, state, { transaction: true, preparedNames: options.preparedNames });
       let begun = false;
+      const owner = Symbol("sqlbraid.transaction");
       try {
         await executor.begin();
         begun = true;
-        const result = await callback(transactionDatabase);
+        state.owner = owner;
+        const result = await transactionContext.run({ state, owner }, () => callback(transactionDatabase));
         await executor.commit();
         return result;
       } catch (error) {
@@ -166,10 +187,9 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
         try { await executor.rollback(); } catch (cleanup) { throw cleanupError(error, cleanup); }
         throw error;
       } finally {
-        state.active = false;
-        state.release?.();
-        state.release = undefined;
         transactionDatabase.close();
+        state.owner = undefined;
+        release();
       }
     },
     close(): void {
