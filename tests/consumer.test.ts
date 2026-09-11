@@ -8,7 +8,7 @@ import { test } from 'vitest';
 
 const run = promisify(execFile);
 
-async function linkPackage(directory, name) {
+async function linkPackage(directory: string, name: string): Promise<void> {
   await symlink(join(process.cwd(), 'packages', name), join(directory, 'node_modules', '@sqlbraid', name), 'dir');
 }
 

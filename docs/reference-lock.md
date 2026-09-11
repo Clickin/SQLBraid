@@ -28,4 +28,9 @@
 - SQLite ordinary-table dynamic storage typing remains conservative; the adapter does not infer a narrower type from declared affinity alone.
 - Unsupported SQL grammar and missing snapshot evidence are errors/unknown, never exact inferred rows.
 
+## Runtime support policy
+
+- Every published SQLBraid package declares `engines.node >=22.18.0`.
+- Build and CI currently run on Node 24.21.0; that validation environment is separate from the published runtime floor.
+
 Detailed finding status is tracked in `planning/parity-status.json` and the executable regression matrix in `tests/remediation.test.ts`.

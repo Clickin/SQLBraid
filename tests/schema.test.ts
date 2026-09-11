@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { canonicalizeSnapshot, diffSnapshots, hashSnapshot, validateSnapshot } from '../packages/schema/dist/index.js';
+import { canonicalizeSnapshot, diffSnapshots, hashSnapshot, validateSnapshot, type SchemaSnapshot } from '@sqlbraid/schema';
 
 const snapshot = {
   formatVersion: 1,
@@ -22,7 +22,7 @@ const snapshot = {
   },
   routines: {},
   metadata: { typePolicyId: 'default' },
-};
+} as const satisfies SchemaSnapshot;
 
 test('canonical snapshot identity is independent of map insertion order', () => {
   const equivalent = { ...snapshot, types: { ...snapshot.types }, namespaces: { ...snapshot.namespaces } };

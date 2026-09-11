@@ -29,6 +29,9 @@ try {
     if (added.length !== 1) throw new Error(`Expected one tarball for ${packageName}, found ${added.length}.`);
     const tarball = join(temp, added[0]);
     tarballs.push(tarball);
+    const { stdout: manifestText } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
+    const manifest = JSON.parse(manifestText);
+    if (manifest.engines?.node !== ">=22.18.0") throw new Error(`Unexpected Node engine for ${manifest.name}: ${manifest.engines?.node ?? "missing"}`);
     await run("pnpm", ["exec", "publint", "run", tarball, "--strict"]);
     await run("pnpm", ["exec", "attw", tarball, "--profile", "esm-only", "--no-emoji"]);
   }
@@ -40,6 +43,10 @@ try {
   await writeFile(join(temp, "consumer-package.json"), JSON.stringify({ name: "sqlbraid-packed-consumer", private: true, type: "module", dependencies }, null, 2));
   await mkdir(consumer);
   await copyFile(join(temp, "consumer-package.json"), join(consumer, "package.json"));
+  await mkdir(join(consumer, "packages/core/src"), { recursive: true });
+  await mkdir(join(consumer, "packages/postgres/src"), { recursive: true });
+  await writeFile(join(consumer, "packages/core/src/index.ts"), "export const sql = 1;\n");
+  await writeFile(join(consumer, "packages/postgres/src/index.ts"), "export const sql = 2;\n");
   await run("npm", ["install", "--ignore-scripts"], consumer);
 
   const entry = join(consumer, "index.mjs");
@@ -74,7 +81,7 @@ try {
   await run(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "--strict", "--skipLibCheck", "--target", "ES2024", "--module", "NodeNext", "--moduleResolution", "NodeNext", types], consumer);
 
   const cliFile = join(consumer, "cli-query.ts");
-  await writeFile(cliFile, 'import { sql } from "@sqlbraid/template"; const query = sql`SELECT 1`; void query;\n');
+  await writeFile(cliFile, 'import { sql as templateSql } from "@sqlbraid/template"; import { sql as postgresSql } from "@sqlbraid/postgres"; const queries = [templateSql`SELECT 1`, postgresSql`SELECT 1`]; void queries;\n');
   await run(join(consumer, "node_modules/.bin/sqlbraid"), ["check", "--file", cliFile], consumer);
 
   const forbidden = [root, `${root}/packages`, "dist/packages"];
@@ -89,7 +96,7 @@ try {
       for (const needle of forbidden) if (text.includes(needle)) throw new Error(`Monorepo path leaked into ${packageEntry.name}/${file.name}: ${needle}`);
     }
   }
-  console.info(`Validated ${tarballs.length} packed packages with ESM, types, subpaths, CLI, and leakage checks.`);
+  console.info(`Validated ${tarballs.length} packed packages with ESM, types, subpaths, CLI, engine metadata, and leakage checks.`);
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

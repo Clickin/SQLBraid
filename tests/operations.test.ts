@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { classifySemantics, createManifest, fingerprintQuery, validateRows, ResultValidationError } from '../packages/operations/dist/index.js';
-import { sql } from '../packages/postgres/dist/index.js';
+import type { StandardSchemaLike } from '@sqlbraid/operations';
+import { classifySemantics, createManifest, fingerprintQuery, validateRows, ResultValidationError } from '@sqlbraid/operations';
+import { sql } from '@sqlbraid/postgres';
 
 test('semantics fail closed for unknown statements and classify reads', () => {
   assert.equal(classifySemantics('SELECT id FROM users').operation, 'read');
@@ -19,7 +20,7 @@ test('manifest excludes bound values', () => {
 
 test('standard schema validation returns normalized rows or issues', async () => {
   const query = sql`SELECT 1`;
-  const schema = { '~standard': { version: 1, vendor: 'test', validate(value) { return typeof value === 'object' ? { value } : { issues: ['not-object'] }; } } };
+  const schema = { '~standard': { version: 1, vendor: 'test', validate(value: unknown) { return typeof value === 'object' ? { value } : { issues: ['not-object'] }; } } } as const satisfies StandardSchemaLike<unknown>;
   assert.deepEqual(await validateRows(query, [{ id: 1 }], schema), [{ id: 1 }]);
   await assert.rejects(() => validateRows(query, [1], schema), ResultValidationError);
 });

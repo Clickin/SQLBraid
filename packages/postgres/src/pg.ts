@@ -46,6 +46,7 @@ export function createPgExecutor(client: PgClientLike, options: { readonly typeP
   const policy = options.typePolicy ?? defaultTypePolicy;
   const runControl = async (text: string): Promise<void> => { await client.query({ text, values: [] }); };
   return {
+    ownershipKey: client,
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
       const result = await client.query({ text: rendered.text, values: rendered.values });
       assertUniqueFields(result.fields ?? []);

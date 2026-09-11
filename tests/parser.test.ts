@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { parseSql, resolveStatement } from '../packages/ast/dist/index.js';
+import type { SchemaSnapshot } from '@sqlbraid/schema';
+import { parseSql, resolveStatement } from '@sqlbraid/ast';
 
 const snapshot = {
   formatVersion: 1,
@@ -22,7 +23,7 @@ const snapshot = {
   },
   routines: {},
   metadata: {},
-};
+} as const satisfies SchemaSnapshot;
 
 test('parses and resolves a basic select against snapshot metadata', () => {
   const parsed = parseSql('SELECT id, name FROM users WHERE id = $1');

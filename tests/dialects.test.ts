@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { sql as postgres } from '../packages/postgres/dist/index.js';
-import { sql as mysql } from '../packages/mysql/dist/index.js';
-import { sql as sqlite } from '../packages/sqlite/dist/index.js';
+import { sql as postgres } from '@sqlbraid/postgres';
+import { sql as mysql } from '@sqlbraid/mysql';
+import { sql as sqlite } from '@sqlbraid/sqlite';
 
 test('dialects own placeholder and identifier rendering', () => {
   assert.deepEqual(postgres`SELECT ${1}, ${2}`.render(), { text: 'SELECT $1, $2', values: [1, 2] , variantFingerprint: '' });

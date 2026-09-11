@@ -1,18 +1,41 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { sql } from '../packages/template/dist/index.js';
-import { createDatabase, DatabaseCardinalityError } from '../packages/runtime/dist/index.js';
+import type { QueryExecutor, RenderedQuery } from '@sqlbraid/core';
+import { sql } from '@sqlbraid/template';
+import { createDatabase, DatabaseCardinalityError } from '@sqlbraid/runtime';
 
-function executorFor(rows) {
-  const calls = [];
+function executorFor(rows: readonly unknown[]): QueryExecutor & { readonly calls: readonly (RenderedQuery | string)[] } {
+  const calls: (RenderedQuery | string)[] = [];
   return {
     calls,
-    async query(rendered) { calls.push(rendered); return { rows }; },
+    async query<Row>(rendered: RenderedQuery) { calls.push(rendered); return { rows: rows as readonly Row[] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
   };
 }
+
+test('database wrappers share ownership for the same executor object', async () => {
+  const calls: string[] = [];
+  const { promise: gate, resolve: release } = Promise.withResolvers<void>();
+  const executor = {
+    async query<Row>(rendered: RenderedQuery) { calls.push(rendered.text); return { rows: [] as readonly Row[] }; },
+    async begin() { calls.push('BEGIN'); },
+    async commit() { calls.push('COMMIT'); },
+    async rollback() { calls.push('ROLLBACK'); },
+  };
+  const first = createDatabase(executor);
+  const second = createDatabase(executor);
+  const transaction = first.transaction(async (tx) => { await tx.execute(sql`SELECT 'inside'`); await gate; });
+  await new Promise((resolve) => setImmediate(resolve));
+  const outside = second.execute(sql`SELECT 'outside'`);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, ['BEGIN', "SELECT 'inside'"]);
+  release();
+  await transaction;
+  await outside;
+  assert.deepEqual(calls, ['BEGIN', "SELECT 'inside'", 'COMMIT', "SELECT 'outside'"]);
+});
 
 test('runtime normalizes query execution to plain rows and enforces cardinality', async () => {
   const executor = executorFor([{ id: 1 }]);
@@ -61,7 +84,7 @@ test('root handle use from its transaction callback fails before queueing', asyn
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
   });
-  await assert.rejects(() => db.transaction(async () => db.execute(sql`SELECT 1`)), (error) => error.code === 'BRAID_TX_SCOPE');
+  await assert.rejects(() => db.transaction(async () => db.execute(sql`SELECT 1`)), (error: unknown) => error instanceof Error && 'code' in error && error.code === 'BRAID_TX_SCOPE');
   assert.deepEqual(calls, ['BEGIN', 'ROLLBACK']);
 });
 

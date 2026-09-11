@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createPgDatabase } from '../packages/postgres/dist/pg.js';
-import { createMysql2Database } from '../packages/mysql/dist/mysql2.js';
-import { createNodeSqliteDatabase } from '../packages/sqlite/dist/node-sqlite.js';
-import { sql } from '../packages/postgres/dist/index.js';
-import { sql as mysqlSql } from '../packages/mysql/dist/index.js';
-import { sql as sqliteSql } from '../packages/sqlite/dist/index.js';
+import { createPgDatabase } from '@sqlbraid/postgres/pg';
+import { createMysql2Database } from '@sqlbraid/mysql/mysql2';
+import { createNodeSqliteDatabase } from '@sqlbraid/sqlite/node-sqlite';
+import { sql } from '@sqlbraid/postgres';
+import { sql as mysqlSql } from '@sqlbraid/mysql';
+import { sql as sqliteSql } from '@sqlbraid/sqlite';
 
 test('postgres adapter preserves plain rows and rendered binds', async () => {
   let request;
@@ -16,7 +16,7 @@ test('postgres adapter preserves plain rows and rendered binds', async () => {
 
 test('mysql2 adapter uses positional placeholders', async () => {
   let request;
-  const db = createMysql2Database({ async execute(text, values) { request = { text, values }; return [[{ ok: 1 }], {}]; } });
+  const db = createMysql2Database({ async execute(text, values) { request = { text, values }; return [[{ ok: 1 }], []]; } });
   assert.deepEqual(await db.all(mysqlSql`SELECT ${1}`), [{ ok: 1 }]);
   assert.deepEqual(request, { text: 'SELECT ?', values: [1] });
 });

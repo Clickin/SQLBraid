@@ -1,7 +1,7 @@
 {
   "referenceCommit": "38ea32b2a16fd79c5c6a58efbdf57446593584bd",
   "baselineCommit": "166cd2ec6e9de7953d5ea9090513a1987993b9bb",
-  "implementationCommit": "working-tree",
+  "implementationCommit": "evidence-2026-09-11-r21-r27@d712368b54f87d08f632d9e79ec54131ee97a267",
   "toolchain": {
     "node": "24.21.0",
     "pnpm": "12.3.4",
@@ -25,7 +25,12 @@
     "sqlite": { "tests": 1, "passed": 1 },
     "postgres": { "tests": 1, "passed": 1 },
     "mysql": { "tests": 1, "passed": 1 },
-    "consumer": { "tests": 1, "passed": 1, "packedPackages": 12 }
+    "consumer": { "tests": 1, "passed": 1, "packedPackages": 12 },
+    "cliConflictingMonorepo": "passed",
+    "testToolingTypecheck": "passed",
+    "watchProject": "unit",
+    "packedEngine": ">=22.18.0",
+    "testAll": { "tests": 53, "passed": 53, "packedPackages": 12 }
   },
   "capabilities": [
     {"id":"template.lexical-directives","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.template-scanner"],"openFindings":[]},

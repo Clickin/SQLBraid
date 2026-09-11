@@ -4,6 +4,7 @@
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },
+  "engines": { "node": ">=22.18.0" },
   "bin": { "sqlbraid-language-server": "./dist/server.js" },
   "dependencies": {
     "@sqlbraid/compiler": "workspace:*",

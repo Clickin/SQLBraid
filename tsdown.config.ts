@@ -12,7 +12,7 @@ const shared: UserConfig = {
   publint: { enabled: "ci-only", level: "error" },
   attw: { enabled: "ci-only", level: "error" },
   exports: false,
-  bin: false,
+
   tsconfig: "../../tsconfig.json",
 };
 

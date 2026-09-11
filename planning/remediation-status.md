@@ -3,6 +3,8 @@
 Reference: `external SQL reference@38ea32b2a16fd79c5c6a58efbdf57446593584bd`  
 Baseline: `166cd2ec6e9de7953d5ea9090513a1987993b9bb`
 
+Evidence revision: `evidence-2026-09-11-r21-r27@d712368b54f87d08f632d9e79ec54131ee97a267`
+
 ## Closed in this working tree
 
 - Package-local `dist` exports and tarball-consumer ESM/type boundaries.
@@ -21,18 +23,24 @@ Baseline: `166cd2ec6e9de7953d5ea9090513a1987993b9bb`
 - tsdown package builds with explicit package entries, external dependencies, and preserved CLI/server shebangs.
 - Vitest project migration covering the existing regression matrix and native SQLite tests.
 - Testcontainers PostgreSQL/MySQL global setup with exact images and serial DB projects.
-- W01 single-executor ownership, same-tick transaction ordering, nested savepoint cleanup, leaked transaction handles, root-handle misuse, and rollback cleanup errors.
+- W01 executor/physical-connection ownership across multiple SQLBraid wrappers, same-tick transaction ordering, nested savepoint cleanup, leaked transaction handles, root-handle misuse, and rollback cleanup errors.
+- Strict TypeScript checking for production, tests, Vitest, and tsdown configuration.
+- Unit watch mode limited to the unit project with source aliases; database and packed consumer checks remain explicit.
+- Published package Node runtime metadata (`>=22.18.0`) and packed manifest validation.
+- CLI source aliases derived from SQLBraid's own checkout location; installed consumers with conflicting `packages/` trees use package resolution.
+- Parity evidence revision and `test:all` packed-package release gate.
 
 ## Verification run
 
 - `pnpm install --frozen-lockfile` — passed with pnpm 12.3.4.
 - `pnpm run typecheck` — passed with TypeScript 5.9.3.
 - `pnpm run build` — tsdown 0.23.0 emitted ESM JavaScript, declarations, JavaScript maps, and declaration maps for all 12 packages; publint and ATTW passed during the build.
-- `pnpm test` — 49 tests passed: 48 unit tests plus 1 native SQLite W01 test.
+- `pnpm test` — 50 tests passed: 48 unit tests, 1 CLI test, and 1 native SQLite W01 test.
 - `pnpm run test:db:sqlite` — 1 test passed on `node:sqlite` SQLite 3.53.4; independent observer state after the rollback race was `["B"]`.
 - `pnpm run test:db:postgres` — 1 test passed on `postgres:16.4-alpine` / PostgreSQL 16.4; independent observer state after the rollback race was `["B"]`.
 - `pnpm run test:db:mysql` — 1 test passed on `mysql:8.4.2` / Oracle MySQL 8.4.2; independent observer state after the rollback race was `["B"]`.
-- `pnpm run test:consumer` — Vitest consumer test plus packed consumer validation passed for all 12 packages, including ESM imports, type resolution, CLI execution, and monorepo-path leakage checks.
+- `pnpm run test:consumer` — Vitest consumer test plus packed consumer validation passed for all 12 packages, including ESM imports, type resolution, CLI execution, Node engine metadata, and conflicting-monorepo path checks.
+- `pnpm run test:all` — 53 tests passed across unit, CLI, native SQLite, PostgreSQL, MySQL, and consumer projects; packed validation passed for all 12 packages.
 - The pre-fix same-tick root transaction regression reproduced the race: both `BEGIN` calls reached the executor before the first transaction completed.
 
 ## Open gates

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { sql } from '../packages/template/dist/index.js';
+import { sql } from '@sqlbraid/template';
+
+function hasCode(code: string): (error: unknown) => boolean {
+  return (error): error is { readonly code: string } => typeof error === 'object' && error !== null && 'code' in error && error.code === code;
+}
 
 test('renders dynamic where and binds active values in order', () => {
   const name = 'Ada';
@@ -31,7 +35,7 @@ test('trims the final assignment comma and rejects ambiguous empty lists', () =>
   const patch = { email: 'a@example.com', status: undefined };
   const query = sql`UPDATE users /*@braid set*/ /*@braid if ${patch.email !== undefined}*/ email = ${patch.email}, /*@braid end*/ /*@braid if ${patch.status !== undefined}*/ status = ${patch.status}, /*@braid end*/ /*@braid end*/ WHERE id = ${1}`;
   assert.match(query.render().text, /SET\s+email = \$1\s+WHERE/);
-  assert.throws(() => sql.list([]), (error) => error.code === 'BRAID_EMPTY_LIST');
+  assert.throws(() => sql.list([]), hasCode('BRAID_EMPTY_LIST'));
 });
 
 test('choose selects the first true branch and nested fragments preserve bind order', () => {

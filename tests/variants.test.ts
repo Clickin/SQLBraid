@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { analyzeStructuralVariants, renderVariants, sql } from '../packages/template/dist/index.js';
+import { analyzeStructuralVariants, renderVariants, sql } from '@sqlbraid/template';
+
+function hasCode(code: string): (error: unknown) => boolean {
+  return (error): error is { readonly code: string } => typeof error === 'object' && error !== null && 'code' in error && error.code === code;
+}
 
 test('local where analysis avoids variant expansion', () => {
   const enabled = true;
@@ -15,5 +19,5 @@ test('shape-changing variants are bounded', () => {
   const include = true;
   const query = sql`SELECT id /*@braid if ${include}*/, email /*@braid end*/ FROM users`;
   assert.equal(renderVariants(query.ir, query.values, { maxVariants: 2 }).length, 2);
-  assert.throws(() => renderVariants(query.ir, query.values, { maxVariants: 1 }), (error) => error.code === 'BRAID_VARIANT_LIMIT');
+  assert.throws(() => renderVariants(query.ir, query.values, { maxVariants: 1 }), hasCode('BRAID_VARIANT_LIMIT'));
 });

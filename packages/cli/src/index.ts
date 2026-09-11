@@ -2,6 +2,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { checkProject, checkSource, createVirtualOverlay, discoverQueries, emitSource, type TypeScriptCheckOptions } from "@sqlbraid/compiler";
 import { classifySemantics, createManifestFromEvidence, fingerprintTemplate, templateFamilyFingerprintOf } from "@sqlbraid/operations";
 import { diffSnapshots, parseSnapshotJson, type SchemaSnapshot } from "@sqlbraid/schema";
@@ -59,21 +60,21 @@ async function main(argv: readonly string[]): Promise<void> {
   const source = targetFile ? await readFile(targetFile, "utf8") : "";
   const snapshot = await loadSnapshot(option(argv, "--snapshot"));
   const nodeTypes = resolve(process.cwd(), "node_modules/@types/node");
-  const workspacePackages = resolve(process.cwd(), "packages");
+  const sqlbraidRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const sourcePackages = resolve(sqlbraidRoot, "packages");
+  const sourcePaths = existsSync(resolve(sourcePackages, "cli/src/index.ts")) ? {
+    "@sqlbraid/*": [resolve(sourcePackages, "*/src/index.ts")],
+    "@sqlbraid/postgres/pg": [resolve(sourcePackages, "postgres/src/pg.ts")],
+    "@sqlbraid/mysql/mysql2": [resolve(sourcePackages, "mysql/src/mysql2.ts")],
+    "@sqlbraid/sqlite/node-sqlite": [resolve(sourcePackages, "sqlite/src/node-sqlite.ts")],
+  } : undefined;
   const options: TypeScriptCheckOptions = {
     moduleSpecifiers: ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite"],
     snapshot,
     compilerOptions: {
       baseUrl: process.cwd(),
       ...(existsSync(nodeTypes) ? { types: ["node"], typeRoots: [resolve(process.cwd(), "node_modules/@types")] } : {}),
-      ...(existsSync(workspacePackages) ? {
-        paths: {
-          "@sqlbraid/*": ["packages/*/src/index.ts"],
-          "@sqlbraid/postgres/pg": ["packages/postgres/src/pg.ts"],
-          "@sqlbraid/mysql/mysql2": ["packages/mysql/src/mysql2.ts"],
-          "@sqlbraid/sqlite/node-sqlite": ["packages/sqlite/src/node-sqlite.ts"],
-        },
-      } : {}),
+      ...(sourcePaths ? { paths: sourcePaths } : {}),
     },
   };
   const discovered = targetFile ? discoverQueries(source, file, options) : { queries: [], diagnostics: [] };

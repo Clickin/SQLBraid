@@ -52,6 +52,17 @@ function cleanupError(error: unknown, cleanup: unknown): unknown {
 }
 
 const transactionContext = new AsyncLocalStorage<{ readonly state: ScopeState; readonly owner: symbol }>();
+const scopeStates = new WeakMap<object, ScopeState>();
+
+function scopeStateFor(executor: QueryExecutor): ScopeState {
+  const key = executor.ownershipKey ?? executor;
+  let state = scopeStates.get(key);
+  if (!state) {
+    state = { tail: Promise.resolve() };
+    scopeStates.set(key, state);
+  }
+  return state;
+}
 
 function acquireRoot(state: ScopeState): Promise<() => void> {
   const context = transactionContext.getStore();
@@ -63,7 +74,7 @@ function acquireRoot(state: ScopeState): Promise<() => void> {
 }
 
 export function createDatabase(executor: QueryExecutor): Database {
-  return createScopedDatabase(executor, { tail: Promise.resolve() }, { transaction: false, preparedNames: new Set<string>() });
+  return createScopedDatabase(executor, scopeStateFor(executor), { transaction: false, preparedNames: new Set<string>() });
 }
 
 function createScopedDatabase(executor: QueryExecutor, state: ScopeState, options: DatabaseOptions): ScopedDatabase {

@@ -187,6 +187,8 @@ export interface RoutineCallResult<Row = unknown> {
 }
 
 export interface QueryExecutor {
+  /** Stable identity for the physical execution resource shared by wrappers; pools must use a leased resource. */
+  readonly ownershipKey?: object;
   query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>>;
   stream?<Row>(rendered: RenderedQuery, signal?: AbortSignal): AsyncIterable<Row>;
   call?<Row>(rendered: RenderedQuery): Promise<RoutineCallResult<Row>>;

@@ -3,16 +3,16 @@ import type { QueryExecutor, QueryExecutionResult, RenderedQuery } from "@sqlbra
 import { createDatabase } from "@sqlbraid/runtime";
 
 export interface SqliteColumnLike {
-  readonly name?: string;
-  readonly column?: string;
-  readonly database?: string;
-  readonly table?: string;
-  readonly type?: string;
+  readonly name?: string | null;
+  readonly column?: string | null;
+  readonly database?: string | null;
+  readonly table?: string | null;
+  readonly type?: string | null;
 }
 
 export interface SqliteStatementLike {
   all(...values: readonly unknown[]): readonly unknown[];
-  run(...values: readonly unknown[]): { readonly changes?: number; readonly lastInsertRowid?: number | bigint };
+  run(...values: readonly unknown[]): { readonly changes?: number | bigint; readonly lastInsertRowid?: number | bigint };
   columns?(): readonly SqliteColumnLike[];
 }
 
@@ -53,6 +53,7 @@ function isRowStatement(statement: SqliteStatementLike, sql: string): boolean {
 export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
   const control = database.exec ? async (sql: string): Promise<void> => { database.exec?.(sql); } : undefined;
   return {
+    ownershipKey: database,
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
       const statement = database.prepare(rendered.text);
       if (isRowStatement(statement, rendered.text)) {
@@ -60,7 +61,8 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
       const result = statement.run(...rendered.values);
-      return { rows: [], rowCount: result.changes, kind: "command", command: { affectedRows: result.changes, insertId: result.lastInsertRowid } };
+      const changes = result.changes === undefined ? undefined : Number(result.changes);
+      return { rows: [], rowCount: changes, kind: "command", command: { affectedRows: changes, insertId: result.lastInsertRowid } };
     },
     begin: control ? () => control("BEGIN") : undefined,
     commit: control ? () => control("COMMIT") : undefined,

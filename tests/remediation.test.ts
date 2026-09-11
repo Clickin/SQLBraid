@@ -6,19 +6,24 @@ import { pathToFileURL } from 'node:url';
 import { PassThrough } from 'node:stream';
 import { once } from 'node:events';
 import { test } from 'vitest';
-import { parseSql, resolveStatement, lexSql } from '../packages/ast/dist/index.js';
-import { checkSource, discoverQueries, emitSource } from '../packages/compiler/dist/index.js';
-import { classifySemantics, fingerprintQuery, templateFamilyFingerprint, validateRows, ResultValidationError } from '../packages/operations/dist/index.js';
-import { createPgDatabase } from '../packages/postgres/dist/pg.js';
-import { createPostgresInspector } from '../packages/postgres/src/inspector.ts';
-import { createNodeSqliteDatabase } from '../packages/sqlite/dist/node-sqlite.js';
-import { createSqliteInspector } from '../packages/sqlite/src/inspector.ts';
-import { createMysqlInspector } from '../packages/mysql/src/inspector.ts';
-import { createDatabase } from '../packages/runtime/dist/index.js';
-import { createSqlTag } from '../packages/template/dist/index.js';
-import { sql as postgres } from '../packages/postgres/dist/index.js';
-import { sql as sqlite } from '../packages/sqlite/dist/index.js';
-import { startStdioLanguageServer } from '../packages/language-server/dist/server.js';
+import type { RenderedQuery } from '@sqlbraid/core';
+import type { StandardSchemaLike } from '@sqlbraid/operations';
+import type { SchemaSnapshot } from '@sqlbraid/schema';
+import { parseSql, resolveStatement, lexSql } from '@sqlbraid/ast';
+import { checkSource, discoverQueries, emitSource } from '@sqlbraid/compiler';
+import { classifySemantics, fingerprintQuery, templateFamilyFingerprint, validateRows, ResultValidationError } from '@sqlbraid/operations';
+import { createPgDatabase } from '@sqlbraid/postgres/pg';
+import { createPostgresInspector } from '@sqlbraid/postgres';
+import { createNodeSqliteDatabase } from '@sqlbraid/sqlite/node-sqlite';
+import { createSqliteInspector } from '@sqlbraid/sqlite';
+import { createMysqlInspector } from '@sqlbraid/mysql';
+import { createDatabase } from '@sqlbraid/runtime';
+import { createSqlTag } from '@sqlbraid/template';
+import { sql as postgres } from '@sqlbraid/postgres';
+import { sql as sqlite } from '@sqlbraid/sqlite';
+import { startStdioLanguageServer } from '@sqlbraid/language-server';
+
+type PgQueryConfig = { readonly text: string; readonly values: readonly unknown[] };
 
 const snapshot = {
   formatVersion: 1,
@@ -38,17 +43,15 @@ const snapshot = {
   },
   routines: {},
   metadata: {},
-};
+} as const satisfies SchemaSnapshot;
 
 const compilerOptions = {
   baseUrl: process.cwd(),
   paths: { '@sqlbraid/*': ['packages/*/src/index.ts'] },
 };
 
-function templateStrings(values) {
-  const strings = [...values];
-  strings.raw = [...values];
-  return strings;
+function hasCode(code: string): (error: unknown) => boolean {
+  return (error): error is { readonly code: string } => typeof error === 'object' && error !== null && 'code' in error && error.code === code;
 }
 
 test('template scanner preserves marker text in SQL lexical regions', () => {
@@ -62,7 +65,7 @@ test('template scanner preserves marker text in SQL lexical regions', () => {
 
 test('trim rejects empty SET, omits comment-only WHERE, and preserves line comment LF', () => {
   const emptySet = postgres`UPDATE users /*@braid set*/ /*@braid if ${false}*/ name = ${'Ada'}, /*@braid end*/ /*@braid end*/ WHERE id = ${1}`;
-  assert.throws(() => emptySet.render(), (error) => error.code === 'BRAID_EMPTY_SET');
+  assert.throws(() => emptySet.render(), hasCode('BRAID_EMPTY_SET'));
   const comments = postgres`SELECT id FROM users /*@braid where*/ /* explanation */ /*@braid end*/`.render();
   assert.equal(comments.text, 'SELECT id FROM users /* explanation */');
   const line = postgres`SELECT id FROM users /*@braid where*/ AND id = ${1} -- condition\n/*@braid end*/ ORDER BY id`.render();
@@ -77,10 +80,10 @@ test('structural inputs are captured and bounded', () => {
   assert.deepEqual(query.render().values, [1]);
   assert.equal(Object.isFrozen(query.ir), true);
   assert.equal(Object.isFrozen(query.ir.nodes), true);
-  assert.throws(() => postgres.list([]), (error) => error.code === 'BRAID_EMPTY_LIST');
-  assert.throws(() => createSqlTag({ limits: { maxSqlBytes: 20 } })`SELECT '가나다라마'`.render(), (error) => error.code === 'BRAID_SQL_LIMIT');
+  assert.throws(() => postgres.list([]), hasCode('BRAID_EMPTY_LIST'));
+  assert.throws(() => createSqlTag({ limits: { maxSqlBytes: 20 } })`SELECT '가나다라마'`.render(), hasCode('BRAID_SQL_LIMIT'));
   const limited = createSqlTag({ limits: { maxStructuralItems: 1 } });
-  assert.throws(() => limited`SELECT ${limited.join([limited.fragment`1`, limited.fragment`2`], limited.fragment`, `)}`.render(), (error) => error.code === 'BRAID_STRUCTURE_LIMIT');
+  assert.throws(() => limited`SELECT ${limited.join([limited.fragment`1`, limited.fragment`2`], limited.fragment`, `)}`.render(), hasCode('BRAID_STRUCTURE_LIMIT'));
 });
 
 test('AST consumes SQL and preserves qualified scope and bind ordinals', () => {
@@ -92,7 +95,7 @@ test('AST consumes SQL and preserves qualified scope and bind ordinals', () => {
   assert.ok(missingJoin.diagnostics.some((diagnostic) => diagnostic.code === 'SQL_RELATION'));
   const placeholders = resolveStatement(parseSql('SELECT ? AS value FROM users WHERE id = ?'), snapshot);
   assert.deepEqual(placeholders.binds.map((bind) => bind.placeholder), [1, 2]);
-  const routines = { ...snapshot, routines: { f: [
+  const routines: SchemaSnapshot = { ...snapshot, routines: { f: [
     { name: 'f', identity: 'public.f(int)', kind: 'procedure', arguments: [{ mode: 'in', type: 'int4', tsType: 'number' }], result: { kind: 'void' } },
     { name: 'f', identity: 'public.f(text)', kind: 'procedure', arguments: [{ mode: 'in', type: 'text', tsType: 'string' }], result: { kind: 'void' } },
   ] } };
@@ -100,9 +103,9 @@ test('AST consumes SQL and preserves qualified scope and bind ordinals', () => {
   assert.equal(ambiguous.columns, 'unknown');
   assert.ok(ambiguous.diagnostics.some((diagnostic) => diagnostic.code === 'SQL_ROUTINE_AMBIGUOUS'));
   assert.ok(resolveStatement(parseSql('CALL f($1, $2)'), routines).diagnostics.some((diagnostic) => diagnostic.code === 'SQL_ROUTINE_ARITY'));
-  assert.equal(parseSql("SELECT 'unterminated FROM users").diagnostics[0].code, 'SQL_LEX');
-  assert.equal(parseSql('SELECT (((((id))))) FROM users', { maxNestingDepth: 1 }).diagnostics[0].code, 'SQL_LEX');
-  assert.equal(lexSql('SELECT id FROM users WHERE id=$1').find((token) => token.kind === 'placeholder').text, '$1');
+  assert.equal(parseSql("SELECT 'unterminated FROM users").diagnostics[0]?.code, 'SQL_LEX');
+  assert.equal(parseSql('SELECT (((((id))))) FROM users', { maxNestingDepth: 1 }).diagnostics[0]?.code, 'SQL_LEX');
+  assert.equal(lexSql('SELECT id FROM users WHERE id=$1').find((token) => token.kind === 'placeholder')?.text, '$1');
 });
 
 test('operations use conservative semantics, shape identity, and Standard Schema envelopes', async () => {
@@ -115,9 +118,9 @@ test('operations use conservative semantics, shape identity, and Standard Schema
   const b = postgres`SELECT ${postgres.ident('name')} FROM users`;
   assert.notEqual(fingerprintQuery(a), fingerprintQuery(b));
   assert.equal(templateFamilyFingerprint(a), templateFamilyFingerprint(b));
-  const schema = { '~standard': { version: 1, vendor: 'test', validate(value) { return { value: { ...value, mapped: true } }; } } };
+  const schema = { '~standard': { version: 1, vendor: 'test', validate(value: unknown) { return { value: { ...(value as Record<string, unknown>), mapped: true } }; } } } as const satisfies StandardSchemaLike<unknown>;
   assert.deepEqual(await validateRows(postgres`SELECT 1`, [{ id: 1 }], schema), [{ id: 1, mapped: true }]);
-  const failing = { '~standard': { version: 1, vendor: 'test', validate() { return { issues: ['bad'] }; } } };
+  const failing = { '~standard': { version: 1, vendor: 'test', validate() { return { issues: ['bad'] }; } } } as const satisfies StandardSchemaLike<unknown>;
   await assert.rejects(() => validateRows(postgres`SELECT 1`, [{ id: 1 }], failing), ResultValidationError);
 });
 
@@ -159,14 +162,18 @@ test('emitted guarded JavaScript evaluates only the active branch', async () => 
 });
 
 test('adapters preserve command and returning result kinds', async () => {
-  let pgRequest;
+  let pgRequest: { readonly text: string; readonly values: readonly unknown[] } | undefined;
   const pg = createPgDatabase({
-    async query(config) { pgRequest = config; return { rows: [{ id: '7' }], fields: [{ name: 'id', dataTypeID: 20 }], rowCount: 1 }; },
+    async query(configOrText: PgQueryConfig | string, values: readonly unknown[] = []) {
+      const config = typeof configOrText === 'string' ? { text: configOrText, values } : configOrText;
+      pgRequest = config;
+      return { rows: [{ id: '7' }], fields: [{ name: 'id', dataTypeID: 20 }], rowCount: 1 };
+    },
   });
   assert.deepEqual(await pg.all(postgres`SELECT ${1}`), [{ id: 7n }]);
   assert.deepEqual(pgRequest, { text: 'SELECT $1', values: [1] });
   const fake = {
-    prepare(text) {
+    prepare(text: string) {
       return {
         columns: () => text.includes('RETURNING') || text.includes('SELECT') ? [{ name: 'id' }] : [],
         all: () => [{ id: 1 }],
@@ -183,9 +190,9 @@ test('stdio language server answers initialize and document diagnostics', async 
   const input = new PassThrough();
   const output = new PassThrough();
   startStdioLanguageServer({ moduleSpecifier: '@sqlbraid/template', snapshot }, { input, output });
-  const messages = [];
+  const messages: string[] = [];
   output.on('data', (chunk) => messages.push(chunk.toString()));
-  const send = (message) => {
+  const send = (message: Record<string, unknown>): void => {
     const body = JSON.stringify(message);
     input.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
   };
@@ -200,11 +207,14 @@ test('stdio language server answers initialize and document diagnostics', async 
 });
 
 test('root execution waits until the transaction scope closes', async () => {
-  const log = [];
-  let release;
-  const gate = new Promise((resolve) => { release = resolve; });
+  const log: string[] = [];
+  const { promise: gate, resolve: release } = Promise.withResolvers<void>();
   const db = createPgDatabase({
-    async query(config) { log.push(config.text); return { rows: [] }; },
+    async query(configOrText: PgQueryConfig | string, values: readonly unknown[] = []) {
+      const config = typeof configOrText === 'string' ? { text: configOrText, values } : configOrText;
+      log.push(config.text);
+      return { rows: [] };
+    },
   });
   const transaction = db.transaction(async (tx) => { await tx.execute(postgres`SELECT 'inside'`); await gate; });
   await new Promise((resolve) => setImmediate(resolve));
@@ -224,16 +234,16 @@ test('SQLite inspector records strict and dynamic table evidence', async () => {
     native.exec('CREATE TABLE ordinary(id INTEGER, payload TEXT); CREATE TABLE strict_table(id INTEGER) STRICT;');
     const snapshot = await createSqliteInspector(native).inspect();
     assert.equal(snapshot.dialect, 'sqlite');
-    assert.equal(snapshot.relations['main.strict_table'].strict, true);
-    assert.equal(snapshot.relations['main.ordinary'].columns[0].tsType, undefined);
-    assert.ok(Array.isArray(snapshot.server.capabilities.compileOptions));
+    assert.equal(snapshot.relations['main.strict_table']?.strict, true);
+    assert.equal(snapshot.relations['main.ordinary']?.columns[0]?.tsType, undefined);
+    assert.ok(Array.isArray(snapshot.server.capabilities?.compileOptions));
   } finally {
     native.close();
   }
 });
 
 test('MySQL inspector rejects MariaDB as a different product', async () => {
-  const connection = { async execute() { return [[{ version: '10.11.0-MariaDB', product: 'MariaDB' }], []]; } };
+  const connection = { async execute(_sql: string) { return [[{ version: '10.11.0-MariaDB', product: 'MariaDB' }], []] as const; } };
   await assert.rejects(() => createMysqlInspector(connection).inspect(), /MYSQL_PRODUCT_UNSUPPORTED/);
 });
 
@@ -253,8 +263,8 @@ test('PostgreSQL inspector records relation and routine metadata', async () => {
 test('prepared queries reject shape drift and streams honor adapter capability', async () => {
   let second = false;
   const db = createDatabase({
-    async query(rendered) { return { rows: [{ text: rendered.text }] }; },
-    async *stream(rendered) { yield { text: rendered.text }; },
+    async query<Row>(rendered: RenderedQuery) { return { rows: [{ text: rendered.text }] as unknown as readonly Row[] }; },
+    async *stream<Row>(rendered: RenderedQuery): AsyncIterable<Row> { yield { text: rendered.text } as unknown as Row; },
   });
   const prepared = db.prepare('users', () => second ? postgres`SELECT name` : postgres`SELECT id`);
   assert.deepEqual(await prepared.all(), [{ text: 'SELECT id' }]);

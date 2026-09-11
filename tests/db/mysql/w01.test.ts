@@ -4,7 +4,7 @@ import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
 import { sql } from "@sqlbraid/mysql";
 import { runW01 } from "../w01.js";
 
-test("MySQL adapter preserves transaction isolation on an independent observer connection", async () => {
+test("MySQL wrappers sharing one connection preserve transaction isolation", async () => {
   const settings = inject("mysql");
   const client = await createConnection(settings.connectionUri);
   const observer = await createConnection(settings.connectionUri);
@@ -13,8 +13,10 @@ test("MySQL adapter preserves transaction isolation on an independent observer c
     const version = (versionRows as { version: string }[])[0]?.version ?? "unknown";
     console.info(`[db-mysql] server_version=${version}`);
     const db = createMysql2Database(client);
+    const secondaryDb = createMysql2Database(client);
     await runW01({
       db,
+      secondaryDb,
       sql,
       rows: async () => {
         const [result] = await observer.query("SELECT id FROM braid_w01 ORDER BY id");

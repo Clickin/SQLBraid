@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createLanguageService } from '../packages/language-server/dist/index.js';
+import type { SchemaSnapshot } from '@sqlbraid/schema';
+import { createLanguageService } from '@sqlbraid/language-server';
 
-const snapshot = { formatVersion: 1, dialect: 'postgres', dialectVersion: '16', server: {}, namespaces: {}, types: {}, relations: { users: { identity: 'public.users', name: 'users', kind: 'table', columns: [{ name: 'id', ordinal: 1, type: 'int8', tsType: 'bigint', nullable: false }] } }, routines: {}, metadata: {} };
+const snapshot = { formatVersion: 1, dialect: 'postgres', dialectVersion: '16', server: {}, namespaces: {}, types: {}, relations: { users: { identity: 'public.users', name: 'users', kind: 'table', columns: [{ name: 'id', ordinal: 1, type: 'int8', tsType: 'bigint', nullable: false }] } }, routines: {}, metadata: {} } as const satisfies SchemaSnapshot;
 const source = `import { sql } from '@sqlbraid/template';\nconst q = sql\`SELECT id FROM users\`;`;
 
 test('language service shares compiler discovery for hover and diagnostics', () => {

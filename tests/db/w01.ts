@@ -11,6 +11,7 @@ interface SqlTagLike {
 
 interface W01Options {
   readonly db: DatabaseLike;
+  readonly secondaryDb?: DatabaseLike;
   readonly sql: SqlTagLike;
   readonly rows: () => Promise<readonly string[]>;
   readonly clear: () => Promise<void>;
@@ -23,7 +24,7 @@ const tick = async (): Promise<void> => {
 };
 
 export async function runW01(options: W01Options): Promise<void> {
-  const { db, sql, rows, clear } = options;
+  const { db, secondaryDb = db, sql, rows, clear } = options;
   await db.execute(sql`DROP TABLE IF EXISTS braid_w01`);
   await db.execute(sql`CREATE TABLE braid_w01 (id VARCHAR(255) PRIMARY KEY)`);
 
@@ -36,7 +37,8 @@ export async function runW01(options: W01Options): Promise<void> {
     throw new Error("rollback A");
   });
   await started.promise;
-  const outside = db.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"B"})`);
+  const outside = secondaryDb.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"B"})`);
+  await tick();
   release.resolve();
   await expect(rollback).rejects.toThrow("rollback A");
   await outside;

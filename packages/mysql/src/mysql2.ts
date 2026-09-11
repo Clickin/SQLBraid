@@ -13,9 +13,12 @@ export interface Mysql2ResultHeader extends CommandResult {
   readonly warningStatus?: number;
 }
 
+type Mysql2TypedParameter = { readonly type: number; readonly value: unknown; readonly unsigned: boolean };
+type Mysql2Parameter = string | number | bigint | boolean | Date | null | Blob | Buffer | Uint8Array | Mysql2TypedParameter | Mysql2Parameter[] | { [key: string]: Mysql2Parameter };
+
 export interface Mysql2ConnectionLike {
-  execute(sql: string, values?: readonly unknown[]): Promise<readonly [unknown, readonly Mysql2FieldLike[] | undefined]>;
-  query?(sql: string, values?: readonly unknown[]): Promise<readonly [unknown, readonly Mysql2FieldLike[] | undefined]>;
+  execute(sql: string, values?: Mysql2Parameter): Promise<readonly [unknown, readonly Mysql2FieldLike[] | undefined]>;
+  query?(sql: string): Promise<readonly [unknown, readonly Mysql2FieldLike[] | undefined]>;
   beginTransaction?(): Promise<void>;
   commit?(): Promise<void>;
   rollback?(): Promise<void>;
@@ -45,10 +48,12 @@ function assertUniqueFields(fields: readonly Mysql2FieldLike[]): void {
 
 export function createMysql2Executor(connection: Mysql2ConnectionLike, options: { readonly typePolicy?: TypePolicy } = {}): QueryExecutor {
   const policy = options.typePolicy ?? defaultTypePolicy;
-  const control = async (sql: string): Promise<void> => { await (connection.query ?? connection.execute).call(connection, sql, []); };
+  const control = async (sql: string): Promise<void> => { await (connection.query ?? connection.execute).call(connection, sql); };
   return {
+    ownershipKey: connection,
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
-      const [payload, rawFields] = await connection.execute(rendered.text, rendered.values);
+      // RenderedQuery values are the driver-owned bind boundary; mysql2 accepts the mutable array shape here.
+      const [payload, rawFields] = await connection.execute(rendered.text, rendered.values as unknown as Mysql2Parameter[]);
       const fields = Array.isArray(rawFields) ? rawFields : [];
       assertUniqueFields(fields);
       if (Array.isArray(payload)) {
@@ -60,7 +65,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       return { rows: [], rowCount: header.affectedRows, kind: "command", command: header };
     },
     async call<Row>(rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
-      const [payload, rawFields] = await connection.execute(rendered.text, rendered.values);
+      const [payload, rawFields] = await connection.execute(rendered.text, rendered.values as unknown as Mysql2Parameter[]);
       const fields = Array.isArray(rawFields) ? rawFields : [];
       assertUniqueFields(fields);
       if (!Array.isArray(payload)) return { output: payload && typeof payload === "object" ? Object.fromEntries(Object.entries(payload)) : {}, resultSets: [] };
