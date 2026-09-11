@@ -253,6 +253,10 @@ function rowType(semantic: SemanticResult): string {
   return `{ ${fields.join("; ")} }`;
 }
 
+function provenSemanticRow(semantic: SemanticResult): boolean {
+  return semantic.columns !== "unknown" && semantic.columns.every((column) => column.type !== "unknown" && column.type !== "any" && safeType(column.type) !== "unknown");
+}
+
 function typeNodeFromText(text: string, fileName: string): ts.TypeNode | undefined {
   if (!text.trim()) return undefined;
   const source = ts.createSourceFile(`${fileName}.type.ts`, `type __SqlBraidType = ${text};`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -267,7 +271,7 @@ function typeNodeFromText(text: string, fileName: string): ts.TypeNode | undefin
 }
 
 function contractDiagnostics(query: DiscoveredQuery, semantic: SemanticResult): readonly CompileDiagnostic[] {
-  if (!query.expectedType || semantic.columns !== "unknown") return [];
+  if (!query.expectedType || provenSemanticRow(semantic)) return [];
   return [{ code: "BRAID_CONTRACT_UNPROVEN", message: "The expected sql<T> contract cannot be verified from the available SQL evidence.", severity: "error", range: query.templateRange }];
 }
 
@@ -319,7 +323,7 @@ function defaultAnalyze(query: DiscoveredQuery, options: OverlayOptions): Inferr
     if (expectation) bindingTypes[mapping.interpolation] = expectation.type;
   }
   diagnostics.push(...contractDiagnostics(query, semantic));
-  return { rowType: diagnostics.length ? "unknown" : rowType(semantic), bindingTypes, diagnostics, resultKind: semantic.resultKind, semantic };
+  return { rowType: diagnostics.length || !provenSemanticRow(semantic) ? "unknown" : rowType(semantic), bindingTypes, diagnostics, resultKind: semantic.resultKind, semantic };
 }
 
 export function discoverQueries(sourceText: string, fileName: string, options: OverlayOptions): SourceAnalysisResult {
