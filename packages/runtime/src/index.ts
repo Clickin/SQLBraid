@@ -14,10 +14,11 @@ export class DatabaseCardinalityError extends Error {
 }
 
 export class DatabaseScopeError extends Error {
-  readonly code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED";
+  readonly code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED" | "BRAID_CONNECTION_POISONED";
+  declare readonly cause?: unknown;
 
-  constructor(code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED", message: string) {
-    super(message);
+  constructor(code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED" | "BRAID_CONNECTION_POISONED", message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause });
     this.name = "DatabaseScopeError";
     this.code = code;
   }
@@ -35,6 +36,7 @@ export class DatabaseResultError extends Error {
 interface ScopeState {
   tail: Promise<void>;
   owner?: symbol;
+  poisoned?: unknown;
 }
 
 interface DatabaseOptions {
@@ -46,9 +48,8 @@ interface ScopedDatabase extends Database {
   close(): void;
 }
 
-function cleanupError(error: unknown, cleanup: unknown): unknown {
-  if (cleanup === undefined) return error;
-  return new AggregateError([error, cleanup], "Transaction failed and cleanup also failed.");
+function cleanupError(error: unknown, cleanup: unknown): AggregateError {
+  return new AggregateError([error, cleanup], "Transaction failed and cleanup also failed.", { cause: error });
 }
 
 const transactionContext = new AsyncLocalStorage<{ readonly state: ScopeState; readonly owner: symbol }>();
@@ -64,13 +65,32 @@ function scopeStateFor(executor: QueryExecutor): ScopeState {
   return state;
 }
 
+function isPoisoned(state: ScopeState): boolean {
+  return Object.hasOwn(state, "poisoned");
+}
+
+function poison(state: ScopeState, reason: unknown): void {
+  if (!isPoisoned(state)) state.poisoned = reason;
+}
+
+function assertHealthy(state: ScopeState): void {
+  if (isPoisoned(state)) throw new DatabaseScopeError("BRAID_CONNECTION_POISONED", "The physical execution resource is poisoned and cannot accept new SQLBraid work.", state.poisoned);
+}
+
 function acquireRoot(state: ScopeState): Promise<() => void> {
+  assertHealthy(state);
   const context = transactionContext.getStore();
   if (context?.state === state && state.owner === context.owner) throw new DatabaseScopeError("BRAID_TX_SCOPE", "The root database handle cannot be used from its own transaction callback.");
   const { promise: turn, resolve: release } = Promise.withResolvers<void>();
   const previous = state.tail;
   state.tail = previous.then(() => turn);
-  return previous.then(() => release);
+  return previous.then(() => {
+    if (isPoisoned(state)) {
+      release();
+      assertHealthy(state);
+    }
+    return release;
+  });
 }
 
 export function createDatabase(executor: QueryExecutor): Database {
@@ -84,6 +104,7 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
   };
   const acquireForUse = (): Promise<(() => void) | undefined> => {
     assertOpen();
+    assertHealthy(state);
     return options.transaction ? Promise.resolve(undefined) : acquireRoot(state);
   };
 
@@ -144,6 +165,8 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
       };
     },
     stream<Row>(query: RowQuery<Row>, options: { readonly signal?: AbortSignal } = {}): AsyncIterable<Row> {
+      assertOpen();
+      assertHealthy(state);
       const streamExecutor = executor.stream;
       if (!streamExecutor) throw new Error("BRAID_STREAM_UNSUPPORTED: this adapter does not expose a streaming protocol.");
       return (async function* (): AsyncGenerator<Row> {
@@ -159,23 +182,29 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
       })();
     },
     async transaction<T>(callback: (transactionDatabase: Database) => Promise<T>): Promise<T> {
+      assertOpen();
+      assertHealthy(state);
       if (options.transaction) {
-        assertOpen();
         if (!executor.savepoint || !executor.rollbackTo || !executor.releaseSavepoint) throw new DatabaseScopeError("BRAID_TX_SCOPE", "Nested transactions require savepoint support.");
         const name = `braid_sp_${Math.random().toString(36).slice(2)}`;
-        await executor.savepoint(name);
+        try { await executor.savepoint(name); } catch (error) { poison(state, error); throw error; }
         const nested = createScopedDatabase(executor, state, { transaction: true, preparedNames: options.preparedNames });
         try {
           const result = await callback(nested);
-          await executor.releaseSavepoint(name);
+          try { await executor.releaseSavepoint(name); } catch (error) { poison(state, error); throw error; }
           return result;
         } catch (error) {
+          if (isPoisoned(state)) throw error;
           let cleanup: unknown;
           try { await executor.rollbackTo(name); } catch (failure) { cleanup = failure; }
           if (cleanup === undefined) {
             try { await executor.releaseSavepoint(name); } catch (failure) { cleanup = failure; }
           }
-          if (cleanup !== undefined) throw cleanupError(error, cleanup);
+          if (cleanup !== undefined) {
+            const combined = cleanupError(error, cleanup);
+            poison(state, combined);
+            throw combined;
+          }
           throw error;
         } finally {
           nested.close();
@@ -187,15 +216,20 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
       let begun = false;
       const owner = Symbol("sqlbraid.transaction");
       try {
-        await executor.begin();
+        try { await executor.begin(); } catch (error) { poison(state, error); throw error; }
         begun = true;
         state.owner = owner;
         const result = await transactionContext.run({ state, owner }, () => callback(transactionDatabase));
-        await executor.commit();
+        try { await executor.commit(); } catch (error) { poison(state, error); throw error; }
         return result;
       } catch (error) {
         if (!begun) throw error;
-        try { await executor.rollback(); } catch (cleanup) { throw cleanupError(error, cleanup); }
+        if (isPoisoned(state)) throw error;
+        try { await executor.rollback(); } catch (cleanup) {
+          const combined = cleanupError(error, cleanup);
+          poison(state, combined);
+          throw combined;
+        }
         throw error;
       } finally {
         transactionDatabase.close();

@@ -1,7 +1,7 @@
 {
   "referenceCommit": "38ea32b2a16fd79c5c6a58efbdf57446593584bd",
   "baselineCommit": "166cd2ec6e9de7953d5ea9090513a1987993b9bb",
-  "implementationCommit": "d6157d3b834f5c00c4c5f0c1885409b121fee2cf",
+  "implementationCommit": "working-tree",
   "toolchain": {
     "node": "24.21.0",
     "pnpm": "12.3.4",
@@ -21,7 +21,7 @@
   "verification": {
     "installFrozen": "passed",
     "typecheck": "passed",
-    "unit": { "tests": 48, "passed": 48 },
+    "unit": { "tests": 58, "passed": 58 },
     "sqlite": { "tests": 1, "passed": 1 },
     "postgres": { "tests": 1, "passed": 1 },
     "mysql": { "tests": 1, "passed": 1 },
@@ -30,17 +30,18 @@
     "testToolingTypecheck": "passed",
     "watchProject": "unit",
     "packedEngine": ">=22.18.0",
-    "testAll": { "tests": 53, "passed": 53, "packedPackages": 12 }
+    "testAll": { "tests": 63, "passed": 63, "packedPackages": 12 }
   },
   "capabilities": [
     {"id":"template.lexical-directives","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.template-scanner"],"openFindings":[]},
-    {"id":"template.guarded-lowering","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.guarded-runtime"],"openFindings":["requires build/emit transform; bare JS tag remains eager"]},
+    {"id":"template.guarded-lowering","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.guarded-runtime","remediation.w03-hygiene"],"openFindings":["requires build/emit transform; bare JS tag remains eager"]},
     {"id":"template.trim-and-limits","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.trim","remediation.structural-limits"],"openFindings":[]},
     {"id":"compiler.static-select","dialect":"postgres","metadata":"verified","parse":"verified","inference":"exact","runtime":"simulated","consumer":"verified","tests":["parser.basic-select","compiler.downstream-row"],"openFindings":["snapshot must be supplied for relation evidence"]},
     {"id":"runtime.sqlite-returning","dialect":"sqlite","metadata":"verified","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.sqlite-returning"],"openFindings":[]},
     {"id":"runtime.postgres-codec","dialect":"postgres","metadata":"verified","parse":"absent","inference":"conservative","runtime":"simulated","consumer":"verified","tests":["remediation.pg-int8"],"openFindings":["live pg protocol matrix not run"]},
     {"id":"runtime.mysql-command-result","dialect":"mysql","metadata":"verified","parse":"absent","inference":"conservative","runtime":"simulated","consumer":"verified","tests":["adapters.mysql-command"],"openFindings":["live mysql2 matrix not run"]},
-    {"id":"runtime.transaction-scope","dialect":"all","metadata":"absent","parse":"absent","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.transaction-isolation","db.w01.sqlite","db.w01.postgres","db.w01.mysql"],"openFindings":["pool lease ownership is not implemented"]},
+    {"id":"runtime.transaction-scope","dialect":"all","metadata":"absent","parse":"absent","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.transaction-isolation","remediation.transaction-poison","db.w01.sqlite","db.w01.postgres","db.w01.mysql"],"openFindings":["pool lease ownership is not implemented","transaction-scope concurrent operation policy is not defined/implemented; transaction-internal Promise.all behavior remains driver command queue dependent"]},
+    {"id":"compiler.typechecker-overlay","dialect":"all","metadata":"absent","parse":"verified","inference":"verified","runtime":"verified","consumer":"verified","tests":["remediation.w03-bind-types","remediation.w03-contracts","remediation.w03-project","remediation.w03-hygiene"],"openFindings":["incremental language-service caching remains incomplete"]},
     {"id":"operations.standard-schema-v1","dialect":"all","metadata":"absent","parse":"absent","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.standard-schema"],"openFindings":[]},
     {"id":"operations.shape-fingerprint","dialect":"all","metadata":"absent","parse":"verified","inference":"conservative","runtime":"verified","consumer":"verified","tests":["remediation.shape-fingerprint"],"openFindings":["compiler artifact does not yet encode evaluated structural identifiers"]},
     {"id":"snapshot.codec-and-drift","dialect":"all","metadata":"verified","parse":"absent","inference":"conservative","runtime":"simulated","consumer":"verified","tests":["schema.snapshot"],"openFindings":["live inspectors are not implemented"]},
