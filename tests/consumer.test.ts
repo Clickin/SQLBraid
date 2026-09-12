@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -15,7 +15,8 @@ async function linkPackage(directory: string, name: string): Promise<void> {
 test('public package exports resolve in an external consumer directory', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'sqlbraid-consumer-'));
   await mkdir(join(directory, 'node_modules', '@sqlbraid'), { recursive: true });
-  for (const name of ['core', 'template', 'runtime', 'schema', 'ast', 'operations', 'compiler', 'postgres', 'mysql', 'sqlite', 'cli', 'language-server']) await linkPackage(directory, name);
+  const packages = await readdir(join(process.cwd(), 'packages'), { withFileTypes: true });
+  for (const entry of packages) if (entry.isDirectory()) await linkPackage(directory, entry.name);
   await writeFile(join(directory, 'package.json'), '{"type":"module"}\n');
   const entry = join(directory, 'index.mjs');
   await writeFile(entry, [

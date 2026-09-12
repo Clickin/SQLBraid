@@ -10,10 +10,8 @@ import ts from 'typescript';
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import type { RenderedQuery } from '@sqlbraid/core';
 import type { StandardSchemaLike } from '@sqlbraid/operations';
-import type { SchemaSnapshot } from '@sqlbraid/schema';
-import { parseSql, resolveStatement, lexSql } from '@sqlbraid/ast';
 import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource, sourcePosition } from '@sqlbraid/compiler';
-import { classifySemantics, fingerprintQuery, templateFamilyFingerprint, validateRows, ResultValidationError } from '@sqlbraid/operations';
+import { fingerprintQuery, templateFamilyFingerprint, validateRows, ResultValidationError } from '@sqlbraid/operations';
 import { createPgDatabase } from '@sqlbraid/postgres/pg';
 import { createPostgresInspector } from '@sqlbraid/postgres';
 import { createNodeSqliteDatabase } from '@sqlbraid/sqlite/node-sqlite';
@@ -26,26 +24,6 @@ import { sql as sqlite } from '@sqlbraid/sqlite';
 import { startStdioLanguageServer } from '@sqlbraid/language-server';
 
 type PgQueryConfig = { readonly text: string; readonly values: readonly unknown[] };
-
-const snapshot = {
-  formatVersion: 1,
-  dialect: 'postgres',
-  dialectVersion: '16',
-  server: {},
-  namespaces: {},
-  types: {},
-  relations: {
-    'public.users': {
-      identity: 'public.users', name: 'users', kind: 'table',
-      columns: [
-        { name: 'id', ordinal: 0, type: 'int4', tsType: 'number', nullable: false },
-        { name: 'name', ordinal: 1, type: 'text', tsType: 'string', nullable: false },
-      ],
-    },
-  },
-  routines: {},
-  metadata: {},
-} as const satisfies SchemaSnapshot;
 
 const compilerOptions = {
   baseUrl: process.cwd(),
@@ -88,34 +66,7 @@ test('structural inputs are captured and bounded', () => {
   assert.throws(() => limited`SELECT ${limited.join([limited.fragment`1`, limited.fragment`2`], limited.fragment`, `)}`.render(), hasCode('BRAID_STRUCTURE_LIMIT'));
 });
 
-test('AST consumes SQL and preserves qualified scope and bind ordinals', () => {
-  const qualified = resolveStatement(parseSql('SELECT u.id AS "userId" FROM users u WHERE u.id = $1'), snapshot);
-  assert.deepEqual(qualified.columns, [{ name: 'userId', type: 'number', nullable: false, source: 'public.users' }]);
-  assert.deepEqual(qualified.binds, [{ placeholder: 1, type: 'number', nullable: false, evidence: 'column:id' }]);
-  const missingJoin = resolveStatement(parseSql('SELECT id FROM users JOIN definitely_missing ON true'), snapshot);
-  assert.equal(missingJoin.columns, 'unknown');
-  assert.ok(missingJoin.diagnostics.some((diagnostic) => diagnostic.code === 'SQL_RELATION'));
-  const placeholders = resolveStatement(parseSql('SELECT ? AS value FROM users WHERE id = ?'), snapshot);
-  assert.deepEqual(placeholders.binds.map((bind) => bind.placeholder), [1, 2]);
-  const routines: SchemaSnapshot = { ...snapshot, routines: { f: [
-    { name: 'f', identity: 'public.f(int)', kind: 'procedure', arguments: [{ mode: 'in', type: 'int4', tsType: 'number' }], result: { kind: 'void' } },
-    { name: 'f', identity: 'public.f(text)', kind: 'procedure', arguments: [{ mode: 'in', type: 'text', tsType: 'string' }], result: { kind: 'void' } },
-  ] } };
-  const ambiguous = resolveStatement(parseSql('CALL f($1)'), routines);
-  assert.equal(ambiguous.columns, 'unknown');
-  assert.ok(ambiguous.diagnostics.some((diagnostic) => diagnostic.code === 'SQL_ROUTINE_AMBIGUOUS'));
-  assert.ok(resolveStatement(parseSql('CALL f($1, $2)'), routines).diagnostics.some((diagnostic) => diagnostic.code === 'SQL_ROUTINE_ARITY'));
-  assert.equal(parseSql("SELECT 'unterminated FROM users").diagnostics[0]?.code, 'SQL_LEX');
-  assert.equal(parseSql('SELECT (((((id))))) FROM users', { maxNestingDepth: 1 }).diagnostics[0]?.code, 'SQL_LEX');
-  assert.equal(lexSql('SELECT id FROM users WHERE id=$1').find((token) => token.kind === 'placeholder')?.text, '$1');
-});
-
-test('operations use conservative semantics, shape identity, and Standard Schema envelopes', async () => {
-  assert.equal(classifySemantics('SELECT id FROM users').operation, 'read');
-  assert.equal(classifySemantics('SELECT nextval(\'s\')').operation, 'unknown');
-  assert.equal(classifySemantics('SELECT id FROM users FOR NO KEY UPDATE').readOnly, false);
-  assert.equal(classifySemantics('EXPLAIN ANALYZE DELETE FROM users').operation, 'unknown');
-  assert.equal(classifySemantics('PRAGMA foreign_keys = OFF').operation, 'session');
+test('operations preserve shape identity and Standard Schema envelopes', async () => {
   const a = postgres`SELECT ${postgres.ident('id')} FROM users`;
   const b = postgres`SELECT ${postgres.ident('name')} FROM users`;
   assert.notEqual(fingerprintQuery(a), fingerprintQuery(b));
@@ -325,7 +276,7 @@ test('adapters preserve command and returning result kinds', async () => {
   const fake = {
     prepare(text: string) {
       return {
-        columns: () => text.includes('RETURNING') || text.includes('SELECT') ? [{ name: 'id' }] : [],
+        columns: () => text.includes('RETURNING') || text.includes('SELECT') ? [{ name: 'id', column: 'id', database: 'main', table: 'users', type: 'INTEGER' }] : [],
         all: () => [{ id: 1 }],
         run: () => ({ changes: 1, lastInsertRowid: 2 }),
       };

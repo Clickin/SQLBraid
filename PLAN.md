@@ -492,7 +492,7 @@ It should **not** own:
 - full dialect coercion logic;
 - universal result inference.
 
-The PV2 compiler implements this boundary: it depends on `@sqlbraid/core`, `@sqlbraid/template`, and TypeScript, not `@sqlbraid/ast` or `@sqlbraid/schema`. Ordinary checking has no schema-driven row/bind inference or dynamic-variant semantic proof.
+The compiler implements this boundary: it depends only on `@sqlbraid/core`, `@sqlbraid/template`, and TypeScript. Ordinary checking has no schema-driven row/bind inference or dynamic-variant semantic proof.
 
 The canonical row contract is `sql.rows<T>`; bare `sql<T>` is unsupported. Explicit tags retain their runtime result kind without the transform, while bare `sql` remains `Query<unknown, "unknown">`. Guarded lowering preserves the original TypeScript type arguments and checks active branches through TypeScript control flow.
 
@@ -500,23 +500,16 @@ CLI checks/builds are snapshot-independent. LSP hover exposes declared contracts
 
 ---
 
-## 10. What happens to the existing SQL AST work
+## 10. Post-AST architecture
 
-The existing `@sqlbraid/ast` and semantic resolver were created for a broader automatic-inference strategy.
+PV3 removed the broad SQL AST package, semantic resolver, and their abandoned tests without creating a replacement SQL lexer.
 
-Do not keep expanding that scope by inertia.
+- `@sqlbraid/template` retains its independent Braid scanner for directive recognition and interpolation safety in dialect-specific quoted/comment regions.
+- `@sqlbraid/operations` retains fingerprints, declared result kinds, optional source/result-type metadata, and existing validation helpers. Its provisional manifest does not infer operation, read-only, locking, or session-affinity semantics.
+- The `node:sqlite` adapter uses explicit query kinds and required native `statement.columns()` metadata. Unknown queries use column presence; explicit rows reject statements with no result columns; commands use the command path; calls are unsupported. Row execution rejects duplicate result labels.
+- Schema inspection remains available for completion and drift, independently of ordinary compiler checks.
 
-Migration plan:
-
-1. identify which lexical/scanning utilities are still required for safe directive handling, lightweight statement classification, diagnostics, or verification support;
-2. move or retain only those narrow utilities;
-3. stop adding broad expression/function/operator semantics;
-4. remove compiler dependencies on semantic AST inference where explicit contracts/manifests replace them;
-5. deprecate or remove unused AST/resolver APIs before v1 if they no longer serve a product requirement.
-
-Deletion is preferred over maintaining a second partial SQL implementation indefinitely.
-
-PV2 leaves `packages/ast` and its remaining non-compiler consumers intact. The lexical-utility migration and AST/resolver removal belong to PV3.
+Deletion is preferred over maintaining a second partial SQL implementation. Runtime validation APIs, database verification, and the final manifest format remain later work.
 
 ---
 
@@ -610,7 +603,7 @@ Retain as first-class product packages:
 - `@sqlbraid/cli`
 - `@sqlbraid/language-server`
 
-`@sqlbraid/ast` is transitional and should survive only if it has a narrow, durable responsibility after the pivot.
+PV3 leaves eleven publishable packages; Braid scanning remains part of the template package.
 
 Avoid creating more packages without a clear user-facing or architectural boundary.
 
@@ -686,7 +679,7 @@ Goal: make the implementation match this product definition.
 - make explicit result contracts the primary typed path;
 - remove mandatory SQL semantic inference from normal checking;
 - retire old external-parity planning artifacts;
-- stop treating `@sqlbraid/ast` as a growing dialect compiler;
+- keep the removed SQL AST/resolver out of the product path;
 - simplify compiler diagnostics around directives/contracts/manifests;
 - update tests to assert the new contract.
 

@@ -1,27 +1,11 @@
 import { createHash } from "node:crypto";
-import { lexSql, type SqlToken } from "@sqlbraid/ast";
 import { SQL_FRAGMENT, type Query, type QueryResultKind, type QueryRow, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
-
-export type StatementOperation = "read" | "write" | "transaction" | "session" | "unknown";
-
-export interface QuerySemantics {
-  readonly operation: StatementOperation;
-  readonly readOnly: boolean;
-  readonly locking: boolean;
-  readonly sessionAffine: boolean;
-  readonly reason: string;
-}
 
 export interface QueryManifest {
   readonly fingerprint: string;
   readonly templateFamilyFingerprint: string;
   readonly variantFingerprint?: string;
-  readonly operation: StatementOperation;
-  readonly readOnly: boolean;
-  readonly locking: boolean;
-  readonly sessionAffine: boolean;
-  readonly reason: string;
-  readonly resultKind?: "rows" | "command" | "call" | "unknown";
+  readonly resultKind: QueryResultKind;
   readonly source?: string;
   readonly resultType?: string;
 }
@@ -30,12 +14,7 @@ export interface QueryManifestEvidence {
   readonly fingerprint: string;
   readonly templateFamilyFingerprint: string;
   readonly variantFingerprint?: string;
-  readonly operation: StatementOperation;
-  readonly readOnly?: boolean;
-  readonly locking?: boolean;
-  readonly sessionAffine?: boolean;
-  readonly reason?: string;
-  readonly resultKind?: "rows" | "command" | "call" | "unknown";
+  readonly resultKind: QueryResultKind;
   readonly source?: string;
   readonly resultType?: string;
 }
@@ -126,59 +105,17 @@ export function fingerprintTemplate(ir: TemplateIr, values: readonly unknown[]):
   return createHash("sha256").update(canonicalIr(ir, values)).digest("hex");
 }
 
-function significant(tokens: readonly SqlToken[]): readonly SqlToken[] {
-  return tokens.filter((token) => token.kind !== "comment" && token.kind !== "eof");
-}
-
-function unknownSemantics(reason: string): QuerySemantics {
-  return { operation: "unknown", readOnly: false, locking: true, sessionAffine: true, reason };
-}
-
 function portableSource(source: string | undefined): string | undefined {
   if (!source || source.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(source)) return undefined;
   return source;
 }
 
-function tokenNames(tokens: readonly SqlToken[]): readonly string[] {
-  return tokens.map((token) => token.text.toUpperCase());
-}
-
-export function classifySemantics(sqlText: string): QuerySemantics {
-  let tokens: readonly SqlToken[];
-  try { tokens = significant(lexSql(sqlText)); }
-  catch { return unknownSemantics("SQL could not be lexed safely"); }
-  const first = tokens[0]?.text.toUpperCase();
-  if (!first) return unknownSemantics("empty statement");
-  const names = tokenNames(tokens);
-  if (["BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT", "RELEASE"].includes(first)) return { operation: "transaction", readOnly: false, locking: true, sessionAffine: true, reason: "transaction control" };
-  if (["SET", "RESET", "USE"].includes(first)) return { operation: "session", readOnly: false, locking: false, sessionAffine: true, reason: "session state" };
-  if (first === "PRAGMA") {
-    const assignment = names.includes("=") || names.includes(":=");
-    return assignment ? { operation: "session", readOnly: false, locking: false, sessionAffine: true, reason: "PRAGMA changes session state" } : { operation: "read", readOnly: true, locking: false, sessionAffine: false, reason: "read-only PRAGMA query" };
-  }
-  if (first === "EXPLAIN") return unknownSemantics(names.includes("ANALYZE") ? "EXPLAIN ANALYZE executes the statement" : "planning effects are not proven absent");
-  if (first === "SELECT" || first === "VALUES" || first === "SHOW" || first === "DESCRIBE") {
-    const suspicious = ["NEXTVAL", "SETVAL", "CURRVAL", "LASTVAL", "PG_ADVISORY_LOCK", "PG_ADVISORY_XACT_LOCK", "PG_TRY_ADVISORY_LOCK", "SET_CONFIG"];
-    if (suspicious.some((name) => names.includes(name))) return unknownSemantics("routine or session effects are not proven absent");
-    if (names.includes("FOR")) return unknownSemantics("locking clause requires a pinned session");
-    return { operation: "read", readOnly: true, locking: false, sessionAffine: false, reason: "static read statement" };
-  }
-  if (["INSERT", "UPDATE", "DELETE", "MERGE", "CREATE", "ALTER", "DROP", "TRUNCATE", "CALL"].includes(first)) return { operation: "write", readOnly: false, locking: true, sessionAffine: false, reason: "write or routine statement" };
-  return unknownSemantics(`unproven statement kind: ${first}`);
-}
-
 export function createManifest(query: Query<unknown, QueryResultKind>, options: { readonly source?: string; readonly resultType?: string } = {}): QueryManifest {
   const rendered = query.render();
-  const semantics = classifySemantics(rendered.text);
   return {
     fingerprint: fingerprintQuery(query),
     templateFamilyFingerprint: templateFamilyFingerprint(query),
     ...(rendered.variantFingerprint ? { variantFingerprint: rendered.variantFingerprint } : {}),
-    operation: semantics.operation,
-    readOnly: semantics.readOnly,
-    locking: semantics.locking,
-    sessionAffine: semantics.sessionAffine,
-    reason: semantics.reason,
     resultKind: query.resultKind,
     ...(portableSource(options.source) ? { source: portableSource(options.source) } : {}),
     ...(options.resultType ? { resultType: options.resultType } : {}),
@@ -186,7 +123,14 @@ export function createManifest(query: Query<unknown, QueryResultKind>, options: 
 }
 
 export function createManifestFromEvidence(evidence: QueryManifestEvidence): QueryManifest {
-  return { readOnly: false, locking: true, sessionAffine: true, reason: "manifest supplied without semantic evidence", ...evidence, ...(portableSource(evidence.source) ? { source: portableSource(evidence.source) } : { source: undefined }) };
+  return {
+    fingerprint: evidence.fingerprint,
+    templateFamilyFingerprint: evidence.templateFamilyFingerprint,
+    ...(evidence.variantFingerprint ? { variantFingerprint: evidence.variantFingerprint } : {}),
+    resultKind: evidence.resultKind,
+    ...(portableSource(evidence.source) ? { source: portableSource(evidence.source) } : {}),
+    ...(evidence.resultType ? { resultType: evidence.resultType } : {}),
+  };
 }
 
 export async function validateRows<Q extends Query<unknown, QueryResultKind>>(query: Q, rows: readonly QueryRow<Q>[], schema: StandardSchemaLike<QueryRow<Q>>): Promise<readonly QueryRow<Q>[]> {

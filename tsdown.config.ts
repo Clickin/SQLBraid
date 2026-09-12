@@ -23,7 +23,7 @@ function packageBuild(cwd: string, entry: Record<string, string>): UserConfig {
 export default defineConfig([
   packageBuild("packages/core", { index: "src/index.ts" }),
   packageBuild("packages/template", { index: "src/index.ts" }),
-  packageBuild("packages/ast", { index: "src/index.ts" }),
+
   packageBuild("packages/schema", { index: "src/index.ts" }),
   packageBuild("packages/compiler", { index: "src/index.ts" }),
   packageBuild("packages/operations", { index: "src/index.ts" }),

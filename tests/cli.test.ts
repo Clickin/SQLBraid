@@ -26,9 +26,11 @@ test('CLI checks, manifests, and builds opaque declared queries without a snapsh
     const check = await exec(process.execPath, ['packages/cli/dist/index.js', 'check', '--file', file, '--json']);
     assert.deepEqual(JSON.parse(check.stdout), []);
     const manifest = await exec(process.execPath, ['packages/cli/dist/index.js', 'manifest', '--file', file]);
-    const entries: { resultKind: string; resultType?: string }[] = JSON.parse(manifest.stdout);
+    const entries: { resultKind: string; resultType?: string; [key: string]: unknown }[] = JSON.parse(manifest.stdout);
     assert.deepEqual(entries.map((entry) => entry.resultKind), ['rows', 'command', 'call', 'unknown']);
     assert.deepEqual(entries.map((entry) => entry.resultType), ['Row', 'import("@sqlbraid/core").CommandResult', 'Row', undefined]);
+    assert.ok(entries.every((entry) => !('operation' in entry) && !('readOnly' in entry) && !('locking' in entry) && !('sessionAffine' in entry) && !('reason' in entry)));
+    assert.ok(entries.every((entry) => typeof entry.fingerprint === 'string' && typeof entry.templateFamilyFingerprint === 'string' && typeof entry.source === 'string'));
     const output = join(directory, 'generated', 'renamed.mjs');
     await exec(process.execPath, ['packages/cli/dist/index.js', 'build', '--file', file, '--out-file', output]);
     const { build } = await import(pathToFileURL(output).href);

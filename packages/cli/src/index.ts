@@ -4,11 +4,11 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProject, checkSource, createVirtualOverlay, discoverQueries, emitSource, type TypeScriptCheckOptions } from "@sqlbraid/compiler";
-import { classifySemantics, createManifestFromEvidence, fingerprintTemplate, templateFamilyFingerprintOf } from "@sqlbraid/operations";
+import { createManifestFromEvidence, fingerprintTemplate, templateFamilyFingerprintOf } from "@sqlbraid/operations";
 import { diffSnapshots, parseSnapshotJson, type SchemaSnapshot } from "@sqlbraid/schema";
 
 function usage(): never {
-  console.error("Usage: sqlbraid check|manifest|build|drift --file <path> [--snapshot <path>] [--out-file <path>] [--before <path> --after <path>]");
+  console.error("Usage: sqlbraid check|manifest|build --file <path> [--out-file <path>] | sqlbraid check --project <path> | sqlbraid drift --before <path> --after <path>");
   process.exit(2);
 }
 
@@ -105,8 +105,7 @@ async function main(argv: readonly string[]): Promise<void> {
   const manifests = discovered.queries.map((query) => {
     const captured = new Array<unknown>(Math.max(0, query.bindings.length)).fill(null);
     const contract = overlay.queryTypes.find((candidate) => candidate.range.start === query.range.start);
-    const semantics = classifySemantics(query.strings.join(" ? "));
-    return createManifestFromEvidence({ fingerprint: fingerprintTemplate(query.ir, captured), templateFamilyFingerprint: templateFamilyFingerprintOf(query.ir), operation: semantics.operation, readOnly: semantics.readOnly, locking: semantics.locking, sessionAffine: semantics.sessionAffine, reason: semantics.reason, resultKind: query.declaredResultKind, source: relative(process.cwd(), file), ...(contract?.rowType && contract.rowType !== "unknown" ? { resultType: contract.rowType } : {}) });
+    return createManifestFromEvidence({ fingerprint: fingerprintTemplate(query.ir, captured), templateFamilyFingerprint: templateFamilyFingerprintOf(query.ir), resultKind: query.declaredResultKind, source: relative(process.cwd(), file), ...(contract?.rowType && contract.rowType !== "unknown" ? { resultType: contract.rowType } : {}) });
   });
   process.stdout.write(`${JSON.stringify(manifests, null, 2)}\n`);
   if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) process.exitCode = 1;

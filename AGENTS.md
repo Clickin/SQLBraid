@@ -70,7 +70,7 @@ Before adding SQL parser/resolver complexity, ask:
 
 If yes, use the smaller mechanism.
 
-The existing `@sqlbraid/ast` package is transitional. Do not grow it by inertia. Its long-term scope must be justified by the revised `PLAN.md`.
+PV3 removed the broad SQL AST package and semantic resolver. Keep Braid lexical scanning in `@sqlbraid/template`; use explicit query kinds and native driver metadata for execution, not SQL-text classification.
 
 ---
 

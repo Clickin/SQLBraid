@@ -152,12 +152,6 @@ importers:
         specifier: 5.0.0
         version: 5.0.0(@types/node@22.20.1)(vite@7.0.0(@types/node@22.20.1)(yaml@2.9.0))
 
-  packages/ast:
-    dependencies:
-      '@sqlbraid/schema':
-        specifier: workspace:*
-        version: link:../schema
-
   packages/cli:
     dependencies:
       '@sqlbraid/compiler':
@@ -213,9 +207,6 @@ importers:
 
   packages/operations:
     dependencies:
-      '@sqlbraid/ast':
-        specifier: workspace:*
-        version: link:../ast
       '@sqlbraid/core':
         specifier: workspace:*
         version: link:../core
@@ -245,9 +236,6 @@ importers:
 
   packages/sqlite:
     dependencies:
-      '@sqlbraid/ast':
-        specifier: workspace:*
-        version: link:../ast
       '@sqlbraid/core':
         specifier: workspace:*
         version: link:../core

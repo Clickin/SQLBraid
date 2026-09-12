@@ -12,7 +12,7 @@
       "@sqlbraid/template": ["packages/template/src/index.ts"],
       "@sqlbraid/schema": ["packages/schema/src/index.ts"],
       "@sqlbraid/compiler": ["packages/compiler/src/index.ts"],
-      "@sqlbraid/ast": ["packages/ast/src/index.ts"],
+
       "@sqlbraid/runtime": ["packages/runtime/src/index.ts"],
       "@sqlbraid/operations": ["packages/operations/src/index.ts"],
       "@sqlbraid/language-server": ["packages/language-server/src/index.ts"],

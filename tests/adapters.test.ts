@@ -22,7 +22,7 @@ test('mysql2 adapter uses positional placeholders', async () => {
 });
 
 test('node sqlite adapter distinguishes row and command statements', async () => {
-  const db = createNodeSqliteDatabase({ prepare(text) { return { all: () => [{ id: 1 }], run: () => ({ changes: 1 }) }; } });
+  const db = createNodeSqliteDatabase({ prepare(text) { return { columns: () => text.startsWith('SELECT') ? [{ name: 'id' }] : [], all: () => [{ id: 1 }], run: () => ({ changes: 1 }) }; } });
   assert.deepEqual(await db.all(sqliteSql.rows`SELECT 1`), [{ id: 1 }]);
   assert.equal((await db.execute(sqliteSql`UPDATE users SET ok = ${true}`)).rowCount, 1);
 });

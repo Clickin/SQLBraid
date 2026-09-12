@@ -1,5 +1,4 @@
-import { lexSql } from "@sqlbraid/ast";
-import type { QueryExecutor, QueryExecutionResult, RenderedQuery } from "@sqlbraid/core";
+import type { QueryExecutor, QueryExecutionResult, RenderedQuery, RoutineCallResult } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
 
 export interface SqliteColumnLike {
@@ -13,7 +12,7 @@ export interface SqliteColumnLike {
 export interface SqliteStatementLike {
   all(...values: readonly unknown[]): readonly unknown[];
   run(...values: readonly unknown[]): { readonly changes?: number | bigint; readonly lastInsertRowid?: number | bigint };
-  columns?(): readonly SqliteColumnLike[];
+  columns(): readonly SqliteColumnLike[];
 }
 
 export interface SqliteDatabaseLike {
@@ -26,28 +25,19 @@ function plainRow(value: unknown): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value));
 }
 
-function isRowStatement(statement: SqliteStatementLike, sql: string): boolean {
-  if (statement.columns) {
-    try {
-      const columns = statement.columns();
-      const names = new Set<string>();
-      for (const column of columns) {
-        const name = column.name ?? column.column;
-        if (name && names.has(name)) throw new Error(`BRAID_RESULT_COLUMNS: duplicate SQLite result label ${name}.`);
-        if (name) names.add(name);
-      }
-      if (columns.length > 0) return true;
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith("BRAID_RESULT_COLUMNS:")) throw error;
-    }
+function resultColumns(statement: SqliteStatementLike): readonly SqliteColumnLike[] {
+  const columns = statement.columns();
+  const names = new Set<string>();
+  for (const column of columns) {
+    const name = column.name ?? column.column;
+    if (name != null && names.has(name)) throw new Error(`BRAID_RESULT_COLUMNS: duplicate SQLite result label ${name}.`);
+    if (name != null) names.add(name);
   }
-  try {
-    const tokens = lexSql(sql).filter((token) => token.kind !== "comment" && token.kind !== "eof");
-    const first = tokens[0]?.text.toUpperCase();
-    if (["SELECT", "VALUES", "PRAGMA", "EXPLAIN"].includes(first ?? "")) return true;
-    if (first === "WITH") return tokens.some((token) => token.text.toUpperCase() === "RETURNING");
-  } catch { return false; }
-  return false;
+  return columns;
+}
+
+function unsupportedCall(): never {
+  throw new Error("BRAID_CALL_UNSUPPORTED: SQLite adapter does not support routine calls.");
 }
 
 export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
@@ -55,14 +45,22 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
   return {
     ownershipKey: database,
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
+      if (rendered.resultKind === "call") unsupportedCall();
       const statement = database.prepare(rendered.text);
-      if (isRowStatement(statement, rendered.text)) {
+      const columns = rendered.resultKind === "command" ? [] : resultColumns(statement);
+      if (rendered.resultKind === "rows" && columns.length === 0) {
+        throw new Error("BRAID_RESULT_KIND: SQLite statement declared rows but native metadata has no result columns.");
+      }
+      if (rendered.resultKind === "rows" || (rendered.resultKind === "unknown" && columns.length > 0)) {
         const rows = statement.all(...rendered.values).map(plainRow);
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
       const result = statement.run(...rendered.values);
       const changes = result.changes === undefined ? undefined : Number(result.changes);
       return { rows: [], rowCount: changes, kind: "command", command: { affectedRows: changes, insertId: result.lastInsertRowid } };
+    },
+    async call<Row>(_rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
+      unsupportedCall();
     },
     begin: control ? () => control("BEGIN") : undefined,
     commit: control ? () => control("COMMIT") : undefined,

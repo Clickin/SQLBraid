@@ -14,7 +14,7 @@ const unknown = sql\`SELECT id FROM users\`;`;
 test('declared contract hover and diagnostics work without a snapshot', () => {
   const service = createLanguageService({ moduleSpecifier: '@sqlbraid/template' });
   assert.equal(service.diagnostics(source, 'fixture.ts').length, 0);
-  assert.match(service.hover(source, 'fixture.ts', source.indexOf('SELECT'))?.contents ?? '', /Query<UserRow>/);
+  assert.match(service.hover(source, 'fixture.ts', source.indexOf('SELECT'))?.contents ?? '', /RowQuery<UserRow>/);
   assert.match(service.hover(source, 'fixture.ts', source.indexOf('proprietary_command'))?.contents ?? '', /CommandQuery</);
   assert.match(service.hover(source, 'fixture.ts', source.indexOf('proprietary_call'))?.contents ?? '', /CallQuery<UserRow>/);
   assert.match(service.hover(source, 'fixture.ts', source.indexOf('SELECT id'))?.contents ?? '', /Query<unknown>/);

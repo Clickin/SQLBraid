@@ -184,6 +184,8 @@ Static templates work with ordinary TypeScript compilation. Guarded interpolatio
 
 `sqlbraid check` and `sqlbraid build` do not require a schema snapshot. They check TypeScript contracts and Braid directives, not SQL semantics: custom functions, operators, and vendor SQL pass through without local type inference. A declared result contract is not database verification.
 
+The provisional `sqlbraid manifest` output records fingerprints, declared result kind, and optional source/result-type metadata. It does not infer read-only, locking, session-affinity, or operation semantics from SQL text.
+
 ### Runtime validation
 
 For stronger runtime guarantees, SQLBraid can integrate with Standard Schema-compatible validators. This is useful when database output crosses a trust boundary or when custom database types/functions make static verification impractical.
@@ -228,6 +230,8 @@ Each dialect owns the parts that actually differ at the driver boundary:
 
 The goal is to keep dialect support thin. Adding a database should not require teaching the compiler every function and operator in that database.
 
+The `node:sqlite` adapter requires native `statement.columns()` metadata. Explicit `sql.rows` uses row execution and rejects statements without result columns; `sql.command` uses command execution; bare `sql` selects the path from column metadata. Routine calls are unsupported, and row execution rejects duplicate result labels.
+
 ---
 
 ## Runtime API
@@ -268,10 +272,9 @@ The workspace currently contains:
 | `@sqlbraid/sqlite` | SQLite dialect, inspector, `node:sqlite` adapter |
 | `@sqlbraid/compiler` | TypeScript source discovery and guarded-template transform |
 | `@sqlbraid/schema` | Metadata/snapshot structures used by tooling and verification |
-| `@sqlbraid/operations` | Validation, fingerprints, operational metadata |
+| `@sqlbraid/operations` | Validation, fingerprints, provisional declaration manifests |
 | `@sqlbraid/cli` | `sqlbraid` command-line tools |
 | `@sqlbraid/language-server` | Editor/LSP integration |
-| `@sqlbraid/ast` | Transitional lightweight SQL analysis; scope is being reduced |
 
 See [`PLAN.md`](./PLAN.md) for the authoritative v1 scope and migration plan.
 

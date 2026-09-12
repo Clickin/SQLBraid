@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -28,5 +29,37 @@ test("SQLite wrappers sharing one database preserve transaction isolation", asyn
     observer.close();
     native.close();
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("SQLite result kinds follow native columns metadata", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO users (name) VALUES ('Ada');");
+    const db = createNodeSqliteDatabase(native);
+
+    const explicitRows = await db.execute(sql.rows<{ readonly id: number; readonly name: string }>`SELECT id, name FROM users`);
+    assert.equal(explicitRows.kind, "rows");
+    assert.deepEqual(explicitRows.rows, [{ id: 1, name: "Ada" }]);
+
+    const explicitCommand = await db.execute(sql.command`UPDATE users SET name = 'Grace' WHERE id = 1`);
+    assert.equal(explicitCommand.kind, "command");
+    assert.equal(explicitCommand.rowCount, 1);
+
+    const unknownRows = await db.execute(sql`SELECT name FROM users`);
+    assert.equal(unknownRows.kind, "rows");
+    assert.deepEqual(unknownRows.rows, [{ name: "Grace" }]);
+
+    const unknownCommand = await db.execute(sql`DELETE FROM users WHERE id = 1`);
+    assert.equal(unknownCommand.kind, "command");
+    assert.equal(unknownCommand.rowCount, 1);
+
+    await assert.rejects(() => db.execute(sql.rows`DELETE FROM users`), /BRAID_RESULT_KIND/);
+    await assert.rejects(() => db.call(sql.call`CALL unsupported()`), /BRAID_CALL_UNSUPPORTED/);
+    await assert.rejects(() => db.execute(sql.call`SELECT 1`), /BRAID_CALL_UNSUPPORTED/);
+    await assert.rejects(() => db.execute(sql`SELECT 1 AS duplicate, 2 AS duplicate`), /BRAID_RESULT_COLUMNS/);
+    await assert.rejects(() => db.execute(sql.rows`SELECT 1 AS "", 2 AS ""`), /BRAID_RESULT_COLUMNS/);
+  } finally {
+    native.close();
   }
 });

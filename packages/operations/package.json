@@ -6,7 +6,6 @@
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22.18.0" },
   "dependencies": {
-    "@sqlbraid/ast": "workspace:*",
     "@sqlbraid/core": "workspace:*"
   },
   "exports": {
