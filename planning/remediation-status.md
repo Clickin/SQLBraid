@@ -27,6 +27,7 @@ Implementation commit: `4724bdd479577690c3c4dc6420c66d0beaf5cfe3`
 - W01 poisoned physical ownership state: failed outer rollback, failed nested rollback/release cleanup, failed BEGIN, and failed COMMIT conservatively poison the shared physical resource; later work from every wrapper fails with `BRAID_CONNECTION_POISONED` while retaining application/cleanup causes.
 - W03 TypeScript checker overlay: bind assignability uses `TypeChecker.isTypeAssignableTo`, `sql<T>` uses interface/alias/union/readonly/optional structural contracts, unknown inferred rows fail closed, and directive branches use real TypeScript control-flow narrowing.
 - W03 hygienic lowering: TypeScript AST factory transforms use fresh identifiers, preserve lexical `this` and source expressions, short-circuit `choose`, cache selected interpolation evaluation, and attach origin-aware source-map metadata.
+- W03 dynamic structural inference now fails closed for unproven shape-changing guards; only proven local `WHERE`/`SET` clauses retain exact row inference pending W05 variant proof.
 - Strict TypeScript checking for production, tests, Vitest, and tsdown configuration.
 - Unit watch mode limited to the unit project with source aliases; database and packed consumer checks remain explicit.
 - Published package Node runtime metadata (`>=22.18.0`) and packed manifest validation.

@@ -6,11 +6,13 @@ import { pathToFileURL } from 'node:url';
 import { PassThrough } from 'node:stream';
 import { once } from 'node:events';
 import { test } from 'vitest';
+import ts from 'typescript';
+import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import type { RenderedQuery } from '@sqlbraid/core';
 import type { StandardSchemaLike } from '@sqlbraid/operations';
 import type { SchemaSnapshot } from '@sqlbraid/schema';
 import { parseSql, resolveStatement, lexSql } from '@sqlbraid/ast';
-import { checkProject, checkSource, discoverQueries, emitSource, type CompileDiagnostic } from '@sqlbraid/compiler';
+import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource, sourcePosition, type CompileDiagnostic } from '@sqlbraid/compiler';
 import { classifySemantics, fingerprintQuery, templateFamilyFingerprint, validateRows, ResultValidationError } from '@sqlbraid/operations';
 import { createPgDatabase } from '@sqlbraid/postgres/pg';
 import { createPostgresInspector } from '@sqlbraid/postgres';
@@ -213,15 +215,81 @@ test('project checking keeps one TypeScript program for re-exported tags and imp
   const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-project-'));
   try {
     writeFileSync(join(directory, 'bar.ts'), "export { sql } from '@sqlbraid/template';\n");
-    writeFileSync(join(directory, 'types.ts'), 'export type UserRow = { readonly id: number; name?: string | null }\n');
-    writeFileSync(join(directory, 'main.ts'), "import {sql} from './bar.js'; import type {UserRow} from './types.js'; export const q=sql<UserRow>`SELECT id, name FROM users`;\n");
-    writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, baseUrl: process.cwd(), paths: { '@sqlbraid/*': ['packages/*/src/index.ts'] } }, include: ['*.ts'] }));
+    writeFileSync(join(directory, 'types.ts'), 'export type ImportedRow = { readonly id: number; name?: string | null }\n');
+    writeFileSync(join(directory, 'main.ts'), "import {sql} from './bar.js'; import type {ImportedRow} from './types.js'; export const imported=sql<ImportedRow>`SELECT id, name FROM users`;\n");
+    writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, baseUrl: '.', paths: { '@sqlbraid/*': ['../packages/*/src/index.ts'] } }, include: ['*.ts'] }));
     const projectFile = join(directory, 'tsconfig.json');
+    const context = createProjectContext(projectFile);
+    assert.ok(context.fileNames.includes(join(directory, 'main.ts')));
+    assert.ok(context.fileNames.includes(join(directory, 'bar.ts')));
+    assert.ok(context.fileNames.includes(join(directory, 'types.ts')));
     const diagnostics = checkProject(projectFile, { moduleSpecifier: '@sqlbraid/template', snapshot });
     assert.equal(diagnostics.some((diagnostic) => diagnostic.code.startsWith('TS') || diagnostic.code.startsWith('BRAID_')), false);
+    writeFileSync(join(directory, 'wrong.ts'), "import {sql} from './bar.js'; interface UserRow { id: string; } export const q=sql<UserRow>`SELECT id FROM users`;\n");
+    const negative = checkProject(projectFile, { moduleSpecifier: '@sqlbraid/template', snapshot });
+    assert.ok(negative.some((diagnostic) => diagnostic.code === 'BRAID_CONTRACT_TYPE'));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('project checking preserves TSX, MTS, and CTS source identities', () => {
+  const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-project-kinds-'));
+  try {
+    writeFileSync(join(directory, 'jsx.d.ts'), 'declare namespace JSX { interface IntrinsicElements { div: { children?: unknown } } }\n');
+    writeFileSync(join(directory, 'view.tsx'), "import {sql} from '@sqlbraid/template'; export function View() { const q=sql`SELECT 1`; return <div>{String(q)}</div>; }\n");
+    writeFileSync(join(directory, 'module.mts'), "import {sql} from '@sqlbraid/template'; export const q=sql`SELECT 1`;\n");
+    writeFileSync(join(directory, 'module.cts'), "import {sql} from '@sqlbraid/template'; export const q=sql`SELECT 1`;\n");
+    const projectFile = join(directory, 'tsconfig.json');
+    writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', jsx: 'preserve', strict: true, baseUrl: '.', paths: { '@sqlbraid/*': ['../packages/*/src/index.ts'] } }, include: ['*.tsx', '*.mts', '*.cts', '*.d.ts'] }));
+    const context = createProjectContext(projectFile);
+    assert.ok(context.fileNames.includes(join(directory, 'view.tsx')));
+    assert.ok(context.fileNames.includes(join(directory, 'module.mts')));
+    assert.ok(context.fileNames.includes(join(directory, 'module.cts')));
+    const diagnostics = checkProject(projectFile, { moduleSpecifier: '@sqlbraid/template' });
+    assert.equal(diagnostics.some((diagnostic) => diagnostic.code.startsWith('TS')), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('dynamic structural inference fails closed outside proven local clauses', () => {
+  const projection = "import {sql} from '@sqlbraid/template'; declare const includeName: boolean; const q=sql`SELECT id /*@braid if ${includeName}*/ , name /*@braid end*/ FROM users`;";
+  const projectionOverlay = createVirtualOverlay(projection, join(tmpdir(), 'sqlbraid-dynamic-projection.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot });
+  assert.equal(projectionOverlay.queryTypes[0]?.rowType, 'unknown');
+  assert.ok(projectionOverlay.diagnostics.some((diagnostic) => diagnostic.code === 'BRAID_DYNAMIC_UNPROVEN'));
+
+  const choose = "import {sql} from '@sqlbraid/template'; const q=sql`/*@braid choose*/ /*@braid when ${true}*/ SELECT id FROM users /*@braid when ${true}*/ SELECT missing FROM definitely_missing /*@braid otherwise*/ SELECT id FROM users /*@braid end*/`;";
+  const chooseOverlay = createVirtualOverlay(choose, join(tmpdir(), 'sqlbraid-dynamic-choose.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot });
+  assert.equal(chooseOverlay.queryTypes[0]?.rowType, 'unknown');
+  assert.ok(chooseOverlay.diagnostics.some((diagnostic) => diagnostic.code === 'BRAID_DYNAMIC_UNPROVEN'));
+
+  const where = "import {sql} from '@sqlbraid/template'; declare const name: string | null; const q=sql`SELECT id, name FROM users /*@braid where*/ /*@braid if ${name != null}*/ AND name = ${name} /*@braid end*/ /*@braid end*/`;";
+  const whereOverlay = createVirtualOverlay(where, join(tmpdir(), 'sqlbraid-dynamic-where.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot });
+  assert.match(whereOverlay.queryTypes[0]?.rowType ?? '', /id/);
+  assert.match(whereOverlay.queryTypes[0]?.rowType ?? '', /name/);
+  assert.equal(whereOverlay.diagnostics.some((diagnostic) => diagnostic.code === 'BRAID_DYNAMIC_UNPROVEN'), false);
+});
+
+test('emits directive prologues, preserves compiler options, and maps generated JS to original TS', () => {
+  const source = '"use client";\nimport {sql} from "@sqlbraid/template";\nexport function build(user: {name: string} | null) { return sql`SELECT * /*@braid if ${user != null}*/ WHERE name = ${user.name} /*@braid end*/`; }\n';
+  const emitted = emitSource(source, 'sqlbraid-source-map.ts', { moduleSpecifier: '@sqlbraid/template', analyze: () => ({ rowType: 'unknown', bindingTypes: ['unknown', 'unknown'] }), compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, sourceMap: true, inlineSources: true } });
+  assert.equal(emitted.diagnostics.length, 0);
+  assert.ok(emitted.outputText.trimStart().startsWith('"use client";'));
+  assert.ok(emitted.outputText.indexOf('"use client"') < emitted.outputText.indexOf('capture'));
+  const map = new TraceMap(JSON.parse(emitted.sourceMapText ?? '{}'));
+  const generatedOffset = emitted.outputText.indexOf('user.name');
+  assert.ok(generatedOffset >= 0);
+  const generated = sourcePosition(emitted.outputText, generatedOffset);
+  const original = originalPositionFor(map, { line: generated.line + 1, column: generated.character });
+  const expected = sourcePosition(source, source.indexOf('user.name'));
+  assert.equal(original.line, expected.line + 1);
+  assert.equal(original.column, expected.character);
+
+  const commonJs = emitSource('import {sql} from "@sqlbraid/template"; export const f = (value: number) => value + 1; export const q=sql`SELECT ${1}`;', 'sqlbraid-options.ts', { moduleSpecifier: '@sqlbraid/template', compilerOptions: { target: ts.ScriptTarget.ES5, module: ts.ModuleKind.CommonJS, sourceMap: false } });
+  assert.equal(commonJs.sourceMapText, undefined);
+  assert.match(commonJs.outputText, /require\(["']@sqlbraid\/template["']\)/u);
+  assert.doesNotMatch(commonJs.outputText, /=>/u);
 });
 
 test('AST lowering is hygienic and preserves side effects, this, choose order, and multiple queries', async () => {

@@ -23,6 +23,96 @@ export interface SelectItem {
   readonly sourceRange: { readonly start: number; readonly end: number };
 }
 
+export interface SqlExpressionRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+export interface ColumnRefExpression {
+  readonly kind: "column-ref";
+  readonly name: string;
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface LiteralExpression {
+  readonly kind: "literal";
+  readonly value: string | number | boolean | null;
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface BindRefExpression {
+  readonly kind: "bind-ref";
+  readonly placeholder: number;
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface BinaryExpression {
+  readonly kind: "binary";
+  readonly operator: string;
+  readonly left: SqlExpression;
+  readonly right: SqlExpression;
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface UnaryExpression {
+  readonly kind: "unary";
+  readonly operator: string;
+  readonly operand: SqlExpression;
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface FunctionCallExpression {
+  readonly kind: "function-call";
+  readonly name: string;
+  readonly arguments: readonly SqlExpression[];
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface CastExpression {
+  readonly kind: "cast";
+  readonly expression: SqlExpression;
+  readonly typeName: string;
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface TupleExpression {
+  readonly kind: "tuple";
+  readonly items: readonly SqlExpression[];
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface ListExpression {
+  readonly kind: "list";
+  readonly items: readonly SqlExpression[];
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface CaseExpression {
+  readonly kind: "case";
+  readonly branches: readonly { readonly when: SqlExpression; readonly then: SqlExpression }[];
+  readonly otherwise?: SqlExpression;
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export interface UnknownExpression {
+  readonly kind: "unknown";
+  readonly text?: string;
+  readonly sourceRange?: SqlExpressionRange;
+}
+
+export type SqlExpression =
+  | ColumnRefExpression
+  | LiteralExpression
+  | BindRefExpression
+  | BinaryExpression
+  | UnaryExpression
+  | FunctionCallExpression
+  | CastExpression
+  | TupleExpression
+  | ListExpression
+  | CaseExpression
+  | UnknownExpression;
+
 export interface RelationRef {
   readonly name: string;
   readonly alias?: string;

@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
+    "@jridgewell/trace-mapping": "0.3.31",
     "@testcontainers/mysql": "12.1.0",
     "@testcontainers/postgresql": "12.1.0",
     "@types/node": "22.20.1",
