@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { ConnectionProvider, ExecutionEvent, QueryExecutor, RenderedQuery, StandardSchemaV1 } from "@sqlbraid/core";
-import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
+import { DatabaseCardinalityError, createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { sql } from "@sqlbraid/template";
 
 function executor(): QueryExecutor {
@@ -93,6 +93,53 @@ test("observer errors identify each pipeline stage and preserve thrown mapper er
   }
 });
 
+test("observers distinguish result-kind mismatches from cardinality failures", async () => {
+  const resultKindEvents: ExecutionEvent[] = [];
+  const resultKindDb = createDatabase({
+    async query() {
+      return { kind: "command" as const, rows: [] as const, command: { affectedRows: 1 } };
+    },
+  }, { observers: [{ onEvent(event) { resultKindEvents.push(event); } }] });
+  await assert.rejects(resultKindDb.execute(sql.rows`UPDATE users SET active = 1`), (error) => (
+    error instanceof Error
+    && "code" in error
+    && error.code === "BRAID_RESULT_KIND"
+  ));
+  const resultKindError = resultKindEvents.find((event) => event.type === "query:error");
+  assert.ok(resultKindError?.type === "query:error");
+  assert.equal(resultKindError.stage, "result-kind");
+  assert.equal(resultKindError.executionStarted, true);
+  assert.equal(resultKindError.executionCompleted, true);
+  assert.equal("duration" in resultKindError, false);
+  assert.equal(typeof resultKindError.durationMs, "number");
+  assert.equal(resultKindEvents.some((event) => event.type === "query:result"), false);
+
+  for (const [method, rows] of [["one", []], ["maybeOne", [{ id: 1 }, { id: 2 }]]] as const) {
+    const events: ExecutionEvent[] = [];
+    const db = createDatabase({
+      async query<Row>() {
+        return { kind: "rows" as const, rows: rows as readonly Row[] };
+      },
+    }, { observers: [{ onEvent(event) { events.push(event); } }] });
+    await assert.rejects(
+      () => method === "one" ? db.one(sql.rows`SELECT id`) : db.maybeOne(sql.rows`SELECT id`),
+      (error) => error instanceof DatabaseCardinalityError
+        && error.expected === method
+        && error.actual === rows.length,
+    );
+    const result = events.find((event) => event.type === "query:result");
+    assert.ok(result?.type === "query:result");
+    assert.equal(result.actualKind, "rows");
+    const cardinalityError = events.find((event) => event.type === "query:error");
+    assert.ok(cardinalityError?.type === "query:error");
+    assert.equal(cardinalityError.stage, "cardinality");
+    assert.equal(cardinalityError.executionStarted, true);
+    assert.equal(cardinalityError.executionCompleted, true);
+    assert.equal("duration" in cardinalityError, false);
+    assert.equal(typeof cardinalityError.durationMs, "number");
+  }
+});
+
 test("error observers preserve original failures including undefined rejection values", async () => {
   for (const original of [new Error("driver failed"), undefined]) {
     const reporting = new Error("error audit failed");
@@ -114,6 +161,10 @@ test("prepared names and batch correlation survive result and mapping events", a
     if (event.type === "query:ready" || event.type === "query:result" || event.type === "query:mapped") {
       assert.ok("preparedName" in event);
       assert.equal(event.preparedName, "named-shape");
+      if (event.type !== "query:ready") {
+        assert.equal("duration" in event, false);
+        assert.equal(typeof event.durationMs, "number");
+      }
     }
   }
   events.length = 0;
@@ -123,6 +174,35 @@ test("prepared names and batch correlation survive result and mapping events", a
   assert.notEqual(ready[0].operationId, ready[1].operationId);
   assert.equal(typeof ready[0].batchId, "string");
   assert.equal(ready[0].batchId, ready[1].batchId);
+});
+
+test("all public observer timing events use durationMs without a duration alias", async () => {
+  const events: ExecutionEvent[] = [];
+  const db = createDatabase({
+    ...executor(),
+    async begin() {},
+    async commit() {},
+    async rollback() {},
+    async *stream<Row>(): AsyncGenerator<Row> {
+      yield { id: 1 } as Row;
+    },
+  }, { observers: [{ onEvent(event) { events.push(event); } }] });
+
+  await db.execute(sql.rows`SELECT 1`);
+  await db.tx(async () => {});
+  for await (const row of db.stream(sql.rows`SELECT 1`)) void row;
+
+  for (const event of events) {
+    if (event.type === "query:result"
+      || event.type === "query:mapped"
+      || event.type === "query:error"
+      || event.type === "stream:end"
+      || event.type === "transaction") {
+      assert.equal(Object.hasOwn(event, "durationMs"), true);
+      assert.equal("duration" in event, false);
+      if (event.durationMs !== undefined) assert.equal(typeof event.durationMs, "number");
+    }
+  }
 });
 
 test("routine observers identify calls without guessing command kind from empty rows", async () => {

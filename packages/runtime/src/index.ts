@@ -127,7 +127,7 @@ interface PreparedOperation<Q extends ExecutableQuery> {
 
 interface RawOperation<Q extends ExecutableQuery> extends PreparedOperation<Q> {
   readonly result?: QueryExecutionResult<unknown>;
-  readonly duration: number;
+  readonly durationMs: number;
   readonly driverError?: unknown;
   readonly driverFailed: boolean;
 }
@@ -376,7 +376,7 @@ function queryResultEvent(operation: RawOperation<ExecutableQuery>, result: Quer
     operationId: operation.meta.operationId,
     preparedName: operation.meta.preparedName,
     batchId: operation.meta.batchId,
-    duration: operation.duration,
+    durationMs: operation.durationMs,
     actualKind: result.kind,
     rowCount: result.kind === "rows" ? result.rows.length : result.rowCount,
     command: result.kind === "command" ? Object.freeze({ ...result.command }) : undefined,
@@ -385,13 +385,13 @@ function queryResultEvent(operation: RawOperation<ExecutableQuery>, result: Quer
   };
 }
 
-function queryMappedEvent(operation: RawOperation<ExecutableQuery>, rowCount: number, queryMapped: boolean, executionMapped: boolean, duration: number): ExecutionEvent {
+function queryMappedEvent(operation: RawOperation<ExecutableQuery>, rowCount: number, queryMapped: boolean, executionMapped: boolean, durationMs: number): ExecutionEvent {
   return {
     type: "query:mapped",
     operationId: operation.meta.operationId,
     preparedName: operation.meta.preparedName,
     batchId: operation.meta.batchId,
-    duration,
+    durationMs,
     rowCount,
     queryMapped,
     executionMapped,
@@ -400,7 +400,7 @@ function queryMappedEvent(operation: RawOperation<ExecutableQuery>, rowCount: nu
   };
 }
 
-function errorEvent(operation: PreparedOperation<ExecutableQuery>, error: unknown, stage: QueryErrorEventStage, started: boolean, completed: boolean, duration?: number): ExecutionEvent {
+function errorEvent(operation: PreparedOperation<ExecutableQuery>, error: unknown, stage: QueryErrorEventStage, started: boolean, completed: boolean, durationMs?: number): ExecutionEvent {
   return {
     type: "query:error",
     operationId: operation.meta.operationId,
@@ -410,7 +410,7 @@ function errorEvent(operation: PreparedOperation<ExecutableQuery>, error: unknow
     stage,
     executionStarted: started,
     executionCompleted: completed,
-    duration,
+    durationMs,
     transactionDepth: operation.meta.transactionDepth,
     transactionScoped: operation.meta.transactionScoped,
   };
@@ -451,7 +451,7 @@ async function transactionEvent(
     status,
     depth,
     savepointName,
-    duration: started === undefined ? undefined : now() - started,
+    durationMs: started === undefined ? undefined : now() - started,
     error,
   });
 }
@@ -568,25 +568,25 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         { rootState: options.rootState, direct: use.direct, stream: false },
         () => use.executor.query<unknown>(operation.rendered),
       );
-      return { ...operation, result, duration: now() - started, driverFailed: false };
+      return { ...operation, result, durationMs: now() - started, driverFailed: false };
     } catch (driverError) {
-      return { ...operation, driverError, driverFailed: true, duration: now() - started };
+      return { ...operation, driverError, driverFailed: true, durationMs: now() - started };
     }
   };
   const finalizePhysical = async <Q extends ExecutableQuery>(operation: RawOperation<Q>): Promise<QueryExecutionResult<unknown>> => {
     if (operation.driverFailed) {
-      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, operation.driverError, "driver", true, false, operation.duration), operation.driverError);
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, operation.driverError, "driver", true, false, operation.durationMs), operation.driverError);
     }
     let result: QueryExecutionResult<unknown>;
     try {
       result = assertExecutionResult(operation.query, operation.result as QueryExecutionResult<unknown>);
     } catch (error) {
-      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "result-kind", true, true, operation.duration), error);
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "result-kind", true, true, operation.durationMs), error);
     }
     try {
       await notify(options.observers ?? [], queryResultEvent(operation as RawOperation<ExecutableQuery>, result!));
     } catch (error) {
-      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "observer-after", true, true, operation.duration), error);
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "observer-after", true, true, operation.durationMs), error);
     }
     return result!;
   };
@@ -597,7 +597,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       try {
         await notify(options.observers ?? [], queryMappedEvent(operation as RawOperation<ExecutableQuery>, result.kind === "rows" ? result.rows.length : result.rowCount ?? 0, queryMapped, executionMapped, 0));
       } catch (error) {
-        await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "observer-after", true, true, operation.duration), error);
+        await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "observer-after", true, true, operation.durationMs), error);
       }
       return result;
     }
@@ -608,12 +608,12 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     try {
       queryStandard = standardSchemaFor(operation.query.resultSchema) as StandardSchemaV1.Props<unknown, unknown> | undefined;
     } catch (error) {
-      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "query-map", true, true, operation.duration), error);
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "query-map", true, true, operation.durationMs), error);
     }
     try {
       executionStandard = standardSchemaFor(executionSchema) as StandardSchemaV1.Props<unknown, unknown> | undefined;
     } catch (error) {
-      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "execution-map", true, true, operation.duration), error);
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "execution-map", true, true, operation.durationMs), error);
     }
     for (let rowIndex = 0; rowIndex < result.rows.length; rowIndex += 1) {
       let mapped: unknown = result.rows[rowIndex];
@@ -621,14 +621,14 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         try {
           mapped = await validateRow(queryStandard, mapped, rowIndex, "query");
         } catch (error) {
-          await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "query-map", true, true, operation.duration), error);
+          await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "query-map", true, true, operation.durationMs), error);
         }
       }
       if (executionStandard !== undefined) {
         try {
           mapped = await validateRow(executionStandard, mapped, rowIndex, "execution");
         } catch (error) {
-          await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "execution-map", true, true, operation.duration), error);
+          await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "execution-map", true, true, operation.durationMs), error);
         }
       }
       rows.push(mapped);
@@ -636,7 +636,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     try {
       await notify(options.observers ?? [], queryMappedEvent(operation as RawOperation<ExecutableQuery>, result.rows.length, queryMapped, executionMapped, now() - mappingStarted));
     } catch (error) {
-      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "observer-after", true, true, operation.duration), error);
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "observer-after", true, true, operation.durationMs), error);
     }
     return { ...result, rows: rows! };
   };
@@ -668,10 +668,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     if (raw.driverFailed) {
       const original = releaseFailed ? new AggregateError([raw.driverError, releaseError], "Execution and lease release failed.", { cause: raw.driverError }) : raw.driverError;
       const stage = releaseFailed ? "release" : "driver";
-      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, original, stage, true, false, raw.duration), original);
+      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, original, stage, true, false, raw.durationMs), original);
     }
     if (releaseFailed) {
-      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, releaseError, "release", true, true, raw.duration), releaseError);
+      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, releaseError, "release", true, true, raw.durationMs), releaseError);
     }
     return raw;
   };
@@ -692,7 +692,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     if (result.kind !== "rows") malformedExecutionResult();
     if (result.rows.length !== 1) {
       const error = new DatabaseCardinalityError("one", result.rows.length);
-      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "result-kind", true, true, raw.duration), error);
+      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "cardinality", true, true, raw.durationMs), error);
     }
     return await processOne(raw, result, validationOptions?.schema) as Row;
   };
@@ -702,11 +702,11 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     if (result.kind !== "rows") malformedExecutionResult();
     if (result.rows.length > 1) {
       const error = new DatabaseCardinalityError("maybeOne", result.rows.length);
-      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "result-kind", true, true, raw.duration), error);
+      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "cardinality", true, true, raw.durationMs), error);
     }
     if (result.rows.length === 0) {
       try { await notify(options.observers ?? [], queryMappedEvent(raw as RawOperation<ExecutableQuery>, 0, query.resultSchema !== undefined, validationOptions?.schema !== undefined, 0)); }
-      catch (error) { await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "observer-after", true, true, raw.duration), error); }
+      catch (error) { await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "observer-after", true, true, raw.durationMs), error); }
       return undefined;
     }
     return await processOne(raw, result, validationOptions?.schema) as Row;
@@ -767,7 +767,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         await notify(options.observers ?? [], {
           type: "query:result",
           operationId,
-          duration: now() - started,
+          durationMs: now() - started,
           actualKind: "call",
           rowCount,
           transactionDepth: options.depth,
@@ -776,7 +776,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         await notify(options.observers ?? [], {
           type: "query:mapped",
           operationId,
-          duration: 0,
+          durationMs: 0,
           rowCount,
           queryMapped: false,
           executionMapped: false,
@@ -830,7 +830,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         const failed = raw.find((operation) => operation.driverFailed);
         if (failed) {
           const original = new AggregateError([failed.driverError, batchReleaseError], "Batch execution and lease release failed.", { cause: failed.driverError });
-          await notifyError(options.observers ?? [], errorEvent(failed, original, "release", true, false, failed.duration), original);
+          await notifyError(options.observers ?? [], errorEvent(failed, original, "release", true, false, failed.durationMs), original);
         }
         const operation = failed ?? raw.at(-1) ?? operations[0];
         if (operation) await notifyError(options.observers ?? [], errorEvent(operation, batchReleaseError, "release", true, true), batchReleaseError);
@@ -950,7 +950,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           }
           use!.physicalState.streamUsers -= 1;
           openStreams.delete(stream);
-          const endEvent: ExecutionEvent = { type: "stream:end", operationId, status: streamFailed ? "error" : "completed", duration: now() - started, rowCount: count, error: streamError, transactionDepth: options.depth, transactionScoped: options.transaction };
+          const endEvent: ExecutionEvent = { type: "stream:end", operationId, status: streamFailed ? "error" : "completed", durationMs: now() - started, rowCount: count, error: streamError, transactionDepth: options.depth, transactionScoped: options.transaction };
           try { await notify(options.observers ?? [], endEvent); }
           catch (error) {
             streamError = streamFailed ? new AggregateError([streamError, error], "Stream and observer failed.", { cause: streamError }) : error;

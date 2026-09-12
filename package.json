@@ -20,6 +20,10 @@
     "test:consumer": "pnpm run build && vitest run --project consumer && pnpm run pack:check",
     "test:all": "pnpm run typecheck && pnpm run build && vitest run && pnpm run pack:check",
     "pack:check": "node scripts/validate-packages.mjs",
+    "test:runtime:node": "node scripts/runtime-portability.mjs node",
+    "test:runtime:bun": "node scripts/runtime-portability.mjs bun",
+    "test:runtime:deno": "node scripts/runtime-portability.mjs deno",
+    "test:runtime": "node scripts/runtime-portability.mjs node bun deno",
     "sqlbraid": "node packages/cli/dist/index.js"
   },
   "devDependencies": {

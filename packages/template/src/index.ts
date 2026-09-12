@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import {
   SQL_FRAGMENT,
   type BindNode,

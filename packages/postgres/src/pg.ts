@@ -18,7 +18,7 @@ export interface PgFieldLike {
 
 export interface PgResultLike {
   readonly rows: readonly unknown[];
-  readonly rowCount?: number;
+  readonly rowCount?: number | null;
   readonly fields?: readonly PgFieldLike[];
   readonly command?: string;
 }
@@ -26,10 +26,15 @@ export interface PgResultLike {
 export interface PgClientLike {
   query(config: { readonly text: string; readonly values: readonly unknown[] }): Promise<PgResultLike>;
   query(text: string, values?: readonly unknown[]): Promise<PgResultLike>;
-  release?(): void;
+  /**
+   * Physical node-postgres clients expose these helpers; pools do not.
+   * They are the public discriminator that keeps pool usage on the lease API.
+   */
+  escapeIdentifier(value: string): string;
+  escapeLiteral(value: string): string;
 }
 
-export interface PgPoolClientLike extends Omit<PgClientLike, "release"> {
+export interface PgPoolClientLike extends PgClientLike {
   release(destroy?: boolean): void | Promise<void>;
 }
 
@@ -40,6 +45,12 @@ export interface PgPoolLike {
 export type PgDatabaseOptions = DatabaseOptions & { readonly typePolicy?: TypePolicy };
 
 const oidTypes: Readonly<Record<number, string>> = { 20: "int8", 21: "int2", 23: "int4", 16: "bool", 25: "text", 1700: "numeric" };
+
+function assertPgClient(client: PgClientLike): void {
+  if (!client || typeof client !== "object" || typeof client.escapeIdentifier !== "function" || typeof client.escapeLiteral !== "function") {
+    throw new TypeError("SQLBraid PostgreSQL direct adapter requires a physical pg Client or PoolClient.");
+  }
+}
 
 function plainRow(value: unknown, fields: readonly PgFieldLike[], policy: TypePolicy): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { value };
@@ -61,6 +72,7 @@ function assertUniqueFields(fields: readonly PgFieldLike[]): void {
 }
 
 export function createPgExecutor(client: PgClientLike, options: { readonly typePolicy?: TypePolicy } = {}): QueryExecutor {
+  assertPgClient(client);
   const policy = options.typePolicy ?? defaultTypePolicy;
   const runControl = async (text: string): Promise<void> => { await client.query({ text, values: [] }); };
   return {
@@ -69,8 +81,9 @@ export function createPgExecutor(client: PgClientLike, options: { readonly typeP
       const result = await client.query({ text: rendered.text, values: rendered.values });
       assertUniqueFields(result.fields ?? []);
       const rows = result.rows.map((row) => plainRow(row, result.fields ?? [], policy));
+      const rowCount = result.rowCount ?? undefined;
       const rowBearing = (result.fields?.length ?? 0) > 0 || result.rows.length > 0 || result.command === "SELECT";
-      return rowBearing ? { rows: rows as readonly Row[], rowCount: result.rowCount, kind: "rows" } : { rows: [], rowCount: result.rowCount, kind: "command", command: { affectedRows: result.rowCount } };
+      return rowBearing ? { rows: rows as readonly Row[], rowCount, kind: "rows" } : { rows: [], rowCount, kind: "command", command: { affectedRows: rowCount } };
     },
     async call<Row>(rendered: RenderedQuery) {
       const result = await client.query({ text: rendered.text, values: rendered.values });

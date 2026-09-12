@@ -10,14 +10,23 @@ import { sql as sqliteSql } from '@sqlbraid/sqlite';
 
 test('postgres adapter preserves plain rows and rendered binds', async () => {
   let request;
-  const db = createPgDatabase({ async query(config) { request = config; return { rows: [{ id: 1 }] }; } });
+  const db = createPgDatabase({
+    async query(config) { request = config; return { rows: [{ id: 1 }] }; },
+    escapeIdentifier(value: string) { return value; },
+    escapeLiteral(value: string) { return value; },
+  });
   assert.deepEqual(await db.all(sql.rows`SELECT ${1}`), [{ id: 1 }]);
   assert.deepEqual(request, { text: 'SELECT $1', values: [1] });
 });
 
 test('mysql2 adapter uses positional placeholders', async () => {
   let request;
-  const db = createMysql2Database({ async execute(text, values) { request = { text, values }; return [[{ ok: 1 }], []]; } });
+  const db = createMysql2Database({
+    async execute(text, values) { request = { text, values }; return [[{ ok: 1 }], []]; },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+  });
   assert.deepEqual(await db.all(mysqlSql.rows`SELECT ${1}`), [{ ok: 1 }]);
   assert.deepEqual(request, { text: 'SELECT ?', values: [1] });
 });
@@ -26,6 +35,8 @@ test('pool providers release healthy leases once and discard poisoned leases', a
   const pgReleases: boolean[] = [];
   const pgClient = {
     async query() { return { rows: [] }; },
+    escapeIdentifier(value: string) { return value; },
+    escapeLiteral(value: string) { return value; },
     release(destroy = false) { pgReleases.push(destroy); },
   };
   const pgProvider = createPgPoolProvider({ connect: async () => pgClient });
@@ -40,6 +51,9 @@ test('pool providers release healthy leases once and discard poisoned leases', a
   let mysqlDestroys = 0;
   const mysqlConnection = {
     async execute() { return [[{ ok: 1 }], []] as const; },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
     release() { mysqlReleases += 1; },
     destroy() { mysqlDestroys += 1; },
   };
@@ -73,6 +87,8 @@ test('postgres reports actual result kinds independently of declarations', async
       if (text.startsWith('SELECT')) return { rows: [{ id: 1 }], fields: [{ name: 'id', dataTypeID: 23 }], rowCount: 1, command: 'SELECT' };
       return { rows: [], rowCount: 1, command: 'UPDATE' };
     },
+    escapeIdentifier(value: string) { return value; },
+    escapeLiteral(value: string) { return value; },
   });
   assert.equal((await db.execute(sql.rows`SELECT 1`)).kind, 'rows');
   assert.equal((await db.execute(sql`SELECT 1`)).kind, 'rows');
@@ -88,6 +104,9 @@ test('mysql2 reports actual result kinds independently of declarations', async (
       if (text.startsWith('SELECT')) return [[{ id: 1 }], [{ name: 'id', type: 3 }]];
       return [{ affectedRows: 1, insertId: 2 }, []];
     },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
   });
   assert.equal((await db.execute(mysqlSql.rows`SELECT 1`)).kind, 'rows');
   assert.equal((await db.execute(mysqlSql`SELECT 1`)).kind, 'rows');
@@ -95,6 +114,32 @@ test('mysql2 reports actual result kinds independently of declarations', async (
   assert.equal((await db.execute(mysqlSql`UPDATE users SET ok = true`)).kind, 'command');
   await assert.rejects(() => db.execute(mysqlSql.command`SELECT 1`), (error) => isKindError(error, 'command', 'rows'));
   await assert.rejects(() => db.execute(mysqlSql.rows`UPDATE users SET ok = true`), (error) => isKindError(error, 'rows', 'command'));
+});
+
+test('direct adapter factories reject pools before any I/O', () => {
+  let pgCalls = 0;
+  assert.throws(
+    () => createPgDatabase({
+      async query() { pgCalls += 1; return { rows: [] }; },
+      async connect() { pgCalls += 1; throw new Error('pool connect must not run'); },
+    } as never),
+    (error) => error instanceof TypeError && error.message.includes('physical pg Client'),
+  );
+  assert.equal(pgCalls, 0);
+
+  let mysqlCalls = 0;
+  assert.throws(
+    () => createMysql2Database({
+      async execute() { mysqlCalls += 1; return [[], []] as const; },
+      async query() { mysqlCalls += 1; return [[], []] as const; },
+      async beginTransaction() {},
+      async commit() {},
+      async rollback() {},
+      async getConnection() { mysqlCalls += 1; throw new Error('pool getConnection must not run'); },
+    } as never),
+    (error) => error instanceof TypeError && error.message.includes('physical mysql2 Promise Connection'),
+  );
+  assert.equal(mysqlCalls, 0);
 });
 
 test('node sqlite reports actual result kinds from columns metadata', async () => {

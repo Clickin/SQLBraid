@@ -354,7 +354,7 @@ binding map when available
 declared result kind
 actual result kind when known
 row count / command metadata where safe
-duration
+durationMs (milliseconds)
 transaction depth
 prepared name
 variant fingerprint
@@ -418,15 +418,25 @@ Future adapters may be added only when they provide real value. `QueryExecutor`/
 
 ### 8.3 Runtime support policy
 
-Use three support labels:
+Use four support labels:
 
 - **Official**: exercised in SQLBraid CI on that runtime + driver combination;
 - **Compatible**: expected from public APIs but not an SQLBraid CI gate;
 - **Custom**: user integrates through executor/provider SPI.
+- **Unsupported**: a required capability is absent or SQLBraid's checks fail.
 
-PV7 will audit runtime-neutral code and establish Node/Bun/Deno support through actual CI rather than claims.
+PV7 provides packed-consumer smoke and source/distribution audit gates. Local
+Node 22.18.0/24.21.0, Bun 1.3.14 and Deno 2.9.3 pass core/template/runtime, PostgreSQL/pg
+8.23.0 and MySQL/mysql2 3.24.4 checks against PostgreSQL 16.4 and MySQL 8.4.2.
+Node/Deno pass node:sqlite; Bun 1.3.14 lacks that module and is Unsupported.
+The README matrix is Compatible pending observed GitHub CI; a workflow file
+alone is not a CI pass. Node keeps `>=22.18.0`; Bun/Deno promises cover exact
+tested versions only. The workflow pins the Node floor and those Bun/Deno versions.
 
-Core/template should prefer ECMAScript/Web APIs when practical. Tooling (`compiler`, CLI, codegen, LSP) may remain Node-first for pre-release.
+Reviewed compatibility imports are `node:buffer` for allocation-free UTF-8 byte
+counting and `node:async_hooks` for transaction context. SQLBraid-owned public
+runtime declarations compile without Node ambient types. Tooling (`compiler`,
+CLI, metadata/codegen, LSP) remains Node-first.
 
 ---
 
@@ -521,14 +531,15 @@ Non-negotiable:
 - observe/fail-only interceptor semantics;
 - no SQL/bind/result mutation.
 
-### PV7 — Runtime portability
+### PV7 — Runtime portability — implemented locally; CI promotion pending
 
-- Node/Bun/Deno audit for core/template/runtime;
-- actual runtime smoke/CI matrix;
-- test `pg` across feasible runtimes;
-- test `node:sqlite` across feasible runtimes;
-- publish Official/Compatible/Custom matrix;
-- no new runtime-specific driver unless existing adapters cannot cover the case.
+- reject pools in official direct PostgreSQL/MySQL factories, including runtime guards;
+- observer `cardinality` stage and `durationMs` public timing fields, without aliases;
+- packed Node/Bun/Deno smoke, concurrent ALS isolation, source/distribution audit;
+- real pg/mysql2 direct/pool matrix and node:sqlite capability/full adapter smoke;
+- pinned GitHub Actions release/runtime jobs; publish observed CI before Official labels;
+- README uses Official/Compatible/Custom/Unsupported labels with exact tested versions;
+- no new runtime-specific drivers, including when an existing adapter is Unsupported.
 
 ### PV8 — Metadata package cleanup
 

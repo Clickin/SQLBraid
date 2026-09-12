@@ -24,17 +24,18 @@ export interface Mysql2ResultHeader extends CommandResult {
 }
 
 type Mysql2TypedParameter = { readonly type: number; readonly value: unknown; readonly unsigned: boolean };
-type Mysql2Parameter = string | number | bigint | boolean | Date | null | Blob | Buffer | Uint8Array | Mysql2TypedParameter | Mysql2Parameter[] | { [key: string]: Mysql2Parameter };
+type Mysql2Parameter = string | number | bigint | boolean | Date | null | Blob | Uint8Array | Mysql2TypedParameter | Mysql2Parameter[] | { [key: string]: Mysql2Parameter };
 
 export interface Mysql2ConnectionLike {
   execute(sql: string, values?: Mysql2Parameter): Promise<readonly [unknown, readonly Mysql2FieldLike[] | undefined]>;
   query?(sql: string): Promise<readonly [unknown, readonly Mysql2FieldLike[] | undefined]>;
-  beginTransaction?(): Promise<void>;
-  commit?(): Promise<void>;
-  rollback?(): Promise<void>;
+  beginTransaction(): Promise<void>;
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
+  getConnection?: never;
 }
 
-export interface Mysql2PoolConnectionLike extends Omit<Mysql2ConnectionLike, "release" | "destroy"> {
+export interface Mysql2PoolConnectionLike extends Mysql2ConnectionLike {
   release(): void | Promise<void>;
   destroy(): void;
 }
@@ -46,6 +47,21 @@ export interface Mysql2PoolLike {
 export type Mysql2DatabaseOptions = DatabaseOptions & { readonly typePolicy?: TypePolicy };
 
 const mysqlTypes: Readonly<Record<number, string>> = { 3: "INT", 8: "BIGINT", 246: "DECIMAL", 253: "VARCHAR", 245: "JSON" };
+
+function assertMysql2Connection(connection: Mysql2ConnectionLike): void {
+  const candidate = connection as unknown as { readonly getConnection?: unknown };
+  if (
+    !connection
+    || typeof connection !== "object"
+    || typeof connection.execute !== "function"
+    || typeof connection.beginTransaction !== "function"
+    || typeof connection.commit !== "function"
+    || typeof connection.rollback !== "function"
+    || typeof candidate.getConnection === "function"
+  ) {
+    throw new TypeError("SQLBraid MySQL direct adapter requires a physical mysql2 Promise Connection.");
+  }
+}
 
 function plainRow(value: unknown, fields: readonly Mysql2FieldLike[], policy: TypePolicy): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { value };
@@ -68,6 +84,7 @@ function assertUniqueFields(fields: readonly Mysql2FieldLike[]): void {
 }
 
 export function createMysql2Executor(connection: Mysql2ConnectionLike, options: { readonly typePolicy?: TypePolicy } = {}): QueryExecutor {
+  assertMysql2Connection(connection);
   const policy = options.typePolicy ?? defaultTypePolicy;
   const control = async (sql: string): Promise<void> => { await (connection.query ?? connection.execute).call(connection, sql); };
   return {
@@ -95,9 +112,9 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
         : [{ rows: payload.map((row) => plainRow(row, fields, policy)) as readonly Row[] }];
       return { output: {}, resultSets };
     },
-    begin: connection.beginTransaction?.bind(connection),
-    commit: connection.commit?.bind(connection),
-    rollback: connection.rollback?.bind(connection),
+    begin: connection.beginTransaction.bind(connection),
+    commit: connection.commit.bind(connection),
+    rollback: connection.rollback.bind(connection),
     savepoint: (name) => control(`SAVEPOINT ${name}`),
     rollbackTo: (name) => control(`ROLLBACK TO SAVEPOINT ${name}`),
     releaseSavepoint: (name) => control(`RELEASE SAVEPOINT ${name}`),

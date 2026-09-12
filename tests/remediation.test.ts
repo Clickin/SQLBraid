@@ -265,6 +265,8 @@ test('adapters preserve command and returning result kinds', async () => {
       pgRequest = config;
       return { rows: [{ id: '7' }], fields: [{ name: 'id', dataTypeID: 20 }], rowCount: 1 };
     },
+    escapeIdentifier(value: string) { return value; },
+    escapeLiteral(value: string) { return value; },
   });
   assert.deepEqual(await pg.all(postgres.rows`SELECT ${1}`), [{ id: 7n }]);
   assert.deepEqual(pgRequest, { text: 'SELECT $1', values: [1] });
@@ -317,6 +319,8 @@ test('root execution waits until the transaction scope closes', async () => {
       log.push(config.text);
       return { rows: [] };
     },
+    escapeIdentifier(value: string) { return value; },
+    escapeLiteral(value: string) { return value; },
   });
   const transaction = db.tx(async (tx) => { await tx.execute(postgres`SELECT 'inside'`); await gate; });
   await new Promise((resolve) => setImmediate(resolve));
@@ -345,7 +349,12 @@ test('SQLite inspector records strict and dynamic table evidence', async () => {
 });
 
 test('MySQL inspector rejects MariaDB as a different product', async () => {
-  const connection = { async execute(_sql: string) { return [[{ version: '10.11.0-MariaDB', product: 'MariaDB' }], []] as const; } };
+  const connection = {
+    async execute(_sql: string) { return [[{ version: '10.11.0-MariaDB', product: 'MariaDB' }], []] as const; },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+  };
   await assert.rejects(() => createMysqlInspector(connection).inspect(), /MYSQL_PRODUCT_UNSUPPORTED/);
 });
 
@@ -357,7 +366,11 @@ test('PostgreSQL inspector records relation and routine metadata', async () => {
     { rows: [{ routine_schema: 'public', routine_name: 'ping', routine_type: 'FUNCTION', data_type: 'text', specific_name: 'ping_1' }] },
   ];
   let index = 0;
-  const snapshot = await createPostgresInspector({ async query() { return responses[index++]; } }).inspect();
+  const snapshot = await createPostgresInspector({
+    async query() { return responses[index++]; },
+    escapeIdentifier(value: string) { return value; },
+    escapeLiteral(value: string) { return value; },
+  }).inspect();
   assert.equal(snapshot.relations['public.users'].columns[0].tsType, 'number');
   assert.equal(snapshot.routines.ping[0].result.kind, 'scalar');
 });

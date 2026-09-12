@@ -79,7 +79,15 @@ try {
 
   // First prove packed runtime imports need no concrete validator, then test optional interop.
   const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  await run("npm", ["install", "--ignore-scripts", `valibot@${workspace.devDependencies.valibot}`, `zod@${workspace.devDependencies.zod}`], consumer);
+  await run("npm", [
+    "install",
+    "--ignore-scripts",
+    `valibot@${workspace.devDependencies.valibot}`,
+    `zod@${workspace.devDependencies.zod}`,
+    `pg@${workspace.devDependencies.pg}`,
+    `@types/pg@${workspace.devDependencies["@types/pg"]}`,
+    `mysql2@${workspace.devDependencies.mysql2}`,
+  ], consumer);
 
   const types = join(consumer, "types.ts");
   await writeFile(types, [
@@ -87,6 +95,8 @@ try {
     'import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";',
     'import { createPgPoolDatabase, type PgPoolLike } from "@sqlbraid/postgres/pg";',
     'import { createMysql2PoolDatabase, type Mysql2PoolLike } from "@sqlbraid/mysql/mysql2";',
+    'import type { Client as PgClient, Pool as PgPool, PoolClient } from "pg";',
+    'import type { Connection as MysqlConnection, Pool as MysqlPool, PoolConnection as MysqlPoolConnection } from "mysql2/promise";',
     'declare const lease: ConnectionLease;',
     'const provider: ConnectionProvider = { acquire: async () => lease };',
     'const observer: ExecutionObserver = { onEvent(event: ExecutionEvent) {',
@@ -95,10 +105,26 @@ try {
     '} };',
     'const pooled = createPooledDatabase(provider, { observers: [observer] });',
     'const direct = createDatabase(lease, { observers: [observer] });',
-    'declare const pgPool: PgPoolLike;',
-    'declare const mysqlPool: Mysql2PoolLike;',
-    'createPgPoolDatabase(pgPool, { observers: [observer] });',
-    'createMysql2PoolDatabase(mysqlPool, { observers: [observer] });',
+    'declare const pgPoolLike: PgPoolLike;',
+    'declare const mysqlPoolLike: Mysql2PoolLike;',
+    'createPgPoolDatabase(pgPoolLike, { observers: [observer] });',
+    'createMysql2PoolDatabase(mysqlPoolLike, { observers: [observer] });',
+    'declare const pgClient: PgClient;',
+    'declare const pgPoolClient: PoolClient;',
+    'declare const pgPool: PgPool;',
+    'createPgDatabase(pgClient);',
+    'createPgDatabase(pgPoolClient);',
+    'createPgPoolDatabase(pgPool);',
+    '// @ts-expect-error direct PostgreSQL adapter rejects a pool',
+    'createPgDatabase(pgPool);',
+    'declare const mysqlConnection: MysqlConnection;',
+    'declare const mysqlPoolConnection: MysqlPoolConnection;',
+    'declare const mysqlPool: MysqlPool;',
+    'createMysql2Database(mysqlConnection);',
+    'createMysql2Database(mysqlPoolConnection);',
+    'createMysql2PoolDatabase(mysqlPool);',
+    '// @ts-expect-error direct mysql2 adapter rejects a pool',
+    'createMysql2Database(mysqlPool);',
     'pooled.tx(async (tx) => tx.execute(pg.rows<{id: number}>`SELECT 1 AS id`));',
     '// @ts-expect-error pre-release transaction alias was removed',
     'direct.transaction(async () => undefined);',

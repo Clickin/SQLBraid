@@ -251,7 +251,7 @@ export interface QueryResultEvent {
   readonly operationId: string;
   readonly preparedName?: string;
   readonly batchId?: string;
-  readonly duration: number;
+  readonly durationMs: number;
   readonly actualKind: "rows" | "command" | "call";
   readonly rowCount?: number;
   readonly command?: Readonly<Record<string, unknown>>;
@@ -264,7 +264,7 @@ export interface QueryMappedEvent {
   readonly operationId: string;
   readonly preparedName?: string;
   readonly batchId?: string;
-  readonly duration: number;
+  readonly durationMs: number;
   readonly rowCount: number;
   readonly queryMapped: boolean;
   readonly executionMapped: boolean;
@@ -278,6 +278,7 @@ export type QueryErrorStage =
   | "acquire"
   | "driver"
   | "result-kind"
+  | "cardinality"
   | "query-map"
   | "execution-map"
   | "observer-after"
@@ -294,7 +295,7 @@ export interface QueryErrorEvent {
   readonly stage: QueryErrorStage;
   readonly executionStarted: boolean;
   readonly executionCompleted: boolean;
-  readonly duration?: number;
+  readonly durationMs?: number;
   readonly transactionDepth: number;
   readonly transactionScoped: boolean;
 }
@@ -316,7 +317,7 @@ export interface StreamEndEvent {
   readonly type: "stream:end";
   readonly operationId: string;
   readonly status: "completed" | "error";
-  readonly duration: number;
+  readonly durationMs: number;
   readonly rowCount: number;
   readonly error?: unknown;
   readonly transactionDepth: number;
@@ -338,7 +339,7 @@ export interface TransactionEvent {
   readonly status: "requested" | "completed" | "failed";
   readonly depth: number;
   readonly savepointName?: string;
-  readonly duration?: number;
+  readonly durationMs?: number;
   readonly error?: unknown;
 }
 

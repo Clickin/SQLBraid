@@ -280,7 +280,7 @@ Coverage includes:
 - readonly bind values and binding metadata;
 - declared and actual result kinds;
 - query/call/batch/prepared lifecycle;
-- DB execution duration;
+- DB execution duration in milliseconds (`durationMs`);
 - row count/command metadata where appropriate;
 - result-mapping completion;
 - stream start/end/error;
@@ -369,13 +369,52 @@ Current primary first-party adapters are:
 
 A different driver only needs a thin adapter/provider if the SQL dialect remains the same.
 
-Runtime support will use three labels:
+Runtime support uses four labels:
 
 - **Official** — exercised in SQLBraid CI for that runtime + driver;
 - **Compatible** — expected from public APIs but not an SQLBraid CI gate;
 - **Custom** — connected through the executor/provider SPI.
+- **Unsupported** — a required capability is absent or the combination fails SQLBraid's checks.
 
-PV7 will establish the actual Node/Bun/Deno matrix before broader support claims are made. Tooling may remain Node-first even when runtime packages are portable.
+### Runtime libraries
+
+| Runtime | core/template/runtime | Tested version | Notes |
+| --- | --- | --- | --- |
+| Node | Compatible; CI promotion pending | 22.18.0, 24.21.0 | Floor full release gate; packed smoke including concurrent transaction ALS |
+| Bun | Compatible; CI promotion pending | 1.3.14 | Same packed smoke and ALS assertions |
+| Deno | Compatible; CI promotion pending | 2.9.3 | Same packed smoke and ALS assertions |
+
+### First-party driver adapters
+
+| Adapter | Node 22.18.0 / 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
+| --- | --- | --- | --- |
+| PostgreSQL / `pg` 8.23.0 | Compatible | Compatible | Compatible |
+| MySQL / `mysql2` 3.24.4 | Compatible | Compatible | Compatible |
+| SQLite / `node:sqlite` | Compatible | Unsupported | Compatible |
+
+These are measured local packed-consumer results, not observed GitHub CI passes.
+The [runtime workflow](.github/workflows/runtime-portability.yml) adds release gates
+on Node **22.18.0**, Bun **1.3.14**, and Deno **2.9.3**. Promote a cell to Official
+only after its CI job succeeds. Bun/Deno versions are exact tested versions, not
+minimum-version promises. Node package metadata retains `>=22.18.0`.
+
+PostgreSQL 16.4 and MySQL 8.4.2 smokes exercise direct clients, concurrent pools,
+physical transaction identity, savepoint rollback, root escape protection, observer
+events, and asynchronous mapper re-entry with pool size one.
+Bun 1.3.14 has no `node:sqlite` module. Deno 2.9.3 does provide `columns()` and
+passes the existing adapter smoke; older documentation omitting that method is
+not evidence of its absence. No SQL keyword classifier or substitute SQLite driver
+is used.
+
+Compiler, CLI, language server, and metadata/codegen tooling remain **Node-first**.
+Other drivers remain **Custom** through `QueryExecutor` / `ConnectionProvider`.
+
+Direct `createPgDatabase()` accepts physical `Client`/`PoolClient`, not `pg.Pool`.
+Direct `createMysql2Database()` accepts a Promise `Connection`/`PoolConnection`,
+not a pool. Type checks and immediate runtime guards enforce this boundary;
+use the corresponding `create*PoolDatabase()` factory for pools.
+Observer errors distinguish `cardinality` from `result-kind`; all public timing
+fields are named `durationMs`, with no former-name alias.
 
 ---
 
@@ -467,6 +506,18 @@ pnpm run test:db
 pnpm run test:consumer
 pnpm run test:all
 pnpm run pack:check
+pnpm run test:runtime
 ```
+
+`test:runtime:node`, `test:runtime:bun`, and `test:runtime:deno` run individual cells.
+The Node/pnpm orchestrator builds and packs runtime packages, installs an isolated
+consumer, audits source/distribution and Node-ambient-free declarations, and runs
+the same scripts under each runtime. It starts disposable PostgreSQL/MySQL
+Testcontainers unless `SQLBRAID_POSTGRES_URL` / `SQLBRAID_MYSQL_URL` identify
+dedicated test databases. The smoke creates and drops isolated test tables;
+**never point it at a non-test database**. CI supplies service containers.
+Deno uses `--no-prompt`, consumer-scoped `--allow-read`, DB endpoint-scoped
+`--allow-net`, and `--allow-env=SQLBRAID_POSTGRES_URL,SQLBRAID_MYSQL_URL,PG*,NODE_*,USER,USERNAME,TZ`.
+It needs no `-A`, subprocess, write, or FFI permission.
 
 Read [`PLAN.md`](./PLAN.md) for the authoritative roadmap and [`AGENTS.md`](./AGENTS.md) before broad architectural changes.
