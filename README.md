@@ -2,55 +2,42 @@
 
 **Write SQL. Keep TypeScript. Skip the query-builder translation layer.**
 
-SQLBraid is a SQL-first data-access toolkit for TypeScript. It lets you write ordinary SQL in tagged templates, add readable inline dynamic clauses, bind values safely, declare result contracts, and execute through first-party PostgreSQL, MySQL, and SQLite adapters.
+SQLBraid is a SQL-first data-access toolkit for TypeScript. It keeps ordinary SQL as the primary authoring language while adding safe binds, readable dynamic SQL, explicit result contracts, Standard Schema result mapping, transaction-safe execution and first-party PostgreSQL/MySQL/SQLite adapters.
 
 ```ts
 interface UserRow {
   id: number;
   name: string;
-  email: string | null;
 }
 
 const users = sql.rows<UserRow>`
-  SELECT u.id, u.name, u.email
+  SELECT u.id, u.name
   FROM users u
-
   /*@braid where*/
     /*@braid if ${name != null}*/
       AND u.name = ${name}
     /*@braid end*/
   /*@braid end*/
-
-  ORDER BY u.id
 `;
 ```
 
-SQL stays readable from top to bottom. JavaScript values stay bound parameters. Dynamic SQL stays next to the SQL it controls.
-
-> **Status:** pre-release. The core runtime, template engine, guarded compiler transform, result-kind enforcement, query-bound Standard Schema mapping, execution-time validation, dialect adapters, real DB tests, and package toolchain are implemented. Metadata package cleanup is next. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release. Explicit result kinds, guarded compiler lowering, runtime result-kind enforcement, Standard Schema execution validation, query-bound result mapping, PostgreSQL/MySQL/SQLite adapters and real-DB tests are implemented. The next runtime milestone is the execution boundary: connection leasing/transaction pinning plus SQL/bind/audit observers. See [`PLAN.md`](./PLAN.md).
 
 ---
 
 ## Why SQLBraid?
 
-TypeScript database libraries often ask you to choose between two extremes:
+SQLBraid sits between low-level drivers and query-builder/ORM-first libraries:
 
-- use a low-level driver and give up most higher-level ergonomics; or
-- translate SQL into a TypeScript query-builder/ORM API.
+- write SQL directly;
+- bind values safely;
+- keep dynamic SQL next to the statement;
+- declare the application row type explicitly;
+- optionally validate/transform rows through Standard Schema;
+- execute through a small runtime abstraction;
+- keep metadata/codegen optional.
 
-SQLBraid takes a different approach: **SQL is already the query language.**
-
-The toolkit focuses on the layers around SQL:
-
-- safe parameter binding;
-- inline dynamic SQL;
-- explicit TypeScript result contracts;
-- optional result validation/transformation;
-- plain JavaScript results;
-- transactions and execution helpers;
-- optional metadata/code-generation tooling.
-
-SQLBraid does not need to understand every database function or extension before you can use it.
+SQLBraid does not need a local function registry or complete SQL parser before you can use database-specific SQL.
 
 ```ts
 const report = sql.rows<ReportRow>`
@@ -61,26 +48,30 @@ const report = sql.rows<ReportRow>`
 `;
 ```
 
-If your database accepts the SQL, SQLBraid should not force you to wait for a local function registry to catch up.
-
 ---
 
-## SQL-first by design
-
-SQLBraid is not an ORM and does not make a fluent query builder the primary API.
+## Dynamic SQL
 
 ```ts
 const query = sql.rows<UserRow>`
-  SELECT id, name, email
+  SELECT id, name
   FROM users
-  WHERE organization_id = ${organizationId}
-  ORDER BY name
+  /*@braid where*/
+    /*@braid if ${name != null}*/
+      AND name = ${name}
+    /*@braid end*/
+    /*@braid if ${teamId != null}*/
+      AND team_id = ${teamId}
+    /*@braid end*/
+  /*@braid end*/
 `;
 ```
 
-Ordinary interpolation always becomes a bound value. It is never concatenated into the SQL string.
+Supported v1 directives are `if`, `choose`, `when`, `otherwise`, `where`, `set` and `trim`.
 
-For SQL structure, use explicit helpers:
+The compiler transform preserves lazy evaluation for guarded TypeScript expressions; inactive branches are not evaluated.
+
+Structural SQL is explicit:
 
 ```ts
 sql.ident(columnName)
@@ -90,52 +81,7 @@ sql.join(parts, sql.fragment`, `)
 sql.raw(trustedSql)
 ```
 
-`sql.raw()` is intentionally explicit: it is the escape hatch for trusted structural SQL.
-
----
-
-## Dynamic SQL without leaving the statement
-
-```ts
-const query = sql.rows<UserRow>`
-  SELECT id, name
-  FROM users
-
-  /*@braid where*/
-    /*@braid if ${name != null}*/
-      AND name = ${name}
-    /*@braid end*/
-
-    /*@braid if ${teamId != null}*/
-      AND team_id = ${teamId}
-    /*@braid end*/
-  /*@braid end*/
-`;
-```
-
-First-match branching is also supported:
-
-```ts
-const query = sql.rows<UserRow>`
-  SELECT id, name
-  FROM users
-
-  /*@braid where*/
-    /*@braid choose*/
-      /*@braid when ${id != null}*/
-        AND id = ${id}
-      /*@braid when ${email != null}*/
-        AND email = ${email}
-      /*@braid otherwise*/
-        AND active = ${true}
-    /*@braid end*/
-  /*@braid end*/
-`;
-```
-
-The compiler transform preserves lazy evaluation for guarded TypeScript expressions. Disabled branches do not eagerly evaluate their guarded values.
-
-The directive language is deliberately small. SQLBraid is not trying to embed another general-purpose language inside SQL.
+Ordinary `${value}` interpolation is always a bind parameter.
 
 ---
 
@@ -144,116 +90,56 @@ The directive language is deliberately small. SQLBraid is not trying to embed an
 ### Explicit contract
 
 ```ts
-interface AccountRow {
-  id: bigint;
-  displayName: string;
-  disabledAt: Date | null;
-}
-
 const query = sql.rows<AccountRow>`
-  SELECT id, display_name AS "displayName", disabled_at AS "disabledAt"
+  SELECT id, display_name AS "displayName"
   FROM accounts
 `;
 ```
 
-The application declares the row shape it expects.
-
-This is intentionally similar to the practical contract used by SQL mapping frameworks: SQLBraid does not locally prove that arbitrary SQL produces the declared model.
-
-A bare query remains unknown:
-
-```ts
-const query = sql`SELECT ...`;
-// Query<unknown, "unknown">
-```
+The developer owns the correspondence between arbitrary SQL and `AccountRow`. SQLBraid does not fabricate SQL-to-TypeScript inference.
 
 Explicit result kinds are:
 
 ```ts
-const rows = sql.rows<UserRow>`SELECT id, name FROM users`;
-const command = sql.command`UPDATE users SET active = ${true}`;
-const call = sql.call<RefreshResult>`CALL refresh_users()`;
+sql.rows<UserRow>`SELECT ...`
+sql.command`UPDATE ...`
+sql.call<RefreshResult>`CALL ...`
+sql`SELECT ...` // Query<unknown, "unknown">
 ```
 
-The bare `sql<Row>` shorthand is not supported.
+Adapters report the actual row/command result kind and the runtime checks it against the declaration. A mismatch throws `BRAID_RESULT_KIND` **after execution**; use a transaction when a write must roll back if its declared kind was wrong.
 
 ---
 
-## Runtime result-kind safety
+## Standard Schema result mapping
 
-Adapters report the actual database result kind. The shared runtime compares it with the query declaration.
+SQLBraid depends only on `@standard-schema/spec`. It does not require Valibot, Zod, ArkType or another concrete validator implementation.
 
-```ts
-const result = await db.execute(sql.command`
-  UPDATE users SET active = true
-`);
-
-if (result.kind === "command") {
-  console.log(result.command.affectedRows);
-}
-```
-
-A mismatch throws `DatabaseResultKindError` with code `BRAID_RESULT_KIND`.
-
-This check happens **after database execution**. It is an assertion on the returned result, not a pre-execution SQL verifier. Use a transaction when a write must roll back if its declared result kind was wrong.
-
-Routine calls use `db.call()` and are intentionally excluded from generic `execute()` and `batch()`.
-
----
-
-## Standard Schema: choose your own implementation
-
-SQLBraid uses the **Standard Schema protocol** as the interoperability boundary for result validation and transformation.
-
-SQLBraid depends only on `@standard-schema/spec` for the protocol types; it does not require Valibot, Zod, ArkType, or another concrete validator library.
-
-You choose the implementation that fits your application.
-
-### Execution-time validation
-
-Row APIs accept Standard Schema-compatible validators:
+### Query-bound mapper
 
 ```ts
-const users = await db.all(query, {
-  schema: UserSchema,
-});
-```
-
-`all`, `one`, `maybeOne`, and `stream` accept `{ schema }`; prepared row helpers accept it on `all`, `one`, and `maybeOne`.
-
-Validation may be synchronous or asynchronous. Transformed schema output is returned. `one` and `maybeOne` enforce cardinality before validation, while streams validate row-by-row before each yield.
-
-### Query-bound result mapping
-
-Bind a mapper directly to the query definition:
-
-```ts
-const query = sql.rows(UserSchema)`
-  SELECT
-    id,
-    created_at AS "createdAt",
-    payload
+const eventQuery = sql.rows(EventSchema)`
+  SELECT created_at AS "createdAt", payload
   FROM events
 `;
+
+const event = await db.one(eventQuery);
 ```
 
-The Standard Schema **output type** becomes the query row type.
+The Standard Schema output type becomes the query row type.
 
-For example, choose Valibot to turn a compact UTC timestamp and JSON text into application values:
+A lightweight Valibot example:
 
 ```ts
 import * as v from "valibot";
-import { sql } from "@sqlbraid/postgres";
 
 const EventSchema = v.object({
   createdAt: v.pipe(
     v.string(),
     v.regex(/^\d{14}$/),
     v.transform((s) =>
-      `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}Z`
+      new Date(`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}Z`)
     ),
-    v.isoTimestamp(),
-    v.transform((s) => new Date(s)),
   ),
   payload: v.pipe(
     v.string(),
@@ -261,24 +147,7 @@ const EventSchema = v.object({
     v.object({ enabled: v.boolean() }),
   ),
 });
-
-const eventQuery = sql.rows(EventSchema)`
-  SELECT '20260912191500' AS "createdAt", '{"enabled":true}' AS payload
-`;
-const event = await db.one(eventQuery);
-// { createdAt: Date, payload: { enabled: boolean } }
 ```
-
-This enables application-level transformations such as:
-
-```text
-VARCHAR(14) yyyyMMddHHmmss -> Temporal.PlainDateTime
-TEXT JSON                  -> typed object
-json/jsonb                  -> validated domain object
-legacy string code          -> application value object
-```
-
-without a SQLBraid-specific result-map DSL.
 
 Conceptually:
 
@@ -290,112 +159,159 @@ driver + dialect TypePolicy normalization
 plain normalized row
    ↓
 query-bound Standard Schema
-validate + transform
+   ↓
+optional execution-level schema
    ↓
 application model
 ```
 
-A per-execution `{ schema }` remains additive and runs after the query-bound mapper.
+Mapping is intrinsic to row queries: `execute`, `all`, `one`, `maybeOne`, `batch`, prepared queries, streams and transaction-scoped equivalents return mapped rows.
 
-Mapping is intrinsic to row queries: `execute`, `all`, `one`, `maybeOne`, `batch`, prepared queries, streams, and transaction-scoped equivalents all return mapped rows. `one`/`maybeOne` check raw cardinality first; multi-row operations process schemas sequentially, and streams do not buffer the full result.
+A per-execution schema remains additive:
 
-Validation issues throw `DatabaseResultValidationError` (`BRAID_RESULT_VALIDATION`) with `stage: "query" | "execution"`, `issues`, and zero-based `rowIndex`. Validator-thrown exceptions propagate unchanged. SQLBraid's own message contains no raw rows or binds.
+```ts
+await db.all(eventQuery, { schema: ExtraSchema });
+```
 
-The mapper is query metadata, not rendered SQL: different mappers can share SQL and fingerprints. Reusing `const eventRows = sql.rows(EventSchema)` preserves the schema reference. Guarded compiler lowering evaluates a schema expression once, before active interpolations.
+Validation issues throw `DatabaseResultValidationError` (`BRAID_RESULT_VALIDATION`) with query/execution stage and row index. SQLBraid's own error message does not dump raw rows or binds.
 
-### Validator choice remains yours
-
-Valibot is a natural lightweight option, while Zod, ArkType, and other Standard Schema-compatible libraries work as well.
-
-Valibot, Zod, and a handwritten Standard Schema implementation are covered by interoperability tests. No concrete validator is bundled or required.
-
----
-
-## Result mapping is intentionally one-row-to-one-row
-
-SQLBraid result mapping may:
-
-- validate fields;
-- transform values;
-- parse JSON/text;
-- build temporal or domain values;
-- reshape a single row.
-
-It does not perform ORM-style multi-row graph assembly, identity maps, relation hydration, lazy entities, or collection merging.
-
-If you need nested data, ordinary SQL aliases, JSON aggregation, or a Standard Schema transform can shape a row without turning SQLBraid into an ORM.
+Result mapping is intentionally one-row-to-one-row. SQLBraid does not provide identity maps, relation hydration or multi-row object-graph assembly.
 
 ---
 
 ## Input mapping is deferred
 
-Pre-release SQLBraid deliberately does **not** add a symmetric application input-mapper framework.
-
-JavaScript database drivers do not provide a JDBC-like universal application-input type model. Supporting arbitrary `Temporal`, classes, custom objects, JSON conventions, binary values, and driver-specific inputs would require a much broader encoding policy.
-
-For now:
+Pre-release SQLBraid does not add a symmetric application input-codec framework.
 
 ```ts
 ${value}
 ```
 
-remains a normal bound value handled by the dialect/driver boundary.
-
-Application-level input codecs may be reconsidered after pre-release based on real use cases.
+remains an ordinary driver-bound value. JavaScript database drivers do not expose a JDBC-like universal application-input type system, so `Temporal`, custom classes, JSON conventions and binary representations will be revisited only after real post-release requirements justify an input-mapping design.
 
 ---
 
-## Runtime API
+## Runtime execution model
 
-SQLBraid returns plain results and provides cardinality helpers:
+Current public row/command APIs include:
 
 ```ts
-const rows = await db.all(query);
-const row = await db.one(query);
-const maybe = await db.maybeOne(query);
-const result = await db.execute(command);
+await db.all(query);
+await db.one(query);
+await db.maybeOne(query);
+await db.execute(command);
+await db.call(callQuery);
+await db.batch(queries);
+db.prepare(name, factory);
+db.stream(query);
+await db.transaction(async (tx) => { ... });
 ```
 
-Execution results are discriminated:
+The runtime tracks physical-resource ownership and prevents uncertain transaction state from being silently reused.
+
+### Next: pool/transaction execution boundary
+
+PV6 will make the physical connection boundary explicit.
+
+Outside an explicit transaction, a pooled database may obtain any available physical connection for each root operation:
 
 ```text
-rows    -> typed rows
-command -> empty rows + command payload
-unknown -> actual rows or command result
+root query
+  -> acquire lease
+  -> execute DB I/O
+  -> release lease
+  -> application result mapping
 ```
 
-Transactions use a transaction-scoped database handle:
+The transaction API becomes the explicit connection-pinning boundary (the final pre-release name may be `db.tx(...)`):
 
 ```ts
-await db.transaction(async (tx) => {
+await db.tx(async (tx) => {
   await tx.execute(insertAudit);
   await tx.execute(updateAccount);
 });
 ```
 
-The runtime tracks ownership by physical execution resource so independent wrappers cannot accidentally leak work into another transaction. Failed transaction-control cleanup poisons the affected resource instead of silently reusing uncertain state.
+Inside that closure, every `tx.*` operation reuses one physical connection until commit/rollback and release. Nested transactions use savepoints on the same connection when supported.
+
+Using the outer/root database from its own transaction context must fail instead of silently escaping onto another pool connection.
+
+A pool such as `pg.Pool`, `mysql2.Pool` or Bun.SQL must be modeled as a **connection provider/lease source**, not as a fake executor whose `BEGIN`, query and `COMMIT` could land on different connections.
+
+Materialized query results should release their lease before asynchronous application mapping. Streaming keeps its lease until the iterator closes because the driver cursor/result stream is still active.
 
 ---
 
-## Dialects
+## Next: execution observers / interceptors
 
-First-party packages target:
+Production systems often need SQL/bind logging or audit without coupling SQLBraid to a logger.
 
-- PostgreSQL via `pg`
-- MySQL via `mysql2`
-- SQLite via `node:sqlite`
+PV6 will add a runtime observer/interceptor SPI around the central execution pipeline. It is inspired by the useful coverage of MyBatis interceptors while deliberately exposing less mutation authority.
 
-Dialect packages own:
+Planned coverage includes:
 
-- placeholders;
-- identifier quoting;
-- driver execution;
-- transactions/savepoints;
-- primitive type normalization through `TypePolicy`;
-- result normalization;
-- optional database metadata inspection.
+- final rendered SQL;
+- readonly bind values and binding metadata;
+- declared and actual result kinds;
+- query/call/batch/prepared lifecycle;
+- DB execution duration;
+- row count/command metadata where appropriate;
+- result-mapping completion;
+- stream start/end/error;
+- transaction begin/commit/rollback;
+- savepoint lifecycle;
+- errors with pipeline stage.
 
-Application semantic transforms such as compact-string dates or domain JSON belong in result schemas, not in dialect TypePolicy.
+A likely surface is a discriminated event observer:
+
+```ts
+interface ExecutionObserver {
+  onEvent(event: ExecutionEvent): void | Promise<void>;
+}
+```
+
+Pre-release observer semantics are **observe/fail only**:
+
+- observers may inspect events;
+- an observer may throw to reject/fail the operation;
+- SQL, binds and results are not mutable through this SPI;
+- retry/routing/query rewriting are not part of the observer contract.
+
+Bind values are available because some audit systems require them, but SQLBraid does not log them by default. Applications decide their own redaction and retention policy.
+
+A failure before DB execution prevents execution. A failure after DB execution cannot undo an already committed root side effect; inside `db.tx(...)`, propagated failures participate in rollback.
+
+This SPI is also the intended foundation for a later optional OpenTelemetry integration.
+
+---
+
+## Dialect, driver and runtime are separate
+
+SQLBraid does not need a new dialect for every driver/runtime combination.
+
+```text
+dialect     PostgreSQL / MySQL / SQLite SQL surface
+driver      pg / mysql2 / node:sqlite / future alternatives
+runtime     Node / Bun / Deno
+```
+
+Current primary first-party adapters are:
+
+| Dialect | Adapter |
+| --- | --- |
+| PostgreSQL | `pg` |
+| MySQL | `mysql2` |
+| SQLite | `node:sqlite` |
+
+A different driver only needs a thin adapter/provider if the SQL dialect remains the same.
+
+Runtime support will use three labels:
+
+- **Official** — exercised in SQLBraid CI for that runtime + driver;
+- **Compatible** — expected from public APIs but not an SQLBraid CI gate;
+- **Custom** — connected through the executor/provider SPI.
+
+PV7 will establish the actual Node/Bun/Deno matrix before broader support claims are made. Tooling may remain Node-first even when runtime packages are portable.
 
 ---
 
@@ -403,33 +319,26 @@ Application semantic transforms such as compact-string dates or domain JSON belo
 
 Database metadata is optional development tooling.
 
-The current `@sqlbraid/schema` package contains metadata/snapshot structures. Before public pre-release, the roadmap plans to rename/reframe it as:
+The current `@sqlbraid/schema` package is planned to become `@sqlbraid/metadata` after the runtime execution boundary is stable.
 
-```text
-@sqlbraid/metadata
-```
-
-A later optional package:
-
-```text
-@sqlbraid/codegen
-```
-
-will generate deterministic table-oriented TypeScript models such as `Row`, `Insert`, and `Update` shapes.
-
-Codegen is not required for normal SQLBraid authoring and will not become a runtime/compiler dependency.
-
-The first codegen scope does not promise arbitrary SELECT/JOIN result inference.
+A later optional `@sqlbraid/codegen` package will generate deterministic table-oriented TypeScript models such as `Row`, `Insert` and `Update` shapes. Arbitrary SELECT/JOIN inference is not required.
 
 ---
 
-## Database verification
+## Oracle
 
-A prepare/describe DB verifier is **not** part of the pre-release core roadmap.
+Oracle/node-oracledb is intentionally post-release.
 
-If later demand justifies it, it should be optional development tooling using real database evidence, not a local SQL semantic engine.
+Oracle support needs more than placeholder syntax: named/positional binds, IN/OUT/IN OUT parameters, REF CURSOR, LOBs, NUMBER conversion, DATE/TIMESTAMP variants, object/database types, result-set modes and Oracle-specific session/pool behavior need a dedicated dialect/adapter design.
 
-The current product does not require a verifier to use explicit contracts or Standard Schema result mapping.
+A future surface may look like:
+
+```text
+@sqlbraid/oracle
+@sqlbraid/oracle/oracledb
+```
+
+but it is not a pre-release gate.
 
 ---
 
@@ -439,23 +348,17 @@ Current workspace packages:
 
 | Package | Responsibility |
 | --- | --- |
-| `@sqlbraid/core` | Public contracts, execution result types, Standard Schema-facing types |
-| `@sqlbraid/template` | Tagged templates, directives, rendering, structural helpers |
-| `@sqlbraid/runtime` | Execution, result-kind enforcement, result validation/mapping, cardinality, transactions, prepared/streaming seams |
+| `@sqlbraid/core` | Public contracts and Standard Schema-facing types |
+| `@sqlbraid/template` | Tagged templates, directives and rendering |
+| `@sqlbraid/runtime` | Execution, mapping, result-kind safety, transactions and streaming |
 | `@sqlbraid/postgres` | PostgreSQL dialect, TypePolicy, inspector, `pg` adapter |
 | `@sqlbraid/mysql` | MySQL dialect, TypePolicy, inspector, `mysql2` adapter |
 | `@sqlbraid/sqlite` | SQLite dialect, inspector, `node:sqlite` adapter |
-| `@sqlbraid/compiler` | TypeScript source discovery and guarded-template transform |
-| `@sqlbraid/schema` | Database metadata/snapshot structures; planned PV6 rename to `@sqlbraid/metadata` |
+| `@sqlbraid/compiler` | TypeScript discovery and guarded-template lowering |
+| `@sqlbraid/schema` | Database metadata snapshots; later rename to `@sqlbraid/metadata` |
 | `@sqlbraid/operations` | Fingerprints and provisional declaration manifests |
-| `@sqlbraid/cli` | `sqlbraid` command-line tools |
+| `@sqlbraid/cli` | Command-line tooling |
 | `@sqlbraid/language-server` | Editor/LSP integration |
-
-Planned optional development tooling:
-
-```text
-@sqlbraid/codegen
-```
 
 ---
 
@@ -467,17 +370,19 @@ Completed:
 2. **PV2** — remove compiler SQL semantic inference;
 3. **PV3** — remove broad SQL AST/resolver;
 4. **PV4** — runtime result-kind enforcement + execution-time Standard Schema validation;
-5. **PV5** — query-bound result mapping via Standard Schema.
+5. **PV5** — query-bound Standard Schema result mapping.
 
 Next:
 
-6. **PV6** — rename/reframe database schema snapshots as metadata;
-7. **PV7** — optional table metadata → TypeScript codegen;
-8. **PV8** — codegen CLI, naming and type overrides;
-9. **PV9** — LSP metadata/codegen integration;
-10. **PV10** — public API/docs/package hardening for pre-release/Product Hunt.
+6. **PV6** — execution boundary, connection leasing/transaction pinning, SQL/bind/audit observer SPI;
+7. **PV7** — Node/Bun/Deno runtime portability matrix;
+8. **PV8** — rename/reframe `@sqlbraid/schema` as `@sqlbraid/metadata`;
+9. **PV9** — optional metadata → TypeScript codegen;
+10. **PV10** — codegen CLI and overrides;
+11. **PV11** — LSP metadata/codegen integration;
+12. **PV12** — public API/docs/package hardening for pre-release/Product Hunt.
 
-Post-pre-release candidates include input mapping, optional DB verification tooling, pool leasing, cancellation, bulk/pipeline operations, routing/retry, and telemetry.
+Post-release candidates include Oracle/node-oracledb, application input mapping, optional DB verification, additional driver adapters, cancellation, bulk/pipeline operations, query transformation, routing/retry and OpenTelemetry.
 
 ---
 
@@ -485,11 +390,9 @@ Post-pre-release candidates include input mapping, optional DB verification tool
 
 Requirements:
 
-- Node.js `>=22.18.0`
-- pnpm `12.x`
-- Docker for PostgreSQL/MySQL integration tests
-
-Common commands:
+- Node.js `>=22.18.0` for the current published packages;
+- pnpm `12.x`;
+- Docker for PostgreSQL/MySQL integration tests.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -502,29 +405,4 @@ pnpm run test:all
 pnpm run pack:check
 ```
 
-The integration suite uses Testcontainers for PostgreSQL/MySQL and native `node:sqlite` for SQLite.
-
-Published-package checks include packed external consumers, ESM/type resolution, subpath exports, CLI/language-server execution, `publint`, and Are The Types Wrong.
-
----
-
-## Design principles
-
-1. **SQL stays SQL.**
-2. **Values are bound by default.**
-3. **Dynamic SQL remains local and readable.**
-4. **Explicit contracts beat fabricated inference.**
-5. **Standard Schema is the result-mapping interoperability boundary.**
-6. **Users choose the validation/transform implementation.**
-7. **Dialect adapters stay thin.**
-8. **Metadata/codegen stays optional.**
-9. **Offline development stays possible.**
-10. **Complexity must earn its place in the product.**
-
----
-
-## Contributing
-
-Read [`PLAN.md`](./PLAN.md) for product scope and [`AGENTS.md`](./AGENTS.md) for repository engineering rules before making broad architectural changes.
-
-The most important contribution rule is simple: **do not grow SQLBraid into a partial database compiler, ORM mapper framework, or validator library when an explicit contract or ecosystem protocol already solves the problem.**
+Read [`PLAN.md`](./PLAN.md) for the authoritative roadmap and [`AGENTS.md`](./AGENTS.md) before broad architectural changes.
