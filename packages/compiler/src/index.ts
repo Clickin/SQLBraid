@@ -22,6 +22,9 @@ export interface DiscoveredQuery {
   readonly strings: readonly string[];
   readonly bindings: readonly BindingSite[];
   readonly ir: TemplateIr;
+  readonly mappedRow: boolean;
+  readonly resultSchemaExpression?: string;
+  readonly resultSchemaRange?: SourceRange;
   readonly declaredRowType?: string;
   readonly declaredResultKind: QueryResultKind;
 }
@@ -179,6 +182,15 @@ function explicitResultKind(expression: ts.Expression): "rows" | "command" | "ca
   return expression.name.text === "rows" || expression.name.text === "command" || expression.name.text === "call" ? expression.name.text : undefined;
 }
 
+function mappedRowsCall(expression: ts.Expression): ts.CallExpression | undefined {
+  if (!ts.isCallExpression(expression) || expression.arguments.length !== 1) return undefined;
+  return ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === "rows" ? expression : undefined;
+}
+
+function tagExpression(expression: ts.Expression): ts.Expression {
+  return mappedRowsCall(expression)?.expression ?? expression;
+}
+
 function importedTagModule(expression: ts.Expression, bindings: ImportBindings, tagExport: string): string | undefined {
   if (ts.isIdentifier(expression)) return bindings.named.get(expression.text) ?? bindings.defaults.get(expression.text);
   if (!ts.isPropertyAccessExpression(expression)) return undefined;
@@ -188,6 +200,7 @@ function importedTagModule(expression: ts.Expression, bindings: ImportBindings, 
 }
 
 function tagRoot(expression: ts.Expression): ts.Identifier | undefined {
+  expression = tagExpression(expression);
   if (ts.isIdentifier(expression)) return expression;
   if (ts.isPropertyAccessExpression(expression) && explicitResultKind(expression)) return tagRoot(expression.expression);
   if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)) return expression.expression;
@@ -203,6 +216,7 @@ function checkerTagModule(expression: ts.Expression, sourceFile: ts.SourceFile, 
   if (!checker) return undefined;
   const symbolNode = ts.isPropertyAccessExpression(expression) ? expression.name : expression;
   let symbol = checker.getSymbolAtLocation(symbolNode);
+  if (!symbol && ts.isPropertyAccessExpression(expression)) symbol = checker.getTypeAtLocation(expression.expression).getProperty(expression.name.text);
   if (!symbol) return undefined;
   while ((symbol.flags & ts.SymbolFlags.Alias) !== 0) {
     const aliased = checker.getAliasedSymbol(symbol);
@@ -216,13 +230,16 @@ function checkerTagModule(expression: ts.Expression, sourceFile: ts.SourceFile, 
     const canonical = ts.sys.resolvePath(resolved);
     if (declarations.some((declaration) => ts.sys.resolvePath(declaration.getSourceFile().fileName) === canonical)) return moduleSpecifier;
   }
+  if (ts.isCallExpression(expression)) return checkerTagModule(expression.expression, sourceFile, options);
+  if (ts.isPropertyAccessExpression(expression)) return checkerTagModule(expression.expression, sourceFile, options);
   return undefined;
 }
 
 function tagIdentity(expression: ts.Expression, bindings: ImportBindings, tagExport: string, sourceFile: ts.SourceFile, options: OverlayOptions): { readonly name?: string; readonly moduleSpecifier?: string; readonly declaredResultKind: QueryResultKind } {
-  const kind = explicitResultKind(expression);
-  const root = tagRoot(expression);
-  const moduleSpecifier = root && !isShadowed(root) ? importedTagModule(expression, bindings, tagExport) : undefined;
+  const tag = tagExpression(expression);
+  const kind = explicitResultKind(tag);
+  const root = tagRoot(tag);
+  const moduleSpecifier = root && !isShadowed(root) ? importedTagModule(tag, bindings, tagExport) : undefined;
   const checkedModule = moduleSpecifier ?? (kind && root ? checkerTagModule(root, sourceFile, options) : undefined) ?? checkerTagModule(expression, sourceFile, options);
   return { ...(checkedModule ? { name: expression.getText(sourceFile), moduleSpecifier: checkedModule } : {}), declaredResultKind: kind ?? "unknown" };
 }
@@ -260,8 +277,22 @@ export function discoverQueries(sourceText: string, fileName: string, options: O
       const declaredRowType = identity.declaredResultKind === "unknown" ? undefined : node.typeArguments?.[0]?.getText(sourceFile);
       if (identity.name && identity.moduleSpecifier) {
         const extracted = extractTemplate(node.template, sourceFile);
+        const schemaCall = mappedRowsCall(node.tag);
+        const resultSchema = schemaCall?.arguments[0];
         try {
-          const query: DiscoveredQuery = { tagName: identity.name, moduleSpecifier: identity.moduleSpecifier, range: range(node, sourceFile), templateRange: extracted.templateRange, strings: extracted.strings, bindings: extracted.bindings, ir: parseTemplate(createTemplateStrings(extracted.strings), dialectForModule(identity.moduleSpecifier, options).lexicalProfile, options.limits?.maxNestingDepth), ...(declaredRowType ? { declaredRowType } : {}), declaredResultKind: identity.declaredResultKind };
+          const query: DiscoveredQuery = {
+            tagName: identity.name,
+            moduleSpecifier: identity.moduleSpecifier,
+            range: range(node, sourceFile),
+            templateRange: extracted.templateRange,
+            strings: extracted.strings,
+            bindings: extracted.bindings,
+            ir: parseTemplate(createTemplateStrings(extracted.strings), dialectForModule(identity.moduleSpecifier, options).lexicalProfile, options.limits?.maxNestingDepth),
+            mappedRow: identity.declaredResultKind === "rows" && resultSchema !== undefined,
+            ...(resultSchema ? { resultSchemaExpression: resultSchema.getText(sourceFile), resultSchemaRange: range(resultSchema, sourceFile) } : {}),
+            ...(declaredRowType ? { declaredRowType } : {}),
+            declaredResultKind: identity.declaredResultKind,
+          };
           queries.push(query);
         } catch (error) {
           const code = error && typeof error === "object" && "code" in error ? String(error.code) : "BRAID_TEMPLATE";
@@ -287,6 +318,57 @@ export interface VirtualTypeScriptOverlay {
   readonly virtualSourceText: string;
   readonly queryTypes: readonly OverlayQueryType[];
   readonly diagnostics: readonly CompileDiagnostic[];
+}
+
+function typeArgumentsOf(type: ts.Type, checker: ts.TypeChecker): readonly ts.Type[] {
+  const aliasTypeArguments = (type as ts.Type & { readonly aliasTypeArguments?: readonly ts.Type[] }).aliasTypeArguments;
+  if (aliasTypeArguments?.length) return aliasTypeArguments;
+  if ((type.flags & ts.TypeFlags.Object) !== 0) return checker.getTypeArguments(type as ts.TypeReference);
+  return [];
+}
+
+function mappedRowType(node: ts.TaggedTemplateExpression, checker: ts.TypeChecker): string | undefined {
+  const candidates: ts.Type[] = [checker.getTypeAtLocation(node)];
+  const tagType = checker.getTypeAtLocation(node.tag);
+  const signature = checker.getSignaturesOfType(tagType, ts.SignatureKind.Call)[0];
+  if (signature) candidates.push(checker.getReturnTypeOfSignature(signature));
+  for (const candidate of candidates) {
+    const argumentsOfType = typeArgumentsOf(candidate, checker);
+    if (argumentsOfType.length === 1) return checker.typeToString(argumentsOfType[0], node, ts.TypeFormatFlags.NoTruncation);
+    if (argumentsOfType.length < 2) continue;
+    const first = checker.typeToString(argumentsOfType[0], node, ts.TypeFormatFlags.NoTruncation);
+    const second = checker.typeToString(argumentsOfType[1], node, ts.TypeFormatFlags.NoTruncation);
+    if (second === '"rows"') return first;
+    if (first === '"rows"') return second;
+  }
+  return undefined;
+}
+
+function queryNodeFor(sourceFile: ts.SourceFile, target: DiscoveredQuery): ts.TaggedTemplateExpression | undefined {
+  let found: ts.TaggedTemplateExpression | undefined;
+  function visit(node: ts.Node): void {
+    if (found || !ts.isTaggedTemplateExpression(node)) {
+      if (!found) ts.forEachChild(node, visit);
+      return;
+    }
+    if (queryKey(range(node, sourceFile)) === queryKey(target.range)) found = node;
+  }
+  visit(sourceFile);
+  return found;
+}
+
+function hasMappedRowsTag(sourceFile: ts.SourceFile): boolean {
+  let found = false;
+  function visit(node: ts.Node): void {
+    if (found) return;
+    if (ts.isTaggedTemplateExpression(node) && mappedRowsCall(node.tag)) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return found;
 }
 
 interface NameAllocator {
@@ -487,9 +569,7 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
         ? [...captureSetup(factory, valuesName, evaluatedNames.get(key) ?? allocator.fresh("__sqlbraidEvaluated"), readNames.get(key) ?? allocator.fresh("__sqlbraidRead")), ...captureStatements(query.ir.nodes, captureContext)]
         : captureStatements(query.ir.nodes, captureContext);
       const callback = factory.createArrowFunction(undefined, undefined, [factory.createParameterDeclaration(undefined, undefined, factory.createIdentifier(valuesName), undefined, undefined, undefined)], undefined, undefined, factory.createBlock(body, true));
-      const typeArguments = updated.typeArguments ?? (query.declaredResultKind === "command"
-        ? [factory.createImportTypeNode(factory.createLiteralTypeNode(factory.createStringLiteral("@sqlbraid/core")), undefined, factory.createIdentifier("CommandResult"), undefined, false)]
-        : undefined);
+      const typeArguments = updated.typeArguments;
       const tag = typeArguments ? factory.createExpressionWithTypeArguments(updated.tag, typeArguments) : updated.tag;
       const replacement = withOriginal(factory.createCallExpression(factory.createIdentifier(captureName ?? "__sqlbraidCapture"), undefined, [tag, stringsArray(factory, query.strings), callback]), node);
       loweredNodes.set(originalKey, replacement);
@@ -525,13 +605,27 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
 }
 
 export function createVirtualOverlay(sourceText: string, fileName: string, options: OverlayOptions): VirtualTypeScriptOverlay {
-  const sourceFile = sourceFileFor(sourceText, fileName, options);
-  const discovered = discoverQueries(sourceText, fileName, { ...options, sourceFile });
-  const queryTypes: OverlayQueryType[] = discovered.queries.map((query) => ({
-    range: query.range,
-    rowType: query.declaredRowType ?? (query.declaredResultKind === "command" ? 'import("@sqlbraid/core").CommandResult' : "unknown"),
-    resultKind: query.declaredResultKind,
-  }));
+  const compilerOptions = compilerOptionsFor(options);
+  let sourceFile = sourceFileFor(sourceText, fileName, options);
+  let typeChecker = options.typeChecker;
+  let discovered = discoverQueries(sourceText, fileName, { ...options, compilerOptions, sourceFile, ...(typeChecker ? { typeChecker } : {}) });
+  if (!typeChecker && hasMappedRowsTag(sourceFile)) {
+    const originalProgram = ts.createProgram([fileName], compilerOptions, sourceHost(compilerOptions, fileName, sourceText));
+    sourceFile = sourceFileInProgram(originalProgram, fileName) ?? sourceFile;
+    typeChecker = originalProgram.getTypeChecker();
+    discovered = discoverQueries(sourceText, fileName, { ...options, compilerOptions, sourceFile, typeChecker });
+  }
+  const queryTypes: OverlayQueryType[] = discovered.queries.map((query) => {
+    const node = queryNodeFor(sourceFile, query);
+    return {
+      range: query.range,
+      rowType: query.declaredRowType
+        ?? (query.mappedRow && typeChecker && node
+          ? mappedRowType(node, typeChecker) ?? "unknown"
+          : query.declaredResultKind === "command" ? 'import("@sqlbraid/core").CommandResult' : "unknown"),
+      resultKind: query.declaredResultKind,
+    };
+  });
   const transformed = lowerSourceFile(sourceFile, discovered, "runtime");
   return { sourceFileName: fileName, sourceText, virtualSourceText: transformed.sourceText, queryTypes, diagnostics: transformed.diagnostics };
 }

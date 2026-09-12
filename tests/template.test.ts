@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { CallQuery, CommandQuery, Query, RowQuery } from '@sqlbraid/core';
-import { capture, sql } from '@sqlbraid/template';
+import type { CallQuery, CommandQuery, Query, RowQuery, StandardSchemaV1 } from '@sqlbraid/core';
+import { capture, guarded, sql } from '@sqlbraid/template';
 
 function hasCode(code: string): (error: unknown) => boolean {
   return (error): error is { readonly code: string } => typeof error === 'object' && error !== null && 'code' in error && error.code === code;
@@ -77,4 +77,54 @@ test('query tags expose declared result kinds', () => {
   assert.equal(call.resultKind, 'call');
   assert.equal(untyped.resultKind, 'unknown');
   assert.equal(captured.resultKind, 'rows');
+});
+
+test('schema-bound rows retain the mapper reference and render normally', () => {
+  type MappedRow = { readonly id: number; readonly label: string };
+  const schema: StandardSchemaV1<unknown, MappedRow> = {
+    '~standard': {
+      version: 1,
+      vendor: 'template-tests',
+      validate: (value) => ({ value: { id: (value as { id: number }).id, label: 'mapped' } }),
+    },
+  };
+  const mappedRows = sql.rows(schema);
+  const first: RowQuery<MappedRow> = mappedRows`SELECT id FROM users`;
+  const second: RowQuery<MappedRow> = mappedRows`SELECT id FROM users`;
+  const otherSchema: StandardSchemaV1<unknown, MappedRow> = {
+    '~standard': { version: 1, vendor: 'other-tests', validate: schema['~standard'].validate },
+  };
+  const other = sql.rows(otherSchema)`SELECT id FROM users`;
+  assert.equal(first.resultSchema, schema);
+  assert.equal(second.resultSchema, schema);
+  assert.equal(other.resultSchema, otherSchema);
+  const firstRendered = first.render();
+  const secondRendered = second.render();
+  assert.equal(firstRendered.text, 'SELECT id FROM users');
+  assert.equal(firstRendered.variantFingerprint, secondRendered.variantFingerprint);
+  assert.deepEqual(firstRendered, other.render());
+  assert.equal(Object.hasOwn(firstRendered, 'resultSchema'), false);
+  assert.equal(firstRendered.resultKind, 'rows');
+});
+
+test('schema-bound rows compose with capture and guarded without losing the mapper', () => {
+  type MappedRow = { readonly id: number };
+  const schema: StandardSchemaV1<unknown, MappedRow> = {
+    '~standard': { version: 1, vendor: 'template-tests', validate: (value) => ({ value: value as MappedRow }) },
+  };
+  const mappedRows = sql.rows(schema);
+  const captured = capture(mappedRows, ['SELECT ', ''], (values) => { values[0] = 1; });
+  const guardedQuery = guarded(mappedRows, ['SELECT ', ''], [() => 1]);
+  assert.equal(captured.resultSchema, schema);
+  assert.equal(guardedQuery.resultSchema, schema);
+  assert.deepEqual(captured.render().values, [1]);
+  assert.deepEqual(guardedQuery.render().values, [1]);
+});
+
+test('schema-bound rows reject invalid Standard Schema shapes before query creation', () => {
+  assert.throws(() => sql.rows(null as never), TypeError);
+  assert.throws(() => sql.rows({} as never), TypeError);
+  assert.throws(() => sql.rows([] as never), TypeError);
+  assert.throws(() => sql.rows({ '~standard': { version: 2, validate: () => ({ value: 1 }) } } as never), TypeError);
+  assert.throws(() => sql.rows({ '~standard': { version: 1, validate: 'nope' } } as never), TypeError);
 });

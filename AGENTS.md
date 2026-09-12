@@ -89,7 +89,7 @@ Do not reintroduce SQL-driven row inference to prove this contract.
 
 ### 4.2 Query-bound result mapping uses Standard Schema
 
-PV5 adds:
+Query-bound mapping uses:
 
 ```ts
 sql.rows(UserSchema)`SELECT ...`;
@@ -121,7 +121,7 @@ SQLBraid must use:
 
 for Standard Schema types.
 
-Do not maintain a private clone of the protocol interfaces once PV5 migrates them.
+Use the official protocol interfaces; do not maintain a private clone.
 
 Do not make Valibot, Zod, ArkType, or another concrete validator a runtime dependency of SQLBraid core packages.
 
@@ -374,7 +374,7 @@ Unit tests should normally use source aliases and must not require Docker unless
 
 ### Standard Schema interoperability
 
-PV5 must cover:
+Standard Schema interoperability coverage must retain:
 
 - official `@standard-schema/spec` typing;
 - Valibot interoperability;

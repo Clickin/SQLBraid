@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
 import { test } from 'vitest';
-import { checkSource, createVirtualOverlay, discoverQueries } from '@sqlbraid/compiler';
+import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource } from '@sqlbraid/compiler';
 
 const source = `import { sql as dbSql } from '@sqlbraid/template';\nconst name: string | null = 'Ada';\ntype UserRow = { id: bigint };\nconst query = dbSql.rows<UserRow>\`SELECT custom_company_function(id) AS id FROM vendor_table /*@braid where*/ /*@braid if \${name != null}*/ AND name = \${name} /*@braid end*/ /*@braid end*/\`;`;
 const options = {
@@ -33,6 +35,99 @@ test('discovers explicit rows, command, and call tag helpers', () => {
     { name: 'dbSql.command', kind: 'command', type: undefined },
     { name: 'dbSql.call', kind: 'call', type: 'UserRow' },
   ]);
+});
+
+test('discovers mapped rows through direct, aliased, and namespace imports', () => {
+  const mapped = `
+    import { sql } from '@sqlbraid/template';
+    import { sql as dbSql } from '@sqlbraid/template';
+    import * as braid from '@sqlbraid/template';
+    declare const UserSchema: import('@sqlbraid/core').StandardSchemaV1<unknown, { id: number }>;
+    const direct = sql.rows(UserSchema)\`SELECT id FROM users\`;
+    const alias = dbSql.rows(UserSchema)\`SELECT id FROM users\`;
+    const namespace = braid.sql.rows(UserSchema)\`SELECT id FROM users\`;
+    const unrelated = { rows: (_schema: unknown) => (_strings: TemplateStringsArray) => undefined };
+    const ignored = unrelated.rows(UserSchema)\`SELECT id FROM users\`;
+  `;
+  const result = discoverQueries(mapped, 'mapped.ts', { moduleSpecifier: '@sqlbraid/template' });
+  assert.equal(result.queries.length, 3);
+  for (const query of result.queries) {
+    assert.equal(query.declaredResultKind, 'rows');
+    assert.equal(query.mappedRow, true);
+    assert.equal(query.resultSchemaExpression, 'UserSchema');
+    const schemaRange = query.resultSchemaRange;
+    assert.ok(schemaRange);
+    assert.equal(mapped.slice(schemaRange.start, schemaRange.end), 'UserSchema');
+  }
+});
+
+test('checker discovers mapped rows through a re-export', () => {
+  const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-mapped-project-'));
+  try {
+    writeFileSync(join(directory, 'bridge.ts'), "export { sql } from '@sqlbraid/template';\n");
+    writeFileSync(join(directory, 'main.ts'), "import { sql } from './bridge.js'; declare const UserSchema: import('@sqlbraid/core').StandardSchemaV1<unknown, { id: number }>; export const query = sql.rows(UserSchema)`SELECT id FROM users`;\n");
+    const projectFile = join(directory, 'tsconfig.json');
+    writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, baseUrl: '.', paths: { '@sqlbraid/*': ['../packages/*/src/index.ts'] } }, include: ['*.ts'] }));
+    const context = createProjectContext(projectFile);
+    const sourceFile = context.program.getSourceFile(join(directory, 'main.ts'));
+    assert.ok(sourceFile);
+    const discovered = discoverQueries(sourceFile.text, sourceFile.fileName, { moduleSpecifier: '@sqlbraid/template', compilerOptions: context.compilerOptions, sourceFile, typeChecker: context.checker });
+    assert.equal(discovered.queries.length, 1);
+    assert.equal(discovered.queries[0].mappedRow, true);
+    assert.equal(checkProject(projectFile, { moduleSpecifier: '@sqlbraid/template' }).length, 0);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('mapped rows use the Standard Schema output type for downstream checking', () => {
+  const mapped = `
+    import { sql } from '@sqlbraid/template';
+    import type { Database } from '@sqlbraid/core';
+    declare const db: Database;
+    type UserRow = { id: number };
+    declare const UserSchema: import('@sqlbraid/core').StandardSchemaV1<unknown, UserRow>;
+    declare const user: { id: number } | null;
+    const query = sql.rows(UserSchema)\`SELECT id FROM users /*@braid if \${user !== null}*/ WHERE id = \${user.id} /*@braid end*/\`;
+    async function read() {
+      const rows = await db.all(query);
+      return rows[0].missing;
+    }
+  `;
+  const diagnostics = checkSource(mapped, join(tmpdir(), 'sqlbraid-mapped-output.ts'), options);
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.code), ['TS2339']);
+});
+
+test('mapped guarded lowering preserves the tag call and evaluates schema once', async () => {
+  const source = `
+    import { sql } from '@sqlbraid/template';
+    export function build(getSchema, observe, enabled) {
+      return sql.rows(getSchema())\`SELECT id FROM users /*@braid if \${observe('condition', enabled)}*/ WHERE id = \${observe('value', 1)} /*@braid end*/\`;
+    }
+  `;
+  const emitted = emitSource(source, 'mapped-guarded.ts', { moduleSpecifier: '@sqlbraid/template' });
+  assert.equal(emitted.diagnostics.length, 0);
+  const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-mapped-runtime-'));
+  try {
+    const file = join(directory, 'mapped-guarded.mjs');
+    writeFileSync(file, emitted.outputText.replace(/\n\/\/#[^\n]*sourceMappingURL[^\n]*/u, ''));
+    const module = await import(pathToFileURL(file).href);
+    const schema = { '~standard': { version: 1, vendor: 'test', validate: (value: unknown) => ({ value }) } };
+    const events: string[] = [];
+    const getSchema = () => { events.push('schema'); return schema; };
+    const observe = (event: string, value: unknown) => { events.push(event); return value; };
+    const query = module.build(getSchema, observe, true);
+    assert.deepEqual(events, ['schema', 'condition', 'value']);
+    assert.equal(query.resultSchema, schema);
+    assert.deepEqual(query.render().values, [1]);
+    events.length = 0;
+    const inactive = module.build(getSchema, observe, false);
+    assert.deepEqual(events, ['schema', 'condition']);
+    assert.equal(inactive.resultSchema, schema);
+    assert.deepEqual(inactive.render().values, []);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('capture and guarded preserve tag contracts and reject cross-kind arguments', () => {

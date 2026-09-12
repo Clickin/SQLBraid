@@ -248,7 +248,7 @@ No runtime row validation or transformation occurs unless a mapper/schema is att
 
 ### 5.2 Official Standard Schema dependency
 
-SQLBraid will depend on:
+SQLBraid depends on:
 
 ```text
 @standard-schema/spec
@@ -262,7 +262,7 @@ Users may choose any compatible implementation, including Valibot, Zod, ArkType,
 
 ### 5.3 Query-bound result mapping
 
-PV5 adds the canonical mapped-row form:
+The canonical mapped-row form is:
 
 ```ts
 const query = sql.rows(UserSchema)`
@@ -311,7 +311,7 @@ PV4 already supports:
 await db.all(query, { schema: ExtraSchema });
 ```
 
-After PV5, the order is:
+The processing order is:
 
 ```text
 normalized raw row
@@ -434,7 +434,7 @@ The compiler does not own:
 - database coercion rules;
 - Standard Schema implementation logic.
 
-PV5 must ensure schema-bound row tags survive compiler lowering without losing mapper identity or output typing.
+Schema-bound row tags survive compiler lowering without losing mapper identity or output typing; schema expressions execute exactly once in tag-expression order.
 
 ---
 
@@ -667,20 +667,20 @@ Non-negotiable:
 - optional `{ schema }` validation;
 - transaction/prepared/stream integration.
 
-### PV5 — Query-bound result mapping via Standard Schema **NEXT**
+### PV5 — Query-bound result mapping via Standard Schema ✅
 
 - adopt official `@standard-schema/spec` types;
 - remove SQLBraid's private Standard Schema protocol clone;
 - add `sql.rows(schema)` mapped-row authoring;
 - infer row type from Standard Schema output;
 - store mapper on the query;
-- automatically validate/transform all/one/maybeOne/stream/prepared results;
+- automatically validate/transform execute/all/one/maybeOne/batch/stream/prepared and transaction results;
 - compose query-bound mapper before execution-level `{ schema }`;
 - preserve mapper through compiler guarded lowering;
 - Valibot/Zod interoperability tests;
 - no input mapper.
 
-### PV6 — Metadata package cleanup
+### PV6 — Metadata package cleanup **NEXT**
 
 - rename/reframe `@sqlbraid/schema` to `@sqlbraid/metadata`;
 - remove stale verification-oriented naming where appropriate;

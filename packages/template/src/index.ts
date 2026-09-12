@@ -10,6 +10,7 @@ import {
   type QueryResultKind,
   type RenderLimits,
   type RenderedQuery,
+  type StandardSchemaV1,
   type SqlFragment,
   SqlRenderError,
   type SqlTag,
@@ -721,18 +722,54 @@ export interface SqlTagOptions {
   readonly limits?: RenderLimits;
 }
 
+function assertStandardSchema(value: unknown): asserts value is StandardSchemaV1<unknown, unknown> {
+  if (typeof value !== "object" || value === null) {
+    throw new TypeError("sql.rows(schema) requires a Standard Schema object.");
+  }
+  const standard = (value as { readonly "~standard"?: unknown })["~standard"];
+  if (typeof standard !== "object" || standard === null) {
+    throw new TypeError("sql.rows(schema) requires a Standard Schema object.");
+  }
+  const protocol = standard as { readonly version?: unknown; readonly validate?: unknown };
+  if (protocol.version !== 1 || typeof protocol.validate !== "function") {
+    throw new TypeError("sql.rows(schema) requires a Standard Schema v1 object.");
+  }
+}
+
+function isTemplateStringsArray(value: unknown): value is TemplateStringsArray {
+  return Array.isArray(value)
+    && Array.isArray((value as { readonly raw?: unknown }).raw);
+}
+
 export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
   const dialect = options.dialect ?? postgresDialect;
   const limits = validateLimits(options.limits ?? {});
-  const createQuery = <Kind extends QueryResultKind>(strings: TemplateStringsArray, values: readonly unknown[], resultKind: Kind): Query<unknown, Kind> => {
+  const createQuery = <Row, Kind extends QueryResultKind>(
+    strings: TemplateStringsArray,
+    values: readonly unknown[],
+    resultKind: Kind,
+    resultSchema?: StandardSchemaV1<unknown, Row>,
+  ): Query<Row, Kind> => {
     const ir = cachedTemplate(strings, dialect.lexicalProfile, limits.maxNestingDepth);
     const captured = Object.freeze([...values]);
-    return Object.freeze({ ir, values: captured, resultKind, render: () => renderIr(ir, captured, dialect, limits, resultKind) });
+    return Object.freeze({
+      ir,
+      values: captured,
+      resultKind,
+      ...(resultSchema === undefined ? {} : { resultSchema }),
+      render: () => renderIr(ir, captured, dialect, limits, resultKind),
+    });
   };
-  const tag = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "unknown"> => createQuery(strings, values, "unknown")) as SqlTag;
-  tag.rows = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "rows"> => createQuery(strings, values, "rows")) as SqlTag["rows"];
-  tag.command = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "command"> => createQuery(strings, values, "command")) as SqlTag["command"];
-  tag.call = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "call"> => createQuery(strings, values, "call")) as SqlTag["call"];
+  const tag = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "unknown"> => createQuery<unknown, "unknown">(strings, values, "unknown")) as SqlTag;
+  tag.rows = ((first: TemplateStringsArray | StandardSchemaV1, ...values: readonly unknown[]) => {
+    if (isTemplateStringsArray(first)) return createQuery<unknown, "rows">(first, values, "rows");
+    assertStandardSchema(first);
+    const schema = first;
+    return ((strings: TemplateStringsArray, ...tagValues: readonly unknown[]) =>
+      createQuery(strings, tagValues, "rows", schema)) as SqlTagLike<"rows", unknown>;
+  }) as SqlTag["rows"];
+  tag.command = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "command"> => createQuery<unknown, "command">(strings, values, "command")) as SqlTag["command"];
+  tag.call = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "call"> => createQuery<unknown, "call">(strings, values, "call")) as SqlTag["call"];
   tag.fragment = (strings, ...values) => makeFragment(strings, values, dialect, limits);
   tag.empty = makeStaticFragment([], 0, dialect);
   tag.ident = (identifier) => makeStaticFragment([{ kind: "identifier", value: typeof identifier === "string" ? identifier : Object.freeze([...identifier]), range: { start: 0, end: 0 } }], 0, dialect);

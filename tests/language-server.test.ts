@@ -15,7 +15,7 @@ test('declared contract hover and diagnostics work without a snapshot', () => {
   const service = createLanguageService({ moduleSpecifier: '@sqlbraid/template' });
   assert.equal(service.diagnostics(source, 'fixture.ts').length, 0);
   assert.match(service.hover(source, 'fixture.ts', source.indexOf('SELECT'))?.contents ?? '', /RowQuery<UserRow>/);
-  assert.match(service.hover(source, 'fixture.ts', source.indexOf('proprietary_command'))?.contents ?? '', /CommandQuery</);
+  assert.equal(service.hover(source, 'fixture.ts', source.indexOf('proprietary_command'))?.contents, 'CommandQuery');
   assert.match(service.hover(source, 'fixture.ts', source.indexOf('proprietary_call'))?.contents ?? '', /CallQuery<UserRow>/);
   assert.match(service.hover(source, 'fixture.ts', source.indexOf('SELECT id'))?.contents ?? '', /Query<unknown>/);
   assert.deepEqual(service.complete('us'), []);
@@ -25,4 +25,13 @@ test('completion is snapshot-backed', () => {
   const service = createLanguageService({ moduleSpecifier: '@sqlbraid/template' }).reload(snapshot);
   assert.deepEqual(service.complete('us').map((item) => item.label), ['users']);
   assert.deepEqual(service.complete('id').map((item) => item.label), ['id']);
+});
+
+test('mapped rows hover exposes the Standard Schema output type', () => {
+  const mappedSource = `import { sql } from '@sqlbraid/template';
+type UserRow = { id: bigint };
+declare const UserSchema: import('@sqlbraid/core').StandardSchemaV1<unknown, UserRow>;
+const mapped = sql.rows(UserSchema)\`SELECT id FROM users\`;`;
+  const service = createLanguageService({ moduleSpecifier: '@sqlbraid/template' });
+  assert.match(service.hover(mappedSource, 'mapped-hover.ts', mappedSource.indexOf('SELECT'))?.contents ?? '', /RowQuery<UserRow>/u);
 });

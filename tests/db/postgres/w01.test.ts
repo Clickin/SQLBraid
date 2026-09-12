@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { Client } from "pg";
 import { inject, test } from "vitest";
-import type { StandardSchemaLike } from "@sqlbraid/core";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+import * as v from "valibot";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createPgDatabase } from "@sqlbraid/postgres/pg";
 import { sql } from "@sqlbraid/postgres";
@@ -75,7 +76,7 @@ test("PostgreSQL result kinds follow driver metadata", async () => {
         && error.actualKind === "command",
     );
 
-    const schema: StandardSchemaLike<{ readonly id: number }> = {
+    const schema: StandardSchemaV1<unknown, { readonly id: number }> = {
       "~standard": {
         version: 1,
         vendor: "sqlbraid-tests",
@@ -88,6 +89,14 @@ test("PostgreSQL result kinds follow driver metadata", async () => {
     assert.deepEqual(
       await db.all(sql.rows<{ readonly id: number }>`SELECT id FROM braid_pv4 WHERE id = 2`, { schema }),
       [{ id: 12 }],
+    );
+    const mapped = v.object({
+      payload: v.object({ enabled: v.boolean() }),
+      stamp: v.pipe(v.string(), v.transform((stamp) => new Date(`${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T00:00:00Z`))),
+    });
+    assert.deepEqual(
+      (await db.execute(sql.rows(mapped)`SELECT '{"enabled":true}'::jsonb AS payload, '20260912'::text AS stamp`)).rows,
+      [{ payload: { enabled: true }, stamp: new Date("2026-09-12T00:00:00Z") }],
     );
   } finally {
     await client.query("DROP TABLE IF EXISTS braid_pv4").catch(() => undefined);

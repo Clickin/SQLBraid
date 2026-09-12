@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createConnection } from "mysql2/promise";
 import { inject, test } from "vitest";
-import type { StandardSchemaLike } from "@sqlbraid/core";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+import * as v from "valibot";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
 import { sql } from "@sqlbraid/mysql";
@@ -72,7 +73,7 @@ test("MySQL result kinds follow payload metadata", async () => {
         && error.actualKind === "command",
     );
 
-    const schema: StandardSchemaLike<{ readonly id: number }> = {
+    const schema: StandardSchemaV1<unknown, { readonly id: number }> = {
       "~standard": {
         version: 1,
         vendor: "sqlbraid-tests",
@@ -85,6 +86,13 @@ test("MySQL result kinds follow payload metadata", async () => {
     assert.deepEqual(
       await db.all(sql.rows<{ readonly id: number }>`SELECT id FROM braid_pv4 WHERE id = 2`, { schema }),
       [{ id: 12 }],
+    );
+    const mapped = v.object({
+      payload: v.pipe(v.string(), v.parseJson(), v.object({ enabled: v.boolean() })),
+    });
+    assert.deepEqual(
+      (await db.execute(sql.rows(mapped)`SELECT CAST('{"enabled":true}' AS CHAR) AS payload`)).rows,
+      [{ payload: { enabled: true } }],
     );
   } finally {
     await client.query("DROP TABLE IF EXISTS braid_pv4").catch(() => undefined);

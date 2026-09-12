@@ -27,7 +27,7 @@ const users = sql.rows<UserRow>`
 
 SQL stays readable from top to bottom. JavaScript values stay bound parameters. Dynamic SQL stays next to the SQL it controls.
 
-> **Status:** pre-release. The core runtime, template engine, guarded compiler transform, result-kind enforcement, execution-time Standard Schema validation, dialect adapters, real DB tests, and package toolchain are implemented. Query-bound result mapping through the Standard Schema protocol is the next core milestone. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release. The core runtime, template engine, guarded compiler transform, result-kind enforcement, query-bound Standard Schema mapping, execution-time validation, dialect adapters, real DB tests, and package toolchain are implemented. Metadata package cleanup is next. See [`PLAN.md`](./PLAN.md).
 
 ---
 
@@ -205,13 +205,13 @@ Routine calls use `db.call()` and are intentionally excluded from generic `execu
 
 SQLBraid uses the **Standard Schema protocol** as the interoperability boundary for result validation and transformation.
 
-SQLBraid itself should depend only on `@standard-schema/spec`; it does not require Valibot, Zod, ArkType, or another concrete validator library.
+SQLBraid depends only on `@standard-schema/spec` for the protocol types; it does not require Valibot, Zod, ArkType, or another concrete validator library.
 
 You choose the implementation that fits your application.
 
-### Current: execution-time validation
+### Execution-time validation
 
-PV4 already supports Standard Schema-compatible validators on row APIs:
+Row APIs accept Standard Schema-compatible validators:
 
 ```ts
 const users = await db.all(query, {
@@ -223,9 +223,9 @@ const users = await db.all(query, {
 
 Validation may be synchronous or asynchronous. Transformed schema output is returned. `one` and `maybeOne` enforce cardinality before validation, while streams validate row-by-row before each yield.
 
-### Next: query-bound result mapping
+### Query-bound result mapping
 
-PV5 adds a mapper directly to the query definition:
+Bind a mapper directly to the query definition:
 
 ```ts
 const query = sql.rows(UserSchema)`
@@ -238,6 +238,36 @@ const query = sql.rows(UserSchema)`
 ```
 
 The Standard Schema **output type** becomes the query row type.
+
+For example, choose Valibot to turn a compact UTC timestamp and JSON text into application values:
+
+```ts
+import * as v from "valibot";
+import { sql } from "@sqlbraid/postgres";
+
+const EventSchema = v.object({
+  createdAt: v.pipe(
+    v.string(),
+    v.regex(/^\d{14}$/),
+    v.transform((s) =>
+      `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}Z`
+    ),
+    v.isoTimestamp(),
+    v.transform((s) => new Date(s)),
+  ),
+  payload: v.pipe(
+    v.string(),
+    v.parseJson(),
+    v.object({ enabled: v.boolean() }),
+  ),
+});
+
+const eventQuery = sql.rows(EventSchema)`
+  SELECT '20260912191500' AS "createdAt", '{"enabled":true}' AS payload
+`;
+const event = await db.one(eventQuery);
+// { createdAt: Date, payload: { enabled: boolean } }
+```
 
 This enables application-level transformations such as:
 
@@ -267,11 +297,17 @@ application model
 
 A per-execution `{ schema }` remains additive and runs after the query-bound mapper.
 
+Mapping is intrinsic to row queries: `execute`, `all`, `one`, `maybeOne`, `batch`, prepared queries, streams, and transaction-scoped equivalents all return mapped rows. `one`/`maybeOne` check raw cardinality first; multi-row operations process schemas sequentially, and streams do not buffer the full result.
+
+Validation issues throw `DatabaseResultValidationError` (`BRAID_RESULT_VALIDATION`) with `stage: "query" | "execution"`, `issues`, and zero-based `rowIndex`. Validator-thrown exceptions propagate unchanged. SQLBraid's own message contains no raw rows or binds.
+
+The mapper is query metadata, not rendered SQL: different mappers can share SQL and fingerprints. Reusing `const eventRows = sql.rows(EventSchema)` preserves the schema reference. Guarded compiler lowering evaluates a schema expression once, before active interpolations.
+
 ### Validator choice remains yours
 
 Valibot is a natural lightweight option, while Zod, ArkType, and other Standard Schema-compatible libraries work as well.
 
-SQLBraid will test interoperability but will not bundle or require a specific implementation.
+Valibot, Zod, and a handwritten Standard Schema implementation are covered by interoperability tests. No concrete validator is bundled or required.
 
 ---
 
@@ -430,11 +466,11 @@ Completed:
 1. **PV1** — explicit query/result-kind contracts;
 2. **PV2** — remove compiler SQL semantic inference;
 3. **PV3** — remove broad SQL AST/resolver;
-4. **PV4** — runtime result-kind enforcement + execution-time Standard Schema validation.
+4. **PV4** — runtime result-kind enforcement + execution-time Standard Schema validation;
+5. **PV5** — query-bound result mapping via Standard Schema.
 
 Next:
 
-5. **PV5** — query-bound result mapping via Standard Schema;
 6. **PV6** — rename/reframe database schema snapshots as metadata;
 7. **PV7** — optional table metadata → TypeScript codegen;
 8. **PV8** — codegen CLI, naming and type overrides;

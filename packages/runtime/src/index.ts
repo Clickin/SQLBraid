@@ -13,9 +13,7 @@ import type {
   RoutineCallResult,
   RowQuery,
   RowValidationOptions,
-  StandardSchemaFailure,
-  StandardSchemaLike,
-  StandardSchemaSuccess,
+  StandardSchemaV1,
   StreamOptions,
 } from "@sqlbraid/core";
 
@@ -57,14 +55,16 @@ export class DatabaseResultKindError extends Error {
 
 export class DatabaseResultValidationError extends Error {
   readonly code = "BRAID_RESULT_VALIDATION";
-  readonly issues: readonly unknown[];
+  readonly issues: readonly StandardSchemaV1.Issue[];
   readonly rowIndex?: number;
+  readonly stage: "query" | "execution";
 
-  constructor(issues: readonly unknown[], rowIndex?: number) {
+  constructor(issues: readonly StandardSchemaV1.Issue[], rowIndex?: number, stage: "query" | "execution" = "execution") {
     super("Database result validation failed.");
     this.name = "DatabaseResultValidationError";
     this.issues = issues;
     this.rowIndex = rowIndex;
+    this.stage = stage;
   }
 }
 
@@ -141,53 +141,71 @@ function assertRowsQuery(query: Query<unknown, QueryResultKind>): asserts query 
   if (query.resultKind === "command") throw new DatabaseResultKindError("command", "rows");
 }
 
-function standardSchemaFor<Row>(schema: StandardSchemaLike<Row> | undefined): StandardSchemaLike<Row>["~standard"] | undefined {
+function standardSchemaFor<Input, Output>(schema: StandardSchemaV1<Input, Output> | undefined): StandardSchemaV1.Props<Input, Output> | undefined {
   if (schema === undefined) return undefined;
-  const standard = schema["~standard"];
+  if (schema === null || typeof schema !== "object") throw new TypeError("Standard Schema validator is malformed.");
+  const candidate = (schema as { readonly "~standard"?: unknown })["~standard"];
   if (
-    standard === null
-    || typeof standard !== "object"
-    || standard.version !== 1
-    || typeof standard.vendor !== "string"
-    || typeof standard.validate !== "function"
+    candidate === null
+    || typeof candidate !== "object"
+    || Array.isArray(candidate)
   ) {
     throw new TypeError("Standard Schema validator is malformed.");
   }
-  return standard;
+  const standard = candidate as { readonly version?: unknown; readonly validate?: unknown };
+  if (standard.version !== 1 || typeof standard.validate !== "function") {
+    throw new TypeError("Standard Schema validator is malformed.");
+  }
+  return standard as StandardSchemaV1.Props<Input, Output>;
 }
 
-function isStandardSchemaSuccess<T>(result: unknown): result is StandardSchemaSuccess<T> {
-  if (result === null || typeof result !== "object") return false;
+function isStandardSchemaSuccess<T>(result: unknown): result is StandardSchemaV1.SuccessResult<T> {
+  if (result === null || typeof result !== "object" || Array.isArray(result)) return false;
   const candidate = result as { readonly value?: unknown; readonly issues?: unknown };
   return "value" in candidate && candidate.issues === undefined;
 }
 
-function isStandardSchemaFailure(result: unknown): result is StandardSchemaFailure {
-  if (result === null || typeof result !== "object") return false;
+function isStandardSchemaFailure(result: unknown): result is StandardSchemaV1.FailureResult {
+  if (result === null || typeof result !== "object" || Array.isArray(result)) return false;
   const candidate = result as { readonly value?: unknown; readonly issues?: unknown };
   return Array.isArray(candidate.issues) && (!("value" in candidate) || candidate.value === undefined);
 }
 
-function assertStandardSchemaResult(result: unknown): asserts result is StandardSchemaSuccess<unknown> | StandardSchemaFailure {
+function assertStandardSchemaResult(result: unknown): asserts result is StandardSchemaV1.Result<unknown> {
   if (!isStandardSchemaSuccess(result) && !isStandardSchemaFailure(result)) {
     throw new TypeError("Standard Schema validator returned a malformed result.");
   }
 }
 
-async function validateRows<Row>(rows: readonly Row[], schema: StandardSchemaLike<Row> | undefined): Promise<readonly Row[]> {
-  const standard = standardSchemaFor(schema);
-  if (standard === undefined) return rows;
-  const validated: Row[] = [];
+async function validateRows<Output>(
+  rows: readonly unknown[],
+  querySchema: StandardSchemaV1<unknown, Output> | undefined,
+  executionSchema?: StandardSchemaV1<unknown, Output> | undefined,
+): Promise<readonly Output[]> {
+  const queryStandard = standardSchemaFor(querySchema);
+  const executionStandard = standardSchemaFor(executionSchema);
+  if (queryStandard === undefined && executionStandard === undefined) return rows as readonly Output[];
+  const validated: Output[] = [];
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-    validated.push(await validateRow(standard, rows[rowIndex], rowIndex));
+    const mapped = queryStandard === undefined
+      ? rows[rowIndex]
+      : await validateRow(queryStandard, rows[rowIndex], rowIndex, "query");
+    validated.push(executionStandard === undefined
+      ? mapped as Output
+      : await validateRow(executionStandard, mapped, rowIndex, "execution"));
   }
   return validated;
 }
 
-async function validateRow<Row>(standard: StandardSchemaLike<Row>["~standard"], row: Row, rowIndex: number): Promise<Row> {
+async function validateRow<Output>(
+  standard: StandardSchemaV1.Props<unknown, Output>,
+  row: unknown,
+  rowIndex: number,
+  stage: "query" | "execution",
+): Promise<Output> {
   const result = await standard.validate(row);
   assertStandardSchemaResult(result);
-  if (isStandardSchemaFailure(result)) throw new DatabaseResultValidationError(result.issues, rowIndex);
+  if (isStandardSchemaFailure(result)) throw new DatabaseResultValidationError(result.issues, rowIndex, stage);
   return result.value;
 }
 
@@ -220,16 +238,25 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
     assertHealthy(state);
     return options.transaction ? Promise.resolve(undefined) : acquireRoot(state);
   };
-  const executeOne = async <Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>> => {
+  const executeOne = async <Q extends ExecutableQuery>(query: Q, mapQuery = true): Promise<QueryExecutionResult<unknown>> => {
     assertExecutableQuery(query);
-    const result = await executor.query<QueryRow<Q>>(query.render());
-    return assertExecutionResult(query, result) as ExecutionResultOf<Q>;
+    const result = assertExecutionResult(query, await executor.query<unknown>(query.render()));
+    if (!mapQuery || result.kind !== "rows" || query.resultSchema === undefined) {
+      return result;
+    }
+    return {
+      ...result,
+      rows: await validateRows(result.rows, query.resultSchema),
+    };
+  };
+  const executeForUse = async <Q extends ExecutableQuery>(query: Q, mapQuery = true): Promise<QueryExecutionResult<unknown>> => {
+    assertExecutableQuery(query);
+    const release = await acquireForUse();
+    try { return await executeOne(query, mapQuery); } finally { release?.(); }
   };
   const database: ScopedDatabase = {
     async execute<Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>> {
-      assertExecutableQuery(query);
-      const release = await acquireForUse();
-      try { return await executeOne(query); } finally { release?.(); }
+      return await executeForUse(query) as ExecutionResultOf<Q>;
     },
     async call<Row>(query: CallQuery<Row>): Promise<RoutineCallResult<Row>> {
       if (query.resultKind !== "call") throw new TypeError("Only call queries may be executed with database.call().");
@@ -240,20 +267,30 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
       } finally { release?.(); }
     },
     async all<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<readonly Row[]> {
-      return validateRows((await database.execute(query)).rows, options?.schema);
+      const result = await executeForUse(query, false);
+      if (result.kind !== "rows") malformedExecutionResult();
+      return validateRows(result.rows, query.resultSchema, options?.schema);
     },
     async one<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row> {
-      const rows = (await database.execute(query)).rows;
+      const result = await executeForUse(query, false);
+      if (result.kind !== "rows") malformedExecutionResult();
+      const rows = result.rows;
       if (rows.length !== 1) throw new DatabaseCardinalityError("one", rows.length);
-      const standard = standardSchemaFor(options?.schema);
-      return standard === undefined ? rows[0] : validateRow(standard, rows[0], 0);
+      const queryStandard = standardSchemaFor(query.resultSchema);
+      const executionStandard = standardSchemaFor(options?.schema);
+      const mapped = queryStandard === undefined ? rows[0] : await validateRow(queryStandard, rows[0], 0, "query");
+      return executionStandard === undefined ? mapped as Row : validateRow(executionStandard, mapped, 0, "execution");
     },
     async maybeOne<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row | undefined> {
-      const rows = (await database.execute(query)).rows;
+      const result = await executeForUse(query, false);
+      if (result.kind !== "rows") malformedExecutionResult();
+      const rows = result.rows;
       if (rows.length > 1) throw new DatabaseCardinalityError("maybeOne", rows.length);
       if (rows.length === 0) return undefined;
-      const standard = standardSchemaFor(options?.schema);
-      return standard === undefined ? rows[0] : validateRow(standard, rows[0], 0);
+      const queryStandard = standardSchemaFor(query.resultSchema);
+      const executionStandard = standardSchemaFor(options?.schema);
+      const mapped = queryStandard === undefined ? rows[0] : await validateRow(queryStandard, rows[0], 0, "query");
+      return executionStandard === undefined ? mapped as Row : validateRow(executionStandard, mapped, 0, "execution");
     },
     async batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }> {
       for (const query of queries) assertExecutableQuery(query);
@@ -295,14 +332,16 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
         const release = await acquireForUse();
         try {
           const rendered = query.render();
-          const source = streamExecutor<Row>(rendered, options.signal);
-          const standard = standardSchemaFor(options.schema);
+          const source = streamExecutor<unknown>(rendered, options.signal);
+          const queryStandard = standardSchemaFor(query.resultSchema);
+          const executionStandard = standardSchemaFor(options.schema);
           let rowIndex = 0;
           for await (const row of source) {
             if (options.signal?.aborted) throw options.signal.reason ?? new Error("Stream aborted.");
-            const validated = standard === undefined ? row : await validateRow(standard, row, rowIndex);
+            const mapped = queryStandard === undefined ? row : await validateRow(queryStandard, row, rowIndex, "query");
+            const validated = executionStandard === undefined ? mapped : await validateRow(executionStandard, mapped, rowIndex, "execution");
             if (options.signal?.aborted) throw options.signal.reason ?? new Error("Stream aborted.");
-            yield validated;
+            yield validated as Row;
             rowIndex += 1;
           }
         } finally { release?.(); }

@@ -4,7 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
-import type { StandardSchemaLike } from "@sqlbraid/core";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+import * as v from "valibot";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { sql } from "@sqlbraid/sqlite";
@@ -86,7 +87,7 @@ test("SQLite result kinds follow native columns metadata", async () => {
     await assert.rejects(() => db.execute(sql.rows`SELECT 1 AS "", 2 AS ""`), /BRAID_RESULT_COLUMNS/);
 
     native.exec("INSERT INTO users (id, name) VALUES (1, 'Grace')");
-    const schema: StandardSchemaLike<{ readonly name: string }> = {
+    const schema: StandardSchemaV1<unknown, { readonly name: string }> = {
       "~standard": {
         version: 1,
         vendor: "sqlbraid-tests",
@@ -99,6 +100,13 @@ test("SQLite result kinds follow native columns metadata", async () => {
     assert.deepEqual(
       await db.all(sql.rows<{ readonly name: string }>`SELECT name FROM users WHERE id = 1`, { schema }),
       [{ name: "GRACE" }],
+    );
+    const mapped = v.object({
+      payload: v.pipe(v.string(), v.parseJson(), v.object({ enabled: v.boolean() })),
+    });
+    assert.deepEqual(
+      (await db.execute(sql.rows(mapped)`SELECT '{"enabled":true}' AS payload`)).rows,
+      [{ payload: { enabled: true } }],
     );
   } finally {
     native.close();

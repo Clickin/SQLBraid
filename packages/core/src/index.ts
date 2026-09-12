@@ -1,3 +1,7 @@
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+
+export type { StandardSchemaV1 } from "@standard-schema/spec";
+
 export const SQL_FRAGMENT = Symbol.for("sqlbraid.fragment");
 
 export interface SourceRange {
@@ -152,12 +156,16 @@ export interface Query<Row = unknown, Kind extends QueryResultKind = "unknown"> 
   readonly ir: TemplateIr;
   readonly values: readonly unknown[];
   readonly resultKind: Kind;
+  /**
+   * Application result mapper. Never forwarded to a DB driver.
+   */
+  readonly resultSchema?: StandardSchemaV1<unknown, Row>;
   render(): RenderedQuery;
   readonly __row?: Row;
 }
 
 export type RowQuery<Row = unknown> = Query<Row, "rows">;
-export type CommandQuery<Result = CommandResult> = Query<Result, "command">;
+export type CommandQuery = Query<CommandResult, "command">;
 export type CallQuery<Row = unknown> = Query<Row, "call">;
 
 export interface CommandResult {
@@ -184,33 +192,8 @@ export type QueryExecutionResult<Row = unknown> =
   | RowsExecutionResult<Row>
   | CommandExecutionResult;
 
-export interface StandardSchemaSuccess<T> {
-  readonly value: T;
-  readonly issues?: undefined;
-}
-
-export interface StandardSchemaFailure {
-  readonly issues: readonly unknown[];
-  readonly value?: undefined;
-}
-
-export interface StandardSchemaLike<T> {
-  readonly "~standard": {
-    readonly version: 1;
-    readonly vendor: string;
-    readonly types?: {
-      readonly input: unknown;
-      readonly output: T;
-    };
-    validate(value: unknown):
-      | StandardSchemaSuccess<T>
-      | StandardSchemaFailure
-      | Promise<StandardSchemaSuccess<T> | StandardSchemaFailure>;
-  };
-}
-
 export interface RowValidationOptions<Row> {
-  readonly schema?: StandardSchemaLike<NoInfer<Row>>;
+  readonly schema?: StandardSchemaV1<unknown, NoInfer<Row>>;
 }
 
 export interface StreamOptions<Row> extends RowValidationOptions<Row> {
@@ -275,19 +258,20 @@ export interface Database {
 }
 
 export type QueryRow<Q> = Q extends Query<infer Row, QueryResultKind> ? Row : never;
-export type QueryResult<Q> = readonly QueryRow<Q>[];
 
 export interface SqlTagLike<Kind extends QueryResultKind = QueryResultKind, Row = unknown> {
   (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<Row, Kind>;
 }
 
+export interface RowsTag {
+  // Two type parameters keep this overload out of the sql.rows<Row> instantiation expression.
+  <Input, Output>(schema: StandardSchemaV1<Input, Output>): SqlTagLike<"rows", Output>;
+  <Row = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
+}
+
 export interface SqlTag extends SqlTagLike<"unknown"> {
-  rows: {
-    <Row = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
-  };
-  command: {
-    <Result = CommandResult>(strings: TemplateStringsArray, ...values: readonly unknown[]): CommandQuery<Result>;
-  };
+  rows: RowsTag;
+  command: (strings: TemplateStringsArray, ...values: readonly unknown[]) => CommandQuery;
   call: {
     <Row = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): CallQuery<Row>;
   };

@@ -33,7 +33,7 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
     const query = overlay.queryTypes.find((candidate) => offset >= candidate.range.start && offset <= candidate.range.end);
     if (!query) return undefined;
     const type = query.resultKind === "rows" ? "RowQuery" : query.resultKind === "command" ? "CommandQuery" : query.resultKind === "call" ? "CallQuery" : "Query";
-    return { contents: `${type}<${query.rowType}>`, range: query.range };
+    return { contents: query.resultKind === "command" ? type : `${type}<${query.rowType}>`, range: query.range };
   }
 
   function complete(prefix: string): readonly CompletionItem[] {

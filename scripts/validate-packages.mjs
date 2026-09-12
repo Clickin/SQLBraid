@@ -32,6 +32,14 @@ try {
     const { stdout: manifestText } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
     const manifest = JSON.parse(manifestText);
     if (manifest.engines?.node !== ">=22.18.0") throw new Error(`Unexpected Node engine for ${manifest.name}: ${manifest.engines?.node ?? "missing"}`);
+    for (const validator of ["valibot", "zod", "arktype"]) {
+      if (manifest.dependencies?.[validator] || manifest.peerDependencies?.[validator] || manifest.optionalDependencies?.[validator]) {
+        throw new Error(`Concrete validator ${validator} is a production dependency of ${manifest.name}.`);
+      }
+    }
+    if (manifest.name === "@sqlbraid/core" && !manifest.dependencies?.["@standard-schema/spec"]) {
+      throw new Error("Core public Standard Schema types require a regular spec dependency.");
+    }
     await run("pnpm", ["exec", "publint", "run", tarball, "--strict"]);
     await run("pnpm", ["exec", "attw", tarball, "--profile", "esm-only", "--no-emoji"]);
   }
@@ -65,6 +73,10 @@ try {
   ].join("\n"));
   await run(process.execPath, [entry], consumer);
 
+  // First prove packed runtime imports need no concrete validator, then test optional interop.
+  const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+  await run("npm", ["install", "--ignore-scripts", `valibot@${workspace.devDependencies.valibot}`, `zod@${workspace.devDependencies.zod}`], consumer);
+
   const types = join(consumer, "types.ts");
   await writeFile(types, [
     'import { sql as pg } from "@sqlbraid/postgres";',
@@ -75,11 +87,22 @@ try {
     'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
     'import { createVirtualOverlay } from "@sqlbraid/compiler";',
     'import { createLanguageService } from "@sqlbraid/language-server";',
-    'import type { Database, StandardSchemaLike, RowsExecutionResult, CommandExecutionResult, QueryExecutionResult } from "@sqlbraid/core";',
+    'import type { Database, StandardSchemaV1, RowsExecutionResult, CommandExecutionResult, QueryExecutionResult, RowQuery } from "@sqlbraid/core";',
+    'import * as v from "valibot";',
+    'import * as z from "zod";',
     'import { DatabaseResultKindError, DatabaseResultValidationError } from "@sqlbraid/runtime";',
     'declare const db: Database;',
     'const rowQuery = pg.rows<{id: number}>`SELECT 1 AS id`;',
-    'const schema = { "~standard": { version: 1, vendor: "consumer", validate: (_: unknown) => ({ value: { id: 1 } }) } } satisfies StandardSchemaLike<{id: number}>;',
+    'const schema = { "~standard": { version: 1, vendor: "consumer", validate: (_: unknown) => ({ value: { id: 1 } }) } } satisfies StandardSchemaV1<unknown, {id: number}>;',
+    'const V = v.object({ id: v.number() });',
+    'const Z = z.object({ id: z.number().transform(String) });',
+    'const a = pg.rows(V)`SELECT 1 AS id`;',
+    'const b = pg.rows(Z)`SELECT 1 AS id`;',
+    'const inferredV: RowQuery<{id: number}> = a;',
+    'const inferredZ: RowQuery<{id: string}> = b;',
+    '// @ts-expect-error schema output is string, not raw numeric input',
+    'const wrongOutput: RowQuery<{id: number}> = b;',
+    'const mappedRows: Promise<RowsExecutionResult<{id: string}>> = db.execute(b);',
     'const rows: Promise<RowsExecutionResult<{id: number}>> = db.execute(rowQuery);',
     'const command: Promise<CommandExecutionResult> = db.execute(pg.command`UPDATE users SET id = 1`);',
     'const unknown: Promise<QueryExecutionResult<unknown>> = db.execute(pg`SELECT 1`);',
