@@ -61,6 +61,7 @@ test('discovers mapped rows through direct, aliased, and namespace imports', () 
   }
 });
 
+// Cold TypeScript programs exceed Vitest's default 5s on the Node floor CI runner.
 test('checker discovers mapped rows through a re-export', () => {
   const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-mapped-project-'));
   try {
@@ -78,7 +79,7 @@ test('checker discovers mapped rows through a re-export', () => {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
-});
+}, 15_000);
 
 test('mapped rows use the Standard Schema output type for downstream checking', () => {
   const mapped = `

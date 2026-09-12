@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 
+// Several CLI processes create cold TypeScript programs; keep their integration budget separate.
 test('CLI checks, manifests, and builds opaque declared queries without a snapshot', async () => {
   const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
   try {
@@ -46,4 +47,4 @@ test('CLI checks, manifests, and builds opaque declared queries without a snapsh
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 15_000);

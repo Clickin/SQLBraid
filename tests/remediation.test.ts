@@ -72,6 +72,7 @@ test('operations preserve shape identity', () => {
   assert.equal(templateFamilyFingerprint(a), templateFamilyFingerprint(b));
 });
 
+// These multi-program checks need a bounded integration timeout on the Node floor CI runner.
 test('compiler discovers symbols, checks downstream row types, and lowers guarded evaluation', () => {
   const options = { moduleSpecifier: '@sqlbraid/template', compilerOptions };
   const discovered = discoverQueries("import {sql} from '@sqlbraid/template'; function f(sql) { return sql`bad`; } import * as braid from '@sqlbraid/template'; const q=braid.sql`SELECT id FROM users`;", 'fixture.ts', options);
@@ -84,7 +85,7 @@ test('compiler discovers symbols, checks downstream row types, and lowers guarde
   const contractSource = "import {sql} from '@sqlbraid/template'; type UserRow = {id:string}; const q=sql.rows<UserRow>`SELECT opaque_vendor_function(id) AS id FROM vendor_table`;";
   assert.equal(checkSource(contractSource, join(tmpdir(), 'sqlbraid-contract.ts'), { moduleSpecifier: '@sqlbraid/template', compilerOptions }).length, 0);
   assert.deepEqual(checkSource(source.replace('return rows[0].missing;', 'return rows[0].id;'), join(tmpdir(), 'sqlbraid-consumer.ts'), options), []);
-});
+}, 15_000);
 
 test('PV1 query contracts and explicit kinds are checked by TypeScript', () => {
   const options = { moduleSpecifier: '@sqlbraid/template', compilerOptions };
@@ -101,9 +102,9 @@ test('PV1 query contracts and explicit kinds are checked by TypeScript', () => {
   const rows = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db: Database; type UserRow = {id:number}; const query = sql.rows<UserRow>`SELECT custom_company_function(id) AS id FROM vendor_table`; db.all(query);";
   assert.equal(checkSource(rows, join(tmpdir(), 'sqlbraid-pv1-rows.ts'), options).length, 0);
 
-  const call = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db: Database; type UserRow = {id:number}; const query = sql.call<UserRow>`CALL vendor_procedure()`; db.call(query);";
+  const call = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db:Database; type UserRow = {id:number}; const query = sql.call<UserRow>`CALL vendor_procedure()`; db.call(query);";
   assert.equal(checkSource(call, join(tmpdir(), 'sqlbraid-pv1-call.ts'), options).length, 0);
-});
+}, 15_000);
 
 test('emitted guarded JavaScript evaluates only the active branch', async () => {
   const source = "import {sql} from '@sqlbraid/template'; export function build(user, sideEffect){ return sql`SELECT id FROM users /*@braid where*/ /*@braid if ${user != null}*/ AND name = ${user.name} AND value = ${sideEffect()} /*@braid end*/ /*@braid end*/`; }";
@@ -159,7 +160,7 @@ test('project checking keeps one TypeScript program for re-exported tags and imp
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
-});
+}, 15_000);
 
 test('project checking preserves TSX, MTS, and CTS source identities', () => {
   const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-project-kinds-'));
