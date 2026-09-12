@@ -115,6 +115,39 @@ importers:
       '@jridgewell/trace-mapping':
         specifier: 0.3.31
         version: 0.3.31
+      '@sqlbraid/cli':
+        specifier: workspace:*
+        version: link:packages/cli
+      '@sqlbraid/compiler':
+        specifier: workspace:*
+        version: link:packages/compiler
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@sqlbraid/language-server':
+        specifier: workspace:*
+        version: link:packages/language-server
+      '@sqlbraid/mysql':
+        specifier: workspace:*
+        version: link:packages/mysql
+      '@sqlbraid/operations':
+        specifier: workspace:*
+        version: link:packages/operations
+      '@sqlbraid/postgres':
+        specifier: workspace:*
+        version: link:packages/postgres
+      '@sqlbraid/runtime':
+        specifier: workspace:*
+        version: link:packages/runtime
+      '@sqlbraid/schema':
+        specifier: workspace:*
+        version: link:packages/schema
+      '@sqlbraid/sqlite':
+        specifier: workspace:*
+        version: link:packages/sqlite
+      '@sqlbraid/template':
+        specifier: workspace:*
+        version: link:packages/template
       '@standard-schema/spec':
         specifier: 1.1.0
         version: 1.1.0
