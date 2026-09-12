@@ -429,9 +429,11 @@ PV7 provides packed-consumer smoke and source/distribution audit gates. Local
 Node 22.18.0/24.21.0, Bun 1.3.14 and Deno 2.9.3 pass core/template/runtime, PostgreSQL/pg
 8.23.0 and MySQL/mysql2 3.24.4 checks against PostgreSQL 16.4 and MySQL 8.4.2.
 Node/Deno pass node:sqlite; Bun 1.3.14 lacks that module and is Unsupported.
-The README matrix is Compatible pending observed GitHub CI; a workflow file
-alone is not a CI pass. Node keeps `>=22.18.0`; Bun/Deno promises cover exact
-tested versions only. The workflow pins the Node floor and those Bun/Deno versions.
+The pinned GitHub workflow passes all three jobs on revision `f7c70ec`; the
+README links the observed run. Node 22.18.0, Bun 1.3.14 and Deno 2.9.3 are
+Official for the passing combinations above. Node 24.21.0 remains Compatible
+with local evidence only. Node keeps `>=22.18.0`; Bun/Deno promises cover exact
+tested versions only.
 
 Reviewed compatibility imports are `node:buffer` for allocation-free UTF-8 byte
 counting and `node:async_hooks` for transaction context. SQLBraid-owned public
@@ -531,13 +533,15 @@ Non-negotiable:
 - observe/fail-only interceptor semantics;
 - no SQL/bind/result mutation.
 
-### PV7 — Runtime portability — implemented locally; CI promotion pending
+### PV7 — Runtime portability — complete; same-revision CI verified
 
 - reject pools in official direct PostgreSQL/MySQL factories, including runtime guards;
 - observer `cardinality` stage and `durationMs` public timing fields, without aliases;
 - packed Node/Bun/Deno smoke, concurrent ALS isolation, source/distribution audit;
 - real pg/mysql2 direct/pool matrix and node:sqlite capability/full adapter smoke;
-- pinned GitHub Actions release/runtime jobs; publish observed CI before Official labels;
+- pinned GitHub Actions release/runtime jobs, all green on revision `f7c70ec`;
+- explicit root workspace test dependencies preserve native ESM and TypeScript resolution in clean checkouts;
+- bounded compiler/CLI integration timeouts leave runtime and deadlock deadlines unchanged;
 - README uses Official/Compatible/Custom/Unsupported labels with exact tested versions;
 - no new runtime-specific drivers, including when an existing adapter is Unsupported.
 

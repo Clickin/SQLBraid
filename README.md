@@ -380,23 +380,26 @@ Runtime support uses four labels:
 
 | Runtime | core/template/runtime | Tested version | Notes |
 | --- | --- | --- | --- |
-| Node | Compatible; CI promotion pending | 22.18.0, 24.21.0 | Floor full release gate; packed smoke including concurrent transaction ALS |
-| Bun | Compatible; CI promotion pending | 1.3.14 | Same packed smoke and ALS assertions |
-| Deno | Compatible; CI promotion pending | 2.9.3 | Same packed smoke and ALS assertions |
+| Node | Official | 22.18.0 | Clean-checkout full release gate; packed smoke including concurrent transaction ALS |
+| Node | Compatible | 24.21.0 | Local packed smoke; not a CI gate |
+| Bun | Official | 1.3.14 | Packed smoke and ALS assertions in CI |
+| Deno | Official | 2.9.3 | Packed smoke and ALS assertions in CI |
 
 ### First-party driver adapters
 
-| Adapter | Node 22.18.0 / 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
-| --- | --- | --- | --- |
-| PostgreSQL / `pg` 8.23.0 | Compatible | Compatible | Compatible |
-| MySQL / `mysql2` 3.24.4 | Compatible | Compatible | Compatible |
-| SQLite / `node:sqlite` | Compatible | Unsupported | Compatible |
+| Adapter | Node 22.18.0 | Node 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
+| --- | --- | --- | --- | --- |
+| PostgreSQL / `pg` 8.23.0 | Official | Compatible | Official | Official |
+| MySQL / `mysql2` 3.24.4 | Official | Compatible | Official | Official |
+| SQLite / `node:sqlite` | Official | Compatible | Unsupported | Official |
 
-These are measured local packed-consumer results, not observed GitHub CI passes.
-The [runtime workflow](.github/workflows/runtime-portability.yml) adds release gates
-on Node **22.18.0**, Bun **1.3.14**, and Deno **2.9.3**. Promote a cell to Official
-only after its CI job succeeds. Bun/Deno versions are exact tested versions, not
-minimum-version promises. Node package metadata retains `>=22.18.0`.
+The [runtime workflow](.github/workflows/runtime-portability.yml) passed all three
+jobs on the same revision,
+[`f7c70ec`](https://github.com/Clickin/SQLBraid/actions/runs/34700559051),
+including the clean Node **22.18.0** full release gate and packed Bun **1.3.14** /
+Deno **2.9.3** real-driver checks. Node 24.21.0 has local evidence only.
+Bun/Deno versions are exact tested versions, not minimum-version promises.
+Node package metadata retains `>=22.18.0`.
 
 PostgreSQL 16.4 and MySQL 8.4.2 smokes exercise direct clients, concurrent pools,
 physical transaction identity, savepoint rollback, root escape protection, observer
@@ -474,11 +477,11 @@ Completed:
 3. **PV3** — remove broad SQL AST/resolver;
 4. **PV4** — runtime result-kind enforcement + execution-time Standard Schema validation;
 5. **PV5** — query-bound Standard Schema result mapping;
-6. **PV6** — execution boundary, connection leasing/transaction pinning, SQL/bind/audit observer SPI.
+6. **PV6** — execution boundary, connection leasing/transaction pinning, SQL/bind/audit observer SPI;
+7. **PV7** — Node/Bun/Deno runtime portability matrix and clean-checkout CI closure.
 
 Next:
 
-7. **PV7** — Node/Bun/Deno runtime portability matrix;
 8. **PV8** — rename/reframe `@sqlbraid/schema` as `@sqlbraid/metadata`;
 9. **PV9** — optional metadata → TypeScript codegen;
 10. **PV10** — codegen CLI and overrides;

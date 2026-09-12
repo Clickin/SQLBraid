@@ -277,10 +277,10 @@ Runtime support labels:
 - Custom — user integration through executor/provider SPI.
 - Unsupported — a required capability is absent or SQLBraid's checks fail.
 
-PV7's packed smoke passes locally on Node 22.18.0/24.21.0, Bun 1.3.14 and Deno 2.9.3
-for core/template/runtime and pg/mysql2. Node/Deno node:sqlite passes; Bun
-1.3.14 lacks that module. README labels remain Compatible until the pinned
-GitHub workflow is observed passing; source control alone is not CI evidence.
+PV7's pinned CI gates establish Official support on Node 22.18.0, Bun 1.3.14
+and Deno 2.9.3 for core/template/runtime and pg/mysql2. Node/Deno node:sqlite
+passes; Bun 1.3.14 lacks that module. Node 24.21.0 remains Compatible with
+local evidence only. README links the same-revision CI evidence.
 Keep Bun/Deno support scoped to exact tested versions, not inferred floors.
 Preserve reviewed `node:buffer` and `node:async_hooks` imports and the runtime
 source/packed audit. Direct pg/mysql2 factories accept physical clients only.
@@ -363,6 +363,7 @@ Report unavailable DB/runtime infrastructure as not run, never passed.
 - preserve CLI/LSP shebangs and packed executable tests;
 - use tsdown for builds and `tsc --noEmit` for semantic checking;
 - inspect current HEAD before broad changes;
+- keep the root private test package's workspace dependencies explicit: Vite aliases do not cover native generated ESM or internal TypeScript Programs;
 - remove obsolete paths rather than keeping parallel implementations;
 - do not publish/tag/release/force-push unless explicitly requested;
 - never mutate non-test databases.
