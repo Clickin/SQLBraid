@@ -8,8 +8,18 @@
   "dependencies": {
     "@sqlbraid/core": "workspace:*",
     "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/schema": "workspace:*",
     "@sqlbraid/template": "workspace:*"
+  },
+  "peerDependencies": {
+    "@sqlbraid/metadata": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@sqlbraid/metadata": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@sqlbraid/metadata": "workspace:*"
   },
   "exports": {
     ".": {
@@ -19,6 +29,10 @@
     "./mysql2": {
       "types": "./dist/mysql2.d.ts",
       "import": "./dist/mysql2.js"
+    },
+    "./inspector": {
+      "types": "./dist/inspector.d.ts",
+      "import": "./dist/inspector.js"
     }
   }
 }

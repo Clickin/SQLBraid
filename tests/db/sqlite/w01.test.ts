@@ -8,6 +8,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 import * as v from "valibot";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";
 import { sql } from "@sqlbraid/sqlite";
 import { runW01 } from "../w01.js";
 
@@ -207,6 +208,22 @@ test("SQLite result kinds follow native columns metadata", async () => {
       (await db.execute(sql.rows(mapped)`SELECT '{"enabled":true}' AS payload`)).rows,
       [{ payload: { enabled: true } }],
     );
+  } finally {
+    native.close();
+  }
+});
+
+test("SQLite inspector reports only proven rowid identity", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    native.exec("CREATE TABLE braid_pv8_rowid (id INTEGER PRIMARY KEY, payload TEXT); CREATE TABLE braid_pv8_desc (id INTEGER PRIMARY KEY DESC); CREATE TABLE braid_pv8_composite (a INTEGER, b INTEGER, PRIMARY KEY (a, b)); CREATE TABLE braid_pv8_without (id INTEGER PRIMARY KEY) WITHOUT ROWID");
+    const snapshot = await createSqliteInspector(native).inspect();
+    assert.equal(snapshot.format, "sqlbraid-metadata");
+    assert.equal(snapshot.relations["main.braid_pv8_rowid"]?.columns[0]?.identity, true);
+    assert.equal(snapshot.relations["main.braid_pv8_rowid"]?.columns[0]?.nullable, false);
+    assert.equal(snapshot.relations["main.braid_pv8_desc"]?.columns[0]?.identity, undefined);
+    assert.equal(snapshot.relations["main.braid_pv8_composite"]?.columns[0]?.identity, undefined);
+    assert.equal(snapshot.relations["main.braid_pv8_without"]?.columns[0]?.identity, undefined);
   } finally {
     native.close();
   }

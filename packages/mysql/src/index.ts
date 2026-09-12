@@ -11,4 +11,3 @@ export const dialect: Dialect = {
 export const sql: SqlTag = createSqlTag({ dialect });
 export { typePolicy } from "./type-policy.js";
 export { createSqlTag } from "@sqlbraid/template";
-export { createMysqlInspector } from "./inspector.js";

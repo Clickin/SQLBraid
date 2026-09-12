@@ -6,6 +6,7 @@ import * as v from "valibot";
 import type { ExecutionEvent } from "@sqlbraid/core";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
+import { createMysqlInspector } from "@sqlbraid/mysql/inspector";
 import { sql } from "@sqlbraid/mysql";
 import { runW01 } from "../w01.js";
 
@@ -105,6 +106,27 @@ test("MySQL result kinds follow payload metadata", async () => {
     );
   } finally {
     await client.query("DROP TABLE IF EXISTS braid_pv4").catch(() => undefined);
+    await client.end();
+  }
+});
+
+test("MySQL inspector separates primary-key and auto-increment identity", async () => {
+  const settings = inject("mysql");
+  const client = await createConnection(settings.connectionUri);
+  try {
+    await client.query("DROP TABLE IF EXISTS braid_pv8_inspector");
+    await client.query("CREATE TABLE braid_pv8_inspector (external_id INT PRIMARY KEY, generated_id INT NOT NULL AUTO_INCREMENT, computed INT GENERATED ALWAYS AS (external_id + 1) STORED, UNIQUE KEY generated_id_unique (generated_id))");
+    const snapshot = await createMysqlInspector(client).inspect();
+    const relation = Object.values(snapshot.relations).find((entry) => entry.name === "braid_pv8_inspector");
+    const columns = relation?.columns ?? [];
+    assert.equal(snapshot.format, "sqlbraid-metadata");
+    assert.equal(columns.find((column) => column.name === "external_id")?.identity, undefined);
+    assert.equal(columns.find((column) => column.name === "generated_id")?.identity, true);
+    assert.equal(columns.find((column) => column.name === "computed")?.generated, true);
+    assert.equal(columns.find((column) => column.name === "computed")?.updatable, false);
+    assert.equal("tsType" in (columns[0] ?? {}), false);
+  } finally {
+    await client.query("DROP TABLE IF EXISTS braid_pv8_inspector").catch(() => undefined);
     await client.end();
   }
 });

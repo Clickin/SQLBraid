@@ -1,4 +1,4 @@
-import type { SchemaInspector, SchemaSnapshot, RelationSnapshot, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/schema";
+import type { MetadataInspector, MetadataSnapshot, RelationSnapshot, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
 import type { PgClientLike } from "./pg.js";
 
 interface CatalogRow {
@@ -20,28 +20,19 @@ function numberValue(row: CatalogRow | undefined, key: string): number | undefin
   return typeof value === "number" ? value : typeof value === "string" && /^\d+$/u.test(value) ? Number(value) : undefined;
 }
 
-function tsType(dataType: string): string | undefined {
-  const normalized = dataType.toLowerCase();
-  if (["smallint", "integer", "real", "double precision"].includes(normalized)) return "number";
-  if (["bigint"].includes(normalized)) return "bigint";
-  if (["boolean"].includes(normalized)) return "boolean";
-  if (normalized.includes("char") || normalized === "text" || normalized === "uuid") return "string";
-  return undefined;
-}
-
 async function rows(client: PgClientLike, text: string): Promise<readonly CatalogRow[]> {
   const result = await client.query({ text, values: [] });
   return result.rows.map(objectRow);
 }
 
-export function createPostgresInspector(client: PgClientLike): SchemaInspector {
+export function createPostgresInspector(client: PgClientLike): MetadataInspector {
   return {
     dialect: "postgres",
-    async inspect(): Promise<SchemaSnapshot> {
+    async inspect(): Promise<MetadataSnapshot> {
       const versionRow = (await rows(client, "SELECT current_setting('server_version') AS version"))[0];
       const version = text(versionRow, "version") ?? "unknown";
       const tableRows = await rows(client, "SELECT table_schema, table_name, table_type FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name");
-      const columnRows = await rows(client, "SELECT table_schema, table_name, ordinal_position, column_name, data_type, udt_schema, udt_name, is_nullable, column_default FROM information_schema.columns WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name, ordinal_position");
+      const columnRows = await rows(client, "SELECT table_schema, table_name, ordinal_position, column_name, data_type, udt_schema, udt_name, is_nullable, column_default, is_identity, identity_generation, is_generated, generation_expression FROM information_schema.columns WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name, ordinal_position");
       const relations: Record<string, RelationSnapshot> = {};
       for (const relation of tableRows) {
         const schema = text(relation, "table_schema");
@@ -51,7 +42,23 @@ export function createPostgresInspector(client: PgClientLike): SchemaInspector {
         const columns = columnRows.filter((column) => text(column, "table_schema") === schema && text(column, "table_name") === name).map((column) => {
           const dataType = text(column, "data_type") ?? "unknown";
           const ordinal = numberValue(column, "ordinal_position");
-          return { name: text(column, "column_name") ?? "unknown", ordinal: ordinal === undefined ? 0 : Math.max(0, ordinal - 1), type: `${text(column, "udt_schema") ?? "pg_catalog"}.${text(column, "udt_name") ?? dataType}`, ...(tsType(dataType) ? { tsType: tsType(dataType) } : {}), nullable: text(column, "is_nullable") === "YES", ...(text(column, "column_default") ? { defaultExpression: text(column, "column_default") } : {}) };
+          const generationExpression = text(column, "generation_expression");
+          const generatedEvidence = text(column, "is_generated");
+          const generated = generatedEvidence === undefined && generationExpression === undefined
+            ? undefined
+            : generatedEvidence === "ALWAYS" || Boolean(generationExpression);
+          const identityGenerated = text(column, "is_identity") === "YES";
+          return {
+            name: text(column, "column_name") ?? "unknown",
+            ordinal: ordinal === undefined ? 0 : Math.max(0, ordinal - 1),
+            type: `${text(column, "udt_schema") ?? "pg_catalog"}.${text(column, "udt_name") ?? dataType}`,
+            nullable: text(column, "is_nullable") === "YES",
+            ...(text(column, "column_default") ? { defaultExpression: text(column, "column_default") } : {}),
+            ...(generated === undefined ? {} : { generated }),
+            ...(generated === true ? { insertable: false, updatable: false, ...(generationExpression ? { generationExpression } : {}) } : {}),
+            ...(identityGenerated ? { identity: true } : {}),
+            ...(text(column, "identity_generation") ? { identityGeneration: text(column, "identity_generation") } : {}),
+          };
         });
         relations[identity] = { identity, name, namespace: schema, kind: text(relation, "table_type") === "VIEW" ? "view" : "table", columns };
       }
@@ -63,7 +70,14 @@ export function createPostgresInspector(client: PgClientLike): SchemaInspector {
         if (!schema || !name) continue;
         const identity = `${schema}.${text(entry, "specific_name") ?? name}`;
         const dataType = text(entry, "data_type") ?? "unknown";
-        const routine: RoutineSnapshot = { name, schema, identity, kind: text(entry, "routine_type") === "PROCEDURE" ? "procedure" : "function", arguments: [], result: text(entry, "routine_type") === "PROCEDURE" ? { kind: "void" } : { kind: "scalar", type: dataType, ...(tsType(dataType) ? { tsType: tsType(dataType) } : {}), nullable: true } };
+        const routine: RoutineSnapshot = {
+          name,
+          schema,
+          identity,
+          kind: text(entry, "routine_type") === "PROCEDURE" ? "procedure" : "function",
+          arguments: [],
+          result: text(entry, "routine_type") === "PROCEDURE" ? { kind: "void" } : { kind: "scalar", type: dataType, nullable: true },
+        };
         routines[name] = [...(routines[name] ?? []), routine];
       }
       const types: Record<string, TypeSnapshot> = {};
@@ -72,10 +86,10 @@ export function createPostgresInspector(client: PgClientLike): SchemaInspector {
         const name = text(column, "udt_name");
         if (!schema || !name) continue;
         const identity = `${schema}.${name}`;
-        if (!types[identity]) types[identity] = { identity, name, kind: "scalar", ...(tsType(text(column, "data_type") ?? "") ? { tsType: tsType(text(column, "data_type") ?? "") } : {}) };
+        if (!types[identity]) types[identity] = { identity, name, kind: "scalar" };
       }
       const majorVersion = /^\d+/u.exec(version)?.[0];
-      return { formatVersion: 1, dialect: "postgres", dialectVersion: version, server: { product: "postgres", version, ...(majorVersion ? { majorVersion: Number(majorVersion) } : {}) }, namespaces: {}, types, relations, routines, metadata: { source: "postgres information_schema", introspectionScope: "non-system schemas", completeness: "partial" } };
+      return { format: "sqlbraid-metadata", formatVersion: 1, dialect: "postgres", dialectVersion: version, server: { product: "postgres", version, ...(majorVersion ? { majorVersion: Number(majorVersion) } : {}) }, namespaces: {}, types, relations, routines, metadata: { source: "postgres information_schema", introspectionScope: "non-system schemas", completeness: "partial" } };
     },
   };
 }

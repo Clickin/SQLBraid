@@ -12,10 +12,10 @@ import type { RenderedQuery } from '@sqlbraid/core';
 import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource, sourcePosition } from '@sqlbraid/compiler';
 import { fingerprintQuery, templateFamilyFingerprint } from '@sqlbraid/operations';
 import { createPgDatabase } from '@sqlbraid/postgres/pg';
-import { createPostgresInspector } from '@sqlbraid/postgres';
+import { createPostgresInspector } from '@sqlbraid/postgres/inspector';
 import { createNodeSqliteDatabase } from '@sqlbraid/sqlite/node-sqlite';
-import { createSqliteInspector } from '@sqlbraid/sqlite';
-import { createMysqlInspector } from '@sqlbraid/mysql';
+import { createSqliteInspector } from '@sqlbraid/sqlite/inspector';
+import { createMysqlInspector } from '@sqlbraid/mysql/inspector';
 import { createDatabase } from '@sqlbraid/runtime';
 import { createSqlTag } from '@sqlbraid/template';
 import { sql as postgres } from '@sqlbraid/postgres';
@@ -338,11 +338,17 @@ test('SQLite inspector records strict and dynamic table evidence', async () => {
   const { DatabaseSync } = await import('node:sqlite');
   const native = new DatabaseSync(':memory:');
   try {
-    native.exec('CREATE TABLE ordinary(id INTEGER, payload TEXT); CREATE TABLE strict_table(id INTEGER) STRICT;');
+    native.exec('CREATE TABLE ordinary(id INTEGER, payload TEXT); CREATE TABLE strict_table(id INTEGER) STRICT; CREATE TABLE rowid_table(id INTEGER PRIMARY KEY, payload TEXT); CREATE TABLE desc_table(id INTEGER PRIMARY KEY DESC, payload TEXT); CREATE TABLE composite(a INTEGER, b INTEGER, PRIMARY KEY (a, b)); CREATE TABLE no_rowid(id INTEGER PRIMARY KEY, payload TEXT) WITHOUT ROWID;');
     const snapshot = await createSqliteInspector(native).inspect();
     assert.equal(snapshot.dialect, 'sqlite');
+    assert.equal(snapshot.format, 'sqlbraid-metadata');
     assert.equal(snapshot.relations['main.strict_table']?.strict, true);
-    assert.equal(snapshot.relations['main.ordinary']?.columns[0]?.tsType, undefined);
+    assert.equal('tsType' in (snapshot.relations['main.ordinary']?.columns[0] ?? {}), false);
+    assert.equal(snapshot.relations['main.rowid_table']?.columns[0]?.identity, true);
+    assert.equal(snapshot.relations['main.rowid_table']?.columns[0]?.nullable, false);
+    assert.equal(snapshot.relations['main.desc_table']?.columns[0]?.identity, undefined);
+    assert.equal(snapshot.relations['main.composite']?.columns[0]?.identity, undefined);
+    assert.equal(snapshot.relations['main.no_rowid']?.columns[0]?.identity, undefined);
     assert.ok(Array.isArray(snapshot.server.capabilities?.compileOptions));
   } finally {
     native.close();
@@ -359,11 +365,42 @@ test('MySQL inspector rejects MariaDB as a different product', async () => {
   await assert.rejects(() => createMysqlInspector(connection).inspect(), /MYSQL_PRODUCT_UNSUPPORTED/);
 });
 
+test('MySQL inspector separates primary-key, auto-increment, and generated facts', async () => {
+  const responses = [
+    [[{ version: '8.4.0', product: 'MySQL', sqlMode: '', charset: 'utf8mb4', collation: 'utf8mb4_0900_ai_ci' }], []],
+    [[{ schema_name: 'app' }], []],
+    [[{ table_schema: 'app', table_name: 'items', table_type: 'BASE TABLE' }], []],
+    [[
+      { table_schema: 'app', table_name: 'items', ordinal_position: '1', column_name: 'external_id', data_type: 'int', is_nullable: 'NO', column_key: 'PRI', extra: '' },
+      { table_schema: 'app', table_name: 'items', ordinal_position: '2', column_name: 'id', data_type: 'int', is_nullable: 'NO', column_key: '', extra: 'auto_increment' },
+      { table_schema: 'app', table_name: 'items', ordinal_position: '3', column_name: 'display_id', data_type: 'int', is_nullable: 'NO', column_key: '', extra: 'STORED GENERATED', generation_expression: '`external_id` + 1' },
+    ], []],
+    [[], []],
+  ] as const;
+  let index = 0;
+  const snapshot = await createMysqlInspector({
+    async execute() { return responses[index++]; },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+  }).inspect();
+  const columns = snapshot.relations['app.items'].columns;
+  assert.equal(columns[0].identity, undefined);
+  assert.equal(columns[1].identity, true);
+  assert.equal(columns[2].generated, true);
+  assert.equal(columns[2].insertable, false);
+  assert.equal(columns[2].updatable, false);
+  assert.equal('tsType' in columns[0], false);
+});
+
 test('PostgreSQL inspector records relation and routine metadata', async () => {
   const responses = [
     { rows: [{ version: '16.4' }] },
     { rows: [{ table_schema: 'public', table_name: 'users', table_type: 'BASE TABLE' }] },
-    { rows: [{ table_schema: 'public', table_name: 'users', ordinal_position: '1', column_name: 'id', data_type: 'integer', udt_schema: 'pg_catalog', udt_name: 'int4', is_nullable: 'NO' }] },
+    { rows: [
+      { table_schema: 'public', table_name: 'users', ordinal_position: '1', column_name: 'id', data_type: 'integer', udt_schema: 'pg_catalog', udt_name: 'int4', is_nullable: 'NO', is_identity: 'YES', identity_generation: 'BY DEFAULT', is_generated: 'NEVER' },
+      { table_schema: 'public', table_name: 'users', ordinal_position: '2', column_name: 'score', data_type: 'integer', udt_schema: 'pg_catalog', udt_name: 'int4', is_nullable: 'NO', is_identity: 'NO', is_generated: 'ALWAYS', generation_expression: '1 + 1' },
+    ] },
     { rows: [{ routine_schema: 'public', routine_name: 'ping', routine_type: 'FUNCTION', data_type: 'text', specific_name: 'ping_1' }] },
   ];
   let index = 0;
@@ -372,7 +409,12 @@ test('PostgreSQL inspector records relation and routine metadata', async () => {
     escapeIdentifier(value: string) { return value; },
     escapeLiteral(value: string) { return value; },
   }).inspect();
-  assert.equal(snapshot.relations['public.users'].columns[0].tsType, 'number');
+  assert.equal(snapshot.format, 'sqlbraid-metadata');
+  assert.equal(snapshot.relations['public.users'].columns[0].type, 'pg_catalog.int4');
+  assert.equal(snapshot.relations['public.users'].columns[0].identity, true);
+  assert.equal(snapshot.relations['public.users'].columns[1].generated, true);
+  assert.equal(snapshot.relations['public.users'].columns[1].insertable, false);
+  assert.equal('tsType' in snapshot.relations['public.users'].columns[0], false);
   assert.equal(snapshot.routines.ping[0].result.kind, 'scalar');
 });
 

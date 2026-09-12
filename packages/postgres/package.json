@@ -8,8 +8,18 @@
   "dependencies": {
     "@sqlbraid/core": "workspace:*",
     "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/schema": "workspace:*",
     "@sqlbraid/template": "workspace:*"
+  },
+  "peerDependencies": {
+    "@sqlbraid/metadata": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@sqlbraid/metadata": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@sqlbraid/metadata": "workspace:*"
   },
   "exports": {
     ".": {
@@ -19,6 +29,10 @@
     "./pg": {
       "types": "./dist/pg.d.ts",
       "import": "./dist/pg.js"
+    },
+    "./inspector": {
+      "types": "./dist/inspector.d.ts",
+      "import": "./dist/inspector.js"
     }
   }
 }
