@@ -303,9 +303,23 @@ A future Oracle dialect must account for Oracle-specific bind modes, REF CURSOR,
 
 Database metadata is optional tooling.
 
-PV8 plans `@sqlbraid/schema` -> `@sqlbraid/metadata`.
+PV8 provides `@sqlbraid/metadata`: database facts in `MetadataSnapshot`
+(`format: "sqlbraid-metadata"`, `formatVersion: 1`), deterministic identity/drift
+and `MetadataInspector`. Old discriminator-less snapshots are rejected.
 
-PV9 plans optional `@sqlbraid/codegen` for table-oriented `Row`/`Insert`/`Update` generation. Do not make metadata/codegen a runtime/compiler prerequisite and do not promise arbitrary SELECT/JOIN inference.
+Dialect inspectors belong only at `/inspector` subpaths. Their metadata import
+is type-only with an optional peer; runtime roots must install/run without
+metadata. Preserve the packed runtime-only and metadata-tooling consumer gates.
+
+Identity means proven identity/autoincrement generation, not primary-key
+membership. Generated/write flags require database evidence; absence is unknown.
+Metadata contains DB types, not TypeScript guesses or TypePolicy/compiler fields.
+
+Standard Schema owns application row validation/transformation. TypePolicy owns
+runtime primitive representation. PV9 optional `@sqlbraid/codegen` will combine
+metadata + TypePolicy + overrides for table-oriented `Row`/`Insert`/`Update`
+generation. Metadata/codegen remains outside runtime/compiler requirements and
+does not promise arbitrary SELECT/JOIN inference.
 
 ---
 

@@ -429,7 +429,7 @@ PV7 provides packed-consumer smoke and source/distribution audit gates. Local
 Node 22.18.0/24.21.0, Bun 1.3.14 and Deno 2.9.3 pass core/template/runtime, PostgreSQL/pg
 8.23.0 and MySQL/mysql2 3.24.4 checks against PostgreSQL 16.4 and MySQL 8.4.2.
 Node/Deno pass node:sqlite; Bun 1.3.14 lacks that module and is Unsupported.
-The pinned GitHub workflow passes all three jobs on revision `f7c70ec`; the
+The pinned GitHub workflow passes all three jobs on PV7 revision `f6e8952`; the
 README links the observed run. Node 22.18.0, Bun 1.3.14 and Deno 2.9.3 are
 Official for the passing combinations above. Node 24.21.0 remains Compatible
 with local evidence only. Node keeps `>=22.18.0`; Bun/Deno promises cover exact
@@ -446,11 +446,21 @@ CLI, metadata/codegen, LSP) remains Node-first.
 
 Database metadata is optional development tooling and not a requirement for normal execution.
 
-PV8 renames/reframes:
+PV8 establishes `@sqlbraid/metadata`: `MetadataSnapshot` / `MetadataInspector`,
+with `format: "sqlbraid-metadata"` and `formatVersion: 1`. It records database
+facts, not application TypeScript type guesses or compiler/TypePolicy identity.
+Discriminator-less snapshots are rejected. There is no migration API until a
+real second public format exists. Hash/drift identity excludes capture timestamps.
 
-```text
-@sqlbraid/schema -> @sqlbraid/metadata
-```
+Inspectors live at `@sqlbraid/{postgres,mysql,sqlite}/inspector`, with type-only
+metadata imports and an optional metadata peer. Dialect runtime roots neither
+export inspectors nor require metadata installation. CLI drift and LSP
+`options.metadata` consume the neutral metadata model separately.
+
+Column identity means a proven identity/autoincrement mechanism, not a primary
+key. Generated/write flags are evidence, with absence meaning unknown.
+Standard Schema owns application row validation/transformation; TypePolicy owns
+runtime primitive representation. Neither belongs inside metadata inspection.
 
 PV9 adds optional:
 
@@ -458,7 +468,8 @@ PV9 adds optional:
 @sqlbraid/codegen
 ```
 
-Initial codegen scope is deterministic table metadata to TypeScript `Row`/`Insert`/`Update` models. It does not promise arbitrary SELECT/JOIN result inference.
+Initial codegen scope is deterministic `MetadataSnapshot` + TypePolicy + overrides
+to TypeScript `Row`/`Insert`/`Update` models. It does not promise arbitrary SELECT/JOIN result inference.
 
 ---
 
@@ -539,16 +550,21 @@ Non-negotiable:
 - observer `cardinality` stage and `durationMs` public timing fields, without aliases;
 - packed Node/Bun/Deno smoke, concurrent ALS isolation, source/distribution audit;
 - real pg/mysql2 direct/pool matrix and node:sqlite capability/full adapter smoke;
-- pinned GitHub Actions release/runtime jobs, all green on revision `f7c70ec`;
+- pinned GitHub Actions release/runtime jobs, all green on final PV7 revision `f6e8952`;
 - explicit root workspace test dependencies preserve native ESM and TypeScript resolution in clean checkouts;
 - bounded compiler/CLI integration timeouts leave runtime and deadlock deadlines unchanged;
 - README uses Official/Compatible/Custom/Unsupported labels with exact tested versions;
 - no new runtime-specific drivers, including when an existing adapter is Unsupported.
 
-### PV8 — Metadata package cleanup
+### PV8 — Metadata boundary stabilization — implemented
 
-- `@sqlbraid/schema` -> `@sqlbraid/metadata`;
-- preserve deterministic snapshots, inspectors and drift functionality.
+- replaced the unreleased `@sqlbraid/schema` package with `@sqlbraid/metadata`, without aliases;
+- metadata v1 discriminator, DB-fact-only types and deterministic hash/drift;
+- no speculative migration or TypeScript-model/TypePolicy fields;
+- PostgreSQL identity/generated evidence, MySQL auto_increment rather than PK, conservative SQLite rowid identity;
+- explicit inspector subpaths and optional metadata peers keep runtime installs metadata-free;
+- CLI drift, metadata-backed LSP completion and packed runtime/tooling consumer gates;
+- codegen remains PV9.
 
 ### PV9 — Optional `@sqlbraid/codegen`
 

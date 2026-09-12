@@ -21,7 +21,7 @@ const users = sql.rows<UserRow>`
 `;
 ```
 
-> **Status:** pre-release. Explicit result kinds, guarded compiler lowering, runtime result-kind enforcement, Standard Schema execution validation, query-bound result mapping, PostgreSQL/MySQL/SQLite adapters and real-DB tests are implemented. The next runtime milestone is the execution boundary: connection leasing/transaction pinning plus SQL/bind/audit observers. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release. SQL-first authoring, Standard Schema result mapping, connection leasing/transaction pinning, execution observers, runtime portability and optional database metadata tooling are implemented. Next: optional table-oriented codegen. See [`PLAN.md`](./PLAN.md).
 
 ---
 
@@ -395,7 +395,7 @@ Runtime support uses four labels:
 
 The [runtime workflow](.github/workflows/runtime-portability.yml) passed all three
 jobs on the same revision,
-[`f7c70ec`](https://github.com/Clickin/SQLBraid/actions/runs/34700559051),
+[`f6e8952`](https://github.com/Clickin/SQLBraid/actions/runs/34700814024),
 including the clean Node **22.18.0** full release gate and packed Bun **1.3.14** /
 Deno **2.9.3** real-driver checks. Node 24.21.0 has local evidence only.
 Bun/Deno versions are exact tested versions, not minimum-version promises.
@@ -423,11 +423,44 @@ fields are named `durationMs`, with no former-name alias.
 
 ## Metadata and code generation
 
-Database metadata is optional development tooling.
+Database metadata is optional, Node-first development tooling. Runtime dialect
+imports do not install or require `@sqlbraid/metadata`.
 
-The current `@sqlbraid/schema` package is planned to become `@sqlbraid/metadata` after the runtime execution boundary is stable.
+| Layer | Owns |
+| --- | --- |
+| Standard Schema | Application row validation/transformation |
+| `@sqlbraid/metadata` | Introspected database structure and database type facts |
+| TypePolicy | Runtime primitive representation policy |
+| Future `@sqlbraid/codegen` (PV9) | Metadata + TypePolicy + overrides → table-oriented TS `Row`/`Insert`/`Update` models |
 
-A later optional `@sqlbraid/codegen` package will generate deterministic table-oriented TypeScript models such as `Row`, `Insert` and `Update` shapes. Arbitrary SELECT/JOIN inference is not required.
+For inspection, install `@sqlbraid/metadata` explicitly alongside the dialect and
+driver, and use the dedicated inspector subpath:
+
+```ts
+import { hashSnapshot, validateSnapshot } from "@sqlbraid/metadata";
+import { createPostgresInspector } from "@sqlbraid/postgres/inspector";
+
+// client is an already-connected pg.Client.
+const metadata = await createPostgresInspector(client).inspect();
+validateSnapshot(metadata);
+const hash = hashSnapshot(metadata);
+```
+
+MySQL and SQLite expose `@sqlbraid/mysql/inspector` and
+`@sqlbraid/sqlite/inspector`. Inspectors are not exported from dialect roots.
+The metadata relationship is an optional peer dependency.
+
+`MetadataSnapshot` uses `format: "sqlbraid-metadata"` and `formatVersion: 1`.
+Old discriminator-less snapshots are rejected; there is no compatibility parser
+or speculative migration API. Canonicalization/hash/drift ignore capture
+timestamps while preserving database facts. `sqlbraid drift --before ... --after ...`
+validates this format. LSP `createLanguageService({ metadata })` enables database
+completion; diagnostics and declared-contract hover work without metadata.
+
+Identity means proven database identity/autoincrement generation, not primary-key
+membership. Computed columns carry generated/write restrictions where proven;
+absent write flags mean unknown. Inspectors do not choose TypeScript types.
+PV9 codegen remains unimplemented; arbitrary SELECT/JOIN inference is out of scope.
 
 ---
 
@@ -457,11 +490,11 @@ Current workspace packages:
 | `@sqlbraid/core` | Public contracts and Standard Schema-facing types |
 | `@sqlbraid/template` | Tagged templates, directives and rendering |
 | `@sqlbraid/runtime` | Execution, mapping, result-kind safety, transactions and streaming |
-| `@sqlbraid/postgres` | PostgreSQL dialect, TypePolicy, inspector, `pg` adapter |
-| `@sqlbraid/mysql` | MySQL dialect, TypePolicy, inspector, `mysql2` adapter |
-| `@sqlbraid/sqlite` | SQLite dialect, inspector, `node:sqlite` adapter |
+| `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg` adapter; optional `/inspector` |
+| `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2` adapter; optional `/inspector` |
+| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite` adapter; optional `/inspector` |
 | `@sqlbraid/compiler` | TypeScript discovery and guarded-template lowering |
-| `@sqlbraid/schema` | Database metadata snapshots; later rename to `@sqlbraid/metadata` |
+| `@sqlbraid/metadata` | DB-fact snapshots, validation, canonical identity and drift |
 | `@sqlbraid/operations` | Fingerprints and provisional declaration manifests |
 | `@sqlbraid/cli` | Command-line tooling |
 | `@sqlbraid/language-server` | Editor/LSP integration |
@@ -478,11 +511,11 @@ Completed:
 4. **PV4** — runtime result-kind enforcement + execution-time Standard Schema validation;
 5. **PV5** — query-bound Standard Schema result mapping;
 6. **PV6** — execution boundary, connection leasing/transaction pinning, SQL/bind/audit observer SPI;
-7. **PV7** — Node/Bun/Deno runtime portability matrix and clean-checkout CI closure.
+7. **PV7** — Node/Bun/Deno runtime portability matrix and clean-checkout CI closure;
+8. **PV8** — metadata v1 DB-fact model, inspector subpaths and runtime/tooling dependency separation.
 
 Next:
 
-8. **PV8** — rename/reframe `@sqlbraid/schema` as `@sqlbraid/metadata`;
 9. **PV9** — optional metadata → TypeScript codegen;
 10. **PV10** — codegen CLI and overrides;
 11. **PV11** — LSP metadata/codegen integration;
