@@ -10,7 +10,7 @@ This file defines repository-wide rules for AI coding agents and human contribut
 
 SQLBraid is a **SQL-first data-access toolkit for TypeScript**.
 
-The product is built around this developer experience:
+Canonical authoring:
 
 ```ts
 const query = sql.rows<UserRow>`
@@ -24,11 +24,9 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-The project is not an ORM and does not make a fluent TypeScript query builder the primary authoring model.
+The project is not an ORM, not a fluent-query-builder-first product, and not a parity implementation of another TypeScript database library.
 
-The project is also **not a parity implementation of another library**. Do not describe roadmap work as catching up with, cloning, matching, or reproducing another TypeScript database product.
-
-Public-facing documentation should explain SQLBraid from its own product goals.
+Public documentation must explain SQLBraid from its own product goals.
 
 ---
 
@@ -39,14 +37,15 @@ When multiple designs are possible, prefer them in this order:
 1. preserve SQL-first authoring;
 2. preserve safe bound parameters;
 3. keep dynamic SQL readable and local;
-4. use explicit TypeScript contracts where SQL meaning is opaque;
-5. ask the real database for database-specific truth when verification is needed;
+4. use explicit application contracts where SQL meaning is opaque;
+5. use Standard Schema for one-row result validation/transformation instead of inventing a mapper DSL;
 6. keep dialect adapters thin;
 7. keep normal development usable offline;
-8. prefer deletion/simplification over maintaining a partial SQL compiler;
-9. add automatic inference only when evidence is cheap and trustworthy.
+8. keep metadata/codegen optional and outside runtime/compiler dependencies;
+9. prefer deletion/simplification over maintaining partial SQL semantics;
+10. add automatic inference only when evidence is cheap and trustworthy.
 
-A solution that provides less automatic inference but is simpler and honest is usually preferable to a broad heuristic inference engine.
+A smaller honest feature is usually preferable to broad heuristic inference.
 
 ---
 
@@ -58,73 +57,133 @@ Do not expand SQLBraid into a complete local implementation of:
 - MySQL grammar;
 - SQLite grammar;
 - function catalogs;
-- extension function catalogs;
+- extension catalogs;
 - operator overload systems;
 - cast/coercion systems;
 - arbitrary routine semantics;
 - every version-specific dialect edge case.
 
+PV3 removed the broad SQL AST package and semantic resolver. Keep it removed.
+
 Before adding SQL parser/resolver complexity, ask:
 
-> Can this requirement be solved with an explicit result contract, runtime validation, driver metadata, database-assisted verification, or a smaller lexical check?
+> Can this requirement be solved with an explicit row contract, a Standard Schema result mapper, driver metadata, optional codegen, or a narrow lexical check?
 
 If yes, use the smaller mechanism.
 
-PV3 removed the broad SQL AST package and semantic resolver. Keep Braid lexical scanning in `@sqlbraid/template`; use explicit query kinds and native driver metadata for execution, not SQL-text classification.
-
 ---
 
-## 4. Type strategy
+## 4. Type and result-mapping strategy
 
 ### 4.1 Explicit result contracts are primary
 
-The v1 typed authoring path is an explicit result contract:
+The v1 typed path is:
 
 ```ts
 sql.rows<UserRow>`SELECT ...`;
 ```
 
-Do not require SQLBraid to infer every custom function/operator result before users can declare a query's row contract.
+The developer owns the correspondence between the SQL result and `UserRow` unless runtime mapping/validation is attached.
 
-### 4.2 Untyped means unknown
+Do not reintroduce SQL-driven row inference to prove this contract.
 
-If there is no declared or generated contract, prefer `unknown` over fabricated precision.
+### 4.2 Query-bound result mapping uses Standard Schema
 
-Never use `any` as the fallback for failed inference.
+PV5 adds:
 
-### 4.3 Declaration and verification are different
+```ts
+sql.rows(UserSchema)`SELECT ...`;
+```
 
-A TypeScript declaration is not automatically database proof.
+where `UserSchema` implements Standard Schema and its **output type** becomes the query row type.
 
-Keep these concepts separate:
+The pipeline is:
 
-- declared contract;
-- runtime-validated contract;
-- database-verified contract;
-- generated contract.
+```text
+driver row
+  -> dialect TypePolicy normalization
+  -> plain normalized row
+  -> query-bound Standard Schema
+  -> application row
+```
 
-Do not label something “verified” unless an actual verifier supplied evidence.
+This mapper may validate and transform one row into one application value.
 
-### 4.4 Automatic inference is optional
+Do not build a SQLBraid-specific result-map DSL when Standard Schema can express the requirement.
 
-Automatic SQL result inference is a convenience feature, not the foundation of the product.
+### 4.3 Use the official protocol dependency
 
-Only add or retain inference when:
+SQLBraid must use:
 
-- evidence is deterministic;
-- implementation cost is bounded;
-- dialect/version behavior is trustworthy;
-- unsupported cases fail closed cleanly.
+```text
+@standard-schema/spec
+```
 
-Do not maintain large heuristic systems solely to increase inference coverage percentages.
+for Standard Schema types.
+
+Do not maintain a private clone of the protocol interfaces once PV5 migrates them.
+
+Do not make Valibot, Zod, ArkType, or another concrete validator a runtime dependency of SQLBraid core packages.
+
+Users choose their implementation.
+
+### 4.4 One row to one row only
+
+Result mapping may:
+
+- validate;
+- transform fields;
+- parse JSON/text;
+- create temporal/domain values;
+- reshape a single row;
+- run asynchronously when supported by the schema implementation.
+
+It must not turn SQLBraid into an ORM graph assembler.
+
+Do not add:
+
+- identity maps;
+- multi-row association merging;
+- collection hydration across rows;
+- entity lifecycle;
+- lazy relations.
+
+### 4.5 Execution-level schema is additive
+
+PV4 supports:
+
+```ts
+await db.all(query, { schema: ExtraSchema });
+```
+
+When a query-bound mapper exists, processing order is:
+
+```text
+query-bound mapper
+  -> execution-level schema
+```
+
+The execution option must not silently bypass the query's own mapper.
+
+### 4.6 Input mapping is deferred
+
+Do not implement application-level input mapper/codecs before pre-release unless the user explicitly changes the roadmap.
+
+Ordinary `${value}` remains a normal bound value handled by dialect/driver encoding.
+
+JavaScript database drivers do not expose a JDBC-like universal application-input type contract, so do not force artificial symmetry with result mapping.
+
+### 4.7 Untyped means unknown
+
+If there is no declared/generated contract, use `unknown`, not `any` or guessed precision.
 
 ---
 
 ## 5. Dynamic SQL rules
 
-The supported directive namespace is `/*@braid ...*/`.
+The directive namespace is `/*@braid ...*/`.
 
-Keep the language deliberately small:
+Supported v1 directives:
 
 - `if`
 - `choose`
@@ -134,29 +193,28 @@ Keep the language deliberately small:
 - `set`
 - `trim`
 
-Do not introduce an expression language such as OGNL. Conditions are TypeScript expressions.
+Conditions are TypeScript expressions. Do not introduce OGNL or another expression language.
 
 ### Guarded interpolation
 
-JavaScript evaluates template interpolations before a tag call. Therefore guarded lazy expressions require the compiler transform.
+JavaScript evaluates template expressions before a tag call, so guarded laziness requires the compiler transform.
 
 Generated code must:
 
 - be hygienic;
 - preserve lexical `this`;
 - preserve evaluation order;
-- evaluate active interpolations once;
+- evaluate active expressions once;
 - avoid evaluating inactive branches;
 - preserve TypeScript control-flow narrowing;
-- preserve source maps and directive prologues.
-
-Do not pretend a bare runtime tag can provide laziness it cannot provide.
+- preserve source maps/directive prologues;
+- preserve query-bound result mapper identity and output typing.
 
 ### SQL correctness
 
-`where`, `set`, and `trim` are deterministic rendering helpers. They do not need to prove the full database semantics of every possible branch combination.
+`where`, `set`, and `trim` are rendering helpers, not theorem provers.
 
-Do not introduce exponential structural proof as a default requirement.
+Do not add exponential dynamic-variant proof requirements.
 
 ---
 
@@ -168,9 +226,7 @@ Ordinary interpolation is always a bound parameter:
 sql`WHERE id = ${id}`;
 ```
 
-Never concatenate ordinary values into SQL text.
-
-Structural SQL must use explicit APIs:
+Structural SQL requires explicit APIs:
 
 ```ts
 sql.ident(...)
@@ -180,120 +236,156 @@ sql.join(...)
 sql.raw(...)
 ```
 
-`sql.raw()` is a trusted/unsafe escape hatch. Do not make raw structural interpolation implicit.
+`sql.raw()` is a trusted/unsafe escape hatch.
 
-Security regressions in this area are release blockers.
+Security regressions here are release blockers.
 
 ---
 
-## 7. Dialect boundaries
+## 7. Query-result-kind invariants
+
+Canonical tags:
+
+```ts
+sql.rows<Row>`...`
+sql.command`...`
+sql.call<Row>`...`
+sql`...` // unknown
+```
+
+Adapters report the actual rows/command result from database/driver evidence.
+
+Runtime enforces declared-vs-actual kind centrally.
+
+A mismatch is detected **after execution**. Do not claim it prevents write side effects. Use transactions when rollback on mismatch matters.
+
+Routine calls use `db.call()` and do not enter generic execute/batch paths.
+
+---
+
+## 8. Dialect boundaries
 
 First-party dialects are PostgreSQL, MySQL, and SQLite.
 
-Dialect packages should own only the responsibilities that genuinely differ:
+Dialect packages own only genuinely dialect-specific concerns:
 
 - placeholder syntax;
 - identifier quoting;
-- lexical details needed by template scanning;
+- lexical details needed by Braid scanning;
 - driver integration;
-- type codecs;
+- TypePolicy primitive normalization;
 - transaction/savepoint control;
-- result normalization;
-- optional schema inspection;
-- optional verification/describe capabilities.
+- actual result normalization;
+- optional metadata inspection.
 
-A new database should not require compiler-core grammar expansion as a default step.
+Do not place application semantic transforms such as compact-date parsing or domain-object construction into dialect TypePolicy.
 
-Where database semantics differ, prefer adapter capability interfaces over core `if (dialect === ...)` branches.
-
----
-
-## 8. Database-assisted verification
-
-When database-specific semantic proof is required, prefer the real database.
-
-Target verification architecture:
-
-```text
-source query
-  -> render/known verification case
-  -> dialect verifier
-  -> real database metadata/result evidence
-  -> deterministic query manifest
-  -> offline CI/editor consumption
-```
-
-Verification must report its scope honestly.
-
-Do not generalize one verified dynamic variant into proof for all variants unless that generalization is actually justified.
-
-Synthetic integration databases are preferred for CI. Never mutate production databases during verification or tests.
+A new database should not require compiler grammar expansion.
 
 ---
 
-## 9. Runtime invariants
+## 9. Metadata and codegen boundaries
 
-Keep these invariants unless explicitly changed by the user:
+Database metadata tooling is optional development tooling.
 
-- rows are plain objects;
-- root execution is serialized per physical execution resource where required;
+Current `@sqlbraid/schema` represents database metadata snapshots. PV6 plans to rename/reframe it as `@sqlbraid/metadata` before public pre-release.
+
+PV7 plans optional `@sqlbraid/codegen` for deterministic table metadata -> TypeScript models.
+
+Initial codegen scope is table-oriented `Row`/`Insert`/`Update` generation, not arbitrary SELECT/JOIN inference.
+
+Runtime/compiler/template must not depend on codegen.
+
+---
+
+## 10. Database verification is not a pre-release core goal
+
+Do not implement the previously proposed core prepare/describe verifier roadmap unless the user explicitly revives it.
+
+If a verifier is added later, it should be optional development tooling using real database evidence and must not become mandatory for ordinary SQLBraid execution.
+
+---
+
+## 11. Runtime invariants
+
+Keep these invariants unless explicitly changed:
+
+- rows/results are plain JavaScript values;
+- execution results are discriminated rows/command unions;
+- result-kind declarations are centrally enforced;
+- query-bound mapping/validation occurs above adapter normalization;
+- cardinality checks happen before `one`/`maybeOne` validation;
+- streaming validation/mapping is row-by-row without full buffering;
+- root execution is serialized per physical resource where required;
 - a transaction owns its physical resource for its lifetime;
-- root work cannot accidentally execute inside another transaction;
-- nested transactions use savepoints when supported;
+- root work cannot leak into another transaction;
+- nested transactions use savepoints where supported;
 - leaked transaction handles fail;
 - failed transaction-control cleanup poisons the physical resource;
-- poisoned resources are not reused silently.
+- poisoned resources are not silently reused.
 
-Pool support must preserve physical lease ownership. Do not model a transaction over a pool with unrelated per-query connections.
+Pool support must preserve physical lease ownership.
 
-Transaction-internal concurrent operations need an explicit policy before being advertised as supported.
+Transaction-internal concurrency needs an explicit policy before it is advertised as supported.
 
 ---
 
-## 10. Compiler responsibilities
-
-The compiler should focus on TypeScript integration, not database reimplementation.
+## 12. Compiler responsibilities
 
 Good compiler responsibilities:
 
-- discover SQLBraid tagged templates through TypeScript symbols;
-- parse SQLBraid directives;
+- discover SQLBraid tags through TypeScript symbols;
+- parse Braid directives;
 - lower guarded control flow hygienically;
-- preserve source locations;
-- attach explicit/generated query contracts;
-- read/write query manifest metadata;
+- preserve source locations/maps;
+- preserve explicit/result-schema contracts through lowering;
 - issue SQLBraid-specific diagnostics.
 
-Avoid making the compiler responsible for complete SQL semantic resolution.
+Avoid complete SQL semantic resolution.
 
-If legacy semantic-analysis code becomes unused after the pivot, remove it rather than preserving dead complexity for hypothetical future use.
+Remove obsolete analysis code rather than preserving dead complexity for hypothetical reuse.
 
 ---
 
-## 11. LSP rules
+## 13. LSP rules
 
-The language server must share compiler/tooling logic instead of implementing its own inference engine.
+The language server shares compiler/tooling logic.
 
 Prioritize:
 
 - TypeScript/SQLBraid diagnostics;
 - directive diagnostics;
-- contract/verification status hover;
-- schema-backed completion when metadata exists;
-- snapshot/manifest reload;
+- declared/mapped row hover;
+- metadata-backed completion;
+- metadata reload;
 - project cache/cancellation correctness.
 
-Do not promise rich SQL semantics that the core product no longer intends to implement locally.
+Do not implement an editor-only SQL inference engine.
 
 ---
 
-## 12. Testing requirements
+## 14. Testing requirements
 
 ### Fast tests
 
 Use Vitest.
 
-Unit tests should normally run against source aliases and must not require Docker unless they are explicitly DB projects.
+Unit tests should normally use source aliases and must not require Docker unless they are explicit DB projects.
+
+### Standard Schema interoperability
+
+PV5 must cover:
+
+- official `@standard-schema/spec` typing;
+- Valibot interoperability;
+- Zod interoperability;
+- synchronous transform;
+- asynchronous transform;
+- failure issues;
+- query-bound + execution-level composition;
+- compiler guarded lowering of schema-bound queries.
+
+Valibot/Zod are test/dev dependencies only.
 
 ### Real DB tests
 
@@ -303,7 +395,7 @@ Use:
 - Testcontainers MySQL;
 - native `node:sqlite`.
 
-Real DB tests are required for behavior that depends on actual driver/database semantics.
+Real DB tests are required for actual driver/database behavior.
 
 ### Package tests
 
@@ -312,14 +404,15 @@ Retain packed external-consumer validation:
 - `publint`;
 - Are The Types Wrong;
 - root/subpath ESM imports;
-- TypeScript type resolution;
+- TypeScript resolution;
 - CLI executable;
-- supported Node engine metadata;
+- language-server executable;
+- Node engine metadata;
 - no monorepo path leakage.
 
 ### Required commands
 
-Before calling a substantial change complete, run the applicable full gate:
+Before calling substantial work complete, run the applicable full gate:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -334,71 +427,77 @@ pnpm run test:all
 pnpm run pack:check
 ```
 
-If Docker/database tests could not run, report them as not run. Do not convert unavailable infrastructure into a passing result.
+If DB/Docker tests cannot run, report them as not run rather than passing.
 
 ---
 
-## 13. Repository and package discipline
+## 15. Repository/package discipline
 
-- Node runtime floor is currently `>=22.18.0` for published packages.
-- Keep ESM as the default package format unless a concrete compatibility requirement changes it.
-- Keep explicit `package.json` exports narrow.
-- Keep third-party/runtime dependencies external in library builds unless there is a documented reason to bundle.
-- Do not accidentally bundle TypeScript or database drivers into packages that expect them as dependencies/peers.
+- Node runtime floor is `>=22.18.0` unless explicitly changed.
+- Keep ESM as default package format.
+- Keep package exports narrow.
+- Use `@standard-schema/spec` as a normal dependency where public declaration files require it, but import it type-only in runtime source when possible.
+- Do not bundle validator implementations into SQLBraid packages.
+- Do not accidentally bundle TypeScript or database drivers into packages that expect external dependencies.
 - Preserve CLI/language-server shebangs and packed executable tests.
 - Use tsdown for package builds and `tsc --noEmit` for semantic type checking.
 
 ---
 
-## 14. Change discipline
+## 16. Change discipline
 
 For broad work:
 
-1. inspect the current HEAD, not a remembered older state;
+1. inspect current HEAD;
 2. read `PLAN.md`;
-3. reproduce the problem before changing behavior when practical;
-4. make the smallest architectural change that satisfies the product contract;
+3. reproduce the problem when practical;
+4. make the smallest architecture change satisfying the product contract;
 5. add behavior-focused tests;
-6. update public docs if user-visible behavior changes;
-7. remove obsolete paths rather than leaving parallel implementations;
+6. update docs for public behavior changes;
+7. remove obsolete paths rather than keeping parallel implementations;
 8. report exact commands/tests run.
 
-Do not perform publish/tag/release/force-push actions unless explicitly requested.
+Do not publish/tag/release/force-push unless explicitly requested.
 
 Do not mutate non-test databases.
 
 ---
 
-## 15. Public positioning
+## 17. Public positioning
 
-SQLBraid must stand on its own product story.
+SQLBraid stands on its own product story.
 
-Do not add public documentation that frames SQLBraid as:
+Do not frame the repository as:
 
 - a clone;
-- a drop-in replacement for another TypeScript library;
 - a parity project;
-- a clean-room reproduction of another library;
-- an implementation whose success is measured against another project's feature list.
-
-Comparisons may be discussed when explicitly requested by the user, but they are not repository goals or acceptance criteria.
+- a drop-in replacement for another TypeScript library;
+- a clean-room reproduction measured against another project's feature list.
 
 The core public message is:
 
 > **Write SQL. Keep TypeScript.**
 
+Result mapping should be explained as:
+
+> Use any Standard Schema-compatible library to validate and transform database rows into application models.
+
+Do not market one validator implementation as mandatory.
+
 ---
 
-## 16. Final decision rule
+## 18. Final decision rule
 
-When a proposed feature requires a large increase in parser/compiler complexity, stop and evaluate the product value before implementing it.
+When a feature increases parser/compiler/runtime framework complexity substantially, stop and evaluate whether the product truly needs it.
 
 Prefer, in order:
 
-1. explicit contract;
-2. runtime validator;
-3. database metadata/verification;
-4. narrow lexical/static check;
-5. only then additional SQL semantic analysis.
+1. explicit row contract;
+2. query-bound Standard Schema result mapper;
+3. execution-level Standard Schema validation;
+4. optional metadata/codegen;
+5. driver/database evidence when a future tooling feature truly needs it;
+6. narrow lexical/static checks;
+7. only then additional SQL semantic analysis.
 
-Complexity is not a feature. SQLBraid should remain useful precisely because it lets the database stay the database and lets SQL stay SQL.
+Complexity is not a feature. SQLBraid should remain useful because SQL stays SQL and application mapping uses existing ecosystem protocols instead of another proprietary DSL.
