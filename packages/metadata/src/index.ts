@@ -13,9 +13,6 @@ export interface ServerEvidence {
 export interface SnapshotMetadata {
   readonly generatedAt?: string;
   readonly source?: string;
-  readonly typePolicyId?: string;
-  readonly typePolicyHash?: string;
-  readonly grammarRevision?: string;
   readonly introspectionScope?: string;
   readonly completeness?: "complete" | "partial" | "unknown";
   readonly [key: string]: unknown;
@@ -34,7 +31,6 @@ export interface TypeSnapshot {
   readonly identity: string;
   readonly name: string;
   readonly kind: TypeKind;
-  readonly tsType?: string;
   readonly elementType?: string;
   readonly baseType?: string;
   readonly values?: readonly string[];
@@ -45,13 +41,16 @@ export interface ColumnSnapshot {
   readonly name: string;
   readonly ordinal: number;
   readonly type: string;
-  readonly tsType?: string;
   readonly nullable: boolean;
   readonly nullabilityEvidence?: string;
   readonly defaultExpression?: string;
+  /** True when the database computes or generates this value; absence means unknown. */
   readonly generated?: boolean;
+  /** True only when the database proves an identity/autoincrement mechanism for this column. */
   readonly identity?: boolean;
+  /** Whether the database permits explicit inserts; absence means unknown. */
   readonly insertable?: boolean;
+  /** Whether the database permits explicit updates; absence means unknown. */
   readonly updatable?: boolean;
   readonly charset?: string;
   readonly collation?: string;
@@ -91,15 +90,14 @@ export interface RoutineArgument {
   readonly name?: string;
   readonly mode: RoutineArgumentMode;
   readonly type: string;
-  readonly tsType?: string;
   readonly nullable?: boolean;
   readonly hasDefault?: boolean;
   readonly [key: string]: unknown;
 }
 
 export type RoutineResult =
-  | { readonly kind: "scalar"; readonly type: string; readonly tsType?: string; readonly nullable?: boolean; readonly [key: string]: unknown }
-  | { readonly kind: "set" | "record" | "table"; readonly columns?: readonly ColumnSnapshot[]; readonly rowType?: string; readonly [key: string]: unknown }
+  | { readonly kind: "scalar"; readonly type: string; readonly nullable?: boolean; readonly [key: string]: unknown }
+  | { readonly kind: "set" | "record" | "table"; readonly columns?: readonly ColumnSnapshot[]; readonly [key: string]: unknown }
   | { readonly kind: "void" | "command" | "unknown" | "opaque"; readonly [key: string]: unknown };
 
 export interface RoutineSnapshot {
@@ -117,8 +115,9 @@ export interface RoutineSnapshot {
   readonly [key: string]: unknown;
 }
 
-export interface SchemaSnapshot {
-  readonly formatVersion: number;
+export interface MetadataSnapshot {
+  readonly format: "sqlbraid-metadata";
+  readonly formatVersion: typeof CURRENT_FORMAT_VERSION;
   readonly dialect: string;
   readonly dialectVersion: string;
   readonly server: ServerEvidence;
@@ -142,9 +141,9 @@ export interface SnapshotDrift {
   readonly after: unknown;
 }
 
-export interface SchemaInspector {
+export interface MetadataInspector {
   readonly dialect: string;
-  inspect(): Promise<SchemaSnapshot>;
+  inspect(): Promise<MetadataSnapshot>;
 }
 
 export class SnapshotValidationError extends Error {
@@ -228,7 +227,7 @@ function sortedRecord<T>(record: Readonly<Record<string, T>>): Record<string, T>
   return Object.fromEntries(Object.keys(record).sort(compareKeys).map((key) => [key, record[key]]));
 }
 
-function normalizeSnapshot(snapshot: SchemaSnapshot, includeVolatile: boolean): SchemaSnapshot {
+function normalizeSnapshot(snapshot: MetadataSnapshot, includeVolatile: boolean): MetadataSnapshot {
   const relations: Record<string, RelationSnapshot> = {};
   for (const [key, relation] of Object.entries(snapshot.relations).sort(([left], [right]) => compareKeys(left, right))) {
     relations[key] = {
@@ -255,10 +254,11 @@ function canonicalValue(value: unknown): string {
   throw new TypeError(`Snapshot contains unsupported value: ${typeof value}`);
 }
 
-export function validateSnapshot(snapshot: unknown): asserts snapshot is SchemaSnapshot {
+export function validateSnapshot(snapshot: unknown): asserts snapshot is MetadataSnapshot {
   const diagnostics: SnapshotDiagnostic[] = [];
   if (!isRecord(snapshot)) throw new SnapshotValidationError([{ code: "SNAPSHOT_OBJECT", message: "Snapshot must be an object." }]);
   scanSnapshotValues(snapshot, "", diagnostics);
+  if (snapshot.format !== "sqlbraid-metadata") add(diagnostics, "SNAPSHOT_FORMAT", `Unsupported snapshot format: ${String(snapshot.format)}.`, "format");
   if (snapshot.formatVersion !== CURRENT_FORMAT_VERSION) add(diagnostics, "SNAPSHOT_VERSION", `Unsupported snapshot format version: ${String(snapshot.formatVersion)}.`, "formatVersion");
   if (typeof snapshot.dialect !== "string" || !snapshot.dialect) add(diagnostics, "SNAPSHOT_DIALECT", "Snapshot dialect must be a non-empty string.", "dialect");
   if (typeof snapshot.dialectVersion !== "string" || !snapshot.dialectVersion) add(diagnostics, "SNAPSHOT_DIALECT_VERSION", "Snapshot dialectVersion must be a non-empty string.", "dialectVersion");
@@ -295,27 +295,21 @@ export function validateSnapshot(snapshot: unknown): asserts snapshot is SchemaS
   if (diagnostics.length) throw new SnapshotValidationError(diagnostics);
 }
 
-export function canonicalizeSnapshot(snapshot: SchemaSnapshot): string {
+export function canonicalizeSnapshot(snapshot: MetadataSnapshot): string {
   validateSnapshot(snapshot);
   return canonicalValue(normalizeSnapshot(snapshot, false));
 }
 
-export function hashSnapshot(snapshot: SchemaSnapshot): string {
+export function hashSnapshot(snapshot: MetadataSnapshot): string {
   return createHash("sha256").update(canonicalizeSnapshot(snapshot)).digest("hex");
 }
 
-export function snapshotIdentity(snapshot: SchemaSnapshot): { readonly hash: string; readonly formatVersion: number; readonly dialect: string; readonly dialectVersion: string } {
+export function snapshotIdentity(snapshot: MetadataSnapshot): { readonly hash: string; readonly formatVersion: number; readonly dialect: string; readonly dialectVersion: string } {
   validateSnapshot(snapshot);
   return { hash: hashSnapshot(snapshot), formatVersion: snapshot.formatVersion, dialect: snapshot.dialect, dialectVersion: snapshot.dialectVersion };
 }
 
-export function migrateSnapshot(snapshot: unknown, targetVersion = CURRENT_FORMAT_VERSION): SchemaSnapshot {
-  validateSnapshot(snapshot);
-  if (targetVersion !== CURRENT_FORMAT_VERSION) throw new SnapshotValidationError([{ code: "SNAPSHOT_TARGET_VERSION", message: `No migration path to format version ${targetVersion}.` }]);
-  return structuredClone(snapshot);
-}
-
-export function parseSnapshotJson(text: string): SchemaSnapshot {
+export function parseSnapshotJson(text: string): MetadataSnapshot {
   let value: unknown;
   try { value = JSON.parse(text); }
   catch (error) { throw new SnapshotValidationError([{ code: "SNAPSHOT_JSON", message: error instanceof Error ? error.message : String(error) }]); }
@@ -338,7 +332,7 @@ function collectDrift(before: unknown, after: unknown, path: string, output: Sna
   output.push({ path, before, after });
 }
 
-export function diffSnapshots(before: SchemaSnapshot, after: SchemaSnapshot): readonly SnapshotDrift[] {
+export function diffSnapshots(before: MetadataSnapshot, after: MetadataSnapshot): readonly SnapshotDrift[] {
   validateSnapshot(before);
   validateSnapshot(after);
   const output: SnapshotDrift[] = [];
