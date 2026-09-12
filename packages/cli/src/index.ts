@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, extname, relative, resolve } from "node:path";
+import { basename, dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProject, checkSource, createVirtualOverlay, discoverQueries, emitSource, type TypeScriptCheckOptions } from "@sqlbraid/compiler";
 import { classifySemantics, createManifestFromEvidence, fingerprintTemplate, templateFamilyFingerprintOf } from "@sqlbraid/operations";
@@ -58,7 +58,6 @@ async function main(argv: readonly string[]): Promise<void> {
   const file = targetFile ?? projectFile;
   if (!file) usage();
   const source = targetFile ? await readFile(targetFile, "utf8") : "";
-  const snapshot = await loadSnapshot(option(argv, "--snapshot"));
   const nodeTypes = resolve(process.cwd(), "node_modules/@types/node");
   const sqlbraidRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
   const sourcePackages = resolve(sqlbraidRoot, "packages");
@@ -70,7 +69,6 @@ async function main(argv: readonly string[]): Promise<void> {
   } : undefined;
   const options: TypeScriptCheckOptions = {
     moduleSpecifiers: ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite"],
-    snapshot,
     compilerOptions: {
       baseUrl: process.cwd(),
       ...(existsSync(nodeTypes) ? { types: ["node"], typeRoots: [resolve(process.cwd(), "node_modules/@types")] } : {}),
@@ -92,16 +90,23 @@ async function main(argv: readonly string[]): Promise<void> {
     const requested = option(argv, "--out-file");
     const outputFile = resolve(requested ?? `${file.slice(0, -extname(file).length)}.js`);
     await mkdir(dirname(outputFile), { recursive: true });
-    await writeFile(outputFile, emitted.outputText, "utf8");
-    if (emitted.sourceMapText) await writeFile(`${outputFile}.map`, emitted.sourceMapText, "utf8");
+    let outputText = emitted.outputText;
+    if (emitted.sourceMapText) {
+      const map: { file: string; sources: string[] } = JSON.parse(emitted.sourceMapText);
+      map.file = basename(outputFile);
+      map.sources = map.sources.map((source) => relative(dirname(outputFile), resolve(dirname(file), source)).replaceAll("\\", "/"));
+      outputText = outputText.replace(/\/\/# sourceMappingURL=[^\r\n]*(?:\r?\n)?$/u, `//# sourceMappingURL=${encodeURIComponent(map.file)}.map\n`);
+      await writeFile(`${outputFile}.map`, JSON.stringify(map), "utf8");
+    }
+    await writeFile(outputFile, outputText, "utf8");
     return;
   }
   const overlay = createVirtualOverlay(source, file, options);
   const manifests = discovered.queries.map((query) => {
     const captured = new Array<unknown>(Math.max(0, query.bindings.length)).fill(null);
-    const inferred = overlay.queryTypes.find((candidate) => candidate.range.start === query.range.start);
+    const contract = overlay.queryTypes.find((candidate) => candidate.range.start === query.range.start);
     const semantics = classifySemantics(query.strings.join(" ? "));
-    return createManifestFromEvidence({ fingerprint: fingerprintTemplate(query.ir, captured), templateFamilyFingerprint: templateFamilyFingerprintOf(query.ir), operation: semantics.operation, readOnly: semantics.readOnly, locking: semantics.locking, sessionAffine: semantics.sessionAffine, reason: semantics.reason, ...(inferred?.resultKind ? { resultKind: inferred.resultKind } : { resultKind: "unknown" }), source: relative(process.cwd(), file), ...(inferred?.rowType && inferred.rowType !== "unknown" ? { resultType: inferred.rowType } : {}) });
+    return createManifestFromEvidence({ fingerprint: fingerprintTemplate(query.ir, captured), templateFamilyFingerprint: templateFamilyFingerprintOf(query.ir), operation: semantics.operation, readOnly: semantics.readOnly, locking: semantics.locking, sessionAffine: semantics.sessionAffine, reason: semantics.reason, resultKind: query.declaredResultKind, source: relative(process.cwd(), file), ...(contract?.rowType && contract.rowType !== "unknown" ? { resultType: contract.rowType } : {}) });
   });
   process.stdout.write(`${JSON.stringify(manifests, null, 2)}\n`);
   if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) process.exitCode = 1;

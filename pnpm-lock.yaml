@@ -175,15 +175,9 @@ importers:
 
   packages/compiler:
     dependencies:
-      '@sqlbraid/ast':
-        specifier: workspace:*
-        version: link:../ast
       '@sqlbraid/core':
         specifier: workspace:*
         version: link:../core
-      '@sqlbraid/schema':
-        specifier: workspace:*
-        version: link:../schema
       '@sqlbraid/template':
         specifier: workspace:*
         version: link:../template

@@ -12,7 +12,7 @@ import type { RenderedQuery } from '@sqlbraid/core';
 import type { StandardSchemaLike } from '@sqlbraid/operations';
 import type { SchemaSnapshot } from '@sqlbraid/schema';
 import { parseSql, resolveStatement, lexSql } from '@sqlbraid/ast';
-import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource, sourcePosition, type CompileDiagnostic } from '@sqlbraid/compiler';
+import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource, sourcePosition } from '@sqlbraid/compiler';
 import { classifySemantics, fingerprintQuery, templateFamilyFingerprint, validateRows, ResultValidationError } from '@sqlbraid/operations';
 import { createPgDatabase } from '@sqlbraid/postgres/pg';
 import { createPostgresInspector } from '@sqlbraid/postgres';
@@ -127,27 +127,24 @@ test('operations use conservative semantics, shape identity, and Standard Schema
 });
 
 test('compiler discovers symbols, checks downstream row types, and lowers guarded evaluation', () => {
-  const options = { moduleSpecifier: '@sqlbraid/template', snapshot, compilerOptions };
+  const options = { moduleSpecifier: '@sqlbraid/template', compilerOptions };
   const discovered = discoverQueries("import {sql} from '@sqlbraid/template'; function f(sql) { return sql`bad`; } import * as braid from '@sqlbraid/template'; const q=braid.sql`SELECT id FROM users`;", 'fixture.ts', options);
   assert.equal(discovered.queries.length, 1);
-  const source = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db: Database; type UserRow = { id: number; name: string }; const user: {name:string}|null = null; const q=sql<UserRow>`SELECT custom_company_function(id) AS id, name FROM vendor_table /*@braid where*/ /*@braid if ${user != null}*/ AND name = ${user.name} /*@braid end*/ /*@braid end*/`; async function f(){ const rows=await db.all(q); return rows[0].missing; }";
+  const source = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db: Database; type UserRow = { id: number; name: string }; declare const user: {name:string}|null; const q=sql.rows<UserRow>`SELECT custom_company_function(id) AS id, name FROM vendor_table /*@braid where*/ /*@braid if ${user != null}*/ AND name = ${user.name} /*@braid end*/ /*@braid end*/`; async function f(){ const rows=await db.all(q); return rows[0].missing; }";
   const diagnostics = checkSource(source, join(tmpdir(), 'sqlbraid-consumer.ts'), options);
-  assert.ok(diagnostics.some((diagnostic) => diagnostic.code === 'TS2339'));
+  assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.code), ['TS2339']);
   const commandSource = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db: Database; const q=sql`UPDATE users SET name = 'Ada'`; db.all(q);";
   assert.ok(checkSource(commandSource, join(tmpdir(), 'sqlbraid-command.ts'), options).some((diagnostic) => diagnostic.code === 'TS2345'));
-  const contractSource = "import {sql} from '@sqlbraid/template'; type UserRow = {id:string}; const q=sql<UserRow>`SELECT opaque_vendor_function(id) AS id FROM vendor_table`;";
+  const contractSource = "import {sql} from '@sqlbraid/template'; type UserRow = {id:string}; const q=sql.rows<UserRow>`SELECT opaque_vendor_function(id) AS id FROM vendor_table`;";
   assert.equal(checkSource(contractSource, join(tmpdir(), 'sqlbraid-contract.ts'), { moduleSpecifier: '@sqlbraid/template', compilerOptions }).length, 0);
-  const emitted = emitSource(source.replace('return rows[0].missing;', 'return rows[0].id;'), 'consumer.ts', options).outputText;
-  assert.match(emitted, /__sqlbraidCapture\(/);
-  assert.equal(emitted.includes('user\.name'), true);
+  assert.deepEqual(checkSource(source.replace('return rows[0].missing;', 'return rows[0].id;'), join(tmpdir(), 'sqlbraid-consumer.ts'), options), []);
 });
 
 test('PV1 query contracts and explicit kinds are checked by TypeScript', () => {
   const options = { moduleSpecifier: '@sqlbraid/template', compilerOptions };
-  const typed = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db: Database; type UserRow = {id:number}; const query = sql<UserRow>`SELECT custom_company_function(id) AS id FROM vendor_table`; async function read(){ const rows = await db.all(query); return rows[0].missing; }";
+  const typed = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db: Database; type UserRow = {id:number}; const query = sql.rows<UserRow>`SELECT custom_company_function(id) AS id FROM vendor_table`; async function read(){ const rows = await db.all(query); return rows[0].missing; }";
   const typedDiagnostics = checkSource(typed, join(tmpdir(), 'sqlbraid-pv1-typed.ts'), options);
   assert.ok(typedDiagnostics.some((diagnostic) => diagnostic.code === 'TS2339'));
-  assert.equal(typedDiagnostics.some((diagnostic) => diagnostic.code.startsWith('BRAID_CONTRACT')), false);
 
   const untyped = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db: Database; const query = sql`SELECT 1`; db.all(query);";
   assert.ok(checkSource(untyped, join(tmpdir(), 'sqlbraid-pv1-untyped.ts'), options).some((diagnostic) => diagnostic.code === 'TS2345'));
@@ -183,41 +180,9 @@ test('emitted guarded JavaScript evaluates only the active branch', async () => 
   }
 });
 
-test('compiled generic shorthand uses the row query tag at runtime', async () => {
-  const source = "import {sql} from '@sqlbraid/template'; type UserRow = {id:number}; export const query = sql<UserRow>`SELECT custom_company_function(id) AS id FROM vendor_table`;";
-  const emitted = emitSource(source, 'pv1-shorthand.ts', { moduleSpecifier: '@sqlbraid/template' }).outputText;
-  const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-pv1-shorthand-'));
-  try {
-    const file = join(directory, 'shorthand.mjs');
-    writeFileSync(file, emitted.replace(/\n\/\/#[^\n]*sourceMappingURL[^\n]*/u, ''));
-    const module = await import(pathToFileURL(file).href);
-    assert.equal(module.query.resultKind, 'rows');
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-test('TypeChecker bind validation follows TypeScript assignability', () => {
-  const options = {
-    moduleSpecifier: '@sqlbraid/template',
-    analyze: () => ({ rowType: '{ id: number }', bindingTypes: ['string'] }),
-    compilerOptions,
-  };
-  const check = (declaration: string, expression: string, expected = 'string'): readonly CompileDiagnostic[] => checkSource(`import {sql} from '@sqlbraid/template'; ${declaration} const q=sql\`SELECT ${'${'}${expression}}\`;`, join(tmpdir(), `sqlbraid-bind-${expression.replace(/\W/gu, '')}-${expected}.ts`), { ...options, analyze: () => ({ rowType: '{ id: number }', bindingTypes: [expected] }) });
-  const arrayDiagnostics = check('const value: string[] = [];', 'value');
-  assert.ok(arrayDiagnostics.some((diagnostic) => diagnostic.code === 'BRAID_BIND_TYPE'));
-  assert.ok(check('declare const value: number | string;', 'value').some((diagnostic) => diagnostic.code === 'BRAID_BIND_TYPE'));
-  assert.ok(check('declare const value: number | string;', 'value', 'number').some((diagnostic) => diagnostic.code === 'BRAID_BIND_TYPE'));
-  assert.ok(!check("const value = 'Ada';", 'value').some((diagnostic) => diagnostic.code === 'BRAID_BIND_TYPE'));
-  assert.ok(check('const value = 1;', 'value').some((diagnostic) => diagnostic.code === 'BRAID_BIND_TYPE'));
-  assert.ok(!check('const value = 1;', 'value', 'number').some((diagnostic) => diagnostic.code === 'BRAID_BIND_TYPE'));
-  assert.ok(check('declare const value: string | null;', 'value').some((diagnostic) => diagnostic.code === 'BRAID_BIND_TYPE'));
-});
-
 test('guarded bind checking uses real control-flow narrowing and maps diagnostics', () => {
   const options = {
     moduleSpecifier: '@sqlbraid/template',
-    analyze: () => ({ rowType: '{ id: number }', bindingTypes: ['unknown', 'string'] }),
     compilerOptions,
   };
   const safe = "import {sql} from '@sqlbraid/template'; declare const user: {name:string}|null; const q=sql`SELECT id /*@braid if ${user != null}*/ AND name=${user.name} /*@braid end*/`;";
@@ -226,23 +191,6 @@ test('guarded bind checking uses real control-flow narrowing and maps diagnostic
   const diagnostics = checkSource(unsafe, join(tmpdir(), 'sqlbraid-guard-unsafe.ts'), options);
   const start = unsafe.indexOf('user.name');
   assert.ok(diagnostics.some((diagnostic) => diagnostic.code === 'TS18047' && diagnostic.range.start === start && diagnostic.range.end === start + 'user.name'.length));
-  const map = JSON.parse(emitSource(safe, 'sqlbraid-guard-map.ts', options).sourceMapText ?? '{}') as { readonly x_sqlbraid_origins?: readonly unknown[] };
-  assert.ok((map.x_sqlbraid_origins?.length ?? 0) > 0);
-});
-
-test('sql generic contracts accept opaque SQL without semantic proof', () => {
-  const positive = "import {sql} from '@sqlbraid/template'; interface UserRow { id:number; name:string } const q=sql<UserRow>`SELECT id, name FROM users`;";
-  assert.equal(checkSource(positive, join(tmpdir(), 'sqlbraid-contract-interface.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot, compilerOptions }).length, 0);
-  const alias = "import {sql} from '@sqlbraid/template'; type UserRow = { readonly id:number; name?: string|null }; const q=sql<UserRow>`SELECT id, name FROM users`;";
-  assert.equal(checkSource(alias, join(tmpdir(), 'sqlbraid-contract-alias.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot, compilerOptions }).length, 0);
-  const union = "import {sql} from '@sqlbraid/template'; type UserRow = {id:number} | {id:number; name:string}; const q=sql<UserRow>`SELECT id, name FROM users`;";
-  assert.equal(checkSource(union, join(tmpdir(), 'sqlbraid-contract-union.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot, compilerOptions }).length, 0);
-  const wrong = "import {sql} from '@sqlbraid/template'; interface UserRow { id:string } const q=sql<UserRow>`SELECT id FROM users`;";
-  assert.equal(checkSource(wrong, join(tmpdir(), 'sqlbraid-contract-wrong.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot, compilerOptions }).length, 0);
-  const extra = "import {sql} from '@sqlbraid/template'; interface UserRow { id:number } const q=sql<UserRow>`SELECT id, name FROM users`;";
-  assert.equal(checkSource(extra, join(tmpdir(), 'sqlbraid-contract-extra.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot, compilerOptions }).length, 0);
-  const unknown = "import {sql} from '@sqlbraid/template'; interface UserRow { id:number } const q=sql<UserRow>`SELECT opaque FROM users`;";
-  assert.equal(checkSource(unknown, join(tmpdir(), 'sqlbraid-contract-unknown.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot, compilerOptions }).length, 0);
 });
 
 test('project checking keeps one TypeScript program for re-exported tags and imported contracts', () => {
@@ -250,18 +198,18 @@ test('project checking keeps one TypeScript program for re-exported tags and imp
   try {
     writeFileSync(join(directory, 'bar.ts'), "export { sql } from '@sqlbraid/template';\n");
     writeFileSync(join(directory, 'types.ts'), 'export type ImportedRow = { readonly id: number; name?: string | null }\n');
-    writeFileSync(join(directory, 'main.ts'), "import {sql} from './bar.js'; import type {ImportedRow} from './types.js'; export const imported=sql<ImportedRow>`SELECT id, name FROM users`;\n");
+    writeFileSync(join(directory, 'main.ts'), "import {sql} from './bar.js'; import type {ImportedRow} from './types.js'; declare const user: {id:number}|null; export const imported=sql.rows<ImportedRow>`SELECT proprietary_extension(id) FROM users /*@braid if ${user != null}*/ WHERE id=${user.id} /*@braid end*/`;\n");
     writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, baseUrl: '.', paths: { '@sqlbraid/*': ['../packages/*/src/index.ts'] } }, include: ['*.ts'] }));
     const projectFile = join(directory, 'tsconfig.json');
     const context = createProjectContext(projectFile);
     assert.ok(context.fileNames.includes(join(directory, 'main.ts')));
     assert.ok(context.fileNames.includes(join(directory, 'bar.ts')));
     assert.ok(context.fileNames.includes(join(directory, 'types.ts')));
-    const diagnostics = checkProject(projectFile, { moduleSpecifier: '@sqlbraid/template', snapshot });
+    const diagnostics = checkProject(projectFile, { moduleSpecifier: '@sqlbraid/template' });
     assert.equal(diagnostics.some((diagnostic) => diagnostic.code.startsWith('TS') || diagnostic.code.startsWith('BRAID_')), false);
-    writeFileSync(join(directory, 'wrong.ts'), "import {sql} from './bar.js'; interface UserRow { id: string; } export const q=sql<UserRow>`SELECT id FROM users`;\n");
-    const negative = checkProject(projectFile, { moduleSpecifier: '@sqlbraid/template', snapshot });
-    assert.equal(negative.length, 0);
+    writeFileSync(join(directory, 'wrong.ts'), "import {imported} from './main.js'; import type {Database} from '@sqlbraid/core'; declare const db:Database; async function read(){ return (await db.all(imported))[0].missing; }\n");
+    const negative = checkProject(projectFile, { moduleSpecifier: '@sqlbraid/template' });
+    assert.deepEqual(negative.map((diagnostic) => diagnostic.code), ['TS2339']);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -288,25 +236,16 @@ test('project checking preserves TSX, MTS, and CTS source identities', () => {
 });
 
 test('untyped dynamic SQL remains unknown without a declared contract', () => {
-  const projection = "import {sql} from '@sqlbraid/template'; declare const includeName: boolean; const q=sql`SELECT id /*@braid if ${includeName}*/ , name /*@braid end*/ FROM users`;";
-  const projectionOverlay = createVirtualOverlay(projection, join(tmpdir(), 'sqlbraid-dynamic-projection.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot });
-  assert.equal(projectionOverlay.queryTypes[0]?.rowType, 'unknown');
-  assert.ok(projectionOverlay.diagnostics.some((diagnostic) => diagnostic.code === 'BRAID_DYNAMIC_UNPROVEN'));
-
   const choose = "import {sql} from '@sqlbraid/template'; const q=sql`/*@braid choose*/ /*@braid when ${true}*/ SELECT id FROM users /*@braid when ${true}*/ SELECT missing FROM definitely_missing /*@braid otherwise*/ SELECT id FROM users /*@braid end*/`;";
-  const chooseOverlay = createVirtualOverlay(choose, join(tmpdir(), 'sqlbraid-dynamic-choose.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot });
+  const chooseOverlay = createVirtualOverlay(choose, join(tmpdir(), 'sqlbraid-dynamic-choose.ts'), { moduleSpecifier: '@sqlbraid/template' });
   assert.equal(chooseOverlay.queryTypes[0]?.rowType, 'unknown');
-  assert.ok(chooseOverlay.diagnostics.some((diagnostic) => diagnostic.code === 'BRAID_DYNAMIC_UNPROVEN'));
-
-  const where = "import {sql} from '@sqlbraid/template'; declare const name: string | null; const q=sql`SELECT id, name FROM users /*@braid where*/ /*@braid if ${name != null}*/ AND name = ${name} /*@braid end*/ /*@braid end*/`;";
-  const whereOverlay = createVirtualOverlay(where, join(tmpdir(), 'sqlbraid-dynamic-where.ts'), { moduleSpecifier: '@sqlbraid/template', snapshot });
-  assert.equal(whereOverlay.queryTypes[0]?.rowType, 'unknown');
-  assert.equal(whereOverlay.queryTypes[0]?.resultKind, 'unknown');
+  assert.equal(chooseOverlay.queryTypes[0]?.resultKind, 'unknown');
+  assert.deepEqual(checkSource(choose, join(tmpdir(), 'sqlbraid-dynamic-choose.ts'), { moduleSpecifier: '@sqlbraid/template', compilerOptions }), []);
 });
 
 test('emits directive prologues, preserves compiler options, and maps generated JS to original TS', () => {
   const source = '"use client";\nimport {sql} from "@sqlbraid/template";\nexport function build(user: {name: string} | null) { return sql`SELECT * /*@braid if ${user != null}*/ WHERE name = ${user.name} /*@braid end*/`; }\n';
-  const emitted = emitSource(source, 'sqlbraid-source-map.ts', { moduleSpecifier: '@sqlbraid/template', analyze: () => ({ rowType: 'unknown', bindingTypes: ['unknown', 'unknown'] }), compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, sourceMap: true, inlineSources: true } });
+  const emitted = emitSource(source, 'sqlbraid-source-map.ts', { moduleSpecifier: '@sqlbraid/template', compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022, sourceMap: true, inlineSources: true } });
   assert.equal(emitted.diagnostics.length, 0);
   assert.ok(emitted.outputText.trimStart().startsWith('"use client";'));
   assert.ok(emitted.outputText.indexOf('"use client"') < emitted.outputText.indexOf('capture'));
@@ -327,7 +266,7 @@ test('emits directive prologues, preserves compiler options, and maps generated 
 
 test('AST lowering is hygienic and preserves side effects, this, choose order, and multiple queries', async () => {
   const source = "import {sql, capture as __sqlbraidCapture} from '@sqlbraid/template'; const __SQLBraidQuery='user'; export function build(enabled, values, next){ return sql`SELECT id /*@braid if ${enabled}*/ AND id=${values.value} AND next=${next()} /*@braid end*/`; } export class Builder { constructor(user){ this.user=user; } build(){ return sql`SELECT id /*@braid if ${this.user != null}*/ AND name=${this.user.name} /*@braid end*/`; } } export function choose(first, second){ return sql`SELECT 1 /*@braid choose*/ /*@braid when ${first()}*/ A /*@braid when ${second()}*/ B /*@braid otherwise*/ C /*@braid end*/`; } export function many(value){ return [sql`SELECT ${value}`, sql`SELECT ${value}`]; }";
-  const emitted = emitSource(source, 'w03-hygiene.ts', { moduleSpecifier: '@sqlbraid/template', analyze: () => ({ rowType: 'unknown', bindingTypes: ['unknown'] }) });
+  const emitted = emitSource(source, 'w03-hygiene.ts', { moduleSpecifier: '@sqlbraid/template' });
   assert.equal(emitted.diagnostics.some((diagnostic) => diagnostic.code === 'BRAID_ASYNC_CONTEXT'), false);
   const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-hygiene-'));
   try {
@@ -358,7 +297,7 @@ test('AST lowering is hygienic and preserves side effects, this, choose order, a
 
 test('nested async functions and otherwise-only choose emit valid JavaScript', async () => {
   const source = "import {sql} from '@sqlbraid/template'; export function nested(){ return sql`SELECT 1 /*@braid if ${true}*/ AND fn=${async () => await Promise.resolve(1)} /*@braid end*/`; } export function otherwise(value){ return sql`SELECT 1 /*@braid choose*/ /*@braid otherwise*/ AND id=${value} /*@braid end*/`; }";
-  const emitted = emitSource(source, 'w03-nested.ts', { moduleSpecifier: '@sqlbraid/template', analyze: () => ({ rowType: 'unknown', bindingTypes: ['unknown', 'unknown'] }) });
+  const emitted = emitSource(source, 'w03-nested.ts', { moduleSpecifier: '@sqlbraid/template' });
   assert.equal(emitted.diagnostics.some((diagnostic) => diagnostic.code === 'BRAID_ASYNC_CONTEXT'), false);
   const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-nested-'));
   try {
@@ -397,24 +336,30 @@ test('adapters preserve command and returning result kinds', async () => {
   assert.deepEqual(await db.all(sqlite.rows`INSERT INTO users VALUES (2, 'Bob') RETURNING id`), [{ id: 1 }]);
 });
 
-test('stdio language server answers initialize and document diagnostics', async () => {
+test('stdio diagnostics resolve file URIs and check declared row contracts', async () => {
   const input = new PassThrough();
   const output = new PassThrough();
-  startStdioLanguageServer({ moduleSpecifier: '@sqlbraid/template', snapshot }, { input, output });
-  const messages: string[] = [];
-  output.on('data', (chunk) => messages.push(chunk.toString()));
+  const stop = startStdioLanguageServer({ moduleSpecifier: '@sqlbraid/template' }, { input, output });
+  const uri = pathToFileURL(join(process.cwd(), 'sqlbraid lsp fixture.ts')).href;
+  const source = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db:Database; const q=sql.rows<{id:number}>`SELECT vendor_function()`; async function read(){ return (await db.all(q))[0].id; }";
   const send = (message: Record<string, unknown>): void => {
     const body = JSON.stringify(message);
     input.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
   };
-  const initialized = once(output, 'data');
-  send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
-  await initialized;
-  const opened = once(output, 'data');
-  send({ jsonrpc: '2.0', method: 'textDocument/didOpen', params: { textDocument: { uri: 'file:///fixture.ts', languageId: 'typescript', version: 1, text: "import {sql} from '@sqlbraid/template'; const q=sql`SELECT id FROM users`;" } } });
-  await opened;
-  assert.match(messages.join(''), /textDocument\/publishDiagnostics/);
-  input.end();
+  try {
+    const opened = once(output, 'data');
+    send({ jsonrpc: '2.0', method: 'textDocument/didOpen', params: { textDocument: { uri, languageId: 'typescript', version: 1, text: source } } });
+    const first = JSON.parse((await opened)[0].toString().split('\r\n\r\n')[1]);
+    assert.deepEqual(first.params.diagnostics, []);
+    const changed = once(output, 'data');
+    send({ jsonrpc: '2.0', method: 'textDocument/didChange', params: { textDocument: { uri, version: 2 }, contentChanges: [{ text: source.replace('[0].id', '[0].missing') }] } });
+    const second = JSON.parse((await changed)[0].toString().split('\r\n\r\n')[1]);
+    assert.deepEqual(second.params.diagnostics.map((diagnostic: { code: string }) => diagnostic.code), ['TS2339']);
+  } finally {
+    stop();
+    input.end();
+    output.end();
+  }
 });
 
 test('root execution waits until the transaction scope closes', async () => {

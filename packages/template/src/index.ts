@@ -595,10 +595,10 @@ function renderFragment(fragment: SqlFragment, state: RenderState): void {
   renderNodes(fragment.ir.nodes, fragment.values, state);
 }
 
-function renderIr(ir: TemplateIr, captured: readonly unknown[], dialect: Dialect, limits?: RenderLimits): RenderedQuery {
+function renderIr(ir: TemplateIr, captured: readonly unknown[], dialect: Dialect, limits?: RenderLimits, resultKind: QueryResultKind = "unknown"): RenderedQuery {
   const state: RenderState = { dialect, limits: validateLimits(limits ?? {}), values: [], bindingMap: [], output: [], variantPath: [], structuralItems: 0, depth: 0, sqlBytes: 0 };
   renderNodes(ir.nodes, captured, state);
-  const rendered: RenderedQuery = { text: state.output.join(""), values: Object.freeze([...state.values]), variantFingerprint: state.variantPath.join("|") };
+  const rendered: RenderedQuery = { text: state.output.join(""), values: Object.freeze([...state.values]), variantFingerprint: state.variantPath.join("|"), resultKind };
   Object.defineProperty(rendered, "bindingMap", { value: Object.freeze(state.bindingMap.map((entry) => Object.freeze(entry))), enumerable: false });
   return Object.freeze(rendered);
 }
@@ -727,7 +727,7 @@ export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
   const createQuery = <Kind extends QueryResultKind>(strings: TemplateStringsArray, values: readonly unknown[], resultKind: Kind): Query<unknown, Kind> => {
     const ir = cachedTemplate(strings, dialect.lexicalProfile, limits.maxNestingDepth);
     const captured = Object.freeze([...values]);
-    return Object.freeze({ ir, values: captured, resultKind, render: () => renderIr(ir, captured, dialect, limits) });
+    return Object.freeze({ ir, values: captured, resultKind, render: () => renderIr(ir, captured, dialect, limits, resultKind) });
   };
   const tag = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "unknown"> => createQuery(strings, values, "unknown")) as SqlTag;
   tag.rows = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "rows"> => createQuery(strings, values, "rows")) as SqlTag["rows"];
@@ -800,20 +800,20 @@ function captureActive(nodes: readonly TemplateNode[], thunks: readonly (() => u
   }
 }
 
-export function guarded<Row = unknown, Kind extends QueryResultKind = "unknown">(tag: SqlTagLike, strings: readonly string[], thunks: readonly (() => unknown)[]): Query<Row, Kind> {
+export function guarded<Row = unknown, Kind extends QueryResultKind = QueryResultKind>(tag: SqlTagLike<Kind, Row>, strings: readonly string[], thunks: readonly (() => unknown)[]): Query<Row, Kind> {
   const templateStrings = createTemplateStrings(strings);
   const ir = cachedTemplate(templateStrings);
-  if (!hasGuard(ir.nodes)) return tag(templateStrings, ...thunks.map((thunk) => thunk())) as Query<Row, Kind>;
+  if (!hasGuard(ir.nodes)) return tag(templateStrings, ...thunks.map((thunk) => thunk()));
   const values = new Array<unknown>(Math.max(0, strings.length - 1));
   captureActive(ir.nodes, thunks, values);
-  return tag(templateStrings, ...values) as Query<Row, Kind>;
+  return tag(templateStrings, ...values);
 }
 
-export function capture<Row = unknown, Kind extends QueryResultKind = "unknown">(tag: SqlTagLike, strings: readonly string[], build: (values: unknown[]) => void): Query<Row, Kind> {
+export function capture<Row = unknown, Kind extends QueryResultKind = QueryResultKind>(tag: SqlTagLike<Kind, Row>, strings: readonly string[], build: (values: unknown[]) => void): Query<Row, Kind> {
   const captured = new Array<unknown>(Math.max(0, strings.length - 1));
   build(captured);
   const templateStrings = createTemplateStrings(strings);
-  return tag(templateStrings, ...captured) as Query<Row, Kind>;
+  return tag(templateStrings, ...captured);
 }
 
 export const sql = createSqlTag();

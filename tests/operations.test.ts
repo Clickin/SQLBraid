@@ -18,6 +18,16 @@ test('manifest excludes bound values', () => {
   assert.equal(fingerprintQuery(query), manifest.fingerprint);
 });
 
+test('manifest preserves declared kinds rather than classifying SQL result kinds', () => {
+  const queries = [
+    sql.rows<{ id: number }>`OPAQUE vendor_rows()`,
+    sql.command`SELECT proprietary_command()`,
+    sql.call<{ id: number }>`SELECT proprietary_call()`,
+    sql`SELECT id FROM users`,
+  ];
+  assert.deepEqual(queries.map((query) => createManifest(query).resultKind), ['rows', 'command', 'call', 'unknown']);
+});
+
 test('standard schema validation returns normalized rows or issues', async () => {
   const query = sql`SELECT 1`;
   const schema = { '~standard': { version: 1, vendor: 'test', validate(value: unknown) { return typeof value === 'object' ? { value } : { issues: ['not-object'] }; } } } as const satisfies StandardSchemaLike<unknown>;

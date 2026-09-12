@@ -11,7 +11,7 @@ interface UserRow {
   email: string | null;
 }
 
-const users = sql<UserRow>`
+const users = sql.rows<UserRow>`
   SELECT u.id, u.name, u.email
   FROM users u
 
@@ -57,7 +57,7 @@ The toolkit focuses on the layers around SQL:
 SQLBraid does not need to understand every database function or extension before you can use it.
 
 ```ts
-const report = sql<ReportRow>`
+const report = sql.rows<ReportRow>`
   SELECT
     custom_company_score(account_id) AS score,
     jsonb_build_object('id', account_id) AS metadata
@@ -74,7 +74,7 @@ If your database accepts the SQL, SQLBraid should not force you to wait for a lo
 SQLBraid is not an ORM and does not make a fluent query builder the primary API.
 
 ```ts
-const query = sql<UserRow>`
+const query = sql.rows<UserRow>`
   SELECT id, name, email
   FROM users
   WHERE organization_id = ${organizationId}
@@ -103,7 +103,7 @@ sql.raw(trustedSql)
 ### Conditional clauses
 
 ```ts
-const query = sql<UserRow>`
+const query = sql.rows<UserRow>`
   SELECT id, name
   FROM users
 
@@ -122,7 +122,7 @@ const query = sql<UserRow>`
 ### First-match branching
 
 ```ts
-const query = sql<UserRow>`
+const query = sql.rows<UserRow>`
   SELECT id, name
   FROM users
 
@@ -158,7 +158,7 @@ interface AccountRow {
   disabledAt: Date | null;
 }
 
-const query = sql<AccountRow>`
+const query = sql.rows<AccountRow>`
   SELECT id, display_name AS "displayName", disabled_at AS "disabledAt"
   FROM accounts
 `;
@@ -168,7 +168,7 @@ The application declares the row shape it expects.
 
 A query without a declared or generated contract remains `Query<unknown, "unknown">` rather than receiving a guessed type.
 
-The shorthand `sql<Row>\`...\`` declares a row query. Use explicit helpers when the result kind is not a row query:
+Use `sql.rows<Row>\`...\`` for an explicit row contract. Use explicit helpers when the result kind is not a row query:
 
 ```ts
 const rows = sql.rows<UserRow>`SELECT id, name FROM users`;
@@ -176,7 +176,13 @@ const command = sql.command`UPDATE users SET active = ${true}`;
 const call = sql.call<RefreshResult>`CALL refresh_users()`;
 ```
 
+These tags carry their result kind at runtime, with or without the compiler transform. The bare `sql<Row>` shorthand is not supported.
+
 An untyped `sql\`...\`` is `Query<unknown, "unknown">`; pass it to `db.execute()` only, or declare its kind explicitly.
+
+Static templates work with ordinary TypeScript compilation. Guarded interpolations require the SQLBraid transform for lazy evaluation and control-flow narrowing.
+
+`sqlbraid check` and `sqlbraid build` do not require a schema snapshot. They check TypeScript contracts and Braid directives, not SQL semantics: custom functions, operators, and vendor SQL pass through without local type inference. A declared result contract is not database verification.
 
 ### Runtime validation
 

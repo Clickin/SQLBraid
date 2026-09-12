@@ -30,7 +30,7 @@ It exists for developers who want to keep writing SQL as SQL, while gaining the 
 The primary authoring surface is a tagged template:
 
 ```ts
-const query = sql<UserRow>`
+const query = sql.rows<UserRow>`
   SELECT u.id, u.name, u.email
   FROM users u
 
@@ -63,7 +63,7 @@ The product should reward existing SQL knowledge instead of forcing developers t
 Good:
 
 ```ts
-sql<User>`
+sql.rows<User>`
   SELECT id, name
   FROM users
   WHERE status = ${status}
@@ -112,7 +112,7 @@ interface UserRow {
   email: string | null;
 }
 
-const query = sql<UserRow>`SELECT id, name, email FROM users`;
+const query = sql.rows<UserRow>`SELECT id, name, email FROM users`;
 ```
 
 A query without a declared or generated contract is `Query<unknown>`.
@@ -280,7 +280,7 @@ unless a generated verification artifact supplies a known contract.
 ### 5.2 Declared result contract
 
 ```ts
-const query = sql<UserRow>`SELECT ...`;
+const query = sql.rows<UserRow>`SELECT ...`;
 ```
 
 means:
@@ -492,6 +492,12 @@ It should **not** own:
 - full dialect coercion logic;
 - universal result inference.
 
+The PV2 compiler implements this boundary: it depends on `@sqlbraid/core`, `@sqlbraid/template`, and TypeScript, not `@sqlbraid/ast` or `@sqlbraid/schema`. Ordinary checking has no schema-driven row/bind inference or dynamic-variant semantic proof.
+
+The canonical row contract is `sql.rows<T>`; bare `sql<T>` is unsupported. Explicit tags retain their runtime result kind without the transform, while bare `sql` remains `Query<unknown, "unknown">`. Guarded lowering preserves the original TypeScript type arguments and checks active branches through TypeScript control flow.
+
+CLI checks/builds are snapshot-independent. LSP hover exposes declared contracts; schema metadata is optional and used for completion, not as proof of a declared SQL result.
+
 ---
 
 ## 10. What happens to the existing SQL AST work
@@ -510,6 +516,8 @@ Migration plan:
 
 Deletion is preferred over maintaining a second partial SQL implementation indefinitely.
 
+PV2 leaves `packages/ast` and its remaining non-compiler consumers intact. The lexical-utility migration and AST/resolver removal belong to PV3.
+
 ---
 
 ## 11. Schema metadata after the pivot
@@ -524,7 +532,7 @@ Use schema metadata for:
 - optional contract generation;
 - migration/drift tooling where useful.
 
-Do not require schema snapshots as a prerequisite for every ordinary `sql<T>` query.
+Do not require schema snapshots as a prerequisite for every ordinary `sql.rows<T>` query.
 
 A developer who writes an explicit result contract should be able to develop offline without teaching SQLBraid the full schema semantics of every custom function/operator.
 
@@ -694,7 +702,7 @@ Goal: make the implementation match this product definition.
 
 ### Phase C — Result contracts and runtime validation
 
-- finalize `sql<T>` declared-contract semantics;
+- finalize `sql.rows<T>` declared-contract semantics;
 - expose ergonomic Standard Schema validation;
 - document driver decode/type-policy behavior;
 - make declared vs runtime-validated status visible.

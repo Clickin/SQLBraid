@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import type { Readable, Writable } from "node:stream";
 import { createLanguageService, type LanguageServiceOptions, type SqlBraidLanguageService } from "./index.js";
 
@@ -58,13 +57,13 @@ function writeMessage(output: Writable, message: unknown): void {
 }
 
 function uriPath(uri: string): string {
-  try { return new URL(uri).pathname; } catch { return uri; }
+  try { return fileURLToPath(uri); } catch { return uri; }
 }
 
 function notification(service: SqlBraidLanguageService, documents: ReadonlyMap<string, DocumentState>, output: Writable, uri: string): void {
   const document = documents.get(uri);
   if (!document) return;
-  const diagnostics = service.diagnostics(document.text, uri).map((diagnostic) => ({
+  const diagnostics = service.diagnostics(document.text, uriPath(uri)).map((diagnostic) => ({
     range: { start: positionAt(document.text, diagnostic.range.start), end: positionAt(document.text, diagnostic.range.end) },
     severity: diagnostic.severity === "error" ? 1 : 2,
     code: diagnostic.code,
@@ -179,5 +178,3 @@ export function startStdioLanguageServer(options: LanguageServiceOptions, stream
   return () => { stopped = true; streams.input.off("data", onData); };
 }
 
-const executable = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
-if (import.meta.url === executable) startStdioLanguageServer({ moduleSpecifier: "@sqlbraid/template", snapshot: { formatVersion: 1, dialect: "postgres", dialectVersion: "unknown", server: {}, namespaces: {}, types: {}, relations: {}, routines: {}, metadata: {} } });

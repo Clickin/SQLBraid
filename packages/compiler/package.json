@@ -6,9 +6,7 @@
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22.18.0" },
   "dependencies": {
-    "@sqlbraid/ast": "workspace:*",
     "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/schema": "workspace:*",
     "@sqlbraid/template": "workspace:*",
     "typescript": "5.9.3"
   },

@@ -20,7 +20,7 @@ export interface RenderedQuery {
   readonly bindingMap?: readonly { readonly placeholder: number; readonly interpolation?: number }[];
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
-  readonly resultKind?: QueryResultKind;
+  readonly resultKind: QueryResultKind;
 }
 
 export interface DialectLexicalProfile {
@@ -219,13 +219,11 @@ export interface Database {
 export type QueryRow<Q> = Q extends Query<infer Row, QueryResultKind> ? Row : never;
 export type QueryResult<Q> = readonly QueryRow<Q>[];
 
-export interface SqlTagLike {
-  (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, QueryResultKind>;
+export interface SqlTagLike<Kind extends QueryResultKind = QueryResultKind, Row = unknown> {
+  (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<Row, Kind>;
 }
 
-export interface SqlTag extends SqlTagLike {
-  (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "unknown">;
-  <Row>(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
+export interface SqlTag extends SqlTagLike<"unknown"> {
   rows: {
     <Row = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
   };

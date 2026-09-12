@@ -84,6 +84,13 @@ try {
   await writeFile(cliFile, 'import { sql as templateSql } from "@sqlbraid/template"; import { sql as postgresSql } from "@sqlbraid/postgres"; const queries = [templateSql`SELECT 1`, postgresSql`SELECT 1`]; void queries;\n');
   await run(join(consumer, "node_modules/.bin/sqlbraid"), ["check", "--file", cliFile], consumer);
 
+  const server = execFile(join(consumer, "node_modules/.bin/sqlbraid-language-server"), [], { cwd: consumer, timeout: 10_000 });
+  const initialize = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+  server.child.stdin.end(`Content-Length: ${Buffer.byteLength(initialize)}\r\n\r\n${initialize}`);
+  const { stdout: serverOutput } = await server;
+  const initialized = JSON.parse(serverOutput.slice(serverOutput.indexOf("\r\n\r\n") + 4));
+  if (initialized.id !== 1 || initialized.result?.capabilities?.hoverProvider !== true) throw new Error("Packed language server did not initialize.");
+
   const forbidden = [root, `${root}/packages`, "dist/packages"];
   const installedRoot = join(consumer, "node_modules/@sqlbraid");
   const installedPackages = await readdir(installedRoot, { withFileTypes: true });

@@ -5,7 +5,7 @@
   "files": ["dist"],
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22.18.0" },
-  "bin": { "sqlbraid-language-server": "./dist/server.js" },
+  "bin": { "sqlbraid-language-server": "./dist/cli.js" },
   "dependencies": {
     "@sqlbraid/compiler": "workspace:*",
     "@sqlbraid/schema": "workspace:*"

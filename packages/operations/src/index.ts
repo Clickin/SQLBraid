@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { lexSql, type SqlToken } from "@sqlbraid/ast";
-import { SQL_FRAGMENT, type Query, type QueryRow, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
+import { SQL_FRAGMENT, type Query, type QueryResultKind, type QueryRow, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
 
 export type StatementOperation = "read" | "write" | "transaction" | "session" | "unknown";
 
@@ -110,7 +110,7 @@ function valueFragment(fragment: FragmentLike): string {
   return `${fragment.dialectId}:${canonicalIr(fragment.ir, fragment.values)}`;
 }
 
-export function templateFamilyFingerprint(query: Query): string {
+export function templateFamilyFingerprint(query: Query<unknown, QueryResultKind>): string {
   return createHash("sha256").update(canonicalIr(query.ir)).digest("hex");
 }
 
@@ -118,7 +118,7 @@ export function templateFamilyFingerprintOf(ir: TemplateIr): string {
   return createHash("sha256").update(canonicalIr(ir)).digest("hex");
 }
 
-export function fingerprintQuery(query: Query): string {
+export function fingerprintQuery(query: Query<unknown, QueryResultKind>): string {
   return createHash("sha256").update(canonicalIr(query.ir, query.values)).digest("hex");
 }
 
@@ -167,7 +167,7 @@ export function classifySemantics(sqlText: string): QuerySemantics {
   return unknownSemantics(`unproven statement kind: ${first}`);
 }
 
-export function createManifest(query: Query, options: { readonly source?: string; readonly resultType?: string } = {}): QueryManifest {
+export function createManifest(query: Query<unknown, QueryResultKind>, options: { readonly source?: string; readonly resultType?: string } = {}): QueryManifest {
   const rendered = query.render();
   const semantics = classifySemantics(rendered.text);
   return {
@@ -179,7 +179,7 @@ export function createManifest(query: Query, options: { readonly source?: string
     locking: semantics.locking,
     sessionAffine: semantics.sessionAffine,
     reason: semantics.reason,
-    ...(rendered.resultKind ? { resultKind: rendered.resultKind } : {}),
+    resultKind: query.resultKind,
     ...(portableSource(options.source) ? { source: portableSource(options.source) } : {}),
     ...(options.resultType ? { resultType: options.resultType } : {}),
   };
@@ -189,7 +189,7 @@ export function createManifestFromEvidence(evidence: QueryManifestEvidence): Que
   return { readOnly: false, locking: true, sessionAffine: true, reason: "manifest supplied without semantic evidence", ...evidence, ...(portableSource(evidence.source) ? { source: portableSource(evidence.source) } : { source: undefined }) };
 }
 
-export async function validateRows<Q extends Query>(query: Q, rows: readonly QueryRow<Q>[], schema: StandardSchemaLike<QueryRow<Q>>): Promise<readonly QueryRow<Q>[]> {
+export async function validateRows<Q extends Query<unknown, QueryResultKind>>(query: Q, rows: readonly QueryRow<Q>[], schema: StandardSchemaLike<QueryRow<Q>>): Promise<readonly QueryRow<Q>[]> {
   const validated: QueryRow<Q>[] = [];
   for (const row of rows) {
     const result = await schema["~standard"].validate(row);

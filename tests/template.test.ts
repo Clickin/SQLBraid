@@ -67,7 +67,6 @@ test('fragment and join are explicit structural composition', () => {
 
 test('query tags expose declared result kinds', () => {
   type UserRow = { readonly id: number };
-  const typed: RowQuery<UserRow> = sql<UserRow>`SELECT id FROM users`;
   const rows: RowQuery<UserRow> = sql.rows<UserRow>`SELECT id FROM users`;
   const command: CommandQuery = sql.command`UPDATE users SET active = ${true}`;
   const call: CallQuery<UserRow> = sql.call<UserRow>`CALL refresh_users()`;

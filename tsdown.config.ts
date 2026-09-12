@@ -31,6 +31,6 @@ export default defineConfig([
   packageBuild("packages/postgres", { index: "src/index.ts", pg: "src/pg.ts" }),
   packageBuild("packages/mysql", { index: "src/index.ts", mysql2: "src/mysql2.ts" }),
   packageBuild("packages/sqlite", { index: "src/index.ts", "node-sqlite": "src/node-sqlite.ts" }),
-  packageBuild("packages/language-server", { index: "src/index.ts", server: "src/server.ts" }),
+  packageBuild("packages/language-server", { index: "src/index.ts", server: "src/server.ts", cli: "src/cli.ts" }),
   packageBuild("packages/cli", { index: "src/index.ts" }),
 ]);
