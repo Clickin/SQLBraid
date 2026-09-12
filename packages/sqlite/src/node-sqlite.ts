@@ -47,11 +47,8 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
       if (rendered.resultKind === "call") unsupportedCall();
       const statement = database.prepare(rendered.text);
-      const columns = rendered.resultKind === "command" ? [] : resultColumns(statement);
-      if (rendered.resultKind === "rows" && columns.length === 0) {
-        throw new Error("BRAID_RESULT_KIND: SQLite statement declared rows but native metadata has no result columns.");
-      }
-      if (rendered.resultKind === "rows" || (rendered.resultKind === "unknown" && columns.length > 0)) {
+      const columns = resultColumns(statement);
+      if (columns.length > 0) {
         const rows = statement.all(...rendered.values).map(plainRow);
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }

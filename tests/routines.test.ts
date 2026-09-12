@@ -6,7 +6,7 @@ import { sql } from '@sqlbraid/postgres';
 
 test('routine database call preserves output and result-set shape', async () => {
   const executor: QueryExecutor = {
-    async query<Row>() { return { rows: [] as readonly Row[] }; },
+    async query<Row>() { return { kind: 'rows', rows: [] as readonly Row[] }; },
     async call<Row>(rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
       assert.equal(rendered.text, 'CALL do_work($1)');
       return { output: { ok: true }, resultSets: [{ rows: [{ id: 1 }] as unknown as readonly Row[] }, { rows: 'unknown' }] };

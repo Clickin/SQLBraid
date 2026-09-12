@@ -9,9 +9,8 @@ import { test } from 'vitest';
 import ts from 'typescript';
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import type { RenderedQuery } from '@sqlbraid/core';
-import type { StandardSchemaLike } from '@sqlbraid/operations';
 import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource, sourcePosition } from '@sqlbraid/compiler';
-import { fingerprintQuery, templateFamilyFingerprint, validateRows, ResultValidationError } from '@sqlbraid/operations';
+import { fingerprintQuery, templateFamilyFingerprint } from '@sqlbraid/operations';
 import { createPgDatabase } from '@sqlbraid/postgres/pg';
 import { createPostgresInspector } from '@sqlbraid/postgres';
 import { createNodeSqliteDatabase } from '@sqlbraid/sqlite/node-sqlite';
@@ -66,15 +65,11 @@ test('structural inputs are captured and bounded', () => {
   assert.throws(() => limited`SELECT ${limited.join([limited.fragment`1`, limited.fragment`2`], limited.fragment`, `)}`.render(), hasCode('BRAID_STRUCTURE_LIMIT'));
 });
 
-test('operations preserve shape identity and Standard Schema envelopes', async () => {
+test('operations preserve shape identity', () => {
   const a = postgres`SELECT ${postgres.ident('id')} FROM users`;
   const b = postgres`SELECT ${postgres.ident('name')} FROM users`;
   assert.notEqual(fingerprintQuery(a), fingerprintQuery(b));
   assert.equal(templateFamilyFingerprint(a), templateFamilyFingerprint(b));
-  const schema = { '~standard': { version: 1, vendor: 'test', validate(value: unknown) { return { value: { ...(value as Record<string, unknown>), mapped: true } }; } } } as const satisfies StandardSchemaLike<unknown>;
-  assert.deepEqual(await validateRows(postgres`SELECT 1`, [{ id: 1 }], schema), [{ id: 1, mapped: true }]);
-  const failing = { '~standard': { version: 1, vendor: 'test', validate() { return { issues: ['bad'] }; } } } as const satisfies StandardSchemaLike<unknown>;
-  await assert.rejects(() => validateRows(postgres`SELECT 1`, [{ id: 1 }], failing), ResultValidationError);
 });
 
 test('compiler discovers symbols, checks downstream row types, and lowers guarded evaluation', () => {
@@ -370,7 +365,7 @@ test('PostgreSQL inspector records relation and routine metadata', async () => {
 test('prepared queries reject shape drift and streams honor adapter capability', async () => {
   let second = false;
   const db = createDatabase({
-    async query<Row>(rendered: RenderedQuery) { return { rows: [{ text: rendered.text }] as unknown as readonly Row[] }; },
+    async query<Row>(rendered: RenderedQuery) { return { kind: 'rows' as const, rows: [{ text: rendered.text }] as unknown as readonly Row[] }; },
     async *stream<Row>(rendered: RenderedQuery): AsyncIterable<Row> { yield { text: rendered.text } as unknown as Row; },
   });
   const prepared = db.prepare('users', () => second ? postgres.rows`SELECT name` : postgres.rows`SELECT id`);

@@ -293,7 +293,7 @@ The TypeScript compiler may validate the TypeScript shape itself, but SQLBraid m
 
 ### 5.3 Runtime validation
 
-SQLBraid already supports Standard Schema-style validation infrastructure. v1 should expose a simple path for attaching a runtime row validator to a query/execution flow.
+SQLBraid supports optional Standard Schema validation through `{ schema }` on runtime row APIs. Protocol types live in `@sqlbraid/core`; runtime validation returns the validator's output and is distinct from database verification.
 
 Runtime validation is valuable when:
 
@@ -505,11 +505,11 @@ CLI checks/builds are snapshot-independent. LSP hover exposes declared contracts
 PV3 removed the broad SQL AST package, semantic resolver, and their abandoned tests without creating a replacement SQL lexer.
 
 - `@sqlbraid/template` retains its independent Braid scanner for directive recognition and interpolation safety in dialect-specific quoted/comment regions.
-- `@sqlbraid/operations` retains fingerprints, declared result kinds, optional source/result-type metadata, and existing validation helpers. Its provisional manifest does not infer operation, read-only, locking, or session-affinity semantics.
-- The `node:sqlite` adapter uses explicit query kinds and required native `statement.columns()` metadata. Unknown queries use column presence; explicit rows reject statements with no result columns; commands use the command path; calls are unsupported. Row execution rejects duplicate result labels.
+- `@sqlbraid/operations` retains fingerprints, declared result kinds, and optional source/result-type metadata. Its provisional manifest does not infer operation, read-only, locking, or session-affinity semantics. Runtime owns validation; core owns the dependency-neutral Standard Schema protocol.
+- All adapters report actual row/command kinds, and runtime checks them against explicit declarations. The `node:sqlite` adapter always uses required native `statement.columns()` metadata to select the execution path, including DML `RETURNING`. Calls are unsupported. Row execution rejects duplicate result labels.
 - Schema inspection remains available for completion and drift, independently of ordinary compiler checks.
 
-Deletion is preferred over maintaining a second partial SQL implementation. Runtime validation APIs, database verification, and the final manifest format remain later work.
+Deletion is preferred over maintaining a second partial SQL implementation. PV4 adds discriminated execution results and optional ordered sync/async validation on row APIs, including prepared and transaction-scoped handles. Generic execute/batch exclude routine calls. Database verification and the final manifest format remain later work.
 
 ---
 

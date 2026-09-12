@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { SQL_FRAGMENT, type Query, type QueryResultKind, type QueryRow, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
+import { SQL_FRAGMENT, type Query, type QueryResultKind, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
 
 export interface QueryManifest {
   readonly fingerprint: string;
@@ -17,35 +17,6 @@ export interface QueryManifestEvidence {
   readonly resultKind: QueryResultKind;
   readonly source?: string;
   readonly resultType?: string;
-}
-
-export interface StandardSchemaSuccess<T> {
-  readonly value: T;
-  readonly issues?: undefined;
-}
-
-export interface StandardSchemaFailure {
-  readonly issues: readonly unknown[];
-  readonly value?: undefined;
-}
-
-export interface StandardSchemaLike<T> {
-  readonly "~standard": {
-    readonly version: 1;
-    readonly vendor: string;
-    readonly types?: { readonly input: unknown; readonly output: T };
-    validate(value: unknown): StandardSchemaSuccess<T> | StandardSchemaFailure | Promise<StandardSchemaSuccess<T> | StandardSchemaFailure>;
-  };
-}
-
-export class ResultValidationError extends Error {
-  readonly issues: readonly unknown[];
-
-  constructor(issues: readonly unknown[]) {
-    super("Database result validation failed.");
-    this.name = "ResultValidationError";
-    this.issues = issues;
-  }
 }
 
 interface FragmentLike {
@@ -133,12 +104,3 @@ export function createManifestFromEvidence(evidence: QueryManifestEvidence): Que
   };
 }
 
-export async function validateRows<Q extends Query<unknown, QueryResultKind>>(query: Q, rows: readonly QueryRow<Q>[], schema: StandardSchemaLike<QueryRow<Q>>): Promise<readonly QueryRow<Q>[]> {
-  const validated: QueryRow<Q>[] = [];
-  for (const row of rows) {
-    const result = await schema["~standard"].validate(row);
-    if (result.issues !== undefined) throw new ResultValidationError(result.issues);
-    validated.push(result.value);
-  }
-  return validated;
-}

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { StandardSchemaLike } from '@sqlbraid/operations';
-import { createManifest, createManifestFromEvidence, fingerprintQuery, validateRows, ResultValidationError } from '@sqlbraid/operations';
+import { createManifest, createManifestFromEvidence, fingerprintQuery } from '@sqlbraid/operations';
 import { sql } from '@sqlbraid/postgres';
 
 test('manifest carries portable identity and declared result contract without SQL inference', () => {
@@ -44,9 +43,3 @@ test('evidence manifest omits non-portable source paths', () => {
   });
 });
 
-test('standard schema validation returns normalized rows or issues', async () => {
-  const query = sql`SELECT 1`;
-  const schema = { '~standard': { version: 1, vendor: 'test', validate(value: unknown) { return typeof value === 'object' ? { value } : { issues: ['not-object'] }; } } } as const satisfies StandardSchemaLike<unknown>;
-  assert.deepEqual(await validateRows(query, [{ id: 1 }], schema), [{ id: 1 }]);
-  await assert.rejects(() => validateRows(query, [1], schema), ResultValidationError);
-});

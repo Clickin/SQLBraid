@@ -166,11 +166,55 @@ export interface CommandResult {
   readonly [key: string]: unknown;
 }
 
-export interface QueryExecutionResult<Row = unknown> {
+export interface RowsExecutionResult<Row = unknown> {
+  readonly kind: "rows";
   readonly rows: readonly Row[];
   readonly rowCount?: number;
-  readonly kind?: "rows" | "command";
-  readonly command?: CommandResult;
+  readonly command?: never;
+}
+
+export interface CommandExecutionResult {
+  readonly kind: "command";
+  readonly rows: readonly [];
+  readonly rowCount?: number;
+  readonly command: CommandResult;
+}
+
+export type QueryExecutionResult<Row = unknown> =
+  | RowsExecutionResult<Row>
+  | CommandExecutionResult;
+
+export interface StandardSchemaSuccess<T> {
+  readonly value: T;
+  readonly issues?: undefined;
+}
+
+export interface StandardSchemaFailure {
+  readonly issues: readonly unknown[];
+  readonly value?: undefined;
+}
+
+export interface StandardSchemaLike<T> {
+  readonly "~standard": {
+    readonly version: 1;
+    readonly vendor: string;
+    readonly types?: {
+      readonly input: unknown;
+      readonly output: T;
+    };
+    validate(value: unknown):
+      | StandardSchemaSuccess<T>
+      | StandardSchemaFailure
+      | Promise<StandardSchemaSuccess<T> | StandardSchemaFailure>;
+  };
+}
+
+export interface RowValidationOptions<Row> {
+  readonly schema?: StandardSchemaLike<NoInfer<Row>>;
+}
+
+export interface StreamOptions<Row> extends RowValidationOptions<Row> {
+  readonly signal?: AbortSignal;
 }
 
 export interface RoutineResultSet<Row = unknown> {
@@ -198,21 +242,35 @@ export interface QueryExecutor {
 
 export interface PreparedQuery<Row> {
   readonly name: string;
-  execute(): Promise<QueryExecutionResult<Row>>;
-  all(): Promise<readonly Row[]>;
-  one(): Promise<Row>;
-  maybeOne(): Promise<Row | undefined>;
+  execute(): Promise<RowsExecutionResult<Row>>;
+  all(options?: RowValidationOptions<Row>): Promise<readonly Row[]>;
+  one(options?: RowValidationOptions<Row>): Promise<Row>;
+  maybeOne(options?: RowValidationOptions<Row>): Promise<Row | undefined>;
 }
 
+export type ExecutableQuery =
+  | RowQuery<unknown>
+  | Query<unknown, "command">
+  | Query<unknown, "unknown">;
+
+export type ExecutionResultOf<Q> =
+  Q extends RowQuery<infer Row>
+    ? RowsExecutionResult<Row>
+    : Q extends Query<unknown, "command">
+      ? CommandExecutionResult
+      : Q extends Query<infer Row, "unknown">
+        ? QueryExecutionResult<Row>
+        : never;
+
 export interface Database {
-  all<Row>(query: RowQuery<Row>): Promise<readonly Row[]>;
-  one<Row>(query: RowQuery<Row>): Promise<Row>;
-  maybeOne<Row>(query: RowQuery<Row>): Promise<Row | undefined>;
-  execute<Result, Kind extends QueryResultKind>(query: Query<Result, Kind>): Promise<QueryExecutionResult<Result>>;
+  all<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<readonly Row[]>;
+  one<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row>;
+  maybeOne<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row | undefined>;
+  execute<Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>>;
   call<Row>(query: CallQuery<Row>): Promise<RoutineCallResult<Row>>;
-  batch<const Queries extends readonly Query<unknown, QueryResultKind>[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: QueryExecutionResult<QueryRow<Queries[K]>> }>;
+  batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }>;
   prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row>;
-  stream<Row>(query: RowQuery<Row>, options?: { readonly signal?: AbortSignal }): AsyncIterable<Row>;
+  stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row>;
   transaction<T>(callback: (database: Database) => Promise<T>): Promise<T>;
 }
 

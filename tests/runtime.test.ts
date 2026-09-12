@@ -8,7 +8,7 @@ function executorFor(rows: readonly unknown[]): QueryExecutor & { readonly calls
   const calls: (RenderedQuery | string)[] = [];
   return {
     calls,
-    async query<Row>(rendered: RenderedQuery) { calls.push(rendered); return { rows: rows as readonly Row[] }; },
+    async query<Row>(rendered: RenderedQuery) { calls.push(rendered); return { kind: 'rows' as const, rows: rows as readonly Row[] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -19,7 +19,7 @@ test('database wrappers share ownership for the same executor object', async () 
   const calls: string[] = [];
   const { promise: gate, resolve: release } = Promise.withResolvers<void>();
   const executor = {
-    async query<Row>(rendered: RenderedQuery) { calls.push(rendered.text); return { rows: [] as readonly Row[] }; },
+    async query<Row>(rendered: RenderedQuery) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -60,7 +60,7 @@ test('same-tick root transactions serialize their executor ownership', async () 
   const calls: string[] = [];
   const { promise: gate, resolve: release } = Promise.withResolvers<void>();
   const db = createDatabase({
-    async query(rendered) { calls.push(rendered.text); return { rows: [] }; },
+    async query(rendered) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -79,7 +79,7 @@ test('same-tick root transactions serialize their executor ownership', async () 
 test('root handle use from its transaction callback fails before queueing', async () => {
   const calls: string[] = [];
   const db = createDatabase({
-    async query(rendered) { calls.push(rendered.text); return { rows: [] }; },
+    async query(rendered) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -91,7 +91,7 @@ test('root handle use from its transaction callback fails before queueing', asyn
 test('nested rollback releases its savepoint and preserves the parent scope', async () => {
   const calls: string[] = [];
   const db = createDatabase({
-    async query(rendered) { calls.push(rendered.text); return { rows: [] }; },
+    async query(rendered) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -112,7 +112,7 @@ test('transaction cleanup failure is not reported as success', async () => {
   const application = new Error('statement failed');
   const cleanup = new Error('rollback failed');
   const db = createDatabase({
-    async query() { return { rows: [] }; },
+    async query() { return { kind: 'rows' as const, rows: [] }; },
     async begin() {},
     async commit() {},
     async rollback() { throw cleanup; },
@@ -128,7 +128,7 @@ test('poisoned ownership rejects every wrapper sharing the physical resource', a
   const ownershipKey = {};
   const makeExecutor = () => ({
     ownershipKey,
-    async query<Row>() { return { rows: [] as readonly Row[] }; },
+    async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() {},
     async commit() {},
     async rollback() { throw new Error('rollback failed'); },
@@ -142,7 +142,7 @@ test('poisoned ownership rejects every wrapper sharing the physical resource', a
 test('successful transaction cleanup leaves physical ownership reusable', async () => {
   const calls: string[] = [];
   const db = createDatabase({
-    async query<Row>(rendered: RenderedQuery) { calls.push(rendered.text); return { rows: [] as readonly Row[] }; },
+    async query<Row>(rendered: RenderedQuery) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -156,7 +156,7 @@ test('successful transaction cleanup leaves physical ownership reusable', async 
 
 test('nested rollback and release cleanup failures poison the parent ownership', async () => {
   const rollbackFailure = createDatabase({
-    async query<Row>() { return { rows: [] as readonly Row[] }; },
+    async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() {},
     async commit() {},
     async rollback() {},
@@ -168,7 +168,7 @@ test('nested rollback and release cleanup failures poison the parent ownership',
   await assert.rejects(() => rollbackFailure.execute(sql`SELECT blocked`), (error) => error instanceof DatabaseScopeError && error.code === 'BRAID_CONNECTION_POISONED');
 
   const releaseFailure = createDatabase({
-    async query<Row>() { return { rows: [] as readonly Row[] }; },
+    async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() {},
     async commit() {},
     async rollback() {},
@@ -182,7 +182,7 @@ test('nested rollback and release cleanup failures poison the parent ownership',
 
 test('begin and commit failures conservatively poison the physical ownership', async () => {
   const beginFailure = createDatabase({
-    async query<Row>() { return { rows: [] as readonly Row[] }; },
+    async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() { throw new Error('begin uncertain'); },
     async commit() {},
     async rollback() {},
@@ -191,7 +191,7 @@ test('begin and commit failures conservatively poison the physical ownership', a
   await assert.rejects(() => beginFailure.execute(sql`SELECT blocked`), (error) => error instanceof DatabaseScopeError && error.code === 'BRAID_CONNECTION_POISONED');
 
   const commitFailure = createDatabase({
-    async query<Row>() { return { rows: [] as readonly Row[] }; },
+    async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() {},
     async commit() { throw new Error('commit uncertain'); },
     async rollback() { throw new Error('rollback must not recover commit uncertainty'); },
@@ -203,7 +203,7 @@ test('begin and commit failures conservatively poison the physical ownership', a
 test('transaction context does not poison later detached root work', async () => {
   const calls: string[] = [];
   const db = createDatabase({
-    async query(rendered) { calls.push(rendered.text); return { rows: [] }; },
+    async query(rendered) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },

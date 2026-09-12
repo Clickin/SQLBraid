@@ -188,7 +188,39 @@ The provisional `sqlbraid manifest` output records fingerprints, declared result
 
 ### Runtime validation
 
-For stronger runtime guarantees, SQLBraid can integrate with Standard Schema-compatible validators. This is useful when database output crosses a trust boundary or when custom database types/functions make static verification impractical.
+Pass a Standard Schema-compatible validator to a row API. No particular validator library is required:
+
+```ts
+import type { StandardSchemaLike } from "@sqlbraid/core";
+
+interface UserRow { id: number; name: string }
+
+const UserSchema = {
+  "~standard": {
+    version: 1,
+    vendor: "example",
+    validate(value: unknown) {
+      if (
+        typeof value !== "object" || value === null ||
+        !("id" in value) || typeof value.id !== "number" ||
+        !("name" in value) || typeof value.name !== "string"
+      ) return { issues: [{ message: "Expected a user row" }] };
+      return { value: { id: value.id, name: value.name.trim() } };
+    },
+  },
+} satisfies StandardSchemaLike<UserRow>;
+
+const query = sql.rows<UserRow>`SELECT id, name FROM users`;
+const users = await db.all(query, { schema: UserSchema });
+```
+
+`all`, `one`, `maybeOne`, and `stream` accept `{ schema }`, including transaction-scoped handles; prepared queries accept it on `all`, `one`, and `maybeOne`. Schema output must be compatible with the declared row type. Both synchronous and asynchronous validators are supported, and their transformed output is returned.
+
+Rows are validated once, in order. `one` and `maybeOne` check cardinality before invoking the validator. Streams validate immediately before each yield and stop at the first failure without buffering. Omitting `schema` leaves rows unvalidated. Low-level `execute` does not validate rows.
+
+Validation issues produce `DatabaseResultValidationError` from `@sqlbraid/runtime`, with code `BRAID_RESULT_VALIDATION`, `issues`, and a zero-based `rowIndex`. Its message contains no row or bound values; validator-supplied issues may contain sensitive data. Validator exceptions propagate unchanged, and malformed protocol results throw `TypeError`.
+
+`sql.rows<Row>` is a **declared TypeScript contract**; `{ schema }` supplies **runtime validation**, not database verification. The future `sqlbraid verify` workflow supplies database evidence.
 
 ### Database verification
 
@@ -230,7 +262,7 @@ Each dialect owns the parts that actually differ at the driver boundary:
 
 The goal is to keep dialect support thin. Adding a database should not require teaching the compiler every function and operator in that database.
 
-The `node:sqlite` adapter requires native `statement.columns()` metadata. Explicit `sql.rows` uses row execution and rejects statements without result columns; `sql.command` uses command execution; bare `sql` selects the path from column metadata. Routine calls are unsupported, and row execution rejects duplicate result labels.
+The `node:sqlite` adapter requires native `statement.columns()` metadata and always selects row or command execution from actual column presence, including DML `RETURNING`. PostgreSQL and MySQL likewise report actual driver result kinds. The runtime enforces declarations consistently across adapters. SQLite routine calls are unsupported, and row execution rejects duplicate result labels.
 
 ---
 
@@ -244,6 +276,12 @@ const row = await db.one(query);
 const maybe = await db.maybeOne(query);
 const result = await db.execute(command);
 ```
+
+Execution results are discriminated by required `kind`: `"rows"` has typed `rows`; `"command"` has empty `rows` and a `command` payload. `execute(sql.rows<Row>\`...\`)` returns a row result, `execute(sql.command\`...\`)` returns a command result, and bare `sql` returns their unknown-row union.
+
+A declared/actual mismatch throws `DatabaseResultKindError` with code `BRAID_RESULT_KIND`, `declaredKind`, and `actualKind`, without bound values in its message. This check happens **after execution**; it does not undo database side effects. Use a transaction when a mismatch must roll back writes.
+
+`batch` accepts rows, commands, and unknown queries, enforces each declaration, and preserves each item's result type. Routine calls use `db.call()`, never generic `execute` or `batch`. Prepared queries remain row-only and retain their rendered-shape lock.
 
 Transactions use a transaction-scoped database handle:
 
@@ -266,13 +304,13 @@ The workspace currently contains:
 | --- | --- |
 | `@sqlbraid/core` | Public contracts and shared runtime types |
 | `@sqlbraid/template` | Tagged templates, directives, rendering, structural helpers |
-| `@sqlbraid/runtime` | Database execution, cardinality, transactions, prepared/streaming seams |
+| `@sqlbraid/runtime` | Database execution, result-kind enforcement, row validation, cardinality, transactions, prepared/streaming seams |
 | `@sqlbraid/postgres` | PostgreSQL dialect, codecs, inspector, `pg` adapter |
 | `@sqlbraid/mysql` | MySQL dialect, codecs, inspector, `mysql2` adapter |
 | `@sqlbraid/sqlite` | SQLite dialect, inspector, `node:sqlite` adapter |
 | `@sqlbraid/compiler` | TypeScript source discovery and guarded-template transform |
 | `@sqlbraid/schema` | Metadata/snapshot structures used by tooling and verification |
-| `@sqlbraid/operations` | Validation, fingerprints, provisional declaration manifests |
+| `@sqlbraid/operations` | Fingerprints and provisional declaration manifests |
 | `@sqlbraid/cli` | `sqlbraid` command-line tools |
 | `@sqlbraid/language-server` | Editor/LSP integration |
 

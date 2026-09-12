@@ -13,7 +13,7 @@ SQLBraid is a **SQL-first data-access toolkit for TypeScript**.
 The product is built around this developer experience:
 
 ```ts
-const query = sql<UserRow>`
+const query = sql.rows<UserRow>`
   SELECT id, name
   FROM users
   /*@braid where*/
@@ -81,10 +81,10 @@ PV3 removed the broad SQL AST package and semantic resolver. Keep Braid lexical 
 The v1 typed authoring path is an explicit result contract:
 
 ```ts
-sql<UserRow>`SELECT ...`;
+sql.rows<UserRow>`SELECT ...`;
 ```
 
-Do not require SQLBraid to infer every custom function/operator result before users can write SQLBraid external reference.
+Do not require SQLBraid to infer every custom function/operator result before users can declare a query's row contract.
 
 ### 4.2 Untyped means unknown
 

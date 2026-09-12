@@ -4,6 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "vitest";
+import type { StandardSchemaLike } from "@sqlbraid/core";
+import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { sql } from "@sqlbraid/sqlite";
 import { runW01 } from "../w01.js";
@@ -42,9 +44,14 @@ test("SQLite result kinds follow native columns metadata", async () => {
     assert.equal(explicitRows.kind, "rows");
     assert.deepEqual(explicitRows.rows, [{ id: 1, name: "Ada" }]);
 
+    const commandAsRows = await db.execute(sql`UPDATE users SET name = 'Grace' WHERE id = 1`);
+    assert.equal(commandAsRows.kind, "command");
+    assert.deepEqual(commandAsRows.rows, []);
+
     const explicitCommand = await db.execute(sql.command`UPDATE users SET name = 'Grace' WHERE id = 1`);
     assert.equal(explicitCommand.kind, "command");
     assert.equal(explicitCommand.rowCount, 1);
+    assert.deepEqual(explicitCommand.rows, []);
 
     const unknownRows = await db.execute(sql`SELECT name FROM users`);
     assert.equal(unknownRows.kind, "rows");
@@ -53,12 +60,46 @@ test("SQLite result kinds follow native columns metadata", async () => {
     const unknownCommand = await db.execute(sql`DELETE FROM users WHERE id = 1`);
     assert.equal(unknownCommand.kind, "command");
     assert.equal(unknownCommand.rowCount, 1);
+    assert.deepEqual(unknownCommand.rows, []);
 
-    await assert.rejects(() => db.execute(sql.rows`DELETE FROM users`), /BRAID_RESULT_KIND/);
+    const returning = await db.execute(sql.rows`INSERT INTO users (name) VALUES ('Bob') RETURNING id`);
+    assert.equal(returning.kind, "rows");
+    assert.deepEqual(returning.rows, [{ id: 1 }]);
+
+    await assert.rejects(
+      () => db.execute(sql.command`SELECT name FROM users`),
+      (error) => error instanceof DatabaseResultKindError
+        && error.code === "BRAID_RESULT_KIND"
+        && error.declaredKind === "command"
+        && error.actualKind === "rows",
+    );
+
+    await assert.rejects(
+      () => db.execute(sql.rows`DELETE FROM users`),
+      (error) => error instanceof DatabaseResultKindError
+        && error.code === "BRAID_RESULT_KIND"
+        && error.declaredKind === "rows"
+        && error.actualKind === "command",
+    );
     await assert.rejects(() => db.call(sql.call`CALL unsupported()`), /BRAID_CALL_UNSUPPORTED/);
-    await assert.rejects(() => db.execute(sql.call`SELECT 1`), /BRAID_CALL_UNSUPPORTED/);
     await assert.rejects(() => db.execute(sql`SELECT 1 AS duplicate, 2 AS duplicate`), /BRAID_RESULT_COLUMNS/);
     await assert.rejects(() => db.execute(sql.rows`SELECT 1 AS "", 2 AS ""`), /BRAID_RESULT_COLUMNS/);
+
+    native.exec("INSERT INTO users (id, name) VALUES (1, 'Grace')");
+    const schema: StandardSchemaLike<{ readonly name: string }> = {
+      "~standard": {
+        version: 1,
+        vendor: "sqlbraid-tests",
+        validate(value) {
+          const row = value as { readonly name: string };
+          return { value: { name: row.name.toUpperCase() } };
+        },
+      },
+    };
+    assert.deepEqual(
+      await db.all(sql.rows<{ readonly name: string }>`SELECT name FROM users WHERE id = 1`, { schema }),
+      [{ name: "GRACE" }],
+    );
   } finally {
     native.close();
   }

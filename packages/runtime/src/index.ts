@@ -1,5 +1,23 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { CallQuery, Database, PreparedQuery, Query, QueryExecutionResult, QueryExecutor, QueryResultKind, QueryRow, RoutineCallResult, RowQuery } from "@sqlbraid/core";
+import type {
+  CallQuery,
+  Database,
+  ExecutableQuery,
+  ExecutionResultOf,
+  PreparedQuery,
+  Query,
+  QueryExecutionResult,
+  QueryExecutor,
+  QueryResultKind,
+  QueryRow,
+  RoutineCallResult,
+  RowQuery,
+  RowValidationOptions,
+  StandardSchemaFailure,
+  StandardSchemaLike,
+  StandardSchemaSuccess,
+  StreamOptions,
+} from "@sqlbraid/core";
 
 export class DatabaseCardinalityError extends Error {
   readonly expected: "one" | "maybeOne";
@@ -24,12 +42,29 @@ export class DatabaseScopeError extends Error {
   }
 }
 
-export class DatabaseResultError extends Error {
+export class DatabaseResultKindError extends Error {
   readonly code = "BRAID_RESULT_KIND";
+  readonly declaredKind: QueryResultKind;
+  readonly actualKind: "rows" | "command";
 
-  constructor(message: string) {
-    super(message);
-    this.name = "DatabaseResultError";
+  constructor(declaredKind: QueryResultKind, actualKind: "rows" | "command") {
+    super(`Declared query result kind "${declaredKind}" did not match actual result kind "${actualKind}".`);
+    this.name = "DatabaseResultKindError";
+    this.declaredKind = declaredKind;
+    this.actualKind = actualKind;
+  }
+}
+
+export class DatabaseResultValidationError extends Error {
+  readonly code = "BRAID_RESULT_VALIDATION";
+  readonly issues: readonly unknown[];
+  readonly rowIndex?: number;
+
+  constructor(issues: readonly unknown[], rowIndex?: number) {
+    super("Database result validation failed.");
+    this.name = "DatabaseResultValidationError";
+    this.issues = issues;
+    this.rowIndex = rowIndex;
   }
 }
 
@@ -93,6 +128,84 @@ function acquireRoot(state: ScopeState): Promise<() => void> {
   });
 }
 
+function malformedExecutionResult(): never {
+  throw new TypeError("Executor returned a malformed query execution result.");
+}
+
+function assertExecutableQuery(query: Query<unknown, QueryResultKind>): asserts query is ExecutableQuery {
+  if (query.resultKind === "call") throw new TypeError("Call queries must be executed with database.call().");
+}
+
+function assertRowsQuery(query: Query<unknown, QueryResultKind>): asserts query is RowQuery<unknown> {
+  if (query.resultKind === "call") throw new TypeError("Call queries must be executed with database.call().");
+  if (query.resultKind === "command") throw new DatabaseResultKindError("command", "rows");
+}
+
+function standardSchemaFor<Row>(schema: StandardSchemaLike<Row> | undefined): StandardSchemaLike<Row>["~standard"] | undefined {
+  if (schema === undefined) return undefined;
+  const standard = schema["~standard"];
+  if (
+    standard === null
+    || typeof standard !== "object"
+    || standard.version !== 1
+    || typeof standard.vendor !== "string"
+    || typeof standard.validate !== "function"
+  ) {
+    throw new TypeError("Standard Schema validator is malformed.");
+  }
+  return standard;
+}
+
+function isStandardSchemaSuccess<T>(result: unknown): result is StandardSchemaSuccess<T> {
+  if (result === null || typeof result !== "object") return false;
+  const candidate = result as { readonly value?: unknown; readonly issues?: unknown };
+  return "value" in candidate && candidate.issues === undefined;
+}
+
+function isStandardSchemaFailure(result: unknown): result is StandardSchemaFailure {
+  if (result === null || typeof result !== "object") return false;
+  const candidate = result as { readonly value?: unknown; readonly issues?: unknown };
+  return Array.isArray(candidate.issues) && (!("value" in candidate) || candidate.value === undefined);
+}
+
+function assertStandardSchemaResult(result: unknown): asserts result is StandardSchemaSuccess<unknown> | StandardSchemaFailure {
+  if (!isStandardSchemaSuccess(result) && !isStandardSchemaFailure(result)) {
+    throw new TypeError("Standard Schema validator returned a malformed result.");
+  }
+}
+
+async function validateRows<Row>(rows: readonly Row[], schema: StandardSchemaLike<Row> | undefined): Promise<readonly Row[]> {
+  const standard = standardSchemaFor(schema);
+  if (standard === undefined) return rows;
+  const validated: Row[] = [];
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    validated.push(await validateRow(standard, rows[rowIndex], rowIndex));
+  }
+  return validated;
+}
+
+async function validateRow<Row>(standard: StandardSchemaLike<Row>["~standard"], row: Row, rowIndex: number): Promise<Row> {
+  const result = await standard.validate(row);
+  assertStandardSchemaResult(result);
+  if (isStandardSchemaFailure(result)) throw new DatabaseResultValidationError(result.issues, rowIndex);
+  return result.value;
+}
+
+function assertExecutionResult<Row>(query: Query<unknown, QueryResultKind>, result: QueryExecutionResult<Row>): QueryExecutionResult<Row> {
+  if (result === null || typeof result !== "object" || (result.kind !== "rows" && result.kind !== "command") || !Array.isArray(result.rows)) {
+    malformedExecutionResult();
+  }
+  if (result.kind === "rows") {
+    if ("command" in result && result.command !== undefined) malformedExecutionResult();
+  } else if (result.rows.length !== 0 || !result.command || typeof result.command !== "object" || Array.isArray(result.command)) {
+    malformedExecutionResult();
+  }
+  if (query.resultKind !== "unknown" && query.resultKind !== result.kind) {
+    throw new DatabaseResultKindError(query.resultKind, result.kind);
+  }
+  return result;
+}
+
 export function createDatabase(executor: QueryExecutor): Database {
   return createScopedDatabase(executor, scopeStateFor(executor), { transaction: false, preparedNames: new Set<string>() });
 }
@@ -107,40 +220,48 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
     assertHealthy(state);
     return options.transaction ? Promise.resolve(undefined) : acquireRoot(state);
   };
-
+  const executeOne = async <Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>> => {
+    assertExecutableQuery(query);
+    const result = await executor.query<QueryRow<Q>>(query.render());
+    return assertExecutionResult(query, result) as ExecutionResultOf<Q>;
+  };
   const database: ScopedDatabase = {
-    async execute<Result, Kind extends QueryResultKind>(query: Query<Result, Kind>): Promise<QueryExecutionResult<Result>> {
+    async execute<Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>> {
+      assertExecutableQuery(query);
       const release = await acquireForUse();
-      try { return await executor.query<Result>(query.render()); } finally { release?.(); }
+      try { return await executeOne(query); } finally { release?.(); }
     },
     async call<Row>(query: CallQuery<Row>): Promise<RoutineCallResult<Row>> {
+      if (query.resultKind !== "call") throw new TypeError("Only call queries may be executed with database.call().");
       const release = await acquireForUse();
       try {
         if (!executor.call) throw new Error("Executor does not support routine calls.");
         return await executor.call<Row>(query.render());
       } finally { release?.(); }
     },
-    async all<Row>(query: RowQuery<Row>): Promise<readonly Row[]> {
-      const result = await database.execute<Row, "rows">(query);
-      if (result.kind === "command" || result.command !== undefined) throw new DatabaseResultError("A command result cannot be read as rows.");
-      return result.rows;
+    async all<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<readonly Row[]> {
+      return validateRows((await database.execute(query)).rows, options?.schema);
     },
-    async one<Row>(query: RowQuery<Row>): Promise<Row> {
-      const rows = await database.all(query);
+    async one<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row> {
+      const rows = (await database.execute(query)).rows;
       if (rows.length !== 1) throw new DatabaseCardinalityError("one", rows.length);
-      return rows[0];
+      const standard = standardSchemaFor(options?.schema);
+      return standard === undefined ? rows[0] : validateRow(standard, rows[0], 0);
     },
-    async maybeOne<Row>(query: RowQuery<Row>): Promise<Row | undefined> {
-      const rows = await database.all(query);
+    async maybeOne<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row | undefined> {
+      const rows = (await database.execute(query)).rows;
       if (rows.length > 1) throw new DatabaseCardinalityError("maybeOne", rows.length);
-      return rows[0];
+      if (rows.length === 0) return undefined;
+      const standard = standardSchemaFor(options?.schema);
+      return standard === undefined ? rows[0] : validateRow(standard, rows[0], 0);
     },
-    async batch<const Queries extends readonly Query<unknown, QueryResultKind>[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: QueryExecutionResult<QueryRow<Queries[K]>> }> {
+    async batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }> {
+      for (const query of queries) assertExecutableQuery(query);
       const release = await acquireForUse();
       try {
         const results: QueryExecutionResult<unknown>[] = [];
-        for (const query of queries) results.push(await executor.query<unknown>(query.render()));
-        return results as { readonly [K in keyof Queries]: QueryExecutionResult<QueryRow<Queries[K]>> };
+        for (const query of queries) results.push(await executeOne(query));
+        return results as { readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> };
       } finally { release?.(); }
     },
     prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row> {
@@ -159,14 +280,15 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
       return {
         name,
         execute: async () => database.execute(current()),
-        all: async () => database.all(current()),
-        one: async () => database.one(current()),
-        maybeOne: async () => database.maybeOne(current()),
+        all: async (validationOptions?: RowValidationOptions<Row>) => database.all(current(), validationOptions),
+        one: async (validationOptions?: RowValidationOptions<Row>) => database.one(current(), validationOptions),
+        maybeOne: async (validationOptions?: RowValidationOptions<Row>) => database.maybeOne(current(), validationOptions),
       };
     },
-    stream<Row>(query: RowQuery<Row>, options: { readonly signal?: AbortSignal } = {}): AsyncIterable<Row> {
+    stream<Row>(query: RowQuery<Row>, options: StreamOptions<Row> = {}): AsyncIterable<Row> {
       assertOpen();
       assertHealthy(state);
+      assertRowsQuery(query);
       const streamExecutor = executor.stream;
       if (!streamExecutor) throw new Error("BRAID_STREAM_UNSUPPORTED: this adapter does not expose a streaming protocol.");
       return (async function* (): AsyncGenerator<Row> {
@@ -174,9 +296,14 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
         try {
           const rendered = query.render();
           const source = streamExecutor<Row>(rendered, options.signal);
+          const standard = standardSchemaFor(options.schema);
+          let rowIndex = 0;
           for await (const row of source) {
             if (options.signal?.aborted) throw options.signal.reason ?? new Error("Stream aborted.");
-            yield row;
+            const validated = standard === undefined ? row : await validateRow(standard, row, rowIndex);
+            if (options.signal?.aborted) throw options.signal.reason ?? new Error("Stream aborted.");
+            yield validated;
+            rowIndex += 1;
           }
         } finally { release?.(); }
       })();
