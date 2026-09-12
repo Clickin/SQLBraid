@@ -1,6 +1,6 @@
-# SQLBraid — Full v1 Implementation Plan
+# SQLBraid v1 Product Plan
 
-> Status: implementation plan
+> Status: authoritative product and engineering plan
 >
 > Project: **SQLBraid**
 >
@@ -8,2589 +8,750 @@
 >
 > CLI: **`sqlbraid`**
 >
-> SQL template directive namespace: **`/*@braid ...*/`**
->
-> Reference baseline: `external SQL reference` public behavior and documentation as of 2026-09-10.
->
-> This project is an **independent implementation**. `SQLBraid external reference` is a behavioral and architectural reference, not a source-code dependency, fork, port, or code donor.
+> Dynamic SQL directive namespace: **`/*@braid ...*/`**
 
 ---
 
-## 0. Mission
+## 0. Product definition
 
-Build **SQLBraid**, a TypeScript SQL compiler/runtime that combines:
+SQLBraid is a **SQL-first data-access toolkit for TypeScript**.
 
-1. **SQL-first authoring**: application developers write SQL as SQL, not as a fluent query-builder AST.
-2. **MyBatis-style dynamic SQL**: conditional SQL is written inline in the SQL flow using a tiny preprocessing directive language embedded in reserved SQL block comments.
-3. **SQLBraid external reference-grade static analysis**: infer result rows and bound parameter requirements from a real database schema snapshot, SQL grammar, join nullability, routine signatures, database types, and dialect rules.
-4. **Plain TypeScript results**: `SELECT` results must be statically typed ordinary TS objects/arrays; no ORM entity, generated query wrapper, or driver-specific row object leaks into application code.
-5. **Offline normal development**: ordinary type-checking/editor analysis must use a deterministic schema snapshot and must not require a live database connection.
-6. **Fail-closed behavior**: unsupported, ambiguous, stale, dynamically unknowable, or unproven semantics must become a diagnostic or `unknown`, never an optimistic fabricated type.
-7. **Independent dialect architecture**: PostgreSQL, MySQL, and SQLite are first-party dialects; adding another dialect later must not require modifying the compiler core.
-8. **Runtime/static parity**: inferred TS types and actual runtime decoding must be derived from the same type policy.
+It exists for developers who want to keep writing SQL as SQL, while gaining the TypeScript ergonomics normally missing from driver-level database access:
 
-The central product idea is:
+- safe parameter binding;
+- readable inline dynamic SQL;
+- explicit result contracts;
+- plain JavaScript/TypeScript rows;
+- transaction and execution helpers;
+- runtime validation when requested;
+- database-assisted verification when requested;
+- first-party PostgreSQL, MySQL, and SQLite adapters.
 
-```text
-TypeScript source
-      │
-      ▼
-sql` ... SQL + @braid directives ... `
-      │
-      ├────────────── compile/editor path ──────────────┐
-      │                                                │
-      ▼                                                ▼
-Template IR                                      Schema Snapshot
-      │                                          + Type Policy
-      ▼                                                │
-SQL semantic analysis ◄────────────────────────────────┘
-      │
-      ├─ row inference
-      ├─ bind expectation inference
-      ├─ routine resolution
-      ├─ dependency/semantics evidence
-      └─ diagnostics
-      │
-      ▼
-Virtual TypeScript semantic overlay
-      │
-      ▼
-Query<Row> / plain typed TS objects
-
-At runtime:
-
-Template IR + captured JS values
-      │
-      ▼
-Dynamic renderer
-      │
-      ├─ final ordinary SQL text
-      └─ ordered driver bind values
-      │
-      ▼
-Database adapter
-```
-
-The database must **never receive `@braid` directives**.
-
----
-
-## 1. Non-negotiable design rules
-
-### 1.1 SQL stays SQL
-
-Do not replace SQL clauses with APIs such as:
+The primary authoring surface is a tagged template:
 
 ```ts
-query.select(...)
-  .from(...)
-  .where(...)
-```
-
-The primary authoring surface is always:
-
-```ts
-const query = sql`
-  SELECT ...
-  FROM ...
-  WHERE ...
-`;
-```
-
-The developer should be able to read the statement top-to-bottom as SQL.
-
-### 1.2 Dynamic composition stays inside SQL flow
-
-Prefer:
-
-```ts
-const query = sql`
-  SELECT u.id, u.name
+const query = sql<UserRow>`
+  SELECT u.id, u.name, u.email
   FROM users u
+
   /*@braid where*/
     /*@braid if ${name != null}*/
       AND u.name = ${name}
     /*@braid end*/
+
+    /*@braid if ${active != null}*/
+      AND u.active = ${active}
+    /*@braid end*/
   /*@braid end*/
+
   ORDER BY u.id
 `;
 ```
 
-over JS-side predicate assembly.
+SQLBraid should make this style pleasant and safe **without turning into a universal SQL compiler or ORM**.
 
-Reusable fragments remain available, but must not become the normal mechanism for ordinary optional predicates.
+---
 
-### 1.3 Ordinary interpolation is always a bound value
+## 1. Product thesis
+
+### 1.1 SQL stays SQL
+
+Do not replace SQL with a fluent query-builder language.
+
+The product should reward existing SQL knowledge instead of forcing developers to translate SQL into a TypeScript AST API.
+
+Good:
 
 ```ts
-sql`WHERE id = ${id}`
+sql<User>`
+  SELECT id, name
+  FROM users
+  WHERE status = ${status}
+`;
 ```
 
-must render a driver placeholder and bind `id`.
+Not the primary SQLBraid experience:
 
-It must never concatenate the value into SQL text.
+```ts
+query
+  .select(...)
+  .from(...)
+  .where(...);
+```
 
-Structural interpolation requires an explicit API:
+### 1.2 Dynamic SQL belongs in the SQL flow
+
+Conditional clauses should remain readable top-to-bottom.
+
+The v1 directive set is intentionally small:
+
+- `if`
+- `choose`
+- `when`
+- `otherwise`
+- `where`
+- `set`
+- `trim`
+
+Do not build a second programming language inside SQL. Conditions are ordinary TypeScript expressions captured by the compiler transform.
+
+### 1.3 The database already has a SQL parser
+
+SQLBraid must not attempt to reproduce the full grammar, function registry, operator system, coercion rules, extension ecosystem, or version-specific semantics of every supported database.
+
+When SQL meaning needs authoritative verification, prefer the **actual database** over a local reimplementation.
+
+### 1.4 Explicit contracts are a feature, not a failure of inference
+
+For v1, explicit TypeScript result contracts are the default typed workflow.
+
+```ts
+interface UserRow {
+  id: number;
+  name: string;
+  email: string | null;
+}
+
+const query = sql<UserRow>`SELECT id, name, email FROM users`;
+```
+
+A query without a declared or generated contract is `Query<unknown>`.
+
+SQLBraid does not need to understand every SQL function or database extension in order to return useful typed results.
+
+### 1.5 Verification is separate from declaration
+
+A declared TypeScript contract and a verified database contract are different states.
+
+SQLBraid should make that distinction visible in tooling and metadata.
+
+Verification may come from:
+
+- runtime Standard Schema validation;
+- database metadata/describe capabilities;
+- query manifests generated against a real database;
+- integration tests using the real driver/database.
+
+Do not claim a contract is database-verified merely because TypeScript accepted the declaration.
+
+---
+
+## 2. Non-goals
+
+The following are explicitly **not** v1 goals:
+
+- being an ORM;
+- replacing SQL with a query builder;
+- implementing a complete PostgreSQL grammar;
+- implementing a complete MySQL grammar;
+- implementing a complete SQLite grammar;
+- maintaining built-in signatures for every SQL function;
+- reproducing every database operator/coercion rule locally;
+- inferring arbitrary user-defined function return types from SQL text;
+- proving every possible dynamic SQL combination at compile time;
+- achieving behavioral parity with another TypeScript database library;
+- treating automatic SQL-to-TypeScript inference as the product's primary value.
+
+If an advanced feature requires SQLBraid to become a database parser/compiler vendor, the default answer is **no** unless it directly unlocks a core product requirement that cannot be solved through explicit contracts or database-assisted verification.
+
+---
+
+## 3. Core authoring contract
+
+### 3.1 Value interpolation is always binding
+
+```ts
+sql`WHERE id = ${id}`;
+```
+
+must produce a driver placeholder and a bound value.
+
+It must never concatenate `id` into SQL text.
+
+### 3.2 Structural interpolation is explicit
+
+Use dedicated helpers for SQL structure:
 
 ```ts
 sql.ident(name)
 sql.fragment`...`
-sql.raw(...)
+sql.raw(text)
 sql.empty
-sql.join(...)
-sql.list(...)
-```
-
-`sql.raw()` is an explicitly unsafe/trusted escape hatch and must be visibly named and documented as such.
-
-### 1.4 The DB metadata is authoritative when it can prove a type
-
-Do not require developers to duplicate table columns, routine argument types, result nullability, enums, domains, etc. in handwritten TS interfaces.
-
-If metadata can prove the type, infer it.
-
-### 1.5 A generic type is a contract, not an override
-
-If public syntax supports:
-
-```ts
-sql<UserRow>`SELECT ...`
-```
-
-`UserRow` means:
-
-> verify that the inferred SQL result is compatible with this contract.
-
-It must **not** mean:
-
-> trust `UserRow` regardless of the SQL.
-
-A mismatch is a compile diagnostic.
-
-If a developer genuinely wants to bypass proof, require an explicit API such as:
-
-```ts
-sql.unsafeType<UserRow>`...`
-```
-
-or equivalent. Keep this separate from normal `sql<T>`.
-
-### 1.6 Do not lie about opaque routine result sets
-
-Routine input/output metadata should be inferred automatically when the catalog exposes it.
-
-A cursor/dynamic result set whose row shape does not exist in catalog metadata must remain `unknown` unless the developer provides an explicit result contract or validator.
-
-Do not attempt to become a PL/pgSQL/MySQL stored-program whole-program analyzer merely to guess a cursor shape.
-
-### 1.7 Runtime decoding and static inference share one TypePolicy
-
-A DB type may not be inferred as a JS type that the runtime adapter does not actually return.
-
-Static type policy and runtime codec/decoder registration must use the same logical mapping identity and hash.
-
-### 1.8 No hidden live DB dependency in normal builds/editors
-
-The normal workflow is:
-
-```text
-DB
- │
- └─ inspect/generate snapshot (explicit)
-           │
-           ▼
-   schema.snapshot.json
-           │
-    ┌──────┴──────┐
-    ▼             ▼
-  editor         CI/build
-```
-
-Live DB operations are explicit commands only.
-
----
-
-## 2. Reference baseline and clean-room rule
-
-Use the public `SQLBraid external reference` repository documentation, public API behavior, database behavior, and independently written test cases as a capability reference.
-
-Reference repository:
-
-- https://github.com/external SQL reference
-
-Important public reference areas:
-
-- root README
-- `docs/concepts/type-safety.md`
-- `docs/concepts/architecture.md`
-- `docs/guides/composition.md`
-- `docs/guides/execution.md`
-- `docs/guides/result-validation.md`
-- `docs/guides/query-manifests.md`
-- `docs/guides/live-verification.md`
-- `docs/guides/query-plan-governance.md`
-- `docs/guides/migration-compatibility.md`
-- `docs/guides/routing-and-retries.md`
-- `docs/guides/bulk-data.md`
-- `docs/guides/observability.md`
-- `docs/guides/editors.md`
-- `docs/extending/custom-grammars.md`
-- PostgreSQL/MySQL/SQLite dialect references
-
-Rules for the agent:
-
-- Do **not** copy implementation source from `SQLBraid external reference`.
-- Do **not** import any `@SQLBraid external reference/*` package in production packages.
-- Do **not** port internal types mechanically.
-- Re-derive the implementation from SQL/database behavior and the public capability contract.
-- An optional development-only black-box comparison harness may invoke an installed/reference `SQLBraid external reference` CLI in isolated fixtures, but production and unit-test correctness must not depend on it.
-- Every parity test committed to this project must state the SQL/database behavior it verifies rather than merely asserting “same as SQLBraid external reference”.
-
----
-
-## 3. Workspace/package architecture
-
-Branding is fixed for this project:
-
-- project/product name: **SQLBraid**
-- npm organization/scope: **`@sqlbraid`**
-- CLI executable: **`sqlbraid`**
-- dynamic SQL directive namespace: **`@braid`**
-- primary tag exported by dialect packages: **`sql`**
-
-Do not introduce alternative public names such as `tsql`, `SQLBraid external reference`, `sql-braid`, or `braidsql`.
-Internal implementation identifiers may use `SqlBraid*` where a branded name is genuinely useful, but ordinary domain types should keep precise names such as `Query`, `TemplateIr`, `Dialect`, and `SchemaSnapshot`.
-
-Recommended workspace boundaries:
-
-```text
-packages/
-  core/                # @sqlbraid/core
-  template/            # @sqlbraid/template
-  ast/                 # @sqlbraid/ast
-  schema/              # @sqlbraid/schema
-  compiler/            # @sqlbraid/compiler
-  config/              # @sqlbraid/config
-  conformance/         # @sqlbraid/conformance
-  language-server/     # @sqlbraid/language-server
-  postgres/            # @sqlbraid/postgres (+ /pg subpath)
-  mysql/               # @sqlbraid/mysql (+ /mysql2 subpath)
-  sqlite/              # @sqlbraid/sqlite (+ /node-sqlite subpath)
-  opentelemetry/       # @sqlbraid/opentelemetry
-  cli/                 # @sqlbraid/cli, exposes `sqlbraid`
-
-editors/
-  vscode/
-  zed/
-
-test/
-  conformance/
-  fixtures/
-  differential/
-  integration/
-```
-
-Public package names are part of the v1 contract. Prefer dialect-owned adapter subpath exports over additional top-level npm packages:
-
-```text
-@sqlbraid/postgres
-@sqlbraid/postgres/pg
-
-@sqlbraid/mysql
-@sqlbraid/mysql/mysql2
-
-@sqlbraid/sqlite
-@sqlbraid/sqlite/node-sqlite
-```
-
-The root `sqlbraid` unscoped npm name, if available and intentionally reserved, must not become a second competing API surface. The canonical libraries live under `@sqlbraid/*`; the executable remains `sqlbraid`.
-
-Responsibilities:
-
-### `core` — `@sqlbraid/core`
-
-Stable public contracts only:
-
-- `Query<Row, ...>`
-- `SqlFragment`
-- SQL tag runtime contract
-- rendered query contract
-- database execution interfaces
-- transaction interfaces
-- diagnostics
-- query semantics
-- observer contract
-- result validation contract
-- capability tokens
-- cancellation/deadline contracts
-- prepared query contracts
-
-No SQL dialect grammar.
-
-### `template` — `@sqlbraid/template`
-
-The MyBatis-like template frontend:
-
-- scans tagged template static strings and interpolation positions
-- recognizes `@braid` directive comments
-- builds Template IR
-- renders Template IR at runtime
-- preserves exact source ranges
-- contains no database-specific SQL semantics
-
-### `ast` — `@sqlbraid/ast`
-
-Shared bounded lexer/parser infrastructure:
-
-- source cursor
-- tokens
-- source ranges
-- Pratt expression framework
-- AST visitor/toolkit
-- parser resource limits
-- error recovery sufficient for editor diagnostics
-
-Do not put database catalog semantics here.
-
-### `schema` — `@sqlbraid/schema`
-
-Versioned deterministic schema snapshot model:
-
-- namespaces
-- database types
-- relations
-- columns
-- constraints
-- indexes
-- routines
-- server/capability evidence
-- dialect extension evidence
-- canonical serialization
-- snapshot hash/identity
-- schema drift primitives
-- snapshot migration between format versions
-
-### `compiler` — `@sqlbraid/compiler`
-
-Dialect-neutral TypeScript/template compiler:
-
-- discover SQL tag usage from TS AST/import identity
-- parse Template IR
-- expand/fold structural variants when required
-- request SQL analysis from selected dialect
-- infer row and binding contracts
-- build source-mapped diagnostics
-- build virtual TS semantic overlay
-- query fingerprints
-- query manifests
-- live verification comparison
-- plan evidence comparison
-- migration compatibility analysis
-
-### `config` — `@sqlbraid/config`
-
-Project configuration loading:
-
-- selected dialect
-- snapshot path/provider
-- type policy module
-- compiler limits
-- source include/exclude
-- runtime compatibility policy
-- extension/custom routine declarations
-
-### `conformance` — `@sqlbraid/conformance`
-
-Public executable contract for first-party and third-party dialects.
-
-A dialect is not considered supported unless it passes this suite.
-
-### dialect packages
-
-First-party public packages are:
-
-```text
-@sqlbraid/postgres
-@sqlbraid/mysql
-@sqlbraid/sqlite
-```
-
-
-`postgres`, `mysql`, `sqlite` own:
-
-- lexical profile
-- grammar
-- SQL AST extensions
-- name resolution
-- operator/function/routine catalogs
-- coercion rules
-- nullability
-- parameter expectation inference
-- result type inference
-- server version/capability gates
-- introspection provider
-- type policy
-- runtime codecs
-- semantic classification
-- retry classification
-- plan normalization
-- live verification translation
-
-### driver adapter subpaths
-
-Driver adapters are exported from dialect-owned subpaths and load application-owned drivers lazily. They must not force driver dependencies into the root dialect package.
-
-First-party adapter entrypoints:
-
-- PostgreSQL: `@sqlbraid/postgres/pg` → application-owned `pg`
-- MySQL: `@sqlbraid/mysql/mysql2` → application-owned `mysql2`
-- SQLite: `@sqlbraid/sqlite/node-sqlite` → built-in `node:sqlite`
-
-Optional PostgreSQL packages such as cursor/COPY support must remain lazy/opt-in.
-
----
-
-## 4. Public authoring syntax
-
-### 4.1 Static query
-
-```ts
-const q = sql`
-  SELECT u.id, u.name
-  FROM users u
-  WHERE u.id = ${id}
-`;
-```
-
-Expected editor type:
-
-```ts
-Query<{
-  id: bigint;
-  name: string;
-}>
-```
-
-and:
-
-```ts
-const rows = await db.all(q);
-// readonly { id: bigint; name: string }[]
-```
-
-### 4.2 Directive namespace and collision rule
-
-SQLBraid directives use the short project-owned namespace `@braid`. A directive is recognized **only** when a block comment starts with the exact byte sequence:
-
-```text
-/*@braid
-```
-
-after the opening `/*`.
-
-Therefore these are ordinary SQL comments and must be preserved:
-
-```sql
-/* ordinary comment */
-/* @braid not-a-directive */
-/*+ INDEX(users idx_users_name) */
-/*! MySQL version comment */
--- @braid not-a-directive
-```
-
-Only these are reserved:
-
-```sql
-/*@braid ...*/
-```
-
-Do not recognize line comments as directives.
-
-Do not heuristically reinterpret similar comments.
-
-All valid `@braid` comments are compile/render-time control tokens and are removed before final SQL reaches the driver.
-
-### 4.3 `if`
-
-```ts
-sql`
-  SELECT ...
-  FROM users u
-  /*@braid where*/
-    /*@braid if ${name != null}*/
-      AND u.name = ${name}
-    /*@braid end*/
-  /*@braid end*/
-`;
-```
-
-The condition position must contain exactly one TypeScript interpolation expression.
-
-Malformed directive bodies are diagnostics.
-
-### 4.4 `choose`
-
-```ts
-sql`
-  SELECT ...
-  FROM users u
-  /*@braid where*/
-    /*@braid choose*/
-      /*@braid when ${id != null}*/
-        AND u.id = ${id}
-      /*@braid when ${email != null}*/
-        AND u.email = ${email}
-      /*@braid otherwise*/
-        AND u.active = TRUE
-    /*@braid end*/
-  /*@braid end*/
-`;
+sql.join(parts, separator)
+sql.list(values)
 ```
 
 Rules:
 
-- first true `when` wins
-- at most one `otherwise`
-- `when` only inside `choose`
-- `otherwise` only inside `choose`
-- empty choose is allowed only if it renders no invalid SQL
+- `sql.ident()` quotes an identifier through the dialect.
+- `sql.fragment` carries trusted SQLBraid template structure.
+- `sql.list()` expands bound values, not raw literals.
+- `sql.raw()` is an explicit trusted/unsafe escape hatch.
+- ordinary `${value}` never becomes structure.
 
-### 4.5 `where`
+### 3.3 Dynamic directives never reach the database
 
-```ts
-/*@braid where*/
-  ...
-/*@braid end*/
-```
+The renderer must consume all `@braid` directives before dispatch.
 
-After child rendering:
-
-- if empty/whitespace-only, emit nothing
-- otherwise emit `WHERE `
-- remove exactly one leading top-level `AND` or `OR`, case-insensitively
-- comments/hints are not accidentally deleted
-- do not alter tokens inside strings, quoted identifiers, nested expressions, or nested comments
-
-### 4.6 `set`
-
-```ts
-UPDATE users
-/*@braid set*/
-  /*@braid if ${patch.name !== undefined}*/
-    name = ${patch.name},
-  /*@braid end*/
-  /*@braid if ${patch.email !== undefined}*/
-    email = ${patch.email},
-  /*@braid end*/
-/*@braid end*/
-WHERE id = ${id}
-```
-
-After child rendering:
-
-- if nothing remains, emit a diagnostic/runtime construction error rather than invalid `UPDATE ... WHERE`
-- emit `SET `
-- remove the final top-level comma
-- preserve commas inside expressions/function calls/subqueries
-
-### 4.7 Generic `trim`
-
-Support a generic trim primitive so `where` and `set` are not special one-off engines.
-
-Syntax:
-
-```sql
-/*@braid trim prefix="WHERE " prefixOverrides="AND|OR" suffix="" suffixOverrides=""*/
-...
-/*@braid end*/
-```
-
-and equivalent for SET.
-
-Implement a small, explicit attribute grammar. Do not evaluate arbitrary JS in attributes.
-
-### 4.8 Reusable structural helpers
-
-Provide:
-
-```ts
-sql.fragment`...`
-sql.empty
-sql.ident(name)
-sql.raw(trustedText)
-sql.join(...)
-sql.list(values)
-```
-
-Recommended semantics:
-
-- `fragment`: trusted nested static SQL structure; nested ordinary interpolations remain binds
-- `empty`: zero structure
-- `ident`: dialect-quoted identifier, not raw text
-- `raw`: trusted verbatim SQL, no escaping claim
-- `join`: combine structural fragments with an explicit separator
-- `list`: bind a collection as multiple placeholders with explicit empty-list behavior
-
-Do not provide implicit array-to-SQL-structure conversion.
-
-### 4.9 No separate OGNL/bind language
-
-Conditions are normal TypeScript expressions.
-
-Do not implement MyBatis OGNL.
-
-Do not implement a second expression language in comment text.
-
-### 4.10 No directive-level `foreach` in initial implementation
-
-Use TypeScript lexical scope plus structural helpers:
-
-```ts
-sql`
-  INSERT INTO users (id, name)
-  VALUES ${sql.join(
-    users.map((u) => sql.fragment`(${u.id}, ${u.name})`),
-    sql.fragment`, `
-  )}
-`;
-```
-
-Optionally add a typed `sql.rows()` convenience after the core model is sound.
-
-Do not invent loop-variable declarations inside SQL comments.
-
----
-
-## 5. Template IR
-
-The runtime/compiler must share one versioned Template IR.
-
-Minimum nodes:
-
-```ts
-type TemplateNode =
-  | TextNode
-  | BindNode
-  | FragmentNode
-  | IdentifierNode
-  | RawNode
-  | ListNode
-  | IfNode
-  | ChooseNode
-  | TrimNode;
-```
-
-Required properties:
-
-- stable node kind
-- original source range
-- template interpolation index where applicable
-- child nodes
-- no captured secret values in serializable compiler artifacts
-- deterministic traversal order
-
-`WhereNode` and `SetNode` may exist as ergonomic AST nodes but should lower to generic `TrimNode` semantics.
-
-The IR must be usable in:
-
-1. runtime rendering
-2. compile-time structural analysis
-3. editor diagnostics
-4. query fingerprint/variant calculation
-
----
-
-## 6. Runtime renderer
-
-The SQL tag must create a compact immutable runtime representation.
-
-It may cache parsing by `TemplateStringsArray` identity using a `WeakMap`.
-
-Do not reparse directive syntax on every execution if the same template literal site is reused.
-
-Rendering output:
+The final driver input is always:
 
 ```ts
 interface RenderedQuery {
-  readonly text: string;
-  readonly values: readonly unknown[];
-  readonly fingerprint?: string;
-  readonly variantFingerprint?: string;
+  text: string;
+  values: readonly unknown[];
 }
 ```
 
-Requirements:
-
-- directives are fully removed
-- disabled branches contribute neither SQL nor values
-- driver placeholders are allocated only for active ordinary binds
-- nested fragments preserve source order
-- identifiers are quoted by dialect renderer
-- no value string concatenation
-- empty/malformed structural constructs fail deterministically
-- enforce maximum rendered SQL bytes
-- enforce maximum bind count
-- enforce maximum repeated-fragment/list cardinality
-
-Add golden renderer tests before SQL semantic analysis work begins.
+plus internal metadata when useful.
 
 ---
 
-## 7. Structural analysis strategy
+## 4. Dynamic SQL model
 
-Correctness first, then eliminate exponential behavior for the common MyBatis case.
-
-### Stage A: bounded complete-statement variants
-
-Initially, for structures whose semantic effect cannot yet be analyzed locally:
-
-- identify independent runtime conditions
-- correlate repeated identical condition expressions where safe
-- fold literal `true` / `false`
-- render bounded complete SQL variants with synthetic placeholders
-- analyze each complete statement
-- merge row/parameter/semantic evidence conservatively
-
-Set a configurable structural variant limit.
-
-Exceeding it is a diagnostic, not an unbounded operation.
-
-This is the initial correctness path for:
-
-- conditional projections
-- conditional CTEs
-- optional joins
-- conditionally different statement clauses
-- arbitrary valid structural fragments
-
-### Stage B: guarded/local clause analysis before v1 release
-
-Do **not** ship with ordinary optional predicates suffering `2^n`.
-
-Implement specialized local analysis for:
-
-- `@braid where` independent predicates
-- `@braid set` independent assignments
-- `choose` alternatives inside WHERE/SET
-- repeated list elements with a stable SQL skeleton
-
-The release gate must include a query with at least 100 independent optional predicates and prove analysis is approximately linear in predicate count, not exponential.
-
-Fallback variant expansion remains available for shape-changing SQL.
-
-### Conditional result typing
-
-For shape-changing projections:
+### 4.1 `if`
 
 ```ts
-const q = sql`
-  SELECT id
-  /*@braid if ${includeEmail}*/
-    , email
-  /*@braid end*/
+sql`
+  SELECT id, name
   FROM users
+  /*@braid where*/
+    /*@braid if ${name != null}*/
+      AND name = ${name}
+    /*@braid end*/
+  /*@braid end*/
 `;
 ```
 
-Infer:
+The guarded interpolation must be evaluated lazily by the compiler transform. A bare JavaScript tagged template cannot retroactively make interpolation lazy.
 
-- exact row when the condition is statically/literally true or false
-- a safe union/conditional row type when it is runtime boolean
-- preserve correlation when the same condition controls multiple structural regions
+### 4.2 `choose`
 
-Never collapse a conditionally absent property into an always-present property merely for convenience.
+```ts
+sql`
+  SELECT id, name
+  FROM users
+  /*@braid where*/
+    /*@braid choose*/
+      /*@braid when ${id != null}*/
+        AND id = ${id}
+      /*@braid when ${name != null}*/
+        AND name = ${name}
+      /*@braid otherwise*/
+        AND active = ${true}
+    /*@braid end*/
+  /*@braid end*/
+`;
+```
+
+`choose` uses first-true semantics and preserves lazy evaluation.
+
+### 4.3 `where`, `set`, and `trim`
+
+These directives are rendering utilities, not SQL theorem provers.
+
+They are responsible for deterministic prefix/suffix handling and common syntax cleanup such as removing a leading `AND`/`OR` or trailing comma where defined.
+
+They do **not** promise that every user-written branch forms valid SQL. Database verification and tests remain the authority for SQL correctness.
+
+### 4.4 No exponential compile-time proof requirement
+
+A query with 100 optional predicates must not force SQLBraid to enumerate `2^100` variants.
+
+The v1 compiler should preserve TypeScript control-flow safety and rendering semantics, but it is not required to prove every database-semantic combination.
 
 ---
 
-## 8. TypeScript semantic integration
+## 5. Type model
 
-A normal TypeScript type system cannot infer arbitrary SQL from a tagged template by generics alone. Implement a source-analysis/overlay system.
-
-### 8.1 Source discovery
-
-Use the TypeScript compiler AST to discover imports/aliases of the configured dialect's `sql` tag.
-
-Do not identify SQL tags by variable name alone.
-
-Support:
+### 5.1 Untyped query
 
 ```ts
-import { sql } from "...";
-import { sql as dbSql } from "...";
+const query = sql`SELECT ...`;
 ```
 
-and stable supported re-export patterns.
-
-Fail closed for dynamic aliasing that cannot be proven.
-
-### 8.2 Virtual semantic overlay
-
-Do not rewrite source files on disk.
-
-Generate an in-memory source overlay for checking/editor services.
-
-The overlay must:
-
-- assign the inferred `Query<Row, ...>` type to the original tagged expression
-- verify every bind expression against its SQL-inferred expected type
-- preserve source ranges for diagnostics/hovers
-- avoid treating directive conditions as database binds
-- preserve TypeScript control-flow narrowing implied by `@braid if` / `when`
-
-For guarded templates, the safe path is a compiler transform, not a runtime tag trick.
-Generate the same branch control flow in the virtual checker source and emitted JavaScript:
-
-Conceptually:
+is conceptually:
 
 ```ts
-if (name != null) {
-  __expect<string>(name);
+Query<unknown>
+```
+
+unless a generated verification artifact supplies a known contract.
+
+### 5.2 Declared result contract
+
+```ts
+const query = sql<UserRow>`SELECT ...`;
+```
+
+means:
+
+> The application declares `UserRow` as the expected application-facing row contract for this query.
+
+This is the primary v1 typed authoring path.
+
+The TypeScript compiler may validate the TypeScript shape itself, but SQLBraid must not claim the database proved this type unless database verification has actually occurred.
+
+### 5.3 Runtime validation
+
+SQLBraid already supports Standard Schema-style validation infrastructure. v1 should expose a simple path for attaching a runtime row validator to a query/execution flow.
+
+Runtime validation is valuable when:
+
+- database schemas are managed outside the TypeScript application;
+- SQL contains opaque/custom functions;
+- untrusted or loosely typed driver values require checking;
+- production correctness matters more than validation overhead.
+
+### 5.4 Database-verified contract
+
+A verification workflow should compare a query's declared/generated contract against real database metadata whenever the dialect can provide trustworthy evidence.
+
+This is an opt-in development/CI workflow, not a requirement for ordinary application startup.
+
+### 5.5 Optional automatic inference
+
+Automatic result inference is a **secondary convenience feature**.
+
+It is acceptable only when evidence is cheap, deterministic, and trustworthy.
+
+Examples that may be supported later:
+
+- metadata returned directly by a prepared/describe protocol;
+- generated query manifests;
+- simple static queries where proof is trivial and stable.
+
+Unsupported SQL must fall back to `unknown` or an explicit contract. Do not grow a universal semantic SQL engine merely to preserve inference coverage.
+
+---
+
+## 6. Database-assisted verification
+
+### 6.1 Philosophy
+
+The database is the authoritative implementation of its SQL dialect.
+
+SQLBraid verification should use real database capabilities when possible instead of duplicating:
+
+- function signatures;
+- extension functions;
+- operator overloads;
+- casts/coercions;
+- version-specific grammar;
+- user-defined routines.
+
+### 6.2 Query manifest
+
+The target artifact is a deterministic query manifest keyed by a stable query/template fingerprint.
+
+Conceptual shape:
+
+```json
+{
+  "version": 1,
+  "dialect": "postgres",
+  "queries": {
+    "<fingerprint>": {
+      "parameters": [
+        { "databaseType": "text", "nullable": false }
+      ],
+      "columns": [
+        { "name": "id", "databaseType": "int8", "typescriptType": "bigint" },
+        { "name": "name", "databaseType": "text", "typescriptType": "string" }
+      ]
+    }
+  }
 }
 ```
 
-or a semantically equivalent nested conditional expression.
+The exact format should be versioned and deterministic.
 
-The source code remains unchanged.
+### 6.3 Offline development
 
-Do not reject:
+Normal editor/build operation should not require a live database.
 
-```ts
-name: string | null
+A live verification step can generate/update the manifest. Later checks can consume it offline.
 
-/*@braid if ${name != null}*/
-  AND name = ${name}
-/*@braid end*/
-```
+### 6.4 Dynamic SQL verification
 
-merely because the original source lacks a real JavaScript `if`. The directive condition must narrow the guarded expression for checking.
+SQLBraid does not need to prove every dynamic combination automatically.
 
-The transform must not rewrite the user's source file. A bare JavaScript tagged template
-still evaluates every interpolation before the tag is called, so it is not a lazy-safe
-guarded mode. Untransformed guarded templates must fail the standard build/check path or
-be explicitly documented as eager compatibility mode.
+Verification may cover:
 
-## 8.3 CLI type check
+- explicitly supplied representative cases;
+- variants observed in integration tests;
+- bounded cases when cheap;
+- database-prepared statements generated from known variants.
 
-Provide:
-
-```bash
-sqlbraid check
-sqlbraid check --file ...
-sqlbraid check --project ...
-```
-
-It must use the same compiler analysis service as the language server.
-
-No separate editor inference implementation.
-
-### 8.4 Language server/editor
-
-Implement:
-
-- SQL/TS diagnostics
-- inferred query hover
-- column/type hover
-- definition navigation from table/column/routine references to snapshot metadata where practical
-- completion for visible tables/columns/routines
-- quick fixes for safe structural mistakes
-- snapshot reload
-- stale-analysis suppression
-- cancellation
-- bounded caches
-
-VS Code is the first editor target.
-
-Zed can follow through the same LSP.
-
-Do not fork inference logic inside editor extensions.
+Tooling must report what was verified. It must not silently generalize one verified variant to all possible variants.
 
 ---
 
-## 9. Type contracts
+## 7. Dialect architecture
 
-### 9.1 Query
+Dialect support must remain intentionally thin.
 
-Public type shape may evolve, but it must preserve at least:
+A dialect is responsible for database/driver boundaries, not for reimplementing the database parser.
+
+Conceptual responsibilities:
 
 ```ts
-interface Query<Row> {
-  // phantom static row contract
-  // immutable runtime template representation
+interface Dialect {
+  readonly id: string;
+  placeholder(index: number): string;
+  quoteIdentifier(identifier: string): string;
+  readonly lexicalProfile?: DialectLexicalProfile;
 }
 ```
 
-A second generic may be used for bind/source contracts only if it remains semantically honest for dynamic templates.
+The dialect package additionally owns:
 
-Do not expose a misleading “final ordered parameter tuple” if a single dynamic template can render multiple different bind lists.
+- driver adapter;
+- transaction/savepoint controls;
+- result normalization;
+- type policy/codecs;
+- optional schema inspection;
+- optional prepare/describe verification capability;
+- dialect-specific runtime features where justified.
 
-If necessary, model dynamic binding metadata separately:
+First-party dialects:
 
-```ts
-Query<Row, BindingContract>
-```
+- PostgreSQL (`pg`)
+- MySQL (`mysql2`)
+- SQLite (`node:sqlite`)
 
-where `BindingContract` describes source binding sites/variants rather than pretending there is one fixed runtime tuple.
-
-### 9.2 Result helpers
-
-Provide:
-
-```ts
-type QueryRow<Q> = ...
-```
-
-Potentially:
-
-```ts
-type QueryResult<Q> = ...
-```
-
-Execution APIs:
-
-```ts
-db.all(query)       // readonly Row[]
-db.one(query)       // Row, cardinality checked
-db.maybeOne(query)  // Row | undefined
-db.execute(query)   // appropriate command/result contract
-```
-
-Rows returned from adapters must be normalized to ordinary objects.
-
-### 9.3 Handwritten result contract
-
-Support:
-
-```ts
-sql<UserRow>`SELECT ...`
-```
-
-only as verified expected contract.
-
-Compare:
-
-- property names
-- property requiredness
-- nullability
-- compatible TS output type
-
-Decide and document whether extra SQL columns are allowed. Recommended default: exact object shape for query contracts, with a separate “satisfies/assignable” mode only if a real use case requires it.
-
-### 9.4 Unknown
-
-`unknown` is a first-class sound outcome.
-
-Never use `any` for failed inference.
+Adding another dialect should primarily require a renderer/adapter/type-policy package, not compiler-core grammar changes.
 
 ---
 
-## 10. Schema snapshot
+## 8. Runtime
 
-Define snapshot format v1 before implementing full inference.
+### 8.1 Plain results
 
-It must be versioned and deterministic.
+Rows returned to application code are ordinary JavaScript objects/arrays.
 
-Minimum top-level model:
+No ORM entity lifecycle is introduced.
 
-```ts
-interface SchemaSnapshot {
-  readonly formatVersion: number;
-  readonly dialect: string;
-  readonly dialectVersion: string;
-  readonly server: ServerEvidence;
-  readonly namespaces: Record<string, NamespaceSnapshot>;
-  readonly types: Record<string, TypeSnapshot>;
-  readonly relations: Record<string, RelationSnapshot>;
-  readonly routines: Record<string, readonly RoutineSnapshot[]>;
-  readonly metadata: SnapshotMetadata;
-}
-```
+### 8.2 Cardinality helpers
 
-### Relations
-
-Record at least:
-
-- schema/catalog namespace
-- table/view/materialized/foreign/virtual kind where supported
-- ordered columns
-- DB type identity
-- TS type under selected type policy
-- nullability and evidence source
-- defaults
-- generated/identity behavior
-- insertable/updatable eligibility
-- charset/collation where applicable
-- constraints
-- indexes
-- dialect extension evidence
-
-### Types
-
-Represent enough structure for each dialect:
-
-- scalar
-- enum
-- domain
-- composite/record
-- array/collection
-- range/multirange
-- opaque/unknown
-- dialect-specific extensions
-
-### Routines
-
-First-class routine model:
+Core execution surface:
 
 ```ts
-interface RoutineSnapshot {
-  name: string;
-  schema?: string;
-  identity: string;
-  kind: "function" | "procedure" | "aggregate" | "window";
-  arguments: RoutineArgument[];
-  result: RoutineResult;
-  volatility?: ...;
-  deterministic?: ...;
-  dataAccess?: ...;
-  nullInput?: ...;
-  versionRange?: ...;
-}
-```
-
-Argument modes:
-
-```text
-in
-out
-inout
-variadic
-```
-
-Results:
-
-```text
-scalar
-set
-record
-table
-void
-command
-unknown/opaque
-```
-
-Allow dialect extension fields for information not portable across PostgreSQL/MySQL/SQLite.
-
-### Snapshot identity
-
-Canonical serialization must sort semantically unordered maps/collections.
-
-Generate cryptographic hashes for:
-
-- complete snapshot
-- dialect grammar/catalog revision
-- type policy
-- normalized server capability evidence
-- selected introspection scope
-
-Secrets, connection strings, role names where sensitive, absolute paths, SQL text, and runtime values must not enter portable artifacts unless explicitly intended.
-
----
-
-## 11. Schema inspection workflow
-
-CLI:
-
-```bash
-sqlbraid inspect
-sqlbraid drift
-```
-
-`inspect` is the explicit live-DB step.
-
-Normal `check`, editor use, and ordinary builds are offline.
-
-### PostgreSQL inspector
-
-Capture at least:
-
-- server version/major
-- relevant lexical/session settings
-- effective search path
-- installed extension identities/versions
-- tables/views/materialized views/foreign tables
-- columns/defaults/generated/identity
-- constraints/indexes
-- arrays
-- enums
-- domains
-- composites
-- ranges/multiranges
-- user routines and argument/result metadata
-
-### MySQL inspector
-
-Capture at least:
-
-- actual Oracle MySQL product identity
-- version
-- normalized SQL mode
-- connection/server charset/collation evidence
-- selected databases
-- tables/views
-- columns/generated/invisible/auto-increment
-- enum/set/numeric/temporal metadata
-- constraints/indexes
-- routine arguments/results/determinism/data access
-- creation SQL mode/charset/collation evidence where needed
-
-Do not silently treat MariaDB as MySQL.
-
-### SQLite inspector
-
-Capture:
-
-- SQLite library version
-- compile options
-- attached schemas
-- tables/views/virtual tables
-- STRICT / WITHOUT ROWID
-- columns and rowid aliases
-- generated/hidden columns
-- indexes
-- foreign keys
-- check/trigger fingerprints where available
-- configured application routines
-
-SQLite application-defined routine signatures require explicit registry evidence because SQLite catalog metadata cannot prove them.
-
-### Permission-limited introspection
-
-Optional/secondary metadata failures should become explicit incomplete-evidence diagnostics, not silently positive assumptions.
-
-Essential target discovery failure aborts inspection.
-
----
-
-## 12. SQL lexer/parser architecture
-
-Implement independently.
-
-Do not rely on TypeScript conditional types to parse SQL.
-
-Recommended implementation:
-
-- hand-written bounded lexer
-- recursive-descent statement parser
-- Pratt parser for expressions/operators
-- exact source ranges
-- dialect lexical profiles and parser extension hooks
-
-Reasons:
-
-- predictable source mapping
-- editor error recovery
-- dialect version gates
-- dynamic-template token integration
-- no native parser dependency requirement
-- no need to reconstruct SQL from a query-builder AST
-
-### Common statement AST
-
-Support enough common nodes for:
-
-- `SELECT`
-- CTE
-- compound queries
-- INSERT
-- UPDATE
-- DELETE
-- RETURNING/result clauses
-- routine call statement where supported
-- transaction/session classification where required for semantics/routing
-- expressions/subqueries
-
-Dialect packages can extend statement/expr nodes.
-
-### Parser limits
-
-Bound:
-
-- source bytes
-- token count
-- nesting depth
-- CTE count
-- select item count
-- expression depth
-- structural variants
-- generated overlay size
-
-Resource-limit breaches are diagnostics.
-
----
-
-## 13. Semantic resolver
-
-Separate parsing from semantic/type resolution.
-
-Inputs:
-
-```text
-SQL AST
-SchemaSnapshot
-Dialect built-in catalog
-TypePolicy
-Server/capability evidence
-```
-
-Outputs:
-
-- result columns
-- expected bind types
-- nullability
-- statement result kind
-- dependencies
-- cardinality evidence where provable
-- volatility
-- locking
-- connection affinity/session state
-- diagnostics
-
-### Scope resolution
-
-Implement:
-
-- schemas/catalogs
-- relation aliases
-- column ambiguity
-- stars
-- join namespace
-- CTE scope
-- recursive CTE scope
-- derived/subquery scope
-- correlated subqueries
-- lateral semantics
-- function/table-function relations where dialect supports them
-
-### Nullability
-
-At minimum:
-
-- declared column nullability
-- outer-join nullable side
-- aggregate empty-input behavior
-- scalar subquery nullability
-- CASE branches
-- COALESCE
-- routine result nullability
-- dialect-specific operator/function nullability
-
-### Bind inference
-
-Infer an ordinary `${value}` expected type from:
-
-- comparison operands
-- casts
-- DML target columns
-- INSERT target positions
-- UPDATE assignments
-- BETWEEN/ranges
-- LIMIT/OFFSET
-- function/routine overload arguments
-- operator overloads
-- array/list element context
-- row comparisons
-- compound query coercion where meaningful
-
-A parameter with insufficient evidence becomes `unknown`.
-
-### Overload/coercion engine
-
-Create a dialect-owned candidate selection engine for:
-
-- functions
-- routines
-- operators
-- casts
-- polymorphic families
-
-Candidate resolution must be deterministic and fail closed on ambiguity.
-
----
-
-## 14. First-party dialect parity goals
-
-The functional baseline is the public `SQLBraid external reference` capability set current at implementation time. Re-check its current docs before declaring parity because it may evolve after this plan.
-
-### 14.1 PostgreSQL
-
-Target the currently supported stable major lines at implementation time.
-
-Coverage target includes, where supported by those server versions:
-
-- SELECT / DISTINCT / DISTINCT ON
-- schemas, aliases, stars, USING
-- inner/outer/cross joins
-- ordinary/recursive CTE
-- SEARCH/CYCLE version gates
-- derived/correlated/scalar subqueries
-- UNION/INTERSECT/EXCEPT
-- grouping, grouping sets, ROLLUP, CUBE
-- aggregates including FILTER and ordered forms
-- named/inline windows and frames
-- lateral/function relations
-- ROWS FROM / WITH ORDINALITY
-- ordering
-- TABLESAMPLE
-- LIMIT/OFFSET/FETCH
-- CASE/casts
-- scalar/row IN
-- quantified comparisons
-- arrays
-- enum/domain/composite
-- range/multirange
-- JSON/JSONB/JSONPATH
-- modern SQL/JSON forms with version gates
-- common catalog/built-in functions
-- INSERT/UPDATE/DELETE
-- ON CONFLICT
-- MERGE with version gates
-- RETURNING
-- function/routine overload resolution
-- dialect type coercions/operator families
-- extension manifests for types/routines/operators/casts/codecs where feasible
-
-Unknown extensions remain conservative.
-
-### 14.2 MySQL
-
-Target current supported Oracle MySQL LTS lines at implementation time.
-
-Coverage:
-
-- aliases/stars/joins
-- recursive CTE
-- derived/correlated/lateral subqueries
-- compound SELECT/TABLE/VALUES
-- grouping/ROLLUP
-- aggregates/windows
-- CASE
-- EXISTS/IN/BETWEEN
-- JSON functions/operators
-- INSERT VALUE(S), VALUES ROW, SET, SELECT/TABLE sources
-- inserted-row aliases
-- ON DUPLICATE KEY UPDATE
-- REPLACE
-- single/multi-table UPDATE/DELETE
-- mode-aware lexical semantics
-- charset/collation/coercibility
-- signed/unsigned numeric rules
-- decimal policy
-- routine metadata
-- version-gated built-ins/types
-- explicit unsupported syntax diagnostics
-
-MariaDB is not implicitly supported by the MySQL dialect.
-
-### 14.3 SQLite
-
-Target the current tested stable SQLite feature band at implementation time.
-
-Coverage:
-
-- dynamic storage typing with sound ordinary-table inference
-- STRICT tables
-- rowid aliases / WITHOUT ROWID
-- joins including RIGHT/FULL when version available
-- ordinary/recursive CTE
-- subqueries
-- grouping/windows/FILTER
-- CASE/casts
-- JSON/JSONB gates
-- compound queries
-- INSERT/UPDATE/DELETE RETURNING
-- conflict algorithms/ON CONFLICT
-- UPDATE FROM
-- core function catalog with version/compile-option gates
-- application-defined routine registry
-- virtual table/table-function evidence where declared
-- compile-option capability evidence
-
-Do not infer ordinary non-STRICT columns as their declared affinity alone. Runtime storage-class reality must remain sound.
-
----
-
-## 15. Stored functions and procedures
-
-Routine support is first-class, not an afterthought.
-
-### 15.1 Functions used in expressions
-
-Resolve:
-
-```sql
-SELECT some_function(${x})
-```
-
-against:
-
-- built-in routine catalog
-- snapshot routines
-- extension/application routine registry
-
-Infer:
-
-- overload
-- argument expectations
-- result type
-- nullability
-- volatility/determinism semantics
-
-### 15.2 Set/table-returning functions
-
-Treat record/table-returning functions as relation sources where the dialect supports them.
-
-Expose the result columns to normal scope resolution.
-
-### 15.3 Procedure calls
-
-Add grammar/runtime support for procedure invocation where the target DB/driver exposes it.
-
-Do not force procedure calls through the ordinary SELECT row model if the database semantics differ.
-
-A public API may expose:
-
-```ts
+db.all(query)
+db.one(query)
+db.maybeOne(query)
+db.execute(query)
 db.call(query)
 ```
 
-or a result-kind-sensitive `execute()`.
+### 8.3 Transactions
 
-The compiler should infer catalog-visible OUT/INOUT scalar outputs.
-
-### 15.4 Opaque cursor/dynamic result sets
-
-If catalog metadata says only “cursor” or otherwise lacks row columns:
-
-- output row type is `unknown`
-- allow an explicit local contract/validator for that output only
-- do not require the entire call result to be handwritten
-- do not parse procedure bodies to guess arbitrary dynamic SQL
-
-Example conceptual API:
-
-```ts
-sql.out.cursor<UserRow>("rows")
-```
-
-or an equivalent declaration mechanism.
-
-The concrete syntax can be adjusted to fit each driver's actual call API, but the type-safety policy must remain.
-
-### 15.5 Multiple result sets
-
-Design the internal call result representation to handle:
-
-- OUT parameters
-- zero or more result sets
-- driver-specific metadata
-
-Normalize the public result to typed ordinary JS objects and arrays.
-
-Unknown result-set shapes remain unknown unless explicitly contracted.
-
----
-
-## 16. Runtime type policy and codecs
-
-Each dialect exports a default TypePolicy and allows explicit customization.
-
-A policy must define:
-
-- DB type identity
-- accepted input TS types
-- output TS type
-- encoder where needed
-- decoder where needed
-- array/collection handling
-- null handling
-
-Changing type policy changes snapshot/compiler identity.
-
-Examples requiring explicit policy:
-
-- PostgreSQL bigint/numeric/temporal
-- MySQL bigint/decimal/date/JSON/tinyint(1)
-- SQLite integer number-vs-bigint and flexible storage classes
-
-Runtime adapters must reject driver configuration that contradicts the active policy when that contradiction would make static inference false.
-
----
-
-## 17. Database runtime API
-
-Build a grammar-neutral database contract.
-
-Minimum:
-
-```ts
-database.execute(query)
-database.all(query)
-database.one(query)
-database.maybeOne(query)
-
-database.transaction(async (tx) => ...)
-database.batch([...])
-database.prepare(name, factory)
-database.stream(query, options)
-```
-
-Where a backend can safely support it:
-
-```ts
-database.pipeline([...])
-```
+Current transaction ownership/poison semantics are retained.
 
 Requirements:
 
-- plain object rows
-- nested transactions via savepoints when supported
-- strict transaction scope ownership
-- cancellation/deadline contract only where it can be implemented honestly
-- prepared structural-shape drift detection
-- bounded caches
-- no hidden multi-statement string concatenation
-- stable normalized adapter errors
-- no SQL text/bound values in redacted error/observer metadata by default
+- one physical execution resource has one shared ownership state;
+- root operations cannot leak into an active transaction;
+- failed transaction-control cleanup poisons the physical resource;
+- nested transactions use savepoints where supported;
+- leaked transaction handles fail deterministically.
+
+Future pool support must lease a physical connection for the full transaction lifetime.
+
+### 8.4 Prepared queries and streaming
+
+Retain the current prepared-query shape lock and streaming seam.
+
+Future work should prefer native driver facilities where available rather than emulating protocols in core.
+
+### 8.5 Cancellation and backpressure
+
+Cancellation, streaming lifecycle, batch/bulk/pipeline support, and bounded backpressure remain post-core runtime work.
 
 ---
 
-## 18. Prepared statements
+## 9. Compiler responsibilities after the pivot
 
-`prepare(name, factory)` must:
+The compiler remains useful, but its job becomes much smaller and clearer.
 
-- keep exact query/result inference
-- freeze allowed structural skeletons
-- reject duplicate logical names
-- reject unexpected structural drift
-- bound per-factory dynamic-cardinality variants
-- integrate with driver-native prepared caches where applicable
-- invalidate appropriately after schema/session changes that make prepared metadata unsafe
+It should own:
 
-Dynamic predicates may produce multiple legitimate structural variants. Cache them by variant fingerprint with an explicit bound.
+1. discovering configured `sql` tags through the TypeScript compiler;
+2. parsing SQLBraid template directives;
+3. generating hygienic lazy control flow for guarded interpolations;
+4. preserving TypeScript control-flow narrowing;
+5. preserving source maps/diagnostic ranges;
+6. attaching declared/generated query contracts;
+7. generating/querying stable fingerprints and manifests;
+8. project-aware diagnostics for SQLBraid-specific misuse.
 
----
+It should **not** own:
 
-## 19. Streaming
-
-Support typed async iteration.
-
-PostgreSQL:
-
-- lazy optional cursor dependency
-- leased connection for cursor lifetime
-- explicit close/early break cleanup
-- transaction scope reuses transaction connection
-
-MySQL:
-
-- protocol-backed streaming
-- honest semantics for early consumer break/drain/cancellation
-
-SQLite:
-
-- adapt synchronous native iteration to common async iterator contract
-- document event-loop blocking
-- do not claim asynchronous cancellation if the API cannot deliver it
+- a complete SQL grammar;
+- complete SQL expression semantics;
+- a database function registry;
+- full dialect coercion logic;
+- universal result inference.
 
 ---
 
-## 20. Batch/pipeline
+## 10. What happens to the existing SQL AST work
 
-`batch()`:
+The existing `@sqlbraid/ast` and semantic resolver were created for a broader automatic-inference strategy.
 
-- sequential statements on one leased connection
-- not implicit atomicity
-- explicit transaction for atomic batch
+Do not keep expanding that scope by inertia.
 
-PostgreSQL may provide explicit `pipeline()` where the chosen `pg` version and public API support it.
+Migration plan:
 
-Do not emulate a pipeline by concatenating SQL.
+1. identify which lexical/scanning utilities are still required for safe directive handling, lightweight statement classification, diagnostics, or verification support;
+2. move or retain only those narrow utilities;
+3. stop adding broad expression/function/operator semantics;
+4. remove compiler dependencies on semantic AST inference where explicit contracts/manifests replace them;
+5. deprecate or remove unused AST/resolver APIs before v1 if they no longer serve a product requirement.
 
----
-
-## 21. Native bulk operations
-
-Match the reference feature class without forcing it into core execution.
-
-PostgreSQL:
-
-- COPY FROM typed INSERT factory
-- COPY TO typed static SELECT
-- backpressure
-- no arbitrary server path/PROGRAM injection
-- lazy optional dependency
-
-MySQL:
-
-- typed LOAD DATA LOCAL INFILE path using application-provided stream only
-- no arbitrary local path from SQL input
-- reject types that cannot be serialized soundly
-
-SQLite:
-
-- no fake native bulk capability; ordinary transaction/batched insertion is sufficient unless the native API exposes a real distinct protocol.
-
-Bulk APIs must preserve type checking from the normal SQL factory.
+Deletion is preferred over maintaining a second partial SQL implementation indefinitely.
 
 ---
 
-## 22. Result validation
+## 11. Schema metadata after the pivot
 
-Static inference does not validate untrusted runtime data.
+Schema inspection remains useful, but its role changes.
 
-Support optional Standard Schema V1-compatible result validators without taking a hard dependency on a validator library.
+Use schema metadata for:
 
-Conceptual:
+- type-policy configuration;
+- database-assisted verification;
+- editor completion/hover;
+- optional contract generation;
+- migration/drift tooling where useful.
 
-```ts
-const checked = sql.validateResult(query, schema);
-```
+Do not require schema snapshots as a prerequisite for every ordinary `sql<T>` query.
 
-Requirements:
-
-- validator output must be statically compatible with inferred SQL row
-- validation occurs after runtime DB decoding
-- unvalidated path pays no validator dependency/runtime cost
-- validation errors do not expose SQL or secret values by default
+A developer who writes an explicit result contract should be able to develop offline without teaching SQLBraid the full schema semantics of every custom function/operator.
 
 ---
 
-## 23. Query semantics evidence
+## 12. CLI
 
-Analysis should produce a versioned semantics object.
+Target CLI surface:
 
-At minimum:
+### `sqlbraid check`
 
-- statement operation/read/write
-- schema dependencies
-- routine dependencies
-- cardinality evidence where provable
-- volatility
-- locking
-- connection/session affinity
-- server capability/version requirements
+Checks:
 
-Conditional templates merge semantics conservatively.
+- TypeScript integration;
+- dynamic directive structure;
+- unsafe/misused SQLBraid APIs;
+- declared contract availability;
+- manifest drift when a manifest is configured.
 
-This evidence is reused by manifests, routing, compatibility, and observability.
+It should not pretend to validate arbitrary SQL semantics without database evidence.
 
----
+### `sqlbraid build`
 
-## 24. Query fingerprints and manifests
+Emits the hygienic guarded-template transform where needed.
 
-Generate path-independent fingerprints from canonical static query/template evidence.
+### `sqlbraid verify`
 
-Maintain:
+Connects to a configured database/test instance and verifies query contracts/metadata using dialect-specific capabilities.
 
-- query fingerprint
-- structural variant fingerprint
-- variant description
-- inferred result description
-- parameter/binding description
-- dependency evidence
-- semantic evidence
-- relative source location
+Verification output should be machine-readable and suitable for CI.
 
-Portable manifests must not contain:
+### `sqlbraid manifest`
 
-- bound values
-- secrets
-- connection strings
-- absolute paths
+Generates or updates deterministic query verification metadata.
 
-Prefer not to persist raw SQL unless a dedicated explicit artifact requires it.
+### `sqlbraid drift`
 
-CLI:
-
-```bash
-sqlbraid manifest
-```
+Compares compatible metadata artifacts where useful.
 
 ---
 
-## 25. Live database verification
+## 13. Language server
 
-Provide an optional explicit live command that verifies compiler inference against native prepare/describe metadata **without executing application values** where the database protocol permits it.
+The language server should focus on high-value tooling that does not require owning a full SQL compiler.
 
-PostgreSQL:
+Priority:
 
-- parse/describe-style metadata
-- parameter/result OID comparison
-- no Bind/Execute for verification
+- SQLBraid/TypeScript diagnostics;
+- directive diagnostics;
+- declared/verified contract hover;
+- query fingerprint/verification status;
+- table/column/routine completion when schema metadata is available;
+- snapshot/manifest reload;
+- stale-analysis suppression;
+- cancellation;
+- bounded project caches.
 
-MySQL:
-
-- COM_STMT_PREPARE metadata
-- close statement without executing values
-
-SQLite:
-
-- implement only evidence that can be obtained safely from native prepare/metadata
-- do not invent native type precision SQLite does not provide
-
-Generate deterministic redacted proof artifacts.
-
-CLI:
-
-```bash
-sqlbraid verify --live
-sqlbraid verify
-```
-
-Offline `verify` validates the stored proof against current compiler/snapshot identities.
+Advanced SQL semantic navigation is optional and must be evidence-backed.
 
 ---
 
-## 26. Query plan governance
+## 14. Package direction
 
-Optional explicit plan inspection:
+Retain as first-class product packages:
 
-- PostgreSQL structured JSON EXPLAIN without ANALYZE by default
-- MySQL structured JSON EXPLAIN without ANALYZE
-- SQLite plan support only if useful/stable enough; otherwise capability is absent rather than simulated
+- `@sqlbraid/core`
+- `@sqlbraid/template`
+- `@sqlbraid/runtime`
+- `@sqlbraid/postgres`
+- `@sqlbraid/mysql`
+- `@sqlbraid/sqlite`
+- `@sqlbraid/schema`
+- `@sqlbraid/operations`
+- `@sqlbraid/compiler`
+- `@sqlbraid/cli`
+- `@sqlbraid/language-server`
 
-Normalize plan evidence into a small dialect-neutral node inventory.
+`@sqlbraid/ast` is transitional and should survive only if it has a narrow, durable responsibility after the pivot.
 
-Support:
-
-- fingerprint-keyed plan capture
-- before/after comparison
-- absolute budgets
-- relative budgets when environments are comparable
-- explicit uncertainty for changed schema/settings/statistics/sample policy
-
-Do not store expressions/literals unnecessarily.
-
-CLI:
-
-```bash
-sqlbraid explain
-sqlbraid explain --compare ...
-```
+Avoid creating more packages without a clear user-facing or architectural boundary.
 
 ---
 
-## 27. Schema drift and migration compatibility
+## 15. Testing strategy
 
-`drift` compares live/current snapshot evidence to checked-in snapshot deterministically.
+### 15.1 Fast tests
 
-Migration compatibility consumes:
+Vitest unit tests should cover:
 
-- before snapshot
-- after snapshot
-- before query manifest
-- after query manifest
+- directive parsing/rendering;
+- lazy evaluation;
+- bind ordering;
+- trim behavior;
+- fragment/list/identifier safety;
+- runtime cardinality;
+- transaction state;
+- codecs/type policy;
+- compiler transform/source maps;
+- manifest determinism.
 
-Analyze both rolling-deployment directions:
+### 15.2 Real databases
 
-```text
-old app → new DB
-new app → old DB
-```
+Use Testcontainers for PostgreSQL/MySQL and native `node:sqlite` for SQLite.
 
-Classify:
+Real DB tests are the preferred oracle for:
 
-- compatible
-- breaking
-- unknown
-- source-only/runtime-only as appropriate
+- driver behavior;
+- transaction semantics;
+- result normalization;
+- prepare/describe capabilities;
+- database-assisted contract verification;
+- database-specific codecs.
 
-Map breaking schema/routine/type changes to exact affected query source ranges through dependency evidence.
+### 15.3 Packed consumers
 
-CLI:
+Continue validating actual packed packages with:
 
-```bash
-sqlbraid compat ...
-```
-
----
-
-## 28. Semantic read routing and transaction retry
-
-Optional routed database wrapper:
-
-```text
-primary
-replica(s)
-```
-
-Route to a replica only when compiler/runtime grammar evidence proves the query is:
-
-- read-only
-- non-locking
-- not session-affine
-- not volatile/unsafe under dialect rules
-
-Anything unknown routes to primary.
-
-Transaction retries:
-
-- explicit transaction callback only
-- dialect-owned retryable error classification
-- bounded attempts/backoff
-- never retry arbitrary statements outside an explicit transaction scope unless a separately proven idempotency model exists
+- publint;
+- Are The Types Wrong;
+- external ESM consumer;
+- TypeScript resolution;
+- subpath exports;
+- CLI executable;
+- supported Node engine metadata.
 
 ---
 
-## 29. Observability
+## 16. Security and correctness rules
 
-Core defines a driver-neutral observer contract.
+Non-negotiable:
 
-Provide optional OpenTelemetry bridge.
-
-Observe at least:
-
-- query
-- prepared query
-- batch
-- pipeline where present
-- stream
-- transaction/nested transaction
-- cancellation/deadline
-- bulk operations
-
-Default telemetry contains:
-
-- compiler-compatible fingerprints
-- operation/result kind
-- duration/status
-- safe dialect metadata
-
-Do not emit SQL text or bound values by default.
+- ordinary interpolation is always bound;
+- structural SQL requires explicit helpers;
+- `sql.raw()` is explicit and documented as trusted/unsafe;
+- dynamic directives never reach the database;
+- no hidden value stringification into SQL;
+- transaction ownership is physical-resource scoped;
+- poisoned connections are not reused;
+- unsupported verification never becomes fabricated proof;
+- `unknown` is preferable to a false claim;
+- generated code must preserve source semantics and source maps.
 
 ---
 
-## 30. Runtime compatibility negotiation
+## 17. Product roadmap
 
-When configured with a compile snapshot, an adapter should verify that the live target is compatible before claiming compiler/runtime parity.
+### Phase A — Scope pivot and API simplification
 
-Compare dialect-relevant evidence such as:
+Goal: make the implementation match this product definition.
 
-- server major/version policy
-- lexical/session modes
-- type policy identity
-- catalog revision
-- extension versions
-- search path/schema scope where applicable
-- charset/collation mode
-- SQLite compile options
+- make explicit result contracts the primary typed path;
+- remove mandatory SQL semantic inference from normal checking;
+- retire old external-parity planning artifacts;
+- stop treating `@sqlbraid/ast` as a growing dialect compiler;
+- simplify compiler diagnostics around directives/contracts/manifests;
+- update tests to assert the new contract.
 
-Mismatch fails before normal application SQL when compatibility mode is enabled.
+### Phase B — Core authoring/runtime release quality
 
-This feature is explicit; runtime adapters without a compatibility snapshot may remain lazy.
+- finalize `if/choose/where/set/trim` behavior;
+- finalize fragment/list/identifier/raw contracts;
+- driver adapter polish;
+- transaction/savepoint lifecycle;
+- prepared/stream behavior;
+- clear error codes;
+- public API documentation and examples.
 
----
+### Phase C — Result contracts and runtime validation
 
-## 31. Diagnostics
+- finalize `sql<T>` declared-contract semantics;
+- expose ergonomic Standard Schema validation;
+- document driver decode/type-policy behavior;
+- make declared vs runtime-validated status visible.
 
-Create stable diagnostic codes and source ranges from the beginning.
+### Phase D — Database verification and query manifests
 
-Families should include:
+- define manifest v1;
+- implement dialect verification capability interfaces;
+- PostgreSQL verification path;
+- MySQL verification path;
+- SQLite verification path;
+- CI-friendly `sqlbraid verify`;
+- offline manifest consumption.
 
-- template/directive syntax
-- unsafe structural interpolation
-- SQL parse
-- name resolution
-- ambiguity
-- type mismatch
-- parameter mismatch
-- routine overload mismatch
-- unsupported/version-gated feature
-- incomplete schema evidence
-- stale/mismatched snapshot
-- structural variant/resource limit
-- runtime compatibility
-- driver capability mismatch
+### Phase E — Tooling
 
-Diagnostics must include:
+- LSP project cache;
+- verification status hover;
+- schema-backed completion;
+- manifest drift diagnostics;
+- editor integration packaging.
 
-- stable code
-- severity
-- concise message
-- exact source range
-- actionable suggestion where possible
+### Phase F — Operational/runtime extensions
 
-Never hide unsupported SQL by silently returning a plausible type.
+- pool lease ownership;
+- cancellation;
+- batch/bulk/pipeline;
+- COPY/LOAD DATA where justified;
+- routing/retry only with explicit semantics;
+- OpenTelemetry;
+- migration compatibility tooling.
 
----
+### Phase G — Optional inference
 
-## 32. Custom dialect/conformance SPI
+Only after the core product is stable:
 
-Define a stable public dialect contract before considering the first-party dialect work complete.
+- database-generated contracts;
+- simple static-query inference from trusted metadata;
+- opt-in helpers for common cases.
 
-A dialect must provide:
-
-- ID/version
-- SQL module/tag identity
-- lexer profile
-- parser/analyzer
-- placeholder renderer
-- identifier quoting
-- snapshot validation
-- schema provider/introspection
-- type policy
-- runtime codec surface
-- server capability/version policy
-- query semantics
-- optional live verifier
-- optional plan inspector
-- optional retry classifier
-- optional routing classifier
-- optional bulk capabilities
-
-The `conformance` package must be able to test a third-party dialect without importing first-party PostgreSQL/MySQL/SQLite code.
+This phase must not recreate a universal SQL semantic compiler.
 
 ---
 
-## 33. CLI
-
-Target commands:
-
-```text
-inspect / generate
-check
-drift
-manifest
-verify --live
-verify
-explain
-compat
-```
-
-Optional helpful commands:
-
-```text
-doctor
-snapshot print
-query explain-type
-```
-
-CLI output:
-
-- deterministic where machine-consumed
-- human-readable diagnostics on stderr/stdout as appropriate
-- `--json` for CI
-- no credentials in output
-- explicit exit codes
-
----
-
-## 34. Configuration
-
-One project config file.
-
-Conceptual:
-
-```ts
-export default defineConfig({
-  dialect: postgres(...),
-  schema: {
-    snapshot: "./db/schema.json",
-    provider: ...
-  },
-  typePolicy,
-  compiler: {
-    maxSourceBytes: ...,
-    maxQueries: ...,
-    maxStructuralVariants: ...,
-    maxGeneratedOverlayBytes: ...
-  }
-});
-```
-
-Requirements:
-
-- no implicit DB access during config load for ordinary checks
-- connection factories used only by explicit live commands
-- application owns credentials and driver installation
-- config must be importable without loading all drivers/dialects
-
----
-
-## 35. Security requirements
-
-### SQL injection
-
-- ordinary interpolation always binds
-- identifier interpolation must use `ident`
-- raw SQL requires explicit `raw`
-- fragment objects are branded/opaque
-- arrays are not implicitly structure
-- no mixed value/fragment arrays without explicit API
-
-### Artifact redaction
-
-Manifests, proofs, plan evidence, telemetry, diagnostics, and compatibility reports must not accidentally persist:
-
-- bound parameter values
-- credentials
-- connection strings
-- absolute local paths
-- raw driver errors containing secrets
-
-### Resource exhaustion
-
-Bound all parser/compiler/runtime expansion operations.
-
-### Driver safety
-
-- do not enable MySQL multi-statements for convenience
-- bulk APIs must not accept arbitrary filesystem paths
-- cancellation must not return a protocol-corrupted connection to a pool
-- failed transactions must not continue as if healthy
-
----
-
-## 36. Testing architecture
-
-Testing is a release feature, not cleanup work.
-
-### 36.1 Unit tests
-
-- template scanner
-- directive parser
-- trim/where/set
-- renderer placeholder/value order
-- lexer
-- parser
-- resolver
-- coercion
-- nullability
-- overloads
-- source mapping
-- overlay generation
-- snapshot codec/hash
-- runtime codecs
-
-### 36.2 Golden source tests
-
-Each fixture should contain:
-
-```text
-schema snapshot
-TypeScript source
-expected diagnostics
-expected inferred row type
-expected bind expectations
-expected rendered SQL per runtime branch
-```
-
-### 36.3 Database differential tests
-
-Run real supported database versions in CI.
-
-For inference questions where the server provides native evidence, compare compiler expectations with prepare/describe metadata.
-
-### 36.4 Reference parity suite
-
-Create independently written cases covering the public capability classes exposed by `SQLBraid external reference`.
-
-Do not copy its tests.
-
-Track a matrix:
-
-```text
-feature
-postgres status
-mysql status
-sqlite status
-our diagnostic/result
-reference behavior
-notes
-```
-
-A capability is not considered parity-complete because one happy-path fixture passes.
-
-### 36.5 Mutation/fuzz/property testing
-
-At minimum:
-
-- SQL tokenizer/parser fuzz
-- directive nesting fuzz
-- renderer property: number/order of placeholders equals active bound values
-- source-map round-trip ranges
-- snapshot canonicalization stability
-- operator/function overload mutation cases
-- condition/variant correlation
-
-### 36.6 Performance tests
-
-Measure:
-
-- static query analysis
-- many-query project analysis
-- incremental editor re-analysis
-- 100+ optional WHERE predicates
-- large INSERT lists
-- deep but valid SQL
-- worst-case rejected nesting
-
-Set budgets before release.
-
----
-
-## 37. Implementation phases and gates
-
-The agent should execute these phases in order. Do not stop after writing architecture stubs.
-
-### Phase 0 — repository reconnaissance and reference lock
-
-1. Inspect the repository's existing build/package conventions.
-2. Re-read current `SQLBraid external reference` public README and relevant public docs.
-3. Write a local capability matrix from the current reference.
-4. Record the reference commit SHA/date used for parity tracking.
-5. Establish clean-room implementation rule in contributor/agent docs if the repository has them.
-
-Gate:
-
-- capability matrix exists
-- no production dependency on `SQLBraid external reference`
-- package boundaries agreed in code layout
-
-### Phase 1 — core + Template IR + renderer
-
-Implement:
-
-- core Query/Fragment contracts
-- SQL tag
-- directive scanner/parser
-- Template IR
-- `if`, `choose`, `where`, `set`, `trim`
-- structural helpers
-- runtime renderer
-- source mapping
-- renderer limits
-
-Gate fixtures must cover:
-
-- optimizer hints
-- MySQL version comments
-- normal comments
-- fake `/* @braid */` comments
-- every directive nesting combination
-- placeholder order across enabled/disabled branches
-- malicious/raw structural cases
-- trim correctness around nested SQL/comments/strings
-
-### Phase 2 — schema v1 + config + snapshot codec
-
-Implement:
-
-- schema model
-- canonical serialization
-- hash/identity
-- config loader
-- snapshot migrations infrastructure
-- drift primitives
-
-Gate:
-
-- byte-for-byte deterministic output from equivalent metadata
-- format validation
-- unknown future fields/version handling policy tested
-
-### Phase 3 — compiler source discovery + minimal overlay
-
-Implement:
-
-- TS AST SQL tag discovery
-- Template IR extraction from source
-- overlay engine
-- source-map diagnostics
-- manually supplied/mock SQL analysis results to prove editor/tsc path
-
-Gate:
-
-- a mock inferred row becomes the actual hover/tsc type
-- a mock expected bind rejects wrong TS expression type
-- directive condition narrows guarded expressions
-- source files are never rewritten
-
-### Phase 4 — common SQL lexer/parser/resolver foundation
-
-Implement:
-
-- bounded lexer
-- expression Pratt parser
-- common query/DML AST
-- scopes
-- column resolution
-- joins/nullability
-- subqueries
-- CTEs
-- compound queries
-- basic function/operator/cast abstraction
-- basic DML parameter inference
-
-Use synthetic dialect fixtures before full real dialect catalogs.
-
-Gate:
-
-- cross-dialect common SQL fixtures infer exact rows/parameters
-- ambiguity and unknown evidence fail closed
-
-### Phase 5 — PostgreSQL vertical completion
-
-Build PostgreSQL introspection, catalogs, resolver extensions, type policy, runtime codec utilities, and grammar coverage.
-
-Start with common SELECT/DML, then systematically close the PostgreSQL parity matrix.
-
-Do not declare completion with “most SQL works”.
-
-Gate:
-
-- PostgreSQL capability matrix has no unexplained red/unknown entries inside declared support
-- real DB differential tests pass
-- runtime decoded types match static policy
-- routine/function inference passes
-- extension/version behavior is conservative
-
-### Phase 6 — MySQL vertical completion
-
-Implement MySQL lexical modes, coercion/collation/numeric behavior, introspection, routines, grammar, codecs, and runtime contracts.
-
-Gate:
-
-- supported LTS/version profiles tested
-- MariaDB rejected or separately identified
-- SQL mode behavior cannot silently use wrong grammar
-- real prepare metadata differentials pass
-
-### Phase 7 — SQLite vertical completion
-
-Implement SQLite version/compile-option evidence, STRICT/dynamic typing, introspection, routine registry, grammar, type policy, and node adapter contracts.
-
-Gate:
-
-- ordinary non-STRICT values remain sound
-- STRICT tables infer precisely
-- compile-option/version gates tested
-- Node runtime integer policy equals compiler inference
-
-### Phase 8 — structural analysis hardening
-
-Replace exponential common-case dynamic WHERE/SET analysis with guarded/local analysis.
-
-Retain bounded variants for true shape changes.
-
-Gate:
-
-- 100 independent optional predicates analyze successfully within performance budget
-- conditional projection/join types remain correct
-- repeated conditions remain correlated
-- no type result changes versus exhaustive expansion on small cross-check fixtures
-
-### Phase 9 — production runtime adapters
-
-Implement:
-
-- pg
-- mysql2
-- node:sqlite
-
-Then:
-
-- execute/all/one/maybeOne
-- transaction/savepoints
-- batch
-- prepare
-- streaming
-- cancellation/deadline where honestly supportable
-- normalized errors
-- runtime compatibility negotiation
-
-Gate:
-
-- integration tests on real DBs
-- no driver-specific result shape leaks
-- connection cleanup failure tests
-- prepared shape drift tests
-- transaction invalidation tests
-
-### Phase 10 — routine/procedure execution
-
-Complete:
-
-- expression functions
-- table/set-returning functions
-- CALL/procedure syntax where DB supports it
-- IN/OUT/INOUT
-- opaque result set contracts
-- multiple-result-set internal model
-
-Gate:
-
-- catalog-known outputs inferred
-- opaque outputs remain unknown until explicitly declared
-- no procedure-body guessing
-
-### Phase 11 — parity operational features
-
-Implement and test:
-
-- Standard Schema result validation
-- query semantics
-- fingerprints/manifests
-- live verification
-- plan governance
-- schema/migration compatibility
-- semantic routing/retries
-- observability
-- native bulk operations
-- PostgreSQL pipeline if supported by the chosen adapter API
-
-Each feature must be capability-gated. Do not simulate unsupported backend features.
-
-### Phase 12 — LSP/editor completion
-
-Implement production editor behavior using the same analysis service:
-
-- hover
-- diagnostics
-- completion
-- definitions
-- quick fixes
-- cancellation
-- incremental caches
-- snapshot reload
-
-Gate:
-
-- CLI/editor diagnostics and inferred types are identical for the same source revision
-- no stale result publication
-- bounded memory/caches
-
-### Phase 13 — parity/release audit
-
-1. Re-read the current `SQLBraid external reference` docs at the end, not only the reference snapshot from Phase 0.
-2. Diff newly added public capabilities.
-3. Update parity matrix.
-4. Run all database matrices.
-5. Run conformance.
-6. Run performance/resource-limit tests.
-7. Run package/API surface audit.
-8. Run security/redaction audit.
-9. Review docs examples against executable fixtures.
-
-Release only when remaining differences are deliberate and documented.
-
----
-
-## 38. Required representative acceptance fixtures
-
-The following are mandatory.
-
-### Dynamic WHERE
-
-```ts
-const q = sql`
-  SELECT a.id, a.email
-  FROM account a
-  /*@braid where*/
-    /*@braid if ${status != null}*/
-      AND a.status = ${status}
-    /*@braid end*/
-    /*@braid if ${minimumId != null}*/
-      AND a.id >= ${minimumId}
-    /*@braid end*/
-  /*@braid end*/
-`;
-```
-
-Prove:
-
-- correct render for all four combinations
-- correct value order
-- exact output row
-- guarded nullable input narrowing
-
-### Dynamic SET
-
-```ts
-const q = sql`
-  UPDATE account
-  /*@braid set*/
-    /*@braid if ${patch.email !== undefined}*/
-      email = ${patch.email},
-    /*@braid end*/
-    /*@braid if ${patch.status !== undefined}*/
-      status = ${patch.status},
-    /*@braid end*/
-  /*@braid end*/
-  WHERE id = ${id}
-  RETURNING id, email, status
-`;
-```
-
-Prove:
-
-- comma trimming
-- no empty SET
-- assignment type inference
-- RETURNING row inference
-
-### Conditional projection
-
-```ts
-const q = sql`
-  SELECT id
-  /*@braid if ${includeEmail}*/
-    , email
-  /*@braid end*/
-  FROM account
-`;
-```
-
-Prove exact/conditional/union type behavior.
-
-### Outer join
-
-Prove join-side nullability.
-
-### Recursive CTE
-
-Prove seed/member shape checking and dialect differences.
-
-### Compound query
-
-Prove arity/type merging.
-
-### Function overload
-
-Prove bind expectation from routine candidate selection.
-
-### Table-returning routine
-
-Prove relation scope and output columns.
-
-### Procedure with known OUT metadata
-
-Prove typed plain object output where driver semantics allow it.
-
-### Procedure with opaque result set
-
-Prove `unknown` by default and local explicit contract path.
-
-### PostgreSQL enum/domain/array/range/JSON
-
-Prove type and operator resolution.
-
-### MySQL enum/unsigned/decimal/collation/sql_mode
-
-Prove dialect semantics and mode evidence.
-
-### SQLite ordinary vs STRICT
-
-Prove sound storage union versus precise STRICT type.
-
-### SQL comments/hints
-
-Prove all non-exact `/*@braid` forms survive unchanged.
-
----
-
-## 39. Documentation deliverables
-
-Write executable docs, not aspirational API prose.
-
-Required:
-
-- philosophy: SQL-first vs query builder
-- dynamic directive reference
-- schema snapshot workflow
-- type inference/safety rules
-- unknown/unsafe boundaries
-- functions/procedures
-- execution/transactions
-- prepared statements
-- streaming
-- bulk
-- result validation
-- observability
-- manifests/live verification/plans
-- migration compatibility
-- routing/retries
-- PostgreSQL reference
-- MySQL reference
-- SQLite reference
-- custom dialect guide
-- diagnostics
-- editor setup
-- version/support policy
-
-Every documented code sample must be covered by a compile fixture or executable test where practical.
-
----
-
-## 40. Definition of done
-
-This plan is complete only when all of the following are true:
-
-0. All public branding is consistently SQLBraid: npm packages use `@sqlbraid/*`, the CLI is `sqlbraid`, and dynamic template directives use the exact `/*@braid ...*/` namespace.
-
-1. Developers can author static and MyBatis-style dynamic SQL inside a tagged template without converting SQL clauses into a query-builder DSL.
-2. Exact `/*@braid ...*/` directives never leak to the DB.
-3. Ordinary comments, optimizer hints, and vendor comments do not collide with directive parsing.
-4. PostgreSQL/MySQL/SQLite schema snapshots are generated explicitly from real DB metadata and normal editor/build analysis is offline.
-5. Result row types are inferred automatically wherever schema + grammar + routine evidence can prove them.
-6. Bound TS expressions are checked against SQL-inferred expected types.
-7. Directive conditions participate in control-flow narrowing for guarded binds.
-8. Result rows returned to application code are ordinary typed TS objects.
-9. Handwritten `sql<T>` contracts are verified, not blindly trusted.
-10. Opaque/unprovable result shapes are `unknown` or explicitly contracted; never fabricated.
-11. Functions/routines are first-class in snapshot and resolver logic.
-12. Procedure execution supports metadata-visible inputs/outputs where the dialect/driver permits it and treats dynamic result sets honestly.
-13. Common dynamic WHERE/SET analysis does not grow exponentially with independent predicates.
-14. Shape-changing dynamic SQL remains bounded and safe.
-15. Static TypePolicy and runtime codecs agree.
-16. Unsupported/version-gated/ambiguous SQL fails closed.
-17. PostgreSQL/MySQL/SQLite declared grammar coverage matches the current reference capability matrix or every deliberate deviation is documented.
-18. Runtime adapters pass real-database integration tests.
-19. CLI and editor use one shared analysis service and return equivalent inference/diagnostics.
-20. Snapshot drift, query manifests, live verification, plan governance, migration compatibility, result validation, observability, routing/retries, and supported bulk operations are implemented to the declared parity level.
-21. Third-party dialects can be built and tested through the public dialect/conformance contract.
-22. No production package imports or ports `SQLBraid external reference`.
-23. Parser/compiler/runtime resources are explicitly bounded.
-24. Portable artifacts and default telemetry contain no secrets or bound values.
-25. All release gates and parity matrices pass.
-
----
-
-## 41. Agent execution instruction
-
-Implement this plan rather than producing another speculative architecture document.
-
-Before changing code:
-
-- inspect the existing repository and adapt names/build conventions to it
-- read the current public `SQLBraid external reference` reference docs listed above
-- establish the parity matrix and reference commit
-- identify any existing parser/runtime/schema code that already satisfies parts of this plan
-
-Then execute the phases sequentially.
-
-Do not stop because a phase is large. Keep each layer working and tested before expanding coverage.
-
-When a design choice is under-specified:
-
-1. preserve SQL-first authoring,
-2. preserve soundness,
-3. preserve offline compilation,
-4. prefer DB metadata over handwritten duplication,
-5. prefer explicit `unknown` over inference guesses,
-6. keep runtime driver ownership in the application,
-7. keep dialect semantics outside compiler core.
-
-Do not replace difficult SQL semantics with `any`, broad casts, handwritten result types, or skipped tests merely to make the build green.
-
-When full parity requires more work than initially expected, continue closing the parity matrix. The parity matrix, database evidence, and executable fixtures—not line count or apparent feature completion—determine whether the implementation is done.
-
+## 18. v1 release definition
+
+SQLBraid v1 is ready when a TypeScript developer can:
+
+1. install the relevant SQLBraid packages;
+2. write normal SQL in a tagged template;
+3. use `@braid` directives for common dynamic SQL;
+4. declare a result contract explicitly;
+5. bind values safely across PostgreSQL/MySQL/SQLite;
+6. execute queries and transactions through plain driver adapters;
+7. optionally validate rows at runtime;
+8. optionally verify query contracts against a real database;
+9. use the compiler/CLI without requiring a live DB for ordinary development;
+10. trust that unsupported analysis is reported honestly rather than guessed.
+
+The v1 success metric is **how little SQL knowledge SQLBraid gets in the way of**, not how much SQL grammar SQLBraid can reimplement.
