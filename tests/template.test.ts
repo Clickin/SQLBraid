@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { sql } from '@sqlbraid/template';
+import type { CallQuery, CommandQuery, Query, RowQuery } from '@sqlbraid/core';
+import { capture, sql } from '@sqlbraid/template';
 
 function hasCode(code: string): (error: unknown) => boolean {
   return (error): error is { readonly code: string } => typeof error === 'object' && error !== null && 'code' in error && error.code === code;
@@ -62,4 +63,19 @@ test('fragment and join are explicit structural composition', () => {
   const rendered = sql`INSERT INTO users(id) VALUES ${fragment}`.render();
   assert.equal(rendered.text, 'INSERT INTO users(id) VALUES ($1), ($2)');
   assert.deepEqual(rendered.values, values);
+});
+
+test('query tags expose declared result kinds', () => {
+  type UserRow = { readonly id: number };
+  const typed: RowQuery<UserRow> = sql<UserRow>`SELECT id FROM users`;
+  const rows: RowQuery<UserRow> = sql.rows<UserRow>`SELECT id FROM users`;
+  const command: CommandQuery = sql.command`UPDATE users SET active = ${true}`;
+  const call: CallQuery<UserRow> = sql.call<UserRow>`CALL refresh_users()`;
+  const untyped: Query<unknown, 'unknown'> = sql`SELECT 1`;
+  const captured: RowQuery<UserRow> = capture<UserRow, 'rows'>(sql.rows, ['SELECT ', ''], (values) => { values[0] = 1; });
+  assert.equal(rows.resultKind, 'rows');
+  assert.equal(command.resultKind, 'command');
+  assert.equal(call.resultKind, 'call');
+  assert.equal(untyped.resultKind, 'unknown');
+  assert.equal(captured.resultKind, 'rows');
 });

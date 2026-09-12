@@ -148,7 +148,7 @@ export interface SqlFragment {
   readonly dialectId: string;
 }
 
-export interface Query<Row = unknown, Kind extends QueryResultKind = "rows"> {
+export interface Query<Row = unknown, Kind extends QueryResultKind = "unknown"> {
   readonly ir: TemplateIr;
   readonly values: readonly unknown[];
   readonly resultKind: Kind;
@@ -157,12 +157,8 @@ export interface Query<Row = unknown, Kind extends QueryResultKind = "rows"> {
 }
 
 export type RowQuery<Row = unknown> = Query<Row, "rows">;
-export type CommandQuery<Result = unknown> = Query<Result, "command">;
+export type CommandQuery<Result = CommandResult> = Query<Result, "command">;
 export type CallQuery<Row = unknown> = Query<Row, "call">;
-
-export type UnverifiedQuery<Expected> = Query<unknown, "unknown"> & {
-  readonly __expectedContract?: Expected;
-};
 
 export interface CommandResult {
   readonly affectedRows?: number;
@@ -223,9 +219,22 @@ export interface Database {
 export type QueryRow<Q> = Q extends Query<infer Row, QueryResultKind> ? Row : never;
 export type QueryResult<Q> = readonly QueryRow<Q>[];
 
-export interface SqlTag {
-  (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown>;
-  <Expected>(strings: TemplateStringsArray, ...values: readonly unknown[]): UnverifiedQuery<Expected>;
+export interface SqlTagLike {
+  (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, QueryResultKind>;
+}
+
+export interface SqlTag extends SqlTagLike {
+  (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "unknown">;
+  <Row>(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
+  rows: {
+    <Row = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
+  };
+  command: {
+    <Result = CommandResult>(strings: TemplateStringsArray, ...values: readonly unknown[]): CommandQuery<Result>;
+  };
+  call: {
+    <Row = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): CallQuery<Row>;
+  };
   fragment: (strings: TemplateStringsArray, ...values: readonly unknown[]) => SqlFragment;
   empty: SqlFragment;
   ident: (identifier: string | readonly string[]) => SqlFragment;

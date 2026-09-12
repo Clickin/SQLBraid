@@ -40,11 +40,11 @@ test('database wrappers share ownership for the same executor object', async () 
 test('runtime normalizes query execution to plain rows and enforces cardinality', async () => {
   const executor = executorFor([{ id: 1 }]);
   const db = createDatabase(executor);
-  assert.deepEqual(await db.all(sql`SELECT 1`), [{ id: 1 }]);
-  assert.deepEqual(await db.one(sql`SELECT 1`), { id: 1 });
-  assert.deepEqual(await db.maybeOne(sql`SELECT 1`), { id: 1 });
+  assert.deepEqual(await db.all(sql.rows`SELECT 1`), [{ id: 1 }]);
+  assert.deepEqual(await db.one(sql.rows`SELECT 1`), { id: 1 });
+  assert.deepEqual(await db.maybeOne(sql.rows`SELECT 1`), { id: 1 });
   const many = createDatabase(executorFor([{ id: 1 }, { id: 2 }]));
-  await assert.rejects(() => many.maybeOne(sql`SELECT 1`), DatabaseCardinalityError);
+  await assert.rejects(() => many.maybeOne(sql.rows`SELECT 1`), DatabaseCardinalityError);
 });
 
 test('transactions commit and rollback through the adapter seam', async () => {

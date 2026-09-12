@@ -7,11 +7,13 @@ import {
   type IfNode,
   type ListNode,
   type Query,
+  type QueryResultKind,
   type RenderLimits,
   type RenderedQuery,
   type SqlFragment,
   SqlRenderError,
   type SqlTag,
+  type SqlTagLike,
   type SourceRange,
   type TemplateIr,
   type TemplateNode,
@@ -722,11 +724,15 @@ export interface SqlTagOptions {
 export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
   const dialect = options.dialect ?? postgresDialect;
   const limits = validateLimits(options.limits ?? {});
-  const tag = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown> => {
+  const createQuery = <Kind extends QueryResultKind>(strings: TemplateStringsArray, values: readonly unknown[], resultKind: Kind): Query<unknown, Kind> => {
     const ir = cachedTemplate(strings, dialect.lexicalProfile, limits.maxNestingDepth);
     const captured = Object.freeze([...values]);
-    return Object.freeze({ ir, values: captured, resultKind: "rows" as const, render: () => renderIr(ir, captured, dialect, limits) });
-  }) as SqlTag;
+    return Object.freeze({ ir, values: captured, resultKind, render: () => renderIr(ir, captured, dialect, limits) });
+  };
+  const tag = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "unknown"> => createQuery(strings, values, "unknown")) as SqlTag;
+  tag.rows = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "rows"> => createQuery(strings, values, "rows")) as SqlTag["rows"];
+  tag.command = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "command"> => createQuery(strings, values, "command")) as SqlTag["command"];
+  tag.call = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "call"> => createQuery(strings, values, "call")) as SqlTag["call"];
   tag.fragment = (strings, ...values) => makeFragment(strings, values, dialect, limits);
   tag.empty = makeStaticFragment([], 0, dialect);
   tag.ident = (identifier) => makeStaticFragment([{ kind: "identifier", value: typeof identifier === "string" ? identifier : Object.freeze([...identifier]), range: { start: 0, end: 0 } }], 0, dialect);
@@ -794,20 +800,20 @@ function captureActive(nodes: readonly TemplateNode[], thunks: readonly (() => u
   }
 }
 
-export function guarded(tag: SqlTag, strings: readonly string[], thunks: readonly (() => unknown)[]): Query<unknown> {
+export function guarded<Row = unknown, Kind extends QueryResultKind = "unknown">(tag: SqlTagLike, strings: readonly string[], thunks: readonly (() => unknown)[]): Query<Row, Kind> {
   const templateStrings = createTemplateStrings(strings);
   const ir = cachedTemplate(templateStrings);
-  if (!hasGuard(ir.nodes)) return tag(templateStrings, ...thunks.map((thunk) => thunk()));
+  if (!hasGuard(ir.nodes)) return tag(templateStrings, ...thunks.map((thunk) => thunk())) as Query<Row, Kind>;
   const values = new Array<unknown>(Math.max(0, strings.length - 1));
   captureActive(ir.nodes, thunks, values);
-  return tag(templateStrings, ...values);
+  return tag(templateStrings, ...values) as Query<Row, Kind>;
 }
 
-export function capture(tag: SqlTag, strings: readonly string[], build: (values: unknown[]) => void): Query<unknown> {
+export function capture<Row = unknown, Kind extends QueryResultKind = "unknown">(tag: SqlTagLike, strings: readonly string[], build: (values: unknown[]) => void): Query<Row, Kind> {
   const captured = new Array<unknown>(Math.max(0, strings.length - 1));
   build(captured);
   const templateStrings = createTemplateStrings(strings);
-  return tag(templateStrings, ...captured);
+  return tag(templateStrings, ...captured) as Query<Row, Kind>;
 }
 
 export const sql = createSqlTag();

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { CallQuery, QueryExecutor, RenderedQuery, RoutineCallResult } from '@sqlbraid/core';
+import type { QueryExecutor, RenderedQuery, RoutineCallResult } from '@sqlbraid/core';
 import type { SchemaSnapshot } from '@sqlbraid/schema';
 import { parseSql, resolveStatement } from '@sqlbraid/ast';
 import { createDatabase } from '@sqlbraid/runtime';
@@ -22,7 +22,6 @@ test('routine database call preserves output and result-set shape', async () => 
     },
   };
   const db = createDatabase(executor);
-  const query = sql`CALL do_work(${1})`;
-  const callQuery: CallQuery<unknown> = { ir: query.ir, values: query.values, resultKind: "call", render: query.render };
-  assert.deepEqual(await db.call(callQuery), { output: { ok: true }, resultSets: [{ rows: [{ id: 1 }] }, { rows: 'unknown' }] });
+  const query = sql.call`CALL do_work(${1})`;
+  assert.deepEqual(await db.call(query), { output: { ok: true }, resultSets: [{ rows: [{ id: 1 }] }, { rows: 'unknown' }] });
 });

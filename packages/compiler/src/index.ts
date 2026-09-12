@@ -25,6 +25,7 @@ export interface DiscoveredQuery {
   readonly bindings: readonly BindingSite[];
   readonly ir: TemplateIr;
   readonly expectedType?: string;
+  readonly declaredResultKind?: "rows" | "command" | "call";
 }
 
 export interface CompileDiagnostic {
@@ -197,6 +198,26 @@ function unwrapTag(tag: ts.Expression): UnwrappedTag {
   return { expression: tag.expression, ...(expectedType ? { expectedType } : {}) };
 }
 
+function explicitResultKind(expression: ts.Expression): "rows" | "command" | "call" | undefined {
+  if (!ts.isPropertyAccessExpression(expression)) return undefined;
+  return expression.name.text === "rows" || expression.name.text === "command" || expression.name.text === "call" ? expression.name.text : undefined;
+}
+
+function importedTagModule(expression: ts.Expression, bindings: ImportBindings, tagExport: string): string | undefined {
+  if (ts.isIdentifier(expression)) return bindings.named.get(expression.text) ?? bindings.defaults.get(expression.text);
+  if (!ts.isPropertyAccessExpression(expression)) return undefined;
+  if (expression.name.text === tagExport && ts.isIdentifier(expression.expression)) return bindings.namespaces.get(expression.expression.text);
+  if (explicitResultKind(expression)) return importedTagModule(expression.expression, bindings, tagExport);
+  return undefined;
+}
+
+function tagRoot(expression: ts.Expression): ts.Identifier | undefined {
+  if (ts.isIdentifier(expression)) return expression;
+  if (ts.isPropertyAccessExpression(expression) && explicitResultKind(expression)) return tagRoot(expression.expression);
+  if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)) return expression.expression;
+  return undefined;
+}
+
 function resolvedModulePath(moduleSpecifier: string, sourceFile: ts.SourceFile, options: OverlayOptions): string | undefined {
   return ts.resolveModuleName(moduleSpecifier, sourceFile.fileName, options.compilerOptions ?? defaultCompilerOptions(), ts.sys).resolvedModule?.resolvedFileName;
 }
@@ -222,20 +243,15 @@ function checkerTagModule(expression: ts.Expression, sourceFile: ts.SourceFile, 
   return undefined;
 }
 
-function tagIdentity(tag: ts.Expression, bindings: ImportBindings, tagExport: string, sourceFile: ts.SourceFile, options: OverlayOptions, expectedType?: string): { readonly name?: string; readonly moduleSpecifier?: string; readonly expectedType?: string } {
+function tagIdentity(tag: ts.Expression, bindings: ImportBindings, tagExport: string, sourceFile: ts.SourceFile, options: OverlayOptions, expectedType?: string): { readonly name?: string; readonly moduleSpecifier?: string; readonly expectedType?: string; readonly declaredResultKind?: "rows" | "command" | "call" } {
   const unwrapped = unwrapTag(tag);
   const expression = unwrapped.expression;
   const contract = expectedType ?? unwrapped.expectedType;
-  if (ts.isIdentifier(expression)) {
-    if (!isShadowed(expression)) {
-      const moduleSpecifier = bindings.named.get(expression.text) ?? bindings.defaults.get(expression.text);
-      if (moduleSpecifier) return { name: expression.text, moduleSpecifier, ...(contract ? { expectedType: contract } : {}) };
-    }
-  } else if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression) && expression.name.text === tagExport && bindings.namespaces.has(expression.expression.text) && !isShadowed(expression.expression)) {
-    return { name: expression.getText(sourceFile), moduleSpecifier: bindings.namespaces.get(expression.expression.text), ...(contract ? { expectedType: contract } : {}) };
-  }
-  const moduleSpecifier = checkerTagModule(expression, sourceFile, options);
-  return moduleSpecifier ? { name: expression.getText(sourceFile), moduleSpecifier, ...(contract ? { expectedType: contract } : {}) } : { ...(contract ? { expectedType: contract } : {}) };
+  const kind = explicitResultKind(expression);
+  const root = tagRoot(expression);
+  const moduleSpecifier = root && !isShadowed(root) ? importedTagModule(expression, bindings, tagExport) : undefined;
+  const checkedModule = moduleSpecifier ?? (kind && root ? checkerTagModule(root, sourceFile, options) : undefined) ?? checkerTagModule(expression, sourceFile, options);
+  return checkedModule ? { name: expression.getText(sourceFile), moduleSpecifier: checkedModule, ...(contract ? { expectedType: contract } : {}), ...(kind ? { declaredResultKind: kind } : {}) } : { ...(contract ? { expectedType: contract } : {}) };
 }
 
 interface ExtractedTemplate {
@@ -258,24 +274,10 @@ function extractTemplate(node: ts.NoSubstitutionTemplateLiteral | ts.TemplateExp
   return { strings, bindings, expressions, templateRange: range(node, sourceFile) };
 }
 
-function emptySnapshot(dialect: string): SchemaSnapshot {
-  return { formatVersion: 1, dialect, dialectVersion: "unknown", server: {}, namespaces: {}, types: {}, relations: {}, routines: {}, metadata: { completeness: "unknown" } };
-}
-
 function safeType(value: string | undefined): string {
   if (!value || value === "unknown" || value.length > 10_000) return "unknown";
   if (!/^[A-Za-z0-9_$\s{}:;,|<>()?\.\[\]"'&+\-]+$/u.test(value)) return "unknown";
   return value;
-}
-
-function rowType(semantic: SemanticResult): string {
-  if (semantic.columns === "unknown") return "unknown";
-  const fields = semantic.columns.map((column) => `${JSON.stringify(column.name)}: ${safeType(column.type)}${column.nullable ? " | null" : ""}`);
-  return `{ ${fields.join("; ")} }`;
-}
-
-function provenSemanticRow(semantic: SemanticResult): boolean {
-  return semantic.columns !== "unknown" && semantic.columns.every((column) => column.type !== "unknown" && column.type !== "any" && safeType(column.type) !== "unknown");
 }
 
 function typeNodeFromText(text: string, fileName: string): ts.TypeNode | undefined {
@@ -289,11 +291,6 @@ function typeNodeFromText(text: string, fileName: string): ts.TypeNode | undefin
   }
   detach(declaration.type);
   return declaration.type;
-}
-
-function contractDiagnostics(query: DiscoveredQuery, semantic: SemanticResult): readonly CompileDiagnostic[] {
-  if (!query.expectedType || provenSemanticRow(semantic)) return [];
-  return [{ code: "BRAID_CONTRACT_UNPROVEN", message: "The expected sql<T> contract cannot be verified from the available SQL evidence.", severity: "error", range: query.templateRange }];
 }
 
 function conditionIndexes(nodes: readonly TemplateNode[], output = new Set<number>()): Set<number> {
@@ -314,6 +311,20 @@ function conditionIndexes(nodes: readonly TemplateNode[], output = new Set<numbe
 
 function hasGuard(nodes: readonly TemplateNode[]): boolean {
   return conditionIndexes(nodes).size > 0;
+}
+
+function emptySnapshot(dialect: string): SchemaSnapshot {
+  return { formatVersion: 1, dialect, dialectVersion: "unknown", server: {}, namespaces: {}, types: {}, relations: {}, routines: {}, metadata: { completeness: "unknown" } };
+}
+
+function rowType(semantic: SemanticResult): string {
+  if (semantic.columns === "unknown") return "unknown";
+  const fields = semantic.columns.map((column) => `${JSON.stringify(column.name)}: ${safeType(column.type)}${column.nullable ? " | null" : ""}`);
+  return `{ ${fields.join("; ")} }`;
+}
+
+function provenSemanticRow(semantic: SemanticResult): boolean {
+  return semantic.columns !== "unknown" && semantic.columns.every((column) => column.type !== "unknown" && column.type !== "any" && safeType(column.type) !== "unknown");
 }
 
 function maxInterpolation(query: DiscoveredQuery): number {
@@ -357,8 +368,24 @@ function defaultAnalyze(query: DiscoveredQuery, options: OverlayOptions): Inferr
     const expectation = semantic.binds.find((bind) => bind.placeholder === mapping.placeholder);
     if (expectation) bindingTypes[mapping.interpolation] = expectation.type;
   }
-  diagnostics.push(...contractDiagnostics(query, semantic));
   return { rowType: diagnostics.length || !provenSemanticRow(semantic) ? "unknown" : rowType(semantic), bindingTypes, diagnostics, resultKind: semantic.resultKind, semantic };
+}
+
+function declaredShape(query: DiscoveredQuery, options: OverlayOptions): InferredQueryShape | undefined {
+  if (!query.expectedType && !query.declaredResultKind) return undefined;
+  const analyzed = options.analyze?.(query);
+  return {
+    rowType: query.expectedType ?? "unknown",
+    bindingTypes: analyzed?.bindingTypes ?? query.bindings.map(() => "unknown"),
+    resultKind: query.declaredResultKind ?? "rows",
+  };
+}
+
+function shapeForQuery(query: DiscoveredQuery, options: OverlayOptions): InferredQueryShape {
+  const declared = declaredShape(query, options);
+  if (declared) return declared;
+  const analyzed = options.analyze?.(query) ?? defaultAnalyze(query, options);
+  return { ...analyzed, rowType: "unknown", resultKind: "unknown" };
 }
 
 export function discoverQueries(sourceText: string, fileName: string, options: OverlayOptions): SourceAnalysisResult {
@@ -374,7 +401,7 @@ export function discoverQueries(sourceText: string, fileName: string, options: O
       if (identity.name && identity.moduleSpecifier) {
         const extracted = extractTemplate(node.template, sourceFile);
         try {
-          const query: DiscoveredQuery = { tagName: identity.name, moduleSpecifier: identity.moduleSpecifier, range: range(node, sourceFile), templateRange: extracted.templateRange, strings: extracted.strings, bindings: extracted.bindings, ir: parseTemplate(createTemplateStrings(extracted.strings), dialectForModule(identity.moduleSpecifier, options).lexicalProfile, options.limits?.maxNestingDepth), ...(identity.expectedType ? { expectedType: identity.expectedType } : {}) };
+          const query: DiscoveredQuery = { tagName: identity.name, moduleSpecifier: identity.moduleSpecifier, range: range(node, sourceFile), templateRange: extracted.templateRange, strings: extracted.strings, bindings: extracted.bindings, ir: parseTemplate(createTemplateStrings(extracted.strings), dialectForModule(identity.moduleSpecifier, options).lexicalProfile, options.limits?.maxNestingDepth), ...(identity.expectedType ? { expectedType: identity.expectedType } : {}), ...(identity.declaredResultKind ? { declaredResultKind: identity.declaredResultKind } : {}) };
           queries.push(query);
         } catch (error) {
           const code = error && typeof error === "object" && "code" in error ? String(error.code) : "BRAID_TEMPLATE";
@@ -448,8 +475,13 @@ function topLevelAwaitOrYield(node: ts.Expression): boolean {
   return found;
 }
 
+function rowTypeNode(factory: ts.NodeFactory, rowTypeText: string, resultKind: "rows" | "command" | "call" | "unknown"): ts.TypeNode {
+  if (resultKind === "command" && rowTypeText === "unknown") return factory.createImportTypeNode(factory.createLiteralTypeNode(factory.createStringLiteral("@sqlbraid/core")), undefined, factory.createIdentifier("CommandResult"), undefined, false);
+  return typeNodeFromText(safeType(rowTypeText), "sqlbraid-inferred") ?? factory.createKeywordTypeNode(ts.SyntaxKind.UnknownKeyword);
+}
+
 function queryTypeNode(factory: ts.NodeFactory, rowTypeText: string, resultKind: "rows" | "command" | "call" | "unknown"): ts.TypeNode {
-  const rowType = typeNodeFromText(safeType(rowTypeText), "sqlbraid-inferred") ?? factory.createKeywordTypeNode(ts.SyntaxKind.UnknownKeyword);
+  const rowType = rowTypeNode(factory, rowTypeText, resultKind);
   const kind = factory.createLiteralTypeNode(factory.createStringLiteral(resultKind));
   return factory.createImportTypeNode(factory.createLiteralTypeNode(factory.createStringLiteral("@sqlbraid/core")), undefined, factory.createIdentifier("Query"), [rowType, kind], false);
 }
@@ -551,9 +583,9 @@ function taggedWithoutTypeArguments(factory: ts.NodeFactory, tag: ts.Expression,
   return factory.createTaggedTemplateExpression(unwrapped.expression, undefined, template);
 }
 
-function contractValue(factory: ts.NodeFactory, rowTypeText: string): ts.Expression {
-  const inferred = typeNodeFromText(safeType(rowTypeText), "sqlbraid-contract-inferred") ?? unknownTypeNode(factory);
-  return factory.createAsExpression(factory.createAsExpression(factory.createNull(), unknownTypeNode(factory)), inferred);
+function tagExpressionForQuery(factory: ts.NodeFactory, tag: ts.Expression, query: DiscoveredQuery): ts.Expression {
+  const expression = unwrapTag(tag).expression;
+  return query.expectedType && !query.declaredResultKind ? factory.createPropertyAccessExpression(expression, "rows") : expression;
 }
 
 interface ExpectationOrigin {
@@ -562,17 +594,11 @@ interface ExpectationOrigin {
   readonly interpolation: number;
 }
 
-interface ContractOrigin {
-  readonly helperName: string;
-  readonly range: SourceRange;
-}
-
 interface LoweredSource {
   readonly sourceText: string;
   readonly diagnostics: readonly CompileDiagnostic[];
   readonly origins: readonly SourceMapOrigin[];
   readonly expectations: readonly ExpectationOrigin[];
-  readonly contracts: readonly ContractOrigin[];
   readonly transformer: ts.TransformerFactory<ts.SourceFile>;
 }
 
@@ -590,7 +616,6 @@ interface LoweringPlan {
   readonly transformer: ts.TransformerFactory<ts.SourceFile>;
   readonly diagnostics: CompileDiagnostic[];
   readonly expectations: readonly ExpectationOrigin[];
-  readonly contracts: readonly ContractOrigin[];
   readonly loweredNodes: ReadonlyMap<string, ts.Node>;
 }
 
@@ -618,12 +643,10 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
   const factory = ts.factory;
   const allocator = createNameAllocator(sourceFile);
   const inferred = new Map<DiscoveredQuery, InferredQueryShape>();
-  for (const query of discovered.queries) inferred.set(query, options.analyze?.(query) ?? defaultAnalyze(query, options));
+  for (const query of discovered.queries) inferred.set(query, shapeForQuery(query, options));
   const queryByKey = new Map(discovered.queries.map((query) => [queryKey(query.range), query]));
   const expectationNames = new Map<string, string>();
   const expectationOrigins: ExpectationOrigin[] = [];
-  const contractNames = new Map<string, string>();
-  const contractOrigins: ContractOrigin[] = [];
   let captureName: string | undefined;
   const valuesNames = new Map<string, string>();
   const evaluatedNames = new Map<string, string>();
@@ -646,18 +669,12 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
       expectationNames.set(`${queryKey(query.range)}:${binding.interpolation}`, helperName);
       expectationOrigins.push({ helperName, range: binding.range, interpolation: binding.interpolation });
     }
-    if (query.expectedType) {
-      const helperName = allocator.fresh("__sqlbraidContract");
-      contractNames.set(queryKey(query.range), helperName);
-      contractOrigins.push({ helperName, range: query.templateRange });
-    }
   }
   const loweredNodes = new Map<string, ts.Node>();
   const diagnostics = [...discovered.diagnostics];
   for (const query of discovered.queries) {
     const shape = inferred.get(query);
     if (shape?.diagnostics) diagnostics.push(...shape.diagnostics);
-    if (query.expectedType && (!shape || safeType(shape.rowType) === "unknown")) diagnostics.push({ code: "BRAID_CONTRACT_UNPROVEN", message: "The expected sql<T> contract cannot be verified from the available SQL evidence.", severity: "error", range: query.templateRange });
     if (mode === "checker" && shape) for (const binding of query.bindings) {
       const expected = shape.bindingTypes?.[binding.interpolation] ?? "unknown";
       if (expected !== "unknown" && !typeNodeFromText(expected, "sqlbraid-bind-expected")) diagnostics.push({ code: "BRAID_BIND_UNPROVEN", message: `The expected bind type is not a valid TypeScript type: ${expected}.`, severity: "error", range: binding.range });
@@ -665,7 +682,7 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
   }
   const prefix: ts.Statement[] = [];
   if (mode === "checker") {
-    const helperNames = [...expectationOrigins.map((origin) => origin.helperName), ...contractOrigins.map((origin) => origin.helperName)];
+    const helperNames = expectationOrigins.map((origin) => origin.helperName);
     prefix.push(...helperNames.map((name) => createExpectDeclaration(factory, name)));
   }
   if (captureName) {
@@ -685,11 +702,11 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
         loweredNodes.set(originalKey, updated);
         return updated;
       }
-      const tag = unwrapTag(updated.tag).expression;
+      const tag = tagExpressionForQuery(factory, updated.tag, query);
       const key = queryKey(query.range);
       const baseQuery = taggedWithoutTypeArguments(factory, tag, updated.template);
       const resultKind = shape.resultKind ?? "rows";
-      const assertion = withOriginal(factory.createAsExpression(baseQuery, queryTypeNode(factory, shape.rowType, resultKind)), node);
+      const assertion = withOriginal(factory.createAsExpression(factory.createAsExpression(baseQuery, unknownTypeNode(factory)), queryTypeNode(factory, shape.rowType, resultKind)), node);
       let replacement: ts.Expression = assertion;
       if (hasGuard(query.ir.nodes)) {
         const valuesName = valuesNames.get(key) ?? allocator.fresh("__sqlbraidValues");
@@ -704,13 +721,8 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
           ? [...captureSetup(factory, valuesName, evaluatedNames.get(key) ?? allocator.fresh("__sqlbraidEvaluated"), readNames.get(key) ?? allocator.fresh("__sqlbraidRead")), ...captureStatements(query.ir.nodes, captureContext)]
           : captureStatements(query.ir.nodes, captureContext);
         const callback = factory.createArrowFunction(undefined, undefined, [factory.createParameterDeclaration(undefined, undefined, factory.createIdentifier(valuesName), undefined, undefined, undefined)], undefined, undefined, factory.createBlock(body, true));
-        const captureCall = withOriginal(factory.createCallExpression(factory.createIdentifier(captureName ?? "__sqlbraidCapture"), undefined, [tag, stringsArray(factory, query.strings), callback]), node);
-        replacement = withOriginal(factory.createAsExpression(captureCall, queryTypeNode(factory, shape.rowType, resultKind)), node);
-      }
-      const contractName = contractNames.get(key);
-      if (mode === "checker" && contractName && query.expectedType) {
-        const expectedType = updated.typeArguments?.[0] ?? typeNodeFromText(query.expectedType, "sqlbraid-contract-expected");
-        if (expectedType) replacement = withOriginal(factory.createParenthesizedExpression(factory.createCommaListExpression([expectCall(factory, contractName, expectedType, contractValue(factory, shape.rowType)), replacement])), node);
+        const captureCall = withOriginal(factory.createCallExpression(factory.createIdentifier(captureName ?? "__sqlbraidCapture"), [rowTypeNode(factory, shape.rowType, resultKind), factory.createLiteralTypeNode(factory.createStringLiteral(resultKind))], [tag, stringsArray(factory, query.strings), callback]), node);
+        replacement = withOriginal(factory.createAsExpression(factory.createAsExpression(captureCall, unknownTypeNode(factory)), queryTypeNode(factory, shape.rowType, resultKind)), node);
       }
       if (mode === "checker" && !hasGuard(query.ir.nodes)) {
         const checks: ts.Expression[] = [];
@@ -733,7 +745,7 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
       return insertGeneratedStatements(ts.visitNode(root, visit) as ts.SourceFile, prefix);
     };
   };
-  return { transformer, diagnostics, expectations: expectationOrigins, contracts: contractOrigins, loweredNodes };
+  return { transformer, diagnostics, expectations: expectationOrigins, loweredNodes };
 }
 
 function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisResult, options: OverlayOptions, mode: "runtime" | "checker"): LoweredSource {
@@ -753,7 +765,7 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
     origins.push({ generatedStart, generatedEnd: generatedStart + text.length, sourceStart: query.range.start, sourceEnd: query.range.end });
     searchStart = generatedStart + text.length;
   }
-  for (const origin of [...plan.expectations.map((value) => ({ helperName: value.helperName, range: value.range })), ...plan.contracts.map((value) => ({ helperName: value.helperName, range: value.range }))]) {
+  for (const origin of plan.expectations.map((value) => ({ helperName: value.helperName, range: value.range }))) {
     let search = 0;
     const needle = `${origin.helperName}<`;
     while (search < output.length) {
@@ -765,7 +777,7 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
     }
   }
   transformed.dispose();
-  return { sourceText: output, diagnostics: plan.diagnostics, origins, expectations: plan.expectations, contracts: plan.contracts, transformer: plan.transformer };
+  return { sourceText: output, diagnostics: plan.diagnostics, origins, expectations: plan.expectations, transformer: plan.transformer };
 }
 
 export function createVirtualOverlay(sourceText: string, fileName: string, options: OverlayOptions): VirtualTypeScriptOverlay {
@@ -774,7 +786,7 @@ export function createVirtualOverlay(sourceText: string, fileName: string, optio
   const queryTypes: OverlayQueryType[] = [];
   const diagnostics = [...discovered.diagnostics];
   for (const query of discovered.queries) {
-    const inferred = options.analyze?.(query) ?? defaultAnalyze(query, options);
+    const inferred = shapeForQuery(query, options);
     queryTypes.push({ range: query.range, rowType: inferred.rowType, bindingTypes: inferred.bindingTypes ?? query.bindings.map(() => "unknown" as const), ...(inferred.resultKind ? { resultKind: inferred.resultKind } : {}) });
     if (inferred.diagnostics) diagnostics.push(...inferred.diagnostics);
   }
@@ -882,17 +894,6 @@ function addDiagnostic(output: CompileDiagnostic[], seen: Set<string>, diagnosti
   output.push(diagnostic);
 }
 
-function contractHasUnexpectedKeys(checker: ts.TypeChecker, actual: ts.Type, expected: ts.Type): boolean {
-  if (!expected.isUnion() && checker.getPropertiesOfType(checker.getApparentType(expected)).length === 0) return false;
-  const candidates = expected.isUnion() ? expected.types : [expected];
-  const actualNames = checker.getPropertiesOfType(checker.getApparentType(actual)).map((property) => property.name);
-  return !candidates.some((candidate) => {
-    if (!checker.isTypeAssignableTo(actual, candidate)) return false;
-    const expectedNames = new Set(checker.getPropertiesOfType(checker.getApparentType(candidate)).map((property) => property.name));
-    return actualNames.every((name) => expectedNames.has(name));
-  });
-}
-
 function helperCall(sourceFile: ts.SourceFile, helperName: string): ts.CallExpression | undefined {
   let found: ts.CallExpression | undefined;
   function visit(node: ts.Node): void {
@@ -922,7 +923,7 @@ function checkVirtualRecords(records: readonly FileRecord[], virtualProgram: ts.
     const start = diagnostic.start ?? 0;
     const end = start + (diagnostic.length ?? 1);
     const generatedFile = virtualProgram.getSourceFile(diagnostic.file.fileName);
-    const helperRanges = [...record.lowered.expectations.map((origin) => origin.helperName), ...record.lowered.contracts.map((origin) => origin.helperName)].flatMap((helperName) => {
+    const helperRanges = record.lowered.expectations.map((origin) => origin.helperName).flatMap((helperName) => {
       const call = generatedFile ? helperCall(generatedFile, helperName) : undefined;
       return call ? [{ start: call.getStart(generatedFile), end: call.getEnd() }] : [];
     });
@@ -940,16 +941,6 @@ function checkVirtualRecords(records: readonly FileRecord[], virtualProgram: ts.
       if (!checker.isTypeAssignableTo(actual, expected)) {
         addDiagnostic(diagnostics, seen, { code: "BRAID_BIND_TYPE", message: `Binding ${origin.interpolation} expects ${checker.typeToString(expected)}, received ${checker.typeToString(actual)}.`, severity: "error", range: origin.range });
       }
-    }
-    for (const origin of record.lowered.contracts) {
-      const query = record.discovered.queries.find((candidate) => candidate.templateRange.start === origin.range.start);
-      if (!query?.expectedType) continue;
-      const call = helperCall(sourceFile, origin.helperName);
-      if (!call || !call.typeArguments?.[0] || !call.arguments[0]) continue;
-      const actual = checker.getTypeAtLocation(call.arguments[0]);
-      const expected = checker.getTypeFromTypeNode(call.typeArguments[0]);
-      if (!checker.isTypeAssignableTo(actual, expected)) addDiagnostic(diagnostics, seen, { code: "BRAID_CONTRACT_TYPE", message: `The inferred SQL row type ${checker.typeToString(actual)} is not assignable to ${checker.typeToString(expected)}.`, severity: "error", range: origin.range });
-      else if (contractHasUnexpectedKeys(checker, actual, expected)) addDiagnostic(diagnostics, seen, { code: "BRAID_CONTRACT_KEYS", message: `The inferred SQL row type ${checker.typeToString(actual)} has fields outside the contract ${checker.typeToString(expected)}.`, severity: "error", range: origin.range });
     }
   }
   return diagnostics;

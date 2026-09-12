@@ -166,7 +166,17 @@ const query = sql<AccountRow>`
 
 The application declares the row shape it expects.
 
-A query without a declared or generated contract remains `Query<unknown>` rather than receiving a guessed type.
+A query without a declared or generated contract remains `Query<unknown, "unknown">` rather than receiving a guessed type.
+
+The shorthand `sql<Row>\`...\`` declares a row query. Use explicit helpers when the result kind is not a row query:
+
+```ts
+const rows = sql.rows<UserRow>`SELECT id, name FROM users`;
+const command = sql.command`UPDATE users SET active = ${true}`;
+const call = sql.call<RefreshResult>`CALL refresh_users()`;
+```
+
+An untyped `sql\`...\`` is `Query<unknown, "unknown">`; pass it to `db.execute()` only, or declare its kind explicitly.
 
 ### Runtime validation
 
