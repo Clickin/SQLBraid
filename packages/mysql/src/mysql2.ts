@@ -1,5 +1,15 @@
-import type { CommandResult, QueryExecutor, QueryExecutionResult, RenderedQuery, RoutineCallResult, TypePolicy } from "@sqlbraid/core";
-import { createDatabase } from "@sqlbraid/runtime";
+import type {
+  CommandResult,
+  ConnectionLease,
+  ConnectionProvider,
+  DatabaseOptions,
+  QueryExecutor,
+  QueryExecutionResult,
+  RenderedQuery,
+  RoutineCallResult,
+  TypePolicy,
+} from "@sqlbraid/core";
+import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
 export interface Mysql2FieldLike {
@@ -23,6 +33,17 @@ export interface Mysql2ConnectionLike {
   commit?(): Promise<void>;
   rollback?(): Promise<void>;
 }
+
+export interface Mysql2PoolConnectionLike extends Omit<Mysql2ConnectionLike, "release" | "destroy"> {
+  release(): void | Promise<void>;
+  destroy(): void;
+}
+
+export interface Mysql2PoolLike {
+  getConnection(): Promise<Mysql2PoolConnectionLike>;
+}
+
+export type Mysql2DatabaseOptions = DatabaseOptions & { readonly typePolicy?: TypePolicy };
 
 const mysqlTypes: Readonly<Record<number, string>> = { 3: "INT", 8: "BIGINT", 246: "DECIMAL", 253: "VARCHAR", 245: "JSON" };
 
@@ -83,6 +104,31 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
   };
 }
 
-export function createMysql2Database(connection: Mysql2ConnectionLike, options: { readonly typePolicy?: TypePolicy } = {}) {
-  return createDatabase(createMysql2Executor(connection, options));
+export function createMysql2Database(connection: Mysql2ConnectionLike, options: Mysql2DatabaseOptions = {}) {
+  const { typePolicy, ...databaseOptions } = options;
+  return createDatabase(createMysql2Executor(connection, { typePolicy }), databaseOptions);
+}
+
+export function createMysql2PoolProvider(pool: Mysql2PoolLike, options: { readonly typePolicy?: TypePolicy } = {}): ConnectionProvider {
+  return {
+    async acquire(): Promise<ConnectionLease> {
+      const connection = await pool.getConnection();
+      const executor = createMysql2Executor(connection, options);
+      let released = false;
+      return {
+        ...executor,
+        async release(releaseOptions = {}): Promise<void> {
+          if (released) return;
+          released = true;
+          if (releaseOptions.discard === true) connection.destroy();
+          else await connection.release();
+        },
+      };
+    },
+  };
+}
+
+export function createMysql2PoolDatabase(pool: Mysql2PoolLike, options: Mysql2DatabaseOptions = {}) {
+  const { typePolicy, ...databaseOptions } = options;
+  return createPooledDatabase(createMysql2PoolProvider(pool, { typePolicy }), databaseOptions);
 }

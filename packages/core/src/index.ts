@@ -223,6 +223,142 @@ export interface QueryExecutor {
   releaseSavepoint?(name: string): Promise<void>;
 }
 
+export interface ConnectionLease extends QueryExecutor {
+  release(options?: { readonly discard?: boolean }): void | Promise<void>;
+}
+
+export interface ConnectionProvider {
+  acquire(): Promise<ConnectionLease>;
+}
+
+export interface QueryReadyEvent {
+  readonly type: "query:ready";
+  readonly operationId: string;
+  readonly batchId?: string;
+  readonly sql: string;
+  readonly values: readonly unknown[];
+  readonly bindingMap?: readonly { readonly placeholder: number; readonly interpolation?: number }[];
+  readonly declaredKind: QueryResultKind;
+  readonly fingerprint?: string;
+  readonly variantFingerprint?: string;
+  readonly preparedName?: string;
+  readonly transactionDepth: number;
+  readonly transactionScoped: boolean;
+}
+
+export interface QueryResultEvent {
+  readonly type: "query:result";
+  readonly operationId: string;
+  readonly preparedName?: string;
+  readonly batchId?: string;
+  readonly duration: number;
+  readonly actualKind: "rows" | "command" | "call";
+  readonly rowCount?: number;
+  readonly command?: Readonly<Record<string, unknown>>;
+  readonly transactionDepth: number;
+  readonly transactionScoped: boolean;
+}
+
+export interface QueryMappedEvent {
+  readonly type: "query:mapped";
+  readonly operationId: string;
+  readonly preparedName?: string;
+  readonly batchId?: string;
+  readonly duration: number;
+  readonly rowCount: number;
+  readonly queryMapped: boolean;
+  readonly executionMapped: boolean;
+  readonly transactionDepth: number;
+  readonly transactionScoped: boolean;
+}
+
+export type QueryErrorStage =
+  | "render"
+  | "observer-before"
+  | "acquire"
+  | "driver"
+  | "result-kind"
+  | "query-map"
+  | "execution-map"
+  | "observer-after"
+  | "release"
+  | "stream"
+  | "transaction";
+
+export interface QueryErrorEvent {
+  readonly type: "query:error";
+  readonly operationId: string;
+  readonly preparedName?: string;
+  readonly batchId?: string;
+  readonly error: unknown;
+  readonly stage: QueryErrorStage;
+  readonly executionStarted: boolean;
+  readonly executionCompleted: boolean;
+  readonly duration?: number;
+  readonly transactionDepth: number;
+  readonly transactionScoped: boolean;
+}
+
+export interface StreamStartEvent {
+  readonly type: "stream:start";
+  readonly operationId: string;
+  readonly sql: string;
+  readonly values: readonly unknown[];
+  readonly bindingMap?: readonly { readonly placeholder: number; readonly interpolation?: number }[];
+  readonly declaredKind: "rows";
+  readonly variantFingerprint?: string;
+  readonly preparedName?: string;
+  readonly transactionDepth: number;
+  readonly transactionScoped: boolean;
+}
+
+export interface StreamEndEvent {
+  readonly type: "stream:end";
+  readonly operationId: string;
+  readonly status: "completed" | "error";
+  readonly duration: number;
+  readonly rowCount: number;
+  readonly error?: unknown;
+  readonly transactionDepth: number;
+  readonly transactionScoped: boolean;
+}
+
+export type TransactionEventPhase =
+  | "begin"
+  | "commit"
+  | "rollback"
+  | "savepoint"
+  | "rollback-to-savepoint"
+  | "release-savepoint";
+
+export interface TransactionEvent {
+  readonly type: "transaction";
+  readonly transactionId: string;
+  readonly phase: TransactionEventPhase;
+  readonly status: "requested" | "completed" | "failed";
+  readonly depth: number;
+  readonly savepointName?: string;
+  readonly duration?: number;
+  readonly error?: unknown;
+}
+
+export type ExecutionEvent =
+  | QueryReadyEvent
+  | QueryResultEvent
+  | QueryMappedEvent
+  | QueryErrorEvent
+  | StreamStartEvent
+  | StreamEndEvent
+  | TransactionEvent;
+
+export interface ExecutionObserver {
+  onEvent(event: ExecutionEvent): void | Promise<void>;
+}
+
+export interface DatabaseOptions {
+  readonly observers?: readonly ExecutionObserver[];
+}
+
 export interface PreparedQuery<Row> {
   readonly name: string;
   execute(): Promise<RowsExecutionResult<Row>>;
@@ -254,7 +390,7 @@ export interface Database {
   batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }>;
   prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row>;
   stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row>;
-  transaction<T>(callback: (database: Database) => Promise<T>): Promise<T>;
+  tx<T>(callback: (database: Database) => Promise<T>): Promise<T>;
 }
 
 export type QueryRow<Q> = Q extends Query<infer Row, QueryResultKind> ? Row : never;

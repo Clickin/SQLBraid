@@ -59,6 +59,10 @@ try {
 
   const entry = join(consumer, "index.mjs");
   await writeFile(entry, [
+    'import { createPooledDatabase } from "@sqlbraid/runtime";',
+    'import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";',
+    'import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";',
+    'if ([createPooledDatabase, createPgPoolDatabase, createMysql2PoolDatabase].some((value) => typeof value !== "function")) throw new Error("packed pool exports failed");',
     'import { sql as pg } from "@sqlbraid/postgres";',
     'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
     'import { sql as mysql } from "@sqlbraid/mysql";',
@@ -79,6 +83,25 @@ try {
 
   const types = join(consumer, "types.ts");
   await writeFile(types, [
+    'import type { ConnectionProvider, ConnectionLease, ExecutionObserver, ExecutionEvent } from "@sqlbraid/core";',
+    'import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";',
+    'import { createPgPoolDatabase, type PgPoolLike } from "@sqlbraid/postgres/pg";',
+    'import { createMysql2PoolDatabase, type Mysql2PoolLike } from "@sqlbraid/mysql/mysql2";',
+    'declare const lease: ConnectionLease;',
+    'const provider: ConnectionProvider = { acquire: async () => lease };',
+    'const observer: ExecutionObserver = { onEvent(event: ExecutionEvent) {',
+    '  // @ts-expect-error execution events are readonly',
+    '  event.type = "invalid";',
+    '} };',
+    'const pooled = createPooledDatabase(provider, { observers: [observer] });',
+    'const direct = createDatabase(lease, { observers: [observer] });',
+    'declare const pgPool: PgPoolLike;',
+    'declare const mysqlPool: Mysql2PoolLike;',
+    'createPgPoolDatabase(pgPool, { observers: [observer] });',
+    'createMysql2PoolDatabase(mysqlPool, { observers: [observer] });',
+    'pooled.tx(async (tx) => tx.execute(pg.rows<{id: number}>`SELECT 1 AS id`));',
+    '// @ts-expect-error pre-release transaction alias was removed',
+    'direct.transaction(async () => undefined);',
     'import { sql as pg } from "@sqlbraid/postgres";',
     'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
     'import { sql as mysql } from "@sqlbraid/mysql";',

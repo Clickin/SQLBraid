@@ -247,7 +247,7 @@ test('transaction-scoped row APIs preserve query-bound mapping', async () => {
     async rollback() {},
   });
 
-  await db.transaction(async (tx) => {
+  await db.tx(async (tx) => {
     assert.deepEqual((await tx.execute(sql.rows(mapper)`SELECT user`)).rows, [{ id: 12 }]);
     assert.deepEqual(await tx.all(sql.rows(mapper)`SELECT user`), [{ id: 12 }]);
     assert.deepEqual(await tx.one(sql.rows(mapper)`SELECT user`), { id: 12 });

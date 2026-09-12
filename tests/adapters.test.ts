@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { DatabaseResultKindError } from '@sqlbraid/runtime';
-import { createPgDatabase } from '@sqlbraid/postgres/pg';
-import { createMysql2Database } from '@sqlbraid/mysql/mysql2';
+import { createPgDatabase, createPgPoolProvider } from '@sqlbraid/postgres/pg';
+import { createMysql2Database, createMysql2PoolProvider } from '@sqlbraid/mysql/mysql2';
 import { createNodeSqliteDatabase } from '@sqlbraid/sqlite/node-sqlite';
 import { sql } from '@sqlbraid/postgres';
 import { sql as mysqlSql } from '@sqlbraid/mysql';
@@ -20,6 +20,37 @@ test('mysql2 adapter uses positional placeholders', async () => {
   const db = createMysql2Database({ async execute(text, values) { request = { text, values }; return [[{ ok: 1 }], []]; } });
   assert.deepEqual(await db.all(mysqlSql.rows`SELECT ${1}`), [{ ok: 1 }]);
   assert.deepEqual(request, { text: 'SELECT ?', values: [1] });
+});
+
+test('pool providers release healthy leases once and discard poisoned leases', async () => {
+  const pgReleases: boolean[] = [];
+  const pgClient = {
+    async query() { return { rows: [] }; },
+    release(destroy = false) { pgReleases.push(destroy); },
+  };
+  const pgProvider = createPgPoolProvider({ connect: async () => pgClient });
+  const pgHealthy = await pgProvider.acquire();
+  await pgHealthy.release();
+  await pgHealthy.release({ discard: true });
+  const pgDiscarded = await pgProvider.acquire();
+  await pgDiscarded.release({ discard: true });
+  assert.deepEqual(pgReleases, [false, true]);
+
+  let mysqlReleases = 0;
+  let mysqlDestroys = 0;
+  const mysqlConnection = {
+    async execute() { return [[{ ok: 1 }], []] as const; },
+    release() { mysqlReleases += 1; },
+    destroy() { mysqlDestroys += 1; },
+  };
+  const mysqlProvider = createMysql2PoolProvider({ getConnection: async () => mysqlConnection });
+  const mysqlHealthy = await mysqlProvider.acquire();
+  await mysqlHealthy.release();
+  await mysqlHealthy.release({ discard: true });
+  const mysqlDiscarded = await mysqlProvider.acquire();
+  await mysqlDiscarded.release({ discard: true });
+  assert.equal(mysqlReleases, 1);
+  assert.equal(mysqlDestroys, 1);
 });
 
 test('node sqlite adapter distinguishes row and command statements', async () => {

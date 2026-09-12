@@ -161,7 +161,7 @@ A direct `QueryExecutor` must not secretly multiplex unrelated physical connecti
 
 ### 8.2 Pools use a provider/lease boundary
 
-PV6 introduces a connection-provider abstraction. The semantic model is:
+PV6 provides `ConnectionProvider` / `ConnectionLease` and explicit `createPooledDatabase`, PostgreSQL pool and MySQL pool factories. The stable semantic model is:
 
 ```text
 root operation
@@ -175,7 +175,7 @@ Do not adapt a pool by exposing pool-level `begin/query/commit` as a `QueryExecu
 
 ### 8.3 Transaction closure pins one connection
 
-The canonical transaction boundary is a closure (`db.tx(...)`; current `transaction(...)` may be renamed before release):
+The canonical transaction boundary is the `db.tx(...)` closure; `transaction(...)` has been removed:
 
 ```ts
 await db.tx(async (tx) => {
@@ -308,7 +308,7 @@ Use Vitest for fast tests, Testcontainers for PostgreSQL/MySQL and native `node:
 
 Retain packed-consumer validation (`publint`, Are The Types Wrong, ESM/type resolution, executables, engine metadata, no monorepo path leakage).
 
-PV6 must specifically test:
+Retain the PV6 regression gates for:
 
 - mapper re-entry without root-lock deadlock;
 - lease acquired/released exactly once per root materialized operation;

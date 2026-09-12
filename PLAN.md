@@ -264,7 +264,7 @@ Direct connection examples include a `pg.Client`, `mysql2.Connection`, or `node:
 
 ### 6.2 Connection provider / pool
 
-PV6 introduces a pool/provider boundary conceptually like:
+PV6 provides an explicit pool/provider boundary:
 
 ```ts
 interface ConnectionProvider {
@@ -272,11 +272,11 @@ interface ConnectionProvider {
 }
 
 interface ConnectionLease extends QueryExecutor {
-  release(): void | Promise<void>;
+  release(options?: { readonly discard?: boolean }): void | Promise<void>;
 }
 ```
 
-Exact names may differ, but the semantics do not:
+`createPooledDatabase(provider, options?)`, `createPgPoolDatabase(pool, options?)` and `createMysql2PoolDatabase(pool, options?)` use this contract:
 
 - ordinary root query/call: acquire one lease, perform physical DB I/O, release it;
 - materialized result mapping: run after release;
@@ -286,7 +286,7 @@ Exact names may differ, but the semantics do not:
 
 ### 6.3 Transaction boundary
 
-The canonical transaction API is a closure boundary (`db.tx(...)`; the current `transaction(...)` name may be renamed during pre-release).
+The canonical transaction API is the `db.tx(...)` closure boundary. The former `transaction(...)` name is removed.
 
 ```ts
 await db.tx(async (tx) => {
@@ -319,9 +319,9 @@ Pool support must go through the lease/provider abstraction.
 
 ## 7. Execution observer/interceptor SPI
 
-PV6 adds a deterministic observer SPI around the central runtime execution pipeline.
+PV6 provides a deterministic observer SPI around the central runtime execution pipeline.
 
-A preferred public shape is a single discriminated event callback:
+The public observer contract uses a single discriminated event callback:
 
 ```ts
 interface ExecutionObserver {
@@ -329,7 +329,7 @@ interface ExecutionObserver {
 }
 ```
 
-The exact event names may change, but coverage must include the useful subset of MyBatis `Executor`, `StatementHandler`, `ParameterHandler` and `ResultSetHandler` interception points without exposing mutable driver internals.
+Events cover physical execution, application mapping and connection-scoped lifecycles without exposing mutable driver internals.
 
 Required event coverage:
 
@@ -476,7 +476,7 @@ Retain:
 - `publint` and Are The Types Wrong;
 - source-map/compiler regression tests.
 
-PV6 must add tests for connection lease lifetime, transaction pinning, observer event ordering/failure behavior, bind visibility/redaction examples and mapper re-entry.
+PV6 regression gates cover connection lease lifetime, transaction pinning, observer event ordering/failure behavior, bind visibility and mapper re-entry.
 
 PV7 adds Bun and Deno runtime smoke/CI gates before any support claim becomes official.
 
@@ -507,7 +507,7 @@ Non-negotiable:
 ### PV4 — Runtime result-kind enforcement + execution-time Standard Schema validation ✅
 ### PV5 — Query-bound Standard Schema result mapping ✅
 
-### PV6 — Execution boundary, connection leasing and interceptor/observer SPI **NEXT**
+### PV6 — Execution boundary, connection leasing and interceptor/observer SPI — implemented
 
 - fix PV5 materialized-mapper lock/lease lifetime;
 - centralize physical execution vs post-processing;

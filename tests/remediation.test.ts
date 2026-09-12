@@ -318,7 +318,7 @@ test('root execution waits until the transaction scope closes', async () => {
       return { rows: [] };
     },
   });
-  const transaction = db.transaction(async (tx) => { await tx.execute(postgres`SELECT 'inside'`); await gate; });
+  const transaction = db.tx(async (tx) => { await tx.execute(postgres`SELECT 'inside'`); await gate; });
   await new Promise((resolve) => setImmediate(resolve));
   const outside = db.execute(postgres`SELECT 'outside'`);
   await new Promise((resolve) => setImmediate(resolve));

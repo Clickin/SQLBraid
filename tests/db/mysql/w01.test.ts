@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
-import { createConnection } from "mysql2/promise";
+import { createConnection, createPool, type Pool } from "mysql2/promise";
 import { inject, test } from "vitest";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import * as v from "valibot";
+import type { ExecutionEvent } from "@sqlbraid/core";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
-import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
+import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
 import { sql } from "@sqlbraid/mysql";
 import { runW01 } from "../w01.js";
+
+async function endPool(pool: Pick<Pool, "end">): Promise<void> {
+  const ending = pool.end().catch(() => undefined);
+  const timeout = Promise.withResolvers<void>();
+  const timer = setTimeout(timeout.resolve, 500);
+  await Promise.race([ending, timeout.promise]);
+  clearTimeout(timer);
+}
 
 test("MySQL wrappers sharing one connection preserve transaction isolation", async () => {
   const settings = inject("mysql");
@@ -97,5 +106,127 @@ test("MySQL result kinds follow payload metadata", async () => {
   } finally {
     await client.query("DROP TABLE IF EXISTS braid_pv4").catch(() => undefined);
     await client.end();
+  }
+});
+
+test("MySQL pool leases run concurrent roots and pin transactions", async () => {
+  const settings = inject("mysql");
+  const pool = createPool({ uri: settings.connectionUri, connectionLimit: 2, idleTimeout: 0 });
+  const acquiredIds: number[] = [];
+  let releaseCount = 0;
+  pool.on("acquire", (connection) => { acquiredIds.push(connection.threadId); });
+  pool.on("release", () => { releaseCount += 1; });
+  const db = createMysql2PoolDatabase(pool);
+  try {
+    const backendIds = await Promise.all([
+      db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId, SLEEP(0.15) AS pause`),
+      db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId, SLEEP(0.15) AS pause`),
+    ]);
+    assert.equal(new Set(backendIds.map(({ connectionId }) => String(connectionId))).size, 2);
+
+    await db.execute(sql`DROP TABLE IF EXISTS braid_pv6_pool`);
+    await db.execute(sql`CREATE TABLE braid_pv6_pool (id VARCHAR(255) PRIMARY KEY) ENGINE=InnoDB`);
+    const pinnedIds: string[] = [];
+    await db.tx(async (tx) => {
+      pinnedIds.push(String((await tx.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`)).connectionId));
+      await assert.rejects(
+        tx.tx(async (nested) => {
+          pinnedIds.push(String((await nested.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`)).connectionId));
+          await nested.execute(sql`INSERT INTO braid_pv6_pool (id) VALUES ('nested')`);
+          throw new Error("rollback savepoint");
+        }),
+        /rollback savepoint/,
+      );
+      pinnedIds.push(String((await tx.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`)).connectionId));
+      await tx.execute(sql`INSERT INTO braid_pv6_pool (id) VALUES ('committed')`);
+    });
+    assert.equal(new Set(pinnedIds).size, 1);
+    assert.deepEqual(await db.all(sql.rows<{ readonly id: string }>`SELECT id FROM braid_pv6_pool`), [{ id: "committed" }]);
+
+    await assert.rejects(
+      db.tx(async () => db.execute(sql`SELECT 1`)),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_SCOPE",
+    );
+    await assert.rejects(db.tx(async (tx) => {
+      await tx.execute(sql`INSERT INTO braid_pv6_pool (id) VALUES ('rolled-back')`);
+      throw new Error("rollback transaction");
+    }), /rollback transaction/);
+    assert.deepEqual(await db.all(sql.rows<{ readonly id: string }>`SELECT id FROM braid_pv6_pool`), [{ id: "committed" }]);
+    assert.equal(releaseCount, acquiredIds.length);
+  } finally {
+    await pool.query("DROP TABLE IF EXISTS braid_pv6_pool").catch(() => undefined);
+    await endPool(pool);
+  }
+});
+
+test("MySQL pool releases before an async mapper can re-enter a max-one pool", async () => {
+  const settings = inject("mysql");
+  const pool = createPool({ uri: settings.connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  let acquired = 0;
+  let released = 0;
+  pool.on("acquire", () => { acquired += 1; });
+  pool.on("release", () => { released += 1; });
+  const db = createMysql2PoolDatabase(pool);
+  try {
+    const mapper: StandardSchemaV1<unknown, { readonly value: number }> = {
+      "~standard": {
+        version: 1,
+        vendor: "sqlbraid-tests",
+        async validate(value) {
+          await db.execute(sql`SELECT 2`);
+          return { value: { value: (value as { readonly value: number }).value + 1 } };
+        },
+      },
+    };
+    const mappedQuery = sql.rows(mapper)`SELECT 1 AS value`;
+    const operation = (async () => {
+      const executed = await db.execute(mappedQuery);
+      assert.deepEqual(executed.rows, [{ value: 2 }]);
+      const prepared = db.prepare("pv6-mysql-mapped", () => mappedQuery);
+      assert.deepEqual((await prepared.execute()).rows, [{ value: 2 }]);
+      const [batched] = await db.batch([mappedQuery] as const);
+      assert.deepEqual(batched.rows, [{ value: 2 }]);
+    })();
+    operation.catch(() => undefined);
+    const timeout = Promise.withResolvers<void>();
+    const timer = setTimeout(() => timeout.reject(new Error("mapper re-entry timed out")), 2_000);
+    try {
+      await Promise.race([operation, timeout.promise]);
+    } finally {
+      clearTimeout(timer);
+    }
+    assert.equal(acquired, released);
+  } finally {
+    await endPool(pool);
+  }
+});
+
+test("MySQL pool observers receive SQL, binds, results, errors, and transaction lifecycle", async () => {
+  const settings = inject("mysql");
+  const pool = createPool({ uri: settings.connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  const events: ExecutionEvent[] = [];
+  const db = createMysql2PoolDatabase(pool, {
+    observers: [{ async onEvent(event) { events.push(event); } }],
+  });
+  try {
+    await db.execute(sql`SELECT ${"observer-secret"}`);
+    const ready = events.find((event) => event.type === "query:ready");
+    assert.ok(ready && ready.type === "query:ready");
+    assert.equal(ready.sql, "SELECT ?");
+    assert.deepEqual(ready.values, ["observer-secret"]);
+    assert.equal(events.some((event) => event.type === "query:result" && event.actualKind === "rows"), true);
+    assert.equal(events.some((event) => event.type === "query:mapped"), true);
+
+    await db.tx(async (tx) => { await tx.execute(sql`SELECT 1`); });
+    assert.equal(events.some((event) => event.type === "transaction" && event.phase === "begin" && event.status === "completed"), true);
+    assert.equal(events.some((event) => event.type === "transaction" && event.phase === "commit" && event.status === "completed"), true);
+
+    await assert.rejects(db.execute(sql`SELECT * FROM braid_pv6_observer_missing`));
+    const error = events.find((event) => event.type === "query:error");
+    assert.ok(error && error.type === "query:error");
+    assert.equal(error.stage, "driver");
+    assert.equal(error.executionStarted, true);
+  } finally {
+    await endPool(pool);
   }
 });

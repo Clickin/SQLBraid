@@ -1,4 +1,4 @@
-import type { QueryExecutor, QueryExecutionResult, RenderedQuery, RoutineCallResult } from "@sqlbraid/core";
+import type { DatabaseOptions, QueryExecutor, QueryExecutionResult, RenderedQuery, RoutineCallResult } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
 
 export interface SqliteColumnLike {
@@ -11,6 +11,7 @@ export interface SqliteColumnLike {
 
 export interface SqliteStatementLike {
   all(...values: readonly unknown[]): readonly unknown[];
+  iterate?(...values: readonly unknown[]): IterableIterator<unknown>;
   run(...values: readonly unknown[]): { readonly changes?: number | bigint; readonly lastInsertRowid?: number | bigint };
   columns(): readonly SqliteColumnLike[];
 }
@@ -59,6 +60,16 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
     async call<Row>(_rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
       unsupportedCall();
     },
+    async *stream<Row>(rendered: RenderedQuery, signal?: AbortSignal): AsyncGenerator<Row> {
+      signal?.throwIfAborted();
+      const statement = database.prepare(rendered.text);
+      if (!statement.iterate) throw new Error("BRAID_STREAM_UNSUPPORTED: SQLite statement does not expose iteration.");
+      if (resultColumns(statement).length === 0) throw new Error("BRAID_RESULT_KIND: SQLite stream requires a row-producing statement.");
+      for (const row of statement.iterate(...rendered.values)) {
+        signal?.throwIfAborted();
+        yield plainRow(row) as Row;
+      }
+    },
     begin: control ? () => control("BEGIN") : undefined,
     commit: control ? () => control("COMMIT") : undefined,
     rollback: control ? () => control("ROLLBACK") : undefined,
@@ -68,6 +79,6 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
   };
 }
 
-export function createNodeSqliteDatabase(database: SqliteDatabaseLike) {
-  return createDatabase(createNodeSqliteExecutor(database));
+export function createNodeSqliteDatabase(database: SqliteDatabaseLike, options: DatabaseOptions = {}) {
+  return createDatabase(createNodeSqliteExecutor(database), options);
 }

@@ -204,14 +204,32 @@ await db.call(callQuery);
 await db.batch(queries);
 db.prepare(name, factory);
 db.stream(query);
-await db.transaction(async (tx) => { ... });
+await db.tx(async (tx) => { ... });
 ```
 
 The runtime tracks physical-resource ownership and prevents uncertain transaction state from being silently reused.
 
-### Next: pool/transaction execution boundary
+### Direct connections and pools
 
-PV6 will make the physical connection boundary explicit.
+`createDatabase(executor, options?)` accepts one physical execution resource. Direct wrappers sharing an ownership key serialize their physical operations.
+
+Pools have explicit factories; SQLBraid does not detect pools by duck typing:
+
+```ts
+import { Pool } from "pg";
+import { createPool } from "mysql2/promise";
+import { createPgDatabase, createPgPoolDatabase } from "@sqlbraid/postgres/pg";
+import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
+import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
+import type { ConnectionProvider } from "@sqlbraid/core";
+
+const direct = createPgDatabase(client); // connected pg.Client
+const postgres = createPgPoolDatabase(new Pool(pgOptions));
+const mysql = createMysql2PoolDatabase(createPool(mysqlOptions));
+const custom = createPooledDatabase(provider); // ConnectionProvider
+```
+
+A `ConnectionProvider.acquire()` returns a `ConnectionLease`: one `QueryExecutor` plus `release({ discard? })`. Independent pooled root operations have no global SQLBraid queue. The application owns pool shutdown.
 
 Outside an explicit transaction, a pooled database may obtain any available physical connection for each root operation:
 
@@ -223,7 +241,7 @@ root query
   -> application result mapping
 ```
 
-The transaction API becomes the explicit connection-pinning boundary (the final pre-release name may be `db.tx(...)`):
+`db.tx(...)` is the connection-pinning boundary:
 
 ```ts
 await db.tx(async (tx) => {
@@ -234,21 +252,29 @@ await db.tx(async (tx) => {
 
 Inside that closure, every `tx.*` operation reuses one physical connection until commit/rollback and release. Nested transactions use savepoints on the same connection when supported.
 
-Using the outer/root database from its own transaction context must fail instead of silently escaping onto another pool connection.
+Use the innermost callback handle while a savepoint is active; parent/sibling handle use fails with `BRAID_TX_SCOPE`. Physical transaction operations are serialized. A callback must close its streams: an abandoned live iterator is closed and the transaction rolls back instead of committing over an active cursor.
+
+Using the outer/root database from its own transaction context fails with `BRAID_TX_SCOPE` instead of silently escaping onto another pool connection. Use the callback's `tx` handle, which becomes unusable after the closure ends.
 
 A pool such as `pg.Pool`, `mysql2.Pool` or Bun.SQL must be modeled as a **connection provider/lease source**, not as a fake executor whose `BEGIN`, query and `COMMIT` could land on different connections.
 
-Materialized query results should release their lease before asynchronous application mapping. Streaming keeps its lease until the iterator closes because the driver cursor/result stream is still active.
+Materialized query results release their root lease before asynchronous application mapping, including `execute`, prepared execution and `batch`.
+
+One batch uses one lease, executes every physical statement in order, releases, then maps the materialized results. **Batch is not atomic:** earlier statements—and later statements when mapping fails—may already have executed. Wrap it in `db.tx()` when atomicity is required.
+
+Streaming keeps its lease until iteration finishes, breaks, aborts or fails. Rows are mapped one at a time without buffering. Pooled-root mapper re-entry may acquire another lease; a pool needs available capacity for that nested operation. Same-root direct-stream re-entry fails with `BRAID_STREAM_SCOPE` rather than waiting on itself. Transaction streams prohibit overlapping work on the pinned connection. The SQLite adapter uses native statement iteration; adapters without a streaming protocol reject streaming.
+
+Uncertain transaction-control failures poison the physical resource. Pooled cleanup discards it (`pg` release-with-destroy; mysql2 `destroy()`); direct resources reject further SQLBraid work.
 
 ---
 
-## Next: execution observers / interceptors
+## Execution observers / interceptors
 
 Production systems often need SQL/bind logging or audit without coupling SQLBraid to a logger.
 
-PV6 will add a runtime observer/interceptor SPI around the central execution pipeline. It is inspired by the useful coverage of MyBatis interceptors while deliberately exposing less mutation authority.
+Configure observers through `{ observers: [...] }` on direct or pooled database factories.
 
-Planned coverage includes:
+Coverage includes:
 
 - final rendered SQL;
 - readonly bind values and binding metadata;
@@ -262,13 +288,49 @@ Planned coverage includes:
 - savepoint lifecycle;
 - errors with pipeline stage.
 
-A likely surface is a discriminated event observer:
+The public contract in `@sqlbraid/core` is a readonly discriminated event union:
 
 ```ts
 interface ExecutionObserver {
   onEvent(event: ExecutionEvent): void | Promise<void>;
 }
 ```
+
+Redact binds by default:
+
+```ts
+const db = createPgPoolDatabase(pool, {
+  observers: [{
+    onEvent(event) {
+      if (event.type === "query:ready") {
+        logger.debug({
+          sql: event.sql,
+          binds: event.values.map(() => "[REDACTED]"),
+        });
+      }
+    },
+  }],
+});
+```
+
+An audit policy can fail closed before acquiring a connection:
+
+```ts
+const db = createPgPoolDatabase(pool, {
+  observers: [{
+    async onEvent(event) {
+      if (event.type === "query:ready") {
+        await audit.record({ operationId: event.operationId, sql: event.sql });
+        // A rejected audit write prevents this SQL statement from executing.
+      }
+    },
+  }],
+});
+```
+
+Observers run sequentially in registration order. Events and metadata arrays are frozen where practical; nested application bind objects remain application-owned and must not be mutated. Prepared events carry the SQLBraid shape-lock name, not a promise of native driver preparation.
+
+The event types are `query:ready`, `query:result`, `query:mapped`, `query:error`, `stream:start`, `stream:end` and `transaction`. Batch items use ordinary query events with a shared `batchId` and individual `operationId`s; this is the batch lifecycle representation rather than separate batch start/end events.
 
 Pre-release observer semantics are **observe/fail only**:
 
@@ -280,6 +342,8 @@ Pre-release observer semantics are **observe/fail only**:
 Bind values are available because some audit systems require them, but SQLBraid does not log them by default. Applications decide their own redaction and retention policy.
 
 A failure before DB execution prevents execution. A failure after DB execution cannot undo an already committed root side effect; inside `db.tx(...)`, propagated failures participate in rollback.
+
+If an error observer also fails, an `AggregateError` preserves the original failure and the observer failure. SQLBraid-generated errors do not stringify bind values; driver/application errors retain their original identity and may require application redaction.
 
 This SPI is also the intended foundation for a later optional OpenTelemetry integration.
 
@@ -370,11 +434,11 @@ Completed:
 2. **PV2** — remove compiler SQL semantic inference;
 3. **PV3** — remove broad SQL AST/resolver;
 4. **PV4** — runtime result-kind enforcement + execution-time Standard Schema validation;
-5. **PV5** — query-bound Standard Schema result mapping.
+5. **PV5** — query-bound Standard Schema result mapping;
+6. **PV6** — execution boundary, connection leasing/transaction pinning, SQL/bind/audit observer SPI.
 
 Next:
 
-6. **PV6** — execution boundary, connection leasing/transaction pinning, SQL/bind/audit observer SPI;
 7. **PV7** — Node/Bun/Deno runtime portability matrix;
 8. **PV8** — rename/reframe `@sqlbraid/schema` as `@sqlbraid/metadata`;
 9. **PV9** — optional metadata → TypeScript codegen;

@@ -1,5 +1,13 @@
-import type { QueryExecutor, QueryExecutionResult, RenderedQuery, TypePolicy } from "@sqlbraid/core";
-import { createDatabase } from "@sqlbraid/runtime";
+import type {
+  ConnectionLease,
+  ConnectionProvider,
+  DatabaseOptions,
+  QueryExecutor,
+  QueryExecutionResult,
+  RenderedQuery,
+  TypePolicy,
+} from "@sqlbraid/core";
+import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
 export interface PgFieldLike {
@@ -20,6 +28,16 @@ export interface PgClientLike {
   query(text: string, values?: readonly unknown[]): Promise<PgResultLike>;
   release?(): void;
 }
+
+export interface PgPoolClientLike extends Omit<PgClientLike, "release"> {
+  release(destroy?: boolean): void | Promise<void>;
+}
+
+export interface PgPoolLike {
+  connect(): Promise<PgPoolClientLike>;
+}
+
+export type PgDatabaseOptions = DatabaseOptions & { readonly typePolicy?: TypePolicy };
 
 const oidTypes: Readonly<Record<number, string>> = { 20: "int8", 21: "int2", 23: "int4", 16: "bool", 25: "text", 1700: "numeric" };
 
@@ -69,6 +87,31 @@ export function createPgExecutor(client: PgClientLike, options: { readonly typeP
   };
 }
 
-export function createPgDatabase(client: PgClientLike, options: { readonly typePolicy?: TypePolicy } = {}) {
-  return createDatabase(createPgExecutor(client, options));
+export function createPgDatabase(client: PgClientLike, options: PgDatabaseOptions = {}) {
+  const { typePolicy, ...databaseOptions } = options;
+  return createDatabase(createPgExecutor(client, { typePolicy }), databaseOptions);
+}
+
+export function createPgPoolProvider(pool: PgPoolLike, options: { readonly typePolicy?: TypePolicy } = {}): ConnectionProvider {
+  return {
+    async acquire(): Promise<ConnectionLease> {
+      const client = await pool.connect();
+      const executor = createPgExecutor(client, options);
+      let released = false;
+      return {
+        ...executor,
+        async release(releaseOptions = {}): Promise<void> {
+          if (released) return;
+          released = true;
+          if (releaseOptions.discard === true) await client.release(true);
+          else await client.release();
+        },
+      };
+    },
+  };
+}
+
+export function createPgPoolDatabase(pool: PgPoolLike, options: PgDatabaseOptions = {}) {
+  const { typePolicy, ...databaseOptions } = options;
+  return createPooledDatabase(createPgPoolProvider(pool, { typePolicy }), databaseOptions);
 }

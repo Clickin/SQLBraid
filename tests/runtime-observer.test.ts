@@ -1,0 +1,181 @@
+import assert from "node:assert/strict";
+import { test } from "vitest";
+import type { ConnectionProvider, ExecutionEvent, QueryExecutor, RenderedQuery, StandardSchemaV1 } from "@sqlbraid/core";
+import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
+import { sql } from "@sqlbraid/template";
+
+function executor(): QueryExecutor {
+  return { async query<Row>() { return { kind: "rows", rows: [{ id: 1 }] as unknown as readonly Row[] }; } };
+}
+
+function schema(validate: StandardSchemaV1.Props<unknown, unknown>["validate"]): StandardSchemaV1<unknown, unknown> {
+  return { "~standard": { version: 1, vendor: "observer-regression", validate } };
+}
+
+test("observers await registration order and cannot replace SQL or bind slots", async () => {
+  const order: string[] = [];
+  const secret = "conspicuous-private-bind";
+  const query = sql.rows`SELECT ${secret}`;
+  let received: readonly unknown[] = [];
+  const db = createDatabase({
+    async query<Row>(rendered: RenderedQuery) {
+      order.push("driver");
+      received = rendered.values;
+      assert.equal(rendered.text, query.render().text);
+      return { kind: "rows", rows: [] as readonly Row[] };
+    },
+  }, { observers: [
+    { async onEvent(event) {
+      await Promise.resolve();
+      order.push(`A:${event.type}`);
+      if (event.type === "query:ready") {
+        assert.deepEqual(event.values, [secret]);
+        assert.equal(Reflect.set(event.values, "0", "replacement"), false);
+        assert.equal(Reflect.set(event, "sql", "DELETE FROM users"), false);
+      }
+    } },
+    { onEvent(event) { order.push(`B:${event.type}`); } },
+  ] });
+  await db.execute(query);
+  assert.deepEqual(received, [secret]);
+  assert.deepEqual(order, ["A:query:ready", "B:query:ready", "driver", "A:query:result", "B:query:result", "A:query:mapped", "B:query:mapped"]);
+});
+
+test("audit failure prevents acquisition and SQL execution", async () => {
+  const failure = new Error("audit unavailable");
+  let acquisitions = 0;
+  const events: ExecutionEvent[] = [];
+  const provider: ConnectionProvider = { async acquire() { acquisitions += 1; return { ...executor(), release() {} }; } };
+  const db = createPooledDatabase(provider, { observers: [{ onEvent(event) {
+    events.push(event);
+    if (event.type === "query:ready") throw failure;
+  } }] });
+  await assert.rejects(db.execute(sql`SELECT ${"secret"}`), (error) => error === failure);
+  assert.equal(acquisitions, 0);
+  const error = events.find((event) => event.type === "query:error");
+  assert.ok(error?.type === "query:error");
+  assert.equal(error.stage, "observer-before");
+  assert.equal(error.executionStarted, false);
+});
+
+test("observer errors identify each pipeline stage and preserve thrown mapper errors", async () => {
+  const stages = ["render", "acquire", "driver", "result-kind", "query-map", "execution-map", "observer-after", "release"] as const;
+  for (const stage of stages) {
+    const failure = new Error(stage);
+    const events: ExecutionEvent[] = [];
+    const db = createPooledDatabase({ async acquire() {
+      if (stage === "acquire") throw failure;
+      return {
+        async query<Row>() {
+          if (stage === "driver") throw failure;
+          if (stage === "result-kind") return { kind: "command" as const, rows: [] as const, command: {} };
+          return { kind: "rows" as const, rows: [{}] as unknown as readonly Row[] };
+        },
+        release() { if (stage === "release") throw failure; },
+      };
+    } }, { observers: [{ onEvent(event) {
+      events.push(event);
+      if (stage === "observer-after" && event.type === "query:result") throw failure;
+    } }] });
+    const query = sql.rows(schema((value) => {
+      if (stage === "query-map") throw failure;
+      return { value };
+    }))`SELECT 1`;
+    const runnable = stage === "render" ? { ...query, render() { throw failure; } } : query;
+    await assert.rejects(db.all(runnable, { schema: schema((value) => {
+      if (stage === "execution-map") throw failure;
+      return { value };
+    }) }), (error) => stage === "result-kind" ? error instanceof Error && "code" in error && error.code === "BRAID_RESULT_KIND" : error === failure);
+    const errors = events.filter((event) => event.type === "query:error");
+    assert.equal(errors.length, 1, stage);
+    assert.equal(errors[0].stage, stage);
+    assert.equal(errors[0].executionStarted, !["render", "acquire"].includes(stage));
+  }
+});
+
+test("error observers preserve original failures including undefined rejection values", async () => {
+  for (const original of [new Error("driver failed"), undefined]) {
+    const reporting = new Error("error audit failed");
+    let released = 0;
+    const db = createPooledDatabase({ async acquire() {
+      return { async query() { throw original; }, release() { released += 1; } };
+    } }, { observers: [{ onEvent(event) { if (event.type === "query:error") throw reporting; } }] });
+    await assert.rejects(db.execute(sql`SELECT 1`), (error) => error instanceof AggregateError && error.errors[0] === original && error.errors[1] === reporting);
+    assert.equal(released, 1);
+  }
+});
+
+test("prepared names and batch correlation survive result and mapping events", async () => {
+  const events: ExecutionEvent[] = [];
+  const db = createDatabase(executor(), { observers: [{ onEvent(event) { events.push(event); } }] });
+  const query = sql.rows`SELECT 1`;
+  await db.prepare("named-shape", () => query).execute();
+  for (const event of events) {
+    if (event.type === "query:ready" || event.type === "query:result" || event.type === "query:mapped") {
+      assert.ok("preparedName" in event);
+      assert.equal(event.preparedName, "named-shape");
+    }
+  }
+  events.length = 0;
+  await db.batch([query, query]);
+  const ready = events.filter((event) => event.type === "query:ready");
+  assert.equal(ready.length, 2);
+  assert.notEqual(ready[0].operationId, ready[1].operationId);
+  assert.equal(typeof ready[0].batchId, "string");
+  assert.equal(ready[0].batchId, ready[1].batchId);
+});
+
+test("routine observers identify calls without guessing command kind from empty rows", async () => {
+  const events: ExecutionEvent[] = [];
+  const db = createDatabase({ ...executor(), async call() { return { output: {}, resultSets: [{ rows: [] }] }; } }, {
+    observers: [{ onEvent(event) { events.push(event); } }],
+  });
+  await db.call(sql.call`CALL routine()`);
+  const result = events.find((event) => event.type === "query:result");
+  assert.ok(result?.type === "query:result");
+  assert.equal(result.actualKind, "call");
+});
+
+test("generated kind mismatch errors never stringify private binds", async () => {
+  const secret = "private-bind-never-render";
+  const db = createDatabase(executor());
+  await assert.rejects(db.execute(sql.command`UPDATE users SET secret = ${secret}`), (error) => {
+    assert.ok(error instanceof Error);
+    assert.equal(error.message.includes(secret), false);
+    return "code" in error && error.code === "BRAID_RESULT_KIND";
+  });
+});
+
+test("transaction and stream failures retain non-Error rejection values", async () => {
+  const db = createDatabase({
+    ...executor(),
+    async begin() {},
+    async commit() {},
+    async rollback() {},
+    async *stream<Row>(): AsyncGenerator<Row> { throw undefined; },
+  });
+  const transaction = await db.tx(async () => { throw undefined; }).then(
+    () => ({ rejected: false }),
+    (reason: unknown) => ({ rejected: true, reason }),
+  );
+  assert.deepEqual(transaction, { rejected: true, reason: undefined });
+  const stream = await (async () => {
+    for await (const row of db.stream(sql.rows`SELECT 1`)) void row;
+  })().then(
+    () => ({ rejected: false }),
+    (reason: unknown) => ({ rejected: true, reason }),
+  );
+  assert.deepEqual(stream, { rejected: true, reason: undefined });
+});
+
+test("early stream return propagates lease cleanup and end observer failures", async () => {
+  for (const failingStage of ["release", "observer"] as const) {
+    const failure = new Error(failingStage);
+    const db = createPooledDatabase({ async acquire() {
+      return { ...executor(), async *stream<Row>() { yield 1 as Row; }, release() { if (failingStage === "release") throw failure; } };
+    } }, { observers: [{ onEvent(event) { if (event.type === "stream:end" && failingStage === "observer") throw failure; } }] });
+    await assert.rejects(async () => {
+      for await (const row of db.stream(sql.rows`SELECT 1`)) { void row; break; }
+    }, (error) => error === failure);
+  }
+});

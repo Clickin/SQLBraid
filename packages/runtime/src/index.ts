@@ -1,8 +1,13 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type {
   CallQuery,
+  ConnectionLease,
+  ConnectionProvider,
   Database,
+  DatabaseOptions,
   ExecutableQuery,
+  ExecutionEvent,
+  ExecutionObserver,
   ExecutionResultOf,
   PreparedQuery,
   Query,
@@ -10,9 +15,11 @@ import type {
   QueryExecutor,
   QueryResultKind,
   QueryRow,
+  RenderedQuery,
   RoutineCallResult,
   RowQuery,
   RowValidationOptions,
+  RowsExecutionResult,
   StandardSchemaV1,
   StreamOptions,
 } from "@sqlbraid/core";
@@ -30,10 +37,14 @@ export class DatabaseCardinalityError extends Error {
 }
 
 export class DatabaseScopeError extends Error {
-  readonly code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED" | "BRAID_CONNECTION_POISONED";
+  readonly code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED" | "BRAID_CONNECTION_POISONED" | "BRAID_STREAM_SCOPE" | "BRAID_REENTRY";
   declare readonly cause?: unknown;
 
-  constructor(code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED" | "BRAID_CONNECTION_POISONED", message: string, cause?: unknown) {
+  constructor(
+    code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED" | "BRAID_CONNECTION_POISONED" | "BRAID_STREAM_SCOPE" | "BRAID_REENTRY",
+    message: string,
+    cause?: unknown,
+  ) {
     super(message, cause === undefined ? undefined : { cause });
     this.name = "DatabaseScopeError";
     this.code = code;
@@ -70,34 +81,100 @@ export class DatabaseResultValidationError extends Error {
 
 interface ScopeState {
   tail: Promise<void>;
-  owner?: symbol;
+  transactionTail: Promise<void>;
+  streamUsers: number;
+  activeScope?: symbol;
   poisoned?: unknown;
 }
 
-interface DatabaseOptions {
-  readonly transaction?: boolean;
+interface RuntimeOptions extends DatabaseOptions {
+  readonly transaction: boolean;
   readonly preparedNames: Set<string>;
+  readonly rootState: ScopeState;
+  readonly pooled: boolean;
+  readonly lease?: ConnectionLease;
+  readonly leaseState?: ScopeState;
+  readonly transactionId?: string;
+  readonly depth: number;
+  readonly scope?: symbol;
 }
 
-interface ScopedDatabase extends Database {
-  close(): void;
+interface TransactionContext {
+  readonly rootState: ScopeState;
+  readonly activity: { active: boolean };
+  readonly parent?: TransactionContext;
 }
 
-function cleanupError(error: unknown, cleanup: unknown): AggregateError {
-  return new AggregateError([error, cleanup], "Transaction failed and cleanup also failed.", { cause: error });
+interface PhysicalContext {
+  readonly rootState: ScopeState;
+  readonly direct: boolean;
+  readonly stream: boolean;
 }
 
-const transactionContext = new AsyncLocalStorage<{ readonly state: ScopeState; readonly owner: symbol }>();
+interface OperationMeta {
+  readonly operationId: string;
+  readonly transactionDepth: number;
+  readonly transactionScoped: boolean;
+  readonly preparedName?: string;
+  readonly batchId?: string;
+}
+
+interface PreparedOperation<Q extends ExecutableQuery> {
+  readonly query: Q;
+  readonly rendered: RenderedQuery;
+  readonly meta: OperationMeta;
+}
+
+interface RawOperation<Q extends ExecutableQuery> extends PreparedOperation<Q> {
+  readonly result?: QueryExecutionResult<unknown>;
+  readonly duration: number;
+  readonly driverError?: unknown;
+  readonly driverFailed: boolean;
+}
+
+interface Use {
+  readonly executor: QueryExecutor;
+  readonly physicalState: ScopeState;
+  readonly direct: boolean;
+  readonly release: (discard?: boolean) => Promise<void>;
+}
+
+const transactionContext = new AsyncLocalStorage<TransactionContext>();
+const physicalContext = new AsyncLocalStorage<PhysicalContext>();
 const scopeStates = new WeakMap<object, ScopeState>();
+let operationSequence = 0;
+let transactionSequence = 0;
+
+function now(): number {
+  return typeof performance === "undefined" ? Date.now() : performance.now();
+}
+
+function nextOperationId(): string {
+  operationSequence += 1;
+  return `braid_op_${operationSequence}`;
+}
+
+function nextTransactionId(): string {
+  transactionSequence += 1;
+  return `braid_tx_${transactionSequence}`;
+}
 
 function scopeStateFor(executor: QueryExecutor): ScopeState {
   const key = executor.ownershipKey ?? executor;
   let state = scopeStates.get(key);
   if (!state) {
-    state = { tail: Promise.resolve() };
+    state = { tail: Promise.resolve(), transactionTail: Promise.resolve(), streamUsers: 0 };
     scopeStates.set(key, state);
   }
   return state;
+}
+
+function acquireTransactionTurn(state: ScopeState): Promise<() => void> {
+  assertHealthy(state);
+  const { promise: turn, resolve: release } = Promise.withResolvers<void>();
+  const previous = state.transactionTail;
+  state.transactionTail = previous.then(() => turn);
+  return previous.then(() => release);
 }
 
 function isPoisoned(state: ScopeState): boolean {
@@ -109,20 +186,52 @@ function poison(state: ScopeState, reason: unknown): void {
 }
 
 function assertHealthy(state: ScopeState): void {
-  if (isPoisoned(state)) throw new DatabaseScopeError("BRAID_CONNECTION_POISONED", "The physical execution resource is poisoned and cannot accept new SQLBraid work.", state.poisoned);
+  if (isPoisoned(state)) {
+    throw new DatabaseScopeError(
+      "BRAID_CONNECTION_POISONED",
+      "The physical execution resource is poisoned and cannot accept new SQLBraid work.",
+      state.poisoned,
+    );
+  }
 }
 
-function acquireRoot(state: ScopeState): Promise<() => void> {
-  assertHealthy(state);
-  const context = transactionContext.getStore();
-  if (context?.state === state && state.owner === context.owner) throw new DatabaseScopeError("BRAID_TX_SCOPE", "The root database handle cannot be used from its own transaction callback.");
+function assertRootAllowed(rootState: ScopeState, stream: boolean): void {
+  for (let transaction = transactionContext.getStore(); transaction; transaction = transaction.parent) {
+    if (transaction.rootState === rootState && transaction.activity.active) {
+      throw new DatabaseScopeError("BRAID_TX_SCOPE", "The root database handle cannot be used from its own transaction callback.");
+    }
+  }
+  const active = physicalContext.getStore();
+  if (active?.rootState === rootState && active.direct && active.stream) {
+    throw new DatabaseScopeError(
+      "BRAID_STREAM_SCOPE",
+      "A direct database stream cannot re-enter its own physical execution resource.",
+    );
+  }
+  if (rootState.streamUsers > 0) {
+    throw new DatabaseScopeError(
+      "BRAID_STREAM_SCOPE",
+      "A direct database stream cannot re-enter its own physical execution resource.",
+    );
+  }
+  if (!stream && active?.rootState === rootState && active.direct) {
+    throw new DatabaseScopeError(
+      "BRAID_REENTRY",
+      "A direct database operation cannot re-enter its own physical execution resource.",
+    );
+  }
+}
+
+function acquireDirectRoot(rootState: ScopeState, stream: boolean): Promise<() => void> {
+  assertHealthy(rootState);
+  assertRootAllowed(rootState, stream);
   const { promise: turn, resolve: release } = Promise.withResolvers<void>();
-  const previous = state.tail;
-  state.tail = previous.then(() => turn);
+  const previous = rootState.tail;
+  rootState.tail = previous.then(() => turn);
   return previous.then(() => {
-    if (isPoisoned(state)) {
+    if (isPoisoned(rootState)) {
       release();
-      assertHealthy(state);
+      assertHealthy(rootState);
     }
     return release;
   });
@@ -145,11 +254,7 @@ function standardSchemaFor<Input, Output>(schema: StandardSchemaV1<Input, Output
   if (schema === undefined) return undefined;
   if (schema === null || typeof schema !== "object") throw new TypeError("Standard Schema validator is malformed.");
   const candidate = (schema as { readonly "~standard"?: unknown })["~standard"];
-  if (
-    candidate === null
-    || typeof candidate !== "object"
-    || Array.isArray(candidate)
-  ) {
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
     throw new TypeError("Standard Schema validator is malformed.");
   }
   const standard = candidate as { readonly version?: unknown; readonly validate?: unknown };
@@ -175,26 +280,6 @@ function assertStandardSchemaResult(result: unknown): asserts result is Standard
   if (!isStandardSchemaSuccess(result) && !isStandardSchemaFailure(result)) {
     throw new TypeError("Standard Schema validator returned a malformed result.");
   }
-}
-
-async function validateRows<Output>(
-  rows: readonly unknown[],
-  querySchema: StandardSchemaV1<unknown, Output> | undefined,
-  executionSchema?: StandardSchemaV1<unknown, Output> | undefined,
-): Promise<readonly Output[]> {
-  const queryStandard = standardSchemaFor(querySchema);
-  const executionStandard = standardSchemaFor(executionSchema);
-  if (queryStandard === undefined && executionStandard === undefined) return rows as readonly Output[];
-  const validated: Output[] = [];
-  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-    const mapped = queryStandard === undefined
-      ? rows[rowIndex]
-      : await validateRow(queryStandard, rows[rowIndex], rowIndex, "query");
-    validated.push(executionStandard === undefined
-      ? mapped as Output
-      : await validateRow(executionStandard, mapped, rowIndex, "execution"));
-  }
-  return validated;
 }
 
 async function validateRow<Output>(
@@ -224,82 +309,538 @@ function assertExecutionResult<Row>(query: Query<unknown, QueryResultKind>, resu
   return result;
 }
 
-export function createDatabase(executor: QueryExecutor): Database {
-  return createScopedDatabase(executor, scopeStateFor(executor), { transaction: false, preparedNames: new Set<string>() });
+function frozenEvent(event: ExecutionEvent): ExecutionEvent {
+  if (event.type === "query:ready" || event.type === "stream:start") {
+    const values = Object.freeze([...event.values]);
+    const bindingMap = event.bindingMap === undefined ? undefined : Object.freeze(event.bindingMap.map((item) => Object.freeze({ ...item })));
+    return Object.freeze({ ...event, values, ...(bindingMap === undefined ? {} : { bindingMap }) }) as ExecutionEvent;
+  }
+  return Object.freeze(event) as ExecutionEvent;
 }
 
-function createScopedDatabase(executor: QueryExecutor, state: ScopeState, options: DatabaseOptions): ScopedDatabase {
+async function notify(observers: readonly ExecutionObserver[], event: ExecutionEvent): Promise<void> {
+  if (observers.length === 0) return;
+  const immutable = frozenEvent(event);
+  for (const observer of observers) await observer.onEvent(immutable);
+}
+
+async function notifyError(
+  observers: readonly ExecutionObserver[],
+  event: ExecutionEvent,
+  original: unknown,
+): Promise<never> {
+  const failures: unknown[] = [];
+  const immutable = frozenEvent(event);
+  for (const observer of observers) {
+    try {
+      await observer.onEvent(immutable);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length === 0) throw original;
+  throw new AggregateError([original, ...failures], "Execution failed and error observers also failed.", { cause: original });
+}
+
+function metadata(options: RuntimeOptions, operationId: string, preparedName?: string, batchId?: string): OperationMeta {
+  return {
+    operationId,
+    preparedName,
+    batchId,
+    transactionDepth: options.depth,
+    transactionScoped: options.transaction,
+  };
+}
+
+function queryReadyEvent(operation: PreparedOperation<ExecutableQuery>): ExecutionEvent {
+  const { query, rendered, meta } = operation;
+  return {
+    type: "query:ready",
+    operationId: meta.operationId,
+    batchId: meta.batchId,
+    sql: rendered.text,
+    values: rendered.values,
+    bindingMap: rendered.bindingMap,
+    declaredKind: query.resultKind,
+    fingerprint: rendered.fingerprint,
+    variantFingerprint: rendered.variantFingerprint,
+    preparedName: meta.preparedName,
+    transactionDepth: meta.transactionDepth,
+    transactionScoped: meta.transactionScoped,
+  };
+}
+
+function queryResultEvent(operation: RawOperation<ExecutableQuery>, result: QueryExecutionResult<unknown>): ExecutionEvent {
+  return {
+    type: "query:result",
+    operationId: operation.meta.operationId,
+    preparedName: operation.meta.preparedName,
+    batchId: operation.meta.batchId,
+    duration: operation.duration,
+    actualKind: result.kind,
+    rowCount: result.kind === "rows" ? result.rows.length : result.rowCount,
+    command: result.kind === "command" ? Object.freeze({ ...result.command }) : undefined,
+    transactionDepth: operation.meta.transactionDepth,
+    transactionScoped: operation.meta.transactionScoped,
+  };
+}
+
+function queryMappedEvent(operation: RawOperation<ExecutableQuery>, rowCount: number, queryMapped: boolean, executionMapped: boolean, duration: number): ExecutionEvent {
+  return {
+    type: "query:mapped",
+    operationId: operation.meta.operationId,
+    preparedName: operation.meta.preparedName,
+    batchId: operation.meta.batchId,
+    duration,
+    rowCount,
+    queryMapped,
+    executionMapped,
+    transactionDepth: operation.meta.transactionDepth,
+    transactionScoped: operation.meta.transactionScoped,
+  };
+}
+
+function errorEvent(operation: PreparedOperation<ExecutableQuery>, error: unknown, stage: QueryErrorEventStage, started: boolean, completed: boolean, duration?: number): ExecutionEvent {
+  return {
+    type: "query:error",
+    operationId: operation.meta.operationId,
+    preparedName: operation.meta.preparedName,
+    batchId: operation.meta.batchId,
+    error,
+    stage,
+    executionStarted: started,
+    executionCompleted: completed,
+    duration,
+    transactionDepth: operation.meta.transactionDepth,
+    transactionScoped: operation.meta.transactionScoped,
+  };
+}
+
+type QueryErrorEventStage = Extract<ExecutionEvent, { readonly type: "query:error" }>['stage'];
+
+function streamStartEvent(operation: PreparedOperation<ExecutableQuery>): ExecutionEvent {
+  const { rendered, meta } = operation;
+  return {
+    type: "stream:start",
+    operationId: meta.operationId,
+    sql: rendered.text,
+    values: rendered.values,
+    bindingMap: rendered.bindingMap,
+    declaredKind: "rows",
+    variantFingerprint: rendered.variantFingerprint,
+    preparedName: meta.preparedName,
+    transactionDepth: meta.transactionDepth,
+    transactionScoped: meta.transactionScoped,
+  };
+}
+
+async function transactionEvent(
+  observers: readonly ExecutionObserver[],
+  transactionId: string,
+  phase: Extract<ExecutionEvent, { readonly type: "transaction" }>['phase'],
+  status: Extract<ExecutionEvent, { readonly type: "transaction" }>['status'],
+  depth: number,
+  started?: number,
+  savepointName?: string,
+  error?: unknown,
+): Promise<void> {
+  await notify(observers, {
+    type: "transaction",
+    transactionId,
+    phase,
+    status,
+    depth,
+    savepointName,
+    duration: started === undefined ? undefined : now() - started,
+    error,
+  });
+}
+
+export function createDatabase(executor: QueryExecutor, options: DatabaseOptions = {}): Database {
+  const rootState = scopeStateFor(executor);
+  return createScopedDatabase(executor, rootState, {
+    ...options,
+    observers: options.observers === undefined ? [] : Object.freeze([...options.observers]),
+    transaction: false,
+    preparedNames: new Set<string>(),
+    rootState,
+    pooled: false,
+    depth: 0,
+  });
+}
+
+export function createPooledDatabase(provider: ConnectionProvider, options: DatabaseOptions = {}): Database {
+  const rootState: ScopeState = { tail: Promise.resolve(), transactionTail: Promise.resolve(), streamUsers: 0 };
+  return createScopedDatabase(provider, rootState, {
+    ...options,
+    observers: options.observers === undefined ? [] : Object.freeze([...options.observers]),
+    transaction: false,
+    preparedNames: new Set<string>(),
+    rootState,
+    pooled: true,
+    depth: 0,
+  });
+}
+
+function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, state: ScopeState, options: RuntimeOptions): Database & { close(): void; finish(): Promise<void> } {
   let closed = false;
+  const openStreams = new Set<AsyncGenerator<unknown>>();
   const assertOpen = (): void => {
     if (closed) throw new DatabaseScopeError("BRAID_TX_CLOSED", "Transaction database is no longer usable.");
+    if (options.transaction && state.activeScope !== options.scope) {
+      throw new DatabaseScopeError("BRAID_TX_SCOPE", "Use the innermost transaction database while its savepoint is active.");
+    }
   };
-  const acquireForUse = (): Promise<(() => void) | undefined> => {
+  const leaseForUse = async (stream: boolean): Promise<Use> => {
     assertOpen();
     assertHealthy(state);
-    return options.transaction ? Promise.resolve(undefined) : acquireRoot(state);
-  };
-  const executeOne = async <Q extends ExecutableQuery>(query: Q, mapQuery = true): Promise<QueryExecutionResult<unknown>> => {
-    assertExecutableQuery(query);
-    const result = assertExecutionResult(query, await executor.query<unknown>(query.render()));
-    if (!mapQuery || result.kind !== "rows" || query.resultSchema === undefined) {
-      return result;
+    if (options.transaction) {
+      const lease = options.lease;
+      if (!lease || !options.leaseState) throw new DatabaseScopeError("BRAID_TX_CLOSED", "Transaction database is no longer usable.");
+      const active = physicalContext.getStore();
+      if (options.leaseState.streamUsers > 0 || (active?.rootState === options.rootState && active.direct)) {
+        if (options.leaseState.streamUsers > 0) {
+          throw new DatabaseScopeError("BRAID_STREAM_SCOPE", "A transaction stream cannot re-enter its pinned physical execution resource.");
+        }
+        throw new DatabaseScopeError("BRAID_REENTRY", "A transaction connection cannot execute concurrent physical work.");
+      }
+      assertHealthy(options.leaseState);
+      const releaseTurn = await acquireTransactionTurn(options.leaseState);
+      try { assertOpen(); assertHealthy(options.leaseState); }
+      catch (error) { releaseTurn(); throw error; }
+      return { executor: lease, physicalState: options.leaseState, direct: true, release: async () => { releaseTurn(); } };
+    }
+    assertRootAllowed(options.rootState, stream);
+    if (!options.pooled) {
+      const release = await acquireDirectRoot(state, stream);
+      return { executor: executor as QueryExecutor, physicalState: state, direct: true, release: async () => { release(); } };
+    }
+    let lease: ConnectionLease;
+    try {
+      lease = await (executor as ConnectionProvider).acquire();
+    } catch (error) {
+      throw error;
+    }
+    if (!lease || typeof lease !== "object" || typeof lease.release !== "function" || typeof lease.query !== "function") {
+      throw new TypeError("Connection provider returned an invalid lease.");
+    }
+    const leaseState = scopeStateFor(lease);
+    try {
+      assertHealthy(leaseState);
+    } catch (error) {
+      try { await lease.release({ discard: true }); } catch (releaseError) { throw new AggregateError([error, releaseError], "Poisoned lease cleanup failed.", { cause: error }); }
+      throw error;
     }
     return {
-      ...result,
-      rows: await validateRows(result.rows, query.resultSchema),
+      executor: lease,
+      physicalState: leaseState,
+      direct: false,
+      release: async (discard = false) => { await lease.release(discard ? { discard: true } : undefined); },
     };
   };
-  const executeForUse = async <Q extends ExecutableQuery>(query: Q, mapQuery = true): Promise<QueryExecutionResult<unknown>> => {
-    assertExecutableQuery(query);
-    const release = await acquireForUse();
-    try { return await executeOne(query, mapQuery); } finally { release?.(); }
+  const prepare = <Q extends ExecutableQuery>(query: Q, preparedName?: string, batchId?: string): PreparedOperation<Q> => {
+    const operationId = nextOperationId();
+    const rendered = query.render();
+    return { query, rendered, meta: metadata(options, operationId, preparedName, batchId) };
   };
-  const database: ScopedDatabase = {
+  const prepareObserved = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, batchId?: string): Promise<PreparedOperation<Q>> => {
+    let operation = {
+      query,
+      rendered: { text: "", values: [], resultKind: query.resultKind } as RenderedQuery,
+      meta: metadata(options, nextOperationId(), preparedName, batchId),
+    } as PreparedOperation<Q>;
+    try {
+      operation = prepare(query, preparedName, batchId);
+    } catch (error) {
+      await notifyError(options.observers ?? [], errorEvent(operation as PreparedOperation<ExecutableQuery>, error, "render", false, false), error);
+    }
+    try {
+      await notify(options.observers ?? [], queryReadyEvent(operation as PreparedOperation<ExecutableQuery>));
+    } catch (error) {
+      await notifyError(options.observers ?? [], errorEvent(operation as PreparedOperation<ExecutableQuery>, error, "observer-before", false, false), error);
+    }
+    return operation;
+  };
+  const physical = async <Q extends ExecutableQuery>(operation: PreparedOperation<Q>, use: Use): Promise<RawOperation<Q>> => {
+    const started = now();
+    try {
+      const result = await physicalContext.run(
+        { rootState: options.rootState, direct: use.direct, stream: false },
+        () => use.executor.query<unknown>(operation.rendered),
+      );
+      return { ...operation, result, duration: now() - started, driverFailed: false };
+    } catch (driverError) {
+      return { ...operation, driverError, driverFailed: true, duration: now() - started };
+    }
+  };
+  const finalizePhysical = async <Q extends ExecutableQuery>(operation: RawOperation<Q>): Promise<QueryExecutionResult<unknown>> => {
+    if (operation.driverFailed) {
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, operation.driverError, "driver", true, false, operation.duration), operation.driverError);
+    }
+    let result: QueryExecutionResult<unknown>;
+    try {
+      result = assertExecutionResult(operation.query, operation.result as QueryExecutionResult<unknown>);
+    } catch (error) {
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "result-kind", true, true, operation.duration), error);
+    }
+    try {
+      await notify(options.observers ?? [], queryResultEvent(operation as RawOperation<ExecutableQuery>, result!));
+    } catch (error) {
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "observer-after", true, true, operation.duration), error);
+    }
+    return result!;
+  };
+  const processRows = async <Q extends ExecutableQuery>(operation: RawOperation<Q>, result: QueryExecutionResult<unknown>, executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>): Promise<QueryExecutionResult<unknown>> => {
+    const queryMapped = operation.query.resultSchema !== undefined;
+    const executionMapped = executionSchema !== undefined;
+    if (result.kind !== "rows" || (!queryMapped && !executionMapped)) {
+      try {
+        await notify(options.observers ?? [], queryMappedEvent(operation as RawOperation<ExecutableQuery>, result.kind === "rows" ? result.rows.length : result.rowCount ?? 0, queryMapped, executionMapped, 0));
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "observer-after", true, true, operation.duration), error);
+      }
+      return result;
+    }
+    const mappingStarted = now();
+    const rows: unknown[] = [];
+    let queryStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
+    let executionStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
+    try {
+      queryStandard = standardSchemaFor(operation.query.resultSchema) as StandardSchemaV1.Props<unknown, unknown> | undefined;
+    } catch (error) {
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "query-map", true, true, operation.duration), error);
+    }
+    try {
+      executionStandard = standardSchemaFor(executionSchema) as StandardSchemaV1.Props<unknown, unknown> | undefined;
+    } catch (error) {
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "execution-map", true, true, operation.duration), error);
+    }
+    for (let rowIndex = 0; rowIndex < result.rows.length; rowIndex += 1) {
+      let mapped: unknown = result.rows[rowIndex];
+      if (queryStandard !== undefined) {
+        try {
+          mapped = await validateRow(queryStandard, mapped, rowIndex, "query");
+        } catch (error) {
+          await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "query-map", true, true, operation.duration), error);
+        }
+      }
+      if (executionStandard !== undefined) {
+        try {
+          mapped = await validateRow(executionStandard, mapped, rowIndex, "execution");
+        } catch (error) {
+          await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "execution-map", true, true, operation.duration), error);
+        }
+      }
+      rows.push(mapped);
+    }
+    try {
+      await notify(options.observers ?? [], queryMappedEvent(operation as RawOperation<ExecutableQuery>, result.rows.length, queryMapped, executionMapped, now() - mappingStarted));
+    } catch (error) {
+      await notifyError(options.observers ?? [], errorEvent(operation as RawOperation<ExecutableQuery>, error, "observer-after", true, true, operation.duration), error);
+    }
+    return { ...result, rows: rows! };
+  };
+  const processOne = async <Q extends ExecutableQuery>(operation: RawOperation<Q>, result: QueryExecutionResult<unknown>, executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>): Promise<unknown> => {
+    if (result.kind !== "rows") return result;
+    const mapped = await processRows(operation, result, executionSchema);
+    return mapped.rows[0];
+  };
+  const runMaterialized = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, batchId?: string): Promise<RawOperation<Q>> => {
+    assertExecutableQuery(query);
+    const operation = await prepareObserved(query, preparedName, batchId);
+    let use: Use;
+    try {
+      use = await leaseForUse(false);
+    } catch (error) {
+      await notifyError(options.observers ?? [], errorEvent(operation as PreparedOperation<ExecutableQuery>, error, "acquire", false, false), error);
+      throw error;
+    }
+    const raw = await physical(operation, use!);
+    let releaseError: unknown;
+    let releaseFailed = false;
+    try {
+      await use!.release();
+    } catch (error) {
+      releaseError = error;
+      releaseFailed = true;
+      poison(use!.physicalState, error);
+    }
+    if (raw.driverFailed) {
+      const original = releaseFailed ? new AggregateError([raw.driverError, releaseError], "Execution and lease release failed.", { cause: raw.driverError }) : raw.driverError;
+      const stage = releaseFailed ? "release" : "driver";
+      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, original, stage, true, false, raw.duration), original);
+    }
+    if (releaseFailed) {
+      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, releaseError, "release", true, true, raw.duration), releaseError);
+    }
+    return raw;
+  };
+  const materializedResult = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>, batchId?: string): Promise<QueryExecutionResult<unknown>> => {
+    const raw = await runMaterialized(query, preparedName, batchId);
+    const result = await finalizePhysical(raw);
+    return processRows(raw, result, executionSchema);
+  };
+  const executeNamed = async <Q extends ExecutableQuery>(query: Q, preparedName?: string): Promise<ExecutionResultOf<Q>> => await materializedResult(query, preparedName) as ExecutionResultOf<Q>;
+  const allNamed = async <Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>, preparedName?: string): Promise<readonly Row[]> => {
+    const result = await materializedResult(query, preparedName, validationOptions?.schema);
+    if (result.kind !== "rows") malformedExecutionResult();
+    return result.rows as readonly Row[];
+  };
+  const oneNamed = async <Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>, preparedName?: string): Promise<Row> => {
+    const raw = await runMaterialized(query, preparedName);
+    const result = await finalizePhysical(raw);
+    if (result.kind !== "rows") malformedExecutionResult();
+    if (result.rows.length !== 1) {
+      const error = new DatabaseCardinalityError("one", result.rows.length);
+      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "result-kind", true, true, raw.duration), error);
+    }
+    return await processOne(raw, result, validationOptions?.schema) as Row;
+  };
+  const maybeOneNamed = async <Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>, preparedName?: string): Promise<Row | undefined> => {
+    const raw = await runMaterialized(query, preparedName);
+    const result = await finalizePhysical(raw);
+    if (result.kind !== "rows") malformedExecutionResult();
+    if (result.rows.length > 1) {
+      const error = new DatabaseCardinalityError("maybeOne", result.rows.length);
+      await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "result-kind", true, true, raw.duration), error);
+    }
+    if (result.rows.length === 0) {
+      try { await notify(options.observers ?? [], queryMappedEvent(raw as RawOperation<ExecutableQuery>, 0, query.resultSchema !== undefined, validationOptions?.schema !== undefined, 0)); }
+      catch (error) { await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "observer-after", true, true, raw.duration), error); }
+      return undefined;
+    }
+    return await processOne(raw, result, validationOptions?.schema) as Row;
+  };
+  const database: Database & { close(): void; finish(): Promise<void> } = {
     async execute<Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>> {
-      return await executeForUse(query) as ExecutionResultOf<Q>;
+      return await executeNamed(query);
     },
     async call<Row>(query: CallQuery<Row>): Promise<RoutineCallResult<Row>> {
+      assertOpen();
       if (query.resultKind !== "call") throw new TypeError("Only call queries may be executed with database.call().");
-      const release = await acquireForUse();
+      const operationId = nextOperationId();
+      let rendered: RenderedQuery = { text: "", values: [], resultKind: query.resultKind };
       try {
-        if (!executor.call) throw new Error("Executor does not support routine calls.");
-        return await executor.call<Row>(query.render());
-      } finally { release?.(); }
+        rendered = query.render();
+      } catch (error) {
+        const fallback = { query, rendered, meta: metadata(options, operationId) } as unknown as PreparedOperation<ExecutableQuery>;
+        await notifyError(options.observers ?? [], errorEvent(fallback, error, "render", false, false), error);
+        throw error;
+      }
+      const operation = { query, rendered, meta: metadata(options, operationId) } as unknown as PreparedOperation<ExecutableQuery>;
+      try {
+        await notify(options.observers ?? [], queryReadyEvent(operation));
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent(operation, error, "observer-before", false, false), error);
+      }
+      let use: Use;
+      try {
+        use = await leaseForUse(false);
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent(operation, error, "acquire", false, false), error);
+        throw error;
+      }
+      if (!use!.executor.call) {
+        const error = new Error("Executor does not support routine calls.");
+        let releaseError: unknown;
+        try { await use!.release(); } catch (failure) { releaseError = failure; poison(use!.physicalState, failure); }
+        const reported = releaseError === undefined ? error : new AggregateError([error, releaseError], "Call and lease release failed.", { cause: error });
+        await notifyError(options.observers ?? [], errorEvent(operation, reported, releaseError === undefined ? "driver" : "release", false, false), reported);
+      }
+      const started = now();
+      let value: RoutineCallResult<Row>;
+      let released = false;
+      try {
+        value = await physicalContext.run({ rootState: options.rootState, direct: use!.direct, stream: false }, () => use!.executor.call!(rendered!));
+      } catch (error) {
+        let releaseError: unknown;
+        try { await use!.release(); } catch (failure) { releaseError = failure; poison(use!.physicalState, failure); }
+        released = true;
+        const original = releaseError === undefined ? error : new AggregateError([error, releaseError], "Execution and lease release failed.", { cause: error });
+        await notifyError(options.observers ?? [], errorEvent(operation, original, releaseError === undefined ? "driver" : "release", true, false, now() - started), original);
+      }
+      if (!released) {
+        try { await use!.release(); } catch (error) { poison(use!.physicalState, error); await notifyError(options.observers ?? [], errorEvent(operation, error, "release", true, true, now() - started), error); }
+      }
+      const rowCount = value!.resultSets.reduce((count, set) => count + (set.rows === "unknown" ? 0 : set.rows.length), 0);
+      try {
+        await notify(options.observers ?? [], {
+          type: "query:result",
+          operationId,
+          duration: now() - started,
+          actualKind: "call",
+          rowCount,
+          transactionDepth: options.depth,
+          transactionScoped: options.transaction,
+        });
+        await notify(options.observers ?? [], {
+          type: "query:mapped",
+          operationId,
+          duration: 0,
+          rowCount,
+          queryMapped: false,
+          executionMapped: false,
+          transactionDepth: options.depth,
+          transactionScoped: options.transaction,
+        });
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent(operation, error, "observer-after", true, true, now() - started), error);
+      }
+      return value!;
     },
-    async all<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<readonly Row[]> {
-      const result = await executeForUse(query, false);
-      if (result.kind !== "rows") malformedExecutionResult();
-      return validateRows(result.rows, query.resultSchema, options?.schema);
+    async all<Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>): Promise<readonly Row[]> {
+      assertRowsQuery(query);
+      return allNamed(query, validationOptions);
     },
-    async one<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row> {
-      const result = await executeForUse(query, false);
-      if (result.kind !== "rows") malformedExecutionResult();
-      const rows = result.rows;
-      if (rows.length !== 1) throw new DatabaseCardinalityError("one", rows.length);
-      const queryStandard = standardSchemaFor(query.resultSchema);
-      const executionStandard = standardSchemaFor(options?.schema);
-      const mapped = queryStandard === undefined ? rows[0] : await validateRow(queryStandard, rows[0], 0, "query");
-      return executionStandard === undefined ? mapped as Row : validateRow(executionStandard, mapped, 0, "execution");
+    async one<Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>): Promise<Row> {
+      assertRowsQuery(query);
+      return oneNamed(query, validationOptions);
     },
-    async maybeOne<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row | undefined> {
-      const result = await executeForUse(query, false);
-      if (result.kind !== "rows") malformedExecutionResult();
-      const rows = result.rows;
-      if (rows.length > 1) throw new DatabaseCardinalityError("maybeOne", rows.length);
-      if (rows.length === 0) return undefined;
-      const queryStandard = standardSchemaFor(query.resultSchema);
-      const executionStandard = standardSchemaFor(options?.schema);
-      const mapped = queryStandard === undefined ? rows[0] : await validateRow(queryStandard, rows[0], 0, "query");
-      return executionStandard === undefined ? mapped as Row : validateRow(executionStandard, mapped, 0, "execution");
+    async maybeOne<Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>): Promise<Row | undefined> {
+      assertRowsQuery(query);
+      return maybeOneNamed(query, validationOptions);
     },
     async batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }> {
+      assertOpen();
       for (const query of queries) assertExecutableQuery(query);
-      const release = await acquireForUse();
+      const batchId = `braid_batch_${nextOperationId()}`;
+      const operations: PreparedOperation<ExecutableQuery>[] = [];
+      for (const query of queries) operations.push(await prepareObserved(query, undefined, batchId));
+      let use: Use;
       try {
-        const results: QueryExecutionResult<unknown>[] = [];
-        for (const query of queries) results.push(await executeOne(query));
-        return results as { readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> };
-      } finally { release?.(); }
+        use = await leaseForUse(false);
+      } catch (error) {
+        const operation = operations[0];
+        if (operation) await notifyError(options.observers ?? [], errorEvent(operation, error, "acquire", false, false), error);
+        throw error;
+      }
+      const raw: RawOperation<ExecutableQuery>[] = [];
+      let batchReleaseError: unknown;
+      let batchReleaseFailed = false;
+      try {
+        for (const operation of operations) {
+          const result = await physical(operation, use);
+          raw.push(result);
+          if (result.driverFailed) break;
+        }
+      } finally {
+        try { await use.release(); } catch (error) { batchReleaseError = error; batchReleaseFailed = true; poison(use.physicalState, error); }
+      }
+      if (batchReleaseFailed) {
+        const failed = raw.find((operation) => operation.driverFailed);
+        if (failed) {
+          const original = new AggregateError([failed.driverError, batchReleaseError], "Batch execution and lease release failed.", { cause: failed.driverError });
+          await notifyError(options.observers ?? [], errorEvent(failed, original, "release", true, false, failed.duration), original);
+        }
+        const operation = failed ?? raw.at(-1) ?? operations[0];
+        if (operation) await notifyError(options.observers ?? [], errorEvent(operation, batchReleaseError, "release", true, true), batchReleaseError);
+      }
+      const output: QueryExecutionResult<unknown>[] = [];
+      for (const operation of raw) {
+        const result = await finalizePhysical(operation);
+        output.push(await processRows(operation, result));
+      }
+      return output as { readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> };
     },
     prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row> {
       if (!name.trim()) throw new Error("BRAID_PREPARED_NAME: prepared query name must not be empty.");
@@ -316,96 +857,247 @@ function createScopedDatabase(executor: QueryExecutor, state: ScopeState, option
       };
       return {
         name,
-        execute: async () => database.execute(current()),
-        all: async (validationOptions?: RowValidationOptions<Row>) => database.all(current(), validationOptions),
-        one: async (validationOptions?: RowValidationOptions<Row>) => database.one(current(), validationOptions),
-        maybeOne: async (validationOptions?: RowValidationOptions<Row>) => database.maybeOne(current(), validationOptions),
+        execute: async () => await executeNamed(current(), name) as RowsExecutionResult<Row>,
+        all: async (validationOptions?: RowValidationOptions<Row>) => allNamed(current(), validationOptions, name),
+        one: async (validationOptions?: RowValidationOptions<Row>) => oneNamed(current(), validationOptions, name),
+        maybeOne: async (validationOptions?: RowValidationOptions<Row>) => maybeOneNamed(current(), validationOptions, name),
       };
     },
-    stream<Row>(query: RowQuery<Row>, options: StreamOptions<Row> = {}): AsyncIterable<Row> {
+    stream<Row>(query: RowQuery<Row>, streamOptions: StreamOptions<Row> = {}): AsyncIterable<Row> {
       assertOpen();
       assertHealthy(state);
       assertRowsQuery(query);
-      const streamExecutor = executor.stream;
-      if (!streamExecutor) throw new Error("BRAID_STREAM_UNSUPPORTED: this adapter does not expose a streaming protocol.");
-      return (async function* (): AsyncGenerator<Row> {
-        const release = await acquireForUse();
+      const operationId = nextOperationId();
+      let stream!: AsyncGenerator<Row>;
+      stream = (async function* (): AsyncGenerator<Row> {
+        let rendered: RenderedQuery;
+        try { rendered = query.render(); } catch (error) {
+          const fallback = { query, rendered: { text: "", values: [], resultKind: query.resultKind }, meta: metadata(options, operationId) } as PreparedOperation<ExecutableQuery>;
+          await notifyError(options.observers ?? [], errorEvent(fallback, error, "render", false, false), error);
+        }
+        const operation = { query, rendered: rendered!, meta: metadata(options, operationId) } as PreparedOperation<ExecutableQuery>;
         try {
-          const rendered = query.render();
-          const source = streamExecutor<unknown>(rendered, options.signal);
-          const queryStandard = standardSchemaFor(query.resultSchema);
-          const executionStandard = standardSchemaFor(options.schema);
-          let rowIndex = 0;
-          for await (const row of source) {
-            if (options.signal?.aborted) throw options.signal.reason ?? new Error("Stream aborted.");
-            const mapped = queryStandard === undefined ? row : await validateRow(queryStandard, row, rowIndex, "query");
-            const validated = executionStandard === undefined ? mapped : await validateRow(executionStandard, mapped, rowIndex, "execution");
-            if (options.signal?.aborted) throw options.signal.reason ?? new Error("Stream aborted.");
-            yield validated as Row;
-            rowIndex += 1;
+          await notify(options.observers ?? [], streamStartEvent(operation));
+        } catch (error) {
+          await notifyError(options.observers ?? [], errorEvent(operation, error, "observer-before", false, false), error);
+        }
+        let use: Use;
+        try { use = await leaseForUse(true); } catch (error) { await notifyError(options.observers ?? [], errorEvent(operation, error, "acquire", false, false), error); }
+        const started = now();
+        let count = 0;
+        let streamError: unknown;
+        let streamFailed = false;
+        let errorAlreadyReported = false;
+        let iterator: AsyncIterator<unknown> | undefined;
+        const activeContext: PhysicalContext = { rootState: options.rootState, direct: use!.direct, stream: true };
+        use!.physicalState.streamUsers += 1;
+        openStreams.add(stream);
+        try {
+          if (!use!.executor.stream) throw new Error("BRAID_STREAM_UNSUPPORTED: this adapter does not expose a streaming protocol.");
+          const source = physicalContext.run(activeContext, () => use!.executor.stream!(rendered!, streamOptions.signal));
+          iterator = source[Symbol.asyncIterator]();
+          let queryStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
+          let executionStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
+          try { queryStandard = standardSchemaFor(query.resultSchema) as StandardSchemaV1.Props<unknown, unknown> | undefined; }
+          catch (error) { errorAlreadyReported = true; await notifyError(options.observers ?? [], errorEvent(operation, error, "query-map", true, true, now() - started), error); }
+          try { executionStandard = standardSchemaFor(streamOptions.schema) as StandardSchemaV1.Props<unknown, unknown> | undefined; }
+          catch (error) { errorAlreadyReported = true; await notifyError(options.observers ?? [], errorEvent(operation, error, "execution-map", true, true, now() - started), error); }
+          while (true) {
+            const next = await physicalContext.run(activeContext, () => iterator!.next());
+            if (next.done) break;
+            const row = next.value;
+            if (streamOptions.signal?.aborted) throw streamOptions.signal.reason ?? new Error("Stream aborted.");
+            let mapped: unknown = row;
+            if (queryStandard !== undefined) {
+              try { mapped = await physicalContext.run(activeContext, () => validateRow(queryStandard!, row, count, "query")); }
+              catch (error) { errorAlreadyReported = true; await notifyError(options.observers ?? [], errorEvent(operation, error, "query-map", true, true, now() - started), error); }
+            }
+            if (executionStandard !== undefined) {
+              try { mapped = await physicalContext.run(activeContext, () => validateRow(executionStandard!, mapped, count, "execution")); }
+              catch (error) { errorAlreadyReported = true; await notifyError(options.observers ?? [], errorEvent(operation, error, "execution-map", true, true, now() - started), error); }
+            }
+            if (streamOptions.signal?.aborted) throw streamOptions.signal.reason ?? new Error("Stream aborted.");
+            count += 1;
+            yield mapped as Row;
           }
-        } finally { release?.(); }
+        } catch (error) {
+          streamError = error;
+          streamFailed = true;
+          if (!errorAlreadyReported) {
+            try { await notifyError(options.observers ?? [], errorEvent(operation, error, "stream", true, false, now() - started), error); } catch (reported) { streamError = reported; }
+          }
+        } finally {
+          if (iterator?.return) {
+            try { await physicalContext.run(activeContext, () => iterator!.return!()); }
+            catch (error) {
+              streamError = streamFailed ? new AggregateError([streamError, error], "Stream iterator cleanup failed.", { cause: streamError }) : error;
+              streamFailed = true;
+              poison(use!.physicalState, streamError);
+            }
+          }
+          let releaseError: unknown;
+          let releaseFailed = false;
+          try { await use!.release(isPoisoned(use!.physicalState)); } catch (error) { releaseError = error; releaseFailed = true; poison(use!.physicalState, error); }
+          if (releaseFailed) {
+            try { await notifyError(options.observers ?? [], errorEvent(operation, releaseError, "release", true, streamError === undefined, now() - started), releaseError); }
+            catch (reported) { releaseError = reported; }
+          }
+          if (releaseFailed) {
+            streamError = streamFailed
+              ? new AggregateError([streamError, releaseError], "Stream and lease release failed.", { cause: streamError })
+              : releaseError;
+            streamFailed = true;
+          }
+          use!.physicalState.streamUsers -= 1;
+          openStreams.delete(stream);
+          const endEvent: ExecutionEvent = { type: "stream:end", operationId, status: streamFailed ? "error" : "completed", duration: now() - started, rowCount: count, error: streamError, transactionDepth: options.depth, transactionScoped: options.transaction };
+          try { await notify(options.observers ?? [], endEvent); }
+          catch (error) {
+            streamError = streamFailed ? new AggregateError([streamError, error], "Stream and observer failed.", { cause: streamError }) : error;
+            streamFailed = true;
+          }
+          if (streamFailed) throw streamError;
+        }
       })();
+      return stream;
     },
-    async transaction<T>(callback: (transactionDatabase: Database) => Promise<T>): Promise<T> {
+    async tx<T>(callback: (database: Database) => Promise<T>): Promise<T> {
       assertOpen();
       assertHealthy(state);
-      if (options.transaction) {
-        if (!executor.savepoint || !executor.rollbackTo || !executor.releaseSavepoint) throw new DatabaseScopeError("BRAID_TX_SCOPE", "Nested transactions require savepoint support.");
-        const name = `braid_sp_${Math.random().toString(36).slice(2)}`;
-        try { await executor.savepoint(name); } catch (error) { poison(state, error); throw error; }
-        const nested = createScopedDatabase(executor, state, { transaction: true, preparedNames: options.preparedNames });
-        try {
-          const result = await callback(nested);
-          try { await executor.releaseSavepoint(name); } catch (error) { poison(state, error); throw error; }
-          return result;
-        } catch (error) {
-          if (isPoisoned(state)) throw error;
-          let cleanup: unknown;
-          try { await executor.rollbackTo(name); } catch (failure) { cleanup = failure; }
-          if (cleanup === undefined) {
-            try { await executor.releaseSavepoint(name); } catch (failure) { cleanup = failure; }
+      const nested = options.transaction;
+      if (nested && state.streamUsers > 0) throw new DatabaseScopeError("BRAID_STREAM_SCOPE", "Close the transaction stream before opening a savepoint.");
+      const transactionId = options.transactionId ?? nextTransactionId();
+      const depth = options.depth + 1;
+      const savepointName = nested ? `braid_sp_${nextTransactionId()}` : undefined;
+      const scope = Symbol("transaction scope");
+      const previousScope = state.activeScope;
+      // Reserve the nested scope synchronously so sibling/parent work cannot enter it.
+      if (nested) state.activeScope = scope;
+      let use: Use | undefined;
+      let scoped: ReturnType<typeof createScopedDatabase> | undefined;
+      let physicalState = state;
+      let started = false;
+      let completed = false;
+      let failed = false;
+      let failure: unknown;
+      let result!: T;
+      const activity = { active: true };
+      const parent = transactionContext.getStore();
+      const observers = options.observers ?? [];
+      const combine = (original: unknown, errors: readonly unknown[]): unknown => errors.length === 0 ? original
+        : new AggregateError([original, ...errors], "Transaction failed and cleanup also failed.", { cause: original });
+      try {
+        if (nested) {
+          const lease = options.lease!;
+          if (!lease.savepoint || !lease.rollbackTo || !lease.releaseSavepoint) throw new DatabaseScopeError("BRAID_TX_SCOPE", "Nested transactions require savepoint support.");
+          use = { executor: lease, physicalState: state, direct: true, release: async () => {} };
+        } else {
+          await transactionEvent(observers, transactionId, "begin", "requested", depth);
+          try { use = await leaseForUse(false); }
+          catch (error) {
+            try { await transactionEvent(observers, transactionId, "begin", "failed", depth, undefined, undefined, error); }
+            catch (reporting) { throw combine(error, [reporting]); }
+            throw error;
           }
-          if (cleanup !== undefined) {
-            const combined = cleanupError(error, cleanup);
-            poison(state, combined);
+          physicalState = use.physicalState;
+          physicalState.activeScope = scope;
+        }
+        const resource = use.executor;
+        if (!nested && (!resource.begin || !resource.commit || !resource.rollback)) throw new Error("Executor does not support transactions.");
+        scoped = createScopedDatabase(resource, physicalState, {
+          ...options, transaction: true, lease: resource as ConnectionLease, leaseState: physicalState, transactionId, depth, scope,
+        });
+        await transactionContext.run({ rootState: options.rootState, activity, parent }, async () => {
+          const control = async (
+            phase: Extract<ExecutionEvent, { type: "transaction" }>["phase"],
+            action: () => Promise<void>,
+            cleanup = false,
+            requested = true,
+          ): Promise<void> => {
+            const errors: unknown[] = [];
+            const start = now();
+            if (requested) {
+              try { await transactionEvent(observers, transactionId, phase, "requested", depth, undefined, savepointName); }
+              catch (error) { if (!cleanup) throw error; errors.push(error); }
+            }
+            const release = await acquireTransactionTurn(physicalState);
+            let driverFailed = false;
+            try {
+              await physicalContext.run({ rootState: options.rootState, direct: true, stream: false }, action);
+            } catch (error) {
+              driverFailed = true;
+              errors.push(error);
+              poison(physicalState, error);
+            } finally { release(); }
+            try {
+              await transactionEvent(observers, transactionId, phase, driverFailed ? "failed" : "completed", depth, start, savepointName, driverFailed ? errors.at(-1) : undefined);
+            } catch (error) { errors.push(error); }
+            if (errors.length > 0) throw combine(errors[0], errors.slice(1));
+          };
+          try {
+            await control(nested ? "savepoint" : "begin", async () => {
+              if (nested) await resource.savepoint!(savepointName!);
+              else await resource.begin!();
+              started = true;
+            }, false, nested);
+            result = await callback(scoped!);
+            await scoped!.finish();
+            assertHealthy(physicalState);
+            await control(nested ? "release-savepoint" : "commit", async () => {
+              if (nested) await resource.releaseSavepoint!(savepointName!);
+              else await resource.commit!();
+              completed = true;
+            });
+          } catch (error) {
+            const cleanup: unknown[] = [];
+            try { await scoped!.finish(); } catch (closing) { if (closing !== error) cleanup.push(closing); }
+            if (started && !completed && !isPoisoned(physicalState)) {
+              try { await control(nested ? "rollback-to-savepoint" : "rollback", () => nested ? resource.rollbackTo!(savepointName!) : resource.rollback!(), true); }
+              catch (rollback) { cleanup.push(rollback); }
+              if (nested && !isPoisoned(physicalState)) {
+                try { await control("release-savepoint", () => resource.releaseSavepoint!(savepointName!), true); }
+                catch (release) { cleanup.push(release); }
+              }
+            }
+            const combined = combine(error, cleanup);
+            if (isPoisoned(physicalState)) physicalState.poisoned = combined;
             throw combined;
           }
-          throw error;
-        } finally {
-          nested.close();
-        }
-      }
-      if (!executor.begin || !executor.commit || !executor.rollback) throw new Error("Executor does not support transactions.");
-      const release = await acquireRoot(state);
-      const transactionDatabase = createScopedDatabase(executor, state, { transaction: true, preparedNames: options.preparedNames });
-      let begun = false;
-      const owner = Symbol("sqlbraid.transaction");
-      try {
-        try { await executor.begin(); } catch (error) { poison(state, error); throw error; }
-        begun = true;
-        state.owner = owner;
-        const result = await transactionContext.run({ state, owner }, () => callback(transactionDatabase));
-        try { await executor.commit(); } catch (error) { poison(state, error); throw error; }
-        return result;
+        });
       } catch (error) {
-        if (!begun) throw error;
-        if (isPoisoned(state)) throw error;
-        try { await executor.rollback(); } catch (cleanup) {
-          const combined = cleanupError(error, cleanup);
-          poison(state, combined);
-          throw combined;
-        }
-        throw error;
+        failed = true;
+        failure = error;
       } finally {
-        transactionDatabase.close();
-        state.owner = undefined;
-        release();
+        scoped?.close();
+        activity.active = false;
+        physicalState.activeScope = nested ? previousScope : undefined;
+        if (use && !nested) {
+          try { await use.release(isPoisoned(physicalState)); }
+          catch (error) {
+            poison(physicalState, error);
+            failure = failed ? combine(failure, [error]) : error;
+            failed = true;
+          }
+        }
+      }
+      if (failed) throw failure;
+      return result;
+    },
+    async finish(): Promise<void> {
+      const active = [...openStreams];
+      const failures: unknown[] = [];
+      for (const stream of active) {
+        try { await stream.return(undefined); } catch (error) { failures.push(error); }
+      }
+      await state.transactionTail;
+      closed = true;
+      if (active.length > 0) {
+        const error = new DatabaseScopeError("BRAID_STREAM_SCOPE", "A transaction callback must close its streams before completion.");
+        if (failures.length > 0) throw new AggregateError([error, ...failures], "Transaction streams failed to close.", { cause: error });
+        throw error;
       }
     },
-    close(): void {
-      closed = true;
-    },
+    close(): void { closed = true; },
   };
   return database;
 }

@@ -11,6 +11,105 @@ import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { sql } from "@sqlbraid/sqlite";
 import { runW01 } from "../w01.js";
 
+test("SQLite materialized query mappers reenter after releasing the root resource", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    const db = createNodeSqliteDatabase(native);
+    const mapper: StandardSchemaV1<unknown, number> = {
+      "~standard": {
+        version: 1,
+        vendor: "reentry",
+        async validate() {
+          const row = await db.one(sql.rows<{ value: number }>`SELECT 42 AS value`);
+          return { value: row.value };
+        },
+      },
+    };
+    const query = sql.rows(mapper)`SELECT 1`;
+    assert.deepEqual((await db.execute(query)).rows, [42]);
+    assert.deepEqual((await db.prepare("reentry", () => query).execute()).rows, [42]);
+    assert.deepEqual((await db.batch([query, query])).map((result) => result.rows), [[42], [42]]);
+  } finally {
+    native.close();
+  }
+}, 1000);
+
+test("SQLite stream mapper reentry rejects without retaining the resource", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    const db = createNodeSqliteDatabase(native);
+    const mapper: StandardSchemaV1<unknown, unknown> = {
+      "~standard": {
+        version: 1,
+        vendor: "stream-reentry",
+        async validate(value) {
+          await db.execute(sql`SELECT 2`);
+          return { value };
+        },
+      },
+    };
+    await assert.rejects(async () => {
+      for await (const row of db.stream(sql.rows(mapper)`SELECT 1`)) void row;
+    }, (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_STREAM_SCOPE");
+    assert.deepEqual(await db.one(sql.rows`SELECT 3 AS value`), { value: 3 });
+  } finally {
+    native.close();
+  }
+}, 1000);
+
+test("SQLite streams close native iteration on break, mapper failure and abort", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    const db = createNodeSqliteDatabase(native);
+    const query = sql.rows<{ value: number }>`SELECT 1 AS value UNION ALL SELECT 2`;
+    for await (const row of db.stream(query)) {
+      assert.equal(row.value, 1);
+      break;
+    }
+    const failure = new Error("mapper failed");
+    await assert.rejects(async () => {
+      for await (const row of db.stream(query, {
+        schema: { "~standard": { version: 1, vendor: "failure", validate() { throw failure; } } },
+      })) void row;
+    }, (error) => error === failure);
+    const abort = new AbortController();
+    await assert.rejects(async () => {
+      for await (const row of db.stream(query, { signal: abort.signal })) {
+        assert.equal(row.value, 1);
+        abort.abort(failure);
+      }
+    }, (error) => error === failure);
+    await db.tx(async (tx) => {
+      assert.deepEqual(await tx.one(sql.rows`SELECT 3 AS value`), { value: 3 });
+    });
+  } finally {
+    native.close();
+  }
+}, 1000);
+
+test("SQLite observer failures preserve root side effects but roll back transaction writes", async () => {
+  const native = new DatabaseSync(":memory:");
+  native.exec("CREATE TABLE audit_effect (id INTEGER PRIMARY KEY)");
+  const failure = new Error("post-execution audit failed");
+  let rejectResult = true;
+  const db = createNodeSqliteDatabase(native, { observers: [{
+    onEvent(event) {
+      if (rejectResult && event.type === "query:result") throw failure;
+    },
+  }] });
+  try {
+    await assert.rejects(db.execute(sql.command`INSERT INTO audit_effect VALUES (1)`), (error) => error === failure);
+    assert.deepEqual(native.prepare("SELECT id FROM audit_effect").all().map((row) => row.id), [1]);
+    await assert.rejects(db.tx(async (tx) => {
+      await tx.execute(sql.command`INSERT INTO audit_effect VALUES (2)`);
+    }), (error) => error === failure);
+    rejectResult = false;
+    assert.deepEqual(await db.all(sql.rows`SELECT id FROM audit_effect`), [{ id: 1 }]);
+  } finally {
+    native.close();
+  }
+});
+
 test("SQLite wrappers sharing one database preserve transaction isolation", async () => {
   const directory = await mkdtemp(join(tmpdir(), "sqlbraid-sqlite-w01-"));
   const file = join(directory, "w01.sqlite");
