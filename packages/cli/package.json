@@ -9,8 +9,8 @@
   "dependencies": {
     "@sqlbraid/compiler": "workspace:*",
     "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/operations": "workspace:*",
-    "@sqlbraid/schema": "workspace:*"
+    "@sqlbraid/metadata": "workspace:*",
+    "@sqlbraid/operations": "workspace:*"
   },
   "exports": {
     ".": {

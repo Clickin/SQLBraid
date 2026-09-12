@@ -5,7 +5,7 @@ import { basename, dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProject, checkSource, createVirtualOverlay, discoverQueries, emitSource, type TypeScriptCheckOptions } from "@sqlbraid/compiler";
 import { createManifestFromEvidence, fingerprintTemplate, templateFamilyFingerprintOf } from "@sqlbraid/operations";
-import { diffSnapshots, parseSnapshotJson, type SchemaSnapshot } from "@sqlbraid/schema";
+import { diffSnapshots, parseSnapshotJson, type MetadataSnapshot } from "@sqlbraid/metadata";
 
 function usage(): never {
   console.error("Usage: sqlbraid check|manifest|build --file <path> [--out-file <path>] | sqlbraid check --project <path> | sqlbraid drift --before <path> --after <path>");
@@ -17,7 +17,7 @@ function option(argv: readonly string[], name: string): string | undefined {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-async function loadSnapshot(path: string | undefined): Promise<SchemaSnapshot | undefined> {
+async function loadMetadata(path: string | undefined): Promise<MetadataSnapshot | undefined> {
   if (!path) return undefined;
   return parseSnapshotJson(await readFile(path, "utf8"));
 }
@@ -41,8 +41,8 @@ async function main(argv: readonly string[]): Promise<void> {
     const beforePath = option(argv, "--before");
     const afterPath = option(argv, "--after");
     if (!beforePath || !afterPath) usage();
-    const before = await loadSnapshot(resolve(beforePath));
-    const after = await loadSnapshot(resolve(afterPath));
+    const before = await loadMetadata(resolve(beforePath));
+    const after = await loadMetadata(resolve(afterPath));
     if (!before || !after) usage();
     const drift = diffSnapshots(before, after);
     process.stdout.write(`${JSON.stringify(drift, null, 2)}\n`);

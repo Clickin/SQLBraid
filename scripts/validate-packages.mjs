@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { runtimePackages } from "./audit-runtime.mjs";
 
 const execFile = promisify(execFileCallback);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -21,6 +22,7 @@ async function run(command, args, cwd = root) {
 }
 
 try {
+  if (packageNames.length !== 11 || !packageNames.includes("metadata")) throw new Error("Expected 11 packages including metadata.");
   const tarballs = [];
   for (const packageName of packageNames) {
     const before = new Set(await readdir(temp));
@@ -40,6 +42,9 @@ try {
     if (manifest.name === "@sqlbraid/core" && !manifest.dependencies?.["@standard-schema/spec"]) {
       throw new Error("Core public Standard Schema types require a regular spec dependency.");
     }
+    if (runtimePackages.includes(packageName) && (manifest.dependencies?.["@sqlbraid/metadata"] || manifest.optionalDependencies?.["@sqlbraid/metadata"])) {
+      throw new Error(`Metadata is a runtime dependency of ${manifest.name}.`);
+    }
     await run("pnpm", ["exec", "publint", "run", tarball, "--strict"]);
     await run("pnpm", ["exec", "attw", tarball, "--profile", "esm-only", "--no-emoji"]);
   }
@@ -48,6 +53,64 @@ try {
     const { stdout } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
     return [JSON.parse(stdout).name, `file:${tarball}`];
   })));
+  const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+  const boundaryConsumer = join(temp, "boundary-consumer");
+  await mkdir(boundaryConsumer);
+  const runtimeDependencies = Object.fromEntries(runtimePackages.map((name) => [`@sqlbraid/${name}`, dependencies[`@sqlbraid/${name}`]]));
+  await writeFile(join(boundaryConsumer, "package.json"), JSON.stringify({
+    name: "sqlbraid-boundary-consumer", private: true, type: "module",
+    dependencies: { ...runtimeDependencies, pg: workspace.devDependencies.pg, mysql2: workspace.devDependencies.mysql2 },
+  }));
+  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], boundaryConsumer);
+  if ((await readdir(join(boundaryConsumer, "node_modules/@sqlbraid"))).includes("metadata")) throw new Error("Runtime consumer installed metadata transitively.");
+  await writeFile(join(boundaryConsumer, "runtime.mjs"), [
+    'import assert from "node:assert/strict";',
+    'import { sql } from "@sqlbraid/postgres";',
+    'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
+    'assert.equal(sql`SELECT ${1}`.render().text, "SELECT $1");',
+    'assert.equal(typeof createPgDatabase, "function");',
+    'for (const dialect of ["postgres", "mysql", "sqlite"]) {',
+    '  const root = await import(`@sqlbraid/${dialect}`);',
+    '  assert.ok(!Object.keys(root).some((key) => /Inspector/.test(key)));',
+    '}',
+  ].join("\n"));
+  await run(process.execPath, ["runtime.mjs"], boundaryConsumer);
+  console.info("PASS packed runtime-only npm consumer without metadata");
+  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", dependencies["@sqlbraid/metadata"]], boundaryConsumer);
+  const metadataImports = [
+    'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
+    'import { createMysqlInspector } from "@sqlbraid/mysql/inspector";',
+    'import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";',
+  ];
+  await writeFile(join(boundaryConsumer, "metadata.mjs"), [
+    ...metadataImports,
+    'import assert from "node:assert/strict";',
+    'import { DatabaseSync } from "node:sqlite";',
+    'import { validateSnapshot, parseSnapshotJson, hashSnapshot } from "@sqlbraid/metadata";',
+    'const db = new DatabaseSync(":memory:");',
+    'try {',
+    '  db.exec("CREATE TABLE example (id INTEGER PRIMARY KEY, label TEXT NOT NULL)");',
+    '  const metadata = await createSqliteInspector(db).inspect();',
+    '  validateSnapshot(metadata);',
+    '  assert.equal(hashSnapshot(parseSnapshotJson(JSON.stringify(metadata))), hashSnapshot(metadata));',
+    '} finally { db.close(); }',
+    'assert.equal(typeof createPostgresInspector, "function");',
+    'assert.equal(typeof createMysqlInspector, "function");',
+  ].join("\n"));
+  await run(process.execPath, ["metadata.mjs"], boundaryConsumer);
+  await writeFile(join(boundaryConsumer, "metadata.ts"), [
+    ...metadataImports,
+    'import type { MetadataSnapshot, MetadataInspector } from "@sqlbraid/metadata";',
+    'import type { PgClientLike } from "@sqlbraid/postgres/pg";',
+    'import type { Mysql2ConnectionLike } from "@sqlbraid/mysql/mysql2";',
+    'import type { SqliteDatabaseLike } from "@sqlbraid/sqlite/node-sqlite";',
+    'declare const pg: PgClientLike, mysql: Mysql2ConnectionLike, sqlite: SqliteDatabaseLike;',
+    'const inspectors: MetadataInspector[] = [createPostgresInspector(pg), createMysqlInspector(mysql), createSqliteInspector(sqlite)];',
+    'const results: Promise<MetadataSnapshot>[] = inspectors.map((inspector) => inspector.inspect());',
+    'void results;',
+  ].join("\n"));
+  await run(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "--strict", "--target", "ES2024", "--module", "NodeNext", "--moduleResolution", "NodeNext", "metadata.ts"], boundaryConsumer);
+  console.info("PASS packed metadata tooling consumer: inspector subpaths, SQLite inspection, TypeScript");
   await writeFile(join(temp, "consumer-package.json"), JSON.stringify({ name: "sqlbraid-packed-consumer", private: true, type: "module", dependencies }, null, 2));
   await mkdir(consumer);
   await copyFile(join(temp, "consumer-package.json"), join(consumer, "package.json"));
@@ -78,7 +141,6 @@ try {
   await run(process.execPath, [entry], consumer);
 
   // First prove packed runtime imports need no concrete validator, then test optional interop.
-  const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   await run("npm", [
     "install",
     "--ignore-scripts",

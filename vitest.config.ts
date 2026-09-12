@@ -4,17 +4,20 @@ import { defineConfig } from "vitest/config";
 const sourceAliases = {
   "@sqlbraid/core": resolve("packages/core/src/index.ts"),
   "@sqlbraid/template": resolve("packages/template/src/index.ts"),
-  "@sqlbraid/schema": resolve("packages/schema/src/index.ts"),
+  "@sqlbraid/metadata": resolve("packages/metadata/src/index.ts"),
   "@sqlbraid/compiler": resolve("packages/compiler/src/index.ts"),
 
   "@sqlbraid/runtime": resolve("packages/runtime/src/index.ts"),
   "@sqlbraid/operations": resolve("packages/operations/src/index.ts"),
   "@sqlbraid/language-server": resolve("packages/language-server/src/index.ts"),
   "@sqlbraid/postgres/pg": resolve("packages/postgres/src/pg.ts"),
+  "@sqlbraid/postgres/inspector": resolve("packages/postgres/src/inspector.ts"),
   "@sqlbraid/postgres": resolve("packages/postgres/src/index.ts"),
   "@sqlbraid/mysql/mysql2": resolve("packages/mysql/src/mysql2.ts"),
+  "@sqlbraid/mysql/inspector": resolve("packages/mysql/src/inspector.ts"),
   "@sqlbraid/mysql": resolve("packages/mysql/src/index.ts"),
   "@sqlbraid/sqlite/node-sqlite": resolve("packages/sqlite/src/node-sqlite.ts"),
+  "@sqlbraid/sqlite/inspector": resolve("packages/sqlite/src/inspector.ts"),
   "@sqlbraid/sqlite": resolve("packages/sqlite/src/index.ts"),
 };
 

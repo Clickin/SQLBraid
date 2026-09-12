@@ -26,11 +26,16 @@ test('public package exports resolve in an external consumer directory', async (
     'import { createMysql2Database } from "@sqlbraid/mysql/mysql2";',
     'import { sql as sqlite } from "@sqlbraid/sqlite";',
     'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
+    'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
+    'import { createMysqlInspector } from "@sqlbraid/mysql/inspector";',
+    'import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";',
+    'import { validateSnapshot } from "@sqlbraid/metadata";',
     'import { createLanguageService, startStdioLanguageServer } from "@sqlbraid/language-server";',
     'if (pg`SELECT ${1}`.render().text !== "SELECT $1") throw new Error("postgres export failed");',
     'if (mysql`SELECT ${1}`.render().text !== "SELECT ?") throw new Error("mysql export failed");',
     'if (sqlite`SELECT ${1}`.render().text !== "SELECT ?") throw new Error("sqlite export failed");',
     'if ([createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("adapter export failed");',
+    'if ([createPostgresInspector, createMysqlInspector, createSqliteInspector, validateSnapshot].some((value) => typeof value !== "function")) throw new Error("metadata tooling export failed");',
   ].join('\n'));
   try {
     const result = await run(process.execPath, [entry], { cwd: directory });

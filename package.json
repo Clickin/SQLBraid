@@ -37,7 +37,7 @@
     "@sqlbraid/operations": "workspace:*",
     "@sqlbraid/postgres": "workspace:*",
     "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/schema": "workspace:*",
+    "@sqlbraid/metadata": "workspace:*",
     "@sqlbraid/sqlite": "workspace:*",
     "@sqlbraid/template": "workspace:*",
     "@standard-schema/spec": "1.1.0",

@@ -48,3 +48,60 @@ test('CLI checks, manifests, and builds opaque declared queries without a snapsh
     await rm(directory, { recursive: true, force: true });
   }
 }, 15_000);
+
+test('CLI drift validates metadata snapshots and reports changed database facts', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  try {
+    const before = {
+      format: 'sqlbraid-metadata',
+      formatVersion: 1,
+      dialect: 'postgres',
+      dialectVersion: '16',
+      server: {},
+      namespaces: {},
+      types: {},
+      relations: {
+        users: {
+          identity: 'public.users',
+          name: 'users',
+          kind: 'table',
+          columns: [{ name: 'id', ordinal: 1, type: 'int8', nullable: false }],
+        },
+      },
+      routines: {},
+      metadata: {},
+    };
+    const after = {
+      ...before,
+      relations: {
+        ...before.relations,
+        users: {
+          ...before.relations.users,
+          columns: [{ ...before.relations.users.columns[0], nullable: true }],
+        },
+      },
+    };
+    const beforeFile = join(directory, 'before.json');
+    const afterFile = join(directory, 'after.json');
+    await writeFile(beforeFile, JSON.stringify(before));
+    await writeFile(afterFile, JSON.stringify(after));
+
+    const unchanged = await exec(process.execPath, ['packages/cli/dist/index.js', 'drift', '--before', beforeFile, '--after', beforeFile]);
+    assert.deepEqual(JSON.parse(unchanged.stdout), []);
+
+    try {
+      await exec(process.execPath, ['packages/cli/dist/index.js', 'drift', '--before', beforeFile, '--after', afterFile]);
+      assert.fail('drift should exit non-zero when metadata changes');
+    } catch (error) {
+      const result = error as { readonly code?: number; readonly stdout?: string };
+      assert.equal(result.code, 1);
+      assert.deepEqual(JSON.parse(result.stdout ?? ''), [{
+        path: 'relations.users.columns[0].nullable',
+        before: false,
+        after: true,
+      }]);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

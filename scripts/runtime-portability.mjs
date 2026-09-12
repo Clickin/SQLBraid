@@ -35,8 +35,7 @@ try {
   await auditRuntime(join(root, "packages"), "src");
   await mkdir(consumer);
   const dependencies = { pg: workspace.devDependencies.pg, mysql2: workspace.devDependencies.mysql2 };
-  // Existing inspector exports depend on schema; package it, without expanding runtime support to tooling.
-  for (const name of [...runtimePackages, "schema"]) {
+  for (const name of runtimePackages) {
     await run("pnpm", ["--dir", join(root, "packages", name), "pack", "--pack-destination", temp]);
     const manifest = JSON.parse(await readFile(join(root, "packages", name, "package.json"), "utf8"));
     const tarball = (await readdir(temp)).find((file) => file === `sqlbraid-${name}-${manifest.version}.tgz`);
@@ -46,6 +45,10 @@ try {
   }
   await writeFile(join(consumer, "package.json"), JSON.stringify({ name: "sqlbraid-runtime-consumer", private: true, type: "module", dependencies }));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], consumer);
+  if ((await readdir(join(consumer, "node_modules/@sqlbraid"))).includes("metadata")) {
+    throw new Error("Runtime-only installation pulled in @sqlbraid/metadata");
+  }
+  console.info("PASS runtime-only npm install without @sqlbraid/metadata");
   const core = JSON.parse(await readFile(join(consumer, "node_modules/@sqlbraid/core/package.json"), "utf8"));
   if (!core.dependencies?.["@standard-schema/spec"]) throw new Error("Standard Schema is not a regular packed dependency");
   await readFile(join(consumer, "node_modules/@standard-schema/spec/package.json"));

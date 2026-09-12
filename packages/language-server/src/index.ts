@@ -1,5 +1,5 @@
 import { checkSource, createVirtualOverlay, discoverQueries, sourcePosition, type CompileDiagnostic, type OverlayOptions } from "@sqlbraid/compiler";
-import type { SchemaSnapshot } from "@sqlbraid/schema";
+import type { MetadataSnapshot } from "@sqlbraid/metadata";
 
 export interface HoverResult {
   readonly contents: string;
@@ -13,14 +13,14 @@ export interface CompletionItem {
 }
 
 export interface LanguageServiceOptions extends OverlayOptions {
-  readonly snapshot?: SchemaSnapshot;
+  readonly metadata?: MetadataSnapshot;
 }
 
 export interface SqlBraidLanguageService {
   diagnostics(sourceText: string, fileName: string): readonly CompileDiagnostic[];
   hover(sourceText: string, fileName: string, offset: number): HoverResult | undefined;
   complete(prefix: string): readonly CompletionItem[];
-  reload(snapshot: SchemaSnapshot): SqlBraidLanguageService;
+  reload(metadata: MetadataSnapshot): SqlBraidLanguageService;
 }
 
 export function createLanguageService(options: LanguageServiceOptions): SqlBraidLanguageService {
@@ -37,16 +37,16 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
   }
 
   function complete(prefix: string): readonly CompletionItem[] {
-    if (!options.snapshot) return [];
+    if (!options.metadata) return [];
     const lower = prefix.toLowerCase();
-    const relations = Object.values(options.snapshot.relations).filter((relation) => relation.name.toLowerCase().startsWith(lower)).map((relation) => ({ label: relation.name, kind: "relation" as const, detail: relation.kind }));
-    const routines = Object.values(options.snapshot.routines).flat().filter((routine) => routine.name.toLowerCase().startsWith(lower)).map((routine) => ({ label: routine.name, kind: "routine" as const, detail: routine.kind }));
-    const columns = Object.values(options.snapshot.relations).flatMap((relation) => relation.columns.filter((column) => column.name.toLowerCase().startsWith(lower)).map((column) => ({ label: column.name, kind: "column" as const, detail: column.tsType ?? column.type })));
+    const relations = Object.values(options.metadata.relations).filter((relation) => relation.name.toLowerCase().startsWith(lower)).map((relation) => ({ label: relation.name, kind: "relation" as const, detail: relation.kind }));
+    const routines = Object.values(options.metadata.routines).flat().filter((routine) => routine.name.toLowerCase().startsWith(lower)).map((routine) => ({ label: routine.name, kind: "routine" as const, detail: routine.kind }));
+    const columns = Object.values(options.metadata.relations).flatMap((relation) => relation.columns.filter((column) => column.name.toLowerCase().startsWith(lower)).map((column) => ({ label: column.name, kind: "column" as const, detail: column.type })));
     return [...relations, ...columns, ...routines];
   }
 
-  function reload(snapshot: SchemaSnapshot): SqlBraidLanguageService {
-    return createLanguageService({ ...options, snapshot });
+  function reload(metadata: MetadataSnapshot): SqlBraidLanguageService {
+    return createLanguageService({ ...options, metadata });
   }
 
   return { diagnostics, hover, complete, reload };
