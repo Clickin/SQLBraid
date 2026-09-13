@@ -9,6 +9,7 @@ import { checkProject, checkSource, createVirtualOverlay, discoverQueries, emitS
 import { createManifestFromEvidence, fingerprintTemplate, templateFamilyFingerprintOf } from "@sqlbraid/operations";
 import { diffSnapshots, parseSnapshotJson, type MetadataSnapshot } from "@sqlbraid/metadata";
 import type { CodegenTargetConfig, SqlBraidConfig } from "./config.js";
+import { codegenOutputCollisionKey } from "./codegen-path.js";
 
 function usage(): never {
   console.error("Usage: sqlbraid check|manifest|build --file <path> [--out-file <path>] | sqlbraid check --project <path> | sqlbraid drift --before <path> --after <path> | sqlbraid codegen [--config <path>] [--target <name>]... [--check] [--json]");
@@ -183,7 +184,7 @@ function metadataDiagnostic(error: unknown): CodegenDiagnostic {
   };
 }
 
-async function prepareCodegenTarget(target: CodegenTargetConfig, configDirectory: string, check: boolean): Promise<PreparedCodegenTarget> {
+async function prepareCodegenTarget(target: CodegenTargetConfig, configDirectory: string): Promise<PreparedCodegenTarget> {
   const metadataPath = resolve(configDirectory, target.metadata);
   const outputPath = resolve(configDirectory, target.outFile);
   try {
@@ -203,7 +204,7 @@ async function prepareCodegenTarget(target: CodegenTargetConfig, configDirectory
     }
     const status: CodegenStatus = diagnostics.some((diagnostic) => diagnostic.severity === "error")
       ? "error"
-      : current === undefined ? (check ? "missing" : "missing") : current === generated.source ? "unchanged" : (check ? "stale" : "written");
+      : current === undefined ? "missing" : current === generated.source ? "unchanged" : "stale";
     return {
       target,
       metadataPath,
@@ -271,11 +272,11 @@ async function runCodegen(argv: readonly string[], json: boolean): Promise<void>
   for (const name of requested) if (!targets.some((target) => target.name === name)) throw new CliError(`Unknown codegen target: ${name}.`, 2);
   const selected = targets.filter((target) => requestedSet.size === 0 || requestedSet.has(target.name)).sort((left, right) => compareNames(left.name, right.name));
   const check = argv.includes("--check");
-  const prepared = await Promise.all(selected.map((target) => prepareCodegenTarget(target, loaded.directory, check)));
+  const prepared = await Promise.all(selected.map((target) => prepareCodegenTarget(target, loaded.directory)));
   const paths = new Map<string, PreparedCodegenTarget>();
   let configurationError = false;
   for (const item of prepared) {
-    const prior = paths.get(item.outputPath);
+    const prior = paths.get(codegenOutputCollisionKey(item.outputPath));
     if (prior) {
       configurationError = true;
       const message = `Output path collides with target ${prior.target.name}.`;
@@ -283,12 +284,12 @@ async function runCodegen(argv: readonly string[], json: boolean): Promise<void>
       item.result.diagnostics = [...item.result.diagnostics, { code: "CODEGEN_OUTPUT_PATH_COLLISION", severity: "error", message }];
       prior.result.status = "error";
       prior.result.diagnostics = [...prior.result.diagnostics, { code: "CODEGEN_OUTPUT_PATH_COLLISION", severity: "error", message: `Output path collides with target ${item.target.name}.` }];
-    } else paths.set(item.outputPath, item);
+    } else paths.set(codegenOutputCollisionKey(item.outputPath), item);
   }
   const hasGenerationError = prepared.some((item) => item.result.status === "error");
   if (!check && !configurationError && !hasGenerationError) {
     for (const item of prepared) {
-      if (item.result.status !== "written" && item.result.status !== "missing") continue;
+      if (item.result.status !== "stale" && item.result.status !== "missing") continue;
       if (item.source === undefined) continue;
       try {
         await atomicWrite(item.outputPath, item.source);

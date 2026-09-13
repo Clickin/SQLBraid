@@ -279,16 +279,16 @@ function resolveType(
   diagnostics: CodegenDiagnostic[],
 ): ResolvedType {
   const isSqlite = metadata.dialect.toLowerCase() === "sqlite";
-  if (isSqlite && relation.strict !== true) {
+  const isDynamicSqlite = isSqlite && relation.strict !== true;
+  if (isDynamicSqlite) {
     diagnostics.push({
       code: "CODEGEN_SQLITE_DYNAMIC_TYPE",
       severity: "warning",
-      message: "SQLite non-STRICT columns retain unknown types because declared affinity is not sufficient evidence.",
+      message: "SQLite non-STRICT declared affinity is insufficient for automatic TypePolicy mapping; unresolved override sides remain unknown.",
       relation: relation.identity,
       column: column.name,
       databaseType: column.type,
     });
-    return { hasPolicyMapping: false };
   }
 
   const columnOverrides = overrides?.columns?.[relation.identity];
@@ -297,16 +297,19 @@ function resolveType(
   const databaseOverride = databaseOverrides && Object.hasOwn(databaseOverrides, column.type) ? databaseOverrides[column.type] : undefined;
   let mapping: TypeMapping | undefined;
   let hasPolicyMapping = false;
-  for (const candidate of policyTypeCandidates(metadata, column, relation)) {
-    const key = normalizeDatabaseType(candidate);
-    if (!policy.has(key)) continue;
-    mapping = policy.get(key);
-    hasPolicyMapping = true;
-    break;
+  if (!isDynamicSqlite) {
+    for (const candidate of policyTypeCandidates(metadata, column, relation)) {
+      const key = normalizeDatabaseType(candidate);
+      if (!policy.has(key)) continue;
+      mapping = policy.get(key);
+      hasPolicyMapping = true;
+      break;
+    }
   }
 
   const inputType = columnOverride?.inputType ?? databaseOverride?.inputType ?? mapping?.inputType;
   const outputType = columnOverride?.outputType ?? databaseOverride?.outputType ?? mapping?.outputType;
+  if (isDynamicSqlite && !inputType && !outputType) return { hasPolicyMapping: false };
   if (!inputType && !outputType && !hasPolicyMapping) {
     diagnostics.push({
       code: "CODEGEN_UNKNOWN_DATABASE_TYPE",
@@ -535,7 +538,7 @@ function nameRelations(
     }
   }
   const suffixes = naming?.suffixes;
-  return named.map((entry) => {
+  const finalNames = named.map((entry) => {
     const rowName = `${entry.modelName}${suffixes?.row ?? "Row"}`;
     const insertName = `${entry.modelName}${suffixes?.insert ?? "Insert"}`;
     const updateName = `${entry.modelName}${suffixes?.update ?? "Update"}`;
@@ -556,6 +559,37 @@ function nameRelations(
       ...entry,
       rowName,
       ...(entry.relation.kind === "table" ? { insertName, updateName } : {}),
+    };
+  });
+  const declarationOwners = new Map<string, { readonly relationIdentity: string; readonly kind: string }>();
+  return finalNames.map((entry) => {
+    const claim = (candidate: string, kind: string): string => {
+      const owner = declarationOwners.get(candidate);
+      if (!owner) {
+        declarationOwners.set(candidate, { relationIdentity: entry.relation.identity, kind });
+        return candidate;
+      }
+      diagnostics.push({
+        code: "CODEGEN_MODEL_NAME_COLLISION",
+        severity: "error",
+        message: `Exported declaration name ${JSON.stringify(candidate)} for ${JSON.stringify(entry.relation.identity)} ${kind} collides with ${JSON.stringify(owner.relationIdentity)} ${owner.kind}; a deterministic identity suffix was added.`,
+        relation: entry.relation.identity,
+      });
+      const identitySuffix = stableDigest(`${entry.relation.identity}\u0000${kind}`).slice(0, 12);
+      let disambiguated = `${candidate}_${identitySuffix}`;
+      let attempt = 2;
+      while (declarationOwners.has(disambiguated)) {
+        disambiguated = `${candidate}_${identitySuffix}_${attempt}`;
+        attempt += 1;
+      }
+      declarationOwners.set(disambiguated, { relationIdentity: entry.relation.identity, kind });
+      return disambiguated;
+    };
+    return {
+      ...entry,
+      rowName: claim(entry.rowName, "row"),
+      ...(entry.insertName !== undefined ? { insertName: claim(entry.insertName, "insert") } : {}),
+      ...(entry.updateName !== undefined ? { updateName: claim(entry.updateName, "update") } : {}),
     };
   });
 }

@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { test } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { codegenOutputCollisionKey } from '../packages/cli/src/codegen-path.js';
 
 const exec = promisify(execFile);
 const cliEntry = resolve(process.cwd(), 'packages/cli/dist/index.js');
@@ -194,17 +195,57 @@ test('CLI codegen discovers configs, selects repeated targets, and blocks error 
       '{ name: "other", metadata: "./data/metadata.json", outFile: "./other.ts", typePolicy }',
       '] } });',
     ].join('\n'));
-    await rm(join(directory, 'main.ts'), { force: true });
-    await rm(join(directory, 'other.ts'), { force: true });
+    await writeFile(join(directory, 'main.ts'), 'preserve-main');
+    await writeFile(join(directory, 'other.ts'), 'preserve-other');
     await assert.rejects(
       exec(process.execPath, [cliEntry, 'codegen', '--json'], { cwd: directory }),
       (error: unknown) => {
         const result = error as { code?: number; stdout?: string };
-        return result.code === 1 && !result.stdout?.includes('export interface');
+        const entries = JSON.parse(result.stdout ?? '') as Array<{ target: string; status: string }>;
+        return result.code === 1
+          && entries.find((entry) => entry.target === 'main')?.status === 'error'
+          && entries.find((entry) => entry.target === 'other')?.status === 'stale';
       },
     );
-    await assert.rejects(readFile(join(directory, 'main.ts')));
-    await assert.rejects(readFile(join(directory, 'other.ts')));
+    assert.equal(await readFile(join(directory, 'main.ts'), 'utf8'), 'preserve-main');
+    assert.equal(await readFile(join(directory, 'other.ts'), 'utf8'), 'preserve-other');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test('CLI codegen rejects case-folded output collisions on simulated Windows', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  try {
+    await mkdir(join(directory, 'data'), { recursive: true });
+    await writeFile(join(directory, 'data', 'metadata.json'), JSON.stringify(metadata()));
+    await writeFile(join(directory, 'sqlbraid.config.mjs'), [
+      'import { defineConfig } from "@sqlbraid/cli/config";',
+      'import { typePolicy } from "@sqlbraid/postgres";',
+      'export default defineConfig({ codegen: { targets: [',
+      '{ name: "upper", metadata: "./data/metadata.json", outFile: "./Generated.ts", typePolicy },',
+      '{ name: "lower", metadata: "./data/metadata.json", outFile: "./generated.ts", typePolicy }',
+      '] } });',
+    ].join('\n'));
+    const preload = join(directory, 'win32.cjs');
+    await writeFile(preload, 'Object.defineProperty(process, "platform", { value: "win32" });');
+    await assert.rejects(
+      exec(process.execPath, [cliEntry, 'codegen', '--json'], {
+        cwd: directory,
+        env: { ...process.env, NODE_OPTIONS: `--require ${preload}` },
+      }),
+      (error: unknown) => {
+        const result = error as { code?: number; stdout?: string };
+        const entries = JSON.parse(result.stdout ?? '') as Array<{ target: string; status: string; diagnostics: Array<{ code: string }> }>;
+        return result.code === 2
+          && entries.every((entry) => entry.status === 'error')
+          && entries.every((entry) => entry.diagnostics.some((diagnostic) => diagnostic.code === 'CODEGEN_OUTPUT_PATH_COLLISION'));
+      },
+    );
+    await assert.rejects(readFile(join(directory, 'Generated.ts')));
+    await assert.rejects(readFile(join(directory, 'generated.ts')));
+    assert.equal(codegenOutputCollisionKey('/tmp/Generated.ts', 'win32'), codegenOutputCollisionKey('/tmp/generated.ts', 'win32'));
+    assert.notEqual(codegenOutputCollisionKey('/tmp/Generated.ts', 'darwin'), codegenOutputCollisionKey('/tmp/generated.ts', 'darwin'));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

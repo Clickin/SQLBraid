@@ -480,7 +480,9 @@ DB null/default/identity/generated/write evidence; Update uses input representat
 plus DB generated/update evidence. Column nullability is authoritative. Only
 tables receive write models; identity alone makes Insert optional without
 excluding Update. Unknown evidence becomes `unknown` plus a diagnostic, including
-SQLite non-STRICT declared types. PostgreSQL qualified types resolve through
+SQLite non-STRICT declared types without explicit overrides. Explicit column and
+exact DB-type overrides still apply independently to each input/output side;
+only automatic affinity-based TypePolicy mapping is disabled. PostgreSQL qualified types resolve through
 metadata type-name evidence; MySQL policy matching is case-insensitive.
 It does not promise arbitrary SELECT/JOIN result inference.
 
@@ -601,7 +603,9 @@ Non-negotiable:
 - independent input/output representation resolution and options provenance;
 - typed executable config at `@sqlbraid/cli/config`;
 - multi-target codegen, stable no-op/atomic writes, `--check` and structured JSON output;
-- full preflight before selected output writes.
+- full preflight before selected output writes; JSON reports `written` only after successful I/O;
+- final declaration names are globally collision-checked after suffix application;
+- resolved output collision keys are case-folded on Windows.
 
 ### PV11 — LSP metadata/codegen integration — NEXT
 

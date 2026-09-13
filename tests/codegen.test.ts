@@ -274,6 +274,72 @@ test("keeps SQLite non-STRICT columns conservative but maps supported STRICT dec
   assert.equal(dynamic.diagnostics[0]?.code, "CODEGEN_SQLITE_DYNAMIC_TYPE");
 });
 
+test("applies SQLite non-STRICT column and exact database-type overrides independently per side", () => {
+  const result = generateModels({
+    ...snapshot({
+      "main.dynamic": relation("main.dynamic", "dynamic", "table", [
+        { name: "column_only", type: "int4", nullable: false },
+        { name: "database_only", type: "text", nullable: false },
+        { name: "both", type: "text", nullable: false },
+      ]),
+    }, { dialect: "sqlite" }),
+  }, {
+    typePolicy: policy,
+    typeOverrides: {
+      databaseTypes: { text: { inputType: "DatabaseInput", outputType: "DatabaseOutput" } },
+      columns: {
+        "main.dynamic": {
+          column_only: { outputType: "ColumnOutput" },
+          both: { outputType: "ColumnOutput" },
+        },
+      },
+    },
+  });
+
+  assertGeneratedProperty(result.source, "DynamicRow", "column_only", "ColumnOutput", false);
+  assertGeneratedProperty(result.source, "DynamicInsert", "column_only", "unknown", false);
+  assertGeneratedProperty(result.source, "DynamicRow", "database_only", "DatabaseOutput", false);
+  assertGeneratedProperty(result.source, "DynamicInsert", "database_only", "DatabaseInput", false);
+  assertGeneratedProperty(result.source, "DynamicRow", "both", "ColumnOutput", false);
+  assertGeneratedProperty(result.source, "DynamicInsert", "both", "DatabaseInput", false);
+  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_SQLITE_DYNAMIC_TYPE").length, 3);
+  assert.equal(result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE"), false);
+});
+
+test("disambiguates every final exported declaration name, including same-relation and cross-relation collisions", () => {
+  const sameRelation = generateModels({
+    ...snapshot({
+      "public.users": relation("public.users", "users", "table", [
+        { name: "id", type: "int4", nullable: false },
+      ]),
+    }),
+  }, {
+    typePolicy: policy,
+    naming: { suffixes: { row: "Model", insert: "Model", update: "Patch" } },
+  });
+  const sameRelationNames = sameRelation.models.flatMap((model) =>
+    [model.rowName, model.insertName, model.updateName].filter((name): name is string => name !== undefined),
+  );
+  assert.equal(new Set(sameRelationNames).size, sameRelationNames.length);
+  assert.equal(sameRelation.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_MODEL_NAME_COLLISION" && diagnostic.severity === "error"), true);
+
+  const crossRelation = generateModels({
+    ...snapshot({
+      "public.user": relation("public.user", "user", "table", [{ name: "id", type: "int4", nullable: false }]),
+      "public.user_row": relation("public.user_row", "user_row", "view", [{ name: "id", type: "int4", nullable: false }]),
+    }),
+  }, {
+    typePolicy: policy,
+    naming: { suffixes: { row: "X", insert: "Create", update: "RowX" } },
+  });
+  const crossRelationNames = crossRelation.models.flatMap((model) =>
+    [model.rowName, model.insertName, model.updateName].filter((name): name is string => name !== undefined),
+  );
+  assert.equal(new Set(crossRelationNames).size, crossRelationNames.length);
+  assert.equal(crossRelation.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_MODEL_NAME_COLLISION" && diagnostic.severity === "error"), true);
+  assert.match(crossRelation.source, /export interface UserRowX_[0-9a-f]{12} \{/u);
+});
+
 test("sanitizes arbitrary names, preserves exact property keys, and resolves collisions independent of map order", async () => {
   const relations = {
     "public.users": relation("public.users", "users", "table", [{ name: "select", type: "text", nullable: false }], { namespace: "public" }),
