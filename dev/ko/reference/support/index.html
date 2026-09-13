@@ -144,28 +144,28 @@
 </tr>
 <tr>
 <td>Oracle portable root / <code dir="auto">@sqlbraid/oracle</code></td>
+<td>Official</td>
 <td>Compatible</td>
-<td>Compatible</td>
-<td>Compatible</td>
-<td>Compatible</td>
+<td>Official</td>
+<td>Official</td>
 </tr>
 <tr>
 <td>Oracle Thin / <code dir="auto">node-oracledb</code> 7.0.1</td>
-<td>Compatible</td>
+<td>Official</td>
 <td>Compatible</td>
 <td>Unsupported</td>
 <td>Unsupported</td>
 </tr>
 <tr>
 <td>SQL Server portable root / <code dir="auto">@sqlbraid/mssql</code></td>
+<td>Official</td>
 <td>Compatible</td>
-<td>Compatible</td>
-<td>Compatible</td>
-<td>Compatible</td>
+<td>Official</td>
+<td>Official</td>
 </tr>
 <tr>
 <td>SQL Server / Tedious 20.0.0</td>
-<td>Compatible</td>
+<td>Official</td>
 <td>Compatible</td>
 <td>Unsupported</td>
 <td>Unsupported</td>
@@ -180,9 +180,9 @@
 </tbody>
 </table>
 <p>Oracle은 <code dir="auto">node-oracledb</code> Thin 모드를 대상으로 하며 Thick 모드는 Official이 아닙니다. SQL Server는 Tedious 어댑터를 대상으로 합니다. Oracle <code dir="auto">call()</code> 경로와 SQL Server OUT/return-value 루틴 바인딩은 이 RC에서 Unsupported입니다. PostgreSQL, MySQL, SQLite는 파라미터 힌트를 조용히 무시하지 않고 명시적으로 거부합니다.</p>
-<p>Dialect, 드라이버, 실행 런타임, 트랜잭션 프로필은 서로 다른 축입니다. 로컬 Node 22.18.0 테스트는 Oracle 23.9.0.25.07 Thin과 SQL Server 2022 CU18(16.0.4185.3)을 실행합니다. 고정 SQL Server 이미지는 Linux x64이며 로컬 ARM 에뮬레이션 실행은 Official ARM 지원 근거가 아닙니다. 신규 통합은 같은 revision의 CI가 해당 조합을 증명할 때까지 보수적으로 Compatible로 표시합니다. Bun/Deno 드라이버 서브패스와 Oracle Thick은 검증 범위가 아니며 portable root는 별도로 검사합니다.</p>
+<p>Dialect, 드라이버, 실행 런타임, 트랜잭션 프로필은 서로 다른 축입니다. <a href="https://github.com/Clickin/SQLBraid/actions/runs/34753809318">d4bc626의 성공한 PV13 runtime 게이트</a>는 Linux x64의 Node 22.18.0에서 Oracle 23.9.0.25.07 Thin과 SQL Server 2022 CU18(16.0.4185.3)을 실행합니다. 로컬 SQL Server ARM 에뮬레이션은 Official ARM 지원 근거가 아닙니다. Bun/Deno 드라이버 서브패스와 Oracle Thick은 검증 범위가 아니며, 다섯 portable root는 고정 Node/Bun/Deno 버전에서 별도로 통과했습니다.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="릴리스-증거-provenance">릴리스 증거 provenance</h2><a class="sl-anchor-link" href="#릴리스-증거-provenance"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “릴리스 증거 provenance”</span></a></div>
-<div class="build-provenance"><p><strong>Docs build candidate:</strong><a href="https://github.com/Clickin/SQLBraid/commit/d4bc626358baf3916ec666e1e2ca8dcc6fa2259d">d4bc626358baf3916ec666e1e2ca8dcc6fa2259d</a>· <a href="https://github.com/Clickin/SQLBraid/actions/runs/34753809316">workflow run 34753809316</a></p><p>Exact-commit evidence: <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/runtime-portability.yml/runs?head_sha=d4bc626358baf3916ec666e1e2ca8dcc6fa2259d">runtime runs (JSON)</a> · <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/release.yml/runs?head_sha=d4bc626358baf3916ec666e1e2ca8dcc6fa2259d">immutable release runs and artifacts (JSON)</a>. Each result includes its run URL and conclusion; an empty or unfinished run is not a pass.</p><p>These links identify the docs build candidate only. A successful Pages build does not claim that runtime, package, database, VS Code, or publication gates passed; consult individual checks and the release evidence artifact.</p></div>
+<div class="build-provenance"><p><strong>Docs build candidate:</strong><a href="https://github.com/Clickin/SQLBraid/commit/bc3092b1d31f8fc5410e8b0b57554567477d1147">bc3092b1d31f8fc5410e8b0b57554567477d1147</a>· <a href="https://github.com/Clickin/SQLBraid/actions/runs/34754564061">workflow run 34754564061</a></p><p>Exact-commit evidence: <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/runtime-portability.yml/runs?head_sha=bc3092b1d31f8fc5410e8b0b57554567477d1147">runtime runs (JSON)</a> · <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/release.yml/runs?head_sha=bc3092b1d31f8fc5410e8b0b57554567477d1147">immutable release runs and artifacts (JSON)</a>. Each result includes its run URL and conclusion; an empty or unfinished run is not a pass.</p><p>These links identify the docs build candidate only. A successful Pages build does not claim that runtime, package, database, VS Code, or publication gates passed; consult individual checks and the release evidence artifact.</p></div>
 <ul>
 <li>현재 검증 기록: <a href="https://github.com/Clickin/SQLBraid/commits/main/"><code dir="auto">main</code>의 commit</a></li>
 <li>과거 PV11 증거: <a href="https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7">revision <code dir="auto">1615311</code></a> 및 <a href="https://github.com/Clickin/SQLBraid/actions/runs/34745030794">workflow run <code dir="auto">34745030794</code></a></li>

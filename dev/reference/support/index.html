@@ -144,28 +144,28 @@
 </tr>
 <tr>
 <td>Oracle portable root / <code dir="auto">@sqlbraid/oracle</code></td>
+<td>Official</td>
 <td>Compatible</td>
-<td>Compatible</td>
-<td>Compatible</td>
-<td>Compatible</td>
+<td>Official</td>
+<td>Official</td>
 </tr>
 <tr>
 <td>Oracle Thin / <code dir="auto">node-oracledb</code> 7.0.1</td>
-<td>Compatible</td>
+<td>Official</td>
 <td>Compatible</td>
 <td>Unsupported</td>
 <td>Unsupported</td>
 </tr>
 <tr>
 <td>SQL Server portable root / <code dir="auto">@sqlbraid/mssql</code></td>
+<td>Official</td>
 <td>Compatible</td>
-<td>Compatible</td>
-<td>Compatible</td>
-<td>Compatible</td>
+<td>Official</td>
+<td>Official</td>
 </tr>
 <tr>
 <td>SQL Server / Tedious 20.0.0</td>
-<td>Compatible</td>
+<td>Official</td>
 <td>Compatible</td>
 <td>Unsupported</td>
 <td>Unsupported</td>
@@ -180,9 +180,9 @@
 </tbody>
 </table>
 <p>Oracle targets <code dir="auto">node-oracledb</code> Thin mode; Thick mode is not Official. SQL Server targets the Tedious adapter. The Oracle <code dir="auto">call()</code> path and SQL Server OUT/return-value routine binding are Unsupported in this RC. PostgreSQL, MySQL, and SQLite explicitly reject parameter hints rather than silently ignoring them.</p>
-<p>Dialect, driver, execution runtime, and transaction profile are separate axes. Local Node 22.18.0 tests exercise Oracle 23.9.0.25.07 Thin and SQL Server 2022 CU18 (16.0.4185.3). The pinned SQL Server image is Linux x64; running it through local ARM emulation does not establish Official ARM support. The new integrations are conservatively Compatible until same-revision CI proves the advertised combination. Bun/Deno driver subpaths and Oracle Thick mode are not covered; portable roots are checked separately.</p>
+<p>Dialect, driver, execution runtime, and transaction profile are separate axes. The <a href="https://github.com/Clickin/SQLBraid/actions/runs/34753809318">successful PV13 runtime gate at d4bc626</a> exercises Oracle 23.9.0.25.07 Thin and SQL Server 2022 CU18 (16.0.4185.3) with Node 22.18.0 on Linux x64. Local SQL Server ARM emulation does not establish Official ARM support. Bun/Deno driver subpaths and Oracle Thick mode are not covered; all five portable roots pass separately on the pinned Node/Bun/Deno versions.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="release-evidence-provenance">Release evidence provenance</h2><a class="sl-anchor-link" href="#release-evidence-provenance"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>Section titled “Release evidence provenance”</span></a></div>
-<div class="build-provenance"><p><strong>Docs build candidate:</strong><a href="https://github.com/Clickin/SQLBraid/commit/d4bc626358baf3916ec666e1e2ca8dcc6fa2259d">d4bc626358baf3916ec666e1e2ca8dcc6fa2259d</a>· <a href="https://github.com/Clickin/SQLBraid/actions/runs/34753809316">workflow run 34753809316</a></p><p>Exact-commit evidence: <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/runtime-portability.yml/runs?head_sha=d4bc626358baf3916ec666e1e2ca8dcc6fa2259d">runtime runs (JSON)</a> · <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/release.yml/runs?head_sha=d4bc626358baf3916ec666e1e2ca8dcc6fa2259d">immutable release runs and artifacts (JSON)</a>. Each result includes its run URL and conclusion; an empty or unfinished run is not a pass.</p><p>These links identify the docs build candidate only. A successful Pages build does not claim that runtime, package, database, VS Code, or publication gates passed; consult individual checks and the release evidence artifact.</p></div>
+<div class="build-provenance"><p><strong>Docs build candidate:</strong><a href="https://github.com/Clickin/SQLBraid/commit/bc3092b1d31f8fc5410e8b0b57554567477d1147">bc3092b1d31f8fc5410e8b0b57554567477d1147</a>· <a href="https://github.com/Clickin/SQLBraid/actions/runs/34754564061">workflow run 34754564061</a></p><p>Exact-commit evidence: <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/runtime-portability.yml/runs?head_sha=bc3092b1d31f8fc5410e8b0b57554567477d1147">runtime runs (JSON)</a> · <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/release.yml/runs?head_sha=bc3092b1d31f8fc5410e8b0b57554567477d1147">immutable release runs and artifacts (JSON)</a>. Each result includes its run URL and conclusion; an empty or unfinished run is not a pass.</p><p>These links identify the docs build candidate only. A successful Pages build does not claim that runtime, package, database, VS Code, or publication gates passed; consult individual checks and the release evidence artifact.</p></div>
 <ul>
 <li>Current verification history: <a href="https://github.com/Clickin/SQLBraid/commits/main/">commits on <code dir="auto">main</code></a></li>
 <li>Historical PV11 evidence: <a href="https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7">revision <code dir="auto">1615311</code></a> and <a href="https://github.com/Clickin/SQLBraid/actions/runs/34745030794">workflow run <code dir="auto">34745030794</code></a></li>

@@ -83,7 +83,7 @@
 <li>첫 번째 지원 대상은 <code dir="auto">node-oracledb</code> Thin 모드입니다. Thick 모드는 Official 주장이 아닙니다.</li>
 <li>OUT/IN OUT 디스크립터가 아직 바인드 API에 없으므로 이 RC에서 <code dir="auto">call()</code>은 Unsupported입니다.</li>
 <li>스트리밍은 드라이버의 ResultSet 프로토콜을 사용하며 완료, 중단, 조기 종료 시 ResultSet을 닫습니다.</li>
-<li>로컬 Node 22.18.0 테스트는 Oracle 23.9.0.25.07을 사용합니다. portable root와 Thin 어댑터는 같은 revision의 CI가 Official 범위를 증명하기 전까지 보수적으로 Compatible입니다. <a href="/SQLBraid/dev/ko/reference/support/">런타임 및 드라이버 지원</a>을 참고하세요.</li>
+<li>CI는 Node 22.18.0/Linux x64에서 Oracle 23.9.0.25.07 Thin을 검증합니다. 고정된 검증 증거와 portable root 범위는 <a href="/SQLBraid/dev/ko/reference/support/">런타임 및 드라이버 지원</a>을 참고하세요.</li>
 </ul>
 <p>드라이버가 안전한 Oracle 타입을 추론할 수 없는 <code dir="auto">null</code>에는 명시적인 힌트를 사용하세요. 타입이 지정되지 않은 null을 조용히 <code dir="auto">VARCHAR2</code>로 바꾸지 않습니다.</p>
 <p>기본 정책은 정밀도를 보존하기 위해 <code dir="auto">NUMBER</code> 결과를 문자열로 가져옵니다. 명시적인 <code dir="auto">NUMBER</code> 입력은 <code dir="auto">number</code> 또는 <code dir="auto">bigint</code>를 받으며, 소수 문자열은 손실 변환하지 않고 거부합니다. SQL에서 소수 문자열 입력이 필요하면 일반 문자열 바인드와 명시적인 SQL 변환을 사용하세요.</p>

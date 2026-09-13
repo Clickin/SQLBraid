@@ -83,7 +83,7 @@
 <li>The first-party target is <code dir="auto">node-oracledb</code> Thin mode. Thick mode is not an Official claim.</li>
 <li><code dir="auto">call()</code> is Unsupported in this RC because OUT/IN OUT descriptors are not yet part of the bind API.</li>
 <li>Streaming uses the driver’s ResultSet protocol and closes the ResultSet on completion, abort, or early break.</li>
-<li>Local Node 22.18.0 tests use Oracle 23.9.0.25.07. Portable roots and the Thin adapter are conservatively Compatible until same-revision CI establishes Official coverage; see <a href="/SQLBraid/dev/reference/support/">runtime and driver support</a>.</li>
+<li>CI covers Oracle 23.9.0.25.07 Thin on Node 22.18.0/Linux x64; see <a href="/SQLBraid/dev/reference/support/">runtime and driver support</a> for the pinned evidence and portable-root coverage.</li>
 </ul>
 <p>Use an explicit hint for <code dir="auto">null</code> when the driver cannot infer a safe Oracle type. Do not silently turn an untyped null into <code dir="auto">VARCHAR2</code>.</p>
 <p>The default policy fetches <code dir="auto">NUMBER</code> results as strings to preserve precision. Explicit <code dir="auto">NUMBER</code> input accepts <code dir="auto">number</code> or <code dir="auto">bigint</code>; decimal strings are rejected by this adapter rather than converted lossily. Use an ordinary string bind with an explicit SQL conversion when your SQL requires decimal-text input.</p>
