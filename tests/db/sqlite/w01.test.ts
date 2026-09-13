@@ -6,11 +6,14 @@ import { join } from "node:path";
 import { test } from "vitest";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import * as v from "valibot";
+import { generateModels } from "@sqlbraid/codegen";
+import { hashSnapshot } from "@sqlbraid/metadata";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";
-import { sql } from "@sqlbraid/sqlite";
+import { sql, typePolicy as sqliteTypePolicy } from "@sqlbraid/sqlite";
 import { runW01 } from "../w01.js";
+import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGeneratedPropertyAbsent } from "../codegen.js";
 
 test("SQLite materialized query mappers reenter after releasing the root resource", async () => {
   const native = new DatabaseSync(":memory:");
@@ -224,6 +227,110 @@ test("SQLite inspector reports only proven rowid identity", async () => {
     assert.equal(snapshot.relations["main.braid_pv8_desc"]?.columns[0]?.identity, undefined);
     assert.equal(snapshot.relations["main.braid_pv8_composite"]?.columns[0]?.identity, undefined);
     assert.equal(snapshot.relations["main.braid_pv8_without"]?.columns[0]?.identity, undefined);
+  } finally {
+    native.close();
+  }
+});
+
+test("SQLite inspector evidence generates compiling strict and conservative dynamic models", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    native.exec(`
+      CREATE TABLE braid_pv9_strict (
+        id INTEGER PRIMARY KEY,
+        count INT NOT NULL,
+        score REAL NOT NULL DEFAULT 0.0,
+        title TEXT NOT NULL,
+        bytes BLOB,
+        payload ANY,
+        calculated INTEGER GENERATED ALWAYS AS (id + count) STORED
+      ) STRICT;
+      CREATE TABLE braid_pv9_dynamic (
+        id INTEGER PRIMARY KEY,
+        count INT NOT NULL,
+        title TEXT,
+        payload BLOB
+      );
+    `);
+
+    const snapshot = await createSqliteInspector(native).inspect();
+    const strict = snapshot.relations["main.braid_pv9_strict"];
+    const dynamic = snapshot.relations["main.braid_pv9_dynamic"];
+    assert.ok(strict);
+    assert.ok(dynamic);
+    assert.equal(strict.strict, true);
+    assert.equal(dynamic.strict, false);
+    const strictColumns = new Map(strict.columns.map((column) => [column.name, column]));
+    assert.equal(strictColumns.get("id")?.type, "INTEGER");
+    assert.equal(strictColumns.get("id")?.identity, true);
+    assert.equal(strictColumns.get("count")?.type, "INT");
+    assert.equal(strictColumns.get("score")?.type, "REAL");
+    assert.equal(typeof strictColumns.get("score")?.defaultExpression, "string");
+    assert.equal(strictColumns.get("bytes")?.type, "BLOB");
+    assert.equal(strictColumns.get("payload")?.type, "ANY");
+    assert.equal(strictColumns.get("calculated")?.generated, true);
+    assert.equal(strictColumns.get("calculated")?.insertable, false);
+    assert.equal(strictColumns.get("calculated")?.updatable, false);
+
+    const result = generateModels(snapshot, { typePolicy: sqliteTypePolicy });
+    assert.equal(result.metadataHash, hashSnapshot(snapshot));
+    assert.equal(result.typePolicyId, sqliteTypePolicy.id);
+    assert.equal(result.typePolicyHash, sqliteTypePolicy.hash);
+    assert.deepEqual(result.models, [
+      {
+        relationIdentity: "main.braid_pv9_dynamic",
+        modelName: "BraidPv9Dynamic",
+        rowName: "BraidPv9DynamicRow",
+        insertName: "BraidPv9DynamicInsert",
+        updateName: "BraidPv9DynamicUpdate",
+      },
+      {
+        relationIdentity: "main.braid_pv9_strict",
+        modelName: "BraidPv9Strict",
+        rowName: "BraidPv9StrictRow",
+        insertName: "BraidPv9StrictInsert",
+        updateName: "BraidPv9StrictUpdate",
+      },
+    ]);
+
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "id", "number | bigint", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "count", "number | bigint", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "score", "number", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "title", "string", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "bytes", "Uint8Array | null", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "payload", "unknown | null", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "calculated", "number | bigint | null", false);
+
+    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "id", "number | bigint", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "count", "number | bigint", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "score", "number", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "title", "string", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "bytes", "Uint8Array | null", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "payload", "unknown | null", true);
+    assertGeneratedPropertyAbsent(result.source, "BraidPv9StrictInsert", "calculated");
+
+    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "id", "number | bigint", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "count", "number | bigint", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "score", "number", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "title", "string", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "bytes", "Uint8Array | null", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "payload", "unknown | null", true);
+    assertGeneratedPropertyAbsent(result.source, "BraidPv9StrictUpdate", "calculated");
+
+    for (const model of ["BraidPv9DynamicRow", "BraidPv9DynamicInsert", "BraidPv9DynamicUpdate"]) {
+      for (const column of dynamic.columns) {
+        const expectedType = column.nullable ? "unknown | null" : "unknown";
+        const optional = model.endsWith("Row")
+          ? false
+          : model.endsWith("Insert")
+            ? column.identity === true || column.nullable
+            : true;
+        assertGeneratedProperty(result.source, model, column.name, expectedType, optional);
+      }
+    }
+    assert.ok(result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_SQLITE_DYNAMIC_TYPE" && diagnostic.relation === "main.braid_pv9_dynamic"));
+
+    await assertCompilesGeneratedSource(result.source, "sqlite-pv9");
   } finally {
     native.close();
   }

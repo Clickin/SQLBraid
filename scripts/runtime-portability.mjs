@@ -45,10 +45,11 @@ try {
   }
   await writeFile(join(consumer, "package.json"), JSON.stringify({ name: "sqlbraid-runtime-consumer", private: true, type: "module", dependencies }));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], consumer);
-  if ((await readdir(join(consumer, "node_modules/@sqlbraid"))).includes("metadata")) {
-    throw new Error("Runtime-only installation pulled in @sqlbraid/metadata");
+  const installedPackages = await readdir(join(consumer, "node_modules/@sqlbraid"));
+  if (installedPackages.includes("metadata") || installedPackages.includes("codegen")) {
+    throw new Error("Runtime-only installation pulled in @sqlbraid/metadata or @sqlbraid/codegen");
   }
-  console.info("PASS runtime-only npm install without @sqlbraid/metadata");
+  console.info("PASS runtime-only npm install without @sqlbraid/metadata or @sqlbraid/codegen");
   const core = JSON.parse(await readFile(join(consumer, "node_modules/@sqlbraid/core/package.json"), "utf8"));
   if (!core.dependencies?.["@standard-schema/spec"]) throw new Error("Standard Schema is not a regular packed dependency");
   await readFile(join(consumer, "node_modules/@standard-schema/spec/package.json"));

@@ -185,12 +185,20 @@ function validateColumn(value: unknown, path: string, diagnostics: SnapshotDiagn
   if (!isFiniteNumber(value.ordinal) || !Number.isInteger(value.ordinal) || value.ordinal < 0) add(diagnostics, "SNAPSHOT_COLUMN_ORDINAL", "Column ordinal must be a non-negative integer.", `${path}.ordinal`);
   if (typeof value.type !== "string" || !value.type) add(diagnostics, "SNAPSHOT_COLUMN_TYPE", "Column type must be non-empty.", `${path}.type`);
   if (typeof value.nullable !== "boolean") add(diagnostics, "SNAPSHOT_COLUMN_NULLABLE", "Column nullable must be boolean.", `${path}.nullable`);
+  for (const field of ["nullabilityEvidence", "defaultExpression", "charset", "collation"]) {
+    if (value[field] !== undefined && typeof value[field] !== "string") add(diagnostics, "SNAPSHOT_COLUMN_FACT", `Column ${field} must be a string.`, `${path}.${field}`);
+  }
+  for (const field of ["generated", "identity", "insertable", "updatable"]) {
+    if (value[field] !== undefined && typeof value[field] !== "boolean") add(diagnostics, "SNAPSHOT_COLUMN_FACT", `Column ${field} must be boolean.`, `${path}.${field}`);
+  }
 }
 
 function validateRelation(value: unknown, path: string, diagnostics: SnapshotDiagnostic[]): void {
   if (!isRecord(value)) { add(diagnostics, "SNAPSHOT_RELATION", "Relation must be an object.", path); return; }
   if (typeof value.identity !== "string" || !value.identity) add(diagnostics, "SNAPSHOT_RELATION_ID", "Relation identity must be non-empty.", `${path}.identity`);
   if (typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_RELATION_NAME", "Relation name must be non-empty.", `${path}.name`);
+  if (value.namespace !== undefined && typeof value.namespace !== "string") add(diagnostics, "SNAPSHOT_RELATION_NAMESPACE", "Relation namespace must be a string.", `${path}.namespace`);
+  if (value.strict !== undefined && typeof value.strict !== "boolean") add(diagnostics, "SNAPSHOT_RELATION_STRICT", "Relation strict evidence must be boolean.", `${path}.strict`);
   if (!["table", "view", "materialized", "foreign", "virtual", "unknown"].includes(String(value.kind))) add(diagnostics, "SNAPSHOT_RELATION_KIND", "Relation kind is invalid.", `${path}.kind`);
   if (!Array.isArray(value.columns)) { add(diagnostics, "SNAPSHOT_RELATION_COLUMNS", "Relation columns must be an array.", `${path}.columns`); return; }
   const names = new Set<string>();
@@ -215,8 +223,16 @@ function validateRoutine(value: unknown, path: string, diagnostics: SnapshotDiag
     if (!isRecord(argument)) { add(diagnostics, "SNAPSHOT_ARGUMENT", "Routine argument must be an object.", `${path}.arguments[${index}]`); return; }
     if (!["in", "out", "inout", "variadic"].includes(String(argument.mode))) add(diagnostics, "SNAPSHOT_ARGUMENT_MODE", "Routine argument mode is invalid.", `${path}.arguments[${index}].mode`);
     if (typeof argument.type !== "string" || !argument.type) add(diagnostics, "SNAPSHOT_ARGUMENT_TYPE", "Routine argument type must be non-empty.", `${path}.arguments[${index}].type`);
+    if (argument.name !== undefined && typeof argument.name !== "string") add(diagnostics, "SNAPSHOT_ARGUMENT_NAME", "Routine argument name must be a string.", `${path}.arguments[${index}].name`);
+    for (const field of ["nullable", "hasDefault"]) {
+      if (argument[field] !== undefined && typeof argument[field] !== "boolean") add(diagnostics, "SNAPSHOT_ARGUMENT_FACT", `Routine argument ${field} must be boolean.`, `${path}.arguments[${index}].${field}`);
+    }
   });
   if (!isRecord(value.result)) add(diagnostics, "SNAPSHOT_RESULT", "Routine result must be an object.", `${path}.result`);
+  else if (value.result.kind === "scalar") {
+    if (typeof value.result.type !== "string" || !value.result.type) add(diagnostics, "SNAPSHOT_RESULT_TYPE", "Scalar result type must be non-empty.", `${path}.result.type`);
+    if (value.result.nullable !== undefined && typeof value.result.nullable !== "boolean") add(diagnostics, "SNAPSHOT_RESULT_NULLABLE", "Scalar result nullable must be boolean.", `${path}.result.nullable`);
+  }
   else if (["table", "record", "set"].includes(String(value.result.kind)) && value.result.columns !== undefined) {
     if (!Array.isArray(value.result.columns)) add(diagnostics, "SNAPSHOT_RESULT_COLUMNS", "Routine result columns must be an array.", `${path}.result.columns`);
     else value.result.columns.forEach((column, index) => validateColumn(column, `${path}.result.columns[${index}]`, diagnostics));
@@ -228,7 +244,7 @@ function sortedRecord<T>(record: Readonly<Record<string, T>>): Record<string, T>
 }
 
 function normalizeSnapshot(snapshot: MetadataSnapshot, includeVolatile: boolean): MetadataSnapshot {
-  const relations: Record<string, RelationSnapshot> = {};
+  const relations: Record<string, RelationSnapshot> = Object.create(null);
   for (const [key, relation] of Object.entries(snapshot.relations).sort(([left], [right]) => compareKeys(left, right))) {
     relations[key] = {
       ...relation,
@@ -237,7 +253,7 @@ function normalizeSnapshot(snapshot: MetadataSnapshot, includeVolatile: boolean)
       indexes: relation.indexes ? [...relation.indexes].sort((left, right) => compareKeys(left.name, right.name)) : undefined,
     };
   }
-  const routines: Record<string, readonly RoutineSnapshot[]> = {};
+  const routines: Record<string, readonly RoutineSnapshot[]> = Object.create(null);
   for (const [key, values] of Object.entries(snapshot.routines).sort(([left], [right]) => compareKeys(left, right))) routines[key] = [...values].sort((left, right) => compareKeys(left.identity, right.identity));
   const metadata = includeVolatile ? snapshot.metadata : Object.fromEntries(Object.entries(snapshot.metadata).filter(([key]) => !["generatedAt", "observedAt", "capturedAt"].includes(key)).sort(([left], [right]) => compareKeys(left, right)));
   return { ...snapshot, metadata, namespaces: sortedRecord(snapshot.namespaces), types: sortedRecord(snapshot.types), relations, routines };
@@ -271,6 +287,9 @@ export function validateSnapshot(snapshot: unknown): asserts snapshot is Metadat
     else if (identities.has(value.identity)) add(diagnostics, "SNAPSHOT_DUPLICATE_IDENTITY", `Duplicate type identity: ${value.identity}.`, `types.${key}.identity`);
     else identities.add(value.identity);
     if (!["scalar", "enum", "domain", "composite", "array", "range", "multirange", "opaque", "unknown"].includes(String(value.kind))) add(diagnostics, "SNAPSHOT_TYPE_KIND", "Type kind is invalid.", `types.${key}.kind`);
+    for (const field of ["elementType", "baseType"]) {
+      if (value[field] !== undefined && typeof value[field] !== "string") add(diagnostics, "SNAPSHOT_TYPE_FACT", `Type ${field} must be a string.`, `types.${key}.${field}`);
+    }
     if (value.values !== undefined && (!Array.isArray(value.values) || value.values.some((entry) => typeof entry !== "string"))) add(diagnostics, "SNAPSHOT_TYPE_VALUES", "Type values must be an array of strings.", `types.${key}.values`);
   }
   const relationIdentities = new Set<string>();

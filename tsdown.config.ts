@@ -22,6 +22,7 @@ function packageBuild(cwd: string, entry: Record<string, string>): UserConfig {
 
 export default defineConfig([
   packageBuild("packages/core", { index: "src/index.ts" }),
+  packageBuild("packages/codegen", { index: "src/index.ts" }),
   packageBuild("packages/template", { index: "src/index.ts" }),
 
   packageBuild("packages/metadata", { index: "src/index.ts" }),

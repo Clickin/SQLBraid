@@ -30,6 +30,7 @@
     "@arethetypeswrong/cli": "0.18.5",
     "@jridgewell/trace-mapping": "0.3.31",
     "@sqlbraid/cli": "workspace:*",
+    "@sqlbraid/codegen": "workspace:*",
     "@sqlbraid/compiler": "workspace:*",
     "@sqlbraid/core": "workspace:*",
     "@sqlbraid/language-server": "workspace:*",

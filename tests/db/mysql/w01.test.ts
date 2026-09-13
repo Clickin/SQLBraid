@@ -4,11 +4,14 @@ import { inject, test } from "vitest";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import * as v from "valibot";
 import type { ExecutionEvent } from "@sqlbraid/core";
+import { generateModels } from "@sqlbraid/codegen";
+import { hashSnapshot } from "@sqlbraid/metadata";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
 import { createMysqlInspector } from "@sqlbraid/mysql/inspector";
-import { sql } from "@sqlbraid/mysql";
+import { sql, typePolicy as mysqlTypePolicy } from "@sqlbraid/mysql";
 import { runW01 } from "../w01.js";
+import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGeneratedPropertyAbsent } from "../codegen.js";
 
 async function endPool(pool: Pick<Pool, "end">): Promise<void> {
   const ending = pool.end().catch(() => undefined);
@@ -127,6 +130,83 @@ test("MySQL inspector separates primary-key and auto-increment identity", async 
     assert.equal("tsType" in (columns[0] ?? {}), false);
   } finally {
     await client.query("DROP TABLE IF EXISTS braid_pv8_inspector").catch(() => undefined);
+    await client.end();
+  }
+});
+
+test("MySQL inspector evidence generates compiling Row Insert and Update models", async () => {
+  const settings = inject("mysql");
+  const client = await createConnection(settings.connectionUri);
+  try {
+    await client.query("DROP TABLE IF EXISTS braid_pv9_codegen");
+    await client.query(`
+      CREATE TABLE braid_pv9_codegen (
+        external_id INT NOT NULL PRIMARY KEY,
+        identity_value BIGINT NOT NULL AUTO_INCREMENT,
+        amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+        label VARCHAR(255) NOT NULL,
+        payload JSON,
+        nickname VARCHAR(255) NULL,
+        calculated INT GENERATED ALWAYS AS (external_id + 1) STORED,
+        UNIQUE KEY braid_pv9_codegen_identity (identity_value)
+      ) ENGINE=InnoDB
+    `);
+
+    const snapshot = await createMysqlInspector(client).inspect();
+    const relation = Object.values(snapshot.relations).find((entry) => entry.name === "braid_pv9_codegen");
+    assert.ok(relation);
+    const columns = new Map(relation.columns.map((column) => [column.name, column]));
+    assert.equal(columns.get("external_id")?.type, "int");
+    assert.equal(columns.get("external_id")?.identity, undefined);
+    assert.equal(columns.get("identity_value")?.type, "bigint");
+    assert.equal(columns.get("identity_value")?.identity, true);
+    assert.equal(columns.get("amount")?.type, "decimal");
+    assert.equal(typeof columns.get("amount")?.defaultExpression, "string");
+    assert.equal(columns.get("payload")?.type, "json");
+    assert.equal(columns.get("nickname")?.nullable, true);
+    assert.equal(columns.get("calculated")?.generated, true);
+    assert.equal(columns.get("calculated")?.insertable, false);
+    assert.equal(columns.get("calculated")?.updatable, false);
+
+    const result = generateModels(snapshot, { typePolicy: mysqlTypePolicy });
+    assert.equal(result.metadataHash, hashSnapshot(snapshot));
+    assert.equal(result.typePolicyId, mysqlTypePolicy.id);
+    assert.equal(result.typePolicyHash, mysqlTypePolicy.hash);
+    assert.deepEqual(result.models.find((model) => model.relationIdentity === relation.identity), {
+      relationIdentity: relation.identity,
+      modelName: "BraidPv9Codegen",
+      rowName: "BraidPv9CodegenRow",
+      insertName: "BraidPv9CodegenInsert",
+      updateName: "BraidPv9CodegenUpdate",
+    });
+
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "external_id", "number", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "identity_value", "bigint | string", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "amount", "string", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "label", "string", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "payload", "unknown | null", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "nickname", "string | null", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "calculated", "number | null", false);
+
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "external_id", "number", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "identity_value", "bigint | string", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "amount", "string | number", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "label", "string", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "payload", "unknown | null", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "nickname", "string | null", true);
+    assertGeneratedPropertyAbsent(result.source, "BraidPv9CodegenInsert", "calculated");
+
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "external_id", "number", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "identity_value", "bigint | string", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "amount", "string | number", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "label", "string", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "payload", "unknown | null", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "nickname", "string | null", true);
+    assertGeneratedPropertyAbsent(result.source, "BraidPv9CodegenUpdate", "calculated");
+
+    await assertCompilesGeneratedSource(result.source, "mysql-pv9");
+  } finally {
+    await client.query("DROP TABLE IF EXISTS braid_pv9_codegen").catch(() => undefined);
     await client.end();
   }
 });

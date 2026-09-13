@@ -316,10 +316,19 @@ membership. Generated/write flags require database evidence; absence is unknown.
 Metadata contains DB types, not TypeScript guesses or TypePolicy/compiler fields.
 
 Standard Schema owns application row validation/transformation. TypePolicy owns
-runtime primitive representation. PV9 optional `@sqlbraid/codegen` will combine
-metadata + TypePolicy + overrides for table-oriented `Row`/`Insert`/`Update`
-generation. Metadata/codegen remains outside runtime/compiler requirements and
-does not promise arbitrary SELECT/JOIN inference.
+runtime primitive representation. PV9 `@sqlbraid/codegen` provides pure, offline
+`generateModels(metadata, { typePolicy })` for table-oriented `Row`/`Insert`/`Update`
+declarations. TypePolicy is selected input, never embedded in metadata snapshots.
+Row uses output representation; Insert/Update use input representation and explicit
+DB null/default/identity/generated/write evidence. Identity alone makes Insert
+optional but does not exclude Update. Only tables receive write models.
+
+Unknown types and SQLite non-STRICT columns remain `unknown` with diagnostics,
+never an `any` fallback. Keep exact DB column keys, deterministic collision-safe
+model names and metadata/TypePolicy provenance. The generator performs no
+filesystem writes, config lookup, live inspection or arbitrary SELECT inference.
+PV10 owns CLI/config/filters/naming/type overrides. Runtime/compiler must not
+acquire metadata/codegen dependencies; retain packed runtime-only exclusion gates.
 
 ---
 

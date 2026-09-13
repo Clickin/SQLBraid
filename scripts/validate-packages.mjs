@@ -22,7 +22,7 @@ async function run(command, args, cwd = root) {
 }
 
 try {
-  if (packageNames.length !== 11 || !packageNames.includes("metadata")) throw new Error("Expected 11 packages including metadata.");
+  if (packageNames.length !== 12 || !packageNames.includes("metadata") || !packageNames.includes("codegen")) throw new Error("Expected 12 packages including metadata and codegen.");
   const tarballs = [];
   for (const packageName of packageNames) {
     const before = new Set(await readdir(temp));
@@ -42,8 +42,16 @@ try {
     if (manifest.name === "@sqlbraid/core" && !manifest.dependencies?.["@standard-schema/spec"]) {
       throw new Error("Core public Standard Schema types require a regular spec dependency.");
     }
-    if (runtimePackages.includes(packageName) && (manifest.dependencies?.["@sqlbraid/metadata"] || manifest.optionalDependencies?.["@sqlbraid/metadata"])) {
-      throw new Error(`Metadata is a runtime dependency of ${manifest.name}.`);
+    if (manifest.name === "@sqlbraid/codegen") {
+      const dependencyNames = Object.keys(manifest.dependencies ?? {}).sort();
+      if (dependencyNames.length !== 2 || dependencyNames[0] !== "@sqlbraid/core" || dependencyNames[1] !== "@sqlbraid/metadata" || Object.keys(manifest.peerDependencies ?? {}).length || Object.keys(manifest.optionalDependencies ?? {}).length) {
+        throw new Error("Codegen must have only core and metadata production dependencies.");
+      }
+    }
+    for (const tooling of ["@sqlbraid/metadata", "@sqlbraid/codegen"]) {
+      if (runtimePackages.includes(packageName) && (manifest.dependencies?.[tooling] || manifest.optionalDependencies?.[tooling])) {
+        throw new Error(`${tooling} is a runtime dependency of ${manifest.name}.`);
+      }
     }
     await run("pnpm", ["exec", "publint", "run", tarball, "--strict"]);
     await run("pnpm", ["exec", "attw", tarball, "--profile", "esm-only", "--no-emoji"]);
@@ -62,7 +70,8 @@ try {
     dependencies: { ...runtimeDependencies, pg: workspace.devDependencies.pg, mysql2: workspace.devDependencies.mysql2 },
   }));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], boundaryConsumer);
-  if ((await readdir(join(boundaryConsumer, "node_modules/@sqlbraid"))).includes("metadata")) throw new Error("Runtime consumer installed metadata transitively.");
+  const runtimeInstalledPackages = await readdir(join(boundaryConsumer, "node_modules/@sqlbraid"));
+  if (runtimeInstalledPackages.includes("metadata") || runtimeInstalledPackages.includes("codegen")) throw new Error("Runtime consumer installed metadata or codegen transitively.");
   await writeFile(join(boundaryConsumer, "runtime.mjs"), [
     'import assert from "node:assert/strict";',
     'import { sql } from "@sqlbraid/postgres";',
@@ -75,8 +84,8 @@ try {
     '}',
   ].join("\n"));
   await run(process.execPath, ["runtime.mjs"], boundaryConsumer);
-  console.info("PASS packed runtime-only npm consumer without metadata");
-  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", dependencies["@sqlbraid/metadata"]], boundaryConsumer);
+  console.info("PASS packed runtime-only npm consumer without metadata or codegen");
+  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", dependencies["@sqlbraid/metadata"], dependencies["@sqlbraid/codegen"]], boundaryConsumer);
   const metadataImports = [
     'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
     'import { createMysqlInspector } from "@sqlbraid/mysql/inspector";',
@@ -98,8 +107,41 @@ try {
     'assert.equal(typeof createMysqlInspector, "function");',
   ].join("\n"));
   await run(process.execPath, ["metadata.mjs"], boundaryConsumer);
+  await writeFile(join(boundaryConsumer, "codegen.mjs"), [
+    'import assert from "node:assert/strict";',
+    'import { writeFile } from "node:fs/promises";',
+    'import { generateModels } from "@sqlbraid/codegen";',
+    'import { typePolicy } from "@sqlbraid/postgres";',
+    'const metadata = {',
+    '  format: "sqlbraid-metadata", formatVersion: 1, dialect: "postgres", dialectVersion: "16",',
+    '  server: {}, namespaces: {},',
+    '  types: {',
+    '    "pg_catalog.int8": { identity: "pg_catalog.int8", name: "int8", kind: "scalar" },',
+    '    "pg_catalog.text": { identity: "pg_catalog.text", name: "text", kind: "scalar" },',
+    '  },',
+    '  relations: {',
+    '    "public.users": { identity: "public.users", name: "users", namespace: "public", kind: "table", columns: [',
+    '      { name: "id", ordinal: 1, type: "pg_catalog.int8", nullable: false, identity: true },',
+    '      { name: "name", ordinal: 2, type: "pg_catalog.text", nullable: false },',
+    '    ] },',
+    '  },',
+    '  routines: {}, metadata: {},',
+    '};',
+    'const generated = generateModels(metadata, { typePolicy });',
+    'assert.equal(generated.diagnostics.filter(({ severity }) => severity === "error").length, 0);',
+    'assert.deepEqual(generated.models[0], { relationIdentity: "public.users", modelName: "Users", rowName: "UsersRow", insertName: "UsersInsert", updateName: "UsersUpdate" });',
+    'assert.match(generated.source, /export interface UsersRow/);',
+    'assert.match(generated.source, /export interface UsersInsert/);',
+    'assert.match(generated.source, /export interface UsersUpdate/);',
+    'await writeFile("generated.ts", generated.source);',
+  ].join("\n"));
+  await run(process.execPath, ["codegen.mjs"], boundaryConsumer);
+  await run(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "--strict", "--target", "ES2024", "--module", "NodeNext", "--moduleResolution", "NodeNext", "generated.ts"], boundaryConsumer);
+  console.info("PASS packed codegen tooling consumer: PostgreSQL policy generation and TypeScript");
   await writeFile(join(boundaryConsumer, "metadata.ts"), [
     ...metadataImports,
+    'import { generateModels, type CodegenResult } from "@sqlbraid/codegen";',
+    'import { typePolicy as postgresTypePolicy } from "@sqlbraid/postgres";',
     'import type { MetadataSnapshot, MetadataInspector } from "@sqlbraid/metadata";',
     'import type { PgClientLike } from "@sqlbraid/postgres/pg";',
     'import type { Mysql2ConnectionLike } from "@sqlbraid/mysql/mysql2";',
@@ -107,6 +149,10 @@ try {
     'declare const pg: PgClientLike, mysql: Mysql2ConnectionLike, sqlite: SqliteDatabaseLike;',
     'const inspectors: MetadataInspector[] = [createPostgresInspector(pg), createMysqlInspector(mysql), createSqliteInspector(sqlite)];',
     'const results: Promise<MetadataSnapshot>[] = inspectors.map((inspector) => inspector.inspect());',
+    'declare const metadata: MetadataSnapshot;',
+    'const generated: CodegenResult = generateModels(metadata, { typePolicy: postgresTypePolicy });',
+    'const source: string = generated.source;',
+    'void source;',
     'void results;',
   ].join("\n"));
   await run(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "--strict", "--target", "ES2024", "--module", "NodeNext", "--moduleResolution", "NodeNext", "metadata.ts"], boundaryConsumer);

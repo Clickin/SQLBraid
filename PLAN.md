@@ -468,8 +468,19 @@ PV9 adds optional:
 @sqlbraid/codegen
 ```
 
-Initial codegen scope is deterministic `MetadataSnapshot` + TypePolicy + overrides
-to TypeScript `Row`/`Insert`/`Update` models. It does not promise arbitrary SELECT/JOIN result inference.
+PV9 provides pure, offline `generateModels(metadata, { typePolicy })`, returning
+deterministic standalone TypeScript source, model identities, diagnostics and
+metadata/TypePolicy provenance. The generator performs no filesystem writes,
+live inspection or config lookup. Overrides belong to PV10.
+
+Row uses TypePolicy output representation. Insert uses input representation plus
+DB null/default/identity/generated/write evidence; Update uses input representation
+plus DB generated/update evidence. Column nullability is authoritative. Only
+tables receive write models; identity alone makes Insert optional without
+excluding Update. Unknown evidence becomes `unknown` plus a diagnostic, including
+SQLite non-STRICT declared types. PostgreSQL qualified types resolve through
+metadata type-name evidence; MySQL policy matching is case-insensitive.
+It does not promise arbitrary SELECT/JOIN result inference.
 
 ---
 
@@ -566,13 +577,16 @@ Non-negotiable:
 - CLI drift, metadata-backed LSP completion and packed runtime/tooling consumer gates;
 - codegen remains PV9.
 
-### PV9 — Optional `@sqlbraid/codegen`
+### PV9 — Optional `@sqlbraid/codegen` — implemented
 
-- metadata -> `Row` / `Insert` / `Update` models;
-- deterministic output;
-- TypePolicy-aware primitive mapping.
+- validated metadata + selected TypePolicy -> `Row` / `Insert` / `Update` models;
+- pure programmatic API with deterministic source, safe names and provenance;
+- output/input representation separation and explicit DB write/nullability facts;
+- unknown fallback and stable diagnostics, conservative SQLite dynamic typing;
+- external strict TypeScript compilation, real inspector integrations and packed
+  12-package/runtime-only dependency boundaries.
 
-### PV10 — Codegen CLI and overrides
+### PV10 — Codegen CLI and overrides — NEXT
 
 - naming/custom type policies;
 - filters;

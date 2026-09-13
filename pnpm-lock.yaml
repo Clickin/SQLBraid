@@ -118,6 +118,9 @@ importers:
       '@sqlbraid/cli':
         specifier: workspace:*
         version: link:packages/cli
+      '@sqlbraid/codegen':
+        specifier: workspace:*
+        version: link:packages/codegen
       '@sqlbraid/compiler':
         specifier: workspace:*
         version: link:packages/compiler
@@ -208,6 +211,15 @@ importers:
       '@sqlbraid/operations':
         specifier: workspace:*
         version: link:../operations
+
+  packages/codegen:
+    dependencies:
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sqlbraid/metadata':
+        specifier: workspace:*
+        version: link:../metadata
 
   packages/compiler:
     dependencies:

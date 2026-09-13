@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 
 const sourceAliases = {
   "@sqlbraid/core": resolve("packages/core/src/index.ts"),
+  "@sqlbraid/codegen": resolve("packages/codegen/src/index.ts"),
   "@sqlbraid/template": resolve("packages/template/src/index.ts"),
   "@sqlbraid/metadata": resolve("packages/metadata/src/index.ts"),
   "@sqlbraid/compiler": resolve("packages/compiler/src/index.ts"),
