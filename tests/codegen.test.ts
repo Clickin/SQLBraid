@@ -374,6 +374,77 @@ test("returns provenance and keeps policy comments single-line", () => {
   assert.equal(result.source.split("\n").filter((line) => line.startsWith("// TypePolicy:")).length, 1);
 });
 
+test("filters exact relations, applies naming and type override precedence, and hashes policy options canonically", () => {
+  const metadata = snapshot({
+    "public.users": relation("public.users", "users", "table", [
+      { name: "id", type: "int4", nullable: false },
+      { name: "created_at", type: "text", nullable: false },
+    ], { namespace: "public" }),
+    "audit.users": relation("audit.users", "users", "table", [
+      { name: "id", type: "int4", nullable: false },
+    ], { namespace: "audit" }),
+    "public.view": relation("public.view", "view", "view", [
+      { name: "id", type: "int4", nullable: false },
+    ], { namespace: "public" }),
+  });
+  const first = generateModels(metadata, {
+    typePolicy: policy,
+    filters: { includeNamespaces: ["public"], excludeRelations: ["public.view"] },
+    naming: { relations: { "public.users": "User" }, suffixes: { row: "Record", insert: "Create", update: "Patch" } },
+    typeOverrides: {
+      databaseTypes: { text: { inputType: "string", outputType: "DbText" } },
+      columns: { "public.users": { created_at: { inputType: "DomainDate", outputType: "DomainDate" } } },
+    },
+  });
+  assert.deepEqual(first.models.map((model) => model.modelName), ["User"]);
+  assert.match(first.source, /export interface UserRecord/u);
+  assert.match(first.source, /export interface UserCreate/u);
+  assertGeneratedProperty(first.source, "UserRecord", "created_at", "DomainDate", false);
+  assertGeneratedProperty(first.source, "UserCreate", "created_at", "DomainDate", false);
+  assert.equal(first.diagnostics.length, 0);
+  const second = generateModels(metadata, {
+    typePolicy: policy,
+    filters: { excludeRelations: ["public.view"], includeNamespaces: ["public"] },
+    naming: { suffixes: { update: "Patch", insert: "Create", row: "Record" }, relations: { "public.users": "User" } },
+    typeOverrides: {
+      columns: { "public.users": { created_at: { outputType: "DomainDate", inputType: "DomainDate" } } },
+      databaseTypes: { text: { outputType: "DbText", inputType: "string" } },
+    },
+  });
+  assert.equal(first.optionsHash, second.optionsHash);
+  assert.equal(first.source, second.source);
+
+  const partial = generateModels(metadata, {
+    typePolicy: { ...policy, mappings: policy.mappings.filter((mapping) => mapping.databaseType !== "text") },
+    filters: { includeNamespaces: ["public"] },
+    typeOverrides: { columns: { "public.users": { created_at: { outputType: "DomainDate" } } } },
+  });
+  assertGeneratedProperty(partial.source, "UsersRow", "created_at", "DomainDate", false);
+  assertGeneratedProperty(partial.source, "UsersInsert", "created_at", "unknown", false);
+  assert.equal(partial.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_INPUT_TYPE"), true);
+});
+
+test("rejects invalid or colliding explicit model names and reports unused exact overrides", () => {
+  const metadata = snapshot({
+    "public.first": relation("public.first", "first", "table", [{ name: "id", type: "int4", nullable: false }], { namespace: "public" }),
+    "public.second": relation("public.second", "second", "table", [{ name: "id", type: "int4", nullable: false }], { namespace: "public" }),
+    "public.third": relation("public.third", "third", "table", [{ name: "id", type: "int4", nullable: false }], { namespace: "public" }),
+  });
+  const result = generateModels(metadata, {
+    typePolicy: policy,
+    naming: { relations: { "public.first": "1Bad", "public.second": "Same", "public.third": "Same" } },
+    typeOverrides: {
+      columns: { "missing.relation": { id: { outputType: "Id" } }, "public.first": { missing: { outputType: "Missing" } } },
+      databaseTypes: { missing_type: { outputType: "Missing" } },
+    },
+  });
+  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_INVALID_MODEL_NAME")?.severity, "error");
+  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_MODEL_NAME_COLLISION")?.severity, "error");
+  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_TYPE_RELATION_NOT_FOUND")?.severity, "warning");
+  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_TYPE_COLUMN_NOT_FOUND")?.severity, "warning");
+  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_DATABASE_TYPE_OVERRIDE_UNUSED")?.severity, "warning");
+});
+
 test("rejects malformed policies before generation", () => {
   const value = snapshot({
     "public.values": relation("public.values", "values", "table", [{ name: "id", type: "int4", nullable: false }]),

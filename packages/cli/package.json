@@ -7,6 +7,7 @@
   "engines": { "node": ">=22.18.0" },
   "bin": { "sqlbraid": "./dist/index.js" },
   "dependencies": {
+    "@sqlbraid/codegen": "workspace:*",
     "@sqlbraid/compiler": "workspace:*",
     "@sqlbraid/core": "workspace:*",
     "@sqlbraid/metadata": "workspace:*",
@@ -16,6 +17,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
     }
   }
 }

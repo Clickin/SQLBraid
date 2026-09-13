@@ -33,5 +33,5 @@ export default defineConfig([
   packageBuild("packages/mysql", { index: "src/index.ts", mysql2: "src/mysql2.ts", inspector: "src/inspector.ts" }),
   packageBuild("packages/sqlite", { index: "src/index.ts", "node-sqlite": "src/node-sqlite.ts", inspector: "src/inspector.ts" }),
   packageBuild("packages/language-server", { index: "src/index.ts", server: "src/server.ts", cli: "src/cli.ts" }),
-  packageBuild("packages/cli", { index: "src/index.ts" }),
+  packageBuild("packages/cli", { index: "src/index.ts", config: "src/config.ts" }),
 ]);

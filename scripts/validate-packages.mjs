@@ -168,6 +168,7 @@ try {
 
   const entry = join(consumer, "index.mjs");
   await writeFile(entry, [
+    'import { defineConfig } from "@sqlbraid/cli/config";',
     'import { createPooledDatabase } from "@sqlbraid/runtime";',
     'import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";',
     'import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";',
@@ -183,8 +184,27 @@ try {
     'if (mysql`SELECT ${1}`.render().text !== "SELECT ?") throw new Error("packed mysql root failed");',
     'if (sqlite`SELECT ${1}`.render().text !== "SELECT ?") throw new Error("packed sqlite root failed");',
     'if ([createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("packed subpath failed");',
+    'if (defineConfig({})?.codegen !== undefined) throw new Error("packed config helper failed");',
   ].join("\n"));
   await run(process.execPath, [entry], consumer);
+
+  await writeFile(join(consumer, "sqlbraid.config.mjs"), [
+    'import { defineConfig } from "@sqlbraid/cli/config";',
+    'import { typePolicy } from "@sqlbraid/postgres";',
+    'export default defineConfig({ codegen: { targets: [{ name: "packed", metadata: "./packed-metadata.json", outFile: "./packed-generated.ts", typePolicy }] } });',
+  ].join("\n"));
+  await writeFile(join(consumer, "packed-metadata.json"), JSON.stringify({
+    format: "sqlbraid-metadata", formatVersion: 1, dialect: "postgres", dialectVersion: "16",
+    server: {}, namespaces: {}, types: {},
+    relations: {
+      "public.users": {
+        identity: "public.users", name: "users", namespace: "public", kind: "table",
+        columns: [{ name: "id", ordinal: 0, type: "int4", nullable: false }],
+      },
+    },
+    routines: {}, metadata: {},
+  }));
+  await run(join(consumer, "node_modules/.bin/sqlbraid"), ["codegen", "--json"], consumer);
 
   // First prove packed runtime imports need no concrete validator, then test optional interop.
   await run("npm", [

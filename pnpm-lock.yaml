@@ -199,6 +199,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@sqlbraid/codegen':
+        specifier: workspace:*
+        version: link:../codegen
       '@sqlbraid/compiler':
         specifier: workspace:*
         version: link:../compiler

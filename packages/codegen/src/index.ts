@@ -10,6 +10,36 @@ import {
 
 export interface CodegenOptions {
   readonly typePolicy: TypePolicy;
+  readonly filters?: CodegenRelationFilter;
+  readonly naming?: CodegenNamingOptions;
+  readonly typeOverrides?: CodegenTypeOverrides;
+}
+
+export interface CodegenRelationFilter {
+  readonly includeNamespaces?: readonly string[];
+  readonly excludeNamespaces?: readonly string[];
+  readonly includeRelations?: readonly string[];
+  readonly excludeRelations?: readonly string[];
+  readonly kinds?: readonly RelationSnapshot["kind"][];
+}
+
+export interface CodegenNamingOptions {
+  readonly relations?: Readonly<Record<string, string>>;
+  readonly suffixes?: {
+    readonly row?: string;
+    readonly insert?: string;
+    readonly update?: string;
+  };
+}
+
+export interface CodegenTypeOverride {
+  readonly inputType?: string;
+  readonly outputType?: string;
+}
+
+export interface CodegenTypeOverrides {
+  readonly databaseTypes?: Readonly<Record<string, CodegenTypeOverride>>;
+  readonly columns?: Readonly<Record<string, Readonly<Record<string, CodegenTypeOverride>>>>;
 }
 
 export interface CodegenDiagnostic {
@@ -36,6 +66,7 @@ export interface CodegenResult {
   readonly metadataHash: string;
   readonly typePolicyId: string;
   readonly typePolicyHash: string;
+  readonly optionsHash: string;
 }
 
 interface NamedRelation {
@@ -47,8 +78,9 @@ interface NamedRelation {
 }
 
 interface ResolvedType {
-  readonly type: string;
-  readonly mapping?: TypeMapping;
+  readonly inputType?: string;
+  readonly outputType?: string;
+  readonly hasPolicyMapping: boolean;
 }
 
 const READABLE_RELATION_KINDS = new Set<RelationSnapshot["kind"]>([
@@ -61,6 +93,15 @@ const READABLE_RELATION_KINDS = new Set<RelationSnapshot["kind"]>([
 
 const IDENTIFIER_PART = /^\p{ID_Continue}$/u;
 const IDENTIFIER_START = /^\p{ID_Start}$/u;
+const RESERVED_EXPORT_NAMES = new Set([
+  "any", "as", "asserts", "bigint", "boolean", "break", "case", "catch", "class", "const", "continue",
+  "debugger", "declare", "default", "delete", "do", "else", "enum", "export", "extends", "false", "finally",
+  "for", "from", "function", "get", "if", "implements", "import", "in", "infer", "instanceof", "interface",
+  "keyof", "let", "module", "namespace", "never", "new", "null", "number", "object", "of", "package",
+  "private", "protected", "public", "readonly", "require", "return", "set", "static", "string", "super",
+  "switch", "symbol", "this", "throw", "true", "try", "type", "typeof", "undefined", "unique", "unknown",
+  "var", "void", "while", "with", "yield",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -72,6 +113,20 @@ function compareStrings(left: string, right: string): number {
 
 function normalizeDatabaseType(value: string): string {
   return value.toLowerCase();
+}
+
+function canonicalValue(value: unknown): string {
+  if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalValue).join(",")}]`;
+  if (isRecord(value)) {
+    return `{${Object.entries(value)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => compareStrings(left, right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalValue(entry)}`)
+      .join(",")}}`;
+  }
+  throw new TypeError(`Unsupported codegen option value: ${typeof value}`);
 }
 
 function validateTypePolicy(policy: unknown): asserts policy is TypePolicy {
@@ -91,6 +146,70 @@ function validateTypePolicy(policy: unknown): asserts policy is TypePolicy {
     }
     if (typeof mapping.nullable !== "boolean") {
       throw new TypeError(`Codegen TypePolicy mapping ${index}.nullable must be boolean.`);
+    }
+  }
+}
+
+function validateStringList(value: unknown, field: string): asserts value is readonly string[] | undefined {
+  if (value !== undefined && (!Array.isArray(value) || value.some((entry) => typeof entry !== "string"))) {
+    throw new TypeError(`Codegen ${field} must be an array of strings.`);
+  }
+}
+
+function validateOverride(value: unknown, field: string): asserts value is CodegenTypeOverride {
+  if (!isRecord(value)) throw new TypeError(`Codegen ${field} must be an object.`);
+  for (const key of ["inputType", "outputType"] as const) {
+    if (value[key] !== undefined && (typeof value[key] !== "string" || value[key].length === 0)) {
+      throw new TypeError(`Codegen ${field}.${key} must be a non-empty string.`);
+    }
+  }
+  if (value.inputType === undefined && value.outputType === undefined) {
+    throw new TypeError(`Codegen ${field} must specify inputType or outputType.`);
+  }
+}
+
+function validateOptions(options: unknown): asserts options is CodegenOptions {
+  if (!isRecord(options)) throw new TypeError("Codegen options must be an object.");
+  validateTypePolicy(options.typePolicy);
+  const filters = options.filters;
+  if (filters !== undefined) {
+    if (!isRecord(filters)) throw new TypeError("Codegen filters must be an object.");
+    for (const field of ["includeNamespaces", "excludeNamespaces", "includeRelations", "excludeRelations", "kinds"]) {
+      validateStringList(filters[field], `filters.${field}`);
+    }
+    const kinds = filters.kinds as readonly string[] | undefined;
+    if (kinds?.some((kind) => !["table", "view", "materialized", "foreign", "virtual", "unknown"].includes(kind))) {
+      throw new TypeError("Codegen filters.kinds contains an invalid relation kind.");
+    }
+  }
+  const naming = options.naming;
+  if (naming !== undefined) {
+    if (!isRecord(naming)) throw new TypeError("Codegen naming must be an object.");
+    if (naming.relations !== undefined && (!isRecord(naming.relations) || Object.entries(naming.relations).some(([, name]) => typeof name !== "string"))) {
+      throw new TypeError("Codegen naming.relations must be a string map.");
+    }
+    if (naming.suffixes !== undefined) {
+      if (!isRecord(naming.suffixes)) throw new TypeError("Codegen naming.suffixes must be an object.");
+      for (const field of ["row", "insert", "update"]) {
+        if (naming.suffixes[field] !== undefined && (typeof naming.suffixes[field] !== "string" || naming.suffixes[field].length === 0)) {
+          throw new TypeError(`Codegen naming.suffixes.${field} must be a non-empty string.`);
+        }
+      }
+    }
+  }
+  const typeOverrides = options.typeOverrides;
+  if (typeOverrides !== undefined) {
+    if (!isRecord(typeOverrides)) throw new TypeError("Codegen typeOverrides must be an object.");
+    if (typeOverrides.databaseTypes !== undefined) {
+      if (!isRecord(typeOverrides.databaseTypes)) throw new TypeError("Codegen typeOverrides.databaseTypes must be an object.");
+      for (const [key, value] of Object.entries(typeOverrides.databaseTypes)) validateOverride(value, `typeOverrides.databaseTypes[${JSON.stringify(key)}]`);
+    }
+    if (typeOverrides.columns !== undefined) {
+      if (!isRecord(typeOverrides.columns)) throw new TypeError("Codegen typeOverrides.columns must be an object.");
+      for (const [relation, columns] of Object.entries(typeOverrides.columns)) {
+        if (!isRecord(columns)) throw new TypeError(`Codegen typeOverrides.columns[${JSON.stringify(relation)}] must be an object.`);
+        for (const [column, value] of Object.entries(columns)) validateOverride(value, `typeOverrides.columns[${JSON.stringify(relation)}][${JSON.stringify(column)}]`);
+      }
     }
   }
 }
@@ -155,6 +274,8 @@ function resolveType(
   policy: ReadonlyMap<string, TypeMapping | undefined>,
   relation: RelationSnapshot,
   column: ColumnSnapshot,
+  overrides: CodegenTypeOverrides | undefined,
+  needsInput: boolean,
   diagnostics: CodegenDiagnostic[],
 ): ResolvedType {
   const isSqlite = metadata.dialect.toLowerCase() === "sqlite";
@@ -167,25 +288,53 @@ function resolveType(
       column: column.name,
       databaseType: column.type,
     });
-    return { type: "unknown" };
+    return { hasPolicyMapping: false };
   }
 
+  const columnOverrides = overrides?.columns?.[relation.identity];
+  const columnOverride = columnOverrides && Object.hasOwn(columnOverrides, column.name) ? columnOverrides[column.name] : undefined;
+  const databaseOverrides = overrides?.databaseTypes;
+  const databaseOverride = databaseOverrides && Object.hasOwn(databaseOverrides, column.type) ? databaseOverrides[column.type] : undefined;
+  let mapping: TypeMapping | undefined;
+  let hasPolicyMapping = false;
   for (const candidate of policyTypeCandidates(metadata, column, relation)) {
     const key = normalizeDatabaseType(candidate);
     if (!policy.has(key)) continue;
-    const mapping = policy.get(key);
-    return mapping ? { type: mapping.outputType, mapping } : { type: "unknown" };
+    mapping = policy.get(key);
+    hasPolicyMapping = true;
+    break;
   }
 
-  diagnostics.push({
-    code: "CODEGEN_UNKNOWN_DATABASE_TYPE",
-    severity: "warning",
-    message: `No TypePolicy mapping matches database type ${JSON.stringify(column.type)}.`,
-    relation: relation.identity,
-    column: column.name,
-    databaseType: column.type,
-  });
-  return { type: "unknown" };
+  const inputType = columnOverride?.inputType ?? databaseOverride?.inputType ?? mapping?.inputType;
+  const outputType = columnOverride?.outputType ?? databaseOverride?.outputType ?? mapping?.outputType;
+  if (!inputType && !outputType && !hasPolicyMapping) {
+    diagnostics.push({
+      code: "CODEGEN_UNKNOWN_DATABASE_TYPE",
+      severity: "warning",
+      message: `No TypePolicy mapping or type override matches database type ${JSON.stringify(column.type)}.`,
+      relation: relation.identity,
+      column: column.name,
+      databaseType: column.type,
+    });
+  } else {
+    if (needsInput && !inputType) diagnostics.push({
+      code: "CODEGEN_UNKNOWN_INPUT_TYPE",
+      severity: "warning",
+      message: `No input representation is available for database type ${JSON.stringify(column.type)}.`,
+      relation: relation.identity,
+      column: column.name,
+      databaseType: column.type,
+    });
+    if (!outputType) diagnostics.push({
+      code: "CODEGEN_UNKNOWN_OUTPUT_TYPE",
+      severity: "warning",
+      message: `No output representation is available for database type ${JSON.stringify(column.type)}.`,
+      relation: relation.identity,
+      column: column.name,
+      databaseType: column.type,
+    });
+  }
+  return { inputType, outputType, hasPolicyMapping };
 }
 
 function withNullability(type: string, nullable: boolean): string {
@@ -222,6 +371,14 @@ function relationStem(value: string): string {
   const first = [...result][0];
   if (!first || !IDENTIFIER_START.test(first)) result = `_${result}`;
   return result;
+}
+
+function isValidExportIdentifier(value: string): boolean {
+  if (value.length === 0 || RESERVED_EXPORT_NAMES.has(value)) return false;
+  const characters = [...value];
+  const first = characters[0];
+  if (!first || !IDENTIFIER_START.test(first)) return false;
+  return characters.slice(1).every((character) => IDENTIFIER_PART.test(character));
 }
 
 function stableDigest(value: string): string {
@@ -304,6 +461,105 @@ function disambiguateRelations(
     .sort((left, right) => compareStrings(left.relation.identity, right.relation.identity));
 }
 
+function selectedRelations(metadata: MetadataSnapshot, filters: CodegenRelationFilter | undefined, diagnostics: CodegenDiagnostic[]): readonly RelationSnapshot[] {
+  const allRelations = Object.values(metadata.relations).sort((left, right) => compareStrings(left.identity, right.identity));
+  const includeRelations = filters?.includeRelations;
+  for (const identity of includeRelations ?? []) {
+    if (!allRelations.some((relation) => relation.identity === identity)) {
+      diagnostics.push({
+        code: "CODEGEN_FILTER_RELATION_NOT_FOUND",
+        severity: "warning",
+        message: `Included relation ${JSON.stringify(identity)} was not found in metadata.`,
+        relation: identity,
+      });
+    }
+  }
+  return allRelations.filter((relation) => {
+    const namespace = relation.namespace;
+    if (includeRelations && includeRelations.length > 0 && !includeRelations.includes(relation.identity)) return false;
+    if (filters?.excludeRelations?.includes(relation.identity)) return false;
+    if (filters?.includeNamespaces && filters.includeNamespaces.length > 0 && (namespace === undefined || !filters.includeNamespaces.includes(namespace))) return false;
+    if (namespace !== undefined && filters?.excludeNamespaces?.includes(namespace)) return false;
+    if (filters?.kinds && filters.kinds.length > 0 && !filters.kinds.includes(relation.kind)) return false;
+    return true;
+  });
+}
+
+function nameRelations(
+  relations: readonly RelationSnapshot[],
+  naming: CodegenNamingOptions | undefined,
+  allRelations: readonly RelationSnapshot[],
+  diagnostics: CodegenDiagnostic[],
+): readonly NamedRelation[] {
+  const explicit = naming?.relations ?? {};
+  for (const identity of Object.keys(explicit)) {
+    if (!allRelations.some((relation) => relation.identity === identity)) {
+      diagnostics.push({
+        code: "CODEGEN_NAMING_RELATION_NOT_FOUND",
+        severity: "warning",
+        message: `Naming override relation ${JSON.stringify(identity)} was not found in metadata.`,
+        relation: identity,
+      });
+    }
+  }
+  const defaultNamed = disambiguateRelations(relations, diagnostics);
+  const named = defaultNamed.map((entry) => {
+    const requested = Object.hasOwn(explicit, entry.relation.identity) ? explicit[entry.relation.identity] : undefined;
+    if (requested === undefined) return entry;
+    if (!isValidExportIdentifier(requested)) {
+      diagnostics.push({
+        code: "CODEGEN_INVALID_MODEL_NAME",
+        severity: "error",
+        message: `Explicit model name ${JSON.stringify(requested)} is not a valid exported TypeScript identifier.`,
+        relation: entry.relation.identity,
+      });
+      return entry;
+    }
+    return { ...entry, modelName: requested };
+  });
+  const modelGroups = groupByName(named);
+  for (const [modelName, group] of modelGroups) {
+    if (group.length < 2) continue;
+    const ordered = [...group].sort((left, right) =>
+      Number(explicit[right.relation.identity] !== undefined) - Number(explicit[left.relation.identity] !== undefined)
+      || compareStrings(left.relation.identity, right.relation.identity));
+    diagnostics.push({
+      code: "CODEGEN_MODEL_NAME_COLLISION",
+      severity: "error",
+      message: `Model name ${JSON.stringify(modelName)} is used by multiple relations: ${group.map((entry) => entry.relation.identity).sort(compareStrings).join(", ")}.`,
+      relation: ordered[0]?.relation.identity,
+    });
+    for (const entry of ordered.slice(1)) {
+      const index = named.indexOf(entry);
+      if (index >= 0) named[index] = { ...entry, modelName: `${entry.modelName}_${stableDigest(entry.relation.identity).slice(0, 12)}` };
+    }
+  }
+  const suffixes = naming?.suffixes;
+  return named.map((entry) => {
+    const rowName = `${entry.modelName}${suffixes?.row ?? "Row"}`;
+    const insertName = `${entry.modelName}${suffixes?.insert ?? "Insert"}`;
+    const updateName = `${entry.modelName}${suffixes?.update ?? "Update"}`;
+    if (!isValidExportIdentifier(rowName) || (entry.relation.kind === "table" && (!isValidExportIdentifier(insertName) || !isValidExportIdentifier(updateName)))) {
+      diagnostics.push({
+        code: "CODEGEN_INVALID_MODEL_NAME",
+        severity: "error",
+        message: `Generated model name for ${JSON.stringify(entry.relation.identity)} is not a valid exported TypeScript identifier.`,
+        relation: entry.relation.identity,
+      });
+      return {
+        ...entry,
+        rowName: `${entry.modelName}Row`,
+        ...(entry.relation.kind === "table" ? { insertName: `${entry.modelName}Insert`, updateName: `${entry.modelName}Update` } : {}),
+      };
+    }
+    return {
+      ...entry,
+      rowName,
+      ...(entry.relation.kind === "table" ? { insertName, updateName } : {}),
+    };
+  });
+}
+
 function safeComment(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f\u2028\u2029]/gu, (character) => {
     const code = character.codePointAt(0) ?? 0;
@@ -316,16 +572,22 @@ function renderRelation(
   names: NamedRelation,
   metadata: MetadataSnapshot,
   policy: ReadonlyMap<string, TypeMapping | undefined>,
+  overrides: CodegenTypeOverrides | undefined,
   diagnostics: CodegenDiagnostic[],
 ): string {
   const columns = [...relation.columns].sort(
     (left, right) => left.ordinal - right.ordinal || compareStrings(left.name, right.name),
   );
   const resolved = new Map<string, ResolvedType>();
-  for (const column of columns) resolved.set(column.name, resolveType(metadata, policy, relation, column, diagnostics));
+  for (const column of columns) {
+    const needsInput = relation.kind === "table"
+      && column.generated !== true
+      && (column.insertable !== false || column.updatable !== false);
+    resolved.set(column.name, resolveType(metadata, policy, relation, column, overrides, needsInput, diagnostics));
+  }
 
   const rowProperties = columns.map((column) =>
-    renderProperty(column, resolved.get(column.name)?.type ?? "unknown", false),
+    renderProperty(column, resolved.get(column.name)?.outputType ?? "unknown", false),
   );
   const blocks = [renderInterface(names.rowName, rowProperties)];
 
@@ -333,13 +595,13 @@ function renderRelation(
     const insertProperties = columns
       .filter((column) => column.insertable !== false && column.generated !== true)
       .map((column) => {
-        const mapping = resolved.get(column.name)?.mapping;
+        const mapping = resolved.get(column.name);
         return renderProperty(column, mapping?.inputType ?? "unknown", column.identity === true || column.defaultExpression !== undefined || column.nullable);
       });
     const updateProperties = columns
       .filter((column) => column.updatable !== false && column.generated !== true)
       .map((column) => {
-        const mapping = resolved.get(column.name)?.mapping;
+        const mapping = resolved.get(column.name);
         return renderProperty(column, mapping?.inputType ?? "unknown", true);
       });
     blocks.push(renderInterface(names.insertName ?? `${names.modelName}Insert`, insertProperties));
@@ -372,15 +634,14 @@ export function generateModels(
   options: CodegenOptions,
 ): CodegenResult {
   validateSnapshot(metadata);
-  const policy = options?.typePolicy;
-  validateTypePolicy(policy);
+  validateOptions(options);
+  const policy = options.typePolicy;
   const diagnostics: CodegenDiagnostic[] = [];
   const policyIndex = indexTypePolicy(policy, diagnostics);
   const metadataHash = hashSnapshot(metadata);
-
-  const allRelations = Object.values(metadata.relations)
-    .sort((left, right) => compareStrings(left.identity, right.identity));
-  for (const relation of allRelations) {
+  const allRelations = Object.values(metadata.relations).sort((left, right) => compareStrings(left.identity, right.identity));
+  const filteredRelations = selectedRelations(metadata, options.filters, diagnostics);
+  for (const relation of filteredRelations) {
     if (relation.kind === "unknown") {
       diagnostics.push({
         code: "CODEGEN_UNKNOWN_RELATION_KIND",
@@ -390,15 +651,54 @@ export function generateModels(
       });
     }
   }
-  const relations = allRelations.filter(
+  const relations = filteredRelations.filter(
     (relation) => READABLE_RELATION_KINDS.has(relation.kind) || (relation.kind === "unknown" && relation.columns.length > 0),
   );
-  const namedRelations = disambiguateRelations(relations, diagnostics);
-  const blocks = namedRelations.map((named) => renderRelation(named.relation, named, metadata, policyIndex, diagnostics));
+  const typeOverrides = options.typeOverrides;
+  for (const [identity, columns] of Object.entries(typeOverrides?.columns ?? {})) {
+    const relation = allRelations.find((candidate) => candidate.identity === identity);
+    if (!relation) {
+      diagnostics.push({
+        code: "CODEGEN_TYPE_RELATION_NOT_FOUND",
+        severity: "warning",
+        message: `Type override relation ${JSON.stringify(identity)} was not found in metadata.`,
+        relation: identity,
+      });
+      continue;
+    }
+    for (const column of Object.keys(columns)) {
+      if (!relation.columns.some((candidate) => candidate.name === column)) diagnostics.push({
+        code: "CODEGEN_TYPE_COLUMN_NOT_FOUND",
+        severity: "warning",
+        message: `Type override column ${JSON.stringify(column)} was not found on relation ${JSON.stringify(identity)}.`,
+        relation: identity,
+        column,
+      });
+    }
+  }
+  for (const databaseType of Object.keys(typeOverrides?.databaseTypes ?? {})) {
+    if (!allRelations.some((relation) => relation.columns.some((column) => column.type === databaseType))) {
+      diagnostics.push({
+        code: "CODEGEN_DATABASE_TYPE_OVERRIDE_UNUSED",
+        severity: "warning",
+        message: `Database type override ${JSON.stringify(databaseType)} did not match any metadata column type.`,
+        databaseType,
+      });
+    }
+  }
+  const namedRelations = nameRelations(relations, options.naming, allRelations, diagnostics);
+  const blocks = namedRelations.map((named) => renderRelation(named.relation, named, metadata, policyIndex, typeOverrides, diagnostics));
+  const generationOptions = {
+    filters: options.filters,
+    naming: options.naming,
+    typeOverrides,
+  };
+  const optionsHash = stableDigest(canonicalValue(generationOptions));
   const source = [
     "// Generated by @sqlbraid/codegen. Do not edit.",
     `// Metadata: ${safeComment(metadataHash)}`,
     `// TypePolicy: ${safeComment(policy.id)} (${safeComment(policy.hash)})`,
+    `// Codegen: ${optionsHash}`,
     "",
     blocks.join("\n"),
   ].join("\n");
@@ -416,5 +716,6 @@ export function generateModels(
     metadataHash,
     typePolicyId: policy.id,
     typePolicyHash: policy.hash,
+    optionsHash,
   };
 }

@@ -1,12 +1,36 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
+const cliEntry = resolve(process.cwd(), 'packages/cli/dist/index.js');
+
+function metadata(nullable = false) {
+  return {
+    format: 'sqlbraid-metadata',
+    formatVersion: 1,
+    dialect: 'postgres',
+    dialectVersion: '16',
+    server: {},
+    namespaces: {},
+    types: {},
+    relations: {
+      'public.users': {
+        identity: 'public.users',
+        name: 'users',
+        namespace: 'public',
+        kind: 'table',
+        columns: [{ name: 'id', ordinal: 0, type: 'int4', nullable }],
+      },
+    },
+    routines: {},
+    metadata: {},
+  };
+}
 
 // Several CLI processes create cold TypeScript programs; keep their integration budget separate.
 test('CLI checks, manifests, and builds opaque declared queries without a snapshot', async () => {
@@ -105,3 +129,83 @@ test('CLI drift validates metadata snapshots and reports changed database facts'
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('CLI codegen resolves config-relative paths, preserves unchanged mtimes, and checks freshness', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  try {
+    const configDirectory = join(directory, 'config');
+    const outputDirectory = join(directory, 'generated');
+    const metadataFile = join(configDirectory, 'metadata.json');
+    const outputFile = join(outputDirectory, 'database.ts');
+    await mkdir(configDirectory, { recursive: true });
+    await writeFile(metadataFile, JSON.stringify(metadata()));
+    await writeFile(join(configDirectory, 'sqlbraid.config.mjs'), [
+      'import { defineConfig } from "@sqlbraid/cli/config";',
+      'import { typePolicy } from "@sqlbraid/postgres";',
+      'export default defineConfig({ codegen: { targets: [{ name: "main", metadata: "./metadata.json", outFile: "../generated/database.ts", typePolicy }] } });',
+    ].join('\n'));
+
+    const first = await exec(process.execPath, [cliEntry, 'codegen', '--config', join(configDirectory, 'sqlbraid.config.mjs'), '--json'], { cwd: process.cwd() });
+    assert.equal(JSON.parse(first.stdout)[0].status, 'written');
+    const firstMtime = (await stat(outputFile)).mtimeMs;
+    const second = await exec(process.execPath, [cliEntry, 'codegen', '--config', join(configDirectory, 'sqlbraid.config.mjs'), '--json'], { cwd: process.cwd() });
+    assert.equal(JSON.parse(second.stdout)[0].status, 'unchanged');
+    assert.equal((await stat(outputFile)).mtimeMs, firstMtime);
+
+    await writeFile(metadataFile, JSON.stringify(metadata(true)));
+    await assert.rejects(
+      exec(process.execPath, [cliEntry, 'codegen', '--config', join(configDirectory, 'sqlbraid.config.mjs'), '--check', '--json'], { cwd: process.cwd() }),
+      (error: unknown) => (error as { code?: number; stdout?: string }).code === 1
+        && JSON.parse((error as { stdout: string }).stdout)[0].status === 'stale',
+    );
+    assert.equal((await stat(outputFile)).mtimeMs, firstMtime);
+    const current = await exec(process.execPath, [cliEntry, 'codegen', '--config', join(configDirectory, 'sqlbraid.config.mjs'), '--json'], { cwd: process.cwd() });
+    assert.equal(JSON.parse(current.stdout)[0].status, 'written');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test('CLI codegen discovers configs, selects repeated targets, and blocks error writes', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  try {
+    await mkdir(join(directory, 'data'), { recursive: true });
+    await writeFile(join(directory, 'data', 'metadata.json'), JSON.stringify(metadata()));
+    await writeFile(join(directory, 'sqlbraid.config.mjs'), [
+      'import { defineConfig } from "@sqlbraid/cli/config";',
+      'import { typePolicy } from "@sqlbraid/postgres";',
+      'export default defineConfig({ codegen: { targets: [',
+      '{ name: "main", metadata: "./data/metadata.json", outFile: "./main.ts", typePolicy },',
+      '{ name: "other", metadata: "./data/metadata.json", outFile: "./other.ts", typePolicy }',
+      '] } });',
+    ].join('\n'));
+    const selected = await exec(process.execPath, [cliEntry, 'codegen', '--target', 'other', '--target', 'main', '--json'], { cwd: directory });
+    assert.deepEqual(JSON.parse(selected.stdout).map((entry: { target: string }) => entry.target), ['main', 'other']);
+    await assert.rejects(
+      exec(process.execPath, [cliEntry, 'codegen', '--target', 'missing'], { cwd: directory }),
+      (error: unknown) => (error as { code?: number }).code === 2,
+    );
+
+    await writeFile(join(directory, 'sqlbraid.config.mjs'), [
+      'import { defineConfig } from "@sqlbraid/cli/config";',
+      'import { typePolicy } from "@sqlbraid/postgres";',
+      'export default defineConfig({ codegen: { targets: [',
+      '{ name: "main", metadata: "./data/metadata.json", outFile: "./main.ts", typePolicy, naming: { relations: { "public.users": "1bad" } } },',
+      '{ name: "other", metadata: "./data/metadata.json", outFile: "./other.ts", typePolicy }',
+      '] } });',
+    ].join('\n'));
+    await rm(join(directory, 'main.ts'), { force: true });
+    await rm(join(directory, 'other.ts'), { force: true });
+    await assert.rejects(
+      exec(process.execPath, [cliEntry, 'codegen', '--json'], { cwd: directory }),
+      (error: unknown) => {
+        const result = error as { code?: number; stdout?: string };
+        return result.code === 1 && !result.stdout?.includes('export interface');
+      },
+    );
+    await assert.rejects(readFile(join(directory, 'main.ts')));
+    await assert.rejects(readFile(join(directory, 'other.ts')));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);

@@ -18,6 +18,7 @@
       "@sqlbraid/operations": ["packages/operations/src/index.ts"],
       "@sqlbraid/language-server": ["packages/language-server/src/index.ts"],
       "@sqlbraid/cli": ["packages/cli/src/index.ts"],
+      "@sqlbraid/cli/config": ["packages/cli/src/config.ts"],
       "@sqlbraid/postgres": ["packages/postgres/src/index.ts"],
       "@sqlbraid/postgres/inspector": ["packages/postgres/src/inspector.ts"],
       "@sqlbraid/postgres/pg": ["packages/postgres/src/pg.ts"],

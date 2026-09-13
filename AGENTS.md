@@ -327,8 +327,15 @@ Unknown types and SQLite non-STRICT columns remain `unknown` with diagnostics,
 never an `any` fallback. Keep exact DB column keys, deterministic collision-safe
 model names and metadata/TypePolicy provenance. The generator performs no
 filesystem writes, config lookup, live inspection or arbitrary SELECT inference.
-PV10 owns CLI/config/filters/naming/type overrides. Runtime/compiler must not
-acquire metadata/codegen dependencies; retain packed runtime-only exclusion gates.
+PV10 owns CLI/config/filters/naming/type overrides. Filters are exact metadata
+selectors; override precedence is column > database type > TypePolicy, with
+input/output resolved independently. Column names remain exact DB keys. Unknown
+evidence remains unknown, never `any`. Runtime/compiler must not acquire
+metadata/codegen dependencies; retain packed runtime-only exclusion gates.
+CLI config/filesystem behavior never moves into codegen core. Unchanged outputs
+are not rewritten, and multi-target validation completes before writes. Config
+files are executable Node code and are not sandboxed. Runtime packages never
+depend on CLI, codegen or metadata.
 
 ---
 

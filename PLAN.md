@@ -470,8 +470,10 @@ PV9 adds optional:
 
 PV9 provides pure, offline `generateModels(metadata, { typePolicy })`, returning
 deterministic standalone TypeScript source, model identities, diagnostics and
-metadata/TypePolicy provenance. The generator performs no filesystem writes,
-live inspection or config lookup. Overrides belong to PV10.
+metadata/TypePolicy provenance. PV10 extends this core with exact filters,
+explicit model-name and database-type/column overrides, independently resolved
+input/output representations and generation-options provenance. The generator
+still performs no filesystem writes, live inspection or config lookup.
 
 Row uses TypePolicy output representation. Insert uses input representation plus
 DB null/default/identity/generated/write evidence; Update uses input representation
@@ -492,7 +494,12 @@ Prepare/describe verification is not a pre-release core requirement. If later ju
 
 ## 11. CLI and LSP
 
-Pre-release CLI priorities are TypeScript/Braid checking and guarded-template build. Metadata/codegen commands come later.
+Pre-release CLI priorities include TypeScript/Braid checking, guarded-template
+build and `sqlbraid codegen`. Codegen loads executable Node `.mjs`/`.js`/`.cjs`
+configuration, resolves paths relative to that config, validates all selected
+targets before writing, preserves unchanged outputs, and supports repeated
+`--target`, `--check` and `--json`. TypeScript config files, watch mode, live
+database inspection and column renaming are not supported.
 
 The LSP focuses on SQLBraid diagnostics, mapper/declaration hover and metadata-backed completion, not its own SQL semantic engine.
 
@@ -586,13 +593,17 @@ Non-negotiable:
 - external strict TypeScript compilation, real inspector integrations and packed
   12-package/runtime-only dependency boundaries.
 
-### PV10 — Codegen CLI and overrides — NEXT
+### PV10 — Codegen CLI and overrides — implemented
 
-- naming/custom type policies;
-- filters;
-- generated-file stability.
+- exact namespace/relation/kind filters;
+- explicit model-name and suffix overrides with collision diagnostics;
+- exact database-type/column type overrides with column > database type > TypePolicy precedence;
+- independent input/output representation resolution and options provenance;
+- typed executable config at `@sqlbraid/cli/config`;
+- multi-target codegen, stable no-op/atomic writes, `--check` and structured JSON output;
+- full preflight before selected output writes.
 
-### PV11 — LSP metadata/codegen integration
+### PV11 — LSP metadata/codegen integration — NEXT
 
 - metadata-backed completion/hover;
 - generated-model navigation;
