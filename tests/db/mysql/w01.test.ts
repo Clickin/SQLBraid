@@ -118,6 +118,8 @@ test("MySQL inspector separates primary-key and auto-increment identity", async 
   const client = await createConnection(settings.connectionUri);
   try {
     await client.query("DROP TABLE IF EXISTS braid_pv8_inspector");
+    await client.query("DROP PROCEDURE IF EXISTS braid_pv8_routine");
+    await client.query("CREATE PROCEDURE braid_pv8_routine(IN value INT) SELECT value");
     await client.query("CREATE TABLE braid_pv8_inspector (external_id INT PRIMARY KEY, generated_id INT NOT NULL AUTO_INCREMENT, computed INT GENERATED ALWAYS AS (external_id + 1) STORED, UNIQUE KEY generated_id_unique (generated_id))");
     const snapshot = await createMysqlInspector(client).inspect();
     const relation = Object.values(snapshot.relations).find((entry) => entry.name === "braid_pv8_inspector");
@@ -128,8 +130,10 @@ test("MySQL inspector separates primary-key and auto-increment identity", async 
     assert.equal(columns.find((column) => column.name === "computed")?.generated, true);
     assert.equal(columns.find((column) => column.name === "computed")?.updatable, false);
     assert.equal("tsType" in (columns[0] ?? {}), false);
+    assert.equal(Object.values(snapshot.routines).flat().find((routine) => routine.name === "braid_pv8_routine")?.argumentsComplete, false);
   } finally {
     await client.query("DROP TABLE IF EXISTS braid_pv8_inspector").catch(() => undefined);
+    await client.query("DROP PROCEDURE IF EXISTS braid_pv8_routine").catch(() => undefined);
     await client.end();
   }
 });

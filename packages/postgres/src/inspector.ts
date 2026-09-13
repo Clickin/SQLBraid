@@ -76,6 +76,7 @@ export function createPostgresInspector(client: PgClientLike): MetadataInspector
           identity,
           kind: text(entry, "routine_type") === "PROCEDURE" ? "procedure" : "function",
           arguments: [],
+          argumentsComplete: false,
           result: text(entry, "routine_type") === "PROCEDURE" ? { kind: "void" } : { kind: "scalar", type: dataType, nullable: true },
         };
         routines[name] = [...(routines[name] ?? []), routine];

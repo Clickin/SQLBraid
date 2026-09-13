@@ -91,11 +91,12 @@ test('metadata package has no speculative migration API', () => {
 
 test('JSON snapshots reject malformed optional codegen facts at their exact paths', () => {
   const column = snapshot.relations['public.users'].columns[0];
-  const cases: readonly ['column' | 'type' | 'argument' | 'result' | 'relation', unknown, string][] = [
+  const cases: readonly ['column' | 'type' | 'argument' | 'routine' | 'result' | 'relation', unknown, string][] = [
     ...['nullabilityEvidence', 'defaultExpression', 'charset', 'collation'].map((field): ['column', unknown, string] => ['column', 1, field]),
     ...['generated', 'identity', 'insertable', 'updatable'].map((field): ['column', unknown, string] => ['column', 'false', field]),
     ['type', false, 'elementType'], ['type', 1, 'baseType'], ['type', ['ok', 1], 'values'],
     ['argument', 1, 'name'], ['argument', 'false', 'nullable'], ['argument', 1, 'hasDefault'],
+    ['routine', 'false', 'argumentsComplete'],
     ['result', 'true', 'nullable'],
     ['relation', 1, 'namespace'], ['relation', 'true', 'strict'],
   ];
@@ -104,12 +105,29 @@ test('JSON snapshots reject malformed optional codegen facts at their exact path
       ...snapshot,
       types: { t: { identity: 't', name: 't', kind: 'scalar', ...(target === 'type' ? { [field]: value } : {}) } },
       relations: { users: { ...snapshot.relations['public.users'], ...(target === 'relation' ? { [field]: value } : {}), columns: [{ ...column, ...(target === 'column' ? { [field]: value } : {}) }] } },
-      routines: { f: [{ identity: 'f()', name: 'f', kind: 'function', arguments: [{ mode: 'in', type: 't', ...(target === 'argument' ? { [field]: value } : {}) }], result: { kind: 'scalar', type: 't', ...(target === 'result' ? { [field]: value } : {}) } }] },
+      routines: { f: [{ identity: 'f()', name: 'f', kind: 'function', arguments: [{ mode: 'in', type: 't', ...(target === 'argument' ? { [field]: value } : {}) }], ...(target === 'routine' ? { [field]: value } : {}), result: { kind: 'scalar', type: 't', ...(target === 'result' ? { [field]: value } : {}) } }] },
     };
-    const prefix = { column: 'relations.users.columns[0]', type: 'types.t', argument: 'routines.f[0].arguments[0]', result: 'routines.f[0].result', relation: 'relations.users' }[target];
+    const prefix = { column: 'relations.users.columns[0]', type: 'types.t', argument: 'routines.f[0].arguments[0]', routine: 'routines.f[0]', result: 'routines.f[0].result', relation: 'relations.users' }[target];
     assert.throws(() => metadata.parseSnapshotJson(JSON.stringify(candidate)), (error: unknown) =>
       error instanceof metadata.SnapshotValidationError && error.diagnostics.some((diagnostic) => diagnostic.path === `${prefix}.${field}`));
   }
+});
+
+test('routine argument completeness is canonicalized and reported as drift', () => {
+  const routine = {
+    identity: 'public.calculate_fee',
+    name: 'calculate_fee',
+    schema: 'public',
+    kind: 'function' as const,
+    arguments: [],
+    argumentsComplete: false,
+    result: { kind: 'scalar' as const, type: 'numeric' },
+  };
+  const incomplete: MetadataSnapshot = { ...snapshot, routines: { calculate_fee: [routine] } };
+  const complete: MetadataSnapshot = { ...incomplete, routines: { calculate_fee: [{ ...routine, argumentsComplete: true }] } };
+  assert.deepEqual(metadata.parseSnapshotJson(JSON.stringify(incomplete)).routines.calculate_fee[0], routine);
+  assert.notEqual(hashSnapshot(incomplete), hashSnapshot(complete));
+  assert.deepEqual(diffSnapshots(incomplete, complete).map((entry) => entry.path), ['routines.calculate_fee[0].argumentsComplete']);
 });
 
 test('JSON snapshots preserve valid false and empty optional facts', () => {

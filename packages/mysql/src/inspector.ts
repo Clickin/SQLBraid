@@ -87,6 +87,7 @@ export function createMysqlInspector(connection: Mysql2ConnectionLike): Metadata
           identity: `${schema}.${name}:${text(entry, "dtd_identifier") ?? resultType}`,
           kind: text(entry, "routine_type") === "PROCEDURE" ? "procedure" : "function",
           arguments: [],
+          argumentsComplete: false,
           result: text(entry, "routine_type") === "PROCEDURE" ? { kind: "void" } : { kind: "scalar", type: resultType, nullable: true },
           deterministic: text(entry, "is_deterministic") === "YES",
           dataAccess: text(entry, "sql_data_access") === "NO SQL" ? "none" : "unknown",

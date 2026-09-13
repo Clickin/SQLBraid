@@ -106,6 +106,8 @@ export interface RoutineSnapshot {
   readonly identity: string;
   readonly kind: "function" | "procedure" | "aggregate" | "window";
   readonly arguments: readonly RoutineArgument[];
+  /** Whether the snapshot proves that the complete routine argument list is present. */
+  readonly argumentsComplete?: boolean;
   readonly result: RoutineResult;
   readonly volatility?: "immutable" | "stable" | "volatile" | "unknown";
   readonly deterministic?: boolean;
@@ -219,15 +221,18 @@ function validateRoutine(value: unknown, path: string, diagnostics: SnapshotDiag
   if (typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_ROUTINE_NAME", "Routine name must be non-empty.", `${path}.name`);
   if (!["function", "procedure", "aggregate", "window"].includes(String(value.kind))) add(diagnostics, "SNAPSHOT_ROUTINE_KIND", "Routine kind is invalid.", `${path}.kind`);
   if (!Array.isArray(value.arguments)) add(diagnostics, "SNAPSHOT_ROUTINE_ARGS", "Routine arguments must be an array.", `${path}.arguments`);
-  else value.arguments.forEach((argument, index) => {
-    if (!isRecord(argument)) { add(diagnostics, "SNAPSHOT_ARGUMENT", "Routine argument must be an object.", `${path}.arguments[${index}]`); return; }
-    if (!["in", "out", "inout", "variadic"].includes(String(argument.mode))) add(diagnostics, "SNAPSHOT_ARGUMENT_MODE", "Routine argument mode is invalid.", `${path}.arguments[${index}].mode`);
-    if (typeof argument.type !== "string" || !argument.type) add(diagnostics, "SNAPSHOT_ARGUMENT_TYPE", "Routine argument type must be non-empty.", `${path}.arguments[${index}].type`);
-    if (argument.name !== undefined && typeof argument.name !== "string") add(diagnostics, "SNAPSHOT_ARGUMENT_NAME", "Routine argument name must be a string.", `${path}.arguments[${index}].name`);
-    for (const field of ["nullable", "hasDefault"]) {
-      if (argument[field] !== undefined && typeof argument[field] !== "boolean") add(diagnostics, "SNAPSHOT_ARGUMENT_FACT", `Routine argument ${field} must be boolean.`, `${path}.arguments[${index}].${field}`);
-    }
-  });
+  else {
+    value.arguments.forEach((argument, index) => {
+      if (!isRecord(argument)) { add(diagnostics, "SNAPSHOT_ARGUMENT", "Routine argument must be an object.", `${path}.arguments[${index}]`); return; }
+      if (!["in", "out", "inout", "variadic"].includes(String(argument.mode))) add(diagnostics, "SNAPSHOT_ARGUMENT_MODE", "Routine argument mode is invalid.", `${path}.arguments[${index}].mode`);
+      if (typeof argument.type !== "string" || !argument.type) add(diagnostics, "SNAPSHOT_ARGUMENT_TYPE", "Routine argument type must be non-empty.", `${path}.arguments[${index}].type`);
+      if (argument.name !== undefined && typeof argument.name !== "string") add(diagnostics, "SNAPSHOT_ARGUMENT_NAME", "Routine argument name must be a string.", `${path}.arguments[${index}].name`);
+      for (const field of ["nullable", "hasDefault"]) {
+        if (argument[field] !== undefined && typeof argument[field] !== "boolean") add(diagnostics, "SNAPSHOT_ARGUMENT_FACT", `Routine argument ${field} must be boolean.`, `${path}.arguments[${index}].${field}`);
+      }
+    });
+  }
+  if (value.argumentsComplete !== undefined && typeof value.argumentsComplete !== "boolean") add(diagnostics, "SNAPSHOT_ROUTINE_ARGS_COMPLETE", "Routine argumentsComplete must be boolean.", `${path}.argumentsComplete`);
   if (!isRecord(value.result)) add(diagnostics, "SNAPSHOT_RESULT", "Routine result must be an object.", `${path}.result`);
   else if (value.result.kind === "scalar") {
     if (typeof value.result.type !== "string" || !value.result.type) add(diagnostics, "SNAPSHOT_RESULT_TYPE", "Scalar result type must be non-empty.", `${path}.result.type`);
