@@ -11,6 +11,7 @@ import {
 import {
   findProjectEvidence,
   isProjectEvidencePath,
+  SQLBRAID_DOCUMENT_GLOB,
   SQLBRAID_CONFIG_FILES,
   type ProjectEvidence,
 } from "./project.js";
@@ -70,11 +71,10 @@ function resolveMatchingDependencies(): { readonly serverPath: string; readonly 
 
 function projectWatchers(folder: vscode.WorkspaceFolder): vscode.FileSystemWatcher[] {
   const patterns = [
-    ...SQLBRAID_CONFIG_FILES,
-    "package.json",
-    "**/*.json",
-    "**/*.ts",
-    "**/*.tsx",
+    ...SQLBRAID_CONFIG_FILES.map((fileName) => `**/${fileName}`),
+    "**/tsconfig*.json",
+    "**/package.json",
+    "**/*.{ts,tsx,mts,cts,js,jsx}",
   ];
   return patterns.map((pattern) => vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, pattern)));
 }
@@ -185,14 +185,19 @@ class SqlBraidProjects implements vscode.Disposable {
     };
     const clientOptions: LanguageClientOptions = {
       documentSelector: [
-        { scheme: "file", language: "typescript", pattern: `${folder.uri.fsPath}/**/*` },
-        { scheme: "file", language: "typescriptreact", pattern: `${folder.uri.fsPath}/**/*` },
+        { scheme: "file", language: "typescript" },
+        { scheme: "file", language: "typescriptreact" },
       ],
       workspaceFolder: folder,
       synchronize: { fileEvents: watchers },
       outputChannelName: "SQLBraid Language Server",
     };
     const client = new LanguageClient(SERVER_ID, `SQLBraid (${folder.name})`, serverOptions, clientOptions);
+    // LSP 3.17 selectors accept strings; scope native VS Code registrations
+    // at the client's conversion boundary instead of serializing OS path globs.
+    const convertSelector = client.protocol2CodeConverter.asDocumentSelector;
+    client.protocol2CodeConverter.asDocumentSelector = (selector) =>
+      scopeDocumentSelector(convertSelector(selector), folder.uri);
     const project: RunningProject = { folder, client, watchers, evidence };
     this.projects.set(folder.uri.toString(), project);
     try {
@@ -260,6 +265,14 @@ class SqlBraidProjects implements vscode.Disposable {
 }
 
 let activeProjects: SqlBraidProjects | undefined;
+
+export function scopeDocumentSelector(selector: vscode.DocumentSelector, folder: vscode.Uri): vscode.DocumentSelector {
+  const pattern = new vscode.RelativePattern(folder, SQLBRAID_DOCUMENT_GLOB);
+  const filters = typeof selector === "string" ? [selector] : Array.isArray(selector) ? selector : [selector];
+  return filters.map((filter) => typeof filter === "string"
+    ? { language: filter, pattern }
+    : { ...filter, pattern });
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const projects = new SqlBraidProjects(context);

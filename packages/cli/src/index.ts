@@ -240,10 +240,13 @@ function inspectionContext(fileName: string | undefined, configPath: string | un
     return { rootPath: dirname(absoluteConfigPath), configPath: absoluteConfigPath };
   }
   let current = fileName ? dirname(fileName) : process.cwd();
+  let projectFallback: string | undefined;
   while (true) {
-    if (CONFIG_NAMES.some((name) => existsSync(resolve(current, name))) || existsSync(resolve(current, "tsconfig.json")) || existsSync(resolve(current, "package.json"))) return { rootPath: current };
+    const sqlBraidConfig = CONFIG_NAMES.map((name) => resolve(current, name)).find((path) => existsSync(path));
+    if (sqlBraidConfig) return { rootPath: current, configPath: sqlBraidConfig };
+    if (!projectFallback && (existsSync(resolve(current, "tsconfig.json")) || existsSync(resolve(current, "package.json")))) projectFallback = current;
     const parent = dirname(current);
-    if (parent === current) return { rootPath: current };
+    if (parent === current) return { rootPath: projectFallback ?? current };
     current = parent;
   }
 }

@@ -4,7 +4,8 @@ import { pathToFileURL } from "node:url";
 import { checkSourceDetailed, createVirtualOverlay, discoverQueries, sourcePosition, type CompileDiagnostic, type DiscoveredQuery, type VirtualTypeScriptOverlay } from "@sqlbraid/compiler";
 import type { ColumnSnapshot, MetadataSnapshot, RelationSnapshot, RoutineSnapshot } from "@sqlbraid/metadata";
 import type { CodegenResult } from "@sqlbraid/codegen";
-import type { CompletionItem, LanguageServiceOptions, Location, QuerySymbol, SignatureResult, SqlBraidLanguageService, ToolingDiagnostic, ToolingTarget, WorkspaceSymbol, HoverResult, SourceDocument } from "./types.js";
+import { SOURCE_FILE_LOADER, type InternalLanguageServiceOptions } from "./internal.js";
+import type { Cancellation, CompletionItem, LanguageServiceOptions, Location, QuerySymbol, SignatureResult, SqlBraidLanguageService, ToolingDiagnostic, ToolingTarget, WorkspaceSymbol, HoverResult, SourceDocument } from "./types.js";
 
 type Range = { readonly start: number; readonly end: number };
 type MetadataEvidence = { readonly snapshot: MetadataSnapshot; readonly target?: ToolingTarget };
@@ -59,7 +60,8 @@ const SQL_KEYWORDS = new Set([
   "all", "and", "as", "asc", "between", "by", "case", "cast", "check", "collate", "column", "create", "cross", "delete", "desc", "distinct", "do", "else", "end", "except", "exists", "false", "fetch", "filter", "for", "foreign", "from", "full", "grant", "group", "having", "if", "ilike", "in", "inner", "insert", "intersect", "into", "is", "join", "lateral", "left", "like", "limit", "natural", "not", "null", "offset", "on", "or", "order", "outer", "over", "partition", "primary", "procedure", "references", "returning", "right", "select", "set", "table", "then", "to", "true", "union", "unique", "update", "using", "values", "when", "where", "window", "with", "recursive", "return",
 ]);
 
-function lower(value: string): string { return value.toLocaleLowerCase(); }
+export function normalizeIdentifier(value: string): string { return value.toLowerCase(); }
+function lower(value: string): string { return normalizeIdentifier(value); }
 function identifierKey(value: string, fold = true): string {
   return value.split(".").map((part) => {
     const quote = part[0];
@@ -246,7 +248,7 @@ function metadataEvidence(options: LanguageServiceOptions): readonly MetadataEvi
 function evidenceKey(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? String(value);
   if (Array.isArray(value)) return `[${value.map(evidenceKey).join(",")}]`;
-  return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => `${JSON.stringify(key)}:${evidenceKey(entry)}`).join(",")}}`;
+  return `{${Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, entry]) => `${JSON.stringify(key)}:${evidenceKey(entry)}`).join(",")}}`;
 }
 function allRelations(options: LanguageServiceOptions): readonly RelationSnapshot[] {
   const groups = new Map<string, RelationSnapshot[]>();
@@ -528,6 +530,7 @@ function querySymbols(analysis: FileAnalysis): readonly QuerySymbol[] { return a
 
 export function createLanguageService(options: LanguageServiceOptions): SqlBraidLanguageService {
   const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
+  const internalOptions = options as InternalLanguageServiceOptions;
   const files = new Map<string, FileAnalysis>();
   const overlays = new Map<string, VirtualTypeScriptOverlay>();
   const diagnosticsCache = new Map<string, readonly ToolingDiagnostic[]>();
@@ -590,7 +593,7 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
     const current = analysis(sourceText, fileName); const lexical = queryAt(current, offset, true); if (!lexical) return [];
     const logical = lexical.map.findIndex((value) => value >= offset); if (logical >= 0 && lexical.code[logical] === false) return [];
     const { prefix, qualified } = completionPrefix(sourceText, offset);
-    const cursorToken = lexical.tokens.find((token) => token.sourceStart < offset && token.sourceEnd >= offset);
+    const cursorToken = lexical.tokens.find((token) => token.kind === "identifier" && token.sourceStart < offset && token.sourceEnd >= offset);
     const before = lexical.tokens.filter((token) => token.sourceEnd <= (cursorToken?.sourceStart ?? offset));
     const previous = before.at(-1);
     const relationContext = previous?.kind === "identifier" && ["from", "join", "update", "into"].includes(previous.text.toLowerCase());
@@ -621,17 +624,22 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
     const routine = lexical.routineUses.find((use) => use.token.start === token.start)?.routine; if (routine) for (const evidence of metadataEvidence(semanticOptions)) { const target = evidence.target; if (target) { const found = metadataRange(metadata(), target, routine.identity, undefined, true); if (found) return found; } }
     return undefined;
   }
-  function references(sourceText: string, fileName: string, offset: number): readonly Location[] {
+  async function references(sourceText: string, fileName: string, offset: number, cancellation?: Cancellation): Promise<readonly Location[]> {
+    if (cancellation?.isCancellationRequested) return [];
     const current = analysis(sourceText, fileName); const lexical = queryAt(current, offset, true); if (!lexical) return [];
     const token = tokenAt(lexical, offset); if (!token) return [];
     const relation = lexical.relationUses.find((use) => use.tokens.some((part) => part.start === token.start))?.relation;
     const column = lexical.columnUses.find((use) => use.token.start === token.start);
     const routine = lexical.routineUses.find((use) => use.token.start === token.start)?.routine;
     if (!relation && !column && !routine) return [];
-    const documents: SourceDocument[] = unique([{ fileName, sourceText }, ...(options.sources ?? [])], (document) => document.fileName);
     const results: Location[] = [];
-    for (const document of documents) {
+    const seenFiles = new Set<string>();
+    const visit = async (document: SourceDocument): Promise<boolean> => {
+      if (cancellation?.isCancellationRequested) return false;
+      if (seenFiles.has(document.fileName)) return true;
+      seenFiles.add(document.fileName);
       const indexed = analysis(document.sourceText, document.fileName);
+      if (cancellation?.isCancellationRequested) return false;
       for (const item of indexed.queries) {
         if (relation) for (const use of item.relationUses) if (use.relation?.identity === relation.identity && !use.cte) {
           const first = use.tokens[0];
@@ -641,8 +649,20 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
         if (routine) for (const use of item.routineUses) if (use.routine?.identity === routine.identity) results.push(location(document.fileName, document.sourceText, sourceRange(use.token.sourceStart, use.token.sourceEnd)));
         if (column) for (const use of item.columnUses) if (use.owner.identity === column.owner.identity && use.column.name === column.column.name) results.push(location(document.fileName, document.sourceText, sourceRange(use.token.sourceStart, use.token.sourceEnd)));
       }
+      await new Promise<void>((resolvePromise) => setImmediate(resolvePromise));
+      return !cancellation?.isCancellationRequested;
+    };
+    for (const document of [{ fileName, sourceText }, ...(options.sources ?? [])]) {
+      if (!await visit(document)) return [];
     }
-    return bounded(unique(results, (item) => `${item.uri}\0${item.range.start.line}\0${item.range.start.character}\0${item.range.end.line}\0${item.range.end.character}`), maxEntries);
+    const sourceLoader = internalOptions[SOURCE_FILE_LOADER];
+    for (const sourcePath of internalOptions.sourceFiles ?? []) {
+      if (seenFiles.has(sourcePath)) continue;
+      if (cancellation?.isCancellationRequested) return [];
+      const document = sourceLoader ? await sourceLoader(sourcePath, cancellation) : undefined;
+      if (document && !await visit(document)) return [];
+    }
+    return unique(results, (item) => `${item.uri}\0${item.range.start.line}\0${item.range.start.character}\0${item.range.end.line}\0${item.range.end.character}`);
   }
   function documentSymbols(sourceText: string, fileName: string): readonly QuerySymbol[] { return bounded(querySymbols(analysis(sourceText, fileName)), maxEntries); }
   function workspaceSymbols(query: string): readonly WorkspaceSymbol[] {

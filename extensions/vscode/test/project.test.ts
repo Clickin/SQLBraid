@@ -45,3 +45,10 @@ test("project evidence path matching is root-scoped", () => {
   assert.equal(isProjectEvidencePath(join(root, "package.json"), root), true);
   assert.equal(isProjectEvidencePath(join(tmpdir(), "outside", "package.json"), root), false);
 });
+
+test("project evidence matching remains root-scoped for Windows-shaped paths", () => {
+  const root = "C:\\workspace\\app";
+  assert.equal(isProjectEvidencePath("C:\\workspace\\app\\package.json", root), true);
+  assert.equal(isProjectEvidencePath("C:\\workspace\\other\\package.json", root), false);
+});
+

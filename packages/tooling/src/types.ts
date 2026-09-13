@@ -33,7 +33,7 @@ export interface SqlBraidLanguageService {
   hover(sourceText: string, fileName: string, offset: number): HoverResult | undefined;
   complete(sourceText: string, fileName: string, offset: number): readonly CompletionItem[];
   definition(sourceText: string, fileName: string, offset: number): Location | undefined;
-  references(sourceText: string, fileName: string, offset: number): readonly Location[];
+  references(sourceText: string, fileName: string, offset: number, cancellation?: Cancellation): Promise<readonly Location[]>;
   documentSymbols(sourceText: string, fileName: string): readonly QuerySymbol[];
   workspaceSymbols(query: string): readonly WorkspaceSymbol[];
   signatureHelp(sourceText: string, fileName: string, offset: number): SignatureResult | undefined;

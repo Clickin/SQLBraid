@@ -251,11 +251,14 @@ test('CLI codegen rejects case-folded output collisions on simulated Windows', a
   }
 }, 15_000);
 
-test('CLI inspect JSON uses the shared workspace service', async () => {
+test('CLI inspect JSON discovers an ancestor SQLBraid config past nested projects', async () => {
   const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
   try {
     const file = join(directory, 'src', 'nested', 'query.ts');
     await mkdir(join(directory, 'src', 'nested'), { recursive: true });
+    await writeFile(join(directory, 'package.json'), JSON.stringify({ private: true }));
+    await writeFile(join(directory, 'src', 'nested', 'package.json'), JSON.stringify({ private: true }));
+    await writeFile(join(directory, 'src', 'nested', 'tsconfig.json'), JSON.stringify({ compilerOptions: {} }));
     await writeFile(join(directory, 'metadata.json'), JSON.stringify(metadata()));
     await writeFile(join(directory, 'sqlbraid.config.mjs'), `export default ${JSON.stringify({
       codegen: {

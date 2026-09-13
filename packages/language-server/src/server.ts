@@ -64,6 +64,14 @@ const DIAGNOSTIC_DEBOUNCE_MS = 30;
 // ponytail: cap evidence, not open-document invalidations; dropping those leaves stale errors.
 const MAX_WORKSPACES = 32;
 const MAX_WORKSPACE_SYMBOLS = 256;
+const FILE_WATCH_GLOBS = [
+  "**/sqlbraid.config.mjs",
+  "**/sqlbraid.config.js",
+  "**/sqlbraid.config.cjs",
+  "**/tsconfig*.json",
+  "**/package.json",
+  "**/*.{ts,tsx,mts,cts,js,jsx}",
+] as const;
 
 function uriPath(uri: string): string {
   try { return fileURLToPath(uri); } catch { return uri; }
@@ -286,7 +294,7 @@ export function startStdioLanguageServer(
   async function withService<T>(
     uri: string,
     token: Cancellation | undefined,
-    callback: (service: SqlBraidLanguageService, document: TextDocument) => T,
+    callback: (service: SqlBraidLanguageService, document: TextDocument) => T | PromiseLike<T>,
   ): Promise<T | undefined> {
     const document = documents.get(uri);
     if (!document || token?.isCancellationRequested) return undefined;
@@ -303,7 +311,7 @@ export function startStdioLanguageServer(
     await yieldToEventLoop();
     const current = documents.get(uri);
     if (token?.isCancellationRequested || !current || current.version !== version || currentWorkspace !== workspaceForFile(uriPath(uri)) || revision !== workspaceRevision) return undefined;
-    const result = callback(service, document);
+    const result = await callback(service, document);
     await yieldToEventLoop();
     const latest = documents.get(uri);
     return token?.isCancellationRequested || !latest || latest.version !== version || revision !== workspaceRevision ? undefined : result;
@@ -361,7 +369,7 @@ export function startStdioLanguageServer(
   connection.onInitialized(() => {
     if (workspaceFoldersSupported) workspaceFolderListener = connection.workspace.onDidChangeWorkspaceFolders(updateWorkspaceFolders);
     if (watchedFilesSupported) {
-      void connection.client.register(DidChangeWatchedFilesNotification.type, { watchers: [{ globPattern: "**/*" }] }).catch(
+      void connection.client.register(DidChangeWatchedFilesNotification.type, { watchers: FILE_WATCH_GLOBS.map((globPattern) => ({ globPattern })) }).catch(
         (error: unknown) => { if (!stopped) console.error(`SQLBraid file-watch registration failed: ${String(error)}`); },
       );
     }
@@ -417,7 +425,7 @@ export function startStdioLanguageServer(
   });
 
   connection.onReferences(async (params, token) => {
-    const result = await withService(params.textDocument.uri, token, (service, document) => service.references(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
+    const result = await withService(params.textDocument.uri, token, (service, document) => service.references(document.getText(), uriPath(document.uri), document.offsetAt(params.position), token));
     return (result ?? []).map(locationFor);
   });
 

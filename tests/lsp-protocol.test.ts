@@ -286,6 +286,45 @@ test("built stdio server routes workspace symbols across multiple roots", async 
   }
 }, 30000);
 
+test("stdio server registers only relevant project file watchers", async () => {
+  const server = spawn(process.execPath, [resolve("packages/language-server/dist/cli.js")], { stdio: "pipe" });
+  const reader = createMessageReader(server);
+  try {
+    send(server, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        processId: process.pid,
+        rootUri: pathToFileURL(resolve("tests")).href,
+        capabilities: { workspace: { didChangeWatchedFiles: { dynamicRegistration: true } } },
+        workspaceFolders: [{ uri: pathToFileURL(resolve("tests")).href, name: "tests" }],
+      },
+    });
+    await response(reader, 1);
+    send(server, { jsonrpc: "2.0", method: "initialized", params: {} });
+    const registration = await reader.next((message) => message.method === "client/registerCapability");
+    const registrations = (registration.params as { readonly registrations: readonly { readonly registerOptions?: { readonly watchers?: readonly { readonly globPattern: string }[] } }[] }).registrations;
+    const watchers = registrations.flatMap((entry) => entry.registerOptions?.watchers ?? []).map((watcher) => watcher.globPattern);
+    assert.deepEqual(watchers, [
+      "**/sqlbraid.config.mjs",
+      "**/sqlbraid.config.js",
+      "**/sqlbraid.config.cjs",
+      "**/tsconfig*.json",
+      "**/package.json",
+      "**/*.{ts,tsx,mts,cts,js,jsx}",
+    ]);
+    send(server, { jsonrpc: "2.0", id: registration.id, result: null });
+    send(server, { jsonrpc: "2.0", id: 2, method: "shutdown", params: null });
+    await response(reader, 2);
+    send(server, { jsonrpc: "2.0", method: "exit", params: null });
+    await waitForExit(server);
+  } finally {
+    reader.dispose();
+    if (!server.killed) server.kill();
+  }
+}, 30000);
+
 test("real LSP diagnostics preserve native, Braid, and overlay-only ownership", async () => {
   const root = await mkdtemp(join(tmpdir(), "sqlbraid-lsp-diagnostics-"));
   const modulePath = join(root, "tag.ts");

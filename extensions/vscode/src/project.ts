@@ -1,7 +1,8 @@
 import { access, readFile } from "node:fs/promises";
-import { basename, join, relative, resolve, sep } from "node:path";
+import { basename, join, relative, resolve, sep, win32 } from "node:path";
 
 export const SQLBRAID_CONFIG_FILES = ["sqlbraid.config.mjs", "sqlbraid.config.js", "sqlbraid.config.cjs"] as const;
+export const SQLBRAID_DOCUMENT_GLOB = "**/*";
 const SQLBRAID_PACKAGE_PREFIX = "@sqlbraid/";
 
 export interface ProjectEvidence {
@@ -25,9 +26,12 @@ export function isSqlBraidLanguage(languageId: string): boolean {
 }
 
 export function isProjectEvidencePath(filePath: string, rootPath: string): boolean {
-  const relativePath = relative(resolve(rootPath), resolve(filePath));
-  if (relativePath === ".." || relativePath.startsWith(`..${sep}`)) return false;
-  const fileName = basename(relativePath);
+  const windows = /^[A-Za-z]:[\\/]|^\\\\/u.test(filePath) || /^[A-Za-z]:[\\/]|^\\\\/u.test(rootPath);
+  const relativePath = windows
+    ? win32.relative(win32.resolve(rootPath), win32.resolve(filePath))
+    : relative(resolve(rootPath), resolve(filePath));
+  if (relativePath === ".." || relativePath.startsWith(`..${windows ? win32.sep : sep}`)) return false;
+  const fileName = windows ? win32.basename(relativePath) : basename(relativePath);
   return SQLBRAID_CONFIG_FILES.includes(fileName as (typeof SQLBRAID_CONFIG_FILES)[number]) || fileName === "package.json";
 }
 

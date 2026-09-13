@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "vitest";
 import { generateModels } from "@sqlbraid/codegen";
@@ -61,7 +61,7 @@ test("workspace refreshes unsaved source and metadata evidence without writing g
     const changedSource = 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM orders`;';
     workspace.setDocument(file, changedSource, 2);
     const second = await workspace.service();
-    assert.equal(second.references(changedSource, file, changedSource.indexOf("orders")).length, 0);
+    assert.equal((await second.references(changedSource, file, changedSource.indexOf("orders"))).length, 0);
     await writeFile(metadataFile, JSON.stringify(metadata("orders")));
     const third = await workspace.service();
     assert.ok(third.definition(changedSource, file, changedSource.indexOf("orders"))?.uri.endsWith("/metadata.json"));
@@ -73,6 +73,62 @@ test("workspace refreshes unsaved source and metadata evidence without writing g
     assert.equal(changed.config.codegen?.targets[0]?.name, "orders");
     workspace.dispose();
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("workspace reference coverage is exhaustive beyond bounded caches and keeps unsaved documents", async () => {
+  const directory = await mkdtemp(join(process.cwd(), ".sqlbraid-workspace-"));
+  const workspace = createWorkspace({ rootPath: directory, configPath: join(directory, "sqlbraid.config.mjs"), maxEntries: 1 });
+  try {
+    await writeFile(join(directory, "metadata.json"), JSON.stringify(metadata("users")));
+    await writeFile(join(directory, "sqlbraid.config.mjs"), config("users"));
+    await writeFile(join(directory, "tsconfig.json"), JSON.stringify({ include: ["**/*.ts"] }));
+    const source = 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM public.users`;';
+    const queryFile = join(directory, "query.ts");
+    const diskFiles = Array.from({ length: 260 }, (_, index) => join(directory, `disk-${index}.ts`));
+    await Promise.all(diskFiles.map((file) => writeFile(file, source)));
+    const unsavedFiles = [join(directory, "unsaved-a.ts"), join(directory, "unsaved-b.ts")];
+    workspace.setDocument(queryFile, source, 1);
+    for (const [index, file] of unsavedFiles.entries()) workspace.setDocument(file, source, index + 2);
+
+    const service = await workspace.service();
+    const references = await service.references(source, queryFile, source.indexOf("public.users"));
+    assert.equal(references.length, 263);
+    assert.equal(references.some((reference) => reference.uri.endsWith("/query.ts")), true);
+    assert.equal(references.some((reference) => reference.uri.endsWith("/disk-259.ts")), true);
+    assert.equal(references.some((reference) => reference.uri.endsWith("/unsaved-a.ts")), true);
+    assert.equal(references.some((reference) => reference.uri.endsWith("/unsaved-b.ts")), true);
+    let checks = 0;
+    const cancellation = { get isCancellationRequested(): boolean { checks += 1; return checks > 8; } };
+    assert.deepEqual(await service.references(source, queryFile, source.indexOf("public.users"), cancellation), []);
+  } finally {
+    workspace.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("workspace hover does not read every indexed project source", async () => {
+  const directory = await mkdtemp(join(process.cwd(), ".sqlbraid-workspace-"));
+  const workspace = createWorkspace({ rootPath: directory, configPath: join(directory, "sqlbraid.config.mjs") });
+  try {
+    await writeFile(join(directory, "metadata.json"), JSON.stringify(metadata("users")));
+    await writeFile(join(directory, "sqlbraid.config.mjs"), config("users"));
+    await writeFile(join(directory, "tsconfig.json"), JSON.stringify({ include: ["**/*.ts"] }));
+    const indexedSource = join(directory, "indexed.ts");
+    await writeFile(indexedSource, 'export const unrelated = "source";');
+    const queryFile = join(directory, "query.ts");
+    const source = 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM public.users`;';
+    workspace.setDocument(queryFile, source, 1);
+    const first = await workspace.service();
+    assert.match(first.hover(source, queryFile, source.indexOf("public.users"))?.contents ?? "", /^Relation public.users/u);
+
+    await rm(indexedSource, { force: true });
+    await mkdir(indexedSource);
+    const second = await workspace.service();
+    assert.match(second.hover(source, queryFile, source.indexOf("public.users"))?.contents ?? "", /^Relation public.users/u);
+  } finally {
+    workspace.dispose();
     await rm(directory, { recursive: true, force: true });
   }
 });

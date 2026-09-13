@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { createLanguageService } from '@sqlbraid/tooling';
 import type { CodegenResult } from '@sqlbraid/codegen';
 import type { MetadataSnapshot } from '@sqlbraid/metadata';
+import { normalizeIdentifier } from '../packages/tooling/src/service.js';
 
 const users = {
   identity: 'public.users',
@@ -77,6 +78,8 @@ test('completion is scoped to static SQL and does not pollute TypeScript', () =>
   assert.deepEqual(service.complete(ordinary, 'ordinary.ts', ordinary.length), []);
   const sqlOffset = sql.indexOf('us`') + 2;
   assert.deepEqual(service.complete(sql, 'sql.ts', sqlOffset).map((item) => item.label), ['users']);
+  const qualified = sql.replace('FROM us', 'FROM public.');
+  assert.deepEqual(service.complete(qualified, 'qualified.ts', qualified.indexOf('public.') + 'public.'.length).map((item) => item.label), ['users']);
   assert.deepEqual(service.complete(interpolation, 'interpolation.ts', interpolation.indexOf('ordinary.') + 'ordinary.'.length), []);
   assert.deepEqual(service.complete(interpolation, 'interpolation.ts', interpolation.indexOf('${')), []);
   assert.deepEqual(service.complete(escaped, 'escaped.ts', escaped.indexOf('\\u0072s') + '\\u0072s'.length), []);
@@ -122,18 +125,48 @@ test('generated current output wins navigation and stale output falls back to me
   assert.ok((staleDefinition?.range.start.line ?? 0) > 0);
 });
 
-test('references require positive relation and column evidence and exclude CTE shadowing', () => {
+test('references require positive relation and column evidence and exclude CTE shadowing', async () => {
   const sourceB = "import { sql } from '@sqlbraid/postgres';\nconst query = sql.rows<{}>`WITH users AS (SELECT 1 AS id) SELECT id FROM users`;";
   const service = createLanguageService({ metadata, sources: [{ fileName: 'b.ts', sourceText: sourceB }] });
-  const references = service.references(queryA, 'a.ts', queryA.indexOf('users'));
+  const references = await service.references(queryA, 'a.ts', queryA.indexOf('users'));
   assert.equal(references.length, 1);
   assert.match(references[0]?.uri ?? '', /a\.ts/u);
-  const qualifiedColumn = service.references(queryA, 'a.ts', queryA.indexOf('u.id') + 2);
+  const qualifiedColumn = await service.references(queryA, 'a.ts', queryA.indexOf('u.id') + 2);
   assert.equal(qualifiedColumn.length, 1);
-  assert.equal(service.references(sourceB, 'b.ts', sourceB.indexOf('users`')).length, 0);
+  assert.equal((await service.references(sourceB, 'b.ts', sourceB.indexOf('users`'))).length, 0);
 });
 
-test('ambiguous SQL aliases and omitted sources never become positive column references', () => {
+test('identifier folding is deterministic while quoted identifiers preserve case', () => {
+  const snapshot = {
+    ...metadata,
+    relations: {
+      'public.i': { ...users, identity: 'public.i', name: 'i' },
+    },
+  } as const satisfies MetadataSnapshot;
+  const json = JSON.stringify(snapshot);
+  const service = createLanguageService({ targets: [{ name: 'db', metadata: snapshot, metadataPath: 'metadata.json', metadataSource: json }] });
+  const source = 'import { sql } from "@sqlbraid/postgres"; const q = sql`SELECT * FROM PUBLIC.I`;';
+  assert.equal(normalizeIdentifier('I'), 'i');
+  assert.ok(service.definition(source, 'folding.ts', source.indexOf('PUBLIC.I'))?.uri.endsWith('/metadata.json'));
+  assert.equal(service.hover(source, 'folding.ts', source.indexOf('PUBLIC.I'))?.contents.startsWith('Relation public.i'), true);
+  const quoted = source.replace('PUBLIC.I', '"I"');
+  assert.doesNotMatch(service.hover(quoted, 'quoted-case.ts', quoted.indexOf('"I"'))?.contents ?? '', /^Relation public.i/u);
+});
+
+test('references exceed the analysis cache bound and honor cancellation', async () => {
+  const source = 'import { sql } from "@sqlbraid/postgres"; const q = sql`SELECT id FROM public.users`;';
+  const sources = Array.from({ length: 260 }, (_, index) => ({
+    fileName: `reference-${index}.ts`,
+    sourceText: source,
+  }));
+  const service = createLanguageService({ metadata, sources, maxEntries: 1 });
+  assert.equal((await service.references(source, 'query.ts', source.indexOf('public.users'))).length, 261);
+  let checks = 0;
+  const cancellation = { get isCancellationRequested(): boolean { checks += 1; return checks > 2; } };
+  assert.deepEqual(await service.references(source, 'query.ts', source.indexOf('public.users'), cancellation), []);
+});
+
+test('ambiguous SQL aliases and omitted sources never become positive column references', async () => {
   const service = createLanguageService({ metadata, targets: [target] });
   for (const [module, sqlText, selected] of [
     ['postgres', 'WITH users (id) AS (SELECT 1) SELECT id FROM users', 'users'],
@@ -146,7 +179,7 @@ test('ambiguous SQL aliases and omitted sources never become positive column ref
     const source = `import { sql } from '@sqlbraid/${module}'; const q = sql\`${sqlText}\`;`;
     const offset = source.lastIndexOf(selected);
     assert.equal(service.definition(source, 'ambiguous.ts', offset), undefined, sqlText);
-    assert.deepEqual(service.references(source, 'ambiguous.ts', offset), [], sqlText);
+    assert.deepEqual(await service.references(source, 'ambiguous.ts', offset), [], sqlText);
   }
 });
 

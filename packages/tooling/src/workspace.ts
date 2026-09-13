@@ -7,6 +7,7 @@ import { generateModels, type CodegenResult } from "@sqlbraid/codegen";
 import { hashSnapshot, parseSnapshotJson, type MetadataSnapshot } from "@sqlbraid/metadata";
 import { createLanguageService } from "./service.js";
 import { ConfigurationCancellationError, loadConfig, type CodegenTargetConfig } from "./config.js";
+import { SOURCE_FILE_LOADER, type SourceFileLoader } from "./internal.js";
 import type {
   Cancellation,
   LanguageServiceOptions,
@@ -44,6 +45,7 @@ interface WorkspaceState {
   readonly metadata?: MetadataSnapshot;
   readonly targets: readonly ToolingTarget[];
   readonly sources: readonly SourceDocument[];
+  readonly sourceFiles: readonly string[];
 }
 
 interface GeneratedEvidence {
@@ -100,7 +102,13 @@ async function fileEvidence(path: string, cache: Map<string, FileEvidence>, limi
     touch(cache, key, cached, limit);
     return cached;
   }
-  const text = await readFile(path, "utf8");
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
   checkCancellation(cancellation);
   const result = { path: realPath, key, text };
   touch(cache, key, result, limit);
@@ -221,35 +229,38 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
     };
   }
 
-  async function loadSources(context: TypeScriptProjectContext | undefined, targets: readonly ToolingTarget[], cancellation?: Cancellation): Promise<readonly SourceDocument[]> {
+  async function loadSources(context: TypeScriptProjectContext | undefined, targets: readonly ToolingTarget[], cancellation?: Cancellation): Promise<{ readonly sources: readonly SourceDocument[]; readonly sourceFiles: readonly string[] }> {
     const result = new Map<string, SourceDocument>();
     const generatedPaths = new Map(targets.filter((target) => target.outFile).map((target) => [canonicalPath(target.outFile as string, rootPath), target.generatedSource]));
     for (const document of documents.values()) {
-      if (result.size >= maxEntries) break;
+      checkCancellation(cancellation);
       if (generatedPaths.has(document.fileName) && generatedPaths.get(document.fileName) === undefined) continue;
       result.set(document.fileName, document);
     }
+    checkCancellation(cancellation);
     const diskFiles = [...(context?.fileNames ?? [])]
       .map((fileName) => canonicalPath(fileName, rootPath))
       .filter((fileName) => isSourceFile(fileName))
       .sort();
-    for (const fileName of diskFiles) {
-      if (result.size >= maxEntries) break;
-      if (result.has(fileName)) continue;
-      if (generatedPaths.has(fileName)) continue;
-      checkCancellation(cancellation);
-      const evidence = await fileEvidence(fileName, sourceCache, Math.min(maxEntries, MAX_SOURCE_CACHE), cancellation);
-      if (!evidence) continue;
-      result.set(evidence.path, sourceDocument(evidence.path, evidence.text));
-    }
+    checkCancellation(cancellation);
     // Generated declarations are evidence only when they match pure in-memory output.
     for (const target of targets) {
-      if (result.size >= maxEntries || !target.generatedSource || !target.outFile) continue;
+      checkCancellation(cancellation);
+      if (!target.generatedSource || !target.outFile) continue;
       const path = canonicalPath(target.outFile, rootPath);
       if (!result.has(path)) result.set(path, sourceDocument(path, target.generatedSource));
     }
-    return [...result.values()];
+    return { sources: [...result.values()], sourceFiles: diskFiles.filter((fileName) => !generatedPaths.has(fileName)) };
   }
+
+  const loadSourceFile: SourceFileLoader = async (fileName, cancellation) => {
+    checkCancellation(cancellation);
+    const path = canonicalPath(fileName, rootPath);
+    const document = documents.get(path);
+    if (document) return document;
+    const evidence = await fileEvidence(path, sourceCache, Math.min(maxEntries, MAX_SOURCE_CACHE), cancellation);
+    return evidence ? sourceDocument(evidence.path, evidence.text) : undefined;
+  };
 
   async function rebuild(cancellation?: Cancellation): Promise<WorkspaceState> {
     checkCancellation(cancellation);
@@ -272,12 +283,11 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
     const configuredTargets: ToolingTarget[] = [];
     if (loaded?.config.codegen?.targets) {
       for (const target of loaded.config.codegen.targets) {
-        if (configuredTargets.length >= maxEntries) break;
         const evidence = await loadTarget(target, loaded.directory, cancellation);
         if (evidence) configuredTargets.push(evidence);
       }
     }
-    const targets: readonly ToolingTarget[] = (configuredTargets.length ? configuredTargets : [...(options.targets ?? [])].slice(0, maxEntries)).map((target): ToolingTarget => {
+    const targets: readonly ToolingTarget[] = (configuredTargets.length ? configuredTargets : [...(options.targets ?? [])]).map((target): ToolingTarget => {
       if (!target.outFile) return target;
       const outputDocument = documents.get(canonicalPath(target.outFile, rootPath));
       if (!outputDocument) return target;
@@ -285,7 +295,7 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
       const { generatedSource: _generatedSource, ...withoutStaleEvidence } = target;
       return withoutStaleEvidence;
     });
-    const sources = await loadSources(context, targets, cancellation);
+    const { sources, sourceFiles } = await loadSources(context, targets, cancellation);
     const metadata = options.metadata;
     checkCancellation(cancellation);
     const key = digest({
@@ -300,8 +310,9 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
         generatedSource: target.generatedSource,
       })),
       sources: sources.map((source) => [source.fileName, source.version, digest(source.sourceText)]),
+      sourceFiles,
     });
-    return { key, options: semanticOptions, metadata, targets, sources };
+    return { key, options: semanticOptions, metadata, targets, sources, sourceFiles };
   }
 
   function refresh(): Promise<WorkspaceState> {
@@ -357,7 +368,15 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
         if (disposed) throw new WorkspaceCancellationError();
         if (currentRevision !== revision) continue;
         if (semanticService && semanticKey === refreshed.key) return semanticService;
-        semanticService = createLanguageService({ ...refreshed.options, metadata: refreshed.metadata, targets: refreshed.targets, sources: refreshed.sources, maxEntries });
+        semanticService = createLanguageService({
+          ...refreshed.options,
+          metadata: refreshed.metadata,
+          targets: refreshed.targets,
+          sources: refreshed.sources,
+          maxEntries,
+          sourceFiles: refreshed.sourceFiles,
+          [SOURCE_FILE_LOADER]: loadSourceFile,
+        } as LanguageServiceOptions);
         semanticKey = refreshed.key;
         return semanticService;
       }
@@ -373,7 +392,6 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
       const path = canonicalPath(fileName, rootPath);
       documents.delete(path);
       documents.set(path, sourceDocument(path, sourceText, version));
-      while (documents.size > maxEntries) documents.delete(documents.keys().next().value as string);
       revision += 1;
     },
     closeDocument(fileName) {
