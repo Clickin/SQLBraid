@@ -124,15 +124,14 @@ test('emitted guarded JavaScript evaluates only the active branch', async () => 
   }
 });
 
-test('guarded bind checking uses real control-flow narrowing and maps diagnostics', () => {
-  const options = {
-    moduleSpecifier: '@sqlbraid/template',
-    compilerOptions,
-  };
+test('guarded bind checking uses real control-flow narrowing', () => {
   const safe = "import {sql} from '@sqlbraid/template'; declare const user: {name:string}|null; const q=sql`SELECT id /*@braid if ${user != null}*/ AND name=${user.name} /*@braid end*/`;";
-  assert.equal(checkSource(safe, join(tmpdir(), 'sqlbraid-guard-safe.ts'), options).some((diagnostic) => diagnostic.code === 'TS18047'), false);
+  assert.equal(checkSource(safe, join(tmpdir(), 'sqlbraid-guard-safe.ts'), { moduleSpecifier: '@sqlbraid/template', compilerOptions }).some((diagnostic) => diagnostic.code === 'TS18047'), false);
+});
+
+test('unguarded nullable binds report diagnostics at their original source range', () => {
   const unsafe = "import {sql} from '@sqlbraid/template'; declare const enabled: boolean; declare const user: {name:string}|null; const q=sql`SELECT id /*@braid if ${enabled}*/ AND name=${user.name} /*@braid end*/`;";
-  const diagnostics = checkSource(unsafe, join(tmpdir(), 'sqlbraid-guard-unsafe.ts'), options);
+  const diagnostics = checkSource(unsafe, join(tmpdir(), 'sqlbraid-guard-unsafe.ts'), { moduleSpecifier: '@sqlbraid/template', compilerOptions });
   const start = unsafe.indexOf('user.name');
   assert.ok(diagnostics.some((diagnostic) => diagnostic.code === 'TS18047' && diagnostic.range.start === start && diagnostic.range.end === start + 'user.name'.length));
 });
