@@ -3,8 +3,6 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { PassThrough } from 'node:stream';
-import { once } from 'node:events';
 import { test } from 'vitest';
 import ts from 'typescript';
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
@@ -20,7 +18,6 @@ import { createDatabase } from '@sqlbraid/runtime';
 import { createSqlTag } from '@sqlbraid/template';
 import { sql as postgres } from '@sqlbraid/postgres';
 import { sql as sqlite } from '@sqlbraid/sqlite';
-import { startStdioLanguageServer } from '@sqlbraid/language-server';
 
 type PgQueryConfig = { readonly text: string; readonly values: readonly unknown[] };
 
@@ -283,32 +280,6 @@ test('adapters preserve command and returning result kinds', async () => {
   const db = createNodeSqliteDatabase(fake);
   assert.deepEqual(await db.all(sqlite.rows`/* comment */ SELECT id FROM users`), [{ id: 1 }]);
   assert.deepEqual(await db.all(sqlite.rows`INSERT INTO users VALUES (2, 'Bob') RETURNING id`), [{ id: 1 }]);
-});
-
-test('stdio diagnostics resolve file URIs and check declared row contracts', async () => {
-  const input = new PassThrough();
-  const output = new PassThrough();
-  const stop = startStdioLanguageServer({ moduleSpecifier: '@sqlbraid/template' }, { input, output });
-  const uri = pathToFileURL(join(process.cwd(), 'sqlbraid lsp fixture.ts')).href;
-  const source = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db:Database; const q=sql.rows<{id:number}>`SELECT vendor_function()`; async function read(){ return (await db.all(q))[0].id; }";
-  const send = (message: Record<string, unknown>): void => {
-    const body = JSON.stringify(message);
-    input.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
-  };
-  try {
-    const opened = once(output, 'data');
-    send({ jsonrpc: '2.0', method: 'textDocument/didOpen', params: { textDocument: { uri, languageId: 'typescript', version: 1, text: source } } });
-    const first = JSON.parse((await opened)[0].toString().split('\r\n\r\n')[1]);
-    assert.deepEqual(first.params.diagnostics, []);
-    const changed = once(output, 'data');
-    send({ jsonrpc: '2.0', method: 'textDocument/didChange', params: { textDocument: { uri, version: 2 }, contentChanges: [{ text: source.replace('[0].id', '[0].missing') }] } });
-    const second = JSON.parse((await changed)[0].toString().split('\r\n\r\n')[1]);
-    assert.deepEqual(second.params.diagnostics.map((diagnostic: { code: string }) => diagnostic.code), ['TS2339']);
-  } finally {
-    stop();
-    input.end();
-    output.end();
-  }
 });
 
 test('root execution waits until the transaction scope closes', async () => {

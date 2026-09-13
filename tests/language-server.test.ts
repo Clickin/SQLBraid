@@ -15,24 +15,26 @@ test('declared contract hover and diagnostics work without metadata', () => {
   const service = createLanguageService({ moduleSpecifier: '@sqlbraid/template' });
   assert.equal(service.diagnostics(source, 'fixture.ts').length, 0);
   assert.match(service.hover(source, 'fixture.ts', source.indexOf('SELECT'))?.contents ?? '', /RowQuery<UserRow>/);
-  assert.equal(service.hover(source, 'fixture.ts', source.indexOf('proprietary_command'))?.contents, 'CommandQuery');
+  assert.match(service.hover(source, 'fixture.ts', source.indexOf('proprietary_command'))?.contents ?? '', /^CommandQuery/u);
   assert.match(service.hover(source, 'fixture.ts', source.indexOf('proprietary_call'))?.contents ?? '', /CallQuery<UserRow>/);
   assert.match(service.hover(source, 'fixture.ts', source.indexOf('SELECT id'))?.contents ?? '', /Query<unknown>/);
-  assert.deepEqual(service.complete('us'), []);
+  assert.deepEqual(service.complete(source, 'fixture.ts', source.indexOf('SELECT')), []);
 });
 
 test('completion is metadata-backed and reload replaces metadata', () => {
   const service = createLanguageService({ moduleSpecifier: '@sqlbraid/template' });
-  assert.deepEqual(service.complete('us'), []);
+  const relationSource = "import { sql } from '@sqlbraid/template'; const query = sql.rows<{}>`SELECT * FROM us`;";
+  const columnSource = "import { sql } from '@sqlbraid/template'; const query = sql.rows<{}>`SELECT id FROM users`;";
+  assert.deepEqual(service.complete(relationSource, 'relation.ts', relationSource.indexOf('us`') + 2), []);
   const withMetadata = createLanguageService({ moduleSpecifier: '@sqlbraid/template', metadata });
-  assert.deepEqual(withMetadata.complete('us').map((item) => item.label), ['users']);
-  assert.deepEqual(withMetadata.complete('id').map((item) => item.label), ['id']);
-  assert.equal(withMetadata.complete('id')[0]?.detail, 'int8');
+  assert.deepEqual(withMetadata.complete(relationSource, 'relation.ts', relationSource.indexOf('us`') + 2).map((item) => item.label), ['users']);
+  assert.deepEqual(withMetadata.complete(columnSource, 'column.ts', columnSource.indexOf('id FROM') + 2).map((item) => item.label), ['id']);
+  assert.equal(withMetadata.complete(columnSource, 'column.ts', columnSource.indexOf('id FROM') + 2)[0]?.detail, 'int8');
   const reloaded = service.reload(metadata);
-  assert.deepEqual(reloaded.complete('us').map((item) => item.label), ['users']);
-  assert.deepEqual(service.complete('us'), []);
+  assert.deepEqual(reloaded.complete(relationSource, 'relation.ts', relationSource.indexOf('us`') + 2).map((item) => item.label), ['users']);
+  assert.deepEqual(service.complete(relationSource, 'relation.ts', relationSource.indexOf('us`') + 2), []);
   const replacement = { ...metadata, relations: {} } satisfies MetadataSnapshot;
-  assert.deepEqual(reloaded.reload(replacement).complete('us'), []);
+  assert.deepEqual(reloaded.reload(replacement).complete(relationSource, 'relation.ts', relationSource.indexOf('us`') + 2), []);
 });
 
 test('mapped rows hover exposes the Standard Schema output type', () => {

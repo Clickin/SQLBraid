@@ -1,0 +1,60 @@
+{
+  "name": "sqlbraid-vscode",
+  "displayName": "SQLBraid",
+  "description": "SQLBraid language tooling for TypeScript projects",
+  "version": "0.1.0",
+  "type": "commonjs",
+  "publisher": "sqlbraid",
+  "license": "MIT",
+  "engines": {
+    "vscode": ">=1.121.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:package.json",
+    "workspaceContains:sqlbraid.config.mjs",
+    "workspaceContains:sqlbraid.config.js",
+    "workspaceContains:sqlbraid.config.cjs"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "sqlbraid.generateModels",
+        "title": "SQLBraid: Generate Models"
+      },
+      {
+        "command": "sqlbraid.checkGeneratedModels",
+        "title": "SQLBraid: Check Generated Models"
+      },
+      {
+        "command": "sqlbraid.reloadProject",
+        "title": "SQLBraid: Reload Project"
+      }
+    ]
+  },
+  "files": [
+    "dist/**",
+    "node_modules/**",
+    "package.json"
+  ],
+  "dependencies": {
+    "@sqlbraid/cli": "workspace:0.1.0",
+    "@sqlbraid/language-server": "workspace:0.1.0",
+    "vscode-languageclient": "9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/vscode": "1.95.0",
+    "@vscode/test-electron": "3.1.0",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "compile-tests": "tsc -p tsconfig.test.json",
+    "test": "pnpm run build && pnpm run compile-tests && node --test dist-test/test/project.test.js",
+    "test:host": "pnpm run build && pnpm run compile-tests && node dist-test/test/runTest.js"
+  }
+}

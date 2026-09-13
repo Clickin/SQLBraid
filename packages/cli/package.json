@@ -11,7 +11,8 @@
     "@sqlbraid/compiler": "workspace:*",
     "@sqlbraid/core": "workspace:*",
     "@sqlbraid/metadata": "workspace:*",
-    "@sqlbraid/operations": "workspace:*"
+    "@sqlbraid/operations": "workspace:*",
+    "@sqlbraid/tooling": "workspace:*"
   },
   "exports": {
     ".": {

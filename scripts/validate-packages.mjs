@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile as execFileCallback } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ async function run(command, args, cwd = root) {
 }
 
 try {
-  if (packageNames.length !== 12 || !packageNames.includes("metadata") || !packageNames.includes("codegen")) throw new Error("Expected 12 packages including metadata and codegen.");
+  if (packageNames.length !== 13 || !packageNames.includes("metadata") || !packageNames.includes("codegen") || !packageNames.includes("tooling")) throw new Error("Expected 13 packages including metadata, codegen and tooling.");
   const tarballs = [];
   for (const packageName of packageNames) {
     const before = new Set(await readdir(temp));
@@ -48,7 +48,14 @@ try {
         throw new Error("Codegen must have only core and metadata production dependencies.");
       }
     }
-    for (const tooling of ["@sqlbraid/metadata", "@sqlbraid/codegen"]) {
+    if (manifest.name === "@sqlbraid/tooling") {
+      for (const dependency of ["@sqlbraid/runtime", "@sqlbraid/cli", "@sqlbraid/language-server", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite", "pg", "mysql2", "vscode"]) {
+        if (manifest.dependencies?.[dependency] || manifest.optionalDependencies?.[dependency] || manifest.peerDependencies?.[dependency]) {
+          throw new Error(`Shared tooling cannot depend on ${dependency}.`);
+        }
+      }
+    }
+    for (const tooling of ["@sqlbraid/metadata", "@sqlbraid/codegen", "@sqlbraid/tooling", "@sqlbraid/cli", "@sqlbraid/language-server", "@sqlbraid/vscode"]) {
       if (runtimePackages.includes(packageName) && (manifest.dependencies?.[tooling] || manifest.optionalDependencies?.[tooling])) {
         throw new Error(`${tooling} is a runtime dependency of ${manifest.name}.`);
       }
@@ -71,7 +78,7 @@ try {
   }));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], boundaryConsumer);
   const runtimeInstalledPackages = await readdir(join(boundaryConsumer, "node_modules/@sqlbraid"));
-  if (runtimeInstalledPackages.includes("metadata") || runtimeInstalledPackages.includes("codegen")) throw new Error("Runtime consumer installed metadata or codegen transitively.");
+  if (["metadata", "codegen", "tooling", "cli", "language-server", "vscode"].some((name) => runtimeInstalledPackages.includes(name))) throw new Error("Runtime consumer installed development tooling transitively.");
   await writeFile(join(boundaryConsumer, "runtime.mjs"), [
     'import assert from "node:assert/strict";',
     'import { sql } from "@sqlbraid/postgres";',
@@ -84,7 +91,7 @@ try {
     '}',
   ].join("\n"));
   await run(process.execPath, ["runtime.mjs"], boundaryConsumer);
-  console.info("PASS packed runtime-only npm consumer without metadata or codegen");
+  console.info("PASS packed runtime-only npm consumer without metadata, codegen, tooling, CLI, LSP or editor");
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", dependencies["@sqlbraid/metadata"], dependencies["@sqlbraid/codegen"]], boundaryConsumer);
   const metadataImports = [
     'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
@@ -219,6 +226,12 @@ try {
 
   const types = join(consumer, "types.ts");
   await writeFile(types, [
+    'import { createWorkspace, type ToolingWorkspace, type SqlBraidLanguageService } from "@sqlbraid/tooling";',
+    'import { defineConfig, type SqlBraidConfig } from "@sqlbraid/cli/config";',
+    'const toolingWorkspace: ToolingWorkspace = createWorkspace({ rootPath: process.cwd() });',
+    'const semanticService: Promise<SqlBraidLanguageService> = toolingWorkspace.service();',
+    'const toolingConfig: SqlBraidConfig = defineConfig({});',
+    'void [semanticService, toolingConfig];',
     'import type { ConnectionProvider, ConnectionLease, ExecutionObserver, ExecutionEvent } from "@sqlbraid/core";',
     'import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";',
     'import { createPgPoolDatabase, type PgPoolLike } from "@sqlbraid/postgres/pg";',
@@ -300,12 +313,9 @@ try {
   await writeFile(cliFile, 'import { sql as templateSql } from "@sqlbraid/template"; import { sql as postgresSql } from "@sqlbraid/postgres"; const queries = [templateSql`SELECT 1`, postgresSql`SELECT 1`]; void queries;\n');
   await run(join(consumer, "node_modules/.bin/sqlbraid"), ["check", "--file", cliFile], consumer);
 
-  const server = execFile(join(consumer, "node_modules/.bin/sqlbraid-language-server"), [], { cwd: consumer, timeout: 10_000 });
-  const initialize = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
-  server.child.stdin.end(`Content-Length: ${Buffer.byteLength(initialize)}\r\n\r\n${initialize}`);
-  const { stdout: serverOutput } = await server;
-  const initialized = JSON.parse(serverOutput.slice(serverOutput.indexOf("\r\n\r\n") + 4));
-  if (initialized.id !== 1 || initialized.result?.capabilities?.hoverProvider !== true) throw new Error("Packed language server did not initialize.");
+  await copyFile(join(root, "scripts/agent-tooling-consumer.mjs"), join(consumer, "agent-tooling-consumer.mjs"));
+  const agentConsumer = await execFile(process.execPath, ["agent-tooling-consumer.mjs"], { cwd: consumer, maxBuffer: 1024 * 1024 });
+  process.stdout.write(agentConsumer.stdout);
 
   const forbidden = [root, `${root}/packages`, "dist/packages"];
   const installedRoot = join(consumer, "node_modules/@sqlbraid");
@@ -319,7 +329,39 @@ try {
       for (const needle of forbidden) if (text.includes(needle)) throw new Error(`Monorepo path leaked into ${packageEntry.name}/${file.name}: ${needle}`);
     }
   }
-  console.info(`Validated ${tarballs.length} packed packages with ESM, types, subpaths, CLI, engine metadata, and leakage checks.`);
+  const extensionRoot = join(root, "extensions/vscode");
+  const extension = join(temp, "vscode");
+  const extensionManifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
+  const extensionDependencies = Object.fromEntries(Object.entries(extensionManifest.dependencies).map(([name, version]) => [name, version.replace(/^workspace:/u, "")]));
+  const bundledNames = new Set();
+  async function includeTooling(name) {
+    if (bundledNames.has(name)) return;
+    bundledNames.add(name);
+    const manifest = JSON.parse(await readFile(join(packageRoot, name.slice("@sqlbraid/".length), "package.json"), "utf8"));
+    for (const dependency of Object.keys(manifest.dependencies ?? {})) if (dependency.startsWith("@sqlbraid/")) await includeTooling(dependency);
+  }
+  for (const name of Object.keys(extensionDependencies)) if (name.startsWith("@sqlbraid/")) await includeTooling(name);
+  await mkdir(extension);
+  await cp(join(extensionRoot, "dist"), join(extension, "dist"), { recursive: true });
+  for (const file of ["README.md", "LICENSE"]) {
+    try { await copyFile(join(extensionRoot, file), join(extension, file)); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
+  await writeFile(join(extension, "package.json"), JSON.stringify({
+    ...extensionManifest,
+    devDependencies: {},
+    dependencies: { ...extensionDependencies, ...Object.fromEntries([...bundledNames].map((name) => [name, dependencies[name]])) },
+  }));
+  await run("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], extension);
+  await writeFile(join(extension, "package.json"), JSON.stringify({ ...extensionManifest, devDependencies: {}, dependencies: extensionDependencies }));
+  await rm(join(extension, "package-lock.json"), { force: true });
+  await run(join(root, "node_modules/.bin/vsce"), ["package", "--no-yarn", "--allow-missing-repository", "--skip-license", "--out", join(temp, "sqlbraid.vsix")], extension);
+  const { stdout: vsixFiles } = await execFile("unzip", ["-Z1", join(temp, "sqlbraid.vsix")]);
+  for (const file of [extensionManifest.main.replace(/^\.\//u, ""), "node_modules/@sqlbraid/language-server/dist/cli.js", "node_modules/@sqlbraid/cli/dist/index.js"]) {
+    if (!vsixFiles.split("\n").includes(`extension/${file}`)) throw new Error(`VSIX omits ${file}.`);
+  }
+  console.info("PASS VSIX bundles the matching CLI and standard language server.");
+  console.info(`Validated ${tarballs.length} packed packages with ESM, types, subpaths, CLI, engine metadata, tooling/editor consumers and leakage checks.`);
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

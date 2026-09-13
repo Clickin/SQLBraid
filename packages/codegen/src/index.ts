@@ -9,7 +9,7 @@ import {
 } from "@sqlbraid/metadata";
 
 export interface CodegenOptions {
-  readonly typePolicy: TypePolicy;
+  readonly typePolicy: Pick<TypePolicy, "id" | "hash" | "mappings">;
   readonly filters?: CodegenRelationFilter;
   readonly naming?: CodegenNamingOptions;
   readonly typeOverrides?: CodegenTypeOverrides;
@@ -129,7 +129,7 @@ function canonicalValue(value: unknown): string {
   throw new TypeError(`Unsupported codegen option value: ${typeof value}`);
 }
 
-function validateTypePolicy(policy: unknown): asserts policy is TypePolicy {
+function validateTypePolicy(policy: unknown): asserts policy is CodegenOptions["typePolicy"] {
   if (!isRecord(policy)) throw new TypeError("Codegen TypePolicy must be an object.");
   for (const field of ["id", "hash"] as const) {
     if (typeof policy[field] !== "string" || policy[field].length === 0) {
@@ -214,7 +214,7 @@ function validateOptions(options: unknown): asserts options is CodegenOptions {
   }
 }
 
-function indexTypePolicy(policy: TypePolicy, diagnostics: CodegenDiagnostic[]): ReadonlyMap<string, TypeMapping | undefined> {
+function indexTypePolicy(policy: CodegenOptions["typePolicy"], diagnostics: CodegenDiagnostic[]): ReadonlyMap<string, TypeMapping | undefined> {
   const grouped = new Map<string, TypeMapping[]>();
   for (const mapping of policy.mappings) {
     const normalized = normalizeDatabaseType(mapping.databaseType);

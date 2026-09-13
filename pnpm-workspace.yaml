@@ -1,8 +1,11 @@
 packages:
   - packages/*
+  - extensions/*
 
 allowBuilds:
+  '@vscode/vsce-sign': false
   cpu-features: true
   esbuild: true
+  keytar: false
   protobufjs: true
   ssh2: true

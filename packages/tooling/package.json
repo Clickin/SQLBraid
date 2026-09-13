@@ -1,26 +1,21 @@
 {
-  "name": "@sqlbraid/language-server",
+  "name": "@sqlbraid/tooling",
   "version": "0.1.0",
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22.18.0" },
-  "bin": { "sqlbraid-language-server": "./dist/cli.js" },
   "dependencies": {
+    "@sqlbraid/codegen": "workspace:*",
     "@sqlbraid/compiler": "workspace:*",
+    "@sqlbraid/core": "workspace:*",
     "@sqlbraid/metadata": "workspace:*",
-    "@sqlbraid/tooling": "workspace:*",
-    "vscode-languageserver": "9.0.1",
-    "vscode-languageserver-textdocument": "1.0.12"
+    "typescript": "5.9.3"
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./stdio": {
-      "types": "./dist/server.d.ts",
-      "import": "./dist/server.js"
     }
   }
 }

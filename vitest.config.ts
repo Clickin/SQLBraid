@@ -7,6 +7,7 @@ const sourceAliases = {
   "@sqlbraid/template": resolve("packages/template/src/index.ts"),
   "@sqlbraid/metadata": resolve("packages/metadata/src/index.ts"),
   "@sqlbraid/compiler": resolve("packages/compiler/src/index.ts"),
+  "@sqlbraid/tooling": resolve("packages/tooling/src/index.ts"),
   "@sqlbraid/cli": resolve("packages/cli/src/index.ts"),
   "@sqlbraid/cli/config": resolve("packages/cli/src/config.ts"),
 

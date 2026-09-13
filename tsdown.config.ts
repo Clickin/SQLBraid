@@ -27,6 +27,7 @@ export default defineConfig([
 
   packageBuild("packages/metadata", { index: "src/index.ts" }),
   packageBuild("packages/compiler", { index: "src/index.ts" }),
+  packageBuild("packages/tooling", { index: "src/index.ts", "config-worker": "src/config-worker.ts" }),
   packageBuild("packages/operations", { index: "src/index.ts" }),
   packageBuild("packages/runtime", { index: "src/index.ts" }),
   packageBuild("packages/postgres", { index: "src/index.ts", pg: "src/pg.ts", inspector: "src/inspector.ts" }),

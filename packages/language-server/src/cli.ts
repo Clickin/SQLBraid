@@ -1,4 +1,15 @@
 #!/usr/bin/env node
-import { startStdioLanguageServer } from "./server.js";
+import { resolve } from "node:path";
+import { startStdioLanguageServer, type StdioLanguageServerOptions } from "./server.js";
 
-startStdioLanguageServer({ moduleSpecifier: "@sqlbraid/template" });
+const args = process.argv.slice(2);
+const configIndex = args.indexOf("--config");
+const configAssignment = args.find((argument) => argument.startsWith("--config="));
+const configPath = configAssignment?.slice("--config=".length)
+  || (configIndex >= 0 && typeof args[configIndex + 1] === "string" ? args[configIndex + 1] : undefined);
+const options: StdioLanguageServerOptions = {
+  moduleSpecifiers: ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite"],
+  ...(configPath ? { configPath: resolve(configPath) } : {}),
+};
+
+startStdioLanguageServer(options);

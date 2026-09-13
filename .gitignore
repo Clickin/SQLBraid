@@ -1,5 +1,8 @@
 node_modules/
 dist/
+dist-test/
+*.vsix
+.vscode-test/
 *.tgz
 .DS_Store
 npm-debug.log*

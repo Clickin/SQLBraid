@@ -250,3 +250,52 @@ test('CLI codegen rejects case-folded output collisions on simulated Windows', a
     await rm(directory, { recursive: true, force: true });
   }
 }, 15_000);
+
+test('CLI inspect JSON uses the shared workspace service', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  try {
+    const file = join(directory, 'src', 'nested', 'query.ts');
+    await mkdir(join(directory, 'src', 'nested'), { recursive: true });
+    await writeFile(join(directory, 'metadata.json'), JSON.stringify(metadata()));
+    await writeFile(join(directory, 'sqlbraid.config.mjs'), `export default ${JSON.stringify({
+      codegen: {
+        targets: [{
+          name: 'nested',
+          metadata: './metadata.json',
+          outFile: './generated.ts',
+          typePolicy: {
+            id: 'nested-policy',
+            hash: 'nested-policy-v1',
+            mappings: [{ databaseType: 'int4', inputType: 'number', outputType: 'number', nullable: false }],
+          },
+        }],
+      },
+    })};\n`);
+    await writeFile(file, 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT 1`;\n');
+    const column = (await readFile(file, 'utf8')).indexOf('sql`') + 1;
+    const inspected = await exec(process.execPath, [
+      cliEntry,
+      'inspect',
+      'query',
+      '--file',
+      file,
+      '--line',
+      '1',
+      '--column',
+      String(column),
+      '--json',
+    ], { cwd: directory });
+    const result = JSON.parse(inspected.stdout) as { operation: string; resolved: boolean; provenance?: string; contents?: string };
+    assert.equal(result.operation, 'query');
+    assert.equal(result.resolved, true);
+    assert.equal(result.provenance, 'sqlbraid');
+    assert.match(result.contents ?? '', /target: nested/u);
+
+    const diagnostics = await exec(process.execPath, [cliEntry, 'inspect', 'diagnostics', '--file', file, '--json'], { cwd: directory });
+    const diagnosticResult = JSON.parse(diagnostics.stdout) as { operation: string; diagnostics: readonly unknown[] };
+    assert.equal(diagnosticResult.operation, 'diagnostics');
+    assert.deepEqual(diagnosticResult.diagnostics, []);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);

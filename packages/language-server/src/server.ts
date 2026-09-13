@@ -1,180 +1,471 @@
 import { fileURLToPath } from "node:url";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { Readable, Writable } from "node:stream";
-import { createLanguageService, type LanguageServiceOptions, type SqlBraidLanguageService } from "./index.js";
+import {
+  CompletionItemKind,
+  createConnection,
+  DiagnosticSeverity,
+  DidChangeWatchedFilesNotification,
+  MarkupKind,
+  ProposedFeatures,
+  SymbolKind,
+  TextDocuments,
+  TextDocumentSyncKind,
+  type CancellationToken,
+  type Disposable,
+  type InitializeParams,
+  type WorkspaceFoldersChangeEvent,
+} from "vscode-languageserver/node.js";
+import { TextDocument } from "vscode-languageserver-textdocument";
+import type { CompileDiagnostic } from "@sqlbraid/compiler";
+import {
+  createWorkspace,
+  type Cancellation,
+  type LanguageServiceOptions,
+  type SqlBraidLanguageService,
+  type ToolingWorkspace,
+  type WorkspaceSymbol,
+} from "@sqlbraid/tooling";
 
-interface JsonRpcMessage {
-  readonly id?: number | string;
-  readonly method?: string;
-  readonly params?: unknown;
-}
-
-interface DocumentState {
-  readonly text: string;
-  readonly version: number;
-}
-
-interface Position {
-  readonly line: number;
-  readonly character: number;
-}
-
-interface LspStreams {
+export interface LspStreams {
   readonly input: Readable;
   readonly output: Writable;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+export interface StdioLanguageServerOptions extends LanguageServiceOptions {
+  readonly configPath?: string;
 }
 
-function isJsonRpcMessage(value: unknown): value is JsonRpcMessage {
-  if (!isRecord(value)) return false;
-  return value.id === undefined || typeof value.id === "string" || typeof value.id === "number";
-}
+type Position = { readonly line: number; readonly character: number };
+type Range = { readonly start: Position; readonly end: Position };
 
-function offsetAt(text: string, position: Position): number {
-  let line = 0;
-  let offset = 0;
-  while (line < position.line && offset < text.length) {
-    const next = text.indexOf("\n", offset);
-    if (next < 0) return text.length;
-    offset = next + 1;
-    line += 1;
-  }
-  return Math.min(text.length, offset + Math.max(0, position.character));
-}
+type PendingDiagnostics = {
+  readonly version: number;
+  readonly timer: ReturnType<typeof setTimeout>;
+};
 
-function positionAt(text: string, offset: number): Position {
-  const safe = Math.max(0, Math.min(offset, text.length));
-  const prefix = text.slice(0, safe);
-  const lines = prefix.split(/\r\n|\r|\n/u);
-  return { line: lines.length - 1, character: lines.at(-1)?.length ?? 0 };
-}
+type ActiveDiagnostics = {
+  readonly version: number;
+  readonly cancel: () => void;
+};
 
-function writeMessage(output: Writable, message: unknown): void {
-  const body = JSON.stringify(message);
-  output.write(`Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n${body}`);
-}
+type WorkspaceSlot = {
+  readonly rootPath: string;
+  readonly workspace: ToolingWorkspace;
+};
+
+const DEFAULT_MODULE_SPECIFIERS = [
+  "@sqlbraid/template",
+  "@sqlbraid/postgres",
+  "@sqlbraid/mysql",
+  "@sqlbraid/sqlite",
+] as const;
+const DIAGNOSTIC_DEBOUNCE_MS = 30;
+// ponytail: cap evidence, not open-document invalidations; dropping those leaves stale errors.
+const MAX_WORKSPACES = 32;
+const MAX_WORKSPACE_SYMBOLS = 256;
 
 function uriPath(uri: string): string {
   try { return fileURLToPath(uri); } catch { return uri; }
 }
 
-function notification(service: SqlBraidLanguageService, documents: ReadonlyMap<string, DocumentState>, output: Writable, uri: string): void {
-  const document = documents.get(uri);
-  if (!document) return;
-  const diagnostics = service.diagnostics(document.text, uriPath(uri)).map((diagnostic) => ({
-    range: { start: positionAt(document.text, diagnostic.range.start), end: positionAt(document.text, diagnostic.range.end) },
-    severity: diagnostic.severity === "error" ? 1 : 2,
+function configPathFrom(value: unknown): string | undefined {
+  if (value && typeof value === "object" && !Array.isArray(value) && "configPath" in value && typeof value.configPath === "string") return value.configPath;
+  return undefined;
+}
+
+function rootPathFor(params: InitializeParams): string {
+  const folder = params.workspaceFolders?.[0]?.uri;
+  const rootUri = folder ?? params.rootUri ?? undefined;
+  return rootUri ? uriPath(rootUri) : process.cwd();
+}
+
+function diagnosticSeverity(severity: CompileDiagnostic["severity"]): DiagnosticSeverity {
+  return severity === "error" ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning;
+}
+
+function diagnosticFor(document: TextDocument, diagnostic: CompileDiagnostic) {
+  return {
+    range: {
+      start: document.positionAt(diagnostic.range.start),
+      end: document.positionAt(diagnostic.range.end),
+    },
+    severity: diagnosticSeverity(diagnostic.severity),
     code: diagnostic.code,
     source: "sqlbraid",
     message: diagnostic.message,
-  }));
-  writeMessage(output, { jsonrpc: "2.0", method: "textDocument/publishDiagnostics", params: { uri, version: document.version, diagnostics } });
+  };
 }
 
-function parseMessages(buffer: Buffer<ArrayBufferLike>): { readonly messages: readonly JsonRpcMessage[]; readonly rest: Buffer<ArrayBufferLike> } {
-  const messages: JsonRpcMessage[] = [];
-  let cursor = 0;
-  while (cursor < buffer.length) {
-    const separator = buffer.indexOf("\r\n\r\n", cursor);
-    if (separator < 0) break;
-    const headers = buffer.subarray(cursor, separator).toString("ascii");
-    const length = /^Content-Length:\s*(\d+)$/im.exec(headers)?.[1];
-    if (!length) { cursor = separator + 4; continue; }
-    const bodyStart = separator + 4;
-    const bodyEnd = bodyStart + Number(length);
-    if (bodyEnd > buffer.length) break;
-    try {
-      const message: unknown = JSON.parse(buffer.subarray(bodyStart, bodyEnd).toString("utf8"));
-      if (isJsonRpcMessage(message)) messages.push(message);
-    } catch { /* malformed JSON is ignored */ }
-    cursor = bodyEnd;
-  }
-  return { messages, rest: buffer.subarray(cursor) };
+function rangeFor(document: TextDocument, start: number, end: number): Range {
+  return { start: document.positionAt(start), end: document.positionAt(end) };
 }
 
-function documentParams(params: unknown): { readonly uri: string; readonly text?: string; readonly version?: number } | undefined {
-  if (!isRecord(params) || !isRecord(params.textDocument) || typeof params.textDocument.uri !== "string") return undefined;
-  return { uri: params.textDocument.uri, ...(typeof params.textDocument.text === "string" ? { text: params.textDocument.text } : {}), ...(typeof params.textDocument.version === "number" ? { version: params.textDocument.version } : {}) };
+function locationFor(location: { readonly uri: string; readonly range: Range }) {
+  return { uri: location.uri, range: location.range };
 }
 
-function positionParams(params: unknown): { readonly uri: string; readonly position: Position } | undefined {
-  if (!isRecord(params) || !isRecord(params.textDocument) || !isRecord(params.position) || typeof params.textDocument.uri !== "string" || typeof params.position.line !== "number" || typeof params.position.character !== "number") return undefined;
-  return { uri: params.textDocument.uri, position: { line: params.position.line, character: params.position.character } };
+function completionKind(kind: "relation" | "column" | "routine"): CompletionItemKind {
+  if (kind === "column") return CompletionItemKind.Field;
+  if (kind === "routine") return CompletionItemKind.Function;
+  return CompletionItemKind.Class;
 }
 
-export function startStdioLanguageServer(options: LanguageServiceOptions, streams: LspStreams = { input: process.stdin, output: process.stdout }): () => void {
-  const service = createLanguageService(options);
-  const documents = new Map<string, DocumentState>();
-  let buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+function symbolKind(kind: "relation" | "routine" | "model"): SymbolKind {
+  return kind === "routine" ? SymbolKind.Function : SymbolKind.Class;
+}
+
+function yieldToEventLoop(): Promise<void> {
+  const { promise, resolve: resolvePromise } = Promise.withResolvers<void>();
+  setImmediate(resolvePromise);
+  return promise;
+}
+
+function pathContains(rootPath: string, fileName: string): boolean {
+  const child = relative(rootPath, fileName);
+  return child === "" || (!child.startsWith("..") && !isAbsolute(child));
+}
+
+function normalizedPath(path: string): string {
+  return resolve(path);
+}
+
+export function startStdioLanguageServer(
+  options: StdioLanguageServerOptions = { moduleSpecifiers: [...DEFAULT_MODULE_SPECIFIERS] },
+  streams: LspStreams = { input: process.stdin, output: process.stdout },
+): () => void {
+  const serverOptions: StdioLanguageServerOptions = {
+    ...options,
+    moduleSpecifiers: options.moduleSpecifiers ?? [
+      ...(options.moduleSpecifier ? [options.moduleSpecifier] : []),
+      ...DEFAULT_MODULE_SPECIFIERS.filter((entry) => entry !== options.moduleSpecifier),
+    ],
+  };
+  const connection = createConnection(ProposedFeatures.all, streams.input, streams.output);
+  const documents = new TextDocuments(TextDocument);
   let stopped = false;
-  const handle = async (message: JsonRpcMessage): Promise<void> => {
-    const method = message.method;
-    if (!method) return;
-    if (method === "initialize") {
-      if (message.id !== undefined) writeMessage(streams.output, { jsonrpc: "2.0", id: message.id, result: { capabilities: { textDocumentSync: 1, hoverProvider: true, completionProvider: { triggerCharacters: ["."] }, diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false } } } });
-      return;
-    }
-    if (method === "shutdown") {
-      if (message.id !== undefined) writeMessage(streams.output, { jsonrpc: "2.0", id: message.id, result: null });
-      return;
-    }
-    if (method === "exit") { stopped = true; streams.input.off("data", onData); return; }
-    if (method === "textDocument/didOpen") {
-      const item = documentParams(message.params);
-      if (!item || item.text === undefined) return;
-      documents.set(item.uri, { text: item.text, version: item.version ?? 0 });
-      notification(service, documents, streams.output, item.uri);
-      return;
-    }
-    if (method === "textDocument/didChange") {
-      const item = documentParams(message.params);
-      const params = isRecord(message.params) ? message.params : undefined;
-      const changes = params?.contentChanges;
-      const current = item ? documents.get(item.uri) : undefined;
-      const last = Array.isArray(changes) ? changes.at(-1) : undefined;
-      if (item && current && isRecord(last) && typeof last.text === "string") documents.set(item.uri, { text: last.text, version: item.version ?? current.version + 1 });
-      if (item) notification(service, documents, streams.output, item.uri);
-      return;
-    }
-    if (method === "textDocument/didClose") {
-      const item = documentParams(message.params);
-      if (!item) return;
-      documents.delete(item.uri);
-      writeMessage(streams.output, { jsonrpc: "2.0", method: "textDocument/publishDiagnostics", params: { uri: item.uri, diagnostics: [] } });
-      return;
-    }
-    if (method === "textDocument/diagnostic") {
-      const item = documentParams(message.params);
-      const document = item ? documents.get(item.uri) : undefined;
-      const diagnostics = document ? service.diagnostics(document.text, uriPath(item?.uri ?? "")).map((diagnostic) => ({ range: { start: positionAt(document.text, diagnostic.range.start), end: positionAt(document.text, diagnostic.range.end) }, severity: diagnostic.severity === "error" ? 1 : 2, code: diagnostic.code, source: "sqlbraid", message: diagnostic.message })) : [];
-      if (message.id !== undefined) writeMessage(streams.output, { jsonrpc: "2.0", id: message.id, result: { kind: "full", items: diagnostics } });
-      return;
-    }
-    if (method === "textDocument/hover") {
-      const item = positionParams(message.params);
-      const document = item ? documents.get(item.uri) : undefined;
-      const hover = document && item ? service.hover(document.text, uriPath(item.uri), offsetAt(document.text, item.position)) : undefined;
-      if (message.id !== undefined) writeMessage(streams.output, { jsonrpc: "2.0", id: message.id, result: hover && document ? { contents: { kind: "markdown", value: hover.contents }, range: { start: positionAt(document.text, hover.range.start), end: positionAt(document.text, hover.range.end) } } : null });
-      return;
-    }
-    if (method === "textDocument/completion") {
-      const item = positionParams(message.params);
-      const document = item ? documents.get(item.uri) : undefined;
-      const prefix = document && item ? document.text.slice(0, offsetAt(document.text, item.position)).split(/\s|\./u).at(-1) ?? "" : "";
-      const items = service.complete(prefix).map((entry) => ({ label: entry.label, kind: entry.kind === "column" ? 5 : entry.kind === "relation" ? 7 : 3, detail: entry.detail }));
-      if (message.id !== undefined) writeMessage(streams.output, { jsonrpc: "2.0", id: message.id, result: { isIncomplete: false, items } });
-    }
-  };
-  const onData = (chunk: Buffer | string): void => {
-    if (stopped) return;
-    buffer = Buffer.concat([buffer, Buffer.from(chunk)]);
-    const parsed = parseMessages(buffer);
-    buffer = parsed.rest;
-    for (const message of parsed.messages) void handle(message);
-  };
-  streams.input.on("data", onData);
-  return () => { stopped = true; streams.input.off("data", onData); };
-}
+  let cleanupDone = false;
+  let rootPath = process.cwd();
+  let configPath = serverOptions.configPath;
+  let workspaceRevision = 0;
+  let workspaceFolderListener: Disposable | undefined;
+  let workspaceFoldersSupported = false;
+  let watchedFilesSupported = false;
+  const workspaces = new Map<string, WorkspaceSlot>();
+  const pendingDiagnostics = new Map<string, PendingDiagnostics>();
+  const activeDiagnostics = new Map<string, ActiveDiagnostics>();
 
+  function disposeWorkspaces(): void {
+    for (const slot of workspaces.values()) slot.workspace.dispose();
+    workspaces.clear();
+  }
+
+  function workspaceForFile(fileName: string): ToolingWorkspace {
+    const candidate = normalizedPath(fileName);
+    let best: WorkspaceSlot | undefined;
+    for (const slot of workspaces.values()) {
+      if (pathContains(slot.rootPath, candidate) && (!best || slot.rootPath.length > best.rootPath.length)) best = slot;
+    }
+    if (best) return best.workspace;
+    const fallbackRoot = normalizedPath(rootPath);
+    const existing = workspaces.get(fallbackRoot);
+    if (existing) return existing.workspace;
+    const workspace = createWorkspace({ ...serverOptions, rootPath: fallbackRoot, ...(configPath ? { configPath } : {}) });
+    workspaces.set(fallbackRoot, { rootPath: fallbackRoot, workspace });
+    return workspace;
+  }
+
+  function setDocumentInWorkspace(document: TextDocument): void {
+    workspaceForFile(uriPath(document.uri)).setDocument(uriPath(document.uri), document.getText(), document.version);
+  }
+
+  function resetDocumentsInWorkspaces(): void {
+    for (const slot of workspaces.values()) {
+      for (const document of documents.all()) slot.workspace.closeDocument(uriPath(document.uri));
+    }
+    for (const document of documents.all()) setDocumentInWorkspace(document);
+  }
+
+  function replaceWorkspaces(rootPaths: readonly string[]): void {
+    cancelAllDiagnostics();
+    disposeWorkspaces();
+    workspaceRevision += 1;
+    const uniqueRoots = [...new Set(rootPaths.map(normalizedPath))];
+    const roots = (uniqueRoots.length ? uniqueRoots : [normalizedPath(rootPath)]).slice(0, MAX_WORKSPACES);
+    rootPath = roots[0] ?? rootPath;
+    for (const path of roots) {
+      workspaces.set(path, {
+        rootPath: path,
+        workspace: createWorkspace({ ...serverOptions, rootPath: path, ...(configPath ? { configPath } : {}) }),
+      });
+    }
+    resetDocumentsInWorkspaces();
+  }
+
+  function workspaceRoots(params: InitializeParams): readonly string[] {
+    const folders = params.workspaceFolders?.map((folder) => uriPath(folder.uri)) ?? [];
+    return folders.length ? folders : [rootPathFor(params)];
+  }
+
+  function cancelDiagnostics(uri: string): void {
+    const pending = pendingDiagnostics.get(uri);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingDiagnostics.delete(uri);
+    }
+    activeDiagnostics.get(uri)?.cancel();
+    activeDiagnostics.delete(uri);
+  }
+
+  function cancelAllDiagnostics(): void {
+    for (const uri of pendingDiagnostics.keys()) cancelDiagnostics(uri);
+    for (const active of activeDiagnostics.values()) active.cancel();
+    activeDiagnostics.clear();
+  }
+
+  function scheduleDiagnostics(uri: string): void {
+    const document = documents.get(uri);
+    if (!document || stopped) return;
+    cancelDiagnostics(uri);
+    const version = document.version;
+    const timer = setTimeout(() => {
+      pendingDiagnostics.delete(uri);
+      void publishDiagnostics(uri, version);
+    }, DIAGNOSTIC_DEBOUNCE_MS);
+    pendingDiagnostics.set(uri, { version, timer });
+  }
+
+  async function computeDiagnostics(document: TextDocument, token?: Cancellation): Promise<readonly CompileDiagnostic[]> {
+    if (token?.isCancellationRequested) return [];
+    const currentWorkspace = workspaceForFile(uriPath(document.uri));
+    const revision = workspaceRevision;
+    let service: SqlBraidLanguageService;
+    try {
+      service = await currentWorkspace.service(token);
+    } catch (error) {
+      if (token?.isCancellationRequested || revision !== workspaceRevision) return [];
+      throw error;
+    }
+    await yieldToEventLoop();
+    if (token?.isCancellationRequested) return [];
+    const current = documents.get(document.uri);
+    if (!current || current.version !== document.version || currentWorkspace !== workspaceForFile(uriPath(document.uri)) || revision !== workspaceRevision) return [];
+    const diagnostics = service.diagnostics(document.getText(), uriPath(document.uri));
+    await yieldToEventLoop();
+    if (token?.isCancellationRequested) return [];
+    const latest = documents.get(document.uri);
+    return latest && latest.version === document.version && revision === workspaceRevision ? diagnostics : [];
+  }
+
+  async function publishDiagnostics(uri: string, version: number): Promise<void> {
+    const document = documents.get(uri);
+    if (!document || document.version !== version || stopped) return;
+    const revision = workspaceRevision;
+    let cancelled = false;
+    const token = { get isCancellationRequested() { return cancelled; } };
+    const active: ActiveDiagnostics = { version, cancel: () => { cancelled = true; } };
+    activeDiagnostics.set(uri, active);
+    try {
+      const diagnostics = await computeDiagnostics(document, token);
+      const latest = documents.get(uri);
+      if (cancelled || stopped || !latest || latest.version !== version || revision !== workspaceRevision || pendingDiagnostics.has(uri)) return;
+      connection.sendDiagnostics({ uri, version, diagnostics: diagnostics.map((entry) => diagnosticFor(document, entry)) });
+    } catch (error) {
+      if (!cancelled && !stopped) console.error(`SQLBraid diagnostics failed for ${uri}: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      if (activeDiagnostics.get(uri) === active) activeDiagnostics.delete(uri);
+    }
+  }
+
+  function invalidateAndSchedule(): void {
+    workspaceRevision += 1;
+    for (const slot of workspaces.values()) slot.workspace.invalidate();
+    for (const document of documents.all()) scheduleDiagnostics(document.uri);
+  }
+
+  async function withService<T>(
+    uri: string,
+    token: Cancellation | undefined,
+    callback: (service: SqlBraidLanguageService, document: TextDocument) => T,
+  ): Promise<T | undefined> {
+    const document = documents.get(uri);
+    if (!document || token?.isCancellationRequested) return undefined;
+    const version = document.version;
+    const currentWorkspace = workspaceForFile(uriPath(uri));
+    const revision = workspaceRevision;
+    let service: SqlBraidLanguageService;
+    try {
+      service = await currentWorkspace.service(token);
+    } catch (error) {
+      if (token?.isCancellationRequested || revision !== workspaceRevision) return undefined;
+      throw error;
+    }
+    await yieldToEventLoop();
+    const current = documents.get(uri);
+    if (token?.isCancellationRequested || !current || current.version !== version || currentWorkspace !== workspaceForFile(uriPath(uri)) || revision !== workspaceRevision) return undefined;
+    const result = callback(service, document);
+    await yieldToEventLoop();
+    const latest = documents.get(uri);
+    return token?.isCancellationRequested || !latest || latest.version !== version || revision !== workspaceRevision ? undefined : result;
+  }
+
+  connection.onInitialize((params) => {
+    configPath = configPathFrom(params.initializationOptions) ?? serverOptions.configPath;
+    workspaceFoldersSupported = params.capabilities.workspace?.workspaceFolders === true;
+    watchedFilesSupported = params.capabilities.workspace?.didChangeWatchedFiles?.dynamicRegistration === true;
+    replaceWorkspaces(workspaceRoots(params));
+    return {
+      capabilities: {
+        textDocumentSync: TextDocumentSyncKind.Full,
+        hoverProvider: true,
+        completionProvider: { triggerCharacters: ["."] },
+        definitionProvider: true,
+        referencesProvider: true,
+        documentSymbolProvider: true,
+        workspaceSymbolProvider: true,
+        signatureHelpProvider: { triggerCharacters: ["(", ","], retriggerCharacters: [","] },
+        diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
+        workspace: { workspaceFolders: { supported: true, changeNotifications: true } },
+      },
+      serverInfo: { name: "SQLBraid Language Server", version: "0.1.0" },
+    };
+  });
+
+  connection.onShutdown(() => {
+    cancelAllDiagnostics();
+    disposeWorkspaces();
+  });
+
+  connection.onExit(() => {
+    cleanup();
+  });
+
+  function updateWorkspaceFolders(event: WorkspaceFoldersChangeEvent): void {
+    const removed = new Set(event.removed.map((folder) => normalizedPath(uriPath(folder.uri))));
+    for (const path of removed) {
+      const slot = workspaces.get(path);
+      if (slot) slot.workspace.dispose();
+      workspaces.delete(path);
+    }
+    for (const folder of event.added) {
+      const path = normalizedPath(uriPath(folder.uri));
+      if (workspaces.size < MAX_WORKSPACES && !workspaces.has(path)) workspaces.set(path, { rootPath: path, workspace: createWorkspace({ ...serverOptions, rootPath: path, ...(configPath ? { configPath } : {}) }) });
+    }
+    if (!workspaces.size) workspaces.set(normalizedPath(rootPath), { rootPath: normalizedPath(rootPath), workspace: createWorkspace({ ...serverOptions, rootPath: normalizedPath(rootPath), ...(configPath ? { configPath } : {}) }) });
+    if (!workspaces.has(normalizedPath(rootPath))) rootPath = [...workspaces.keys()][0] ?? rootPath;
+    workspaceRevision += 1;
+    resetDocumentsInWorkspaces();
+    invalidateAndSchedule();
+  }
+
+  connection.onInitialized(() => {
+    if (workspaceFoldersSupported) workspaceFolderListener = connection.workspace.onDidChangeWorkspaceFolders(updateWorkspaceFolders);
+    if (watchedFilesSupported) {
+      void connection.client.register(DidChangeWatchedFilesNotification.type, { watchers: [{ globPattern: "**/*" }] }).catch(
+        (error: unknown) => { if (!stopped) console.error(`SQLBraid file-watch registration failed: ${String(error)}`); },
+      );
+    }
+  });
+
+  connection.onDidChangeWatchedFiles(() => {
+    invalidateAndSchedule();
+  });
+
+  connection.onDidChangeConfiguration(() => {
+    invalidateAndSchedule();
+  });
+
+  documents.onDidOpen((event) => {
+    setDocumentInWorkspace(event.document);
+    scheduleDiagnostics(event.document.uri);
+  });
+
+  documents.onDidChangeContent((event) => {
+    setDocumentInWorkspace(event.document);
+    scheduleDiagnostics(event.document.uri);
+  });
+
+  documents.onDidClose((event) => {
+    cancelDiagnostics(event.document.uri);
+    workspaceForFile(uriPath(event.document.uri)).closeDocument(uriPath(event.document.uri));
+    connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
+  });
+
+  connection.onRequest("textDocument/diagnostic", async (params: { readonly textDocument: { readonly uri: string } }, token: CancellationToken) => {
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return { kind: "full", resultId: "missing", items: [] };
+    const diagnostics = await computeDiagnostics(document, token);
+    if (token.isCancellationRequested || documents.get(document.uri)?.version !== document.version) return { kind: "full", resultId: String(document.version), items: [] };
+    return { kind: "full", resultId: String(document.version), items: diagnostics.map((entry) => diagnosticFor(document, entry)) };
+  });
+
+  connection.onHover(async (params, token) => {
+    const result = await withService(params.textDocument.uri, token, (service, document) => service.hover(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
+    if (!result) return null;
+    const document = documents.get(params.textDocument.uri);
+    return document ? { contents: { kind: MarkupKind.Markdown, value: result.contents }, range: rangeFor(document, result.range.start, result.range.end) } : null;
+  });
+
+  connection.onCompletion(async (params, token) => {
+    const result = await withService(params.textDocument.uri, token, (service, document) => service.complete(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
+    return { isIncomplete: false, items: (result ?? []).map((entry) => ({ label: entry.label, kind: completionKind(entry.kind), ...(entry.detail ? { detail: entry.detail } : {}) })) };
+  });
+
+  connection.onDefinition(async (params, token) => {
+    const result = await withService(params.textDocument.uri, token, (service, document) => service.definition(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
+    return result ? locationFor(result) : null;
+  });
+
+  connection.onReferences(async (params, token) => {
+    const result = await withService(params.textDocument.uri, token, (service, document) => service.references(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
+    return (result ?? []).map(locationFor);
+  });
+
+  connection.onDocumentSymbol(async (params, token) => {
+    const result = await withService(params.textDocument.uri, token, (service, document) => service.documentSymbols(document.getText(), uriPath(document.uri)));
+    const document = documents.get(params.textDocument.uri);
+    if (!document) return [];
+    return (result ?? []).map((entry) => ({ name: entry.name, detail: entry.detail, kind: SymbolKind.Function, range: rangeFor(document, entry.range.start, entry.range.end), selectionRange: rangeFor(document, entry.selectionRange.start, entry.selectionRange.end) }));
+  });
+
+  connection.onWorkspaceSymbol(async (params, token) => {
+    if (token.isCancellationRequested) return [];
+    const revision = workspaceRevision;
+    const symbols: WorkspaceSymbol[] = [];
+    for (const slot of workspaces.values()) {
+      let service: SqlBraidLanguageService;
+      try {
+        service = await slot.workspace.service(token);
+      } catch (error) {
+        if (token.isCancellationRequested || revision !== workspaceRevision) return [];
+        throw error;
+      }
+      await yieldToEventLoop();
+      if (token.isCancellationRequested || revision !== workspaceRevision) return [];
+      symbols.push(...service.workspaceSymbols(params.query).slice(0, MAX_WORKSPACE_SYMBOLS - symbols.length));
+      if (symbols.length >= MAX_WORKSPACE_SYMBOLS) break;
+    }
+    return symbols.map((entry) => ({ name: entry.name, kind: symbolKind(entry.kind), location: locationFor(entry.location), ...(entry.detail ? { containerName: entry.detail } : {}) }));
+  });
+
+  connection.onSignatureHelp(async (params, token) => {
+    const result = await withService(params.textDocument.uri, token, (service, document) => service.signatureHelp(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
+    return result ? { signatures: [{ label: result.label, parameters: result.parameters.map((label) => ({ label })) }], activeSignature: 0, activeParameter: result.activeParameter } : null;
+  });
+
+  const documentsListener = documents.listen(connection);
+  connection.listen();
+
+  function cleanup(): void {
+    if (cleanupDone) return;
+    cleanupDone = true;
+    stopped = true;
+    cancelAllDiagnostics();
+    documentsListener.dispose();
+    workspaceFolderListener?.dispose();
+    disposeWorkspaces();
+    connection.dispose();
+  }
+
+  return cleanup;
+}

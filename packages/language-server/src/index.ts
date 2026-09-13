@@ -1,56 +1,20 @@
-import { checkSource, createVirtualOverlay, discoverQueries, sourcePosition, type CompileDiagnostic, type OverlayOptions } from "@sqlbraid/compiler";
-import type { MetadataSnapshot } from "@sqlbraid/metadata";
+export {
+  type Cancellation,
+  createLanguageService,
+  type CompletionItem,
+  type LanguageServiceOptions,
+  type Location,
+  type HoverResult,
+  type QuerySymbol,
+  type SignatureResult,
+  type SqlBraidLanguageService,
+  type SourceDocument,
+  type ToolingTarget,
+  type ToolingWorkspace,
+  type WorkspaceOptions,
+  type WorkspaceSymbol,
+} from "@sqlbraid/tooling";
 
-export interface HoverResult {
-  readonly contents: string;
-  readonly range: { readonly start: number; readonly end: number };
-}
-
-export interface CompletionItem {
-  readonly label: string;
-  readonly kind: "relation" | "column" | "routine";
-  readonly detail?: string;
-}
-
-export interface LanguageServiceOptions extends OverlayOptions {
-  readonly metadata?: MetadataSnapshot;
-}
-
-export interface SqlBraidLanguageService {
-  diagnostics(sourceText: string, fileName: string): readonly CompileDiagnostic[];
-  hover(sourceText: string, fileName: string, offset: number): HoverResult | undefined;
-  complete(prefix: string): readonly CompletionItem[];
-  reload(metadata: MetadataSnapshot): SqlBraidLanguageService;
-}
-
-export function createLanguageService(options: LanguageServiceOptions): SqlBraidLanguageService {
-  function diagnostics(sourceText: string, fileName: string): readonly CompileDiagnostic[] {
-    return checkSource(sourceText, fileName, options);
-  }
-
-  function hover(sourceText: string, fileName: string, offset: number): HoverResult | undefined {
-    const overlay = createVirtualOverlay(sourceText, fileName, options);
-    const query = overlay.queryTypes.find((candidate) => offset >= candidate.range.start && offset <= candidate.range.end);
-    if (!query) return undefined;
-    const type = query.resultKind === "rows" ? "RowQuery" : query.resultKind === "command" ? "CommandQuery" : query.resultKind === "call" ? "CallQuery" : "Query";
-    return { contents: query.resultKind === "command" ? type : `${type}<${query.rowType}>`, range: query.range };
-  }
-
-  function complete(prefix: string): readonly CompletionItem[] {
-    if (!options.metadata) return [];
-    const lower = prefix.toLowerCase();
-    const relations = Object.values(options.metadata.relations).filter((relation) => relation.name.toLowerCase().startsWith(lower)).map((relation) => ({ label: relation.name, kind: "relation" as const, detail: relation.kind }));
-    const routines = Object.values(options.metadata.routines).flat().filter((routine) => routine.name.toLowerCase().startsWith(lower)).map((routine) => ({ label: routine.name, kind: "routine" as const, detail: routine.kind }));
-    const columns = Object.values(options.metadata.relations).flatMap((relation) => relation.columns.filter((column) => column.name.toLowerCase().startsWith(lower)).map((column) => ({ label: column.name, kind: "column" as const, detail: column.type })));
-    return [...relations, ...columns, ...routines];
-  }
-
-  function reload(metadata: MetadataSnapshot): SqlBraidLanguageService {
-    return createLanguageService({ ...options, metadata });
-  }
-
-  return { diagnostics, hover, complete, reload };
-}
-
-export { sourcePosition, discoverQueries };
+export { discoverQueries, sourcePosition } from "@sqlbraid/compiler";
 export { startStdioLanguageServer } from "./server.js";
+export type { LspStreams, StdioLanguageServerOptions } from "./server.js";

@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, extname, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { generateModels, type CodegenDiagnostic } from "@sqlbraid/codegen";
 import { checkProject, checkSource, createVirtualOverlay, discoverQueries, emitSource, type TypeScriptCheckOptions } from "@sqlbraid/compiler";
 import { createManifestFromEvidence, fingerprintTemplate, templateFamilyFingerprintOf } from "@sqlbraid/operations";
 import { diffSnapshots, parseSnapshotJson, type MetadataSnapshot } from "@sqlbraid/metadata";
-import type { CodegenTargetConfig, SqlBraidConfig } from "./config.js";
+import { CONFIG_NAMES, ConfigurationError, createWorkspace, loadConfig, type CodegenTargetConfig } from "@sqlbraid/tooling";
 import { codegenOutputCollisionKey } from "./codegen-path.js";
 
 function usage(): never {
-  console.error("Usage: sqlbraid check|manifest|build --file <path> [--out-file <path>] | sqlbraid check --project <path> | sqlbraid drift --before <path> --after <path> | sqlbraid codegen [--config <path>] [--target <name>]... [--check] [--json]");
+  console.error("Usage: sqlbraid check|manifest|build --file <path> [--out-file <path>] | sqlbraid check --project <path> | sqlbraid drift --before <path> --after <path> | sqlbraid codegen [--config <path>] [--target <name>]... [--check] [--json] | sqlbraid inspect query --file <path> --line <n> --column <n> [--config <path>] [--json] | sqlbraid inspect symbol <name> [--config <path>] [--json] | sqlbraid inspect diagnostics --file <path> [--config <path>] [--json]");
   process.exit(2);
 }
 
@@ -36,107 +36,6 @@ class CliError extends Error {
   constructor(message: string, readonly exitCode: 1 | 2) {
     super(message);
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function validateConfigOptions(target: Record<string, unknown>): void {
-  const policy = target.typePolicy;
-  if (!isRecord(policy) || typeof policy.id !== "string" || !policy.id || typeof policy.hash !== "string" || !policy.hash || !Array.isArray(policy.mappings)) {
-    throw new CliError(`Configuration target ${String(target.name)} has an invalid typePolicy.`, 2);
-  }
-  for (const [index, mapping] of policy.mappings.entries()) {
-    if (!isRecord(mapping) || ["databaseType", "inputType", "outputType"].some((field) => typeof mapping[field] !== "string" || !mapping[field]) || typeof mapping.nullable !== "boolean") {
-      throw new CliError(`Configuration target ${String(target.name)} has an invalid typePolicy mapping ${index}.`, 2);
-    }
-  }
-  const filters = target.filters;
-  if (filters !== undefined && (!isRecord(filters)
-    || ["includeNamespaces", "excludeNamespaces", "includeRelations", "excludeRelations", "kinds"]
-      .some((field) => filters[field] !== undefined && (!Array.isArray(filters[field]) || filters[field].some((entry) => typeof entry !== "string"))))) {
-    throw new CliError("Configuration target filters must contain only string arrays.", 2);
-  }
-  const filterKinds = isRecord(filters) && Array.isArray(filters.kinds) ? filters.kinds : [];
-  if (filterKinds.some((kind) => !["table", "view", "materialized", "foreign", "virtual", "unknown"].includes(String(kind)))) {
-    throw new CliError("Configuration target filters.kinds contains an invalid relation kind.", 2);
-  }
-  const naming = target.naming;
-  if (naming !== undefined) {
-    if (!isRecord(naming)) throw new CliError("Configuration target naming has invalid structure.", 2);
-    if (naming.relations !== undefined && (!isRecord(naming.relations) || Object.values(naming.relations).some((name) => typeof name !== "string"))) {
-      throw new CliError("Configuration target naming.relations has invalid structure.", 2);
-    }
-    const suffixes = naming.suffixes;
-    if (suffixes !== undefined && (!isRecord(suffixes) || ["row", "insert", "update"].some((field) => suffixes[field] !== undefined && typeof suffixes[field] !== "string"))) {
-      throw new CliError("Configuration target naming.suffixes has invalid structure.", 2);
-    }
-  }
-  const overrides = target.typeOverrides;
-  if (overrides !== undefined && !isRecord(overrides)) throw new CliError("Configuration target typeOverrides must be an object.", 2);
-  if (isRecord(overrides)) {
-    for (const field of ["databaseTypes", "columns"]) {
-      if (overrides[field] !== undefined && !isRecord(overrides[field])) throw new CliError(`Configuration target typeOverrides.${field} must be an object.`, 2);
-    }
-    const validateOverrideMap = (map: Record<string, unknown>, label: string): void => {
-      for (const [key, value] of Object.entries(map)) {
-        if (!isRecord(value)) throw new CliError(`Configuration ${label}.${key} must be an object.`, 2);
-        if (value.inputType === undefined && value.outputType === undefined) throw new CliError(`Configuration ${label}.${key} must specify a type.`, 2);
-        for (const side of ["inputType", "outputType"]) if (value[side] !== undefined && (typeof value[side] !== "string" || value[side].length === 0)) {
-          throw new CliError(`Configuration ${label}.${key}.${side} must be a non-empty string.`, 2);
-        }
-      }
-    };
-    if (isRecord(overrides.databaseTypes)) validateOverrideMap(overrides.databaseTypes, "typeOverrides.databaseTypes");
-    if (isRecord(overrides.columns)) for (const [relation, columns] of Object.entries(overrides.columns)) {
-      if (!isRecord(columns)) throw new CliError(`Configuration typeOverrides.columns.${relation} must be an object.`, 2);
-      validateOverrideMap(columns, `typeOverrides.columns.${relation}`);
-    }
-  }
-}
-
-function validateConfig(value: unknown): asserts value is SqlBraidConfig {
-  if (!isRecord(value)) throw new CliError("Configuration default export must be an object.", 2);
-  const codegen = value.codegen;
-  if (codegen === undefined) return;
-  if (!isRecord(codegen) || !Array.isArray(codegen.targets)) throw new CliError("Configuration codegen.targets must be an array.", 2);
-  const names = new Set<string>();
-  for (const [index, target] of codegen.targets.entries()) {
-    if (!isRecord(target)) throw new CliError(`Configuration target ${index} must be an object.`, 2);
-    for (const field of ["name", "metadata", "outFile"] as const) {
-      if (typeof target[field] !== "string" || target[field].length === 0) throw new CliError(`Configuration target ${index}.${field} must be a non-empty string.`, 2);
-    }
-    const name = target.name as string;
-    if (names.has(name)) throw new CliError(`Configuration target name is duplicated: ${name}.`, 2);
-    names.add(name);
-    if (!target.typePolicy) throw new CliError(`Configuration target ${name} requires typePolicy.`, 2);
-    validateConfigOptions(target);
-  }
-}
-
-async function loadCodegenConfig(configPath: string | undefined): Promise<{ config: SqlBraidConfig; directory: string; path: string }> {
-  const cwd = process.cwd();
-  let path: string;
-  if (configPath) {
-    path = resolve(cwd, configPath);
-  } else {
-    const candidates = ["sqlbraid.config.mjs", "sqlbraid.config.js", "sqlbraid.config.cjs"]
-      .map((candidate) => resolve(cwd, candidate))
-      .filter((candidate) => existsSync(candidate));
-    if (candidates.length > 1) throw new CliError(`Multiple configuration files found: ${candidates.map((candidate) => relative(cwd, candidate)).join(", ")}.`, 2);
-    path = candidates[0] ?? "";
-  }
-  if (!path) throw new CliError("No sqlbraid.config.mjs, sqlbraid.config.js, or sqlbraid.config.cjs found.", 2);
-  if (![".mjs", ".js", ".cjs"].includes(extname(path))) throw new CliError("Codegen configuration must be .mjs, .js, or .cjs; TypeScript configs are not supported.", 2);
-  let imported: { default?: unknown };
-  try {
-    imported = await import(`${pathToFileURL(path).href}?sqlbraid=${Date.now()}`);
-  } catch (error) {
-    throw new CliError(`Could not load configuration ${path}: ${error instanceof Error ? error.message : String(error)}`, 2);
-  }
-  validateConfig(imported.default);
-  return { config: imported.default, directory: dirname(path), path };
 }
 
 async function loadMetadata(path: string | undefined): Promise<MetadataSnapshot | undefined> {
@@ -264,7 +163,7 @@ function reportCodegen(results: readonly CodegenCliTargetResult[], json: boolean
 }
 
 async function runCodegen(argv: readonly string[], json: boolean): Promise<void> {
-  const loaded = await loadCodegenConfig(option(argv, "--config"));
+  const loaded = await loadConfig(option(argv, "--config"));
   const targets = loaded.config.codegen?.targets;
   if (!targets) throw new CliError("Configuration must define codegen.targets.", 2);
   const requested = options(argv, "--target");
@@ -316,9 +215,91 @@ function reportDiagnostics(diagnostics: readonly { readonly code: string; readon
   else for (const diagnostic of diagnostics) console.error(diagnosticText(diagnostic));
 }
 
+function numericOption(argv: readonly string[], name: string): number {
+  const value = option(argv, name);
+  if (!value || !/^\d+$/u.test(value)) usage();
+  return Number(value);
+}
+
+function offsetAt(source: string, line: number, column: number): number {
+  if (line < 1 || column < 1) usage();
+  let offset = 0;
+  let currentLine = 1;
+  while (currentLine < line) {
+    const next = source.indexOf("\n", offset);
+    if (next < 0) return source.length;
+    offset = next + 1;
+    currentLine += 1;
+  }
+  return Math.min(source.length, offset + column - 1);
+}
+
+function inspectionContext(fileName: string | undefined, configPath: string | undefined): { readonly rootPath: string; readonly configPath?: string } {
+  if (configPath) {
+    const absoluteConfigPath = resolve(process.cwd(), configPath);
+    return { rootPath: dirname(absoluteConfigPath), configPath: absoluteConfigPath };
+  }
+  let current = fileName ? dirname(fileName) : process.cwd();
+  while (true) {
+    if (CONFIG_NAMES.some((name) => existsSync(resolve(current, name))) || existsSync(resolve(current, "tsconfig.json")) || existsSync(resolve(current, "package.json"))) return { rootPath: current };
+    const parent = dirname(current);
+    if (parent === current) return { rootPath: current };
+    current = parent;
+  }
+}
+
+async function runInspect(argv: readonly string[], json: boolean): Promise<void> {
+  const operation = argv[0];
+  const configPath = option(argv, "--config");
+  if (!operation || !["query", "symbol", "diagnostics"].includes(operation)) usage();
+  const fileOption = option(argv, "--file");
+  const fileName = fileOption ? resolve(process.cwd(), fileOption) : undefined;
+  if ((operation === "query" || operation === "diagnostics") && !fileName) usage();
+  const symbolName = operation === "symbol"
+    ? argv.slice(1).find((value, index, values) => !value.startsWith("--") && values[index - 1] !== "--config")
+    : undefined;
+  if (operation === "symbol" && !symbolName) usage();
+  const workspace = createWorkspace(inspectionContext(fileName, configPath));
+  try {
+    if (operation === "symbol") {
+      const service = await workspace.service();
+      const symbols = service.workspaceSymbols(symbolName as string);
+      const result = { operation, query: symbolName, symbols };
+      if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
+      else for (const symbol of symbols) console.log(`${symbol.name} ${symbol.kind} ${symbol.location.uri}`);
+      return;
+    }
+    const source = await readFile(fileName as string, "utf8");
+    workspace.setDocument(fileName as string, source);
+    const service = await workspace.service();
+    if (operation === "diagnostics") {
+      const allDiagnostics = service.diagnostics(source, fileName as string);
+      const diagnostics = allDiagnostics.slice(0, 100).map((diagnostic) => ({
+        ...diagnostic,
+        message: diagnostic.message.slice(0, 2000),
+      }));
+      if (json) process.stdout.write(`${JSON.stringify({ operation, file: fileName, truncated: allDiagnostics.length > diagnostics.length, diagnostics })}\n`);
+      else reportDiagnostics(diagnostics, false);
+      return;
+    }
+    const hover = service.hover(source, fileName as string, offsetAt(source, numericOption(argv, "--line"), numericOption(argv, "--column")));
+    const result = hover
+      ? { operation, file: fileName, resolved: true, contents: hover.contents, range: hover.range, provenance: "sqlbraid" }
+      : { operation, file: fileName, resolved: false, evidence: "unresolved" };
+    if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
+    else console.log(result.resolved ? `${result.contents}` : "unresolved");
+  } finally {
+    workspace.dispose();
+  }
+}
+
 async function main(argv: readonly string[]): Promise<void> {
   const command = argv[0];
   const json = argv.includes("--json");
+  if (command === "inspect") {
+    await runInspect(argv.slice(1), json);
+    return;
+  }
   if (command === "codegen") {
     await runCodegen(argv.slice(1), json);
     return;
@@ -400,7 +381,10 @@ async function main(argv: readonly string[]): Promise<void> {
   if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) process.exitCode = 1;
 }
 
-void main(process.argv.slice(2)).catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = error instanceof CliError ? error.exitCode : 1;
-});
+const invokedPath = process.argv[1] && existsSync(process.argv[1]) ? realpathSync(process.argv[1]) : undefined;
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  void main(process.argv.slice(2)).catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = error instanceof CliError || error instanceof ConfigurationError ? error.exitCode : 1;
+  });
+}
