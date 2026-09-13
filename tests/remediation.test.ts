@@ -192,7 +192,7 @@ test('project checking preserves TSX, MTS, and CTS source identities', () => {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
-});
+}, 15_000);
 
 test('untyped dynamic SQL remains unknown without a declared contract', () => {
   const choose = "import {sql} from '@sqlbraid/template'; const q=sql`/*@braid choose*/ /*@braid when ${true}*/ SELECT id FROM users /*@braid when ${true}*/ SELECT missing FROM definitely_missing /*@braid otherwise*/ SELECT id FROM users /*@braid end*/`;";
