@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="ko" dir="ltr" data-theme="dark" data-has-toc data-has-sidebar class="astro-6rm2io2w"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>런타임 및 드라이버 지원 | SQLBraid</title><link rel="canonical" href="https://clickin.github.io/SQLBraid/dev/ko/reference/support/"/><link rel="alternate" hreflang="en" href="https://clickin.github.io/SQLBraid/dev/reference/support/"/><link rel="alternate" hreflang="ko" href="https://clickin.github.io/SQLBraid/dev/ko/reference/support/"/><link rel="alternate" hreflang="x-default" href="https://clickin.github.io/SQLBraid/dev/reference/support/"/><link rel="sitemap" href="/SQLBraid/dev/sitemap-index.xml"/><link rel="shortcut icon" href="/SQLBraid/dev/favicon.svg" type="image/svg+xml"/><meta name="generator" content="Astro v7.3.2"/><meta name="generator" content="Starlight v0.42.0"/><meta property="og:title" content="런타임 및 드라이버 지원"/><meta property="og:type" content="article"/><meta property="og:url" content="https://clickin.github.io/SQLBraid/dev/ko/reference/support/"/><meta property="og:locale" content="ko"/><meta property="og:description" content="릴리스 증거, 호환성 기대치, 사용자 지정 어댑터를 분리합니다."/><meta property="og:site_name" content="SQLBraid"/><meta name="twitter:card" content="summary_large_image"/><meta name="description" content="릴리스 증거, 호환성 기대치, 사용자 지정 어댑터를 분리합니다."/><script>
+<!DOCTYPE html><html lang="ko" dir="ltr" data-theme="dark" data-has-toc data-has-sidebar class="astro-6rm2io2w"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>런타임 및 드라이버 지원 | SQLBraid</title><link rel="canonical" href="https://clickin.github.io/SQLBraid/dev/ko/reference/support/"/><link rel="alternate" hreflang="en" href="https://clickin.github.io/SQLBraid/dev/reference/support/"/><link rel="alternate" hreflang="ko" href="https://clickin.github.io/SQLBraid/dev/ko/reference/support/"/><link rel="alternate" hreflang="x-default" href="https://clickin.github.io/SQLBraid/dev/reference/support/"/><link rel="sitemap" href="/SQLBraid/dev/sitemap-index.xml"/><link rel="shortcut icon" href="/SQLBraid/dev/favicon.svg" type="image/svg+xml"/><meta name="generator" content="Astro v7.3.2"/><meta name="generator" content="Starlight v0.42.0"/><meta property="og:title" content="런타임 및 드라이버 지원"/><meta property="og:type" content="article"/><meta property="og:url" content="https://clickin.github.io/SQLBraid/dev/ko/reference/support/"/><meta property="og:locale" content="ko"/><meta property="og:description" content="구현된 capability 경로와 대기 중인 PV15 릴리스 증거를 분리합니다."/><meta property="og:site_name" content="SQLBraid"/><meta name="twitter:card" content="summary_large_image"/><meta name="description" content="구현된 capability 경로와 대기 중인 PV15 릴리스 증거를 분리합니다."/><script>
 	window.StarlightThemeProvider = (() => {
 		const storedTheme =
 			typeof localStorage !== 'undefined' && localStorage.getItem('starlight-theme');
@@ -70,171 +70,120 @@
 		})();
 	</script></sl-sidebar-state-persist><div class="md:sl-hidden"><div class="mobile-preferences sl-flex astro-ycy7qy7c"><div class="social-icons astro-ycy7qy7c"><a href="https://github.com/Clickin/SQLBraid" rel="me" class="sl-flex astro-cfdceejf"><span class="sr-only astro-cfdceejf">GitHub</span><svg aria-hidden="true" class="astro-cfdceejf astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a><label class="docs-version-select astro-smepgwxr"><span class="astro-smepgwxr">문서 버전</span><select data-docs-version data-docs-page="reference/support" data-docs-locale="ko" data-docs-current="dev" data-docs-index="/SQLBraid/versions.json" class="astro-smepgwxr"><option value="dev" selected class="astro-smepgwxr">개발 버전</option></select></label></div><starlight-theme-select><label style="--sl-select-width: 6.25em" class="astro-m2ofnpmr"><span class="sr-only astro-m2ofnpmr">테마 선택</span><svg aria-hidden="true" class="icon label-icon astro-m2ofnpmr astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg><select autocomplete="off" class="astro-m2ofnpmr"><option value="dark" class="astro-m2ofnpmr">어두운 테마</option><option value="light" class="astro-m2ofnpmr">밝은 테마</option><option value="auto" selected class="astro-m2ofnpmr">자동</option></select><svg aria-hidden="true" class="icon caret astro-m2ofnpmr astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg></label></starlight-theme-select><script>
 	StarlightThemeProvider.updatePickers();
-</script><starlight-lang-select><label style="--sl-select-width: 7em" class="astro-m2ofnpmr"><span class="sr-only astro-m2ofnpmr">언어 선택</span><svg aria-hidden="true" class="icon label-icon astro-m2ofnpmr astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path fill-rule="evenodd" d="M8.516 3a.94.94 0 0 0-.941.94v1.15H2.94a.94.94 0 1 0 0 1.882h7.362a7.422 7.422 0 0 1-1.787 3.958 7.42 7.42 0 0 1-1.422-2.425.94.94 0 1 0-1.774.627 9.303 9.303 0 0 0 1.785 3.043 7.422 7.422 0 0 1-4.164 1.278.94.94 0 1 0 0 1.881 9.303 9.303 0 0 0 5.575-1.855 9.303 9.303 0 0 0 4.11 1.74l-.763 1.525a.968.968 0 0 0-.016.034l-1.385 2.77a.94.94 0 1 0 1.683.841l1.133-2.267h5.806l1.134 2.267a.94.94 0 0 0 1.683-.841l-1.385-2.769a.95.95 0 0 0-.018-.036l-3.476-6.951a.94.94 0 0 0-1.682 0l-1.82 3.639a7.423 7.423 0 0 1-3.593-1.256 9.303 9.303 0 0 0 2.27-5.203h1.894a.94.94 0 0 0 0-1.881H9.456V3.94A.94.94 0 0 0 8.516 3Zm6.426 11.794a1.068 1.068 0 0 1-.02.039l-.703 1.407h3.924l-1.962-3.924-1.24 2.478Z" clip-rule="evenodd"/></svg><select autocomplete="off" class="astro-m2ofnpmr"><option value="/SQLBraid/dev/reference/support/" class="astro-m2ofnpmr">English</option><option value="/SQLBraid/dev/ko/reference/support/" selected class="astro-m2ofnpmr">한국어</option></select><svg aria-hidden="true" class="icon caret astro-m2ofnpmr astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg></label></starlight-lang-select></div></div></div></sl-sidebar-pane></nav><div class="main-frame astro-huvlfsz4"><script type="module">var e=document.getElementById(`starlight__sidebar`),t=e?.querySelector(`sl-sidebar-state-persist`),n=`sl-sidebar-state`,r=()=>{let r=[],i=t?.dataset.hash||``;try{let e=sessionStorage.getItem(n),t=JSON.parse(e||`{}`);Array.isArray(t.open)&&t.hash===i&&(r=t.open)}catch{}return{hash:i,open:r,scroll:e?.scrollTop||0}},i=e=>{try{sessionStorage.setItem(n,JSON.stringify(e))}catch{}},a=()=>i(r()),o=(e,t)=>{let n=r();n.open[t]=e,i(n)};t?.addEventListener(`click`,e=>{if(!(e.target instanceof Element))return;let t=e.target.closest(`summary`)?.closest(`details`);if(!t)return;let n=t.querySelector(`sl-sidebar-restore`),r=parseInt(n?.dataset.index||``);isNaN(r)||o(!t.open,r)}),addEventListener(`visibilitychange`,()=>{document.visibilityState===`hidden`&&a()});</script><div class="lg:sl-flex astro-kbgvjamk"><aside class="right-sidebar-container print:hidden astro-kbgvjamk"><div class="right-sidebar astro-kbgvjamk"><div class="lg:sl-hidden astro-enujiiuy"><mobile-starlight-toc data-min-h="2" data-max-h="3" class="astro-du2abrur"><nav aria-labelledby="starlight__on-this-page--mobile" class="astro-du2abrur"><details id="starlight__mobile-toc" class="astro-du2abrur"><summary id="starlight__on-this-page--mobile" class="sl-flex astro-du2abrur"><span class="toggle sl-flex astro-du2abrur">목차<svg aria-hidden="true" class="caret astro-du2abrur astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></span><span class="display-current astro-du2abrur"></span></summary><div class="dropdown astro-du2abrur"><ul class="isMobile astro-4qrkinfj" style="--depth: 0;"><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#_top" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">개요</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#pv14-전송-맵-검증-대기" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">PV14 전송 맵 (검증 대기)</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#릴리스-증거-provenance" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">릴리스 증거 provenance</span></a></li></ul></div></details></nav></mobile-starlight-toc><script type="module" src="/SQLBraid/dev/_astro/MobileTableOfContents.astro_astro_type_script_index_0_lang.BcSo_yiZ.js"></script></div><div class="right-sidebar-panel sl-hidden lg:sl-block astro-enujiiuy"><div class="sl-container astro-enujiiuy"><starlight-toc data-min-h="2" data-max-h="3"><nav aria-labelledby="starlight__on-this-page"><h2 id="starlight__on-this-page">목차</h2><ul class="astro-4qrkinfj" style="--depth: 0;"><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#_top" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">개요</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#pv14-전송-맵-검증-대기" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">PV14 전송 맵 (검증 대기)</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#릴리스-증거-provenance" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">릴리스 증거 provenance</span></a></li></ul></nav></starlight-toc><script type="module" src="/SQLBraid/dev/_astro/TableOfContents.astro_astro_type_script_index_0_lang.Csloo1VZ.js"></script></div></div></div></aside><div class="main-pane astro-kbgvjamk"><main data-pagefind-body class="astro-6rm2io2w" lang="ko" dir="ltr"><div class="content-panel astro-lhvyrvha"><div class="sl-container astro-lhvyrvha"><h1 id="_top" class="astro-f3logpig">런타임 및 드라이버 지원</h1></div></div><div class="content-panel astro-lhvyrvha"><div class="sl-container astro-lhvyrvha"><div class="sl-markdown-content">
-<blockquote>
-<p>PV14 바인딩 전송과 observer 진단은 개발/리뷰 중입니다. 정확한 최종
-revision의 검증이 대기 중입니다. 이 문서는 새 SHA, CI, 런타임 지원,
-패키지 버전 또는 RC 배포를 주장하지 않으며, PV14 개발·리뷰·사용자
-승인이 끝날 때까지 RC 배포는 연기됩니다. 아래 역사적 증거의 원래
-provenance는 보존합니다.</p>
-</blockquote>
-<p>지원 label의 의미는 다음과 같습니다.</p>
+</script><starlight-lang-select><label style="--sl-select-width: 7em" class="astro-m2ofnpmr"><span class="sr-only astro-m2ofnpmr">언어 선택</span><svg aria-hidden="true" class="icon label-icon astro-m2ofnpmr astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path fill-rule="evenodd" d="M8.516 3a.94.94 0 0 0-.941.94v1.15H2.94a.94.94 0 1 0 0 1.882h7.362a7.422 7.422 0 0 1-1.787 3.958 7.42 7.42 0 0 1-1.422-2.425.94.94 0 1 0-1.774.627 9.303 9.303 0 0 0 1.785 3.043 7.422 7.422 0 0 1-4.164 1.278.94.94 0 1 0 0 1.881 9.303 9.303 0 0 0 5.575-1.855 9.303 9.303 0 0 0 4.11 1.74l-.763 1.525a.968.968 0 0 0-.016.034l-1.385 2.77a.94.94 0 1 0 1.683.841l1.133-2.267h5.806l1.134 2.267a.94.94 0 0 0 1.683-.841l-1.385-2.769a.95.95 0 0 0-.018-.036l-3.476-6.951a.94.94 0 0 0-1.682 0l-1.82 3.639a7.423 7.423 0 0 1-3.593-1.256 9.303 9.303 0 0 0 2.27-5.203h1.894a.94.94 0 0 0 0-1.881H9.456V3.94A.94.94 0 0 0 8.516 3Zm6.426 11.794a1.068 1.068 0 0 1-.02.039l-.703 1.407h3.924l-1.962-3.924-1.24 2.478Z" clip-rule="evenodd"/></svg><select autocomplete="off" class="astro-m2ofnpmr"><option value="/SQLBraid/dev/reference/support/" class="astro-m2ofnpmr">English</option><option value="/SQLBraid/dev/ko/reference/support/" selected class="astro-m2ofnpmr">한국어</option></select><svg aria-hidden="true" class="icon caret astro-m2ofnpmr astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg></label></starlight-lang-select></div></div></div></sl-sidebar-pane></nav><div class="main-frame astro-huvlfsz4"><script type="module">var e=document.getElementById(`starlight__sidebar`),t=e?.querySelector(`sl-sidebar-state-persist`),n=`sl-sidebar-state`,r=()=>{let r=[],i=t?.dataset.hash||``;try{let e=sessionStorage.getItem(n),t=JSON.parse(e||`{}`);Array.isArray(t.open)&&t.hash===i&&(r=t.open)}catch{}return{hash:i,open:r,scroll:e?.scrollTop||0}},i=e=>{try{sessionStorage.setItem(n,JSON.stringify(e))}catch{}},a=()=>i(r()),o=(e,t)=>{let n=r();n.open[t]=e,i(n)};t?.addEventListener(`click`,e=>{if(!(e.target instanceof Element))return;let t=e.target.closest(`summary`)?.closest(`details`);if(!t)return;let n=t.querySelector(`sl-sidebar-restore`),r=parseInt(n?.dataset.index||``);isNaN(r)||o(!t.open,r)}),addEventListener(`visibilitychange`,()=>{document.visibilityState===`hidden`&&a()});</script><div class="lg:sl-flex astro-kbgvjamk"><aside class="right-sidebar-container print:hidden astro-kbgvjamk"><div class="right-sidebar astro-kbgvjamk"><div class="lg:sl-hidden astro-enujiiuy"><mobile-starlight-toc data-min-h="2" data-max-h="3" class="astro-du2abrur"><nav aria-labelledby="starlight__on-this-page--mobile" class="astro-du2abrur"><details id="starlight__mobile-toc" class="astro-du2abrur"><summary id="starlight__on-this-page--mobile" class="sl-flex astro-du2abrur"><span class="toggle sl-flex astro-du2abrur">목차<svg aria-hidden="true" class="caret astro-du2abrur astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></span><span class="display-current astro-du2abrur"></span></summary><div class="dropdown astro-du2abrur"><ul class="isMobile astro-4qrkinfj" style="--depth: 0;"><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#_top" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">개요</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#증거-label" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">증거 label</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#현재-pv15-매트릭스-최종-증거-대기" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">현재 PV15 매트릭스 (최종 증거 대기)</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#역사적-증거" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">역사적 증거</span></a></li></ul></div></details></nav></mobile-starlight-toc><script type="module" src="/SQLBraid/dev/_astro/MobileTableOfContents.astro_astro_type_script_index_0_lang.BcSo_yiZ.js"></script></div><div class="right-sidebar-panel sl-hidden lg:sl-block astro-enujiiuy"><div class="sl-container astro-enujiiuy"><starlight-toc data-min-h="2" data-max-h="3"><nav aria-labelledby="starlight__on-this-page"><h2 id="starlight__on-this-page">목차</h2><ul class="astro-4qrkinfj" style="--depth: 0;"><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#_top" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">개요</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#증거-label" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">증거 label</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#현재-pv15-매트릭스-최종-증거-대기" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">현재 PV15 매트릭스 (최종 증거 대기)</span></a></li><li style="--depth: 0;" class="astro-4qrkinfj"><a href="#역사적-증거" style="--depth: 0;" class="astro-4qrkinfj"><span style="--depth: 0;" class="astro-4qrkinfj">역사적 증거</span></a></li></ul></nav></starlight-toc><script type="module" src="/SQLBraid/dev/_astro/TableOfContents.astro_astro_type_script_index_0_lang.Csloo1VZ.js"></script></div></div></div></aside><div class="main-pane astro-kbgvjamk"><main data-pagefind-body class="astro-6rm2io2w" lang="ko" dir="ltr"><div class="content-panel astro-lhvyrvha"><div class="sl-container astro-lhvyrvha"><h1 id="_top" class="astro-f3logpig">런타임 및 드라이버 지원</h1></div></div><div class="content-panel astro-lhvyrvha"><div class="sl-container astro-lhvyrvha"><div class="sl-markdown-content"><p>PV15 최종 검증은 대기 중입니다. 이 페이지는 현재 SHA, CI, 배포 또는
+Official 지원 주장을 의도적으로 하지 않습니다. 패키지 이름이나 로컬
+fixture는 릴리스 증거가 아닙니다.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="증거-label">증거 label</h2><a class="sl-anchor-link" href="#증거-label"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “증거 label”</span></a></div>
 <ul>
-<li><strong>Official</strong> — 해당 런타임/드라이버 조합이 SQLBraid 릴리스 게이트에서 실행되었습니다.</li>
-<li><strong>Compatible</strong> — 공개 API에서 동작할 것으로 예상되고 로컬에서 검사되었지만 릴리스 게이트 주장은 아닙니다.</li>
-<li><strong>Custom</strong> — 첫 번째 파티 어댑터가 아니라 <code dir="auto">QueryExecutor</code> 또는 <code dir="auto">ConnectionProvider</code>를 통해 연결됩니다.</li>
-<li><strong>Unsupported</strong> — 필요한 기능이 없거나 조합이 명시적 검사에 실패했습니다.</li>
+<li><strong>Pending</strong> — 구현 경로는 있지만 PV15 최종 릴리스 게이트 증거가 아직 제공되지 않았습니다.</li>
+<li><strong>Historical</strong> — 정확한 revision 또는 과거 workflow가 조합을 실행했지만 현재 PV15 tree를 증명하지 않습니다.</li>
+<li><strong>Compatible expectation</strong> — public API와 어댑터 계약에 기반한 기대이며 릴리스 게이트 주장이 아닙니다.</li>
+<li><strong>Custom</strong> — 사용자가 제공한 <code dir="auto">QueryExecutor</code> 또는 <code dir="auto">ConnectionProvider</code>입니다.</li>
+<li><strong>Unsupported</strong> — 필요한 SQLBraid capability가 의도적으로 없습니다.</li>
 </ul>
-<p>매트릭스는 증거이며 패키지가 존재한다는 사실로 추론한 약속이 아닙니다. 특히 실제 데이터베이스 검사가 릴리스 게이트에 포함되기 전까지 어댑터는 Official이 아닙니다.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="현재-pv15-매트릭스-최종-증거-대기">현재 PV15 매트릭스 (최종 증거 대기)</h2><a class="sl-anchor-link" href="#현재-pv15-매트릭스-최종-증거-대기"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “현재 PV15 매트릭스 (최종 증거 대기)”</span></a></div>
 <table>
 <thead>
 <tr>
-<th>런타임/라이브러리</th>
+<th>런타임 또는 어댑터 경로</th>
 <th>상태</th>
-<th>증거</th>
+<th>경계</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Node 22.18.0 + core/template/runtime</td>
-<td>Official</td>
-<td>릴리스 게이트 대상</td>
+<td>Node <code dir="auto">&gt;=22.18.0</code> + core/template/runtime</td>
+<td>Pending</td>
+<td>런타임 패키지 대상</td>
 </tr>
 <tr>
-<td>Node 24.21.0 + core/template/runtime</td>
-<td>Compatible</td>
-<td>로컬 packed smoke, CI 게이트 아님</td>
+<td>Node 24 + Vite 8 애플리케이션 통합</td>
+<td>Pending</td>
+<td><code dir="auto">@sqlbraid/vite</code> pre-transform; 서버 런타임은 별도</td>
 </tr>
 <tr>
-<td>Bun 1.3.14 + core/template/runtime</td>
-<td>Official</td>
-<td>packed portability smoke</td>
+<td>PostgreSQL / <code dir="auto">pg</code></td>
+<td>Pending</td>
+<td>일반 실행; 스트리밍에는 <code dir="auto">pg-cursor</code> optional peer</td>
 </tr>
 <tr>
-<td>Deno 2.9.3 + core/template/runtime</td>
-<td>Official</td>
-<td>packed portability smoke</td>
-</tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th>어댑터 또는 통합</th>
-<th>Node 22.18.0</th>
-<th>Node 24.21.0</th>
-<th>Bun 1.3.14</th>
-<th>Deno 2.9.3</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>PostgreSQL / <code dir="auto">pg</code> 8.23.0</td>
-<td>Official</td>
-<td>Compatible</td>
-<td>Official</td>
-<td>Official</td>
-</tr>
-<tr>
-<td>MySQL / <code dir="auto">mysql2</code> 3.24.4</td>
-<td>Official</td>
-<td>Compatible</td>
-<td>Official</td>
-<td>Official</td>
+<td>MySQL / <code dir="auto">mysql2</code></td>
+<td>Pending</td>
+<td>일반 실행 및 raw prepared <code dir="auto">Execute.stream()</code></td>
 </tr>
 <tr>
 <td>SQLite / <code dir="auto">node:sqlite</code></td>
-<td>Official</td>
-<td>Compatible</td>
-<td>Unsupported</td>
-<td>Official</td>
+<td>Pending</td>
+<td>Node statement API; <code dir="auto">integerMode</code>는 명시적</td>
 </tr>
 <tr>
-<td>Oracle portable root / <code dir="auto">@sqlbraid/oracle</code></td>
-<td>Official</td>
-<td>Compatible</td>
-<td>Official</td>
-<td>Official</td>
+<td>Oracle Thin / <code dir="auto">node-oracledb</code></td>
+<td>Pending</td>
+<td>scalar/cursor/implicit 루틴 리소스는 lease 반환 전에 닫아야 함</td>
 </tr>
 <tr>
-<td>Oracle Thin / <code dir="auto">node-oracledb</code> 7.0.1</td>
-<td>Official</td>
-<td>Compatible</td>
-<td>Unsupported</td>
-<td>Unsupported</td>
-</tr>
-<tr>
-<td>SQL Server portable root / <code dir="auto">@sqlbraid/mssql</code></td>
-<td>Official</td>
-<td>Compatible</td>
-<td>Official</td>
-<td>Official</td>
-</tr>
-<tr>
-<td>SQL Server / Tedious 20.0.0</td>
-<td>Official</td>
-<td>Compatible</td>
-<td>Unsupported</td>
-<td>Unsupported</td>
+<td>SQL Server / Tedious</td>
+<td>Pending</td>
+<td>Request event, OUTPUT 값, RETURN용 명시적 procedure metadata</td>
 </tr>
 <tr>
 <td>기타 드라이버 또는 데이터베이스</td>
 <td>Custom</td>
-<td>Custom</td>
-<td>Custom</td>
-<td>Custom</td>
+<td>독립적인 어댑터 증거 필요</td>
 </tr>
 </tbody>
 </table>
-<p>Oracle은 <code dir="auto">node-oracledb</code> Thin 모드를 대상으로 하며 Thick 모드는 Official이 아닙니다. SQL Server는 Tedious 어댑터를 대상으로 합니다. Oracle <code dir="auto">call()</code> 경로와 SQL Server OUT/return-value 루틴 바인딩은 이 RC에서 Unsupported입니다. PostgreSQL, MySQL, SQLite는 파라미터 힌트를 조용히 무시하지 않고 명시적으로 거부합니다.</p>
-<div class="sl-heading-wrapper level-h2"><h2 id="pv14-전송-맵-검증-대기">PV14 전송 맵 (검증 대기)</h2><a class="sl-anchor-link" href="#pv14-전송-맵-검증-대기"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “PV14 전송 맵 (검증 대기)”</span></a></div>
-<p>다섯 first-party 어댑터는 동일한 논리 <code dir="auto">RenderedStatement</code>를 받고 순수한
-바인딩 설명 이후 각자의 요청을 구체화합니다.</p>
+<p>첫 번째 파티 5개 행 스트리밍 primitive는 dialect flag가 아닌 서로 다른
+드라이버 capability입니다.</p>
 <table>
 <thead>
 <tr>
-<th>경로</th>
-<th>전송</th>
-<th>유효 reuse 정책</th>
+<th>어댑터</th>
+<th><code dir="auto">db.stream()</code> primitive</th>
+<th>중요 경계</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>PostgreSQL / <code dir="auto">pg</code></td>
-<td>text-positional <code dir="auto">$1..$N</code></td>
-<td>fresh unnamed simple, driver</td>
+<td><code dir="auto">pg-cursor</code></td>
+<td>Optional peer이며 capability가 없으면 <code dir="auto">BRAID_STREAM_UNSUPPORTED</code>입니다.</td>
 </tr>
 <tr>
 <td>MySQL / <code dir="auto">mysql2</code></td>
-<td>text-positional <code dir="auto">?</code></td>
-<td>driver reuse</td>
+<td>raw prepared <code dir="auto">Execute.stream()</code></td>
+<td>prepared/binary 실행을 유지하고 lease 반환 전에 drain 또는 discard합니다.</td>
 </tr>
 <tr>
 <td>SQLite / <code dir="auto">node:sqlite</code></td>
-<td>문서화된 <code dir="auto">DatabaseSync.prepare(text)</code>와 <code dir="auto">?</code></td>
-<td>fresh simple, driver</td>
+<td><code dir="auto">StatementSync.iterate()</code></td>
+<td>native iterator 종료가 정리 경계입니다.</td>
 </tr>
 <tr>
-<td>Oracle Thin / <code dir="auto">node-oracledb</code></td>
-<td>descriptor를 사용하는 text-positional <code dir="auto">:1..:N</code></td>
-<td>driver cache reuse</td>
+<td>Oracle Thin</td>
+<td><code dir="auto">ResultSet</code></td>
+<td>모든 ResultSet을 닫고 close 실패 시 lease를 폐기합니다.</td>
 </tr>
 <tr>
 <td>SQL Server / Tedious</td>
-<td><code dir="auto">TYPES.*</code>를 사용하는 typed request <code dir="auto">@p1..@pN</code></td>
-<td>fresh Request/<code dir="auto">execSql</code>, simple</td>
+<td>Request row event + bounded queue</td>
+<td>lease 반환 전에 request가 완료되어야 합니다.</td>
 </tr>
 </tbody>
 </table>
-<p>요청한 reuse는 정책 입력이지 유효 reuse의 증거가 아닙니다. 유효 결과는
-어댑터가 보고합니다. Placeholder 표기는 논리 prepared shape identity에
-포함되지 않습니다.</p>
-<p>Dialect, 드라이버, 실행 런타임, 트랜잭션 프로필은 서로 다른 축입니다. <a href="https://github.com/Clickin/SQLBraid/actions/runs/34753809318">d4bc626의 성공한 PV13 runtime 게이트</a>는 Linux x64의 Node 22.18.0에서 Oracle 23.9.0.25.07 Thin과 SQL Server 2022 CU18(16.0.4185.3)을 실행합니다. 로컬 SQL Server ARM 에뮬레이션은 Official ARM 지원 근거가 아닙니다. Bun/Deno 드라이버 서브패스와 Oracle Thick은 검증 범위가 아니며, 다섯 portable root는 고정 Node/Bun/Deno 버전에서 별도로 통과했습니다.</p>
-<div class="sl-heading-wrapper level-h2"><h2 id="릴리스-증거-provenance">릴리스 증거 provenance</h2><a class="sl-anchor-link" href="#릴리스-증거-provenance"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “릴리스 증거 provenance”</span></a></div>
-<div class="build-provenance"><p><strong>Docs build candidate:</strong><a href="https://github.com/Clickin/SQLBraid/commit/2aa3067dcf0c03ccde58a2eca2940c383a73729e">2aa3067dcf0c03ccde58a2eca2940c383a73729e</a>· <a href="https://github.com/Clickin/SQLBraid/actions/runs/34758108592">workflow run 34758108592</a></p><p>Exact-commit evidence: <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/runtime-portability.yml/runs?head_sha=2aa3067dcf0c03ccde58a2eca2940c383a73729e">runtime runs (JSON)</a> · <a href="https://api.github.com/repos/Clickin/SQLBraid/actions/workflows/release.yml/runs?head_sha=2aa3067dcf0c03ccde58a2eca2940c383a73729e">immutable release runs and artifacts (JSON)</a>. Each result includes its run URL and conclusion; an empty or unfinished run is not a pass.</p><p>These links identify the docs build candidate only. A successful Pages build does not claim that runtime, package, database, VS Code, or publication gates passed; consult individual checks and the release evidence artifact.</p></div>
+<p>Materialized <code dir="auto">db.all()</code>은 의도적으로 버퍼링합니다. <code dir="auto">db.call()</code>은 이질적인
+result-set schema를 매핑하기 전에 루틴 result 리소스를 materialize하고
+닫습니다. PostgreSQL refcursor 호출에는 기존 transaction이 필요합니다.
+MySQL prepared CALL OUT/INOUT은 mysql2 3.x에 검증된 public carrier
+discriminator가 없어 거부합니다. SQLite 루틴 호출은 지원하지 않으며 SQL
+Server <code dir="auto">CURSOR VARYING OUTPUT</code>은 애플리케이션 cursor 채널이 아닙니다.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="역사적-증거">역사적 증거</h2><a class="sl-anchor-link" href="#역사적-증거"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “역사적 증거”</span></a></div>
+<p>다음 링크는 provenance만을 위해 보존합니다.</p>
 <ul>
-<li>현재 검증 기록: <a href="https://github.com/Clickin/SQLBraid/commits/main/"><code dir="auto">main</code>의 commit</a></li>
-<li>과거 PV11 증거: <a href="https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7">revision <code dir="auto">1615311</code></a> 및 <a href="https://github.com/Clickin/SQLBraid/actions/runs/34745030794">workflow run <code dir="auto">34745030794</code></a></li>
+<li>PV13 런타임 증거: revision <a href="https://github.com/Clickin/SQLBraid/commit/d4bc626"><code dir="auto">d4bc626</code></a> 및 역사적 workflow <a href="https://github.com/Clickin/SQLBraid/actions/runs/34753809318"><code dir="auto">34753809318</code></a></li>
+<li>PV11 증거: revision <a href="https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7"><code dir="auto">1615311</code></a> 및 역사적 workflow <a href="https://github.com/Clickin/SQLBraid/actions/runs/34745030794"><code dir="auto">34745030794</code></a></li>
 </ul>
-<p>이 매트릭스는 테스트 결과가 아니라 문서입니다. 전체 릴리스 게이트에 관한 주장은 릴리스 증거와 개별 검사를 사용해 확인하세요.</p>
+<p>이 정확한 revision은 PV15 이전이며 현재 source, 현재 드라이버, 현재 Vite
+통합 또는 RC 배포를 주장하지 않습니다. PV15 검증 후 Main이 Pending 항목을
+최종 증거로 교체해야 합니다.</p>
 <p>사용자 지정 어댑터는 <a href="/SQLBraid/dev/agents/driver-author/">드라이버 작성자 바인딩 가이드</a>를 참고하세요.</p></div><footer class="sl-flex astro-j2cc5yqm"><div class="meta sl-flex astro-j2cc5yqm"></div><div class="pagination-links print:hidden astro-ttiagmsw" dir="ltr"><a href="/SQLBraid/dev/ko/reference/packages/" rel="prev" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg><span class="astro-ttiagmsw">이전 페이지<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">패키지 구성</span></span></a><a href="/SQLBraid/dev/ko/reference/errors/" rel="next" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg><span class="astro-ttiagmsw">다음 페이지<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">진단과 오류 코드</span></span></a></div></footer></div></div></main></div></div></div></div></body></html>

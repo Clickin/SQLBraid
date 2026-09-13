@@ -125,6 +125,38 @@ network failures remain stage <code dir="auto">"driver"</code>. A materializatio
 <td>Adapter does not expose a streaming protocol.</td>
 </tr>
 <tr>
+<td><code dir="auto">BRAID_CALL_RESULT_SETS</code></td>
+<td>A tuple routine contract declared a different number of result sets than the driver returned.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_MAP</code></td>
+<td>A routine output, return value, or result-set row failed query-bound Standard Schema mapping; inspect its location.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_CURSOR_TX_REQUIRED</code></td>
+<td>A PostgreSQL <code dir="auto">refcursor</code> call requires an existing transaction-scoped database.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_CURSOR</code></td>
+<td>A PostgreSQL refcursor output did not provide a usable portal name.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_CURSOR_UNSUPPORTED</code></td>
+<td>The adapter cannot expose the requested cursor output as an application result set.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_RETURN_UNSUPPORTED</code></td>
+<td>A query requested a return/status schema, but the driver call exposed no return/status channel.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_RESOURCE_CLEANUP</code></td>
+<td>Closing, draining, or cancelling a driver resource failed; the physical lease is not treated as safely reusable.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_INTEGER_MODE_UNSUPPORTED</code></td>
+<td>SQLite <code dir="auto">integerMode: "bigint"</code> needs a statement API exposing <code dir="auto">setReadBigInts</code>.</td>
+</tr>
+<tr>
 <td><code dir="auto">BRAID_PREPARED_NAME</code></td>
 <td>Prepared query name is empty or duplicated.</td>
 </tr>
@@ -150,7 +182,7 @@ network failures remain stage <code dir="auto">"driver"</code>. A materializatio
 </tr>
 <tr>
 <td><code dir="auto">BRAID_CALL_OUT_UNSUPPORTED</code></td>
-<td>Actual SQL Server output parameters cannot be represented by the current call contract.</td>
+<td>The adapter cannot represent or safely identify the requested OUT/INOUT channel (for example MySQL’s unproven prepared-CALL carrier).</td>
 </tr>
 <tr>
 <td><code dir="auto">BRAID_RESULT_SETS_UNSUPPORTED</code></td>

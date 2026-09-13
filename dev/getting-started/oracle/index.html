@@ -85,12 +85,28 @@ lease acquisition. The adapter reports driver-owned effective reuse. Unsupported
 hint facets fail at the <code dir="auto">materialize</code> stage before database I/O.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="capability-boundaries">Capability boundaries</h2><a class="sl-anchor-link" href="#capability-boundaries"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>Section titled “Capability boundaries”</span></a></div>
 <ul>
-<li>The first-party target is <code dir="auto">node-oracledb</code> Thin mode. Thick mode is not an Official claim.</li>
-<li><code dir="auto">call()</code> is Unsupported in this RC because OUT/IN OUT descriptors are not yet part of the bind API.</li>
+<li>The first-party target is <code dir="auto">node-oracledb</code> Thin mode. Thick mode is outside
+this guide’s verification scope.</li>
+<li><code dir="auto">sql.call</code> supports scalar OUT/IN OUT descriptors and <code dir="auto">SYS_REFCURSOR</code> OUT
+values with <code dir="auto">oracleParameter.refCursor()</code>. Cursor outputs become
+materialized <code dir="auto">resultSets</code> and are removed from scalar <code dir="auto">output</code>; implicit
+results are included and every <code dir="auto">ResultSet</code> is closed before lease release.</li>
+<li>Native <code dir="auto">procedure</code> metadata is not supported by this adapter; author the
+Oracle PL/SQL/SQL call text explicitly.</li>
 <li>Streaming uses the driver’s ResultSet protocol and closes the ResultSet on completion, abort, or early break.</li>
-<li>CI covers Oracle 23.9.0.25.07 Thin on Node 22.18.0/Linux x64; see <a href="/SQLBraid/dev/reference/support/">runtime and driver support</a> for the pinned evidence and portable-root coverage.</li>
+<li>The target combination is Oracle 23.9.0.25.07 Thin on Node 22.18.0/Linux
+x64. PV15 final verification is pending; see <a href="/SQLBraid/dev/reference/support/">runtime and driver
+support</a> for historical evidence only.</li>
 </ul>
 <p>Use an explicit hint for <code dir="auto">null</code> when the driver cannot infer a safe Oracle type. Do not silently turn an untyped null into <code dir="auto">VARCHAR2</code>.</p>
 <p>The default policy fetches <code dir="auto">NUMBER</code> results as strings to preserve precision. Explicit <code dir="auto">NUMBER</code> input accepts <code dir="auto">number</code> or <code dir="auto">bigint</code>; decimal strings are rejected by this adapter rather than converted lossily. Use an ordinary string bind with an explicit SQL conversion when your SQL requires decimal-text input.</p>
-<p>The Thin adapter honors base type hints but rejects length/precision/scale facets: node-oracledb cannot express those constraints on an IN parameter. Put such constraints in SQL/schema; descriptors remain available to custom executors. Materialized CLOB/NCLOB values are strings and BLOB/RAW values are buffers; they do not retain a live LOB after lease release. Temporal values use <code dir="auto">Date</code>, not a preserved source timezone name or sub-millisecond precision.</p>
+<p>The Thin adapter rejects precision/scale facets and IN length constraints.
+VARCHAR2/NVARCHAR2 OUT/INOUT lengths select the driver’s <code dir="auto">maxSize</code>; other
+length facets are rejected. Put database constraints in SQL/schema.
+Materialized CLOB/NCLOB values are strings and BLOB/RAW values are buffers.
+Routine LOB outputs are read with <code dir="auto">getData()</code> and destroyed before lease
+release, including unvisited siblings after a read failure. Temporal values
+use <code dir="auto">Date</code>, not a preserved source timezone name or sub-millisecond precision.</p>
+<p>Use <a href="/SQLBraid/dev/concepts/routines/">routine calls</a> for the complete
+<code dir="auto">sql.out</code>/<code dir="auto">sql.inOut</code> and heterogeneous result-set contract.</p>
 </div><footer class="sl-flex astro-j2cc5yqm"><div class="meta sl-flex astro-j2cc5yqm"></div><div class="pagination-links print:hidden astro-ttiagmsw" dir="ltr"><a href="/SQLBraid/dev/getting-started/mysql/" rel="prev" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg><span class="astro-ttiagmsw">Previous<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">MySQL</span></span></a><a href="/SQLBraid/dev/getting-started/mssql/" rel="next" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg><span class="astro-ttiagmsw">Next<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">SQL Server</span></span></a></div></footer></div></div></main></div></div></div></div></body></html>

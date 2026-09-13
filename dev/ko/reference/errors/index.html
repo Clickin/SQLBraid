@@ -125,6 +125,38 @@ materialize 오류의 <code dir="auto">executionStarted</code>와 <code dir="aut
 <td>어댑터가 스트리밍 프로토콜을 노출하지 않습니다.</td>
 </tr>
 <tr>
+<td><code dir="auto">BRAID_CALL_RESULT_SETS</code></td>
+<td>tuple 루틴 계약이 선언한 result set 개수와 드라이버가 반환한 개수가 다릅니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_MAP</code></td>
+<td>루틴 output, return value 또는 result-set 행의 query-bound Standard Schema 매핑이 실패했습니다. 위치를 확인하세요.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_CURSOR_TX_REQUIRED</code></td>
+<td>PostgreSQL <code dir="auto">refcursor</code> 호출에는 기존 transaction-scoped database가 필요합니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_CURSOR</code></td>
+<td>PostgreSQL refcursor output이 사용할 수 있는 portal 이름을 제공하지 않았습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_CURSOR_UNSUPPORTED</code></td>
+<td>어댑터가 요청한 cursor output을 애플리케이션 result set으로 노출할 수 없습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_CALL_RETURN_UNSUPPORTED</code></td>
+<td>return/status schema를 요청했지만 driver call이 return/status 채널을 노출하지 않았습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_RESOURCE_CLEANUP</code></td>
+<td>드라이버 리소스 close, drain 또는 cancel이 실패했으며 물리적 lease를 안전하게 재사용할 수 없습니다.</td>
+</tr>
+<tr>
+<td><code dir="auto">BRAID_INTEGER_MODE_UNSUPPORTED</code></td>
+<td>SQLite <code dir="auto">integerMode: "bigint"</code>에는 <code dir="auto">setReadBigInts</code>를 노출하는 statement API가 필요합니다.</td>
+</tr>
+<tr>
 <td><code dir="auto">BRAID_PREPARED_NAME</code></td>
 <td>준비된 쿼리 이름이 비어 있거나 중복됩니다.</td>
 </tr>
@@ -150,7 +182,7 @@ materialize 오류의 <code dir="auto">executionStarted</code>와 <code dir="aut
 </tr>
 <tr>
 <td><code dir="auto">BRAID_CALL_OUT_UNSUPPORTED</code></td>
-<td>실제 SQL Server 출력 파라미터를 현재 호출 계약으로 표현할 수 없습니다.</td>
+<td>어댑터가 요청한 OUT/INOUT 채널을 표현하거나 안전하게 식별할 수 없습니다(예: 검증되지 않은 MySQL prepared-CALL carrier).</td>
 </tr>
 <tr>
 <td><code dir="auto">BRAID_RESULT_SETS_UNSUPPORTED</code></td>

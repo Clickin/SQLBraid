@@ -85,12 +85,29 @@
 <code dir="auto">materialize</code> 단계에서 실패합니다.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="기능-경계">기능 경계</h2><a class="sl-anchor-link" href="#기능-경계"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “기능 경계”</span></a></div>
 <ul>
-<li>첫 번째 지원 대상은 <code dir="auto">node-oracledb</code> Thin 모드입니다. Thick 모드는 Official 주장이 아닙니다.</li>
-<li>OUT/IN OUT 디스크립터가 아직 바인드 API에 없으므로 이 RC에서 <code dir="auto">call()</code>은 Unsupported입니다.</li>
+<li>첫 번째 대상은 <code dir="auto">node-oracledb</code> Thin 모드입니다. Thick 모드는 이 문서의
+검증 범위 밖입니다.</li>
+<li><code dir="auto">sql.call</code>은 scalar OUT/IN OUT descriptor와
+<code dir="auto">oracleParameter.refCursor()</code>를 사용하는 <code dir="auto">SYS_REFCURSOR</code> OUT을 지원합니다.
+Cursor output은 materialized <code dir="auto">resultSets</code>가 되고 scalar <code dir="auto">output</code>에서
+제거됩니다. implicit result도 포함하며 lease 반환 전에 모든 <code dir="auto">ResultSet</code>을
+닫습니다.</li>
+<li>이 어댑터는 native <code dir="auto">procedure</code> metadata를 지원하지 않습니다. Oracle
+PL/SQL/SQL 호출 텍스트를 명시적으로 작성하세요.</li>
 <li>스트리밍은 드라이버의 ResultSet 프로토콜을 사용하며 완료, 중단, 조기 종료 시 ResultSet을 닫습니다.</li>
-<li>CI는 Node 22.18.0/Linux x64에서 Oracle 23.9.0.25.07 Thin을 검증합니다. 고정된 검증 증거와 portable root 범위는 <a href="/SQLBraid/dev/ko/reference/support/">런타임 및 드라이버 지원</a>을 참고하세요.</li>
+<li>대상 조합은 Node 22.18.0/Linux x64의 Oracle 23.9.0.25.07 Thin입니다.
+PV15 최종 검증은 대기 중이며 <a href="/SQLBraid/dev/ko/reference/support/">런타임 및 드라이버
+지원</a>의 역사적 증거를 참고하세요.</li>
 </ul>
 <p>드라이버가 안전한 Oracle 타입을 추론할 수 없는 <code dir="auto">null</code>에는 명시적인 힌트를 사용하세요. 타입이 지정되지 않은 null을 조용히 <code dir="auto">VARCHAR2</code>로 바꾸지 않습니다.</p>
 <p>기본 정책은 정밀도를 보존하기 위해 <code dir="auto">NUMBER</code> 결과를 문자열로 가져옵니다. 명시적인 <code dir="auto">NUMBER</code> 입력은 <code dir="auto">number</code> 또는 <code dir="auto">bigint</code>를 받으며, 소수 문자열은 손실 변환하지 않고 거부합니다. SQL에서 소수 문자열 입력이 필요하면 일반 문자열 바인드와 명시적인 SQL 변환을 사용하세요.</p>
-<p>Thin 어댑터는 기본 타입 힌트를 적용하지만 길이·precision·scale 속성은 거부합니다. node-oracledb가 IN 파라미터에서 이 제약을 표현할 수 없기 때문입니다. 제약은 SQL이나 스키마에 선언하세요. 사용자 정의 executor에서는 해당 디스크립터를 사용할 수 있습니다. 구체화된 CLOB/NCLOB는 문자열, BLOB/RAW는 버퍼이며 lease 반환 후 살아 있는 LOB를 보유하지 않습니다. 시간 값은 <code dir="auto">Date</code>를 사용하므로 원래 시간대 이름이나 밀리초 미만 정밀도를 보존하지 않습니다.</p>
+<p>Thin 어댑터는 precision/scale 속성과 IN 길이 제약을 거부합니다.
+VARCHAR2/NVARCHAR2 OUT/INOUT 길이는 드라이버의 <code dir="auto">maxSize</code>를 지정하며
+다른 길이 속성은 거부합니다. DB 제약은 SQL이나 스키마에 선언하세요.
+구체화된 CLOB/NCLOB는 문자열, BLOB/RAW는 버퍼입니다. 루틴 LOB output은
+<code dir="auto">getData()</code>로 읽고 lease 반환 전에 destroy 완료를 기다립니다. 읽기 실패 시
+아직 방문하지 않은 sibling 리소스도 정리합니다. 시간 값은 <code dir="auto">Date</code>를 사용하므로
+원래 시간대 이름이나 밀리초 미만 정밀도를 보존하지 않습니다.</p>
+<p>전체 <code dir="auto">sql.out</code>/<code dir="auto">sql.inOut</code> 및 이질적 result-set 계약은
+<a href="/SQLBraid/dev/ko/concepts/routines/">루틴 호출</a>을 참고하세요.</p>
 </div><footer class="sl-flex astro-j2cc5yqm"><div class="meta sl-flex astro-j2cc5yqm"></div><div class="pagination-links print:hidden astro-ttiagmsw" dir="ltr"><a href="/SQLBraid/dev/ko/getting-started/mysql/" rel="prev" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg><span class="astro-ttiagmsw">이전 페이지<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">MySQL</span></span></a><a href="/SQLBraid/dev/ko/getting-started/mssql/" rel="next" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg><span class="astro-ttiagmsw">다음 페이지<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">SQL Server</span></span></a></div></footer></div></div></main></div></div></div></div></body></html>
