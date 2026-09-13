@@ -27,6 +27,9 @@
     "test:lsp": "pnpm run build && vitest run --project unit tests/lsp-protocol.test.ts",
     "test:agent-tooling": "pnpm run build && vitest run --project unit --project cli tests/tooling.test.ts tests/tooling-workspace.test.ts tests/language-server.test.ts tests/cli.test.ts",
     "test:vscode": "pnpm --dir extensions/vscode test && node scripts/test-vscode.mjs",
+    "test:examples": "node scripts/test-examples.mjs",
+    "docs:build": "pnpm --dir website build",
+    "release:dry-run": "node scripts/release.mjs",
     "sqlbraid": "node packages/cli/dist/index.js"
   },
   "devDependencies": {

@@ -1,11 +1,15 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
+import assert from "node:assert/strict";
+import { builtinModules } from "node:module";
 import { execFile as execFileCallback } from "node:child_process";
-import { copyFile, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { runtimePackages } from "./audit-runtime.mjs";
+import ts from "typescript";
 
 const execFile = promisify(execFileCallback);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -14,25 +18,143 @@ const packageNames = (await readdir(packageRoot, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
   .sort();
+const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+const expectedVersion = workspace.version;
+const MAX_TARBALL_BYTES = 5 * 1024 * 1024;
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const temp = await mkdtemp(join(tmpdir(), "sqlbraid-pack-check-"));
 const consumer = join(temp, "consumer");
+const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR) : undefined;
 
 async function run(command, args, cwd = root) {
   await execFile(command, args, { cwd, maxBuffer: 20 * 1024 * 1024 });
 }
 
+async function sha256(path) {
+  return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
+function collectPackagePaths(value, paths = []) {
+  if (typeof value === "string" && value.startsWith("./")) paths.push(value.slice(2));
+  else if (value && typeof value === "object") {
+    for (const nested of Object.values(value)) collectPackagePaths(nested, paths);
+  }
+  return paths;
+}
+
 try {
   if (packageNames.length !== 13 || !packageNames.includes("metadata") || !packageNames.includes("codegen") || !packageNames.includes("tooling")) throw new Error("Expected 13 packages including metadata, codegen and tooling.");
+  const inputTarballs = new Map();
+  if (packInputDir) {
+    await rm(join(packInputDir, "pack-check-success.json"), { force: true });
+    const release = JSON.parse(await readFile(join(packInputDir, "release-manifest.json"), "utf8"));
+    const { stdout: head } = await execFile("git", ["rev-parse", "HEAD"], { cwd: root });
+    assert.equal(release.commit, head.trim(), "Supplied release must belong to the checked-out commit.");
+    assert.equal(release.version, expectedVersion);
+    assert.equal(release.packages.length, packageNames.length);
+    const inputFiles = (await readdir(packInputDir, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".tgz"))
+      .map((entry) => join(packInputDir, entry.name));
+    for (const tarball of inputFiles) {
+      const { stdout } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
+      const manifest = JSON.parse(stdout);
+      if (inputTarballs.has(manifest.name)) throw new Error(`Duplicate supplied tarball for ${manifest.name}.`);
+      const recorded = release.packages.find((entry) => entry.name === manifest.name);
+      assert.ok(recorded && join(packInputDir, recorded.file) === tarball, `Unrecorded release artifact: ${manifest.name}`);
+      assert.equal(await sha256(tarball), recorded.sha256, `Changed release artifact: ${manifest.name}`);
+      inputTarballs.set(manifest.name, tarball);
+    }
+    assert.equal(inputTarballs.size, packageNames.length);
+  }
   const tarballs = [];
   for (const packageName of packageNames) {
-    const before = new Set(await readdir(temp));
-    await run("pnpm", ["--dir", join(packageRoot, packageName), "pack", "--pack-destination", temp]);
-    const added = (await readdir(temp)).filter((entry) => entry.endsWith(".tgz") && !before.has(entry));
-    if (added.length !== 1) throw new Error(`Expected one tarball for ${packageName}, found ${added.length}.`);
-    const tarball = join(temp, added[0]);
+    const sourceManifest = JSON.parse(await readFile(join(packageRoot, packageName, "package.json"), "utf8"));
+    if (sourceManifest.version !== expectedVersion) throw new Error(`Package ${sourceManifest.name} is not synchronized to workspace version ${expectedVersion}.`);
+    let tarball;
+    if (packInputDir) {
+      tarball = inputTarballs.get(sourceManifest.name);
+      if (!tarball) throw new Error(`Release artifact directory is missing ${sourceManifest.name}.`);
+    } else {
+      const before = new Set(await readdir(temp));
+      await run("pnpm", ["--dir", join(packageRoot, packageName), "pack", "--pack-destination", temp]);
+      const added = (await readdir(temp)).filter((entry) => entry.endsWith(".tgz") && !before.has(entry));
+      if (added.length !== 1) throw new Error(`Expected one tarball for ${packageName}, found ${added.length}.`);
+      tarball = join(temp, added[0]);
+    }
     tarballs.push(tarball);
+    if ((await stat(tarball)).size > MAX_TARBALL_BYTES) throw new Error(`Tarball for ${packageName} exceeds ${MAX_TARBALL_BYTES} bytes.`);
     const { stdout: manifestText } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
     const manifest = JSON.parse(manifestText);
+    const expectedManifest = structuredClone(sourceManifest);
+    for (const field of ["dependencies", "optionalDependencies", "peerDependencies", "devDependencies"]) {
+      for (const [name, version] of Object.entries(expectedManifest[field] ?? {})) {
+        if (!version.startsWith("workspace:")) continue;
+        const range = version.slice("workspace:".length);
+        expectedManifest[field][name] = range === "*" ? expectedVersion
+          : range === "^" || range === "~" ? `${range}${expectedVersion}` : range;
+      }
+    }
+    assert.deepEqual(manifest, expectedManifest, `${manifest.name} packed manifest must match current source.`);
+    if (JSON.stringify(manifest).includes("workspace:")) throw new Error(`Workspace dependency protocol leaked into ${manifest.name} metadata.`);
+
+    if (manifest.version !== expectedVersion) throw new Error(`Packed ${manifest.name} is not synchronized to workspace version ${expectedVersion}.`);
+    if (manifest.license !== "MIT") throw new Error(`Packed ${manifest.name} is missing the MIT license.`);
+    if (!manifest.description || !manifest.repository?.url || !manifest.repository?.directory || !manifest.homepage || !manifest.bugs?.url || !Array.isArray(manifest.keywords) || manifest.keywords.length === 0) {
+      throw new Error(`Packed ${manifest.name} is missing public package metadata.`);
+    }
+    if (manifest.name !== `@sqlbraid/${packageName}` ||
+        manifest.repository.type !== "git" ||
+        manifest.repository.url !== "git+https://github.com/Clickin/SQLBraid.git" ||
+        manifest.repository.directory !== `packages/${packageName}` ||
+        manifest.bugs.url !== "https://github.com/Clickin/SQLBraid/issues" ||
+        manifest.homepage !== "https://github.com/Clickin/SQLBraid#readme") {
+      throw new Error(`Packed ${manifest.name} has incorrect repository metadata.`);
+    }
+    const unpacked = join(temp, `unpacked-${packageName}`);
+    await mkdir(unpacked);
+    await run("tar", ["-xzf", tarball, "-C", unpacked]);
+    const packageDir = join(unpacked, "package");
+    const packageFiles = await readdir(packageDir, { recursive: true, withFileTypes: true });
+    const fileNames = new Set();
+    for (const file of packageFiles) {
+      if (!file.isFile()) continue;
+      const name = relative(packageDir, join(file.parentPath, file.name)).replaceAll("\\", "/");
+      fileNames.add(name);
+      if (name !== "package.json" && name !== "README.md" && name !== "LICENSE" && !name.startsWith("dist/")) {
+        throw new Error(`Unexpected file in ${manifest.name} tarball: ${name}`);
+      }
+      if (/(^|\/)(?:test|tests|fixture|fixtures|__tests__)(?:[-_.\/]|$)/iu.test(name) || /(^|\/)(?:\.env(?:\..*)?|[^/]+\.(?:pem|key|p12|secret))$/iu.test(name)) {
+        throw new Error(`Test, fixture, or secret file in ${manifest.name} tarball: ${name}`);
+      }
+      if ((await stat(join(packageDir, name))).size > MAX_FILE_BYTES) throw new Error(`File ${manifest.name}/${name} exceeds ${MAX_FILE_BYTES} bytes.`);
+      const text = await readFile(join(packageDir, name), "utf8");
+      if (name.startsWith("dist/") || name === "README.md") {
+        assert.equal(text, await readFile(join(packageRoot, packageName, name), "utf8"), `${manifest.name}/${name} differs from the current build.`);
+      }
+      if (/\.(?:js|ts)$/u.test(name)) {
+        for (const imported of ts.preProcessFile(text, true, true).importedFiles) {
+          const specifier = imported.fileName;
+          if (specifier.startsWith(".") || specifier.startsWith("node:") || builtinModules.includes(specifier)) continue;
+          const dependency = specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0];
+          if (dependency === manifest.name) continue;
+          assert.ok(manifest.dependencies?.[dependency] || manifest.peerDependencies?.[dependency] || manifest.optionalDependencies?.[dependency],
+            `${manifest.name}/${name} imports undeclared production dependency ${dependency}.`);
+        }
+      }
+      if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:npm_|gh[pousr]_)[A-Za-z0-9]{30,}/u.test(text)) {
+        throw new Error(`Credential-like content in ${manifest.name}/${name}.`);
+      }
+      for (const needle of [root, `${root}/packages`, "dist/packages"]) {
+        if (text.includes(needle)) throw new Error(`Monorepo path leaked into ${manifest.name}/${name}: ${needle}`);
+      }
+    }
+    for (const required of ["LICENSE", "README.md"]) if (!fileNames.has(required)) throw new Error(`Packed ${manifest.name} is missing package/${required}.`);
+    if (await readFile(join(packageDir, "LICENSE"), "utf8") !== await readFile(join(root, "LICENSE"), "utf8")) {
+      throw new Error(`Packed ${manifest.name} license differs from the root license.`);
+    }
+    for (const packagePath of [...collectPackagePaths(manifest.exports), ...collectPackagePaths(manifest.bin)]) {
+      if (!fileNames.has(packagePath)) throw new Error(`Packed ${manifest.name} references missing ${packagePath}.`);
+    }
     if (manifest.engines?.node !== ">=22.18.0") throw new Error(`Unexpected Node engine for ${manifest.name}: ${manifest.engines?.node ?? "missing"}`);
     for (const validator of ["valibot", "zod", "arktype"]) {
       if (manifest.dependencies?.[validator] || manifest.peerDependencies?.[validator] || manifest.optionalDependencies?.[validator]) {
@@ -63,12 +185,12 @@ try {
     await run("pnpm", ["exec", "publint", "run", tarball, "--strict"]);
     await run("pnpm", ["exec", "attw", tarball, "--profile", "esm-only", "--no-emoji"]);
   }
+  if (packInputDir && inputTarballs.size !== packageNames.length) throw new Error(`Release artifact directory contains ${inputTarballs.size} tarballs; expected ${packageNames.length}.`);
 
   const dependencies = Object.fromEntries(await Promise.all(tarballs.map(async (tarball) => {
     const { stdout } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
     return [JSON.parse(stdout).name, `file:${tarball}`];
   })));
-  const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   const boundaryConsumer = join(temp, "boundary-consumer");
   await mkdir(boundaryConsumer);
   const runtimeDependencies = Object.fromEntries(runtimePackages.map((name) => [`@sqlbraid/${name}`, dependencies[`@sqlbraid/${name}`]]));
@@ -332,6 +454,7 @@ try {
   const extensionRoot = join(root, "extensions/vscode");
   const extension = join(temp, "vscode");
   const extensionManifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
+  const vsixOutput = resolve(process.env.SQLBRAID_VSIX_OUTPUT ?? join(root, "sqlbraid.vsix"));
   const extensionDependencies = Object.fromEntries(Object.entries(extensionManifest.dependencies).map(([name, version]) => [name, version.replace(/^workspace:/u, "")]));
   const bundledNames = new Set();
   async function includeTooling(name) {
@@ -343,10 +466,8 @@ try {
   for (const name of Object.keys(extensionDependencies)) if (name.startsWith("@sqlbraid/")) await includeTooling(name);
   await mkdir(extension);
   await cp(join(extensionRoot, "dist"), join(extension, "dist"), { recursive: true });
-  for (const file of ["README.md", "LICENSE"]) {
-    try { await copyFile(join(extensionRoot, file), join(extension, file)); }
-    catch (error) { if (error.code !== "ENOENT") throw error; }
-  }
+  await copyFile(join(extensionRoot, "README.md"), join(extension, "README.md"));
+  await copyFile(join(root, "LICENSE"), join(extension, "LICENSE"));
   await writeFile(join(extension, "package.json"), JSON.stringify({
     ...extensionManifest,
     devDependencies: {},
@@ -355,11 +476,44 @@ try {
   await run("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], extension);
   await writeFile(join(extension, "package.json"), JSON.stringify({ ...extensionManifest, devDependencies: {}, dependencies: extensionDependencies }));
   await rm(join(extension, "package-lock.json"), { force: true });
-  await run(join(root, "node_modules/.bin/vsce"), ["package", "--no-yarn", "--allow-missing-repository", "--skip-license", "--out", join(temp, "sqlbraid.vsix")], extension);
-  const { stdout: vsixFiles } = await execFile("unzip", ["-Z1", join(temp, "sqlbraid.vsix")]);
-  for (const file of [extensionManifest.main.replace(/^\.\//u, ""), "node_modules/@sqlbraid/language-server/dist/cli.js", "node_modules/@sqlbraid/cli/dist/index.js"]) {
+  const packagedVsix = join(temp, "sqlbraid.vsix");
+  await run(join(root, "node_modules/.bin/vsce"), ["package", "--no-yarn", "--out", packagedVsix], extension);
+  const { stdout: vsixFiles } = await execFile("unzip", ["-Z1", packagedVsix]);
+  for (const file of [
+    "readme.md",
+    extensionManifest.main.replace(/^\.\//u, ""),
+    "node_modules/@sqlbraid/language-server/dist/cli.js",
+    "node_modules/@sqlbraid/cli/dist/index.js",
+  ]) {
     if (!vsixFiles.split("\n").includes(`extension/${file}`)) throw new Error(`VSIX omits ${file}.`);
   }
+  const licensePath = vsixFiles.split("\n").find((file) => /^extension\/license(?:\.(?:txt|md))?$/iu.test(file));
+  assert.ok(licensePath, "VSIX must include its license document.");
+  const { stdout: vsixLicense } = await execFile("unzip", ["-p", packagedVsix, licensePath]);
+  assert.equal(vsixLicense, await readFile(join(root, "LICENSE"), "utf8"), "VSIX must ship the same MIT license as npm.");
+  await mkdir(dirname(vsixOutput), { recursive: true });
+  await copyFile(packagedVsix, vsixOutput);
+  const previousVsix = process.env.SQLBRAID_VSIX_PATH;
+  process.env.SQLBRAID_VSIX_PATH = vsixOutput;
+  try {
+    await run("pnpm", ["--dir", extensionRoot, "run", "compile-tests"]);
+    await run(process.execPath, [join(root, "scripts/test-vscode.mjs")]);
+  } finally {
+    if (previousVsix === undefined) delete process.env.SQLBRAID_VSIX_PATH;
+    else process.env.SQLBRAID_VSIX_PATH = previousVsix;
+  }
+  if (packInputDir) {
+    const { stdout: commit } = await execFile("git", ["rev-parse", "HEAD"], { cwd: root });
+    await writeFile(join(packInputDir, "pack-check-success.json"), `${JSON.stringify({
+      version: expectedVersion,
+      commit: commit.trim(),
+      packages: await Promise.all(tarballs.map(async (tarball) => {
+        const { stdout } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
+        return { name: JSON.parse(stdout).name, sha256: await sha256(tarball) };
+      })),
+    }, null, 2)}\n`);
+  }
+  console.info(`PASS packaged VSIX includes README/LICENSE and passed the clean-profile host gate: ${vsixOutput}`);
   console.info("PASS VSIX bundles the matching CLI and standard language server.");
   console.info(`Validated ${tarballs.length} packed packages with ESM, types, subpaths, CLI, engine metadata, tooling/editor consumers and leakage checks.`);
 } finally {

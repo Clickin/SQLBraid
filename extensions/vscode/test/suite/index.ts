@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as vscode from "vscode";
 
@@ -106,16 +106,20 @@ export async function run(): Promise<void> {
   }, "generated model output");
   const generatedSource = await readFile(generatedPath, "utf8");
   assert.match(generatedSource, /export interface UsersRow/u);
+  const generatedRealPath = await realpath(generatedPath);
 
   const definition = await waitFor(async () => {
     try {
       const locations = await vscode.commands.executeCommand<readonly vscode.Location[]>("vscode.executeDefinitionProvider", queryDocument.uri, usersPosition);
-      return locations?.find((location) => location.uri.fsPath === generatedPath);
+      for (const location of locations ?? []) {
+        if (await realpath(location.uri.fsPath) === generatedRealPath) return location;
+      }
+      return undefined;
     } catch {
       return undefined;
     }
   }, "generated model definition");
-  assert.equal(definition.uri.fsPath, generatedPath);
+  assert.equal(await realpath(definition.uri.fsPath), generatedRealPath);
 
   const beforeCheck = (await stat(generatedPath)).mtimeMs;
   await vscode.commands.executeCommand("sqlbraid.checkGeneratedModels");

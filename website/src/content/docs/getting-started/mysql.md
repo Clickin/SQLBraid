@@ -1,0 +1,62 @@
+---
+title: MySQL quickstart
+description: Connect SQLBraid to mysql2 with either a direct connection or an explicit pool.
+---
+
+Install the SQLBraid MySQL adapter and its driver together:
+
+```bash
+npm install @sqlbraid/mysql mysql2
+```
+
+## Direct physical connection
+
+The direct factory receives a connected `Connection` or `PoolConnection` object from `mysql2/promise`, not an unresolved Promise or a pool:
+
+```ts
+import mysql from "mysql2/promise";
+import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
+import { sql } from "@sqlbraid/mysql";
+
+const connection = await mysql.createConnection(
+  process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
+);
+const db = createMysql2Database(connection);
+
+try {
+  const rows = await db.all(sql.rows<{ id: number; name: string }>`
+    SELECT id, name FROM users ORDER BY id
+  `);
+  console.log(rows);
+} finally {
+  await connection.end();
+}
+```
+
+## Pool-backed database
+
+Use the pool factory for `mysql2/promise` pools:
+
+```ts
+import mysql from "mysql2/promise";
+import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
+import { sql } from "@sqlbraid/mysql";
+
+const pool = mysql.createPool(process.env.DATABASE_URL ?? "mysql://root:password@localhost/app");
+const db = createMysql2PoolDatabase(pool);
+const userId = 1;
+try {
+  const user = await db.maybeOne(sql.rows<{ id: number; name: string }>`
+    SELECT id, name FROM users WHERE id = ${userId}
+  `);
+  console.log(user);
+} finally {
+  await pool.end();
+}
+```
+
+The pool remains the application's resource. SQLBraid acquires and releases a physical connection for each independent root operation; `db.tx(...)` pins one lease for the callback.
+
+:::caution Do not pass a pool to `createMysql2Database`
+Use `createMysql2PoolDatabase(pool)` for a pool. Explicit factories keep transaction and release semantics physical-connection-safe.
+:::

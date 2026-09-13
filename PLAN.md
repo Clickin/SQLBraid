@@ -715,14 +715,29 @@ Non-negotiable:
 - transaction-profile design is reserved in §8.4; no runtime isolation API,
   MCP requirement, docs website or PV12 release/marketing work.
 
-### PV12 — Public pre-release/Product Hunt hardening
+### PV12 — Public pre-release/Product Hunt hardening — release candidate
 
-- five-minute quickstart;
-- package/API cleanup;
-- result mapping and audit/logging examples;
-- runtime support matrix;
-- packed consumer gates;
-- release notes/product positioning.
+- closes PV11 from `1615311149cce6290976df3ed6e63e41dfe795d7`: deterministic
+  identifier folding, ancestor CLI config discovery, exhaustive lazy project
+  references with bounded caches/cancellation, narrow evidence watchers, and
+  native workspace-relative VS Code selectors;
+- schema-qualified completion immediately after `FROM public.` returns table
+  evidence rather than routine candidates; the editor host verifies actual SQL
+  metadata completions separately from native TypeScript word suggestions;
+- canonical MIT license and compact README/public metadata for all 13 synchronized
+  `0.1.0` npm packages; explicit [public API/SPI audit](docs/public-api-audit.md);
+- Astro 7.3.2 / Starlight 0.42.0 / MDX documentation in `website/`, with
+  internal-link/anchor validation and GitHub Pages deployment;
+- packed SQLite/PostgreSQL/MySQL/codegen examples, including the literal SQLite
+  documentation snippet, direct/pool execution and deterministic codegen checks;
+- tarball manifest/source/hash/dependency validation and actual installed-VSIX
+  clean-profile tests, native TypeScript coexistence and unrelated-workspace checks;
+- dependency-derived immutable pack-only RC and tag-gated npm provenance workflow;
+  every release gate runs before publication;
+- release notes and [external administration checklist](docs/SQLBraid_release_readiness.md).
+  npm scope/bootstrap/trusted-publisher readiness remains an external prerequisite;
+  no `v0.1.0` tag or npm/Marketplace publication is implied by this candidate;
+- no stretch database/driver packages or transaction-profile runtime API.
 
 ### Post-release candidates
 

@@ -1,0 +1,43 @@
+{
+  "format": "sqlbraid-metadata",
+  "formatVersion": 1,
+  "dialect": "sqlite",
+  "dialectVersion": "3",
+  "server": {},
+  "namespaces": {
+    "main": {
+      "name": "main",
+      "kind": "attached"
+    }
+  },
+  "types": {},
+  "relations": {
+    "main.users": {
+      "identity": "main.users",
+      "name": "users",
+      "namespace": "main",
+      "kind": "table",
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type": "INTEGER",
+          "nullable": false,
+          "identity": true
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type": "TEXT",
+          "nullable": false
+        }
+      ]
+    }
+  },
+  "routines": {},
+  "metadata": {
+    "source": "packed codegen example",
+    "introspectionScope": "main",
+    "completeness": "complete"
+  }
+}

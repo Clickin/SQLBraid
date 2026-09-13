@@ -23,6 +23,11 @@ const users = sql.rows<UserRow>`
 
 > **Status:** pre-release. SQL-first authoring, Standard Schema mapping, connection leasing, execution observers, runtime portability, metadata/codegen and agent-native LSP tooling are implemented. See [`PLAN.md`](./PLAN.md).
 
+[Get started](https://clickin.github.io/SQLBraid/getting-started/sqlite/) ·
+[Documentation](https://clickin.github.io/SQLBraid/) ·
+[Packed executable examples](./examples/) ·
+[Public API inventory](./docs/public-api-audit.md)
+
 ---
 
 ## Why SQLBraid?
@@ -399,9 +404,12 @@ Runtime support uses four labels:
 | MySQL / `mysql2` 3.24.4 | Official | Compatible | Official | Official |
 | SQLite / `node:sqlite` | Official | Compatible | Unsupported | Official |
 
-The [runtime workflow](.github/workflows/runtime-portability.yml) passed all three
-jobs on the same revision,
-[`f6e8952`](https://github.com/Clickin/SQLBraid/actions/runs/34700814024),
+The [published candidate's exact-SHA evidence](https://clickin.github.io/SQLBraid/reference/support/#release-evidence-provenance),
+[current runtime runs](https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml?query=branch%3Amain)
+and [immutable release workflow](https://github.com/Clickin/SQLBraid/actions/workflows/release.yml)
+are the release evidence entrypoints: match the run's commit SHA to the artifact
+you use. The last reviewed baseline passed all three runtime jobs on
+[`1615311`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794),
 including the clean Node **22.18.0** full release gate and packed Bun **1.3.14** /
 Deno **2.9.3** real-driver checks. Node 24.21.0 has local evidence only.
 Bun/Deno versions are exact tested versions, not minimum-version promises.

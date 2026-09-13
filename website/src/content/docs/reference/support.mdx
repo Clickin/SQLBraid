@@ -1,0 +1,37 @@
+---
+title: Runtime and driver support
+description: Separate official evidence from compatibility expectations and custom adapters.
+---
+
+import BuildProvenance from "../../../components/BuildProvenance.astro";
+
+Support labels mean:
+
+- **Official** — exercised in the SQLBraid release gate for that runtime/driver combination.
+- **Compatible** — expected from public APIs but not an SQLBraid CI gate.
+- **Custom** — connected through `QueryExecutor` or `ConnectionProvider`.
+- **Unsupported** — a required capability is absent or the combination fails checks.
+
+| Runtime/library | Status | Evidence |
+| --- | --- | --- |
+| Node 22.18.0 + core/template/runtime | Official | Release gate target |
+| Node 24.21.0 + core/template/runtime | Compatible | Local packed smoke, not a CI gate |
+| Bun 1.3.14 + core/template/runtime | Official | Packed portability smoke |
+| Deno 2.9.3 + core/template/runtime | Official | Packed portability smoke |
+
+| Adapter | Node 22.18.0 | Node 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
+| --- | --- | --- | --- | --- |
+| PostgreSQL / `pg` 8.23.0 | Official | Compatible | Official | Official |
+| MySQL / `mysql2` 3.24.4 | Official | Compatible | Official | Official |
+| SQLite / `node:sqlite` | Official | Compatible | Unsupported | Official |
+
+Dialect, driver, execution runtime, and transaction profile are separate axes. A driver does not prove a dialect, and neither proves isolation or transaction semantics. Other drivers can use the executor/provider SPI but are Custom until independently exercised.
+
+## Release evidence provenance
+
+<BuildProvenance />
+
+- Current verification history: [commits on `main`](https://github.com/Clickin/SQLBraid/commits/main/)
+- Historical PV11 evidence: [revision `1615311`](https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7) and [workflow run `34745030794`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794)
+
+The matrix is documentation, not a test result. Use release evidence and individual checks for claims about the full release gate.

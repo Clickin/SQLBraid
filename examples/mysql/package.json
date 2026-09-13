@@ -1,0 +1,17 @@
+{
+  "name": "sqlbraid-example-mysql",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@sqlbraid/cli": "0.1.0",
+    "@sqlbraid/mysql": "0.1.0",
+    "mysql2": "3.24.4"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "22.20.1"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "sqlbraid-example-sqlite-quickstart",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@sqlbraid/cli": "0.1.0",
+    "@sqlbraid/sqlite": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/node": "22.20.1"
+  }
+}

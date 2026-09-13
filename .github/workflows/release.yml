@@ -1,0 +1,169 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_mode:
+        description: RC validation mode (never publishes)
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - pack-only
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Immutable release gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_USER: sqlbraid
+          POSTGRES_PASSWORD: sqlbraid-test
+          POSTGRES_DB: sqlbraid
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sqlbraid"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mysql:
+        image: mysql:8.4.2
+        env:
+          MYSQL_DATABASE: sqlbraid
+          MYSQL_USER: sqlbraid
+          MYSQL_PASSWORD: sqlbraid-test
+          MYSQL_ROOT_PASSWORD: sqlbraid-root-test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -psqlbraid-root-test"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      SQLBRAID_POSTGRES_URL: postgres://sqlbraid:sqlbraid-test@127.0.0.1:5432/sqlbraid
+      SQLBRAID_MYSQL_URL: mysql://sqlbraid:sqlbraid-test@127.0.0.1:3306/sqlbraid
+      SQLBRAID_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
+      SQLBRAID_VSIX_OUTPUT: ${{ runner.temp }}/sqlbraid-release-artifacts/sqlbraid.vsix
+    steps:
+      - name: Check out exact release ref
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 22.18.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+
+      - name: Set up pnpm 12.3.4
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+
+      - name: Set up Bun 1.3.14
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Set up Deno 2.9.3
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.3
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert clean tree, versions, and release ref
+        run: node scripts/release.mjs --mode preflight
+
+      - name: Install npm trusted-publishing CLI
+        if: github.event_name == 'push' || inputs.release_mode == 'dry-run'
+        run: npm install --global npm@11.5.1
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build packages and extension
+        run: pnpm run build
+
+      - name: Unit, CLI, and real SQLite gate
+        run: pnpm test
+
+      - name: Real SQLite gate
+        run: pnpm run test:db:sqlite
+
+      - name: Real PostgreSQL gate
+        run: pnpm run test:db:postgres
+
+      - name: Real MySQL gate
+        run: pnpm run test:db:mysql
+
+      - name: Packed consumer gate
+        run: pnpm run test:consumer
+
+      - name: Full test and VS Code source host gate
+        run: pnpm run test:all
+
+      - name: VS Code host gate
+        run: pnpm run test:vscode
+
+      - name: Node packed runtime gate
+        run: pnpm run test:runtime:node
+
+      - name: Bun packed runtime gate
+        run: pnpm run test:runtime:bun
+
+      - name: Deno packed runtime gate
+        run: pnpm run test:runtime:deno
+
+      - name: Documentation site gate
+        run: pnpm --dir website build
+
+      - name: Packed examples gate
+        run: pnpm run test:examples
+
+      - name: Pack immutable release candidate
+        run: >-
+          node scripts/release.mjs
+          --mode pack
+          --artifact-dir "$SQLBRAID_RELEASE_ARTIFACT_DIR"
+
+      - name: Pack hygiene and installed VSIX host gate
+        env:
+          SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
+        run: pnpm run pack:check
+
+      - name: Preserve validated release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlbraid-${{ github.event_name == 'push' && github.ref_name || 'rc' }}
+          path: ${{ runner.temp }}/sqlbraid-release-artifacts
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: npm publication dry run
+        if: github.event_name == 'workflow_dispatch' && inputs.release_mode == 'dry-run'
+        run: node scripts/release.mjs --mode publish-dry-run --artifact-dir "$SQLBRAID_RELEASE_ARTIFACT_DIR"
+
+      - name: Publish validated tarballs with npm provenance
+        if: github.event_name == 'push'
+        run: node scripts/release.mjs --mode publish --artifact-dir "$SQLBRAID_RELEASE_ARTIFACT_DIR"
+
+      - name: Create a draft GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft
+          --title "SQLBraid $GITHUB_REF_NAME"
+          --notes-file docs/SQLBraid_0.1.0_release_notes.md
+          "$SQLBRAID_VSIX_OUTPUT"

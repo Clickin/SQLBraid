@@ -3,6 +3,7 @@ dist/
 dist-test/
 *.vsix
 .vscode-test/
+.astro/
 *.tgz
 .DS_Store
 npm-debug.log*
