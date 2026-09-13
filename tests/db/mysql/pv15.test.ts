@@ -137,6 +137,34 @@ test("MySQL prepared Execute.stream handles 100k rows and drains on break", asyn
   }
 });
 
+test("MySQL streaming rejects multiple result sets and drains before reusing the same connection", async () => {
+  const pool = createPool({ uri: inject("mysql").connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  const db = createMysql2PoolDatabase(pool, { streamHighWaterMark: 2 });
+  try {
+    await pool.query("DROP PROCEDURE IF EXISTS braid_pv15_stream_multi");
+    await pool.query(`
+      CREATE PROCEDURE braid_pv15_stream_multi()
+      BEGIN
+        SELECT 1 AS USER_ID, 'Ada' AS NAME;
+        SELECT 10 AS PAYMENT_ID, 12.5 AS AMOUNT;
+      END
+    `);
+    const before = await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`);
+    await assert.rejects(async () => {
+      for await (const row of db.stream(sql.rows<Record<string, unknown>>`CALL braid_pv15_stream_multi()`)) {
+        assert.equal("PAYMENT_ID" in row, false, "second-result rows must never escape");
+        assert.deepEqual(row, { USER_ID: 1, NAME: "Ada" });
+      }
+    }, /BRAID_RESULT_SETS_UNSUPPORTED/u);
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    const after = await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`);
+    assert.equal(after.connectionId, before.connectionId, "a safely drained connection is reused, not replaced");
+  } finally {
+    await pool.query("DROP PROCEDURE IF EXISTS braid_pv15_stream_multi").catch(() => undefined);
+    await endPool(pool);
+  }
+});
+
 test("MySQL prepared CALL keeps emitted result-set metadata independent and rejects OUT", async () => {
   const pool = createPool({ uri: inject("mysql").connectionUri, connectionLimit: 1, idleTimeout: 0 });
   const db = createMysql2PoolDatabase(pool);

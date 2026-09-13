@@ -29,7 +29,10 @@ await db.all(events, { schema: ExtraSchema });
 루틴 계약은 각 채널을 독립적으로 매핑합니다. `sql.call({ output,
 resultSets: [UserSchema, PaymentSchema] as const, returnValue })`는 scalar
 객체에 output schema를, 각 tuple schema를 대응하는 result set의 행에,
-return schema를 선택적 return/status 값에 적용합니다. Cursor output은 scalar
+return schema를 실제 return/status 값에 적용합니다. `returnValue` schema를
+선언하면 성공한 `db.call()` 결과의 `returnValue`는 해당 schema의 출력 타입인
+필수 속성입니다. driver 채널이 없으면 `BRAID_CALL_RETURN_UNSUPPORTED`로
+실패합니다. bare 및 return schema가 없는 계약은 선택적 속성을 유지합니다. Cursor output은 scalar
 `output`에서 제거되며 어댑터는 async 매핑 전에 리소스를 소비하고 닫습니다.
 result-set 개수가 다르면 `BRAID_CALL_RESULT_SETS`, 특정 루틴 위치의 매핑
 실패는 `BRAID_CALL_MAP`으로 보고됩니다.

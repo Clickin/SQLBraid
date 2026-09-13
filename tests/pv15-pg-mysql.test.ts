@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import type { Mysql2ConnectionLike, Mysql2PoolConnectionLike, Mysql2RawCommandLike, Mysql2RawConnectionLike, Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
+import type { Mysql2ConnectionLike, Mysql2FieldLike, Mysql2PoolConnectionLike, Mysql2RawCommandLike, Mysql2RawConnectionLike, Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
 import { createMysql2Executor, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
 import type { PgClientLike, PgCursorFactory, PgCursorLike, PgPoolClientLike, PgResultLike } from "@sqlbraid/postgres/pg";
 import { createPgExecutor, createPgPoolDatabase, pgStatementBinding } from "@sqlbraid/postgres/pg";
 import { postgresParameter, sql as pgSql } from "@sqlbraid/postgres";
-import { sql as mysqlSql } from "@sqlbraid/mysql";
+import { sql as mysqlSql, typePolicy as mysqlTypePolicy } from "@sqlbraid/mysql";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { runStreamingConformance } from "./streaming-conformance.js";
 
@@ -111,6 +111,50 @@ class RowsStream implements Mysql2RawStreamLike {
   }
 }
 
+class FieldsBoundaryStream implements Mysql2RawStreamLike {
+  readonly readableEnded = false;
+  readonly destroyed = false;
+  private fieldsListener: ((...args: readonly unknown[]) => void) | undefined;
+  private step = 0;
+  drained = false;
+
+  constructor(
+    private readonly secondFields: readonly Mysql2FieldLike[],
+    private readonly secondRow?: unknown,
+    private readonly terminalError?: unknown,
+  ) {}
+
+  on(event: string, listener: (...args: readonly unknown[]) => void): this {
+    if (event === "fields") this.fieldsListener = listener;
+    return this;
+  }
+
+  once(event: string, listener: (...args: readonly unknown[]) => void): this {
+    return this.on(event, listener);
+  }
+
+  resume(): this { return this; }
+
+  [Symbol.asyncIterator](): AsyncIterator<unknown> {
+    return {
+      next: async (): Promise<IteratorResult<unknown>> => {
+        const step = this.step++;
+        if (step === 0) {
+          this.fieldsListener?.([{ name: "value", type: "FIRST" }]);
+          return { done: false, value: { value: "first" } };
+        }
+        if (step === 1) {
+          this.fieldsListener?.(this.secondFields);
+          if (this.terminalError !== undefined) throw this.terminalError;
+          if (this.secondRow !== undefined) return { done: false, value: this.secondRow };
+        }
+        this.drained = true;
+        return { done: true, value: undefined };
+      },
+    };
+  }
+}
+
 test("MySQL streaming normalizes DECIMAL metadata without materialization and rejects OUT before I/O", async () => {
   let executeCalls = 0;
   let requestedHighWaterMark: number | undefined;
@@ -140,7 +184,87 @@ test("MySQL streaming normalizes DECIMAL metadata without materialization and re
   assert.equal(executeCalls, 0);
 });
 
-test("PostgreSQL adapter reports driver read failures and closes the cursor", async () => {
+test("MySQL streaming preserves first metadata and rejects queued rows from a second result set", async () => {
+  const source = new FieldsBoundaryStream([{ name: "value", type: "SECOND" }], { value: "second" });
+  const raw: Mysql2RawConnectionLike = {
+    execute: () => ({ stream: () => source }) as Mysql2RawCommandLike,
+    destroy: () => undefined,
+  };
+  const connection = {
+    connection: raw,
+    execute: async () => [[], []] as const,
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  } as unknown as Mysql2ConnectionLike;
+  const executor = createMysql2Executor(connection, {
+    typePolicy: {
+      ...mysqlTypePolicy,
+      decode: (databaseType, value) => `${databaseType}:${String(value)}`,
+    },
+  });
+  const iterator = executor.stream(mysqlSql.rows`SELECT value FROM first_set`.render())[Symbol.asyncIterator]();
+  assert.deepEqual(await iterator.next(), { done: false, value: { value: "FIRST:first" } });
+  await assert.rejects(
+    () => iterator.next(),
+    /BRAID_RESULT_SETS_UNSUPPORTED/u,
+  );
+  assert.equal(source.drained, true);
+});
+
+test("MySQL streaming reports an empty second result set after iterator completion", async () => {
+  const source = new FieldsBoundaryStream([]);
+  const raw: Mysql2RawConnectionLike = {
+    execute: () => ({ stream: () => source }) as Mysql2RawCommandLike,
+    destroy: () => undefined,
+  };
+  const connection = {
+    connection: raw,
+    execute: async () => [[], []] as const,
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  } as unknown as Mysql2ConnectionLike;
+  const executor = createMysql2Executor(connection);
+  const iterator = executor.stream(mysqlSql.rows`SELECT value FROM first_set`.render())[Symbol.asyncIterator]();
+  assert.deepEqual(await iterator.next(), { done: false, value: { value: "first" } });
+  await assert.rejects(
+    () => iterator.next(),
+    /BRAID_RESULT_SETS_UNSUPPORTED/u,
+  );
+  assert.equal(source.drained, true);
+});
+
+test("MySQL streaming preserves second-set errors with drain cleanup failures", async () => {
+  const drainFailure = new Error("mysql stream drain failed after second result set");
+  const source = new FieldsBoundaryStream([{ name: "value", type: "SECOND" }], undefined, drainFailure);
+  const cleanup: string[] = [];
+  const raw: Mysql2RawConnectionLike = {
+    execute: () => ({ stream: () => source }) as Mysql2RawCommandLike,
+    destroy: () => undefined,
+  };
+  const connection = {
+    connection: raw,
+    execute: async () => [[], []] as const,
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+    release: () => { cleanup.push("release"); },
+    destroy: () => { cleanup.push("destroy"); },
+  } as unknown as Mysql2PoolConnectionLike;
+  const db = createMysql2PoolDatabase({ getConnection: async () => connection });
+  const iterator = db.stream(mysqlSql.rows`SELECT value FROM first_set`)[Symbol.asyncIterator]();
+  assert.deepEqual(await iterator.next(), { done: false, value: { value: "first" } });
+  await assert.rejects(
+    () => iterator.return!(),
+    (error: unknown) => error instanceof AggregateError
+      && error.errors.some((entry) => entry instanceof Error && /BRAID_RESULT_SETS_UNSUPPORTED/u.test(entry.message))
+      && error.errors.some((entry) => entry instanceof Error && entry.cause === drainFailure),
+  );
+  assert.deepEqual(cleanup, ["destroy"]);
+});
+
+test("PostgreSQL adapter reports driver read failures", async () => {
   const failure = new Error("pg driver read failed");
   let closed = 0;
   class FailingCursor implements PgCursorLike {

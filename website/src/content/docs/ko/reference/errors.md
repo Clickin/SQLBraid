@@ -14,6 +14,7 @@ materialize 오류의 `executionStarted`와 `executionCompleted`는 모두
 | Code | 의미 |
 | --- | --- |
 | `BRAID_RESULT_KIND` | 선언한 결과 종류와 실행 후 어댑터 결과가 다릅니다. |
+| `BRAID_RESULT_SETS_UNSUPPORTED` | MySQL 행 스트리밍에서 두 번째 result set을 발견했습니다. 다중 결과 루틴에는 `db.call()`을 사용하세요. |
 | `BRAID_RESULT_VALIDATION` | 쿼리 연결 또는 실행 수준 Standard Schema 검증에 실패했습니다. |
 | `BRAID_TX_SCOPE` | 루트/부모/sibling 트랜잭션 핸들이 활성 범위를 벗어났습니다. |
 | `BRAID_TX_CLOSED` | 콜백이 끝난 뒤 트랜잭션 핸들을 사용했습니다. |

@@ -14,6 +14,7 @@ network failures remain stage `"driver"`. A materialization error has
 | Code | Meaning |
 | --- | --- |
 | `BRAID_RESULT_KIND` | Declared result kind disagreed with adapter result after execution. |
+| `BRAID_RESULT_SETS_UNSUPPORTED` | MySQL row streaming encountered a second result set. Use `db.call()` for multi-result routines. |
 | `BRAID_RESULT_VALIDATION` | Query-bound or execution-level Standard Schema validation failed. |
 | `BRAID_TX_SCOPE` | A root/parent/sibling transaction handle escaped the active scope. |
 | `BRAID_TX_CLOSED` | A transaction handle was used after its callback ended. |

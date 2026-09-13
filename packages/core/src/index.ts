@@ -779,7 +779,9 @@ export type RoutineResultFromContract<Contract extends RoutineContract> = Routin
     ? RoutineRowsFromSchemas<Schemas>
     : readonly unknown[],
   Contract["returnValue"] extends RoutineSchema ? RoutineSchemaOutput<Contract["returnValue"]> : unknown
->;
+> & (Contract extends { readonly returnValue: RoutineSchema }
+  ? { readonly returnValue: RoutineSchemaOutput<Contract["returnValue"]> }
+  : {});
 
 export type RoutineResultSource =
   | {

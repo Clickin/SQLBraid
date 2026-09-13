@@ -241,9 +241,16 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       const source = command.stream({ highWaterMark });
       let fields: readonly Mysql2FieldLike[] = [];
       let fieldsChanged = false;
+      let fieldsSeen = 0;
+      let pendingError: Error | undefined;
       (source.on ?? source.once).call(source, "fields", (value: unknown) => {
-        fields = Array.isArray(value) ? value : [];
-        fieldsChanged = true;
+        fieldsSeen += 1;
+        if (fieldsSeen === 1) {
+          fields = Array.isArray(value) ? value : [];
+          fieldsChanged = true;
+        } else {
+          pendingError ??= new Error("BRAID_RESULT_SETS_UNSUPPORTED: MySQL stream returned multiple result sets; use database.call().");
+        }
       });
       const iterator = source[Symbol.asyncIterator]();
       let exhausted = false;
@@ -261,13 +268,14 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
         while (true) {
           signal?.throwIfAborted();
           const next = await iterator.next();
+          exhausted = next.done === true;
+          if (pendingError !== undefined) throw pendingError;
           if (fieldsChanged) {
             assertUniqueFields(fields);
             if (fields.length === 0) throw new Error("BRAID_RESULT_KIND: MySQL stream requires a row-producing statement.");
             fieldsChanged = false;
           }
           if (next.done) {
-            exhausted = true;
             break;
           }
           signal?.throwIfAborted();
@@ -283,11 +291,14 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
               while (!(await iterator.next()).done) {
                 signal?.throwIfAborted();
               }
+              exhausted = true;
             } catch (error) {
               const cleanup = cleanupError("MySQL stream command did not drain to completion.", error);
-              if (streamError !== undefined) throw cleanupAggregate([streamError, cleanup], "MySQL stream cleanup failed.", streamError);
+              const originals = [streamError, pendingError].filter((candidate, index, values): candidate is unknown => candidate !== undefined && values.indexOf(candidate) === index);
+              if (originals.length > 0) throw cleanupAggregate([...originals, cleanup], "MySQL stream cleanup failed.", originals[0]);
               throw cleanup;
             }
+            if (streamError === undefined && pendingError !== undefined) throw pendingError;
           }
           if (aborted) {
             const cleanup = cleanupError("MySQL physical connection was destroyed after stream abort.", signal?.reason);

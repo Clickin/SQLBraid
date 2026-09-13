@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import {
   createStatementBindingDescription,
   type CallQuery,
+  type Database,
   type RoutineCallResult,
   type StandardSchemaV1,
 } from '@sqlbraid/core';
@@ -17,6 +18,29 @@ function schema<Output>(): StandardSchemaV1<unknown, Output> {
       validate: (value) => ({ value: value as Output }),
     },
   };
+}
+
+declare const db: Database;
+
+async function routineContractResultTypeAssertions(): Promise<void> {
+  const contracted = sql.call({ returnValue: schema<number>() })`CALL typed()`;
+  const result = await db.call(contracted);
+  const requiredNumber: number = result.returnValue;
+  // @ts-expect-error a contracted number return value cannot be used as a string.
+  const incompatibleReturn: string = result.returnValue;
+
+  const bareQuery: CallQuery<RoutineCallResult> = sql.call`CALL bare()`;
+  const bare = await db.call(bareQuery);
+  const noReturnContract = await db.call(sql.call({
+    resultSets: [schema<{ readonly id: number }>()] as const,
+  })`CALL no_return()`);
+  type AssertTrue<Value extends true> = Value;
+  type BareReturnIsOptional = AssertTrue<{} extends Pick<typeof bare, 'returnValue'> ? true : false>;
+  type NoReturnContractIsOptional = AssertTrue<{} extends Pick<typeof noReturnContract, 'returnValue'> ? true : false>;
+  void requiredNumber;
+  void incompatibleReturn;
+  void bare;
+  void noReturnContract;
 }
 
 test('routine contracts infer heterogeneous result-set tuples and channels', () => {

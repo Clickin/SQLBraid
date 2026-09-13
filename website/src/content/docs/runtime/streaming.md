@@ -50,4 +50,6 @@ These are driver capabilities, not dialect properties. A custom executor must im
 
 Routine cursor streaming is not part of the materialized routine contract. Use `db.call()` for normalized, closed, heterogeneous result sets and this API for ordinary row streams.
 
+MySQL rejects a second result-set metadata boundary with `BRAID_RESULT_SETS_UNSUPPORTED` before yielding any second-set row. It drains the command before releasing a reusable connection; drain failure preserves the result-set error with `BRAID_RESOURCE_CLEANUP` and discards the connection. Use `db.call()` for routines that emit multiple result sets.
+
 See [transactions](/SQLBraid/runtime/transactions/), [observers](/SQLBraid/runtime/observers/), and [routine calls](/SQLBraid/concepts/routines/).

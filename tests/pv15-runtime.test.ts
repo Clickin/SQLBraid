@@ -68,6 +68,8 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
   await assert.rejects(() => renderPrepared.execute(), (error) => error === renderFailure);
   errorEvent = events.at(-1);
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.stage : undefined, "render");
+  assert.equal(errorEvent?.type === "query:error" ? errorEvent.executionStarted : undefined, false);
+  assert.equal(errorEvent?.type === "query:error" ? errorEvent.executionCompleted : undefined, false);
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.preparedName : undefined, "render-failure");
 
   events.length = 0;
@@ -81,6 +83,20 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.stage : undefined, "prepared");
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.executionStarted : undefined, false);
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.executionCompleted : undefined, false);
+  assert.equal(errorEvent?.type === "query:error" ? errorEvent.preparedName : undefined, "dialect-shape");
+
+  events.length = 0;
+  const bindingFailure = new Error("binding failed");
+  const bindingDb = createDatabase(emptyRowsExecutor({
+    statementBinding: { id: "failing-binding", describe() { throw bindingFailure; } },
+  }), { observers: [{ onEvent(event) { events.push(event); } }] });
+  const bindingPrepared = bindingDb.prepare("binding-failure", () => sql.rows`SELECT 1`);
+  await assert.rejects(() => bindingPrepared.execute(), (error) => error === bindingFailure);
+  errorEvent = events.at(-1);
+  assert.equal(errorEvent?.type === "query:error" ? errorEvent.stage : undefined, "materialize");
+  assert.equal(errorEvent?.type === "query:error" ? errorEvent.executionStarted : undefined, false);
+  assert.equal(errorEvent?.type === "query:error" ? errorEvent.executionCompleted : undefined, false);
+  assert.equal(errorEvent?.type === "query:error" ? errorEvent.preparedName : undefined, "binding-failure");
 });
 
 test("streaming explicitly returns the driver iterator before releasing its lease", async () => {

@@ -50,4 +50,6 @@ stream이 살아 있는 동안 transaction callback을 반환하지 마세요.
 
 루틴 cursor streaming은 materialized 루틴 계약에 포함되지 않습니다. 정규화되고 닫힌 이질적 result set에는 `db.call()`을, 일반 행 stream에는 이 API를 사용하세요.
 
+MySQL은 두 번째 result-set 메타데이터 경계에서 `BRAID_RESULT_SETS_UNSUPPORTED`로 실패하며 두 번째 집합의 행은 전달하지 않습니다. command를 drain한 뒤 재사용 가능한 연결을 반환합니다. drain 실패 시 result-set 오류와 `BRAID_RESOURCE_CLEANUP`을 함께 보존하고 연결을 폐기합니다. 여러 result set을 내보내는 루틴에는 `db.call()`을 사용하세요.
+
 [트랜잭션](/SQLBraid/runtime/transactions/), [observer](/SQLBraid/runtime/observers/), [루틴 호출](/SQLBraid/concepts/routines/)도 참고하세요.

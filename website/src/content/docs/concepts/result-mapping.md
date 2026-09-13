@@ -29,7 +29,11 @@ await db.all(events, { schema: ExtraSchema });
 Routine contracts map their channels independently. `sql.call({ output,
 resultSets: [UserSchema, PaymentSchema] as const, returnValue })` applies the
 output schema to the scalar object, each tuple schema to rows in its matching
-result set, and the return schema to the optional return/status value. Cursor
+result set, and the return schema to the actual return/status value. When a
+`returnValue` schema is declared, successful `db.call()` results have a required
+`returnValue` property with that schema's output type; a missing driver channel
+fails with `BRAID_CALL_RETURN_UNSUPPORTED`. Bare and no-return-schema contracts
+keep the property optional. Cursor
 outputs are removed from scalar `output`; adapters consume and close their
 resources before asynchronous mapping begins. A result-set count mismatch is
 `BRAID_CALL_RESULT_SETS`, and a failed routine location is reported by
