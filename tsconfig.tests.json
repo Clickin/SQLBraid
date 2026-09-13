@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "types": ["node", "vitest"]
-  },
-  "include": ["tests/**/*.ts", "tests/**/*.d.ts", "vitest.config.ts", "tsdown.config.ts"]
-}

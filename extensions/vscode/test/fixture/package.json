@@ -1,8 +1,0 @@
-{
-  "name": "sqlbraid-vscode-fixture",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@sqlbraid/template": "0.1.0"
-  }
-}
