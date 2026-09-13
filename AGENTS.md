@@ -337,6 +337,37 @@ are not rewritten, and multi-target validation completes before writes. Config
 files are executable Node code and are not sandboxed. Runtime packages never
 depend on CLI, codegen or metadata.
 
+### 12.1 Agent-native tooling
+
+PV11 `@sqlbraid/tooling` owns config/workspace and semantic evidence for standard
+LSP and CLI `inspect ... --json`. Preserve `@sqlbraid/cli/config` as the intentional
+reexport of the shared config contract. Tooling depends on core/compiler/metadata/
+codegen, never runtime, drivers, CLI, LSP or VS Code. Codegen needs only TypePolicy
+id/hash/mappings, not runtime encode/decode.
+
+Metadata is open-world positive evidence. A miss is unresolved, not invalid SQL:
+built-ins, extensions, UDFs, temp/session objects and CTEs remain legal opaque SQL.
+`RoutineSnapshot.argumentsComplete === true` alone permits exact signatures;
+first-party pg/mysql inspectors currently say false. Preserve optional boolean
+validation and canonical/hash/drift evidence without a metadata version bump.
+
+Use compiler diagnostic provenance: publish Braid plus overlay-only TS diagnostics,
+not native TS duplicates. Completion owns static SQL only, never normal TS or
+`${...}`. Navigation uses positive lexical identity and current real-file ranges;
+omit ambiguous references and stale generated offsets. Keep caches per-workspace,
+bounded and invalidated; discard cancellation/stale-version results without
+claiming synchronous TypeScript preemption.
+
+Standard LSP is primary; the portable skill is `skills/sqlbraid/SKILL.md`.
+VS Code stays a thin matching-version client, with native TypeScript authoritative.
+Keep actual stdio, packed agent-consumer and editor-host gates in `test:all`.
+Runtime-only packed installs must exclude metadata/codegen/tooling/CLI/LSP/editor.
+
+Preserve PLAN §8.4's independent dialect, driver, transaction-profile and execution
+runtime concerns. Node/Bun/Deno host compatibility is separate deployment evidence.
+PV11 implements no transaction-isolation/profile runtime API; omitted future
+isolation options must preserve the actual DB/session default.
+
 ---
 
 ## 13. Testing requirements

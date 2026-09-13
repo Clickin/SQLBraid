@@ -440,6 +440,57 @@ counting and `node:async_hooks` for transaction context. SQLBraid-owned public
 runtime declarations compile without Node ambient types. Tooling (`compiler`,
 CLI, metadata/codegen, LSP) remains Node-first.
 
+### 8.4 Reserved transaction-profile architecture
+
+This is a design constraint for a later runtime phase, **not a PV11 runtime API**.
+Keep four concerns independent:
+
+- **Dialect:** SQL syntax, lexical behavior and identifiers.
+- **Driver adapter:** wire protocol/client API and result materialization.
+- **Transaction profile:** DBMS transaction characteristics and capabilities.
+- **Execution runtime:** physical lease ownership, pinning, savepoints and scope.
+
+Node/Bun/Deno host support is separately tested deployment evidence. A
+MySQL-protocol driver with Oracle-compatible SQL may legitimately use MariaDB
+transaction semantics. PostgreSQL wire compatibility likewise does not prove
+PostgreSQL transaction semantics (for example, CockroachDB).
+
+The future conceptual isolation union is `read-uncommitted | read-committed |
+repeatable-read | snapshot | serializable`. Access mode is separate:
+`read-write | read-only`. PostgreSQL DEFERRABLE, SQLite
+DEFERRED/IMMEDIATE/EXCLUSIVE and MySQL WITH CONSISTENT SNAPSHOT belong to
+profile-specific options, not the isolation union.
+
+A future `TransactionProfile<Isolation, Extra>` should expose `id`,
+`supportedIsolationLevels`, `documentedDefaultIsolation`, `supportedAccessModes`
+and optional per-level `availability: "always" | "server-config"`. Its narrowed
+isolation type and profile-specific extra options should guide factory inference.
+Omitting isolation in `db.tx(...)` preserves the real database/session default;
+the documented default is intelligence, never a command to reset the session.
+
+The design must represent at least:
+
+| Future profile | Explicit portable isolation concepts | Separate caveat |
+| --- | --- | --- |
+| PostgreSQL | read-committed, repeatable-read, serializable | READ UNCOMMITTED aliases RC; DEFERRABLE is separate |
+| MySQL/InnoDB | read-uncommitted, read-committed, repeatable-read, serializable | Consistent snapshot is separate |
+| SQLite | serializable | Begin mode is separate; read_uncommitted/shared-cache is not a normal portable tx option |
+| Oracle | read-committed, serializable | Read-only is an access mode |
+| SQL Server | read-uncommitted, read-committed, repeatable-read, snapshot, serializable | SNAPSHOT may require database/server configuration |
+
+Normal factories will choose their ordinary profile (PostgreSQL, MySQL,
+SQLite respectively), while advanced configurations may override the profile
+independently of dialect and driver. Future Oracle/MSSQL factories follow the
+same rule. Exact behavior requires official DB documentation and real integration
+tests before implementation. PV11 exports no transaction-profile/isolation API.
+
+The future Astro Starlight + MDX website should render a
+`<TransactionIsolationMatrix />` from those profile definitions: documented
+default, omitted-option behavior, supported explicit levels, server-config
+requirements and DB-specific characteristics. This conceptual table reserves
+the design; it is not a second runtime capability source. No website is built
+in PV11.
+
 ---
 
 ## 9. Metadata and code generation
@@ -504,6 +555,48 @@ targets before writing, preserves unchanged outputs, and supports repeated
 database inspection and column renaming are not supported.
 
 The LSP focuses on SQLBraid diagnostics, mapper/declaration hover and metadata-backed completion, not its own SQL semantic engine.
+
+PV11 makes standard LSP the primary agent interface. `@sqlbraid/tooling` owns
+the shared Node-first config/workspace and semantic evidence service; CLI and
+language-server depend on it. Its dependencies are core/compiler/metadata/codegen,
+never runtime, drivers, CLI, LSP or VS Code. The existing `@sqlbraid/cli/config`
+import deliberately reexports the shared config contract. Pure codegen consumes
+only TypePolicy `id`/`hash`/`mappings`; it never needs runtime encode/decode methods.
+
+Metadata is open-world positive evidence. Missing relations/columns/routines/types
+never alone cause invalid-SQL diagnostics. Built-ins, extension functions, runtime
+UDFs, temp/session objects and CTEs remain opaque legal SQL. Routine
+`argumentsComplete?: boolean` is additive metadata v1 evidence:
+PostgreSQL/MySQL inspectors set false; SQLite emits no routines. Only true
+permits exact signatures, never incomplete empty arrays.
+
+Compiler `checkSourceDetailed` separates Braid, native TS, mapped overlay TS and
+overlay-only diagnostics using mapped source evidence. LSP/CLI inspection expose
+Braid plus overlay-only diagnostics; ordinary TS stays with TypeScript.
+The existing full `sqlbraid check` behavior remains available.
+
+The generic stdio transport uses `vscode-languageserver`, consumes initialize
+root/workspace folders and project tsconfig, and advertises standard diagnostics,
+hover, completion, definition, references, document/workspace symbols and
+completeness-gated signature help. It recognizes all four first-party SQL imports.
+Completion owns only static SQL, never ordinary TS or interpolation expressions.
+Lexical ambiguity yields less intelligence, not invented SQL semantics.
+
+Definitions prefer real current generated TS declarations/properties indexed by
+the TS parser, then reliable metadata JSON ranges. Stale or absent generated
+files never receive made-up offsets. References require positive lexical identity
+and omit CTE/alias ambiguity. Results are filtered/bounded and provenance-aware.
+Per-workspace source/config/metadata/generated caches are bounded and invalidated;
+pending async work is coalesced/cancellable, stale document/workspace results are
+discarded, and synchronous TypeScript work is not claimed to be preemptible.
+
+`sqlbraid inspect query|symbol|diagnostics --json` is the focused fallback for
+non-LSP agents, backed by that same service. A portable skill ships at
+`skills/sqlbraid/SKILL.md`. MCP remains optional and is not implemented.
+The thin VS Code client keeps native TypeScript language support, activates
+the server on SQLBraid project evidence, bundles matching server/CLI versions,
+and exposes generate/check/reload commands without duplicating semantics.
+Actual stdio, external packed tooling and real editor-host gates are mandatory.
 
 ---
 
@@ -607,11 +700,20 @@ Non-negotiable:
 - final declaration names are globally collision-checked after suffix application;
 - resolved output collision keys are case-folded on Windows.
 
-### PV11 — LSP metadata/codegen integration — NEXT
+### PV11 — Agent-native LSP and editor tooling — implemented
 
-- metadata-backed completion/hover;
-- generated-model navigation;
-- bounded caches/cancellation.
+- starts after PV10 closure `2eb663f0702177622358b87c734e9ce9d6e6de6b`,
+  with all predecessor [Node/Bun/Deno CI jobs green](https://github.com/Clickin/SQLBraid/actions/runs/34741363531);
+- shared tooling/config/evidence core with structured diagnostic ownership;
+- open-world metadata and honest routine argument completeness;
+- contextual SQL completion, bounded hover, real definitions, conservative
+  references and query/workspace symbols;
+- standard stdio transport, workspace initialization, invalidation and cancellation;
+- CLI JSON fallback, portable agent skill and thin version-matched VS Code client;
+- 13 npm packages plus a separately packaged editor extension; runtime-only
+  installs remain free of development tooling;
+- transaction-profile design is reserved in §8.4; no runtime isolation API,
+  MCP requirement, docs website or PV12 release/marketing work.
 
 ### PV12 — Public pre-release/Product Hunt hardening
 

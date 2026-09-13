@@ -21,7 +21,7 @@ const users = sql.rows<UserRow>`
 `;
 ```
 
-> **Status:** pre-release. SQL-first authoring, Standard Schema result mapping, connection leasing/transaction pinning, execution observers, runtime portability and optional metadata/codegen tooling are implemented. Next: LSP metadata/codegen integration. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release. SQL-first authoring, Standard Schema mapping, connection leasing, execution observers, runtime portability, metadata/codegen and agent-native LSP tooling are implemented. See [`PLAN.md`](./PLAN.md).
 
 ---
 
@@ -369,6 +369,12 @@ Current primary first-party adapters are:
 
 A different driver only needs a thin adapter/provider if the SQL dialect remains the same.
 
+Transaction semantics are a separate, future **transaction profile**, not an
+inference from dialect or driver. The execution runtime owns physical leases,
+pinning and savepoint scope; Node/Bun/Deno describe its host. PV11 adds no
+isolation API. The [reserved transaction architecture](./PLAN.md#84-reserved-transaction-profile-architecture)
+keeps these concerns independent, including unusual protocol/dialect combinations.
+
 Runtime support uses four labels:
 
 - **Official** — exercised in SQLBraid CI for that runtime + driver;
@@ -505,7 +511,9 @@ options hash. Map insertion order and capture timestamps do not affect bytes.
 PostgreSQL qualified types resolve through explicit metadata type-name evidence;
 MySQL policy keys match case-insensitively. SQLite STRICT declarations use the
 selected primitive policy (`INT` also resolves through `INTEGER`); non-STRICT
-columns remain `unknown` with warnings. Unsupported types also remain `unknown`,
+columns use explicit column/DB-type overrides or remain `unknown` with warnings;
+declared affinity never supplies automatic TypePolicy mapping there.
+Unsupported types also remain `unknown`,
 never an inferred application type. Column names survive as quoted property keys;
 namespace evidence and stable identity suffixes disambiguate model names.
 
@@ -543,11 +551,90 @@ Metadata and output paths are relative to the config file. Use repeated
 `--target` to select targets, `--check` as a CI freshness gate, and `--json`
 for one structured result document. Validation completes for every selected
 target before any output is written; unchanged files keep their mtime.
+JSON reports `written` only after successful I/O. Final Row/Insert/Update names
+are globally collision-checked; Windows output collision keys are case-folded.
 
 The config is executable application code and is not sandboxed. Type overrides
 change generated TypeScript only; they do not transform driver values. Column
 names remain exact database keys, and arbitrary SELECT/JOIN inference remains
 outside codegen.
+
+## Agent-native LSP and editor tooling
+
+`sqlbraid-language-server [--config <path>]` is a standard stdio LSP server,
+using `vscode-languageserver`, not a VS Code-specific protocol. It consumes
+`rootUri`/workspace folders and project `tsconfig`, and discovers the same
+`.mjs`/`.js`/`.cjs` SQLBraid config as codegen. Imports from template, PostgreSQL,
+MySQL and SQLite packages are recognized.
+
+| Standard operation | SQLBraid evidence |
+| --- | --- |
+| Diagnostics (push/pull) | Braid errors and mapped overlay-only TS errors; ordinary TS remains TSServer-owned |
+| Completion | Metadata candidates in static SQL only, never ordinary TS or `${...}` |
+| Hover | Query contract/binds/dialect; known DB relation, column or routine facts and provenance |
+| Definition | Current generated declaration/property, otherwise reliable metadata JSON location |
+| References | Positive lexical identity only; ambiguous CTE/alias occurrences are omitted |
+| Document/workspace symbols | Query units and filtered metadata/generated declarations |
+| Signature help | Only routines with `argumentsComplete: true` |
+
+Metadata is **open-world positive evidence**. Absence never proves a table,
+column, routine or type invalid. Built-ins, extension routines, runtime UDFs,
+temporary objects and CTEs remain legal opaque SQL. PostgreSQL/MySQL inspectors
+currently report `argumentsComplete: false`; an empty argument list is not a
+zero-arity claim. SQLite emits no routine records.
+
+Uncertain lexical contexts return less intelligence, not SQL errors. Unqualified
+column navigation is limited to direct `SELECT column FROM` evidence; use
+qualified references for other supported column lookups. Quoted PostgreSQL
+identifiers retain case, and MySQL double-quoted literals stay opaque without
+ANSI_QUOTES evidence. The tooling
+does not reconstruct a SQL AST or infer arbitrary SELECT results. Generated
+navigation checks actual current source; stale/missing output never receives
+invented offsets. `sqlbraid codegen --check` remains the freshness authority.
+
+For agents without LSP:
+
+```bash
+sqlbraid inspect query --file src/query.ts --line 8 --column 20 --json
+sqlbraid inspect symbol UsersRow --json
+sqlbraid inspect diagnostics --file src/query.ts --json
+```
+
+Positions are 1-based in CLI and standard 0-based in LSP. JSON results are
+focused and bounded; unresolved query evidence uses `resolved: false`, not
+invalid-SQL claims. The [portable agent skill](./skills/sqlbraid/SKILL.md)
+documents LSP-first/CLI-fallback use and generated-file discipline.
+
+The dependency direction is:
+
+```text
+core / compiler / metadata / codegen
+                 ↓
+        @sqlbraid/tooling
+           ↙           ↘
+         CLI     language-server
+                         ↑
+                 thin VS Code client
+```
+
+The shared tooling package owns config loading, workspace evidence and semantic
+indexes. `@sqlbraid/cli/config` intentionally reexports its config contract.
+Runtime packages acquire none of these dependencies. Config runs as trusted
+Node code in disposable workers to bound module-cache lifetime; workers are
+not a sandbox. Per-workspace caches track source/config/metadata/generated
+changes. Requests stat cached disk evidence even without client watchers;
+capable LSP clients also receive standard file-watch registration. Pending work
+is shared without letting one cancelled caller abort another; disposal terminates
+in-flight config workers and obsolete results are discarded.
+Synchronous TypeScript work is not preemptible.
+
+`extensions/vscode` targets VS Code `>=1.121.0`, whose tested host provides Node
+`22.22.1`, and is a thin TypeScript/TSX client. It starts the server only
+for config/dependency-proven SQLBraid projects, keeps built-in TypeScript support,
+and offers **Generate Models**, **Check Generated Models**, and **Reload Project**.
+The VSIX contains matching `0.1.0` server/CLI dependencies with version checks;
+it never silently selects a global/workspace server. No semantic engine lives in
+the extension. The full gate runs a real VS Code host and packs the VSIX.
 
 ---
 
@@ -583,6 +670,7 @@ Current workspace packages:
 | `@sqlbraid/compiler` | TypeScript discovery and guarded-template lowering |
 | `@sqlbraid/metadata` | DB-fact snapshots, validation, canonical identity and drift |
 | `@sqlbraid/codegen` | Pure metadata + TypePolicy to Row/Insert/Update declarations |
+| `@sqlbraid/tooling` | Shared config/workspace, evidence indexes and agent/editor semantics |
 | `@sqlbraid/operations` | Fingerprints and provisional declaration manifests |
 | `@sqlbraid/cli` | Command-line tooling |
 | `@sqlbraid/language-server` | Editor/LSP integration |
@@ -601,12 +689,12 @@ Completed:
 6. **PV6** — execution boundary, connection leasing/transaction pinning, SQL/bind/audit observer SPI;
 7. **PV7** — Node/Bun/Deno runtime portability matrix and clean-checkout CI closure;
 8. **PV8** — metadata v1 DB-fact model, inspector subpaths and runtime/tooling dependency separation;
-9. **PV9** — pure, deterministic programmatic metadata + TypePolicy → TypeScript codegen.
+9. **PV9** — pure, deterministic programmatic metadata + TypePolicy → TypeScript codegen;
+10. **PV10** — codegen CLI/overrides and correctness closure;
+11. **PV11** — open-world agent-native LSP, shared CLI JSON and thin VS Code client.
 
 Next:
 
-10. **PV10** — codegen CLI and overrides;
-11. **PV11** — LSP metadata/codegen integration;
 12. **PV12** — public API/docs/package hardening for pre-release/Product Hunt.
 
 Post-release candidates include Oracle/node-oracledb, application input mapping, optional DB verification, additional driver adapters, cancellation, bulk/pipeline operations, query transformation, routing/retry and OpenTelemetry.
@@ -631,7 +719,15 @@ pnpm run test:consumer
 pnpm run test:all
 pnpm run pack:check
 pnpm run test:runtime
+pnpm run test:lsp
+pnpm run test:agent-tooling
+pnpm run test:vscode
 ```
+
+`test:all` includes the real VS Code host gate. Headless Linux needs `xvfb-run`;
+the host runner downloads pinned VS Code `1.121.0` unless
+`SQLBRAID_VSCODE_EXECUTABLE` selects an installed test executable. Local macOS
+uses the standard installed VS Code path when present.
 
 `test:runtime:node`, `test:runtime:bun`, and `test:runtime:deno` run individual cells.
 The Node/pnpm orchestrator builds and packs runtime packages, installs an isolated
