@@ -14,4 +14,6 @@ description: 하네스가 달라도 코딩 에이전트에 동일한 SQLBraid �
 - dialect, 드라이버, 실행 런타임, 트랜잭션 프로필을 독립적인 축으로 유지합니다.
 - 모델을 재생성하기 전에 설정이나 메타데이터를 변경하고 `sqlbraid codegen --check`를 실행합니다.
 
-SQLBraid에는 MCP가 필요하지 않습니다. 에이전트는 일반적인 LSP 전송을 사용하거나 일회성 프로젝트 환경에서 CLI를 호출할 수 있습니다.
+SQLBraid에는 MCP가 필요하지 않습니다. 에이전트는 일반 LSP 전송을 사용하거나 일회성 프로젝트 환경에서 CLI를 호출할 수 있습니다.
+
+드라이버와 executor 작성자는 사용자 지정 전송을 구현하기 전에 [드라이버 작성자 바인딩 가이드](/SQLBraid/dev/agents/driver-author/)를 읽으세요.

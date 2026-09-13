@@ -1,14 +1,32 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { QueryExecutor, RenderedQuery } from '@sqlbraid/core';
+import { createStatementBindingDescription } from "@sqlbraid/core";
+import type { QueryExecutor, RenderedStatement, StatementBindingAdapter } from "@sqlbraid/core";
 import { sql } from '@sqlbraid/template';
 import { createDatabase, DatabaseCardinalityError, DatabaseScopeError } from '@sqlbraid/runtime';
 
-function executorFor(rows: readonly unknown[]): QueryExecutor & { readonly calls: readonly (RenderedQuery | string)[] } {
-  const calls: (RenderedQuery | string)[] = [];
+const statementBinding = Object.freeze<StatementBindingAdapter>({
+  id: "runtime-test",
+  describe(statement, context) {
+    return createStatementBindingDescription(statement, context, {
+      adapterId: "runtime-test",
+      transport: "text-positional",
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: "simple", owner: "sqlbraid" },
+    });
+  },
+})
+
+function statementText(statement: RenderedStatement): string {
+  return statement.segments.join("?");
+}
+
+function executorFor(rows: readonly unknown[]): QueryExecutor & { readonly calls: readonly (RenderedStatement | string)[] } {
+  const calls: (RenderedStatement | string)[] = [];
   return {
     calls,
-    async query<Row>(rendered: RenderedQuery) { calls.push(rendered); return { kind: 'rows' as const, rows: rows as readonly Row[] }; },
+    statementBinding,
+    async query<Row>(rendered: RenderedStatement) { calls.push(rendered); return { kind: 'rows' as const, rows: rows as readonly Row[] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -19,7 +37,8 @@ test('database wrappers share ownership for the same executor object', async () 
   const calls: string[] = [];
   const { promise: gate, resolve: release } = Promise.withResolvers<void>();
   const executor = {
-    async query<Row>(rendered: RenderedQuery) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
+    statementBinding,
+    async query<Row>(rendered: RenderedStatement) { calls.push(statementText(rendered)); return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -51,7 +70,7 @@ test('transactions commit and rollback through the adapter seam', async () => {
   const executor = executorFor([]);
   const db = createDatabase(executor);
   await db.tx(async (tx) => { await tx.execute(sql`UPDATE users SET ok = ${true}`); });
-  assert.deepEqual(executor.calls.map((value) => typeof value === 'string' ? value : value.values), ['BEGIN', [true], 'COMMIT']);
+  assert.deepEqual(executor.calls.map((value) => typeof value === 'string' ? value : value.parameters.map((parameter) => parameter.value)), ['BEGIN', [true], 'COMMIT']);
   await assert.rejects(() => db.tx(async () => { throw new Error('boom'); }));
   assert.equal(executor.calls.at(-1), 'ROLLBACK');
 });
@@ -60,7 +79,8 @@ test('same-tick root transactions serialize their executor ownership', async () 
   const calls: string[] = [];
   const { promise: gate, resolve: release } = Promise.withResolvers<void>();
   const db = createDatabase({
-    async query(rendered) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] }; },
+    statementBinding,
+    async query(rendered) { calls.push(statementText(rendered)); return { kind: 'rows' as const, rows: [] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -79,7 +99,8 @@ test('same-tick root transactions serialize their executor ownership', async () 
 test('root handle use from its transaction callback fails before queueing', async () => {
   const calls: string[] = [];
   const db = createDatabase({
-    async query(rendered) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] }; },
+    statementBinding,
+    async query(rendered) { calls.push(statementText(rendered)); return { kind: 'rows' as const, rows: [] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -91,7 +112,8 @@ test('root handle use from its transaction callback fails before queueing', asyn
 test('nested rollback releases its savepoint and preserves the parent scope', async () => {
   const calls: string[] = [];
   const db = createDatabase({
-    async query(rendered) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] }; },
+    statementBinding,
+    async query(rendered) { calls.push(statementText(rendered)); return { kind: 'rows' as const, rows: [] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -112,6 +134,7 @@ test('transaction cleanup failure is not reported as success', async () => {
   const application = new Error('statement failed');
   const cleanup = new Error('rollback failed');
   const db = createDatabase({
+    statementBinding,
     async query() { return { kind: 'rows' as const, rows: [] }; },
     async begin() {},
     async commit() {},
@@ -128,6 +151,7 @@ test('poisoned ownership rejects every wrapper sharing the physical resource', a
   const ownershipKey = {};
   const makeExecutor = () => ({
     ownershipKey,
+    statementBinding,
     async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() {},
     async commit() {},
@@ -142,7 +166,8 @@ test('poisoned ownership rejects every wrapper sharing the physical resource', a
 test('successful transaction cleanup leaves physical ownership reusable', async () => {
   const calls: string[] = [];
   const db = createDatabase({
-    async query<Row>(rendered: RenderedQuery) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
+    statementBinding,
+    async query<Row>(rendered: RenderedStatement) { calls.push(statementText(rendered)); return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },
@@ -156,6 +181,7 @@ test('successful transaction cleanup leaves physical ownership reusable', async 
 
 test('nested rollback and release cleanup failures poison the parent ownership', async () => {
   const rollbackFailure = createDatabase({
+    statementBinding,
     async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() {},
     async commit() {},
@@ -168,6 +194,7 @@ test('nested rollback and release cleanup failures poison the parent ownership',
   await assert.rejects(() => rollbackFailure.execute(sql`SELECT blocked`), (error) => error instanceof DatabaseScopeError && error.code === 'BRAID_CONNECTION_POISONED');
 
   const releaseFailure = createDatabase({
+    statementBinding,
     async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() {},
     async commit() {},
@@ -182,6 +209,7 @@ test('nested rollback and release cleanup failures poison the parent ownership',
 
 test('begin and commit failures conservatively poison the physical ownership', async () => {
   const beginFailure = createDatabase({
+    statementBinding,
     async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() { throw new Error('begin uncertain'); },
     async commit() {},
@@ -191,6 +219,7 @@ test('begin and commit failures conservatively poison the physical ownership', a
   await assert.rejects(() => beginFailure.execute(sql`SELECT blocked`), (error) => error instanceof DatabaseScopeError && error.code === 'BRAID_CONNECTION_POISONED');
 
   const commitFailure = createDatabase({
+    statementBinding,
     async query<Row>() { return { kind: 'rows' as const, rows: [] as readonly Row[] }; },
     async begin() {},
     async commit() { throw new Error('commit uncertain'); },
@@ -203,7 +232,8 @@ test('begin and commit failures conservatively poison the physical ownership', a
 test('transaction context does not poison later detached root work', async () => {
   const calls: string[] = [];
   const db = createDatabase({
-    async query(rendered) { calls.push(rendered.text); return { kind: 'rows' as const, rows: [] }; },
+    statementBinding,
+    async query(rendered) { calls.push(statementText(rendered)); return { kind: 'rows' as const, rows: [] }; },
     async begin() { calls.push('BEGIN'); },
     async commit() { calls.push('COMMIT'); },
     async rollback() { calls.push('ROLLBACK'); },

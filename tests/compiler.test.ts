@@ -156,12 +156,12 @@ test('mapped guarded lowering preserves the tag call and evaluates schema once',
     const query = module.build(getSchema, observe, true);
     assert.deepEqual(events, ['schema', 'condition', 'value']);
     assert.equal(query.resultSchema, schema);
-    assert.deepEqual(query.render().values, [1]);
+    assert.deepEqual(query.render().parameters.map(({ value }: { readonly value: unknown }) => value), [1]);
     events.length = 0;
     const inactive = module.build(getSchema, observe, false);
     assert.deepEqual(events, ['schema', 'condition']);
     assert.equal(inactive.resultSchema, schema);
-    assert.deepEqual(inactive.render().values, []);
+    assert.deepEqual(inactive.render().parameters, []);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

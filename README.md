@@ -21,12 +21,13 @@ const users = sql.rows<UserRow>`
 `;
 ```
 
-> **Status:** pre-release. SQL-first authoring, Standard Schema mapping, connection leasing, execution observers, runtime portability, metadata/codegen and agent-native LSP tooling are implemented. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release. SQL-first authoring, Standard Schema mapping, connection leasing, execution observers, runtime portability, metadata/codegen and agent-native LSP tooling are implemented. PV14 binding transport and observer diagnostics remain verification-pending; RC publication is deferred until development, review and user acceptance. See [`PLAN.md`](./PLAN.md).
 
 [Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) ·
 [Documentation](https://clickin.github.io/SQLBraid/) ·
 [Packed executable examples](./examples/) ·
-[Public API inventory](./docs/public-api-audit.md)
+[Public API inventory](./docs/public-api-audit.md) ·
+[Driver-author guide](./docs/driver-author-guide.md)
 
 ---
 
@@ -101,6 +102,17 @@ const query = sql.rows<UserRow>`
 ```
 
 `${value}` uses the driver's documented inference. `${sql.bind(value, hint)}` requests an explicit database parameter type. SQLBraid does not infer a universal database type from a TypeScript type; parameter hints are not application input codecs or validation.
+
+Template rendering produces one immutable logical statement: `segments` contain
+resolved structural SQL and `parameters` contain ordered value records
+(`value`, optional `interpolation`, optional `hint`). The invariant is
+`segments.length === parameters.length + 1`. A parameter is never SQL, an
+identifier, nested query, driver fragment, or tagged-template command.
+
+The selected driver owns materialization. It converts the logical statement to
+its transport (`$1`, `?`, `:1`, `@p1`, a named request, or a native value
+template) only after pure binding description and hint validation. Placeholder
+syntax is not a dialect or template-renderer concern.
 
 ---
 
@@ -295,8 +307,9 @@ Configure observers through `{ observers: [...] }` on direct or pooled database 
 
 Coverage includes:
 
-- final rendered SQL;
+- derived parameterized SQL and lazy diagnostic `literalizedSql(options?)` views;
 - readonly bind values and binding metadata;
+- effective adapter, dialect, transport and reuse plan;
 - declared and actual result kinds;
 - query/call/batch/prepared lifecycle;
 - DB execution duration in milliseconds (`durationMs`);
@@ -347,7 +360,17 @@ const db = createPgPoolDatabase(pool, {
 });
 ```
 
-Observers run sequentially in registration order. Events and metadata arrays are frozen where practical; nested application bind objects remain application-owned and must not be mutated. Prepared events carry the SQLBraid shape-lock name, not a promise of native driver preparation.
+Observers run sequentially in registration order. Events and metadata arrays are frozen where practical; nested application bind objects remain application-owned and must not be mutated. Prepared events carry the logical SQLBraid shape-lock name, not a promise of native driver preparation.
+
+`literalizedSql(options?)` is a lazy, cached diagnostic reconstruction from
+logical segments and parameters. It is not necessarily the protocol text and
+must never be used as execution input. Redaction is the default; callers may
+select inline/redacted values, maximum value length, binary summary/full output
+and a custom redactor. Unsupported objects use a safe descriptive marker.
+Parameterized and literalized views never search or replace `$1`, `?`, `:1` or
+`@p1` in SQL text.
+For `native-value-template` transports, the parameterized `sql` view may be
+absent; use the literalized result only for diagnostics.
 
 The event types are `query:ready`, `query:result`, `query:mapped`, `query:error`, `stream:start`, `stream:end` and `transaction`. Batch items use ordinary query events with a shared `batchId` and individual `operationId`s; this is the batch lifecycle representation rather than separate batch start/end events.
 
@@ -362,6 +385,10 @@ Bind values are available because some audit systems require them, but SQLBraid 
 
 A failure before DB execution prevents execution. A failure after DB execution cannot undo an already committed root side effect; inside `db.tx(...)`, propagated failures participate in rollback.
 
+Binding/typed-request construction is a separate `materialize` stage and runs
+before lease acquisition (`executionStarted` and `executionCompleted` are both
+false on failure). Driver, server, and network failures remain `driver`.
+
 If an error observer also fails, an `AggregateError` preserves the original failure and the observer failure. SQLBraid-generated errors do not stringify bind values; driver/application errors retain their original identity and may require application redaction.
 
 This SPI is also the intended foundation for a later optional OpenTelemetry integration.
@@ -373,20 +400,26 @@ This SPI is also the intended foundation for a later optional OpenTelemetry inte
 SQLBraid does not need a new dialect for every driver/runtime combination.
 
 ```text
-dialect     PostgreSQL / MySQL / SQLite SQL surface
-driver      pg / mysql2 / node:sqlite / future alternatives
+dialect     PostgreSQL / MySQL / SQLite / Oracle / SQL Server SQL surface
+driver      pg / mysql2 / node:sqlite / node-oracledb / Tedious / future alternatives
 runtime     Node / Bun / Deno
 ```
 
-Current primary first-party adapters are:
+Current first-party adapters and their transport ownership are:
 
-| Dialect | Adapter |
-| --- | --- |
-| PostgreSQL | `pg` |
-| MySQL | `mysql2` |
-| SQLite | `node:sqlite` |
+| Dialect | Adapter | Transport/reuse owner |
+| --- | --- | --- |
+| PostgreSQL | `pg` | text-positional `$1..$N`; fresh unnamed simple execution |
+| MySQL | `mysql2` | text-positional `?`; driver-owned reuse for every request |
+| SQLite | `node:sqlite` | documented `?` prepare path; fresh simple execution |
+| Oracle | `node-oracledb` Thin | text-positional `:1..:N`; driver cache reuse |
+| SQL Server | Tedious | typed request `@p1..@pN`; fresh simple execution |
 
 A different driver only needs a thin adapter/provider if the SQL dialect remains the same.
+Custom adapter authors must preserve the logical statement value boundary and
+provider/lease binding identity; see the [driver-author guide](./docs/driver-author-guide.md).
+The requested reuse policy is not a promise about the effective strategy; the
+adapter reports the effective result.
 
 Transaction semantics are a separate, future **transaction profile**, not an
 inference from dialect or driver. The execution runtime owns physical leases,

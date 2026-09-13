@@ -4,6 +4,7 @@ import { mssqlParameter, sql, typePolicy } from "@sqlbraid/mssql";
 import {
   createTediousExecutor,
   createTediousPoolProvider,
+  tediousStatementBinding,
   type TediousConnectionLike,
   type TediousRequestLike,
 } from "@sqlbraid/mssql/tedious";
@@ -24,9 +25,14 @@ function emit(request: TediousRequestLike, event: string, ...args: unknown[]): v
 
 test("MSSQL dialect renders deterministic parameters and bracket identifiers", () => {
   const query = sql`SELECT ${1}, ${"Ada"}`;
-  assert.equal(query.render().text, "SELECT @p1, @p2");
-  assert.deepEqual(query.render().values, [1, "Ada"]);
-  assert.equal(sql`SELECT ${sql.ident("a]b")}`.render().text, "SELECT [a]]b]");
+  const rendered = query.render();
+  assert.deepEqual(rendered.segments, ["SELECT ", ", ", ""]);
+  assert.deepEqual(rendered.parameters, [{ value: 1, interpolation: 0 }, { value: "Ada", interpolation: 1 }]);
+  assert.equal(
+    tediousStatementBinding.describe(rendered, { dialectId: "mssql", requestedReuse: "auto" }).parameterizedSql,
+    "SELECT @p1, @p2",
+  );
+  assert.equal(sql`SELECT ${sql.ident("a]b")}`.render().segments[0], "SELECT [a]]b]");
   assert.equal(typePolicy.id, "mssql-default");
 });
 
@@ -41,9 +47,12 @@ test("MSSQL parameter factories preserve explicit metadata", () => {
 test("MSSQL bind hints align with rendered values", () => {
   const query = sql`SELECT ${sql.bind(null, mssqlParameter.nvarchar(20))}`;
   const rendered = query.render();
-  assert.equal(rendered.text, "SELECT @p1");
-  assert.deepEqual(rendered.values, [null]);
-  assert.deepEqual(rendered.parameterHints, [mssqlParameter.nvarchar(20)]);
+  assert.equal(
+    tediousStatementBinding.describe(rendered, { dialectId: "mssql", requestedReuse: "auto" }).parameterizedSql,
+    "SELECT @p1",
+  );
+  assert.deepEqual(rendered.parameters.map((parameter) => parameter.value), [null]);
+  assert.deepEqual(rendered.parameters.map((parameter) => parameter.hint), [mssqlParameter.nvarchar(20)]);
 });
 
 test("MSSQL adapter honors int hints and rejects ignored type facets", async () => {
@@ -61,6 +70,16 @@ test("MSSQL adapter honors int hints and rejects ignored type facets", async () 
     () => executor.query(sql`SELECT ${sql.bind(1, { databaseType: "decimal", precision: 10, scale: 2, length: 4 })}`.render()),
     /does not support length/u,
   );
+});
+
+test("MSSQL typed materialization rejects out-of-range values before execution", async () => {
+  let executions = 0;
+  const executor = createTediousExecutor(mockConnection(() => { executions += 1; }));
+  await assert.rejects(
+    () => executor.query(sql`SELECT ${sql.bind(2_147_483_648, mssqlParameter.int())}`.render()),
+    /invalid SQL Server int parameter/u,
+  );
+  assert.equal(executions, 0);
 });
 
 test("MSSQL direct adapters reject pool connections while pool leases release once", async () => {

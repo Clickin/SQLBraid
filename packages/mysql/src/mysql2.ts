@@ -5,10 +5,14 @@ import type {
   DatabaseOptions,
   QueryExecutor,
   QueryExecutionResult,
-  RenderedQuery,
+  RenderedStatement,
   RoutineCallResult,
   TypePolicy,
+  StatementBindingAdapter,
+  StatementBindingContext,
+  StatementBindingDescription,
 } from "@sqlbraid/core";
+import { createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -83,10 +87,49 @@ function assertUniqueFields(fields: readonly Mysql2FieldLike[]): void {
   }
 }
 
-function assertParameterHintsUnsupported(rendered: RenderedQuery): void {
-  if (rendered.parameterHints?.some((hint) => hint !== undefined)) {
+function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
+  if (rendered.parameters.some((parameter) => parameter.hint !== undefined)) {
     throw new Error("BRAID_BIND_HINT_UNSUPPORTED: MySQL adapter does not support explicit bind type hints.");
   }
+}
+
+const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+
+export const mysql2StatementBinding: StatementBindingAdapter = Object.freeze({
+  id: "mysql2",
+  describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+    statement = createRenderedStatement(statement);
+    assertParameterHintsUnsupported(statement);
+    const description = createStatementBindingDescription(statement, context, {
+      adapterId: "mysql2",
+      transport: "text-positional",
+      placeholder: () => "?",
+      reuse: { effective: "reuse", owner: "driver" },
+    });
+    describedStatements.set(description, statement);
+    return description;
+  },
+});
+
+const defaultBindingContext: StatementBindingContext = Object.freeze({
+  dialectId: "mysql",
+  requestedReuse: "auto",
+});
+
+function materialize(
+  statement: RenderedStatement,
+  binding: StatementBindingDescription | undefined,
+): { readonly text: string; readonly values: readonly unknown[] } {
+  statement = createRenderedStatement(statement);
+  const description = binding ?? mysql2StatementBinding.describe(statement, defaultBindingContext);
+  if (describedStatements.get(description) !== statement) throw new TypeError("BRAID_BINDING_IDENTITY: MySQL description belongs to another statement or adapter.");
+  if (description.parameterizedSql === undefined) {
+    throw new Error("BRAID_BIND_TRANSPORT: MySQL binding description did not provide parameterized SQL.");
+  }
+  return {
+    text: description.parameterizedSql,
+    values: statement.parameters.map((parameter) => parameter.value),
+  };
 }
 
 export function createMysql2Executor(connection: Mysql2ConnectionLike, options: { readonly typePolicy?: TypePolicy } = {}): QueryExecutor {
@@ -95,10 +138,11 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
   const control = async (sql: string): Promise<void> => { await (connection.query ?? connection.execute).call(connection, sql); };
   return {
     ownershipKey: connection,
-    async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
+    statementBinding: mysql2StatementBinding,
+    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
-      // RenderedQuery values are the driver-owned bind boundary; mysql2 accepts the mutable array shape here.
-      const [payload, rawFields] = await connection.execute(rendered.text, rendered.values as unknown as Mysql2Parameter[]);
+      const prepared = materialize(rendered, binding);
+      const [payload, rawFields] = await connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]);
       const fields = Array.isArray(rawFields) ? rawFields : [];
       assertUniqueFields(fields);
       if (Array.isArray(payload)) {
@@ -109,9 +153,10 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       const header: Mysql2ResultHeader = { ...payload };
       return { rows: [], rowCount: header.affectedRows, kind: "command", command: header };
     },
-    async call<Row>(rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
+    async call<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<RoutineCallResult<Row>> {
       assertParameterHintsUnsupported(rendered);
-      const [payload, rawFields] = await connection.execute(rendered.text, rendered.values as unknown as Mysql2Parameter[]);
+      const prepared = materialize(rendered, binding);
+      const [payload, rawFields] = await connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]);
       const fields = Array.isArray(rawFields) ? rawFields : [];
       assertUniqueFields(fields);
       if (!Array.isArray(payload)) return { output: payload && typeof payload === "object" ? Object.fromEntries(Object.entries(payload)) : {}, resultSets: [] };
@@ -136,6 +181,7 @@ export function createMysql2Database(connection: Mysql2ConnectionLike, options: 
 
 export function createMysql2PoolProvider(pool: Mysql2PoolLike, options: { readonly typePolicy?: TypePolicy } = {}): ConnectionProvider {
   return {
+    statementBinding: mysql2StatementBinding,
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
       const executor = createMysql2Executor(connection, options);

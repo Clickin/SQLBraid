@@ -63,6 +63,8 @@ function assertObserverContent(events, placeholder, boundValue) {
   assert.ok(ready, "observer must receive query SQL");
   assert.equal(ready.sql, `SELECT ${placeholder}`);
   assert.deepEqual(ready.values, [boundValue], "observer must receive query binds");
+  assert.equal(ready.execution.transport, "text-positional", "observer must receive binding transport metadata");
+  assert.equal(typeof ready.literalizedSql, "function", "observer must expose diagnostic SQL literalization");
   assert.equal(ready.declaredKind, "unknown");
   assert.ok(events.some((event) => event.type === "query:result" && event.actualKind === "rows"), "observer must receive row result");
   assert.ok(events.some((event) => event.type === "query:mapped" && event.queryMapped), "observer must receive mapper result");

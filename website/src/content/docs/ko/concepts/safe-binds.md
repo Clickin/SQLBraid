@@ -14,7 +14,16 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-렌더링된 텍스트에는 dialect placeholder(`$1`, `?` 등)가 포함되고 값은 어댑터에 별도로 전달됩니다. 보간했다는 이유만으로 값이 SQL 소스가 되지는 않습니다.
+렌더링은 먼저 하나의 불변 논리 문장을 만듭니다. `segments`에는 해결된
+구조적 SQL이, `parameters`에는 순서가 있는 값 레코드(`value`, 선택적
+`interpolation`, 선택적 `hint`)가 들어갑니다. 불변식은
+`segments.length === parameters.length + 1`입니다. 값을 보간했다는 이유만으로
+SQL 소스가 되지는 않습니다.
+
+선택된 드라이버는 순수한 바인딩 설명과 힌트 검증이 끝난 뒤에 문장을
+구체화합니다. 물리적 전송과 placeholder(`$1`, `?`, `:1`, `@p1`, 이름 있는
+바인드 또는 native value-template 요청)는 드라이버가 소유하며, dialect나
+템플릿 렌더러의 책임이 아닙니다.
 
 데이터베이스 파라미터 타입을 명시해야 할 때는 `sql.bind(value, hint)`를 사용하세요.
 

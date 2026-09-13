@@ -108,12 +108,57 @@ SQLBraid therefore provides a runtime execution observer/interceptor seam. Pre-r
 Do not create a new dialect because a driver or JavaScript runtime is different.
 
 ```text
-dialect     SQL surface / placeholders / quoting / primitive DB semantics
-driver      protocol/API bridge and result normalization
+dialect     SQL surface / lexical profile / quoting / primitive DB semantics
+driver      protocol/API bridge, placeholder materialization and result normalization
 runtime     Node / Bun / Deno execution environment
 ```
 
 A PostgreSQL `pg` adapter remains one adapter if the same public driver API works on Node, Bun and Deno. Runtime compatibility must be proved by CI before being advertised as official.
+
+### 1.8 Logical statements and driver binding
+
+Template rendering produces one immutable logical statement. It contains structural
+SQL segments and ordered value parameters; it does not contain driver placeholders:
+
+```ts
+interface RenderedParameter {
+  readonly value: unknown;
+  readonly interpolation?: number;
+  readonly hint?: ParameterTypeHint;
+}
+
+interface RenderedStatement {
+  readonly segments: readonly string[];
+  readonly parameters: readonly RenderedParameter[];
+  readonly resultKind: QueryResultKind;
+  readonly dialectId: string;
+  readonly fingerprint?: string;
+  readonly variantFingerprint?: string;
+}
+```
+
+`segments.length === parameters.length + 1` is mandatory. Structural helpers
+(`sql.ident`, `sql.raw`, fragments, lists, joins and directives) are resolved into
+segments; a `RenderedParameter` is always a value. Adapters must not interpret a
+parameter as SQL, an identifier, a nested query, a driver fragment or a tagged
+template command. `createRenderedStatement` validates and snapshots this boundary.
+
+Driver packages own binding/materialization through `StatementBindingAdapter`. Its
+pure `describe(statement, context)` operation selects the transport and validates
+hints before connection acquisition. The resulting `StatementBindingDescription`
+records adapter/dialect identity, binding metadata and requested/effective reuse:
+`native-value-template`, `text-positional`, `text-named` or `typed-request`.
+`parameterizedSql(statement, placeholder)` and `createStatementBindingDescription`
+are diagnostic/core helpers; placeholder generation never belongs to a dialect or
+template renderer. `QueryExecutor` and `ConnectionProvider` expose the same
+immutable `statementBinding` object, and a provider's leases must share that exact
+adapter identity.
+
+Prepared shape identity uses `resultKind`, canonical segments and ordered hint
+signatures, never `$1`, `?`, `:1` or `@p1` syntax. A prepared execution renders
+once, validates the logical shape, describes the binding, then executes that exact
+statement. Driver/server reuse remains adapter-owned; runtime does not add a
+universal prepared cache.
 
 ---
 
@@ -326,6 +371,31 @@ Never model `pg.Pool`, `mysql2.Pool`, Bun.SQL or another pool as a `QueryExecuto
 
 Pool support must go through the lease/provider abstraction.
 
+### 6.5 Binding identity and materialization
+
+Binding description is computed before `acquire()`. A provider advertises an
+immutable `statementBinding` adapter and every lease uses that same adapter
+object; a provider/lease identity mismatch is an integration error, not a
+silent fallback. `describe()` performs no database I/O and keeps driver-specific
+request types inside the driver package.
+
+The execution pipeline is:
+
+```text
+render once
+  -> logical shape/prepared validation
+  -> pure binding description/materialize
+  -> observer ready event
+  -> acquire lease
+  -> driver execution
+  -> release materialized lease
+  -> application mapping
+```
+
+Deterministic placeholder, hint, typed-request or transport-selection failures
+are `QueryErrorStage: "materialize"` with both execution flags false. Driver,
+server and network failures remain `"driver"`. PV14 adds no retry policy.
+
 ---
 
 ## 7. Execution observer/interceptor SPI
@@ -359,9 +429,11 @@ Required event coverage:
 Events should expose useful immutable metadata such as:
 
 ```text
-final SQL text
+parameterized SQL diagnostic view (derived by the effective adapter)
+literalizedSql(options?) diagnostic view, reconstructed from segments
 readonly bind-value array
 binding map when available
+effective adapter/dialect/transport/reuse plan
 declared result kind
 actual result kind when known
 row count / command metadata where safe
@@ -401,6 +473,15 @@ Observers execute in registration order.
 
 No built-in logger/audit backend is required. pino, winston, console, OTEL or application-specific audit storage may implement the observer SPI.
 
+`literalizedSql(options?)` is lazy and cached, and is diagnostic-only: it may
+not equal the protocol text and must never be sent for execution. It reconstructs
+`segment[0] + literal(parameter[0]) + ...` directly from the logical statement,
+never by replacing placeholders in materialized SQL. Redaction is the default;
+callers may choose inline/redacted values, a maximum value length, binary summary
+or full form, and a parameter redactor. The result reports completeness and
+redacted/truncated counts. Unsupported objects use a safe descriptive marker
+instead of accidental `toString()` execution.
+
 ---
 
 ## 8. Dialect / driver / runtime architecture
@@ -411,7 +492,9 @@ First-party pre-release dialects:
 
 - PostgreSQL;
 - MySQL/MariaDB-compatible MySQL surface where supported by mysql2 tests;
-- SQLite.
+- SQLite;
+- Oracle;
+- SQL Server.
 
 A new driver does not imply a new dialect.
 
@@ -423,9 +506,22 @@ Current primary adapters:
 PostgreSQL -> pg
 MySQL      -> mysql2
 SQLite     -> node:sqlite
+Oracle     -> node-oracledb Thin
+SQL Server -> Tedious
 ```
 
 Future adapters may be added only when they provide real value. `QueryExecutor`/provider SPIs remain the escape hatch for other drivers.
+
+The five first-party transports are adapter-owned: pg materializes
+`text-positional` `$1..$N` with fresh unnamed simple execution; mysql2
+materializes `text-positional` `?` and uses driver-owned reuse for every
+request; node:sqlite prepares documented `?` text with fresh simple execution;
+node-oracledb Thin uses text-positional `:1..:N` plus bind descriptors and its
+driver cache; Tedious uses `typed-request` `@p1..@pN` with `TYPES.*` and facets,
+creating a fresh request with simple execution. These are physical transport
+details, not logical shape identity. The same adapter object may receive
+multiple dialect contexts. Requested reuse is policy input; never infer the
+effective result from the request alone.
 
 ### 8.3 Runtime support policy
 
@@ -750,10 +846,11 @@ Non-negotiable:
   no `v0.1.0` tag or npm/Marketplace publication is implied by this candidate;
 - no stretch database/driver packages or transaction-profile runtime API.
 
-### PV13 — Five-DB typed parameters, localized/versioned docs, and npm bootstrap — authorized current phase
+### PV13 — Five-DB typed parameters, localized/versioned docs, and npm bootstrap — implemented baseline
 
 - `sql.bind(value, hint)` descriptors, aligned rendered `parameterHints`, and
-  prepared-query hint shape protection;
+  prepared-query hint shape protection (the PV13 historical representation;
+  PV14 derives these views from atomic `RenderedParameter` records);
 - PostgreSQL/MySQL/SQLite explicit hint rejection; no silent ignore path;
 - Oracle and SQL Server portable roots with parameter factories and
   Node driver subpaths, while real database evidence remains a release-gate
@@ -763,6 +860,24 @@ Non-negotiable:
   support evidence matrix, package map, and version/locale documentation contract;
 - 15 scoped packages plus the unscoped `sqlbraid` CLI convenience package;
 - prerelease/OIDC publication bootstrap and restart-safe release registry.
+
+### PV14 — Logical binding transport and observer diagnostics — development/review pending
+
+- logical immutable `RenderedStatement` (`segments` plus atomic `parameters`) is
+  the only execution source of truth;
+- driver-owned placeholder/materialization SPI for all five first-party paths,
+  with pure pre-acquire binding descriptions and provider/lease identity checks;
+- one-render prepared execution with transport-neutral shape identity and
+  adapter-owned effective reuse;
+- observer effective execution plans, distinct `"materialize"` errors, and lazy
+  cached diagnostic `literalizedSql()` with redaction/truncation;
+- custom-driver author guide and native-template value-only security/conformance
+  guidance.
+
+PV14 verification is pending on the exact final revision. No new SHA support,
+runtime/driver Official label, CI pass, package version, or publication is
+claimed by this phase. RC publication remains deferred until PV14 development,
+review and user acceptance are complete.
 
 ### Post-release candidates
 
@@ -793,5 +908,12 @@ SQLBraid is ready for public pre-release when a developer can:
 8. optionally generate table-oriented TypeScript models from metadata;
 9. use compiler/CLI/LSP without mandatory live-DB semantics;
 10. trust unsupported analysis to remain unknown rather than guessed.
+
+PV14 must complete development, review and user acceptance before this
+definition is considered satisfied. In particular, transport materialization,
+observer effective-plan diagnostics and custom-driver conformance remain
+verification-pending until the exact final revision is checked. RC publication
+is deferred; this plan claims no new SHA, CI, runtime support label or package
+version.
 
 The success metric is **how little SQLBraid gets in the way of SQL while providing strong TypeScript and execution boundaries around it**.

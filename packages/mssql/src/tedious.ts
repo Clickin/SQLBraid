@@ -7,11 +7,14 @@ import type {
   ParameterTypeHint,
   QueryExecutor,
   QueryExecutionResult,
-  RenderedQuery,
+  RenderedStatement,
   RoutineCallResult,
+  StatementBindingAdapter,
+  StatementBindingContext,
+  StatementBindingDescription,
   TypePolicy,
 } from "@sqlbraid/core";
-import { isBoundParameter } from "@sqlbraid/core";
+import { createStatementBindingDescription } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -67,6 +70,25 @@ export type TediousExecutorOptions = {
   readonly typePolicy?: TypePolicy;
   readonly maxBufferedRows?: number;
 };
+
+interface TediousMaterializedParameter {
+  readonly name: string;
+  readonly databaseType: DatabaseType;
+  readonly type: unknown;
+  readonly value: unknown;
+  readonly options?: { readonly length?: number; readonly precision?: number; readonly scale?: number };
+}
+
+interface TediousStatementBindingAdapter extends StatementBindingAdapter {
+  readonly materializedParameters: (
+    statement: RenderedStatement,
+    description: StatementBindingDescription,
+  ) => readonly TediousMaterializedParameter[] | undefined;
+}
+
+export interface TediousStatementBindingOptions {
+  readonly typePolicy?: TypePolicy;
+}
 
 type DatabaseType = "int" | "bigint" | "decimal" | "numeric" | "float" | "bit" | "nvarchar" | "varchar" | "char" | "varbinary" | "binary" | "uniqueidentifier" | "date" | "datetime2" | "datetimeoffset";
 
@@ -290,10 +312,7 @@ function mapRow(value: unknown, columns: readonly TediousColumnMetadataLike[], p
   return { value };
 }
 
-function addParameter(request: TediousRequestLike, index: number, value: unknown, suppliedHint: ParameterTypeHint | undefined, policy: TypePolicy): void {
-  const wrapped = isBoundParameter(value) ? value : undefined;
-  const actualValue = wrapped === undefined ? value : wrapped.value;
-  const actualHint = suppliedHint ?? (wrapped === undefined ? undefined : wrapped.hint);
+function materializeParameter(index: number, actualValue: unknown, actualHint: ParameterTypeHint | undefined, policy: TypePolicy): TediousMaterializedParameter {
   if (actualValue === undefined) throw new TypeError("BRAID_BIND_TYPE_REQUIRED: undefined is not a SQL Server parameter value.");
   const inferred = actualHint === undefined ? inferType(actualValue) : undefined;
   const type = actualHint === undefined ? inferred!.type : typeForHint(actualHint);
@@ -307,10 +326,134 @@ function addParameter(request: TediousRequestLike, index: number, value: unknown
   if (actualHint?.scale !== undefined) options.scale = actualHint.scale;
   const tediousType = TYPES[typeNames[type] as keyof typeof TYPES];
   if (!tediousType) throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Tedious does not expose SQL Server type ${type}.`);
-  request.addParameter(`p${index}`, tediousType, encoded, Object.keys(options).length === 0 ? undefined : options);
+  // Tedious repeats this validation from Request just before sending. Run the
+  // collation-independent part here so bad values fail before a pooled lease
+  // is acquired. Text encoding is checked for its stable JS shape here; any
+  // collation-dependent details remain in Tedious.
+  if (type === "nvarchar" || type === "varchar" || type === "char") {
+    if (encoded !== null && typeof encoded !== "string") {
+      throw new TypeError(`BRAID_BIND_TYPE_REQUIRED: invalid SQL Server ${type} parameter: expected a string.`);
+    }
+  } else {
+    const validate = (tediousType as { readonly validate?: (value: unknown, collation?: unknown) => unknown }).validate;
+    if (typeof validate === "function") {
+      try {
+        encoded = validate(encoded);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new TypeError(`BRAID_BIND_TYPE_REQUIRED: invalid SQL Server ${type} parameter: ${detail}`, { cause: error });
+      }
+    }
+  }
+  return {
+    name: `p${index}`,
+    databaseType: type,
+    type: tediousType,
+    value: encoded,
+    ...(Object.keys(options).length === 0 ? {} : { options }),
+  };
 }
 
-function collect(connection: TediousConnectionLike, rendered: RenderedQuery, policy: TypePolicy): Promise<CollectedResult> {
+function addParameter(request: TediousRequestLike, parameter: TediousMaterializedParameter): void {
+  request.addParameter(parameter.name, parameter.type, parameter.value, parameter.options);
+}
+
+function tediousLiteralValue(
+  value: unknown,
+  databaseType: DatabaseType,
+  binary: "summary" | "full" | undefined = "summary",
+): string {
+  if (value === null || value === undefined) return "NULL";
+  if (databaseType === "int" || databaseType === "bigint" || databaseType === "decimal" || databaseType === "numeric" || databaseType === "float") {
+    if (typeof value === "bigint") return value.toString(10);
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : "[unsupported numeric value]";
+    if (typeof value === "string" && /^-?(?:\d+)(?:\.\d+)?$/u.test(value)) return value;
+    return "[unsupported numeric value]";
+  }
+  if (databaseType === "bit") {
+    if (typeof value === "boolean") return value ? "1" : "0";
+    if (value === 0 || value === 1) return String(value);
+    return "[unsupported bit value]";
+  }
+  if (databaseType === "nvarchar" || databaseType === "varchar" || databaseType === "char" || databaseType === "uniqueidentifier") {
+    return typeof value === "string" ? `'${value.replaceAll("'", "''")}'` : "[unsupported string value]";
+  }
+  if (databaseType === "date" || databaseType === "datetime2" || databaseType === "datetimeoffset") {
+    return value instanceof Date && Number.isFinite(Date.prototype.getTime.call(value))
+      ? `'${Date.prototype.toISOString.call(value)}'`
+      : "[unsupported date]";
+  }
+  if (value instanceof Uint8Array) {
+    if (binary !== "full") return `<binary ${value.byteLength} bytes>`;
+    return `0x${Buffer.from(value).toString("hex").toUpperCase()}`;
+  }
+  return typeof value === "object" ? "[unsupported object]" : `[unsupported ${typeof value}]`;
+}
+
+function createBinding(options: TediousStatementBindingOptions = {}): TediousStatementBindingAdapter {
+  const policy = options.typePolicy ?? defaultTypePolicy;
+  const materialized = new WeakMap<StatementBindingDescription, { readonly statement: RenderedStatement; readonly parameters: readonly TediousMaterializedParameter[] }>();
+  const adapter: TediousStatementBindingAdapter = {
+    id: "tedious",
+    describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+      const parameters = statement.parameters.map((parameter, index) => materializeParameter(index + 1, parameter.value, parameter.hint, policy));
+      const description = createStatementBindingDescription(statement, context, {
+        adapterId: "tedious",
+        transport: "typed-request",
+        placeholder: (index) => `@p${index}`,
+        reuse: {
+          effective: "simple",
+          owner: "driver",
+        },
+        formatLiteral: (_parameter, index, literalOptions) => tediousLiteralValue(
+          parameters[index]?.value,
+          parameters[index]?.databaseType ?? "nvarchar",
+          literalOptions.binary,
+        ),
+      });
+      materialized.set(description, { statement, parameters });
+      return description;
+    },
+    materializedParameters(statement: RenderedStatement, description: StatementBindingDescription): readonly TediousMaterializedParameter[] | undefined {
+      const prepared = materialized.get(description);
+      return prepared?.statement === statement ? prepared.parameters : undefined;
+    },
+  };
+  return Object.freeze(adapter);
+}
+
+export function createTediousStatementBinding(options: TediousStatementBindingOptions = {}): StatementBindingAdapter {
+  return createBinding(options);
+}
+
+/** Default adapter for callers that do not supply a custom type policy. */
+export const tediousStatementBinding: StatementBindingAdapter = createTediousStatementBinding();
+
+function executionBinding(
+  adapter: TediousStatementBindingAdapter,
+  statement: RenderedStatement,
+  description: StatementBindingDescription | undefined,
+): { readonly description: StatementBindingDescription; readonly parameters: readonly TediousMaterializedParameter[] } {
+  const binding = description ?? adapter.describe(statement, {
+    dialectId: statement.dialectId,
+    requestedReuse: "auto",
+  });
+  if (binding.adapterId !== adapter.id) {
+    throw new TypeError(`SQLBraid Tedious executor requires binding adapter "${adapter.id}".`);
+  }
+  const parameters = adapter.materializedParameters(statement, binding);
+  if (parameters === undefined) {
+    throw new TypeError("SQLBraid Tedious executor received a binding description not produced by its adapter.");
+  }
+  return { description: binding, parameters };
+}
+
+function collect(
+  connection: TediousConnectionLike,
+  parameterizedSql: string,
+  parameters: readonly TediousMaterializedParameter[],
+  policy: TypePolicy,
+): Promise<CollectedResult> {
   return new Promise<CollectedResult>((resolve, reject) => {
     let request: TediousRequestLike | undefined;
     let callbackError: unknown;
@@ -365,7 +508,7 @@ function collect(connection: TediousConnectionLike, rendered: RenderedQuery, pol
       });
     };
     try {
-      request = new Request(rendered.text, ((error: unknown, rowCount?: number) => {
+      request = new Request(parameterizedSql, ((error: unknown, rowCount?: number) => {
         callbackError = error;
         if (typeof rowCount === "number") callbackRowCount = rowCount;
         finish();
@@ -408,8 +551,7 @@ function collect(connection: TediousConnectionLike, rendered: RenderedQuery, pol
       });
       request.on("error", (error: unknown) => { fail(error); });
       request.on("requestCompleted", () => { completed = true; finish(); });
-      const hints = rendered.parameterHints ?? [];
-      for (let index = 0; index < rendered.values.length; index += 1) addParameter(request, index + 1, rendered.values[index], hints[index], policy);
+      for (const parameter of parameters) addParameter(request, parameter);
       started = true;
       connection.execSql(request);
     } catch (error) {
@@ -436,9 +578,15 @@ function control(connection: TediousConnectionLike, method: "beginTransaction" |
   });
 }
 
-function rollbackTo(connection: TediousConnectionLike, name: string, policy: TypePolicy): Promise<void> {
-  const rendered = { text: `ROLLBACK TRANSACTION [${name.replaceAll("]", "]]")}]`, values: [], resultKind: "command" as const };
-  return collect(connection, rendered, policy).then(() => undefined);
+function rollbackTo(connection: TediousConnectionLike, name: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    try {
+      const request = new Request(`ROLLBACK TRANSACTION [${name.replaceAll("]", "]]")}]`, () => resolve()) as unknown as TediousRequestLike;
+      connection.execSql(request);
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 function rowResult(result: CollectedResult): QueryExecutionResult<Record<string, unknown>> {
@@ -454,7 +602,14 @@ function rowResult(result: CollectedResult): QueryExecutionResult<Record<string,
 
 const DEFAULT_MAX_BUFFERED_ROWS = 32;
 
-function streamRows(connection: TediousConnectionLike, rendered: RenderedQuery, policy: TypePolicy, maxBufferedRows: number, signal?: AbortSignal): AsyncGenerator<Record<string, unknown>> {
+function streamRows(
+  connection: TediousConnectionLike,
+  parameterizedSql: string,
+  parameters: readonly TediousMaterializedParameter[],
+  policy: TypePolicy,
+  maxBufferedRows: number,
+  signal?: AbortSignal,
+): AsyncGenerator<Record<string, unknown>> {
   const max = Number.isSafeInteger(maxBufferedRows) && maxBufferedRows > 0 ? maxBufferedRows : DEFAULT_MAX_BUFFERED_ROWS;
   return (async function* (): AsyncGenerator<Record<string, unknown>> {
     const queue: Record<string, unknown>[] = [];
@@ -494,7 +649,7 @@ function streamRows(connection: TediousConnectionLike, rendered: RenderedQuery, 
         return;
       }
       try {
-        request = new Request(rendered.text, ((error: unknown) => {
+        request = new Request(parameterizedSql, ((error: unknown) => {
           if (error !== undefined && error !== null) {
             failure = failure ?? asError(error);
             cancel();
@@ -545,8 +700,7 @@ function streamRows(connection: TediousConnectionLike, rendered: RenderedQuery, 
           if (failure) reject(failure);
           else resolve();
         });
-        const hints = rendered.parameterHints ?? [];
-        for (let index = 0; index < rendered.values.length; index += 1) addParameter(request, index + 1, rendered.values[index], hints[index], policy);
+        for (const parameter of parameters) addParameter(request, parameter);
         request.pause?.();
         paused = true;
         connection.execSql(request);
@@ -584,21 +738,29 @@ function streamRows(connection: TediousConnectionLike, rendered: RenderedQuery, 
   })();
 }
 
-function makeTediousExecutor(connection: TediousConnectionLike, options: TediousExecutorOptions = {}): QueryExecutor {
+function makeTediousExecutor(
+  connection: TediousConnectionLike,
+  options: TediousExecutorOptions = {},
+  bindingAdapter: TediousStatementBindingAdapter = createBinding(options),
+): QueryExecutor {
   const policy = options.typePolicy ?? defaultTypePolicy;
   const maxBufferedRows = options.maxBufferedRows ?? DEFAULT_MAX_BUFFERED_ROWS;
   return {
     ownershipKey: connection,
-    async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
-      const result = await collect(connection, rendered, policy);
+    statementBinding: bindingAdapter,
+    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+      const execution = executionBinding(bindingAdapter, rendered, binding);
+      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy);
       if (result.outputSeen) throw new Error("BRAID_CALL_OUT_UNSUPPORTED: SQL Server output parameters are not implemented.");
       return rowResult(result) as QueryExecutionResult<Row>;
     },
-    stream<Row>(rendered: RenderedQuery, signal?: AbortSignal): AsyncIterable<Row> {
-      return streamRows(connection, rendered, policy, maxBufferedRows, signal) as AsyncIterable<Row>;
+    stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncIterable<Row> {
+      const execution = executionBinding(bindingAdapter, rendered, binding);
+      return streamRows(connection, execution.description.parameterizedSql!, execution.parameters, policy, maxBufferedRows, signal) as AsyncIterable<Row>;
     },
-    async call<Row>(rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
-      const result = await collect(connection, rendered, policy);
+    async call<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<RoutineCallResult<Row>> {
+      const execution = executionBinding(bindingAdapter, rendered, binding);
+      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy);
       if (result.outputSeen) throw new Error("BRAID_CALL_OUT_UNSUPPORTED: SQL Server output parameters are not implemented.");
       return {
         output: {},
@@ -609,14 +771,14 @@ function makeTediousExecutor(connection: TediousConnectionLike, options: Tedious
     commit: () => control(connection, "commitTransaction"),
     rollback: () => control(connection, "rollbackTransaction"),
     savepoint: (name) => control(connection, "saveTransaction", name),
-    rollbackTo: (name) => rollbackTo(connection, name, policy),
+    rollbackTo: (name) => rollbackTo(connection, name),
     releaseSavepoint: async () => undefined,
   };
 }
 
 export function createTediousExecutor(connection: TediousConnectionLike, options: TediousExecutorOptions = {}): QueryExecutor {
   assertDirectConnection(connection);
-  return makeTediousExecutor(connection, options);
+  return makeTediousExecutor(connection, options, createBinding(options));
 }
 
 export function createTediousDatabase(connection: TediousConnectionLike, options: TediousDatabaseOptions = {}) {
@@ -631,11 +793,13 @@ export function createTediousPoolProvider(pool: TediousPoolLike, options: Tediou
         : typeof pool.getConnection === "function" ? pool.getConnection.bind(pool)
           : undefined;
   if (!acquireConnection) throw new TypeError("SQLBraid SQL Server pool provider requires acquire(), connect(), or getConnection().");
+  const bindingAdapter = createBinding(options);
   return {
+    statementBinding: bindingAdapter,
     async acquire(): Promise<ConnectionLease> {
       const connection = await acquireConnection();
       if (!connection || typeof connection.release !== "function") throw new TypeError("SQL Server pool returned a connection without explicit release ownership.");
-      const executor = makeTediousExecutor(connection, options);
+      const executor = makeTediousExecutor(connection, options, bindingAdapter);
       let released = false;
       return {
         ...executor,

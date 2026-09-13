@@ -17,7 +17,7 @@ hero:
 SQLBraid is a SQL-first TypeScript data-access toolkit. Keep the SQL you know, without a query-builder translation layer, while retaining the boundaries that matter in production.
 
 - **SQL stays visible.** Tagged templates preserve ordinary SQL and database-specific features.
-- **Values stay bound.** Ordinary value interpolation is a driver bind; structural SQL requires an explicit helper.
+- **Values stay bound.** Ordinary value interpolation becomes a logical value parameter; the selected driver owns placeholder/materialization transport, while structural SQL requires an explicit helper.
 - **Results stay explicit.** Declare `rows`, `command`, or `call`, then let runtime checks catch mismatches.
 - **Runtime semantics stay honest.** Direct connections and pools use different factories; transactions pin one physical connection.
 - **Tooling stays optional.** Metadata, deterministic code generation, LSP, CLI inspection, and VS Code support do not enter the runtime dependency path.
@@ -32,4 +32,8 @@ SQLBraid does not infer arbitrary SELECT result types, hydrate object graphs, or
 
 ## Launch documentation
 
-This is the 0.1.0 release candidate documentation for the planned September 18 release. npm publication is not complete yet. See [release notes and limitations](/SQLBraid/release/notes/) and the [tested runtime/driver matrix](/SQLBraid/reference/support/) before choosing an integration.
+This is the 0.1.0 pre-release documentation. PV14 transport/observer
+verification and user acceptance are pending, so RC publication remains
+deferred. See [release notes and limitations](/SQLBraid/release/notes/) and the
+[tested runtime/driver matrix](/SQLBraid/reference/support/) before choosing an
+integration.

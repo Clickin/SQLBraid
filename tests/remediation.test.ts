@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 import { test } from 'vitest';
 import ts from 'typescript';
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
-import type { RenderedQuery } from '@sqlbraid/core';
+import { createStatementBindingDescription, parameterizedSql } from '@sqlbraid/core';
+import type { RenderedStatement, StatementBindingContext } from '@sqlbraid/core';
 import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource, sourcePosition } from '@sqlbraid/compiler';
 import { fingerprintQuery, templateFamilyFingerprint } from '@sqlbraid/operations';
 import { createPgDatabase } from '@sqlbraid/postgres/pg';
@@ -30,11 +31,26 @@ function hasCode(code: string): (error: unknown) => boolean {
   return (error): error is { readonly code: string } => typeof error === 'object' && error !== null && 'code' in error && error.code === code;
 }
 
+const testBinding = {
+  id: 'remediation-test',
+  describe(statement: RenderedStatement, context: StatementBindingContext) {
+    return createStatementBindingDescription(statement, context, {
+      adapterId: 'remediation-test',
+      transport: 'native-value-template',
+      reuse: { effective: 'simple', owner: 'sqlbraid' },
+    });
+  },
+} as const;
+
+function postgresSql(statement: RenderedStatement): string {
+  return parameterizedSql(statement, (index) => `$${index}`);
+}
+
 test('template scanner preserves marker text in SQL lexical regions', () => {
-  assert.equal(postgres`SELECT '/*@braid where*/ x /*@braid end*/' AS marker`.render().text, "SELECT '/*@braid where*/ x /*@braid end*/' AS marker");
-  assert.equal(postgres`SELECT $$ /*@braid where*/ $$ AS marker`.render().text, 'SELECT $$ /*@braid where*/ $$ AS marker');
-  assert.equal(postgres`SELECT '\u00000\u0000' AS marker`.render().text, "SELECT '\u00000\u0000' AS marker");
-  assert.equal(postgres`-- /*@braid end*/\nSELECT 1`.render().text, '-- /*@braid end*/\nSELECT 1');
+  assert.equal(postgres`SELECT '/*@braid where*/ x /*@braid end*/' AS marker`.render().segments.join(''), "SELECT '/*@braid where*/ x /*@braid end*/' AS marker");
+  assert.equal(postgres`SELECT $$ /*@braid where*/ $$ AS marker`.render().segments.join(''), 'SELECT $$ /*@braid where*/ $$ AS marker');
+  assert.equal(postgres`SELECT '\u00000\u0000' AS marker`.render().segments.join(''), "SELECT '\u00000\u0000' AS marker");
+  assert.equal(postgres`-- /*@braid end*/\nSELECT 1`.render().segments.join(''), '-- /*@braid end*/\nSELECT 1');
   const parsed = discoverQueries("import {sql} from '@sqlbraid/template'; const q=sql`SELECT '${name}'`;", 'fixture.ts', { moduleSpecifier: '@sqlbraid/template' });
   assert.equal(parsed.diagnostics[0].code, 'BRAID_HOLE_CONTEXT');
 });
@@ -43,17 +59,17 @@ test('trim rejects empty SET, omits comment-only WHERE, and preserves line comme
   const emptySet = postgres`UPDATE users /*@braid set*/ /*@braid if ${false}*/ name = ${'Ada'}, /*@braid end*/ /*@braid end*/ WHERE id = ${1}`;
   assert.throws(() => emptySet.render(), hasCode('BRAID_EMPTY_SET'));
   const comments = postgres`SELECT id FROM users /*@braid where*/ /* explanation */ /*@braid end*/`.render();
-  assert.equal(comments.text, 'SELECT id FROM users /* explanation */');
+  assert.equal(comments.segments.join(''), 'SELECT id FROM users /* explanation */');
   const line = postgres`SELECT id FROM users /*@braid where*/ AND id = ${1} -- condition\n/*@braid end*/ ORDER BY id`.render();
-  assert.match(line.text, /-- condition\n\s*ORDER BY id/);
-  assert.equal(postgres`SELECT/*@braid if ${false}*/ DISTINCT /*@braid end*/id FROM users`.render().text, 'SELECT id FROM users');
+  assert.match(postgresSql(line), /-- condition\n\s*ORDER BY id/);
+  assert.equal(postgres`SELECT/*@braid if ${false}*/ DISTINCT /*@braid end*/id FROM users`.render().segments.join(''), 'SELECT id FROM users');
 });
 
 test('structural inputs are captured and bounded', () => {
   const ids = [1];
   const query = postgres`SELECT id FROM users WHERE id IN (${postgres.list(ids)})`;
   ids.push(2);
-  assert.deepEqual(query.render().values, [1]);
+  assert.deepEqual(query.render().parameters.map(({ value }: { readonly value: unknown }) => value), [1]);
   assert.equal(Object.isFrozen(query.ir), true);
   assert.equal(Object.isFrozen(query.ir.nodes), true);
   assert.throws(() => postgres.list([]), hasCode('BRAID_EMPTY_LIST'));
@@ -114,10 +130,10 @@ test('emitted guarded JavaScript evaluates only the active branch', async () => 
     let calls = 0;
     const inactive = module.build(null, () => { calls += 1; return 7; }).render();
     assert.equal(calls, 0);
-    assert.deepEqual(inactive.values, []);
+    assert.deepEqual(inactive.parameters, []);
     const active = module.build({ name: 'Ada' }, () => { calls += 1; return 7; }).render();
     assert.equal(calls, 1);
-    assert.deepEqual(active.values, ['Ada', 7]);
+    assert.deepEqual(active.parameters.map(({ value }: { readonly value: unknown }) => value), ['Ada', 7]);
     assert.deepEqual(module.build({ name: 'Ada' }, () => { calls += 1; return 8; }).render(), module.build({ name: 'Ada' }, () => 8).render());
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -219,17 +235,17 @@ test('AST lowering is hygienic and preserves side effects, this, choose order, a
     let getterCalls = 0;
     let nextCalls = 0;
     const inactive = module.build(false, { get value() { getterCalls += 1; return 7; } }, () => { nextCalls += 1; return 8; }).render();
-    assert.deepEqual(inactive.values, []);
+    assert.deepEqual(inactive.parameters, []);
     assert.equal(getterCalls, 0);
     assert.equal(nextCalls, 0);
     const active = module.build(true, { get value() { getterCalls += 1; return 7; } }, () => { nextCalls += 1; return 8; }).render();
-    assert.deepEqual(active.values, [7, 8]);
+    assert.deepEqual(active.parameters.map(({ value }: { readonly value: unknown }) => value), [7, 8]);
     assert.equal(getterCalls, 1);
     assert.equal(nextCalls, 1);
-    assert.deepEqual(new module.Builder({ name: 'Ada' }).build().render().values, ['Ada']);
+    assert.deepEqual(new module.Builder({ name: 'Ada' }).build().render().parameters.map(({ value }: { readonly value: unknown }) => value), ['Ada']);
     let firstCalls = 0;
     let secondCalls = 0;
-    assert.match(module.choose(() => { firstCalls += 1; return true; }, () => { secondCalls += 1; return true; }).render().text, /A/);
+    assert.match(module.choose(() => { firstCalls += 1; return true; }, () => { secondCalls += 1; return true; }).render().segments.join(''), /A/);
     assert.equal(firstCalls, 1);
     assert.equal(secondCalls, 0);
     assert.equal(module.many(3).length, 2);
@@ -247,8 +263,8 @@ test('nested async functions and otherwise-only choose emit valid JavaScript', a
     const file = join(directory, 'nested.mjs');
     writeFileSync(file, emitted.outputText.replace(/\n\/\/#[^\n]*sourceMappingURL[^\n]*/u, ''));
     const module = await import(pathToFileURL(file).href);
-    assert.equal(typeof module.nested().render().values[0], 'function');
-    assert.deepEqual(module.otherwise(7).render().values, [7]);
+    assert.equal(typeof module.nested().render().parameters[0]?.value, 'function');
+    assert.deepEqual(module.otherwise(7).render().parameters.map(({ value }: { readonly value: unknown }) => value), [7]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -391,8 +407,9 @@ test('PostgreSQL inspector records relation and routine metadata', async () => {
 test('prepared queries reject shape drift and streams honor adapter capability', async () => {
   let second = false;
   const db = createDatabase({
-    async query<Row>(rendered: RenderedQuery) { return { kind: 'rows' as const, rows: [{ text: rendered.text }] as unknown as readonly Row[] }; },
-    async *stream<Row>(rendered: RenderedQuery): AsyncIterable<Row> { yield { text: rendered.text } as unknown as Row; },
+    statementBinding: testBinding,
+    async query<Row>(rendered: RenderedStatement) { return { kind: 'rows' as const, rows: [{ text: postgresSql(rendered) }] as unknown as readonly Row[] }; },
+    async *stream<Row>(rendered: RenderedStatement): AsyncIterable<Row> { yield { text: postgresSql(rendered) } as unknown as Row; },
   });
   const prepared = db.prepare('users', () => second ? postgres.rows`SELECT name` : postgres.rows`SELECT id`);
   assert.deepEqual(await prepared.all(), [{ text: 'SELECT id' }]);

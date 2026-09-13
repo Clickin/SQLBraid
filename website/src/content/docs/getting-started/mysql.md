@@ -57,6 +57,11 @@ try {
 
 The pool remains the application's resource. SQLBraid acquires and releases a physical connection for each independent root operation; `db.tx(...)` pins one lease for the callback.
 
+The mysql2 binding adapter materializes the logical statement as text-positional
+`?` placeholders plus the ordered value array. Binding description and hint
+validation happen before acquisition; mysql2 owns effective reuse, including
+the requested `reuse` policy. Unsupported hints fail before driver I/O.
+
 :::caution Do not pass a pool to `createMysql2Database`
 Use `createMysql2PoolDatabase(pool)` for a pool. Explicit factories keep transaction and release semantics physical-connection-safe.
 :::

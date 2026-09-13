@@ -43,6 +43,12 @@ try {
 
 `sql.bind` keeps the value separate from SQL text and supplies an Oracle database parameter type. Without a hint, the adapter uses its documented driver inference. SQLBraid never treats a TypeScript `number`, `string`, or `Date` as universal evidence for an Oracle type.
 
+The Thin binding adapter materializes the logical statement as text-positional
+`:1`, `:2`, … binds and maps supported hints to node-oracledb descriptors.
+Description, hint validation, and deterministic bind construction happen before
+lease acquisition. The adapter reports driver-owned effective reuse. Unsupported
+hint facets fail at the `materialize` stage before database I/O.
+
 ## Capability boundaries
 
 - The first-party target is `node-oracledb` Thin mode. Thick mode is not an Official claim.

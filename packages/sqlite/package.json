@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/sqlite",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.0",
   "description": "SQLBraid SQLite dialect, node:sqlite adapter, and metadata inspector",
   "license": "MIT",
   "repository": {

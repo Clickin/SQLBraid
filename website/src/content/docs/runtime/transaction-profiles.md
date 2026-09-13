@@ -9,8 +9,8 @@ Nothing on this page is an existing SQLBraid API. Do not pass `isolation`, `tran
 
 SQLBraid already separates four concerns:
 
-1. **Dialect** — SQL surface, placeholders, quoting, and primitive database semantics.
-2. **Driver** — protocol bridge and result normalization (`pg`, `mysql2`, `node:sqlite`).
+1. **Dialect** — SQL surface, lexical profile, quoting, and primitive database semantics.
+2. **Driver** — protocol bridge, placeholder/materialization policy, and result normalization (`pg`, `mysql2`, `node:sqlite`, `node-oracledb`, `Tedious`).
 3. **Execution runtime** — physical lease ownership, transaction pinning, savepoints, and scope on Node/Bun/Deno.
 4. **Transaction profile** — a future explicit description of isolation/session behavior.
 

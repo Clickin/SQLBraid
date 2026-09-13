@@ -8,6 +8,7 @@ import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createOracledbDatabase, createOracledbPoolDatabase } from "@sqlbraid/oracle/oracledb";
 import { createOracleInspector } from "@sqlbraid/oracle/inspector";
 import { oracleParameter, sql, typePolicy } from "@sqlbraid/oracle";
+import { bindingObserver } from "../binding.js";
 
 async function connect() {
   const settings = inject("oracle");
@@ -18,6 +19,21 @@ async function connect() {
 async function drop(connection: { execute(sql: string): Promise<unknown> }, name: string): Promise<void> {
   await connection.execute(`BEGIN EXECUTE IMMEDIATE 'DROP ${name}'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;`);
 }
+
+test("Oracle binding diagnostics preserve literal marker text through real execution", async () => {
+  const { connection } = await connect();
+  try {
+    const probe = bindingObserver("oracle", "text-positional");
+    const db = createOracledbDatabase(connection, { observers: [probe.observer] });
+    assert.deepEqual(
+      await db.one(sql.rows`SELECT ${sql.bind("O'Reilly", oracleParameter.varchar2())} AS value, '$1 ? :1 @p1' AS marker FROM dual /* $1 ? :1 @p1 */`),
+      { VALUE: "O'Reilly", MARKER: "$1 ? :1 @p1" },
+    );
+    probe.verify("SELECT :1 AS value, '$1 ? :1 @p1' AS marker FROM dual /* $1 ? :1 @p1 */");
+  } finally {
+    await connection.close();
+  }
+});
 
 test("Oracle direct Thin adapter handles typed values, observers, mapping lifetime, stream cleanup, and nested transactions", async () => {
   const { connection, settings } = await connect();

@@ -59,6 +59,13 @@ try {
 
 A pooled root operation acquires one connection lease, performs its physical I/O, releases the lease, then maps materialized results. A transaction is the explicit connection-pinning boundary; use its callback handle for every operation inside it. The application owns pool shutdown.
 
+The pg binding adapter receives a logical `RenderedStatement`, then materializes
+text-positional `$1`, `$2`, … placeholders and the ordered value array. This
+driver-owned step happens after pure binding description and before lease
+acquisition; placeholder spelling is not supplied by the PostgreSQL dialect.
+The adapter reports simple driver-owned reuse and rejects unsupported parameter
+hints before I/O.
+
 :::caution Do not pass a pool to `createPgDatabase`
 SQLBraid does not duck-type pools. Passing `pg.Pool` to the direct factory is the wrong ownership model; use `createPgPoolDatabase(pool)`.
 :::

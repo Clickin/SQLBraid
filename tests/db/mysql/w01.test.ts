@@ -11,6 +11,7 @@ import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/
 import { createMysqlInspector } from "@sqlbraid/mysql/inspector";
 import { sql, typePolicy as mysqlTypePolicy } from "@sqlbraid/mysql";
 import { runW01 } from "../w01.js";
+import { bindingObserver } from "../binding.js";
 import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGeneratedPropertyAbsent } from "../codegen.js";
 
 async function endPool(pool: Pick<Pool, "end">): Promise<void> {
@@ -20,6 +21,21 @@ async function endPool(pool: Pick<Pool, "end">): Promise<void> {
   await Promise.race([ending, timeout.promise]);
   clearTimeout(timer);
 }
+
+test("MySQL binding diagnostics preserve literal marker text through real execution", async () => {
+  const client = await createConnection(inject("mysql").connectionUri);
+  try {
+    const probe = bindingObserver("mysql", "text-positional");
+    const db = createMysql2Database(client, { observers: [probe.observer] });
+    assert.deepEqual(
+      await db.one(sql.rows`SELECT ${"O'Reilly"} AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */`),
+      { value: "O'Reilly", marker: "$1 ? :1 @p1" },
+    );
+    probe.verify("SELECT ? AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */");
+  } finally {
+    await client.end();
+  }
+});
 
 test("MySQL wrappers sharing one connection preserve transaction isolation", async () => {
   const settings = inject("mysql");

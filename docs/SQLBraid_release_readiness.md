@@ -2,6 +2,36 @@
 
 This document records what the repository automates and what a maintainer must configure outside the repository. It contains no credentials or registry tokens.
 
+PV14 binding transport and observer diagnostics are still in development/review
+with verification pending on the exact final revision. RC publication remains
+deferred until PV14 development, review and user acceptance are complete. This
+readiness record therefore makes no new SHA, CI, runtime support, or package
+version claim.
+
+### PV14 local working-tree evidence — 2026-09-13
+
+The implementation was exercised on Node 22.18.0 from base
+`bc3092b1d31f8fc5410e8b0b57554567477d1147`, with the existing rc.0 version
+changes preserved. Local evidence includes frozen installation, type checking,
+build, unit/CLI/consumer tests, all five real database suites, the VS Code host,
+16 packed packages, and packed public examples. Node 22.18.0, Bun 1.3.14 and
+Deno 2.9.3 passed the existing packed core/runtime/pg/mysql2 matrix; node:sqlite
+passed on Node/Deno and remains unavailable on Bun. This does not extend
+Oracle/Tedious support to Bun or Deno.
+
+The bilingual documentation build validated 73 pages and 3,084 links/anchors.
+All three complete custom-adapter snippets passed strict TypeScript checking.
+An actual in-memory SQLite smoke exercised prepared single-render execution,
+observer transport metadata, marker preservation, default redaction and inline
+diagnostics. Standards/spec review findings for binding provenance, prepared
+shape ordering and native value-only execution were addressed with regressions.
+
+These results were collected from the working tree, not exact-SHA CI or immutable
+release evidence. The final reviewed commit still needs its CI gates and
+immutable release dry-run. No tag, release, npm publication or
+dist-tag mutation was performed during local verification; maintainer/user acceptance remains
+required before RC publication.
+
 ## Automated release path
 
 `.github/workflows/release.yml` has two safe entry points:

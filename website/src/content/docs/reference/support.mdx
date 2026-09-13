@@ -5,6 +5,13 @@ description: Separate release evidence from compatibility expectations and custo
 
 import BuildProvenance from "../../../components/BuildProvenance.astro";
 
+> PV14 binding transport and observer diagnostics are under development/review.
+> Verification is pending on the exact final revision. This page makes no new
+> SHA, CI, runtime support, package version, or RC publication claim; RC
+> publication remains deferred until PV14 development, review, and user
+> acceptance are complete. The historical evidence below retains its original
+> provenance.
+
 Support labels mean:
 
 - **Official** — exercised in the SQLBraid release gate for that runtime/driver combination.
@@ -34,6 +41,23 @@ The matrix is evidence, not a promise inferred from a package existing. In parti
 
 Oracle targets `node-oracledb` Thin mode; Thick mode is not Official. SQL Server targets the Tedious adapter. The Oracle `call()` path and SQL Server OUT/return-value routine binding are Unsupported in this RC. PostgreSQL, MySQL, and SQLite explicitly reject parameter hints rather than silently ignoring them.
 
+## PV14 transport map (verification pending)
+
+All five first-party adapters receive the same logical `RenderedStatement` and
+materialize their own request after pure binding description:
+
+| Path | Transport | Effective reuse policy |
+| --- | --- | --- |
+| PostgreSQL / `pg` | text-positional `$1..$N` | fresh unnamed simple, driver-owned |
+| MySQL / `mysql2` | text-positional `?` | driver-owned reuse |
+| SQLite / `node:sqlite` | documented `DatabaseSync.prepare(text)` with `?` | fresh simple, driver-owned |
+| Oracle Thin / `node-oracledb` | text-positional `:1..:N` with descriptors | driver cache reuse |
+| SQL Server / Tedious | typed request `@p1..@pN` with `TYPES.*` | fresh Request/`execSql`, simple |
+
+Requested reuse is policy input, not evidence of effective reuse; the adapter
+reports the effective result. Placeholder syntax does not participate in
+logical prepared shape identity.
+
 Dialect, driver, execution runtime, and transaction profile are separate axes. The [successful PV13 runtime gate at d4bc626](https://github.com/Clickin/SQLBraid/actions/runs/34753809318) exercises Oracle 23.9.0.25.07 Thin and SQL Server 2022 CU18 (16.0.4185.3) with Node 22.18.0 on Linux x64. Local SQL Server ARM emulation does not establish Official ARM support. Bun/Deno driver subpaths and Oracle Thick mode are not covered; all five portable roots pass separately on the pinned Node/Bun/Deno versions.
 
 ## Release evidence provenance
@@ -44,3 +68,5 @@ Dialect, driver, execution runtime, and transaction profile are separate axes. T
 - Historical PV11 evidence: [revision `1615311`](https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7) and [workflow run `34745030794`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794)
 
 This matrix is documentation, not a test result. Use release evidence and individual checks for claims about the full release gate.
+
+For custom adapters, see the [driver-author binding guide](/SQLBraid/dev/agents/driver-author/).

@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import {
   SQL_FRAGMENT,
   createBoundParameter,
+  createRenderedStatement,
   isBoundParameter,
   type BindNode,
   type ChooseNode,
@@ -12,7 +13,8 @@ import {
   type Query,
   type QueryResultKind,
   type RenderLimits,
-  type RenderedQuery,
+  type RenderedParameter,
+  type RenderedStatement,
   type ParameterTypeHint,
   type StandardSchemaV1,
   type SqlFragment,
@@ -35,7 +37,6 @@ const DEFAULT_LIMITS: Required<RenderLimits> = {
 
 export const postgresDialect: Dialect = {
   id: "postgres",
-  placeholder: (index) => `$${index}`,
   quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
   lexicalProfile: {
     lineCommentPrefixes: ["--"],
@@ -508,14 +509,13 @@ function applyTrim(text: string, attributes: TrimAttributes): string {
 interface RenderState {
   readonly dialect: Dialect;
   readonly limits: Required<RenderLimits>;
-  readonly values: unknown[];
-  readonly bindingMap: { readonly placeholder: number; readonly interpolation?: number }[];
-  readonly parameterHints: (ParameterTypeHint | undefined)[];
-  readonly output: string[];
+  readonly parameters: RenderedParameter[];
+  readonly segments: string[];
   readonly variantPath: string[];
   structuralItems: number;
   depth: number;
   sqlBytes: number;
+  afterParameter: boolean;
 }
 
 function validateLimits(limits: RenderLimits): Required<RenderLimits> {
@@ -526,16 +526,17 @@ function validateLimits(limits: RenderLimits): Required<RenderLimits> {
 
 function addText(state: RenderState, text: string): void {
   if (!text) return;
-  const previous = state.output.at(-1);
-  const previousChar = previous?.at(-1);
+  const segment = state.segments.at(-1);
+  const previousChar = segment?.at(-1);
   const nextChar = text[0];
-  if (previousChar && nextChar && /[\p{L}\p{N}_$]/u.test(previousChar) && /[\p{L}\p{N}_$]/u.test(nextChar)) {
-    state.output.push(" ");
+  if ((previousChar || state.afterParameter) && nextChar && /[\p{L}\p{N}_$]/u.test(previousChar ?? "0") && /[\p{L}\p{N}_$]/u.test(nextChar)) {
+    state.segments[state.segments.length - 1] += " ";
     state.sqlBytes += 1;
   }
-  state.output.push(text);
+  state.segments[state.segments.length - 1] += text;
   state.sqlBytes += Buffer.byteLength(text, "utf8");
   if (state.sqlBytes > state.limits.maxSqlBytes) throw new SqlRenderError("BRAID_SQL_LIMIT", "Rendered SQL exceeds maxSqlBytes.");
+  state.afterParameter = false;
 }
 
 function addStructural(state: RenderState, count = 1): void {
@@ -548,13 +549,69 @@ export function assertDirectiveCondition(value: unknown): boolean {
   return Boolean(value);
 }
 
+function appendParameter(state: RenderState, parameter: RenderedParameter): void {
+  if (state.parameters.length >= state.limits.maxBindCount) throw new SqlRenderError("BRAID_BIND_LIMIT", "Rendered bind count exceeds maxBindCount.");
+  const segment = state.segments[state.segments.length - 1];
+  if ((segment.at(-1) && /[\p{L}\p{N}_$]/u.test(segment.at(-1)!)) || state.afterParameter) {
+    state.segments[state.segments.length - 1] += " ";
+    state.sqlBytes += 1;
+    if (state.sqlBytes > state.limits.maxSqlBytes) throw new SqlRenderError("BRAID_SQL_LIMIT", "Rendered SQL exceeds maxSqlBytes.");
+  }
+  state.parameters.push(parameter);
+  state.segments.push("");
+  state.afterParameter = true;
+}
+
 function addBind(state: RenderState, value: unknown, interpolation?: number, hint?: ParameterTypeHint): void {
-  if (state.values.length >= state.limits.maxBindCount) throw new SqlRenderError("BRAID_BIND_LIMIT", "Rendered bind count exceeds maxBindCount.");
-  state.values.push(value);
-  const placeholder = state.values.length;
-  state.bindingMap.push({ placeholder, ...(interpolation === undefined ? {} : { interpolation }) });
-  state.parameterHints.push(hint);
-  addText(state, state.dialect.placeholder(placeholder));
+  appendParameter(state, {
+    value,
+    ...(interpolation === undefined ? {} : { interpolation }),
+    ...(hint === undefined ? {} : { hint }),
+  });
+}
+
+function appendRendered(state: RenderState, segments: readonly string[], parameters: readonly RenderedParameter[]): void {
+  addText(state, segments[0] ?? "");
+  for (let index = 0; index < parameters.length; index += 1) {
+    appendParameter(state, parameters[index]);
+    addText(state, segments[index + 1] ?? "");
+  }
+}
+
+function trimSegmentStart(text: string): string {
+  let start = 0;
+  while (start < text.length && /\s/.test(text[start])) start += 1;
+  return text.slice(start);
+}
+
+function trimSegmentEnd(text: string): string {
+  let end = text.length;
+  while (end > 0 && /\s/.test(text[end - 1])) end -= 1;
+  const tokens = trimTokens(text);
+  const last = tokens.at(-1);
+  if (last?.kind === "comment" && last.text.startsWith("--")) {
+    const newline = text.indexOf("\n", last.end);
+    end = newline >= 0 ? newline + 1 : last.end;
+  }
+  return text.slice(0, end);
+}
+
+function applyTrimToSegments(
+  segments: readonly string[],
+  parameters: readonly RenderedParameter[],
+  attributes: TrimAttributes,
+): readonly string[] {
+  if (!parameters.length) return [applyTrim(segments[0] ?? "", attributes)];
+  const trimmed = [...segments];
+  trimmed[0] = trimSegmentStart(trimmed[0] ?? "");
+  trimmed[trimmed.length - 1] = trimSegmentEnd(trimmed[trimmed.length - 1] ?? "");
+  trimmed[0] = removeLeadingOverride(trimmed[0], attributes.prefixOverrides);
+  trimmed[trimmed.length - 1] = removeTrailingOverride(trimmed[trimmed.length - 1], attributes.suffixOverrides);
+  trimmed[0] = trimSegmentStart(trimmed[0]);
+  trimmed[trimmed.length - 1] = trimSegmentEnd(trimmed[trimmed.length - 1]);
+  trimmed[0] = `${attributes.prefix}${trimmed[0]}`;
+  trimmed[trimmed.length - 1] = `${trimmed[trimmed.length - 1]}${attributes.suffix}`;
+  return trimmed;
 }
 
 function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[], state: RenderState): void {
@@ -592,12 +649,21 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
       continue;
     }
     if (node.kind === "trim") {
-      const nested: RenderState = { ...state, output: [], bindingMap: state.bindingMap, parameterHints: state.parameterHints, variantPath: state.variantPath, depth: state.depth, sqlBytes: 0 };
+      const nested: RenderState = {
+        ...state,
+        parameters: [],
+        segments: [""],
+        variantPath: state.variantPath,
+        depth: state.depth,
+        sqlBytes: 0,
+        afterParameter: false,
+      };
       renderNodes(node.children, captured, nested);
       state.structuralItems = nested.structuralItems;
-      const body = applyTrim(nested.output.join(""), node.attributes);
-      if (node.attributes.prefix === "SET " && !hasSqlToken(body)) throw new SqlRenderError("BRAID_EMPTY_SET", "@braid set rendered no assignments.");
-      addText(state, body);
+      const trimmed = applyTrimToSegments(nested.segments, nested.parameters, node.attributes);
+      const body = trimmed.join("");
+      if (node.attributes.prefix === "SET " && !hasSqlToken(body) && !nested.parameters.length) throw new SqlRenderError("BRAID_EMPTY_SET", "@braid set rendered no assignments.");
+      appendRendered(state, trimmed, nested.parameters);
       continue;
     }
     if (node.kind === "fragment") { renderFragment(node.fragment, state); continue; }
@@ -627,21 +693,18 @@ function renderFragment(fragment: SqlFragment, state: RenderState): void {
   renderNodes(fragment.ir.nodes, fragment.values, state);
 }
 
-function renderIr(ir: TemplateIr, captured: readonly unknown[], dialect: Dialect, limits?: RenderLimits, resultKind: QueryResultKind = "unknown"): RenderedQuery {
-  const state: RenderState = { dialect, limits: validateLimits(limits ?? {}), values: [], bindingMap: [], parameterHints: [], output: [], variantPath: [], structuralItems: 0, depth: 0, sqlBytes: 0 };
+function renderIr(ir: TemplateIr, captured: readonly unknown[], dialect: Dialect, limits?: RenderLimits, resultKind: QueryResultKind = "unknown"): RenderedStatement {
+  const state: RenderState = { dialect, limits: validateLimits(limits ?? {}), parameters: [], segments: [""], variantPath: [], structuralItems: 0, depth: 0, sqlBytes: 0, afterParameter: false };
   renderNodes(ir.nodes, captured, state);
-  const rendered: RenderedQuery = {
-    text: state.output.join(""),
-    values: Object.freeze([...state.values]),
-    ...(state.parameterHints.some((hint) => hint !== undefined) ? { parameterHints: Object.freeze([...state.parameterHints]) } : {}),
+  return createRenderedStatement({
+    segments: state.segments,
+    parameters: state.parameters,
+    dialectId: dialect.id,
     variantFingerprint: state.variantPath.join("|"),
     resultKind,
-  };
-  Object.defineProperty(rendered, "bindingMap", { value: Object.freeze(state.bindingMap.map((entry) => Object.freeze(entry))), enumerable: false });
-  return Object.freeze(rendered);
+  });
 }
-
-export function renderTemplateIr(ir: TemplateIr, captured: readonly unknown[], dialect: Dialect = postgresDialect, limits?: RenderLimits): RenderedQuery {
+export function renderTemplateIr(ir: TemplateIr, captured: readonly unknown[], dialect: Dialect = postgresDialect, limits?: RenderLimits): RenderedStatement {
   return renderIr(ir, captured, dialect, limits);
 }
 
@@ -718,7 +781,7 @@ export function analyzeStructuralVariants(ir: TemplateIr, maxVariants = 256): St
 
 export interface StructuralVariant {
   readonly values: readonly unknown[];
-  readonly rendered: RenderedQuery;
+  readonly rendered: RenderedStatement;
 }
 
 export function renderVariants(ir: TemplateIr, values: readonly unknown[], options: { readonly dialect?: Dialect; readonly limits?: RenderLimits; readonly maxVariants?: number } = {}): readonly StructuralVariant[] {

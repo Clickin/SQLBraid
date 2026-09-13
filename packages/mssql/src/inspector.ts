@@ -24,8 +24,9 @@ function integer(row: CatalogRow | undefined, key: string): number | undefined {
 
 async function rows(connection: TediousConnectionLike, textQuery: string): Promise<readonly CatalogRow[]> {
   const result = await createTediousExecutor(connection).query<CatalogRow>({
-    text: textQuery,
-    values: [],
+    segments: [textQuery],
+    parameters: [],
+    dialectId: "mssql",
     resultKind: "rows",
   });
   if (result.kind !== "rows") throw new Error("MSSQL_INSPECT_RESULT: catalog query did not return rows.");

@@ -224,10 +224,10 @@ importers:
   extensions/vscode:
     dependencies:
       '@sqlbraid/cli':
-        specifier: workspace:0.1.0
+        specifier: workspace:0.1.0-rc.0
         version: link:../../packages/cli
       '@sqlbraid/language-server':
-        specifier: workspace:0.1.0
+        specifier: workspace:0.1.0-rc.0
         version: link:../../packages/language-server
       vscode-languageclient:
         specifier: 9.0.1

@@ -4,7 +4,6 @@ import { oracleParameter, typePolicy } from "./type-policy.js";
 
 export const dialect: Dialect = {
   id: "oracle",
-  placeholder: (index) => `:${index}`,
   quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
   lexicalProfile: {
     lineCommentPrefixes: ["--"],

@@ -51,9 +51,16 @@ Use an explicit hint for ambiguous values such as `null` or an application-speci
 
 ## Rendered metadata and prepared shape
 
-Rendered queries keep `parameterHints` aligned with `values`; each position is either a descriptor or `undefined` for an ordinary bind. Execution observers can inspect this structural metadata without changing the bind-value redaction policy.
+Rendered statements keep each value, interpolation index, and optional hint in
+one immutable `parameters` record. `segments.length === parameters.length + 1`;
+observers derive values, hints, and interpolation maps from that record without
+changing the bind-value redaction policy.
 
-Prepared queries include the parameter-hint signature in their shape. Changing only a value is allowed; changing a hint, length, precision, or scale is a shape change and fails rather than silently reusing an incompatible prepared statement.
+Prepared queries use result kind, canonical logical segments, and the ordered
+hint signature as their shape. Changing only a value is allowed; changing a
+hint, length, precision, or scale is a shape change and fails rather than
+silently reusing an incompatible prepared statement. Physical `$1`, `?`, `:1`,
+or `@p1` spelling is not part of the shape.
 
 ## Adapter support
 

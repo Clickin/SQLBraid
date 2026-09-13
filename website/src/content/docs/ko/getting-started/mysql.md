@@ -57,6 +57,11 @@ try {
 
 풀은 애플리케이션의 리소스로 남습니다. SQLBraid는 독립적인 각 루트 작업마다 물리적 연결을 얻고 반환하며, `db.tx(...)`는 콜백 동안 하나의 lease를 고정합니다. 풀 종료는 애플리케이션이 소유합니다.
 
+mysql2 바인딩 어댑터는 논리 문장을 text-positional `?` placeholder와 순서가
+있는 값 배열로 구체화합니다. 바인딩 설명과 힌트 검증은 연결을 얻기 전에
+수행되며, `reuse` 요청을 포함한 유효 reuse는 mysql2가 소유합니다. 지원하지
+않는 힌트는 드라이버 I/O 전에 실패합니다.
+
 :::caution `createMysql2Database`에 풀을 전달하지 마세요
 풀에는 `createMysql2PoolDatabase(pool)`을 사용하세요. 명시적 팩토리는 트랜잭션과 반환 의미가 물리적 연결에 안전하도록 보장합니다.
 :::

@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { createStatementBindingDescription } from '@sqlbraid/core';
 import type {
   Database,
   QueryExecutor,
-  RenderedQuery,
+  RenderedStatement,
+  StatementBindingAdapter,
   StandardSchemaV1,
 } from '@sqlbraid/core';
 import { sql } from '@sqlbraid/template';
@@ -16,6 +18,22 @@ import {
 
 type User = { readonly id: number };
 type MappedUser = { readonly id: number; readonly source: 'first' | 'second' };
+
+const statementBinding = Object.freeze<StatementBindingAdapter>({
+  id: 'runtime-validation-test',
+  describe(statement, context) {
+    return createStatementBindingDescription(statement, context, {
+      adapterId: 'runtime-validation-test',
+      transport: 'text-positional',
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: 'simple', owner: 'sqlbraid' },
+    });
+  },
+})
+
+function statementText(statement: RenderedStatement): string {
+  return statement.segments.join('?');
+}
 
 function schema<Row>(
   validate: (value: unknown) => StandardSchemaV1.Result<Row> | Promise<StandardSchemaV1.Result<Row>>,
@@ -31,7 +49,8 @@ function schema<Row>(
 
 function rowsExecutor(rows: readonly unknown[]): QueryExecutor {
   return {
-    async query<Row>(_rendered: RenderedQuery) {
+    statementBinding,
+    async query<Row>(_rendered: RenderedStatement) {
       return { kind: 'rows' as const, rows: rows as readonly Row[] };
     },
   };
@@ -163,6 +182,7 @@ test('all and streaming map rows sequentially and close at the first failure', a
   let consumed = 0;
   let closed = false;
   const streaming = createDatabase({
+    statementBinding,
     async query<Row>() {
       return { kind: 'rows' as const, rows: [] as readonly Row[] };
     },
@@ -204,6 +224,7 @@ test('stream composes execution schemas one row at a time', async () => {
     return { value: { id: (value as User).id * 2 } };
   });
   const db = createDatabase({
+    statementBinding,
     async query<Row>() {
       return { kind: 'rows' as const, rows: [] as readonly Row[] };
     },
@@ -262,8 +283,9 @@ test('result kinds are asserted before mapping and unknown rows stay raw', async
     return { value: value as User };
   });
   const db = createDatabase({
-    async query<Row>(rendered: RenderedQuery) {
-      if (rendered.text.includes('UPDATE')) {
+    statementBinding,
+    async query<Row>(rendered: RenderedStatement) {
+      if (statementText(rendered).includes('UPDATE')) {
         return { kind: 'command' as const, rows: [] as const, command: { affectedRows: 1 } };
       }
       return { kind: 'rows' as const, rows: [{ id: 1 }] as unknown as readonly Row[] };
@@ -282,6 +304,7 @@ test('result kinds are asserted before mapping and unknown rows stay raw', async
   assert.equal(validations, 1);
 
   const malformed = createDatabase({
+    statementBinding,
     async query() {
       return { rows: [] } as never;
     },

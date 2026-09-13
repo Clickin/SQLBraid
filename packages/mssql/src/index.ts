@@ -3,7 +3,6 @@ import type { Dialect, SqlTag } from "@sqlbraid/core";
 
 export const dialect: Dialect = {
   id: "mssql",
-  placeholder: (index) => `@p${index}`,
   quoteIdentifier: (identifier) => `[${identifier.replaceAll("]", "]]")}]`,
   lexicalProfile: {
     lineCommentPrefixes: ["--"],

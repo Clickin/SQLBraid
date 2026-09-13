@@ -53,6 +53,12 @@ try {
 
 Tedious receives deterministic `@p1`, `@p2`, ... parameter names. `sql.bind` selects the database type; it does not turn the value into SQL text. OUT/return-value routine binding is Unsupported in this RC.
 
+The Tedious binding adapter materializes a logical statement as a typed request:
+deterministic `@p1`, `@p2`, … names, `TYPES.*` mappings, encoded values, and
+facets. Description, hint validation, and exactness checks happen before lease
+acquisition. Tedious owns effective reuse; failures in this work are
+`materialize` errors with no driver I/O.
+
 ## Capability boundaries
 
 - CI covers the Tedious adapter on Node 22.18.0/Linux x64, and checks portable roots separately on the pinned Node/Bun/Deno versions.

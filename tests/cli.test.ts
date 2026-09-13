@@ -63,8 +63,8 @@ test('CLI checks, manifests, and builds opaque declared queries without a snapsh
     const inactive = build(null);
     assert.deepEqual(inactive.map((query: { resultKind: string }) => query.resultKind), ['rows', 'command', 'call', 'unknown']);
     const active = build({ id: 7 });
-    assert.deepEqual(active[0].render().values, [7]);
-    assert.deepEqual(inactive[0].render().values, []);
+    assert.deepEqual(active[0].render().parameters.map(({ value }: { readonly value: unknown }) => value), [7]);
+    assert.deepEqual(inactive[0].render().parameters, []);
     await assert.rejects(
       exec(process.execPath, ['--enable-source-maps', '--input-type=module', '--eval', `import { build } from ${JSON.stringify(pathToFileURL(output).href)}; build({ get id() { throw new Error('source-map-probe'); } });`]),
       (error: unknown) => error instanceof Error && error.message.includes(`${file}:`),

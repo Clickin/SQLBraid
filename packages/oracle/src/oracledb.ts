@@ -1,5 +1,19 @@
 import oracledb from "oracledb";
-import { isBoundParameter, type ConnectionLease, type ConnectionProvider, type DatabaseOptions, type ParameterTypeHint, type QueryExecutor, type QueryExecutionResult, type RenderedQuery, type RoutineCallResult, type TypePolicy } from "@sqlbraid/core";
+import {
+  createStatementBindingDescription,
+  type ConnectionLease,
+  type ConnectionProvider,
+  type DatabaseOptions,
+  type ParameterTypeHint,
+  type QueryExecutor,
+  type QueryExecutionResult,
+  type RenderedStatement,
+  type RoutineCallResult,
+  type StatementBindingAdapter,
+  type StatementBindingContext,
+  type StatementBindingDescription,
+  type TypePolicy,
+} from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -44,6 +58,7 @@ export interface OracleConnectionLike {
   execute(sql: string, bindParams?: any, options?: any): Promise<unknown>;
   commit(): Promise<void>;
   rollback(): Promise<void>;
+  readonly stmtCacheSize?: number;
   close?(options?: { readonly drop?: boolean }): Promise<void> | void;
 }
 
@@ -53,6 +68,7 @@ export interface OraclePoolConnectionLike extends OracleConnectionLike {
 
 export interface OraclePoolLike {
   getConnection(): Promise<OraclePoolConnectionLike>;
+  readonly stmtCacheSize?: number;
 }
 
 export interface OracleDriverLike {
@@ -90,6 +106,20 @@ export interface OracleDatabaseOptions extends DatabaseOptions {
 }
 
 const defaultDriver = oracledb as unknown as OracleDriverLike;
+
+interface OracleStatementBindingAdapter extends StatementBindingAdapter {
+  readonly materializedBinds: (
+    statement: RenderedStatement,
+    description: StatementBindingDescription,
+  ) => readonly unknown[] | undefined;
+}
+
+export interface OracledbStatementBindingOptions {
+  readonly typePolicy?: TypePolicy;
+  readonly driver?: OracleDriverLike;
+  readonly executeOptions?: OracleExecuteOptionsLike;
+  readonly stmtCacheSize?: number;
+}
 
 function assertConnection(connection: OracleConnectionLike): void {
   if (!connection || typeof connection !== "object" || typeof connection.execute !== "function" || typeof connection.commit !== "function" || typeof connection.rollback !== "function" || typeof (connection as { readonly getConnection?: unknown }).getConnection === "function") {
@@ -208,13 +238,12 @@ function identifier(name: string): string {
   return name;
 }
 
-function bindValues(rendered: RenderedQuery, policy: TypePolicy, driver: OracleDriverLike): readonly unknown[] {
+function bindValues(rendered: RenderedStatement, policy: TypePolicy, driver: OracleDriverLike): readonly unknown[] {
   const values: unknown[] = [];
-  for (let index = 0; index < rendered.values.length; index += 1) {
-    const raw = rendered.values[index];
-    const wrapped = isBoundParameter(raw) ? raw : undefined;
-    const value = wrapped === undefined ? raw : wrapped.value;
-    const hint = rendered.parameterHints?.[index] ?? (wrapped === undefined ? undefined : wrapped.hint);
+  for (let index = 0; index < rendered.parameters.length; index += 1) {
+    const parameter = rendered.parameters[index]!;
+    const value = parameter.value;
+    const hint = parameter.hint;
     if (hint === undefined) {
       if (value === null || value === undefined) throw new Error("BRAID_BIND_TYPE_REQUIRED: Oracle null parameters require sql.bind(null, oracleParameter.*).");
       values.push(value);
@@ -231,6 +260,116 @@ function bindValues(rendered: RenderedQuery, policy: TypePolicy, driver: OracleD
     values.push({ dir: driver.BIND_IN, val: encoded, type: typeConstant(databaseType, driver) } satisfies OracleBindLike);
   }
   return values;
+}
+
+function oracleLiteralValue(
+  value: unknown,
+  binary: "summary" | "full" | undefined = "summary",
+  databaseType?: string,
+): string {
+  if (value === null || value === undefined) return "NULL";
+  const type = databaseType === undefined ? undefined : normalType(databaseType);
+  if (type === "NUMBER" || type === "BINARY_FLOAT" || type === "BINARY_DOUBLE") {
+    return typeof value === "bigint"
+      ? value.toString(10)
+      : typeof value === "number" && Number.isFinite(value) ? String(value) : "[unsupported numeric value]";
+  }
+  if (type === "DATE" || type?.startsWith("TIMESTAMP")) {
+    return value instanceof Date && Number.isFinite(Date.prototype.getTime.call(value))
+      ? `TIMESTAMP '${Date.prototype.toISOString.call(value).replace("T", " ").replace("Z", "")}'`
+      : "[unsupported date]";
+  }
+  if (type === "RAW" || type === "BLOB") {
+    if (!(value instanceof Uint8Array)) return "[unsupported binary value]";
+    if (binary !== "full") return `<binary ${value.byteLength} bytes>`;
+    return `HEXTORAW('${Buffer.from(value).toString("hex").toUpperCase()}')`;
+  }
+  if (type === "VARCHAR2" || type === "NVARCHAR2" || type === "CLOB" || type === "NCLOB") {
+    return typeof value === "string" ? `'${value.replaceAll("'", "''")}'` : "[unsupported string value]";
+  }
+  if (typeof value === "string") return `'${value.replaceAll("'", "''")}'`;
+  if (typeof value === "bigint") return value.toString(10);
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : "[unsupported number]";
+  }
+  if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+  if (value instanceof Date) {
+    if (!Number.isFinite(Date.prototype.getTime.call(value))) return "[unsupported date]";
+    return `TIMESTAMP '${Date.prototype.toISOString.call(value).replace("T", " ").replace("Z", "")}'`;
+  }
+  if (value instanceof Uint8Array) {
+    if (binary !== "full") return `<binary ${value.byteLength} bytes>`;
+    const hex = Buffer.from(value).toString("hex").toUpperCase();
+    return `HEXTORAW('${hex}')`;
+  }
+  return typeof value === "object" ? "[unsupported object]" : `[unsupported ${typeof value}]`;
+}
+
+function createBinding(options: OracledbStatementBindingOptions = {}): OracleStatementBindingAdapter {
+  const policy = options.typePolicy ?? defaultTypePolicy;
+  const driver = options.driver ?? defaultDriver;
+  const effectiveReuse = options.executeOptions?.keepInStmtCache === false || options.stmtCacheSize === 0 ? "simple" : "reuse";
+  const encodedBinds = new WeakMap<StatementBindingDescription, { readonly statement: RenderedStatement; readonly binds: readonly unknown[] }>();
+  const adapter: OracleStatementBindingAdapter = {
+    id: "oracledb",
+    describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+      // Materialize before creating the public description so every failure is
+      // deterministic and occurs before an executor can acquire a connection.
+      const binds = bindValues(statement, policy, driver);
+      const description = createStatementBindingDescription(statement, context, {
+        adapterId: "oracledb",
+        transport: "text-positional",
+        placeholder: (index) => `:${index}`,
+        reuse: {
+          effective: effectiveReuse,
+          owner: "driver",
+          ...(effectiveReuse === "reuse" && options.stmtCacheSize !== undefined && Number.isSafeInteger(options.stmtCacheSize) && options.stmtCacheSize > 0
+            ? { capacity: options.stmtCacheSize }
+            : {}),
+        },
+        formatLiteral: (parameter, index, literalOptions) => {
+          const encoded = binds[index];
+          const value = parameter.hint === undefined
+            ? encoded
+            : (encoded as OracleBindLike).val;
+          return oracleLiteralValue(value, literalOptions.binary, parameter.hint?.databaseType);
+        },
+      });
+      encodedBinds.set(description, { statement, binds });
+      return description;
+    },
+    materializedBinds(statement: RenderedStatement, description: StatementBindingDescription): readonly unknown[] | undefined {
+      const materialized = encodedBinds.get(description);
+      return materialized?.statement === statement ? materialized.binds : undefined;
+    },
+  };
+  return Object.freeze(adapter);
+}
+
+export function createOracledbStatementBinding(options: OracledbStatementBindingOptions = {}): StatementBindingAdapter {
+  return createBinding(options);
+}
+
+/** Default adapter for callers that do not supply a custom type policy/driver. */
+export const oracledbStatementBinding: StatementBindingAdapter = createOracledbStatementBinding();
+
+function executionBinding(
+  adapter: OracleStatementBindingAdapter,
+  statement: RenderedStatement,
+  description: StatementBindingDescription | undefined,
+): { readonly description: StatementBindingDescription; readonly binds: readonly unknown[] } {
+  const binding = description ?? adapter.describe(statement, {
+    dialectId: statement.dialectId,
+    requestedReuse: "auto",
+  });
+  if (binding.adapterId !== adapter.id) {
+    throw new TypeError(`SQLBraid Oracle executor requires binding adapter "${adapter.id}".`);
+  }
+  const binds = adapter.materializedBinds(statement, binding);
+  if (binds === undefined) {
+    throw new TypeError("SQLBraid Oracle executor received a binding description not produced by its adapter.");
+  }
+  return { description: binding, binds };
 }
 
 function executeOptions(options: OracleDatabaseOptions, driver: OracleDriverLike, resultSet = false): OracleExecuteOptionsLike {
@@ -255,15 +394,20 @@ function unsupportedCall(): never {
   throw new Error("BRAID_CALL_UNSUPPORTED: Oracle routine calls are unsupported until OUT/IN OUT bind descriptors are available.");
 }
 
-export function createOracledbExecutor(connection: OracleConnectionLike, options: Omit<OracleDatabaseOptions, "observers"> = {}): QueryExecutor {
-  assertConnection(connection);
+function makeOracledbExecutor(
+  connection: OracleConnectionLike,
+  options: Omit<OracleDatabaseOptions, "observers">,
+  bindingAdapter: OracleStatementBindingAdapter,
+): QueryExecutor {
   const policy = options.typePolicy ?? defaultTypePolicy;
   const driver = options.driver ?? defaultDriver;
   const control = async (text: string): Promise<void> => { await connection.execute(text, [], executeOptions(options, driver)); };
   return {
     ownershipKey: connection,
-    async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
-      const result = executionResult(await connection.execute(rendered.text, bindValues(rendered, policy, driver), executeOptions(options, driver)));
+    statementBinding: bindingAdapter,
+    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+      const execution = executionBinding(bindingAdapter, rendered, binding);
+      const result = executionResult(await connection.execute(execution.description.parameterizedSql!, execution.binds, executeOptions(options, driver)));
       const fields = Array.isArray(result.metaData) ? result.metaData : [];
       assertUniqueFields(fields);
       if (Array.isArray(result.rows)) {
@@ -272,12 +416,13 @@ export function createOracledbExecutor(connection: OracleConnectionLike, options
       }
       return { rows: [], rowCount: result.rowsAffected, kind: "command", command: { affectedRows: result.rowsAffected } };
     },
-    async call<Row>(_rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
+    async call<Row>(_rendered: RenderedStatement): Promise<RoutineCallResult<Row>> {
       unsupportedCall();
     },
-    async *stream<Row>(rendered: RenderedQuery, signal?: AbortSignal): AsyncGenerator<Row> {
+    async *stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncGenerator<Row> {
+      const execution = executionBinding(bindingAdapter, rendered, binding);
       signal?.throwIfAborted();
-      const result = executionResult(await connection.execute(rendered.text, bindValues(rendered, policy, driver), executeOptions(options, driver, true)));
+      const result = executionResult(await connection.execute(execution.description.parameterizedSql!, execution.binds, executeOptions(options, driver, true)));
       const resultSet = result.resultSet;
       if (!resultSet) throw new Error("BRAID_STREAM_UNSUPPORTED: Oracle execute did not return a ResultSet.");
       let closePromise: Promise<void> | undefined;
@@ -334,17 +479,30 @@ export function createOracledbExecutor(connection: OracleConnectionLike, options
   };
 }
 
+export function createOracledbExecutor(connection: OracleConnectionLike, options: Omit<OracleDatabaseOptions, "observers"> = {}): QueryExecutor {
+  assertConnection(connection);
+  return makeOracledbExecutor(connection, options, createBinding({
+    ...options,
+    stmtCacheSize: connection.stmtCacheSize,
+  }));
+}
+
 export function createOracledbDatabase(connection: OracleConnectionLike, options: OracleDatabaseOptions = {}) {
   const { typePolicy, driver, executeOptions, ...databaseOptions } = options;
   return createDatabase(createOracledbExecutor(connection, { typePolicy, driver, executeOptions }), databaseOptions);
 }
 
 export function createOracledbPoolProvider(pool: OraclePoolLike, options: Omit<OracleDatabaseOptions, "observers"> = {}): ConnectionProvider {
+  const bindingAdapter = createBinding({
+    ...options,
+    stmtCacheSize: pool.stmtCacheSize,
+  });
   return {
+    statementBinding: bindingAdapter,
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
       assertPoolConnection(connection);
-      const executor = createOracledbExecutor(connection, options);
+      const executor = makeOracledbExecutor(connection, options, bindingAdapter);
       let released = false;
       return {
         ...executor,

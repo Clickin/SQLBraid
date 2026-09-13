@@ -99,8 +99,8 @@ import { runPostgresSmoke, runMysqlSmoke, runSqliteSmoke } from "./runtime-drive
 import { sql as oracle } from "@sqlbraid/oracle";
 import { sql as mssql } from "@sqlbraid/mssql";
 console.info(JSON.stringify({versions:process.versions}));
-assert.equal(oracle\`SELECT \${1}\`.render().text, "SELECT :1");
-assert.equal(mssql\`SELECT \${1}\`.render().text, "SELECT @p1");
+assert.deepEqual(oracle\`SELECT \${1}\`.render().segments, ["SELECT ", ""]);
+assert.deepEqual(mssql\`SELECT \${1}\`.render().segments, ["SELECT ", ""]);
 await runRuntimeSmoke();
 console.info("PASS packed portable core/template/runtime and five dialect roots including ALS");
 await runPostgresSmoke(process.env.SQLBRAID_POSTGRES_URL);

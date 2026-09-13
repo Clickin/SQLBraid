@@ -1,17 +1,25 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { oracleParameter, sql, typePolicy } from "@sqlbraid/oracle";
-import { createOracledbExecutor } from "@sqlbraid/oracle/oracledb";
+import { createOracledbExecutor, oracledbStatementBinding } from "@sqlbraid/oracle/oracledb";
 import { createOracleInspector } from "@sqlbraid/oracle/inspector";
 
 test("Oracle renders positional binds and doubled quoted identifiers", () => {
-  assert.equal(sql`SELECT ${1}, ${2}`.render().text, "SELECT :1, :2");
-  assert.equal(sql`SELECT ${sql.ident("A\"B")}`.render().text, 'SELECT "A""B"');
+  const rendered = sql`SELECT ${1}, ${2}`.render();
+  assert.deepEqual(rendered.segments, ["SELECT ", ", ", ""]);
+  assert.deepEqual(rendered.parameters, [{ value: 1, interpolation: 0 }, { value: 2, interpolation: 1 }]);
+  const binding = oracledbStatementBinding.describe(rendered, { dialectId: "oracle", requestedReuse: "auto" });
+  assert.equal(binding.parameterizedSql, "SELECT :1, :2");
+  assert.equal(sql`SELECT ${sql.ident("A\"B")}`.render().segments[0], 'SELECT "A""B"');
 });
 
 test("Oracle lexical scanner preserves q literals, comments, and quoted text", () => {
   const query = sql`SELECT q'[/*@braid if \${false}*/hidden/*@braid end*/]' AS marker, '/*@braid end*/' AS quoted /*@braid where*/ AND id = ${7} /*@braid end*/`;
-  assert.equal(query.render().text, "SELECT q'[/*@braid if ${false}*/hidden/*@braid end*/]' AS marker, '/*@braid end*/' AS quoted WHERE id = :1");
+  const rendered = query.render();
+  assert.equal(
+    oracledbStatementBinding.describe(rendered, { dialectId: "oracle", requestedReuse: "auto" }).parameterizedSql,
+    "SELECT q'[/*@braid if ${false}*/hidden/*@braid end*/]' AS marker, '/*@braid end*/' AS quoted WHERE id = :1",
+  );
 });
 
 test("Oracle inspector keeps catalog-qualified object and domain type evidence", async () => {
@@ -65,8 +73,8 @@ test("Oracle inspector keeps catalog-qualified object and domain type evidence",
 test("Oracle parameter hints are aligned and NUMBER policy stays exact", () => {
   const query = sql`SELECT ${sql.bind(null, oracleParameter.number(38, -2))}, ${sql.bind("Ada", oracleParameter.nvarchar2(40))}`;
   const rendered = query.render();
-  assert.deepEqual(rendered.values, [null, "Ada"]);
-  assert.deepEqual(rendered.parameterHints, [
+  assert.deepEqual(rendered.parameters.map((parameter) => parameter.value), [null, "Ada"]);
+  assert.deepEqual(rendered.parameters.map((parameter) => parameter.hint), [
     { databaseType: "NUMBER", precision: 38, scale: -2 },
     { databaseType: "NVARCHAR2", length: 40 },
   ]);

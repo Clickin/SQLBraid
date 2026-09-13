@@ -14,7 +14,16 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-The rendered text contains a dialect placeholder (`$1`, `?`, and so on) and the values are passed separately to the adapter. A value never becomes SQL source merely because it was interpolated.
+Rendering first produces one immutable logical statement: `segments` contains
+resolved structural SQL and `parameters` contains ordered value records
+(`value`, optional `interpolation`, optional `hint`). The invariant is
+`segments.length === parameters.length + 1`. A value never becomes SQL source
+merely because it was interpolated.
+
+The selected driver materializes that statement only after pure binding
+description and hint validation. It owns the physical transport and may emit
+`$1`, `?`, `:1`, `@p1`, named bindings, or a native value-template request.
+Placeholder syntax is not a dialect or template-renderer responsibility.
 
 When the database parameter type must be explicit, use `sql.bind(value, hint)`:
 

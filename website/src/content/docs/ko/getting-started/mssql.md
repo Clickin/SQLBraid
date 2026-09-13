@@ -53,6 +53,12 @@ try {
 
 Tedious는 `@p1`, `@p2` 같은 결정적인 파라미터 이름을 받습니다. `sql.bind`는 데이터베이스 타입을 선택할 뿐 값을 SQL 텍스트로 바꾸지 않습니다. OUT/return-value 루틴 바인딩은 이 RC에서 Unsupported입니다.
 
+Tedious 바인딩 어댑터는 논리 문장을 typed request로 구체화합니다. 결정적인
+`@p1`, `@p2`, … 이름, `TYPES.*` 매핑, 인코딩된 값과 facet을 구성합니다.
+설명·힌트 검증·exactness 검사는 lease를 얻기 전에 수행됩니다. 유효 reuse는
+Tedious가 소유하며, 이 단계의 실패는 드라이버 I/O 없이 `materialize` 오류가
+됩니다.
+
 ## 기능 경계
 
 - CI는 Node 22.18.0/Linux x64에서 Tedious 어댑터를 검증하고, 고정 Node/Bun/Deno 버전에서 portable root를 별도로 검사합니다.

@@ -43,6 +43,12 @@ try {
 
 `sql.bind`는 값을 SQL 텍스트와 분리한 채 Oracle 데이터베이스 파라미터 타입을 지정합니다. 힌트가 없으면 어댑터는 문서화된 드라이버 추론을 사용합니다. SQLBraid는 TypeScript의 `number`, `string`, `Date`를 Oracle 타입의 보편적인 근거로 취급하지 않습니다.
 
+Thin 바인딩 어댑터는 논리 문장을 text-positional `:1`, `:2`, … 바인드로
+구체화하고 지원되는 힌트를 node-oracledb descriptor로 매핑합니다. 설명,
+힌트 검증, 결정적 바인드 구성은 lease를 얻기 전에 수행됩니다. 어댑터는
+드라이버 소유 유효 reuse를 보고하며, 지원하지 않는 힌트 속성은 DB I/O 전
+`materialize` 단계에서 실패합니다.
+
 ## 기능 경계
 
 - 첫 번째 지원 대상은 `node-oracledb` Thin 모드입니다. Thick 모드는 Official 주장이 아닙니다.

@@ -134,6 +134,42 @@ sql.raw(...)
 
 `sql.raw()` is trusted/unsafe. Security regressions here are release blockers.
 
+### 6.1 Logical statement and binding boundary
+
+Template/core rendering produces an immutable `RenderedStatement`:
+
+```ts
+interface RenderedStatement {
+  readonly segments: readonly string[];
+  readonly parameters: readonly RenderedParameter[];
+  readonly resultKind: QueryResultKind;
+  readonly dialectId: string;
+  readonly fingerprint?: string;
+  readonly variantFingerprint?: string;
+}
+```
+
+`segments.length === parameters.length + 1`. Each `RenderedParameter` is one
+value plus optional interpolation and `ParameterTypeHint`. Structural helpers
+are merged into segments. Keep this value-only boundary intact: a parameter is
+never raw SQL, an identifier, nested query, driver fragment or tagged-template
+command. `RenderedStatement` is the execution source of truth; do not retain
+parallel mutable text/values/hints/maps.
+
+Dialects describe SQL lexical/quoting/type behavior. They do not generate
+placeholders. Driver packages implement `StatementBindingAdapter.describe()`
+and own `text-positional`, `text-named`, `typed-request` or
+`native-value-template` materialization. Use `parameterizedSql(statement,
+placeholder)` only as a derived view. Read
+[`docs/driver-author-guide.md`](docs/driver-author-guide.md) before adding a
+custom executor, provider or binding adapter.
+
+Binding description is pure and pre-acquire. `QueryExecutor` and
+`ConnectionProvider` expose the same `statementBinding` object; leases must
+preserve that identity. Prepared shape is logical (`resultKind`, canonical
+segments and ordered hint signature), and each prepared invocation renders
+once before binding and execution. Driver/server reuse remains adapter-owned.
+
 ---
 
 ## 7. Result-kind invariants
@@ -220,7 +256,8 @@ interface ExecutionObserver {
 
 Required coverage includes:
 
-- final rendered SQL/binds;
+- derived parameterized SQL, lazy diagnostic `literalizedSql(options?)`, binds and
+  effective adapter/dialect/transport/reuse plan;
 - before physical execution;
 - after driver result;
 - result mapping completion;
@@ -252,6 +289,12 @@ Observers may see original bind values because audit systems sometimes require t
 
 Examples/docs should redact by default. Application policy controls storage and retention.
 
+`literalizedSql()` reconstructs from logical segments and parameters, never by
+searching or replacing placeholders. It is diagnostic-only and must never be
+used as execution input. Redaction is the default; max value length, binary
+summary/full mode and a custom redactor are supported. Unsupported objects use
+a safe descriptive marker rather than accidental `toString()` execution.
+
 ### 9.3 No built-in logger backend
 
 Do not add mandatory pino/winston/OTEL dependencies. Those integrate through the observer SPI. OpenTelemetry remains post-release unless explicitly reprioritized.
@@ -263,8 +306,8 @@ Do not add mandatory pino/winston/OTEL dependencies. Those integrate through the
 A dialect is about SQL/database behavior, not the JavaScript driver or runtime.
 
 ```text
-dialect: PostgreSQL / MySQL / SQLite
-driver:  pg / mysql2 / node:sqlite / future alternatives
+dialect: PostgreSQL / MySQL / SQLite / Oracle / SQL Server
+driver:  pg / mysql2 / node:sqlite / node-oracledb / Tedious / future alternatives
 runtime: Node / Bun / Deno
 ```
 
@@ -304,6 +347,11 @@ structure, never values, in executable fingerprints and prepared shape guards.
 Oracle NUMBER/LOB/temporal and SQL Server precision/scale semantics require
 driver-specific handling. Unsupported call/OUT or streaming capabilities must
 remain explicit rather than simulated.
+
+PV14 verification is pending on the exact final revision. Do not infer a new
+runtime/driver support label, SHA, CI pass, package version or RC publication
+from in-progress implementation. RC publication remains deferred until PV14
+development, review and user acceptance.
 
 ---
 
@@ -403,6 +451,14 @@ PV7 must use actual Bun/Deno smoke/CI before marking combinations official.
 Run `pnpm run test:runtime` for packed runtime/driver changes (Docker, Bun and
 Deno required, or dedicated test DB URLs). Observer taxonomy uses `cardinality`
 separately from `result-kind`; public elapsed fields are `durationMs`.
+
+PV14 regressions must cover the `segments`/`parameters` invariant, one-render
+prepared execution, transport-neutral shape identity, all five adapter
+materializers, pre-acquire `materialize` failures, provider/lease binding
+identity, immutable observer execution plans, direct segment-based
+`literalizedSql()` reconstruction with redaction/truncation, large SQL, and the
+native-template value-only security fixture. These are verification requirements,
+not evidence of a passing SHA until the exact final revision is checked.
 
 Before substantial changes are complete, run applicable gates:
 

@@ -59,6 +59,12 @@ try {
 
 풀 기반 루트 작업은 연결 lease 하나를 얻어 물리적 I/O를 수행하고 lease를 반환한 다음 구체화된 결과를 매핑합니다. 트랜잭션은 명시적으로 연결을 고정하는 경계이므로, 트랜잭션 내부의 모든 작업에는 콜백 핸들을 사용하세요. 풀 종료는 애플리케이션이 소유합니다.
 
+pg 바인딩 어댑터는 논리 `RenderedStatement`를 받은 뒤 text-positional
+`$1`, `$2`, … placeholder와 순서가 있는 값 배열을 구체화합니다. 이 드라이버
+단계는 순수한 바인딩 설명 후, lease를 얻기 전에 수행되며 placeholder 표기는
+PostgreSQL dialect가 제공하지 않습니다. 어댑터는 드라이버 소유 simple reuse를
+보고하고 지원하지 않는 파라미터 힌트는 I/O 전에 거부합니다.
+
 :::caution `createPgDatabase`에 풀을 전달하지 마세요
 SQLBraid는 duck typing으로 풀을 판별하지 않습니다. 직접 팩토리에 `pg.Pool`을 전달하는 것은 잘못된 소유 모델이므로 `createPgPoolDatabase(pool)`을 사용하세요.
 :::

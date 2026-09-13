@@ -1,10 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { CallQuery, CommandQuery, Query, RowQuery, StandardSchemaV1 } from '@sqlbraid/core';
+import { parameterizedSql } from '@sqlbraid/core';
 import { capture, guarded, sql } from '@sqlbraid/template';
 
 function hasCode(code: string): (error: unknown) => boolean {
   return (error): error is { readonly code: string } => typeof error === 'object' && error !== null && 'code' in error && error.code === code;
+}
+
+function valuesOf(statement: ReturnType<Query['render']>): readonly unknown[] {
+  return statement.parameters.map(({ value }) => value);
+}
+
+function postgresSql(statement: ReturnType<Query['render']>): string {
+  return parameterizedSql(statement, (index) => `$${index}`);
 }
 
 test('renders dynamic where and binds active values in order', () => {
@@ -19,23 +28,23 @@ test('renders dynamic where and binds active values in order', () => {
     /*@braid end*/
   `;
   const rendered = query.render();
-  assert.match(rendered.text, /WHERE/);
-  assert.deepEqual(rendered.values, ['Ada', 7]);
-  assert.doesNotMatch(rendered.text, /@braid/);
+  assert.match(postgresSql(rendered), /WHERE/);
+  assert.deepEqual(valuesOf(rendered), ['Ada', 7]);
+  assert.doesNotMatch(postgresSql(rendered), /@braid/);
 });
 
 test('preserves ordinary comments and quotes explicit identifiers', () => {
   const query = sql`/* @braid not-a-directive */ SELECT ${sql.ident('users.name')} FROM ${sql.ident('users')}`;
   const rendered = query.render();
-  assert.match(rendered.text, /\/\* @braid not-a-directive \*\//);
-  assert.equal(rendered.text, '/* @braid not-a-directive */ SELECT "users"."name" FROM "users"');
-  assert.deepEqual(rendered.values, []);
+  assert.match(postgresSql(rendered), /\/\* @braid not-a-directive \*\//);
+  assert.equal(postgresSql(rendered), '/* @braid not-a-directive */ SELECT "users"."name" FROM "users"');
+  assert.deepEqual(valuesOf(rendered), []);
 });
 
 test('trims the final assignment comma and rejects ambiguous empty lists', () => {
   const patch = { email: 'a@example.com', status: undefined };
   const query = sql`UPDATE users /*@braid set*/ /*@braid if ${patch.email !== undefined}*/ email = ${patch.email}, /*@braid end*/ /*@braid if ${patch.status !== undefined}*/ status = ${patch.status}, /*@braid end*/ /*@braid end*/ WHERE id = ${1}`;
-  assert.match(query.render().text, /SET\s+email = \$1\s+WHERE/);
+  assert.match(postgresSql(query.render()), /SET\s+email = \$1\s+WHERE/);
   assert.throws(() => sql.list([]), hasCode('BRAID_EMPTY_LIST'));
 });
 
@@ -52,17 +61,17 @@ test('choose selects the first true branch and nested fragments preserve bind or
     AND id = ${id}
   `;
   const rendered = query.render();
-  assert.deepEqual(rendered.values, [email, id]);
-  assert.match(rendered.text, /email = \$1/);
-  assert.doesNotMatch(rendered.text, /active =/);
+  assert.deepEqual(valuesOf(rendered), [email, id]);
+  assert.match(postgresSql(rendered), /email = \$1/);
+  assert.doesNotMatch(postgresSql(rendered), /active =/);
 });
 
 test('fragment and join are explicit structural composition', () => {
   const values = [1, 2];
   const fragment = sql.join(values.map((value) => sql.fragment`(${value})`), sql.fragment`, `);
   const rendered = sql`INSERT INTO users(id) VALUES ${fragment}`.render();
-  assert.equal(rendered.text, 'INSERT INTO users(id) VALUES ($1), ($2)');
-  assert.deepEqual(rendered.values, values);
+  assert.equal(postgresSql(rendered), 'INSERT INTO users(id) VALUES ($1), ($2)');
+  assert.deepEqual(valuesOf(rendered), values);
 });
 
 test('query tags expose declared result kinds', () => {
@@ -100,7 +109,7 @@ test('schema-bound rows retain the mapper reference and render normally', () => 
   assert.equal(other.resultSchema, otherSchema);
   const firstRendered = first.render();
   const secondRendered = second.render();
-  assert.equal(firstRendered.text, 'SELECT id FROM users');
+  assert.equal(postgresSql(firstRendered), 'SELECT id FROM users');
   assert.equal(firstRendered.variantFingerprint, secondRendered.variantFingerprint);
   assert.deepEqual(firstRendered, other.render());
   assert.equal(Object.hasOwn(firstRendered, 'resultSchema'), false);
@@ -117,8 +126,8 @@ test('schema-bound rows compose with capture and guarded without losing the mapp
   const guardedQuery = guarded(mappedRows, ['SELECT ', ''], [() => 1]);
   assert.equal(captured.resultSchema, schema);
   assert.equal(guardedQuery.resultSchema, schema);
-  assert.deepEqual(captured.render().values, [1]);
-  assert.deepEqual(guardedQuery.render().values, [1]);
+  assert.deepEqual(valuesOf(captured.render()), [1]);
+  assert.deepEqual(valuesOf(guardedQuery.render()), [1]);
 });
 
 test('schema-bound rows reject invalid Standard Schema shapes before query creation', () => {

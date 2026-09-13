@@ -19,8 +19,8 @@ Use the project's SQLBraid evidence instead of reconstructing SQL or database fa
 
 Keep these facts separate in notes, diagnostics, and decisions:
 
-- **Dialect:** SQL surface, placeholders, quoting, and primitive database semantics.
-- **Driver:** protocol/API bridge and result normalization.
+- **Dialect:** SQL surface, lexical rules, quoting, and primitive database semantics.
+- **Driver:** value-only binding transport, placeholders/native request construction, reuse, and result normalization. Logical `RenderedStatement` segments and atomic parameters remain transport-neutral.
 - **Execution runtime:** physical lease ownership, transaction pinning, savepoints, and scope. Node/Bun/Deno host compatibility is separately tested deployment evidence.
 - **Transaction profile:** explicit transaction/isolation behavior; do not infer it from a dialect or driver name.
 

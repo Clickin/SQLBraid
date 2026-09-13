@@ -1,12 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import type { QueryExecutor, RenderedQuery } from "@sqlbraid/core";
+import { createStatementBindingDescription } from "@sqlbraid/core";
+import type { QueryExecutor, RenderedStatement, StatementBindingAdapter } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { sql } from "@sqlbraid/template";
 
+const statementBinding = Object.freeze<StatementBindingAdapter>({
+  id: "runtime-transaction-boundary-test",
+  describe(statement, context) {
+    return createStatementBindingDescription(statement, context, {
+      adapterId: "runtime-transaction-boundary-test",
+      transport: "text-positional",
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: "simple", owner: "sqlbraid" },
+    });
+  },
+})
+
+function statementText(statement: RenderedStatement): string {
+  return statement.segments.join("?");
+}
+
 function physical(log: string[]): QueryExecutor {
   return {
-    async query<Row>(query: RenderedQuery) { log.push(query.text); return { kind: "rows", rows: [] as readonly Row[] }; },
+    statementBinding,
+    async query<Row>(query: RenderedStatement) { log.push(statementText(query)); return { kind: "rows", rows: [] as readonly Row[] }; },
     async begin() { log.push("begin"); }, async commit() { log.push("commit"); }, async rollback() { log.push("rollback"); },
     async savepoint(name) { log.push(`savepoint:${name}`); },
     async rollbackTo(name) { log.push(`rollback-to:${name}`); },
@@ -17,7 +35,7 @@ function physical(log: string[]): QueryExecutor {
 test("concurrent pooled transactions each retain root escape protection", async () => {
   const firstReady = Promise.withResolvers<void>();
   const secondReady = Promise.withResolvers<void>();
-  const db = createPooledDatabase({ async acquire() { return { ...physical([]), release() {} }; } });
+  const db = createPooledDatabase({ statementBinding, async acquire() { return { ...physical([]), release() {} }; } });
   await Promise.all([
     db.tx(async () => {
       firstReady.resolve();

@@ -15,7 +15,6 @@ sql.bind('not an integer', integerHint);
 
 const oracleDialect: Dialect = {
   id: 'oracle-test',
-  placeholder: (index) => `:${index}`,
   quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
   lexicalProfile: {
     lineCommentPrefixes: ['--'],
@@ -27,7 +26,6 @@ const oracleDialect: Dialect = {
 
 const bracketDialect: Dialect = {
   id: 'bracket-test',
-  placeholder: (index) => `?`,
   quoteIdentifier: (identifier) => `[${identifier.replaceAll(']', ']]')}]`,
   lexicalProfile: {
     lineCommentPrefixes: ['--'],
@@ -47,11 +45,13 @@ test('bind wrappers are branded, frozen, and preserve ordinary values at the dri
 
   const query = sql`SELECT ${'Ada'}, ${numberParameter}, ${true}`;
   const rendered = query.render();
-  assert.deepEqual(rendered.values, ['Ada', 1, true]);
-  assert.deepEqual(rendered.parameterHints, [undefined, numberParameter.hint, undefined]);
-  assert.equal(Object.isFrozen(rendered.parameterHints), true);
-  assert.equal(Object.hasOwn(rendered, 'parameterHints'), true);
-  assert.equal(Object.hasOwn(sql`SELECT ${1}`.render(), 'parameterHints'), false);
+  assert.deepEqual(rendered.parameters, [
+    { value: 'Ada', interpolation: 0 },
+    { value: 1, interpolation: 1, hint: numberParameter.hint },
+    { value: true, interpolation: 2 },
+  ]);
+  assert.equal(Object.isFrozen(rendered.parameters), true);
+  assert.ok(rendered.parameters.every((parameter) => Object.isFrozen(parameter)));
 });
 
 test('hints align through lists, nested fragments, and trim nodes', () => {
@@ -60,9 +60,12 @@ test('hints align through lists, nested fragments, and trim nodes', () => {
   const nested = sql.fragment`(${sql.bind('Ada', textHint)})`;
   const query = sql`SELECT ${nested} /*@braid where*/ /*@braid if ${true}*/ AND id IN (${list}) /*@braid end*/ /*@braid end*/`;
   const rendered = query.render();
-  assert.deepEqual(rendered.values, ['Ada', 1, 2]);
-  assert.deepEqual(rendered.parameterHints, [textHint, integerHint, undefined]);
-  assert.match(rendered.text, /WHERE/);
+  assert.deepEqual(rendered.parameters, [
+    { value: 'Ada', interpolation: 0, hint: textHint },
+    { value: 1, hint: integerHint },
+    { value: 2 },
+  ]);
+  assert.match(rendered.segments.join(''), /WHERE/);
 });
 
 test('hint descriptors reject malformed structural fields', () => {
@@ -87,18 +90,18 @@ test('guarded capture remains lazy for inactive bind branches', () => {
   let evaluated = 0;
   const query = guarded(sql, ['SELECT 1 /*@braid if ', '*/ AND id = ', ' /*@braid end*/'], [() => false, () => { evaluated += 1; return sql.bind(1, integerHint); }]);
   assert.equal(evaluated, 0);
-  assert.deepEqual(query.render().values, []);
+  assert.deepEqual(query.render().parameters, []);
 });
 
 test('Oracle q literals and configured bracket identifiers protect interpolations', () => {
   const oracle = createSqlTag({ dialect: oracleDialect });
   for (const literal of ["q'[/*@braid if nope*/]'", "q'{a ${not-a-hole}}'", "q'(a) b)'", "q'<a > b>'", "q'!a ! b!'"]) {
     const query = oracle([`SELECT ${literal}`] as unknown as TemplateStringsArray);
-    assert.equal(query.render().text, `SELECT ${literal}`);
+    assert.deepEqual(query.render().segments, [`SELECT ${literal}`]);
   }
   assert.throws(() => oracle`SELECT q'[${1}]'`, hasCode('BRAID_HOLE_CONTEXT'));
   const oracleEscapedQuote = oracle([`SELECT 'a\\' || `, ''] as unknown as TemplateStringsArray, 1);
-  assert.deepEqual(oracleEscapedQuote.render().values, [1]);
+  assert.deepEqual(oracleEscapedQuote.render().parameters, [{ value: 1, interpolation: 0 }]);
   const bracketed = createSqlTag({ dialect: bracketDialect });
   assert.throws(() => bracketed`SELECT [${1}]`, hasCode('BRAID_HOLE_CONTEXT'));
 });

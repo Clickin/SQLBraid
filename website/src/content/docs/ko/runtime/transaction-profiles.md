@@ -9,8 +9,8 @@ description: 향후 격리/세션 API를 위해 예약된 개념적 경계이며
 
 SQLBraid는 이미 네 가지 관심사를 분리합니다.
 
-1. **Dialect** — SQL 표면, placeholder, 인용, 기본 데이터베이스 의미.
-2. **Driver** — 프로토콜 브리지와 결과 정규화(`pg`, `mysql2`, `node:sqlite`).
+1. **Dialect** — SQL 표면, lexical profile, 인용, 기본 데이터베이스 의미.
+2. **Driver** — 프로토콜 브리지, placeholder/구체화 정책, 결과 정규화(`pg`, `mysql2`, `node:sqlite`, `node-oracledb`, `Tedious`).
 3. **실행 런타임** — 물리적 lease 소유, 트랜잭션 고정, savepoint, Node/Bun/Deno에서의 범위.
 4. **트랜잭션 프로필** — 격리/세션 동작을 명시적으로 설명하기 위한 향후 개념.
 

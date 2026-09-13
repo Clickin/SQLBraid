@@ -139,7 +139,6 @@ function dialectForModule(moduleSpecifier: string | undefined, options: OverlayO
   if (options.dialect) return options.dialect;
   if (moduleSpecifier?.includes("oracle")) return {
     id: "oracle",
-    placeholder: (index) => `:${index}`,
     quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
     lexicalProfile: {
       lineCommentPrefixes: ["--"],
@@ -151,7 +150,6 @@ function dialectForModule(moduleSpecifier: string | undefined, options: OverlayO
   };
   if (moduleSpecifier?.includes("mssql")) return {
     id: "mssql",
-    placeholder: (index) => `@p${index}`,
     quoteIdentifier: (identifier) => `[${identifier.replaceAll("]", "]]")}]`,
     lexicalProfile: {
       lineCommentPrefixes: ["--"],
@@ -161,8 +159,8 @@ function dialectForModule(moduleSpecifier: string | undefined, options: OverlayO
       backslashEscapes: false,
     },
   };
-  if (moduleSpecifier?.includes("mysql")) return { id: "mysql", placeholder: () => "?", quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, backslashEscapes: true } };
-  if (moduleSpecifier?.includes("sqlite")) return { id: "sqlite", placeholder: () => "?", quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBracketIdentifiers: true, backslashEscapes: false } };
+  if (moduleSpecifier?.includes("mysql")) return { id: "mysql", quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, backslashEscapes: true } };
+  if (moduleSpecifier?.includes("sqlite")) return { id: "sqlite", quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBracketIdentifiers: true, backslashEscapes: false } };
   return postgresDialect;
 }
 

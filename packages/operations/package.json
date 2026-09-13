@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/operations",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.0",
   "description": "SQLBraid operation and execution result helpers for database queries",
   "license": "MIT",
   "repository": {

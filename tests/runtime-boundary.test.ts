@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { createStatementBindingDescription } from "@sqlbraid/core";
 import type {
   ConnectionLease,
   ConnectionProvider,
   Database,
+  ExecutionEvent,
   QueryExecutor,
-  RenderedQuery,
+  RenderedStatement,
+  StatementBindingAdapter,
+  StatementBindingDescription,
   StandardSchemaV1,
 } from "@sqlbraid/core";
 import { sql } from "@sqlbraid/template";
@@ -16,10 +20,27 @@ import {
   DatabaseScopeError,
 } from "@sqlbraid/runtime";
 
+const statementBinding = Object.freeze<StatementBindingAdapter>({
+  id: "runtime-boundary-test",
+  describe(statement, context) {
+    return createStatementBindingDescription(statement, context, {
+      adapterId: "runtime-boundary-test",
+      transport: "text-positional",
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: "simple", owner: "sqlbraid" },
+    });
+  },
+})
+
+function statementText(statement: RenderedStatement): string {
+  return statement.segments.join("?");
+}
+
 function rowsExecutor(rows: readonly unknown[], calls: string[] = []): QueryExecutor {
   return {
-    async query<Row>(rendered: RenderedQuery) {
-      calls.push(rendered.text);
+    statementBinding,
+    async query<Row>(rendered: RenderedStatement) {
+      calls.push(statementText(rendered));
       return { kind: "rows" as const, rows: rows as readonly Row[] };
     },
   };
@@ -45,12 +66,14 @@ test("pooled roots lease independently and a batch holds one lease", async () =>
   const gate = Promise.withResolvers<void>();
   let running = 0;
   const provider: ConnectionProvider = {
+    statementBinding,
     async acquire() {
       const id = `lease-${log.acquired.length}`;
       log.acquired.push(id);
       return {
-        async query<Row>(rendered: RenderedQuery) {
-          log.queries.push(`${id}:${rendered.text}`);
+        statementBinding,
+        async query<Row>(rendered: RenderedStatement) {
+          log.queries.push(`${id}:${statementText(rendered)}`);
           running += 1;
           if (running === 1) await gate.promise;
           running -= 1;
@@ -77,9 +100,11 @@ test("pooled transactions pin one lease, nest with savepoints, and reject root e
   const log: string[] = [];
   let releases = 0;
   const provider: ConnectionProvider = {
+    statementBinding,
     async acquire() {
       const lease: ConnectionLease = {
-        async query<Row>(rendered: RenderedQuery) { log.push(`query:${rendered.text}`); return { kind: "rows" as const, rows: [] as readonly Row[] }; },
+        statementBinding,
+        async query<Row>(rendered: RenderedStatement) { log.push(`query:${statementText(rendered)}`); return { kind: "rows" as const, rows: [] as readonly Row[] }; },
         async begin() { log.push("BEGIN"); },
         async commit() { log.push("COMMIT"); },
         async rollback() { log.push("ROLLBACK"); },
@@ -109,8 +134,10 @@ test("leaked transaction handles are closed and poisoned cleanup discards a leas
   let releaseOptions: { readonly discard?: boolean } | undefined;
   let shouldFailCommit = false;
   const provider: ConnectionProvider = {
+    statementBinding,
     async acquire() {
       return {
+        statementBinding,
         async query<Row>() { return { kind: "rows" as const, rows: [] as readonly Row[] }; },
         async begin() {},
         async commit() { if (shouldFailCommit) throw new Error("commit failed"); },
@@ -131,9 +158,11 @@ test("stream leases release on completion, early return, mapping failure, and ab
   const released: string[] = [];
   let index = 0;
   const provider: ConnectionProvider = {
+    statementBinding,
     async acquire() {
       const id = `lease-${index++}`;
       return {
+        statementBinding,
         async query<Row>() { return { kind: "rows" as const, rows: [] as readonly Row[] }; },
         async *stream<Row>() { yield 1 as Row; yield 2 as Row; },
         release() { released.push(id); },
@@ -157,22 +186,17 @@ test("direct stream mapper re-entry fails with BRAID_STREAM_SCOPE instead of wai
   let db!: ReturnType<typeof createDatabase>;
   const mapper = schema(async (value) => { await db.execute(sql`SELECT nested`); return { value }; });
   db = createDatabase({
+    statementBinding,
     async query<Row>() { return { kind: "rows" as const, rows: [] as readonly Row[] }; },
     async *stream<Row>() { yield 1 as Row; },
   });
   await assert.rejects(async () => { for await (const row of db.stream(sql.rows(mapper)`SELECT stream`)) void row; }, (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_STREAM_SCOPE");
 });
 
-;
-
-;
-
-;
-
 test("all materialized row APIs and calls release exactly one root lease", async () => {
   let acquired = 0;
   let released = 0;
-  const db = createPooledDatabase({ async acquire() {
+  const db = createPooledDatabase({ statementBinding, async acquire() {
     acquired += 1;
     return {
       ...rowsExecutor([{ id: 1 }]),
@@ -196,7 +220,7 @@ test("all materialized row APIs and calls release exactly one root lease", async
 test("pooled stream mapper reentry uses another lease while the cursor retains its own", async () => {
   let acquired = 0;
   let released = 0;
-  const db = createPooledDatabase({ async acquire() {
+  const db = createPooledDatabase({ statementBinding, async acquire() {
     acquired += 1;
     return {
       ...rowsExecutor([]),
@@ -216,6 +240,86 @@ test("pooled stream mapper reentry uses another lease while the cursor retains i
   assert.deepEqual(output, [1]);
   assert.equal(released, 2);
 }, 1000);
+
+test("pooled lease binding identity mismatch discards the lease before execution", async () => {
+  const mismatchedBinding = Object.freeze<StatementBindingAdapter>({
+    ...statementBinding,
+    describe: statementBinding.describe,
+  })
+  let released: { readonly discard?: boolean } | undefined;
+  let queries = 0;
+  const events: ExecutionEvent[] = [];
+  const db = createPooledDatabase({
+    statementBinding,
+    async acquire() {
+      return {
+        statementBinding: mismatchedBinding,
+        async query() {
+          queries += 1;
+          return { kind: "rows" as const, rows: [] as const };
+        },
+        release(options) { released = options; },
+      };
+    },
+  }, { observers: [{ onEvent(event) { events.push(event); } }] });
+
+  await assert.rejects(() => db.execute(sql`SELECT mismatch`), /BRAID_BINDING_IDENTITY/);
+  assert.equal(queries, 0);
+  assert.equal(released?.discard, true);
+  const error = events.find((event) => event.type === "query:error");
+  assert.equal(error?.type, "query:error");
+  if (error?.type === "query:error") {
+    assert.equal(error.stage, "materialize");
+    assert.equal(error.executionStarted, false);
+    assert.equal(error.executionCompleted, false);
+  }
+});
+
+test("prepared invocation renders once and passes one binding description to execution", async () => {
+  let renders = 0;
+  let descriptions = 0;
+  let receivedBinding: unknown;
+  let describedBinding: unknown;
+  let requestedReuse: string | undefined;
+  const adapter = Object.freeze<StatementBindingAdapter>({
+    id: "prepared-binding-test",
+    describe(statement, context) {
+      descriptions += 1;
+      requestedReuse = context.requestedReuse;
+      const description = createStatementBindingDescription(statement, context, {
+        adapterId: "prepared-binding-test",
+        transport: "text-positional",
+        placeholder: (index) => `$${index}`,
+        reuse: { effective: "simple", owner: "sqlbraid" },
+      });
+      describedBinding = description;
+      return description;
+    },
+  })
+  const db = createDatabase({
+    statementBinding: adapter,
+    async query<Row>(_statement: RenderedStatement, binding?: StatementBindingDescription) {
+      receivedBinding = binding;
+      return { kind: "rows" as const, rows: [] as readonly Row[] };
+    },
+  });
+  const prepared = db.prepare("render-once", () => {
+    const query = sql.rows`SELECT ${renders}`;
+    return {
+      ...query,
+      render() {
+        renders += 1;
+        return query.render();
+      },
+    };
+  });
+
+  await prepared.execute();
+  assert.equal(renders, 1);
+  assert.equal(descriptions, 1);
+  assert.equal(requestedReuse, "reuse");
+  assert.equal(receivedBinding, describedBinding);
+});
 
 test("transaction stream consumer cannot run another pinned physical operation", async () => {
   const db = createDatabase({

@@ -5,6 +5,12 @@ description: 안정적인 SQLBraid 코드와 각 코드가 보호하는 경계�
 
 SQLBraid 런타임/컴파일러 오류는 오류 타입에 따라 `code`를 노출합니다. 얇은 어댑터의 기능 경계 오류는 메시지에 `BRAID_*` 표식을 사용하므로 모든 어댑터 오류에 `code` 속성이 있다고 가정하지 마세요. 드라이버 오류는 원래 identity를 유지합니다.
 
+바인딩 구성 실패(placeholder 생성, 힌트 매핑, typed request 구성 또는 지원하지
+않는 전송 선택)는 `"materialize"` 오류 단계로 보고하며 lease 획득과 드라이버
+I/O 전에 발생합니다. 드라이버·서버·네트워크 실패는 `"driver"` 단계입니다.
+materialize 오류의 `executionStarted`와 `executionCompleted`는 모두
+`false`입니다.
+
 | Code | 의미 |
 | --- | --- |
 | `BRAID_RESULT_KIND` | 선언한 결과 종류와 실행 후 어댑터 결과가 다릅니다. |
@@ -42,3 +48,4 @@ SQLBraid 런타임/컴파일러 오류는 오류 타입에 따라 `code`를 노�
 | `BRAID_SQL_LIMIT` / `BRAID_BIND_LIMIT` | 렌더링된 출력이 구성된 제한을 초과했습니다. |
 
 컴파일러 진단에는 소스 범위와 severity가 포함됩니다. CLI JSON은 1부터 시작하는 위치를 사용하고 LSP는 표준 0부터 시작하는 위치를 사용합니다. 누락된 메타데이터 증거를 잘못된 SQL 오류로 바꾸지 마세요. 메타데이터는 개방 세계입니다.
+

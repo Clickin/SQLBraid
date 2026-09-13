@@ -7,6 +7,7 @@ import { createMssqlInspector } from "@sqlbraid/mssql/inspector";
 import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
 import { mssqlParameter, sql, typePolicy } from "@sqlbraid/mssql";
 import { runW01 } from "../w01.js";
+import { bindingObserver } from "../binding.js";
 
 interface MssqlSettings {
   readonly server: string;
@@ -46,6 +47,21 @@ async function close(connection: Connection): Promise<void> {
     setTimeout(resolve, 500);
   });
 }
+
+test("SQL Server binding diagnostics preserve literal marker text through real execution", async () => {
+  const connection = await connect(inject("mssql") as MssqlSettings);
+  try {
+    const probe = bindingObserver("mssql", "typed-request");
+    const db = createTediousDatabase(connection, { observers: [probe.observer] });
+    assert.deepEqual(
+      await db.one(sql.rows`SELECT ${sql.bind("O'Reilly", mssqlParameter.nvarchar(40))} AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */`),
+      { value: "O'Reilly", marker: "$1 ? :1 @p1" },
+    );
+    probe.verify("SELECT @p1 AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */");
+  } finally {
+    await close(connection);
+  }
+});
 
 test("SQL Server wrappers sharing one Tedious connection preserve transaction isolation", async () => {
   const settings = inject("mssql") as MssqlSettings;

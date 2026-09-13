@@ -1,10 +1,26 @@
 import assert from "node:assert/strict";
+import { createStatementBindingDescription, parameterizedSql } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase, DatabaseCardinalityError } from "@sqlbraid/runtime";
 import { capture, createSqlTag, guarded, sql } from "@sqlbraid/template";
 import { sql as mysql } from "@sqlbraid/mysql";
 import { sql as sqlite } from "@sqlbraid/sqlite";
 import { sql as oracle } from "@sqlbraid/oracle";
 import { sql as mssql } from "@sqlbraid/mssql";
+
+const syntheticStatementBinding = Object.freeze({
+  id: "runtime-smoke",
+  describe(statement, context) {
+    return createStatementBindingDescription(statement, context, {
+      adapterId: "runtime-smoke",
+      transport: "native-value-template",
+      reuse: { effective: "simple", owner: "sqlbraid" },
+    });
+  },
+});
+
+function diagnosticSql(statement, placeholder = () => "?") {
+  return parameterizedSql(statement, placeholder);
+}
 
 function barrier() {
   let resolve;
@@ -39,8 +55,9 @@ function resultFor(rendered, rows) {
   if (rendered.resultKind === "command") {
     return { kind: "command", rows: [], rowCount: 2, command: { affectedRows: 2 } };
   }
-  if (rendered.text.includes("empty")) return { kind: "rows", rows: [], rowCount: 0 };
-  if (rendered.text.includes("many")) {
+  const sqlText = diagnosticSql(rendered);
+  if (sqlText.includes("empty")) return { kind: "rows", rows: [], rowCount: 0 };
+  if (sqlText.includes("many")) {
     return { kind: "rows", rows: [{ id: 1 }, { id: 2 }], rowCount: 2 };
   }
   return { kind: "rows", rows: rows ?? [{ id: 1 }], rowCount: rows?.length ?? 1 };
@@ -48,17 +65,20 @@ function resultFor(rendered, rows) {
 
 function physical(log, options = {}) {
   return {
+    statementBinding: syntheticStatementBinding,
     async query(rendered) {
-      if (rendered.text.includes("driver-failure") && options.driverFailure !== undefined) {
+      const sqlText = diagnosticSql(rendered);
+      if (sqlText.includes("driver-failure") && options.driverFailure !== undefined) {
         throw options.driverFailure;
       }
-      log.push(`query:${rendered.text}`);
+      log.push(`query:${sqlText}`);
       return resultFor(rendered, options.rows);
     },
     async *stream(rendered) {
-      log.push(`stream:${rendered.text}`);
+      const sqlText = diagnosticSql(rendered);
+      log.push(`stream:${sqlText}`);
       for (const row of options.streamRows ?? [{ id: 1 }]) yield row;
-      if (rendered.text.includes("stream-failure") && options.streamFailure !== undefined) {
+      if (sqlText.includes("stream-failure") && options.streamFailure !== undefined) {
         throw options.streamFailure;
       }
     },
@@ -74,6 +94,7 @@ function physical(log, options = {}) {
 function pooledFake(options = {}) {
   const records = [];
   const provider = {
+    statementBinding: syntheticStatementBinding,
     async acquire() {
       const record = {
         id: `lease-${records.length + 1}`,
@@ -116,23 +137,29 @@ function assertEventDurations(events) {
 async function templateCoreSmoke() {
   const pg = sql;
   const pgRendered = pg`SELECT ${pg.ident(["public", "users"])} WHERE id IN (${pg.list([3, 5])}) AND state = ${"ready"}`.render();
+  assert.deepEqual(pgRendered.segments, [
+    'SELECT "public"."users" WHERE id IN (',
+    ", ",
+    ") AND state = ",
+    "",
+  ]);
   assert.equal(
-    pgRendered.text,
+    diagnosticSql(pgRendered, (index) => `$${index}`),
     'SELECT "public"."users" WHERE id IN ($1, $2) AND state = $3',
   );
-  assert.deepEqual(pgRendered.values, [3, 5, "ready"]);
-  assert.deepEqual(pgRendered.bindingMap, [
-    { placeholder: 1 },
-    { placeholder: 2 },
-    { placeholder: 3, interpolation: 2 },
+  assert.deepEqual(pgRendered.parameters, [
+    { value: 3 },
+    { value: 5 },
+    { value: "ready", interpolation: 2 },
   ]);
 
   const joined = pg.join(
     [pg.fragment`(${10})`, pg.fragment`(${20})`],
     pg.fragment`, `,
   );
-  assert.equal(pg`VALUES ${joined}`.render().text, "VALUES ($1), ($2)");
-  assert.deepEqual(pg`VALUES ${joined}`.render().values, [10, 20]);
+  const joinedRendered = pg`VALUES ${joined}`.render();
+  assert.equal(diagnosticSql(joinedRendered, (index) => `$${index}`), "VALUES ($1), ($2)");
+  assert.deepEqual(joinedRendered.parameters.map(({ value }) => value), [10, 20]);
 
   const selected = pg`
     SELECT *
@@ -145,9 +172,9 @@ async function templateCoreSmoke() {
       /*@braid end*/
     /*@braid end*/
   `.render();
-  assert.match(selected.text, /WHERE\s+email = \$1/);
-  assert.doesNotMatch(selected.text, /@braid|id =|active =/);
-  assert.deepEqual(selected.values, ["ada@example.com"]);
+  assert.match(diagnosticSql(selected, (index) => `$${index}`), /WHERE\s+email = \$1/);
+  assert.doesNotMatch(diagnosticSql(selected, (index) => `$${index}`), /@braid|id =|active =/);
+  assert.deepEqual(selected.parameters.map(({ value }) => value), ["ada@example.com"]);
 
   const update = pg`
     UPDATE users
@@ -157,29 +184,28 @@ async function templateCoreSmoke() {
     /*@braid end*/
     WHERE id = ${7}
   `.render();
-  assert.match(update.text, /SET\s+name = \$1\s+WHERE id = \$2/);
-  assert.deepEqual(update.values, ["Ada", 7]);
+  assert.match(diagnosticSql(update, (index) => `$${index}`), /SET\s+name = \$1\s+WHERE id = \$2/);
+  assert.deepEqual(update.parameters.map(({ value }) => value), ["Ada", 7]);
 
   const trimmed = pg`SELECT 1 /*@braid trim prefix="WHERE " prefixOverrides="AND|OR"*/ AND id = ${8} /*@braid end*/`.render();
-  assert.match(trimmed.text, /WHERE\s+id = \$1/);
-  assert.doesNotMatch(trimmed.text, /@braid|\bAND\b/);
-  assert.deepEqual(trimmed.values, [8]);
+  assert.match(diagnosticSql(trimmed, (index) => `$${index}`), /WHERE\s+id = \$1/);
+  assert.doesNotMatch(diagnosticSql(trimmed, (index) => `$${index}`), /@braid|\bAND\b/);
+  assert.deepEqual(trimmed.parameters.map(({ value }) => value), [8]);
   assert.equal(
-    mysql`SELECT ${mysql.ident("users.name")} WHERE id = ${4}`.render().text,
+    diagnosticSql(mysql`SELECT ${mysql.ident("users.name")} WHERE id = ${4}`.render()),
     "SELECT `users`.`name` WHERE id = ?",
   );
-  assert.deepEqual(mysql`SELECT ${mysql.ident("users.name")} WHERE id = ${4}`.render().values, [4]);
+  assert.deepEqual(mysql`SELECT ${mysql.ident("users.name")} WHERE id = ${4}`.render().parameters.map(({ value }) => value), [4]);
   assert.equal(
-    sqlite`SELECT ${sqlite.ident("users.name")} WHERE id = ${4}`.render().text,
+    diagnosticSql(sqlite`SELECT ${sqlite.ident("users.name")} WHERE id = ${4}`.render()),
     'SELECT "users"."name" WHERE id = ?',
   );
-  assert.deepEqual(sqlite`SELECT ${sqlite.ident("users.name")} WHERE id = ${4}`.render().values, [4]);
+  assert.deepEqual(sqlite`SELECT ${sqlite.ident("users.name")} WHERE id = ${4}`.render().parameters.map(({ value }) => value), [4]);
   const hinted = sql`SELECT ${sql.bind("Ada", { databaseType: "VARCHAR2", length: 40 })}`.render();
-  assert.equal(hinted.text, "SELECT $1");
-  assert.deepEqual(hinted.values, ["Ada"]);
-  assert.deepEqual(hinted.parameterHints, [{ databaseType: "VARCHAR2", length: 40 }]);
-  assert.equal(oracle`SELECT ${1}`.render().text, "SELECT :1");
-  assert.equal(mssql`SELECT ${1}`.render().text, "SELECT @p1");
+  assert.deepEqual(hinted.segments, ["SELECT ", ""]);
+  assert.deepEqual(hinted.parameters, [{ value: "Ada", interpolation: 0, hint: { databaseType: "VARCHAR2", length: 40 } }]);
+  assert.deepEqual(oracle`SELECT ${1}`.render().segments, ["SELECT ", ""]);
+  assert.deepEqual(mssql`SELECT ${1}`.render().segments, ["SELECT ", ""]);
 
   const encoder = new TextEncoder();
   assert.equal(encoder.encode("ASCII").length, 5);
@@ -189,7 +215,7 @@ async function templateCoreSmoke() {
   const unicodeSql = "SELECT 'ASCII 한 😀 e\u0301'";
   const unicodeBytes = encoder.encode(unicodeSql).length;
   const exact = createSqlTag({ limits: { maxSqlBytes: unicodeBytes } });
-  assert.equal(exact`SELECT 'ASCII 한 😀 é'`.render().text, unicodeSql);
+  assert.equal(exact`SELECT 'ASCII 한 😀 é'`.render().segments.join(""), unicodeSql);
   const tooSmall = createSqlTag({ limits: { maxSqlBytes: unicodeBytes - 1 } });
   assert.throws(
     () => tooSmall`SELECT 'ASCII 한 😀 é'`.render(),
@@ -204,10 +230,10 @@ async function templateCoreSmoke() {
   });
   assert.equal(captured.resultKind, "rows");
   assert.equal(captured.resultSchema, mappedSchema);
-  assert.deepEqual(captured.render().values, [1]);
+  assert.deepEqual(captured.render().parameters.map(({ value }) => value), [1]);
   const guardedQuery = guarded(sql.rows(mappedSchema), ["SELECT ", ""], [() => 1]);
   assert.equal(guardedQuery.resultSchema, mappedSchema);
-  assert.deepEqual(guardedQuery.render().values, [1]);
+  assert.deepEqual(guardedQuery.render().parameters.map(({ value }) => value), [1]);
 }
 
 async function runtimeSmoke() {
@@ -329,6 +355,7 @@ async function runtimeSmoke() {
   const failClosedError = new Error("observer refused acquisition");
   let acquisitionCount = 0;
   const failClosedDb = createPooledDatabase({
+    statementBinding: syntheticStatementBinding,
     async acquire() {
       acquisitionCount += 1;
       return { ...physical([]), release() {} };

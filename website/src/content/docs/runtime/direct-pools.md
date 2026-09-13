@@ -29,6 +29,10 @@ const customDb = createPooledDatabase(connectionProvider);
 
 A provider's `acquire()` returns one `ConnectionLease` with an executor and `release({ discard })`. Each independent pooled root operation acquires one lease, performs DB I/O, releases it, and then maps materialized results. The application owns pool shutdown.
 
+Providers expose an immutable `statementBinding` adapter. Binding description and
+hint validation happen before `acquire()`, and every lease must use that exact
+adapter object; a lease cannot silently switch transport or dialect identity.
+
 A pool is not a fake executor. If `BEGIN`, a query, and `COMMIT` can land on different physical connections, the transaction is not real; use `db.tx(...)` to pin the lease.
 
 :::caution Factory boundary

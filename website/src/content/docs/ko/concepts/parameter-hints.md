@@ -51,9 +51,15 @@ const query = sql.rows<UserRow>`
 
 ## 렌더링 메타데이터와 prepared shape
 
-렌더링된 쿼리는 `values`와 정렬된 `parameterHints`를 유지합니다. 각 위치는 디스크립터이거나 일반 바인드의 경우 `undefined`입니다. 실행 observer는 바인드 값의 redaction 정책을 바꾸지 않고 이 구조 메타데이터를 확인할 수 있습니다.
+렌더링된 문장은 값, 보간 인덱스, 선택적 힌트를 하나의 불변
+`parameters` 레코드에 보관합니다. `segments.length === parameters.length + 1`이며,
+observer는 바인드 값의 redaction 정책을 바꾸지 않고 이 레코드에서 값·힌트·
+보간 맵을 파생합니다.
 
-Prepared query는 파라미터 힌트 시그니처를 shape에 포함합니다. 값만 바꾸는 것은 허용되지만 힌트, 길이, 정밀도 또는 스케일을 바꾸면 호환되지 않는 prepared statement를 조용히 재사용하지 않고 실패합니다.
+Prepared query의 shape는 결과 종류, 정규화된 논리 `segments`, 순서가 있는
+힌트 시그니처로 정합니다. 값만 바꾸는 것은 허용되지만 힌트·길이·정밀도·
+스케일을 바꾸면 호환되지 않는 statement를 조용히 재사용하지 않고 실패합니다.
+물리적인 `$1`, `?`, `:1`, `@p1` 표기는 shape에 포함되지 않습니다.
 
 ## 어댑터 지원
 

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createRenderedStatement } from "@sqlbraid/core";
 import type {
   CallQuery,
   ConnectionLease,
@@ -14,14 +15,18 @@ import type {
   QueryExecutionResult,
   QueryExecutor,
   QueryResultKind,
+  QueryReadyEvent,
   QueryRow,
-  RenderedQuery,
+  StatementBindingAdapter,
+  StatementBindingDescription,
+  RenderedStatement,
   RoutineCallResult,
   RowQuery,
   RowValidationOptions,
   RowsExecutionResult,
   StandardSchemaV1,
   StreamOptions,
+  StreamStartEvent,
 } from "@sqlbraid/core";
 
 export class DatabaseCardinalityError extends Error {
@@ -119,13 +124,14 @@ interface OperationMeta {
   readonly batchId?: string;
 }
 
-interface PreparedOperation<Q extends ExecutableQuery> {
+interface PreparedOperation<Q extends Query<unknown, QueryResultKind>> {
   readonly query: Q;
-  readonly rendered: RenderedQuery;
+  readonly rendered: RenderedStatement;
+  readonly binding: StatementBindingDescription;
   readonly meta: OperationMeta;
 }
 
-interface RawOperation<Q extends ExecutableQuery> extends PreparedOperation<Q> {
+interface RawOperation<Q extends Query<unknown, QueryResultKind>> extends PreparedOperation<Q> {
   readonly result?: QueryExecutionResult<unknown>;
   readonly durationMs: number;
   readonly driverError?: unknown;
@@ -137,6 +143,17 @@ interface Use {
   readonly physicalState: ScopeState;
   readonly direct: boolean;
   readonly release: (discard?: boolean) => Promise<void>;
+}
+
+class PreparationFailure extends Error {
+  declare readonly cause?: unknown;
+  readonly stage: "render" | "materialize";
+
+  constructor(stage: "render" | "materialize", cause: unknown) {
+    super(stage === "render" ? "Query rendering failed." : "Statement materialization failed.", { cause });
+    this.name = "PreparationFailure";
+    this.stage = stage;
+  }
 }
 
 const transactionContext = new AsyncLocalStorage<TransactionContext>();
@@ -241,6 +258,95 @@ function malformedExecutionResult(): never {
   throw new TypeError("Executor returned a malformed query execution result.");
 }
 
+function bindingAdapterFor(resource: QueryExecutor | ConnectionProvider): StatementBindingAdapter {
+  const adapter = resource.statementBinding;
+  if (
+    adapter === null
+    || typeof adapter !== "object"
+    || typeof adapter.id !== "string"
+    || adapter.id.length === 0
+    || typeof adapter.describe !== "function"
+  ) {
+    throw new TypeError("Execution resource returned an invalid statement binding adapter.");
+  }
+  return adapter;
+}
+
+function assertBindingDescription(
+  description: StatementBindingDescription,
+  adapter: StatementBindingAdapter,
+  statement: RenderedStatement,
+): StatementBindingDescription {
+  const effective = statement.dialectId;
+  const validTransport = description !== null
+    && typeof description === "object"
+    && (description.transport === "native-value-template"
+      || description.transport === "text-positional"
+      || description.transport === "text-named"
+      || description.transport === "typed-request");
+  const validReuseOwner = description !== null
+    && typeof description === "object"
+    && (description.reuse?.owner === "sqlbraid" || description.reuse?.owner === "driver" || description.reuse?.owner === "server");
+  if (
+    description === null
+    || typeof description !== "object"
+    || description.adapterId !== adapter.id
+    || description.dialectId !== effective
+    || !validTransport
+    || !Array.isArray(description.bindings)
+    || description.bindings.length !== statement.parameters.length
+    || description.reuse === null
+    || typeof description.reuse !== "object"
+    || description.reuse.requested === undefined
+    || (description.reuse.requested !== "auto" && description.reuse.requested !== "simple" && description.reuse.requested !== "reuse")
+    || (description.reuse.effective !== "simple" && description.reuse.effective !== "reuse")
+    || !validReuseOwner
+    || typeof description.literalizedSql !== "function"
+  ) {
+    throw new TypeError("Statement binding adapter returned an invalid description.");
+  }
+  if (description.reuse.capacity !== undefined
+    && (!Number.isInteger(description.reuse.capacity) || description.reuse.capacity < 0)) {
+    throw new TypeError("Statement binding adapter returned an invalid reuse capacity.");
+  }
+  for (const [offset, binding] of description.bindings.entries()) {
+    if (
+      binding === null
+      || typeof binding !== "object"
+      || binding.index !== offset + 1
+      || binding.interpolation !== statement.parameters[offset].interpolation
+    ) {
+      throw new TypeError("Statement binding adapter returned misaligned bindings.");
+    }
+    const expectedHint = statement.parameters[offset].hint;
+    const actualHint = binding.hint;
+    if ((expectedHint === undefined) !== (actualHint === undefined)
+      || (expectedHint !== undefined && (
+        actualHint!.databaseType !== expectedHint.databaseType
+        || actualHint!.length !== expectedHint.length
+        || actualHint!.precision !== expectedHint.precision
+        || actualHint!.scale !== expectedHint.scale
+      ))) {
+      throw new TypeError("Statement binding adapter returned misaligned parameter hints.");
+    }
+    if (actualHint !== undefined && !Object.isFrozen(actualHint)) Object.freeze(actualHint);
+    if (!Object.isFrozen(binding)) Object.freeze(binding);
+  }
+  if (!Object.isFrozen(description.bindings)) Object.freeze(description.bindings);
+  if (!Object.isFrozen(description.reuse)) Object.freeze(description.reuse);
+  if (!Object.isFrozen(description)) Object.freeze(description);
+  return description;
+}
+
+function bindingIdentityMismatch(): TypeError {
+  const error = new TypeError("BRAID_BINDING_IDENTITY: leased execution resource uses a different statement binding adapter.");
+  return error;
+}
+
+function isBindingIdentityMismatch(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith("BRAID_BINDING_IDENTITY:");
+}
+
 function assertExecutableQuery(query: Query<unknown, QueryResultKind>): asserts query is ExecutableQuery {
   if (query.resultKind === "call") throw new TypeError("Call queries must be executed with database.call().");
 }
@@ -313,15 +419,19 @@ function frozenEvent(event: ExecutionEvent): ExecutionEvent {
   if (event.type === "query:ready" || event.type === "stream:start") {
     const values = Object.freeze([...event.values]);
     const bindingMap = event.bindingMap === undefined ? undefined : Object.freeze(event.bindingMap.map((item) => Object.freeze({ ...item })));
-    const parameterHints = event.type === "query:ready" && event.parameterHints !== undefined
+    const parameterHints = event.parameterHints !== undefined
       ? Object.freeze(event.parameterHints.map((hint) => hint === undefined ? undefined : Object.freeze({ ...hint })))
       : undefined;
-    return Object.freeze({
-      ...event,
-      values,
-      ...(bindingMap === undefined ? {} : { bindingMap }),
-      ...(parameterHints === undefined ? {} : { parameterHints }),
-    }) as ExecutionEvent;
+    const execution = Object.freeze({
+      ...event.execution,
+      reuse: Object.freeze({ ...event.execution.reuse }),
+    });
+    const descriptors = Object.getOwnPropertyDescriptors(event);
+    if (descriptors.values !== undefined) descriptors.values.value = values;
+    if (bindingMap !== undefined && descriptors.bindingMap !== undefined) descriptors.bindingMap.value = bindingMap;
+    if (parameterHints !== undefined && descriptors.parameterHints !== undefined) descriptors.parameterHints.value = parameterHints;
+    if (descriptors.execution !== undefined) descriptors.execution.value = execution;
+    return Object.freeze(Object.defineProperties({}, descriptors)) as ExecutionEvent;
   }
   return Object.freeze(event) as ExecutionEvent;
 }
@@ -360,9 +470,8 @@ function metadata(options: RuntimeOptions, operationId: string, preparedName?: s
   };
 }
 
-function parameterHintShape(rendered: RenderedQuery): string {
-  if (rendered.parameterHints === undefined) return "";
-  return JSON.stringify(rendered.parameterHints.map((hint) => {
+function parameterHintShape(rendered: RenderedStatement): string {
+  return JSON.stringify(rendered.parameters.map(({ hint }) => {
     if (hint === undefined) return null;
     return {
       databaseType: hint.databaseType,
@@ -373,16 +482,59 @@ function parameterHintShape(rendered: RenderedQuery): string {
   }));
 }
 
-function queryReadyEvent(operation: PreparedOperation<ExecutableQuery>): ExecutionEvent {
-  const { query, rendered, meta } = operation;
+function preparedShape(query: ExecutableQuery, rendered: RenderedStatement): string {
+  return JSON.stringify({
+    resultKind: query.resultKind,
+    segments: rendered.segments,
+    hints: parameterHintShape(rendered),
+  });
+}
+
+function executionProjection(binding: StatementBindingDescription): {
+  readonly adapterId: string;
+  readonly dialectId: string;
+  readonly transport: StatementBindingDescription["transport"];
+  readonly reuse: StatementBindingDescription["reuse"];
+} {
   return {
+    adapterId: binding.adapterId,
+    dialectId: binding.dialectId,
+    transport: binding.transport,
+    reuse: {
+      requested: binding.reuse.requested,
+      effective: binding.reuse.effective,
+      owner: binding.reuse.owner,
+      ...(binding.reuse.capacity === undefined ? {} : { capacity: binding.reuse.capacity }),
+    },
+  };
+}
+
+function eventSql(
+  event: object,
+  binding: StatementBindingDescription,
+): void {
+  Object.defineProperty(event, "sql", {
+    configurable: false,
+    enumerable: true,
+    get: () => binding.parameterizedSql,
+  });
+}
+
+function queryReadyEvent(operation: PreparedOperation<Query<unknown, QueryResultKind>>): ExecutionEvent {
+  const { query, rendered, binding, meta } = operation;
+  const parameterHints = rendered.parameters.map((parameter) => parameter.hint);
+  const event: QueryReadyEvent = {
     type: "query:ready",
+    literalizedSql: (options) => binding.literalizedSql(options),
     operationId: meta.operationId,
     batchId: meta.batchId,
-    sql: rendered.text,
-    values: rendered.values,
-    bindingMap: rendered.bindingMap,
-    ...(rendered.parameterHints === undefined ? {} : { parameterHints: rendered.parameterHints }),
+    values: rendered.parameters.map((parameter) => parameter.value),
+    bindingMap: rendered.parameters.map((parameter, index) => ({
+      placeholder: index + 1,
+      ...(parameter.interpolation === undefined ? {} : { interpolation: parameter.interpolation }),
+    })),
+    ...(parameterHints.some((hint) => hint !== undefined) ? { parameterHints } : {}),
+    execution: executionProjection(binding),
     declaredKind: query.resultKind,
     fingerprint: rendered.fingerprint,
     variantFingerprint: rendered.variantFingerprint,
@@ -390,6 +542,8 @@ function queryReadyEvent(operation: PreparedOperation<ExecutableQuery>): Executi
     transactionDepth: meta.transactionDepth,
     transactionScoped: meta.transactionScoped,
   };
+  if ("parameterizedSql" in binding) eventSql(event, binding);
+  return event;
 }
 
 function queryResultEvent(operation: RawOperation<ExecutableQuery>, result: QueryExecutionResult<unknown>): ExecutionEvent {
@@ -422,7 +576,7 @@ function queryMappedEvent(operation: RawOperation<ExecutableQuery>, rowCount: nu
   };
 }
 
-function errorEvent(operation: PreparedOperation<ExecutableQuery>, error: unknown, stage: QueryErrorEventStage, started: boolean, completed: boolean, durationMs?: number): ExecutionEvent {
+function errorEvent(operation: { readonly meta: OperationMeta }, error: unknown, stage: QueryErrorEventStage, started: boolean, completed: boolean, durationMs?: number): ExecutionEvent {
   return {
     type: "query:error",
     operationId: operation.meta.operationId,
@@ -441,19 +595,27 @@ function errorEvent(operation: PreparedOperation<ExecutableQuery>, error: unknow
 type QueryErrorEventStage = Extract<ExecutionEvent, { readonly type: "query:error" }>['stage'];
 
 function streamStartEvent(operation: PreparedOperation<ExecutableQuery>): ExecutionEvent {
-  const { rendered, meta } = operation;
-  return {
+  const { rendered, binding, meta } = operation;
+  const parameterHints = rendered.parameters.map((parameter) => parameter.hint);
+  const event: StreamStartEvent = {
     type: "stream:start",
+    literalizedSql: (options) => binding.literalizedSql(options),
     operationId: meta.operationId,
-    sql: rendered.text,
-    values: rendered.values,
-    bindingMap: rendered.bindingMap,
+    values: rendered.parameters.map((parameter) => parameter.value),
+    bindingMap: rendered.parameters.map((parameter, index) => ({
+      placeholder: index + 1,
+      ...(parameter.interpolation === undefined ? {} : { interpolation: parameter.interpolation }),
+    })),
+    ...(parameterHints.some((hint) => hint !== undefined) ? { parameterHints } : {}),
+    execution: executionProjection(binding),
     declaredKind: "rows",
     variantFingerprint: rendered.variantFingerprint,
     preparedName: meta.preparedName,
     transactionDepth: meta.transactionDepth,
     transactionScoped: meta.transactionScoped,
   };
+  if ("parameterizedSql" in binding) eventSql(event, binding);
+  return event;
 }
 
 async function transactionEvent(
@@ -479,6 +641,7 @@ async function transactionEvent(
 }
 
 export function createDatabase(executor: QueryExecutor, options: DatabaseOptions = {}): Database {
+  bindingAdapterFor(executor);
   const rootState = scopeStateFor(executor);
   return createScopedDatabase(executor, rootState, {
     ...options,
@@ -492,6 +655,7 @@ export function createDatabase(executor: QueryExecutor, options: DatabaseOptions
 }
 
 export function createPooledDatabase(provider: ConnectionProvider, options: DatabaseOptions = {}): Database {
+  bindingAdapterFor(provider);
   const rootState: ScopeState = { tail: Promise.resolve(), transactionTail: Promise.resolve(), streamUsers: 0 };
   return createScopedDatabase(provider, rootState, {
     ...options,
@@ -506,6 +670,7 @@ export function createPooledDatabase(provider: ConnectionProvider, options: Data
 
 function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, state: ScopeState, options: RuntimeOptions): Database & { close(): void; finish(): Promise<void> } {
   let closed = false;
+  const statementBinding = bindingAdapterFor(executor);
   const openStreams = new Set<AsyncGenerator<unknown>>();
   const assertOpen = (): void => {
     if (closed) throw new DatabaseScopeError("BRAID_TX_CLOSED", "Transaction database is no longer usable.");
@@ -513,7 +678,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       throw new DatabaseScopeError("BRAID_TX_SCOPE", "Use the innermost transaction database while its savepoint is active.");
     }
   };
-  const leaseForUse = async (stream: boolean): Promise<Use> => {
+  const leaseForUse = async (stream: boolean, expectedBinding: StatementBindingAdapter): Promise<Use> => {
     assertOpen();
     assertHealthy(state);
     if (options.transaction) {
@@ -530,6 +695,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       const releaseTurn = await acquireTransactionTurn(options.leaseState);
       try { assertOpen(); assertHealthy(options.leaseState); }
       catch (error) { releaseTurn(); throw error; }
+      if (lease.statementBinding !== expectedBinding) {
+        releaseTurn();
+        throw bindingIdentityMismatch();
+      }
       return { executor: lease, physicalState: options.leaseState, direct: true, release: async () => { releaseTurn(); } };
     }
     assertRootAllowed(options.rootState, stream);
@@ -546,6 +715,14 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     if (!lease || typeof lease !== "object" || typeof lease.release !== "function" || typeof lease.query !== "function") {
       throw new TypeError("Connection provider returned an invalid lease.");
     }
+    if (lease.statementBinding !== expectedBinding) {
+      let releaseError: unknown;
+      let releaseFailed = false;
+      try { await lease.release({ discard: true }); } catch (error) { releaseFailed = true; releaseError = error; }
+      const mismatch = bindingIdentityMismatch();
+      if (releaseFailed) throw new AggregateError([mismatch, releaseError], "Binding identity mismatch and lease cleanup failed.", { cause: mismatch });
+      throw mismatch;
+    }
     const leaseState = scopeStateFor(lease);
     try {
       assertHealthy(leaseState);
@@ -560,27 +737,68 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       release: async (discard = false) => { await lease.release(discard ? { discard: true } : undefined); },
     };
   };
-  const prepare = <Q extends ExecutableQuery>(query: Q, preparedName?: string, batchId?: string): PreparedOperation<Q> => {
+  const prepare = <Q extends Query<unknown, QueryResultKind>>(
+    query: Q,
+    preparedName?: string,
+    batchId?: string,
+    alreadyRendered?: RenderedStatement,
+  ): PreparedOperation<Q> => {
     const operationId = nextOperationId();
-    const rendered = query.render();
-    return { query, rendered, meta: metadata(options, operationId, preparedName, batchId) };
+    let rendered: RenderedStatement;
+    try {
+      rendered = alreadyRendered ?? createRenderedStatement(query.render());
+    } catch (error) {
+      throw new PreparationFailure("render", error);
+    }
+    const adapter = statementBinding;
+    const requestedReuse = options.reuse === "simple"
+      ? "simple"
+      : preparedName === undefined ? (options.reuse ?? "auto") : "reuse";
+    let binding: StatementBindingDescription;
+    try {
+      binding = assertBindingDescription(adapter.describe(rendered, {
+        dialectId: rendered.dialectId,
+        requestedReuse,
+        preparedName,
+      }), adapter, rendered);
+      if ("parameterizedSql" in binding) {
+        const parameterizedSql = binding.parameterizedSql;
+        if (parameterizedSql !== undefined && typeof parameterizedSql !== "string") {
+          throw new TypeError("BRAID_BIND_TRANSPORT: binding parameterized SQL must be a string.");
+        }
+        if ((binding.transport === "text-positional" || binding.transport === "text-named") && parameterizedSql === undefined) {
+          throw new TypeError("BRAID_BIND_TRANSPORT: text binding descriptions must provide parameterized SQL.");
+        }
+      } else if (binding.transport === "text-positional" || binding.transport === "text-named") {
+        throw new TypeError("BRAID_BIND_TRANSPORT: text binding descriptions must provide parameterized SQL.");
+      }
+    } catch (error) {
+      throw new PreparationFailure("materialize", error);
+    }
+    return { query, rendered, binding, meta: metadata(options, operationId, preparedName, batchId) };
   };
-  const prepareObserved = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, batchId?: string): Promise<PreparedOperation<Q>> => {
-    let operation = {
-      query,
-      rendered: { text: "", values: [], resultKind: query.resultKind } as RenderedQuery,
-      meta: metadata(options, nextOperationId(), preparedName, batchId),
-    } as PreparedOperation<Q>;
+  const observePrepared = async <Q extends Query<unknown, QueryResultKind>>(operation: PreparedOperation<Q>): Promise<void> => {
+    try {
+      await notify(options.observers ?? [], queryReadyEvent(operation));
+    } catch (error) {
+      await notifyError(options.observers ?? [], errorEvent(operation, error, "observer-before", false, false), error);
+    }
+  };
+  const prepareObserved = async <Q extends Query<unknown, QueryResultKind>>(query: Q, preparedName?: string, batchId?: string): Promise<PreparedOperation<Q>> => {
+    let operation: PreparedOperation<Q>;
     try {
       operation = prepare(query, preparedName, batchId);
     } catch (error) {
-      await notifyError(options.observers ?? [], errorEvent(operation as PreparedOperation<ExecutableQuery>, error, "render", false, false), error);
+      const failure = error instanceof PreparationFailure ? error : undefined;
+      const reported = failure === undefined ? error : failure.cause;
+      await notifyError(
+        options.observers ?? [],
+        errorEvent({ meta: metadata(options, nextOperationId(), preparedName, batchId) }, reported, failure?.stage ?? "render", false, false),
+        reported,
+      );
+      throw reported;
     }
-    try {
-      await notify(options.observers ?? [], queryReadyEvent(operation as PreparedOperation<ExecutableQuery>));
-    } catch (error) {
-      await notifyError(options.observers ?? [], errorEvent(operation as PreparedOperation<ExecutableQuery>, error, "observer-before", false, false), error);
-    }
+    await observePrepared(operation);
     return operation;
   };
   const physical = async <Q extends ExecutableQuery>(operation: PreparedOperation<Q>, use: Use): Promise<RawOperation<Q>> => {
@@ -588,7 +806,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     try {
       const result = await physicalContext.run(
         { rootState: options.rootState, direct: use.direct, stream: false },
-        () => use.executor.query<unknown>(operation.rendered),
+        () => use.executor.query<unknown>(operation.rendered, operation.binding),
       );
       return { ...operation, result, durationMs: now() - started, driverFailed: false };
     } catch (driverError) {
@@ -667,14 +885,13 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     const mapped = await processRows(operation, result, executionSchema);
     return mapped.rows[0];
   };
-  const runMaterialized = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, batchId?: string): Promise<RawOperation<Q>> => {
-    assertExecutableQuery(query);
-    const operation = await prepareObserved(query, preparedName, batchId);
+  const runPrepared = async <Q extends ExecutableQuery>(operation: PreparedOperation<Q>): Promise<RawOperation<Q>> => {
     let use: Use;
     try {
-      use = await leaseForUse(false);
+      use = await leaseForUse(false, statementBinding);
     } catch (error) {
-      await notifyError(options.observers ?? [], errorEvent(operation as PreparedOperation<ExecutableQuery>, error, "acquire", false, false), error);
+      const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
+      await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
       throw error;
     }
     const raw = await physical(operation, use!);
@@ -697,10 +914,20 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     }
     return raw;
   };
-  const materializedResult = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>, batchId?: string): Promise<QueryExecutionResult<unknown>> => {
-    const raw = await runMaterialized(query, preparedName, batchId);
+  const runMaterialized = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, batchId?: string): Promise<RawOperation<Q>> => {
+    assertExecutableQuery(query);
+    return runPrepared(await prepareObserved(query, preparedName, batchId));
+  };
+  const materializedPreparedResult = async <Q extends ExecutableQuery>(
+    operation: PreparedOperation<Q>,
+    executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>,
+  ): Promise<QueryExecutionResult<unknown>> => {
+    const raw = await runPrepared(operation);
     const result = await finalizePhysical(raw);
     return processRows(raw, result, executionSchema);
+  };
+  const materializedResult = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>, batchId?: string): Promise<QueryExecutionResult<unknown>> => {
+    return materializedPreparedResult(await prepareObserved(query, preparedName, batchId), executionSchema);
   };
   const executeNamed = async <Q extends ExecutableQuery>(query: Q, preparedName?: string): Promise<ExecutionResultOf<Q>> => await materializedResult(query, preparedName) as ExecutionResultOf<Q>;
   const allNamed = async <Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>, preparedName?: string): Promise<readonly Row[]> => {
@@ -740,26 +967,13 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     async call<Row>(query: CallQuery<Row>): Promise<RoutineCallResult<Row>> {
       assertOpen();
       if (query.resultKind !== "call") throw new TypeError("Only call queries may be executed with database.call().");
-      const operationId = nextOperationId();
-      let rendered: RenderedQuery = { text: "", values: [], resultKind: query.resultKind };
-      try {
-        rendered = query.render();
-      } catch (error) {
-        const fallback = { query, rendered, meta: metadata(options, operationId) } as unknown as PreparedOperation<ExecutableQuery>;
-        await notifyError(options.observers ?? [], errorEvent(fallback, error, "render", false, false), error);
-        throw error;
-      }
-      const operation = { query, rendered, meta: metadata(options, operationId) } as unknown as PreparedOperation<ExecutableQuery>;
-      try {
-        await notify(options.observers ?? [], queryReadyEvent(operation));
-      } catch (error) {
-        await notifyError(options.observers ?? [], errorEvent(operation, error, "observer-before", false, false), error);
-      }
+      const operation = await prepareObserved(query);
       let use: Use;
       try {
-        use = await leaseForUse(false);
+        use = await leaseForUse(false, statementBinding);
       } catch (error) {
-        await notifyError(options.observers ?? [], errorEvent(operation, error, "acquire", false, false), error);
+        const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
+        await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
         throw error;
       }
       if (!use!.executor.call) {
@@ -773,7 +987,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       let value: RoutineCallResult<Row>;
       let released = false;
       try {
-        value = await physicalContext.run({ rootState: options.rootState, direct: use!.direct, stream: false }, () => use!.executor.call!(rendered!));
+        value = await physicalContext.run(
+          { rootState: options.rootState, direct: use!.direct, stream: false },
+          () => use!.executor.call!(operation.rendered, operation.binding),
+        );
       } catch (error) {
         let releaseError: unknown;
         try { await use!.release(); } catch (failure) { releaseError = failure; poison(use!.physicalState, failure); }
@@ -788,7 +1005,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       try {
         await notify(options.observers ?? [], {
           type: "query:result",
-          operationId,
+          operationId: operation.meta.operationId,
           durationMs: now() - started,
           actualKind: "call",
           rowCount,
@@ -797,7 +1014,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         });
         await notify(options.observers ?? [], {
           type: "query:mapped",
-          operationId,
+          operationId: operation.meta.operationId,
           durationMs: 0,
           rowCount,
           queryMapped: false,
@@ -830,10 +1047,13 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       for (const query of queries) operations.push(await prepareObserved(query, undefined, batchId));
       let use: Use;
       try {
-        use = await leaseForUse(false);
+        use = await leaseForUse(false, statementBinding);
       } catch (error) {
         const operation = operations[0];
-        if (operation) await notifyError(options.observers ?? [], errorEvent(operation, error, "acquire", false, false), error);
+        if (operation) {
+          const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
+          await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
+        }
         throw error;
       }
       const raw: RawOperation<ExecutableQuery>[] = [];
@@ -869,20 +1089,61 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       if (options.preparedNames.has(name)) throw new Error(`BRAID_PREPARED_NAME: duplicate prepared query name ${name}.`);
       options.preparedNames.add(name);
       let shape: string | undefined;
-      const current = (): RowQuery<Row> => {
+      const current = (): PreparedOperation<RowQuery<Row>> => {
         const query = factory();
-        const rendered = query.render();
-        const nextShape = `${query.resultKind}:${rendered.text}:${parameterHintShape(rendered)}`;
+        const rendered = createRenderedStatement(query.render());
+        const nextShape = preparedShape(query, rendered);
         if (shape === undefined) shape = nextShape;
         else if (shape !== nextShape) throw new Error(`BRAID_PREPARED_SHAPE: prepared query ${name} changed its rendered structure.`);
-        return query;
+        return prepare(query, name, undefined, rendered);
+      };
+      const currentObserved = async (): Promise<PreparedOperation<RowQuery<Row>>> => {
+        const operation = current();
+        await observePrepared(operation);
+        return operation;
       };
       return {
         name,
-        execute: async () => await executeNamed(current(), name) as RowsExecutionResult<Row>,
-        all: async (validationOptions?: RowValidationOptions<Row>) => allNamed(current(), validationOptions, name),
-        one: async (validationOptions?: RowValidationOptions<Row>) => oneNamed(current(), validationOptions, name),
-        maybeOne: async (validationOptions?: RowValidationOptions<Row>) => maybeOneNamed(current(), validationOptions, name),
+        execute: async () => await materializedPreparedResult(await currentObserved()) as RowsExecutionResult<Row>,
+        all: async (validationOptions?: RowValidationOptions<Row>) => {
+          const result = await materializedPreparedResult(await currentObserved(), validationOptions?.schema);
+          if (result.kind !== "rows") malformedExecutionResult();
+          return result.rows as readonly Row[];
+        },
+        one: async (validationOptions?: RowValidationOptions<Row>) => {
+          const raw = await runPrepared(await currentObserved());
+          const result = await finalizePhysical(raw);
+          if (result.kind !== "rows") malformedExecutionResult();
+          if (result.rows.length !== 1) {
+            const error = new DatabaseCardinalityError("one", result.rows.length);
+            await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "cardinality", true, true, raw.durationMs), error);
+          }
+          return await processOne(raw, result, validationOptions?.schema) as Row;
+        },
+        maybeOne: async (validationOptions?: RowValidationOptions<Row>) => {
+          const raw = await runPrepared(await currentObserved());
+          const result = await finalizePhysical(raw);
+          if (result.kind !== "rows") malformedExecutionResult();
+          if (result.rows.length > 1) {
+            const error = new DatabaseCardinalityError("maybeOne", result.rows.length);
+            await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "cardinality", true, true, raw.durationMs), error);
+          }
+          if (result.rows.length === 0) {
+            try {
+              await notify(options.observers ?? [], queryMappedEvent(
+                raw as RawOperation<ExecutableQuery>,
+                0,
+                raw.query.resultSchema !== undefined,
+                validationOptions?.schema !== undefined,
+                0,
+              ));
+            } catch (error) {
+              await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "observer-after", true, true, raw.durationMs), error);
+            }
+            return undefined;
+          }
+          return await processOne(raw, result, validationOptions?.schema) as Row;
+        },
       };
     },
     stream<Row>(query: RowQuery<Row>, streamOptions: StreamOptions<Row> = {}): AsyncIterable<Row> {
@@ -892,19 +1153,37 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       const operationId = nextOperationId();
       let stream!: AsyncGenerator<Row>;
       stream = (async function* (): AsyncGenerator<Row> {
-        let rendered: RenderedQuery;
-        try { rendered = query.render(); } catch (error) {
-          const fallback = { query, rendered: { text: "", values: [], resultKind: query.resultKind }, meta: metadata(options, operationId) } as PreparedOperation<ExecutableQuery>;
-          await notifyError(options.observers ?? [], errorEvent(fallback, error, "render", false, false), error);
+        let operation: PreparedOperation<ExecutableQuery>;
+        try {
+          operation = prepare(query) as PreparedOperation<ExecutableQuery>;
+        } catch (error) {
+          const failure = error instanceof PreparationFailure ? error : undefined;
+          const reported = failure === undefined ? error : failure.cause;
+          const fallback = {
+            query,
+            rendered: { segments: [""], parameters: [], resultKind: query.resultKind, dialectId: "" },
+            binding: undefined,
+            meta: metadata(options, operationId),
+          } as unknown as PreparedOperation<ExecutableQuery>;
+          await notifyError(
+            options.observers ?? [],
+            errorEvent(fallback, reported, failure?.stage ?? "render", false, false),
+            reported,
+          );
+          throw reported;
         }
-        const operation = { query, rendered: rendered!, meta: metadata(options, operationId) } as PreparedOperation<ExecutableQuery>;
         try {
           await notify(options.observers ?? [], streamStartEvent(operation));
         } catch (error) {
           await notifyError(options.observers ?? [], errorEvent(operation, error, "observer-before", false, false), error);
         }
         let use: Use;
-        try { use = await leaseForUse(true); } catch (error) { await notifyError(options.observers ?? [], errorEvent(operation, error, "acquire", false, false), error); }
+        try {
+          use = await leaseForUse(true, statementBinding);
+        } catch (error) {
+          const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
+          await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
+        }
         const started = now();
         let count = 0;
         let streamError: unknown;
@@ -916,7 +1195,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         openStreams.add(stream);
         try {
           if (!use!.executor.stream) throw new Error("BRAID_STREAM_UNSUPPORTED: this adapter does not expose a streaming protocol.");
-          const source = physicalContext.run(activeContext, () => use!.executor.stream!(rendered!, streamOptions.signal));
+          const source = physicalContext.run(
+            activeContext,
+            () => use!.executor.stream!(operation.rendered, streamOptions.signal, operation.binding),
+          );
           iterator = source[Symbol.asyncIterator]();
           let queryStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
           let executionStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
@@ -972,7 +1254,16 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           }
           use!.physicalState.streamUsers -= 1;
           openStreams.delete(stream);
-          const endEvent: ExecutionEvent = { type: "stream:end", operationId, status: streamFailed ? "error" : "completed", durationMs: now() - started, rowCount: count, error: streamError, transactionDepth: options.depth, transactionScoped: options.transaction };
+          const endEvent: ExecutionEvent = {
+            type: "stream:end",
+            operationId: operation.meta.operationId,
+            status: streamFailed ? "error" : "completed",
+            durationMs: now() - started,
+            rowCount: count,
+            error: streamError,
+            transactionDepth: options.depth,
+            transactionScoped: options.transaction,
+          };
           try { await notify(options.observers ?? [], endEvent); }
           catch (error) {
             streamError = streamFailed ? new AggregateError([streamError, error], "Stream and observer failed.", { cause: streamError }) : error;
@@ -1015,7 +1306,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           use = { executor: lease, physicalState: state, direct: true, release: async () => {} };
         } else {
           await transactionEvent(observers, transactionId, "begin", "requested", depth);
-          try { use = await leaseForUse(false); }
+          try { use = await leaseForUse(false, statementBinding); }
           catch (error) {
             try { await transactionEvent(observers, transactionId, "begin", "failed", depth, undefined, undefined, error); }
             catch (reporting) { throw combine(error, [reporting]); }

@@ -5,6 +5,12 @@ description: Stable SQLBraid codes and the boundary each one protects.
 
 SQLBraid runtime/compiler errors expose a `code` where provided by their error type. Thin adapter capability errors use the `BRAID_*` marker in the message; do not assume every adapter error has a `code` property. Driver errors retain their original identity.
 
+Binding construction failures (placeholder generation, hint mapping, typed
+request construction, or unsupported transport selection) use error stage
+`"materialize"` and occur before lease acquisition or driver I/O. Driver/server/
+network failures remain stage `"driver"`. A materialization error has
+`executionStarted === false` and `executionCompleted === false`.
+
 | Code | Meaning |
 | --- | --- |
 | `BRAID_RESULT_KIND` | Declared result kind disagreed with adapter result after execution. |

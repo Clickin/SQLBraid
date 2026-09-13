@@ -58,6 +58,12 @@ node src/index.ts
 
 The output is a row array such as `[{ id: 1, name: "Ada" }]`. The requested ID is a driver-bound value, not interpolated SQL text.
 
+The node:sqlite adapter renders the logical statement to text with `?`
+placeholders, then uses the documented `DatabaseSync.prepare(text)` and
+`StatementSync` APIs. Materialization and hint validation happen before any
+statement execution. Reuse is adapter-owned when configured; SQLBraid does not
+invoke `SQLTagStore` through an undocumented callable path.
+
 ## 3. Add dynamic @braid and lower it
 
 Replace the `requestedId` declaration and query block in `src/index.ts` with this one:

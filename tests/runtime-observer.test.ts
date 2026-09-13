@@ -1,11 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import type { ConnectionProvider, ExecutionEvent, QueryExecutor, RenderedQuery, StandardSchemaV1 } from "@sqlbraid/core";
+import { createStatementBindingDescription } from "@sqlbraid/core";
+import type {
+  ConnectionProvider,
+  ExecutionEvent,
+  QueryExecutor,
+  RenderedStatement,
+  StatementBindingAdapter,
+  StandardSchemaV1,
+} from "@sqlbraid/core";
 import { DatabaseCardinalityError, createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { sql } from "@sqlbraid/template";
 
+const statementBinding = Object.freeze<StatementBindingAdapter>({
+  id: "runtime-observer-test",
+  describe(statement, context) {
+    return createStatementBindingDescription(statement, context, {
+      adapterId: "runtime-observer-test",
+      transport: "text-positional",
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: "simple", owner: "sqlbraid" },
+    });
+  },
+})
+
 function executor(): QueryExecutor {
-  return { async query<Row>() { return { kind: "rows", rows: [{ id: 1 }] as unknown as readonly Row[] }; } };
+  return { statementBinding, async query<Row>() { return { kind: "rows", rows: [{ id: 1 }] as unknown as readonly Row[] }; } };
 }
 
 function schema(validate: StandardSchemaV1.Props<unknown, unknown>["validate"]): StandardSchemaV1<unknown, unknown> {
@@ -18,10 +38,11 @@ test("observers await registration order and cannot replace SQL or bind slots", 
   const query = sql.rows`SELECT ${secret}`;
   let received: readonly unknown[] = [];
   const db = createDatabase({
-    async query<Row>(rendered: RenderedQuery) {
+    statementBinding,
+    async query<Row>(rendered: RenderedStatement) {
       order.push("driver");
-      received = rendered.values;
-      assert.equal(rendered.text, query.render().text);
+      received = rendered.parameters.map((parameter) => parameter.value);
+      assert.deepEqual(rendered.segments, query.render().segments);
       return { kind: "rows", rows: [] as readonly Row[] };
     },
   }, { observers: [
@@ -30,6 +51,16 @@ test("observers await registration order and cannot replace SQL or bind slots", 
       order.push(`A:${event.type}`);
       if (event.type === "query:ready") {
         assert.deepEqual(event.values, [secret]);
+        assert.deepEqual(event.execution, {
+          adapterId: "runtime-observer-test",
+          dialectId: "postgres",
+          transport: "text-positional",
+          reuse: { requested: "auto", effective: "simple", owner: "sqlbraid" },
+        });
+        assert.equal(Object.isFrozen(event.execution), true);
+        assert.equal(Object.isFrozen(event.execution.reuse), true);
+        assert.equal(event.sql, "SELECT $1");
+        assert.equal(event.literalizedSql({ values: "inline" }).text, "SELECT 'conspicuous-private-bind'");
         assert.equal(Reflect.set(event.values, "0", "replacement"), false);
         assert.equal(Reflect.set(event, "sql", "DELETE FROM users"), false);
       }
@@ -45,7 +76,7 @@ test("audit failure prevents acquisition and SQL execution", async () => {
   const failure = new Error("audit unavailable");
   let acquisitions = 0;
   const events: ExecutionEvent[] = [];
-  const provider: ConnectionProvider = { async acquire() { acquisitions += 1; return { ...executor(), release() {} }; } };
+  const provider: ConnectionProvider = { statementBinding, async acquire() { acquisitions += 1; return { ...executor(), release() {} }; } };
   const db = createPooledDatabase(provider, { observers: [{ onEvent(event) {
     events.push(event);
     if (event.type === "query:ready") throw failure;
@@ -58,14 +89,40 @@ test("audit failure prevents acquisition and SQL execution", async () => {
   assert.equal(error.executionStarted, false);
 });
 
+test("binding materialization fails before acquisition and reports the materialize stage", async () => {
+  const failure = new Error("placeholder generation failed");
+  let acquisitions = 0;
+  const failingBinding = Object.freeze<StatementBindingAdapter>({
+    id: "materialize-failure",
+    describe() { throw failure; },
+  })
+  const events: ExecutionEvent[] = [];
+  const db = createPooledDatabase({
+    statementBinding: failingBinding,
+    async acquire() {
+      acquisitions += 1;
+      throw new Error("must not acquire");
+    },
+  }, { observers: [{ onEvent(event) { events.push(event); } }] });
+
+  await assert.rejects(db.execute(sql`SELECT ${1}`), (error) => error === failure);
+  assert.equal(acquisitions, 0);
+  const error = events.find((event) => event.type === "query:error");
+  assert.ok(error?.type === "query:error");
+  assert.equal(error.stage, "materialize");
+  assert.equal(error.executionStarted, false);
+  assert.equal(error.executionCompleted, false);
+});
+
 test("observer errors identify each pipeline stage and preserve thrown mapper errors", async () => {
   const stages = ["render", "acquire", "driver", "result-kind", "query-map", "execution-map", "observer-after", "release"] as const;
   for (const stage of stages) {
     const failure = new Error(stage);
     const events: ExecutionEvent[] = [];
-    const db = createPooledDatabase({ async acquire() {
+    const db = createPooledDatabase({ statementBinding, async acquire() {
       if (stage === "acquire") throw failure;
       return {
+        statementBinding,
         async query<Row>() {
           if (stage === "driver") throw failure;
           if (stage === "result-kind") return { kind: "command" as const, rows: [] as const, command: {} };
@@ -96,6 +153,7 @@ test("observer errors identify each pipeline stage and preserve thrown mapper er
 test("observers distinguish result-kind mismatches from cardinality failures", async () => {
   const resultKindEvents: ExecutionEvent[] = [];
   const resultKindDb = createDatabase({
+    statementBinding,
     async query() {
       return { kind: "command" as const, rows: [] as const, command: { affectedRows: 1 } };
     },
@@ -117,6 +175,7 @@ test("observers distinguish result-kind mismatches from cardinality failures", a
   for (const [method, rows] of [["one", []], ["maybeOne", [{ id: 1 }, { id: 2 }]]] as const) {
     const events: ExecutionEvent[] = [];
     const db = createDatabase({
+      statementBinding,
       async query<Row>() {
         return { kind: "rows" as const, rows: rows as readonly Row[] };
       },
@@ -144,8 +203,8 @@ test("error observers preserve original failures including undefined rejection v
   for (const original of [new Error("driver failed"), undefined]) {
     const reporting = new Error("error audit failed");
     let released = 0;
-    const db = createPooledDatabase({ async acquire() {
-      return { async query() { throw original; }, release() { released += 1; } };
+    const db = createPooledDatabase({ statementBinding, async acquire() {
+      return { statementBinding, async query() { throw original; }, release() { released += 1; } };
     } }, { observers: [{ onEvent(event) { if (event.type === "query:error") throw reporting; } }] });
     await assert.rejects(db.execute(sql`SELECT 1`), (error) => error instanceof AggregateError && error.errors[0] === original && error.errors[1] === reporting);
     assert.equal(released, 1);
@@ -251,7 +310,7 @@ test("transaction and stream failures retain non-Error rejection values", async 
 test("early stream return propagates lease cleanup and end observer failures", async () => {
   for (const failingStage of ["release", "observer"] as const) {
     const failure = new Error(failingStage);
-    const db = createPooledDatabase({ async acquire() {
+    const db = createPooledDatabase({ statementBinding, async acquire() {
       return { ...executor(), async *stream<Row>() { yield 1 as Row; }, release() { if (failingStage === "release") throw failure; } };
     } }, { observers: [{ onEvent(event) { if (event.type === "stream:end" && failingStage === "observer") throw failure; } }] });
     await assert.rejects(async () => {

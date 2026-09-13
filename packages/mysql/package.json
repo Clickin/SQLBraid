@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/mysql",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.0",
   "description": "SQLBraid MySQL dialect, mysql2 adapter, and metadata inspector",
   "license": "MIT",
   "repository": {

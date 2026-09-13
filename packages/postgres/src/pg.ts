@@ -4,9 +4,13 @@ import type {
   DatabaseOptions,
   QueryExecutor,
   QueryExecutionResult,
-  RenderedQuery,
+  RenderedStatement,
   TypePolicy,
+  StatementBindingAdapter,
+  StatementBindingContext,
+  StatementBindingDescription,
 } from "@sqlbraid/core";
+import { createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -71,10 +75,49 @@ function assertUniqueFields(fields: readonly PgFieldLike[]): void {
   }
 }
 
-function assertParameterHintsUnsupported(rendered: RenderedQuery): void {
-  if (rendered.parameterHints?.some((hint) => hint !== undefined)) {
+function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
+  if (rendered.parameters.some((parameter) => parameter.hint !== undefined)) {
     throw new Error("BRAID_BIND_HINT_UNSUPPORTED: PostgreSQL adapter does not support explicit bind type hints.");
   }
+}
+
+const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+
+export const pgStatementBinding: StatementBindingAdapter = Object.freeze({
+  id: "pg",
+  describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
+    statement = createRenderedStatement(statement);
+    assertParameterHintsUnsupported(statement);
+    const description = createStatementBindingDescription(statement, context, {
+      adapterId: "pg",
+      transport: "text-positional",
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: "simple", owner: "driver" },
+    });
+    describedStatements.set(description, statement);
+    return description;
+  },
+});
+
+const defaultBindingContext: StatementBindingContext = Object.freeze({
+  dialectId: "postgres",
+  requestedReuse: "auto",
+});
+
+function materialize(
+  statement: RenderedStatement,
+  binding: StatementBindingDescription | undefined,
+): { readonly text: string; readonly values: readonly unknown[] } {
+  statement = createRenderedStatement(statement);
+  const description = binding ?? pgStatementBinding.describe(statement, defaultBindingContext);
+  if (describedStatements.get(description) !== statement) throw new TypeError("BRAID_BINDING_IDENTITY: PostgreSQL description belongs to another statement or adapter.");
+  if (description.parameterizedSql === undefined) {
+    throw new Error("BRAID_BIND_TRANSPORT: PostgreSQL binding description did not provide parameterized SQL.");
+  }
+  return {
+    text: description.parameterizedSql,
+    values: statement.parameters.map((parameter) => parameter.value),
+  };
 }
 
 export function createPgExecutor(client: PgClientLike, options: { readonly typePolicy?: TypePolicy } = {}): QueryExecutor {
@@ -83,18 +126,19 @@ export function createPgExecutor(client: PgClientLike, options: { readonly typeP
   const runControl = async (text: string): Promise<void> => { await client.query({ text, values: [] }); };
   return {
     ownershipKey: client,
-    async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
+    statementBinding: pgStatementBinding,
+    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
-      const result = await client.query({ text: rendered.text, values: rendered.values });
+      const result = await client.query(materialize(rendered, binding));
       assertUniqueFields(result.fields ?? []);
       const rows = result.rows.map((row) => plainRow(row, result.fields ?? [], policy));
       const rowCount = result.rowCount ?? undefined;
       const rowBearing = (result.fields?.length ?? 0) > 0 || result.rows.length > 0 || result.command === "SELECT";
       return rowBearing ? { rows: rows as readonly Row[], rowCount, kind: "rows" } : { rows: [], rowCount, kind: "command", command: { affectedRows: rowCount } };
     },
-    async call<Row>(rendered: RenderedQuery) {
+    async call<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription) {
       assertParameterHintsUnsupported(rendered);
-      const result = await client.query({ text: rendered.text, values: rendered.values });
+      const result = await client.query(materialize(rendered, binding));
       assertUniqueFields(result.fields ?? []);
       const rows = result.rows.map((row) => plainRow(row, result.fields ?? [], policy));
       return { output: {}, resultSets: [{ rows: rows as readonly Row[] }] };
@@ -115,6 +159,7 @@ export function createPgDatabase(client: PgClientLike, options: PgDatabaseOption
 
 export function createPgPoolProvider(pool: PgPoolLike, options: { readonly typePolicy?: TypePolicy } = {}): ConnectionProvider {
   return {
+    statementBinding: pgStatementBinding,
     async acquire(): Promise<ConnectionLease> {
       const client = await pool.connect();
       const executor = createPgExecutor(client, options);

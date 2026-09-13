@@ -15,3 +15,5 @@ The short version:
 - Change config or metadata before regenerating models; run `sqlbraid codegen --check`.
 
 SQLBraid does not require MCP. An agent can use ordinary LSP transport or invoke the CLI in a disposable project environment.
+
+Driver and executor authors should read the [driver-author binding guide](/SQLBraid/dev/agents/driver-author/) before implementing a custom transport.

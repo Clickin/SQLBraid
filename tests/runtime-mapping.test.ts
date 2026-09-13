@@ -2,12 +2,26 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import * as v from 'valibot';
 import { z } from 'zod';
-import type { QueryExecutor, StandardSchemaV1 } from '@sqlbraid/core';
+import { createStatementBindingDescription } from '@sqlbraid/core';
+import type { QueryExecutor, StandardSchemaV1, StatementBindingAdapter } from '@sqlbraid/core';
 import { sql } from '@sqlbraid/template';
 import { createDatabase, DatabaseResultValidationError } from '@sqlbraid/runtime';
 
+const statementBinding = Object.freeze<StatementBindingAdapter>({
+  id: 'runtime-mapping-test',
+  describe(statement, context) {
+    return createStatementBindingDescription(statement, context, {
+      adapterId: 'runtime-mapping-test',
+      transport: 'text-positional',
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: 'simple', owner: 'sqlbraid' },
+    });
+  },
+})
+
 function rowsExecutor(rows: readonly unknown[]): QueryExecutor {
   return {
+    statementBinding,
     async query<Row>() {
       return { kind: 'rows' as const, rows: rows as readonly Row[] };
     },

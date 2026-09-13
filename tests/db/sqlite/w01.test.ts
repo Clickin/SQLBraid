@@ -13,7 +13,23 @@ import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";
 import { sql, typePolicy as sqliteTypePolicy } from "@sqlbraid/sqlite";
 import { runW01 } from "../w01.js";
+import { bindingObserver } from "../binding.js";
 import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGeneratedPropertyAbsent } from "../codegen.js";
+
+test("SQLite binding diagnostics preserve literal marker text through real execution", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    const probe = bindingObserver("sqlite", "text-positional");
+    const db = createNodeSqliteDatabase(native, { observers: [probe.observer] });
+    assert.deepEqual(
+      await db.one(sql.rows`SELECT ${"O'Reilly"} AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */`),
+      { value: "O'Reilly", marker: "$1 ? :1 @p1" },
+    );
+    probe.verify("SELECT ? AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */");
+  } finally {
+    native.close();
+  }
+});
 
 test("SQLite materialized query mappers reenter after releasing the root resource", async () => {
   const native = new DatabaseSync(":memory:");

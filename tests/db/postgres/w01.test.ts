@@ -10,6 +10,7 @@ import { createPgDatabase, createPgPoolDatabase } from "@sqlbraid/postgres/pg";
 import { createPostgresInspector } from "@sqlbraid/postgres/inspector";
 import { sql, typePolicy as postgresTypePolicy } from "@sqlbraid/postgres";
 import { runW01 } from "../w01.js";
+import { bindingObserver } from "../binding.js";
 import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGeneratedPropertyAbsent } from "../codegen.js";
 
 async function endPool(pool: Pick<Pool, "end">): Promise<void> {
@@ -19,6 +20,20 @@ async function endPool(pool: Pick<Pool, "end">): Promise<void> {
   await Promise.race([ending, timeout.promise]);
   clearTimeout(timer);
 }
+
+test("PostgreSQL binding diagnostics preserve literal marker text through real execution", async () => {
+  const client = new Client({ connectionString: inject("postgres").connectionUri });
+  await client.connect();
+  try {
+    const probe = bindingObserver("postgres", "text-positional");
+    const db = createPgDatabase(client, { observers: [probe.observer] });
+    const query = sql.rows`SELECT ${"O'Reilly"}::text AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */`;
+    assert.deepEqual(await db.one(query), { value: "O'Reilly", marker: "$1 ? :1 @p1" });
+    probe.verify("SELECT $1::text AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */");
+  } finally {
+    await client.end();
+  }
+});
 
 test("PostgreSQL wrappers sharing one client preserve transaction isolation", async () => {
   const settings = inject("postgres");

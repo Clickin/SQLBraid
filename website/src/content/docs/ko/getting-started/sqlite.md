@@ -58,6 +58,12 @@ node src/index.ts
 
 출력은 `[{ id: 1, name: "Ada" }]`와 같은 행 배열입니다. 요청한 ID는 드라이버에 바인드되는 값이며 SQL 텍스트에 삽입되지 않습니다.
 
+node:sqlite 어댑터는 논리 문장을 `?` placeholder가 있는 텍스트로 만든 뒤
+문서화된 `DatabaseSync.prepare(text)`와 `StatementSync` API를 사용합니다.
+구체화와 힌트 검증은 statement 실행 전에 끝납니다. reuse가 필요하면
+어댑터가 소유하며, SQLBraid는 문서화되지 않은 `SQLTagStore` 호출 경로를
+사용하지 않습니다.
+
 ## 3. 동적 @braid 추가 및 lowering
 
 `src/index.ts`에서 `requestedId` 선언과 쿼리 블록을 다음 코드로 바꾸세요.
