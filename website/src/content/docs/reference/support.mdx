@@ -1,72 +1,60 @@
 ---
 title: Runtime and driver support
-description: Separate release evidence from compatibility expectations and custom adapters.
+description: Separate implemented capability paths from the pending PV15 release evidence.
 ---
 
-import BuildProvenance from "../../../components/BuildProvenance.astro";
+PV15 final verification is pending. This page deliberately makes no current
+SHA, CI, publication, or Official support claim. A package name or a local
+fixture is not release evidence.
 
-> PV14 binding transport and observer diagnostics are under development/review.
-> Verification is pending on the exact final revision. This page makes no new
-> SHA, CI, runtime support, package version, or RC publication claim; RC
-> publication remains deferred until PV14 development, review, and user
-> acceptance are complete. The historical evidence below retains its original
-> provenance.
+## Evidence labels
 
-Support labels mean:
+- **Pending** — the implementation path exists, but PV15 final release-gate evidence has not been supplied here.
+- **Historical** — an exact revision or old workflow exercised a combination; it does not prove the current PV15 tree.
+- **Compatible expectation** — based on public APIs and adapter contracts, without a release-gate claim.
+- **Custom** — a user-provided `QueryExecutor` or `ConnectionProvider`.
+- **Unsupported** — the required SQLBraid capability is intentionally absent.
 
-- **Official** — exercised in the SQLBraid release gate for that runtime/driver combination.
-- **Compatible** — expected from public APIs and checked locally, but not a release-gate claim.
-- **Custom** — connected through `QueryExecutor` or `ConnectionProvider` rather than a first-party adapter.
-- **Unsupported** — a required capability is absent, or the combination has explicitly failed checks.
+## Current PV15 matrix (final evidence pending)
 
-The matrix is evidence, not a promise inferred from a package existing. In particular, an adapter is not Official until a real database check is part of the release gate.
-
-| Runtime/library | Status | Evidence |
+| Runtime or adapter path | Status | Boundary |
 | --- | --- | --- |
-| Node 22.18.0 + core/template/runtime | Official | Release gate target |
-| Node 24.21.0 + core/template/runtime | Compatible | Local packed smoke, not a CI gate |
-| Bun 1.3.14 + core/template/runtime | Official | Packed portability smoke |
-| Deno 2.9.3 + core/template/runtime | Official | Packed portability smoke |
+| Node `>=22.18.0` + core/template/runtime | Pending | Runtime package target |
+| Node 24 + Vite 8 application integration | Pending | `@sqlbraid/vite` pre-transform; server runtime is separate |
+| PostgreSQL / `pg` | Pending | Ordinary execution; `pg-cursor` optional peer for streaming |
+| MySQL / `mysql2` | Pending | Ordinary execution and raw prepared `Execute.stream()` |
+| SQLite / `node:sqlite` | Pending | Node statement APIs; `integerMode` is explicit |
+| Oracle Thin / `node-oracledb` | Pending | Scalar/cursor/implicit routine resources must close before lease release |
+| SQL Server / Tedious | Pending | Request events, OUTPUT values, and explicit procedure metadata for RETURN |
+| Other driver or database | Custom | Independent adapter evidence required |
 
-| Adapter or integration | Node 22.18.0 | Node 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
-| --- | --- | --- | --- | --- |
-| PostgreSQL / `pg` 8.23.0 | Official | Compatible | Official | Official |
-| MySQL / `mysql2` 3.24.4 | Official | Compatible | Official | Official |
-| SQLite / `node:sqlite` | Official | Compatible | Unsupported | Official |
-| Oracle portable root / `@sqlbraid/oracle` | Official | Compatible | Official | Official |
-| Oracle Thin / `node-oracledb` 7.0.1 | Official | Compatible | Unsupported | Unsupported |
-| SQL Server portable root / `@sqlbraid/mssql` | Official | Compatible | Official | Official |
-| SQL Server / Tedious 20.0.0 | Official | Compatible | Unsupported | Unsupported |
-| Other driver or database | Custom | Custom | Custom | Custom |
+The five first-party row-streaming primitives are implemented as distinct driver
+capabilities, not dialect flags:
 
-Oracle targets `node-oracledb` Thin mode; Thick mode is not Official. SQL Server targets the Tedious adapter. The Oracle `call()` path and SQL Server OUT/return-value routine binding are Unsupported in this RC. PostgreSQL, MySQL, and SQLite explicitly reject parameter hints rather than silently ignoring them.
-
-## PV14 transport map (verification pending)
-
-All five first-party adapters receive the same logical `RenderedStatement` and
-materialize their own request after pure binding description:
-
-| Path | Transport | Effective reuse policy |
+| Adapter | `db.stream()` primitive | Important boundary |
 | --- | --- | --- |
-| PostgreSQL / `pg` | text-positional `$1..$N` | fresh unnamed simple, driver-owned |
-| MySQL / `mysql2` | text-positional `?` | driver-owned reuse |
-| SQLite / `node:sqlite` | documented `DatabaseSync.prepare(text)` with `?` | fresh simple, driver-owned |
-| Oracle Thin / `node-oracledb` | text-positional `:1..:N` with descriptors | driver cache reuse |
-| SQL Server / Tedious | typed request `@p1..@pN` with `TYPES.*` | fresh Request/`execSql`, simple |
+| PostgreSQL / `pg` | `pg-cursor` | Optional peer; missing capability yields `BRAID_STREAM_UNSUPPORTED`. |
+| MySQL / `mysql2` | raw prepared `Execute.stream()` | Preserve prepared/binary execution; drain or discard before lease release. |
+| SQLite / `node:sqlite` | `StatementSync.iterate()` | Native iterator termination is the cleanup boundary. |
+| Oracle Thin | `ResultSet` | Close every ResultSet; close failure discards the lease. |
+| SQL Server / Tedious | Request row events + bounded queue | Request completion precedes lease release. |
 
-Requested reuse is policy input, not evidence of effective reuse; the adapter
-reports the effective result. Placeholder syntax does not participate in
-logical prepared shape identity.
+Materialized `db.all()` is intentionally buffered. `db.call()` materializes
+and closes routine result resources before mapping heterogeneous result-set
+schemas. PostgreSQL refcursor calls require an existing transaction; MySQL
+prepared CALL OUT/INOUT is rejected because mysql2 3.x exposes no proven public
+carrier discriminator; SQLite routine calls remain unsupported; SQL Server
+`CURSOR VARYING OUTPUT` is not an application cursor channel.
 
-Dialect, driver, execution runtime, and transaction profile are separate axes. The [successful PV13 runtime gate at d4bc626](https://github.com/Clickin/SQLBraid/actions/runs/34753809318) exercises Oracle 23.9.0.25.07 Thin and SQL Server 2022 CU18 (16.0.4185.3) with Node 22.18.0 on Linux x64. Local SQL Server ARM emulation does not establish Official ARM support. Bun/Deno driver subpaths and Oracle Thick mode are not covered; all five portable roots pass separately on the pinned Node/Bun/Deno versions.
+## Historical evidence
 
-## Release evidence provenance
+The following links are retained for provenance only:
 
-<BuildProvenance />
+- PV13 runtime evidence at revision [`d4bc626`](https://github.com/Clickin/SQLBraid/commit/d4bc626) and its historical workflow run [`34753809318`](https://github.com/Clickin/SQLBraid/actions/runs/34753809318).
+- PV11 evidence at revision [`1615311`](https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7) and historical workflow run [`34745030794`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794).
 
-- Current verification history: [commits on `main`](https://github.com/Clickin/SQLBraid/commits/main/)
-- Historical PV11 evidence: [revision `1615311`](https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7) and [workflow run `34745030794`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794)
-
-This matrix is documentation, not a test result. Use release evidence and individual checks for claims about the full release gate.
+Those exact revisions predate PV15 and are not claims about the current source,
+current drivers, current Vite integration, or RC publication. Main must replace
+Pending entries with final evidence after PV15 verification.
 
 For custom adapters, see the [driver-author binding guide](/SQLBraid/dev/agents/driver-author/).

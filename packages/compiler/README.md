@@ -1,16 +1,16 @@
 # @sqlbraid/compiler
 
-Compile SQLBraid tagged templates into typed SQL query definitions and virtual source.
+Compile SQLBraid guarded templates into typed SQL query definitions and source-mapped virtual source.
 
 ```sh
 npm install @sqlbraid/compiler
 ```
 
 ```ts
-import { createVirtualOverlay } from "@sqlbraid/compiler";
-const overlay = createVirtualOverlay("const query = sql`SELECT 1`;", "query.ts", {
-  moduleSpecifier: "@sqlbraid/template",
-});
+import { transformSource } from "@sqlbraid/compiler";
+const result = transformSource(source, "src/query.ts");
 ```
 
-The primary import is `@sqlbraid/compiler`; use it to build editor, CLI, or code-generation integrations around SQLBraid templates. See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+`transformSource` lowers SQLBraid guarded-template semantics only. It does not transpile TypeScript, TSX/JSX, decorators, module format, or framework code; Vite/Oxc/Rolldown remains responsible for those transforms. Use `@sqlbraid/vite` for the Vite 8 pre-transform and preserve its returned source map when composing downstream transforms.
+
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

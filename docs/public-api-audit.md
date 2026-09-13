@@ -1,6 +1,6 @@
 # 0.1.0 public API freeze audit
 
-> PV14 delta (exact-revision verification pending): the execution SPI has cut over from
+> PV14/PV15 delta (exact-revision verification pending): the execution SPI has cut over from
 > `RenderedQuery` to immutable `RenderedStatement` (`segments` plus atomic
 > `parameters`). Core now owns `parameterizedSql`,
 > `createRenderedStatement`, and `createStatementBindingDescription`; drivers
@@ -9,7 +9,7 @@
 > runtime support label, or publication. Preserve the historical inventory and
 > provenance below until the exact final revision is audited.
 
-Initial audit baseline: `1615311149cce6290976df3ed6e63e41dfe795d7`; PV13 extends the inventory from `d111e116d66ce9fc1b060881778ab1845874ef57`. All 16 npm packages and every manifest export subpath are inventoried below. This is an API classification, not a claim that release CI or registry publication has passed.
+Initial audit baseline: `1615311149cce6290976df3ed6e63e41dfe795d7`; PV13 extends the inventory from `d111e116d66ce9fc1b060881778ab1845874ef57`; PV15 starts at `2aa3067dcf0c03ccde58a2eca2940c383a73729e`. All 17 npm packages and every manifest export subpath are inventoried below. This is an API classification, not a claim that release CI or registry publication has passed.
 
 - **Application**: documented application authoring/execution/configuration API.
 - **SPI**: documented low-level physical driver, provider, dialect, representation or inspector contract.
@@ -45,6 +45,20 @@ Executable convenience wrapper; no named application exports and no driver depen
 
 ## @sqlbraid/core
 
+**PV15 Application:** `RoutineContract`, `RoutineParameter`,
+`RoutineParameterDirection`, `RoutineProcedure`, `RoutineSchema`,
+`RoutineResultFromContract`, `RoutineResultSetTuple`, `RoutineMappingError`,
+`RoutineMappingLocation`, `SqlTag.out()` and `SqlTag.inOut()`.
+`RoutineCallResult<Output, Sets, ReturnValue>` replaces the single-row generic;
+`CallQuery<Result>` carries the complete result contract.
+
+**PV15 SPI:** `DriverRoutineResult`, `DriverRoutineResultSet`,
+`RoutineResultSource`, `DriverCapabilityErrorCode`. `QueryExecutor.stream()` and `call()` are required
+capability methods. Raw source metadata is not copied into application result sets.
+
+**PV15 Advanced:** `createRoutineOutParameter`, `createRoutineInOutParameter`,
+`isRoutineParameter`.
+
 **Application:** `CallQuery`, `CommandExecutionResult`, `CommandQuery`, `CommandResult`, `Database`, `DatabaseOptions`, `ExecutableQuery`, `ExecutionEvent`, `ExecutionObserver`, `ExecutionResultOf`, `PreparedQuery`, `Query`, `QueryErrorEvent`, `QueryErrorStage`, `QueryExecutionResult`, `QueryMappedEvent`, `QueryReadyEvent`, `QueryResultEvent`, `QueryResultKind`, `QueryRow`, `RenderLimits`, `RoutineCallResult`, `RoutineResultSet`, `RowQuery`, `RowValidationOptions`, `RowsExecutionResult`, `RowsTag`, `SqlFragment`, `SqlRenderError`, `SqlTag`, `StandardSchemaV1`, `StreamEndEvent`, `StreamOptions`, `StreamStartEvent`, `TransactionEvent`, `TransactionEventPhase`.
 
 **SPI:** `ConnectionLease`, `ConnectionProvider`, `Dialect`, `DialectLexicalProfile`, `QueryExecutor`, `RenderedStatement`, `RenderedParameter`, `ParameterTransportKind`, `StatementBindingAdapter`, `StatementBindingContext`, `StatementBindingDescription`, `BindingDescription`, `LiteralizeOptions`, `LiteralizedSqlResult`, `TypeMapping`, `TypePolicy`.
@@ -79,6 +93,10 @@ values/hints/maps are derived views; no parallel mutable statement arrays remain
 **Advanced:** `createSqlTag`, `dialect`, `typePolicy`.
 
 ## @sqlbraid/mysql/mysql2
+
+**PV15 SPI:** `Mysql2RawStreamLike`, `Mysql2RawCommandLike`,
+`Mysql2RawConnectionLike`, `Mysql2FieldPayload`, `Mysql2Parameter`.
+`Mysql2ExecutorOptions.streamHighWaterMark` bounds native delivery.
 
 **Application:** `createMysql2Database`, `createMysql2PoolDatabase`.
 
@@ -134,11 +152,15 @@ values/hints/maps are derived views; no parallel mutable statement arrays remain
 
 ## @sqlbraid/postgres
 
-**Application:** `sql`.
+**Application:** `sql`, `postgresParameter.refcursor()`.
 
 **Advanced:** `createSqlTag`, `dialect`, `typePolicy`.
 
 ## @sqlbraid/postgres/pg
+
+**PV15 SPI:** `PgCursorLike`, `PgCursorFactory`, `PgExecutorOptions`.
+The optional pg-cursor peer is loaded only for streaming; `streamBatchSize`
+bounds cursor reads. Public cursor callback metadata drives row normalization.
 
 **Application:** `createPgDatabase`, `createPgPoolDatabase`.
 
@@ -156,7 +178,10 @@ values/hints/maps are derived views; no parallel mutable statement arrays remain
 
 ## @sqlbraid/sqlite
 
-**Application:** `sql`.
+**Application:** `sql`, `typePolicyForIntegerMode`.
+
+**PV15 Application:** `SqliteIntegerMode`, `SqliteExecutorOptions`,
+`SqliteDatabaseOptions`, also exported by `/node-sqlite`.
 
 **Advanced:** `createSqlTag`, `dialect`, `typePolicy`.
 
@@ -181,4 +206,13 @@ values/hints/maps are derived views; no parallel mutable statement arrays remain
 **Application:** `defineConfig`.
 
 **Advanced:** `CONFIG_NAMES`, `Cancellation`, `CodegenTargetConfig`, `CompletionItem`, `ConfigurationCancellationError`, `ConfigurationError`, `HoverResult`, `LanguageServiceOptions`, `LoadedConfig`, `Location`, `Position`, `QuerySymbol`, `SignatureResult`, `SourceDocument`, `SqlBraidConfig`, `SqlBraidLanguageService`, `ToolingDiagnostic`, `ToolingTarget`, `ToolingWorkspace`, `WorkspaceCancellationError`, `WorkspaceOptions`, `WorkspaceSymbol`, `createLanguageService`, `createWorkspace`, `loadConfig`, `validateConfig`.
+
+## @sqlbraid/vite
+
+**Application:** default `sqlbraid()` Vite plugin, `SqlBraidViteOptions`,
+`FilterPattern`.
+
+**Advanced:** `transformSource`, `CompileDiagnostic`, `SourceMap`,
+`TransformSourceOptions`, `TransformSourceResult` reexports from the compiler.
+These are build-tool APIs; Vite/React/TanStack are not runtime dependencies.
 

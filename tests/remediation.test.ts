@@ -115,7 +115,7 @@ test('PV1 query contracts and explicit kinds are checked by TypeScript', () => {
   const rows = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db: Database; type UserRow = {id:number}; const query = sql.rows<UserRow>`SELECT custom_company_function(id) AS id FROM vendor_table`; db.all(query);";
   assert.equal(checkSource(rows, join(tmpdir(), 'sqlbraid-pv1-rows.ts'), options).length, 0);
 
-  const call = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db:Database; type UserRow = {id:number}; const query = sql.call<UserRow>`CALL vendor_procedure()`; db.call(query);";
+  const call = "import {sql} from '@sqlbraid/template'; import type {Database} from '@sqlbraid/core'; declare const db:Database; const query = sql.call`CALL vendor_procedure()`; db.call(query);";
   assert.equal(checkSource(call, join(tmpdir(), 'sqlbraid-pv1-call.ts'), options).length, 0);
 }, 15_000);
 
@@ -410,6 +410,7 @@ test('prepared queries reject shape drift and streams honor adapter capability',
     statementBinding: testBinding,
     async query<Row>(rendered: RenderedStatement) { return { kind: 'rows' as const, rows: [{ text: postgresSql(rendered) }] as unknown as readonly Row[] }; },
     async *stream<Row>(rendered: RenderedStatement): AsyncIterable<Row> { yield { text: postgresSql(rendered) } as unknown as Row; },
+    async call() { throw new Error('BRAID_CALL_UNSUPPORTED'); },
   });
   const prepared = db.prepare('users', () => second ? postgres.rows`SELECT name` : postgres.rows`SELECT id`);
   assert.deepEqual(await prepared.all(), [{ text: 'SELECT id' }]);

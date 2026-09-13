@@ -65,3 +65,23 @@ mysql2 바인딩 어댑터는 논리 문장을 text-positional `?` placeholder�
 :::caution `createMysql2Database`에 풀을 전달하지 마세요
 풀에는 `createMysql2PoolDatabase(pool)`을 사용하세요. 명시적 팩토리는 트랜잭션과 반환 의미가 물리적 연결에 안전하도록 보장합니다.
 :::
+
+## 스트리밍과 루틴 경계
+
+`db.stream()`은 promise connection 뒤의 raw prepared
+`Execute.stream()` command를 사용합니다. prepared/binary 실행을 유지하며
+text `query()`로 낮추지 않습니다. break 또는 abort 시 SQLBraid는 행 전달을
+중지하고 lease 반환 전에 command를 drain하거나 물리 연결을 폐기합니다.
+
+MySQL emitted result set은 서로 다른 형태일 수 있습니다.
+
+```ts
+const result = await db.call(sql.call({
+  resultSets: [UserSchema, SummarySchema] as const,
+})`CALL dashboard()`);
+```
+
+Prepared CALL OUT/INOUT은 현재 `BRAID_CALL_OUT_UNSUPPORTED`로 거부합니다.
+mysql2 3.x에는 protocol의 추가 OUT carrier result를 구분하는 검증된 public
+discriminator가 없으므로 SQLBraid는 carrier 행을 추측하지 않습니다. Stored
+function은 result set을 내보낼 수 없습니다.

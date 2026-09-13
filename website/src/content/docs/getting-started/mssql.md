@@ -51,7 +51,7 @@ try {
 }
 ```
 
-Tedious receives deterministic `@p1`, `@p2`, ... parameter names. `sql.bind` selects the database type; it does not turn the value into SQL text. OUT/return-value routine binding is Unsupported in this RC.
+Tedious receives deterministic `@p1`, `@p2`, ... parameter names. `sql.bind` selects the database type; it does not turn the value into SQL text. Scalar OUTPUT/INOUT routine parameters require explicit hints. A T-SQL integer RETURN status requires explicit `procedure: { name, parameterNames }` metadata in the `sql.call` contract; SQLBraid does not parse arbitrary `EXEC` text to guess identity.
 
 The Tedious binding adapter materializes a logical statement as a typed request:
 deterministic `@p1`, `@p2`, … names, `TYPES.*` mappings, encoded values, and
@@ -61,11 +61,18 @@ acquisition. Tedious owns effective reuse; failures in this work are
 
 ## Capability boundaries
 
-- CI covers the Tedious adapter on Node 22.18.0/Linux x64, and checks portable roots separately on the pinned Node/Bun/Deno versions.
-- The SQL Server gate uses 2022 CU18 (16.0.4185.3), Linux x64; local ARM emulation is not an Official ARM claim.
+- The target combination is Tedious on Node 22.18.0/Linux x64. PV15 final
+  verification is pending; do not treat the historical matrix as a current
+  release-gate result.
+- Historical fixtures use SQL Server 2022 CU18 (16.0.4185.3), Linux x64;
+  local ARM emulation is outside this guide's verification scope.
 - Unhinted common values use adapter-local Tedious inference. Use an explicit hint for `null`, custom objects, precision/scale, lengths, or SQL Server-specific types.
 - The adapter preserves multiple recordsets instead of flattening them into fabricated single-row results.
+- `CURSOR VARYING OUTPUT` is not an application cursor channel and is rejected with `BRAID_CALL_CURSOR_UNSUPPORTED`. Batches that consume a local cursor and emit `SELECT` rows return those rows as ordinary result sets.
 
 Tedious returns `decimal`/`numeric` as JavaScript numbers; this default policy does not promise arbitrary-precision decimal results. Explicit decimal-text inputs exceeding 15 significant digits are rejected with `BRAID_BIND_DECIMAL_EXACTNESS`. For exact decimal text, select an explicit SQL string conversion and declare a string result contract. `bigint` results use strings. Date/time values use `Date`, which does not preserve the original offset or sub-millisecond precision.
 
 See [runtime and driver support](/SQLBraid/reference/support/) for the evidence labels and current matrix.
+
+For the explicit procedure metadata shape and heterogeneous `sql.call` result
+contract, see [routine calls](/SQLBraid/concepts/routines/).

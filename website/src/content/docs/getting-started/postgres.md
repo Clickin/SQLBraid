@@ -71,3 +71,22 @@ SQLBraid does not duck-type pools. Passing `pg.Pool` to the direct factory is th
 :::
 
 See [direct connections and pools](/SQLBraid/runtime/direct-pools/) and [transactions](/SQLBraid/runtime/transactions/) for the boundary in detail.
+
+## Streaming and routines
+
+Install `pg-cursor` only when this application uses `db.stream()`:
+
+```bash
+npm install pg-cursor
+```
+
+The peer is optional for ordinary queries. PostgreSQL streaming uses cursor
+batch reads and reports `BRAID_STREAM_UNSUPPORTED` if the capability is absent.
+Abort awaits physical `Client.end()` and discards the connection, including a
+pending batch read. Pools replace that connection; direct clients must be
+replaced. Custom wrappers need to expose `end()` for abortable streams.
+For a routine with a `refcursor` OUT/INOUT parameter, use
+`postgresParameter.refcursor()` and call it inside an existing
+`db.tx(async (tx) => tx.call(query))` scope. SQLBraid fetches and closes the
+transaction-bound portal, removes it from scalar `output`, and returns its rows
+in `resultSets`; it never creates a hidden transaction.

@@ -65,4 +65,8 @@ const query = sql.rows<UserRow>`
 
 SQLBraid의 렌더링 제한은 SQL 바이트 크기, 바인드 수, 구조적 항목 수, 중첩 깊이도 제한합니다. 애플리케이션에 더 엄격한 범위가 필요하면 `createSqlTag({ dialect, limits })`를 통해 제한을 구성하세요.
 
-PostgreSQL, MySQL, SQLite는 `BRAID_BIND_HINT_UNSUPPORTED`로 힌트가 있는 쿼리를 명시적으로 거부하며 결코 조용히 무시하지 않습니다. 데이터베이스 타입 API가 필요하면 해당하는 첫 번째 파티 Oracle 또는 SQL Server 어댑터를 사용하세요.
+PostgreSQL, MySQL, SQLite는 일반 힌트를 `BRAID_BIND_HINT_UNSUPPORTED`로
+명시적으로 거부하며 결코 조용히 무시하지 않습니다. PostgreSQL의
+루틴 전용 `postgresParameter.refcursor()`는 OUT/INOUT portal을 분류합니다.
+다른 데이터베이스 타입 API가 필요하면 해당하는 첫 번째 파티 Oracle 또는
+SQL Server 어댑터를 사용하세요.

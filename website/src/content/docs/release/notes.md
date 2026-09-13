@@ -1,23 +1,39 @@
 ---
-title: 0.1.0 release notes
-description: The SQL-first pre-release surface shipped for the September launch.
+title: PV15 release notes
+description: The pre-release surface for streaming, routine channels, and Vite integration.
 ---
 
-SQLBraid 0.1.0 is a public pre-release focused on a stable, SQL-first TypeScript contract.
+PV15 documentation describes the pre-release SQLBraid surface. Final verification
+is pending; these notes make no final SHA, CI, publication, or Official support
+claim.
 
-## Included
+## Included contract
 
-- PostgreSQL, MySQL, and SQLite dialects with first-party `pg`, `mysql2`, and `node:sqlite` adapters;
-- safe binds, explicit `rows`/`command`/`call` result kinds, structural fragments, and dynamic `@braid` directives;
-- Standard Schema query-bound and execution-level row mapping;
-- direct and pooled execution with physical connection leases;
-- transactions, savepoints, streaming, prepared shape locks, and execution observers;
-- optional metadata v1 snapshots, inspectors, deterministic Row/Insert/Update codegen, and `codegen --check`;
-- standard stdio LSP, CLI JSON inspection, portable agent skill, and thin VS Code integration;
-- Node 22.18.0 release target plus documented Bun/Deno evidence where supported.
+- PostgreSQL, MySQL, SQLite, Oracle Thin, and SQL Server/Tedious dialect and adapter paths, with explicit direct/pool ownership boundaries;
+- `sql.rows`, `sql.command`, `sql.call`, safe value binds, structural fragments, and dynamic `@braid` directives;
+- `db.stream()` as a real driver path rather than an `all()` buffer, with adapter-specific cleanup before physical lease release;
+- Standard Schema mapping for rows and heterogeneous routine result-set tuples;
+- routine channels for scalar `output`, ordered `resultSets`, and optional `returnValue`, with `sql.out`/`sql.inOut` direction helpers;
+- PostgreSQL transaction-bound refcursor handling, Oracle explicit/implicit cursor results, SQL Server explicit procedure metadata for native RETURN status, and intentional SQLite routine rejection;
+- MySQL raw prepared `Execute.stream()` support and explicit rejection of OUT/INOUT where mysql2 does not expose a proven carrier discriminator;
+- execution observers with `durationMs`, non-sensitive call result structure, and lazy diagnostic literalization;
+- `@sqlbraid/vite` Vite 8 pre-transform that preserves TSX and source-map composition while leaving TypeScript and framework transforms to Vite;
+- optional metadata, inspectors, deterministic code generation, CLI JSON inspection, standard stdio LSP, and thin VS Code integration.
+
+## Verification status
+
+Main owns PV15 final verification. Until that evidence is supplied, treat the
+support matrix as Pending and historical exact-SHA links as provenance only.
+Do not infer publication or release-gate completion from this site or from a
+package README.
 
 ## Upgrade discipline
 
-Treat generated model files as derived artifacts. After metadata or config changes, run `sqlbraid codegen` and commit the result, then run `sqlbraid codegen --check`. Keep adapter direct-vs-pool factories aligned with the physical resource you own.
+Treat generated model files as derived artifacts. After metadata or config
+changes, run `sqlbraid codegen` and commit the result, then run
+`sqlbraid codegen --check`. Keep direct-vs-pool factories aligned with the
+physical resource you own. Keep Vite transforms and the server database runtime
+separate; never import Node-only database drivers into browser code.
 
-This site is the intended documentation target at `https://clickin.github.io/SQLBraid/`. A target URL is not a claim that a deployment or every release gate has completed.
+See [routine calls](/SQLBraid/concepts/routines/), [streaming](/SQLBraid/runtime/streaming/),
+[limitations](/SQLBraid/release/limitations/), and [runtime/driver support](/SQLBraid/reference/support/).

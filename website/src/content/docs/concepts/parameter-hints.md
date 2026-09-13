@@ -64,6 +64,31 @@ or `@p1` spelling is not part of the shape.
 
 ## Adapter support
 
-The PostgreSQL, MySQL, and SQLite adapters explicitly reject a query containing a parameter hint with `BRAID_BIND_HINT_UNSUPPORTED`; they do not silently ignore it. Use their ordinary unhinted binds until an adapter with the required type API is available.
+The PostgreSQL, MySQL, and SQLite adapters explicitly reject ordinary
+parameter hints with `BRAID_BIND_HINT_UNSUPPORTED`; they do not silently ignore
+one. PostgreSQL's routine-only `postgresParameter.refcursor()` is the narrow
+exception that classifies an OUT/INOUT portal. Use ordinary unhinted binds for
+all other parameters until an adapter with the required type API is available.
 
-Oracle and SQL Server portable roots expose the hint descriptors. Their Node adapters have real local database checks; see [runtime and driver support](/SQLBraid/reference/support/) for the exact coverage. Oracle rejects IN length/precision/scale facets because node-oracledb cannot apply them. Neither adapter silently ignores unsupported facets.
+Oracle and SQL Server portable roots expose the hint descriptors. Their Node
+adapters perform adapter-specific capability checks; PV15 final evidence is
+pending in [runtime and driver support](/SQLBraid/reference/support/). Oracle
+rejects IN length/precision/scale facets because node-oracledb cannot apply
+them. Neither adapter silently ignores unsupported facets.
+
+## Routine directions
+
+`sql.bind(value, hint)` is an IN value. Routine calls additionally support:
+
+```ts
+sql.out("name", hint?)              // OUT, logical null placeholder
+sql.inOut("name", value, hint?)     // INOUT, initial value plus output
+```
+
+These helpers are valid only in `sql.call` templates. Output names must be
+unique. Oracle OUT/INOUT values require a hint; SQL Server OUTPUT/INOUT values
+require a Tedious hint; PostgreSQL needs `postgresParameter.refcursor()` to
+classify a refcursor output. MySQL's prepared CALL path rejects OUT/INOUT
+because its public mysql2 3.x API does not prove which extra result is the
+carrier. See [routine calls](/SQLBraid/concepts/routines/) for result ordering,
+cursor removal from `output`, and cleanup.

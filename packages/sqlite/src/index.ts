@@ -8,5 +8,6 @@ export const dialect: Dialect = {
 };
 
 export const sql: SqlTag = createSqlTag({ dialect });
-export { typePolicy } from "./type-policy.js";
+export { typePolicy, typePolicyForIntegerMode } from "./type-policy.js";
+export type { SqliteDatabaseOptions, SqliteExecutorOptions, SqliteIntegerMode } from "./node-sqlite.js";
 export { createSqlTag } from "@sqlbraid/template";

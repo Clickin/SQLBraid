@@ -33,11 +33,16 @@ const {
 } = event.execution;
 ```
 
-Events also retain derived readonly values, hints, interpolation map, declared/actual result kinds, operation IDs, duration (`durationMs`), row/command metadata, mapping completion, stream status, and transaction/savepoint phases. `event.sql` is a derived parameterized view and may be absent for a native-value-template transport.
+Events also retain derived readonly values, hints, interpolation map, declared/actual result kinds, operation IDs, duration (`durationMs`), row/command metadata, mapping completion, stream status, and transaction/savepoint phases. For calls, `query:result` reports `actualKind: "call"`, `resultSetCount`, total `rowCount`, `outputKeys`, and `hasReturnValue`; it does not log output values, cursor portal names, ResultSet objects, or protocol carrier rows by default. `event.sql` is a derived parameterized view and may be absent for a native-value-template transport.
 
 Observers run sequentially in registration order. They can inspect events or throw to reject an operation; they cannot mutate SQL, binds, or results and do not implement retry, routing, or rewriting. A failure before DB execution prevents execution. A failure after execution cannot undo a root side effect; if it propagates inside `db.tx`, normal rollback applies. If an error observer also fails, an `AggregateError` preserves both failures.
 
 SQLBraid does not log bind values by default. Applications own redaction and retention policy.
+
+For a stream, `stream:end` is emitted only after the adapter has closed,
+drained, or cancelled its driver resource and the runtime has released or
+discarded the physical lease. An observer may observe cleanup failures, but it
+cannot make an unsafe lease reusable.
 
 `event.literalizedSql(options?)` is lazy and cached. It reconstructs diagnostic
 text directly from logical segments and parameters; it never replaces

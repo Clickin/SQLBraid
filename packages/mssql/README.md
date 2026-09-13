@@ -1,6 +1,6 @@
 # @sqlbraid/mssql
 
-Microsoft SQL Server dialect, Tedious adapter, and conservative catalog inspector for SQLBraid.
+Microsoft SQL Server dialect, Tedious adapter, routine support, and conservative catalog inspector for SQLBraid.
 
 ```sh
 npm install @sqlbraid/mssql tedious
@@ -10,27 +10,25 @@ npm install @sqlbraid/mssql tedious
 import { mssqlParameter, sql } from "@sqlbraid/mssql";
 import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
 
-const query = sql.rows`
-  SELECT id, display_name
-  FROM dbo.users
-  WHERE display_name = ${sql.bind("Ada", mssqlParameter.nvarchar(200))}
-`;
+const query = sql.rows<{ id: number }>`SELECT id FROM dbo.users`;
 const db = createTediousDatabase(connection);
 const rows = await db.all(query);
 ```
 
-The `./tedious` and `./inspector` entry points import Tedious and therefore
-require the optional `tedious` peer. The portable root entry point does not
-load a driver.
+The `./tedious` and `./inspector` entry points require the optional `tedious` peer; the portable root does not load a driver. Row streaming uses Tedious Request row events with bounded pause/resume; lease release waits for request completion or discards the physical connection on cancellation.
 
-Ordinary strings, booleans, dates, safe numbers, bigint values, and
-`Uint8Array` values use conservative adapter-local inference. `null` and
-custom values require an explicit hint. Decimal and numeric inputs are
-limited to values Tedious can represent without a JavaScript-number precision
-loss; high-precision decimal strings are rejected before I/O.
+Routine calls support emitted heterogeneous result sets and scalar OUTPUT/INOUT parameters when explicit hints are supplied. A T-SQL integer RETURN status requires explicit native procedure metadata in the query contract, including the procedure name and ordered Tedious parameter names:
 
-The inspector reports positive evidence from SQL Server `sys` catalogs and
-leaves result-set and routine facts unknown when the catalog does not prove
-them. Tedious output parameters are currently unsupported and fail with
-`BRAID_CALL_OUT_UNSUPPORTED`; result sets from `database.call()` remain
-separate.
+```ts
+const query = sql.call({
+  procedure: { name: "dbo.refresh_accounts", parameterNames: ["accountId"] },
+  resultSets: [AccountSchema] as const,
+})`${accountId}`;
+```
+
+Native procedure metadata requires a parameter-only template; `EXEC` text is
+rejected rather than ignored.
+
+`CURSOR VARYING OUTPUT` is not exposed as an application cursor: ordinary database APIs do not bind it as a client result cursor, so a cursor-output hint is rejected with `BRAID_CALL_CURSOR_UNSUPPORTED`. If a batch consumes a local cursor and emits `SELECT` rows, those are ordinary emitted result sets. Tedious output/return failures remain explicit; SQLBraid never guesses a procedure identity from arbitrary `EXEC` text.
+
+See the [SQL Server setup](https://clickin.github.io/SQLBraid/getting-started/mssql/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).

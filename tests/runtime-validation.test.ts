@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { createStatementBindingDescription } from '@sqlbraid/core';
 import type {
   Database,
+  DriverRoutineResult,
   QueryExecutor,
   RenderedStatement,
   StatementBindingAdapter,
@@ -53,6 +54,8 @@ function rowsExecutor(rows: readonly unknown[]): QueryExecutor {
     async query<Row>(_rendered: RenderedStatement) {
       return { kind: 'rows' as const, rows: rows as readonly Row[] };
     },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error('BRAID_STREAM_UNSUPPORTED'); },
+    async call(): Promise<DriverRoutineResult> { throw new Error('BRAID_CALL_UNSUPPORTED'); },
   };
 }
 
@@ -186,6 +189,7 @@ test('all and streaming map rows sequentially and close at the first failure', a
     async query<Row>() {
       return { kind: 'rows' as const, rows: [] as readonly Row[] };
     },
+    async call(): Promise<DriverRoutineResult> { throw new Error('BRAID_CALL_UNSUPPORTED'); },
     stream<Row>() {
       return (async function* () {
         try {
@@ -228,6 +232,7 @@ test('stream composes execution schemas one row at a time', async () => {
     async query<Row>() {
       return { kind: 'rows' as const, rows: [] as readonly Row[] };
     },
+    async call(): Promise<DriverRoutineResult> { throw new Error('BRAID_CALL_UNSUPPORTED'); },
     stream<Row>() {
       return (async function* () {
         yield { id: 1 } as Row;
@@ -290,6 +295,8 @@ test('result kinds are asserted before mapping and unknown rows stay raw', async
       }
       return { kind: 'rows' as const, rows: [{ id: 1 }] as unknown as readonly Row[] };
     },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error('BRAID_STREAM_UNSUPPORTED'); },
+    async call(): Promise<DriverRoutineResult> { throw new Error('BRAID_CALL_UNSUPPORTED'); },
   });
 
   assert.deepEqual((await db.execute(sql`SELECT user`)).rows, [{ id: 1 }]);
@@ -308,6 +315,8 @@ test('result kinds are asserted before mapping and unknown rows stay raw', async
     async query() {
       return { rows: [] } as never;
     },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error('BRAID_STREAM_UNSUPPORTED'); },
+    async call(): Promise<DriverRoutineResult> { throw new Error('BRAID_CALL_UNSUPPORTED'); },
   });
   await assert.rejects(() => malformed.execute(sql`SELECT malformed`), TypeError);
   await assert.rejects(() => malformed.batch([sql`SELECT malformed`]), TypeError);

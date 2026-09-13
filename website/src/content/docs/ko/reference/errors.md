@@ -23,13 +23,21 @@ materialize 오류의 `executionStarted`와 `executionCompleted`는 모두
 | `BRAID_RESULT_COLUMNS` | 어댑터가 중복 결과 label을 반환했습니다. |
 | `BRAID_CALL_UNSUPPORTED` | 어댑터가 루틴 호출을 노출하지 않습니다. |
 | `BRAID_STREAM_UNSUPPORTED` | 어댑터가 스트리밍 프로토콜을 노출하지 않습니다. |
+| `BRAID_CALL_RESULT_SETS` | tuple 루틴 계약이 선언한 result set 개수와 드라이버가 반환한 개수가 다릅니다. |
+| `BRAID_CALL_MAP` | 루틴 output, return value 또는 result-set 행의 query-bound Standard Schema 매핑이 실패했습니다. 위치를 확인하세요. |
+| `BRAID_CALL_CURSOR_TX_REQUIRED` | PostgreSQL `refcursor` 호출에는 기존 transaction-scoped database가 필요합니다. |
+| `BRAID_CALL_CURSOR` | PostgreSQL refcursor output이 사용할 수 있는 portal 이름을 제공하지 않았습니다. |
+| `BRAID_CALL_CURSOR_UNSUPPORTED` | 어댑터가 요청한 cursor output을 애플리케이션 result set으로 노출할 수 없습니다. |
+| `BRAID_CALL_RETURN_UNSUPPORTED` | return/status schema를 요청했지만 driver call이 return/status 채널을 노출하지 않았습니다. |
+| `BRAID_RESOURCE_CLEANUP` | 드라이버 리소스 close, drain 또는 cancel이 실패했으며 물리적 lease를 안전하게 재사용할 수 없습니다. |
+| `BRAID_INTEGER_MODE_UNSUPPORTED` | SQLite `integerMode: "bigint"`에는 `setReadBigInts`를 노출하는 statement API가 필요합니다. |
 | `BRAID_PREPARED_NAME` | 준비된 쿼리 이름이 비어 있거나 중복됩니다. |
 | `BRAID_PREPARED_SHAPE` | 준비된 쿼리가 다른 구조를 렌더링했습니다. |
 | `BRAID_BIND_HINT_CONTEXT` | boolean 식 대신 바인드 값 래퍼를 지시문 조건에 사용했습니다. |
 | `BRAID_BIND_HINT_UNSUPPORTED` | 어댑터가 명시적인 타입 또는 속성을 적용할 수 없어 DB I/O 전에 거부했습니다. |
 | `BRAID_BIND_TYPE_REQUIRED` | Oracle/SQL Server의 타입 없는 null 등 드라이버 추론이 모호합니다. |
 | `BRAID_BIND_DECIMAL_EXACTNESS` | Tedious가 JavaScript 숫자를 통해 해당 소수 값을 안전하게 인코딩할 수 없습니다. |
-| `BRAID_CALL_OUT_UNSUPPORTED` | 실제 SQL Server 출력 파라미터를 현재 호출 계약으로 표현할 수 없습니다. |
+| `BRAID_CALL_OUT_UNSUPPORTED` | 어댑터가 요청한 OUT/INOUT 채널을 표현하거나 안전하게 식별할 수 없습니다(예: 검증되지 않은 MySQL prepared-CALL carrier). |
 | `BRAID_RESULT_SETS_UNSUPPORTED` | 행 쿼리/스트림에 추가 문장 또는 결과 집합이 있습니다. 지원되는 경우 `call()`을 사용하세요. |
 | `BRAID_EMPTY_LIST` | 명시적 빈 전략 없이 `sql.list([])`를 사용했습니다. |
 | `BRAID_EMPTY_SET` | `@braid set`에 할당이 렌더링되지 않았습니다. |

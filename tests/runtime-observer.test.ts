@@ -3,6 +3,7 @@ import { test } from "vitest";
 import { createStatementBindingDescription } from "@sqlbraid/core";
 import type {
   ConnectionProvider,
+  DriverRoutineResult,
   ExecutionEvent,
   QueryExecutor,
   RenderedStatement,
@@ -25,7 +26,12 @@ const statementBinding = Object.freeze<StatementBindingAdapter>({
 })
 
 function executor(): QueryExecutor {
-  return { statementBinding, async query<Row>() { return { kind: "rows", rows: [{ id: 1 }] as unknown as readonly Row[] }; } };
+  return {
+    statementBinding,
+    async query<Row>() { return { kind: "rows", rows: [{ id: 1 }] as unknown as readonly Row[] }; },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
+    async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
+  };
 }
 
 function schema(validate: StandardSchemaV1.Props<unknown, unknown>["validate"]): StandardSchemaV1<unknown, unknown> {
@@ -45,6 +51,8 @@ test("observers await registration order and cannot replace SQL or bind slots", 
       assert.deepEqual(rendered.segments, query.render().segments);
       return { kind: "rows", rows: [] as readonly Row[] };
     },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
+    async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
   }, { observers: [
     { async onEvent(event) {
       await Promise.resolve();
@@ -128,6 +136,8 @@ test("observer errors identify each pipeline stage and preserve thrown mapper er
           if (stage === "result-kind") return { kind: "command" as const, rows: [] as const, command: {} };
           return { kind: "rows" as const, rows: [{}] as unknown as readonly Row[] };
         },
+        async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
+        async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
         release() { if (stage === "release") throw failure; },
       };
     } }, { observers: [{ onEvent(event) {
@@ -157,6 +167,8 @@ test("observers distinguish result-kind mismatches from cardinality failures", a
     async query() {
       return { kind: "command" as const, rows: [] as const, command: { affectedRows: 1 } };
     },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
+    async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
   }, { observers: [{ onEvent(event) { resultKindEvents.push(event); } }] });
   await assert.rejects(resultKindDb.execute(sql.rows`UPDATE users SET active = 1`), (error) => (
     error instanceof Error
@@ -179,6 +191,8 @@ test("observers distinguish result-kind mismatches from cardinality failures", a
       async query<Row>() {
         return { kind: "rows" as const, rows: rows as readonly Row[] };
       },
+      async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
+      async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
     }, { observers: [{ onEvent(event) { events.push(event); } }] });
     await assert.rejects(
       () => method === "one" ? db.one(sql.rows`SELECT id`) : db.maybeOne(sql.rows`SELECT id`),
@@ -204,7 +218,13 @@ test("error observers preserve original failures including undefined rejection v
     const reporting = new Error("error audit failed");
     let released = 0;
     const db = createPooledDatabase({ statementBinding, async acquire() {
-      return { statementBinding, async query() { throw original; }, release() { released += 1; } };
+      return {
+        statementBinding,
+        async query() { throw original; },
+        async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
+        async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
+        release() { released += 1; },
+      };
     } }, { observers: [{ onEvent(event) { if (event.type === "query:error") throw reporting; } }] });
     await assert.rejects(db.execute(sql`SELECT 1`), (error) => error instanceof AggregateError && error.errors[0] === original && error.errors[1] === reporting);
     assert.equal(released, 1);
@@ -266,7 +286,12 @@ test("all public observer timing events use durationMs without a duration alias"
 
 test("routine observers identify calls without guessing command kind from empty rows", async () => {
   const events: ExecutionEvent[] = [];
-  const db = createDatabase({ ...executor(), async call() { return { output: {}, resultSets: [{ rows: [] }] }; } }, {
+  const db = createDatabase({
+    ...executor(),
+    async call(): Promise<DriverRoutineResult> {
+      return { output: {}, resultSets: [{ rows: [], source: { kind: "emitted", index: 0 } }] };
+    },
+  }, {
     observers: [{ onEvent(event) { events.push(event); } }],
   });
   await db.call(sql.call`CALL routine()`);

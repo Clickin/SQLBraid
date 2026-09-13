@@ -7,6 +7,8 @@ export const SQL_FRAGMENT = Symbol.for("sqlbraid.fragment");
 const SQL_BOUND_PARAMETER = Symbol.for("sqlbraid.bound-parameter");
 const knownBoundParameters = new WeakSet<object>();
 declare const boundParameterBrand: unique symbol;
+const SQL_ROUTINE_PARAMETER = Symbol.for("sqlbraid.routine-parameter");
+const knownRoutineParameters = new WeakSet<object>();
 
 export interface SourceRange {
   readonly start: number;
@@ -22,6 +24,26 @@ export interface RenderLimits {
 
 export type QueryResultKind = "rows" | "command" | "call" | "unknown";
 
+export type RoutineParameterDirection = "in" | "out" | "inout";
+
+export interface RoutineProcedure {
+  readonly name: string;
+  readonly parameterNames: readonly string[];
+}
+
+export type RoutineSchema = StandardSchemaV1<any, any>;
+
+export interface RoutineContract<
+  Output extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>,
+  Sets extends readonly RoutineSchema[] = readonly RoutineSchema[],
+  ReturnValue = unknown,
+> {
+  readonly output?: StandardSchemaV1<any, Output>;
+  readonly resultSets?: Sets;
+  readonly returnValue?: StandardSchemaV1<any, ReturnValue>;
+  readonly procedure?: RoutineProcedure;
+}
+
 /**
  * A rendered parameter is always a value. Adapters MUST NOT interpret it as
  * raw SQL, an identifier, a nested query, a driver-specific fragment, or a
@@ -31,6 +53,8 @@ export interface RenderedParameter {
   readonly value: unknown;
   readonly interpolation?: number;
   readonly hint?: ParameterTypeHint;
+  readonly direction?: RoutineParameterDirection;
+  readonly outputName?: string;
 }
 
 export interface RenderedStatement {
@@ -38,6 +62,7 @@ export interface RenderedStatement {
   readonly parameters: readonly RenderedParameter[];
   readonly dialectId: string;
   readonly resultKind: QueryResultKind;
+  readonly routineProcedure?: RoutineProcedure;
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
 }
@@ -54,6 +79,13 @@ export interface BoundParameter<Input = unknown> {
   readonly value: Input;
   readonly hint: ParameterTypeHint<Input>;
   readonly [boundParameterBrand]: true;
+}
+
+export interface RoutineParameter<Input = unknown> {
+  readonly value: Input;
+  readonly hint?: ParameterTypeHint;
+  readonly direction: Exclude<RoutineParameterDirection, "in">;
+  readonly outputName: string;
 }
 
 function validHintNumber(value: unknown): value is number {
@@ -108,6 +140,61 @@ export function isBoundParameter(value: unknown): value is BoundParameter {
     && isParameterTypeHint(candidate.hint);
 }
 
+function normalizeOutputName(name: unknown): string {
+  if (typeof name !== "string" || !name.trim()) throw new TypeError("Routine outputName must be a non-empty string.");
+  return name;
+}
+
+export function createRoutineOutParameter(
+  name: string,
+  hint?: ParameterTypeHint,
+): RoutineParameter<null> {
+  const normalizedHint = hint === undefined ? undefined : createParameterTypeHint(hint);
+  const parameter = Object.freeze({
+    value: null,
+    direction: "out" as const,
+    outputName: normalizeOutputName(name),
+    ...(normalizedHint === undefined ? {} : { hint: normalizedHint }),
+    [SQL_ROUTINE_PARAMETER]: true as const,
+  });
+  knownRoutineParameters.add(parameter);
+  return parameter;
+}
+
+export function createRoutineInOutParameter<Input>(
+  name: string,
+  value: NoInfer<Input>,
+  hint?: ParameterTypeHint<Input>,
+): RoutineParameter<Input> {
+  const normalizedHint = hint === undefined ? undefined : createParameterTypeHint(hint);
+  const parameter = Object.freeze({
+    value,
+    direction: "inout" as const,
+    outputName: normalizeOutputName(name),
+    ...(normalizedHint === undefined ? {} : { hint: normalizedHint }),
+    [SQL_ROUTINE_PARAMETER]: true as const,
+  });
+  knownRoutineParameters.add(parameter);
+  return parameter as RoutineParameter<Input>;
+}
+
+export function isRoutineParameter(value: unknown): value is RoutineParameter {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !knownRoutineParameters.has(value)) return false;
+  const candidate = value as {
+    readonly value?: unknown;
+    readonly direction?: unknown;
+    readonly outputName?: unknown;
+    readonly hint?: unknown;
+    readonly [SQL_ROUTINE_PARAMETER]?: unknown;
+  };
+  return candidate[SQL_ROUTINE_PARAMETER] === true
+    && Object.hasOwn(candidate, "value")
+    && (candidate.direction === "out" || candidate.direction === "inout")
+    && typeof candidate.outputName === "string"
+    && Boolean(candidate.outputName.trim())
+    && (candidate.hint === undefined || isParameterTypeHint(candidate.hint));
+}
+
 export type ParameterTransportKind =
   | "native-value-template"
   | "text-positional"
@@ -122,6 +209,7 @@ export interface StatementBindingContext {
   readonly dialectId: string;
   readonly requestedReuse: RequestedReuse;
   readonly preparedName?: string;
+  readonly transactionScoped?: boolean;
 }
 
 export interface BindingDescription {
@@ -129,6 +217,8 @@ export interface BindingDescription {
   readonly name?: string;
   readonly interpolation?: number;
   readonly hint?: ParameterTypeHint;
+  readonly direction?: RoutineParameterDirection;
+  readonly outputName?: string;
 }
 
 export interface LiteralizeOptions {
@@ -140,6 +230,11 @@ export interface LiteralizeOptions {
 
 export interface LiteralizedSqlResult {
   readonly text: string;
+  /**
+   * True when no diagnostic parameter representation was truncated. Redaction,
+   * unsupported literal markers, and divergence from wire SQL do not make it
+   * incomplete.
+   */
   readonly complete: boolean;
   readonly redactedParameters: number;
   readonly truncatedParameters: number;
@@ -184,24 +279,61 @@ function copyRenderedParameter(parameter: RenderedParameter): RenderedParameter 
   if (typeof parameter !== "object" || parameter === null || Array.isArray(parameter)) {
     throw new TypeError("RenderedStatement parameters must be parameter records.");
   }
-  const candidate = parameter as { readonly value?: unknown; readonly interpolation?: unknown; readonly hint?: unknown };
+  const candidate = parameter as {
+    readonly value?: unknown;
+    readonly interpolation?: unknown;
+    readonly hint?: unknown;
+    readonly direction?: unknown;
+    readonly outputName?: unknown;
+  };
   if (!Object.hasOwn(candidate, "value")) throw new TypeError("RenderedStatement parameters must contain a value.");
   const interpolation = candidate.interpolation;
   if (interpolation !== undefined && !validHintNumber(interpolation)) {
     throw new TypeError("RenderedStatement parameter interpolation must be a non-negative integer.");
   }
   const hint = candidate.hint === undefined ? undefined : createParameterTypeHint(candidate.hint as ParameterTypeHint);
+  const direction = candidate.direction;
+  if (direction !== undefined && direction !== "in" && direction !== "out" && direction !== "inout") {
+    throw new TypeError("RenderedStatement parameter direction is unsupported.");
+  }
+  const outputName = candidate.outputName;
+  if (outputName !== undefined && (typeof outputName !== "string" || !outputName.trim())) {
+    throw new TypeError("RenderedStatement parameter outputName must be a non-empty string.");
+  }
+  if ((direction === "out" || direction === "inout") && outputName === undefined) {
+    throw new TypeError("RenderedStatement OUT and INOUT parameters require an outputName.");
+  }
+  if (outputName !== undefined && (direction === undefined || direction === "in")) {
+    throw new TypeError("RenderedStatement parameter outputName requires an OUT or INOUT direction.");
+  }
   return Object.freeze({
     value: candidate.value,
     ...(interpolation === undefined ? {} : { interpolation }),
     ...(hint === undefined ? {} : { hint }),
+    ...(direction === undefined ? {} : { direction }),
+    ...(outputName === undefined ? {} : { outputName }),
   });
+}
+
+function copyRoutineProcedure(procedure: RoutineProcedure | undefined): RoutineProcedure | undefined {
+  if (procedure === undefined) return undefined;
+  if (typeof procedure !== "object" || procedure === null || typeof procedure.name !== "string" || !procedure.name.trim()) {
+    throw new TypeError("Routine procedure name must be a non-empty string.");
+  }
+  if (!Array.isArray(procedure.parameterNames)) throw new TypeError("Routine procedure parameterNames must be an array.");
+  const parameterNames = procedure.parameterNames.map((name) => {
+    if (typeof name !== "string" || !name.trim()) throw new TypeError("Routine procedure parameterNames must contain non-empty strings.");
+    return name;
+  });
+  if (new Set(parameterNames).size !== parameterNames.length) throw new TypeError("Routine procedure parameterNames must be unique.");
+  return Object.freeze({ name: procedure.name, parameterNames: Object.freeze(parameterNames) });
 }
 
 export function createRenderedStatement(statement: {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
   readonly resultKind: QueryResultKind;
+  readonly routineProcedure?: RoutineProcedure;
   readonly dialectId: string;
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
@@ -215,15 +347,33 @@ export function createRenderedStatement(statement: {
   if (statement.segments.length !== statement.parameters.length + 1) {
     throw new TypeError("RenderedStatement invariant violated: segments.length must equal parameters.length + 1.");
   }
+  if (statement.resultKind !== "call" && statement.routineProcedure !== undefined) {
+    throw new TypeError("Routine procedure metadata is only valid for call statements.");
+  }
   if (typeof statement.dialectId !== "string" || !statement.dialectId) throw new TypeError("RenderedStatement dialectId must be a non-empty string.");
   const segments = Object.freeze([...statement.segments]);
   if (segments.some((segment) => typeof segment !== "string")) throw new TypeError("RenderedStatement segments must be an array of strings.");
   const parameters = Object.freeze(Array.from(statement.parameters, copyRenderedParameter));
+  if (parameters.some((parameter) => parameter.direction !== undefined && parameter.direction !== "in") && statement.resultKind !== "call") {
+    throw new TypeError("OUT and INOUT parameters are only valid for call statements.");
+  }
+  const outputNames = new Set<string>();
+  for (const parameter of parameters) {
+    if (parameter.outputName !== undefined) {
+      if (outputNames.has(parameter.outputName)) throw new TypeError(`Duplicate routine outputName: ${parameter.outputName}`);
+      outputNames.add(parameter.outputName);
+    }
+  }
+  const routineProcedure = copyRoutineProcedure(statement.routineProcedure);
+  if (routineProcedure !== undefined && routineProcedure.parameterNames.length !== parameters.length) {
+    throw new TypeError("Routine procedure parameterNames must match the rendered parameter count.");
+  }
   const rendered = Object.freeze({
     segments,
     parameters,
     dialectId: statement.dialectId,
     resultKind: statement.resultKind,
+    ...(routineProcedure === undefined ? {} : { routineProcedure }),
     ...(statement.fingerprint === undefined ? {} : { fingerprint: statement.fingerprint }),
     ...(statement.variantFingerprint === undefined ? {} : { variantFingerprint: statement.variantFingerprint }),
   });
@@ -333,6 +483,9 @@ export function createStatementBindingDescription(
   const capacity = options.reuse.capacity;
   const dialectId = context.dialectId;
   const requestedReuse = context.requestedReuse;
+  if (logical.dialectId !== dialectId) {
+    throw new TypeError(`BRAID_DIALECT: statement binding dialect ${dialectId} does not match rendered statement dialect ${logical.dialectId}.`);
+  }
   if (typeof adapterId !== "string" || !adapterId) throw new TypeError("Statement binding adapterId must be a non-empty string.");
   if (typeof dialectId !== "string" || !dialectId) throw new TypeError("Statement binding dialectId must be a non-empty string.");
   if (!["native-value-template", "text-positional", "text-named", "typed-request"].includes(transport)) {
@@ -353,8 +506,10 @@ export function createStatementBindingDescription(
   }
   const bindings = Object.freeze(logical.parameters.map((parameter, offset) => Object.freeze({
     index: offset + 1,
+    ...(parameter.outputName === undefined ? {} : { name: parameter.outputName, outputName: parameter.outputName }),
     ...(parameter.interpolation === undefined ? {} : { interpolation: parameter.interpolation }),
     ...(parameter.hint === undefined ? {} : { hint: createParameterTypeHint(parameter.hint) }),
+    ...(parameter.direction === undefined ? {} : { direction: parameter.direction }),
   })));
   const reuse = Object.freeze({
     requested: requestedReuse,
@@ -549,13 +704,14 @@ export interface Query<Row = unknown, Kind extends QueryResultKind = "unknown"> 
    * Application result mapper. Never forwarded to a DB driver.
    */
   readonly resultSchema?: StandardSchemaV1<unknown, Row>;
+  readonly routineContract?: RoutineContract;
   render(): RenderedStatement;
   readonly __row?: Row;
 }
 
 export type RowQuery<Row = unknown> = Query<Row, "rows">;
 export type CommandQuery = Query<CommandResult, "command">;
-export type CallQuery<Row = unknown> = Query<Row, "call">;
+export type CallQuery<Result extends RoutineCallResult = RoutineCallResult> = Query<Result, "call">;
 
 export interface CommandResult {
   readonly affectedRows?: number;
@@ -590,12 +746,95 @@ export interface StreamOptions<Row> extends RowValidationOptions<Row> {
 }
 
 export interface RoutineResultSet<Row = unknown> {
-  readonly rows: readonly Row[] | "unknown";
+  readonly rows: readonly Row[];
 }
 
-export interface RoutineCallResult<Row = unknown> {
+export type RoutineResultSetTuple<Sets extends readonly unknown[]> = {
+  readonly [K in keyof Sets]: RoutineResultSet<Sets[K]>;
+};
+
+export interface RoutineCallResult<
+  Output extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>,
+  Sets extends readonly unknown[] = readonly unknown[],
+  ReturnValue = unknown,
+> {
+  readonly output: Output;
+  readonly resultSets: RoutineResultSetTuple<Sets>;
+  readonly returnValue?: ReturnValue;
+}
+
+export type RoutineSchemaOutput<Schema> = Schema extends StandardSchemaV1<any, infer Output> ? Output : never;
+
+type RoutineRowsFromSchemas<Schemas extends readonly RoutineSchema[]> = {
+  readonly [K in keyof Schemas]: RoutineSchemaOutput<Schemas[K]>;
+};
+
+export type RoutineResultFromContract<Contract extends RoutineContract> = RoutineCallResult<
+  Contract["output"] extends RoutineSchema
+    ? RoutineSchemaOutput<Contract["output"]> extends Readonly<Record<string, unknown>>
+      ? RoutineSchemaOutput<Contract["output"]>
+      : Readonly<Record<string, unknown>>
+    : Readonly<Record<string, unknown>>,
+  Contract["resultSets"] extends infer Schemas extends readonly RoutineSchema[]
+    ? RoutineRowsFromSchemas<Schemas>
+    : readonly unknown[],
+  Contract["returnValue"] extends RoutineSchema ? RoutineSchemaOutput<Contract["returnValue"]> : unknown
+>;
+
+export type RoutineResultSource =
+  | {
+      readonly kind: "out-cursor";
+      readonly name?: string;
+      readonly parameterIndex?: number;
+    }
+  | {
+      readonly kind: "implicit";
+      readonly index: number;
+    }
+  | {
+      readonly kind: "emitted";
+      readonly index: number;
+    };
+
+export interface DriverRoutineResultSet {
+  readonly rows: readonly unknown[];
+  readonly source: RoutineResultSource;
+}
+
+export interface DriverRoutineResult {
   readonly output: Readonly<Record<string, unknown>>;
-  readonly resultSets: readonly RoutineResultSet<Row>[];
+  readonly returnValue?: unknown;
+  readonly resultSets: readonly DriverRoutineResultSet[];
+}
+
+export type RoutineMappingLocation =
+  | { readonly kind: "output" }
+  | { readonly kind: "return-value" }
+  | {
+      readonly kind: "result-set";
+      readonly resultSetIndex: number;
+      readonly rowIndex: number;
+    };
+
+export type DriverCapabilityErrorCode =
+  | "BRAID_STREAM_UNSUPPORTED"
+  | "BRAID_CALL_UNSUPPORTED"
+  | "BRAID_CALL_RESULT_SETS"
+  | "BRAID_CALL_CURSOR_TX_REQUIRED"
+  | "BRAID_CALL_OUT_UNSUPPORTED"
+  | "BRAID_CALL_RETURN_UNSUPPORTED"
+  | "BRAID_CALL_CURSOR_UNSUPPORTED"
+  | "BRAID_RESOURCE_CLEANUP";
+
+export class RoutineMappingError extends Error {
+  readonly code = "BRAID_CALL_MAP";
+  readonly location: RoutineMappingLocation;
+
+  constructor(message: string, location: RoutineMappingLocation, options?: { readonly cause?: unknown }) {
+    super(message, options);
+    this.name = "RoutineMappingError";
+    this.location = Object.freeze(location);
+  }
 }
 
 export interface QueryExecutor {
@@ -603,8 +842,8 @@ export interface QueryExecutor {
   readonly ownershipKey?: object;
   readonly statementBinding: StatementBindingAdapter;
   query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>>;
-  stream?<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncIterable<Row>;
-  call?<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<RoutineCallResult<Row>>;
+  stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncIterable<Row>;
+  call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult>;
   begin?(): Promise<void>;
   commit?(): Promise<void>;
   rollback?(): Promise<void>;
@@ -635,7 +874,12 @@ export interface QueryReadyEvent {
   readonly batchId?: string;
   readonly sql?: string;
   readonly values: readonly unknown[];
-  readonly bindingMap?: readonly { readonly placeholder: number; readonly interpolation?: number }[];
+  readonly bindingMap?: readonly {
+    readonly placeholder: number;
+    readonly interpolation?: number;
+    readonly direction?: RoutineParameterDirection;
+    readonly outputName?: string;
+  }[];
   readonly parameterHints?: readonly (ParameterTypeHint | undefined)[];
   readonly execution: QueryExecutionPlan;
   readonly literalizedSql: (options?: LiteralizeOptions) => LiteralizedSqlResult;
@@ -655,6 +899,9 @@ export interface QueryResultEvent {
   readonly durationMs: number;
   readonly actualKind: "rows" | "command" | "call";
   readonly rowCount?: number;
+  readonly resultSetCount?: number;
+  readonly outputKeys?: readonly string[];
+  readonly hasReturnValue?: boolean;
   readonly command?: Readonly<Record<string, unknown>>;
   readonly transactionDepth: number;
   readonly transactionScoped: boolean;
@@ -675,6 +922,7 @@ export interface QueryMappedEvent {
 
 export type QueryErrorStage =
   | "render"
+  | "prepared"
   | "observer-before"
   | "materialize"
   | "acquire"
@@ -707,7 +955,12 @@ export interface StreamStartEvent {
   readonly operationId: string;
   readonly sql?: string;
   readonly values: readonly unknown[];
-  readonly bindingMap?: readonly { readonly placeholder: number; readonly interpolation?: number }[];
+  readonly bindingMap?: readonly {
+    readonly placeholder: number;
+    readonly interpolation?: number;
+    readonly direction?: RoutineParameterDirection;
+    readonly outputName?: string;
+  }[];
   readonly parameterHints?: readonly (ParameterTypeHint | undefined)[];
   readonly execution: QueryExecutionPlan;
   readonly literalizedSql: (options?: LiteralizeOptions) => LiteralizedSqlResult;
@@ -793,7 +1046,7 @@ export interface Database {
   one<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row>;
   maybeOne<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row | undefined>;
   execute<Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>>;
-  call<Row>(query: CallQuery<Row>): Promise<RoutineCallResult<Row>>;
+  call<Result extends RoutineCallResult>(query: CallQuery<Result>): Promise<Result>;
   batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }>;
   prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row>;
   stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row>;
@@ -806,6 +1059,10 @@ export interface SqlTagLike<Kind extends QueryResultKind = QueryResultKind, Row 
   (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<Row, Kind>;
 }
 
+export interface RoutineContractTag<Contract extends RoutineContract> {
+  (strings: TemplateStringsArray, ...values: readonly unknown[]): CallQuery<RoutineResultFromContract<Contract>>;
+}
+
 export interface RowsTag {
   // Two type parameters keep this overload out of the sql.rows<Row> instantiation expression.
   <Input, Output>(schema: StandardSchemaV1<Input, Output>): SqlTagLike<"rows", Output>;
@@ -816,9 +1073,12 @@ export interface SqlTag extends SqlTagLike<"unknown"> {
   rows: RowsTag;
   command: (strings: TemplateStringsArray, ...values: readonly unknown[]) => CommandQuery;
   call: {
-    <Row = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): CallQuery<Row>;
+    <Result extends RoutineCallResult = RoutineCallResult>(strings: TemplateStringsArray, ...values: readonly unknown[]): CallQuery<Result>;
+    <Contract extends RoutineContract>(contract: Contract): RoutineContractTag<Contract>;
   };
   bind<Input>(value: NoInfer<Input>, hint: ParameterTypeHint<Input>): BoundParameter<Input>;
+  out(name: string, hint?: ParameterTypeHint): RoutineParameter<null>;
+  inOut<Input>(name: string, value: NoInfer<Input>, hint?: ParameterTypeHint<Input>): RoutineParameter<Input>;
   fragment: (strings: TemplateStringsArray, ...values: readonly unknown[]) => SqlFragment;
   empty: SqlFragment;
   ident: (identifier: string | readonly string[]) => SqlFragment;

@@ -23,13 +23,21 @@ network failures remain stage `"driver"`. A materialization error has
 | `BRAID_RESULT_COLUMNS` | Adapter returned duplicate result labels. |
 | `BRAID_CALL_UNSUPPORTED` | Adapter does not expose routine calls. |
 | `BRAID_STREAM_UNSUPPORTED` | Adapter does not expose a streaming protocol. |
+| `BRAID_CALL_RESULT_SETS` | A tuple routine contract declared a different number of result sets than the driver returned. |
+| `BRAID_CALL_MAP` | A routine output, return value, or result-set row failed query-bound Standard Schema mapping; inspect its location. |
+| `BRAID_CALL_CURSOR_TX_REQUIRED` | A PostgreSQL `refcursor` call requires an existing transaction-scoped database. |
+| `BRAID_CALL_CURSOR` | A PostgreSQL refcursor output did not provide a usable portal name. |
+| `BRAID_CALL_CURSOR_UNSUPPORTED` | The adapter cannot expose the requested cursor output as an application result set. |
+| `BRAID_CALL_RETURN_UNSUPPORTED` | A query requested a return/status schema, but the driver call exposed no return/status channel. |
+| `BRAID_RESOURCE_CLEANUP` | Closing, draining, or cancelling a driver resource failed; the physical lease is not treated as safely reusable. |
+| `BRAID_INTEGER_MODE_UNSUPPORTED` | SQLite `integerMode: "bigint"` needs a statement API exposing `setReadBigInts`. |
 | `BRAID_PREPARED_NAME` | Prepared query name is empty or duplicated. |
 | `BRAID_PREPARED_SHAPE` | A prepared query rendered a different structural shape. |
 | `BRAID_BIND_HINT_CONTEXT` | A bound-value wrapper was used as a directive condition instead of a boolean expression. |
 | `BRAID_BIND_HINT_UNSUPPORTED` | The adapter cannot honor the explicit type or one of its facets; execution is rejected before database I/O. |
 | `BRAID_BIND_TYPE_REQUIRED` | Driver inference is ambiguous, including an untyped null in Oracle or SQL Server. |
 | `BRAID_BIND_DECIMAL_EXACTNESS` | Tedious cannot safely encode the supplied decimal value through JavaScript numbers. |
-| `BRAID_CALL_OUT_UNSUPPORTED` | Actual SQL Server output parameters cannot be represented by the current call contract. |
+| `BRAID_CALL_OUT_UNSUPPORTED` | The adapter cannot represent or safely identify the requested OUT/INOUT channel (for example MySQL's unproven prepared-CALL carrier). |
 | `BRAID_RESULT_SETS_UNSUPPORTED` | A row query or stream returned additional statement/result sets; use `call()` where supported. |
 | `BRAID_EMPTY_LIST` | `sql.list([])` was used without an explicit empty strategy. |
 | `BRAID_EMPTY_SET` | `@braid set` rendered no assignment. |

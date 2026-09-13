@@ -18,6 +18,7 @@
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22.18.0" },
   "dependencies": {
+    "@jridgewell/gen-mapping": "0.3.13",
     "@sqlbraid/core": "workspace:*",
     "@sqlbraid/template": "workspace:*",
     "typescript": "5.9.3"

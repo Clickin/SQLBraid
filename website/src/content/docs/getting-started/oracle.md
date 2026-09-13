@@ -51,13 +51,30 @@ hint facets fail at the `materialize` stage before database I/O.
 
 ## Capability boundaries
 
-- The first-party target is `node-oracledb` Thin mode. Thick mode is not an Official claim.
-- `call()` is Unsupported in this RC because OUT/IN OUT descriptors are not yet part of the bind API.
+- The first-party target is `node-oracledb` Thin mode. Thick mode is outside
+  this guide's verification scope.
+- `sql.call` supports scalar OUT/IN OUT descriptors and `SYS_REFCURSOR` OUT
+  values with `oracleParameter.refCursor()`. Cursor outputs become
+  materialized `resultSets` and are removed from scalar `output`; implicit
+  results are included and every `ResultSet` is closed before lease release.
+- Native `procedure` metadata is not supported by this adapter; author the
+  Oracle PL/SQL/SQL call text explicitly.
 - Streaming uses the driver's ResultSet protocol and closes the ResultSet on completion, abort, or early break.
-- CI covers Oracle 23.9.0.25.07 Thin on Node 22.18.0/Linux x64; see [runtime and driver support](/SQLBraid/reference/support/) for the pinned evidence and portable-root coverage.
+- The target combination is Oracle 23.9.0.25.07 Thin on Node 22.18.0/Linux
+  x64. PV15 final verification is pending; see [runtime and driver
+  support](/SQLBraid/reference/support/) for historical evidence only.
 
 Use an explicit hint for `null` when the driver cannot infer a safe Oracle type. Do not silently turn an untyped null into `VARCHAR2`.
 
 The default policy fetches `NUMBER` results as strings to preserve precision. Explicit `NUMBER` input accepts `number` or `bigint`; decimal strings are rejected by this adapter rather than converted lossily. Use an ordinary string bind with an explicit SQL conversion when your SQL requires decimal-text input.
 
-The Thin adapter honors base type hints but rejects length/precision/scale facets: node-oracledb cannot express those constraints on an IN parameter. Put such constraints in SQL/schema; descriptors remain available to custom executors. Materialized CLOB/NCLOB values are strings and BLOB/RAW values are buffers; they do not retain a live LOB after lease release. Temporal values use `Date`, not a preserved source timezone name or sub-millisecond precision.
+The Thin adapter rejects precision/scale facets and IN length constraints.
+VARCHAR2/NVARCHAR2 OUT/INOUT lengths select the driver's `maxSize`; other
+length facets are rejected. Put database constraints in SQL/schema.
+Materialized CLOB/NCLOB values are strings and BLOB/RAW values are buffers.
+Routine LOB outputs are read with `getData()` and destroyed before lease
+release, including unvisited siblings after a read failure. Temporal values
+use `Date`, not a preserved source timezone name or sub-millisecond precision.
+
+Use [routine calls](/SQLBraid/concepts/routines/) for the complete
+`sql.out`/`sql.inOut` and heterogeneous result-set contract.

@@ -35,13 +35,21 @@ const {
 
 이벤트에는 파생된 읽기 전용 값·힌트·보간 맵, 선언/실제 결과 종류, 작업 ID,
 소요 시간(`durationMs`), 행/command 메타데이터, 매핑 완료 여부,
-stream 상태, 트랜잭션/savepoint 단계도 유지됩니다.
+stream 상태, 트랜잭션/savepoint 단계도 유지됩니다. call의 `query:result`는
+`actualKind: "call"`, `resultSetCount`, 전체 `rowCount`, `outputKeys`,
+`hasReturnValue`를 보고합니다. output 값, cursor portal 이름, ResultSet 객체,
+protocol carrier 행은 기본적으로 기록하지 않습니다.
 `event.sql`은 파생된 parameterized view이며 native-value-template 전송에서는
 없을 수 있습니다.
 
 Observer는 등록 순서대로 순차 실행됩니다. 이벤트를 검사하거나 throw하여 작업을 거부할 수 있지만 SQL, 바인드, 결과를 변경하거나 retry, routing, rewriting을 구현할 수는 없습니다. DB 실행 전에 실패하면 실행이 방지됩니다. 실행 후 실패는 루트 부작용을 되돌릴 수 없지만 `db.tx` 내부로 전파되면 일반 rollback이 적용됩니다. 오류 observer도 실패하면 `AggregateError`가 두 실패를 모두 보존합니다.
 
 SQLBraid는 기본적으로 바인드 값을 기록하지 않습니다. 정제 및 보존 정책은 애플리케이션이 소유합니다.
+
+stream의 `stream:end`는 어댑터가 드라이버 리소스를 close/drain/cancel하고
+runtime이 물리적 lease를 반환하거나 폐기한 뒤에만 발생합니다. Observer는
+정리 실패를 관찰할 수 있지만 안전하지 않은 lease를 재사용 가능하게 만들 수
+없습니다.
 
 `event.literalizedSql(options?)`는 필요할 때 계산하고 캐시합니다. 논리
 segments와 parameters에서 진단용 텍스트를 직접 재구성하며, 구체화된 SQL의

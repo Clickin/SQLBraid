@@ -14,14 +14,16 @@ const users = sql.rows<{ id: number; name: string }>`
 const update = sql.command`
   UPDATE users SET last_seen_at = now() WHERE id = ${userId}
 `;
-const routine = sql.call<RefreshResult>`CALL refresh_accounts(${accountId})`;
+const routine = sql.call({
+  resultSets: [RefreshSchema] as const,
+})`CALL refresh_accounts(${accountId})`;
 ```
 
 Use the matching runtime operation:
 
 - `db.all`, `db.one`, `db.maybeOne`, `db.stream`, and row prepared queries require `sql.rows`.
 - `db.execute` handles row, command, and unknown queries and checks the adapter's actual result kind.
-- `db.call` is for `sql.call`; the SQLite adapter reports `BRAID_CALL_UNSUPPORTED`.
+- `db.call` is for `sql.call`; see [routine calls](/SQLBraid/concepts/routines/) for output directions, tuple result sets, cleanup, and database-specific limits.
 
 The unqualified `sql` tag creates a query with result kind `unknown`. It is useful when a driver-specific statement can return either rows or command metadata, but it gives up the compile-time row contract.
 
@@ -40,3 +42,6 @@ const users = await db.all(sql.rows<UserRow>`SELECT id, name FROM users`);
 Adapters report whether a statement produced rows or command metadata. If a query declared `rows` but the driver reports a command, SQLBraid throws `BRAID_RESULT_KIND` after execution. Put a write in `db.tx(...)` when a wrong declaration must roll back the write; a result-kind check cannot undo an already-completed root operation.
 
 SQLBraid does not infer a TypeScript row shape from arbitrary SQL. The developer owns the correspondence between selected columns and the declared row type.
+
+Set-returning functions and table-valued extensions remain ordinary row
+queries: use `sql.rows`, `db.all`, or `db.stream`, not `db.call`.

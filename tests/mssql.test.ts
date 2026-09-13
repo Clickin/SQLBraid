@@ -108,7 +108,7 @@ test("MSSQL calls accept OUTPUT text in literals and comments", async () => {
   }));
   assert.ok(executor.call);
   const result = await executor.call(sql.call`SELECT 'OUTPUT' AS value /* OUTPUT */`.render());
-  assert.deepEqual(result.resultSets, [{ rows: [{ value: 1 }] }]);
+  assert.deepEqual(result.resultSets.map((set) => set.rows), [[{ value: 1 }]]);
 });
 
 test("MSSQL query rejects actual output return values instead of discarding them", async () => {

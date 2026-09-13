@@ -21,7 +21,7 @@ const users = sql.rows<UserRow>`
 `;
 ```
 
-> **Status:** pre-release. SQL-first authoring, Standard Schema mapping, connection leasing, execution observers, runtime portability, metadata/codegen and agent-native LSP tooling are implemented. PV14 binding transport and observer diagnostics remain verification-pending; RC publication is deferred until development, review and user acceptance. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release. PV15 adds native streaming across five drivers, heterogeneous routine contracts and Vite 8 integration. Exact-final-revision CI and user acceptance gate RC publication; no release is implied by the working tree. See [`PLAN.md`](./PLAN.md).
 
 [Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) ·
 [Documentation](https://clickin.github.io/SQLBraid/) ·
@@ -137,6 +137,26 @@ sql.command`UPDATE ...`
 sql.call<RefreshResult>`CALL ...`
 sql`SELECT ...` // Query<unknown, "unknown">
 ```
+
+`RefreshResult` describes the whole `RoutineCallResult<Output, Sets, ReturnValue>`,
+not one row. A routine contract can attach separate Standard Schema mappers to
+`output`, each ordered `resultSets` entry and an actual `returnValue` channel:
+
+```ts
+const refresh = sql.call({
+  output: RefreshOutputSchema,
+  resultSets: [AccountSchema, SummarySchema] as const,
+})`CALL refresh_accounts(${sql.inOut("accountId", accountId)})`;
+const { output, resultSets } = await db.call(refresh);
+```
+
+OUT/INOUT support and required hints are driver-specific. PostgreSQL refcursors
+require an existing `db.tx()`. Oracle supports scalar OUT/INOUT, REF CURSORs and
+implicit results. MySQL supports heterogeneous emitted sets but rejects OUT/INOUT
+descriptors: mysql2 does not expose the carrier metadata required for safe
+classification. Tedious native procedure metadata separates OUTPUT from the
+actual procedure RETURN status. SQLite has no stored-procedure `call()` API.
+See the [routine guide](https://clickin.github.io/SQLBraid/dev/concepts/routines/).
 
 Adapters report the actual row/command result kind and the runtime checks it against the declaration. A mismatch throws `BRAID_RESULT_KIND` **after execution**; use a transaction when a write must roll back if its declared kind was wrong.
 
@@ -293,7 +313,21 @@ Materialized query results release their root lease before asynchronous applicat
 
 One batch uses one lease, executes every physical statement in order, releases, then maps the materialized results. **Batch is not atomic:** earlier statements—and later statements when mapping fails—may already have executed. Wrap it in `db.tx()` when atomicity is required.
 
-Streaming keeps its lease until iteration finishes, breaks, aborts or fails. Rows are mapped one at a time without buffering. Pooled-root mapper re-entry may acquire another lease; a pool needs available capacity for that nested operation. Same-root direct-stream re-entry fails with `BRAID_STREAM_SCOPE` rather than waiting on itself. Transaction streams prohibit overlapping work on the pinned connection. The SQLite adapter uses native statement iteration; adapters without a streaming protocol reject streaming.
+Streaming keeps its lease until iteration finishes, breaks, aborts or fails. Rows are mapped one at a time without buffering. Pooled-root mapper re-entry may acquire another lease; a pool needs available capacity for that nested operation. Same-root direct-stream re-entry fails with `BRAID_STREAM_SCOPE` rather than waiting on itself. Transaction streams prohibit overlapping work on the pinned connection.
+
+All five first-party adapters have native streaming paths: optional `pg-cursor`,
+mysql2 prepared `Execute.stream()`, SQLite `iterate()`, Oracle `ResultSet`, and
+Tedious bounded row events. Driver cleanup finishes before lease release. MySQL
+normal break drains the command for reuse. PostgreSQL and MySQL abort terminate
+and discard the physical connection, including pending reads. Cleanup failures
+discard pooled leases or poison direct resources.
+Custom executors must implement `stream()` explicitly, rejecting unsupported
+capabilities rather than wrapping a materialized query. `callStream()` is not
+available.
+
+SQLite defaults to `integerMode: "number"`. Select `"bigint"` for exact 64-bit
+integers, and use `typePolicyForIntegerMode("bigint")` consistently for codegen.
+JavaScript JSON does not serialize bigint automatically.
 
 Uncertain transaction-control failures poison the physical resource. Pooled cleanup discards it (`pg` release-with-destroy; mysql2 `destroy()`); direct resources reject further SQLBraid work.
 
@@ -689,7 +723,7 @@ Synchronous TypeScript work is not preemptible.
 `22.22.1`, and is a thin TypeScript/TSX client. It starts the server only
 for config/dependency-proven SQLBraid projects, keeps built-in TypeScript support,
 and offers **Generate Models**, **Check Generated Models**, and **Reload Project**.
-The VSIX contains matching `0.1.0` server/CLI dependencies with version checks;
+The VSIX contains matching `0.1.0-rc.0` server/CLI dependencies with version checks;
 it never silently selects a global/workspace server. No semantic engine lives in
 the extension. The full gate runs a real VS Code host and packs the VSIX.
 
@@ -697,7 +731,25 @@ the extension. The full gate runs a real VS Code host and packs the VSIX.
 
 ## Oracle and SQL Server evidence
 
-PV13's [successful runtime gate at d4bc626](https://github.com/Clickin/SQLBraid/actions/runs/34753809318) covers Oracle 23.9.0.25.07 Thin and SQL Server 2022 CU18 (16.0.4185.3) with Node 22.18.0 on Linux x64, plus all five portable dialect roots on Node/Bun/Deno. Local SQL Server ARM emulation is not an Official ARM claim. Oracle `call()` and SQL Server OUT/return-value routine binding remain explicitly Unsupported.
+PV13's [successful runtime gate at d4bc626](https://github.com/Clickin/SQLBraid/actions/runs/34753809318) covers the historical Oracle 23.9.0.25.07 Thin and SQL Server 2022 CU18 (16.0.4185.3) baseline with Node 22.18.0 on Linux x64, plus all five portable dialect roots on Node/Bun/Deno. It is not evidence for PV15 routine additions. Local SQL Server ARM emulation is not an Official ARM claim. New routine/streaming capabilities require exact-final-revision CI; Oracle Thick and Oracle/Tedious on Bun/Deno remain outside that claim.
+
+## Vite 8 and TanStack Start
+
+```ts
+import { defineConfig } from "vite";
+import sqlbraid from "@sqlbraid/vite";
+
+export default defineConfig({ plugins: [sqlbraid()] });
+```
+
+The pre-transform lowers guarded Braid expressions and preserves source maps;
+Vite remains responsible for TypeScript/JSX transpilation. Keep database drivers,
+connections and query execution in server-only modules. This is build integration,
+not browser support for SQLBraid runtime packages.
+
+`pnpm run test:tanstack-start` validates a packed Node 24 / TanStack Start finance
+consumer: Vite dev/build/HMR, SSR, Korean STRICT SQLite tables, integer modes and
+client/server bundle boundaries.
 
 ---
 
@@ -716,6 +768,7 @@ Current workspace packages:
 | `@sqlbraid/oracle` | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; optional `/inspector` |
 | `@sqlbraid/mssql` | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; optional `/inspector` |
 | `@sqlbraid/compiler` | TypeScript discovery and guarded-template lowering |
+| `@sqlbraid/vite` | Vite 8 pre-transform, diagnostics and original-source maps |
 | `@sqlbraid/metadata` | DB-fact snapshots, validation, canonical identity and drift |
 | `@sqlbraid/codegen` | Pure metadata + TypePolicy to Row/Insert/Update declarations |
 | `@sqlbraid/tooling` | Shared config/workspace, evidence indexes and agent/editor semantics |
@@ -724,7 +777,7 @@ Current workspace packages:
 | `@sqlbraid/language-server` | Editor/LSP integration |
 | `sqlbraid` | Unscoped CLI convenience package; provides the `sqlbraid` executable without database drivers |
 
-The workspace package set is 16 packages: 15 scoped packages plus the unscoped `sqlbraid` CLI convenience package.
+The workspace package set is 17 packages: 16 scoped packages plus the unscoped `sqlbraid` CLI convenience package.
 
 ---
 

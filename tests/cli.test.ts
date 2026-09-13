@@ -39,12 +39,14 @@ test('CLI checks, manifests, and builds opaque declared queries without a snapsh
   try {
     const file = join(directory, 'query.ts');
     await writeFile(file, `import { sql } from '@sqlbraid/template';
+      import type { RoutineCallResult } from '@sqlbraid/core';
       type Row = { id: number };
+      type CallResult = RoutineCallResult<{ ok: boolean }, readonly [{ id: number }]>;
       export function build(user: Row | null) {
         return [
           sql.rows<Row>\`SELECT custom_company_function(id) /*@braid if \${user != null}*/ WHERE id=\${user.id} /*@braid end*/\`,
           sql.command\`SELECT proprietary_command() /*@braid if \${user != null}*/ WITH ARGUMENT \${user.id} /*@braid end*/\`,
-          sql.call<Row>\`SELECT proprietary_call() /*@braid if \${user != null}*/ WITH ARGUMENT \${user.id} /*@braid end*/\`,
+          sql.call<CallResult>\`SELECT proprietary_call() /*@braid if \${user != null}*/ WITH ARGUMENT \${user.id} /*@braid end*/\`,
           sql\`SELECT id FROM users\`,
         ];
       }
@@ -54,7 +56,7 @@ test('CLI checks, manifests, and builds opaque declared queries without a snapsh
     const manifest = await exec(process.execPath, ['packages/cli/dist/index.js', 'manifest', '--file', file]);
     const entries: { resultKind: string; resultType?: string; [key: string]: unknown }[] = JSON.parse(manifest.stdout);
     assert.deepEqual(entries.map((entry) => entry.resultKind), ['rows', 'command', 'call', 'unknown']);
-    assert.deepEqual(entries.map((entry) => entry.resultType), ['Row', 'import("@sqlbraid/core").CommandResult', 'Row', undefined]);
+    assert.deepEqual(entries.map((entry) => entry.resultType), ['Row', 'import("@sqlbraid/core").CommandResult', 'CallResult', undefined]);
     assert.ok(entries.every((entry) => !('operation' in entry) && !('readOnly' in entry) && !('locking' in entry) && !('sessionAffine' in entry) && !('reason' in entry)));
     assert.ok(entries.every((entry) => typeof entry.fingerprint === 'string' && typeof entry.templateFamilyFingerprint === 'string' && typeof entry.source === 'string'));
     const output = join(directory, 'generated', 'renamed.mjs');

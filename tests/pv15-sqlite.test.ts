@@ -1,0 +1,265 @@
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { test } from "vitest";
+import { createPooledDatabase, DatabaseScopeError } from "@sqlbraid/runtime";
+import type { QueryExecutor } from "@sqlbraid/core";
+import {
+  createNodeSqliteDatabase,
+  createNodeSqliteExecutor,
+} from "@sqlbraid/sqlite/node-sqlite";
+import { sql, typePolicy, typePolicyForIntegerMode } from "@sqlbraid/sqlite";
+import { runStreamingConformance } from "./streaming-conformance.js";
+
+test("SQLite satisfies shared streaming lifecycle and releases only after iterator return", async () => {
+  await runStreamingConformance(() => {
+    const native = new DatabaseSync(":memory:");
+    const executor = createNodeSqliteExecutor(native);
+    let returns = 0;
+    let releases = 0;
+    let cleaned = false;
+    const db = createPooledDatabase({
+      statementBinding: executor.statementBinding,
+      async acquire() {
+        return {
+          ...executor,
+          stream<Row>(...args: Parameters<QueryExecutor["stream"]>): AsyncIterable<Row> {
+            const iterator = executor.stream<Row>(...args)[Symbol.asyncIterator]();
+            return {
+              [Symbol.asyncIterator]() {
+                return {
+                  next: () => iterator.next(),
+                  async return() {
+                    returns += 1;
+                    const result = await iterator.return?.();
+                    cleaned = true;
+                    return result ?? { done: true as const, value: undefined };
+                  },
+                };
+              },
+            };
+          },
+          release() {
+            assert.equal(cleaned, true);
+            releases += 1;
+          },
+        };
+      },
+    });
+    const rowSchema = {
+      "~standard": {
+        version: 1 as const,
+        vendor: "sqlite-conformance",
+        validate(value: unknown) {
+          assert.ok(value !== null && typeof value === "object" && "value" in value && typeof value.value === "number");
+          return { value: { value: value.value * 2 } };
+        },
+      },
+    };
+    return {
+      db,
+      query: sql.rows(rowSchema)`SELECT 1 AS value UNION ALL SELECT 2`,
+      expected: [{ value: 2 }, { value: 4 }],
+      mappingQuery: sql.rows({
+        "~standard": { version: 1, vendor: "sqlite-conformance", validate() { throw new Error("query mapper failed"); } },
+      })`SELECT 1 AS value`,
+      released: () => releases,
+      iteratorReturns: () => returns,
+      close: () => native.close(),
+    };
+  });
+});
+
+test("SQLite preserves read and cleanup errors and discards an uncertain lease", async () => {
+  const readFailure = new Error("native iterator read failed");
+  const closeFailure = new Error("native iterator return failed");
+  let discarded = 0;
+  const executor = createNodeSqliteExecutor({
+    prepare() {
+      return {
+        columns: () => [{ name: "value" }],
+        all() { throw new Error("must not materialize"); },
+        run() { throw new Error("must not execute a command"); },
+        iterate() {
+          return {
+            [Symbol.iterator]() { return this; },
+            next() { throw readFailure; },
+            return() { throw closeFailure; },
+          };
+        },
+      };
+    },
+  });
+  const db = createPooledDatabase({
+    statementBinding: executor.statementBinding,
+    async acquire() {
+      return {
+        ...executor,
+        release(options) {
+          assert.equal(options?.discard, true, "uncertain physical lease must not be reused");
+          discarded += 1;
+        },
+      };
+    },
+  });
+  await assert.rejects(async () => {
+    for await (const row of db.stream(sql.rows`SELECT 1 AS value`)) void row;
+  }, (error: unknown) => error instanceof AggregateError && error.errors.includes(readFailure)
+    && error.errors.some((nested: unknown) => nested === closeFailure || (nested instanceof Error && nested.cause === closeFailure)));
+  assert.equal(discarded, 1);
+});
+
+test("SQLite integer mode enforces native number and bigint reads", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    const numberDb = createNodeSqliteDatabase(native, { integerMode: "number" });
+    assert.deepEqual(await numberDb.one(sql.rows<{ value: number }>`SELECT 42 AS value`), { value: 42 });
+
+    const bigintDb = createNodeSqliteDatabase(native, { integerMode: "bigint" });
+    assert.deepEqual(
+      await bigintDb.one(sql.rows<{ value: bigint }>`SELECT 9007199254740993 AS value`),
+      { value: 9007199254740993n },
+    );
+    assert.deepEqual(
+      (await bigintDb.execute(sql.rows<{ value: bigint }>`SELECT 9007199254740993 AS value`)).rows,
+      [{ value: 9007199254740993n }],
+    );
+    const streamed: bigint[] = [];
+    for await (const row of bigintDb.stream(sql.rows<{ value: bigint }>`SELECT 9007199254740993 AS value`)) {
+      streamed.push(row.value);
+    }
+    assert.deepEqual(streamed, [9007199254740993n]);
+
+    assert.equal(typePolicy.mappings.find((mapping) => mapping.databaseType === "INTEGER")?.outputType, "number | bigint");
+    assert.equal(typePolicyForIntegerMode("number").mappings[0]?.outputType, "number");
+    assert.equal(typePolicyForIntegerMode("bigint").mappings[0]?.outputType, "bigint");
+  } finally {
+    native.close();
+  }
+});
+
+test("SQLite streams 100k rows without materializing an application array", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    native.exec(`
+      CREATE TABLE pv15_stream (value INTEGER NOT NULL);
+      WITH RECURSIVE nums(value) AS (
+        SELECT 1
+        UNION ALL
+        SELECT value + 1 FROM nums WHERE value < 100000
+      )
+      INSERT INTO pv15_stream SELECT value FROM nums;
+    `);
+    let allCalls = 0;
+    let iterateCalls = 0;
+    const db = createNodeSqliteDatabase({
+      prepare(text) {
+        const statement = native.prepare(text);
+        return {
+          columns: () => statement.columns(),
+          all: () => {
+            allCalls += 1;
+            return statement.all();
+          },
+          run: () => statement.run(),
+          iterate: () => {
+            iterateCalls += 1;
+            return statement.iterate();
+          },
+          setReadBigInts: (enabled) => statement.setReadBigInts(enabled),
+        };
+      },
+    });
+    let count = 0;
+    let sum = 0;
+    for await (const row of db.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_stream ORDER BY value`)) {
+      count += 1;
+      sum += row.value;
+    }
+    assert.equal(count, 100000);
+    assert.equal(sum, 5000050000);
+    assert.equal(iterateCalls, 1);
+    assert.equal(allCalls, 0);
+
+    let stopped = 0;
+    for await (const row of db.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_stream ORDER BY value`)) {
+      stopped = row.value;
+      break;
+    }
+    assert.equal(stopped, 1);
+
+    const abort = new AbortController();
+    abort.abort(new Error("stop"));
+    await assert.rejects(
+      async () => {
+        for await (const row of db.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_stream`, { signal: abort.signal })) {
+          void row;
+        }
+      },
+      (error: unknown) => error instanceof Error && error.message === "stop",
+    );
+  } finally {
+    native.close();
+  }
+}, 10_000);
+
+test("SQLite stream mapper errors and transaction ownership release iteration", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    native.exec("CREATE TABLE pv15_tx (value INTEGER); INSERT INTO pv15_tx VALUES (1), (2)");
+    const db = createNodeSqliteDatabase(native);
+    const failure = new Error("mapper failed");
+    await assert.rejects(
+      async () => {
+        for await (const row of db.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_tx`, {
+          schema: { "~standard": { version: 1, vendor: "pv15", validate() { throw failure; } } },
+        })) {
+          void row;
+        }
+      },
+      (error: unknown) => error === failure,
+    );
+
+    await db.tx(async (tx) => {
+      const values: number[] = [];
+      for await (const row of tx.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_tx`)) values.push(row.value);
+      assert.deepEqual(values, [1, 2]);
+      await assert.rejects(
+        () => db.one(sql.rows<{ value: number }>`SELECT value FROM pv15_tx LIMIT 1`),
+        (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_TX_SCOPE",
+      );
+    });
+    assert.deepEqual(await db.all(sql.rows<{ value: number }>`SELECT value FROM pv15_tx`), [{ value: 1 }, { value: 2 }]);
+  } finally {
+    native.close();
+  }
+});
+
+test("SQLite custom scalar and aggregate functions remain ordinary row queries", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    native.function("pv15_double", (value) => {
+      assert.equal(typeof value, "number");
+      return Number(value) * 2;
+    });
+    native.aggregate("pv15_total", {
+      start: 0,
+      step: (total: number, value) => total + Number(value),
+      result: (total: number) => total,
+    });
+    const db = createNodeSqliteDatabase(native);
+    assert.deepEqual(
+      await db.all(sql.rows<{ value: number }>`SELECT pv15_double(value) AS value FROM (SELECT 3 AS value)`),
+      [{ value: 6 }],
+    );
+    assert.deepEqual(
+      await db.all(sql.rows<{ value: number }>`SELECT pv15_total(value) AS value FROM (SELECT 3 AS value UNION ALL SELECT 4)`),
+      [{ value: 7 }],
+    );
+    await assert.rejects(
+      () => db.call(sql.call`CALL pv15_total()`),
+      (error: unknown) => error instanceof Error && error.message.startsWith("BRAID_CALL_UNSUPPORTED:"),
+    );
+  } finally {
+    native.close();
+  }
+});

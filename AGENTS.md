@@ -179,13 +179,28 @@ Canonical tags:
 ```ts
 sql.rows<Row>`...`
 sql.command`...`
-sql.call<Row>`...`
+sql.call<RoutineCallResult<Output, Sets, ReturnValue>>`...`
 sql`...` // unknown
 ```
 
 Adapters report actual row/command kind. Runtime enforces the declaration centrally.
 
 Kind mismatch is post-execution. Never claim it prevents side effects.
+
+Routine result generics describe the whole result, never one shared row type.
+`output`, heterogeneous `resultSets` and actual `returnValue` channels have
+separate Standard Schema contracts. Collect/close all materialized driver
+resources, release root leases, then map application values. OUT cursor sets
+come first in descriptor order, followed by implicit/emitted sets in driver
+order. Scalar output never occupies a result set.
+
+`sql.out()`/`sql.inOut()` are value-only logical parameters. PostgreSQL refcursors
+require an existing `db.tx()`. MySQL emitted sets are supported, but mysql2's
+insufficient OUT carrier evidence means descriptors fail explicitly; never guess
+the final set or rewrite through session variables. Tedious native procedure
+metadata exposes actual OUTPUT/RETURN, not a fabricated wrapper status. SQLite
+calls and direct SQL Server cursor OUT remain Unsupported. `callStream()` is
+reserved, not an implemented API.
 
 ---
 
@@ -239,6 +254,18 @@ For materialized results, release the root lease after DB I/O/result materializa
 Do not hold scarce pool connections while application mapping runs.
 
 Streaming is different: a live stream/cursor retains its lease until iteration closes.
+
+`QueryExecutor.stream()` and `call()` are explicit methods; unsupported custom
+capabilities reject, never buffer or simulate. Every stream returns/closes its
+driver iterator before releasing the lease. Native paths are pg-cursor, mysql2
+prepared Execute stream, SQLite iterate, Oracle ResultSet and bounded Tedious
+row events. MySQL break drains for reuse; abort destroys/discards. Cleanup
+failure poisons/discards the physical resource. No SQLBraid full-result array is
+permitted on `db.stream()`.
+
+SQLite `integerMode` is explicit (`number` default, `bigint` for exact int64).
+Use the matching `typePolicyForIntegerMode()` for generated models; do not
+silently coerce bigint through number or claim JSON serializability.
 
 ---
 
@@ -348,9 +375,9 @@ Oracle NUMBER/LOB/temporal and SQL Server precision/scale semantics require
 driver-specific handling. Unsupported call/OUT or streaming capabilities must
 remain explicit rather than simulated.
 
-PV14 verification is pending on the exact final revision. Do not infer a new
+PV15 verification is pending on the exact final revision. Do not infer a new
 runtime/driver support label, SHA, CI pass, package version or RC publication
-from in-progress implementation. RC publication remains deferred until PV14
+from in-progress implementation. RC publication remains deferred until PV15
 development, review and user acceptance.
 
 ---
@@ -427,6 +454,13 @@ isolation options must preserve the actual DB/session default.
 ---
 
 ## 13. Testing requirements
+
+PV15 adds `@sqlbraid/vite` as the seventeenth publishable package. It is tooling,
+not a runtime dependency: compiler `transformSource` lowers guarded templates
+without transpiling TS/JSX; Vite owns transpilation. Keep original TS/TSX maps,
+dev/build/HMR/SSR evidence and the packed TanStack Start finance gate.
+Database drivers and execution stay server-only. Preserve reviewed `node:buffer`
+imports rather than claiming browser runtime support to accommodate bundling.
 
 Use Vitest for fast tests, Testcontainers for PostgreSQL/MySQL and native `node:sqlite` for SQLite.
 

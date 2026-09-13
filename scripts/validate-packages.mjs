@@ -27,7 +27,7 @@ const consumer = join(temp, "consumer");
 const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR) : undefined;
 const requiredPackageNames = new Set([
   "cli", "codegen", "compiler", "core", "language-server", "metadata", "mssql", "mysql",
-  "operations", "oracle", "postgres", "runtime", "sqlbraid", "sqlite", "template", "tooling",
+  "operations", "oracle", "postgres", "runtime", "sqlbraid", "sqlite", "template", "tooling", "vite",
 ]);
 const packedContainers = [];
 
@@ -191,7 +191,7 @@ try {
         throw new Error("The unscoped sqlbraid package must depend only on @sqlbraid/cli and pull no drivers.");
       }
     }
-    for (const tooling of ["@sqlbraid/metadata", "@sqlbraid/codegen", "@sqlbraid/tooling", "@sqlbraid/cli", "@sqlbraid/language-server", "@sqlbraid/vscode"]) {
+    for (const tooling of ["@sqlbraid/metadata", "@sqlbraid/codegen", "@sqlbraid/tooling", "@sqlbraid/compiler", "@sqlbraid/vite", "@sqlbraid/cli", "@sqlbraid/language-server", "@sqlbraid/vscode", "vite", "react", "@tanstack/react-start"]) {
       if (runtimePackages.includes(packageName) && (manifest.dependencies?.[tooling] || manifest.optionalDependencies?.[tooling])) {
         throw new Error(`${tooling} is a runtime dependency of ${manifest.name}.`);
       }
@@ -214,7 +214,7 @@ try {
   }));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], boundaryConsumer);
   const runtimeInstalledPackages = await readdir(join(boundaryConsumer, "node_modules/@sqlbraid"));
-  if (["metadata", "codegen", "tooling", "cli", "language-server", "vscode"].some((name) => runtimeInstalledPackages.includes(name))) throw new Error("Runtime consumer installed development tooling transitively.");
+  if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode"].some((name) => runtimeInstalledPackages.includes(name))) throw new Error("Runtime consumer installed development tooling transitively.");
   const runtimeTopLevelPackages = await readdir(join(boundaryConsumer, "node_modules"));
   if (runtimeTopLevelPackages.includes("sqlbraid")) throw new Error("Runtime consumer installed the unscoped CLI package transitively.");
   if (["oracledb", "tedious"].some((name) => runtimeTopLevelPackages.includes(name))) throw new Error("Runtime consumer installed a Node-only database driver.");

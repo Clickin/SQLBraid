@@ -51,13 +51,31 @@ Thin 바인딩 어댑터는 논리 문장을 text-positional `:1`, `:2`, … 바
 
 ## 기능 경계
 
-- 첫 번째 지원 대상은 `node-oracledb` Thin 모드입니다. Thick 모드는 Official 주장이 아닙니다.
-- OUT/IN OUT 디스크립터가 아직 바인드 API에 없으므로 이 RC에서 `call()`은 Unsupported입니다.
+- 첫 번째 대상은 `node-oracledb` Thin 모드입니다. Thick 모드는 이 문서의
+  검증 범위 밖입니다.
+- `sql.call`은 scalar OUT/IN OUT descriptor와
+  `oracleParameter.refCursor()`를 사용하는 `SYS_REFCURSOR` OUT을 지원합니다.
+  Cursor output은 materialized `resultSets`가 되고 scalar `output`에서
+  제거됩니다. implicit result도 포함하며 lease 반환 전에 모든 `ResultSet`을
+  닫습니다.
+- 이 어댑터는 native `procedure` metadata를 지원하지 않습니다. Oracle
+  PL/SQL/SQL 호출 텍스트를 명시적으로 작성하세요.
 - 스트리밍은 드라이버의 ResultSet 프로토콜을 사용하며 완료, 중단, 조기 종료 시 ResultSet을 닫습니다.
-- CI는 Node 22.18.0/Linux x64에서 Oracle 23.9.0.25.07 Thin을 검증합니다. 고정된 검증 증거와 portable root 범위는 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)을 참고하세요.
+- 대상 조합은 Node 22.18.0/Linux x64의 Oracle 23.9.0.25.07 Thin입니다.
+  PV15 최종 검증은 대기 중이며 [런타임 및 드라이버
+  지원](/SQLBraid/reference/support/)의 역사적 증거를 참고하세요.
 
 드라이버가 안전한 Oracle 타입을 추론할 수 없는 `null`에는 명시적인 힌트를 사용하세요. 타입이 지정되지 않은 null을 조용히 `VARCHAR2`로 바꾸지 않습니다.
 
 기본 정책은 정밀도를 보존하기 위해 `NUMBER` 결과를 문자열로 가져옵니다. 명시적인 `NUMBER` 입력은 `number` 또는 `bigint`를 받으며, 소수 문자열은 손실 변환하지 않고 거부합니다. SQL에서 소수 문자열 입력이 필요하면 일반 문자열 바인드와 명시적인 SQL 변환을 사용하세요.
 
-Thin 어댑터는 기본 타입 힌트를 적용하지만 길이·precision·scale 속성은 거부합니다. node-oracledb가 IN 파라미터에서 이 제약을 표현할 수 없기 때문입니다. 제약은 SQL이나 스키마에 선언하세요. 사용자 정의 executor에서는 해당 디스크립터를 사용할 수 있습니다. 구체화된 CLOB/NCLOB는 문자열, BLOB/RAW는 버퍼이며 lease 반환 후 살아 있는 LOB를 보유하지 않습니다. 시간 값은 `Date`를 사용하므로 원래 시간대 이름이나 밀리초 미만 정밀도를 보존하지 않습니다.
+Thin 어댑터는 precision/scale 속성과 IN 길이 제약을 거부합니다.
+VARCHAR2/NVARCHAR2 OUT/INOUT 길이는 드라이버의 `maxSize`를 지정하며
+다른 길이 속성은 거부합니다. DB 제약은 SQL이나 스키마에 선언하세요.
+구체화된 CLOB/NCLOB는 문자열, BLOB/RAW는 버퍼입니다. 루틴 LOB output은
+`getData()`로 읽고 lease 반환 전에 destroy 완료를 기다립니다. 읽기 실패 시
+아직 방문하지 않은 sibling 리소스도 정리합니다. 시간 값은 `Date`를 사용하므로
+원래 시간대 이름이나 밀리초 미만 정밀도를 보존하지 않습니다.
+
+전체 `sql.out`/`sql.inOut` 및 이질적 result-set 계약은
+[루틴 호출](/SQLBraid/concepts/routines/)을 참고하세요.

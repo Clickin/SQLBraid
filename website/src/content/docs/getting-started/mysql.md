@@ -65,3 +65,23 @@ the requested `reuse` policy. Unsupported hints fail before driver I/O.
 :::caution Do not pass a pool to `createMysql2Database`
 Use `createMysql2PoolDatabase(pool)` for a pool. Explicit factories keep transaction and release semantics physical-connection-safe.
 :::
+
+## Streaming and routine boundaries
+
+`db.stream()` uses the raw prepared `Execute.stream()` command behind the
+promise connection. It preserves prepared/binary execution; it does not
+downgrade to text `query()`. On break or abort SQLBraid stops row delivery and
+drains the command or discards the physical connection before releasing it.
+
+MySQL emitted result sets may be heterogeneous:
+
+```ts
+const result = await db.call(sql.call({
+  resultSets: [UserSchema, SummarySchema] as const,
+})`CALL dashboard()`);
+```
+
+Prepared CALL OUT/INOUT is currently rejected with
+`BRAID_CALL_OUT_UNSUPPORTED`. mysql2 3.x exposes no proven public discriminator
+for the protocol's extra OUT carrier result, so SQLBraid does not guess a
+carrier row. Stored functions cannot emit result sets.

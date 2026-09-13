@@ -5,8 +5,10 @@ description: Run your first SQLBraid query with Node's built-in SQLite driver.
 
 This path uses Node `>=22.18.0` and `node:sqlite`; no database server is required. The first query is a plain tagged template and needs no SQLBraid compiler. The second adds dynamic `@braid` and uses the shipped lowering command.
 
-:::note Release candidate
-npm packages are not published yet. The commands below are the public-release path; candidate verification installs the same packages from tarballs with [`pnpm run test:examples`](https://github.com/Clickin/SQLBraid/tree/main/examples).
+:::note Verification status
+The package names below are the intended integration path. PV15 final package
+and database verification is pending; this guide does not claim publication,
+CI, or release-gate completion.
 :::
 
 ## 1. Create a project
@@ -103,5 +105,12 @@ The compiler lowers the guarded template into `build/index.js`. `@braid where` e
 For a write, use `sql.command` and `db.execute`. For exactly one row, use `db.one`; it throws a cardinality error unless the result contains one row. See [SQL tags and result kinds](/SQLBraid/concepts/sql-tags/).
 
 :::caution Node SQLite support
-`node:sqlite` is the first-party SQLite adapter used by this release. The SQLite adapter does not support routine calls; streaming requires the native statement iteration protocol.
+`node:sqlite` is the first-party SQLite adapter used by this release. The SQLite
+adapter does not support routine calls; streaming uses
+`StatementSync.iterate()`. Set `integerMode: "bigint"` in
+`createNodeSqliteDatabase(native, { integerMode: "bigint" })` when INTEGER
+results must be read as `bigint`; use the matching
+`typePolicyForIntegerMode("bigint")`. SQLite scalar/aggregate/window functions
+are ordinary SQL functions, and virtual-table/table-valued extensions are
+ordinary row queries, not stored procedures.
 :::

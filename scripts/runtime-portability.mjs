@@ -34,7 +34,7 @@ try {
   await run("pnpm", ["run", "build"]);
   await auditRuntime(join(root, "packages"), "src");
   await mkdir(consumer);
-  const dependencies = { pg: workspace.devDependencies.pg, mysql2: workspace.devDependencies.mysql2 };
+  const dependencies = { pg: workspace.devDependencies.pg, "pg-cursor": workspace.devDependencies["pg-cursor"], mysql2: workspace.devDependencies.mysql2 };
   for (const name of runtimePackages) {
     await run("pnpm", ["--dir", join(root, "packages", name), "pack", "--pack-destination", temp]);
     const manifest = JSON.parse(await readFile(join(root, "packages", name, "package.json"), "utf8"));
@@ -46,7 +46,7 @@ try {
   await writeFile(join(consumer, "package.json"), JSON.stringify({ name: "sqlbraid-runtime-consumer", private: true, type: "module", dependencies }));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], consumer);
   const installedPackages = await readdir(join(consumer, "node_modules/@sqlbraid"));
-  if (["metadata", "codegen", "tooling", "cli", "language-server", "vscode"].some((name) => installedPackages.includes(name))) {
+  if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode"].some((name) => installedPackages.includes(name))) {
     throw new Error("Runtime-only installation pulled in development tooling");
   }
   const topLevelPackages = await readdir(join(consumer, "node_modules"));
@@ -104,9 +104,9 @@ assert.deepEqual(mssql\`SELECT \${1}\`.render().segments, ["SELECT ", ""]);
 await runRuntimeSmoke();
 console.info("PASS packed portable core/template/runtime and five dialect roots including ALS");
 await runPostgresSmoke(process.env.SQLBRAID_POSTGRES_URL);
-console.info("PASS pg direct/pool");
+console.info("PASS pg direct/pool and pg-cursor streaming");
 await runMysqlSmoke(process.env.SQLBRAID_MYSQL_URL);
-console.info("PASS mysql2 direct/pool");
+console.info("PASS mysql2 direct/pool and prepared Execute streaming");
 const sqlite = await runSqliteSmoke();
 console.info("SQLite capability/result:", JSON.stringify(sqlite));
 if (!process.versions.bun) assert.equal(sqlite.supported, true, "Node and pinned Deno SQLite are required release gates");

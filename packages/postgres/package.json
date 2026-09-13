@@ -23,9 +23,13 @@
     "@sqlbraid/template": "workspace:*"
   },
   "peerDependencies": {
+    "pg-cursor": "^2.22.0",
     "@sqlbraid/metadata": "workspace:*"
   },
   "peerDependenciesMeta": {
+    "pg-cursor": {
+      "optional": true
+    },
     "@sqlbraid/metadata": {
       "optional": true
     }

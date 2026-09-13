@@ -14,6 +14,7 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/oracle` | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; `/inspector` |
 | `@sqlbraid/mssql` | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; `/inspector` |
 | `@sqlbraid/compiler` | TypeScript discovery and guarded-template lowering |
+| `@sqlbraid/vite` | Vite 8 pre-transform for guarded-template lowering with source maps |
 | `@sqlbraid/metadata` | DB-fact snapshots, validation, identity, and drift |
 | `@sqlbraid/codegen` | Metadata + TypePolicy to Row/Insert/Update declarations |
 | `@sqlbraid/tooling` | Shared config/workspace evidence and semantic indexes |
@@ -22,14 +23,14 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/language-server` | Standard stdio LSP integration |
 | `sqlbraid` | Unscoped CLI convenience package; provides the `sqlbraid` executable without database drivers |
 
-The package set is 16 packages: 15 scoped runtime/tooling packages plus the unscoped CLI convenience package. Runtime packages do not acquire metadata, codegen, compiler, or editor dependencies. Install tooling packages only in development/build environments. The Oracle and SQL Server driver dependencies are kept out of their portable roots.
+The package set is 17 packages: 16 scoped runtime/tooling packages plus the unscoped CLI convenience package. Runtime packages do not acquire metadata, codegen, compiler, editor, or Vite dependencies. Install tooling packages only in development/build environments. The Oracle and SQL Server driver dependencies are kept out of their portable roots. `@sqlbraid/vite` keeps Vite as a peer and does not import a framework.
 
 The dependency direction is:
 
 ```text
 core / compiler / metadata / codegen
                  ↓
-             tooling
+          tooling / vite
              ↙     ↘
            CLI      LSP
                       ↑

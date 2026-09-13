@@ -13,6 +13,7 @@
       "@sqlbraid/template": ["packages/template/src/index.ts"],
       "@sqlbraid/metadata": ["packages/metadata/src/index.ts"],
       "@sqlbraid/compiler": ["packages/compiler/src/index.ts"],
+      "@sqlbraid/vite": ["packages/vite/src/index.ts"],
       "@sqlbraid/tooling": ["packages/tooling/src/index.ts"],
 
       "@sqlbraid/runtime": ["packages/runtime/src/index.ts"],

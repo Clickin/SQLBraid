@@ -70,3 +70,22 @@ SQLBraid는 duck typing으로 풀을 판별하지 않습니다. 직접 팩토리
 :::
 
 자세한 경계는 [직접 연결과 풀](/SQLBraid/runtime/direct-pools/) 및 [트랜잭션](/SQLBraid/runtime/transactions/)을 참고하세요.
+
+## 스트리밍과 루틴
+
+이 애플리케이션에서 `db.stream()`을 사용할 때만 `pg-cursor`를 설치하세요.
+
+```bash
+npm install pg-cursor
+```
+
+일반 쿼리에는 optional peer가 필요하지 않습니다. PostgreSQL 스트리밍은
+cursor batch read를 사용하며 capability가 없으면
+`BRAID_STREAM_UNSUPPORTED`를 보고합니다. Abort는 대기 중 batch read도
+중단하도록 물리적 `Client.end()` 완료 후 연결을 폐기합니다. Pool은 새 연결을
+제공하며 direct client는 교체해야 합니다. Abort 가능한 custom wrapper에는
+`end()`가 필요합니다. `refcursor` OUT/INOUT 루틴은
+`postgresParameter.refcursor()`로 표시하고 기존
+`db.tx(async (tx) => tx.call(query))` 범위 안에서 호출하세요. SQLBraid는
+transaction-bound portal을 fetch/close하고 scalar `output`에서 제거한 뒤
+행을 `resultSets`로 반환하며 숨은 transaction을 만들지 않습니다.

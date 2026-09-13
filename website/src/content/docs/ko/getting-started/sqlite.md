@@ -5,8 +5,10 @@ description: Node에 내장된 SQLite 드라이버로 첫 SQLBraid 쿼리를 실
 
 이 경로는 Node `>=22.18.0` 및 `node:sqlite`를 사용하며 데이터베이스 서버가 필요하지 않습니다. 첫 번째 쿼리는 단순한 태그 템플릿이므로 SQLBraid 컴파일러가 필요하지 않습니다. 두 번째 쿼리는 동적 `@braid`를 추가하고 함께 제공되는 lowering 명령을 사용합니다.
 
-:::note 릴리스 후보
-npm 패키지는 아직 배포되지 않았습니다. 아래 명령은 공개 릴리스 경로이며, 후보 검증은 [`pnpm run test:examples`](https://github.com/Clickin/SQLBraid/tree/main/examples)를 사용해 동일한 패키지를 tarball에서 설치합니다.
+:::note 검증 상태
+아래 패키지 이름은 의도한 통합 경로입니다. PV15 최종 패키지 및
+데이터베이스 검증은 대기 중이며 이 문서는 배포, CI 또는 릴리스 게이트
+완료를 주장하지 않습니다.
 :::
 
 ## 1. 프로젝트 만들기
@@ -103,5 +105,11 @@ node build/index.js
 쓰기에는 `sql.command`와 `db.execute`를 사용하세요. 정확히 한 행에는 `db.one`을 사용합니다. 결과에 한 행이 없으면 카디널리티 오류가 발생합니다. [SQL 태그와 결과 종류](/SQLBraid/concepts/sql-tags/)를 참고하세요.
 
 :::caution Node SQLite 지원
-`node:sqlite`는 이 릴리스에서 사용하는 첫 번째 파티 SQLite 어댑터입니다. SQLite 어댑터는 루틴 호출을 지원하지 않으며, 스트리밍에는 네이티브 문 반복 프로토콜이 필요합니다.
+`node:sqlite`는 이 릴리스에서 사용하는 첫 번째 파티 SQLite 어댑터입니다.
+SQLite 어댑터는 루틴 호출을 지원하지 않으며 스트리밍에는
+`StatementSync.iterate()`를 사용합니다. INTEGER 결과를 `bigint`로 읽어야
+하면 `createNodeSqliteDatabase(native, { integerMode: "bigint" })`를
+설정하고 `typePolicyForIntegerMode("bigint")`를 사용하세요. SQLite
+scalar/aggregate/window function은 일반 SQL 함수이며 virtual-table/table-valued
+extension도 stored procedure가 아닌 일반 행 쿼리입니다.
 :::

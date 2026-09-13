@@ -63,6 +63,31 @@ Prepared query의 shape는 결과 종류, 정규화된 논리 `segments`, 순서
 
 ## 어댑터 지원
 
-PostgreSQL, MySQL, SQLite 어댑터는 파라미터 힌트가 포함된 쿼리를 `BRAID_BIND_HINT_UNSUPPORTED`로 명시적으로 거부합니다. 힌트를 조용히 무시하지 않습니다. 필요한 타입 API가 있는 어댑터가 준비될 때까지 기존의 힌트 없는 바인드를 사용하세요.
+PostgreSQL, MySQL, SQLite 어댑터는 일반 파라미터 힌트를
+`BRAID_BIND_HINT_UNSUPPORTED`로 명시적으로 거부하며 힌트를 조용히 무시하지
+않습니다. PostgreSQL의 루틴 전용 `postgresParameter.refcursor()`는
+OUT/INOUT portal을 분류하는 좁은 예외입니다. 그 외에는 필요한 타입 API가
+있는 어댑터가 준비될 때까지 힌트 없는 바인드를 사용하세요.
 
-Oracle 및 SQL Server portable root는 힌트 디스크립터를 내보냅니다. 두 Node 어댑터에는 실제 로컬 DB 검사가 있으며 정확한 범위는 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)에서 확인하세요. Oracle은 node-oracledb가 적용할 수 없는 IN 길이·precision·scale 속성을 거부합니다. 두 어댑터 모두 지원하지 않는 속성을 조용히 무시하지 않습니다.
+Oracle 및 SQL Server portable root는 힌트 디스크립터를 내보냅니다. 두 Node
+어댑터는 어댑터별 capability 검사를 수행하며 PV15 최종 증거는 [런타임 및
+드라이버 지원](/SQLBraid/reference/support/)에서 대기 중입니다. Oracle은
+node-oracledb가 적용할 수 없는 IN 길이·precision·scale 속성을 거부합니다.
+두 어댑터 모두 지원하지 않는 속성을 조용히 무시하지 않습니다.
+
+## 루틴 방향
+
+`sql.bind(value, hint)`는 IN 값입니다. 루틴 호출에는 다음 helper가 추가됩니다.
+
+```ts
+sql.out("name", hint?)              // OUT, 논리적 null placeholder
+sql.inOut("name", value, hint?)     // INOUT, 초기값과 output
+```
+
+이 helper는 `sql.call` 템플릿에서만 사용할 수 있습니다. output 이름은
+서로 달라야 합니다. Oracle OUT/INOUT에는 hint가 필요하고 SQL Server
+OUTPUT/INOUT에는 Tedious hint가 필요합니다. PostgreSQL refcursor output은
+`postgresParameter.refcursor()`로 분류해야 합니다. MySQL prepared CALL은
+public mysql2 3.x API로 추가 carrier를 증명할 수 없으므로 OUT/INOUT을
+거부합니다. result 순서, `output`에서 cursor 제거, 정리는
+[루틴 호출](/SQLBraid/concepts/routines/)을 참고하세요.

@@ -53,7 +53,7 @@ jobs:
       SQLBRAID_MYSQL_URL: mysql://sqlbraid:sqlbraid-test@127.0.0.1:3306/sqlbraid
     steps:
       - name: Check out exact release ref
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -63,22 +63,22 @@ jobs:
           echo "SQLBRAID_VSIX_OUTPUT=$RUNNER_TEMP/sqlbraid-release-artifacts/sqlbraid.vsix" >> "$GITHUB_ENV"
 
       - name: Set up Node 22.18.0
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7.0.0
         with:
           node-version: 22.18.0
 
       - name: Set up pnpm 12.3.4
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6.1.0
         with:
           version: 12.3.4
 
       - name: Set up Bun 1.3.14
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.3.14
 
       - name: Set up Deno 2.9.3
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@v2.0.5
         with:
           deno-version: v2.9.3
 
@@ -132,11 +132,40 @@ jobs:
       - name: Real SQL Server gate
         run: pnpm run test:db:mssql
 
+      - name: Streaming and routine conformance
+        run: pnpm run test:streaming && pnpm run test:routines
+
+      - name: Vite transform gate
+        run: pnpm run test:vite
+
+      - name: Set up Node 24 finance consumer
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24.21.0
+
+      - name: Packed TanStack Start dev build HMR SSR gate
+        run: pnpm run test:tanstack-start
+
+      - name: Restore pinned runtime Node
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22.18.0
+
       - name: Packed consumer gate
         run: pnpm run test:consumer
 
+      - name: Select Node 24 for full finance-inclusive gate
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24.21.0
+
       - name: Full test and VS Code source host gate
         run: pnpm run test:all
+
+      - name: Restore Node 22 runtime evidence
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22.18.0
 
       - name: VS Code host gate
         run: pnpm run test:vscode
@@ -168,7 +197,7 @@ jobs:
         run: pnpm run pack:check
 
       - name: Preserve validated release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: sqlbraid-${{ github.event_name == 'push' && github.ref_name || 'rc' }}
           path: ${{ runner.temp }}/sqlbraid-release-artifacts

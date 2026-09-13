@@ -2,11 +2,50 @@
 
 This document records what the repository automates and what a maintainer must configure outside the repository. It contains no credentials or registry tokens.
 
-PV14 binding transport and observer diagnostics are still in development/review
+PV15 native streaming, routine contracts and Vite integration are in final verification
 with verification pending on the exact final revision. RC publication remains
-deferred until PV14 development, review and user acceptance are complete. This
+deferred until PV15 development, review and user acceptance are complete. This
 readiness record therefore makes no new SHA, CI, runtime support, or package
 version claim.
+
+### PV15 local working-tree evidence
+
+Baseline: `2aa3067dcf0c03ccde58a2eca2940c383a73729e`. The existing
+`0.1.0-rc.0` candidate version is retained. All five real database suites pass,
+including PostgreSQL/MySQL 100k-row streaming, native cleanup,
+PostgreSQL refcursors, Oracle OUT cursors/implicit results and Tedious
+OUTPUT/RETURN. The MySQL early-break drain deadlock was reproduced against
+mysql2's native Readable and fixed without buffering.
+
+Final standards/spec review regressions were reproduced and fixed: pending
+PostgreSQL read abort/discard, positional CALL output aliases, Oracle LOB
+materialization and close completion, Oracle ResultSet metadata precedence,
+guarded routine-contract lowering, generated source-map origins, and aggregate
+cleanup-error classification. Focused native PostgreSQL (5 tests) and Oracle
+(8 tests) pass, including CLOB/BLOB OUT/INOUT. Public rebuilt-package smoke
+checks confirm the previously eager routine bind is not evaluated, generated
+locations point to the original query, and no live Oracle Lob escapes.
+
+The final local `test:all` gate passed 344 tests plus the actual editor host,
+finance fixture and all 17 packed consumers. This includes the final contract,
+mapping, prepared-shape identity, Vite lazy-evaluation and review regressions.
+Packed runtime/driver checks pass on Node 22.18.0,
+Bun 1.3.14 and Deno 2.9.3, including native pg/mysql2 stream break, mapper and
+consumer failure, pre-abort and active abort, transaction ownership and
+connection reuse. SQLite passes on Node/Deno; Bun's missing `node:sqlite`
+remains explicit. Oracle and Tedious are not thereby certified on Bun/Deno.
+Packed examples pass. The bilingual docs build validates 77 pages and
+3,358 links/anchors, with four historical-route checks.
+
+The packed Node 24 TanStack Start finance gate passes Vite dev/build/HMR/SSR,
+original-source maps and client/server dependency checks. An actual Chromium
+session rendered and hydrated the Korean table and exact int64 value without
+an application error boundary. Screenshot capture was unavailable; the browser
+evidence is DOM/hydration, not a screenshot comparison.
+
+These are working-tree results, not exact-SHA CI or publication evidence.
+The final Runtime, Docs and Release dry-run links must refer to one immutable
+revision. Historical PV14 evidence below is not reused to certify PV15.
 
 ### PV14 local working-tree evidence — 2026-09-13
 
@@ -39,7 +78,15 @@ required before RC publication.
 - `workflow_dispatch` with `dry-run` runs every release gate, packs immutable tarballs, and runs `npm publish --dry-run` against those tarballs. `pack-only` runs the same gates and preserves the validated tarballs without contacting npm for publication.
 - A `v*` tag runs the same gates, asserts that the tag version and commit match the checked-out `HEAD`, preserves the tarballs and VSIX as a workflow artifact, and only then invokes `npm publish --provenance` in dependency-derived topological order. Prereleases use the `next` dist-tag. A stable release is staged under `release-<version>`, verified for every package, and promoted to `latest` only after the complete set is present and exact. The final step creates a **draft** GitHub Release with the VSIX attached.
 
-The workflow is pinned to Node 22.18.0, pnpm 12.3.4, npm 11.15.0, Bun 1.3.14, and Deno 2.9.3. It uses GitHub-hosted runners, PostgreSQL and MySQL service containers, the real SQLite, Oracle, and SQL Server gates, packed runtime checks, the VS Code host gate, packed examples, package hygiene, and the website build before any publish step.
+The workflow is pinned to Node 22.18.0, pnpm 12.3.4, npm 11.15.0, Bun 1.3.14, and Deno 2.9.3; the packed TanStack Start finance gate runs separately on Node 24.21.0. It uses GitHub-hosted runners, PostgreSQL and MySQL service containers, the real SQLite, Oracle, and SQL Server gates, packed runtime checks, the VS Code host gate, packed examples, package hygiene, and the website build before any publish step.
+
+PV15 adds `@sqlbraid/vite`: 17 synchronized npm packages now require tarball,
+README/LICENSE, export-resolution and provenance checks. Runtime-only installs
+must exclude compiler, Vite, React, TanStack and metadata/tooling packages.
+Workflow action pins were checked against official latest GitHub releases:
+checkout 7.0.1, setup-node 7.0.0, pnpm/action-setup 6.1.0, setup-bun 2.2.0,
+setup-deno 2.0.5, upload-artifact 7.0.1, configure-pages 6.0.0,
+upload-pages-artifact 5.0.0 and deploy-pages 5.0.1.
 
 `scripts/release.mjs` refuses unsynchronized versions, dirty trees, dependency cycles, missing package tarballs, changed validated tarballs, workspace dependency leakage, missing package README/LICENSE files, and a tag that does not point at `HEAD`. Publication is restart-safe: an existing `name@version` is skipped only when its registry `dist.integrity` exactly matches the validated tarball; mismatches fail closed. Final `publish` refuses to run outside GitHub Actions.
 
@@ -78,7 +125,7 @@ pnpm --package=npm@11.15.0 dlx --shell-mode \
   'node scripts/npm-bootstrap-rc.mjs --artifact-dir "$SQLBRAID_RC_ARTIFACTS"'
 ```
 
-Do not pass the current `0.1.0` dry-run artifacts to bootstrap. Do not push an `rc.0` tag first: a `v*` push triggers OIDC publication before the bootstrap/trust setup is ready. Do not bypass the validated publisher with `pnpm publish`. If interrupted, retry with the same validated artifacts; exact registry integrity is required before skipping a package.
+Do not pass artifacts from another version or revision to bootstrap. Do not push an `rc.0` tag first: a `v*` push triggers OIDC publication before the bootstrap/trust setup is ready. Do not bypass the validated publisher with `pnpm publish`. If interrupted, retry with the same validated artifacts; exact registry integrity is required before skipping a package.
 
 ### Candidate gates and trusted publishing
 

@@ -224,11 +224,19 @@ SQLBraid does not infer a universal database parameter type from a TypeScript ty
 ```ts
 sql.rows<Row>`...`
 sql.command`...`
-sql.call<Row>`...`
+sql.call<RoutineCallResult<Output, Sets, ReturnValue>>`...`
 sql`...` // unknown
 ```
 
 Adapters report the actual row/command result kind. Runtime checks it against the declaration. `BRAID_RESULT_KIND` is post-execution and does not undo side effects.
+
+Routine contracts describe the whole result, with separate scalar `output`,
+ordered heterogeneous `resultSets` tuples and a real optional `returnValue`
+channel. `sql.call({ output, resultSets, returnValue })` accepts Standard Schema
+per channel. Materialized driver resources close and root leases release before
+asynchronous application mapping. OUT cursor sets precede implicit/emitted sets;
+scalar outputs remain separate. `sql.out()` and `sql.inOut()` are logical
+parameters, never structural SQL. Unsupported driver channels fail explicitly.
 
 ---
 
@@ -861,7 +869,7 @@ Non-negotiable:
 - 15 scoped packages plus the unscoped `sqlbraid` CLI convenience package;
 - prerelease/OIDC publication bootstrap and restart-safe release registry.
 
-### PV14 — Logical binding transport and observer diagnostics — development/review pending
+### PV14 — Logical binding transport and observer diagnostics — implemented baseline
 
 - logical immutable `RenderedStatement` (`segments` plus atomic `parameters`) is
   the only execution source of truth;
@@ -874,10 +882,31 @@ Non-negotiable:
 - custom-driver author guide and native-template value-only security/conformance
   guidance.
 
-PV14 verification is pending on the exact final revision. No new SHA support,
-runtime/driver Official label, CI pass, package version, or publication is
-claimed by this phase. RC publication remains deferred until PV14 development,
-review and user acceptance are complete.
+### PV15 — Pre-RC streaming, routines and Vite — final verification pending
+
+- explicit executor `stream()`/`call()` capabilities with no buffered fallback;
+- cleanup-before-release on exhaustion, break, mapper failure and abort; cleanup
+  failures discard pooled resources and poison direct connections;
+- native pg-cursor, mysql2 prepared Execute stream, SQLite iteration, Oracle
+  ResultSet and bounded Tedious streaming;
+- heterogeneous routine tuples and per-channel Standard Schema mapping;
+- PostgreSQL scalar OUT and transaction-owned refcursors; Oracle scalar OUT/INOUT,
+  REF CURSORs and implicit results; MySQL emitted result sets; Tedious native
+  OUTPUT/RETURN and emitted sets;
+- MySQL OUT/INOUT descriptors remain Unsupported because mysql2 does not expose
+  sufficient carrier metadata; no session-variable rewrite or guessed last set;
+- SQLite calls and SQL Server direct cursor OUT remain explicitly Unsupported;
+  table/set-returning functions use ordinary row queries; `callStream()` is reserved;
+- `@sqlbraid/vite` pre-transform and compiler `transformSource` original-source maps,
+  with Vite owning TS/JSX transpilation;
+- packed TanStack Start / Node 24 finance acceptance with Korean STRICT tables,
+  explicit SQLite number/bigint mode and server-only database dependencies;
+- prepared factory/shape errors are observable before execution, with dialect,
+  parameter direction/output identity and hint structure in logical shape.
+
+The workspace has 17 publishable packages. Exact-final-SHA Runtime, Docs and
+Release dry-run evidence plus user acceptance remain required. No tag,
+publication or dist-tag mutation is authorized by implementation progress.
 
 ### Post-release candidates
 

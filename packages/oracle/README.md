@@ -1,31 +1,28 @@
 # @sqlbraid/oracle
 
-Oracle SQL dialect, node-oracledb Thin-mode adapters, and metadata inspector for SQLBraid.
+Oracle SQL dialect, node-oracledb Thin-mode adapters, routine support, and metadata inspector for SQLBraid.
 
 ```sh
 npm install @sqlbraid/oracle oracledb
 ```
 
-The portable root has no driver import:
-
-```ts
-import { oracleParameter, sql } from "@sqlbraid/oracle";
-
-const query = sql`SELECT * FROM users WHERE id = ${sql.bind(42n, oracleParameter.number())}`;
-```
-
-Use the Node.js adapter subpath with node-oracledb 7.0.1 (Thin mode is the first-party target):
-
 ```ts
 import oracledb from "oracledb";
+import { oracleParameter, sql } from "@sqlbraid/oracle";
 import { createOracledbDatabase } from "@sqlbraid/oracle/oracledb";
 
 const connection = await oracledb.getConnection({ user, password, connectString });
 const db = createOracledbDatabase(connection);
+const rows = await db.all(sql.rows<{ id: string }>`SELECT id FROM users`);
 ```
 
-`createOracledbPoolProvider` and `createOracledbPoolDatabase` preserve physical pool leases. Oracle ResultSet streaming closes cursors on completion, early return, and abort. Routine calls are explicitly unsupported until an OUT/IN OUT descriptor is added.
+The portable root does not import `oracledb`; the driver subpath is optional. Oracle routine calls support scalar OUT/INOUT binds and `SYS_REFCURSOR`/REF CURSOR OUT values with `oracleParameter.refCursor()`. Cursor outputs are removed from `output`, materialized into ordered `resultSets`, and every live `ResultSet` is closed before lease release. Oracle implicit results are included as additional result sets. Application results never expose raw `ResultSet` objects.
 
-`@sqlbraid/oracle/inspector` reads positive evidence from Oracle `ALL_*` catalog views. It reports visible objects and leaves unknown or inaccessible semantics unknown. Thick mode and Bun/Deno driver subpaths are not claimed Official in this release.
+Oracle routine calls use authored PL/SQL/SQL text. Native procedure metadata is not accepted by this adapter. Thin mode is the first-party target; Thick mode is not implied by this package.
 
-The integration fixture is pinned to `gvenzl/oracle-free:23.9-slim-faststart` (service `FREEPDB1`). Set `SQLBRAID_ORACLE_URL`, `SQLBRAID_ORACLE_USER`, and `SQLBRAID_ORACLE_PASSWORD` to use an external Oracle instance instead.
+CLOB/NCLOB OUT and INOUT values become strings; BLOB values become bytes.
+SQLBraid reads returned Lobs with `getData()` and awaits their `destroy()`/`close`
+event before lease release. Sibling Lobs and ResultSets are cleaned up even
+when another output fails; no live Lob escapes `db.call()`.
+
+See the [Oracle setup](https://clickin.github.io/SQLBraid/getting-started/oracle/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).

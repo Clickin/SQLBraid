@@ -1,0 +1,434 @@
+import assert from "node:assert/strict";
+import { test } from "vitest";
+import type { Mysql2ConnectionLike, Mysql2PoolConnectionLike, Mysql2RawCommandLike, Mysql2RawConnectionLike, Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
+import { createMysql2Executor, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
+import type { PgClientLike, PgCursorFactory, PgCursorLike, PgPoolClientLike, PgResultLike } from "@sqlbraid/postgres/pg";
+import { createPgExecutor, createPgPoolDatabase, pgStatementBinding } from "@sqlbraid/postgres/pg";
+import { postgresParameter, sql as pgSql } from "@sqlbraid/postgres";
+import { sql as mysqlSql } from "@sqlbraid/mysql";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { runStreamingConformance } from "./streaming-conformance.js";
+
+class Cursor implements PgCursorLike {
+  static rows: readonly unknown[] = [{ id: 1 }, { id: 2 }];
+  static closes = 0;
+  read(_size: number, callback: (error: unknown, rows?: readonly unknown[], result?: PgResultLike) => void): void {
+    callback(null, Cursor.rows, { rows: Cursor.rows, fields: [{ name: "id", dataTypeID: 20 }] });
+    Cursor.rows = [];
+  }
+  close(callback: (error?: unknown) => void): void { Cursor.closes += 1; callback(); }
+}
+
+const cursorFactory = Cursor as unknown as PgCursorFactory;
+
+test("PostgreSQL abort interrupts a pending read and waits for physical termination before discard", async () => {
+  const reading = Promise.withResolvers<void>();
+  const ending = Promise.withResolvers<void>();
+  const ended = Promise.withResolvers<void>();
+  const releases: boolean[] = [];
+  class PendingCursor implements PgCursorLike {
+    read(): void { reading.resolve(); }
+    close(callback: (error?: unknown) => void): void { callback(); }
+  }
+  const client = {
+    query(value: unknown) { return value; },
+    escapeIdentifier: (value: string) => `"${value}"`,
+    escapeLiteral: (value: string) => `'${value}'`,
+    end() { ending.resolve(); return ended.promise; },
+    release(discard = false) { releases.push(discard); },
+  } as unknown as PgPoolClientLike;
+  const db = createPgPoolDatabase({ connect: async () => client }, {
+    cursor: PendingCursor as unknown as PgCursorFactory,
+  });
+  const controller = new AbortController();
+  const reason = new Error("cancel pending PostgreSQL read");
+  const iterator = db.stream(pgSql.rows`SELECT pg_sleep(60)`, { signal: controller.signal })[Symbol.asyncIterator]();
+  const next = iterator.next();
+  await reading.promise;
+  controller.abort(reason);
+  await ending.promise;
+  assert.deepEqual(releases, []);
+  ended.resolve();
+  await assert.rejects(next, (error: unknown) => error instanceof Error && error.cause === reason);
+  assert.deepEqual(releases, [true]);
+});
+
+test("PostgreSQL cursor metadata preserves exact int8 values and closes on exhaustion", async () => {
+  Cursor.rows = [{ id: "9007199254740993" }, { id: "9007199254740994" }];
+  Cursor.closes = 0;
+  const client = {
+    query(value: unknown) {
+      if (typeof value === "object") return value;
+      return Promise.resolve({ rows: [], fields: [] });
+    },
+    escapeIdentifier: (value: string) => `"${value}"`,
+    escapeLiteral: (value: string) => `'${value}'`,
+  } as unknown as PgClientLike;
+  const executor = createPgExecutor(client, { cursor: cursorFactory, streamBatchSize: 2 });
+  const rows: unknown[] = [];
+  for await (const row of executor.stream(pgSql.rows`SELECT 1 AS id`.render())) rows.push(row);
+  assert.deepEqual(rows, [{ id: 9007199254740993n }, { id: 9007199254740994n }]);
+  assert.equal(Cursor.closes, 1);
+});
+
+test("PostgreSQL refcursor binding is rejected before root I/O", () => {
+  const rendered = pgSql.call`CALL read_users(${pgSql.out("users", postgresParameter.refcursor())})`.render();
+  assert.throws(
+    () => pgStatementBinding.describe(rendered, { dialectId: "postgres", requestedReuse: "auto" }),
+    (error: unknown) => error instanceof Error && error.message.includes("BRAID_CALL_CURSOR_TX_REQUIRED"),
+  );
+});
+
+test("PostgreSQL logical output names cannot select a different physical carrier column", async () => {
+  const client: PgClientLike = {
+    async query() {
+      return {
+        rows: [{ first: "9007199254740993", second: "text output" }],
+        fields: [{ name: "first", dataTypeID: 20 }, { name: "second", dataTypeID: 25 }],
+      };
+    },
+    escapeIdentifier: (value) => `"${value}"`,
+    escapeLiteral: (value) => `'${value}'`,
+  };
+  const result = await createPgExecutor(client).call(pgSql.call`
+    CALL outputs(${pgSql.out("second")}, ${pgSql.out("first")})
+  `.render());
+  assert.deepEqual(result.output, { second: 9007199254740993n, first: "text output" });
+});
+
+class RowsStream implements Mysql2RawStreamLike {
+  readonly readableEnded = false;
+  readonly destroyed = false;
+  private readonly values: readonly unknown[] = [{ amount: 1.25 }, { amount: 2.5 }];
+  private index = 0;
+  once(event: string, listener: (...args: readonly unknown[]) => void): this {
+    if (event === "fields") listener([{ name: "amount", type: 246 }]);
+    return this;
+  }
+  resume(): this { return this; }
+  [Symbol.asyncIterator](): AsyncIterator<unknown> {
+    return { next: async () => this.index < this.values.length ? { done: false, value: this.values[this.index++] } : { done: true, value: undefined } };
+  }
+}
+
+test("MySQL streaming normalizes DECIMAL metadata without materialization and rejects OUT before I/O", async () => {
+  let executeCalls = 0;
+  let requestedHighWaterMark: number | undefined;
+  const raw: Mysql2RawConnectionLike = {
+    execute: () => ({
+      stream: (options?: { readonly highWaterMark?: number }) => {
+        requestedHighWaterMark = options?.highWaterMark;
+        return new RowsStream();
+      },
+    }) as Mysql2RawCommandLike,
+    destroy: () => undefined,
+  };
+  const connection = {
+    connection: raw,
+    execute: async () => { executeCalls += 1; return [[], []] as const; },
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  } as unknown as Mysql2ConnectionLike;
+  const executor = createMysql2Executor(connection, { streamHighWaterMark: 3 });
+  const rows: unknown[] = [];
+  for await (const row of executor.stream(mysqlSql.rows`SELECT 1 AS id`.render())) rows.push(row);
+  assert.deepEqual(rows, [{ amount: "1.25" }, { amount: "2.5" }]);
+  assert.equal(requestedHighWaterMark, 3);
+  const call = mysqlSql.call`CALL routine(${mysqlSql.out("answer")})`.render();
+  await assert.rejects(() => executor.call(call), /BRAID_CALL_OUT_UNSUPPORTED/);
+  assert.equal(executeCalls, 0);
+});
+
+test("PostgreSQL adapter reports driver read failures and closes the cursor", async () => {
+  const failure = new Error("pg driver read failed");
+  let closed = 0;
+  class FailingCursor implements PgCursorLike {
+    private reads = 0;
+    read(_size: number, callback: (error: unknown, rows?: readonly unknown[]) => void): void {
+      if (this.reads++ === 0) callback(null, [{ id: 1 }]);
+      else callback(failure);
+    }
+    close(callback: (error?: unknown) => void): void {
+      closed += 1;
+      callback();
+    }
+  }
+  const client = {
+    query(value: unknown) {
+      if (typeof value === "object") return value;
+      return Promise.resolve({ rows: [], fields: [] });
+    },
+    escapeIdentifier: (value: string) => `"${value}"`,
+    escapeLiteral: (value: string) => `'${value}'`,
+  } as unknown as PgClientLike;
+  const executor = createPgExecutor(client, { cursor: FailingCursor as unknown as PgCursorFactory, streamBatchSize: 1 });
+  await assert.rejects(
+    async () => {
+      for await (const row of executor.stream(pgSql.rows`SELECT 1 AS id`.render())) void row;
+    },
+    (error: unknown) => error === failure,
+  );
+  assert.equal(closed, 1);
+});
+
+test("PostgreSQL adapter reports cleanup failures", async () => {
+  const failure = new Error("pg cursor close failed");
+  let closed = 0;
+  class CleanupFailingCursor implements PgCursorLike {
+    private exhausted = false;
+    read(_size: number, callback: (error: unknown, rows?: readonly unknown[]) => void): void {
+      if (this.exhausted) callback(null, []);
+      else {
+        this.exhausted = true;
+        callback(null, [{ id: 1 }]);
+      }
+    }
+    close(callback: (error?: unknown) => void): void {
+      closed += 1;
+      callback(failure);
+    }
+  }
+  const client = {
+    query(value: unknown) {
+      if (typeof value === "object") return value;
+      return Promise.resolve({ rows: [], fields: [] });
+    },
+    escapeIdentifier: (value: string) => `"${value}"`,
+    escapeLiteral: (value: string) => `'${value}'`,
+  } as unknown as PgClientLike;
+  const executor = createPgExecutor(client, {
+    cursor: CleanupFailingCursor as unknown as PgCursorFactory,
+    streamBatchSize: 1,
+  });
+  await assert.rejects(
+    async () => {
+      for await (const row of executor.stream(pgSql.rows`SELECT 1 AS id`.render())) {
+        void row;
+        break;
+      }
+    },
+    (error: unknown) => error instanceof Error
+      && (error.cause === failure || (error instanceof AggregateError && error.errors.includes(failure))),
+  );
+  assert.equal(closed, 1);
+});
+
+test("PostgreSQL pooled streaming closes the cursor before releasing its lease", async () => {
+  const events: string[] = [];
+  class OrderingCursor implements PgCursorLike {
+    read(_size: number, callback: (error: unknown, rows?: readonly unknown[]) => void): void {
+      callback(null, [{ id: 1 }]);
+    }
+    close(callback: (error?: unknown) => void): void {
+      events.push("close");
+      callback();
+    }
+  }
+  const client = {
+    query(value: unknown) {
+      if (typeof value === "object") return value;
+      return Promise.resolve({ rows: [], fields: [] });
+    },
+    escapeIdentifier: (value: string) => `"${value}"`,
+    escapeLiteral: (value: string) => `'${value}'`,
+    release() { events.push("release"); },
+  } as unknown as PgClientLike & { release(): void };
+  const db = createPgPoolDatabase(
+    { connect: async () => client },
+    { cursor: OrderingCursor as unknown as PgCursorFactory, streamBatchSize: 1 },
+  );
+  for await (const row of db.stream(pgSql.rows`SELECT 1 AS id`)) {
+    void row;
+    break;
+  }
+  assert.deepEqual(events, ["close", "release"]);
+});
+
+test("PostgreSQL stream keeps binds value-only", async () => {
+  let submitted: unknown;
+  class OneRowCursor implements PgCursorLike {
+    constructor(readonly text: string, readonly values: readonly unknown[]) {}
+    read(_size: number, callback: (error: unknown, rows?: readonly unknown[]) => void): void {
+      callback(null, []);
+    }
+    close(callback: (error?: unknown) => void): void {
+      callback();
+    }
+  }
+  const client = {
+    query(value: unknown) {
+      if (typeof value === "object") {
+        submitted = value;
+        return value;
+      }
+      return Promise.resolve({ rows: [], fields: [] });
+    },
+    escapeIdentifier: (value: string) => `"${value}"`,
+    escapeLiteral: (value: string) => `'${value}'`,
+  } as unknown as PgClientLike;
+  const db = createPgExecutor(client, { cursor: OneRowCursor as unknown as PgCursorFactory });
+  const secret = "x'); DROP TABLE braid_pv15_bind; --";
+  for await (const row of db.stream(pgSql.rows`SELECT ${secret}::text AS value`.render())) void row;
+  assert.equal((submitted as { readonly text: string }).text, "SELECT $1::text AS value");
+  assert.deepEqual((submitted as { readonly values: readonly unknown[] }).values, [secret]);
+});
+
+test("MySQL adapter reports driver read failures", async () => {
+  const failure = new Error("mysql driver read failed");
+  class FailingStream implements Mysql2RawStreamLike {
+    readonly readableEnded = true;
+    readonly destroyed = false;
+    once(_event: string, _listener: (...args: readonly unknown[]) => void): this { return this; }
+    resume(): this { return this; }
+    async *[Symbol.asyncIterator](): AsyncGenerator<unknown> {
+      throw failure;
+    }
+  }
+  const raw: Mysql2RawConnectionLike = {
+    execute: () => ({ stream: () => new FailingStream() }) as Mysql2RawCommandLike,
+    destroy: () => undefined,
+  };
+  const connection = {
+    connection: raw,
+    execute: async () => [[], []] as const,
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  } as unknown as Mysql2ConnectionLike;
+  const executor = createMysql2Executor(connection);
+  await assert.rejects(
+    async () => {
+      for await (const row of executor.stream(mysqlSql.rows`SELECT 1 AS id`.render())) void row;
+    },
+    (error: unknown) => error === failure,
+  );
+});
+
+test("MySQL adapter reports stream drain failures after consumer break", async () => {
+  const failure = new Error("mysql stream drain failed");
+  class CleanupFailingStream implements Mysql2RawStreamLike {
+    readonly readableEnded = false;
+    readonly destroyed = false;
+    once(_event: string, _listener: (...args: readonly unknown[]) => void): this { return this; }
+    async *[Symbol.asyncIterator](): AsyncGenerator<unknown> {
+      yield { id: 1 };
+      throw failure;
+    }
+  }
+  const raw: Mysql2RawConnectionLike = {
+    execute: () => ({ stream: () => new CleanupFailingStream() }) as Mysql2RawCommandLike,
+    destroy: () => undefined,
+  };
+  const connection = {
+    connection: raw,
+    execute: async () => [[], []] as const,
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  } as unknown as Mysql2ConnectionLike;
+  const executor = createMysql2Executor(connection);
+  await assert.rejects(
+    async () => {
+      for await (const row of executor.stream(mysqlSql.rows`SELECT 1 AS id`.render())) {
+        void row;
+        break;
+      }
+    },
+    (error: unknown) => error instanceof Error && error.cause === failure,
+  );
+});
+
+test("supported adapters reuse streaming conformance with query-bound row schemas", async () => {
+  const rowSchema: StandardSchemaV1<unknown, { readonly id: number; readonly label: string }> = {
+    "~standard": {
+      version: 1,
+      vendor: "pv15-conformance",
+      validate(value) {
+        if (!value || typeof value !== "object" || !("id" in value) || !("label" in value)
+          || typeof value.id !== "number" || typeof value.label !== "string") {
+          return { issues: [{ message: "invalid conformance row" }] };
+        }
+        return { value: { id: value.id, label: value.label.toUpperCase() } };
+      },
+    },
+  };
+  const createMockDatabase = (kind: "postgres" | "mysql") => {
+    const rows = [{ id: 1, label: "one" }, { id: 2, label: "two" }] as const;
+    const mapping = {
+      "~standard": {
+        version: 1 as const,
+        vendor: "pv15-conformance-failure",
+        validate() { return { issues: [{ message: "mapping failed" }] }; },
+      },
+    } satisfies StandardSchemaV1<unknown, unknown>;
+    let released = 0;
+    let returned = 0;
+    const db = kind === "postgres"
+      ? createPgPoolDatabase({
+        async connect() {
+          return {
+            query(value: unknown) {
+              if (typeof value === "object") return value;
+              return Promise.resolve({ rows, fields: [] });
+            },
+            escapeIdentifier: (value: string) => `"${value}"`,
+            escapeLiteral: (value: string) => `'${value}'`,
+            async end() { returned += 1; },
+            release() { released += 1; },
+          } as unknown as PgPoolClientLike;
+        },
+      }, {
+        cursor: class implements PgCursorLike {
+          private index = 0;
+          read(_size: number, callback: (error: unknown, rows?: readonly unknown[]) => void): void {
+            callback(null, this.index++ === 0 ? rows : []);
+          }
+          close(callback: (error?: unknown) => void): void {
+            returned += 1;
+            callback();
+          }
+        } as unknown as PgCursorFactory,
+        streamBatchSize: 2,
+      })
+      : createMysql2PoolDatabase({
+        async getConnection() {
+          const source: Mysql2RawStreamLike = {
+            readableEnded: true,
+            destroyed: false,
+            once(_event: string, _listener: (...args: readonly unknown[]) => void) { return this; },
+            resume() { return this; },
+            async *[Symbol.asyncIterator]() { yield* rows; },
+          };
+          return {
+            connection: {
+              execute: () => ({ stream: () => source }) as Mysql2RawCommandLike,
+              destroy: () => undefined,
+            },
+            execute: async () => [rows, []] as const,
+            beginTransaction: async () => undefined,
+            commit: async () => undefined,
+            rollback: async () => undefined,
+            release() { released += 1; },
+            destroy() { released += 1; },
+          } as unknown as Mysql2PoolConnectionLike;
+        },
+      }, { streamHighWaterMark: 2 });
+    const query = kind === "postgres"
+      ? pgSql.rows(rowSchema)`SELECT id, label FROM braid_pv15_conformance`
+      : mysqlSql.rows(rowSchema)`SELECT id, label FROM braid_pv15_conformance`;
+    const mappingQuery = kind === "postgres"
+      ? pgSql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance`
+      : mysqlSql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance`;
+    return {
+      db,
+      query,
+      expected: [{ id: 1, label: "ONE" }, { id: 2, label: "TWO" }],
+      mappingQuery,
+      released: () => released,
+      ...(kind === "postgres" ? { iteratorReturns: () => returned } : {}),
+    };
+  };
+  await runStreamingConformance(() => createMockDatabase("postgres"));
+  await runStreamingConformance(() => createMockDatabase("mysql"));
+});

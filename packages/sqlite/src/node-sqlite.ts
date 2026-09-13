@@ -1,9 +1,9 @@
 import type {
   DatabaseOptions,
+  DriverRoutineResult,
   QueryExecutor,
   QueryExecutionResult,
   RenderedStatement,
-  RoutineCallResult,
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
@@ -24,12 +24,21 @@ export interface SqliteStatementLike {
   iterate?(...values: readonly unknown[]): IterableIterator<unknown>;
   run(...values: readonly unknown[]): { readonly changes?: number | bigint; readonly lastInsertRowid?: number | bigint };
   columns(): readonly SqliteColumnLike[];
+  setReadBigInts?(enabled: boolean): void;
 }
 
 export interface SqliteDatabaseLike {
   prepare(sql: string): SqliteStatementLike;
   exec?(sql: string): void;
 }
+
+export type SqliteIntegerMode = "number" | "bigint";
+
+export interface SqliteExecutorOptions {
+  readonly integerMode?: SqliteIntegerMode;
+}
+
+export interface SqliteDatabaseOptions extends DatabaseOptions, SqliteExecutorOptions {}
 
 function plainRow(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { value };
@@ -51,6 +60,10 @@ function unsupportedCall(): never {
   throw new Error("BRAID_CALL_UNSUPPORTED: SQLite adapter does not support routine calls.");
 }
 
+function assertRoutineUnsupported(rendered: RenderedStatement): void {
+  if (rendered.resultKind === "call" || rendered.routineProcedure !== undefined) unsupportedCall();
+}
+
 function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   if (rendered.parameters.some((parameter) => parameter.hint !== undefined)) {
     throw new Error("BRAID_BIND_HINT_UNSUPPORTED: SQLite adapter does not support explicit bind type hints.");
@@ -63,6 +76,7 @@ export const nodeSqliteStatementBinding: StatementBindingAdapter = Object.freeze
   id: "node-sqlite",
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
     statement = createRenderedStatement(statement);
+    assertRoutineUnsupported(statement);
     assertParameterHintsUnsupported(statement);
     const description = createStatementBindingDescription(statement, context, {
       adapterId: "node-sqlite",
@@ -75,17 +89,19 @@ export const nodeSqliteStatementBinding: StatementBindingAdapter = Object.freeze
   },
 });
 
-const defaultBindingContext: StatementBindingContext = Object.freeze({
-  dialectId: "sqlite",
-  requestedReuse: "auto",
-});
+function bindingContext(statement: RenderedStatement): StatementBindingContext {
+  return {
+    dialectId: statement.dialectId,
+    requestedReuse: "auto",
+  };
+}
 
 function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
 ): { readonly text: string; readonly values: readonly unknown[] } {
   statement = createRenderedStatement(statement);
-  const description = binding ?? nodeSqliteStatementBinding.describe(statement, defaultBindingContext);
+  const description = binding ?? nodeSqliteStatementBinding.describe(statement, bindingContext(statement));
   if (describedStatements.get(description) !== statement) throw new TypeError("BRAID_BINDING_IDENTITY: SQLite description belongs to another statement or adapter.");
   if (description.parameterizedSql === undefined) {
     throw new Error("BRAID_BIND_TRANSPORT: SQLite binding description did not provide parameterized SQL.");
@@ -96,16 +112,36 @@ function materialize(
   };
 }
 
-export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
+function assertIntegerMode(integerMode: SqliteIntegerMode | undefined): SqliteIntegerMode {
+  if (integerMode === undefined) return "number";
+  if (integerMode !== "number" && integerMode !== "bigint") {
+    throw new TypeError('SQLite integerMode must be "number" or "bigint".');
+  }
+  return integerMode;
+}
+
+function configureIntegerMode(statement: SqliteStatementLike, integerMode: SqliteIntegerMode): void {
+  if (typeof statement.setReadBigInts !== "function") {
+    if (integerMode === "bigint") {
+      throw new Error("BRAID_INTEGER_MODE_UNSUPPORTED: SQLite statement does not expose setReadBigInts.");
+    }
+    return;
+  }
+  statement.setReadBigInts(integerMode === "bigint");
+}
+
+export function createNodeSqliteExecutor(database: SqliteDatabaseLike, options: SqliteExecutorOptions = {}): QueryExecutor {
+  const integerMode = assertIntegerMode(options.integerMode);
   const control = database.exec ? async (sql: string): Promise<void> => { database.exec?.(sql); } : undefined;
   return {
     ownershipKey: database,
     statementBinding: nodeSqliteStatementBinding,
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+      assertRoutineUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
-      if (rendered.resultKind === "call") unsupportedCall();
       const prepared = materialize(rendered, binding);
       const statement = database.prepare(prepared.text);
+      configureIntegerMode(statement, integerMode);
       const columns = resultColumns(statement);
       if (columns.length > 0) {
         const rows = statement.all(...prepared.values).map(plainRow);
@@ -115,20 +151,42 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
       const changes = result.changes === undefined ? undefined : Number(result.changes);
       return { rows: [], rowCount: changes, kind: "command", command: { affectedRows: changes, insertId: result.lastInsertRowid } };
     },
-    async call<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<RoutineCallResult<Row>> {
-      assertParameterHintsUnsupported(rendered);
+    async call(rendered: RenderedStatement, _binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
       unsupportedCall();
     },
     async *stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncGenerator<Row> {
+      assertRoutineUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
       signal?.throwIfAborted();
       const prepared = materialize(rendered, binding);
       const statement = database.prepare(prepared.text);
+      configureIntegerMode(statement, integerMode);
       if (!statement.iterate) throw new Error("BRAID_STREAM_UNSUPPORTED: SQLite statement does not expose iteration.");
       if (resultColumns(statement).length === 0) throw new Error("BRAID_RESULT_KIND: SQLite stream requires a row-producing statement.");
-      for (const row of statement.iterate(...prepared.values)) {
-        signal?.throwIfAborted();
-        yield plainRow(row) as Row;
+      const iterator = statement.iterate(...prepared.values);
+      let failed = false;
+      let readError: unknown;
+      try {
+        while (true) {
+          signal?.throwIfAborted();
+          const next = iterator.next();
+          if (next.done) break;
+          yield plainRow(next.value) as Row;
+        }
+      } catch (error) {
+        failed = true;
+        readError = error;
+        throw error;
+      } finally {
+        try {
+          iterator.return?.();
+        } catch (cause) {
+          const cleanup = Object.assign(new Error("SQLite iterator cleanup failed.", { cause }), {
+            code: "BRAID_RESOURCE_CLEANUP",
+          });
+          if (failed) throw new AggregateError([readError, cleanup], "SQLite read and cleanup failed.", { cause: readError });
+          throw cleanup;
+        }
       }
     },
     begin: control ? () => control("BEGIN") : undefined,
@@ -140,6 +198,7 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
   };
 }
 
-export function createNodeSqliteDatabase(database: SqliteDatabaseLike, options: DatabaseOptions = {}) {
-  return createDatabase(createNodeSqliteExecutor(database), options);
+export function createNodeSqliteDatabase(database: SqliteDatabaseLike, options: SqliteDatabaseOptions = {}) {
+  const { integerMode, ...databaseOptions } = options;
+  return createDatabase(createNodeSqliteExecutor(database, { integerMode }), databaseOptions);
 }

@@ -95,7 +95,7 @@ test("Oracle direct Thin adapter handles typed values, observers, mapping lifeti
     }
     assert.equal(streamed, 1);
     await assert.rejects(() => db.execute(sql.command`SELECT amount FROM braid_pv13_bind`), (error) => error instanceof DatabaseResultKindError);
-    await assert.rejects(() => db.call(sql.call`BEGIN NULL; END;`), /BRAID_CALL_UNSUPPORTED/u);
+
   } finally {
     await drop(connection, "TABLE braid_pv13_bind PURGE").catch(() => undefined);
     await connection.close();

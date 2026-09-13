@@ -32,8 +32,8 @@ SQLBraid does not infer arbitrary SELECT result types, hydrate object graphs, or
 
 ## Launch documentation
 
-This is the 0.1.0 pre-release documentation. PV14 transport/observer
-verification and user acceptance are pending, so RC publication remains
-deferred. See [release notes and limitations](/SQLBraid/release/notes/) and the
-[tested runtime/driver matrix](/SQLBraid/reference/support/) before choosing an
-integration.
+This is the 0.1.0 pre-release documentation. PV15 final verification is
+pending; these pages do not claim a final SHA, CI gate, publication, or
+release label. See [release notes and limitations](/SQLBraid/release/notes/)
+and the [runtime/driver evidence matrix](/SQLBraid/reference/support/) before
+choosing an integration.

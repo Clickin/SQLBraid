@@ -65,11 +65,12 @@ test('detailed checking matches mapped diagnostics by source range, not repeated
 });
 
 test('discovers explicit rows, command, and call tag helpers', () => {
-  const result = discoverQueries("import { sql as dbSql } from '@sqlbraid/template'; type UserRow = { id: number }; const rows = dbSql.rows<UserRow>`SELECT id FROM users`; const command = dbSql.command`UPDATE users SET active = true`; const call = dbSql.call<UserRow>`CALL refresh_users()`;", 'fixture.ts', { moduleSpecifier: '@sqlbraid/template' });
+  const result = discoverQueries("import { sql as dbSql } from '@sqlbraid/template'; import type { RoutineCallResult } from '@sqlbraid/core'; type UserRow = { id: number }; type CallResult = RoutineCallResult<{ readonly ok: boolean }, readonly [{ readonly id: number }], number>; const contract = {}; const rows = dbSql.rows<UserRow>`SELECT id FROM users`; const command = dbSql.command`UPDATE users SET active = true`; const call = dbSql.call<CallResult>`CALL refresh_users()`; const contracted = dbSql.call(contract)`CALL refresh_users()`;", 'fixture.ts', { moduleSpecifier: '@sqlbraid/template' });
   assert.deepEqual(result.queries.map((query) => ({ name: query.tagName, kind: query.declaredResultKind, type: query.declaredRowType })), [
     { name: 'dbSql.rows', kind: 'rows', type: 'UserRow' },
     { name: 'dbSql.command', kind: 'command', type: undefined },
-    { name: 'dbSql.call', kind: 'call', type: 'UserRow' },
+    { name: 'dbSql.call', kind: 'call', type: 'CallResult' },
+    { name: 'dbSql.call(contract)', kind: 'call', type: undefined },
   ]);
 });
 
@@ -170,11 +171,12 @@ test('mapped guarded lowering preserves the tag call and evaluates schema once',
 test('capture and guarded preserve tag contracts and reject cross-kind arguments', () => {
   const declarations = `
     import { sql, capture, guarded } from '@sqlbraid/template';
-    import type { Query, RowQuery, CommandQuery, CommandResult, CallQuery } from '@sqlbraid/core';
+    import type { Query, RowQuery, CommandQuery, CommandResult, CallQuery, RoutineCallResult } from '@sqlbraid/core';
     type Row = { id: number };
+    type CallResult = RoutineCallResult<{ readonly ok: boolean }, readonly [{ readonly id: number }], number>;
     const rows: RowQuery<Row> = capture(sql.rows<Row>, ['opaque'], () => {});
     const command: CommandQuery = capture<CommandResult, 'command'>(sql.command, ['opaque'], () => {});
-    const call: CallQuery<Row> = guarded(sql.call<Row>, ['opaque'], []);
+    const call: CallQuery<CallResult> = guarded<CallResult, 'call'>(sql.call, ['opaque'], []);
     const unknown: Query<unknown, 'unknown'> = guarded(sql, ['opaque'], []);
     const inferredRows: RowQuery = capture(sql.rows, ['opaque'], () => {});
   `;
@@ -203,17 +205,17 @@ test('opaque SQL needs no schema or local SQL grammar and keeps declared contrac
     'SELECT value @@ vendor_specific_operator(pattern) FROM custom_table',
     'SELECT proprietary_extension(foo, bar) FROM vendor_relation',
   ];
-  const declarations = "import {sql} from '@sqlbraid/template'; import type {RowQuery, CommandQuery, CallQuery, Query} from '@sqlbraid/core'; type Row={score:number}; declare const user:{name:string}|null;";
+  const declarations = "import {sql} from '@sqlbraid/template'; import type {RowQuery, CommandQuery, CallQuery, Query, RoutineCallResult} from '@sqlbraid/core'; type Row={score:number}; type CallResult=RoutineCallResult<{ok:boolean}, readonly [{id:number}]>; declare const user:{name:string}|null;";
   const queries = opaque.map((text, index) => `const q${index}: RowQuery<Row> = sql.rows<Row>\`${text}\`;`);
   const guarded = "const dynamic: RowQuery<Row> = sql.rows<Row>`SELECT proprietary_extension(foo, bar) /*@braid if ${user != null}*/ FROM vendor_relation WHERE name=${user.name} /*@braid end*/`;";
-  const kinds = "const command:CommandQuery = sql.command`opaque /*@braid if ${true}*/ vendor_command() /*@braid end*/`; const call:CallQuery<Row> = sql.call<Row>`opaque /*@braid if ${true}*/ vendor_call() /*@braid end*/`; const unknown:Query<unknown,'unknown'> = sql`SELECT id FROM users`;";
+  const kinds = "const command:CommandQuery = sql.command`opaque /*@braid if ${true}*/ vendor_command() /*@braid end*/`; const call:CallQuery<CallResult> = sql.call<CallResult>`opaque /*@braid if ${true}*/ vendor_call() /*@braid end*/`; const unknown:Query<unknown,'unknown'> = sql`SELECT id FROM users`;";
   const input = [declarations, ...queries, guarded, kinds].join('\n');
   assert.deepEqual(checkSource(input, join(tmpdir(), 'sqlbraid-opaque.ts'), options), []);
   const overlay = createVirtualOverlay(input, 'sqlbraid-opaque.ts', options);
   assert.deepEqual(overlay.queryTypes.map(({ rowType, resultKind }) => [rowType, resultKind]), [
     ...Array.from({ length: 5 }, () => ['Row', 'rows']),
     ['import("@sqlbraid/core").CommandResult', 'command'],
-    ['Row', 'call'],
+    ['CallResult', 'call'],
     ['unknown', 'unknown'],
   ]);
 });

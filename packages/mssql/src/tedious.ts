@@ -4,11 +4,11 @@ import type {
   ConnectionLease,
   ConnectionProvider,
   DatabaseOptions,
+  DriverRoutineResult,
   ParameterTypeHint,
   QueryExecutor,
   QueryExecutionResult,
   RenderedStatement,
-  RoutineCallResult,
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
@@ -35,6 +35,7 @@ export interface TediousColumnLike {
 export interface TediousRequestLike {
   on(event: string, listener: (...args: any[]) => void): this;
   addParameter(name: string, type: unknown, value: unknown, options?: { readonly length?: number; readonly precision?: number; readonly scale?: number }): void;
+  addOutputParameter?(name: string, type: unknown, value?: unknown, options?: { readonly length?: number; readonly precision?: number; readonly scale?: number }): void;
   cancel?(): void;
   pause?(): void;
   resume?(): void;
@@ -42,6 +43,7 @@ export interface TediousRequestLike {
 
 export interface TediousConnectionLike {
   execSql(request: TediousRequestLike): void;
+  callProcedure?(request: TediousRequestLike): void;
   readonly beginTransaction: (...args: any[]) => void;
   readonly commitTransaction: (...args: any[]) => void;
   readonly rollbackTransaction: (...args: any[]) => void;
@@ -77,6 +79,8 @@ interface TediousMaterializedParameter {
   readonly type: unknown;
   readonly value: unknown;
   readonly options?: { readonly length?: number; readonly precision?: number; readonly scale?: number };
+  readonly direction: "in" | "out" | "inout";
+  readonly outputName?: string;
 }
 
 interface TediousStatementBindingAdapter extends StatementBindingAdapter {
@@ -116,6 +120,9 @@ function canonicalType(value: string): string {
 
 function typeForHint(hint: ParameterTypeHint): DatabaseType {
   const value = canonicalType(hint.databaseType);
+  if (value === "cursor" || value === "cursorvarying" || value === "refcursor") {
+    throw new Error("BRAID_CALL_CURSOR_UNSUPPORTED: SQL Server cursor output parameters are not application result cursors.");
+  }
   const aliases: Readonly<Record<string, DatabaseType>> = {
     int: "int",
     integer: "int",
@@ -240,6 +247,17 @@ function asError(error: unknown): unknown {
   return error === undefined || error === null ? undefined : error instanceof Error ? error : new Error(String(error));
 }
 
+function resourceCleanupError(cause: unknown, cleanupFailures: readonly unknown[]): Error {
+  const values = cause === undefined ? cleanupFailures : [cause, ...cleanupFailures];
+  const error = new AggregateError(values, "BRAID_RESOURCE_CLEANUP: SQL Server request cleanup failed.", { cause: cause ?? cleanupFailures[0] });
+  Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
+  return error;
+}
+
+function setOutputValue(output: Record<string, unknown>, name: string, value: unknown): void {
+  Object.defineProperty(output, name, { value, enumerable: true, configurable: true, writable: true });
+}
+
 interface ResultSetState {
   readonly columns: readonly TediousColumnMetadataLike[];
   readonly rows: Record<string, unknown>[];
@@ -251,6 +269,7 @@ interface CollectedResult {
   readonly statementCount: number;
   readonly output: Readonly<Record<string, unknown>>;
   readonly outputSeen: boolean;
+  readonly returnValue?: number;
 }
 
 function metadataColumns(columns: unknown): readonly TediousColumnMetadataLike[] {
@@ -312,14 +331,24 @@ function mapRow(value: unknown, columns: readonly TediousColumnMetadataLike[], p
   return { value };
 }
 
-function materializeParameter(index: number, actualValue: unknown, actualHint: ParameterTypeHint | undefined, policy: TypePolicy): TediousMaterializedParameter {
-  if (actualValue === undefined) throw new TypeError("BRAID_BIND_TYPE_REQUIRED: undefined is not a SQL Server parameter value.");
-  const inferred = actualHint === undefined ? inferType(actualValue) : undefined;
+function materializeParameter(
+  index: number,
+  actualValue: unknown,
+  actualHint: ParameterTypeHint | undefined,
+  policy: TypePolicy,
+  direction: "in" | "out" | "inout" = "in",
+  outputName?: string,
+): TediousMaterializedParameter {
+  if (direction !== "in" && actualHint === undefined) {
+    throw new TypeError("BRAID_BIND_HINT_UNSUPPORTED: SQL Server OUTPUT and INOUT parameters require an explicit type hint.");
+  }
+  if (direction === "in" && actualValue === undefined) throw new TypeError("BRAID_BIND_TYPE_REQUIRED: undefined is not a SQL Server parameter value.");
+  const inferred = direction === "in" && actualHint === undefined ? inferType(actualValue) : undefined;
   const type = actualHint === undefined ? inferred!.type : typeForHint(actualHint);
-  const input = actualHint === undefined ? inferred!.value : actualValue;
-  let encoded = policy.encode(type, input);
-  if (type === "decimal" || type === "numeric") encoded = decimalInput(encoded);
-  if ((type === "varbinary" || type === "binary") && encoded instanceof Uint8Array && !Buffer.isBuffer(encoded)) encoded = Buffer.from(encoded);
+  const input = direction === "out" ? undefined : actualHint === undefined ? inferred!.value : actualValue;
+  let encoded = direction === "out" ? undefined : policy.encode(type, input);
+  if (direction !== "out" && (type === "decimal" || type === "numeric")) encoded = decimalInput(encoded);
+  if (direction !== "out" && (type === "varbinary" || type === "binary") && encoded instanceof Uint8Array && !Buffer.isBuffer(encoded)) encoded = Buffer.from(encoded);
   const options: { length?: number; precision?: number; scale?: number } = {};
   if (actualHint?.length !== undefined) options.length = actualHint.length === "max" ? Infinity : actualHint.length;
   if (actualHint?.precision !== undefined) options.precision = actualHint.precision;
@@ -330,7 +359,9 @@ function materializeParameter(index: number, actualValue: unknown, actualHint: P
   // collation-independent part here so bad values fail before a pooled lease
   // is acquired. Text encoding is checked for its stable JS shape here; any
   // collation-dependent details remain in Tedious.
-  if (type === "nvarchar" || type === "varchar" || type === "char") {
+  if (direction === "out") {
+    // Tedious validates the output value when the server sends it.
+  } else if (type === "nvarchar" || type === "varchar" || type === "char") {
     if (encoded !== null && typeof encoded !== "string") {
       throw new TypeError(`BRAID_BIND_TYPE_REQUIRED: invalid SQL Server ${type} parameter: expected a string.`);
     }
@@ -350,12 +381,26 @@ function materializeParameter(index: number, actualValue: unknown, actualHint: P
     databaseType: type,
     type: tediousType,
     value: encoded,
+    direction,
+    ...(outputName === undefined ? {} : { outputName }),
     ...(Object.keys(options).length === 0 ? {} : { options }),
   };
 }
 
 function addParameter(request: TediousRequestLike, parameter: TediousMaterializedParameter): void {
-  request.addParameter(parameter.name, parameter.type, parameter.value, parameter.options);
+  if (parameter.direction === "in") {
+    request.addParameter(parameter.name, parameter.type, parameter.value, parameter.options);
+    return;
+  }
+  if (typeof request.addOutputParameter !== "function") {
+    throw new Error("BRAID_CALL_OUT_UNSUPPORTED: Tedious Request does not expose addOutputParameter().");
+  }
+  request.addOutputParameter(
+    parameter.name,
+    parameter.type,
+    parameter.direction === "inout" ? parameter.value : undefined,
+    parameter.options,
+  );
 }
 
 function tediousLiteralValue(
@@ -396,7 +441,19 @@ function createBinding(options: TediousStatementBindingOptions = {}): TediousSta
   const adapter: TediousStatementBindingAdapter = {
     id: "tedious",
     describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
-      const parameters = statement.parameters.map((parameter, index) => materializeParameter(index + 1, parameter.value, parameter.hint, policy));
+      const outputNames = new Set<string>();
+      const parameters = statement.parameters.map((parameter, index) => {
+        const direction = parameter.direction ?? "in";
+        if (direction !== "in" && statement.resultKind !== "call") {
+          throw new Error("BRAID_CALL_OUT_UNSUPPORTED: OUT and INOUT parameters are legal only for sql.call().");
+        }
+        if (direction !== "in") {
+          if (!parameter.outputName) throw new Error("BRAID_CALL_OUT_UNSUPPORTED: OUT and INOUT parameters require outputName.");
+          if (outputNames.has(parameter.outputName)) throw new Error(`BRAID_CALL_OUT_UNSUPPORTED: duplicate outputName ${parameter.outputName}.`);
+          outputNames.add(parameter.outputName);
+        }
+        return materializeParameter(index + 1, parameter.value, parameter.hint, policy, direction, parameter.outputName);
+      });
       const description = createStatementBindingDescription(statement, context, {
         adapterId: "tedious",
         transport: "typed-request",
@@ -453,11 +510,13 @@ function collect(
   parameterizedSql: string,
   parameters: readonly TediousMaterializedParameter[],
   policy: TypePolicy,
+  routineProcedure?: { readonly name: string; readonly parameterNames: readonly string[] },
 ): Promise<CollectedResult> {
   return new Promise<CollectedResult>((resolve, reject) => {
     let request: TediousRequestLike | undefined;
     let callbackError: unknown;
     let eventError: unknown;
+    let cleanupFailure: unknown;
     let completed = false;
     let settled = false;
     let started = false;
@@ -471,6 +530,7 @@ function collect(
     let callbackRowCount: number | undefined;
     let doneCount = 0;
     let doneInProcCount = 0;
+    let procedureReturnValue: number | undefined;
     const fail = (error: unknown): void => {
       if (settled) return;
       eventError = eventError ?? error;
@@ -482,7 +542,7 @@ function collect(
       if (!cancellationRequested) {
         cancellationRequested = true;
         try { request?.cancel?.(); } catch (cancelError) {
-          eventError = new AggregateError([eventError, cancelError], "Failed to cancel SQL Server request.", { cause: eventError });
+          cleanupFailure = cleanupFailure ?? cancelError;
         }
       }
       finish();
@@ -491,7 +551,14 @@ function collect(
       if (!completed || settled) return;
       settled = true;
       const error = asError(eventError ?? callbackError);
-      if (error !== undefined) { reject(error); return; }
+      if (error !== undefined) {
+        reject(cleanupFailure === undefined ? error : resourceCleanupError(error, [cleanupFailure]));
+        return;
+      }
+      if (cleanupFailure !== undefined) {
+        reject(resourceCleanupError(undefined, [cleanupFailure]));
+        return;
+      }
       // execSql wraps the batch in sp_executesql: doneInProc is emitted once
       // per statement and doneProc once for the wrapper itself.
       const rowCounts = doneInProcCount > 0 ? doneInProcRowCounts : doneRowCounts;
@@ -505,10 +572,14 @@ function collect(
         statementCount,
         output,
         outputSeen,
+        ...(routineProcedure === undefined || procedureReturnValue === undefined ? {} : { returnValue: procedureReturnValue }),
       });
     };
     try {
-      request = new Request(parameterizedSql, ((error: unknown, rowCount?: number) => {
+      const requestParameters = routineProcedure === undefined
+        ? parameters
+        : parameters.map((parameter, index) => ({ ...parameter, name: routineProcedure.parameterNames[index]! }));
+      request = new Request(routineProcedure?.name ?? parameterizedSql, ((error: unknown, rowCount?: number) => {
         callbackError = error;
         if (typeof rowCount === "number") callbackRowCount = rowCount;
         finish();
@@ -547,13 +618,29 @@ function collect(
       // doneProc is the completion notification for the sp_executesql wrapper.
       request.on("returnValue", (name: unknown, value: unknown) => {
         outputSeen = true;
-        if (typeof name === "string") output[name] = value;
+        if (typeof name === "string") {
+          try {
+            const parameter = requestParameters.find((candidate) => candidate.name === name);
+            const outputName = parameter?.outputName ?? name;
+            setOutputValue(output, outputName, parameter === undefined ? value : policy.decode(parameter.databaseType, value));
+          } catch (error) {
+            fail(error);
+          }
+        }
+      });
+      request.on("doneProc", (_rowCount: unknown, _more: unknown, status: unknown) => {
+        if (routineProcedure !== undefined && typeof status === "number") procedureReturnValue = status;
       });
       request.on("error", (error: unknown) => { fail(error); });
       request.on("requestCompleted", () => { completed = true; finish(); });
-      for (const parameter of parameters) addParameter(request, parameter);
+      for (const parameter of requestParameters) addParameter(request, parameter);
       started = true;
-      connection.execSql(request);
+      if (routineProcedure !== undefined) {
+        if (typeof connection.callProcedure !== "function") throw new Error("BRAID_CALL_RETURN_UNSUPPORTED: Tedious connection does not expose callProcedure().");
+        connection.callProcedure(request);
+      } else {
+        connection.execSql(request);
+      }
     } catch (error) {
       started = false;
       fail(error);
@@ -600,6 +687,16 @@ function rowResult(result: CollectedResult): QueryExecutionResult<Record<string,
   return { kind: "command", rows: [], rowCount: result.affectedRows, command: { affectedRows: result.affectedRows } };
 }
 
+function assertNativeProcedureStatement(rendered: RenderedStatement): void {
+  if (rendered.routineProcedure === undefined) return;
+  if (rendered.routineProcedure.parameterNames.length !== rendered.parameters.length) {
+    throw new Error("BRAID_CALL_RETURN_UNSUPPORTED: native procedure parameterNames must match the rendered parameter count.");
+  }
+  if (rendered.segments.some((segment) => !/^[\s,]*$/u.test(segment))) {
+    throw new Error("BRAID_CALL_RETURN_UNSUPPORTED: native procedure calls cannot include authored SQL text; use only argument placeholders separated by commas.");
+  }
+}
+
 const DEFAULT_MAX_BUFFERED_ROWS = 32;
 
 function streamRows(
@@ -617,6 +714,7 @@ function streamRows(
     let request: TediousRequestLike | undefined;
     let done = false;
     let failure: unknown;
+    let cleanupFailure: unknown;
     let paused = false;
     let cancellationRequested = false;
     let completion!: Promise<void>;
@@ -631,7 +729,8 @@ function streamRows(
         else if (request) connection.cancel?.();
         if (paused) { request?.resume?.(); paused = false; }
       } catch (error) {
-        failure = new AggregateError([failure, error], "Failed to cancel SQL Server stream.", { cause: failure });
+        cleanupFailure = cleanupFailure ?? error;
+        failure = failure ?? error;
       }
       wake();
     };
@@ -734,6 +833,9 @@ function streamRows(
       if (!done) cancel();
       signal?.removeEventListener("abort", onAbort);
       try { await completion; } catch (error) { if (!failure) failure = error; }
+      if (cleanupFailure !== undefined) {
+        throw resourceCleanupError(failure, [cleanupFailure]);
+      }
     }
   })();
 }
@@ -758,13 +860,17 @@ function makeTediousExecutor(
       const execution = executionBinding(bindingAdapter, rendered, binding);
       return streamRows(connection, execution.description.parameterizedSql!, execution.parameters, policy, maxBufferedRows, signal) as AsyncIterable<Row>;
     },
-    async call<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<RoutineCallResult<Row>> {
+    async call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
-      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy);
-      if (result.outputSeen) throw new Error("BRAID_CALL_OUT_UNSUPPORTED: SQL Server output parameters are not implemented.");
+      assertNativeProcedureStatement(rendered);
+      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy, rendered.routineProcedure);
       return {
-        output: {},
-        resultSets: result.resultSets.map((set) => ({ rows: set.rows as readonly Row[] })),
+        output: result.output,
+        ...(result.returnValue === undefined ? {} : { returnValue: result.returnValue }),
+        resultSets: result.resultSets.map((set, index) => ({
+          rows: set.rows,
+          source: { kind: "emitted" as const, index },
+        })),
       };
     },
     begin: () => control(connection, "beginTransaction"),

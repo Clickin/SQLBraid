@@ -25,6 +25,8 @@ function rowsExecutor(rows: readonly unknown[]): QueryExecutor {
     async query<Row>() {
       return { kind: 'rows' as const, rows: rows as readonly Row[] };
     },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error('BRAID_STREAM_UNSUPPORTED'); },
+    async call() { throw new Error('BRAID_CALL_UNSUPPORTED'); },
   };
 }
 

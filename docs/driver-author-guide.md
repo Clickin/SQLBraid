@@ -1,6 +1,6 @@
 # Driver-author guide: binding transport SPI
 
-This guide is for a custom `QueryExecutor`, `ConnectionProvider`, or first-party-style driver adapter. The guide describes the PV14 seam; verification is pending on the exact final revision. It does not grant a runtime/driver support label or claim CI evidence.
+This guide is for a custom `QueryExecutor`, `ConnectionProvider`, or first-party-style driver adapter. PV15 final verification is pending; this guide does not grant a runtime/driver support label or claim current CI, SHA, publication, or release evidence.
 
 ## 1. The logical statement contract
 
@@ -11,6 +11,8 @@ interface RenderedParameter {
   readonly value: unknown;
   readonly interpolation?: number;
   readonly hint?: ParameterTypeHint;
+  readonly direction?: "in" | "out" | "inout";
+  readonly outputName?: string;
 }
 
 interface RenderedStatement {
@@ -18,6 +20,10 @@ interface RenderedStatement {
   readonly parameters: readonly RenderedParameter[];
   readonly resultKind: QueryResultKind;
   readonly dialectId: string;
+  readonly routineProcedure?: {
+    readonly name: string;
+    readonly parameterNames: readonly string[];
+  };
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
 }
@@ -48,6 +54,7 @@ interface StatementBindingContext {
   readonly dialectId: string;
   readonly requestedReuse: "auto" | "simple" | "reuse";
   readonly preparedName?: string;
+  readonly transactionScoped?: boolean;
 }
 
 interface StatementBindingAdapter {
@@ -78,6 +85,8 @@ interface BindingDescription {
   readonly name?: string;
   readonly interpolation?: number;
   readonly hint?: ParameterTypeHint;
+  readonly direction?: "in" | "out" | "inout";
+  readonly outputName?: string;
 }
 ```
 
@@ -92,6 +101,15 @@ interface QueryExecutor {
     statement: RenderedStatement,
     binding?: StatementBindingDescription,
   ): Promise<QueryExecutionResult>;
+  stream(
+    statement: RenderedStatement,
+    signal?: AbortSignal,
+    binding?: StatementBindingDescription,
+  ): AsyncIterable<unknown>;
+  call(
+    statement: RenderedStatement,
+    binding?: StatementBindingDescription,
+  ): Promise<DriverRoutineResult>;
 }
 
 interface ConnectionProvider {
@@ -101,6 +119,28 @@ interface ConnectionProvider {
 ```
 
 A lease must not silently use a different binding adapter. Keep opaque driver requests in the driver package; a `WeakMap<StatementBindingDescription, OpaqueRequest>` is an appropriate private association when the executor needs already-encoded data.
+
+`call()` returns a raw normalized routine result, not application generic types:
+
+```ts
+interface DriverRoutineResult {
+  readonly output: Readonly<Record<string, unknown>>;
+  readonly returnValue?: unknown;
+  readonly resultSets: readonly {
+    readonly rows: readonly unknown[];
+    readonly source:
+      | { readonly kind: "out-cursor"; readonly name?: string; readonly parameterIndex?: number }
+      | { readonly kind: "implicit"; readonly index: number }
+      | { readonly kind: "emitted"; readonly index: number };
+  }[];
+}
+```
+
+Never return an Oracle `ResultSet`, PostgreSQL portal, MySQL command packet, or
+Tedious `Request` in this value. Consume and close driver resources first; the
+runtime maps the materialized rows to the query's heterogeneous
+`RoutineCallResult` contract after lease release. A cursor OUT value belongs in
+`resultSets`, not scalar `output`.
 
 ## 3. Complete custom text-positional adapter
 
@@ -242,7 +282,13 @@ SQLite adapters must use the documented `DatabaseSync.prepare(text)` and `Statem
 
 A hint selects database parameter metadata; it is not application validation or an input codec. An adapter must either map every supported hint to its driver descriptor or reject unsupported hints before I/O with `BRAID_BIND_HINT_UNSUPPORTED` (or a more specific materialization diagnostic). Never silently discard a hint. Keep hint structure in prepared shape identity; parameter values do not participate.
 
-Oracle must preserve its null, NUMBER, temporal, LOB, and ResultSet policies. Tedious must preserve type inference, precision/scale/length validation, exactness checks, and multiple recordsets. Unsupported OUT/IN OUT and return-value capabilities remain explicit.
+Oracle must preserve its null, NUMBER, temporal, LOB, explicit/implicit ResultSet
+policies and close every live ResultSet before lease release. Tedious must
+preserve type inference, precision/scale/length validation, exactness checks,
+multiple recordsets, and explicit procedure metadata for native RETURN status.
+Unsupported MySQL OUT/INOUT carrier detection, SQL Server cursor outputs,
+SQLite routine calls, and any return-value capability must remain explicit; do
+not guess a carrier or simulate a cursor.
 
 ## 6. Observer and diagnostic description
 
@@ -311,8 +357,13 @@ Before accepting an adapter:
 - keep opaque driver request types out of core types;
 - release materialized leases before asynchronous row mapping;
 - retain a stream lease until iteration closes;
+- close/drain/cancel the driver stream before releasing or discarding that lease;
+- consume and close every routine cursor/request before mapping or releasing;
 - report materialization failures separately from driver I/O;
 - preserve transaction pinning and result-kind checks;
 - document unsupported capabilities instead of simulating them.
 
-PV14 completion and release readiness require exact-revision verification across unit, packed-runtime, docs, and all five real database paths. Until that evidence exists, mark verification pending and do not claim new SHA support, CI success, runtime Official status, or RC publication.
+PV15 completion and release readiness require exact-revision verification across
+unit, packed-runtime, docs, and all five real database paths. Until Main supplies
+that evidence, mark verification pending and do not claim a new SHA, CI success,
+runtime support label, or publication.

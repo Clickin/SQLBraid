@@ -98,6 +98,7 @@ export const oracleParameter = Object.freeze({
   blob: (): ParameterTypeHint<OracleNullable<unknown>> => hint("BLOB"),
   clob: (): ParameterTypeHint<OracleNullable<unknown>> => hint("CLOB"),
   nclob: (): ParameterTypeHint<OracleNullable<unknown>> => hint("NCLOB"),
+  refCursor: (): ParameterTypeHint<null> => hint("REF CURSOR"),
   varchar: (length?: number | "max"): ParameterTypeHint<OracleNullable<string>> => hint("VARCHAR2", length === undefined ? {} : { length }),
   timestampWithTimeZone: (): ParameterTypeHint<OracleNullable<Date>> => hint("TIMESTAMP WITH TIME ZONE"),
   timestampWithLocalTimeZone: (): ParameterTypeHint<OracleNullable<Date>> => hint("TIMESTAMP WITH LOCAL TIME ZONE"),

@@ -8,15 +8,19 @@ import {
   type RenderedStatement,
   type StatementBindingAdapter,
   type StatementBindingContext,
+  type DriverRoutineResult,
 } from '@sqlbraid/core';
 import { createSqlTag, sql } from '@sqlbraid/template';
 import { createDatabase } from '@sqlbraid/runtime';
 
-function logicalStatement(values: readonly unknown[] = ['O\'Reilly', null, true]): RenderedStatement {
+function logicalStatement(
+  values: readonly unknown[] = ['O\'Reilly', null, true],
+  dialectId = 'postgres',
+): RenderedStatement {
   const segments: string[] = values.map((_, index) => index === 0 ? 'SELECT ' : ', ');
   segments.push('');
   return createRenderedStatement({
-    dialectId: 'postgres',
+    dialectId,
     segments,
     parameters: values.map((value, interpolation) => ({ value, interpolation })),
     resultKind: 'rows',
@@ -32,7 +36,7 @@ function conformanceCase(
   execute?: (statement: RenderedStatement, description: ReturnType<StatementBindingAdapter['describe']>) => void,
 ): void {
   test(`${name} preserves value-only bindings and transport order`, () => {
-    const statement = logicalStatement([1, 2, 3]);
+    const statement = logicalStatement([1, 2, 3], context.dialectId);
     const description = adapter.describe(statement, context);
     assert.equal(description.adapterId, adapter.id);
     assert.equal(description.dialectId, context.dialectId);
@@ -105,7 +109,7 @@ test('literalizedSql supports custom redaction, truncation, binary summaries, an
       throw new Error('custom toString must not run');
     },
   };
-  const statement = logicalStatement(["abcdefghi", new Uint8Array([0, 1, 255]), unsupported]);
+  const statement = logicalStatement(["abcdefghi", new Uint8Array([0, 1, 255]), unsupported], 'sqlite');
   const description = createStatementBindingDescription(statement, { dialectId: 'sqlite', requestedReuse: 'auto' }, {
     adapterId: 'diagnostic',
     transport: 'text-positional',
@@ -238,6 +242,8 @@ test('one native transport executes multiple dialects but rejects structural val
       const values = nativeTag(statement.segments, ...statement.parameters.map(({ value }) => value));
       return { kind: 'rows' as const, rows: values.map((value) => ({ value })) as unknown as readonly Row[] };
     },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error('BRAID_STREAM_UNSUPPORTED'); },
+    async call(): Promise<DriverRoutineResult> { throw new Error('BRAID_CALL_UNSUPPORTED'); },
   });
   for (const dialectId of ['postgres', 'mysql', 'sqlite']) {
     const tag = createSqlTag({ dialect: { id: dialectId, quoteIdentifier: (value) => `"${value.replaceAll('"', '""')}"` } });

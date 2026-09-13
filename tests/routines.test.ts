@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createStatementBindingDescription, parameterizedSql } from '@sqlbraid/core';
-import type { QueryExecutor, RenderedStatement, RoutineCallResult, StatementBindingContext } from '@sqlbraid/core';
+import type { DriverRoutineResult, QueryExecutor, RenderedStatement, StatementBindingContext } from '@sqlbraid/core';
 import { createDatabase } from '@sqlbraid/runtime';
 import { sql } from '@sqlbraid/postgres';
 
@@ -18,12 +18,19 @@ test('routine database call preserves output and result-set shape', async () => 
       },
     },
     async query<Row>() { return { kind: 'rows', rows: [] as readonly Row[] }; },
-    async call<Row>(rendered: RenderedStatement): Promise<RoutineCallResult<Row>> {
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error('BRAID_STREAM_UNSUPPORTED'); },
+    async call(rendered: RenderedStatement): Promise<DriverRoutineResult> {
       assert.equal(parameterizedSql(rendered, (index) => `$${index}`), 'CALL do_work($1)');
-      return { output: { ok: true }, resultSets: [{ rows: [{ id: 1 }] as unknown as readonly Row[] }, { rows: 'unknown' }] };
+      return {
+        output: { ok: true },
+        resultSets: [
+          { rows: [{ id: 1 }], source: { kind: 'emitted', index: 0 } },
+          { rows: [], source: { kind: 'emitted', index: 1 } },
+        ],
+      };
     },
   };
   const db = createDatabase(executor);
   const query = sql.call`CALL do_work(${1})`;
-  assert.deepEqual(await db.call(query), { output: { ok: true }, resultSets: [{ rows: [{ id: 1 }] }, { rows: 'unknown' }] });
+  assert.deepEqual(await db.call(query), { output: { ok: true }, resultSets: [{ rows: [{ id: 1 }] }, { rows: [] }] });
 });

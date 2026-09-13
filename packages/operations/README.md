@@ -12,4 +12,6 @@ declare const manifest: QueryManifest;
 void manifest;
 ```
 
-Import operation contracts from `@sqlbraid/operations` when building integrations that consume SQLBraid execution results. See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+Use this package for integrations that consume SQLBraid operation manifests and execution metadata. It does not expose raw driver cursors, requests, or routine carrier packets; applications receive normalized rows, `output`, heterogeneous `resultSets`, and optional `returnValue` through runtime contracts.
+
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

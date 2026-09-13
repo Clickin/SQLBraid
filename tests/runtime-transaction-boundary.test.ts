@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { createStatementBindingDescription } from "@sqlbraid/core";
-import type { QueryExecutor, RenderedStatement, StatementBindingAdapter } from "@sqlbraid/core";
+import type { DriverRoutineResult, QueryExecutor, RenderedStatement, StatementBindingAdapter } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { sql } from "@sqlbraid/template";
 
@@ -25,6 +25,8 @@ function physical(log: string[]): QueryExecutor {
   return {
     statementBinding,
     async query<Row>(query: RenderedStatement) { log.push(statementText(query)); return { kind: "rows", rows: [] as readonly Row[] }; },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
+    async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
     async begin() { log.push("begin"); }, async commit() { log.push("commit"); }, async rollback() { log.push("rollback"); },
     async savepoint(name) { log.push(`savepoint:${name}`); },
     async rollbackTo(name) { log.push(`rollback-to:${name}`); },

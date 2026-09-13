@@ -51,7 +51,7 @@ try {
 }
 ```
 
-Tedious는 `@p1`, `@p2` 같은 결정적인 파라미터 이름을 받습니다. `sql.bind`는 데이터베이스 타입을 선택할 뿐 값을 SQL 텍스트로 바꾸지 않습니다. OUT/return-value 루틴 바인딩은 이 RC에서 Unsupported입니다.
+Tedious는 `@p1`, `@p2` 같은 결정적인 파라미터 이름을 받습니다. `sql.bind`는 데이터베이스 타입을 선택할 뿐 값을 SQL 텍스트로 바꾸지 않습니다. scalar OUTPUT/INOUT 루틴 파라미터에는 명시적인 hint가 필요합니다. T-SQL integer RETURN status에는 `sql.call` 계약의 `procedure: { name, parameterNames }` metadata가 필요하며 SQLBraid는 임의 `EXEC` 텍스트에서 identity를 추측하지 않습니다.
 
 Tedious 바인딩 어댑터는 논리 문장을 typed request로 구체화합니다. 결정적인
 `@p1`, `@p2`, … 이름, `TYPES.*` 매핑, 인코딩된 값과 facet을 구성합니다.
@@ -61,11 +61,18 @@ Tedious가 소유하며, 이 단계의 실패는 드라이버 I/O 없이 `materi
 
 ## 기능 경계
 
-- CI는 Node 22.18.0/Linux x64에서 Tedious 어댑터를 검증하고, 고정 Node/Bun/Deno 버전에서 portable root를 별도로 검사합니다.
-- SQL Server 게이트는 2022 CU18(16.0.4185.3), Linux x64를 사용합니다. 로컬 ARM 에뮬레이션은 Official ARM 지원 주장이 아닙니다.
+- 대상 조합은 Node 22.18.0/Linux x64의 Tedious입니다. PV15 최종 검증은
+  대기 중이므로 역사적 매트릭스를 현재 릴리스 게이트 결과로 취급하지
+  마세요.
+- 역사적 fixture는 SQL Server 2022 CU18(16.0.4185.3), Linux x64를
+  사용합니다. 로컬 ARM 에뮬레이션은 이 문서의 검증 범위 밖입니다.
 - 힌트가 없는 일반 값은 어댑터 로컬 Tedious 추론을 사용합니다. `null`, 사용자 정의 객체, 정밀도/스케일, 길이 또는 SQL Server 전용 타입에는 명시적인 힌트를 사용하세요.
 - 여러 recordset을 하나의 가짜 단일 행 결과로 평탄화하지 않고 보존합니다.
+- `CURSOR VARYING OUTPUT`은 애플리케이션 cursor 채널이 아니며 `BRAID_CALL_CURSOR_UNSUPPORTED`로 거부합니다. local cursor를 소비한 뒤 `SELECT` 행을 내보내는 batch는 일반 result set으로 반환됩니다.
 
 Tedious는 `decimal`/`numeric` 결과를 JavaScript 숫자로 반환하므로 기본 정책은 임의 정밀도 소수 결과를 보장하지 않습니다. 유효숫자 15자리를 초과하는 명시적인 소수 문자열 입력은 `BRAID_BIND_DECIMAL_EXACTNESS`로 거부합니다. 정확한 소수 텍스트가 필요하면 SELECT에서 명시적으로 문자열로 변환하고 결과 계약을 문자열로 선언하세요. `bigint` 결과는 문자열입니다. 날짜와 시간은 `Date`를 사용하므로 원래 offset이나 밀리초 미만 정밀도를 보존하지 않습니다.
 
 증거 라벨과 현재 매트릭스는 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)을 참고하세요.
+
+명시적 procedure metadata와 이질적인 `sql.call` result 계약은
+[루틴 호출](/SQLBraid/concepts/routines/)을 참고하세요.

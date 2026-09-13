@@ -73,6 +73,49 @@ function assertObserverContent(events, placeholder, boundValue) {
   assertEventDurations(events);
 }
 
+async function streamingSmoke(db, tag) {
+  const integerRow = schema((value) => ({ id: Number(value.id) }));
+  const query = tag.rows(integerRow)`SELECT 1 AS id UNION ALL SELECT 2 AS id UNION ALL SELECT 3 AS id`;
+  let sum = 0;
+  for await (const row of db.stream(query, { schema: schema((value) => ({ id: value.id * 2 })) })) sum += row.id;
+  assert.equal(sum, 12, "stream maps every row");
+  for await (const row of db.stream(query)) {
+    assert.equal(row.id, 1);
+    break;
+  }
+  assert.deepEqual(await db.one(tag.rows(integerRow)`SELECT 4 AS id`), { id: 4 }, "break leaves a reusable connection");
+  const failure = new Error("stream mapper failed");
+  await assert.rejects(async () => {
+    for await (const row of db.stream(query, { schema: schema(() => { throw failure; }) })) void row;
+  }, (error) => error === failure || error.cause === failure);
+  assert.deepEqual(await db.one(tag.rows(integerRow)`SELECT 5 AS id`), { id: 5 }, "mapping failure cleans up before reuse");
+  await assert.rejects(async () => {
+    for await (const row of db.stream(query)) {
+      void row;
+      throw failure;
+    }
+  }, (error) => error === failure);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(async () => {
+    for await (const row of db.stream(query, { signal: controller.signal })) void row;
+  }, (error) => error === controller.signal.reason);
+  const activeController = new AbortController();
+  const abortFailure = new Error("active stream aborted");
+  await assert.rejects(async () => {
+    for await (const row of db.stream(query, { signal: activeController.signal })) {
+      void row;
+      activeController.abort(abortFailure);
+    }
+  }, (error) => error === abortFailure || error.cause === abortFailure);
+  assert.deepEqual(await db.one(tag.rows(integerRow)`SELECT 6 AS id`), { id: 6 }, "abort leaves a reusable pool");
+  await db.tx(async (tx) => {
+    let count = 0;
+    for await (const row of tx.stream(query)) count += row.id;
+    assert.equal(count, 6);
+  });
+}
+
 export async function runPostgresSmoke(url) {
   if (typeof url !== "string" || url.length === 0) throw new TypeError("PostgreSQL smoke requires a connection URL.");
 
@@ -179,6 +222,7 @@ export async function runPostgresSmoke(url) {
   try {
     const events = [];
     const db = createPgPoolDatabase(pool, { observers: [{ onEvent(event) { events.push(event); } }] });
+    await streamingSmoke(db, postgres);
 
     const concurrent = await Promise.all([
       db.one(postgres.rows`SELECT pg_backend_pid() AS pid, pg_sleep(0.15) AS pause`),
@@ -365,6 +409,7 @@ export async function runMysqlSmoke(url) {
   try {
     const events = [];
     const db = createMysql2PoolDatabase(pool, { observers: [{ onEvent(event) { events.push(event); } }] });
+    await streamingSmoke(db, mysql);
 
     const concurrent = await Promise.all([
       db.one(mysql.rows`SELECT CONNECTION_ID() AS connectionId, SLEEP(0.15) AS pause`),

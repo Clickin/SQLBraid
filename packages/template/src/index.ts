@@ -2,8 +2,11 @@ import { Buffer } from "node:buffer";
 import {
   SQL_FRAGMENT,
   createBoundParameter,
+  createRoutineInOutParameter,
+  createRoutineOutParameter,
   createRenderedStatement,
   isBoundParameter,
+  isRoutineParameter,
   type BindNode,
   type ChooseNode,
   type Dialect,
@@ -12,6 +15,7 @@ import {
   type ListNode,
   type Query,
   type QueryResultKind,
+  type RoutineContract,
   type RenderLimits,
   type RenderedParameter,
   type RenderedStatement,
@@ -509,9 +513,11 @@ function applyTrim(text: string, attributes: TrimAttributes): string {
 interface RenderState {
   readonly dialect: Dialect;
   readonly limits: Required<RenderLimits>;
+  readonly resultKind: QueryResultKind;
   readonly parameters: RenderedParameter[];
   readonly segments: string[];
   readonly variantPath: string[];
+  readonly outputNames: Set<string>;
   structuralItems: number;
   depth: number;
   sqlBytes: number;
@@ -551,6 +557,13 @@ export function assertDirectiveCondition(value: unknown): boolean {
 
 function appendParameter(state: RenderState, parameter: RenderedParameter): void {
   if (state.parameters.length >= state.limits.maxBindCount) throw new SqlRenderError("BRAID_BIND_LIMIT", "Rendered bind count exceeds maxBindCount.");
+  if (parameter.direction !== undefined && parameter.direction !== "in" && state.resultKind !== "call") {
+    throw new SqlRenderError("BRAID_CALL_ONLY", "sql.out() and sql.inOut() are only valid in sql.call queries.");
+  }
+  if (parameter.outputName !== undefined) {
+    if (state.outputNames.has(parameter.outputName)) throw new SqlRenderError("BRAID_CALL_OUTPUT_NAME", `Duplicate routine outputName: ${parameter.outputName}`);
+    state.outputNames.add(parameter.outputName);
+  }
   const segment = state.segments[state.segments.length - 1];
   if ((segment.at(-1) && /[\p{L}\p{N}_$]/u.test(segment.at(-1)!)) || state.afterParameter) {
     state.segments[state.segments.length - 1] += " ";
@@ -562,11 +575,20 @@ function appendParameter(state: RenderState, parameter: RenderedParameter): void
   state.afterParameter = true;
 }
 
-function addBind(state: RenderState, value: unknown, interpolation?: number, hint?: ParameterTypeHint): void {
+function addBind(
+  state: RenderState,
+  value: unknown,
+  interpolation?: number,
+  hint?: ParameterTypeHint,
+  direction?: RenderedParameter["direction"],
+  outputName?: string,
+): void {
   appendParameter(state, {
     value,
     ...(interpolation === undefined ? {} : { interpolation }),
     ...(hint === undefined ? {} : { hint }),
+    ...(direction === undefined ? {} : { direction }),
+    ...(outputName === undefined ? {} : { outputName }),
   });
 }
 
@@ -622,6 +644,7 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
     if (node.kind === "bind") {
       const value = captured[node.interpolation];
       if (isFragment(value)) renderFragment(value, state);
+      else if (isRoutineParameter(value)) addBind(state, value.value, node.interpolation, value.hint, value.direction, value.outputName);
       else if (isBoundParameter(value)) addBind(state, value.value, node.interpolation, value.hint);
       else addBind(state, value, node.interpolation);
       continue;
@@ -651,9 +674,11 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
     if (node.kind === "trim") {
       const nested: RenderState = {
         ...state,
+        resultKind: state.resultKind,
         parameters: [],
         segments: [""],
         variantPath: state.variantPath,
+        outputNames: state.outputNames,
         depth: state.depth,
         sqlBytes: 0,
         afterParameter: false,
@@ -679,7 +704,8 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
       addStructural(state, node.values.length);
       for (const [index, value] of node.values.entries()) {
         if (index) addText(state, ", ");
-        if (isBoundParameter(value)) addBind(state, value.value, undefined, value.hint);
+        if (isRoutineParameter(value)) addBind(state, value.value, undefined, value.hint, value.direction, value.outputName);
+        else if (isBoundParameter(value)) addBind(state, value.value, undefined, value.hint);
         else addBind(state, value);
       }
     }
@@ -693,13 +719,33 @@ function renderFragment(fragment: SqlFragment, state: RenderState): void {
   renderNodes(fragment.ir.nodes, fragment.values, state);
 }
 
-function renderIr(ir: TemplateIr, captured: readonly unknown[], dialect: Dialect, limits?: RenderLimits, resultKind: QueryResultKind = "unknown"): RenderedStatement {
-  const state: RenderState = { dialect, limits: validateLimits(limits ?? {}), parameters: [], segments: [""], variantPath: [], structuralItems: 0, depth: 0, sqlBytes: 0, afterParameter: false };
+function renderIr(
+  ir: TemplateIr,
+  captured: readonly unknown[],
+  dialect: Dialect,
+  limits?: RenderLimits,
+  resultKind: QueryResultKind = "unknown",
+  routineProcedure?: RoutineContract["procedure"],
+): RenderedStatement {
+  const state: RenderState = {
+    dialect,
+    limits: validateLimits(limits ?? {}),
+    resultKind,
+    parameters: [],
+    segments: [""],
+    variantPath: [],
+    outputNames: new Set<string>(),
+    structuralItems: 0,
+    depth: 0,
+    sqlBytes: 0,
+    afterParameter: false,
+  };
   renderNodes(ir.nodes, captured, state);
   return createRenderedStatement({
     segments: state.segments,
     parameters: state.parameters,
     dialectId: dialect.id,
+    ...(routineProcedure === undefined ? {} : { routineProcedure }),
     variantFingerprint: state.variantPath.join("|"),
     resultKind,
   });
@@ -836,6 +882,48 @@ function assertStandardSchema(value: unknown): asserts value is StandardSchemaV1
   }
 }
 
+function normalizeRoutineContract(value: RoutineContract): RoutineContract {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("sql.call(contract) requires a routine contract object.");
+  }
+  const contract = value as {
+    readonly output?: unknown;
+    readonly resultSets?: unknown;
+    readonly returnValue?: unknown;
+    readonly procedure?: unknown;
+  };
+  if (contract.output !== undefined) assertStandardSchema(contract.output);
+  if (contract.resultSets !== undefined) {
+    if (!Array.isArray(contract.resultSets)) throw new TypeError("sql.call(contract).resultSets must be an array.");
+    for (const schema of contract.resultSets) assertStandardSchema(schema);
+  }
+  if (contract.returnValue !== undefined) assertStandardSchema(contract.returnValue);
+  let procedure: RoutineContract["procedure"];
+  if (contract.procedure !== undefined) {
+    if (typeof contract.procedure !== "object" || contract.procedure === null || Array.isArray(contract.procedure)) {
+      throw new TypeError("sql.call(contract).procedure must be an object.");
+    }
+    const candidate = contract.procedure as { readonly name?: unknown; readonly parameterNames?: unknown };
+    if (typeof candidate.name !== "string" || !candidate.name.trim()) throw new TypeError("Routine procedure name must be a non-empty string.");
+    if (!Array.isArray(candidate.parameterNames) || candidate.parameterNames.some((name) => typeof name !== "string" || !name.trim())) {
+      throw new TypeError("Routine procedure parameterNames must contain non-empty strings.");
+    }
+    if (new Set(candidate.parameterNames).size !== candidate.parameterNames.length) {
+      throw new TypeError("Routine procedure parameterNames must be unique.");
+    }
+    procedure = Object.freeze({
+      name: candidate.name,
+      parameterNames: Object.freeze([...candidate.parameterNames]),
+    });
+  }
+  return Object.freeze({
+    ...(value.output === undefined ? {} : { output: value.output }),
+    ...(value.resultSets === undefined ? {} : { resultSets: Object.freeze([...value.resultSets]) }),
+    ...(value.returnValue === undefined ? {} : { returnValue: value.returnValue }),
+    ...(procedure === undefined ? {} : { procedure }),
+  });
+}
+
 function isTemplateStringsArray(value: unknown): value is TemplateStringsArray {
   return Array.isArray(value)
     && Array.isArray((value as { readonly raw?: unknown }).raw);
@@ -849,6 +937,7 @@ export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
     values: readonly unknown[],
     resultKind: Kind,
     resultSchema?: StandardSchemaV1<unknown, Row>,
+    routineContract?: RoutineContract,
   ): Query<Row, Kind> => {
     const ir = cachedTemplate(strings, dialect.lexicalProfile, limits.maxNestingDepth);
     const captured = Object.freeze([...values]);
@@ -857,7 +946,8 @@ export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
       values: captured,
       resultKind,
       ...(resultSchema === undefined ? {} : { resultSchema }),
-      render: () => renderIr(ir, captured, dialect, limits, resultKind),
+      ...(routineContract === undefined ? {} : { routineContract }),
+      render: () => renderIr(ir, captured, dialect, limits, resultKind, routineContract?.procedure),
     });
   };
   const tag = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "unknown"> => createQuery<unknown, "unknown">(strings, values, "unknown")) as SqlTag;
@@ -869,8 +959,15 @@ export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
       createQuery(strings, tagValues, "rows", schema)) as SqlTagLike<"rows", unknown>;
   }) as SqlTag["rows"];
   tag.command = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "command"> => createQuery<unknown, "command">(strings, values, "command")) as SqlTag["command"];
-  tag.call = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "call"> => createQuery<unknown, "call">(strings, values, "call")) as SqlTag["call"];
+  tag.call = ((first: TemplateStringsArray | RoutineContract, ...values: readonly unknown[]) => {
+    if (isTemplateStringsArray(first)) return createQuery(first, values, "call");
+    const contract = normalizeRoutineContract(first);
+    return ((strings: TemplateStringsArray, ...tagValues: readonly unknown[]) =>
+      createQuery(strings, tagValues, "call", undefined, contract)) as SqlTag["call"];
+  }) as SqlTag["call"];
   tag.bind = ((value: unknown, hint: ParameterTypeHint) => createBoundParameter(value, hint)) as SqlTag["bind"];
+  tag.out = ((name: string, hint?: ParameterTypeHint) => createRoutineOutParameter(name, hint)) as SqlTag["out"];
+  tag.inOut = ((name: string, value: unknown, hint?: ParameterTypeHint) => createRoutineInOutParameter(name, value, hint)) as SqlTag["inOut"];
   tag.fragment = (strings, ...values) => makeFragment(strings, values, dialect, limits);
   tag.empty = makeStaticFragment([], 0, dialect);
   tag.ident = (identifier) => makeStaticFragment([{ kind: "identifier", value: typeof identifier === "string" ? identifier : Object.freeze([...identifier]), range: { start: 0, end: 0 } }], 0, dialect);

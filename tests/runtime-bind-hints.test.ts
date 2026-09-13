@@ -53,6 +53,8 @@ function noRowsExecutor(values: unknown[]): QueryExecutor {
       values.push(...query.parameters.map((parameter) => parameter.value));
       return { kind: "rows", rows: [] as readonly Row[] };
     },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
+    async call() { throw new Error("BRAID_CALL_UNSUPPORTED"); },
   };
 }
 
@@ -65,6 +67,8 @@ test("query:ready exposes immutable parameter hints and adapters receive them", 
       received = query;
       return { kind: "rows", rows: [] as readonly Row[] };
     },
+    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
+    async call() { throw new Error("BRAID_CALL_UNSUPPORTED"); },
   }, { observers: [{ onEvent(event) { events.push(event); } }] });
 
   await db.execute(hintedQuery(1));
@@ -124,7 +128,7 @@ test("legacy adapters reject explicit hints before driver I/O", async () => {
     },
   });
   await assert.rejects(() => sqlite.query(rendered()), /BRAID_BIND_HINT_UNSUPPORTED/);
-  await assert.rejects(() => sqlite.call!(rendered("call")), /BRAID_BIND_HINT_UNSUPPORTED/);
+
   await assert.rejects(async () => {
     for await (const _row of sqlite.stream!(rendered())) void _row;
   }, /BRAID_BIND_HINT_UNSUPPORTED/);

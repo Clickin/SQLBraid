@@ -65,4 +65,8 @@ const query = sql.rows<UserRow>`
 
 SQLBraid's render limits also bound SQL byte size, bind count, structural items, and nesting depth. Configure limits through `createSqlTag({ dialect, limits })` when an application needs stricter bounds.
 
-PostgreSQL, MySQL, and SQLite explicitly reject hints with `BRAID_BIND_HINT_UNSUPPORTED`; they never silently ignore one. Use the matching first-party Oracle or SQL Server adapter when the database type API is required.
+PostgreSQL, MySQL, and SQLite explicitly reject ordinary hints with
+`BRAID_BIND_HINT_UNSUPPORTED`; they never silently ignore one. PostgreSQL's
+routine-only `postgresParameter.refcursor()` classifies an OUT/INOUT portal.
+Use the matching first-party Oracle or SQL Server adapter when another database
+type API is required.

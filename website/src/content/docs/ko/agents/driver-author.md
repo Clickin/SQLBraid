@@ -3,7 +3,7 @@ title: 드라이버 작성자 바인딩 가이드
 description: 값 전용 보안 경계를 지키는 사용자 지정 SQLBraid 바인딩 어댑터를 구현합니다.
 ---
 
-이 문서는 사용자 지정 `QueryExecutor`, `ConnectionProvider`, 드라이버 어댑터를 위한 것입니다. PV14는 정확한 최종 revision에서 검증 대기 중이며, 새 CI·SHA·런타임 지원·배포 증거를 주장하지 않습니다.
+이 문서는 사용자 지정 `QueryExecutor`, `ConnectionProvider`, 드라이버 어댑터를 위한 것입니다. PV15 최종 검증은 대기 중이며 현재 CI·SHA·런타임 지원 label·배포 증거를 주장하지 않습니다.
 
 ## 논리 문장 불변식
 
@@ -14,6 +14,8 @@ interface RenderedParameter {
   readonly value: unknown;
   readonly interpolation?: number;
   readonly hint?: ParameterTypeHint;
+  readonly direction?: "in" | "out" | "inout";
+  readonly outputName?: string;
 }
 
 interface RenderedStatement {
@@ -21,6 +23,10 @@ interface RenderedStatement {
   readonly parameters: readonly RenderedParameter[];
   readonly resultKind: QueryResultKind;
   readonly dialectId: string;
+  readonly routineProcedure?: {
+    readonly name: string;
+    readonly parameterNames: readonly string[];
+  };
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
 }
@@ -48,12 +54,14 @@ interface StatementBindingContext {
   readonly dialectId: string;
   readonly requestedReuse: "auto" | "simple" | "reuse";
   readonly preparedName?: string;
+  readonly transactionScoped?: boolean;
 }
 ```
 
 `StatementBindingDescription.bindings`는 `index`, 선택적 driver `name`,
-보간 인덱스, 선택적 hint를 가진 불변 메타데이터입니다. 애플리케이션 값은
-노출하지 않으며 인코딩된 불투명 request는 드라이버 내부에 보관합니다.
+보간 인덱스, 선택적 hint, 방향, output 이름을 가진 불변 메타데이터입니다.
+애플리케이션 값은 노출하지 않으며 인코딩된 불투명 request는 드라이버 내부에
+보관합니다.
 
 `describe()`는 DB에 대해 순수해야 합니다. `native-value-template`,
 `text-positional`, `text-named`, `typed-request` 중 전송을 선택하고, 힌트를
@@ -188,6 +196,18 @@ parameter를 넘기지 마세요.
 정규화된 segments + 순서가 있는 hint 시그니처이며 placeholder 표기는 포함하지
 않습니다. Prepared factory는 한 번 렌더링합니다. 런타임에 범용 statement
 cache를 추가하지 마세요.
+
+## 루틴·stream·lease 경계
+
+`QueryExecutor.stream`은 `all()` buffer가 아닌 실제 드라이버 경로로
+구현하세요. 물리적 lease를 반환하거나 폐기하기 전에 드라이버
+cursor/request/iterator를 close, drain 또는 cancel해야 합니다.
+`QueryExecutor.call`은 `{ output, resultSets, returnValue? }` 정규화 결과를
+반환하며 모든 cursor/ResultSet을 소비합니다. raw 드라이버 객체는 애플리케이션
+결과로 보내지 마세요. Cursor OUT은 scalar `output`이 아니라 `resultSets`에
+들어갑니다. PostgreSQL refcursor는 기존 transaction이 필요하며 안전한
+carrier를 증명할 수 없는 MySQL prepared CALL OUT/INOUT과 SQL Server cursor
+output은 명시적으로 실패해야 합니다.
 
 ## 힌트·provider·observer 규칙
 

@@ -3,7 +3,7 @@ title: Driver-author binding guide
 description: Implement a custom SQLBraid binding adapter without crossing the value-only security boundary.
 ---
 
-This guide is for custom `QueryExecutor`, `ConnectionProvider`, and driver adapters. PV14 verification is pending on the exact final revision; this page does not claim new CI, SHA, runtime support, or publication evidence.
+This guide is for custom `QueryExecutor`, `ConnectionProvider`, and driver adapters. PV15 final verification is pending; this page does not claim a current CI result, SHA, runtime support label, or publication evidence.
 
 ## Logical statement invariant
 
@@ -14,6 +14,8 @@ interface RenderedParameter {
   readonly value: unknown;
   readonly interpolation?: number;
   readonly hint?: ParameterTypeHint;
+  readonly direction?: "in" | "out" | "inout";
+  readonly outputName?: string;
 }
 
 interface RenderedStatement {
@@ -21,6 +23,10 @@ interface RenderedStatement {
   readonly parameters: readonly RenderedParameter[];
   readonly resultKind: QueryResultKind;
   readonly dialectId: string;
+  readonly routineProcedure?: {
+    readonly name: string;
+    readonly parameterNames: readonly string[];
+  };
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
 }
@@ -43,12 +49,14 @@ interface StatementBindingContext {
   readonly dialectId: string;
   readonly requestedReuse: "auto" | "simple" | "reuse";
   readonly preparedName?: string;
+  readonly transactionScoped?: boolean;
 }
 ```
 
 `StatementBindingDescription.bindings` contains immutable metadata records with
-`index`, optional driver `name`, interpolation index, and optional hint. It does
-not expose application values; keep opaque encoded requests private.
+`index`, optional driver `name`, interpolation index, optional hint, direction,
+and output name. It does not expose application values; keep opaque encoded
+requests private.
 
 `describe()` is pure with respect to the database. It selects one transport (`native-value-template`, `text-positional`, `text-named`, or `typed-request`), validates hints, and constructs deterministic typed request data before connection acquisition. A materialization failure is stage `"materialize"`, with both execution flags false. Driver/server/network failures remain stage `"driver"`.
 
@@ -176,6 +184,17 @@ effective policy, which must never be inferred from the request. Prepared shape
 is `resultKind` + canonical segments + ordered hint signature, never placeholder
 spelling. A prepared factory renders once. Do not add a universal runtime
 statement cache.
+
+## Routine, stream, and lease boundaries
+
+Implement `QueryExecutor.stream` as a real driver path, not an `all()` buffer.
+Close, drain, or cancel the driver cursor/request/iterator before releasing or
+discarding the physical lease. Implement `QueryExecutor.call` as a normalized
+`{ output, resultSets, returnValue? }` result: consume every cursor/ResultSet
+and keep raw driver objects out of application results. Cursor OUT values belong
+in `resultSets`, not scalar `output`. PostgreSQL refcursor calls require an
+existing transaction; MySQL prepared CALL OUT/INOUT and SQL Server cursor output
+must fail explicitly when the driver cannot prove a safe carrier.
 
 ## Hints, providers, and observers
 

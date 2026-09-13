@@ -19,7 +19,7 @@ test('manifest preserves declared result kinds for opaque SQL', () => {
   const queries = [
     sql.rows<{ id: number }>`OPAQUE vendor_rows()`,
     sql.command`SELECT proprietary_command()`,
-    sql.call<{ id: number }>`SELECT proprietary_call()`,
+    sql.call`SELECT proprietary_call()`,
     sql`SELECT id FROM users`,
   ];
   assert.deepEqual(queries.map((query) => createManifest(query).resultKind), ['rows', 'command', 'call', 'unknown']);
