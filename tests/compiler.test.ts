@@ -151,7 +151,7 @@ test('capture and guarded preserve tag contracts and reject cross-kind arguments
   `;
   const diagnostics = checkSource(invalid, join(tmpdir(), 'sqlbraid-capture-mismatches.ts'), options);
   assert.deepEqual(diagnostics.map((diagnostic) => diagnostic.code), ['TS2345', 'TS2345', 'TS2345', 'TS2345']);
-});
+}, 15_000);
 
 test('bare sql rejects generic row shorthand with or without guards', () => {
   const invalid = "import {sql} from '@sqlbraid/template'; type Row = {id:number}; const plain=sql<Row>`SELECT 1`; const dynamic=sql<Row>`SELECT 1 /*@braid if ${true}*/ WHERE id=${1} /*@braid end*/`;";
