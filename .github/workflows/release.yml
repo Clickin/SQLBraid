@@ -51,13 +51,16 @@ jobs:
     env:
       SQLBRAID_POSTGRES_URL: postgres://sqlbraid:sqlbraid-test@127.0.0.1:5432/sqlbraid
       SQLBRAID_MYSQL_URL: mysql://sqlbraid:sqlbraid-test@127.0.0.1:3306/sqlbraid
-      SQLBRAID_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
-      SQLBRAID_VSIX_OUTPUT: ${{ runner.temp }}/sqlbraid-release-artifacts/sqlbraid.vsix
     steps:
       - name: Check out exact release ref
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Select runner-local artifact paths
+        run: |
+          echo "SQLBRAID_RELEASE_ARTIFACT_DIR=$RUNNER_TEMP/sqlbraid-release-artifacts" >> "$GITHUB_ENV"
+          echo "SQLBRAID_VSIX_OUTPUT=$RUNNER_TEMP/sqlbraid-release-artifacts/sqlbraid.vsix" >> "$GITHUB_ENV"
 
       - name: Set up Node 22.18.0
         uses: actions/setup-node@v4
