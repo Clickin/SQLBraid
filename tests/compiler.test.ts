@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { test } from 'vitest';
-import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource } from '@sqlbraid/compiler';
+import { checkProject, checkSource, checkSourceDetailed, createProjectContext, createVirtualOverlay, discoverQueries, emitSource } from '@sqlbraid/compiler';
 
 const source = `import { sql as dbSql } from '@sqlbraid/template';\nconst name: string | null = 'Ada';\ntype UserRow = { id: bigint };\nconst query = dbSql.rows<UserRow>\`SELECT custom_company_function(id) AS id FROM vendor_table /*@braid where*/ /*@braid if \${name != null}*/ AND name = \${name} /*@braid end*/ /*@braid end*/\`;`;
 const options = {
@@ -26,6 +26,42 @@ test('virtual overlay preserves source and attaches declared query contract', ()
   assert.equal(overlay.sourceText, source);
   assert.deepEqual(overlay.queryTypes[0], { range: overlay.queryTypes[0].range, rowType: 'UserRow', resultKind: 'rows' });
   assert.equal(overlay.diagnostics.length, 0);
+});
+
+test('detailed checking separates native, Braid, and lowering-only diagnostics', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'sqlbraid-diagnostic-provenance-'));
+  try {
+    const moduleSpecifier = './tag';
+    const fileName = join(directory, 'fixture.ts');
+    writeFileSync(join(directory, 'tag.ts'), 'export declare const sql: any;\n');
+    const source = [
+      `import { sql } from '${moduleSpecifier}';`,
+      'const native: string = 123;',
+      'const malformed = sql`SELECT 1 /*@braid otherwise*/`;',
+      'const lowered = sql`SELECT 1 /*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;',
+    ].join('\n');
+    const result = checkSourceDetailed(source, fileName, { moduleSpecifier });
+    assert.deepEqual(result.nativeTypeScriptDiagnostics.map((diagnostic) => diagnostic.code), ['TS2322']);
+    assert.ok(result.braidDiagnostics.some((diagnostic) => diagnostic.code === 'BRAID_STRUCTURE'));
+    assert.ok(result.overlayTypeScriptDiagnostics.some((diagnostic) => diagnostic.code === 'TS2322'));
+    assert.ok(result.overlayOnlyDiagnostics.some((diagnostic) => diagnostic.code === 'TS2307'));
+    assert.ok(result.overlayOnlyDiagnostics.some((diagnostic) => diagnostic.code === 'TS7006'));
+    assert.equal(result.overlayOnlyDiagnostics.some((diagnostic) => diagnostic.code === 'TS2322'), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('detailed checking matches mapped diagnostics by source range, not repeated snippets', () => {
+  const source = "import { sql } from '@sqlbraid/template'; /* string */ const comment = 'string'; const first: string = 1; const q=sql`SELECT 1 /*@braid if ${true}*/ WHERE value = ${1} /*@braid end*/`; const second: string = 2; class Base { x = 1; } class Child extends Base { query = sql`SELECT 1 /*@braid if ${true}*/ WHERE value = ${super.x} /*@braid end*/`; }";
+  const result = checkSourceDetailed(source, join(tmpdir(), 'sqlbraid-repeated-diagnostic.ts'), options);
+  const native = result.nativeTypeScriptDiagnostics.filter((diagnostic) => diagnostic.code === 'TS2322');
+  const overlay = result.overlayTypeScriptDiagnostics.filter((diagnostic) => diagnostic.code === 'TS2322');
+  assert.equal(native.length, 2);
+  assert.deepEqual(overlay.map((diagnostic) => diagnostic.range), native.map((diagnostic) => diagnostic.range));
+  assert.equal(result.nativeTypeScriptDiagnostics.filter((diagnostic) => diagnostic.code === 'TS2855').length, 1);
+  assert.equal(result.overlayTypeScriptDiagnostics.filter((diagnostic) => diagnostic.code === 'TS2855').length, 1);
+  assert.equal(result.overlayOnlyDiagnostics.some((diagnostic) => diagnostic.code === 'TS2855'), false);
 });
 
 test('discovers explicit rows, command, and call tag helpers', () => {

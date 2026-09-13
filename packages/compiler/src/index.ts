@@ -54,6 +54,13 @@ export interface OverlayOptions {
 
 export interface TypeScriptCheckOptions extends OverlayOptions {}
 
+export interface DetailedCheckResult {
+  readonly braidDiagnostics: readonly CompileDiagnostic[];
+  readonly nativeTypeScriptDiagnostics: readonly CompileDiagnostic[];
+  readonly overlayTypeScriptDiagnostics: readonly CompileDiagnostic[];
+  readonly overlayOnlyDiagnostics: readonly CompileDiagnostic[];
+}
+
 export interface TypeScriptProjectContext {
   readonly projectFile: string;
   readonly compilerOptions: ts.CompilerOptions;
@@ -489,6 +496,7 @@ interface LoweredSource {
   readonly sourceText: string;
   readonly diagnostics: readonly CompileDiagnostic[];
   readonly origins: readonly SourceMapOrigin[];
+  readonly mappingOrigins: readonly SourceMapOrigin[];
   readonly transformer: ts.TransformerFactory<ts.SourceFile>;
 }
 
@@ -591,17 +599,78 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
   const output = printer.printFile(transformedFile);
   const origins: SourceMapOrigin[] = [];
   let searchStart = 0;
+  function fallbackGeneratedRange(query: DiscoveredQuery): { readonly start: number; readonly end: number } | undefined {
+    const candidateStrings = query.strings
+      .map((value, index) => ({ value, index }))
+      .filter(({ value }) => value.length > 0)
+      .sort((left, right) => right.value.length - left.value.length || left.index - right.index);
+    for (const candidate of candidateStrings) {
+      const needle = JSON.stringify(candidate.value);
+      const staticStart = output.indexOf(needle, searchStart);
+      if (staticStart < 0) continue;
+      const arrayStart = output.lastIndexOf("[", staticStart);
+      const callOpen = output.lastIndexOf("(", arrayStart);
+      if (arrayStart < 0 || callOpen < 0 || callOpen < searchStart) continue;
+      let generatedStart = callOpen - 1;
+      while (generatedStart >= 0 && /[$\w]/u.test(output[generatedStart] ?? "")) generatedStart -= 1;
+      generatedStart += 1;
+      const close = /\n[ \t]*\}\);/u.exec(output.slice(staticStart));
+      if (generatedStart >= 0 && close) return { start: generatedStart, end: staticStart + close.index + close[0].length };
+    }
+    return undefined;
+  }
   for (const query of [...discovered.queries].sort((left, right) => left.range.start - right.range.start)) {
     const node = plan.loweredNodes.get(queryKey(query.range));
     if (!node) continue;
     const text = printer.printNode(ts.EmitHint.Expression, node, transformedFile);
-    const generatedStart = output.indexOf(text, searchStart);
+    const exactStart = output.indexOf(text, searchStart);
+    const fallback = exactStart < 0 ? fallbackGeneratedRange(query) : undefined;
+    const generatedStart = exactStart >= 0 ? exactStart : fallback?.start;
+    if (generatedStart === undefined) continue;
+    const generatedEnd = exactStart >= 0 ? exactStart + text.length : fallback?.end;
+    if (generatedEnd === undefined) continue;
+    origins.push({ generatedStart, generatedEnd, sourceStart: query.range.start, sourceEnd: query.range.end });
+    searchStart = generatedEnd;
+  }
+  const mappingOrigins = [...origins];
+  let statementSearchStart = 0;
+  function tokens(node: ts.Node, source: ts.SourceFile): readonly ts.Node[] {
+    const outputTokens: ts.Node[] = [];
+    function visit(current: ts.Node): void {
+      if (ts.isToken(current)) {
+        outputTokens.push(current);
+        return;
+      }
+      ts.forEachChild(current, visit);
+    }
+    visit(node);
+    return outputTokens;
+  }
+  for (const statement of sourceFile.statements) {
+    const transformedStatement = transformedFile.statements.find((candidate) => ts.getOriginalNode(candidate) === statement);
+    if (!transformedStatement) continue;
+    const statementText = printer.printNode(ts.EmitHint.Unspecified, transformedStatement, transformedFile);
+    const generatedStart = output.indexOf(statementText, statementSearchStart);
     if (generatedStart < 0) continue;
-    origins.push({ generatedStart, generatedEnd: generatedStart + text.length, sourceStart: query.range.start, sourceEnd: query.range.end });
-    searchStart = generatedStart + text.length;
+    statementSearchStart = generatedStart + statementText.length;
+    const sourceTokens = tokens(statement, sourceFile);
+    const generatedTokens = tokens(transformedStatement, transformedFile);
+    const count = Math.min(sourceTokens.length, generatedTokens.length);
+    for (let index = 0; index < count; index += 1) {
+      const sourceToken = sourceTokens[index];
+      const generatedToken = generatedTokens[index];
+      if (sourceToken.pos < 0 || sourceToken.end < 0 || generatedToken.pos < 0 || generatedToken.end < 0) continue;
+      if (sourceToken.kind !== generatedToken.kind || sourceToken.getText(sourceFile) !== generatedToken.getText(transformedFile)) continue;
+      mappingOrigins.push({
+        generatedStart: generatedStart + generatedToken.getStart(transformedFile) - transformedStatement.getStart(transformedFile),
+        generatedEnd: generatedStart + generatedToken.getEnd() - transformedStatement.getStart(transformedFile),
+        sourceStart: sourceToken.getStart(sourceFile),
+        sourceEnd: sourceToken.getEnd(),
+      });
+    }
   }
   transformed.dispose();
-  return { sourceText: output, diagnostics: plan.diagnostics, origins, transformer: plan.transformer };
+  return { sourceText: output, diagnostics: plan.diagnostics, origins, mappingOrigins, transformer: plan.transformer };
 }
 
 export function createVirtualOverlay(sourceText: string, fileName: string, options: OverlayOptions): VirtualTypeScriptOverlay {
@@ -691,22 +760,37 @@ function sourceFileInProgram(program: ts.Program, fileName: string): ts.SourceFi
 }
 
 function mapGeneratedRange(record: FileRecord, start: number, end: number): SourceRange {
-  const origin = record.lowered.origins.filter((candidate) => start >= candidate.generatedStart && start <= candidate.generatedEnd).sort((left, right) => (left.generatedEnd - left.generatedStart) - (right.generatedEnd - right.generatedStart))[0];
+  const origin = record.lowered.mappingOrigins.filter((candidate) => start >= candidate.generatedStart && start < candidate.generatedEnd).sort((left, right) => (left.generatedEnd - left.generatedStart) - (right.generatedEnd - right.generatedStart))[0];
   if (origin) {
     const query = record.discovered.queries.find((candidate) => candidate.range.start === origin.sourceStart && candidate.range.end === origin.sourceEnd);
     if (query) {
       const generatedQuery = record.lowered.sourceText.slice(origin.generatedStart, origin.generatedEnd);
+      const callbackStart = generatedQuery.indexOf("=> {");
+      const searchStart = callbackStart >= 0 ? callbackStart : 0;
+      const bindingOffsets = new Map<number, number>();
+      for (const expression of [...new Set(query.bindings.map((binding) => binding.expression))]) {
+        const bindings = query.bindings.filter((binding) => binding.expression === expression).sort((left, right) => left.interpolation - right.interpolation);
+        let offset = searchStart;
+        for (const binding of bindings) {
+          let found = generatedQuery.indexOf(expression, offset);
+          while (found >= 0) {
+            const before = generatedQuery[found - 1];
+            const after = generatedQuery[found + expression.length];
+            const identifierExpression = /[$\w]/u.test(expression[0] ?? "") && /[$\w]/u.test(expression.at(-1) ?? "");
+            if (!identifierExpression || (!/[$\w]/u.test(before ?? "") && !/[$\w]/u.test(after ?? ""))) break;
+            found = generatedQuery.indexOf(expression, found + Math.max(1, expression.length));
+          }
+          if (found < 0) continue;
+          bindingOffsets.set(binding.interpolation, found);
+          offset = found + Math.max(1, expression.length);
+        }
+      }
       for (const binding of query.bindings) {
-        const bindingOffset = generatedQuery.indexOf(binding.expression);
-        if (bindingOffset >= 0 && start >= origin.generatedStart + bindingOffset && start <= origin.generatedStart + bindingOffset + binding.expression.length) return binding.range;
+        const bindingOffset = bindingOffsets.get(binding.interpolation);
+        if (bindingOffset !== undefined && start >= origin.generatedStart + bindingOffset && start <= origin.generatedStart + bindingOffset + binding.expression.length) return binding.range;
       }
     }
     return { start: origin.sourceStart, end: origin.sourceEnd };
-  }
-  const snippet = record.lowered.sourceText.slice(start, end);
-  if (snippet) {
-    const sourceStart = record.sourceText.indexOf(snippet);
-    if (sourceStart >= 0) return { start: sourceStart, end: sourceStart + snippet.length };
   }
   const nearest = record.discovered.queries.reduce<{ readonly distance: number; readonly query?: DiscoveredQuery }>((best, query) => {
     const distance = Math.abs(query.range.start - start);
@@ -729,22 +813,85 @@ function addDiagnostic(output: CompileDiagnostic[], seen: Set<string>, diagnosti
   output.push(diagnostic);
 }
 
-function checkVirtualRecords(records: readonly FileRecord[], virtualProgram: ts.Program): readonly CompileDiagnostic[] {
+function tsDiagnostic(diagnostic: ts.Diagnostic, rangeValue: SourceRange): CompileDiagnostic {
+  return {
+    code: `TS${diagnostic.code}`,
+    message: ts.flattenDiagnosticMessageText(diagnostic.messageText, " "),
+    severity: "error",
+    range: rangeValue,
+  };
+}
+
+function programDiagnostics(
+  records: readonly FileRecord[],
+  program: ts.Program,
+  mapRange: (record: FileRecord, start: number, end: number) => SourceRange,
+): readonly CompileDiagnostic[] {
   const diagnostics: CompileDiagnostic[] = [];
   const seen = new Set<string>();
-  for (const record of records) for (const diagnostic of record.lowered.diagnostics) addDiagnostic(diagnostics, seen, diagnostic);
-  for (const diagnostic of ts.getPreEmitDiagnostics(virtualProgram)) {
+  for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
     if (!diagnostic.file) {
-      addDiagnostic(diagnostics, seen, { code: `TS${diagnostic.code}`, message: ts.flattenDiagnosticMessageText(diagnostic.messageText, " "), severity: "error", range: { start: 0, end: 0 } });
+      addDiagnostic(diagnostics, seen, tsDiagnostic(diagnostic, { start: 0, end: 0 }));
       continue;
     }
     const record = records.find((candidate) => ts.sys.resolvePath(candidate.fileName) === ts.sys.resolvePath(diagnostic.file?.fileName ?? ""));
     if (!record) continue;
     const start = diagnostic.start ?? 0;
     const end = start + (diagnostic.length ?? 1);
-    addDiagnostic(diagnostics, seen, { code: `TS${diagnostic.code}`, message: ts.flattenDiagnosticMessageText(diagnostic.messageText, " "), severity: "error", range: mapGeneratedRange(record, start, end) });
+    addDiagnostic(diagnostics, seen, tsDiagnostic(diagnostic, mapRange(record, start, end)));
   }
   return diagnostics;
+}
+
+function braidDiagnostics(records: readonly FileRecord[]): readonly CompileDiagnostic[] {
+  const diagnostics: CompileDiagnostic[] = [];
+  const seen = new Set<string>();
+  for (const record of records) for (const diagnostic of record.lowered.diagnostics) addDiagnostic(diagnostics, seen, diagnostic);
+  return diagnostics;
+}
+
+function overlayDiagnostics(records: readonly FileRecord[], virtualProgram: ts.Program): readonly CompileDiagnostic[] {
+  return programDiagnostics(records, virtualProgram, mapGeneratedRange);
+}
+
+function sameDiagnosticSource(left: CompileDiagnostic, right: CompileDiagnostic): boolean {
+  if (left.code !== right.code || left.message !== right.message || left.severity !== right.severity) return false;
+  if (left.range.start === right.range.start && left.range.end === right.range.end) return true;
+  const leftContainsRight = left.range.start <= right.range.start && left.range.end >= right.range.end;
+  const rightContainsLeft = right.range.start <= left.range.start && right.range.end >= left.range.end;
+  return (leftContainsRight || rightContainsLeft)
+    && (left.range.start === right.range.start || left.range.end === right.range.end);
+}
+
+function overlayOnlyDiagnostics(
+  overlay: readonly CompileDiagnostic[],
+  native: readonly CompileDiagnostic[],
+): readonly CompileDiagnostic[] {
+  const unmatchedNative = [...native];
+  const only: CompileDiagnostic[] = [];
+  for (const diagnostic of overlay) {
+    const match = unmatchedNative
+      .map((candidate, index) => ({ candidate, index }))
+      .filter(({ candidate }) => sameDiagnosticSource(diagnostic, candidate))
+      .sort((left, right) => {
+        const leftWidth = left.candidate.range.end - left.candidate.range.start;
+        const rightWidth = right.candidate.range.end - right.candidate.range.start;
+        const diagnosticWidth = diagnostic.range.end - diagnostic.range.start;
+        return Math.abs(leftWidth - diagnosticWidth) - Math.abs(rightWidth - diagnosticWidth)
+          || left.candidate.range.start - right.candidate.range.start
+          || left.candidate.range.end - right.candidate.range.end;
+      })[0];
+    if (!match) {
+      only.push(diagnostic);
+      continue;
+    }
+    unmatchedNative.splice(match.index, 1);
+  }
+  return only;
+}
+
+function checkVirtualRecords(records: readonly FileRecord[], virtualProgram: ts.Program): readonly CompileDiagnostic[] {
+  return [...braidDiagnostics(records), ...overlayDiagnostics(records, virtualProgram)];
 }
 
 function compilerOptionsFor(options: TypeScriptCheckOptions): ts.CompilerOptions {
@@ -763,6 +910,32 @@ export function checkSource(sourceText: string, fileName: string, options: TypeS
   const originalFiles = new Map([[ts.sys.resolvePath(fileName), originalSourceFile]]);
   const virtualProgram = ts.createProgram([fileName], compilerOptions, virtualHost(compilerOptions, virtualFiles, originalFiles));
   return checkVirtualRecords(records, virtualProgram);
+}
+
+export function checkSourceDetailed(sourceText: string, fileName: string, options: TypeScriptCheckOptions): DetailedCheckResult {
+  const compilerOptions = compilerOptionsFor(options);
+  const originalProgram = ts.createProgram([fileName], compilerOptions, sourceHost(compilerOptions, fileName, sourceText));
+  const originalSourceFile = sourceFileInProgram(originalProgram, fileName) ?? sourceFileFor(sourceText, fileName, { ...options, compilerOptions });
+  const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: originalProgram.getTypeChecker() };
+  const discovered = discoverQueries(sourceText, fileName, fileOptions);
+  const lowered = lowerSourceFile(originalSourceFile, discovered, "checker");
+  const records: FileRecord[] = [{ fileName, sourceText, discovered, lowered }];
+  const virtualFiles = new Map([[ts.sys.resolvePath(fileName), lowered.sourceText]]);
+  const originalFiles = new Map([[ts.sys.resolvePath(fileName), originalSourceFile]]);
+  const virtualProgram = ts.createProgram([fileName], compilerOptions, virtualHost(compilerOptions, virtualFiles, originalFiles));
+  const braid = braidDiagnostics(records);
+  const native = programDiagnostics(records, originalProgram, (record, start, end) => {
+    const boundedStart = Math.max(0, Math.min(record.sourceText.length, start));
+    const boundedEnd = Math.max(boundedStart, Math.min(record.sourceText.length, end));
+    return { start: boundedStart, end: boundedEnd };
+  });
+  const overlay = overlayDiagnostics(records, virtualProgram);
+  return {
+    braidDiagnostics: braid,
+    nativeTypeScriptDiagnostics: native,
+    overlayTypeScriptDiagnostics: overlay,
+    overlayOnlyDiagnostics: overlayOnlyDiagnostics(overlay, native),
+  };
 }
 
 function readProject(projectFile: string, compilerOptionsOverride?: ts.CompilerOptions): { readonly compilerOptions: ts.CompilerOptions; readonly fileNames: readonly string[] } {
