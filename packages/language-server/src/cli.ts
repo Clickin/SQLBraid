@@ -8,7 +8,7 @@ const configAssignment = args.find((argument) => argument.startsWith("--config="
 const configPath = configAssignment?.slice("--config=".length)
   || (configIndex >= 0 && typeof args[configIndex + 1] === "string" ? args[configIndex + 1] : undefined);
 const options: StdioLanguageServerOptions = {
-  moduleSpecifiers: ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite"],
+  moduleSpecifiers: ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite", "@sqlbraid/oracle", "@sqlbraid/mssql"],
   ...(configPath ? { configPath: resolve(configPath) } : {}),
 };
 

@@ -25,6 +25,11 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const temp = await mkdtemp(join(tmpdir(), "sqlbraid-pack-check-"));
 const consumer = join(temp, "consumer");
 const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR) : undefined;
+const requiredPackageNames = new Set([
+  "cli", "codegen", "compiler", "core", "language-server", "metadata", "mssql", "mysql",
+  "operations", "oracle", "postgres", "runtime", "sqlbraid", "sqlite", "template", "tooling",
+]);
+const packedContainers = [];
 
 async function run(command, args, cwd = root) {
   await execFile(command, args, { cwd, maxBuffer: 20 * 1024 * 1024 });
@@ -43,7 +48,7 @@ function collectPackagePaths(value, paths = []) {
 }
 
 try {
-  if (packageNames.length !== 13 || !packageNames.includes("metadata") || !packageNames.includes("codegen") || !packageNames.includes("tooling")) throw new Error("Expected 13 packages including metadata, codegen and tooling.");
+  for (const name of requiredPackageNames) if (!packageNames.includes(name)) throw new Error(`Missing required package ${name}.`);
   const inputTarballs = new Map();
   if (packInputDir) {
     await rm(join(packInputDir, "pack-check-success.json"), { force: true });
@@ -69,6 +74,7 @@ try {
   const tarballs = [];
   for (const packageName of packageNames) {
     const sourceManifest = JSON.parse(await readFile(join(packageRoot, packageName, "package.json"), "utf8"));
+    const expectedPackageName = packageName === "sqlbraid" ? "sqlbraid" : `@sqlbraid/${packageName}`;
     if (sourceManifest.version !== expectedVersion) throw new Error(`Package ${sourceManifest.name} is not synchronized to workspace version ${expectedVersion}.`);
     let tarball;
     if (packInputDir) {
@@ -102,7 +108,7 @@ try {
     if (!manifest.description || !manifest.repository?.url || !manifest.repository?.directory || !manifest.homepage || !manifest.bugs?.url || !Array.isArray(manifest.keywords) || manifest.keywords.length === 0) {
       throw new Error(`Packed ${manifest.name} is missing public package metadata.`);
     }
-    if (manifest.name !== `@sqlbraid/${packageName}` ||
+    if (manifest.name !== expectedPackageName ||
         manifest.repository.type !== "git" ||
         manifest.repository.url !== "git+https://github.com/Clickin/SQLBraid.git" ||
         manifest.repository.directory !== `packages/${packageName}` ||
@@ -177,6 +183,14 @@ try {
         }
       }
     }
+    if (manifest.name === "sqlbraid") {
+      const dependencyNames = Object.keys(manifest.dependencies ?? {});
+      if (dependencyNames.length !== 1 || dependencyNames[0] !== "@sqlbraid/cli"
+        || Object.keys(manifest.peerDependencies ?? {}).length
+        || Object.keys(manifest.optionalDependencies ?? {}).length) {
+        throw new Error("The unscoped sqlbraid package must depend only on @sqlbraid/cli and pull no drivers.");
+      }
+    }
     for (const tooling of ["@sqlbraid/metadata", "@sqlbraid/codegen", "@sqlbraid/tooling", "@sqlbraid/cli", "@sqlbraid/language-server", "@sqlbraid/vscode"]) {
       if (runtimePackages.includes(packageName) && (manifest.dependencies?.[tooling] || manifest.optionalDependencies?.[tooling])) {
         throw new Error(`${tooling} is a runtime dependency of ${manifest.name}.`);
@@ -201,13 +215,20 @@ try {
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], boundaryConsumer);
   const runtimeInstalledPackages = await readdir(join(boundaryConsumer, "node_modules/@sqlbraid"));
   if (["metadata", "codegen", "tooling", "cli", "language-server", "vscode"].some((name) => runtimeInstalledPackages.includes(name))) throw new Error("Runtime consumer installed development tooling transitively.");
+  const runtimeTopLevelPackages = await readdir(join(boundaryConsumer, "node_modules"));
+  if (runtimeTopLevelPackages.includes("sqlbraid")) throw new Error("Runtime consumer installed the unscoped CLI package transitively.");
+  if (["oracledb", "tedious"].some((name) => runtimeTopLevelPackages.includes(name))) throw new Error("Runtime consumer installed a Node-only database driver.");
   await writeFile(join(boundaryConsumer, "runtime.mjs"), [
     'import assert from "node:assert/strict";',
     'import { sql } from "@sqlbraid/postgres";',
     'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
+    'import { sql as oracle } from "@sqlbraid/oracle";',
+    'import { sql as mssql } from "@sqlbraid/mssql";',
     'assert.equal(sql`SELECT ${1}`.render().text, "SELECT $1");',
     'assert.equal(typeof createPgDatabase, "function");',
-    'for (const dialect of ["postgres", "mysql", "sqlite"]) {',
+    'assert.equal(oracle`SELECT ${1}`.render().text, "SELECT :1");',
+    'assert.equal(mssql`SELECT ${1}`.render().text, "SELECT @p1");',
+    'for (const dialect of ["postgres", "mysql", "sqlite", "oracle", "mssql"]) {',
     '  const root = await import(`@sqlbraid/${dialect}`);',
     '  assert.ok(!Object.keys(root).some((key) => /Inspector/.test(key)));',
     '}',
@@ -219,6 +240,7 @@ try {
     'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
     'import { createMysqlInspector } from "@sqlbraid/mysql/inspector";',
     'import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";',
+    'import { createOracleInspector } from "@sqlbraid/oracle/inspector";',
   ];
   await writeFile(join(boundaryConsumer, "metadata.mjs"), [
     ...metadataImports,
@@ -234,6 +256,7 @@ try {
     '} finally { db.close(); }',
     'assert.equal(typeof createPostgresInspector, "function");',
     'assert.equal(typeof createMysqlInspector, "function");',
+    'assert.equal(typeof createOracleInspector, "function");',
   ].join("\n"));
   await run(process.execPath, ["metadata.mjs"], boundaryConsumer);
   await writeFile(join(boundaryConsumer, "codegen.mjs"), [
@@ -294,6 +317,22 @@ try {
   await writeFile(join(consumer, "packages/core/src/index.ts"), "export const sql = 1;\n");
   await writeFile(join(consumer, "packages/postgres/src/index.ts"), "export const sql = 2;\n");
   await run("npm", ["install", "--ignore-scripts"], consumer);
+  const cliConsumer = join(temp, "cli-consumer");
+  await mkdir(cliConsumer);
+  await writeFile(join(cliConsumer, "package.json"), JSON.stringify({
+    name: "sqlbraid-cli-consumer", private: true, type: "module",
+    dependencies: { sqlbraid: dependencies.sqlbraid },
+    overrides: Object.fromEntries(Object.entries(dependencies).filter(([name]) => name !== "sqlbraid")),
+  }));
+  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], cliConsumer);
+  const unscopedManifest = JSON.parse(await readFile(join(cliConsumer, "node_modules/sqlbraid/package.json"), "utf8"));
+  if (Object.keys(unscopedManifest.dependencies ?? {}).some((name) => /(?:oracledb|tedious|pg|mysql2)/u.test(name))) {
+    throw new Error("Unscoped sqlbraid pulls in a database driver.");
+  }
+  const packedTopLevelPackages = await readdir(join(cliConsumer, "node_modules"));
+  if (["oracledb", "tedious", "pg", "mysql2"].some((name) => packedTopLevelPackages.includes(name))) {
+    throw new Error("Installing the unscoped sqlbraid package pulled in a database driver.");
+  }
 
   const entry = join(consumer, "index.mjs");
   await writeFile(entry, [
@@ -308,21 +347,25 @@ try {
     'import { createMysql2Database } from "@sqlbraid/mysql/mysql2";',
     'import { sql as sqlite } from "@sqlbraid/sqlite";',
     'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
+    'import { sql as oracle } from "@sqlbraid/oracle";',
+    'import { sql as mssql } from "@sqlbraid/mssql";',
     'import { createLanguageService, startStdioLanguageServer } from "@sqlbraid/language-server";',
     'if (pg`SELECT ${1}`.render().text !== "SELECT $1") throw new Error("packed postgres root failed");',
     'if (mysql`SELECT ${1}`.render().text !== "SELECT ?") throw new Error("packed mysql root failed");',
     'if (sqlite`SELECT ${1}`.render().text !== "SELECT ?") throw new Error("packed sqlite root failed");',
+    'if (oracle`SELECT ${1}`.render().text !== "SELECT :1") throw new Error("packed oracle root failed");',
+    'if (mssql`SELECT ${1}`.render().text !== "SELECT @p1") throw new Error("packed mssql root failed");',
     'if ([createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("packed subpath failed");',
     'if (defineConfig({})?.codegen !== undefined) throw new Error("packed config helper failed");',
   ].join("\n"));
   await run(process.execPath, [entry], consumer);
 
-  await writeFile(join(consumer, "sqlbraid.config.mjs"), [
+  await writeFile(join(cliConsumer, "sqlbraid.config.mjs"), [
     'import { defineConfig } from "@sqlbraid/cli/config";',
-    'import { typePolicy } from "@sqlbraid/postgres";',
+    'const typePolicy = { id: "packed", hash: "packed-v1", mappings: [{ databaseType: "int4", inputType: "number", outputType: "number", nullable: false }] };',
     'export default defineConfig({ codegen: { targets: [{ name: "packed", metadata: "./packed-metadata.json", outFile: "./packed-generated.ts", typePolicy }] } });',
   ].join("\n"));
-  await writeFile(join(consumer, "packed-metadata.json"), JSON.stringify({
+  await writeFile(join(cliConsumer, "packed-metadata.json"), JSON.stringify({
     format: "sqlbraid-metadata", formatVersion: 1, dialect: "postgres", dialectVersion: "16",
     server: {}, namespaces: {}, types: {},
     relations: {
@@ -333,7 +376,11 @@ try {
     },
     routines: {}, metadata: {},
   }));
-  await run(join(consumer, "node_modules/.bin/sqlbraid"), ["codegen", "--json"], consumer);
+  const cliProbe = await execFile(process.execPath, [join(cliConsumer, "node_modules/sqlbraid/dist/index.js"), "codegen", "--json"], { cwd: cliConsumer, maxBuffer: 2 * 1024 * 1024 });
+  assert.equal(JSON.parse(cliProbe.stdout)[0].status, "written");
+  const cliCheck = await execFile("npx", ["--no-install", "sqlbraid", "codegen", "--check", "--json"], { cwd: cliConsumer, maxBuffer: 2 * 1024 * 1024 });
+  assert.equal(JSON.parse(cliCheck.stdout)[0].status, "unchanged");
+  console.info("PASS isolated unscoped CLI install and npx codegen --check without drivers");
 
   // First prove packed runtime imports need no concrete validator, then test optional interop.
   await run("npm", [
@@ -344,7 +391,52 @@ try {
     `pg@${workspace.devDependencies.pg}`,
     `@types/pg@${workspace.devDependencies["@types/pg"]}`,
     `mysql2@${workspace.devDependencies.mysql2}`,
+    `oracledb@${JSON.parse(await readFile(join(packageRoot, "oracle", "package.json"), "utf8")).devDependencies.oracledb}`,
+    `tedious@${JSON.parse(await readFile(join(packageRoot, "mssql", "package.json"), "utf8")).devDependencies.tedious}`,
   ], consumer);
+  const packedDatabaseEnv = { ...process.env };
+  packedDatabaseEnv.SQLBRAID_ORACLE_URL ??= packedDatabaseEnv.SQLBRAID_ORACLE_CONNECTION_STRING ?? packedDatabaseEnv.ORACLE_URL;
+  if (!packedDatabaseEnv.SQLBRAID_MSSQL_URL && packedDatabaseEnv.SQLBRAID_MSSQL_SERVER) {
+    const user = packedDatabaseEnv.SQLBRAID_MSSQL_USER ?? "sa";
+    const password = packedDatabaseEnv.SQLBRAID_MSSQL_PASSWORD ?? "Sqlbraid_Test13!";
+    const database = packedDatabaseEnv.SQLBRAID_MSSQL_DATABASE ?? "master";
+    packedDatabaseEnv.SQLBRAID_MSSQL_URL = `mssql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${packedDatabaseEnv.SQLBRAID_MSSQL_SERVER}:${packedDatabaseEnv.SQLBRAID_MSSQL_PORT ?? "1433"}/${database}`;
+  }
+  if (!packedDatabaseEnv.SQLBRAID_ORACLE_URL || !packedDatabaseEnv.SQLBRAID_MSSQL_URL) {
+    const { GenericContainer, Wait } = await import("testcontainers");
+    if (!packedDatabaseEnv.SQLBRAID_ORACLE_URL) {
+      const container = await new GenericContainer("gvenzl/oracle-free:23.9-slim-faststart")
+        .withEnvironment({ ORACLE_PASSWORD: "SqlbraidTest13", APP_USER: "sqlbraid", APP_USER_PASSWORD: "SqlbraidTest13" })
+        .withExposedPorts(1521)
+        .withWaitStrategy(Wait.forLogMessage(/DATABASE IS READY TO USE/iu))
+        .withStartupTimeout(600_000)
+        .start();
+      packedContainers.push(container);
+      packedDatabaseEnv.SQLBRAID_ORACLE_URL = `${container.getHost()}:${container.getMappedPort(1521)}/FREEPDB1`;
+      packedDatabaseEnv.SQLBRAID_ORACLE_USER = "sqlbraid";
+      packedDatabaseEnv.SQLBRAID_ORACLE_PASSWORD = "SqlbraidTest13";
+    }
+    if (!packedDatabaseEnv.SQLBRAID_MSSQL_URL) {
+      const container = await new GenericContainer("mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04")
+        .withEnvironment({ ACCEPT_EULA: "Y", MSSQL_SA_PASSWORD: "Sqlbraid_Test13!", MSSQL_PID: "Developer" })
+        .withExposedPorts(1433)
+        .withWaitStrategy(Wait.forLogMessage("SQL Server is now ready for client connections."))
+        .withStartupTimeout(600_000)
+        .start();
+      packedContainers.push(container);
+      packedDatabaseEnv.SQLBRAID_MSSQL_URL = `sqlserver://sa:${encodeURIComponent("Sqlbraid_Test13!")}`
+        + `@${container.getHost()}:${container.getMappedPort(1433)}`;
+      packedDatabaseEnv.SQLBRAID_MSSQL_USER = "sa";
+      packedDatabaseEnv.SQLBRAID_MSSQL_PASSWORD = "Sqlbraid_Test13!";
+    }
+  }
+  await copyFile(join(root, "scripts/runtime-packed-five-db.mjs"), join(consumer, "runtime-packed-five-db.mjs"));
+  await execFile(process.execPath, ["runtime-packed-five-db.mjs"], {
+    cwd: consumer,
+    env: packedDatabaseEnv,
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  console.info("PASS packed Oracle/MSSQL adapter, pool and inspector smoke");
 
   const types = join(consumer, "types.ts");
   await writeFile(types, [
@@ -358,6 +450,9 @@ try {
     'import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";',
     'import { createPgPoolDatabase, type PgPoolLike } from "@sqlbraid/postgres/pg";',
     'import { createMysql2PoolDatabase, type Mysql2PoolLike } from "@sqlbraid/mysql/mysql2";',
+    'import { createOracledbDatabase, createOracledbPoolDatabase, type OracleConnectionLike, type OraclePoolLike } from "@sqlbraid/oracle/oracledb";',
+    'import { createTediousDatabase, createTediousPoolDatabase, type TediousConnectionLike, type TediousPoolLike } from "@sqlbraid/mssql/tedious";',
+    'import { createMssqlInspector } from "@sqlbraid/mssql/inspector";',
     'import type { Client as PgClient, Pool as PgPool, PoolClient } from "pg";',
     'import type { Connection as MysqlConnection, Pool as MysqlPool, PoolConnection as MysqlPoolConnection } from "mysql2/promise";',
     'declare const lease: ConnectionLease;',
@@ -372,6 +467,13 @@ try {
     'declare const mysqlPoolLike: Mysql2PoolLike;',
     'createPgPoolDatabase(pgPoolLike, { observers: [observer] });',
     'createMysql2PoolDatabase(mysqlPoolLike, { observers: [observer] });',
+    'declare const oracleConnection: OracleConnectionLike, oraclePool: OraclePoolLike;',
+    'declare const tediousConnection: TediousConnectionLike, tediousPool: TediousPoolLike;',
+    'createOracledbDatabase(oracleConnection, { observers: [observer] });',
+    'createOracledbPoolDatabase(oraclePool, { observers: [observer] });',
+    'createTediousDatabase(tediousConnection, { observers: [observer] });',
+    'createTediousPoolDatabase(tediousPool, { observers: [observer] });',
+    'void createMssqlInspector(tediousConnection);',
     'declare const pgClient: PgClient;',
     'declare const pgPoolClient: PoolClient;',
     'declare const pgPool: PgPool;',
@@ -427,7 +529,7 @@ try {
     '// @ts-expect-error schema output cannot widen the declared row contract',
     'db.all(rowQuery, { schema: { "~standard": { version: 1, vendor: "bad", validate: () => ({ value: { id: "bad" } }) } } });',
     'const queries = [pg`SELECT ${1}`, mysql`SELECT ${1}`, sqlite`SELECT ${1}`];',
-    'void [queries, rows, command, unknown, validated, batch, DatabaseResultKindError, DatabaseResultValidationError, createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createVirtualOverlay, createLanguageService];',
+    'void [queries, rows, command, unknown, validated, batch, DatabaseResultKindError, DatabaseResultValidationError, createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createOracledbDatabase, createTediousDatabase, createVirtualOverlay, createLanguageService];',
   ].join("\n"));
   await run(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "--noEmit", "--strict", "--skipLibCheck", "--target", "ES2024", "--module", "NodeNext", "--moduleResolution", "NodeNext", types], consumer);
 
@@ -517,5 +619,6 @@ try {
   console.info("PASS VSIX bundles the matching CLI and standard language server.");
   console.info(`Validated ${tarballs.length} packed packages with ESM, types, subpaths, CLI, engine metadata, tooling/editor consumers and leakage checks.`);
 } finally {
+  await Promise.all(packedContainers.map((container) => container.stop()));
   await rm(temp, { recursive: true, force: true });
 }

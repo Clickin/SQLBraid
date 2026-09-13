@@ -59,6 +59,8 @@ const DEFAULT_MODULE_SPECIFIERS = [
   "@sqlbraid/postgres",
   "@sqlbraid/mysql",
   "@sqlbraid/sqlite",
+  "@sqlbraid/oracle",
+  "@sqlbraid/mssql",
 ] as const;
 const DIAGNOSTIC_DEBOUNCE_MS = 30;
 // ponytail: cap evidence, not open-document invalidations; dropping those leaves stale errors.

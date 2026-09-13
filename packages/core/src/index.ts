@@ -4,6 +4,10 @@ export type { StandardSchemaV1 } from "@standard-schema/spec";
 
 export const SQL_FRAGMENT = Symbol.for("sqlbraid.fragment");
 
+const SQL_BOUND_PARAMETER = Symbol.for("sqlbraid.bound-parameter");
+const knownBoundParameters = new WeakSet<object>();
+declare const boundParameterBrand: unique symbol;
+
 export interface SourceRange {
   readonly start: number;
   readonly end: number;
@@ -22,9 +26,76 @@ export interface RenderedQuery {
   readonly text: string;
   readonly values: readonly unknown[];
   readonly bindingMap?: readonly { readonly placeholder: number; readonly interpolation?: number }[];
+  readonly parameterHints?: readonly (ParameterTypeHint | undefined)[];
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
   readonly resultKind: QueryResultKind;
+}
+
+export interface ParameterTypeHint<Input = unknown> {
+  readonly databaseType: string;
+  readonly length?: number | "max";
+  readonly precision?: number;
+  readonly scale?: number;
+  readonly __input?: Input;
+}
+
+export interface BoundParameter<Input = unknown> {
+  readonly value: Input;
+  readonly hint: ParameterTypeHint<Input>;
+  readonly [boundParameterBrand]: true;
+}
+
+function validHintNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+}
+
+function validHintInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value);
+}
+
+function isParameterTypeHint(value: unknown): value is ParameterTypeHint {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const candidate = value as { readonly databaseType?: unknown; readonly length?: unknown; readonly precision?: unknown; readonly scale?: unknown };
+  return typeof candidate.databaseType === "string"
+    && candidate.databaseType.trim().length > 0
+    && (candidate.length === undefined || candidate.length === "max" || validHintNumber(candidate.length))
+    && (candidate.precision === undefined || validHintNumber(candidate.precision))
+    && (candidate.scale === undefined || validHintInteger(candidate.scale));
+}
+
+export function createParameterTypeHint<Input = unknown>(hint: ParameterTypeHint<Input>): ParameterTypeHint<Input> {
+  if (!isParameterTypeHint(hint)) throw new TypeError("sql.bind hint must be an object with valid structural fields.");
+  const candidate = hint as { readonly databaseType?: unknown; readonly length?: unknown; readonly precision?: unknown; readonly scale?: unknown };
+  if (typeof candidate.databaseType !== "string" || !candidate.databaseType.trim()) throw new TypeError("sql.bind hint databaseType must be a non-empty string.");
+  if (candidate.length !== undefined && candidate.length !== "max" && !validHintNumber(candidate.length)) throw new TypeError("sql.bind hint length must be a non-negative integer or \"max\".");
+  if (candidate.precision !== undefined && !validHintNumber(candidate.precision)) throw new TypeError("sql.bind hint precision must be a non-negative integer.");
+  if (candidate.scale !== undefined && !validHintInteger(candidate.scale)) throw new TypeError("sql.bind hint scale must be an integer.");
+  const normalized = {
+    databaseType: candidate.databaseType,
+    ...(candidate.length === undefined ? {} : { length: candidate.length }),
+    ...(candidate.precision === undefined ? {} : { precision: candidate.precision }),
+    ...(candidate.scale === undefined ? {} : { scale: candidate.scale }),
+  } as ParameterTypeHint<Input>;
+  return Object.freeze(normalized);
+}
+
+export function createBoundParameter<Input>(
+  value: NoInfer<Input>,
+  hint: ParameterTypeHint<Input>,
+): BoundParameter<Input> {
+  const normalizedHint = createParameterTypeHint(hint);
+  const bound = Object.freeze({ value, hint: normalizedHint, [SQL_BOUND_PARAMETER]: true });
+  knownBoundParameters.add(bound);
+  return bound as unknown as BoundParameter<Input>;
+}
+
+export function isBoundParameter(value: unknown): value is BoundParameter {
+  if (typeof value !== "object" || value === null || !knownBoundParameters.has(value) || !Object.hasOwn(value, SQL_BOUND_PARAMETER)) return false;
+  const candidate = value as { readonly value?: unknown; readonly hint?: unknown; readonly [SQL_BOUND_PARAMETER]?: unknown };
+  return candidate[SQL_BOUND_PARAMETER] === true
+    && Object.hasOwn(candidate, "value")
+    && isParameterTypeHint(candidate.hint);
 }
 
 export interface DialectLexicalProfile {
@@ -33,6 +104,7 @@ export interface DialectLexicalProfile {
   readonly supportsDollarQuotes?: boolean;
   readonly supportsBacktickIdentifiers?: boolean;
   readonly supportsBracketIdentifiers?: boolean;
+  readonly supportsOracleQQuotes?: boolean;
   readonly backslashEscapes?: boolean;
 }
 
@@ -238,6 +310,7 @@ export interface QueryReadyEvent {
   readonly sql: string;
   readonly values: readonly unknown[];
   readonly bindingMap?: readonly { readonly placeholder: number; readonly interpolation?: number }[];
+  readonly parameterHints?: readonly (ParameterTypeHint | undefined)[];
   readonly declaredKind: QueryResultKind;
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
@@ -412,6 +485,7 @@ export interface SqlTag extends SqlTagLike<"unknown"> {
   call: {
     <Row = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): CallQuery<Row>;
   };
+  bind<Input>(value: NoInfer<Input>, hint: ParameterTypeHint<Input>): BoundParameter<Input>;
   fragment: (strings: TemplateStringsArray, ...values: readonly unknown[]) => SqlFragment;
   empty: SqlFragment;
   ident: (identifier: string | readonly string[]) => SqlFragment;

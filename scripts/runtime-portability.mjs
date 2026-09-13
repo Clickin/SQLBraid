@@ -49,6 +49,13 @@ try {
   if (["metadata", "codegen", "tooling", "cli", "language-server", "vscode"].some((name) => installedPackages.includes(name))) {
     throw new Error("Runtime-only installation pulled in development tooling");
   }
+  const topLevelPackages = await readdir(join(consumer, "node_modules"));
+  if (topLevelPackages.includes("sqlbraid")) {
+    throw new Error("Runtime-only installation pulled in the unscoped CLI package");
+  }
+  if (["oracledb", "tedious"].some((name) => topLevelPackages.includes(name))) {
+    throw new Error("Portable runtime installation pulled in a Node-only database driver");
+  }
   console.info("PASS runtime-only npm install without metadata, codegen, tooling, CLI, LSP or editor");
   const core = JSON.parse(await readFile(join(consumer, "node_modules/@sqlbraid/core/package.json"), "utf8"));
   if (!core.dependencies?.["@standard-schema/spec"]) throw new Error("Standard Schema is not a regular packed dependency");
@@ -61,9 +68,13 @@ try {
     'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
     'import { createMysql2Database } from "@sqlbraid/mysql/mysql2";',
     'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
+    'import { sql as oracle, oracleParameter } from "@sqlbraid/oracle";',
+    'import { sql as mssql, mssqlParameter } from "@sqlbraid/mssql";',
     'declare const event: ExecutionEvent;',
     'if (event.type === "query:result") { const ms: number = event.durationMs; void ms; }',
-    'void [sql, createDatabase, createPgDatabase, createMysql2Database, createNodeSqliteDatabase];',
+    'const oracleHint = oracleParameter.number();',
+    'const mssqlHint = mssqlParameter.nvarchar(40);',
+    'void [sql, createDatabase, createPgDatabase, createMysql2Database, createNodeSqliteDatabase, oracle, mssql, oracleHint, mssqlHint];',
   ].join("\n"));
   await writeFile(join(consumer, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, types: [], target: "ES2024", module: "NodeNext", moduleResolution: "NodeNext" }, files: ["types.ts"] }));
   await run(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "-p", join(consumer, "tsconfig.json")], consumer);
@@ -85,9 +96,13 @@ try {
 import process from "node:process";
 import { runRuntimeSmoke } from "./runtime-smoke.mjs";
 import { runPostgresSmoke, runMysqlSmoke, runSqliteSmoke } from "./runtime-driver-smoke.mjs";
+import { sql as oracle } from "@sqlbraid/oracle";
+import { sql as mssql } from "@sqlbraid/mssql";
 console.info(JSON.stringify({versions:process.versions}));
+assert.equal(oracle\`SELECT \${1}\`.render().text, "SELECT :1");
+assert.equal(mssql\`SELECT \${1}\`.render().text, "SELECT @p1");
 await runRuntimeSmoke();
-console.info("PASS packed core/template/runtime including ALS");
+console.info("PASS packed portable core/template/runtime and five dialect roots including ALS");
 await runPostgresSmoke(process.env.SQLBRAID_POSTGRES_URL);
 console.info("PASS pg direct/pool");
 await runMysqlSmoke(process.env.SQLBRAID_MYSQL_URL);

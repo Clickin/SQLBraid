@@ -133,12 +133,18 @@ importers:
       '@sqlbraid/metadata':
         specifier: workspace:*
         version: link:packages/metadata
+      '@sqlbraid/mssql':
+        specifier: workspace:*
+        version: link:packages/mssql
       '@sqlbraid/mysql':
         specifier: workspace:*
         version: link:packages/mysql
       '@sqlbraid/operations':
         specifier: workspace:*
         version: link:packages/operations
+      '@sqlbraid/oracle':
+        specifier: workspace:*
+        version: link:packages/oracle
       '@sqlbraid/postgres':
         specifier: workspace:*
         version: link:packages/postgres
@@ -166,6 +172,9 @@ importers:
       '@types/node':
         specifier: 22.20.1
         version: 22.20.1
+      '@types/oracledb':
+        specifier: 7.0.3
+        version: 7.0.3
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
@@ -175,12 +184,21 @@ importers:
       mysql2:
         specifier: 3.24.4
         version: 3.24.4(@types/node@22.20.1)
+      oracledb:
+        specifier: 7.0.1
+        version: 7.0.1
       pg:
         specifier: 8.23.0
         version: 8.23.0
       publint:
         specifier: 0.3.24
         version: 0.3.24
+      sqlbraid:
+        specifier: workspace:*
+        version: link:packages/sqlbraid
+      tedious:
+        specifier: 20.0.0
+        version: 20.0.0(supports-color@7.2.0)
       testcontainers:
         specifier: 12.1.0
         version: 12.1.0(supports-color@7.2.0)
@@ -296,6 +314,25 @@ importers:
 
   packages/metadata: {}
 
+  packages/mssql:
+    dependencies:
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sqlbraid/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@sqlbraid/template':
+        specifier: workspace:*
+        version: link:../template
+    devDependencies:
+      '@sqlbraid/metadata':
+        specifier: workspace:*
+        version: link:../metadata
+      tedious:
+        specifier: 20.0.0
+        version: 20.0.0(supports-color@7.2.0)
+
   packages/mysql:
     dependencies:
       '@sqlbraid/core':
@@ -318,6 +355,28 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/oracle:
+    dependencies:
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sqlbraid/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@sqlbraid/template':
+        specifier: workspace:*
+        version: link:../template
+    devDependencies:
+      '@sqlbraid/metadata':
+        specifier: workspace:*
+        version: link:../metadata
+      '@types/oracledb':
+        specifier: 7.0.3
+        version: 7.0.3
+      oracledb:
+        specifier: 7.0.1
+        version: 7.0.1
+
   packages/postgres:
     dependencies:
       '@sqlbraid/core':
@@ -339,6 +398,12 @@ importers:
       '@sqlbraid/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/sqlbraid:
+    dependencies:
+      '@sqlbraid/cli':
+        specifier: workspace:*
+        version: link:../cli
 
   packages/sqlite:
     dependencies:
@@ -518,6 +583,10 @@ packages:
   '@azu/style-format@1.0.1':
     resolution: {integrity: sha512-AHcTojlNBdD/3/KxIKlg8sxIWHfOtQszLvOpagLTO+bjC3u7SAszu1lf//u7JJC50aUSH+BVWDD/KvaA6Gfn5g==}
 
+  '@azure-rest/core-client@2.9.0':
+    resolution: {integrity: sha512-6933vNLqh06RR7rumnrq3UZIeBtRLeBHDPMrieDPIljiCaMMwt0nRw++nd3TOxiohtasNtm29rC+b/9ZVKCOqg==}
+    engines: {node: '>=22.0.0'}
+
   '@azure/abort-controller@2.2.0':
     resolution: {integrity: sha512-fNAjWnA/nZ2jz31kxR/AqRaUT8ewHBw/WuBIosK0moMy1C9e5ValbDfFdIxJzVOOYaYkV/b2F1S4H/aHiqfVQg==}
     engines: {node: '>=22.0.0'}
@@ -528,6 +597,14 @@ packages:
 
   '@azure/core-client@1.11.1':
     resolution: {integrity: sha512-2QygG2F76ZpMP2eMztiJvAiFMu71M9rDeU7vO/QKg5Css7MgM4frUOslFjhVjRhbGaCNPtz/S8M6y46/fFKVuQ==}
+    engines: {node: '>=22.0.0'}
+
+  '@azure/core-lro@2.7.2':
+    resolution: {integrity: sha512-0YIpccoX8m/k00O7mDDMdJpbr6mf1yWo2dfmxt5A8XVZVVMz2SSKaEbMCeJRvgQ0IaSlqhjT47p4hVIRRy90xw==}
+    engines: {node: '>=18.0.0'}
+
+  '@azure/core-paging@1.7.0':
+    resolution: {integrity: sha512-7GEAoIsaoBr6KELNRb8nypowCqvk8dnCHFCYg4XD4lOQGY2GqjQg5IhkRjyBFRO18CGSMq05PaNqSOE9GQro3g==}
     engines: {node: '>=22.0.0'}
 
   '@azure/core-process@1.0.0':
@@ -549,6 +626,14 @@ packages:
   '@azure/identity@4.13.2':
     resolution: {integrity: sha512-NXL2/pCJctLxgw8bvrwwgge743kEq8LBT+O1pmV0vyUwetzFPH9auP6jhkU/cgZCPPtWoewAe3ncaGCgPo07fA==}
     engines: {node: '>=22.0.0'}
+
+  '@azure/keyvault-common@2.1.0':
+    resolution: {integrity: sha512-aCDidWuKY06LWQ4x7/8TIXK6iRqTaRWRL3t7T+LC+j1b07HtoIsOxP/tU90G4jCSBn5TAyUTCtA4MS/y5Hudaw==}
+    engines: {node: '>=20.0.0'}
+
+  '@azure/keyvault-keys@4.10.2':
+    resolution: {integrity: sha512-VmUSLbXRAbSzDD8grXHGPaknYs0SKr3yuf6U+d4XMpX4XuVYskNqbTTwXce0zR1LyxfTZm9rWEBcvs3vdYwCmQ==}
+    engines: {node: '>=20.0.0'}
 
   '@azure/logger@1.4.0':
     resolution: {integrity: sha512-rbAE25KUfjU/s3XHUdJgceoCP5dEOpMx85J04kF+QMdta73XkuG9JGHHinch+XIoKpBdqljin+KqURpJriSzLA==}
@@ -1192,6 +1277,9 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@js-joda/core@6.1.0':
+    resolution: {integrity: sha512-H8NTMRDJqad/leyv/D/A3kSOsf5/58Ydj4DJGDyaCWk9OU/zuZOLhndVffJgQjsgrn5GC0znHMHie7TfvPPG4w==}
+
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
@@ -1706,8 +1794,14 @@ packages:
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
 
+  '@types/oracledb@7.0.3':
+    resolution: {integrity: sha512-dH4zGmD0b5k62O3BqWRM/qRD41pSKNeQOuPu4FDzvbn8d4DAkLWeLYkPObjvuMJsZNPL4ceSuMiPcOpKyjvhCg==}
+
   '@types/pg@8.23.1':
     resolution: {integrity: sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A==}
+
+  '@types/readable-stream@4.0.24':
+    resolution: {integrity: sha512-NRvUNC/JFGPJvqdAfEve8oginbM6V08u5NzLWpG8MwA2kTPOLnqk+wpwuPT+mp3aUsxyuT6m2gnrPuHYCruzEg==}
 
   '@types/sarif@2.1.7':
     resolution: {integrity: sha512-kRz0VEkJqWLf1LLVN4pT1cg1Z9wAuvI6L97V3m2f5B76Tg8d413ddvLBPTEHAZJlnn4XSvu0FkZtViCQGVyrXQ==}
@@ -2125,6 +2219,9 @@ packages:
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
+
+  bl@6.1.6:
+    resolution: {integrity: sha512-jLsPgN/YSvPUg9UX0Kd73CXpm2Psg9FxMeCSXnk3WBO3CMT10JMwijubhGfHCnFu6TPn1ei3b975dxv7K2pWVg==}
 
   boolbase@1.0.0:
     resolution: {integrity: sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==}
@@ -2947,6 +3044,9 @@ packages:
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
 
+  js-md4@0.3.2:
+    resolution: {integrity: sha512-/GDnfQYsltsjRswQhN9fhv3EMw2sCpUdrdxyWDOUK7eyD++r3gRhzgiQgc/x4MAv2i1iuQ4lxO5mvqM3vj4bwA==}
+
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
@@ -3343,6 +3443,9 @@ packages:
   napi-build-utils@2.0.0:
     resolution: {integrity: sha512-GEbrYkbfF7MoNaoh2iGG84Mnf/WZfB0GdGEsM8wz7Expx/LlWf5U8t9nvJKXSp3qr5IsEbK04cBGhol/KwOsWA==}
 
+  native-duplexpair@1.0.0:
+    resolution: {integrity: sha512-E7QQoM+3jvNtlmyfqRZ0/U75VFgCls+fSkbml2MpgWkWyz3ox8Y58gNhfuziuQYGNNQAbFZJQck55LHCnCK6CA==}
+
   neotraverse@1.0.1:
     resolution: {integrity: sha512-WmmLty1YWwJl9yZi77v2dVIV6X2kuYV8YYBI/G3LWGKdGHmHUvL1z7FW0iDvEvGAwNEoc5x1tOOOyDnf5jJw/w==}
     engines: {node: '>= 10'}
@@ -3420,6 +3523,10 @@ packages:
   ora@8.2.0:
     resolution: {integrity: sha512-weP+BZ8MVNnlCm8c0Qdc1WSWq4Qn7I+9CJGm7Qali6g44e/PUzbjNqJX5NJ9ljlNMosfJvg1fKEGILklK9cwnw==}
     engines: {node: '>=18'}
+
+  oracledb@7.0.1:
+    resolution: {integrity: sha512-xlM0Ceh6A5stQLAdEfKf3pgCSkbOjQLo2ZPEi3+kXklz+KbZD3fLi/nsTSbQeZZNFBSFDNxdn1Ek3+bxG40M8w==}
+    engines: {node: '>=14.17'}
 
   p-limit@7.3.2:
     resolution: {integrity: sha512-Ll0w3fU24vYpXoZmjjZIee6bJQDgG0oAyo1PdmFYI8UDwJJddaHAypxIH9avUu+t+lSsAwKVsb1jDCMIIChliw==}
@@ -3892,6 +3999,9 @@ packages:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
 
+  sprintf-js@1.1.3:
+    resolution: {integrity: sha512-Oo+0REFV59/rz3gfJNKQiBlwfHaSESl1pcGyABQsnnIfWOFt6JNj5gCog2U6MLZ//IGYD+nA8nI+mTShREReaA==}
+
   sql-escaper@1.5.1:
     resolution: {integrity: sha512-4toX5E1fQbBrpfXidaHnF0669nkAdETeIPTs2SUjxxD7RRIs9ICG4gtpmfc68JCEKehsdwLFqBu9VlQqZ1P1gg==}
     engines: {bun: '>=1.0.0', deno: '>=2.0.0', node: '>=12.0.0'}
@@ -3981,6 +4091,10 @@ packages:
 
   tar-stream@3.2.1:
     resolution: {integrity: sha512-nqsEO8zLZJvrOMdEwkA0QdCLFbetHMn95Zqu4fKwX+hkaTWJPZZOrxx/PwtxoK0MMGQmBQNRW3CPs8IFYQz4cQ==}
+
+  tedious@20.0.0:
+    resolution: {integrity: sha512-bTR0aou0Ghucf0ytvZUJjnKHGKDV8tT57jPYtEkSpfTWFe++4uR1wxJLQ4mh5wlSvAYXzmgBxbI0vaE56qigXw==}
+    engines: {node: '>=22'}
 
   teex@1.0.1:
     resolution: {integrity: sha512-eYE6iEI62Ni1H8oIa7KlDU6uQBtqr4Eajni3wX7rpfXD8ysFx8z0+dri+KWEPWpBsxXfxu58x/0jvTVT1ekOSg==}
@@ -4716,6 +4830,17 @@ snapshots:
     dependencies:
       '@azu/format-text': 1.0.2
 
+  '@azure-rest/core-client@2.9.0(supports-color@7.2.0)':
+    dependencies:
+      '@azure/abort-controller': 2.2.0
+      '@azure/core-auth': 1.11.0(supports-color@7.2.0)
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@7.2.0)
+      '@azure/core-tracing': 1.4.0
+      '@typespec/ts-http-runtime': 0.3.9(supports-color@7.2.0)
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
   '@azure/abort-controller@2.2.0':
     dependencies:
       tslib: 2.8.1
@@ -4739,6 +4864,19 @@ snapshots:
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
+
+  '@azure/core-lro@2.7.2(supports-color@7.2.0)':
+    dependencies:
+      '@azure/abort-controller': 2.2.0
+      '@azure/core-util': 1.14.0(supports-color@7.2.0)
+      '@azure/logger': 1.4.0(supports-color@7.2.0)
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@azure/core-paging@1.7.0':
+    dependencies:
+      tslib: 2.8.1
 
   '@azure/core-process@1.0.0': {}
 
@@ -4779,6 +4917,35 @@ snapshots:
       '@azure/msal-browser': 5.21.0
       '@azure/msal-node': 5.6.0
       open: 10.2.0
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@azure/keyvault-common@2.1.0(supports-color@7.2.0)':
+    dependencies:
+      '@azure-rest/core-client': 2.9.0(supports-color@7.2.0)
+      '@azure/abort-controller': 2.2.0
+      '@azure/core-auth': 1.11.0(supports-color@7.2.0)
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@7.2.0)
+      '@azure/core-tracing': 1.4.0
+      '@azure/core-util': 1.14.0(supports-color@7.2.0)
+      '@azure/logger': 1.4.0(supports-color@7.2.0)
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@azure/keyvault-keys@4.10.2(supports-color@7.2.0)':
+    dependencies:
+      '@azure-rest/core-client': 2.9.0(supports-color@7.2.0)
+      '@azure/abort-controller': 2.2.0
+      '@azure/core-auth': 1.11.0(supports-color@7.2.0)
+      '@azure/core-lro': 2.7.2(supports-color@7.2.0)
+      '@azure/core-paging': 1.7.0
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@7.2.0)
+      '@azure/core-tracing': 1.4.0
+      '@azure/core-util': 1.14.0(supports-color@7.2.0)
+      '@azure/keyvault-common': 2.1.0(supports-color@7.2.0)
+      '@azure/logger': 1.4.0(supports-color@7.2.0)
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -5222,6 +5389,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@js-joda/core@6.1.0': {}
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
@@ -5673,11 +5842,19 @@ snapshots:
 
   '@types/normalize-package-data@2.4.4': {}
 
+  '@types/oracledb@7.0.3':
+    dependencies:
+      '@types/node': 22.20.1
+
   '@types/pg@8.23.1':
     dependencies:
       '@types/node': 22.20.1
       pg-protocol: 1.16.0
       pg-types: 2.2.0
+
+  '@types/readable-stream@4.0.24':
+    dependencies:
+      '@types/node': 22.20.1
 
   '@types/sarif@2.1.7': {}
 
@@ -6132,6 +6309,13 @@ snapshots:
       buffer: 5.7.1
       inherits: 2.0.4
       readable-stream: 3.6.2
+
+  bl@6.1.6:
+    dependencies:
+      '@types/readable-stream': 4.0.24
+      buffer: 6.0.3
+      inherits: 2.0.4
+      readable-stream: 4.7.0
 
   boolbase@1.0.0: {}
 
@@ -7021,6 +7205,8 @@ snapshots:
     optionalDependencies:
       '@pkgjs/parseargs': 0.11.0
 
+  js-md4@0.3.2: {}
+
   js-tokens@4.0.0: {}
 
   js-yaml@4.3.2:
@@ -7505,6 +7691,8 @@ snapshots:
   napi-build-utils@2.0.0:
     optional: true
 
+  native-duplexpair@1.0.0: {}
+
   neotraverse@1.0.1: {}
 
   nlcst-to-string@4.0.0:
@@ -7595,6 +7783,8 @@ snapshots:
       stdin-discarder: 0.2.2
       string-width: 7.2.0
       strip-ansi: 7.2.0
+
+  oracledb@7.0.1: {}
 
   p-limit@7.3.2:
     dependencies:
@@ -8195,6 +8385,8 @@ snapshots:
 
   split2@4.2.0: {}
 
+  sprintf-js@1.1.3: {}
+
   sql-escaper@1.5.1: {}
 
   ssh-remote-port-forward@1.0.4:
@@ -8335,6 +8527,21 @@ snapshots:
       - bare-abort-controller
       - bare-buffer
       - react-native-b4a
+
+  tedious@20.0.0(supports-color@7.2.0):
+    dependencies:
+      '@azure/core-auth': 1.11.0(supports-color@7.2.0)
+      '@azure/identity': 4.13.2(supports-color@7.2.0)
+      '@azure/keyvault-keys': 4.10.2(supports-color@7.2.0)
+      '@js-joda/core': 6.1.0
+      '@types/node': 22.20.1
+      bl: 6.1.6
+      iconv-lite: 0.7.3
+      js-md4: 0.3.2
+      native-duplexpair: 1.0.0
+      sprintf-js: 1.1.3
+    transitivePeerDependencies:
+      - supports-color
 
   teex@1.0.1:
     dependencies:

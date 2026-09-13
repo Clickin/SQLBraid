@@ -55,7 +55,7 @@ interface MetadataIndex {
 
 const DEFAULT_MAX_ENTRIES = 100;
 const MAX_EVIDENCE_TEXT = 4096;
-const SQL_MODULES = ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite"] as const;
+const SQL_MODULES = ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite", "@sqlbraid/oracle", "@sqlbraid/mssql"] as const;
 const SQL_KEYWORDS = new Set([
   "all", "and", "as", "asc", "between", "by", "case", "cast", "check", "collate", "column", "create", "cross", "delete", "desc", "distinct", "do", "else", "end", "except", "exists", "false", "fetch", "filter", "for", "foreign", "from", "full", "grant", "group", "having", "if", "ilike", "in", "inner", "insert", "intersect", "into", "is", "join", "lateral", "left", "like", "limit", "natural", "not", "null", "offset", "on", "or", "order", "outer", "over", "partition", "primary", "procedure", "references", "returning", "right", "select", "set", "table", "then", "to", "true", "union", "unique", "update", "using", "values", "when", "where", "window", "with", "recursive", "return",
 ]);
@@ -126,7 +126,17 @@ function buildLexicalText(query: DiscoveredQuery, sourceText: string): { text: s
   const mappingReliable = segments.length === query.strings.length && segments.every((segment, index) => segment.end - segment.start === (query.strings[index]?.length ?? 0));
   return { text: text.join(""), map, code, quoted, staticRanges: segments, mappingReliable };
 }
-function markLexicalProtection(text: string, code: boolean[], quoted: boolean[], profile: { readonly lineCommentPrefixes: readonly string[]; readonly supportsNestedBlockComments?: boolean; readonly supportsDollarQuotes?: boolean; readonly backslashEscapes?: boolean; readonly requireDashDashWhitespace?: boolean }, mysql: boolean): void {
+function oracleQQuoteEnd(text: string, start: number): number | undefined {
+  if ((text[start] !== "q" && text[start] !== "Q") || text[start + 1] !== "'") return undefined;
+  const opening = text[start + 2];
+  if (!opening || /\s/u.test(opening)) return undefined;
+  const closing = opening === "[" ? "]" : opening === "{" ? "}" : opening === "(" ? ")" : opening === "<" ? ">" : opening;
+  for (let index = start + 3; index + 1 < text.length; index += 1) {
+    if (text[index] === closing && text[index + 1] === "'") return index + 2;
+  }
+  return text.length;
+}
+function markLexicalProtection(text: string, code: boolean[], quoted: boolean[], profile: { readonly lineCommentPrefixes: readonly string[]; readonly supportsNestedBlockComments?: boolean; readonly supportsDollarQuotes?: boolean; readonly supportsBacktickIdentifiers?: boolean; readonly supportsBracketIdentifiers?: boolean; readonly supportsOracleQQuotes?: boolean; readonly backslashEscapes?: boolean; readonly requireDashDashWhitespace?: boolean }, mysql: boolean): void {
   let index = 0;
   let state: "code" | "line" | "block" | "single" | "dollar" = "code";
   let depth = 0;
@@ -152,9 +162,13 @@ function markLexicalProtection(text: string, code: boolean[], quoted: boolean[],
     if (state === "dollar") { setProtected(index, index + 1); if (text.startsWith(dollar, index)) { setProtected(index + 1, index + dollar.length); index += dollar.length; state = "code"; } else index += 1; continue; }
     const line = profile.lineCommentPrefixes.find((prefix) => text.startsWith(prefix, index) && (prefix !== "--" || profile.requireDashDashWhitespace !== true || /\s|$/u.test(text[index + prefix.length] ?? "")));
     if (line) { setProtected(index, index + line.length); state = "line"; index += line.length; continue; }
+    if (profile.supportsOracleQQuotes) {
+      const end = oracleQQuoteEnd(text, index);
+      if (end !== undefined) { setProtected(index, end); index = end; continue; }
+    }
     if (current === "/" && next === "*") { setProtected(index, index + 2); state = "block"; depth = 1; index += 2; continue; }
     if (current === "'") { setProtected(index, index + 1); state = "single"; index += 1; continue; }
-    if (current === '"' || current === "`") {
+    if (current === '"' || current === "`" && profile.supportsBacktickIdentifiers) {
       const quote = current;
       const start = index;
       setProtected(index, index + 1);
@@ -169,7 +183,7 @@ function markLexicalProtection(text: string, code: boolean[], quoted: boolean[],
       for (let position = start; position < index; position += 1) quoted[position] = !(mysql && quote === '"');
       continue;
     }
-    if (current === "[") {
+    if (current === "[" && profile.supportsBracketIdentifiers) {
       const start = index;
       setProtected(index, index + 1);
       index += 1;
@@ -235,12 +249,14 @@ function scanTokens(text: string, map: readonly number[], code: readonly boolean
 function queryDialect(moduleSpecifier: string, options: LanguageServiceOptions): string {
   return options.dialect?.id ?? (moduleSpecifier === "@sqlbraid/template" ? options.metadata?.dialect ?? options.targets?.[0]?.metadata.dialect ?? "postgres" : moduleSpecifier.slice("@sqlbraid/".length));
 }
-function profileFor(moduleSpecifier: string, options: LanguageServiceOptions): { readonly lineCommentPrefixes: readonly string[]; readonly supportsNestedBlockComments: boolean; readonly supportsDollarQuotes: boolean; readonly backslashEscapes: boolean; readonly requireDashDashWhitespace: boolean } {
+function profileFor(moduleSpecifier: string, options: LanguageServiceOptions): { readonly lineCommentPrefixes: readonly string[]; readonly supportsNestedBlockComments: boolean; readonly supportsDollarQuotes: boolean; readonly supportsBacktickIdentifiers: boolean; readonly supportsBracketIdentifiers: boolean; readonly supportsOracleQQuotes: boolean; readonly backslashEscapes: boolean; readonly requireDashDashWhitespace: boolean } {
   const configured = options.dialect?.lexicalProfile;
-  if (configured) return { lineCommentPrefixes: configured.lineCommentPrefixes, supportsNestedBlockComments: configured.supportsNestedBlockComments ?? false, supportsDollarQuotes: configured.supportsDollarQuotes ?? false, backslashEscapes: configured.backslashEscapes ?? false, requireDashDashWhitespace: options.dialect?.id === "mysql" };
-  if (queryDialect(moduleSpecifier, options) === "mysql") return { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, backslashEscapes: true, requireDashDashWhitespace: true };
-  if (queryDialect(moduleSpecifier, options) === "sqlite") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: false, supportsDollarQuotes: false, backslashEscapes: false, requireDashDashWhitespace: false };
-  return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: true, supportsDollarQuotes: true, backslashEscapes: false, requireDashDashWhitespace: false };
+  if (configured) return { lineCommentPrefixes: configured.lineCommentPrefixes, supportsNestedBlockComments: configured.supportsNestedBlockComments ?? false, supportsDollarQuotes: configured.supportsDollarQuotes ?? false, supportsBacktickIdentifiers: configured.supportsBacktickIdentifiers ?? false, supportsBracketIdentifiers: configured.supportsBracketIdentifiers ?? false, supportsOracleQQuotes: configured.supportsOracleQQuotes ?? false, backslashEscapes: configured.backslashEscapes ?? false, requireDashDashWhitespace: options.dialect?.id === "mysql" };
+  if (queryDialect(moduleSpecifier, options) === "mysql") return { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, supportsBracketIdentifiers: false, supportsOracleQQuotes: false, backslashEscapes: true, requireDashDashWhitespace: true };
+  if (queryDialect(moduleSpecifier, options) === "sqlite") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: true, supportsOracleQQuotes: false, backslashEscapes: false, requireDashDashWhitespace: false };
+  if (queryDialect(moduleSpecifier, options) === "oracle") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: false, supportsOracleQQuotes: true, backslashEscapes: false, requireDashDashWhitespace: false };
+  if (queryDialect(moduleSpecifier, options) === "mssql") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: true, supportsDollarQuotes: false, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: true, supportsOracleQQuotes: false, backslashEscapes: false, requireDashDashWhitespace: false };
+  return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: true, supportsDollarQuotes: true, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: false, supportsOracleQQuotes: false, backslashEscapes: false, requireDashDashWhitespace: false };
 }
 function metadataEvidence(options: LanguageServiceOptions): readonly MetadataEvidence[] {
   return [ ...(options.metadata ? [{ snapshot: options.metadata }] : []), ...(options.targets ?? []).filter((target) => target.metadata).map((target) => ({ snapshot: target.metadata, target })) ];
@@ -508,7 +524,7 @@ function queryHover(lexical: LexicalQuery, options: LanguageServiceOptions): Hov
   const kind = lexical.query.declaredResultKind;
   const contract = lexical.query.declaredRowType ?? (kind === "command" ? "CommandResult" : "unknown");
   const type = kind === "rows" ? `RowQuery<${contract}>` : kind === "command" ? "CommandQuery" : kind === "call" ? `CallQuery<${contract}>` : `Query<${contract}>`;
-  const dialect = options.dialect?.id ?? (["postgres", "mysql", "sqlite"].find((candidate) => lexical.query.moduleSpecifier.endsWith(`/${candidate}`)) ?? (() => {
+  const dialect = options.dialect?.id ?? (["postgres", "mysql", "sqlite", "oracle", "mssql"].find((candidate) => lexical.query.moduleSpecifier.endsWith(`/${candidate}`)) ?? (() => {
     const candidates = unique(metadataEvidence(options).map((item) => item.snapshot.dialect), (candidate) => candidate);
     return candidates.length === 1 ? candidates[0] : "unknown";
   })());

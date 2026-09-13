@@ -313,7 +313,15 @@ function frozenEvent(event: ExecutionEvent): ExecutionEvent {
   if (event.type === "query:ready" || event.type === "stream:start") {
     const values = Object.freeze([...event.values]);
     const bindingMap = event.bindingMap === undefined ? undefined : Object.freeze(event.bindingMap.map((item) => Object.freeze({ ...item })));
-    return Object.freeze({ ...event, values, ...(bindingMap === undefined ? {} : { bindingMap }) }) as ExecutionEvent;
+    const parameterHints = event.type === "query:ready" && event.parameterHints !== undefined
+      ? Object.freeze(event.parameterHints.map((hint) => hint === undefined ? undefined : Object.freeze({ ...hint })))
+      : undefined;
+    return Object.freeze({
+      ...event,
+      values,
+      ...(bindingMap === undefined ? {} : { bindingMap }),
+      ...(parameterHints === undefined ? {} : { parameterHints }),
+    }) as ExecutionEvent;
   }
   return Object.freeze(event) as ExecutionEvent;
 }
@@ -352,6 +360,19 @@ function metadata(options: RuntimeOptions, operationId: string, preparedName?: s
   };
 }
 
+function parameterHintShape(rendered: RenderedQuery): string {
+  if (rendered.parameterHints === undefined) return "";
+  return JSON.stringify(rendered.parameterHints.map((hint) => {
+    if (hint === undefined) return null;
+    return {
+      databaseType: hint.databaseType,
+      ...(hint.length === undefined ? {} : { length: hint.length }),
+      ...(hint.precision === undefined ? {} : { precision: hint.precision }),
+      ...(hint.scale === undefined ? {} : { scale: hint.scale }),
+    };
+  }));
+}
+
 function queryReadyEvent(operation: PreparedOperation<ExecutableQuery>): ExecutionEvent {
   const { query, rendered, meta } = operation;
   return {
@@ -361,6 +382,7 @@ function queryReadyEvent(operation: PreparedOperation<ExecutableQuery>): Executi
     sql: rendered.text,
     values: rendered.values,
     bindingMap: rendered.bindingMap,
+    ...(rendered.parameterHints === undefined ? {} : { parameterHints: rendered.parameterHints }),
     declaredKind: query.resultKind,
     fingerprint: rendered.fingerprint,
     variantFingerprint: rendered.variantFingerprint,
@@ -850,7 +872,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       const current = (): RowQuery<Row> => {
         const query = factory();
         const rendered = query.render();
-        const nextShape = `${query.resultKind}:${rendered.text}`;
+        const nextShape = `${query.resultKind}:${rendered.text}:${parameterHintShape(rendered)}`;
         if (shape === undefined) shape = nextShape;
         else if (shape !== nextShape) throw new Error(`BRAID_PREPARED_SHAPE: prepared query ${name} changed its rendered structure.`);
         return query;

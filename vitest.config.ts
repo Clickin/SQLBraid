@@ -17,6 +17,12 @@ const sourceAliases = {
   "@sqlbraid/postgres/pg": resolve("packages/postgres/src/pg.ts"),
   "@sqlbraid/postgres/inspector": resolve("packages/postgres/src/inspector.ts"),
   "@sqlbraid/postgres": resolve("packages/postgres/src/index.ts"),
+  "@sqlbraid/oracle/oracledb": resolve("packages/oracle/src/oracledb.ts"),
+  "@sqlbraid/oracle/inspector": resolve("packages/oracle/src/inspector.ts"),
+  "@sqlbraid/oracle": resolve("packages/oracle/src/index.ts"),
+  "@sqlbraid/mssql/tedious": resolve("packages/mssql/src/tedious.ts"),
+  "@sqlbraid/mssql/inspector": resolve("packages/mssql/src/inspector.ts"),
+  "@sqlbraid/mssql": resolve("packages/mssql/src/index.ts"),
   "@sqlbraid/mysql/mysql2": resolve("packages/mysql/src/mysql2.ts"),
   "@sqlbraid/mysql/inspector": resolve("packages/mysql/src/inspector.ts"),
   "@sqlbraid/mysql": resolve("packages/mysql/src/index.ts"),
@@ -76,6 +82,24 @@ export default defineConfig({
         test: {
           name: "consumer",
           include: ["tests/consumer.test.ts"],
+          fileParallelism: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "db-oracle",
+          include: ["tests/db/oracle/**/*.test.ts"],
+          globalSetup: ["./tests/db/oracle.global.ts"],
+          fileParallelism: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "db-mssql",
+          include: ["tests/db/mssql/**/*.test.ts"],
+          globalSetup: ["./tests/db/mssql.global.ts"],
           fileParallelism: false,
         },
       },

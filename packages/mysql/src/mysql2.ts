@@ -83,6 +83,12 @@ function assertUniqueFields(fields: readonly Mysql2FieldLike[]): void {
   }
 }
 
+function assertParameterHintsUnsupported(rendered: RenderedQuery): void {
+  if (rendered.parameterHints?.some((hint) => hint !== undefined)) {
+    throw new Error("BRAID_BIND_HINT_UNSUPPORTED: MySQL adapter does not support explicit bind type hints.");
+  }
+}
+
 export function createMysql2Executor(connection: Mysql2ConnectionLike, options: { readonly typePolicy?: TypePolicy } = {}): QueryExecutor {
   assertMysql2Connection(connection);
   const policy = options.typePolicy ?? defaultTypePolicy;
@@ -90,6 +96,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
   return {
     ownershipKey: connection,
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
+      assertParameterHintsUnsupported(rendered);
       // RenderedQuery values are the driver-owned bind boundary; mysql2 accepts the mutable array shape here.
       const [payload, rawFields] = await connection.execute(rendered.text, rendered.values as unknown as Mysql2Parameter[]);
       const fields = Array.isArray(rawFields) ? rawFields : [];
@@ -103,6 +110,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       return { rows: [], rowCount: header.affectedRows, kind: "command", command: header };
     },
     async call<Row>(rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
+      assertParameterHintsUnsupported(rendered);
       const [payload, rawFields] = await connection.execute(rendered.text, rendered.values as unknown as Mysql2Parameter[]);
       const fields = Array.isArray(rawFields) ? rawFields : [];
       assertUniqueFields(fields);

@@ -11,7 +11,7 @@ jobs:
   node-release:
     name: Node 22.18.0 release gates
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,6 +27,8 @@ jobs:
       - run: pnpm run test:db:sqlite
       - run: pnpm run test:db:postgres
       - run: pnpm run test:db:mysql
+      - run: pnpm run test:db:oracle
+      - run: pnpm run test:db:mssql
       - run: pnpm run test:consumer
       - run: pnpm run test:all
       - run: pnpm run pack:check

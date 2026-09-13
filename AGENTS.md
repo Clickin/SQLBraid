@@ -289,13 +289,21 @@ Tooling can remain Node-first while runtime libraries become portable.
 
 ---
 
-## 11. Oracle
+## 11. Oracle, SQL Server and explicit parameter types
 
-Oracle/node-oracledb is post-release.
+PV13 brings Oracle/node-oracledb Thin and SQL Server/Tedious into the RC scope.
+Driver subpaths remain separate from portable dialect roots. Official support
+requires same-revision real-database CI evidence, not unit mocks or host inference.
 
-Do not add it to pre-release acceptance gates.
+`sql.bind(value, hint)` describes an explicitly selected database parameter type;
+it is not an input codec or Standard Schema validation. JavaScript/TypeScript
+types are never universal DB-type evidence. Hints must be honored or explicitly
+rejected before execution; ordinary binds retain driver behavior. Include hint
+structure, never values, in executable fingerprints and prepared shape guards.
 
-A future Oracle dialect must account for Oracle-specific bind modes, REF CURSOR, LOB, NUMBER, DATE/TIMESTAMP, object types, result sets and pool/session behavior; it is not just a placeholder-syntax adapter.
+Oracle NUMBER/LOB/temporal and SQL Server precision/scale semantics require
+driver-specific handling. Unsupported call/OUT or streaming capabilities must
+remain explicit rather than simulated.
 
 ---
 

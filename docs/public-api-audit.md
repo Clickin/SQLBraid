@@ -1,18 +1,22 @@
 # 0.1.0 public API freeze audit
 
-Audit baseline: `1615311149cce6290976df3ed6e63e41dfe795d7`; release-candidate hardening retains intentional names. All 13 npm packages and every manifest export subpath are inventoried below. No accidental export was identified for removal. This is an API classification, not a claim that release CI has passed.
+Initial audit baseline: `1615311149cce6290976df3ed6e63e41dfe795d7`; PV13 extends the inventory from `d111e116d66ce9fc1b060881778ab1845874ef57`. All 16 npm packages and every manifest export subpath are inventoried below. This is an API classification, not a claim that release CI or registry publication has passed.
 
 - **Application**: documented application authoring/execution/configuration API.
 - **SPI**: documented low-level physical driver, provider, dialect, representation or inspector contract.
 - **Advanced**: intentionally supported compiler/IR/metadata/codegen/evidence integration. These are not required for ordinary queries.
 
-The template IR is dynamic Braid structure, not a SQL AST or semantic resolver. `capture`/`guarded` support compiler-generated lowering. Structural variant helpers remain explicitly bounded advanced tooling, not a SQL proof mechanism. Language-server root service/type reexports are the existing embedded-server integration; the `/stdio` subpath is the transport integration. CLI root is an executable with no exported TypeScript symbols; `/config` intentionally shares the tooling configuration contract, including loading and validation for Node tooling. Driver `*Like` contracts and executor/provider factories are intentional custom-integration SPIs. No transaction-profile or isolation-selection API exists in 0.1.0.
+The template IR is dynamic Braid structure, not a SQL AST or semantic resolver. `capture`/`guarded` and `assertDirectiveCondition` support compiler-generated lowering. Structural variant helpers remain explicitly bounded advanced tooling, not a SQL proof mechanism. Language-server root service/type reexports are the existing embedded-server integration; the `/stdio` subpath is the transport integration. CLI `runCli` is the shared process-facing entry for the scoped executable and unscoped wrapper; `/config` intentionally shares the tooling configuration contract, including loading and validation for Node tooling. Driver `*Like` contracts and executor/provider factories are intentional custom-integration SPIs. No transaction-profile or isolation-selection API exists in 0.1.0.
 
 `SqlBraidLanguageService.references(...)` is asynchronous: embedded consumers must await its `Promise<readonly Location[]>`. It scans the current project file index lazily, prefers open unsaved documents, and checks cancellation between files without making cache capacity a coverage limit.
 
 ## @sqlbraid/cli
 
-Executable entrypoint; no named exports.
+**Advanced:** `runCli(argv)` invokes command parsing and preserves CLI error/exit-code handling in the current process. It is shared by both executable packages, not a second semantic engine.
+
+## sqlbraid
+
+Executable convenience wrapper; no named application exports and no driver dependency. Runtime/application APIs remain scoped under `@sqlbraid/*`.
 
 ## @sqlbraid/cli/config
 
@@ -35,6 +39,10 @@ Executable entrypoint; no named exports.
 **Application:** `CallQuery`, `CommandExecutionResult`, `CommandQuery`, `CommandResult`, `Database`, `DatabaseOptions`, `ExecutableQuery`, `ExecutionEvent`, `ExecutionObserver`, `ExecutionResultOf`, `PreparedQuery`, `Query`, `QueryErrorEvent`, `QueryErrorStage`, `QueryExecutionResult`, `QueryMappedEvent`, `QueryReadyEvent`, `QueryResultEvent`, `QueryResultKind`, `QueryRow`, `RenderLimits`, `RoutineCallResult`, `RoutineResultSet`, `RowQuery`, `RowValidationOptions`, `RowsExecutionResult`, `RowsTag`, `SqlFragment`, `SqlRenderError`, `SqlTag`, `StandardSchemaV1`, `StreamEndEvent`, `StreamOptions`, `StreamStartEvent`, `TransactionEvent`, `TransactionEventPhase`.
 
 **SPI:** `ConnectionLease`, `ConnectionProvider`, `Dialect`, `DialectLexicalProfile`, `QueryExecutor`, `RenderedQuery`, `TypeMapping`, `TypePolicy`.
+
+**PV13 Application:** `BoundParameter`, `ParameterTypeHint` and `SqlTag.bind(value, hint)`.
+
+**PV13 Advanced:** `createBoundParameter`, `createParameterTypeHint`, `isBoundParameter` share branded wrapper validation across template/compiler and first-party hint factories. `RenderedQuery.parameterHints` and executor/observer hint metadata are aligned with values.
 
 **Advanced:** `BindNode`, `ChooseNode`, `ChooseWhen`, `FragmentNode`, `IdentifierNode`, `IfNode`, `ListNode`, `RawNode`, `SQL_FRAGMENT`, `SourceRange`, `SqlTagLike`, `TemplateIr`, `TemplateNode`, `TextNode`, `TrimAttributes`, `TrimNode`.
 
@@ -73,6 +81,44 @@ Executable entrypoint; no named exports.
 ## @sqlbraid/operations
 
 **Advanced:** `QueryManifest`, `QueryManifestEvidence`, `createManifest`, `createManifestFromEvidence`, `fingerprintQuery`, `fingerprintTemplate`, `templateFamilyFingerprint`, `templateFamilyFingerprintOf`.
+
+## @sqlbraid/oracle
+
+**Application:** `sql`, `oracleParameter`, `OracleNumberInput`, `OracleBinaryInput`.
+
+**Advanced:** `createSqlTag`, `dialect`, `typePolicy`. This root is portable and does not load node-oracledb.
+
+## @sqlbraid/oracle/oracledb
+
+**Application:** `createOracledbDatabase`, `createOracledbPoolDatabase`.
+
+**SPI:** `OracleMetaDataLike`, `OracleResultSetLike`, `OracleExecuteResultLike`, `OracleBindLike`, `OracleExecuteOptionsLike`, `OracleConnectionLike`, `OraclePoolConnectionLike`, `OraclePoolLike`, `OracleDriverLike`, `createOracledbExecutor`, `createOracledbPoolProvider`.
+
+**Advanced:** `OracleDatabaseOptions`.
+
+## @sqlbraid/oracle/inspector
+
+**SPI:** `OracleInspectorConnectionLike`.
+
+**Advanced:** `createOracleInspector`.
+
+## @sqlbraid/mssql
+
+**Application:** `sql`, `mssqlParameter`.
+
+**Advanced:** `createSqlTag`, `dialect`, `typePolicy`. This root is portable and does not load Tedious.
+
+## @sqlbraid/mssql/tedious
+
+**Application:** `createTediousDatabase`, `createTediousPoolDatabase`.
+
+**SPI:** `TediousColumnMetadataLike`, `TediousColumnLike`, `TediousRequestLike`, `TediousConnectionLike`, `TediousPoolConnectionLike`, `TediousPoolLike`, `createTediousExecutor`, `createTediousPoolProvider`.
+
+**Advanced:** `TediousDatabaseOptions`, `TediousExecutorOptions`.
+
+## @sqlbraid/mssql/inspector
+
+**Advanced:** `createMssqlInspector`.
 
 ## @sqlbraid/postgres
 
@@ -116,7 +162,7 @@ Executable entrypoint; no named exports.
 
 **Application:** `SqlRenderError`, `sql`.
 
-**Advanced:** `SqlTagOptions`, `StructuralAnalysis`, `StructuralVariant`, `analyzeStructuralVariants`, `capture`, `createSqlTag`, `guarded`, `parseTemplate`, `postgresDialect`, `renderTemplateIr`, `renderVariants`.
+**Advanced:** `SqlTagOptions`, `StructuralAnalysis`, `StructuralVariant`, `analyzeStructuralVariants`, `assertDirectiveCondition`, `capture`, `createSqlTag`, `guarded`, `parseTemplate`, `postgresDialect`, `renderTemplateIr`, `renderVariants`.
 
 ## @sqlbraid/tooling
 

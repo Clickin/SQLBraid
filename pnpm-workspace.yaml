@@ -8,5 +8,7 @@ allowBuilds:
   cpu-features: true
   esbuild: true
   keytar: false
+  # Thin mode is pure JavaScript; the install script checks optional Thick binaries.
+  oracledb: false
   protobufjs: true
   ssh2: true

@@ -16,6 +16,20 @@ const query = sql.rows<UserRow>`
 
 The rendered text contains a dialect placeholder (`$1`, `?`, and so on) and the values are passed separately to the adapter. A value never becomes SQL source merely because it was interpolated.
 
+When the database parameter type must be explicit, use `sql.bind(value, hint)`:
+
+```ts
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
+
+const query = sql.rows<UserRow>`
+  SELECT id, display_name
+  FROM users
+  WHERE display_name = ${sql.bind(name, mssqlParameter.nvarchar(200))}
+`;
+```
+
+`${value}` uses the driver's normal inference. `${sql.bind(value, hint)}` requests an explicit database parameter type. SQLBraid does not infer a universal database type from a TypeScript `number`, `string`, or `Date`; this API is parameter typing, not application input validation or a codec framework. See [parameter type hints](/SQLBraid/concepts/parameter-hints/).
+
 ## Structural input is opt-in
 
 Identifiers and SQL fragments are different from data. Use the explicit helpers in [structural SQL fragments](/SQLBraid/concepts/structural-fragments/):
@@ -41,3 +55,5 @@ const query = sql.rows<UserRow>`
 `sql.list([])` throws `BRAID_EMPTY_LIST`; choose an explicit empty-set strategy or guard the clause with `@braid if`.
 
 SQLBraid's render limits also bound SQL byte size, bind count, structural items, and nesting depth. Configure limits through `createSqlTag({ dialect, limits })` when an application needs stricter bounds.
+
+PostgreSQL, MySQL, and SQLite explicitly reject hints with `BRAID_BIND_HINT_UNSUPPORTED`; they never silently ignore one. Use the matching first-party Oracle or SQL Server adapter when the database type API is required.

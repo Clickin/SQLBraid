@@ -121,7 +121,14 @@ function sourceFileFor(sourceText: string, fileName: string, options: OverlayOpt
 }
 
 function configuredModules(options: OverlayOptions): readonly string[] {
-  return options.moduleSpecifiers ?? (options.moduleSpecifier ? [options.moduleSpecifier] : ["@sqlbraid/template"]);
+  return options.moduleSpecifiers ?? (options.moduleSpecifier ? [options.moduleSpecifier] : [
+    "@sqlbraid/template",
+    "@sqlbraid/postgres",
+    "@sqlbraid/mysql",
+    "@sqlbraid/sqlite",
+    "@sqlbraid/oracle",
+    "@sqlbraid/mssql",
+  ]);
 }
 
 function defaultCompilerOptions(): ts.CompilerOptions {
@@ -130,8 +137,32 @@ function defaultCompilerOptions(): ts.CompilerOptions {
 
 function dialectForModule(moduleSpecifier: string | undefined, options: OverlayOptions): Dialect {
   if (options.dialect) return options.dialect;
-  if (moduleSpecifier?.includes("mysql")) return { id: "mysql", placeholder: () => "?", quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, backslashEscapes: true } };
-  if (moduleSpecifier?.includes("sqlite")) return { id: "sqlite", placeholder: () => "?", quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, backslashEscapes: false } };
+  if (moduleSpecifier?.includes("oracle")) return {
+    id: "oracle",
+    placeholder: (index) => `:${index}`,
+    quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
+    lexicalProfile: {
+      lineCommentPrefixes: ["--"],
+      supportsNestedBlockComments: false,
+      supportsDollarQuotes: false,
+      backslashEscapes: false,
+      supportsOracleQQuotes: true,
+    },
+  };
+  if (moduleSpecifier?.includes("mssql")) return {
+    id: "mssql",
+    placeholder: (index) => `@p${index}`,
+    quoteIdentifier: (identifier) => `[${identifier.replaceAll("]", "]]")}]`,
+    lexicalProfile: {
+      lineCommentPrefixes: ["--"],
+      supportsNestedBlockComments: true,
+      supportsDollarQuotes: false,
+      supportsBracketIdentifiers: true,
+      backslashEscapes: false,
+    },
+  };
+  if (moduleSpecifier?.includes("mysql")) return { id: "mysql", placeholder: () => "?", quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, backslashEscapes: true } };
+  if (moduleSpecifier?.includes("sqlite")) return { id: "sqlite", placeholder: () => "?", quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBracketIdentifiers: true, backslashEscapes: false } };
   return postgresDialect;
 }
 
@@ -433,6 +464,7 @@ interface CaptureContext {
   readonly expressions: readonly ts.Expression[];
   readonly checkerMode: boolean;
   readonly readName?: string;
+  readonly assertConditionName?: string;
 }
 
 function expressionAt(context: CaptureContext, interpolation: number): ts.Expression {
@@ -443,6 +475,15 @@ function readCall(context: CaptureContext, interpolation: number): ts.Expression
   if (!context.readName) return expressionAt(context, interpolation);
   const thunk = context.factory.createArrowFunction(undefined, undefined, [], undefined, undefined, expressionAt(context, interpolation));
   return context.factory.createCallExpression(context.factory.createIdentifier(context.readName), undefined, [context.factory.createNumericLiteral(interpolation), thunk]);
+}
+
+function conditionExpression(context: CaptureContext, interpolation: number): ts.Expression {
+  if (context.checkerMode) return expressionAt(context, interpolation);
+  return context.factory.createCallExpression(
+    context.factory.createIdentifier(context.assertConditionName ?? "__sqlbraidAssertCondition"),
+    undefined,
+    [readCall(context, interpolation)],
+  );
 }
 
 function captureStatements(nodes: readonly TemplateNode[], context: CaptureContext): readonly ts.Statement[] {
@@ -456,7 +497,7 @@ function captureStatements(nodes: readonly TemplateNode[], context: CaptureConte
     if (node.kind === "if") {
       const thenStatements = [...(context.checkerMode ? [elementAssignment(context.factory, context.valuesName, node.condition, context.factory.createTrue())] : []), ...captureStatements(node.children, context)];
       const elseStatements = context.checkerMode ? [elementAssignment(context.factory, context.valuesName, node.condition, context.factory.createFalse())] : [];
-      statements.push(context.factory.createIfStatement(context.checkerMode ? expressionAt(context, node.condition) : context.factory.createCallExpression(context.factory.createPropertyAccessExpression(context.factory.createIdentifier("globalThis"), "Boolean"), undefined, [readCall(context, node.condition)]), context.factory.createBlock(thenStatements, true), context.factory.createBlock(elseStatements, true)));
+      statements.push(context.factory.createIfStatement(conditionExpression(context, node.condition), context.factory.createBlock(thenStatements, true), context.factory.createBlock(elseStatements, true)));
       continue;
     }
     if (node.kind === "choose") {
@@ -474,7 +515,7 @@ function chooseStatement(whens: readonly { readonly condition: number; readonly 
   const when = whens[index];
   const thenStatements = [...(context.checkerMode ? [elementAssignment(context.factory, context.valuesName, when.condition, context.factory.createTrue())] : []), ...captureStatements(when.children, context)];
   const next = chooseStatement(whens, otherwise, index + 1, context);
-  return context.factory.createIfStatement(context.checkerMode ? expressionAt(context, when.condition) : context.factory.createCallExpression(context.factory.createPropertyAccessExpression(context.factory.createIdentifier("globalThis"), "Boolean"), undefined, [readCall(context, when.condition)]), context.factory.createBlock(thenStatements, true), next);
+  return context.factory.createIfStatement(conditionExpression(context, when.condition), context.factory.createBlock(thenStatements, true), next);
 }
 
 function captureSetup(factory: ts.NodeFactory, valuesName: string, evaluatedName: string, readName: string): readonly ts.Statement[] {
@@ -535,12 +576,14 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
   const allocator = createNameAllocator(sourceFile);
   const queryByKey = new Map(discovered.queries.map((query) => [queryKey(query.range), query]));
   let captureName: string | undefined;
+  let assertConditionName: string | undefined;
   const valuesNames = new Map<string, string>();
   const evaluatedNames = new Map<string, string>();
   const readNames = new Map<string, string>();
   for (const query of discovered.queries) {
     if (hasGuard(query.ir.nodes)) {
       captureName ??= allocator.fresh("__sqlbraidCapture");
+      if (mode === "runtime") assertConditionName ??= allocator.fresh("__sqlbraidAssertCondition");
       const key = queryKey(query.range);
       valuesNames.set(key, allocator.fresh("__sqlbraidValues"));
       evaluatedNames.set(key, allocator.fresh("__sqlbraidEvaluated"));
@@ -551,7 +594,11 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
   const diagnostics = [...discovered.diagnostics];
   const prefix: ts.Statement[] = [];
   if (captureName) {
-    prefix.push(factory.createImportDeclaration(undefined, factory.createImportClause(false, undefined, factory.createNamedImports([factory.createImportSpecifier(false, factory.createIdentifier("capture"), factory.createIdentifier(captureName))])), factory.createStringLiteral("@sqlbraid/template"), undefined));
+    const imports = [
+      factory.createImportSpecifier(false, factory.createIdentifier("capture"), factory.createIdentifier(captureName)),
+      ...(assertConditionName ? [factory.createImportSpecifier(false, factory.createIdentifier("assertDirectiveCondition"), factory.createIdentifier(assertConditionName))] : []),
+    ];
+    prefix.push(factory.createImportDeclaration(undefined, factory.createImportClause(false, undefined, factory.createNamedImports(imports)), factory.createStringLiteral("@sqlbraid/template"), undefined));
   }
   const transformer: ts.TransformerFactory<ts.SourceFile> = (context) => {
     function visit(node: ts.Node): ts.VisitResult<ts.Node> {
@@ -572,7 +619,7 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
       }
       const key = queryKey(query.range);
       const valuesName = valuesNames.get(key) ?? allocator.fresh("__sqlbraidValues");
-      const captureContext: CaptureContext = { factory, valuesName, expressions, checkerMode: mode === "checker", ...(mode === "runtime" ? { readName: readNames.get(key) } : {}) };
+      const captureContext: CaptureContext = { factory, valuesName, expressions, checkerMode: mode === "checker", ...(mode === "runtime" ? { readName: readNames.get(key), assertConditionName } : {}) };
       const body = mode === "runtime"
         ? [...captureSetup(factory, valuesName, evaluatedNames.get(key) ?? allocator.fresh("__sqlbraidEvaluated"), readNames.get(key) ?? allocator.fresh("__sqlbraidRead")), ...captureStatements(query.ir.nodes, captureContext)]
         : captureStatements(query.ir.nodes, captureContext);

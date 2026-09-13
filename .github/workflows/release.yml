@@ -85,12 +85,28 @@ jobs:
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Determine release version from manifest and tag
+        shell: bash
+        run: |
+          manifest_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            [[ "$GITHUB_REF_NAME" == v* ]] || { echo "Release tags must start with v."; exit 1; }
+            [[ "$tag_version" == "$manifest_version" ]] || {
+              echo "Tag version $tag_version does not match package.json version $manifest_version."
+              exit 1
+            }
+            echo "SQLBRAID_RELEASE_VERSION=$tag_version" >> "$GITHUB_ENV"
+          else
+            echo "SQLBRAID_RELEASE_VERSION=$manifest_version" >> "$GITHUB_ENV"
+          fi
+
       - name: Assert clean tree, versions, and release ref
         run: node scripts/release.mjs --mode preflight
 
       - name: Install npm trusted-publishing CLI
         if: github.event_name == 'push' || inputs.release_mode == 'dry-run'
-        run: npm install --global npm@11.5.1
+        run: npm install --global npm@11.15.0
 
       - name: Typecheck
         run: pnpm run typecheck
@@ -109,6 +125,12 @@ jobs:
 
       - name: Real MySQL gate
         run: pnpm run test:db:mysql
+
+      - name: Real Oracle gate
+        run: pnpm run test:db:oracle
+
+      - name: Real SQL Server gate
+        run: pnpm run test:db:mssql
 
       - name: Packed consumer gate
         run: pnpm run test:consumer
@@ -129,7 +151,7 @@ jobs:
         run: pnpm run test:runtime:deno
 
       - name: Documentation site gate
-        run: pnpm --dir website build
+        run: pnpm run docs:build
 
       - name: Packed examples gate
         run: pnpm run test:examples

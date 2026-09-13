@@ -22,7 +22,7 @@ It exists for developers who want to keep writing SQL as SQL while gaining the e
 - result-kind-safe execution;
 - transactions and connection-bound execution;
 - execution observation for SQL/bind logging, audit and metrics;
-- first-party PostgreSQL, MySQL and SQLite dialects/adapters;
+- first-party PostgreSQL, MySQL, SQLite, Oracle and SQL Server dialects/adapters;
 - optional metadata/code-generation tooling.
 
 The primary authoring surface remains ordinary SQL:
@@ -132,11 +132,11 @@ The following are not pre-release/v1 goals:
 - automatic retry/routing policy;
 - built-in audit-log storage;
 - mandatory DB prepare/describe verification;
-- Oracle/node-oracledb support before the public pre-release.
+- application-level input mapping/codecs before the public pre-release.
 
-Input mapping is explicitly deferred. JavaScript database drivers do not expose a JDBC-like universal application-input type system, so result mapping does not imply a symmetric input framework.
+Application input mapping remains explicitly deferred. JavaScript database drivers do not expose a JDBC-like universal application-input type system, so result mapping does not imply a symmetric input framework. PV13 parameter hints are not input codecs or Standard Schema validation: they select database parameter metadata and must be honored or rejected explicitly.
 
-Oracle is a post-release dialect/driver project because `node-oracledb` requires Oracle-specific bind, OUT/IN OUT, cursor, LOB, NUMBER, DATE/TIMESTAMP, object-type, result-set and session semantics.
+PV13 is an explicit user-authorized override of the earlier Oracle deferral. It adds Oracle and SQL Server portable roots plus driver subpaths without claiming Official support before real database evidence. Oracle-specific bind, OUT/IN OUT, cursor, LOB, NUMBER, DATE/TIMESTAMP, object-type, result-set and session semantics remain capability boundaries; unsupported pieces are documented as Unsupported rather than fabricated.
 
 ---
 
@@ -163,7 +163,18 @@ sql.list(values)
 
 `sql.raw()` is an explicit trusted/unsafe escape hatch.
 
-### 3.3 Result kinds are explicit
+### 3.3 Database parameter typing is explicit
+
+Ordinary `${value}` interpolation remains a driver-bound value and uses documented driver inference. `${sql.bind(value, hint)}` supplies explicit database parameter metadata:
+
+```ts
+sql`WHERE amount = ${sql.bind(amount, oracleParameter.number())}`;
+sql`WHERE display_name = ${sql.bind(name, mssqlParameter.nvarchar(200))}`;
+```
+
+SQLBraid does not infer a universal database parameter type from a TypeScript type. A `number`, `string`, `Date`, `null`, or custom object is not semantic evidence for one database type. Parameter hints are not application input validation, result mapping, or codecs. Adapters honor a hint or fail explicitly; PostgreSQL, MySQL, and SQLite reject hints with `BRAID_BIND_HINT_UNSUPPORTED` rather than silently ignoring them.
+
+### 3.4 Result kinds are explicit
 
 ```ts
 sql.rows<Row>`...`
@@ -480,9 +491,9 @@ The design must represent at least:
 
 Normal factories will choose their ordinary profile (PostgreSQL, MySQL,
 SQLite respectively), while advanced configurations may override the profile
-independently of dialect and driver. Future Oracle/MSSQL factories follow the
-same rule. Exact behavior requires official DB documentation and real integration
-tests before implementation. PV11 exports no transaction-profile/isolation API.
+independently of dialect and driver. Oracle/MSSQL factories follow the same
+rule. Exact behavior requires official DB documentation and real integration
+tests before an Official label. PV11 exports no transaction-profile/isolation API.
 
 The future Astro Starlight + MDX website should render a
 `<TransactionIsolationMatrix />` from those profile definitions: documented
@@ -710,7 +721,7 @@ Non-negotiable:
   references and query/workspace symbols;
 - standard stdio transport, workspace initialization, invalidation and cancellation;
 - CLI JSON fallback, portable agent skill and thin version-matched VS Code client;
-- 13 npm packages plus a separately packaged editor extension; runtime-only
+- 13 scoped npm packages plus a separately packaged editor extension; runtime-only
   installs remain free of development tooling;
 - transaction-profile design is reserved in §8.4; no runtime isolation API,
   MCP requirement, docs website or PV12 release/marketing work.
@@ -724,8 +735,8 @@ Non-negotiable:
 - schema-qualified completion immediately after `FROM public.` returns table
   evidence rather than routine candidates; the editor host verifies actual SQL
   metadata completions separately from native TypeScript word suggestions;
-- canonical MIT license and compact README/public metadata for all 13 synchronized
-  `0.1.0` npm packages; explicit [public API/SPI audit](docs/public-api-audit.md);
+- canonical MIT license and compact README/public metadata for the 13-package
+  pre-PV13 baseline; explicit [public API/SPI audit](docs/public-api-audit.md);
 - Astro 7.3.2 / Starlight 0.42.0 / MDX documentation in `website/`, with
   internal-link/anchor validation and GitHub Pages deployment;
 - packed SQLite/PostgreSQL/MySQL/codegen examples, including the literal SQLite
@@ -739,9 +750,22 @@ Non-negotiable:
   no `v0.1.0` tag or npm/Marketplace publication is implied by this candidate;
 - no stretch database/driver packages or transaction-profile runtime API.
 
+### PV13 — Five-DB typed parameters, localized/versioned docs, and npm bootstrap — authorized current phase
+
+- `sql.bind(value, hint)` descriptors, aligned rendered `parameterHints`, and
+  prepared-query hint shape protection;
+- PostgreSQL/MySQL/SQLite explicit hint rejection; no silent ignore path;
+- Oracle and SQL Server portable roots with parameter factories and
+  Node driver subpaths, while real database evidence remains a release-gate
+  prerequisite for Official labels;
+- conservative/open-world Oracle and SQL Server inspector/tooling identities;
+- English/Korean getting-started and parameter-hint docs, four-label five-DB
+  support evidence matrix, package map, and version/locale documentation contract;
+- 15 scoped packages plus the unscoped `sqlbraid` CLI convenience package;
+- prerelease/OIDC publication bootstrap and restart-safe release registry.
+
 ### Post-release candidates
 
-- Oracle dialect + `node-oracledb` adapter;
 - application input mapping/codecs;
 - optional DB verifier tooling;
 - Bun.SQL/postgres.js/bun:sqlite adapters where justified;
@@ -763,9 +787,11 @@ SQLBraid is ready for public pre-release when a developer can:
 3. execute rows/commands/calls with honest result-kind behavior;
 4. use a pool for ordinary operations while an explicit transaction closure pins one physical connection;
 5. audit/log SQL, binds, duration, results and transaction boundaries through the observer SPI without SQLBraid imposing a logger;
-6. use PostgreSQL/MySQL/SQLite first-party adapters on the runtimes explicitly marked official;
-7. optionally generate table-oriented TypeScript models from metadata;
-8. use compiler/CLI/LSP without mandatory live-DB semantics;
-9. trust unsupported analysis to remain unknown rather than guessed.
+6. use PostgreSQL/MySQL/SQLite first-party adapters on the runtimes explicitly marked Official;
+7. understand Oracle/SQL Server Compatible-without-Official and Unsupported evidence labels
+   without a fabricated Official claim;
+8. optionally generate table-oriented TypeScript models from metadata;
+9. use compiler/CLI/LSP without mandatory live-DB semantics;
+10. trust unsupported analysis to remain unknown rather than guessed.
 
 The success metric is **how little SQLBraid gets in the way of SQL while providing strong TypeScript and execution boundaries around it**.

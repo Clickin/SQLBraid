@@ -1,0 +1,62 @@
+---
+title: 파라미터 타입 힌트
+description: 드라이버 추론만으로 부족할 때 데이터베이스 파라미터 타입을 명시적으로 선택합니다.
+---
+
+SQLBraid는 JavaScript 값과 데이터베이스 파라미터 타입을 분리합니다. 일반 보간은 드라이버의 기본 추론을 사용합니다.
+
+```ts
+const id = 42;
+const query = sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`;
+```
+
+데이터베이스 타입이 중요할 때는 `sql.bind(value, hint)`로 값을 감쌉니다.
+
+```ts
+import { sql, oracleParameter } from "@sqlbraid/oracle";
+
+const query = sql.rows<UserRow>`
+  SELECT id, name
+  FROM users
+  WHERE account_number = ${sql.bind(accountNumber, oracleParameter.number())}
+`;
+```
+
+래퍼는 템플릿 안에서 값으로 남습니다. 구조적 SQL이 되거나 문장에 문자열로 삽입되지 않습니다.
+
+## TypeScript 타입은 데이터베이스 근거가 아닙니다
+
+SQLBraid는 TypeScript 타입에서 보편적인 데이터베이스 파라미터 타입을 추론하지 않습니다. `number`는 정수, 소수, 금액, 식별자 또는 데이터베이스별 숫자 타입일 수 있습니다. `string`은 텍스트, UUID, JSON 또는 길이가 제한된 문자 타입일 수 있습니다. `Date`도 데이터베이스의 date와 timestamp 변형 중 하나를 결정하지 않습니다.
+
+힌트가 없으면 어댑터는 문서화된 드라이버 기본 추론을 사용할 수 있습니다. 힌트가 있으면 어댑터가 디스크립터를 적용하거나 명시적으로 실패해야 합니다. 이것은 데이터베이스 파라미터 타이핑이며 애플리케이션 입력 검증, 결과 매핑, codec 프레임워크가 아닙니다.
+
+## SQL Server 힌트
+
+SQL Server 루트는 Tedious 어댑터가 지원하는 타입 팩토리를 내보냅니다.
+
+```ts
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
+
+const query = sql.rows<UserRow>`
+  SELECT id, display_name
+  FROM users
+  WHERE display_name = ${sql.bind(name, mssqlParameter.nvarchar(200))}
+    AND account_id = ${sql.bind(accountId, mssqlParameter.int())}
+`;
+```
+
+사용 가능한 팩토리에는 `int()`, `bigint()`, `decimal(precision, scale)`, `numeric(precision, scale)`, `nvarchar(lengthOrMax)`, `varchar(lengthOrMax)`, `varbinary(lengthOrMax)`, `bit()`, `uniqueidentifier()`, `date()`, `datetime2()`, `datetimeoffset()`이 있습니다.
+
+`null`이나 애플리케이션 전용 객체처럼 모호한 값에는 명시적인 힌트를 사용하세요. JavaScript 런타임 타입만으로 정밀도, 스케일, 길이 또는 SQL Server 전용 타입을 선택하지 마세요.
+
+## 렌더링 메타데이터와 prepared shape
+
+렌더링된 쿼리는 `values`와 정렬된 `parameterHints`를 유지합니다. 각 위치는 디스크립터이거나 일반 바인드의 경우 `undefined`입니다. 실행 observer는 바인드 값의 redaction 정책을 바꾸지 않고 이 구조 메타데이터를 확인할 수 있습니다.
+
+Prepared query는 파라미터 힌트 시그니처를 shape에 포함합니다. 값만 바꾸는 것은 허용되지만 힌트, 길이, 정밀도 또는 스케일을 바꾸면 호환되지 않는 prepared statement를 조용히 재사용하지 않고 실패합니다.
+
+## 어댑터 지원
+
+PostgreSQL, MySQL, SQLite 어댑터는 파라미터 힌트가 포함된 쿼리를 `BRAID_BIND_HINT_UNSUPPORTED`로 명시적으로 거부합니다. 힌트를 조용히 무시하지 않습니다. 필요한 타입 API가 있는 어댑터가 준비될 때까지 기존의 힌트 없는 바인드를 사용하세요.
+
+Oracle 및 SQL Server portable root는 힌트 디스크립터를 내보냅니다. 두 Node 어댑터에는 실제 로컬 DB 검사가 있으며 정확한 범위는 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)에서 확인하세요. Oracle은 node-oracledb가 적용할 수 없는 IN 길이·precision·scale 속성을 거부합니다. 두 어댑터 모두 지원하지 않는 속성을 조용히 무시하지 않습니다.

@@ -11,4 +11,4 @@ import { sql } from "@sqlbraid/template";
 const query = sql`SELECT * FROM users WHERE id = ${1}`;
 ```
 
-Use a database-specific package when you need PostgreSQL, MySQL, or SQLite rendering. See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+Use a database-specific package when you need PostgreSQL, MySQL, SQLite, Oracle, or SQL Server rendering. See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

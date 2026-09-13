@@ -3,7 +3,7 @@ title: Diagnostics and error codes
 description: Stable SQLBraid codes and the boundary each one protects.
 ---
 
-SQLBraid errors expose a stable `code` where the failure is generated. Driver errors retain their original identity.
+SQLBraid runtime/compiler errors expose a `code` where provided by their error type. Thin adapter capability errors use the `BRAID_*` marker in the message; do not assume every adapter error has a `code` property. Driver errors retain their original identity.
 
 | Code | Meaning |
 | --- | --- |
@@ -19,6 +19,12 @@ SQLBraid errors expose a stable `code` where the failure is generated. Driver er
 | `BRAID_STREAM_UNSUPPORTED` | Adapter does not expose a streaming protocol. |
 | `BRAID_PREPARED_NAME` | Prepared query name is empty or duplicated. |
 | `BRAID_PREPARED_SHAPE` | A prepared query rendered a different structural shape. |
+| `BRAID_BIND_HINT_CONTEXT` | A bound-value wrapper was used as a directive condition instead of a boolean expression. |
+| `BRAID_BIND_HINT_UNSUPPORTED` | The adapter cannot honor the explicit type or one of its facets; execution is rejected before database I/O. |
+| `BRAID_BIND_TYPE_REQUIRED` | Driver inference is ambiguous, including an untyped null in Oracle or SQL Server. |
+| `BRAID_BIND_DECIMAL_EXACTNESS` | Tedious cannot safely encode the supplied decimal value through JavaScript numbers. |
+| `BRAID_CALL_OUT_UNSUPPORTED` | Actual SQL Server output parameters cannot be represented by the current call contract. |
+| `BRAID_RESULT_SETS_UNSUPPORTED` | A row query or stream returned additional statement/result sets; use `call()` where supported. |
 | `BRAID_EMPTY_LIST` | `sql.list([])` was used without an explicit empty strategy. |
 | `BRAID_EMPTY_SET` | `@braid set` rendered no assignment. |
 | `BRAID_DIALECT` | A fragment belongs to a different dialect. |

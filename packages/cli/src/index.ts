@@ -384,10 +384,12 @@ async function main(argv: readonly string[]): Promise<void> {
   if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) process.exitCode = 1;
 }
 
-const invokedPath = process.argv[1] && existsSync(process.argv[1]) ? realpathSync(process.argv[1]) : undefined;
-if (invokedPath === fileURLToPath(import.meta.url)) {
-  void main(process.argv.slice(2)).catch((error) => {
+export function runCli(argv: readonly string[]): void {
+  void main(argv).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = error instanceof CliError || error instanceof ConfigurationError ? error.exitCode : 1;
   });
 }
+
+const invokedPath = process.argv[1] && existsSync(process.argv[1]) ? realpathSync(process.argv[1]) : undefined;
+if (invokedPath === fileURLToPath(import.meta.url)) runCli(process.argv.slice(2));

@@ -3,6 +3,8 @@ import { createDatabase, createPooledDatabase, DatabaseCardinalityError } from "
 import { capture, createSqlTag, guarded, sql } from "@sqlbraid/template";
 import { sql as mysql } from "@sqlbraid/mysql";
 import { sql as sqlite } from "@sqlbraid/sqlite";
+import { sql as oracle } from "@sqlbraid/oracle";
+import { sql as mssql } from "@sqlbraid/mssql";
 
 function barrier() {
   let resolve;
@@ -172,6 +174,12 @@ async function templateCoreSmoke() {
     'SELECT "users"."name" WHERE id = ?',
   );
   assert.deepEqual(sqlite`SELECT ${sqlite.ident("users.name")} WHERE id = ${4}`.render().values, [4]);
+  const hinted = sql`SELECT ${sql.bind("Ada", { databaseType: "VARCHAR2", length: 40 })}`.render();
+  assert.equal(hinted.text, "SELECT $1");
+  assert.deepEqual(hinted.values, ["Ada"]);
+  assert.deepEqual(hinted.parameterHints, [{ databaseType: "VARCHAR2", length: 40 }]);
+  assert.equal(oracle`SELECT ${1}`.render().text, "SELECT :1");
+  assert.equal(mssql`SELECT ${1}`.render().text, "SELECT @p1");
 
   const encoder = new TextEncoder();
   assert.equal(encoder.encode("ASCII").length, 5);

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { SQL_FRAGMENT, type Query, type QueryResultKind, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
+import { SQL_FRAGMENT, isBoundParameter, type Query, type QueryResultKind, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
 
 export interface QueryManifest {
   readonly fingerprint: string;
@@ -37,16 +37,25 @@ function isFragmentLike(value: unknown): value is FragmentLike {
   return marker === true && Boolean(ir && typeof ir === "object") && Array.isArray(values) && typeof dialectId === "string";
 }
 
+function parameterHint(value: unknown): string {
+  if (!isBoundParameter(value)) return "";
+  const { databaseType, length, precision, scale } = value.hint;
+  return JSON.stringify([databaseType, length ?? null, precision ?? null, scale ?? null]);
+}
+
 function canonicalNode(node: TemplateNode, values: readonly unknown[]): string {
   if (node.kind === "text") return `text:${JSON.stringify(node.text)}`;
   if (node.kind === "bind") {
     const value = values[node.interpolation];
-    return isFragmentLike(value) ? `structural:${canonicalIr(value.ir, value.values)}` : `bind:${node.interpolation}`;
+    return isFragmentLike(value) ? `structural:${canonicalIr(value.ir, value.values)}` : `bind:${node.interpolation}${parameterHint(value)}`;
   }
   if (node.kind === "fragment") return `fragment:${valueFragment(node.fragment)}`;
   if (node.kind === "identifier") return `identifier:${JSON.stringify(node.value)}`;
   if (node.kind === "raw") return `raw:${JSON.stringify(node.text)}`;
-  if (node.kind === "list") return `list:${node.values.length}`;
+  if (node.kind === "list") {
+    const hints = node.values.map(parameterHint);
+    return `list:${node.values.length}${hints.some(Boolean) ? JSON.stringify(hints) : ""}`;
+  }
   if (node.kind === "if") return `if:${node.condition}[${node.children.map((child) => canonicalNode(child, values)).join(",")}]`;
   if (node.kind === "choose") return `choose:${node.whens.map((when) => `${when.condition}[${when.children.map((child) => canonicalNode(child, values)).join(",")}]`).join("|")}|${node.otherwise?.map((child) => canonicalNode(child, values)).join(",") ?? ""}`;
   return `trim:${JSON.stringify(node.attributes)}[${node.children.map((child) => canonicalNode(child, values)).join(",")}]`;

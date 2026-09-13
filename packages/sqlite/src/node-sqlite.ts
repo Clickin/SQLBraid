@@ -41,11 +41,18 @@ function unsupportedCall(): never {
   throw new Error("BRAID_CALL_UNSUPPORTED: SQLite adapter does not support routine calls.");
 }
 
+function assertParameterHintsUnsupported(rendered: RenderedQuery): void {
+  if (rendered.parameterHints?.some((hint) => hint !== undefined)) {
+    throw new Error("BRAID_BIND_HINT_UNSUPPORTED: SQLite adapter does not support explicit bind type hints.");
+  }
+}
+
 export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
   const control = database.exec ? async (sql: string): Promise<void> => { database.exec?.(sql); } : undefined;
   return {
     ownershipKey: database,
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
+      assertParameterHintsUnsupported(rendered);
       if (rendered.resultKind === "call") unsupportedCall();
       const statement = database.prepare(rendered.text);
       const columns = resultColumns(statement);
@@ -57,10 +64,12 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
       const changes = result.changes === undefined ? undefined : Number(result.changes);
       return { rows: [], rowCount: changes, kind: "command", command: { affectedRows: changes, insertId: result.lastInsertRowid } };
     },
-    async call<Row>(_rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
+    async call<Row>(rendered: RenderedQuery): Promise<RoutineCallResult<Row>> {
+      assertParameterHintsUnsupported(rendered);
       unsupportedCall();
     },
     async *stream<Row>(rendered: RenderedQuery, signal?: AbortSignal): AsyncGenerator<Row> {
+      assertParameterHintsUnsupported(rendered);
       signal?.throwIfAborted();
       const statement = database.prepare(rendered.text);
       if (!statement.iterate) throw new Error("BRAID_STREAM_UNSUPPORTED: SQLite statement does not expose iteration.");

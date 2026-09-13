@@ -1,0 +1,46 @@
+---
+title: 런타임 및 드라이버 지원
+description: 릴리스 증거, 호환성 기대치, 사용자 지정 어댑터를 분리합니다.
+---
+
+import BuildProvenance from "../../../../components/BuildProvenance.astro";
+
+지원 label의 의미는 다음과 같습니다.
+
+- **Official** — 해당 런타임/드라이버 조합이 SQLBraid 릴리스 게이트에서 실행되었습니다.
+- **Compatible** — 공개 API에서 동작할 것으로 예상되고 로컬에서 검사되었지만 릴리스 게이트 주장은 아닙니다.
+- **Custom** — 첫 번째 파티 어댑터가 아니라 `QueryExecutor` 또는 `ConnectionProvider`를 통해 연결됩니다.
+- **Unsupported** — 필요한 기능이 없거나 조합이 명시적 검사에 실패했습니다.
+
+매트릭스는 증거이며 패키지가 존재한다는 사실로 추론한 약속이 아닙니다. 특히 실제 데이터베이스 검사가 릴리스 게이트에 포함되기 전까지 어댑터는 Official이 아닙니다.
+
+| 런타임/라이브러리 | 상태 | 증거 |
+| --- | --- | --- |
+| Node 22.18.0 + core/template/runtime | Official | 릴리스 게이트 대상 |
+| Node 24.21.0 + core/template/runtime | Compatible | 로컬 packed smoke, CI 게이트 아님 |
+| Bun 1.3.14 + core/template/runtime | Official | packed portability smoke |
+| Deno 2.9.3 + core/template/runtime | Official | packed portability smoke |
+
+| 어댑터 또는 통합 | Node 22.18.0 | Node 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
+| --- | --- | --- | --- | --- |
+| PostgreSQL / `pg` 8.23.0 | Official | Compatible | Official | Official |
+| MySQL / `mysql2` 3.24.4 | Official | Compatible | Official | Official |
+| SQLite / `node:sqlite` | Official | Compatible | Unsupported | Official |
+| Oracle portable root / `@sqlbraid/oracle` | Compatible | Compatible | Compatible | Compatible |
+| Oracle Thin / `node-oracledb` 7.0.1 | Compatible | Compatible | Unsupported | Unsupported |
+| SQL Server portable root / `@sqlbraid/mssql` | Compatible | Compatible | Compatible | Compatible |
+| SQL Server / Tedious 20.0.0 | Compatible | Compatible | Unsupported | Unsupported |
+| 기타 드라이버 또는 데이터베이스 | Custom | Custom | Custom | Custom |
+
+Oracle은 `node-oracledb` Thin 모드를 대상으로 하며 Thick 모드는 Official이 아닙니다. SQL Server는 Tedious 어댑터를 대상으로 합니다. Oracle `call()` 경로와 SQL Server OUT/return-value 루틴 바인딩은 이 RC에서 Unsupported입니다. PostgreSQL, MySQL, SQLite는 파라미터 힌트를 조용히 무시하지 않고 명시적으로 거부합니다.
+
+Dialect, 드라이버, 실행 런타임, 트랜잭션 프로필은 서로 다른 축입니다. 로컬 Node 22.18.0 테스트는 Oracle 23.9.0.25.07 Thin과 SQL Server 2022 CU18(16.0.4185.3)을 실행합니다. 고정 SQL Server 이미지는 Linux x64이며 로컬 ARM 에뮬레이션 실행은 Official ARM 지원 근거가 아닙니다. 신규 통합은 같은 revision의 CI가 해당 조합을 증명할 때까지 보수적으로 Compatible로 표시합니다. Bun/Deno 드라이버 서브패스와 Oracle Thick은 검증 범위가 아니며 portable root는 별도로 검사합니다.
+
+## 릴리스 증거 provenance
+
+<BuildProvenance />
+
+- 현재 검증 기록: [`main`의 commit](https://github.com/Clickin/SQLBraid/commits/main/)
+- 과거 PV11 증거: [revision `1615311`](https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7) 및 [workflow run `34745030794`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794)
+
+이 매트릭스는 테스트 결과가 아니라 문서입니다. 전체 릴리스 게이트에 관한 주장은 릴리스 증거와 개별 검사를 사용해 확인하세요.

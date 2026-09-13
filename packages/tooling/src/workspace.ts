@@ -18,7 +18,7 @@ import type {
   WorkspaceOptions,
 } from "./types.js";
 
-const SQLBRAID_MODULES = ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite"] as const;
+const SQLBRAID_MODULES = ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite", "@sqlbraid/oracle", "@sqlbraid/mssql"] as const;
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx"]);
 const DEFAULT_MAX_ENTRIES = 256;
 const MAX_CONFIG_CACHE = 4;

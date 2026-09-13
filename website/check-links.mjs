@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 const output = fileURLToPath(new URL("./dist/", import.meta.url));
-const base = new URL("https://clickin.github.io/SQLBraid/");
+const configuredBase = process.env.SQLBRAID_DOCS_BASE?.trim() || "/SQLBraid/dev";
+const base = new URL(`https://clickin.github.io${configuredBase.replace(/\/+$/u, "")}/`);
+const basePath = base.pathname;
 const files = await readdir(output, { recursive: true });
 const pages = new Map();
 for (const file of files.filter((file) => file.endsWith(".html"))) {
@@ -12,11 +14,12 @@ for (const file of files.filter((file) => file.endsWith(".html"))) {
   pages.set(file, { text, ids: new Set([...text.matchAll(/\bid="([^"]*)"/gu)].map((match) => match[1])) });
 }
 assert.ok(pages.has("index.html"), "Documentation build must produce the homepage.");
+assert.ok(pages.has("404.html"), "Documentation build must produce a 404 page.");
 const source = fileURLToPath(new URL("./src/content/docs/", import.meta.url));
 for (const file of await readdir(source, { recursive: true })) {
   if (!/\.mdx?$/u.test(file)) continue;
   const route = file.replace(/\.mdx?$/u, "");
-  const page = route === "index" ? "index.html" : route === "404" ? "404.html" : `${route}/index.html`;
+  const page = route === "index" || route.endsWith("/index") ? `${route}.html` : route === "404" ? "404.html" : `${route}/index.html`;
   assert.ok(pages.has(page), `Missing built documentation page: ${file}`);
 }
 let checked = 0;
@@ -26,10 +29,12 @@ for (const [file, { text }] of pages) {
   for (const match of text.matchAll(/<a\b[^>]*\bhref="([^"]*)"/gu)) {
     const target = new URL(match[1].replaceAll("&amp;", "&"), pageUrl);
     if (target.origin !== base.origin) continue;
-    assert.ok(target.pathname.startsWith(base.pathname), `${file}: link escapes Pages base: ${target.href}`);
-    const relative = decodeURIComponent(target.pathname.slice(base.pathname.length));
+    assert.ok(target.pathname.startsWith(basePath), `${file}: link escapes Pages base: ${target.href}`);
+    const relative = decodeURIComponent(target.pathname.slice(basePath.length));
     const destination = relative.endsWith("/") || relative === "" ? `${relative}index.html` : relative;
-    assert.ok(await stat(join(output, destination)).catch(() => undefined), `${file}: missing link ${target.href}`);
+    const targetFile = await stat(join(output, destination)).catch(() => undefined)
+      ?? (!destination.endsWith(".html") ? await stat(join(output, `${destination}/index.html`)).catch(() => undefined) : undefined);
+    assert.ok(targetFile, `${file}: missing link ${target.href}`);
     const hash = decodeURIComponent(target.hash.slice(1));
     if (hash && pages.has(destination)) {
       assert.ok(pages.get(destination).ids.has(hash), `${file}: missing anchor ${target.href}`);

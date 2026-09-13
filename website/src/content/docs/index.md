@@ -4,7 +4,7 @@ description: Write SQL. Keep TypeScript. Skip the query-builder translation laye
 template: splash
 hero:
   title: Write SQL. Keep TypeScript.
-  tagline: SQLBraid adds safe binds, readable dynamic SQL, explicit result contracts, and a small runtime for PostgreSQL, MySQL, and SQLite.
+  tagline: SQLBraid adds safe binds, readable dynamic SQL, explicit result contracts, and a small runtime for PostgreSQL, MySQL, SQLite, Oracle, and SQL Server.
   actions:
     - text: Get started
       link: /SQLBraid/getting-started/sqlite/

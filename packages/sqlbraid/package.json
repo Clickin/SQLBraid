@@ -1,0 +1,30 @@
+{
+  "name": "sqlbraid",
+  "version": "0.1.0",
+  "description": "SQLBraid command-line convenience wrapper",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/sqlbraid"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "cli"],
+  "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=22.18.0" },
+  "bin": { "sqlbraid": "./dist/index.js" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@sqlbraid/cli": "workspace:*"
+  }
+}

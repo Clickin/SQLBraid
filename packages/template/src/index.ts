@@ -1,6 +1,8 @@
 import { Buffer } from "node:buffer";
 import {
   SQL_FRAGMENT,
+  createBoundParameter,
+  isBoundParameter,
   type BindNode,
   type ChooseNode,
   type Dialect,
@@ -11,6 +13,7 @@ import {
   type QueryResultKind,
   type RenderLimits,
   type RenderedQuery,
+  type ParameterTypeHint,
   type StandardSchemaV1,
   type SqlFragment,
   SqlRenderError,
@@ -122,6 +125,15 @@ function dollarDelimiter(units: readonly Unit[], start: number): string | undefi
   return units.slice(start, cursor + 1).map((unit) => unit.kind === "char" ? unit.value : "").join("");
 }
 
+function oracleQDelimiter(units: readonly Unit[], start: number): { readonly open: string; readonly close: string } | undefined {
+  const quote = charAt(units, start);
+  if ((quote !== "q" && quote !== "Q") || isWordCharacter(charAt(units, start - 1)) || charAt(units, start + 1) !== "'") return undefined;
+  const open = charAt(units, start + 2);
+  if (open === undefined || /\s/u.test(open) || open === "'" || open === '"' || open === "`") return undefined;
+  const close = ({ "[": "]", "{": "}", "(": ")", "<": ">" } as Readonly<Record<string, string>>)[open] ?? open;
+  return { open, close };
+}
+
 function directiveStart(units: readonly Unit[], index: number): boolean {
   return startsWith(units, index, "/*@braid") && !isWordCharacter(charAt(units, index + 8));
 }
@@ -162,9 +174,10 @@ function lineCommentStart(units: readonly Unit[], index: number, profile: Dialec
 function scanNext(units: readonly Unit[], start: number, profile: DialectLexicalProfile): SpecialToken {
   let cursor = start;
   let textStart = start;
-  let state: "code" | "single" | "double" | "backtick" | "bracket" | "line" | "block" | "dollar" = "code";
+  let state: "code" | "single" | "double" | "backtick" | "bracket" | "line" | "block" | "dollar" | "oracleQ" = "code";
   let blockDepth = 0;
   let dollar = "";
+  let oracleQClose = "";
   while (cursor < units.length) {
     const unit = units[cursor];
     if (unit.kind === "hole") {
@@ -191,19 +204,25 @@ function scanNext(units: readonly Unit[], start: number, profile: DialectLexical
       continue;
     }
     if (state === "single" || state === "double" || state === "backtick") {
-      if (current === "\\") { cursor += 2; continue; }
+      if (current === "\\" && profile.backslashEscapes !== false) { cursor += 2; continue; }
       if (current === state[0] && next === state[0]) { cursor += 2; continue; }
       if ((state === "single" && current === "'") || (state === "double" && current === '"') || (state === "backtick" && current === "`")) state = "code";
       cursor += 1;
       continue;
     }
     if (state === "bracket") {
+      if (current === "]" && next === "]") { cursor += 2; continue; }
       if (current === "]") state = "code";
       cursor += 1;
       continue;
     }
     if (state === "dollar") {
       if (startsWith(units, cursor, dollar)) { cursor += dollar.length; state = "code"; }
+      else cursor += 1;
+      continue;
+    }
+    if (state === "oracleQ") {
+      if (current === oracleQClose && next === "'") { cursor += 2; state = "code"; }
       else cursor += 1;
       continue;
     }
@@ -216,8 +235,10 @@ function scanNext(units: readonly Unit[], start: number, profile: DialectLexical
     if (current === "/" && next === "*") { state = "block"; blockDepth = 1; cursor += 2; continue; }
     if (current === "'") { state = "single"; cursor += 1; continue; }
     if (current === '"') { state = "double"; cursor += 1; continue; }
-    if (current === "`") { state = "backtick"; cursor += 1; continue; }
-    if (current === "[") { state = "bracket"; cursor += 1; continue; }
+    if (current === "`" && profile.supportsBacktickIdentifiers) { state = "backtick"; cursor += 1; continue; }
+    if (current === "[" && profile.supportsBracketIdentifiers) { state = "bracket"; cursor += 1; continue; }
+    const qDelimiter = profile.supportsOracleQQuotes ? oracleQDelimiter(units, cursor) : undefined;
+    if (qDelimiter) { state = "oracleQ"; oracleQClose = qDelimiter.close; cursor += 3; continue; }
     const delimiter = profile.supportsDollarQuotes === false ? undefined : dollarDelimiter(units, cursor);
     if (delimiter) { state = "dollar"; dollar = delimiter; cursor += delimiter.length; continue; }
     cursor += 1;
@@ -489,6 +510,7 @@ interface RenderState {
   readonly limits: Required<RenderLimits>;
   readonly values: unknown[];
   readonly bindingMap: { readonly placeholder: number; readonly interpolation?: number }[];
+  readonly parameterHints: (ParameterTypeHint | undefined)[];
   readonly output: string[];
   readonly variantPath: string[];
   structuralItems: number;
@@ -521,11 +543,17 @@ function addStructural(state: RenderState, count = 1): void {
   if (state.structuralItems > state.limits.maxStructuralItems) throw new SqlRenderError("BRAID_STRUCTURE_LIMIT", "Rendered structural item count exceeds maxStructuralItems.");
 }
 
-function addBind(state: RenderState, value: unknown, interpolation?: number): void {
+export function assertDirectiveCondition(value: unknown): boolean {
+  if (isBoundParameter(value)) throw new SqlRenderError("BRAID_BIND_HINT_CONTEXT", "sql.bind(...) cannot be used as a directive condition.");
+  return Boolean(value);
+}
+
+function addBind(state: RenderState, value: unknown, interpolation?: number, hint?: ParameterTypeHint): void {
   if (state.values.length >= state.limits.maxBindCount) throw new SqlRenderError("BRAID_BIND_LIMIT", "Rendered bind count exceeds maxBindCount.");
   state.values.push(value);
   const placeholder = state.values.length;
   state.bindingMap.push({ placeholder, ...(interpolation === undefined ? {} : { interpolation }) });
+  state.parameterHints.push(hint);
   addText(state, state.dialect.placeholder(placeholder));
 }
 
@@ -537,11 +565,12 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
     if (node.kind === "bind") {
       const value = captured[node.interpolation];
       if (isFragment(value)) renderFragment(value, state);
+      else if (isBoundParameter(value)) addBind(state, value.value, node.interpolation, value.hint);
       else addBind(state, value, node.interpolation);
       continue;
     }
     if (node.kind === "if") {
-      const enabled = Boolean(captured[node.condition]);
+      const enabled = assertDirectiveCondition(captured[node.condition]);
       state.variantPath.push(`if:${node.condition}:${enabled ? "1" : "0"}`);
       if (enabled) renderNodes(node.children, captured, state);
       continue;
@@ -549,7 +578,7 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
     if (node.kind === "choose") {
       let selected = false;
       for (const [index, when] of node.whens.entries()) {
-        if (Boolean(captured[when.condition])) {
+        if (assertDirectiveCondition(captured[when.condition])) {
           selected = true;
           state.variantPath.push(`when:${index}:${when.condition}`);
           renderNodes(when.children, captured, state);
@@ -563,7 +592,7 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
       continue;
     }
     if (node.kind === "trim") {
-      const nested: RenderState = { ...state, output: [], bindingMap: state.bindingMap, variantPath: state.variantPath, depth: state.depth, sqlBytes: 0 };
+      const nested: RenderState = { ...state, output: [], bindingMap: state.bindingMap, parameterHints: state.parameterHints, variantPath: state.variantPath, depth: state.depth, sqlBytes: 0 };
       renderNodes(node.children, captured, nested);
       state.structuralItems = nested.structuralItems;
       const body = applyTrim(nested.output.join(""), node.attributes);
@@ -584,7 +613,8 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
       addStructural(state, node.values.length);
       for (const [index, value] of node.values.entries()) {
         if (index) addText(state, ", ");
-        addBind(state, value);
+        if (isBoundParameter(value)) addBind(state, value.value, undefined, value.hint);
+        else addBind(state, value);
       }
     }
   }
@@ -598,9 +628,15 @@ function renderFragment(fragment: SqlFragment, state: RenderState): void {
 }
 
 function renderIr(ir: TemplateIr, captured: readonly unknown[], dialect: Dialect, limits?: RenderLimits, resultKind: QueryResultKind = "unknown"): RenderedQuery {
-  const state: RenderState = { dialect, limits: validateLimits(limits ?? {}), values: [], bindingMap: [], output: [], variantPath: [], structuralItems: 0, depth: 0, sqlBytes: 0 };
+  const state: RenderState = { dialect, limits: validateLimits(limits ?? {}), values: [], bindingMap: [], parameterHints: [], output: [], variantPath: [], structuralItems: 0, depth: 0, sqlBytes: 0 };
   renderNodes(ir.nodes, captured, state);
-  const rendered: RenderedQuery = { text: state.output.join(""), values: Object.freeze([...state.values]), variantFingerprint: state.variantPath.join("|"), resultKind };
+  const rendered: RenderedQuery = {
+    text: state.output.join(""),
+    values: Object.freeze([...state.values]),
+    ...(state.parameterHints.some((hint) => hint !== undefined) ? { parameterHints: Object.freeze([...state.parameterHints]) } : {}),
+    variantFingerprint: state.variantPath.join("|"),
+    resultKind,
+  };
   Object.defineProperty(rendered, "bindingMap", { value: Object.freeze(state.bindingMap.map((entry) => Object.freeze(entry))), enumerable: false });
   return Object.freeze(rendered);
 }
@@ -771,6 +807,7 @@ export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
   }) as SqlTag["rows"];
   tag.command = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "command"> => createQuery<unknown, "command">(strings, values, "command")) as SqlTag["command"];
   tag.call = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "call"> => createQuery<unknown, "call">(strings, values, "call")) as SqlTag["call"];
+  tag.bind = ((value: unknown, hint: ParameterTypeHint) => createBoundParameter(value, hint)) as SqlTag["bind"];
   tag.fragment = (strings, ...values) => makeFragment(strings, values, dialect, limits);
   tag.empty = makeStaticFragment([], 0, dialect);
   tag.ident = (identifier) => makeStaticFragment([{ kind: "identifier", value: typeof identifier === "string" ? identifier : Object.freeze([...identifier]), range: { start: 0, end: 0 } }], 0, dialect);
@@ -819,7 +856,7 @@ function captureActive(nodes: readonly TemplateNode[], thunks: readonly (() => u
         values[node.condition] = thunks[node.condition]();
         evaluated.add(node.condition);
       }
-      if (Boolean(values[node.condition])) captureActive(node.children, thunks, values, evaluated);
+      if (assertDirectiveCondition(values[node.condition])) captureActive(node.children, thunks, values, evaluated);
       continue;
     }
     if (node.kind === "choose") {
@@ -829,7 +866,7 @@ function captureActive(nodes: readonly TemplateNode[], thunks: readonly (() => u
           values[when.condition] = thunks[when.condition]();
           evaluated.add(when.condition);
         }
-        if (Boolean(values[when.condition])) { captureActive(when.children, thunks, values, evaluated); selected = true; break; }
+        if (assertDirectiveCondition(values[when.condition])) { captureActive(when.children, thunks, values, evaluated); selected = true; break; }
       }
       if (!selected && node.otherwise) captureActive(node.otherwise, thunks, values, evaluated);
       continue;

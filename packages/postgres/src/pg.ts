@@ -71,6 +71,12 @@ function assertUniqueFields(fields: readonly PgFieldLike[]): void {
   }
 }
 
+function assertParameterHintsUnsupported(rendered: RenderedQuery): void {
+  if (rendered.parameterHints?.some((hint) => hint !== undefined)) {
+    throw new Error("BRAID_BIND_HINT_UNSUPPORTED: PostgreSQL adapter does not support explicit bind type hints.");
+  }
+}
+
 export function createPgExecutor(client: PgClientLike, options: { readonly typePolicy?: TypePolicy } = {}): QueryExecutor {
   assertPgClient(client);
   const policy = options.typePolicy ?? defaultTypePolicy;
@@ -78,6 +84,7 @@ export function createPgExecutor(client: PgClientLike, options: { readonly typeP
   return {
     ownershipKey: client,
     async query<Row>(rendered: RenderedQuery): Promise<QueryExecutionResult<Row>> {
+      assertParameterHintsUnsupported(rendered);
       const result = await client.query({ text: rendered.text, values: rendered.values });
       assertUniqueFields(result.fields ?? []);
       const rows = result.rows.map((row) => plainRow(row, result.fields ?? [], policy));
@@ -86,6 +93,7 @@ export function createPgExecutor(client: PgClientLike, options: { readonly typeP
       return rowBearing ? { rows: rows as readonly Row[], rowCount, kind: "rows" } : { rows: [], rowCount, kind: "command", command: { affectedRows: rowCount } };
     },
     async call<Row>(rendered: RenderedQuery) {
+      assertParameterHintsUnsupported(rendered);
       const result = await client.query({ text: rendered.text, values: rendered.values });
       assertUniqueFields(result.fields ?? []);
       const rows = result.rows.map((row) => plainRow(row, result.fields ?? [], policy));

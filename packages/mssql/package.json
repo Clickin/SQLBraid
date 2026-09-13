@@ -1,0 +1,55 @@
+{
+  "name": "@sqlbraid/mssql",
+  "version": "0.1.0",
+  "description": "SQLBraid Microsoft SQL Server dialect, Tedious adapter, and metadata inspector",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/mssql"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "mssql", "sql-server", "query"],
+  "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=22.18.0" },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
+  "peerDependencies": {
+    "@sqlbraid/metadata": "workspace:*",
+    "tedious": "20.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@sqlbraid/metadata": {
+      "optional": true
+    },
+    "tedious": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@sqlbraid/metadata": "workspace:*",
+    "tedious": "20.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./tedious": {
+      "types": "./dist/tedious.d.ts",
+      "import": "./dist/tedious.js"
+    },
+    "./inspector": {
+      "types": "./dist/inspector.d.ts",
+      "import": "./dist/inspector.js"
+    }
+  }
+}

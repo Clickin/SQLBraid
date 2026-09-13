@@ -2,7 +2,7 @@
 
 **Write SQL. Keep TypeScript. Skip the query-builder translation layer.**
 
-SQLBraid is a SQL-first data-access toolkit for TypeScript. It keeps ordinary SQL as the primary authoring language while adding safe binds, readable dynamic SQL, explicit result contracts, Standard Schema result mapping, transaction-safe execution and first-party PostgreSQL/MySQL/SQLite adapters.
+SQLBraid is a SQL-first data-access toolkit for TypeScript. It keeps ordinary SQL as the primary authoring language while adding safe binds, readable dynamic SQL, explicit result contracts, Standard Schema result mapping, transaction-safe execution and first-party PostgreSQL/MySQL/SQLite/Oracle/SQL Server integrations.
 
 ```ts
 interface UserRow {
@@ -23,7 +23,7 @@ const users = sql.rows<UserRow>`
 
 > **Status:** pre-release. SQL-first authoring, Standard Schema mapping, connection leasing, execution observers, runtime portability, metadata/codegen and agent-native LSP tooling are implemented. See [`PLAN.md`](./PLAN.md).
 
-[Get started](https://clickin.github.io/SQLBraid/getting-started/sqlite/) ·
+[Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) ·
 [Documentation](https://clickin.github.io/SQLBraid/) ·
 [Packed executable examples](./examples/) ·
 [Public API inventory](./docs/public-api-audit.md)
@@ -87,6 +87,20 @@ sql.raw(trustedSql)
 ```
 
 Ordinary `${value}` interpolation is always a bind parameter.
+
+When a database parameter type must be explicit, use `sql.bind(value, hint)`:
+
+```ts
+import { mssqlParameter, sql } from "@sqlbraid/mssql";
+
+const query = sql.rows<UserRow>`
+  SELECT id, name
+  FROM users
+  WHERE id = ${sql.bind(id, mssqlParameter.int())}
+`;
+```
+
+`${value}` uses the driver's documented inference. `${sql.bind(value, hint)}` requests an explicit database parameter type. SQLBraid does not infer a universal database type from a TypeScript type; parameter hints are not application input codecs or validation.
 
 ---
 
@@ -184,7 +198,7 @@ Result mapping is intentionally one-row-to-one-row. SQLBraid does not provide id
 
 ---
 
-## Input mapping is deferred
+## Database parameter hints are explicit; input codecs are deferred
 
 Pre-release SQLBraid does not add a symmetric application input-codec framework.
 
@@ -192,7 +206,7 @@ Pre-release SQLBraid does not add a symmetric application input-codec framework.
 ${value}
 ```
 
-remains an ordinary driver-bound value. JavaScript database drivers do not expose a JDBC-like universal application-input type system, so `Temporal`, custom classes, JSON conventions and binary representations will be revisited only after real post-release requirements justify an input-mapping design.
+remains an ordinary driver-bound value. When a database parameter type must be selected explicitly, use `sql.bind(value, hint)`; the hint is database typing metadata, not an input codec or Standard Schema validator. JavaScript database drivers do not expose a JDBC-like universal application-input type system, so `Temporal`, custom classes, JSON conventions and binary representations will be revisited only after real post-release requirements justify an input-mapping design.
 
 ---
 
@@ -403,8 +417,10 @@ Runtime support uses four labels:
 | PostgreSQL / `pg` 8.23.0 | Official | Compatible | Official | Official |
 | MySQL / `mysql2` 3.24.4 | Official | Compatible | Official | Official |
 | SQLite / `node:sqlite` | Official | Compatible | Unsupported | Official |
+| Oracle Thin / `node-oracledb` 7.0.1 | Compatible | Compatible | Unsupported | Unsupported |
+| SQL Server / Tedious 20.0.0 | Compatible | Compatible | Unsupported | Unsupported |
 
-The [published candidate's exact-SHA evidence](https://clickin.github.io/SQLBraid/reference/support/#release-evidence-provenance),
+The [development documentation's exact-SHA evidence](https://clickin.github.io/SQLBraid/dev/reference/support/#release-evidence-provenance),
 [current runtime runs](https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml?query=branch%3Amain)
 and [immutable release workflow](https://github.com/Clickin/SQLBraid/actions/workflows/release.yml)
 are the release evidence entrypoints: match the run's commit SHA to the artifact
@@ -646,20 +662,9 @@ the extension. The full gate runs a real VS Code host and packs the VSIX.
 
 ---
 
-## Oracle
+## Oracle and SQL Server evidence
 
-Oracle/node-oracledb is intentionally post-release.
-
-Oracle support needs more than placeholder syntax: named/positional binds, IN/OUT/IN OUT parameters, REF CURSOR, LOBs, NUMBER conversion, DATE/TIMESTAMP variants, object/database types, result-set modes and Oracle-specific session/pool behavior need a dedicated dialect/adapter design.
-
-A future surface may look like:
-
-```text
-@sqlbraid/oracle
-@sqlbraid/oracle/oracledb
-```
-
-but it is not a pre-release gate.
+PV13 adds first-party Oracle and SQL Server portable roots, parameter-hint factories, and Node driver subpaths. Local Node 22.18.0 tests exercise Oracle 23.9.0.25.07 Thin and SQL Server 2022 CU18 (16.0.4185.3); the SQL Server image runs as Linux x64, not an Official ARM claim. The new integrations are conservatively labeled Compatible; an Official label requires successful same-revision CI. Oracle `call()` and SQL Server OUT/return-value routine binding are explicitly Unsupported.
 
 ---
 
@@ -675,6 +680,8 @@ Current workspace packages:
 | `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg` adapter; optional `/inspector` |
 | `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2` adapter; optional `/inspector` |
 | `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite` adapter; optional `/inspector` |
+| `@sqlbraid/oracle` | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; optional `/inspector` |
+| `@sqlbraid/mssql` | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; optional `/inspector` |
 | `@sqlbraid/compiler` | TypeScript discovery and guarded-template lowering |
 | `@sqlbraid/metadata` | DB-fact snapshots, validation, canonical identity and drift |
 | `@sqlbraid/codegen` | Pure metadata + TypePolicy to Row/Insert/Update declarations |
@@ -682,6 +689,9 @@ Current workspace packages:
 | `@sqlbraid/operations` | Fingerprints and provisional declaration manifests |
 | `@sqlbraid/cli` | Command-line tooling |
 | `@sqlbraid/language-server` | Editor/LSP integration |
+| `sqlbraid` | Unscoped CLI convenience package; provides the `sqlbraid` executable without database drivers |
+
+The workspace package set is 16 packages: 15 scoped packages plus the unscoped `sqlbraid` CLI convenience package.
 
 ---
 
@@ -704,8 +714,9 @@ Completed:
 Next:
 
 12. **PV12** — public API/docs/package hardening for pre-release/Product Hunt.
+13. **PV13** — five-DB typed parameter hints, Oracle/SQL Server integrations, localized/versioned docs, tooling registry, and unscoped CLI bootstrap; release claims remain evidence-gated.
 
-Post-release candidates include Oracle/node-oracledb, application input mapping, optional DB verification, additional driver adapters, cancellation, bulk/pipeline operations, query transformation, routing/retry and OpenTelemetry.
+Post-release candidates include application input mapping/codecs, optional DB verification, additional driver adapters, cancellation, bulk/pipeline operations, query transformation, routing/retry and OpenTelemetry.
 
 ---
 
