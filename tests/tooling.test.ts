@@ -97,16 +97,14 @@ test('open-world SQL remains legal and incomplete routine evidence is explicit',
   assert.equal(service.complete(routineSource, 'routine.ts', routineSource.indexOf('calculate_fee') + 3).some((item) => item.label === 'calculate_fee'), true);
 });
 
-test('metadata omissions do not reject built-ins, extensions, runtime UDFs, temp objects or CTEs', () => {
-  for (const [dialect, sqlText] of [
-    ['postgres', "SELECT jsonb_path_query(payload, '$.x'), extension_distance(point), id::vendor_type FROM session_temp"],
-    ['mysql', 'SELECT JSON_EXTRACT(payload, "$.x"), company_udf(id) FROM temporary_orders'],
-    ['sqlite', 'WITH active AS (SELECT runtime_udf(id) AS value FROM temp.session_data) SELECT value FROM active'],
-  ] as const) {
-    const service = createLanguageService({ metadata: { ...metadata, dialect, routines: {} } });
-    const source = `import { sql } from '@sqlbraid/${dialect}';\nconst query = sql.rows<{}>\`${sqlText}\`;`;
-    assert.deepEqual(service.diagnostics(source, `${dialect}-opaque.ts`), []);
-  }
+test.each([
+  ['postgres', "SELECT jsonb_path_query(payload, '$.x'), extension_distance(point), id::vendor_type FROM session_temp"],
+  ['mysql', 'SELECT JSON_EXTRACT(payload, "$.x"), company_udf(id) FROM temporary_orders'],
+  ['sqlite', 'WITH active AS (SELECT runtime_udf(id) AS value FROM temp.session_data) SELECT value FROM active'],
+] as const)('metadata omissions leave %s built-ins, extensions, UDFs, temp objects and CTEs opaque', (dialect, sqlText) => {
+  const service = createLanguageService({ metadata: { ...metadata, dialect, routines: {} } });
+  const source = `import { sql } from '@sqlbraid/${dialect}';\nconst query = sql.rows<{}>\`${sqlText}\`;`;
+  assert.deepEqual(service.diagnostics(source, `${dialect}-opaque.ts`), []);
 });
 
 test('generated current output wins navigation and stale output falls back to metadata JSON', () => {
