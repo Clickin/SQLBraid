@@ -417,8 +417,8 @@ Runtime support uses four labels:
 | PostgreSQL / `pg` 8.23.0 | Official | Compatible | Official | Official |
 | MySQL / `mysql2` 3.24.4 | Official | Compatible | Official | Official |
 | SQLite / `node:sqlite` | Official | Compatible | Unsupported | Official |
-| Oracle Thin / `node-oracledb` 7.0.1 | Compatible | Compatible | Unsupported | Unsupported |
-| SQL Server / Tedious 20.0.0 | Compatible | Compatible | Unsupported | Unsupported |
+| Oracle Thin / `node-oracledb` 7.0.1 | Official | Compatible | Unsupported | Unsupported |
+| SQL Server / Tedious 20.0.0 | Official | Compatible | Unsupported | Unsupported |
 
 The [development documentation's exact-SHA evidence](https://clickin.github.io/SQLBraid/dev/reference/support/#release-evidence-provenance),
 [current runtime runs](https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml?query=branch%3Amain)
@@ -664,7 +664,7 @@ the extension. The full gate runs a real VS Code host and packs the VSIX.
 
 ## Oracle and SQL Server evidence
 
-PV13 adds first-party Oracle and SQL Server portable roots, parameter-hint factories, and Node driver subpaths. Local Node 22.18.0 tests exercise Oracle 23.9.0.25.07 Thin and SQL Server 2022 CU18 (16.0.4185.3); the SQL Server image runs as Linux x64, not an Official ARM claim. The new integrations are conservatively labeled Compatible; an Official label requires successful same-revision CI. Oracle `call()` and SQL Server OUT/return-value routine binding are explicitly Unsupported.
+PV13's [successful runtime gate at d4bc626](https://github.com/Clickin/SQLBraid/actions/runs/34753809318) covers Oracle 23.9.0.25.07 Thin and SQL Server 2022 CU18 (16.0.4185.3) with Node 22.18.0 on Linux x64, plus all five portable dialect roots on Node/Bun/Deno. Local SQL Server ARM emulation is not an Official ARM claim. Oracle `call()` and SQL Server OUT/return-value routine binding remain explicitly Unsupported.
 
 ---
 

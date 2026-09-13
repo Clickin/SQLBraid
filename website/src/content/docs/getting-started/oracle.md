@@ -48,7 +48,7 @@ try {
 - The first-party target is `node-oracledb` Thin mode. Thick mode is not an Official claim.
 - `call()` is Unsupported in this RC because OUT/IN OUT descriptors are not yet part of the bind API.
 - Streaming uses the driver's ResultSet protocol and closes the ResultSet on completion, abort, or early break.
-- Local Node 22.18.0 tests use Oracle 23.9.0.25.07. Portable roots and the Thin adapter are conservatively Compatible until same-revision CI establishes Official coverage; see [runtime and driver support](/SQLBraid/reference/support/).
+- CI covers Oracle 23.9.0.25.07 Thin on Node 22.18.0/Linux x64; see [runtime and driver support](/SQLBraid/reference/support/) for the pinned evidence and portable-root coverage.
 
 Use an explicit hint for `null` when the driver cannot infer a safe Oracle type. Do not silently turn an untyped null into `VARCHAR2`.
 

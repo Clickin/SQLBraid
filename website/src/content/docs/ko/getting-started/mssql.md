@@ -55,8 +55,8 @@ Tedious는 `@p1`, `@p2` 같은 결정적인 파라미터 이름을 받습니다.
 
 ## 기능 경계
 
-- SQL Server portable root와 Tedious 어댑터는 같은 revision의 CI가 Official 범위를 증명하기 전까지 보수적으로 Compatible입니다.
-- 로컬 Node 22.18.0 테스트는 SQL Server 2022 CU18(16.0.4185.3), Linux x64를 사용합니다. ARM 에뮬레이션은 Official ARM 지원 주장이 아닙니다.
+- CI는 Node 22.18.0/Linux x64에서 Tedious 어댑터를 검증하고, 고정 Node/Bun/Deno 버전에서 portable root를 별도로 검사합니다.
+- SQL Server 게이트는 2022 CU18(16.0.4185.3), Linux x64를 사용합니다. 로컬 ARM 에뮬레이션은 Official ARM 지원 주장이 아닙니다.
 - 힌트가 없는 일반 값은 어댑터 로컬 Tedious 추론을 사용합니다. `null`, 사용자 정의 객체, 정밀도/스케일, 길이 또는 SQL Server 전용 타입에는 명시적인 힌트를 사용하세요.
 - 여러 recordset을 하나의 가짜 단일 행 결과로 평탄화하지 않고 보존합니다.
 

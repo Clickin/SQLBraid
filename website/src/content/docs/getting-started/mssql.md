@@ -55,8 +55,8 @@ Tedious receives deterministic `@p1`, `@p2`, ... parameter names. `sql.bind` sel
 
 ## Capability boundaries
 
-- SQL Server portable roots and the Tedious adapter are conservatively Compatible until same-revision CI establishes Official coverage.
-- Local Node 22.18.0 tests use SQL Server 2022 CU18 (16.0.4185.3), Linux x64; ARM emulation is not an Official ARM claim.
+- CI covers the Tedious adapter on Node 22.18.0/Linux x64, and checks portable roots separately on the pinned Node/Bun/Deno versions.
+- The SQL Server gate uses 2022 CU18 (16.0.4185.3), Linux x64; local ARM emulation is not an Official ARM claim.
 - Unhinted common values use adapter-local Tedious inference. Use an explicit hint for `null`, custom objects, precision/scale, lengths, or SQL Server-specific types.
 - The adapter preserves multiple recordsets instead of flattening them into fabricated single-row results.
 

@@ -31,6 +31,27 @@ Current operator checks are intentionally treated as unready external state: `np
 
 ## Maintainer preflight
 
+### Manual rc.0 authentication and publication through pnpm
+
+The maintainer handles browser login and 2FA; never paste credentials or OTPs into an agent session. Use pnpm to provision the same npm CLI version as CI, without adding npm to project dependencies:
+
+```bash
+pnpm dlx npm@11.15.0 login --registry=https://registry.npmjs.org/
+pnpm dlx npm@11.15.0 whoami --registry=https://registry.npmjs.org/
+```
+
+Only after all candidate versions are synchronized to `0.1.0-rc.0`, committed, and the exact commit's immutable artifacts pass validation:
+
+```bash
+export SQLBRAID_RC_ARTIFACTS="/absolute/path/to/validated-rc.0-artifacts"
+pnpm --package=npm@11.15.0 dlx --shell-mode \
+  'node scripts/npm-bootstrap-rc.mjs --artifact-dir "$SQLBRAID_RC_ARTIFACTS"'
+```
+
+Do not pass the current `0.1.0` dry-run artifacts to bootstrap. Do not push an `rc.0` tag first: a `v*` push triggers OIDC publication before the bootstrap/trust setup is ready. Do not bypass the validated publisher with `pnpm publish`. If interrupted, retry with the same validated artifacts; exact registry integrity is required before skipping a package.
+
+### Candidate gates and trusted publishing
+
 - Keep source manifests at the candidate version, then run `workflow_dispatch` in `pack-only` mode on the exact RC commit and download the preserved artifact.
 - For the initial prerelease only, after the full pack validation succeeds, run `npm whoami`, `npm ping`, and `npm config get registry`, then use `scripts/npm-bootstrap-rc.mjs --artifact-dir <validated-artifacts>` while authenticated with 2FA. Review every `next` pointer and `dist.integrity`; do not use `latest`.
 - Configure and verify Trusted Publishing for every package after `rc.0` exists. Run `workflow_dispatch`/tag `v0.1.0-rc.1` through the same gates and confirm provenance, exact integrity, `next -> rc.1`, and unchanged `latest`.

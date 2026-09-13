@@ -48,7 +48,7 @@ try {
 - 첫 번째 지원 대상은 `node-oracledb` Thin 모드입니다. Thick 모드는 Official 주장이 아닙니다.
 - OUT/IN OUT 디스크립터가 아직 바인드 API에 없으므로 이 RC에서 `call()`은 Unsupported입니다.
 - 스트리밍은 드라이버의 ResultSet 프로토콜을 사용하며 완료, 중단, 조기 종료 시 ResultSet을 닫습니다.
-- 로컬 Node 22.18.0 테스트는 Oracle 23.9.0.25.07을 사용합니다. portable root와 Thin 어댑터는 같은 revision의 CI가 Official 범위를 증명하기 전까지 보수적으로 Compatible입니다. [런타임 및 드라이버 지원](/SQLBraid/reference/support/)을 참고하세요.
+- CI는 Node 22.18.0/Linux x64에서 Oracle 23.9.0.25.07 Thin을 검증합니다. 고정된 검증 증거와 portable root 범위는 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)을 참고하세요.
 
 드라이버가 안전한 Oracle 타입을 추론할 수 없는 `null`에는 명시적인 힌트를 사용하세요. 타입이 지정되지 않은 null을 조용히 `VARCHAR2`로 바꾸지 않습니다.
 
