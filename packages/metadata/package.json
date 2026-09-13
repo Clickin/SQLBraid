@@ -1,6 +1,18 @@
 {
   "name": "@sqlbraid/metadata",
   "version": "0.1.0",
+  "description": "SQLBraid database metadata snapshot types, validation, and hashing",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/metadata"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "metadata"],
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },

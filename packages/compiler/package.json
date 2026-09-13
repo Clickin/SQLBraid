@@ -1,6 +1,18 @@
 {
   "name": "@sqlbraid/compiler",
   "version": "0.1.0",
+  "description": "Compile SQLBraid tagged templates into typed SQL query definitions",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/compiler"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "query"],
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },

@@ -1,6 +1,18 @@
 {
   "name": "@sqlbraid/tooling",
   "version": "0.1.0",
+  "description": "SQLBraid Node-first semantic tooling shared by the CLI and language server",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/tooling"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "lsp"],
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },

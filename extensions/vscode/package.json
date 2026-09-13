@@ -6,6 +6,21 @@
   "type": "commonjs",
   "publisher": "sqlbraid",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "extensions/vscode"
+  },
+  "homepage": "https://clickin.github.io/SQLBraid/",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": [
+    "sql",
+    "typescript",
+    "database",
+    "lsp"
+  ],
   "engines": {
     "vscode": ">=1.121.0"
   },
@@ -38,7 +53,9 @@
   "files": [
     "dist/**",
     "node_modules/**",
-    "package.json"
+    "package.json",
+    "README.md",
+    "LICENSE"
   ],
   "dependencies": {
     "@sqlbraid/cli": "workspace:0.1.0",

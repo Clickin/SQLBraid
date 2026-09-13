@@ -1,6 +1,18 @@
 {
   "name": "@sqlbraid/mysql",
   "version": "0.1.0",
+  "description": "SQLBraid MySQL dialect, mysql2 adapter, and metadata inspector",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/mysql"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "mysql", "query"],
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },

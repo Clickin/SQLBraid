@@ -1,6 +1,18 @@
 {
   "name": "@sqlbraid/postgres",
   "version": "0.1.0",
+  "description": "SQLBraid PostgreSQL dialect, pg adapter, and metadata inspector",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/postgres"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "postgresql", "query"],
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },

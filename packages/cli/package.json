@@ -1,6 +1,18 @@
 {
   "name": "@sqlbraid/cli",
   "version": "0.1.0",
+  "description": "SQLBraid command-line tools for inspecting projects and generating typed models",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "codegen", "cli"],
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },

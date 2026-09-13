@@ -1,6 +1,18 @@
 {
   "name": "@sqlbraid/sqlite",
   "version": "0.1.0",
+  "description": "SQLBraid SQLite dialect, node:sqlite adapter, and metadata inspector",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/sqlite"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "sqlite", "query"],
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },
