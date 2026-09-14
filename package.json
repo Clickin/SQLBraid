@@ -19,7 +19,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit && pnpm --dir extensions/vscode exec tsc -p tsconfig.json --noEmit",
     "test:db": "pnpm run build && vitest run --project db-postgres --project db-mysql --project db-mariadb --project db-sqlite --project db-oracle --project db-mssql",
     "test:db:bun-sql": "pnpm run build && vitest run --project db-bun-sql",
-    "test:db:bun-sql:prepared": "vitest run --project db-bun-sql",
     "test:db:postgres": "pnpm run build && vitest run --project db-postgres",
     "test:db:mysql": "pnpm run build && vitest run --project db-mysql",
     "test:db:mariadb": "pnpm run build && vitest run --project db-mariadb",

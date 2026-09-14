@@ -416,7 +416,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ci-evidence/ci-evidence-bun-sql/observations"
           report="$RUNNER_TEMP/ci-evidence/ci-evidence-bun-sql/results.json"
           set +e
-          pnpm run test:db:bun-sql:prepared -- --reporter=default --reporter=json --outputFile.json="$report"
+          pnpm exec vitest run --project db-bun-sql --reporter=default --reporter=json --outputFile.json="$report"
           status=$?
           printf '{"success":%s}\n' "$([ "$status" -eq 0 ] && echo true || echo false)" > "$RUNNER_TEMP/ci-evidence/ci-evidence-bun-sql/status.json"
           exit "$status"
