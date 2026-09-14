@@ -38,7 +38,7 @@ async function run(command, args, cwd = root, env = process.env) {
   }
 }
 try {
-  await run("pnpm", ["run", "build"]);
+  if (process.env.SQLBRAID_USE_PREBUILT_DIST !== "true") await run("pnpm", ["run", "build:packages"]);
   await auditRuntime(join(root, "packages"), "src");
   await mkdir(consumer);
   const dependencies = { pg: workspace.devDependencies.pg, "pg-cursor": workspace.devDependencies["pg-cursor"], mysql2: workspace.devDependencies.mysql2 };

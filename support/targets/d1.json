@@ -45,7 +45,7 @@
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
   "ci": {
-    "command": "pnpm run test:all",
+    "command": "pnpm run test:d1",
     "workflow": ".github/workflows/release.yml",
     "releaseBlocking": true
   },

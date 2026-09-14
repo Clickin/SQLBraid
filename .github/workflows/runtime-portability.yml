@@ -7,105 +7,352 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22.18.0
+  NODE_COMPAT_VERSION: 24.21.0
+  PNPM_VERSION: 12.3.4
+  BUN_VERSION: 1.3.14
+  DENO_VERSION: 2.9.3
+
 jobs:
-  node-release:
-    name: Node 22.18.0 release gates
+  plan:
+    name: Plan CI lanes
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      all: ${{ steps.plan.outputs.all }}
+      common: ${{ steps.plan.outputs.common }}
+      db: ${{ steps.plan.outputs.db }}
+      db_matrix: ${{ steps.plan.outputs.db_matrix }}
+      web: ${{ steps.plan.outputs.web }}
+      vscode: ${{ steps.plan.outputs.vscode }}
+      packages: ${{ steps.plan.outputs.packages }}
+      node24: ${{ steps.plan.outputs.node24 }}
+      packed: ${{ steps.plan.outputs.packed }}
+      bun_sql: ${{ steps.plan.outputs.bun_sql }}
+      evidence: ${{ steps.plan.outputs.evidence }}
+      evidence_shards: ${{ steps.plan.outputs.evidence_shards }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
         with:
-          node-version: 22.18.0
+          fetch-depth: 0
+      - name: Compute fail-open lane plan
+        id: plan
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/ci-plan.mjs
+
+  prepare:
+    name: Prepare packages and shared checks
+    needs: plan
+    if: needs.plan.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
         with:
-          version: 12.3.4
-      - run: pnpm install --frozen-lockfile
-      - uses: oven-sh/setup-bun@v2.2.0
-        with:
-          bun-version: 1.3.14
-      - name: Install browser conformance runtime
-        run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm run typecheck
-      - run: pnpm run build
-      - name: Node 22 unit, consumers and real-driver fidelity
-        env:
-          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/support-observations
-        run: pnpm exec vitest run --reporter=default --reporter=json --outputFile.json=${{ runner.temp }}/support-results.json
+          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
-          node-version: 24.21.0
-      - run: pnpm run test:all
-      - uses: actions/setup-node@v7.0.0
-        with:
-          node-version: 22.18.0
-      - name: Node packed runtime gate
-        env:
-          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations-node
-        run: pnpm run test:runtime:node
-      - name: Preserve Node runtime tuple evidence
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate support and translations
+        run: pnpm run support:validate && pnpm run docs:translations
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Build packages
+        run: pnpm run build:packages
+      - name: Archive prepared package output
+        run: tar -czf "$RUNNER_TEMP/package-dist.tar.gz" packages/*/dist
+      - name: Preserve prepared package output
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: node-runtime-tuple-evidence
-          path: ${{ runner.temp }}/runtime-observations-node
+          name: prepared-package-dist
+          path: ${{ runner.temp }}/package-dist.tar.gz
           if-no-files-found: error
-      - name: Record executed support evidence
-        run: node scripts/support-evidence.mjs "${{ runner.temp }}/support-results.json" "${{ runner.temp }}/support-evidence.json" "${{ runner.temp }}/support-observations"
-      - name: Preserve exact profile evidence
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: support-profile-evidence
-          path: ${{ runner.temp }}/support-evidence.json
-          if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
 
-  runtime-packed:
-    name: Packed ${{ matrix.runtime }} runtime and drivers
+  common:
+    name: Node 22 common and compiler tests
+    needs: [plan, prepare]
+    if: needs.plan.outputs.common == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: prepared-package-dist
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Run common tests
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence/ci-evidence-common/observations
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-evidence/ci-evidence-common/observations"
+          report="$RUNNER_TEMP/ci-evidence/ci-evidence-common/results.json"
+          set +e
+          pnpm run test:unit -- --maxWorkers=2 --reporter=default --reporter=json --outputFile.json="$report"
+          status=$?
+          printf '{"success":%s}\n' "$([ "$status" -eq 0 ] && echo true || echo false)" > "$RUNNER_TEMP/ci-evidence/ci-evidence-common/status.json"
+          exit "$status"
+      - name: Preserve common evidence shard
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ci-evidence-common
+          path: ${{ runner.temp }}/ci-evidence
+          if-no-files-found: error
+          retention-days: 1
+
+  db:
+    name: Node 22 ${{ matrix.database }} real-driver tests
+    needs: [plan, prepare]
+    if: needs.plan.outputs.db == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        runtime: [bun, deno]
+        database: ${{ fromJSON(needs.plan.outputs.db_matrix) }}
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
-        with:
-          node-version: 22.18.0
       - uses: pnpm/action-setup@v6.1.0
         with:
-          version: 12.3.4
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: prepared-package-dist
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Run isolated database project
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence/ci-evidence-${{ matrix.database }}/observations
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-evidence/ci-evidence-${{ matrix.database }}/observations"
+          report="$RUNNER_TEMP/ci-evidence/ci-evidence-${{ matrix.database }}/results.json"
+          set +e
+          pnpm exec vitest run --project "db-${{ matrix.database }}" --reporter=default --reporter=json --outputFile.json="$report"
+          status=$?
+          printf '{"success":%s}\n' "$([ "$status" -eq 0 ] && echo true || echo false)" > "$RUNNER_TEMP/ci-evidence/ci-evidence-${{ matrix.database }}/status.json"
+          exit "$status"
+      - name: Preserve database evidence shard
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ci-evidence-${{ matrix.database }}
+          path: ${{ runner.temp }}/ci-evidence
+          if-no-files-found: error
+          retention-days: 1
+
+  web:
+    name: Browser, D1, and SQLite WASM
+    needs: [plan, prepare]
+    if: needs.plan.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: prepared-package-dist
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Install browser conformance runtime
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run web-runtime tests
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence/ci-evidence-web/observations
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-evidence/ci-evidence-web/observations"
+          report="$RUNNER_TEMP/ci-evidence/ci-evidence-web/results.json"
+          set +e
+          pnpm exec vitest run --project db-d1 --project db-wasm --reporter=default --reporter=json --outputFile.json="$report"
+          status=$?
+          if [ "$status" -eq 0 ]; then pnpm run test:d1; status=$?; fi
+          if [ "$status" -eq 0 ]; then pnpm run test:browser; status=$?; fi
+          if [ "$status" -ne 0 ] && [ -f "$report" ]; then node -e 'const fs=require("node:fs"); const path=process.argv[1]; const report=JSON.parse(fs.readFileSync(path,"utf8")); report.success=false; fs.writeFileSync(path, `${JSON.stringify(report)}\n`);' "$report"; fi
+          printf '{"success":%s}\n' "$([ "$status" -eq 0 ] && echo true || echo false)" > "$RUNNER_TEMP/ci-evidence/ci-evidence-web/status.json"
+          exit "$status"
+      - name: Preserve web evidence shard
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ci-evidence-web
+          path: ${{ runner.temp }}/ci-evidence
+          if-no-files-found: error
+          retention-days: 1
+
+  vscode:
+    name: VS Code source and host tests
+    needs: [plan, prepare]
+    if: needs.plan.outputs.vscode == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: prepared-package-dist
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
+      - run: pnpm run test:vscode
+
+  packages:
+    name: Package consumers and pack hygiene
+    needs: [plan, prepare]
+    if: needs.plan.outputs.packages == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: prepared-package-dist
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
+      - run: pnpm run build:vscode
+      - run: pnpm exec vitest run --project consumer
+      - run: pnpm run pack:check
+
+  node24:
+    name: Node 24 compatibility lane
+    needs: [plan, prepare]
+    if: needs.plan.outputs.node24 == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_COMPAT_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: prepared-package-dist
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
+      - run: pnpm run test:compat:node24
+
+  packed:
+    name: Packed ${{ matrix.runtime }} runtime and drivers
+    needs: [plan, prepare]
+    if: needs.plan.outputs.packed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [node, bun, deno]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - uses: oven-sh/setup-bun@v2.2.0
         if: matrix.runtime == 'bun'
         with:
-          bun-version: 1.3.14
+          bun-version: ${{ env.BUN_VERSION }}
       - uses: denoland/setup-deno@v2.0.5
         if: matrix.runtime == 'deno'
         with:
-          deno-version: v2.9.3
+          deno-version: v${{ env.DENO_VERSION }}
       - run: pnpm install --frozen-lockfile
-      - name: Packed Bun runtime gate
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: prepared-package-dist
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Run packed Node runtime gate
+        if: matrix.runtime == 'node'
+        env:
+          SQLBRAID_USE_PREBUILT_DIST: "true"
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
+        run: pnpm run test:runtime:node
+      - name: Run packed Bun runtime gate
         if: matrix.runtime == 'bun'
         env:
-          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations-${{ matrix.runtime }}
+          SQLBRAID_USE_PREBUILT_DIST: "true"
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
         run: pnpm run test:runtime:bun
-      - name: Packed Deno runtime gate
+      - name: Run packed Deno runtime gate
         if: matrix.runtime == 'deno'
         env:
-          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations-${{ matrix.runtime }}
+          SQLBRAID_USE_PREBUILT_DIST: "true"
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
         run: pnpm run test:runtime:deno
-      - name: Record native Deno support evidence
-        if: matrix.runtime == 'deno'
-        run: node scripts/support-evidence.mjs "${{ runner.temp }}/runtime-observations-deno/deno-deno-runtime-tests.json" "${{ runner.temp }}/runtime-observations-deno/support-evidence-deno.json"
-      - name: Preserve packed runtime tuple evidence
+      - name: Preserve packed runtime evidence
         uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ matrix.runtime }}-runtime-tuple-evidence
-          path: ${{ runner.temp }}/runtime-observations-${{ matrix.runtime }}
+          path: ${{ runner.temp }}/runtime-observations
           if-no-files-found: error
+          retention-days: 14
 
-  bun-sql-matrix:
+  bun_sql:
     name: Bun.SQL first-party driver matrix
+    needs: [plan, prepare]
+    if: needs.plan.outputs.bun_sql == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     services:
@@ -142,27 +389,88 @@ jobs:
           - 3307:3306
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
-        with:
-          node-version: 22.18.0
       - uses: pnpm/action-setup@v6.1.0
         with:
-          version: 12.3.4
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - uses: oven-sh/setup-bun@v2.2.0
         with:
-          bun-version: 1.3.14
+          bun-version: ${{ env.BUN_VERSION }}
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run build
-      - name: Run Bun.SQL backend matrix
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: prepared-package-dist
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Run Bun.SQL Vitest project
         env:
-          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/bun-sql-observations
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence/ci-evidence-bun-sql/observations
           SQLBRAID_POSTGRES_URL: postgres://postgres:sqlbraid@127.0.0.1:5432/postgres
           SQLBRAID_MYSQL_URL: mysql://root:sqlbraid@127.0.0.1:3306/mysql
           SQLBRAID_MARIADB_URL: mysql://root:sqlbraid@127.0.0.1:3307/mysql
-        run: pnpm run test:db:bun-sql
-      - name: Preserve Bun.SQL tuple evidence
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-evidence/ci-evidence-bun-sql/observations"
+          report="$RUNNER_TEMP/ci-evidence/ci-evidence-bun-sql/results.json"
+          set +e
+          pnpm run test:db:bun-sql:prepared -- --reporter=default --reporter=json --outputFile.json="$report"
+          status=$?
+          printf '{"success":%s}\n' "$([ "$status" -eq 0 ] && echo true || echo false)" > "$RUNNER_TEMP/ci-evidence/ci-evidence-bun-sql/status.json"
+          exit "$status"
+      - name: Preserve Bun.SQL evidence shard
+        if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: bun-sql-runtime-tuple-evidence
-          path: ${{ runner.temp }}/bun-sql-observations
+          name: ci-evidence-bun-sql
+          path: ${{ runner.temp }}/ci-evidence
           if-no-files-found: error
+          retention-days: 1
+
+  evidence:
+    name: Aggregate support evidence
+    needs: [plan, common, db, web, bun_sql]
+    if: always() && needs.plan.outputs.evidence == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          pattern: ci-evidence-*
+          path: ${{ runner.temp }}/ci-evidence
+          merge-multiple: true
+      - name: Merge successful shard reports and observations
+        env:
+          EXPECTED_SHARDS: ${{ join(fromJSON(needs.plan.outputs.evidence_shards), ',') }}
+        run: |
+          node scripts/merge-vitest-results.mjs \
+            --output "$RUNNER_TEMP/merged-results.json" \
+            --input-root "$RUNNER_TEMP/ci-evidence" \
+            --expected "$EXPECTED_SHARDS" \
+            --observations-output "$RUNNER_TEMP/merged-observations"
+      - name: Record final support evidence
+        run: node scripts/support-evidence.mjs "$RUNNER_TEMP/merged-results.json" "$RUNNER_TEMP/support-evidence.json" "$RUNNER_TEMP/merged-observations"
+      - name: Preserve final support evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: support-profile-evidence
+          path: ${{ runner.temp }}/support-evidence.json
+          if-no-files-found: error
+          retention-days: 14
+
+  ci-required:
+    name: CI required
+    needs: [plan, prepare, common, db, web, vscode, packages, node24, packed, bun_sql, evidence]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Validate selected lane results
+        env:
+          CI_PLAN: ${{ needs.plan.outputs.plan }}
+          CI_RESULTS: >-
+            {"plan":"${{ needs.plan.result }}","prepare":"${{ needs.prepare.result }}","common":"${{ needs.common.result }}","db":"${{ needs.db.result }}","web":"${{ needs.web.result }}","vscode":"${{ needs.vscode.result }}","packages":"${{ needs.packages.result }}","node24":"${{ needs.node24.result }}","packed":"${{ needs.packed.result }}","bun_sql":"${{ needs.bun_sql.result }}","evidence":"${{ needs.evidence.result }}"}
+        run: node scripts/ci-plan.mjs --verify "$CI_PLAN" --results "$CI_RESULTS"

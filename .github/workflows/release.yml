@@ -21,6 +21,13 @@ permissions:
   contents: write
   id-token: write
 
+env:
+  NODE_VERSION: 22.18.0
+  NODE_COMPAT_VERSION: 24.21.0
+  PNPM_VERSION: 12.3.4
+  BUN_VERSION: 1.3.14
+  DENO_VERSION: 2.9.3
+
 jobs:
   postgres-current-capabilities:
     name: PostgreSQL 18 current capability gate
@@ -31,14 +38,14 @@ jobs:
     steps:
       - name: Check out exact source
         uses: actions/checkout@v7.0.1
-      - name: Set up Node 22.18.0
-        uses: actions/setup-node@v7.0.0
+      - uses: pnpm/action-setup@v6.1.0
         with:
-          node-version: 22.18.0
-      - name: Set up pnpm 12.3.4
-        uses: pnpm/action-setup@v6.1.0
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
         with:
-          version: 12.3.4
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
       - name: Build packages
@@ -56,12 +63,356 @@ jobs:
           path: ${{ runner.temp }}/pg-current-evidence.json
           if-no-files-found: error
 
-  release:
+  release-prep:
     if: github.event_name != 'schedule'
-    needs: postgres-current-capabilities
-    name: Immutable release gates
+    name: Prepare immutable release candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 35
+    steps:
+      - name: Check out exact release ref
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Determine release version
+        shell: bash
+        run: |
+          manifest_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            [[ "$GITHUB_REF_NAME" == v* && "$tag_version" == "$manifest_version" ]] || {
+              echo "Release tag and package version must match."
+              exit 1
+            }
+            echo "SQLBRAID_RELEASE_VERSION=$tag_version" >> "$GITHUB_ENV"
+          else
+            echo "SQLBRAID_RELEASE_VERSION=$manifest_version" >> "$GITHUB_ENV"
+          fi
+      - name: Assert clean tree and exact ref
+        run: node scripts/release.mjs --mode preflight
+      - name: Validate support and translations
+        run: pnpm run support:validate && pnpm run docs:translations
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Build packages and extension once
+        run: pnpm run build
+      - name: Pack immutable release candidate
+        env:
+          SQLBRAID_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
+        run: node scripts/release.mjs --mode pack --artifact-dir "$SQLBRAID_RELEASE_ARTIFACT_DIR"
+      - name: Archive candidate and prepared build
+        run: |
+          tar -czf "$RUNNER_TEMP/release-candidate.tar.gz" -C "$RUNNER_TEMP" sqlbraid-release-artifacts
+          tar -czf "$RUNNER_TEMP/prepared-build.tar.gz" packages/*/dist extensions/vscode/dist
+      - name: Preserve release preparation
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: |
+            ${{ runner.temp }}/release-candidate.tar.gz
+            ${{ runner.temp }}/prepared-build.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  release-node22:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Node 22 complete Vitest and support evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Node 22 complete Vitest gate
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/support-observations
+        run: pnpm exec vitest run --reporter=default --reporter=json --outputFile.json=${{ runner.temp }}/support-results.json
+      - name: Record executed support evidence
+        run: node scripts/support-evidence.mjs "${{ runner.temp }}/support-results.json" "${{ runner.temp }}/support-evidence.json" "${{ runner.temp }}/support-observations"
+      - name: Preserve support evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: support-profile-evidence
+          path: ${{ runner.temp }}/support-evidence.json
+          if-no-files-found: error
+          retention-days: 14
+
+  release-node24:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Node 24 full Vitest compatibility gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_COMPAT_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - run: pnpm run typecheck
+      - run: pnpm exec vitest run
+
+  release-browser:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Browser and D1 release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:d1 && pnpm run test:browser
+
+  release-vscode:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: VS Code source and host release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - run: pnpm run test:vscode
+
+  release-pack:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Validate immutable packages and VSIX
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: |
+          tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+          tar -xzf "$RUNNER_TEMP/prepared/release-candidate.tar.gz" -C "$RUNNER_TEMP"
+      - name: Validate candidate package and VSIX bytes
+        env:
+          SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
+          SQLBRAID_VSIX_OUTPUT: ${{ runner.temp }}/sqlbraid-release-artifacts/sqlbraid.vsix
+        run: pnpm run pack:check
+      - name: Preserve validated candidate
+        run: tar -czf "$RUNNER_TEMP/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP" sqlbraid-release-artifacts
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-candidate-validated
+          path: ${{ runner.temp }}/release-candidate-validated.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  release-docs:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Documentation release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - run: pnpm run docs:build
+
+  release-examples:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Packed examples release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - run: pnpm run test:examples
+
+  release-benchmarks:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Release benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - run: pnpm run benchmark:bulk && pnpm run benchmark:fidelity
+
+  release-runtime:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Packed ${{ matrix.runtime }} runtime and drivers
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [node, bun, deno]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: oven-sh/setup-bun@v2.2.0
+        if: matrix.runtime == 'bun'
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: denoland/setup-deno@v2.0.5
+        if: matrix.runtime == 'deno'
+        with:
+          deno-version: v${{ env.DENO_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Node packed runtime gate
+        if: matrix.runtime == 'node'
+        env:
+          SQLBRAID_USE_PREBUILT_DIST: "true"
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
+        run: pnpm run test:runtime:node
+      - name: Bun packed runtime gate
+        if: matrix.runtime == 'bun'
+        env:
+          SQLBRAID_USE_PREBUILT_DIST: "true"
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
+        run: pnpm run test:runtime:bun
+      - name: Deno packed runtime gate
+        if: matrix.runtime == 'deno'
+        env:
+          SQLBRAID_USE_PREBUILT_DIST: "true"
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
+        run: pnpm run test:runtime:deno
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-${{ matrix.runtime }}-runtime-evidence
+          path: ${{ runner.temp }}/runtime-observations
+          if-no-files-found: error
+          retention-days: 14
+
+  release-bun-sql:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Bun.SQL release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16.4-alpine
@@ -95,181 +446,75 @@ jobs:
         ports:
           - 3307:3306
     steps:
-      - name: Check out exact release ref
-        uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
         with:
-          fetch-depth: 0
-
-      - name: Select runner-local artifact paths
-        run: |
-          echo "SQLBRAID_RELEASE_ARTIFACT_DIR=$RUNNER_TEMP/sqlbraid-release-artifacts" >> "$GITHUB_ENV"
-          echo "SQLBRAID_VSIX_OUTPUT=$RUNNER_TEMP/sqlbraid-release-artifacts/sqlbraid.vsix" >> "$GITHUB_ENV"
-
-      - name: Set up Node 22.18.0
-        uses: actions/setup-node@v7.0.0
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
         with:
-          node-version: 22.18.0
-
-      - name: Set up pnpm 12.3.4
-        uses: pnpm/action-setup@v6.1.0
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
-          version: 12.3.4
-
-      - name: Set up Bun 1.3.14
-        uses: oven-sh/setup-bun@v2.2.0
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
         with:
-          bun-version: 1.3.14
-
-      - name: Set up Deno 2.9.3
-        uses: denoland/setup-deno@v2.0.5
-        with:
-          deno-version: v2.9.3
-
-      - name: Install frozen dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install browser conformance runtime
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Determine release version from manifest and tag
-        shell: bash
-        run: |
-          manifest_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            tag_version="${GITHUB_REF_NAME#v}"
-            [[ "$GITHUB_REF_NAME" == v* ]] || { echo "Release tags must start with v."; exit 1; }
-            [[ "$tag_version" == "$manifest_version" ]] || {
-              echo "Tag version $tag_version does not match package.json version $manifest_version."
-              exit 1
-            }
-            echo "SQLBRAID_RELEASE_VERSION=$tag_version" >> "$GITHUB_ENV"
-          else
-            echo "SQLBRAID_RELEASE_VERSION=$manifest_version" >> "$GITHUB_ENV"
-          fi
-
-      - name: Assert clean tree, versions, and release ref
-        run: node scripts/release.mjs --mode preflight
-
-      - name: Install npm trusted-publishing CLI
-        if: github.event_name == 'push' || inputs.release_mode == 'dry-run'
-        run: npm install --global npm@11.15.0
-
-      - name: Typecheck
-        run: pnpm run typecheck
-
-      - name: Validate support claims and translation freshness
-        run: pnpm run support:validate && pnpm run docs:translations
-
-      - name: Build packages and extension
-        run: pnpm run build
-
-      - name: Node 22 unit, consumers and real-driver fidelity
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Bun.SQL first-party driver matrix
         env:
-          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/support-observations
-        run: pnpm exec vitest run --reporter=default --reporter=json --outputFile.json=${{ runner.temp }}/support-results.json
-
-      - name: Bulk structural benchmark
-        run: pnpm run benchmark:bulk
-
-      - name: Value fidelity normalization benchmark
-        run: pnpm run benchmark:fidelity
-
-      - name: Select Node 24 for full finance-inclusive gate
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version: 24.21.0
-
-      - name: Full test and VS Code source host gate
-        run: pnpm run test:all
-
-      - name: Restore Node 22 runtime evidence
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version: 22.18.0
-
-      - name: Node packed runtime gate
-        env:
-          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
-        run: pnpm run test:runtime:node
-
-      - name: Bun packed runtime gate
-        env:
-          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
-        run: pnpm run test:runtime:bun
-
-      - name: Bun.SQL first-party driver matrix gate
-        env:
+          SQLBRAID_USE_PREBUILT_DIST: "true"
           SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/bun-sql-observations
           SQLBRAID_BUN_SQL_POSTGRES_URL: postgres://postgres:sqlbraid@127.0.0.1:5432/postgres
           SQLBRAID_BUN_SQL_MYSQL_URL: mysql://root:sqlbraid@127.0.0.1:3306/mysql
           SQLBRAID_BUN_SQL_MARIADB_URL: mysql://root:sqlbraid@127.0.0.1:3307/mysql
         run: pnpm run test:runtime:bun-sql
-
-      - name: Preserve Bun.SQL tuple evidence
-        uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@v7.0.1
         with:
-          name: bun-sql-runtime-tuple-evidence
+          name: release-bun-sql-evidence
           path: ${{ runner.temp }}/bun-sql-observations
           if-no-files-found: error
           retention-days: 14
 
-      - name: Deno packed runtime gate
-        env:
-          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
-        run: pnpm run test:runtime:deno
-
-      - name: Preserve packed runtime tuple evidence
-        uses: actions/upload-artifact@v7.0.1
+  release-final:
+    if: github.event_name != 'schedule'
+    needs: [postgres-current-capabilities, release-prep, release-node22, release-node24, release-browser, release-vscode, release-pack, release-docs, release-examples, release-benchmarks, release-runtime, release-bun-sql]
+    name: Final release certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact release ref
+        uses: actions/checkout@v7.0.1
         with:
-          name: packed-runtime-tuple-evidence
-          path: ${{ runner.temp }}/runtime-observations
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Documentation site gate
-        run: pnpm run docs:build
-
-      - name: Packed examples gate
-        run: pnpm run test:examples
-
-      - name: Pack immutable release candidate
-        run: >-
-          node scripts/release.mjs
-          --mode pack
-          --artifact-dir "$SQLBRAID_RELEASE_ARTIFACT_DIR"
-
-      - name: Pack hygiene and installed VSIX host gate
-        env:
-          SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
-        run: pnpm run pack:check
-
-      - name: Preserve validated release artifacts
-        uses: actions/upload-artifact@v7.0.1
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6.1.0
         with:
-          name: sqlbraid-${{ github.event_name == 'push' && github.ref_name || 'rc' }}
-          path: ${{ runner.temp }}/sqlbraid-release-artifacts
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Record executed support evidence
-        run: node scripts/support-evidence.mjs "${{ runner.temp }}/support-results.json" "${{ runner.temp }}/support-evidence.json" "${{ runner.temp }}/support-observations"
-
-      - name: Preserve exact profile evidence
-        uses: actions/upload-artifact@v7.0.1
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v7.0.0
         with:
-          name: support-profile-evidence
-          path: ${{ runner.temp }}/support-evidence.json
-          if-no-files-found: error
-          retention-days: 14
-
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7.0.1
+        with:
+          name: release-candidate-validated
+          path: ${{ runner.temp }}/validated
+      - run: tar -xzf "$RUNNER_TEMP/validated/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP"
+      - name: Assert exact candidate and tag invariants
+        run: node scripts/release.mjs --mode preflight
+      - name: Install npm trusted-publishing CLI
+        if: github.event_name == 'push' || inputs.release_mode == 'dry-run'
+        run: npm install --global npm@11.15.0
       - name: npm publication dry run
         if: github.event_name == 'workflow_dispatch' && inputs.release_mode == 'dry-run'
-        run: node scripts/release.mjs --mode publish-dry-run --artifact-dir "$SQLBRAID_RELEASE_ARTIFACT_DIR"
-
+        run: node scripts/release.mjs --mode publish-dry-run --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts"
       - name: Publish validated tarballs with npm provenance
         if: github.event_name == 'push'
-        run: node scripts/release.mjs --mode publish --artifact-dir "$SQLBRAID_RELEASE_ARTIFACT_DIR"
-
+        run: node scripts/release.mjs --mode publish --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts"
       - name: Create a draft GitHub Release
         if: github.event_name == 'push'
         env:
@@ -278,4 +523,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft
           --title "SQLBraid $GITHUB_REF_NAME"
           --notes-file docs/SQLBraid_0.1.0_release_notes.md
-          "$SQLBRAID_VSIX_OUTPUT"
+          "$RUNNER_TEMP/sqlbraid-release-artifacts/sqlbraid.vsix"

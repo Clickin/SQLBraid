@@ -47,7 +47,7 @@
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml"
   },
   "ci": {
-    "command": "pnpm run test:db:bun-sql",
+    "command": "pnpm run test:db:bun-sql:prepared",
     "workflow": ".github/workflows/runtime-portability.yml",
     "releaseBlocking": true
   },
