@@ -1,0 +1,925 @@
+{
+  "profiles": {
+    "pg-lossless-text": {
+      "id": "pg-lossless-text",
+      "driverId": "pg",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {
+        "parserProfile": {
+          "json": "text",
+          "temporal": "text"
+        }
+      },
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "postgres-lossless-text",
+        "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
+      },
+      "fixtureTestIds": [
+        "postgres.numeric.exact-integer",
+        "postgres.numeric.exact-decimal",
+        "postgres.data.temporal-lossless",
+        "postgres.data.profile-runtime-codegen",
+        "postgres.data.containers-lossless-text",
+        "postgres.numeric.environment-refresh"
+      ]
+    },
+    "pg-native": {
+      "id": "pg-native",
+      "driverId": "pg",
+      "json": "native",
+      "temporal": "native",
+      "requiredOptions": {
+        "parserProfile": {
+          "json": "native",
+          "temporal": "native"
+        }
+      },
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "object/array/string/number/boolean/null",
+        "temporal": "Date or string or interval object or infinity number"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "unknown",
+        "temporal": "Date or string or unknown interval; infinity rejects"
+      },
+      "typePolicy": {
+        "id": "postgres-native",
+        "hash": "5fa897b30c2b3d6a91127df6bbfdeb090356595542616e828ae3bbe302cfdb8e"
+      },
+      "fixtureTestIds": [
+        "postgres.data.parser-profiles",
+        "postgres.data.containers-native-classification"
+      ]
+    },
+    "mysql2-lossless-text": {
+      "id": "mysql2-lossless-text",
+      "driverId": "mysql2",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {
+        "supportBigNumbers": true,
+        "bigNumberStrings": true,
+        "decimalNumbers": false,
+        "rowsAsArray": false,
+        "jsonStrings": true,
+        "dateStrings": true
+      },
+      "driverRawRepresentations": {
+        "integer": "number (INT); string (BIGINT)",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "mysql2-lossless-text",
+        "hash": "01b2f34104422f0d5e3715d4cb85905f28a52740abb9dcf547e002dc9cf4169b"
+      },
+      "fixtureTestIds": [
+        "mysql.numeric.exact-integer",
+        "mysql.numeric.exact-decimal",
+        "mysql.data.json-lossless-text",
+        "mysql.data.temporal-lossless",
+        "mysql.data.profile-conformance"
+      ]
+    },
+    "mysql2-native": {
+      "id": "mysql2-native",
+      "driverId": "mysql2",
+      "json": "native",
+      "temporal": "native",
+      "requiredOptions": {
+        "supportBigNumbers": true,
+        "bigNumberStrings": true,
+        "decimalNumbers": false,
+        "rowsAsArray": false,
+        "jsonStrings": false,
+        "dateStrings": false
+      },
+      "driverRawRepresentations": {
+        "integer": "number (INT); string (BIGINT)",
+        "decimal": "string",
+        "json": "object/array/string/number/boolean/null",
+        "temporal": "Date or string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "unknown",
+        "temporal": "Date or string"
+      },
+      "typePolicy": {
+        "id": "mysql2-native",
+        "hash": "a0e47c8a69732bcd1779dfa76872182e8dd921d5f5dbd5f6c679e88cc1bd0c3c"
+      },
+      "fixtureTestIds": [
+        "mysql.data.temporal-native",
+        "mysql.data.native-profile-conformance"
+      ]
+    },
+    "mariadb-lossless-text": {
+      "id": "mariadb-lossless-text",
+      "driverId": "mariadb",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {
+        "decimalAsNumber": false,
+        "insertIdAsNumber": false,
+        "autoJsonMap": false,
+        "dateStrings": true,
+        "timezone": "Z",
+        "bigIntAsNumber": false
+      },
+      "driverRawRepresentations": {
+        "integer": "number (TINY/SMALL/MEDIUM/INT); bigint (BIGINT)",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "mariadb-lossless-text",
+        "hash": "81a8838812f56c3140244ec2572354b58ea9b9eaf1e475e3e1a2d41a77137934"
+      },
+      "fixtureTestIds": [
+        "mariadb.numeric.exact-integer",
+        "mariadb.numeric.exact-decimal",
+        "mariadb.data.json-lossless-text",
+        "mariadb.data.temporal-lossless",
+        "mariadb.data.profile-conformance"
+      ]
+    },
+    "mariadb-native": {
+      "id": "mariadb-native",
+      "driverId": "mariadb",
+      "json": "native",
+      "temporal": "native",
+      "requiredOptions": {
+        "decimalAsNumber": false,
+        "insertIdAsNumber": false,
+        "autoJsonMap": true,
+        "dateStrings": false,
+        "timezone": "Z",
+        "bigIntAsNumber": false
+      },
+      "driverRawRepresentations": {
+        "integer": "number (TINY/SMALL/MEDIUM/INT); bigint (BIGINT)",
+        "decimal": "string",
+        "json": "object/array/string/number/boolean/null",
+        "temporal": "Date or string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "unknown",
+        "temporal": "Date or string"
+      },
+      "typePolicy": {
+        "id": "mariadb-native",
+        "hash": "216e1b7720285a8dbf1cc0cafd3a889f4e2312cafa31c3015871e2708e2d01d7"
+      },
+      "fixtureTestIds": [
+        "mariadb.data.json-parsed",
+        "mariadb.data.temporal-native",
+        "mariadb.data.native-profile-conformance"
+      ]
+    },
+    "oracle-thin": {
+      "id": "oracle-thin",
+      "driverId": "node-oracledb",
+      "json": "native",
+      "temporal": "native",
+      "requiredOptions": {},
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "object/array/string/number/boolean/null",
+        "temporal": "Date"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "unknown",
+        "temporal": "Date"
+      },
+      "typePolicy": {
+        "id": "oracle-default",
+        "hash": "05f6fd4a7fc0cb2a6c938d420b21792fa4fa2e3a9839aafe30451d94a92d9cdb"
+      },
+      "fixtureTestIds": [
+        "oracle.numeric.exact-decimal",
+        "oracle.data.json-parsed",
+        "oracle.data.temporal-lossless",
+        "oracle.data.json-roots",
+        "oracle.data.objects-unclassified"
+      ]
+    },
+    "mssql-tedious": {
+      "id": "mssql-tedious",
+      "driverId": "tedious",
+      "json": "text",
+      "temporal": "native",
+      "requiredOptions": {},
+      "driverRawRepresentations": {
+        "integer": "number (tinyint/smallint/int); string (bigint)",
+        "decimal": "number",
+        "json": "string",
+        "temporal": "Date"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "unsupported for native number; explicit SQL text stays string",
+        "json": "string",
+        "temporal": "Date"
+      },
+      "typePolicy": {
+        "id": "mssql-default",
+        "hash": "1b5be8926fbd393cd8f4c6c21266ea1608d7014d517c40cf1a08bff55140e99f"
+      },
+      "fixtureTestIds": [
+        "mssql.numeric.exact-integer",
+        "mssql.data.json-lossless-text",
+        "mssql.data.temporal-native",
+        "mssql.data.sql-variant-unclassified"
+      ]
+    },
+    "sqlite-exact-string": {
+      "id": "sqlite-exact-string",
+      "driverId": "node-sqlite",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {},
+      "driverRawRepresentations": {
+        "integer": "bigint or string",
+        "decimal": "storage-dependent bigint, number or string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "sqlite-default",
+        "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
+      },
+      "fixtureTestIds": [
+        "sqlite.numeric.exact-integer",
+        "sqlite.data.json-lossless-text",
+        "sqlite.data.temporal-lossless"
+      ]
+    },
+    "sqlite-wasm-exact-string": {
+      "id": "sqlite-wasm-exact-string",
+      "driverId": "sqlite-wasm",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {},
+      "driverRawRepresentations": {
+        "integer": "bigint",
+        "decimal": "storage-dependent bigint, number or string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "sqlite-default",
+        "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
+      },
+      "fixtureTestIds": [
+        "wasm.numeric.exact-integer",
+        "wasm.data.json-lossless-text",
+        "wasm.data.temporal-lossless"
+      ]
+    },
+    "d1-guarded-safe-integer": {
+      "id": "d1-guarded-safe-integer",
+      "driverId": "cloudflare-d1",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {},
+      "driverRawRepresentations": {
+        "integer": "number",
+        "decimal": "storage-dependent number or string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "sqlite-default",
+        "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
+      },
+      "fixtureTestIds": [
+        "d1.numeric.exact-integer",
+        "d1.data.json-lossless-text",
+        "d1.data.temporal-lossless"
+      ]
+    },
+    "pg-json-native-temporal-text": {
+      "id": "pg-json-native-temporal-text",
+      "driverId": "pg",
+      "json": "native",
+      "temporal": "text",
+      "requiredOptions": {
+        "parserProfile": {
+          "json": "native",
+          "temporal": "text"
+        }
+      },
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "object/array/string/number/boolean/null",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "unknown",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "postgres-json-native-temporal-text",
+        "hash": "5019c418c92a7b8062b2910c945f87f0340cf2bcead966df7602605d0a2a66f1"
+      },
+      "fixtureTestIds": [
+        "postgres.data.pg-json-native-temporal-text-conformance"
+      ]
+    },
+    "pg-json-text-temporal-native": {
+      "id": "pg-json-text-temporal-native",
+      "driverId": "pg",
+      "json": "text",
+      "temporal": "native",
+      "requiredOptions": {
+        "parserProfile": {
+          "json": "text",
+          "temporal": "native"
+        }
+      },
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "Date or string or interval object or infinity number"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "Date or string or unknown interval; infinity rejects"
+      },
+      "typePolicy": {
+        "id": "postgres-json-text-temporal-native",
+        "hash": "d0b807fc59ee744ceae6f491876cd264da188f79180ed66b8f3f31feff5ce61f"
+      },
+      "fixtureTestIds": [
+        "postgres.data.pg-json-text-temporal-native-conformance"
+      ]
+    },
+    "mysql2-json-text": {
+      "id": "mysql2-json-text",
+      "driverId": "mysql2",
+      "json": "text",
+      "temporal": "native",
+      "requiredOptions": {
+        "supportBigNumbers": true,
+        "bigNumberStrings": true,
+        "decimalNumbers": false,
+        "rowsAsArray": false,
+        "jsonStrings": true,
+        "dateStrings": false
+      },
+      "driverRawRepresentations": {
+        "integer": "number (INT); string (BIGINT)",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "Date or string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "Date or string"
+      },
+      "typePolicy": {
+        "id": "mysql2-json-text",
+        "hash": "d48f7d69b942368c7bd14c7eed82a7e8ecf0840bacff644bf52b5fc190f0d8fc"
+      },
+      "fixtureTestIds": [
+        "mysql.data.mysql2-json-text-conformance"
+      ]
+    },
+    "mysql2-date-text": {
+      "id": "mysql2-date-text",
+      "driverId": "mysql2",
+      "json": "native",
+      "temporal": "text",
+      "requiredOptions": {
+        "supportBigNumbers": true,
+        "bigNumberStrings": true,
+        "decimalNumbers": false,
+        "rowsAsArray": false,
+        "jsonStrings": false,
+        "dateStrings": true
+      },
+      "driverRawRepresentations": {
+        "integer": "number (INT); string (BIGINT)",
+        "decimal": "string",
+        "json": "object/array/string/number/boolean/null",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "unknown",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "mysql2-date-text",
+        "hash": "84c902429eefd3d596a6167449b4960bb8bcceca48a57ae9ac870c3dce00f2d8"
+      },
+      "fixtureTestIds": [
+        "mysql.data.mysql2-date-text-conformance"
+      ]
+    },
+    "mariadb-json-text": {
+      "id": "mariadb-json-text",
+      "driverId": "mariadb",
+      "json": "text",
+      "temporal": "native",
+      "requiredOptions": {
+        "bigIntAsNumber": false,
+        "decimalAsNumber": false,
+        "insertIdAsNumber": false,
+        "timezone": "Z",
+        "autoJsonMap": false,
+        "dateStrings": false
+      },
+      "driverRawRepresentations": {
+        "integer": "number (TINY/SMALL/MEDIUM/INT); bigint (BIGINT)",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "Date or string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "Date or string"
+      },
+      "typePolicy": {
+        "id": "mariadb-json-text",
+        "hash": "893bc575754a4a525c5acc0a37fc060729024472e07335267db7579437bcb069"
+      },
+      "fixtureTestIds": [
+        "mariadb.data.mariadb-json-text-conformance"
+      ]
+    },
+    "mariadb-date-text": {
+      "id": "mariadb-date-text",
+      "driverId": "mariadb",
+      "json": "native",
+      "temporal": "text",
+      "requiredOptions": {
+        "bigIntAsNumber": false,
+        "decimalAsNumber": false,
+        "insertIdAsNumber": false,
+        "timezone": "Z",
+        "autoJsonMap": true,
+        "dateStrings": true
+      },
+      "driverRawRepresentations": {
+        "integer": "number (TINY/SMALL/MEDIUM/INT); bigint (BIGINT)",
+        "decimal": "string",
+        "json": "object/array/string/number/boolean/null",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "unknown",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "mariadb-date-text",
+        "hash": "2c1dad0aff904f15e32e33183db5424253b52e6098a57d9106e77e84942aaec9"
+      },
+      "fixtureTestIds": [
+        "mariadb.data.mariadb-date-text-conformance"
+      ]
+    }
+  },
+  "fixtures": {
+    "postgres.numeric.exact-integer": {
+      "profile": "pg-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string"
+      }
+    },
+    "postgres.numeric.exact-decimal": {
+      "profile": "pg-lossless-text",
+      "driverRawRepresentations": {
+        "decimal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "decimal": "string"
+      }
+    },
+    "postgres.data.temporal-lossless": {
+      "profile": "pg-lossless-text",
+      "driverRawRepresentations": {
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "string"
+      }
+    },
+    "postgres.data.parser-profiles": {
+      "profile": "pg-native",
+      "driverRawRepresentations": {
+        "temporal": "Date or string or interval object or infinity number"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "Date or string or unknown interval; infinity rejects"
+      }
+    },
+    "mysql.numeric.exact-integer": {
+      "profile": "mysql2-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "number (INT); string (BIGINT)"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string"
+      }
+    },
+    "mysql.numeric.exact-decimal": {
+      "profile": "mysql2-lossless-text",
+      "driverRawRepresentations": {
+        "decimal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "decimal": "string"
+      }
+    },
+    "mysql.data.json-lossless-text": {
+      "profile": "mysql2-lossless-text",
+      "driverRawRepresentations": {
+        "json": "string"
+      },
+      "sqlbraidRepresentations": {
+        "json": "string"
+      }
+    },
+    "mysql.data.temporal-lossless": {
+      "profile": "mysql2-lossless-text",
+      "driverRawRepresentations": {
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "string"
+      }
+    },
+    "mysql.data.temporal-native": {
+      "profile": "mysql2-native",
+      "driverRawRepresentations": {
+        "temporal": "Date or string"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "Date or string"
+      }
+    },
+    "mariadb.numeric.exact-integer": {
+      "profile": "mariadb-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "number (TINY/SMALL/MEDIUM/INT); bigint (BIGINT)"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string"
+      }
+    },
+    "mariadb.numeric.exact-decimal": {
+      "profile": "mariadb-lossless-text",
+      "driverRawRepresentations": {
+        "decimal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "decimal": "string"
+      }
+    },
+    "mariadb.data.json-lossless-text": {
+      "profile": "mariadb-lossless-text",
+      "driverRawRepresentations": {
+        "json": "string"
+      },
+      "sqlbraidRepresentations": {
+        "json": "string"
+      }
+    },
+    "mariadb.data.temporal-lossless": {
+      "profile": "mariadb-lossless-text",
+      "driverRawRepresentations": {
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "string"
+      }
+    },
+    "mariadb.data.json-parsed": {
+      "profile": "mariadb-native",
+      "driverRawRepresentations": {
+        "json": "object/array/string/number/boolean/null"
+      },
+      "sqlbraidRepresentations": {
+        "json": "unknown"
+      }
+    },
+    "mariadb.data.temporal-native": {
+      "profile": "mariadb-native",
+      "driverRawRepresentations": {
+        "temporal": "Date or string"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "Date or string"
+      }
+    },
+    "oracle.numeric.exact-decimal": {
+      "profile": "oracle-thin",
+      "driverRawRepresentations": {
+        "decimal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "decimal": "string"
+      }
+    },
+    "oracle.data.json-parsed": {
+      "profile": "oracle-thin",
+      "driverRawRepresentations": {
+        "json": "object/array/string/number/boolean/null"
+      },
+      "sqlbraidRepresentations": {
+        "json": "unknown"
+      }
+    },
+    "oracle.data.temporal-lossless": {
+      "profile": "oracle-thin",
+      "driverRawRepresentations": {
+        "temporal": "Date"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "Date"
+      }
+    },
+    "mssql.numeric.exact-integer": {
+      "profile": "mssql-tedious",
+      "driverRawRepresentations": {
+        "integer": "number (tinyint/smallint/int); string (bigint)"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string"
+      }
+    },
+    "mssql.data.json-lossless-text": {
+      "profile": "mssql-tedious",
+      "driverRawRepresentations": {
+        "json": "string"
+      },
+      "sqlbraidRepresentations": {
+        "json": "string"
+      }
+    },
+    "mssql.data.temporal-native": {
+      "profile": "mssql-tedious",
+      "driverRawRepresentations": {
+        "temporal": "Date"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "Date"
+      }
+    },
+    "sqlite.numeric.exact-integer": {
+      "profile": "sqlite-exact-string",
+      "driverRawRepresentations": {
+        "integer": "bigint or string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string"
+      }
+    },
+    "sqlite.data.json-lossless-text": {
+      "profile": "sqlite-exact-string",
+      "driverRawRepresentations": {
+        "json": "string"
+      },
+      "sqlbraidRepresentations": {
+        "json": "string"
+      }
+    },
+    "sqlite.data.temporal-lossless": {
+      "profile": "sqlite-exact-string",
+      "driverRawRepresentations": {
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "string"
+      }
+    },
+    "wasm.numeric.exact-integer": {
+      "profile": "sqlite-wasm-exact-string",
+      "driverRawRepresentations": {
+        "integer": "bigint"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string"
+      }
+    },
+    "wasm.data.json-lossless-text": {
+      "profile": "sqlite-wasm-exact-string",
+      "driverRawRepresentations": {
+        "json": "string"
+      },
+      "sqlbraidRepresentations": {
+        "json": "string"
+      }
+    },
+    "wasm.data.temporal-lossless": {
+      "profile": "sqlite-wasm-exact-string",
+      "driverRawRepresentations": {
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "string"
+      }
+    },
+    "d1.numeric.exact-integer": {
+      "profile": "d1-guarded-safe-integer",
+      "driverRawRepresentations": {
+        "integer": "number"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string"
+      }
+    },
+    "d1.data.json-lossless-text": {
+      "profile": "d1-guarded-safe-integer",
+      "driverRawRepresentations": {
+        "json": "string"
+      },
+      "sqlbraidRepresentations": {
+        "json": "string"
+      }
+    },
+    "d1.data.temporal-lossless": {
+      "profile": "d1-guarded-safe-integer",
+      "driverRawRepresentations": {
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "temporal": "string"
+      }
+    },
+    "postgres.data.profile-runtime-codegen": {
+      "profile": "pg-lossless-text",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "postgres.data.containers-lossless-text": {
+      "profile": "pg-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      }
+    },
+    "postgres.data.containers-native-classification": {
+      "profile": "pg-native",
+      "driverRawRepresentations": {
+        "json": "object/array/string/number/boolean/null"
+      },
+      "sqlbraidRepresentations": {
+        "json": "unknown"
+      }
+    },
+    "oracle.data.json-roots": {
+      "profile": "oracle-thin",
+      "driverRawRepresentations": {
+        "json": "object/array/string/number/boolean/null"
+      },
+      "sqlbraidRepresentations": {}
+    },
+    "oracle.data.objects-unclassified": {
+      "profile": "oracle-thin",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "mssql.data.sql-variant-unclassified": {
+      "profile": "mssql-tedious",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "postgres.numeric.environment-refresh": {
+      "profile": "pg-lossless-text",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "mysql.data.profile-conformance": {
+      "profile": "mysql2-lossless-text",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "mysql.data.native-profile-conformance": {
+      "profile": "mysql2-native",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "mariadb.data.profile-conformance": {
+      "profile": "mariadb-lossless-text",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "mariadb.data.native-profile-conformance": {
+      "profile": "mariadb-native",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "postgres.data.pg-json-native-temporal-text-conformance": {
+      "profile": "pg-json-native-temporal-text",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "postgres.data.pg-json-text-temporal-native-conformance": {
+      "profile": "pg-json-text-temporal-native",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "mysql.data.mysql2-json-text-conformance": {
+      "profile": "mysql2-json-text",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "mysql.data.mysql2-date-text-conformance": {
+      "profile": "mysql2-date-text",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "mariadb.data.mariadb-json-text-conformance": {
+      "profile": "mariadb-json-text",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    },
+    "mariadb.data.mariadb-date-text-conformance": {
+      "profile": "mariadb-date-text",
+      "driverRawRepresentations": {},
+      "sqlbraidRepresentations": {}
+    }
+  }
+}

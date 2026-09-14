@@ -1,31 +1,79 @@
 {
   "id": "mariadb-connector-node-11-8-9",
   "status": "compatible",
-  "database": { "product": "mariadb", "version": "11.8.9", "edition": "community" },
+  "database": {
+    "product": "mariadb",
+    "version": "11.8.9",
+    "edition": "community"
+  },
   "driver": {
     "id": "mariadb",
     "version": "3.5.4",
-    "profile": "connector-node-pv17",
+    "profile": "mariadb-lossless-text",
     "package": "@sqlbraid/mariadb",
     "transport": "text-positional (?)",
     "stream": "MariaDB Connector stream",
     "routine": "prepared CALL emitted result sets; no OUT/INOUT carrier",
     "bulk": "connector-native-batch",
-    "rawRepresentations": { "integer": "bigint", "decimal": "string", "json": "object (autoJsonMap); explicit SQL CAST gives text", "temporal": "Date" },
-    "exclusions": ["MariaDB evidence is separate from mysql2 compatibility", "Bun and Deno MariaDB subpaths are not certified by this target"]
+    "exclusions": [
+      "MariaDB evidence is separate from mysql2 compatibility",
+      "Bun and Deno MariaDB subpaths are not certified by this target"
+    ],
+    "requiredOptions": {
+      "decimalAsNumber": false,
+      "insertIdAsNumber": false,
+      "autoJsonMap": false,
+      "dateStrings": true,
+      "timezone": "Z",
+      "bigIntAsNumber": false
+    },
+    "driverRawRepresentations": {
+      "integer": "number (TINY/SMALL/MEDIUM/INT); bigint (BIGINT)",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    }
   },
-  "runtime": { "id": "node", "version": "22.18.0" },
+  "runtime": {
+    "id": "node",
+    "version": "22.18.0"
+  },
   "reproducibility": {
     "zeroCost": true,
     "description": "GitHub Actions MariaDB service using mariadb:11.8.9.",
     "image": "mariadb:11.8.9",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm exec vitest run", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": {
+    "command": "pnpm exec vitest run",
+    "workflow": ".github/workflows/release.yml",
+    "releaseBlocking": true
+  },
   "numeric": {
-    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "guarded", "profile": "connector-node-pv17" },
-    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "guarded", "profile": "connector-node-pv17" },
-    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless" }
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded",
+      "profile": "mariadb-lossless-text"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "guarded",
+      "profile": "mariadb-lossless-text"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "lossless",
+      "profile": "mariadb-lossless-text"
+    }
   },
   "containers": {
     "postgres-arrays": "unsupported",
@@ -38,41 +86,237 @@
     "vector": "unclassified"
   },
   "capabilities": {
-    "sql.native-transparency": { "status": "guaranteed", "testIds": ["mariadb.sql.native-transparency"] },
-    "sql.generated-structure": { "status": "guaranteed", "testIds": ["mariadb.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "guarded", "conditionCode": "mariadb.exact-numeric-profile", "semantics": "exact-integer", "representation": "string", "fidelity": "guarded", "rawRepresentations": ["bigint", "string"], "testIds": ["mariadb.numeric.exact-integer"] },
-    "numeric.exact-decimal": { "status": "guarded", "conditionCode": "mariadb.exact-numeric-profile", "semantics": "exact-decimal", "representation": "string", "fidelity": "guarded", "rawRepresentations": ["string"], "testIds": ["mariadb.numeric.exact-decimal"] },
-    "numeric.approximate-float": { "status": "guaranteed", "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless", "rawRepresentations": ["number"], "testIds": ["mariadb.numeric.approximate-ieee"] },
-    "numeric.bind-exact": { "status": "guarded", "conditionCode": "mariadb.exact-numeric-profile", "testIds": ["mariadb.numeric.bind-exact"] },
-    "numeric.aggregate": { "status": "guarded", "conditionCode": "mariadb.exact-numeric-profile", "testIds": ["mariadb.numeric.aggregate"] },
-    "data.json-lossless-text": { "status": "guarded", "conditionCode": "mariadb.auto-json-map-false", "rawRepresentations": ["string"], "testIds": ["mariadb.data.json-lossless-text"] },
-    "data.json-parsed": { "status": "guarded", "conditionCode": "mariadb.auto-json-map-true", "rawRepresentations": ["object", "array", "null"], "testIds": ["mariadb.data.json-parsed"] },
-    "data.temporal-lossless": { "status": "guarded", "conditionCode": "mariadb.date-strings-true", "rawRepresentations": ["string"], "testIds": ["mariadb.data.temporal-lossless"] },
-    "data.temporal-native": { "status": "guarded", "conditionCode": "mariadb.date-strings-false", "rawRepresentations": ["Date"], "testIds": ["mariadb.data.temporal-native"] },
-    "data.binary": { "status": "guaranteed", "rawRepresentations": ["Buffer", "Uint8Array"], "testIds": ["mariadb.data.binary"] },
-    "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mariadb.data.uuid"] },
-    "result.rows": { "status": "guaranteed", "testIds": ["mariadb.result.rows"] },
-    "result.command": { "status": "guaranteed", "testIds": ["mariadb.result.command"] },
-    "result.multiple-sets": { "status": "guaranteed", "testIds": ["mariadb.result.multiple-sets"] },
-    "result.standard-schema": { "status": "guaranteed", "testIds": ["mariadb.result.standard-schema"] },
-    "execution.stream": { "status": "guaranteed", "testIds": ["mariadb.execution.stream"] },
-    "execution.bulk": { "status": "guaranteed", "testIds": ["mariadb.execution.bulk"] },
-    "execution.transaction": { "status": "guaranteed", "testIds": ["mariadb.execution.transaction"] },
-    "execution.savepoint": { "status": "guaranteed", "testIds": ["mariadb.execution.savepoint"] },
-    "execution.prepared": { "status": "guaranteed", "testIds": ["mariadb.execution.prepared"] },
-    "routine.scalar-out": { "status": "unsupported", "testIds": [] },
-    "routine.inout": { "status": "unsupported", "testIds": [] },
-    "routine.resultsets": { "status": "guaranteed", "testIds": ["mariadb.routine.resultsets"] },
-    "routine.cursor": { "status": "unsupported", "testIds": [] },
-    "routine.return-status": { "status": "unsupported", "testIds": [] },
-    "metadata.identity": { "status": "guaranteed", "testIds": ["mariadb.metadata.identity"] },
-    "metadata.generated": { "status": "guaranteed", "testIds": ["mariadb.metadata.generated"] },
-    "metadata.routines": { "status": "guaranteed", "testIds": ["mariadb.metadata.routines"] },
-    "metadata.types": { "status": "guaranteed", "testIds": ["mariadb.metadata.types"] },
-    "dml.insert-returning": { "status": "guaranteed", "testIds": ["mariadb.dml.insert-returning"] },
-    "dml.update-returning": { "status": "unsupported", "testIds": [] },
-    "dml.delete-returning": { "status": "guaranteed", "testIds": ["mariadb.dml.delete-returning"] },
-    "dml.upsert-returning": { "status": "guaranteed", "testIds": ["mariadb.dml.upsert-returning"] }
+    "sql.native-transparency": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.sql.native-transparency"
+      ]
+    },
+    "sql.generated-structure": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.sql.generated-structure"
+      ]
+    },
+    "numeric.exact-integer": {
+      "status": "guarded",
+      "conditionCode": "mariadb.exact-numeric-profile",
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded",
+      "testIds": [
+        "mariadb.numeric.exact-integer"
+      ],
+      "driverRawRepresentations": [
+        "number",
+        "bigint"
+      ]
+    },
+    "numeric.exact-decimal": {
+      "status": "guarded",
+      "conditionCode": "mariadb.exact-numeric-profile",
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "guarded",
+      "testIds": [
+        "mariadb.numeric.exact-decimal"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "numeric.approximate-float": {
+      "status": "guaranteed",
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "lossless",
+      "testIds": [
+        "mariadb.numeric.approximate-ieee"
+      ],
+      "driverRawRepresentations": [
+        "number"
+      ]
+    },
+    "numeric.bind-exact": {
+      "status": "guarded",
+      "conditionCode": "mariadb.exact-numeric-profile",
+      "testIds": [
+        "mariadb.numeric.bind-exact"
+      ]
+    },
+    "numeric.aggregate": {
+      "status": "guarded",
+      "conditionCode": "mariadb.exact-numeric-profile",
+      "testIds": [
+        "mariadb.numeric.aggregate"
+      ]
+    },
+    "data.json-lossless-text": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.data.json-lossless-text"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "data.temporal-lossless": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.data.temporal-lossless"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "data.binary": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.data.binary"
+      ],
+      "driverRawRepresentations": [
+        "Buffer",
+        "Uint8Array"
+      ]
+    },
+    "data.uuid": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.data.uuid"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "result.rows": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.result.rows"
+      ]
+    },
+    "result.command": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.result.command"
+      ]
+    },
+    "result.multiple-sets": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.result.multiple-sets"
+      ]
+    },
+    "result.standard-schema": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.result.standard-schema"
+      ]
+    },
+    "execution.stream": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.execution.stream"
+      ]
+    },
+    "execution.bulk": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.execution.bulk"
+      ]
+    },
+    "execution.transaction": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.execution.transaction"
+      ]
+    },
+    "execution.savepoint": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.execution.savepoint"
+      ]
+    },
+    "execution.prepared": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.execution.prepared"
+      ]
+    },
+    "routine.scalar-out": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.inout": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.resultsets": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.routine.resultsets"
+      ]
+    },
+    "routine.cursor": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.return-status": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "metadata.identity": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.metadata.identity"
+      ]
+    },
+    "metadata.generated": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.metadata.generated"
+      ]
+    },
+    "metadata.routines": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.metadata.routines"
+      ]
+    },
+    "metadata.types": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.metadata.types"
+      ]
+    },
+    "dml.insert-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.dml.insert-returning"
+      ]
+    },
+    "dml.update-returning": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "dml.delete-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.dml.delete-returning"
+      ]
+    },
+    "dml.upsert-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "mariadb.dml.upsert-returning"
+      ]
+    }
   },
-  "evidence": { "status": "pending", "runs": [] }
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  },
+  "typePolicy": {
+    "id": "mariadb-lossless-text",
+    "hash": "81a8838812f56c3140244ec2572354b58ea9b9eaf1e475e3e1a2d41a77137934"
+  }
 }

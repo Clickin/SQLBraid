@@ -26,7 +26,9 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run build
       - name: Node 22 unit, consumers and real-driver fidelity
-        run: pnpm exec vitest run
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/support-observations
+        run: pnpm exec vitest run --reporter=default --reporter=json --outputFile.json=${{ runner.temp }}/support-results.json
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: 24.21.0
@@ -35,6 +37,15 @@ jobs:
         with:
           node-version: 22.18.0
       - run: pnpm run test:runtime:node
+      - name: Record executed support evidence
+        run: node scripts/support-evidence.mjs "${{ runner.temp }}/support-results.json" "${{ runner.temp }}/support-evidence.json" "${{ runner.temp }}/support-observations"
+      - name: Preserve exact profile evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: support-profile-evidence
+          path: ${{ runner.temp }}/support-evidence.json
+          if-no-files-found: error
+          retention-days: 14
 
   runtime-packed:
     name: Packed ${{ matrix.runtime }} runtime and drivers

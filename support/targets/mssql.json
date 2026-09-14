@@ -1,31 +1,73 @@
 {
   "id": "mssql-tedious-developer-node-2022-cu18",
   "status": "compatible",
-  "database": { "product": "mssql", "version": "2022-CU18", "edition": "Developer" },
+  "database": {
+    "product": "mssql",
+    "version": "2022-CU18",
+    "edition": "Developer"
+  },
   "driver": {
     "id": "tedious",
     "version": "20.0.0",
-    "profile": "typed-request",
+    "profile": "mssql-tedious",
     "package": "@sqlbraid/mssql",
     "transport": "typed request (@p1..@pN)",
     "stream": "bounded row events",
     "routine": "Tedious callProcedure; OUTPUT, RETURN and emitted row events",
     "bulk": "prepared-loop",
-    "rawRepresentations": { "integer": "string", "decimal": "number", "json": "text", "temporal": "Date" },
-    "exclusions": ["CURSOR VARYING OUTPUT is unsupported", "Decimal and Numeric input is restricted to values safely representable by Tedious Number conversion", "Bun and Deno Tedious subpaths are not certified by this target"]
+    "exclusions": [
+      "CURSOR VARYING OUTPUT is unsupported",
+      "Decimal and Numeric input is restricted to values safely representable by Tedious Number conversion",
+      "Bun and Deno Tedious subpaths are not certified by this target"
+    ],
+    "requiredOptions": {},
+    "driverRawRepresentations": {
+      "integer": "number (tinyint/smallint/int); string (bigint)",
+      "decimal": "number",
+      "json": "string",
+      "temporal": "Date"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "unsupported for native number; explicit SQL text stays string",
+      "json": "string",
+      "temporal": "Date"
+    }
   },
-  "runtime": { "id": "node", "version": "22.18.0" },
+  "runtime": {
+    "id": "node",
+    "version": "22.18.0"
+  },
   "reproducibility": {
     "zeroCost": true,
     "description": "Testcontainers mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04 with Developer edition.",
     "image": "mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm exec vitest run", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": {
+    "command": "pnpm exec vitest run",
+    "workflow": ".github/workflows/release.yml",
+    "releaseBlocking": true
+  },
   "numeric": {
-    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "profile": "typed-request" },
-    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported", "profile": "typed-request" },
-    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless" }
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded",
+      "profile": "mssql-tedious"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "profile": "mssql-tedious"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "lossless",
+      "profile": "mssql-tedious"
+    }
   },
   "containers": {
     "postgres-arrays": "unsupported",
@@ -38,40 +80,249 @@
     "vector": "unclassified"
   },
   "capabilities": {
-    "sql.native-transparency": { "status": "guaranteed", "testIds": ["mssql.sql.native-transparency"] },
-    "sql.generated-structure": { "status": "guaranteed", "testIds": ["mssql.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "guaranteed", "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["mssql.numeric.exact-integer"] },
-    "numeric.exact-decimal": { "status": "unsupported", "conditionCode": "mssql.exact-decimal-text-cast-required", "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported", "testIds": ["mssql.numeric.exact-decimal"] },
-    "numeric.approximate-float": { "status": "guaranteed", "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless", "rawRepresentations": ["number"], "testIds": ["mssql.numeric.approximate-float"] },
-    "numeric.bind-exact": { "status": "guarded", "conditionCode": "mssql.character-cast-required", "testIds": ["mssql.numeric.exact-bind-character"] },
-    "numeric.aggregate": { "status": "unsupported", "conditionCode": "mssql.exact-decimal-text-cast-required", "testIds": ["mssql.numeric.exact-decimal"] },
-    "data.json-lossless-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mssql.data.json-lossless-text"] },
-    "data.temporal-native": { "status": "guarded", "conditionCode": "mssql.temporal-text-cast-required", "rawRepresentations": ["Date"], "testIds": ["mssql.data.temporal-native"] },
-    "data.binary": { "status": "guaranteed", "rawRepresentations": ["Buffer", "Uint8Array"], "testIds": ["mssql.data.binary"] },
-    "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mssql.data.uuid"] },
-    "result.rows": { "status": "guaranteed", "testIds": ["mssql.result.rows"] },
-    "result.command": { "status": "guaranteed", "testIds": ["mssql.result.command"] },
-    "metadata.command-safe": { "status": "guarded", "conditionCode": "mssql.safe-count", "testIds": ["mssql.result.command"] },
-    "result.multiple-sets": { "status": "guaranteed", "testIds": ["mssql.result.multiple-sets"] },
-    "result.standard-schema": { "status": "guaranteed", "testIds": ["mssql.result.standard-schema"] },
-    "execution.prepared": { "status": "guaranteed", "testIds": ["mssql.execution.prepared"] },
-    "execution.stream": { "status": "guaranteed", "testIds": ["mssql.execution.stream"] },
-    "execution.bulk": { "status": "guaranteed", "testIds": ["mssql.execution.bulk"] },
-    "execution.transaction": { "status": "guaranteed", "testIds": ["mssql.execution.transaction"] },
-    "execution.savepoint": { "status": "guaranteed", "testIds": ["mssql.execution.savepoint"] },
-    "routine.scalar-out": { "status": "guaranteed", "testIds": ["mssql.routine.scalar-out"] },
-    "routine.inout": { "status": "unsupported", "testIds": [] },
-    "routine.resultsets": { "status": "guaranteed", "testIds": ["mssql.routine.resultsets"] },
-    "routine.cursor": { "status": "unsupported", "testIds": ["mssql.routine.cursor"] },
-    "routine.return-status": { "status": "guaranteed", "testIds": ["mssql.routine.return-status"] },
-    "metadata.identity": { "status": "guaranteed", "testIds": ["mssql.metadata.identity"] },
-    "metadata.generated": { "status": "guaranteed", "testIds": ["mssql.metadata.generated"] },
-    "metadata.routines": { "status": "guaranteed", "testIds": ["mssql.metadata.routines"] },
-    "metadata.types": { "status": "guaranteed", "testIds": ["mssql.metadata.types"] },
-    "dml.insert-returning": { "status": "guaranteed", "testIds": ["mssql.dml.insert-returning"] },
-    "dml.update-returning": { "status": "guaranteed", "testIds": ["mssql.dml.update-returning"] },
-    "dml.delete-returning": { "status": "guaranteed", "testIds": ["mssql.dml.delete-returning"] },
-    "dml.merge-returning": { "status": "guaranteed", "testIds": ["mssql.dml.merge-returning"] }
+    "sql.native-transparency": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.sql.native-transparency"
+      ]
+    },
+    "sql.generated-structure": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.sql.generated-structure"
+      ]
+    },
+    "numeric.exact-integer": {
+      "status": "guaranteed",
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded",
+      "testIds": [
+        "mssql.numeric.exact-integer"
+      ],
+      "driverRawRepresentations": [
+        "number",
+        "string"
+      ]
+    },
+    "numeric.exact-decimal": {
+      "status": "unsupported",
+      "conditionCode": "mssql.exact-decimal-text-cast-required",
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "testIds": [
+        "mssql.numeric.exact-decimal"
+      ]
+    },
+    "numeric.approximate-float": {
+      "status": "guaranteed",
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "lossless",
+      "testIds": [
+        "mssql.numeric.approximate-float"
+      ],
+      "driverRawRepresentations": [
+        "number"
+      ]
+    },
+    "numeric.bind-exact": {
+      "status": "guarded",
+      "conditionCode": "mssql.character-cast-required",
+      "testIds": [
+        "mssql.numeric.exact-bind-character"
+      ]
+    },
+    "numeric.aggregate": {
+      "status": "unsupported",
+      "conditionCode": "mssql.exact-decimal-text-cast-required",
+      "testIds": [
+        "mssql.numeric.exact-decimal"
+      ]
+    },
+    "data.json-lossless-text": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.data.json-lossless-text"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "data.temporal-native": {
+      "status": "guarded",
+      "conditionCode": "mssql.temporal-text-cast-required",
+      "testIds": [
+        "mssql.data.temporal-native"
+      ],
+      "driverRawRepresentations": [
+        "Date"
+      ]
+    },
+    "data.binary": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.data.binary"
+      ],
+      "driverRawRepresentations": [
+        "Buffer",
+        "Uint8Array"
+      ]
+    },
+    "data.uuid": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.data.uuid"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "result.rows": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.result.rows"
+      ]
+    },
+    "result.command": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.result.command"
+      ]
+    },
+    "metadata.command-safe": {
+      "status": "guarded",
+      "conditionCode": "mssql.safe-count",
+      "testIds": [
+        "mssql.result.command"
+      ]
+    },
+    "result.multiple-sets": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.result.multiple-sets"
+      ]
+    },
+    "result.standard-schema": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.result.standard-schema"
+      ]
+    },
+    "execution.prepared": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.execution.prepared"
+      ]
+    },
+    "execution.stream": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.execution.stream"
+      ]
+    },
+    "execution.bulk": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.execution.bulk"
+      ]
+    },
+    "execution.transaction": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.execution.transaction"
+      ]
+    },
+    "execution.savepoint": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.execution.savepoint"
+      ]
+    },
+    "routine.scalar-out": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.routine.scalar-out"
+      ]
+    },
+    "routine.inout": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.resultsets": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.routine.resultsets"
+      ]
+    },
+    "routine.cursor": {
+      "status": "unsupported",
+      "testIds": [
+        "mssql.routine.cursor"
+      ]
+    },
+    "routine.return-status": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.routine.return-status"
+      ]
+    },
+    "metadata.identity": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.metadata.identity"
+      ]
+    },
+    "metadata.generated": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.metadata.generated"
+      ]
+    },
+    "metadata.routines": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.metadata.routines"
+      ]
+    },
+    "metadata.types": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.metadata.types"
+      ]
+    },
+    "dml.insert-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.dml.insert-returning"
+      ]
+    },
+    "dml.update-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.dml.update-returning"
+      ]
+    },
+    "dml.delete-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.dml.delete-returning"
+      ]
+    },
+    "dml.merge-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "mssql.dml.merge-returning"
+      ]
+    }
   },
-  "evidence": { "status": "pending", "runs": [] }
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  },
+  "typePolicy": {
+    "id": "mssql-default",
+    "hash": "1b5be8926fbd393cd8f4c6c21266ea1608d7014d517c40cf1a08bff55140e99f"
+  }
 }

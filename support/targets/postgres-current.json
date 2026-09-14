@@ -1,31 +1,76 @@
 {
   "id": "postgres-current",
   "status": "compatible",
-  "database": { "product": "postgres", "version": "18.6", "edition": "alpine" },
+  "database": {
+    "product": "postgres",
+    "version": "18.6",
+    "edition": "alpine"
+  },
   "driver": {
     "id": "pg",
     "version": "8.23.0",
-    "profile": "node-postgres",
+    "profile": "pg-lossless-text",
     "package": "@sqlbraid/postgres",
     "transport": "text-positional ($1..$N)",
     "stream": "pg-cursor",
     "routine": "SQL CALL; OUT row and transaction-owned refcursor FETCH",
     "bulk": "prepared-loop",
-    "rawRepresentations": { "integer": "string", "decimal": "string", "json": "text (parsed profile optional)", "temporal": "text (Date profile optional)" },
-    "exclusions": ["Only the PostgreSQL capability fixture is covered by this current target's gate"]
+    "exclusions": [
+      "Only the PostgreSQL capability fixture is covered by this current target's gate"
+    ],
+    "requiredOptions": {
+      "parserProfile": {
+        "json": "text",
+        "temporal": "text"
+      }
+    },
+    "driverRawRepresentations": {
+      "integer": "string",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "string",
+      "json": "string",
+      "temporal": "string"
+    }
   },
-  "runtime": { "id": "node", "version": "22.18.0" },
+  "runtime": {
+    "id": "node",
+    "version": "22.18.0"
+  },
   "reproducibility": {
     "zeroCost": true,
     "description": "GitHub Actions PostgreSQL current capability job using postgres:18.6-alpine.",
     "image": "postgres:18.6-alpine",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm exec vitest run --project db-postgres tests/db/postgres/capabilities.test.ts", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": {
+    "command": "pnpm exec vitest run --project db-postgres tests/db/postgres/capabilities.test.ts",
+    "workflow": ".github/workflows/release.yml",
+    "releaseBlocking": true
+  },
   "numeric": {
-    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "lossless" },
-    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless" },
-    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "guarded", "profile": "extra_float_digits>0" }
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "pg-lossless-text"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "pg-lossless-text"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "guarded",
+      "profile": "pg-lossless-text"
+    }
   },
   "containers": {
     "postgres-arrays": "unclassified",
@@ -38,24 +83,134 @@
     "vector": "unclassified"
   },
   "capabilities": {
-    "sql.native-transparency": { "status": "guaranteed", "testIds": ["postgres.sql.native-transparency"] },
-    "sql.generated-structure": { "status": "guaranteed", "testIds": ["postgres.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "guaranteed", "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.exact-integer"] },
-    "numeric.exact-decimal": { "status": "guaranteed", "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.exact-decimal"] },
-    "numeric.approximate-float": { "status": "guarded", "conditionCode": "pg.extra-float-digits", "semantics": "approximate-binary", "representation": "number", "fidelity": "guarded", "rawRepresentations": ["number"], "testIds": ["postgres.numeric.transport"] },
-    "numeric.bind-exact": { "status": "guaranteed", "testIds": ["postgres.numeric.transport"] },
-    "numeric.aggregate": { "status": "guaranteed", "testIds": ["postgres.numeric.transport"] },
-    "data.json-parsed": { "status": "guarded", "conditionCode": "pg.json-parser-profile", "rawRepresentations": ["object"], "testIds": ["postgres.data.parser-profiles"] },
-    "data.json-lossless-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.transport"] },
-    "data.temporal-native": { "status": "guarded", "conditionCode": "pg.temporal-parser-profile", "rawRepresentations": ["Date"], "testIds": ["postgres.data.parser-profiles"] },
-    "data.temporal-lossless": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["postgres.data.temporal-lossless"] },
-    "data.binary": { "status": "guaranteed", "rawRepresentations": ["Buffer"], "testIds": ["postgres.data.binary"] },
-    "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["postgres.data.uuid"] },
-    "dml.insert-returning": { "status": "guaranteed", "testIds": ["postgres.dml.insert-returning"] },
-    "dml.upsert-returning": { "status": "guaranteed", "testIds": ["postgres.dml.upsert-returning"] },
-    "dml.update-returning": { "status": "guaranteed", "testIds": ["postgres.dml.update-returning"] },
-    "dml.delete-returning": { "status": "guaranteed", "testIds": ["postgres.dml.delete-returning"] }
-
+    "sql.native-transparency": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.sql.native-transparency"
+      ]
+    },
+    "sql.generated-structure": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.sql.generated-structure"
+      ]
+    },
+    "numeric.exact-integer": {
+      "status": "guaranteed",
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "testIds": [
+        "postgres.numeric.exact-integer"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "numeric.exact-decimal": {
+      "status": "guaranteed",
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless",
+      "testIds": [
+        "postgres.numeric.exact-decimal"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "numeric.approximate-float": {
+      "status": "guarded",
+      "conditionCode": "pg.extra-float-digits",
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "guarded",
+      "testIds": [
+        "postgres.numeric.transport"
+      ],
+      "driverRawRepresentations": [
+        "number"
+      ]
+    },
+    "numeric.bind-exact": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.numeric.transport"
+      ]
+    },
+    "numeric.aggregate": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.numeric.transport"
+      ]
+    },
+    "data.json-lossless-text": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.numeric.transport"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "data.temporal-lossless": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.data.temporal-lossless"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "data.binary": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.data.binary"
+      ],
+      "driverRawRepresentations": [
+        "Buffer"
+      ]
+    },
+    "data.uuid": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.data.uuid"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "dml.insert-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.dml.insert-returning"
+      ]
+    },
+    "dml.upsert-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.dml.upsert-returning"
+      ]
+    },
+    "dml.update-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.dml.update-returning"
+      ]
+    },
+    "dml.delete-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "postgres.dml.delete-returning"
+      ]
+    }
   },
-  "evidence": { "status": "pending", "runs": [] }
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  },
+  "typePolicy": {
+    "id": "postgres-lossless-text",
+    "hash": "ed7a23c7308cd1a479df9e40a86503b304a003391def7ff10a82eaa2d3444560"
+  }
 }

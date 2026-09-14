@@ -18,6 +18,7 @@
     "test:db:mysql": "pnpm run build && vitest run --project db-mysql",
     "test:db:mariadb": "pnpm run build && vitest run --project db-mariadb",
     "support:validate": "node scripts/validate-support.mjs",
+    "type-policy:validate": "node scripts/type-policy-provenance.mjs",
     "docs:translations": "node scripts/validate-translations.mjs",
     "test:transparency": "vitest run tests/db/*/capabilities.test.ts -t sql.native-transparency",
     "test:transparency:postgres": "vitest run --project db-postgres tests/db/postgres/capabilities.test.ts -t sql.native-transparency",

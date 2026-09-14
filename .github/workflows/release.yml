@@ -44,7 +44,17 @@ jobs:
       - name: Build packages
         run: pnpm run build
       - name: PostgreSQL 18 capability fixtures
-        run: pnpm exec vitest run --project db-postgres tests/db/postgres/capabilities.test.ts
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/pg-current-observations
+        run: pnpm exec vitest run --project db-postgres tests/db/postgres/capabilities.test.ts tests/db/postgres/containers.test.ts --reporter=default --reporter=json --outputFile.json=${{ runner.temp }}/pg-current-results.json
+      - name: Record current-target executed evidence
+        run: node scripts/support-evidence.mjs "${{ runner.temp }}/pg-current-results.json" "${{ runner.temp }}/pg-current-evidence.json" "${{ runner.temp }}/pg-current-observations"
+      - name: Preserve current-target evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: postgres-current-support-evidence
+          path: ${{ runner.temp }}/pg-current-evidence.json
+          if-no-files-found: error
 
   release:
     if: github.event_name != 'schedule'
@@ -122,7 +132,9 @@ jobs:
         run: pnpm run build
 
       - name: Node 22 unit, consumers and real-driver fidelity
-        run: pnpm exec vitest run
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/support-observations
+        run: pnpm exec vitest run --reporter=default --reporter=json --outputFile.json=${{ runner.temp }}/support-results.json
 
       - name: Bulk structural benchmark
         run: pnpm run benchmark:bulk
@@ -174,6 +186,17 @@ jobs:
         with:
           name: sqlbraid-${{ github.event_name == 'push' && github.ref_name || 'rc' }}
           path: ${{ runner.temp }}/sqlbraid-release-artifacts
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Record executed support evidence
+        run: node scripts/support-evidence.mjs "${{ runner.temp }}/support-results.json" "${{ runner.temp }}/support-evidence.json" "${{ runner.temp }}/support-observations"
+
+      - name: Preserve exact profile evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: support-profile-evidence
+          path: ${{ runner.temp }}/support-evidence.json
           if-no-files-found: error
           retention-days: 14
 

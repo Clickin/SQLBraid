@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "vitest";
@@ -14,7 +14,17 @@ async function copyDataset(): Promise<string> {
   for (const directory of await readdir(join(root, "packages"))) {
     await mkdir(join(destination, "packages", directory), { recursive: true });
     await cp(join(root, "packages", directory, "package.json"), join(destination, "packages", directory, "package.json"));
+    const policySource = join(root, "packages", directory, "src/type-policy.ts");
+    try {
+      await access(policySource);
+      await mkdir(join(destination, "packages", directory, "src"), { recursive: true });
+      await cp(policySource, join(destination, "packages", directory, "src/type-policy.ts"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
   }
+  await mkdir(join(destination, "packages/core/src"), { recursive: true });
+  await cp(join(root, "packages/core/src/index.ts"), join(destination, "packages/core/src/index.ts"));
   const registry = JSON.parse(await readFile(join(root, "support/test-registry.json"), "utf8")) as Record<string, { file: string }>;
   for (const file of new Set(Object.values(registry).map((entry) => entry.file))) {
     await mkdir(dirname(join(destination, file)), { recursive: true });
@@ -52,11 +62,22 @@ test("support validation rejects claims without schema, locale, package, CI or r
     ["SUPPORT_TARGET_NOT_ZERO_COST", async (directory) => mutateJson<{ status: string; reproducibility: { zeroCost: boolean } }>(join(directory, "support/targets/postgres.json"), (v) => { v.status = "official"; v.reproducibility.zeroCost = false; })],
     ["SUPPORT_TARGET_MISSING_EVIDENCE", async (directory) => mutateJson<{ status: string; evidence: { status: string } }>(join(directory, "support/targets/postgres.json"), (v) => { v.status = "official"; v.evidence.status = "pending"; })],
     ["SUPPORT_TARGET_UNKNOWN_VERSION", async (directory) => mutateJson<{ status: string; database: { version?: string } }>(join(directory, "support/targets/postgres.json"), (v) => { v.status = "official"; delete v.database.version; })],
-    ["SUPPORT_NUMERIC_FIDELITY", async (directory) => mutateJson<{ capabilities: Record<string, { rawRepresentations: string[] }> }>(join(directory, "support/targets/postgres.json"), (v) => { v.capabilities["numeric.exact-decimal"]!.rawRepresentations = ["number"]; })],
+    ["SUPPORT_REPRESENTATION_MISMATCH", async (directory) => mutateJson<{ capabilities: Record<string, { driverRawRepresentations: string[] }> }>(join(directory, "support/targets/postgres.json"), (v) => { v.capabilities["numeric.exact-decimal"]!.driverRawRepresentations = ["number"]; })],
     ["SUPPORT_NUMERIC_FIDELITY", async (directory) => mutateJson<{ numeric: Record<string, { representation: string }> }>(join(directory, "support/targets/postgres.json"), (v) => { v.numeric["exact-decimal"]!.representation = "number"; })],
     ["SUPPORT_NUMERIC_FIDELITY", async (directory) => mutateJson<{ capabilities: Record<string, { representation: string }> }>(join(directory, "support/targets/postgres.json"), (v) => { v.capabilities["numeric.exact-decimal"]!.representation = "number"; })],
     ["SUPPORT_UNSUPPORTED_SUCCESS", async (directory) => mutateJson<{ capabilities: Record<string, { testIds: string[] }> }>(join(directory, "support/targets/mssql.json"), (v) => { v.capabilities["numeric.exact-decimal"]!.testIds = ["mssql.numeric.exact-integer"]; })],
     ["SUPPORT_SCHEMA", async (directory) => mutateJson<{ capabilities: Record<string, { canonical?: string }> }>(join(directory, "support/targets/postgres.json"), (v) => { v.capabilities["numeric.exact-decimal"]!.canonical = "string"; })],
+    ["SUPPORT_PROFILE_MISMATCH", async (directory) => mutateJson<{ driver: { requiredOptions: { jsonStrings: boolean } } }>(join(directory, "support/targets/mysql.json"), (v) => { v.driver.requiredOptions.jsonStrings = false; })],
+    ["SUPPORT_PROFILE_MISMATCH", async (directory) => mutateJson<{ profiles: Record<string, { requiredOptions: { dateStrings: boolean } }> }>(join(directory, "support/profiles.json"), (v) => { v.profiles["mariadb-lossless-text"]!.requiredOptions.dateStrings = false; })],
+    ["SUPPORT_PROFILE_MISMATCH", async (directory) => {
+      await mutateJson<{ profiles: Record<string, { requiredOptions: { jsonStrings: boolean } }> }>(join(directory, "support/profiles.json"), (v) => { v.profiles["mysql2-lossless-text"]!.requiredOptions.jsonStrings = false; });
+      await mutateJson<{ driver: { requiredOptions: { jsonStrings: boolean } } }>(join(directory, "support/targets/mysql.json"), (v) => { v.driver.requiredOptions.jsonStrings = false; });
+    }],
+    ["SUPPORT_TYPE_POLICY_MISMATCH", async (directory) => mutateJson<{ typePolicy: { hash: string } }>(join(directory, "support/targets/mysql.json"), (v) => { v.typePolicy.hash = "mismatched-policy-hash"; })],
+    ["SUPPORT_PROFILE_FIXTURE", async (directory) => mutateJson<{ profiles: Record<string, { fixtureTestIds: string[] }> }>(join(directory, "support/profiles.json"), (v) => { v.profiles["mysql2-native"]!.fixtureTestIds = []; })],
+    ["SUPPORT_CAPABILITY_ALTERNATE_PROFILE", async (directory) => mutateJson<{ capabilities: Record<string, { conditionCode?: string }> }>(join(directory, "support/targets/mysql.json"), (v) => { v.capabilities["data.json-lossless-text"]!.conditionCode = "mysql2.json-strings"; })],
+    ["SUPPORT_REPRESENTATION_MISMATCH", async (directory) => mutateJson<{ driver: { driverRawRepresentations: { integer: string } } }>(join(directory, "support/targets/mysql.json"), (v) => { v.driver.driverRawRepresentations.integer = "object"; })],
+    ["SUPPORT_REPRESENTATION_MISMATCH", async (directory) => mutateJson<{ fixtures: Record<string, { driverRawRepresentations: { json: string } }> }>(join(directory, "support/profiles.json"), (v) => { v.fixtures["mysql.data.json-lossless-text"]!.driverRawRepresentations.json = "object"; })],
   ];
   for (const [code, mutate] of mutations) {
     const directory = await copyDataset();

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { PerformanceObserver, performance } from "node:perf_hooks";
 import { DatabaseSync } from "node:sqlite";
 import { normalizeExactInteger, decodeExactInteger } from "@sqlbraid/core";
@@ -7,8 +8,12 @@ import { createDatabase } from "@sqlbraid/runtime";
 import { createNodeSqliteDatabase, nodeSqliteStatementBinding } from "@sqlbraid/sqlite/node-sqlite";
 import { sql } from "@sqlbraid/sqlite";
 
-const MATERIALIZED_ROWS = 100_000;
-const STREAMED_ROWS = 1_000_000;
+const MATERIALIZED_ROWS = positiveInteger("PV18_MATERIALIZED_ROWS", 100_000);
+const STREAMED_ROWS = positiveInteger("PV18_STREAMED_ROWS", 1_000_000);
+const WARMUP_ITERATIONS = positiveInteger("PV18_WARMUPS", 1);
+const REPEAT_COUNT = positiveInteger("PV18_REPEATS", 3);
+const SHUFFLE_SEED = positiveInteger("PV18_SEED", 18_092_026);
+const ISOLATION = process.env.PV18_ISOLATION ?? "family";
 const WIDTHS = [1, 5, 10];
 const TRANSPORTS = ["number", "bigint", "string"];
 const TRANSFORMS = ["raw", "pv16-bigint", "pv17-string", "app-number", "app-bigint", "app-decimal"];
@@ -19,6 +24,14 @@ const TRANSPORT_SEMANTICS = {
   bigint: "exact-integer",
   string: "exact-integer",
 };
+
+function positiveInteger(name, fallback) {
+  const value = process.env[name];
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`${name} must be a positive safe integer.`);
+  return parsed;
+}
 
 class DecimalLike {
   constructor(text) {
@@ -39,9 +52,27 @@ function maxMemory(left, right) {
 }
 
 function runtimeName() {
-  if (typeof Bun !== "undefined") return "bun";
-  if (typeof Deno !== "undefined") return "deno";
-  return "node";
+  return process.release?.name ?? (typeof Bun !== "undefined" ? "bun" : typeof Deno !== "undefined" ? "deno" : "unknown");
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function invocationMetadata() {
+  const script = process.argv[1];
+  const commandArgs = [process.execPath, ...process.execArgv, ...(script === undefined ? [] : [script]), ...process.argv.slice(2)];
+  return {
+    command: commandArgs.map(shellQuote).join(" "),
+    executable: process.execPath,
+    execArgv: [...process.execArgv],
+    argv: [...process.argv],
+    runtime: runtimeName(),
+    version: process.version,
+    platform: process.platform,
+    architecture: process.arch,
+    pid: process.pid,
+  };
 }
 
 function exactValueSql(transport, id) {
@@ -176,12 +207,11 @@ function expectedChecksum(rows, width) {
   const key = `${rows}:${width}`;
   const cached = expectedChecksums.get(key);
   if (cached !== undefined) return cached;
-  let checksum = 0n;
-  for (let id = 1n; id <= BigInt(rows); id += 1n) {
-    for (let column = 1n; column <= BigInt(width); column += 1n) {
-      checksum = (checksum + id * column) & MASK_64;
-    }
-  }
+  const rowCount = BigInt(rows);
+  const columnCount = BigInt(width);
+  const rowSum = rowCount * (rowCount + 1n) / 2n;
+  const columnSum = columnCount * (columnCount + 1n) / 2n;
+  const checksum = (rowSum * columnSum) & MASK_64;
   expectedChecksums.set(key, checksum);
   return checksum;
 }
@@ -207,6 +237,76 @@ function sampleRows(rows, width) {
     assert.equal(canonicalText(first[`v${index + 1}`]), "1");
     assert.equal(canonicalText(last[`v${index + 1}`]), String(rows.length));
   }
+}
+
+function caseId(transport, kind, rows, width, transform) {
+  return `${transport}/${kind}/${rows}/${width}/${transform}`;
+}
+
+function makeCases(transport) {
+  const cases = [];
+  for (const width of WIDTHS) {
+    for (const transform of TRANSFORMS) {
+      cases.push({ transport, kind: "materialized", rows: MATERIALIZED_ROWS, width, transform });
+    }
+  }
+  for (const transform of TRANSFORMS) {
+    cases.push({ transport, kind: "stream", rows: STREAMED_ROWS, width: 5, transform });
+  }
+  return cases;
+}
+
+function shuffledCases(cases, iteration, transportIndex) {
+  const result = [...cases];
+  let state = (SHUFFLE_SEED + iteration * 1_000_003 + transportIndex * 97) >>> 0;
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+    const swap = state % (index + 1);
+    [result[index], result[swap]] = [result[swap], result[index]];
+  }
+  return result;
+}
+
+function median(values) {
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+function spread(values) {
+  return { min: Math.min(...values), max: Math.max(...values), range: Math.max(...values) - Math.min(...values) };
+}
+
+function summarize(workloads) {
+  const grouped = new Map();
+  for (const workload of workloads) {
+    const key = workload.caseId;
+    const group = grouped.get(key) ?? [];
+    group.push(workload);
+    grouped.set(key, group);
+  }
+  return [...grouped.values()].map((group) => {
+    const first = group[0];
+    const wallMs = group.map((item) => item.wallMs);
+    const rssDeltaBytes = group.map((item) => item.rssDeltaBytes);
+    const peakRssBytes = group.map((item) => item.peakRssBytes);
+    return {
+      caseId: first.caseId,
+      kind: first.kind,
+      rows: first.rows,
+      width: first.width,
+      transport: first.transport,
+      transform: first.transform,
+      iterations: group.length,
+      wallMsMedian: Number(median(wallMs).toFixed(3)),
+      wallMsSpread: spread(wallMs),
+      rssDeltaBytesMedian: median(rssDeltaBytes),
+      rssDeltaBytesSpread: spread(rssDeltaBytes),
+      peakRssBytesMedian: median(peakRssBytes),
+      peakRssBytesSpread: spread(peakRssBytes),
+      checksum: first.checksum,
+    };
+  });
 }
 
 async function allowGc() {
@@ -327,60 +427,148 @@ function rawDriverProbe(native) {
   };
 }
 
-async function main() {
+function policyFor(transform) {
+  return transform === "raw" ? rawTypePolicy : transform === "pv16-bigint" ? pv16TypePolicy : pv17TypePolicy;
+}
+
+async function runCase(native, transport, rawObserved, workload, events) {
+  const db = benchmarkDatabase(native, transport, policyFor(workload.transform));
+  try {
+    if (workload.kind === "materialized") {
+      return await runMaterialized(db, transport, rawObserved, workload.rows, workload.width, workload.transform, events);
+    }
+    return await runStream(db, transport, rawObserved, workload.rows, workload.width, workload.transform, events);
+  } finally {
+    await db.finish?.();
+  }
+}
+
+async function runFamily(transport, transportIndex) {
   const native = new DatabaseSync(":memory:");
   const { events, observer } = makeGcObserver();
+  const invocation = invocationMetadata();
   try {
     const rawProbe = rawDriverProbe(native);
-    for (const width of WIDTHS) expectedChecksum(MATERIALIZED_ROWS, width);
-    expectedChecksum(STREAMED_ROWS, 5);
     const sqliteDb = createNodeSqliteDatabase(native);
-    const sqlbraidRaw = {};
-    for (const transport of TRANSPORTS) {
-      const row = await sqliteDb.one(queryFor(transport, 1, 1));
-      sqlbraidRaw[transport] = representation(row.v1);
-    }
+    const row = await sqliteDb.one(queryFor(transport, 1, 1));
+    const sqlbraidRaw = { [transport]: representation(row.v1) };
     const correctness = await sqliteDb.one(sql.rows`${sql.raw("SELECT CAST(9007199254740993 AS INTEGER) AS value")}`);
     assert.equal(normalizeExactInteger(correctness.value), "9007199254740993");
+    await sqliteDb.finish?.();
+
+    const cases = makeCases(transport);
     const workloads = [];
-    for (const transport of TRANSPORTS) {
-      for (const width of WIDTHS) {
-        for (const transform of TRANSFORMS) {
-          const policy = transform === "raw" ? rawTypePolicy : transform === "pv16-bigint" ? pv16TypePolicy : pv17TypePolicy;
-          const db = benchmarkDatabase(native, transport, policy);
-          workloads.push(await runMaterialized(db, transport, rawProbe[transport].type, MATERIALIZED_ROWS, width, transform, events));
-          await db.finish?.();
+    async function runCycle(iteration, record) {
+      const ordered = shuffledCases(cases, iteration, transportIndex);
+      for (const [orderIndex, workload] of ordered.entries()) {
+        const result = await runCase(native, transport, rawProbe[transport].type, workload, events);
+        if (record) {
+          result.caseId = caseId(workload.transport, workload.kind, workload.rows, workload.width, workload.transform);
+          result.iteration = iteration;
+          result.orderIndex = orderIndex;
+          result.processId = invocation.pid;
+          workloads.push(result);
         }
       }
-      for (const transform of TRANSFORMS) {
-        const policy = transform === "raw" ? rawTypePolicy : transform === "pv16-bigint" ? pv16TypePolicy : pv17TypePolicy;
-        const db = benchmarkDatabase(native, transport, policy);
-        workloads.push(await runStream(db, transport, rawProbe[transport].type, STREAMED_ROWS, 5, transform, events));
-        await db.finish?.();
-      }
     }
-    await sqliteDb.finish?.();
+    for (let iteration = 0; iteration < WARMUP_ITERATIONS; iteration += 1) await runCycle(iteration, false);
+    for (let iteration = 1; iteration <= REPEAT_COUNT; iteration += 1) await runCycle(iteration, true);
+
     observer.disconnect();
-    console.log(JSON.stringify({
-      benchmark: "pv17-value-fidelity",
-      runtime: { id: runtimeName(), version: process.version },
-      command: "node scripts/pv17-benchmark.mjs",
-      forcedGc: typeof globalThis.gc === "function",
+    return {
+      transport,
+      invocation,
       rawDriverProbe: rawProbe,
       sqlbraidRawRepresentation: sqlbraidRaw,
       correctness: { wideExactInteger: "9007199254740993", checksum: "BigInt 64-bit modular sum" },
       workloads,
-      observations: [
-        "PV16-style exact integers use a TypePolicy.decode path that returns BigInt; PV17 uses a TypePolicy.decode path that returns strings.",
-        "Number, BigInt and Decimal-like transforms are application-owned Standard Schema mappings after the raw SQLBraid boundary.",
-        "The Number transport uses integral safe-range INTEGER values with native bigint reads disabled; it is reported as guarded exact-integer transport.",
-        "RSS and heap peaks are sampled between rows for streams and around materialization; GC metrics are observational and depend on Node flags/runtime scheduling.",
-      ],
-    }, null, 2));
+    };
   } finally {
     observer.disconnect();
     native.close();
   }
+}
+
+function runFamilyProcess(transport, transportIndex) {
+  const result = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...process.argv.slice(2)], {
+    env: {
+      ...process.env,
+      PV18_BENCHMARK_CHILD: "1",
+      PV18_CHILD_TRANSPORT: transport,
+      PV18_CHILD_TRANSPORT_INDEX: String(transportIndex),
+    },
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`PV18 benchmark child failed for ${transport} (exit ${result.status}): ${result.stderr.trim()}`);
+  }
+  try {
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    throw new Error(`PV18 benchmark child emitted invalid JSON for ${transport}: ${error.message}`);
+  }
+}
+
+async function main() {
+  if (ISOLATION !== "family" && ISOLATION !== "none") {
+    throw new Error("PV18_ISOLATION must be family or none.");
+  }
+  if (process.env.PV18_BENCHMARK_CHILD === "1") {
+    const transport = process.env.PV18_CHILD_TRANSPORT;
+    if (!TRANSPORTS.includes(transport)) throw new Error("PV18_CHILD_TRANSPORT is invalid.");
+    const family = await runFamily(transport, Number(process.env.PV18_CHILD_TRANSPORT_INDEX ?? 0));
+    console.log(JSON.stringify({ benchmark: "pv18-value-fidelity", schemaVersion: 1, role: "family", ...family }, null, 2));
+    return;
+  }
+
+  const families = [];
+  for (const [transportIndex, transport] of TRANSPORTS.entries()) {
+    families.push(ISOLATION === "family" ? runFamilyProcess(transport, transportIndex) : await runFamily(transport, transportIndex));
+  }
+  const workloads = families.flatMap((family) => family.workloads);
+  const rawDriverProbe = families[0].rawDriverProbe;
+  const sqlbraidRawRepresentation = Object.assign({}, ...families.map((family) => family.sqlbraidRawRepresentation));
+  console.log(JSON.stringify({
+    benchmark: "pv18-value-fidelity",
+    schemaVersion: 1,
+    methodology: {
+      warmupIterations: WARMUP_ITERATIONS,
+      measuredIterations: REPEAT_COUNT,
+      deterministicSeed: SHUFFLE_SEED,
+      order: "seeded Fisher-Yates shuffle per transport and iteration",
+      isolation: ISOLATION,
+      materializedRows: MATERIALIZED_ROWS,
+      streamedRows: STREAMED_ROWS,
+      widths: WIDTHS,
+    },
+    invocation: invocationMetadata(),
+    runtime: {
+      id: runtimeName(),
+      version: process.version,
+      platform: process.platform,
+      architecture: process.arch,
+      execArgv: [...process.execArgv],
+    },
+    forcedGc: typeof globalThis.gc === "function",
+    rawDriverProbe,
+    sqlbraidRawRepresentation,
+    correctness: { wideExactInteger: "9007199254740993", checksum: "BigInt 64-bit modular sum" },
+    processes: families.map(({ transport, invocation }) => ({ transport, ...invocation })),
+    workloads,
+    summary: summarize(workloads),
+    observations: [
+      "PV16-style exact integers use a TypePolicy.decode path that returns BigInt; PV17 uses a TypePolicy.decode path that returns strings.",
+      "Number, BigInt and Decimal-like transforms are application-owned Standard Schema mappings after the raw SQLBraid boundary.",
+      "The Number transport uses integral safe-range INTEGER values with native bigint reads disabled; it is reported as guarded exact-integer transport.",
+      "Every measured case validates row count, boundary samples and a modular BigInt checksum before its metric is retained.",
+      "Median and spread summarize repeated wall-clock observations; no performance threshold or release claim is applied.",
+      ISOLATION === "family"
+        ? "RSS and heap metrics are observational within fresh transport-family processes; they are not a sequential peak-RSS performance claim."
+        : "RSS and heap metrics are observational in one process; do not interpret sequential peak-RSS differences as memory performance.",
+    ],
+  }, null, 2));
 }
 
 await main();

@@ -1,30 +1,73 @@
 {
   "id": "d1-cloudflare-workerd-2026-07-30",
   "status": "compatible",
-  "database": { "product": "sqlite", "edition": "Cloudflare D1 managed SQLite (version unreported)" },
+  "database": {
+    "product": "sqlite",
+    "edition": "Cloudflare D1 managed SQLite (version unreported)"
+  },
   "driver": {
     "id": "cloudflare-d1",
     "version": "1.20260730.1",
-    "profile": "guarded-safe-integer",
+    "profile": "d1-guarded-safe-integer",
     "package": "@sqlbraid/sqlite/d1",
     "transport": "ordered placeholders and D1 prepared binds",
     "stream": "unsupported by D1 API",
     "routine": "unsupported by D1 API",
     "bulk": "native D1 batch",
-    "rawRepresentations": { "integer": "number", "decimal": "number or string", "json": "text", "temporal": "text" },
-    "exclusions": ["D1 callback transactions are unsupported", "D1 streaming is unsupported without a bounded native primitive", "Remote production D1 evidence is not claimed", "The API denies sqlite_version(); the compatibility date is not a database version", "Integral REAL values outside the safe range are excluded by the untyped-number guard"]
+    "exclusions": [
+      "D1 callback transactions are unsupported",
+      "D1 streaming is unsupported without a bounded native primitive",
+      "Remote production D1 evidence is not claimed",
+      "The API denies sqlite_version(); the compatibility date is not a database version",
+      "Integral REAL values outside the safe range are excluded by the untyped-number guard"
+    ],
+    "requiredOptions": {},
+    "driverRawRepresentations": {
+      "integer": "number",
+      "decimal": "storage-dependent number or string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+      "json": "string",
+      "temporal": "string"
+    }
   },
-  "runtime": { "id": "workerd", "version": "1.20260730.1" },
+  "runtime": {
+    "id": "workerd",
+    "version": "1.20260730.1"
+  },
   "reproducibility": {
     "zeroCost": true,
     "description": "Local Miniflare 4.20260730.0 with compatibility date 2026-07-30 and a D1 binding.",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm run test:all", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": {
+    "command": "pnpm run test:all",
+    "workflow": ".github/workflows/release.yml",
+    "releaseBlocking": true
+  },
   "numeric": {
-    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "guarded", "profile": "guarded-safe-integer" },
-    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported", "profile": "guarded-safe-integer" },
-    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "guarded", "profile": "guarded-safe-integer" }
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded",
+      "profile": "d1-guarded-safe-integer"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "profile": "d1-guarded-safe-integer"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "guarded",
+      "profile": "d1-guarded-safe-integer"
+    }
   },
   "containers": {
     "postgres-arrays": "unsupported",
@@ -37,35 +80,185 @@
     "vector": "unsupported"
   },
   "capabilities": {
-    "sql.native-transparency": { "status": "guaranteed", "testIds": ["d1.sql.native-transparency"] },
-    "sql.generated-structure": { "status": "guaranteed", "testIds": ["d1.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "guarded", "conditionCode": "cloudflare-d1.safe-integer", "semantics": "exact-integer", "representation": "string", "fidelity": "guarded", "rawRepresentations": ["number"], "testIds": ["d1.numeric.exact-integer"] },
-    "numeric.exact-decimal": { "status": "unsupported", "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported", "testIds": [] },
-    "data.json-lossless-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["d1.data.json-lossless-text"] },
-    "data.binary": { "status": "guaranteed", "rawRepresentations": ["number[]"], "testIds": ["d1.data.mapping-returning"] },
-    "data.temporal-lossless": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["d1.data.temporal-lossless"] },
-    "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["d1.data.mapping-returning"] },
-    "result.rows": { "status": "guaranteed", "testIds": ["d1.sql.native-transparency"] },
-    "result.command": { "status": "guaranteed", "testIds": ["d1.execution.bulk"] },
-    "result.multiple-sets": { "status": "unsupported", "testIds": [] },
-    "result.standard-schema": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] },
-    "execution.bulk": { "status": "guaranteed", "testIds": ["d1.execution.bulk"] },
-    "execution.prepared": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] },
-    "execution.stream": { "status": "unsupported", "testIds": ["d1.execution.stream"] },
-    "execution.transaction": { "status": "unsupported", "testIds": ["d1.execution.transaction"] },
-    "execution.savepoint": { "status": "unsupported", "testIds": [] },
-    "routine.scalar-out": { "status": "unsupported", "testIds": [] },
-    "routine.inout": { "status": "unsupported", "testIds": [] },
-    "routine.resultsets": { "status": "unsupported", "testIds": [] },
-    "routine.cursor": { "status": "unsupported", "testIds": [] },
-    "routine.return-status": { "status": "unsupported", "testIds": [] },
-    "metadata.identity": { "status": "unsupported", "testIds": [] },
-    "metadata.generated": { "status": "unsupported", "testIds": [] },
-    "metadata.routines": { "status": "unsupported", "testIds": [] },
-    "metadata.types": { "status": "unsupported", "testIds": [] },
-    "dml.insert-returning": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] },
-    "dml.update-returning": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] },
-    "dml.delete-returning": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] }
+    "sql.native-transparency": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.sql.native-transparency"
+      ]
+    },
+    "sql.generated-structure": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.sql.generated-structure"
+      ]
+    },
+    "numeric.exact-integer": {
+      "status": "guarded",
+      "conditionCode": "cloudflare-d1.safe-integer",
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded",
+      "testIds": [
+        "d1.numeric.exact-integer"
+      ],
+      "driverRawRepresentations": [
+        "number"
+      ]
+    },
+    "numeric.exact-decimal": {
+      "status": "unsupported",
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "testIds": []
+    },
+    "data.json-lossless-text": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.data.json-lossless-text"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "data.binary": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.data.mapping-returning"
+      ],
+      "driverRawRepresentations": [
+        "number[]"
+      ]
+    },
+    "data.temporal-lossless": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.data.temporal-lossless"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "data.uuid": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.data.mapping-returning"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "result.rows": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.sql.native-transparency"
+      ]
+    },
+    "result.command": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.execution.bulk"
+      ]
+    },
+    "result.multiple-sets": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "result.standard-schema": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.data.mapping-returning"
+      ]
+    },
+    "execution.bulk": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.execution.bulk"
+      ]
+    },
+    "execution.prepared": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.data.mapping-returning"
+      ]
+    },
+    "execution.stream": {
+      "status": "unsupported",
+      "testIds": [
+        "d1.execution.stream"
+      ]
+    },
+    "execution.transaction": {
+      "status": "unsupported",
+      "testIds": [
+        "d1.execution.transaction"
+      ]
+    },
+    "execution.savepoint": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.scalar-out": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.inout": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.resultsets": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.cursor": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.return-status": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "metadata.identity": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "metadata.generated": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "metadata.routines": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "metadata.types": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "dml.insert-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.data.mapping-returning"
+      ]
+    },
+    "dml.update-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.data.mapping-returning"
+      ]
+    },
+    "dml.delete-returning": {
+      "status": "guaranteed",
+      "testIds": [
+        "d1.data.mapping-returning"
+      ]
+    }
   },
-  "evidence": { "status": "pending", "runs": [] }
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  },
+  "typePolicy": {
+    "id": "sqlite-default",
+    "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
+  }
 }
