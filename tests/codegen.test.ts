@@ -235,7 +235,7 @@ test("matches MySQL metadata spellings to first-party case-normalized policy map
   assertGeneratedProperty(result.source, "ValuesRow", "big_id", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "amount", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "label", "string", false);
-  assertGeneratedProperty(result.source, "ValuesRow", "payload", "unknown | null", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "payload", "string | null", false);
   assert.equal(result.diagnostics.length, 0);
 });
 

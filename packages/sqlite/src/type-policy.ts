@@ -32,9 +32,15 @@ const mappings = [
   { databaseType: "ANY", inputType: "unknown", outputType: "unknown", nullable: true },
 ] as const;
 
-export const typePolicy: TypePolicy = {
+for (const mapping of mappings) {
+  if ("numeric" in mapping) Object.freeze(mapping.numeric);
+  Object.freeze(mapping);
+}
+Object.freeze(mappings);
+
+export const typePolicy: TypePolicy = Object.freeze<TypePolicy>({
   id: "sqlite-default",
-  hash: "sqlite-default-v3",
+  hash: "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563",
   mappings,
   decode: (databaseType, value) => {
     if (value === null || value === undefined) return value;
@@ -44,4 +50,4 @@ export const typePolicy: TypePolicy = {
     return value;
   },
   encode: (_databaseType, value) => value,
-};
+});

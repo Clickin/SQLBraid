@@ -6,7 +6,7 @@ import { generateModels } from "@sqlbraid/codegen";
 import type { ExecutionEvent } from "@sqlbraid/core";
 import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
 import { createMariaDbInspector } from "@sqlbraid/mariadb/inspector";
-import { sql, typePolicy } from "@sqlbraid/mariadb";
+import { MARIADB_LOSSLESS_TEXT, MARIADB_NATIVE, sql, typePolicy } from "@sqlbraid/mariadb";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
 import { assertFloatBits, binary32Finite, binary64Finite, exactJsonText } from "../fidelity.js";
 import { runTransparencyCase } from "../../transparency.js";
@@ -15,6 +15,7 @@ import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGenerated
 function connectorOptions(overrides: Partial<ConnectionConfig> = {}): ConnectionConfig {
   const uri = new URL(inject("mariadb").connectionUri);
   return {
+    ...MARIADB_LOSSLESS_TEXT.connectionOptions,
     host: uri.hostname,
     port: Number(uri.port || 3306),
     user: decodeURIComponent(uri.username),
@@ -104,6 +105,12 @@ test("mariadb.numeric.exact-integer", async () => {
       )
     `);
     await connection.query("INSERT INTO braid_pv17_integer_types VALUES ('7', '32767', '8388607', '2147483647', '9223372036854775807')");
+    const rawRows = await connection.query("SELECT tiny_value, small_value, medium_value, int_value, big_value FROM braid_pv17_integer_types") as readonly Record<string, unknown>[];
+    assert.equal(typeof rawRows[0]?.tiny_value, "number");
+    assert.equal(typeof rawRows[0]?.small_value, "number");
+    assert.equal(typeof rawRows[0]?.medium_value, "number");
+    assert.equal(typeof rawRows[0]?.int_value, "number");
+    assert.equal(typeof rawRows[0]?.big_value, "bigint");
     assert.deepEqual(
       await db.one(sql.rows<{
         readonly tiny_value: string;
@@ -226,6 +233,8 @@ test("mariadb.data.json-lossless-text", async () => {
   try {
     await connection.query("CREATE TEMPORARY TABLE braid_pv16_json (payload JSON)");
     await db.execute(sql.command`INSERT INTO braid_pv16_json VALUES (${exactJsonText})`);
+    const rawRows = await connection.query("SELECT payload FROM braid_pv16_json") as readonly Record<string, unknown>[];
+    assert.equal(typeof rawRows[0]?.payload, "string");
     const row = await db.one(sql.rows<{ readonly payload: string; readonly largeInteger: string }>`
       SELECT CAST(payload AS CHAR) AS payload,
              JSON_VALUE(payload, '$.largeInteger') AS largeInteger
@@ -240,7 +249,7 @@ test("mariadb.data.json-lossless-text", async () => {
 
 test("mariadb.data.json-parsed", async () => {
   const connection = await connect({ autoJsonMap: true });
-  const db = createMariaDbDatabase(connection);
+  const db = createMariaDbDatabase(connection, { profile: MARIADB_NATIVE });
   try {
     await connection.query("CREATE TEMPORARY TABLE braid_pv16_json_parsed (payload JSON)");
     await db.execute(sql.command`INSERT INTO braid_pv16_json_parsed VALUES (${exactJsonText})`);
@@ -268,6 +277,11 @@ test("mariadb.data.temporal-lossless", async () => {
       )
     `);
     await connection.query("INSERT INTO braid_pv17_temporal VALUES ('2026-09-14', '12:34:56.123456', '2026-09-14 12:34:56.123456', '2026-09-14 12:34:56.123456')");
+    const rawRows = await connection.query("SELECT date_value, time_value, datetime_value, timestamp_value FROM braid_pv17_temporal") as readonly Record<string, unknown>[];
+    assert.equal(typeof rawRows[0]?.date_value, "string");
+    assert.equal(typeof rawRows[0]?.time_value, "string");
+    assert.equal(typeof rawRows[0]?.datetime_value, "string");
+    assert.equal(typeof rawRows[0]?.timestamp_value, "string");
     assert.deepEqual(
       await db.one(sql.rows<{
         readonly date_value: string;
@@ -289,7 +303,7 @@ test("mariadb.data.temporal-lossless", async () => {
 
 test("mariadb.data.temporal-native", async () => {
   const connection = await connect({ dateStrings: false });
-  const db = createMariaDbDatabase(connection);
+  const db = createMariaDbDatabase(connection, { profile: MARIADB_NATIVE });
   try {
     await connection.query("CREATE TEMPORARY TABLE braid_pv17_temporal_native (value DATETIME(6))");
     await connection.query("INSERT INTO braid_pv17_temporal_native VALUES ('2026-09-14 12:34:56.123456')");

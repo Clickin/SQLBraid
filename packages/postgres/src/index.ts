@@ -8,7 +8,17 @@ export const dialect: Dialect = {
 };
 
 export const sql: SqlTag = createSqlTag({ dialect });
-export { typePolicy } from "./type-policy.js";
+export {
+  representationProfiles,
+  typePolicy,
+  typePolicyForProfile,
+} from "./type-policy.js";
+export type {
+  PgJsonProfile,
+  PgRepresentationProfile,
+  PgRepresentationProfileOptions,
+  PgTemporalProfile,
+} from "./type-policy.js";
 export const postgresParameter = Object.freeze({
   refcursor: (): ParameterTypeHint<null> => Object.freeze({ databaseType: "refcursor" }),
 });

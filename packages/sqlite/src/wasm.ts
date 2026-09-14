@@ -20,6 +20,7 @@ import {
   safeDatabaseCount,
 } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
+import { typePolicy } from "./type-policy.js";
 
 /** The subset of the official @sqlite.org/sqlite-wasm OO1 DB used by SQLBraid. */
 export interface SqliteWasmStatementLike {
@@ -212,7 +213,8 @@ function transactionControl(database: SqliteWasmDatabaseLike, sql: string): Prom
 function sqliteWasmEnvironment(): DriverEnvironment {
   return Object.freeze<DriverEnvironment>({
     database: { product: "sqlite" },
-    driver: { id: "sqlite-wasm", profile: "exact-string" },
+    driver: { id: "sqlite-wasm", profile: "sqlite-wasm-exact-string" },
+    typePolicy: { id: typePolicy.id, hash: typePolicy.hash },
     capabilities: {
       "sql.native-transparency": { status: "guaranteed" },
       "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] },

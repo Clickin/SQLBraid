@@ -17,7 +17,13 @@ import type {
 } from "@sqlbraid/core";
 import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription, ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
-import { typePolicy as defaultTypePolicy } from "./type-policy.js";
+import {
+  representationProfiles,
+  typePolicyForProfile,
+  type PgJsonProfile,
+  type PgRepresentationProfile,
+  type PgTemporalProfile,
+} from "./type-policy.js";
 
 export interface PgFieldLike {
   readonly name: string;
@@ -67,9 +73,6 @@ export interface PgCursorFactory {
   new (text: string, values: readonly unknown[], config?: { readonly types?: PgTypeOverrides }): PgCursorLike;
 }
 
-export type PgJsonProfile = "text" | "parsed";
-export type PgTemporalProfile = "text" | "date";
-
 export interface PgParserProfile {
   readonly json?: PgJsonProfile;
   readonly temporal?: PgTemporalProfile;
@@ -77,6 +80,7 @@ export interface PgParserProfile {
 
 export interface PgExecutorOptions {
   readonly typePolicy?: TypePolicy;
+  readonly profile?: PgRepresentationProfile;
   readonly streamBatchSize?: number;
   readonly cursor?: PgCursorFactory;
   readonly parserProfile?: PgParserProfile;
@@ -87,14 +91,14 @@ export type PgDatabaseOptions = DatabaseOptions & PgExecutorOptions;
 export const pgOidTypes: Readonly<Record<number, string>> = Object.freeze({
   16: "bool",
   17: "bytea",
+  18: "char",
+  19: "name",
   20: "int8",
   21: "int2",
   23: "int4",
   25: "text",
   26: "oid",
   114: "json",
-  700: "float4",
-  701: "float8",
   790: "money",
   1082: "date",
   1083: "time",
@@ -105,23 +109,65 @@ export const pgOidTypes: Readonly<Record<number, string>> = Object.freeze({
   1700: "numeric",
   2950: "uuid",
   3802: "jsonb",
+  700: "float4",
+  701: "float8",
+  791: "money[]",
+  1000: "bool[]",
+  1001: "bytea[]",
+  1002: "char[]",
+  1003: "name[]",
+  1005: "int2[]",
+  1007: "int4[]",
+  1009: "text[]",
+  1014: "bpchar[]",
+  1015: "varchar[]",
+  1016: "int8[]",
+  1021: "float4[]",
+  1022: "float8[]",
+  1028: "oid[]",
+  1182: "date[]",
+  1183: "time[]",
+  1185: "timestamp with time zone[]",
+  1187: "interval[]",
+  1231: "numeric[]",
+  1270: "time with time zone[]",
+  199: "json[]",
+  2951: "uuid[]",
+  3807: "jsonb[]",
+  143: "xml[]",
 });
 
-const defaultParserProfile: Required<PgParserProfile> = Object.freeze({ json: "text", temporal: "text" });
+const defaultParserProfile: Required<Pick<PgParserProfile, "json" | "temporal">> = Object.freeze({ json: "text", temporal: "text" });
 
-function parserProfile(options: PgParserProfile | undefined): Required<PgParserProfile> {
+function parserProfile(
+  options: PgParserProfile | undefined,
+  descriptor?: PgRepresentationProfile,
+): { readonly json: PgJsonProfile; readonly temporal: PgTemporalProfile } {
+  const requestedJson = options?.json;
+  const requestedTemporal = options?.temporal;
+  if (descriptor && requestedJson !== undefined && requestedJson !== descriptor.json) {
+    throw new ResultExactnessError("PostgreSQL parserProfile JSON setting contradicts the selected representation profile.");
+  }
+  if (descriptor && requestedTemporal !== undefined && requestedTemporal !== descriptor.temporal) {
+    throw new ResultExactnessError("PostgreSQL parserProfile temporal setting contradicts the selected representation profile.");
+  }
   const profile = {
-    json: options?.json ?? defaultParserProfile.json,
-    temporal: options?.temporal ?? defaultParserProfile.temporal,
+    json: descriptor?.json ?? requestedJson ?? defaultParserProfile.json,
+    temporal: descriptor?.temporal ?? requestedTemporal ?? defaultParserProfile.temporal,
   };
-  if (profile.json !== "text" && profile.json !== "parsed") throw new RangeError(`Unsupported PostgreSQL JSON parser profile: ${String(profile.json)}`);
-  if (profile.temporal !== "text" && profile.temporal !== "date") throw new RangeError(`Unsupported PostgreSQL temporal parser profile: ${String(profile.temporal)}`);
+  if (profile.json !== "text" && profile.json !== "native") throw new RangeError(`Unsupported PostgreSQL JSON parser profile: ${String(profile.json)}`);
+  if (profile.temporal !== "text" && profile.temporal !== "native") throw new RangeError(`Unsupported PostgreSQL temporal parser profile: ${String(profile.temporal)}`);
   return profile;
 }
 
 const jsonOids = new Set([114, 3802]);
 const temporalOids = new Set([1082, 1083, 1114, 1184, 1186, 1266]);
 const exactNumericOids = new Set([20, 21, 23, 26, 790, 1700]);
+const arrayOids = new Set([
+  143, 199, 1000, 1001, 1002, 1003, 1005, 1007, 1009, 1014, 1015, 1016,
+  1021, 1022, 1028, 1115, 1182, 1183, 1185, 1187, 1231, 1270, 791,
+  2951, 3807,
+]);
 
 function textValue(value: unknown): unknown {
   if (typeof value === "string") return value;
@@ -137,6 +183,7 @@ function binary32Value(value: unknown): number {
 }
 
 function queryTypeOverrides(client: PgClientLike, profile: Required<PgParserProfile>): PgTypeOverrides | undefined {
+  const lossless = profile.json === "text" && profile.temporal === "text";
   return {
     getTypeParser(oid, format) {
       if (oid === 700) return binary32Value;
@@ -145,6 +192,7 @@ function queryTypeOverrides(client: PgClientLike, profile: Required<PgParserProf
         exactNumericOids.has(oid)
         || (profile.json === "text" && jsonOids.has(oid))
         || (profile.temporal === "text" && temporalOids.has(oid))
+        || (lossless && (arrayOids.has(oid) || pgOidTypes[oid] === undefined))
       ) {
         return textValue;
       }
@@ -303,19 +351,30 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   requestedReuse: "auto",
 });
 
-function pgEnvironmentFor(profile: Required<PgParserProfile>): DriverEnvironment {
+function pgEnvironmentFor(
+  profile: { readonly json: PgJsonProfile; readonly temporal: PgTemporalProfile },
+  policy: TypePolicy = typePolicyForProfile(profile),
+): DriverEnvironment {
+  const profileId = profile.json === "text" && profile.temporal === "text"
+    ? "pg-lossless-text"
+    : profile.json === "native" && profile.temporal === "native"
+      ? "pg-native"
+      : profile.json === "native"
+        ? "pg-json-native-temporal-text"
+        : "pg-json-text-temporal-native";
   return Object.freeze<DriverEnvironment>({
     database: { product: "postgres" },
-    driver: { id: "pg", profile: profile.json === "text" && profile.temporal === "text" ? "node-postgres" : "node-postgres-compatibility" },
+    driver: { id: "pg", profile: profileId },
+    typePolicy: { id: policy.id, hash: policy.hash },
     capabilities: {
       "sql.native-transparency": { status: "guaranteed" },
       "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
       "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
       "numeric.approximate-float": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "pg.extra-float-digits" },
       "data.json-lossless-text": { status: profile.json === "text" ? "guaranteed" : "unsupported", canonical: "string", rawRepresentations: ["string"], ...(profile.json === "text" ? {} : { conditionCode: "pg.json-parser-profile" }) },
-      "data.json-parsed": { status: profile.json === "parsed" ? "guarded" : "unsupported", rawRepresentations: ["object"], conditionCode: "pg.json-parser-profile" },
+      "data.json-parsed": { status: profile.json === "native" ? "guarded" : "unsupported", rawRepresentations: ["unknown"], conditionCode: "pg.json-parser-profile" },
       "data.temporal-lossless": { status: profile.temporal === "text" ? "guaranteed" : "unsupported", canonical: "string", rawRepresentations: ["string"], ...(profile.temporal === "text" ? {} : { conditionCode: "pg.temporal-parser-profile" }) },
-      "data.temporal-native": { status: profile.temporal === "date" ? "guarded" : "unsupported", rawRepresentations: ["Date"], conditionCode: "pg.temporal-parser-profile" },
+      "data.temporal-native": { status: profile.temporal === "native" ? "guarded" : "unsupported", rawRepresentations: ["Date", "string", "unknown"], conditionCode: "pg.temporal-parser-profile" },
     },
     probe: {
       statement: createRenderedStatement({
@@ -558,8 +617,11 @@ function enqueuePgBulk<T>(
 
 export function createPgExecutor(client: PgClientLike, options: PgExecutorOptions = {}): QueryExecutor {
   assertPgClient(client);
-  const policy = options.typePolicy ?? defaultTypePolicy;
-  const profile = parserProfile(options.parserProfile);
+  const profile = parserProfile(options.parserProfile, options.profile);
+  const profilePolicy = options.profile?.typePolicy ?? typePolicyForProfile(profile);
+  const policy = options.typePolicy ?? profilePolicy;
+  const firstPartyProfile = options.profile === undefined
+    || representationProfiles.some((entry) => entry === options.profile);
   const types = queryTypeOverrides(client, profile);
   const batchSize = options.streamBatchSize ?? 100;
   if (!Number.isSafeInteger(batchSize) || batchSize < 1) throw new RangeError("PostgreSQL streamBatchSize must be a positive safe integer.");
@@ -567,7 +629,14 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
   return {
     ownershipKey: client,
     statementBinding: pgStatementBinding,
-    environment: policy === defaultTypePolicy ? pgEnvironmentFor(profile) : { ...pgEnvironmentFor(profile), driver: { id: "pg", profile: "custom-type-policy" }, capabilities: {} },
+    environment: policy === profilePolicy && firstPartyProfile
+      ? pgEnvironmentFor(profile, policy)
+      : {
+        ...pgEnvironmentFor(profile, profilePolicy),
+        driver: { id: "pg", profile: "custom-type-policy" },
+        typePolicy: { id: policy.id, hash: policy.hash },
+        capabilities: {},
+      },
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
       const result = await client.query(materialize(rendered, binding, types));
@@ -764,15 +833,26 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
 }
 
 export function createPgDatabase(client: PgClientLike, options: PgDatabaseOptions = {}) {
-  const { typePolicy, cursor, streamBatchSize, parserProfile, ...databaseOptions } = options;
-  return createDatabase(createPgExecutor(client, { typePolicy, cursor, streamBatchSize, parserProfile }), databaseOptions);
+  const { typePolicy, profile, cursor, streamBatchSize, parserProfile, ...databaseOptions } = options;
+  return createDatabase(createPgExecutor(client, { typePolicy, profile, cursor, streamBatchSize, parserProfile }), databaseOptions);
 }
 
 export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOptions = {}): ConnectionProvider {
-  const profile = parserProfile(options.parserProfile);
+  const profile = parserProfile(options.parserProfile, options.profile);
+  const profilePolicy = options.profile?.typePolicy ?? typePolicyForProfile(profile);
+  const policy = options.typePolicy ?? profilePolicy;
+  const firstPartyProfile = options.profile === undefined
+    || representationProfiles.some((entry) => entry === options.profile);
   return {
     statementBinding: pgStatementBinding,
-    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy ? pgEnvironmentFor(profile) : { ...pgEnvironmentFor(profile), driver: { id: "pg", profile: "custom-type-policy" }, capabilities: {} },
+    environment: policy === profilePolicy && firstPartyProfile
+      ? pgEnvironmentFor(profile, policy)
+      : {
+        ...pgEnvironmentFor(profile, profilePolicy),
+        driver: { id: "pg", profile: "custom-type-policy" },
+        typePolicy: { id: policy.id, hash: policy.hash },
+        capabilities: {},
+      },
     async acquire(): Promise<ConnectionLease> {
       const client = await pool.connect();
       const executor = createPgExecutor(client, options);
@@ -791,6 +871,15 @@ export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOption
 }
 
 export function createPgPoolDatabase(pool: PgPoolLike, options: PgDatabaseOptions = {}) {
-  const { typePolicy, cursor, streamBatchSize, parserProfile, ...databaseOptions } = options;
-  return createPooledDatabase(createPgPoolProvider(pool, { typePolicy, cursor, streamBatchSize, parserProfile }), databaseOptions);
+  const { typePolicy, profile, cursor, streamBatchSize, parserProfile, ...databaseOptions } = options;
+  return createPooledDatabase(createPgPoolProvider(pool, { typePolicy, profile, cursor, streamBatchSize, parserProfile }), databaseOptions);
 }
+
+export {
+  representationProfiles,
+  typePolicyForProfile,
+} from "./type-policy.js";
+export type {
+  PgRepresentationProfile,
+  PgRepresentationProfileOptions,
+} from "./type-policy.js";

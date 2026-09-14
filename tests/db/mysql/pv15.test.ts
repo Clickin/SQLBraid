@@ -4,7 +4,7 @@ import { inject, test } from "vitest";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { createMysql2PoolDatabase, createMysql2PoolProvider } from "@sqlbraid/mysql/mysql2";
 import { createPooledDatabase } from "@sqlbraid/runtime";
-import { sql } from "@sqlbraid/mysql";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 import { runStreamingConformance } from "../../streaming-conformance.js";
 
 async function endPool(pool: Pick<Pool, "end">): Promise<void> {
@@ -24,7 +24,7 @@ function rowSchema<Output>(
 }
 
 test("MySQL mysql2 reuses streaming conformance with row schemas and lease counters", async () => {
-  const pool = createPool({ uri: inject("mysql").connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  const pool = createPool({ uri: inject("mysql").connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
   let releases = 0;
   const provider = createMysql2PoolProvider(pool, { streamHighWaterMark: 2 });
   const countedProvider = {
@@ -74,7 +74,7 @@ test("MySQL mysql2 reuses streaming conformance with row schemas and lease count
 });
 
 test("MySQL transaction streaming pins its backend and keeps binds value-only", async () => {
-  const pool = createPool({ uri: inject("mysql").connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  const pool = createPool({ uri: inject("mysql").connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
   const db = createMysql2PoolDatabase(pool, { streamHighWaterMark: 2 });
   try {
     const secret = "x'); DROP TABLE braid_pv15_bind; --";
@@ -105,7 +105,7 @@ test("MySQL transaction streaming pins its backend and keeps binds value-only", 
 });
 
 test("MySQL prepared Execute.stream handles 100k rows and drains on break", async () => {
-  const pool = createPool({ uri: inject("mysql").connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  const pool = createPool({ uri: inject("mysql").connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
   const db = createMysql2PoolDatabase(pool, { streamHighWaterMark: 8 });
   try {
     await pool.query("DROP TABLE IF EXISTS braid_pv15_stream");
@@ -138,7 +138,7 @@ test("MySQL prepared Execute.stream handles 100k rows and drains on break", asyn
 });
 
 test("MySQL streaming rejects multiple result sets and drains before reusing the same connection", async () => {
-  const pool = createPool({ uri: inject("mysql").connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  const pool = createPool({ uri: inject("mysql").connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
   const db = createMysql2PoolDatabase(pool, { streamHighWaterMark: 2 });
   try {
     await pool.query("DROP PROCEDURE IF EXISTS braid_pv15_stream_multi");
@@ -166,7 +166,7 @@ test("MySQL streaming rejects multiple result sets and drains before reusing the
 });
 
 test("MySQL materialized queries reject multiple sets, reuse the connection and keep CALL metadata independent", async () => {
-  const pool = createPool({ uri: inject("mysql").connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  const pool = createPool({ uri: inject("mysql").connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
   const db = createMysql2PoolDatabase(pool);
   try {
     await pool.query("DROP PROCEDURE IF EXISTS braid_pv15_sets");

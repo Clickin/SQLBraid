@@ -4,16 +4,24 @@ import { test } from "vitest";
 import { decodeExactInteger, type ExecutionEvent } from "@sqlbraid/core";
 import { createPooledDatabase } from "@sqlbraid/runtime";
 import { createNodeSqliteDatabase, createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";
-import { sql } from "@sqlbraid/sqlite";
+import { sql, typePolicy } from "@sqlbraid/sqlite";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
-import { assertFloatBits, binary64Finite, exactJsonText } from "../fidelity.js";
+import { assertFloatBits, assertRepresentationConformance, binary64Finite, exactJsonText } from "../fidelity.js";
 import { runTransparencyCase } from "../../transparency.js";
+import { stampSupportEnvironment } from "../support-target.js";
 
 test("sqlite.sql.native-transparency", async () => {
   const native = new DatabaseSync(":memory:");
   const events: ExecutionEvent[] = [];
   const db = createNodeSqliteDatabase(native, { observers: [{ onEvent(event) { events.push(event); } }] });
   try {
+    const environment = await db.environment();
+    stampSupportEnvironment("sqlite", {
+      ...environment,
+      database: { ...environment.database, edition: "Node bundled SQLite" },
+      driver: { ...environment.driver, version: process.versions.node },
+    }, "sqlite.sql.native-transparency");
+    events.length = 0;
     const query = sql.rows`
       WITH inputs(value) AS (SELECT ${7})
       SELECT 'literal $1 :1 @p1 ?' AS marker,
@@ -56,6 +64,10 @@ test("sqlite.numeric.exact-integer", async () => {
   const native = new DatabaseSync(":memory:");
   const db = createNodeSqliteDatabase(native);
   try {
+    const raw = native.prepare("SELECT 42 AS value");
+    raw.setReadBigInts(true);
+    const canonical = await db.one(sql.rows<{ readonly value: string }>`SELECT 42 AS value`);
+    assertRepresentationConformance(raw.get()?.value, 42n, canonical.value, "42", typePolicy, "INTEGER", "string");
     const row = await db.one(sql.rows<{
       readonly safe: string;
       readonly unsafe: string;

@@ -952,7 +952,7 @@ export type CallQuery<Result extends RoutineCallResult = RoutineCallResult> = Qu
 
 export interface CommandResult {
   readonly affectedRows?: number;
-  readonly insertId?: number | bigint | string;
+  readonly insertId?: string;
   readonly [key: string]: unknown;
 }
 
@@ -1294,7 +1294,7 @@ export interface ExecutionObserver {
 
 export interface EnvironmentCapability {
   readonly status: "guaranteed" | "guarded" | "unsupported";
-  readonly canonical?: "string" | "number";
+  readonly canonical?: "string" | "number" | "Uint8Array";
   readonly rawRepresentations?: readonly string[];
   readonly conditionCode?: string;
 }
@@ -1303,6 +1303,7 @@ export interface DatabaseEnvironment {
   readonly database: { readonly product: string; readonly version?: string; readonly edition?: string };
   readonly driver: { readonly id: string; readonly version?: string; readonly profile?: string };
   readonly runtime: { readonly id: string; readonly version?: string };
+  readonly typePolicy?: { readonly id: string; readonly hash: string };
   readonly capabilities: Readonly<Record<string, EnvironmentCapability>>;
   readonly supportMatch: {
     readonly status: "official" | "conditional" | "compatible";
@@ -1315,6 +1316,7 @@ export interface DatabaseEnvironment {
 export interface DriverEnvironment {
   readonly database: DatabaseEnvironment["database"];
   readonly driver: DatabaseEnvironment["driver"];
+  readonly typePolicy?: { readonly id: string; readonly hash: string };
   readonly capabilities: DatabaseEnvironment["capabilities"];
   readonly probe?: {
     readonly statement: RenderedStatement;
@@ -1333,6 +1335,7 @@ export interface EnvironmentSupportTarget {
   readonly database: { readonly product: string; readonly version: string; readonly edition: string };
   readonly driver: { readonly id: string; readonly version: string; readonly profile: string };
   readonly runtime: { readonly id: string; readonly version: string };
+  readonly typePolicy: { readonly id: string; readonly hash: string };
   readonly evidence: { readonly status: string };
 }
 

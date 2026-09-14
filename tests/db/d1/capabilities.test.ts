@@ -6,6 +6,7 @@ import { build as viteBuild } from "vite";
 import { Miniflare } from "miniflare";
 import { test } from "vitest";
 import { exactJsonText } from "../fidelity.js";
+import { stampSupportEnvironment } from "../support-target.js";
 
 type D1Payload = {
   readonly transparency: readonly { readonly marker: string; readonly enabled: string; readonly actual: string }[];
@@ -57,7 +58,9 @@ async function runFixture(): Promise<D1Payload> {
     const response = await worker.dispatchFetch("http://sqlbraid.test/capabilities");
     const body = await response.text();
     assert.equal(response.status, 200, body);
-    return JSON.parse(body) as D1Payload;
+    const payload = JSON.parse(body) as D1Payload;
+    stampSupportEnvironment("d1", payload.environment);
+    return payload;
   } finally {
     if (worker !== undefined) await worker.dispose();
     await rm(outputDirectory, { recursive: true, force: true });

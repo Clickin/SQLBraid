@@ -10,6 +10,7 @@ function environmentDescriptor(): DriverEnvironment {
   return {
     database: { product: "sqlite", edition: "native" },
     driver: { id: "node-sqlite", version: process.versions.node, profile: "exact-text" },
+    typePolicy: { id: "environment-test-policy", hash: "environment-test-hash" },
     capabilities: { "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint"] } },
     probe: {
       statement: sql.rows`SELECT sqlite_version() AS version`.render(),
@@ -67,6 +68,7 @@ test("environment support matching requires exact verified evidence and never gu
       database: { product: "sqlite", edition: "native", version: env.database.version! },
       driver: { id: "node-sqlite", profile: "exact-text", version: process.versions.node },
       runtime: { id: env.runtime.id, version: env.runtime.version! },
+      typePolicy: { id: "environment-test-policy", hash: "environment-test-hash" },
       evidence: { status: "verified" },
     };
     assert.equal((await db.environment()).supportMatch.status, "compatible");

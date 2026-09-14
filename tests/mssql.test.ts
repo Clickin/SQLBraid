@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import type { RenderedBulk } from "@sqlbraid/core";
 import { mssqlParameter, sql, typePolicy } from "@sqlbraid/mssql";
 import {
   createTediousExecutor,
@@ -23,6 +24,10 @@ function emit(request: TediousRequestLike, event: string, ...args: unknown[]): v
   (request as unknown as { emit(event: string, ...args: unknown[]): boolean }).emit(event, ...args);
 }
 
+function completeRequest(request: TediousRequestLike, error?: unknown, rowCount?: number): void {
+  (request as unknown as { callback(error?: unknown, rowCount?: number): void }).callback(error, rowCount);
+}
+
 test("MSSQL dialect renders deterministic parameters and bracket identifiers", () => {
   const query = sql`SELECT ${1}, ${"Ada"}`;
   const rendered = query.render();
@@ -40,6 +45,9 @@ test("MSSQL parameter factories preserve explicit metadata", () => {
   assert.deepEqual(mssqlParameter.nvarchar(200), { databaseType: "nvarchar", length: 200 });
   assert.deepEqual(mssqlParameter.nvarchar("max"), { databaseType: "nvarchar", length: "max" });
   assert.deepEqual(mssqlParameter.decimal(19, 4), { databaseType: "decimal", precision: 19, scale: 4 });
+  assert.deepEqual(mssqlParameter.numeric(19, 4), { databaseType: "numeric", precision: 19, scale: 4 });
+  assert.deepEqual(mssqlParameter.money(), { databaseType: "money" });
+  assert.deepEqual(mssqlParameter.smallmoney(), { databaseType: "smallmoney" });
   assert.throws(() => mssqlParameter.nvarchar(4001), /lengths/u);
   assert.throws(() => mssqlParameter.decimal(10, 11), /scale/u);
 });
@@ -80,6 +88,55 @@ test("MSSQL typed materialization rejects out-of-range values before execution",
     /invalid SQL Server int parameter/u,
   );
   assert.equal(executions, 0);
+});
+
+test("MSSQL native decimal helpers accept only bounded Number compatibility inputs", async () => {
+  let executions = 0;
+  const executor = createTediousExecutor(mockConnection((request) => {
+    executions += 1;
+    emit(request, "requestCompleted");
+  }));
+  await assert.doesNotReject(
+    () => executor.query(sql`SELECT ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}`.render()),
+  );
+  assert.equal(executions, 1);
+  await assert.rejects(
+    () => executor.query(sql`SELECT ${sql.bind("12.34" as never, mssqlParameter.decimal(19, 4))}`.render()),
+    /compatibility inputs require a finite plain JavaScript number/u,
+  );
+  await assert.rejects(
+    () => executor.query(sql`SELECT ${sql.bind(1_234_567_890_123_456 as never, mssqlParameter.money())}`.render()),
+    /limited to 15 significant decimal digits/u,
+  );
+  await assert.rejects(
+    () => executor.query(sql`SELECT ${sql.bind(12.34567, mssqlParameter.smallmoney())}`.render()),
+    /four fractional|exceeds decimal/u,
+  );
+  assert.equal(executions, 1);
+});
+
+test("MSSQL prepared bulk rejects an unsafe aggregate affected-row count", async () => {
+  const connection: TediousConnectionLike = {
+    execSql() { throw new Error("bulk must use prepare/execute/unprepare"); },
+    prepare(request) {
+      Object.assign(request, { preparing: true });
+      completeRequest(request);
+    },
+    execute(request) { completeRequest(request, undefined, Number.MAX_SAFE_INTEGER); },
+    unprepare(request) { completeRequest(request); },
+    beginTransaction() {},
+    commitTransaction() {},
+    rollbackTransaction() {},
+    saveTransaction() {},
+  };
+  const statement = sql.command`UPDATE account SET amount = ${1}`.render();
+  const bulk: RenderedBulk = { statement, parameterSets: [[1], [2]] };
+  const executor = createTediousExecutor(connection);
+  const binding = executor.statementBinding.describeBulk!(bulk, { dialectId: "mssql", requestedReuse: "auto" });
+  await assert.rejects(
+    () => executor.bulk!(bulk, binding),
+    { code: "BRAID_RESULT_EXACTNESS" },
+  );
 });
 
 test("MSSQL direct adapters reject pool connections while pool leases release once", async () => {

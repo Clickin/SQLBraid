@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { Connection, ISOLATION_LEVEL } from "tedious";
+import { readFileSync } from "node:fs";
+import { Connection, ISOLATION_LEVEL, Request } from "tedious";
 import { inject, test } from "vitest";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { ResultExactnessError, type ExecutionEvent } from "@sqlbraid/core";
@@ -8,6 +9,7 @@ import { mssqlParameter, sql } from "@sqlbraid/mssql";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
 import { assertFloatBits, binary32Finite, binary64Finite, exactJsonText } from "../fidelity.js";
 import { runTransparencyCase } from "../../transparency.js";
+import { stampSupportEnvironment } from "../support-target.js";
 
 interface MssqlSettings {
   readonly server: string;
@@ -15,6 +17,19 @@ interface MssqlSettings {
   readonly userName: string;
   readonly password: string;
   readonly database: string;
+}
+
+const tediousVersion = (JSON.parse(readFileSync(new URL("../../../node_modules/tedious/package.json", import.meta.url), "utf8")) as { readonly version: string }).version;
+
+function rawRow(connection: Connection, text: string): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    let row: Record<string, unknown> = {};
+    const request = new Request(text, (error) => error ? reject(error) : resolve(row));
+    request.on("row", (columns: readonly { readonly metadata: { readonly colName: string }; readonly value: unknown }[]) => {
+      row = Object.fromEntries(columns.map((column) => [column.metadata.colName, column.value]));
+    });
+    connection.execSql(request);
+  });
 }
 
 function connect(settings: MssqlSettings): Promise<Connection> {
@@ -35,6 +50,31 @@ function connect(settings: MssqlSettings): Promise<Connection> {
     connection.once("connect", (error) => error ? reject(error) : resolve(connection));
     connection.connect();
   });
+}
+
+async function stampMssqlEnvironment(db: ReturnType<typeof createTediousDatabase>, testId: string): Promise<void> {
+  const environment = await db.environment();
+  const probe = await db.one(sql.rows<{
+    readonly version: string;
+    readonly edition: string;
+    readonly major_version: string;
+    readonly update_level: string | null;
+  }>`
+    SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version,
+           CAST(SERVERPROPERTY('Edition') AS nvarchar(128)) AS edition,
+           CAST(SERVERPROPERTY('ProductMajorVersion') AS nvarchar(16)) AS major_version,
+           CAST(SERVERPROPERTY('ProductUpdateLevel') AS nvarchar(32)) AS update_level
+  `);
+  assert.ok(probe.version && probe.edition && probe.major_version);
+  const major = probe.major_version === "16" ? "2022" : probe.major_version;
+  const databaseVersion = probe.update_level ? `${major}-${probe.update_level}` : probe.version;
+  const edition = /^(Developer|Enterprise|Standard|Express)/u.exec(probe.edition)?.[1] ?? probe.edition;
+  stampSupportEnvironment("mssql", {
+    ...environment,
+    database: { product: "mssql", version: databaseVersion, edition },
+    driver: { ...environment.driver, version: tediousVersion },
+    runtime: { id: "node", version: process.versions.node },
+  }, testId);
 }
 
 async function close(connection: Connection): Promise<void> {
@@ -89,6 +129,8 @@ test("mssql.numeric.exact-integer", { timeout: 30_000 }, async () => {
   const db = createTediousDatabase(connection);
   try {
     assert.equal((await db.environment()).capabilities["numeric.exact-integer"]?.canonical, "string");
+    const raw = await rawRow(connection, "SELECT CAST('2147483647' AS int) AS standard, CAST('9223372036854775807' AS bigint) AS max");
+    assert.deepEqual(raw, { standard: 2147483647, max: "9223372036854775807" });
     const row = await db.one(sql.rows<{
       readonly tiny: string;
       readonly small: string;
@@ -226,6 +268,24 @@ test("mssql.data.json-lossless-text", { timeout: 30_000 }, async () => {
     `);
     assert.equal(row.payload, exactJsonText);
     assert.equal(row.enabled, "true");
+  } finally {
+    await close(connection);
+  }
+});
+
+test("mssql.data.sql-variant-unclassified", { timeout: 30_000 }, async () => {
+  const connection = await connect(inject("mssql") as MssqlSettings);
+  const db = createTediousDatabase(connection);
+  try {
+    const environment = await db.environment();
+    await stampMssqlEnvironment(db, "mssql.data.sql-variant-unclassified");
+    assert.equal(environment.capabilities["data.sql-variant"]?.status, "unsupported");
+    assert.deepEqual(environment.capabilities["data.sql-variant"]?.rawRepresentations, ["driver-native"]);
+    const text = "SELECT CAST(CAST('9007199254740993' AS bigint) AS sql_variant) AS variantBigint, CAST('payload' AS sql_variant) AS variantText, CAST(CAST('12.34' AS decimal(10, 2)) AS sql_variant) AS variantDecimal";
+    const raw = await rawRow(connection, text);
+    const row = await db.one(sql.rows<Record<string, unknown>>`${sql.raw(text)}`);
+    assert.deepEqual(row, raw);
+    assert.deepEqual(Object.keys(row), ["variantBigint", "variantText", "variantDecimal"]);
   } finally {
     await close(connection);
   }

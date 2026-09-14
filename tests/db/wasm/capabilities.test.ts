@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { beforeAll, test } from "vitest";
+import { typePolicy } from "@sqlbraid/sqlite";
 import { exactJsonText } from "../fidelity.js";
+import { stampSupportEnvironment } from "../support-target.js";
 
 interface TransparencyEvidence {
   readonly logicalSegments: readonly string[];
@@ -54,6 +57,7 @@ interface StreamEvidence {
 interface WasmReport {
   readonly runtime: "browser-wasm";
   readonly sqliteVersion: string;
+  readonly browserVersion: string;
   readonly cases: {
     readonly "wasm.sql.native-transparency": TransparencyEvidence;
     readonly "wasm.sql.generated-structure": GeneratedEvidence;
@@ -130,6 +134,14 @@ beforeAll(async () => {
   report = await runBrowserSmoke();
   assert.equal(report.runtime, "browser-wasm");
   assert.match(report.sqliteVersion, /^\d+\.\d+\.\d+$/u);
+  assert.match(report.browserVersion, /^\d+\.\d+\.\d+\.\d+$/u);
+  const driverPackage = JSON.parse(readFileSync(resolve(root, "node_modules/@sqlite.org/sqlite-wasm/package.json"), "utf8"));
+  stampSupportEnvironment("sqlite-wasm", {
+    database: { product: "sqlite", version: report.sqliteVersion, edition: "official SQLite WASM OO1" },
+    driver: { id: "sqlite-wasm", version: driverPackage.version, profile: "sqlite-wasm-exact-string" },
+    runtime: { id: "browser", version: report.browserVersion },
+    typePolicy: { id: typePolicy.id, hash: typePolicy.hash },
+  });
 }, 180_000);
 
 test("wasm.sql.native-transparency", () => {

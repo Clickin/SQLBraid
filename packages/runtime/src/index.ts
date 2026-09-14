@@ -715,6 +715,9 @@ function assertExecutionResult<Row>(query: Query<unknown, QueryResultKind>, resu
   if (result.kind === "rows") {
     return rowCount === result.rowCount ? result : { ...result, rowCount };
   }
+  if (result.command.insertId !== undefined && typeof result.command.insertId !== "string") {
+    throw new ResultExactnessError("Database insertId must be represented as an exact string.");
+  }
   const affectedRows = result.command.affectedRows === undefined
     ? undefined
     : safeDatabaseCount(result.command.affectedRows);
@@ -1392,6 +1395,9 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           database: Object.freeze({ ...databaseInfo }),
           driver: Object.freeze({ ...(descriptor?.driver ?? { id: statementBinding.id }) }),
           runtime: runtimeEnvironment(),
+          ...(descriptor?.typePolicy === undefined
+            ? {}
+            : { typePolicy: Object.freeze({ ...descriptor.typePolicy }) }),
           capabilities: Object.freeze(Object.fromEntries(
             Object.entries(capabilities).map(([id, capability]) => [
               id,
@@ -1417,7 +1423,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         target.driver.version === evidence.driver.version &&
         target.driver.profile === evidence.driver.profile &&
         target.runtime.id === evidence.runtime.id &&
-        target.runtime.version === evidence.runtime.version,
+        target.runtime.version === evidence.runtime.version &&
+        evidence.typePolicy !== undefined &&
+        target.typePolicy?.id === evidence.typePolicy.id &&
+        target.typePolicy?.hash === evidence.typePolicy.hash,
       );
       const target = matches.length === 1 ? matches[0] : undefined;
       const supportMatch: DatabaseEnvironment["supportMatch"] = target

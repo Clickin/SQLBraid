@@ -90,11 +90,11 @@ test("SQL Server binds explicit types, reports kinds, and preserves result-set b
     const db = createTediousDatabase(connection);
     await db.execute(sql`DROP TABLE IF EXISTS dbo.braid_pv13`);
     await db.execute(sql`CREATE TABLE dbo.braid_pv13 (id int NOT NULL PRIMARY KEY, amount decimal(19,4) NULL, label nvarchar(100) NULL, payload varbinary(16) NULL)`);
-    await db.execute(sql`INSERT INTO dbo.braid_pv13 (id, amount, label, payload) VALUES (${1}, ${sql.bind("12.3400", mssqlParameter.decimal(19, 4))}, ${sql.bind("Ada", mssqlParameter.nvarchar(100))}, ${sql.bind(new Uint8Array([1, 2]), mssqlParameter.varbinary(16))})`);
+    await db.execute(sql`INSERT INTO dbo.braid_pv13 (id, amount, label, payload) VALUES (${1}, ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}, ${sql.bind("Ada", mssqlParameter.nvarchar(100))}, ${sql.bind(new Uint8Array([1, 2]), mssqlParameter.varbinary(16))})`);
 
     const selected = await db.all(sql.rows<{ readonly id: string; readonly amount: string; readonly label: string; readonly payload: Uint8Array }>`
       SELECT id, CONVERT(varchar(64), amount) AS amount, label, payload FROM dbo.braid_pv13
-      WHERE amount = ${sql.bind("12.3400", mssqlParameter.decimal(19, 4))}
+      WHERE amount = ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}
         AND id = ${sql.bind(1, mssqlParameter.int())}
     `);
     assert.equal(selected.length, 1);
@@ -111,14 +111,13 @@ test("SQL Server binds explicit types, reports kinds, and preserves result-set b
       (error) => error instanceof DatabaseResultKindError && error.actualKind === "rows",
     );
     await assert.rejects(
-      () => db.execute(sql`SELECT ${sql.bind("1234567890123456", mssqlParameter.decimal(38, 4))}`),
-      /BRAID_BIND_DECIMAL_EXACTNESS/u,
+      () => db.execute(sql`SELECT ${sql.bind("1234567890123456" as never, mssqlParameter.decimal(38, 4))}`),
+      TypeError,
     );
-    await assert.rejects(
-      // @ts-expect-error Invalid typed input from JavaScript must fail before I/O.
-      () => db.execute(sql`SELECT ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}`),
-      /BRAID_BIND_DECIMAL_EXACTNESS/u,
-    );
+    const decimalInput = await db.one(sql.rows<{ value: string }>`
+      SELECT CONVERT(varchar(40), ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}) AS value
+    `);
+    assert.equal(decimalInput.value, "12.3400");
     await assert.rejects(() => db.execute(sql`SELECT ${null}`), /BRAID_BIND_TYPE_REQUIRED/u);
     await assert.rejects(
       () => db.execute(sql.rows`SELECT 1 AS duplicate, 2 AS duplicate`),

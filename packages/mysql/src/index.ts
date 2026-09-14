@@ -8,5 +8,20 @@ export const dialect: Dialect = {
 };
 
 export const sql: SqlTag = createSqlTag({ dialect });
-export { typePolicy } from "./type-policy.js";
+export {
+  MYSQL2_DATE_TEXT,
+  MYSQL2_JSON_TEXT,
+  MYSQL2_LOSSLESS_TEXT,
+  MYSQL2_NATIVE,
+  representationProfiles,
+  typePolicy,
+  typePolicyForProfile,
+} from "./type-policy.js";
+export type {
+  Mysql2ConnectionOptions,
+  Mysql2JsonProfile,
+  Mysql2ProfileOptions,
+  Mysql2RepresentationProfile,
+  Mysql2TemporalProfile,
+} from "./type-policy.js";
 export { createSqlTag } from "@sqlbraid/template";

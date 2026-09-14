@@ -1,4 +1,19 @@
 import assert from "node:assert/strict";
+import type { TypePolicy } from "@sqlbraid/core";
+
+export function assertRepresentationConformance(
+  raw: unknown,
+  expectedRaw: unknown,
+  canonical: unknown,
+  expectedCanonical: unknown,
+  policy: TypePolicy,
+  databaseType: string,
+  outputType: string,
+): void {
+  assert.deepEqual(raw, expectedRaw, "Driver raw carrier/value differs from the fixture.");
+  assert.deepEqual(canonical, expectedCanonical, "Canonical value differs from the representation contract.");
+  assert.equal(policy.mappings.find(mapping => mapping.databaseType === databaseType)?.outputType, outputType);
+}
 
 export const exactJsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
 

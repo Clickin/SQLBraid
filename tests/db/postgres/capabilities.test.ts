@@ -170,10 +170,10 @@ test("postgres.data.temporal", { timeout: 30_000 }, async () => {
   }
 });
 
-test("postgres.pv17.parser-profiles", { timeout: 30_000 }, async () => {
+test("postgres.pv18.parser-profiles", { timeout: 30_000 }, async () => {
   const client = new Client({ connectionString: (inject("postgres") as Settings).connectionUri });
   await client.connect();
-  const db = createPgDatabase(client, { parserProfile: { json: "parsed", temporal: "date" } });
+  const db = createPgDatabase(client, { parserProfile: { json: "native", temporal: "native" } });
   try {
     const row = await db.one(sql.rows<{ readonly payload: unknown; readonly instant: Date }>`
       SELECT '{"nested":{"digits":9007199254740993}}'::jsonb AS payload,
@@ -183,9 +183,11 @@ test("postgres.pv17.parser-profiles", { timeout: 30_000 }, async () => {
     assert.ok(row.instant instanceof Date);
     assert.equal(row.instant.toISOString(), "2026-09-14T12:34:56.123Z");
     const environment = await db.environment();
-    assert.equal(environment.driver.profile, "node-postgres-compatibility");
+    assert.equal(environment.driver.profile, "pg-native");
     assert.equal(environment.capabilities["data.json-lossless-text"]?.status, "unsupported");
     assert.equal(environment.capabilities["data.temporal-lossless"]?.status, "unsupported");
+    assert.equal(environment.capabilities["data.json-parsed"]?.status, "guarded");
+    assert.equal(environment.capabilities["data.temporal-native"]?.status, "guarded");
   } finally {
     await client.end();
   }

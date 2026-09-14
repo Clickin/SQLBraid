@@ -20,6 +20,7 @@ import {
   safeDatabaseCount,
 } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
+import { typePolicy } from "./type-policy.js";
 
 export interface D1ResultMetaLike {
   readonly changes?: number;
@@ -170,7 +171,8 @@ function materialize(statement: RenderedStatement, binding: StatementBindingDesc
 
 const d1Environment = Object.freeze<DriverEnvironment>({
   database: { product: "sqlite" },
-  driver: { id: "cloudflare-d1", profile: "guarded-safe-integer" },
+  driver: { id: "cloudflare-d1", profile: "d1-guarded-safe-integer" },
+  typePolicy: { id: typePolicy.id, hash: typePolicy.hash },
   capabilities: {
     "sql.native-transparency": { status: "guaranteed" },
     "numeric.exact-integer": { status: "guarded", canonical: "string", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.safe-integer" },

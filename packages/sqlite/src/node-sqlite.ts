@@ -20,6 +20,7 @@ import {
   safeDatabaseCount,
 } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
+import { typePolicy } from "./type-policy.js";
 
 export interface SqliteColumnLike {
   readonly name?: string | null;
@@ -170,7 +171,8 @@ function configureExactIntegerReads(statement: SqliteStatementLike): void {
 function nodeSqliteEnvironment(): DriverEnvironment {
   return Object.freeze<DriverEnvironment>({
     database: { product: "sqlite" },
-    driver: { id: "node-sqlite", profile: "exact-string" },
+    driver: { id: "node-sqlite", profile: "sqlite-exact-string" },
+    typePolicy: { id: typePolicy.id, hash: typePolicy.hash },
     capabilities: {
       "sql.native-transparency": { status: "guaranteed" },
       "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] },

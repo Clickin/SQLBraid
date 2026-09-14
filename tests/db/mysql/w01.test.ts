@@ -9,7 +9,7 @@ import { hashSnapshot } from "@sqlbraid/metadata";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
 import { createMysqlInspector } from "@sqlbraid/mysql/inspector";
-import { sql, typePolicy as mysqlTypePolicy } from "@sqlbraid/mysql";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 import { runW01 } from "../w01.js";
 import { bindingObserver } from "../binding.js";
 import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGeneratedPropertyAbsent } from "../codegen.js";
@@ -23,7 +23,7 @@ async function endPool(pool: Pick<Pool, "end">): Promise<void> {
 }
 
 test("MySQL binding diagnostics preserve literal marker text through real execution", async () => {
-  const client = await createConnection(inject("mysql").connectionUri);
+  const client = await createConnection({ uri: inject("mysql").connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions });
   try {
     const probe = bindingObserver("mysql", "text-positional");
     const db = createMysql2Database(client, { observers: [probe.observer] });
@@ -39,8 +39,8 @@ test("MySQL binding diagnostics preserve literal marker text through real execut
 
 test("MySQL wrappers sharing one connection preserve transaction isolation", async () => {
   const settings = inject("mysql");
-  const client = await createConnection(settings.connectionUri);
-  const observer = await createConnection(settings.connectionUri);
+  const client = await createConnection({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions });
+  const observer = await createConnection({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions });
   try {
     const [versionRows] = await observer.query("SELECT VERSION() AS version");
     const version = (versionRows as { version: string }[])[0]?.version ?? "unknown";
@@ -65,7 +65,7 @@ test("MySQL wrappers sharing one connection preserve transaction isolation", asy
 
 test("MySQL result kinds follow payload metadata", async () => {
   const settings = inject("mysql");
-  const client = await createConnection(settings.connectionUri);
+  const client = await createConnection({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions });
   try {
     const db = createMysql2Database(client);
     await client.query("DROP TABLE IF EXISTS braid_pv4");
@@ -131,7 +131,7 @@ test("MySQL result kinds follow payload metadata", async () => {
 
 test("MySQL inspector separates primary-key and auto-increment identity", async () => {
   const settings = inject("mysql");
-  const client = await createConnection(settings.connectionUri);
+  const client = await createConnection({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions });
   try {
     await client.query("DROP TABLE IF EXISTS braid_pv8_inspector");
     await client.query("DROP PROCEDURE IF EXISTS braid_pv8_routine");
@@ -156,7 +156,7 @@ test("MySQL inspector separates primary-key and auto-increment identity", async 
 
 test("MySQL inspector evidence generates compiling Row Insert and Update models", async () => {
   const settings = inject("mysql");
-  const client = await createConnection(settings.connectionUri);
+  const client = await createConnection({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions });
   try {
     await client.query("DROP TABLE IF EXISTS braid_pv9_codegen");
     await client.query(`
@@ -188,10 +188,10 @@ test("MySQL inspector evidence generates compiling Row Insert and Update models"
     assert.equal(columns.get("calculated")?.insertable, false);
     assert.equal(columns.get("calculated")?.updatable, false);
 
-    const result = generateModels(snapshot, { typePolicy: mysqlTypePolicy });
+    const result = generateModels(snapshot, { typePolicy: MYSQL2_LOSSLESS_TEXT.typePolicy });
     assert.equal(result.metadataHash, hashSnapshot(snapshot));
-    assert.equal(result.typePolicyId, mysqlTypePolicy.id);
-    assert.equal(result.typePolicyHash, mysqlTypePolicy.hash);
+    assert.equal(result.typePolicyId, MYSQL2_LOSSLESS_TEXT.typePolicy.id);
+    assert.equal(result.typePolicyHash, MYSQL2_LOSSLESS_TEXT.typePolicy.hash);
     assert.deepEqual(result.models.find((model) => model.relationIdentity === relation.identity), {
       relationIdentity: relation.identity,
       modelName: "BraidPv9Codegen",
@@ -204,7 +204,7 @@ test("MySQL inspector evidence generates compiling Row Insert and Update models"
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "identity_value", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "amount", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "label", "string", false);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "payload", "unknown | null", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "payload", "string | null", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "nickname", "string | null", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "calculated", "string | null", false);
 
@@ -212,7 +212,7 @@ test("MySQL inspector evidence generates compiling Row Insert and Update models"
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "identity_value", "bigint | string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "amount", "string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "label", "string", false);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "payload", "unknown | null", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "payload", "string | null", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "nickname", "string | null", true);
     assertGeneratedPropertyAbsent(result.source, "BraidPv9CodegenInsert", "calculated");
 
@@ -220,7 +220,7 @@ test("MySQL inspector evidence generates compiling Row Insert and Update models"
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "identity_value", "bigint | string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "amount", "string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "label", "string", true);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "payload", "unknown | null", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "payload", "string | null", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "nickname", "string | null", true);
     assertGeneratedPropertyAbsent(result.source, "BraidPv9CodegenUpdate", "calculated");
 
@@ -233,7 +233,7 @@ test("MySQL inspector evidence generates compiling Row Insert and Update models"
 
 test("MySQL pool leases run concurrent roots and pin transactions", async () => {
   const settings = inject("mysql");
-  const pool = createPool({ uri: settings.connectionUri, connectionLimit: 2, idleTimeout: 0 });
+  const pool = createPool({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 2, idleTimeout: 0 });
   const acquiredIds: number[] = [];
   let releaseCount = 0;
   pool.on("acquire", (connection) => { acquiredIds.push(connection.threadId); });
@@ -283,7 +283,7 @@ test("MySQL pool leases run concurrent roots and pin transactions", async () => 
 
 test("MySQL pool releases before an async mapper can re-enter a max-one pool", async () => {
   const settings = inject("mysql");
-  const pool = createPool({ uri: settings.connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  const pool = createPool({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
   let acquired = 0;
   let released = 0;
   pool.on("acquire", () => { acquired += 1; });
@@ -325,7 +325,7 @@ test("MySQL pool releases before an async mapper can re-enter a max-one pool", a
 
 test("MySQL pool observers receive SQL, binds, results, errors, and transaction lifecycle", async () => {
   const settings = inject("mysql");
-  const pool = createPool({ uri: settings.connectionUri, connectionLimit: 1, idleTimeout: 0 });
+  const pool = createPool({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
   const events: ExecutionEvent[] = [];
   const db = createMysql2PoolDatabase(pool, {
     observers: [{ async onEvent(event) { events.push(event); } }],

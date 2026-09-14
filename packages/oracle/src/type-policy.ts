@@ -9,7 +9,10 @@ export type OracleBinaryInput = Uint8Array;
 type OracleNullable<Input> = Input | null;
 const exactNumericTypes = new Set(["NUMBER", "FLOAT", "DECIMAL", "NUMERIC", "INTEGER", "INT", "SMALLINT", "REAL", "DOUBLE", "DOUBLE PRECISION"]);
 
-const mappings = [
+const mappingDefinitions = [
+  { databaseType: "CHAR", inputType: "string", outputType: "string", nullable: true },
+  { databaseType: "NCHAR", inputType: "string", outputType: "string", nullable: true },
+  { databaseType: "VARCHAR", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "VARCHAR2", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "NVARCHAR2", inputType: "string", outputType: "string", nullable: true },
   ...["NUMBER", "FLOAT", "DECIMAL", "NUMERIC", "REAL", "DOUBLE", "DOUBLE PRECISION"].map((databaseType) => ({
@@ -33,10 +36,23 @@ const mappings = [
   { databaseType: "TIMESTAMP WITH TIME ZONE", inputType: "Date", outputType: "Date", nullable: true },
   { databaseType: "TIMESTAMP WITH LOCAL TIME ZONE", inputType: "Date", outputType: "Date", nullable: true },
   { databaseType: "RAW", inputType: "Uint8Array", outputType: "Uint8Array", nullable: true },
+  { databaseType: "ROWID", inputType: "string", outputType: "string", nullable: true },
+  { databaseType: "UROWID", inputType: "string", outputType: "string", nullable: true },
+  // Native JSON/object/vector values are intentionally open: node-oracledb
+  // parses them into driver-owned values whose nested representation is not
+  // recursively covered by scalar TypePolicy guarantees.
+  { databaseType: "JSON", inputType: "unknown", outputType: "unknown", nullable: true },
+  { databaseType: "OBJECT", inputType: "unknown", outputType: "unknown", nullable: true },
+  { databaseType: "VECTOR", inputType: "unknown", outputType: "unknown", nullable: true },
   { databaseType: "BLOB", inputType: "unknown", outputType: "unknown", nullable: true },
   { databaseType: "CLOB", inputType: "unknown", outputType: "unknown", nullable: true },
   { databaseType: "NCLOB", inputType: "unknown", outputType: "unknown", nullable: true },
 ] as const;
+
+const mappings = Object.freeze(mappingDefinitions.map((mapping) => Object.freeze({
+  ...mapping,
+  ...("numeric" in mapping ? { numeric: Object.freeze(mapping.numeric) } : {}),
+})));
 
 function normalize(databaseType: string): string {
   return databaseType.trim().toUpperCase().replaceAll(/\s+/gu, " ");
@@ -62,7 +78,7 @@ export function isOracleBinaryNumericType(databaseType: string): boolean {
 function encode(databaseType: string, value: unknown): unknown {
   if (value === null || value === undefined) return value;
   const type = normalize(databaseType);
-  if ((type === "VARCHAR2" || type === "NVARCHAR2") && typeof value !== "string") {
+  if ((type === "CHAR" || type === "NCHAR" || type === "VARCHAR" || type === "VARCHAR2" || type === "NVARCHAR2" || type === "ROWID" || type === "UROWID") && typeof value !== "string") {
     throw new TypeError(`Oracle ${type} parameters require a string value.`);
   }
   if (isOracleExactNumericType(type) && typeof value !== "bigint" && !isFiniteNumber(value)) {
@@ -92,13 +108,13 @@ function decode(databaseType: string, value: unknown): unknown {
   return value;
 }
 
-export const typePolicy: TypePolicy = {
+export const typePolicy: TypePolicy = Object.freeze({
   id: "oracle-default",
-  hash: "oracle-default-v3",
+  hash: "05f6fd4a7fc0cb2a6c938d420b21792fa4fa2e3a9839aafe30451d94a92d9cdb",
   mappings,
   decode,
   encode,
-};
+});
 
 function hint<Input>(databaseType: string, options: Omit<ParameterTypeHint<Input>, "databaseType" | "__input"> = {}): ParameterTypeHint<Input> {
   if (options.length !== undefined && options.length !== "max" && (!Number.isInteger(options.length) || options.length <= 0)) {
@@ -114,6 +130,8 @@ function hint<Input>(databaseType: string, options: Omit<ParameterTypeHint<Input
 }
 
 export const oracleParameter = Object.freeze({
+  char: (length?: number | "max"): ParameterTypeHint<OracleNullable<string>> => hint("CHAR", length === undefined ? {} : { length }),
+  nchar: (length?: number | "max"): ParameterTypeHint<OracleNullable<string>> => hint("NCHAR", length === undefined ? {} : { length }),
   varchar2: (length?: number | "max"): ParameterTypeHint<OracleNullable<string>> => hint("VARCHAR2", length === undefined ? {} : { length }),
   nvarchar2: (length?: number | "max"): ParameterTypeHint<OracleNullable<string>> => hint("NVARCHAR2", length === undefined ? {} : { length }),
   number: (precision?: number, scale?: number): ParameterTypeHint<OracleNullable<OracleNumberInput>> => hint("NUMBER", { ...(precision === undefined ? {} : { precision }), ...(scale === undefined ? {} : { scale }) }),
@@ -124,6 +142,8 @@ export const oracleParameter = Object.freeze({
   timestampTz: (): ParameterTypeHint<OracleNullable<Date>> => hint("TIMESTAMP WITH TIME ZONE"),
   timestampLtz: (): ParameterTypeHint<OracleNullable<Date>> => hint("TIMESTAMP WITH LOCAL TIME ZONE"),
   raw: (length?: number | "max"): ParameterTypeHint<OracleNullable<OracleBinaryInput>> => hint("RAW", length === undefined ? {} : { length }),
+  rowid: (): ParameterTypeHint<OracleNullable<string>> => hint("ROWID"),
+  urowid: (): ParameterTypeHint<OracleNullable<string>> => hint("UROWID"),
   blob: (): ParameterTypeHint<OracleNullable<unknown>> => hint("BLOB"),
   clob: (): ParameterTypeHint<OracleNullable<unknown>> => hint("CLOB"),
   nclob: (): ParameterTypeHint<OracleNullable<unknown>> => hint("NCLOB"),

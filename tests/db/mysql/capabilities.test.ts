@@ -3,8 +3,8 @@ import { createConnection, type Connection, type RowDataPacket } from "mysql2/pr
 import { inject, test } from "vitest";
 import { type ExecutionEvent } from "@sqlbraid/core";
 import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
-import { sql } from "@sqlbraid/mysql";
-import { assertFloatBits, binary32Finite, binary64Finite, exactJsonText } from "../fidelity.js";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
+import { assertFloatBits, assertRepresentationConformance, binary32Finite, binary64Finite, exactJsonText } from "../fidelity.js";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
 import { runTransparencyCase } from "../../transparency.js";
 
@@ -19,6 +19,7 @@ async function connect(overrides: Partial<{
   const settings = inject("mysql") as Settings;
   const uri = new URL(settings.connectionUri);
   return createConnection({
+    ...MYSQL2_LOSSLESS_TEXT.connectionOptions,
     host: uri.hostname,
     port: uri.port ? Number(uri.port) : 3306,
     user: decodeURIComponent(uri.username),
@@ -28,13 +29,13 @@ async function connect(overrides: Partial<{
     bigNumberStrings: true,
     decimalNumbers: false,
     rowsAsArray: false,
-    jsonStrings: overrides.jsonStrings ?? false,
-    dateStrings: overrides.dateStrings ?? false,
+    jsonStrings: overrides.jsonStrings ?? true,
+    dateStrings: overrides.dateStrings ?? true,
   });
 }
 
 test("mysql.sql.native-transparency", { timeout: 30_000 }, async () => {
-  const connection = await connect();
+  const connection = await connect({ jsonStrings: false, dateStrings: false });
   const events: ExecutionEvent[] = [];
   const db = createMysql2Database(connection, { observers: [{ onEvent(event) { events.push(event); } }] });
   try {
@@ -169,7 +170,7 @@ test("mysql.numeric.exact-bind", { timeout: 30_000 }, async () => {
 });
 
 test("mysql.data.json-native", { timeout: 30_000 }, async () => {
-  const connection = await connect();
+  const connection = await connect({ jsonStrings: false, dateStrings: false });
   const db = createMysql2Database(connection);
   try {
     await connection.query("CREATE TEMPORARY TABLE braid_pv16_json (id INT PRIMARY KEY, payload JSON NOT NULL)");
@@ -181,6 +182,14 @@ test("mysql.data.json-native", { timeout: 30_000 }, async () => {
     `);
     assert.deepEqual(row.payload, { enabled: true, nested: { count: 2 } });
     assert.equal(row.enabled, 2);
+    const roots = await db.one(sql.rows<{ readonly object_value: unknown; readonly array_value: unknown; readonly null_value: unknown }>`
+      SELECT JSON_OBJECT('enabled', TRUE) AS object_value,
+             JSON_ARRAY(1, TRUE, 'text') AS array_value,
+             JSON_EXTRACT('null', '$') AS null_value
+    `);
+    assert.deepEqual(roots.object_value, { enabled: true });
+    assert.deepEqual(roots.array_value, [1, true, "text"]);
+    assert.equal(roots.null_value, null);
   } finally {
     await connection.end();
   }
@@ -194,6 +203,31 @@ test("mysql.data.json-lossless-text", { timeout: 30_000 }, async () => {
     assert.equal(environment.driver.profile, "mysql2-lossless-text");
     assert.equal(environment.capabilities["data.json-lossless-text"]?.status, "guaranteed");
     assert.equal(environment.capabilities["data.temporal-lossless"]?.status, "guaranteed");
+    const [rawProfileRows] = await connection.query<RowDataPacket[]>(`
+      SELECT 7 AS integer_literal_value,
+             CAST('9223372036854775807' AS SIGNED) AS big_value,
+             CAST('123.4500' AS DECIMAL(20, 4)) AS decimal_value,
+             CAST('1.25' AS DOUBLE) AS float_value,
+             JSON_OBJECT('enabled', TRUE) AS json_value,
+             CAST('2026-09-14 12:34:56.123456' AS DATETIME(6)) AS temporal_value
+    `);
+    const rawProfile = rawProfileRows[0]!;
+    assert.equal(typeof rawProfile.integer_literal_value, "string");
+    assert.equal(typeof rawProfile.big_value, "string");
+    assert.equal(typeof rawProfile.decimal_value, "string");
+    assert.equal(typeof rawProfile.float_value, "number");
+    assert.equal(typeof rawProfile.json_value, "string");
+    assert.equal(typeof rawProfile.temporal_value, "string");
+    const canonicalDecimal = await db.one(sql.rows<{ readonly value: string }>`SELECT CAST('123.4500' AS DECIMAL(20, 4)) AS value`);
+    assertRepresentationConformance(
+      rawProfile.decimal_value,
+      "123.4500",
+      canonicalDecimal.value,
+      "123.4500",
+      MYSQL2_LOSSLESS_TEXT.typePolicy,
+      "DECIMAL",
+      "string",
+    );
     await connection.query("CREATE TEMPORARY TABLE braid_pv17_json (payload JSON NOT NULL)");
     await db.execute(sql.command`INSERT INTO braid_pv17_json (payload) VALUES (${exactJsonText})`);
     const row = await db.one(sql.rows<{ readonly payload: string }>`SELECT payload FROM braid_pv17_json`);
@@ -215,13 +249,36 @@ test("mysql.data.json-lossless-text", { timeout: 30_000 }, async () => {
 
     const temporal = await db.one(sql.rows<{ readonly value: string }>`SELECT CAST('2026-09-14 12:34:56.123456' AS DATETIME(6)) AS value`);
     assert.equal(temporal.value, "2026-09-14 12:34:56.123456");
+    await connection.query(`
+      CREATE TEMPORARY TABLE braid_pv18_temporal (
+        date_value DATE,
+        time_value TIME(6),
+        datetime_value DATETIME(6),
+        timestamp_value TIMESTAMP(6)
+      )
+    `);
+    await connection.query("INSERT INTO braid_pv18_temporal VALUES ('2026-09-14', '12:34:56.123456', '2026-09-14 12:34:56.123456', '2026-09-14 12:34:56.123456')");
+    assert.deepEqual(
+      await db.one(sql.rows<{
+        readonly date_value: string;
+        readonly time_value: string;
+        readonly datetime_value: string;
+        readonly timestamp_value: string;
+      }>`SELECT date_value, time_value, datetime_value, timestamp_value FROM braid_pv18_temporal`),
+      {
+        date_value: "2026-09-14",
+        time_value: "12:34:56.123456",
+        datetime_value: "2026-09-14 12:34:56.123456",
+        timestamp_value: "2026-09-14 12:34:56.123456",
+      },
+    );
   } finally {
     await connection.end();
   }
 });
 
 test("mysql.data.temporal", { timeout: 30_000 }, async () => {
-  const connection = await connect();
+  const connection = await connect({ jsonStrings: false, dateStrings: false });
   const db = createMysql2Database(connection);
   try {
     const row = await db.one(sql.rows<{ readonly instant: Date }>`SELECT CAST('2026-09-14 12:34:56' AS DATETIME) AS instant`);
@@ -288,14 +345,14 @@ test("mysql.result.command", { timeout: 30_000 }, async () => {
     assert.equal(inserted.command.affectedRows, 1);
     assert.equal(inserted.command.insertId, "1");
 
-    const lexical = await db.one(sql.rows<{ readonly id: string; readonly enabled: boolean }>`
+    const lexical = await db.one(sql.rows<{ readonly id: string; readonly enabled: string }>`
       SELECT /*+ NO_INDEX(braid_pv16_capability) */ \`id\`, JSON_EXTRACT(payload, '$.enabled') AS enabled
       FROM braid_pv16_capability
       WHERE id = ${1} # a MySQL line comment
         AND name <> ${"nobody"}
     `);
     assert.equal(lexical.id, "1");
-    assert.equal(lexical.enabled, true);
+    assert.equal(lexical.enabled, "true");
 
     const upserted = await db.execute(sql.command`
       INSERT INTO braid_pv16_capability (id, name, team_id, payload)

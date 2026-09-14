@@ -111,7 +111,9 @@ export interface OracleDriverLike {
   readonly BINARY_FLOAT?: unknown;
   readonly BINARY_DOUBLE?: unknown;
   readonly DB_TYPE_VARCHAR?: unknown;
+  readonly DB_TYPE_CHAR?: unknown;
   readonly DB_TYPE_NVARCHAR?: unknown;
+  readonly DB_TYPE_NCHAR?: unknown;
   readonly DB_TYPE_NUMBER?: unknown;
   readonly DB_TYPE_BINARY_FLOAT?: unknown;
   readonly DB_TYPE_BINARY_DOUBLE?: unknown;
@@ -123,6 +125,11 @@ export interface OracleDriverLike {
   readonly DB_TYPE_BLOB?: unknown;
   readonly DB_TYPE_CLOB?: unknown;
   readonly DB_TYPE_NCLOB?: unknown;
+  readonly DB_TYPE_ROWID?: unknown;
+  readonly DB_TYPE_UROWID?: unknown;
+  readonly DB_TYPE_JSON?: unknown;
+  readonly DB_TYPE_OBJECT?: unknown;
+  readonly DB_TYPE_VECTOR?: unknown;
   readonly BLOB?: unknown;
   readonly NCLOB?: unknown;
   readonly CURSOR?: unknown;
@@ -140,7 +147,8 @@ const defaultDriver = oracledb as unknown as OracleDriverLike;
 
 const oracleEnvironment = Object.freeze<DriverEnvironment>({
   database: { product: "oracle" },
-  driver: { id: "node-oracledb", profile: "thin" },
+  driver: { id: "node-oracledb", profile: "oracle-thin" },
+  typePolicy: { id: defaultTypePolicy.id, hash: defaultTypePolicy.hash },
   capabilities: {
     "sql.native-transparency": { status: "guaranteed" },
     "numeric.exact-integer": { status: "unsupported", canonical: "string", rawRepresentations: ["string"] },
@@ -148,8 +156,13 @@ const oracleEnvironment = Object.freeze<DriverEnvironment>({
     "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
     "numeric.approximate-special": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
     "numeric.bind-exact": { status: "unsupported", conditionCode: "oracle.bind-nls-sensitive" },
-    "data.json-parsed": { status: "guaranteed", rawRepresentations: ["object"] },
+    "data.json-parsed": { status: "guaranteed", rawRepresentations: ["object", "array", "string", "number", "boolean", "null"] },
     "data.json-lossless-text": { status: "unsupported", canonical: "string", rawRepresentations: ["string"], conditionCode: "oracle.json-serialize-required" },
+    "data.oracle-object": { status: "unsupported", rawRepresentations: ["object"], conditionCode: "oracle.object-nested-numeric-unclassified" },
+    "data.oracle-collection": { status: "unsupported", rawRepresentations: ["object", "array"], conditionCode: "oracle.collection-nested-numeric-unclassified" },
+    "data.vector": { status: "unsupported", rawRepresentations: ["object", "array"], conditionCode: "oracle.vector-unclassified" },
+    "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Buffer"] },
+    "data.uuid": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
     "data.temporal-native": { status: "guarded", rawRepresentations: ["Date"], conditionCode: "oracle.date-millisecond-precision" },
     "data.temporal-lossless": { status: "unsupported", canonical: "string", rawRepresentations: ["string"], conditionCode: "oracle.temporal-text-cast-required" },
     "metadata.command-safe": { status: "guarded", rawRepresentations: ["number"], conditionCode: "oracle.count-safe-integer" },
@@ -231,7 +244,9 @@ function metadataType(field: OracleMetaDataLike | undefined, driver: OracleDrive
   const value = field?.dbType ?? field?.type;
   if (typeof value === "string") return normalType(value);
   if (value === undefined) return undefined;
+  if (value === driver.DB_TYPE_CHAR) return "CHAR";
   if (value === driver.DB_TYPE_VARCHAR || value === driver.STRING) return "VARCHAR2";
+  if (value === driver.DB_TYPE_NCHAR) return "NCHAR";
   if (value === driver.DB_TYPE_NVARCHAR) return "NVARCHAR2";
   if (value === driver.DB_TYPE_NUMBER || value === driver.NUMBER) return "NUMBER";
   if (value === driver.DB_TYPE_BINARY_FLOAT || value === driver.BINARY_FLOAT) return "BINARY_FLOAT";
@@ -244,6 +259,11 @@ function metadataType(field: OracleMetaDataLike | undefined, driver: OracleDrive
   if (value === driver.DB_TYPE_BLOB || value === driver.BLOB) return "BLOB";
   if (value === driver.DB_TYPE_CLOB || value === driver.CLOB) return "CLOB";
   if (value === driver.DB_TYPE_NCLOB || value === driver.NCLOB) return "NCLOB";
+  if (value === driver.DB_TYPE_ROWID) return "ROWID";
+  if (value === driver.DB_TYPE_UROWID) return "UROWID";
+  if (value === driver.DB_TYPE_JSON) return "JSON";
+  if (value === driver.DB_TYPE_OBJECT) return "OBJECT";
+  if (value === driver.DB_TYPE_VECTOR) return "VECTOR";
   return undefined;
 }
 
@@ -314,20 +334,24 @@ function assertUniqueFields(fields: readonly OracleMetaDataLike[]): void {
 function typeConstant(databaseType: string, driver: OracleDriverLike): unknown {
   const type = normalType(databaseType);
   const value = type === "REF CURSOR" || type === "REFCURSOR" || type === "SYS_REFCURSOR" || type === "CURSOR" ? driver.CURSOR
-    : type === "VARCHAR2" ? (driver.DB_TYPE_VARCHAR ?? driver.STRING)
-    : type === "NVARCHAR2" ? driver.DB_TYPE_NVARCHAR
-      : isOracleExactNumericType(type) ? (driver.DB_TYPE_NUMBER ?? driver.NUMBER)
-        : type === "BINARY_FLOAT" ? (driver.DB_TYPE_BINARY_FLOAT ?? driver.BINARY_FLOAT)
-          : type === "BINARY_DOUBLE" ? (driver.DB_TYPE_BINARY_DOUBLE ?? driver.BINARY_DOUBLE)
-            : type === "DATE" ? (driver.DB_TYPE_DATE ?? driver.DATE)
-              : type === "TIMESTAMP" ? driver.DB_TYPE_TIMESTAMP
-                : type === "TIMESTAMP WITH TIME ZONE" ? driver.DB_TYPE_TIMESTAMP_TZ
-                  : type === "TIMESTAMP WITH LOCAL TIME ZONE" ? driver.DB_TYPE_TIMESTAMP_LTZ
-                    : type === "RAW" ? (driver.DB_TYPE_RAW ?? driver.BUFFER)
-                      : type === "BLOB" ? (driver.DB_TYPE_BLOB ?? driver.BLOB)
-                        : type === "CLOB" ? (driver.DB_TYPE_CLOB ?? driver.CLOB)
-                          : type === "NCLOB" ? (driver.DB_TYPE_NCLOB ?? driver.NCLOB)
-                            : undefined;
+    : type === "CHAR" ? (driver.DB_TYPE_CHAR ?? driver.DB_TYPE_VARCHAR ?? driver.STRING)
+      : type === "VARCHAR" || type === "VARCHAR2" ? (driver.DB_TYPE_VARCHAR ?? driver.STRING)
+        : type === "NCHAR" ? (driver.DB_TYPE_NCHAR ?? driver.DB_TYPE_NVARCHAR)
+          : type === "NVARCHAR2" ? driver.DB_TYPE_NVARCHAR
+            : isOracleExactNumericType(type) ? (driver.DB_TYPE_NUMBER ?? driver.NUMBER)
+              : type === "BINARY_FLOAT" ? (driver.DB_TYPE_BINARY_FLOAT ?? driver.BINARY_FLOAT)
+                : type === "BINARY_DOUBLE" ? (driver.DB_TYPE_BINARY_DOUBLE ?? driver.BINARY_DOUBLE)
+                  : type === "DATE" ? (driver.DB_TYPE_DATE ?? driver.DATE)
+                    : type === "TIMESTAMP" ? driver.DB_TYPE_TIMESTAMP
+                      : type === "TIMESTAMP WITH TIME ZONE" ? driver.DB_TYPE_TIMESTAMP_TZ
+                        : type === "TIMESTAMP WITH LOCAL TIME ZONE" ? driver.DB_TYPE_TIMESTAMP_LTZ
+                          : type === "RAW" ? (driver.DB_TYPE_RAW ?? driver.BUFFER)
+                            : type === "ROWID" ? driver.DB_TYPE_ROWID
+                              : type === "UROWID" ? driver.DB_TYPE_UROWID
+                                : type === "BLOB" ? (driver.DB_TYPE_BLOB ?? driver.BLOB)
+                                  : type === "CLOB" ? (driver.DB_TYPE_CLOB ?? driver.CLOB)
+                                    : type === "NCLOB" ? (driver.DB_TYPE_NCLOB ?? driver.NCLOB)
+                                      : undefined;
   if (value === undefined) throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle driver cannot bind explicit type ${databaseType}.`);
   return value;
 }
@@ -377,10 +401,10 @@ function bindValues(rendered: RenderedStatement, policy: TypePolicy, driver: Ora
       throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle bind ${databaseType} does not support precision or scale facets.`);
     }
     if (direction !== "in" && hint.length === undefined
-      && (databaseType === "VARCHAR2" || databaseType === "NVARCHAR2" || databaseType === "RAW")) {
+      && (databaseType === "CHAR" || databaseType === "NCHAR" || databaseType === "VARCHAR" || databaseType === "VARCHAR2" || databaseType === "NVARCHAR2" || databaseType === "RAW")) {
       throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle ${databaseType} OUT binds require an explicit length to avoid undersized buffers.`);
     }
-    if (hint.length !== undefined && (direction === "in" || (databaseType !== "VARCHAR2" && databaseType !== "NVARCHAR2" && databaseType !== "RAW"))) {
+    if (hint.length !== undefined && (direction === "in" || (databaseType !== "CHAR" && databaseType !== "NCHAR" && databaseType !== "VARCHAR" && databaseType !== "VARCHAR2" && databaseType !== "NVARCHAR2" && databaseType !== "RAW"))) {
       throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle bind ${databaseType} does not support length facets.`);
     }
     const encoded = direction === "out" ? undefined : policy.encode(databaseType!, value);
@@ -396,7 +420,7 @@ function bindValues(rendered: RenderedStatement, policy: TypePolicy, driver: Ora
       type: typeConstant(exactNumberOutput ? "VARCHAR2" : databaseType!, driver),
       ...(exactNumberOutput ? { maxSize: 172 } : {}),
       ...(direction !== "in" && hint.length !== undefined
-        && (databaseType === "VARCHAR2" || databaseType === "NVARCHAR2" || databaseType === "RAW")
+        && (databaseType === "CHAR" || databaseType === "NCHAR" || databaseType === "VARCHAR" || databaseType === "VARCHAR2" || databaseType === "NVARCHAR2" || databaseType === "RAW")
         ? { maxSize: hint.length === "max" ? 32_767 : hint.length }
         : {}),
     } satisfies OracleBindLike);
@@ -901,7 +925,9 @@ function makeOracledbExecutor(
   return {
     ownershipKey: connection,
     statementBinding: bindingAdapter,
-    environment: policy === defaultTypePolicy && driver === defaultDriver && oracledb.thin ? oracleEnvironment : { ...oracleEnvironment, driver: { id: "node-oracledb", profile: "custom" }, capabilities: {} },
+    environment: policy === defaultTypePolicy && driver === defaultDriver && oracledb.thin
+      ? oracleEnvironment
+      : { ...oracleEnvironment, driver: { id: "node-oracledb", profile: "custom" }, typePolicy: { id: policy.id, hash: policy.hash }, capabilities: {} },
     async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
       if (typeof connection.executeMany !== "function") {
         throw new Error("BRAID_BULK_UNSUPPORTED: Oracle connection does not expose executeMany().");
@@ -1157,7 +1183,9 @@ export function createOracledbPoolProvider(pool: OraclePoolLike, options: Omit<O
   });
   return {
     statementBinding: bindingAdapter,
-    environment: (options.typePolicy === undefined || options.typePolicy === defaultTypePolicy) && (options.driver === undefined || options.driver === defaultDriver) && oracledb.thin ? oracleEnvironment : { ...oracleEnvironment, driver: { id: "node-oracledb", profile: "custom" }, capabilities: {} },
+    environment: (options.typePolicy === undefined || options.typePolicy === defaultTypePolicy) && (options.driver === undefined || options.driver === defaultDriver) && oracledb.thin
+      ? oracleEnvironment
+      : { ...oracleEnvironment, driver: { id: "node-oracledb", profile: "custom" }, typePolicy: { id: (options.typePolicy ?? defaultTypePolicy).id, hash: (options.typePolicy ?? defaultTypePolicy).hash }, capabilities: {} },
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
       assertPoolConnection(connection);

@@ -10,7 +10,7 @@ import { sql as postgres } from "@sqlbraid/postgres";
 import { sql as mysql } from "@sqlbraid/mysql";
 import { sql as sqlite } from "@sqlbraid/sqlite";
 import { sql as oracle, oracleParameter } from "@sqlbraid/oracle";
-import { sql as mssql, mssqlParameter } from "@sqlbraid/mssql";
+import { sql as mssql } from "@sqlbraid/mssql";
 
 type Fixture = {
   name: string;
@@ -72,7 +72,7 @@ const fixtures: Fixture[] = [
   },
   {
     name: "Tedious inexact decimal",
-    query: mssql`SELECT ${mssql.bind("1234567890123456", mssqlParameter.decimal(38, 4))}`,
+    query: mssql`SELECT ${mssql.bind("1234567890123456", { databaseType: "decimal", precision: 38, scale: 4 })}`,
     create: (io, events) => createTediousPoolDatabase(
       { acquire: async () => io() },
       { observers: [{ onEvent(event) { events.push(event); } }] },

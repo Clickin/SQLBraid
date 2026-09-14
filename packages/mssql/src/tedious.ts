@@ -230,23 +230,26 @@ function inferType(value: unknown): { readonly type: DatabaseType; readonly valu
   throw new TypeError("BRAID_BIND_TYPE_REQUIRED: this value requires an explicit SQL Server parameter hint.");
 }
 
-function decimalInput(value: unknown): unknown {
+function decimalInput(
+  value: unknown,
+  databaseType: DatabaseType,
+  precision: number,
+  scale: number,
+): number | null {
   if (value === null) return value;
-  if (typeof value === "number") {
-    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: exact decimal parameters do not accept JavaScript numbers; use a character bind with user-authored CAST/CONVERT.");
+  if (typeof value !== "number" || !Number.isFinite(value) || !/^-?\d+(?:\.\d+)?$/u.test(String(value))) {
+    throw new TypeError(`BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility inputs require a finite plain JavaScript number; use a character bind with user-authored CAST/CONVERT for exact text.`);
   }
-  if (typeof value !== "string" || !/^-?(?:\d+)(?:\.\d+)?$/u.test(value)) {
-    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: exact decimal parameters accept only finite safe numbers or plain decimal strings; use an explicit character bind with user-authored CAST/CONVERT for larger values.");
-  }
-  const digits = value.replace(/^-?/u, "").replace(/\./gu, "").replace(/^0+/u, "");
+  const text = String(value);
+  const [integer, fraction = ""] = text.replace(/^-?/u, "").split(".");
+  const digits = `${integer!.replace(/^0+(?=\d)/u, "")}${fraction}`;
   if (digits.length > 15) {
-    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: Tedious converts exact decimal parameters through JavaScript Number; strings over 15 significant digits are rejected.");
+    throw new TypeError(`BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility inputs are limited to 15 significant decimal digits; use a character bind with user-authored CAST/CONVERT for larger values.`);
   }
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: exact decimal strings must fit a finite JavaScript Number.");
+  if (fraction.length > scale || integer.replace(/^0+/u, "").length > precision - scale) {
+    throw new TypeError(`BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility input ${text} exceeds decimal(${precision}, ${scale}); use a character bind with user-authored CAST/CONVERT for exact text.`);
   }
-  return numeric;
+  return value;
 }
 
 function assertDirectConnection(connection: TediousConnectionLike): void {
@@ -350,6 +353,9 @@ function columnType(metadata: TediousColumnMetadataLike): string | undefined {
       return "decimal";
     case "numericn":
       return "numeric";
+    case "variant":
+    case "sqlvariant":
+      return "sql_variant";
     default:
       return type;
   }
@@ -412,7 +418,12 @@ function materializeParameter(
   const input = direction === "out" ? undefined : actualHint === undefined ? inferred!.value : actualValue;
   let encoded = direction === "out" ? undefined : policy.encode(type, input);
   if (direction !== "out" && (type === "decimal" || type === "numeric" || type === "money" || type === "smallmoney")) {
-    encoded = decimalInput(encoded);
+    const precision = type === "money" ? 19 : type === "smallmoney" ? 10 : actualHint?.precision;
+    const scale = type === "money" || type === "smallmoney" ? 4 : actualHint?.scale;
+    if (precision === undefined || scale === undefined) {
+      throw new TypeError(`BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${type} compatibility inputs require explicit precision and scale.`);
+    }
+    encoded = decimalInput(encoded, type, precision, scale);
   }
   if (direction !== "out" && (type === "varbinary" || type === "binary") && encoded instanceof Uint8Array && !Buffer.isBuffer(encoded)) encoded = Buffer.from(encoded);
   const options: { length?: number; precision?: number; scale?: number } = {};
@@ -1011,10 +1022,11 @@ type TediousRequestCompletionCallback = (error: unknown, rowCount?: number) => v
 
 const tediousEnvironment = Object.freeze<DriverEnvironment>({
   database: { product: "mssql" },
-  driver: { id: "tedious", profile: "typed-request" },
+  driver: { id: "tedious", profile: "mssql-tedious" },
+  typePolicy: { id: defaultTypePolicy.id, hash: defaultTypePolicy.hash },
   capabilities: {
     "sql.native-transparency": { status: "guaranteed" },
-    "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
+    "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["number", "string"] },
     "numeric.exact-decimal": { status: "unsupported", canonical: "string", rawRepresentations: ["number"] },
     "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
     "numeric.bind-exact": {
@@ -1036,6 +1048,9 @@ const tediousEnvironment = Object.freeze<DriverEnvironment>({
     },
     "data.json-lossless-text": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
     "data.json-parsed": { status: "unsupported" },
+    "data.sql-variant": { status: "unsupported", rawRepresentations: ["driver-native"], conditionCode: "mssql.sql-variant-unclassified" },
+    "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Buffer"] },
+    "data.uuid": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
     "data.temporal-lossless": { status: "unsupported", conditionCode: "mssql.temporal-text-cast-required" },
     "data.temporal-native": {
       status: "guarded",
@@ -1262,7 +1277,9 @@ function makeTediousExecutor(
   return {
     ownershipKey: connection,
     statementBinding: bindingAdapter,
-    environment: policy === defaultTypePolicy ? tediousEnvironment : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, capabilities: {} },
+    environment: policy === defaultTypePolicy
+      ? tediousEnvironment
+      : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, typePolicy: { id: policy.id, hash: policy.hash }, capabilities: {} },
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
       const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy);
@@ -1282,7 +1299,9 @@ function makeTediousExecutor(
       try {
         for (const row of parameters) {
           const rowCount = await executePrepared(connection, prepared, row);
-          if (typeof rowCount === "number") affectedRows += rowCount;
+          if (typeof rowCount === "number") {
+            affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount(rowCount));
+          }
           else affectedKnown = false;
         }
       } catch (error) {
@@ -1346,7 +1365,9 @@ export function createTediousPoolProvider(pool: TediousPoolLike, options: Tediou
   const bindingAdapter = createBinding(options);
   return {
     statementBinding: bindingAdapter,
-    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy ? tediousEnvironment : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, capabilities: {} },
+    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy
+      ? tediousEnvironment
+      : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, typePolicy: { id: (options.typePolicy ?? defaultTypePolicy).id, hash: (options.typePolicy ?? defaultTypePolicy).hash }, capabilities: {} },
     async acquire(): Promise<ConnectionLease> {
       const connection = await acquireConnection();
       if (!connection || typeof connection.release !== "function") throw new TypeError("SQL Server pool returned a connection without explicit release ownership.");

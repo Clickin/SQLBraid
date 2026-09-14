@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import mariadb, { type Pool } from "mariadb";
 import { inject, test } from "vitest";
 import { createMariaDbDatabase, createMariaDbPoolDatabase } from "@sqlbraid/mariadb/mariadb";
-import { sql } from "@sqlbraid/mariadb";
+import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
 import { runStreamingConformance } from "../../streaming-conformance.js";
 
 async function endPool(pool: Pick<Pool, "end">): Promise<void> {
@@ -12,6 +12,7 @@ async function endPool(pool: Pick<Pool, "end">): Promise<void> {
 function createTestPool(): Pool {
   const uri = new URL(inject("mariadb").connectionUri);
   return mariadb.createPool({
+    ...MARIADB_LOSSLESS_TEXT.connectionOptions,
     host: uri.hostname,
     port: Number(uri.port || 3306),
     user: decodeURIComponent(uri.username),
@@ -30,6 +31,7 @@ function createTestPool(): Pool {
 function createTestConnection() {
   const uri = new URL(inject("mariadb").connectionUri);
   return mariadb.createConnection({
+    ...MARIADB_LOSSLESS_TEXT.connectionOptions,
     host: uri.hostname,
     port: Number(uri.port || 3306),
     user: decodeURIComponent(uri.username),

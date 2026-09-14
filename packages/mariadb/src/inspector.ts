@@ -1,5 +1,6 @@
 import type { MetadataInspector, MetadataSnapshot, RelationSnapshot, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
-import type { MariaDbConnectionLike } from "./mariadb.js";
+import type { MariaDbConnectionLike, MariaDbRowSet } from "./mariadb.js";
+import { dialect } from "./index.js";
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -82,6 +83,20 @@ export function createMariaDbInspector(connection: MariaDbConnectionLike): Metad
               ...(text(column, "column_key") ? { key: text(column, "column_key") } : {}),
             };
           });
+        // MariaDB reports JSON aliases as LONGTEXT in information_schema.
+        // Zero-row driver metadata supplies the server's JSON-format evidence.
+        const longTextColumns = columns.filter((column) => column.type.toLowerCase() === "longtext");
+        if (longTextColumns.length > 0) {
+          const selection = longTextColumns.map((column) => dialect.quoteIdentifier(column.name)).join(", ");
+          const qualifiedName = `${dialect.quoteIdentifier(schema)}.${dialect.quoteIdentifier(name)}`;
+          const result = await connection.execute(`SELECT ${selection} FROM ${qualifiedName} LIMIT 0`, []);
+          if (!Array.isArray(result)) throw new Error("MARIADB_INSPECT_RESULT: column metadata query did not return rows.");
+          const jsonColumns = new Set((result as MariaDbRowSet).meta?.flatMap((field) => {
+            const columnName = typeof field.name === "function" ? field.name() : field.name;
+            return columnName && field.isDataTypeFormatJson?.() ? [columnName] : [];
+          }));
+          for (const column of longTextColumns) if (jsonColumns.has(column.name)) column.type = "json";
+        }
         relations[identity] = {
           identity,
           name,

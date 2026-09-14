@@ -5,7 +5,7 @@ import {
   type TypePolicy,
 } from "@sqlbraid/core";
 
-const mappings = [
+const mappingDefinitions = [
   {
     databaseType: "tinyint",
     inputType: "number",
@@ -36,28 +36,28 @@ const mappings = [
   },
   {
     databaseType: "decimal",
-    inputType: "string",
+    inputType: "number",
     outputType: "unknown",
     nullable: true,
     numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" },
   },
   {
     databaseType: "numeric",
-    inputType: "string",
+    inputType: "number",
     outputType: "unknown",
     nullable: true,
     numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" },
   },
   {
     databaseType: "money",
-    inputType: "string",
+    inputType: "number",
     outputType: "unknown",
     nullable: true,
     numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" },
   },
   {
     databaseType: "smallmoney",
-    inputType: "string",
+    inputType: "number",
     outputType: "unknown",
     nullable: true,
     numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" },
@@ -79,12 +79,23 @@ const mappings = [
   { databaseType: "bit", inputType: "boolean", outputType: "boolean", nullable: true },
   { databaseType: "nvarchar", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "varchar", inputType: "string", outputType: "string", nullable: true },
+  { databaseType: "char", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "varbinary", inputType: "Uint8Array", outputType: "Uint8Array", nullable: true },
+  { databaseType: "binary", inputType: "Uint8Array", outputType: "Uint8Array", nullable: true },
+  { databaseType: "timestamp", inputType: "Uint8Array", outputType: "Uint8Array", nullable: true },
   { databaseType: "uniqueidentifier", inputType: "string", outputType: "string", nullable: true },
+  // Tedious exposes sql_variant as a driver-owned value.  Keep it explicitly
+  // open rather than suggesting recursive nested TypePolicy guarantees.
+  { databaseType: "sql_variant", inputType: "unknown", outputType: "unknown", nullable: true },
   { databaseType: "date", inputType: "Date", outputType: "Date", nullable: true },
   { databaseType: "datetime2", inputType: "Date", outputType: "Date", nullable: true },
   { databaseType: "datetimeoffset", inputType: "Date", outputType: "Date", nullable: true },
 ] as const;
+
+const mappings = Object.freeze(mappingDefinitions.map((mapping) => Object.freeze({
+  ...mapping,
+  ...("numeric" in mapping ? { numeric: Object.freeze(mapping.numeric) } : {}),
+})));
 
 function canonical(databaseType: string): string {
   return databaseType.trim().toLowerCase().replace(/\s+/gu, "");
@@ -113,16 +124,28 @@ function encode(databaseType: string, value: unknown): unknown {
   if (value === null || value === undefined) return value;
   const type = canonical(databaseType);
   if (type === "bigint" && typeof value === "bigint") return value.toString();
+  if (type === "decimal" || type === "numeric" || type === "money" || type === "smallmoney") {
+    if (typeof value !== "number" || !Number.isFinite(value) || !/^-?\d+(?:\.\d+)?$/u.test(String(value))) {
+      throw new TypeError(`SQL Server ${databaseType} compatibility inputs require a finite plain JavaScript number; use a character bind with authored CAST/CONVERT for exact text.`);
+    }
+    const digits = String(value).replace(/^-?/u, "").replace(/\./gu, "").replace(/^0+(?=\d)/u, "");
+    if (digits.length > 15) {
+      throw new TypeError(`SQL Server ${databaseType} compatibility inputs are limited to 15 significant decimal digits; use a character bind with authored CAST/CONVERT for larger values.`);
+    }
+    if ((type === "money" || type === "smallmoney") && (String(value).split(".")[1]?.length ?? 0) > 4) {
+      throw new TypeError(`SQL Server ${databaseType} compatibility inputs support at most four fractional decimal digits; use a character bind with authored CAST/CONVERT for exact text.`);
+    }
+  }
   return value;
 }
 
-export const typePolicy: TypePolicy = {
+export const typePolicy: TypePolicy = Object.freeze({
   id: "mssql-default",
-  hash: "mssql-default-v3",
+  hash: "1b5be8926fbd393cd8f4c6c21266ea1608d7014d517c40cf1a08bff55140e99f",
   mappings,
   decode,
   encode,
-};
+});
 
 type Hint<Input = unknown> = Readonly<ParameterTypeHint<Input>>;
 
@@ -161,10 +184,10 @@ export const mssqlParameter = Object.freeze({
   smallint: (): Hint<number | null> => hint<number | null>("smallint"),
   int: (): Hint<number | null> => hint<number | null>("int"),
   bigint: (): Hint<bigint | string | null> => hint<bigint | string | null>("bigint"),
-  decimal: (precision: number, scale: number): Hint<string | null> => hint("decimal", decimalValues(precision, scale)),
-  numeric: (precision: number, scale: number): Hint<string | null> => hint("numeric", decimalValues(precision, scale)),
-  money: (): Hint<string | null> => hint("money"),
-  smallmoney: (): Hint<string | null> => hint("smallmoney"),
+  decimal: (precision: number, scale: number): Hint<number | null> => hint("decimal", decimalValues(precision, scale)),
+  numeric: (precision: number, scale: number): Hint<number | null> => hint("numeric", decimalValues(precision, scale)),
+  money: (): Hint<number | null> => hint("money"),
+  smallmoney: (): Hint<number | null> => hint("smallmoney"),
   real: (): Hint<number | null> => hint<number | null>("real"),
   float: (): Hint<number | null> => hint<number | null>("float"),
   nvarchar: (length: number | "max"): Hint<string | null> => hint("nvarchar", { length: lengthValue(length, 4000) }),

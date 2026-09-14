@@ -6,6 +6,7 @@ import { createOracledbDatabase } from "@sqlbraid/oracle/oracledb";
 import { oracleParameter, sql } from "@sqlbraid/oracle";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
 import { assertFloatBits, binary32Finite, binary64Finite, exactJsonText } from "../fidelity.js";
+import { stampSupportEnvironment } from "../support-target.js";
 import { runTransparencyCase } from "../../transparency.js";
 
 async function connect() {
@@ -28,6 +29,30 @@ function canonicalDecimal(value: string): string {
   const integer = match[2]!.replace(/^0+(?=\d)/u, "");
   const fraction = (match[3] ?? "").replace(/0+$/u, "");
   return `${match[1]}${integer}${fraction.length === 0 ? "" : `.${fraction}`}`;
+}
+
+async function stampOracleEnvironment(db: ReturnType<typeof createOracledbDatabase>, testId: string): Promise<void> {
+  const environment = await db.environment();
+  const probe = await db.one(sql.rows<{ readonly VERSION_FULL: string; readonly BANNER: string }>`
+    SELECT
+      (SELECT version_full
+         FROM product_component_version
+        WHERE product LIKE 'Oracle Database%'
+          AND ROWNUM = 1) AS version_full,
+      (SELECT banner
+         FROM v$version
+        WHERE banner LIKE 'Oracle Database%'
+          AND ROWNUM = 1) AS banner
+    FROM dual
+  `);
+  const version = /^(\d+\.\d+)/u.exec(probe.VERSION_FULL)?.[1] ?? probe.VERSION_FULL;
+  const edition = /\b(Free|Enterprise|Standard|Express|Developer)\b/iu.exec(probe.BANNER)?.[1] ?? probe.BANNER;
+  stampSupportEnvironment("oracle", {
+    ...environment,
+    database: { product: "oracle", version, edition },
+    driver: { ...environment.driver, version: oracledb.versionString },
+    runtime: { id: "node", version: process.versions.node },
+  }, testId);
 }
 
 test("oracle.sql.native-transparency", { timeout: 60_000 }, async () => {
@@ -153,6 +178,75 @@ test("oracle.data.json-native", { timeout: 60_000 }, async () => {
     assert.deepEqual(row, { PAYLOAD: { enabled: 1, nested: { count: 2 } }, ENABLED: "1", NESTEDCOUNT: "2" });
   } finally {
     await drop(connection, "TABLE braid_pv16_json PURGE").catch(() => undefined);
+    await connection.close();
+  }
+});
+
+test("oracle.data.json-parsed", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    const environment = await db.environment();
+    await stampOracleEnvironment(db, "oracle.data.json-parsed");
+    assert.deepEqual(environment.capabilities["data.json-parsed"]?.rawRepresentations, [
+      "object",
+      "array",
+      "string",
+      "number",
+      "boolean",
+      "null",
+    ]);
+    const row = await db.one(sql.rows<{
+      readonly OBJECT_ROOT: { readonly enabled: number };
+      readonly ARRAY_ROOT: readonly [number, string];
+      readonly STRING_ROOT: string;
+      readonly NUMBER_ROOT: number;
+      readonly BOOLEAN_ROOT: boolean;
+      readonly NULL_ROOT: null;
+    }>`
+      SELECT JSON_OBJECT('enabled' VALUE 1 RETURNING JSON) AS object_root,
+             JSON_ARRAY(1, 'two' RETURNING JSON) AS array_root,
+             JSON('"text"') AS string_root,
+             JSON('42') AS number_root,
+             JSON('false') AS boolean_root,
+             JSON('null') AS null_root
+      FROM dual
+    `);
+    assert.deepEqual(row.OBJECT_ROOT, { enabled: 1 });
+    assert.deepEqual(row.ARRAY_ROOT, [1, "two"]);
+    assert.equal(row.STRING_ROOT, "text");
+    assert.equal(row.NUMBER_ROOT, 42);
+    assert.equal(row.BOOLEAN_ROOT, false);
+    assert.equal(row.NULL_ROOT, null);
+  } finally {
+    await connection.close();
+  }
+});
+
+test("oracle.data.containers-unclassified", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    const environment = await db.environment();
+    assert.equal(environment.capabilities["data.oracle-object"]?.status, "unsupported");
+    assert.equal(environment.capabilities["data.oracle-collection"]?.status, "unsupported");
+    assert.equal(environment.capabilities["data.vector"]?.status, "unsupported");
+    await connection.execute("DROP TYPE braid_pv18_num_varray FORCE").catch(() => undefined);
+    await connection.execute("DROP TYPE braid_pv18_num_obj FORCE").catch(() => undefined);
+    await connection.execute("CREATE TYPE braid_pv18_num_obj AS OBJECT (value NUMBER)");
+    await connection.execute("CREATE TYPE braid_pv18_num_varray AS VARRAY(2) OF NUMBER");
+    const row = await db.one(sql.rows<{ readonly OBJECT_VALUE: unknown; readonly COLLECTION_VALUE: unknown; readonly VECTOR_VALUE: unknown }>`
+      SELECT braid_pv18_num_obj(CAST('9007199254740993' AS NUMBER)) AS object_value,
+             braid_pv18_num_varray(CAST('9007199254740993' AS NUMBER), 2) AS collection_value,
+             TO_VECTOR('[1,2,3]') AS vector_value
+      FROM dual
+    `);
+    assert.equal(typeof row.OBJECT_VALUE, "object");
+    assert.equal(typeof row.COLLECTION_VALUE, "object");
+    assert.notEqual(row.VECTOR_VALUE, undefined);
+  } finally {
+    await connection.execute("DROP TYPE braid_pv18_num_varray FORCE").catch(() => undefined);
+    await connection.execute("DROP TYPE braid_pv18_num_obj FORCE").catch(() => undefined);
     await connection.close();
   }
 });
