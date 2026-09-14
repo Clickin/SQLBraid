@@ -1,0 +1,314 @@
+{
+  "phase": "PV16",
+  "evidenceStatus": "pending",
+  "description": "Named capability suites with passing local working-tree checks. Entries become verified only after the matching exact-SHA CI gate runs; this file is not runtime input.",
+  "localVerification": {
+    "date": "2026-09-14",
+    "baseCommit": "bf9d8f4379e53167d37601dd8c487654395ed296",
+    "workingTree": "uncommitted",
+    "testFiles": 58,
+    "tests": 390,
+    "packedPackages": 18,
+    "details": "docs/SQLBraid_release_readiness.md",
+    "oracle19c": "blocked: no configured endpoint; official image registry authentication required",
+    "finalCiRunIds": []
+  },
+  "capabilities": [
+    "dml-returning",
+    "dml-output",
+    "upsert",
+    "merge",
+    "bulk-dml",
+    "streaming",
+    "routines",
+    "routine-out",
+    "routine-cursor",
+    "native-batch",
+    "callback-transaction"
+  ],
+  "evidence": [
+    {
+      "capability": "dml-returning",
+      "dialect": "postgres",
+      "driver": "pg",
+      "minimumServerVersion": "16.4",
+      "status": "experimental",
+      "evidenceTest": "tests/db/postgres/capabilities.test.ts"
+    },
+    {
+      "capability": "dml-returning",
+      "dialect": "postgres",
+      "driver": "pg",
+      "minimumServerVersion": "18.6",
+      "status": "experimental",
+      "evidenceTest": "tests/db/postgres/capabilities.test.ts (current role)"
+    },
+    {
+      "capability": "dml-returning",
+      "dialect": "sqlite",
+      "driver": "node-sqlite",
+      "status": "experimental",
+      "evidenceTest": "tests/db/sqlite/capabilities.test.ts"
+    },
+    {
+      "capability": "dml-returning",
+      "dialect": "mariadb",
+      "driver": "mariadb",
+      "minimumServerVersion": "11.8.9",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mariadb/pv16.test.ts"
+    },
+    {
+      "capability": "dml-output",
+      "dialect": "mssql",
+      "driver": "tedious",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mssql/capabilities.test.ts"
+    },
+    {
+      "capability": "dml-returning",
+      "dialect": "oracle",
+      "driver": "node-oracledb",
+      "status": "experimental",
+      "evidenceTest": "tests/db/oracle/capabilities.test.ts"
+    },
+    {
+      "capability": "upsert",
+      "dialect": "postgres",
+      "driver": "pg",
+      "status": "experimental",
+      "evidenceTest": "tests/db/postgres/capabilities.test.ts"
+    },
+    {
+      "capability": "upsert",
+      "dialect": "mysql",
+      "driver": "mysql2",
+      "minimumServerVersion": "8.4",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mysql/capabilities.test.ts"
+    },
+    {
+      "capability": "upsert",
+      "dialect": "mariadb",
+      "driver": "mariadb",
+      "minimumServerVersion": "11.8.9",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mariadb/capabilities.test.ts"
+    },
+    {
+      "capability": "upsert",
+      "dialect": "sqlite",
+      "driver": "node-sqlite",
+      "status": "experimental",
+      "evidenceTest": "tests/db/sqlite/capabilities.test.ts"
+    },
+    {
+      "capability": "merge",
+      "dialect": "postgres",
+      "driver": "pg",
+      "minimumServerVersion": "18.6",
+      "status": "experimental",
+      "evidenceTest": "tests/db/postgres/capabilities.test.ts (current role)"
+    },
+    {
+      "capability": "merge",
+      "dialect": "oracle",
+      "driver": "node-oracledb",
+      "status": "experimental",
+      "evidenceTest": "tests/db/oracle/capabilities.test.ts"
+    },
+    {
+      "capability": "merge",
+      "dialect": "mssql",
+      "driver": "tedious",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mssql/capabilities.test.ts"
+    },
+    {
+      "capability": "bulk-dml",
+      "dialect": "postgres",
+      "driver": "pg",
+      "status": "experimental",
+      "evidenceTest": "tests/db/postgres/capabilities.test.ts"
+    },
+    {
+      "capability": "bulk-dml",
+      "dialect": "mysql",
+      "driver": "mysql2",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mysql/capabilities.test.ts"
+    },
+    {
+      "capability": "bulk-dml",
+      "dialect": "mariadb",
+      "driver": "mariadb",
+      "minimumServerVersion": "11.8.9",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mariadb/capabilities.test.ts"
+    },
+    {
+      "capability": "bulk-dml",
+      "dialect": "sqlite",
+      "driver": "node-sqlite",
+      "status": "experimental",
+      "evidenceTest": "tests/db/sqlite/capabilities.test.ts"
+    },
+    {
+      "capability": "bulk-dml",
+      "dialect": "sqlite",
+      "driver": "sqlite-wasm",
+      "status": "experimental",
+      "evidenceTest": "scripts/test-browser.mjs"
+    },
+    {
+      "capability": "bulk-dml",
+      "dialect": "oracle",
+      "driver": "node-oracledb",
+      "status": "experimental",
+      "evidenceTest": "tests/db/oracle/capabilities.test.ts"
+    },
+    {
+      "capability": "bulk-dml",
+      "dialect": "mssql",
+      "driver": "tedious",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mssql/capabilities.test.ts"
+    },
+    {
+      "capability": "bulk-dml",
+      "dialect": "sqlite",
+      "driver": "cloudflare-d1",
+      "status": "experimental",
+      "evidenceTest": "scripts/test-d1.mjs"
+    },
+    {
+      "capability": "streaming",
+      "dialect": "postgres",
+      "driver": "pg",
+      "status": "experimental",
+      "evidenceTest": "tests/db/postgres/pv15.test.ts"
+    },
+    {
+      "capability": "streaming",
+      "dialect": "mysql",
+      "driver": "mysql2",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mysql/pv15.test.ts"
+    },
+    {
+      "capability": "streaming",
+      "dialect": "mariadb",
+      "driver": "mariadb",
+      "minimumServerVersion": "11.8.9",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mariadb/pv16.test.ts"
+    },
+    {
+      "capability": "streaming",
+      "dialect": "sqlite",
+      "driver": "sqlite-wasm",
+      "status": "experimental",
+      "evidenceTest": "scripts/test-browser.mjs"
+    },
+    {
+      "capability": "streaming",
+      "dialect": "sqlite",
+      "driver": "cloudflare-d1",
+      "status": "unsupported-driver",
+      "evidenceTest": "scripts/test-d1.mjs"
+    },
+    {
+      "capability": "routines",
+      "dialect": "postgres",
+      "driver": "pg",
+      "status": "experimental",
+      "evidenceTest": "tests/db/postgres/pv15.test.ts"
+    },
+    {
+      "capability": "routines",
+      "dialect": "mysql",
+      "driver": "mysql2",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mysql/pv15.test.ts"
+    },
+    {
+      "capability": "routines",
+      "dialect": "oracle",
+      "driver": "node-oracledb",
+      "status": "experimental",
+      "evidenceTest": "tests/db/oracle/pv15-routines.test.ts"
+    },
+    {
+      "capability": "routines",
+      "dialect": "mssql",
+      "driver": "tedious",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mssql/pv15-routines.test.ts"
+    },
+    {
+      "capability": "routine-cursor",
+      "dialect": "postgres",
+      "driver": "pg",
+      "status": "experimental",
+      "evidenceTest": "tests/db/postgres/pv15.test.ts"
+    },
+    {
+      "capability": "routine-cursor",
+      "dialect": "oracle",
+      "driver": "node-oracledb",
+      "status": "experimental",
+      "evidenceTest": "tests/db/oracle/pv15-routines.test.ts"
+    },
+    {
+      "capability": "routine-out",
+      "dialect": "oracle",
+      "driver": "node-oracledb",
+      "status": "experimental",
+      "evidenceTest": "tests/db/oracle/pv15-routines.test.ts"
+    },
+    {
+      "capability": "routine-out",
+      "dialect": "mssql",
+      "driver": "tedious",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mssql/pv15-routines.test.ts"
+    },
+    {
+      "capability": "native-batch",
+      "dialect": "mariadb",
+      "driver": "mariadb",
+      "minimumServerVersion": "11.8.9",
+      "status": "experimental",
+      "evidenceTest": "tests/pv16-mariadb.test.ts"
+    },
+    {
+      "capability": "native-batch",
+      "dialect": "sqlite",
+      "driver": "cloudflare-d1",
+      "status": "experimental",
+      "evidenceTest": "scripts/test-d1.mjs"
+    },
+    {
+      "capability": "callback-transaction",
+      "dialect": "postgres",
+      "driver": "pg",
+      "status": "experimental",
+      "evidenceTest": "tests/db/postgres/w01.test.ts"
+    },
+    {
+      "capability": "callback-transaction",
+      "dialect": "mariadb",
+      "driver": "mariadb",
+      "minimumServerVersion": "11.8.9",
+      "status": "experimental",
+      "evidenceTest": "tests/db/mariadb/capabilities.test.ts"
+    },
+    {
+      "capability": "callback-transaction",
+      "dialect": "sqlite",
+      "driver": "cloudflare-d1",
+      "status": "unsupported-driver",
+      "evidenceTest": "scripts/test-d1.mjs"
+    }
+  ]
+}

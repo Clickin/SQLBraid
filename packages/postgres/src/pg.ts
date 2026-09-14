@@ -3,15 +3,18 @@ import type {
   ConnectionProvider,
   DatabaseOptions,
   DriverRoutineResult,
+  BulkBindingDescription,
+  BulkExecutionResult,
   QueryExecutor,
   QueryExecutionResult,
+  RenderedBulk,
   RenderedStatement,
   TypePolicy,
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
 } from "@sqlbraid/core";
-import { createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
+import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -29,7 +32,7 @@ export interface PgResultLike {
 }
 
 export interface PgClientLike {
-  query(config: { readonly text: string; readonly values: readonly unknown[] }): Promise<PgResultLike>;
+  query(config: { readonly text: string; readonly values: readonly unknown[]; readonly name?: string }): Promise<PgResultLike>;
   query(text: string, values?: readonly unknown[]): Promise<PgResultLike>;
   /**
    * Physical node-postgres clients expose these helpers; pools do not.
@@ -161,6 +164,7 @@ function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
 }
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 const bindingContexts = new WeakMap<StatementBindingDescription, StatementBindingContext>();
 
 function isRefcursor(parameter: RenderedStatement["parameters"][number]): boolean {
@@ -189,6 +193,25 @@ export const pgStatementBinding: StatementBindingAdapter = Object.freeze({
     });
     describedStatements.set(description, statement);
     bindingContexts.set(description, context);
+    return description;
+  },
+  describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
+    const statement = createRenderedStatement(bulk.statement);
+    if (statement.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk requires command queries.");
+    if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
+      throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk does not support OUT or INOUT parameters.");
+    }
+    assertParameterHintsUnsupported(statement);
+    for (const values of bulk.parameterSets) {
+      if (values.length !== statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk parameter cardinality changed.");
+    }
+    const description = createBulkBindingDescription(bulk, context, {
+      adapterId: "pg",
+      transport: "text-positional",
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: "reuse", owner: "driver" },
+    });
+    describedBulks.set(description, bulk);
     return description;
   },
 });
@@ -253,6 +276,163 @@ function quotePortal(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
 }
 
+type PgPreparedStatementMap = Record<string, string>;
+
+interface PgPreparedStatementRegistry {
+  readonly parsedStatements: PgPreparedStatementMap;
+  readonly submittedNamedStatements: PgPreparedStatementMap;
+}
+
+interface PgBulkCache {
+  name: string;
+  text?: string;
+  readonly registry?: PgPreparedStatementRegistry;
+  reusable: boolean;
+  tail: Promise<void>;
+}
+
+// node-postgres 8.23 keeps these private maps on Client.connection. They are
+// needed only to make a public DEALLOCATE coherent with node-postgres' own
+// named-query bookkeeping; clients without this exact native boundary fall
+// back to unnamed execution after the first SQL shape.
+const pgBulkCaches = new WeakMap<PgClientLike, PgBulkCache>();
+let nextPreparedBulkName = 0;
+
+function nativePreparedStatementRegistry(client: PgClientLike): PgPreparedStatementRegistry | undefined {
+  const connection = (client as unknown as { readonly connection?: unknown }).connection;
+  if (!connection || typeof connection !== "object") return undefined;
+  const candidate = connection as {
+    readonly parsedStatements?: unknown;
+    readonly submittedNamedStatements?: unknown;
+  };
+  if (
+    !candidate.parsedStatements
+    || typeof candidate.parsedStatements !== "object"
+  ) {
+    return undefined;
+  }
+  const submittedNamedStatements = candidate.submittedNamedStatements;
+  return {
+    parsedStatements: candidate.parsedStatements as PgPreparedStatementMap,
+    submittedNamedStatements: submittedNamedStatements && typeof submittedNamedStatements === "object"
+      ? submittedNamedStatements as PgPreparedStatementMap
+      : Object.create(null) as PgPreparedStatementMap,
+  };
+}
+
+function preparedStatementText(
+  statements: PgPreparedStatementMap,
+  name: string,
+): string | undefined {
+  return Object.hasOwn(statements, name) ? statements[name] : undefined;
+}
+
+function preparedBulkName(registry: PgPreparedStatementRegistry | undefined): string {
+  while (true) {
+    const name = `sqlbraid_bulk_${(nextPreparedBulkName++).toString(36)}`;
+    if (
+      registry === undefined
+      || (
+        preparedStatementText(registry.parsedStatements, name) === undefined
+        && preparedStatementText(registry.submittedNamedStatements, name) === undefined
+      )
+    ) {
+      return name;
+    }
+  }
+}
+
+function pgBulkCacheFor(client: PgClientLike): PgBulkCache {
+  const existing = pgBulkCaches.get(client);
+  if (existing !== undefined) return existing;
+  const registry = nativePreparedStatementRegistry(client);
+  const cache: PgBulkCache = {
+    name: preparedBulkName(registry),
+    ...(registry === undefined ? {} : { registry }),
+    reusable: true,
+    tail: Promise.resolve(),
+  };
+  pgBulkCaches.set(client, cache);
+  return cache;
+}
+
+function hasUnrelatedPreparedStatement(
+  registry: PgPreparedStatementRegistry,
+  name: string,
+  text: string,
+): boolean {
+  const parsed = preparedStatementText(registry.parsedStatements, name);
+  const submitted = preparedStatementText(registry.submittedNamedStatements, name);
+  return (parsed !== undefined && parsed !== text) || (submitted !== undefined && submitted !== text);
+}
+
+function forgetPreparedStatement(
+  registry: PgPreparedStatementRegistry,
+  name: string,
+  text: string,
+): void {
+  if (preparedStatementText(registry.parsedStatements, name) === text) delete registry.parsedStatements[name];
+  if (preparedStatementText(registry.submittedNamedStatements, name) === text) delete registry.submittedNamedStatements[name];
+}
+
+async function evictPgBulkStatement(
+  client: PgClientLike,
+  cache: PgBulkCache,
+): Promise<void> {
+  const text = cache.text;
+  if (text === undefined) return;
+  const registry = cache.registry;
+  if (registry === undefined) {
+    cache.reusable = false;
+    cache.text = undefined;
+    return;
+  }
+  if (hasUnrelatedPreparedStatement(registry, cache.name, text)) {
+    cache.name = preparedBulkName(registry);
+    cache.text = undefined;
+    return;
+  }
+  await client.query({ text: `DEALLOCATE ${quotePortal(cache.name)}`, values: [] });
+  forgetPreparedStatement(registry, cache.name, text);
+  cache.text = undefined;
+}
+
+async function acquirePgBulkName(
+  client: PgClientLike,
+  cache: PgBulkCache,
+  text: string,
+): Promise<string | undefined> {
+  if (!cache.reusable) return undefined;
+  if (cache.text !== text) await evictPgBulkStatement(client, cache);
+  if (!cache.reusable) return undefined;
+  const registry = cache.registry;
+  if (registry !== undefined && hasUnrelatedPreparedStatement(registry, cache.name, text)) {
+    cache.name = preparedBulkName(registry);
+  }
+  return cache.name;
+}
+
+function markPgBulkPrepared(
+  cache: PgBulkCache,
+  name: string,
+  text: string,
+): void {
+  cache.text = text;
+  const registry = cache.registry;
+  if (registry === undefined) return;
+  registry.parsedStatements[name] = text;
+  delete registry.submittedNamedStatements[name];
+}
+
+function enqueuePgBulk<T>(
+  cache: PgBulkCache,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const run = cache.tail.then(operation, operation);
+  cache.tail = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 export function createPgExecutor(client: PgClientLike, options: PgExecutorOptions = {}): QueryExecutor {
   assertPgClient(client);
   const policy = options.typePolicy ?? defaultTypePolicy;
@@ -270,6 +450,58 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       const rowCount = result.rowCount ?? undefined;
       const rowBearing = (result.fields?.length ?? 0) > 0 || result.rows.length > 0 || result.command === "SELECT";
       return rowBearing ? { rows: rows as readonly Row[], rowCount, kind: "rows" } : { rows: [], rowCount, kind: "command", command: { affectedRows: rowCount } };
+    },
+    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
+      const described = describedBulks.get(binding);
+      if (described !== bulk) throw new TypeError("BRAID_BINDING_IDENTITY: PostgreSQL bulk description belongs to another bulk or adapter.");
+      if (binding.adapterId !== pgStatementBinding.id || binding.dialectId !== bulk.statement.dialectId) {
+        throw new TypeError("BRAID_BINDING_IDENTITY: PostgreSQL bulk description belongs to another adapter.");
+      }
+      if (binding.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: PostgreSQL bulk binding did not provide parameterized SQL.");
+      const cache = pgBulkCacheFor(client);
+      return enqueuePgBulk(cache, async () => {
+        let name: string | undefined;
+        let nameReady = false;
+        let affectedRows = 0;
+        let affectedKnown = true;
+        for (let index = 0; index < binding.itemCount; index += 1) {
+          if (!nameReady) {
+            name = await acquirePgBulkName(client, cache, binding.parameterizedSql!);
+            nameReady = true;
+          }
+          const values = binding.valuesAt(index);
+          let result: PgResultLike;
+          try {
+            result = name === undefined
+              ? await client.query({ text: binding.parameterizedSql!, values })
+              : await client.query({ name, text: binding.parameterizedSql!, values });
+          } catch (error) {
+            const registry = cache.registry;
+            if (
+              name !== undefined
+              && registry !== undefined
+              && (
+                preparedStatementText(registry.parsedStatements, name) === binding.parameterizedSql
+                || preparedStatementText(registry.submittedNamedStatements, name) === binding.parameterizedSql
+              )
+            ) {
+              cache.text = binding.parameterizedSql;
+            }
+            throw error;
+          }
+          if (name !== undefined) markPgBulkPrepared(cache, name, binding.parameterizedSql!);
+          if ((result.fields?.length ?? 0) > 0 || result.rows.length > 0) {
+            throw new Error("BRAID_BULK_RESULT_KIND: PostgreSQL bulk command returned rows.");
+          }
+          if (typeof result.rowCount === "number") affectedRows += result.rowCount;
+          else affectedKnown = false;
+        }
+        return {
+          inputCount: binding.itemCount,
+          ...(affectedKnown ? { affectedRows } : {}),
+          executionMode: "prepared-loop",
+        };
+      });
     },
     async *stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncGenerator<Row> {
       assertParameterHintsUnsupported(rendered);

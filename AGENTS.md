@@ -170,6 +170,11 @@ preserve that identity. Prepared shape is logical (`resultKind`, canonical
 segments and ordered hint signature), and each prepared invocation renders
 once before binding and execution. Driver/server reuse remains adapter-owned.
 
+`db.bulk()` accepts homogeneous command factories only. Preflight every input
+before acquisition; shape mismatch fails rather than grouping or rewriting.
+Root bulk has no portable atomicity promise; `tx.bulk()` uses the pinned lease.
+Keep one logical statement plus a value matrix and one bulk observer lifecycle.
+
 ---
 
 ## 7. Result-kind invariants
@@ -194,7 +199,10 @@ resources, release root leases, then map application values. OUT cursor sets
 come first in descriptor order, followed by implicit/emitted sets in driver
 order. Scalar output never occupies a result set.
 
-`sql.out()`/`sql.inOut()` are value-only logical parameters. PostgreSQL refcursors
+`sql.out()`/`sql.inOut()` are value-only logical parameters. `sql.out()` also
+supports materialized Oracle `sql.rows` RETURNING INTO; INOUT remains call-only.
+Oracle positional OUT ordinals are independent of intervening IN parameters.
+PostgreSQL refcursors
 require an existing `db.tx()`. MySQL emitted sets are supported, but mysql2's
 insufficient OUT carrier evidence means descriptors fail explicitly; never guess
 the final set or rewrite through session variables. Tedious native procedure
@@ -352,8 +360,9 @@ and Deno 2.9.3 for core/template/runtime and pg/mysql2. Node/Deno node:sqlite
 passes; Bun 1.3.14 lacks that module. Node 24.21.0 remains Compatible with
 local evidence only. README links the same-revision CI evidence.
 Keep Bun/Deno support scoped to exact tested versions, not inferred floors.
-Preserve reviewed `node:buffer` and `node:async_hooks` imports and the runtime
-source/packed audit. Direct pg/mysql2 factories accept physical clients only.
+Preserve the runtime source/packed audit. Template byte counting is browser-safe;
+runtime uses conditional internal async-context backends, not a browser ALS
+polyfill. Direct pg/mysql2 factories accept physical clients only.
 
 Tooling can remain Node-first while runtime libraries become portable.
 
@@ -375,9 +384,9 @@ Oracle NUMBER/LOB/temporal and SQL Server precision/scale semantics require
 driver-specific handling. Unsupported call/OUT or streaming capabilities must
 remain explicit rather than simulated.
 
-PV15 verification is pending on the exact final revision. Do not infer a new
+PV16 verification is pending on the exact final revision. Do not infer a new
 runtime/driver support label, SHA, CI pass, package version or RC publication
-from in-progress implementation. RC publication remains deferred until PV15
+from in-progress implementation. RC publication remains deferred until PV16
 development, review and user acceptance.
 
 ---
@@ -459,8 +468,9 @@ PV15 adds `@sqlbraid/vite` as the seventeenth publishable package. It is tooling
 not a runtime dependency: compiler `transformSource` lowers guarded templates
 without transpiling TS/JSX; Vite owns transpilation. Keep original TS/TSX maps,
 dev/build/HMR/SSR evidence and the packed TanStack Start finance gate.
-Database drivers and execution stay server-only. Preserve reviewed `node:buffer`
-imports rather than claiming browser runtime support to accommodate bundling.
+TanStack Start database drivers and execution stay server-only. Browser SQLite
+uses the separate WASM adapter, not Node-driver shims. PV16 adds MariaDB as the
+eighteenth publishable package and the SQLite WASM/D1 subpaths.
 
 Use Vitest for fast tests, Testcontainers for PostgreSQL/MySQL and native `node:sqlite` for SQLite.
 

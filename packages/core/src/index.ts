@@ -259,6 +259,7 @@ export interface StatementBindingDescription {
 export interface StatementBindingAdapter {
   readonly id: string;
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription;
+  describeBulk?(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription;
 }
 
 export interface StatementBindingDescriptionOptions {
@@ -271,6 +272,44 @@ export interface StatementBindingDescriptionOptions {
     readonly capacity?: number;
   };
   readonly formatLiteral?: (parameter: RenderedParameter, index: number, options: LiteralizeOptions) => string | undefined;
+}
+
+export interface RenderedBulk {
+  readonly statement: RenderedStatement;
+  readonly parameterSets: readonly (readonly unknown[])[];
+}
+
+export interface BulkBindingDescription {
+  readonly adapterId: string;
+  readonly dialectId: string;
+  readonly transport: ParameterTransportKind;
+  readonly parameterizedSql?: string;
+  readonly bindings: readonly BindingDescription[];
+  readonly itemCount: number;
+  valuesAt(index: number): readonly unknown[];
+  literalizedSql(index: number, options?: LiteralizeOptions): LiteralizedSqlResult;
+}
+
+/**
+ * Normalize and snapshot a homogeneous bulk's logical statement and value
+ * matrix. Values themselves are application-owned and are not cloned.
+ */
+export function createRenderedBulk(bulk: RenderedBulk): RenderedBulk {
+  if (bulk === null || typeof bulk !== "object" || Array.isArray(bulk)) {
+    throw new TypeError("RenderedBulk must be an object.");
+  }
+  const statement = createRenderedStatement(bulk.statement);
+  if (!Array.isArray(bulk.parameterSets)) {
+    throw new TypeError("RenderedBulk parameterSets must be an array.");
+  }
+  const parameterCount = statement.parameters.length;
+  const parameterSets = Object.freeze(bulk.parameterSets.map((values) => {
+    if (!Array.isArray(values) || values.length !== parameterCount) {
+      throw new TypeError("RenderedBulk parameter sets must match the rendered parameter count.");
+    }
+    return Object.isFrozen(values) ? values : Object.freeze([...values]);
+  }));
+  return Object.freeze({ statement, parameterSets });
 }
 
 const knownRenderedStatements = new WeakSet<object>();
@@ -354,8 +393,13 @@ export function createRenderedStatement(statement: {
   const segments = Object.freeze([...statement.segments]);
   if (segments.some((segment) => typeof segment !== "string")) throw new TypeError("RenderedStatement segments must be an array of strings.");
   const parameters = Object.freeze(Array.from(statement.parameters, copyRenderedParameter));
-  if (parameters.some((parameter) => parameter.direction !== undefined && parameter.direction !== "in") && statement.resultKind !== "call") {
-    throw new TypeError("OUT and INOUT parameters are only valid for call statements.");
+  if (parameters.some((parameter) => parameter.direction === "inout" && statement.resultKind !== "call")) {
+    throw new TypeError("INOUT parameters are only valid for call statements.");
+  }
+  if (parameters.some((parameter) => parameter.direction === "out"
+    && statement.resultKind !== "call"
+    && statement.resultKind !== "rows")) {
+    throw new TypeError("OUT parameters are only valid for call and rows statements.");
   }
   const outputNames = new Set<string>();
   for (const parameter of parameters) {
@@ -566,6 +610,67 @@ export function createStatementBindingDescription(
         }
         return parameterized;
       },
+    });
+  }
+  return Object.freeze(description);
+}
+
+/**
+ * Build one binding description for a logical bulk statement. The statement
+ * metadata is shared by every parameter set; values and diagnostics are
+ * addressed only when requested for a particular item.
+ */
+export function createBulkBindingDescription(
+  bulk: RenderedBulk,
+  context: StatementBindingContext,
+  options: StatementBindingDescriptionOptions,
+): BulkBindingDescription {
+  const logical = createRenderedBulk(bulk);
+  const statementBinding = createStatementBindingDescription(logical.statement, context, options);
+  const parameterSets = logical.parameterSets;
+  const itemCount = parameterSets.length;
+  const valuesAt = (index: number): readonly unknown[] => {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= itemCount) {
+      throw new RangeError(`Bulk item index ${String(index)} is outside [0, ${itemCount}).`);
+    }
+    return parameterSets[index]!;
+  };
+  const literalizedSqlFor = (index: number, literalOptions?: LiteralizeOptions): LiteralizedSqlResult => {
+    const values = valuesAt(index);
+    const optionsSnapshot = literalOptions === undefined ? undefined : {
+      ...(literalOptions.values === undefined ? {} : { values: literalOptions.values }),
+      ...(literalOptions.binary === undefined ? {} : { binary: literalOptions.binary }),
+      ...(literalOptions.maxValueLength === undefined ? {} : { maxValueLength: literalOptions.maxValueLength }),
+      ...(literalOptions.redact === undefined ? {} : { redact: literalOptions.redact }),
+    };
+    const statement = {
+      ...logical.statement,
+      parameters: logical.statement.parameters.map((parameter, parameterIndex) => ({
+        ...parameter,
+        value: values[parameterIndex],
+      })),
+    };
+    const result = createStatementBindingDescription(
+      statement,
+      context,
+      options,
+    ).literalizedSql(optionsSnapshot);
+    return result;
+  };
+  const description = {
+    adapterId: statementBinding.adapterId,
+    dialectId: statementBinding.dialectId,
+    transport: statementBinding.transport,
+    bindings: statementBinding.bindings,
+    itemCount,
+    valuesAt,
+    literalizedSql: literalizedSqlFor,
+  } as BulkBindingDescription;
+  if ("parameterizedSql" in statementBinding) {
+    Object.defineProperty(description, "parameterizedSql", {
+      enumerable: true,
+      configurable: false,
+      get: () => statementBinding.parameterizedSql,
     });
   }
   return Object.freeze(description);
@@ -839,6 +944,14 @@ export class RoutineMappingError extends Error {
   }
 }
 
+export type BulkExecutionMode = "native-bulk" | "pipeline" | "prepared-loop" | "remote-batch";
+
+export interface BulkExecutionResult {
+  readonly inputCount: number;
+  readonly affectedRows?: number;
+  readonly executionMode: BulkExecutionMode;
+}
+
 export interface QueryExecutor {
   /** Stable identity for the physical execution resource shared by wrappers; pools must use a leased resource. */
   readonly ownershipKey?: object;
@@ -846,6 +959,7 @@ export interface QueryExecutor {
   query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>>;
   stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncIterable<Row>;
   call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult>;
+  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult>;
   begin?(): Promise<void>;
   commit?(): Promise<void>;
   rollback?(): Promise<void>;
@@ -918,6 +1032,28 @@ export interface QueryMappedEvent {
   readonly rowCount: number;
   readonly queryMapped: boolean;
   readonly executionMapped: boolean;
+  readonly transactionDepth: number;
+  readonly transactionScoped: boolean;
+}
+
+export interface BulkReadyEvent {
+  readonly type: "bulk:ready";
+  readonly operationId: string;
+  readonly itemCount: number;
+  readonly transactionDepth: number;
+  readonly transactionScoped: boolean;
+  readonly sql?: string;
+  readonly valuesAt: (index: number) => readonly unknown[];
+  readonly literalizedSql: (index: number, options?: LiteralizeOptions) => LiteralizedSqlResult;
+}
+
+export interface BulkResultEvent {
+  readonly type: "bulk:result";
+  readonly operationId: string;
+  readonly itemCount: number;
+  readonly affectedRows?: number;
+  readonly executionMode: BulkExecutionMode;
+  readonly durationMs: number;
   readonly transactionDepth: number;
   readonly transactionScoped: boolean;
 }
@@ -1007,6 +1143,8 @@ export type ExecutionEvent =
   | QueryReadyEvent
   | QueryResultEvent
   | QueryMappedEvent
+  | BulkReadyEvent
+  | BulkResultEvent
   | QueryErrorEvent
   | StreamStartEvent
   | StreamEndEvent
@@ -1050,9 +1188,15 @@ export interface Database {
   execute<Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>>;
   call<Result extends RoutineCallResult>(query: CallQuery<Result>): Promise<Result>;
   batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }>;
+  bulk<Input>(inputs: readonly Input[], factory: (input: Input, index: number) => CommandQuery): Promise<BulkResult>;
   prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row>;
   stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row>;
   tx<T>(callback: (database: Database) => Promise<T>): Promise<T>;
+}
+
+export interface BulkResult {
+  readonly inputCount: number;
+  readonly affectedRows?: number;
 }
 
 export type QueryRow<Q> = Q extends Query<infer Row, QueryResultKind> ? Row : never;

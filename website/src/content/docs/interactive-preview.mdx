@@ -1,0 +1,27 @@
+---
+title: Interactive browser preview
+description: Run a production SQLBraid query with SQLite WASM in a browser worker.
+---
+
+import InteractivePreview from "../../components/InteractivePreview.astro";
+
+The preview below is the same execution path used by an application bundle:
+the browser worker imports the SQLBraid SQLite WASM adapter, renders a
+`sql.rows(schema)` query, and executes it against an official SQLite WASM
+`:memory:` database. The fixture is deterministic finance data with Korean and
+other Unicode account names.
+
+It demonstrates:
+
+- guarded `@braid if` branches and ordinary value binds;
+- rendered SQLite SQL and its bind values;
+- Standard Schema validation plus a currency-label transformation; and
+- a real tabular result from the WASM database.
+
+<InteractivePreview />
+
+The default path deliberately does not require OPFS, persistence,
+`SharedArrayBuffer`, or COOP/COEP headers. A production application can choose
+another SQLite WASM storage mode separately; this documentation preview stays
+portable on static hosting such as GitHub Pages.
+

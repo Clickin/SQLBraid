@@ -2,7 +2,7 @@
 
 **Write SQL. Keep TypeScript. Skip the query-builder translation layer.**
 
-SQLBraid is a SQL-first data-access toolkit for TypeScript. It keeps ordinary SQL as the primary authoring language while adding safe binds, readable dynamic SQL, explicit result contracts, Standard Schema result mapping, transaction-safe execution and first-party PostgreSQL/MySQL/SQLite/Oracle/SQL Server integrations.
+SQLBraid is a SQL-first data-access toolkit for TypeScript. It keeps ordinary SQL as the primary authoring language while adding safe binds, readable dynamic SQL, explicit result contracts, Standard Schema result mapping, transaction-safe execution and first-party PostgreSQL/MySQL/MariaDB/SQLite/Oracle/SQL Server integrations, with SQLite WASM and D1 adapter paths.
 
 ```ts
 interface UserRow {
@@ -21,7 +21,7 @@ const users = sql.rows<UserRow>`
 `;
 ```
 
-> **Status:** pre-release. PV15 adds native streaming across five drivers, heterogeneous routine contracts and Vite 8 integration. Exact-final-revision CI and user acceptance gate RC publication; no release is implied by the working tree. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release. PV16 adds DML-returning capability evidence, homogeneous bulk, MariaDB, SQLite WASM, and D1 paths on top of PV15 streaming, routine contracts, and Vite 8 integration. Exact-final-revision CI and user acceptance gate RC publication; no release or current support label is implied by the working tree. See [`PLAN.md`](./PLAN.md).
 
 [Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) ·
 [Documentation](https://clickin.github.io/SQLBraid/) ·
@@ -160,6 +160,35 @@ See the [routine guide](https://clickin.github.io/SQLBraid/dev/concepts/routines
 
 Adapters report the actual row/command result kind and the runtime checks it against the declaration. A mismatch throws `BRAID_RESULT_KIND` **after execution**; use a transaction when a write must roll back if its declared kind was wrong.
 
+### DML that returns rows
+
+DML returning is a row contract, not a SQL-verb guess. Use a materialized row
+API for native syntax supported by the selected database:
+
+```ts
+const inserted = await db.all(sql.rows<AccountRow>`
+  INSERT INTO account (name)
+  VALUES (${name})
+  RETURNING id, name
+`);
+```
+
+The native clauses stay visible and differ by dialect:
+
+| Dialect | Native form | PV16 materialized contract |
+| --- | --- | --- |
+| PostgreSQL | `RETURNING` | `db.execute`, `db.all`, `db.one`, `db.maybeOne` with `sql.rows` |
+| SQLite | `RETURNING` | same row APIs; SQLite accumulates output before delivery |
+| MariaDB | `RETURNING` where the server supports the exact form | official Connector/Node.js evidence is separate from `mysql2` |
+| SQL Server | `OUTPUT` | same row APIs; do not promise rollback-safe streaming |
+| Oracle | `RETURNING ... INTO` plus `sql.out()` | adapter-specific OUT normalization |
+| MySQL | no generic DML-returning clause | use a native MySQL statement or a separate query |
+
+PV16 claims materialized DML-returning only. `db.stream()` for DML-returning is
+not a portable support claim because drivers differ in buffering, statement
+completion, cancellation, and rollback behavior. SQLBraid does not rewrite one
+dialect's clause into another.
+
 ---
 
 ## Standard Schema result mapping
@@ -253,6 +282,9 @@ await db.maybeOne(query);
 await db.execute(command);
 await db.call(callQuery);
 await db.batch(queries);
+await db.bulk(inputs, (input) => sql.command`
+  UPDATE account SET amount = ${input.amount} WHERE id = ${input.id}
+`);
 db.prepare(name, factory);
 db.stream(query);
 await db.tx(async (tx) => { ... });
@@ -311,13 +343,40 @@ A pool such as `pg.Pool`, `mysql2.Pool` or Bun.SQL must be modeled as a **connec
 
 Materialized query results release their root lease before asynchronous application mapping, including `execute`, prepared execution and `batch`.
 
-One batch uses one lease, executes every physical statement in order, releases, then maps the materialized results. **Batch is not atomic:** earlier statements—and later statements when mapping fails—may already have executed. Wrap it in `db.tx()` when atomicity is required.
+One batch uses one lease, executes every physical statement in order, releases, then maps the materialized results. **Batch is not atomic:** earlier statements—and later statements when result mapping fails—may already have executed. Wrap it in `db.tx()` when atomicity is required.
+
+### Homogeneous bulk DML
+
+`db.bulk(inputs, factory)` accepts only `CommandQuery` values. It locks the
+first rendered shape, rejects structural/cardinality or hint differences before
+database I/O, then gives one physical lease and one parameter matrix to the
+driver:
+
+```ts
+const result = await db.bulk(
+  accounts.map(({ id, amount }) => ({ id, amount })),
+  (input) => sql.command`
+    UPDATE account
+    SET amount = ${input.amount}
+    WHERE id = ${input.id}
+  `,
+);
+// { inputCount, affectedRows? }
+```
+
+An empty input returns `{ inputCount: 0 }` without acquiring a connection.
+`db.bulk()` is a throughput primitive, not a portable transaction boundary:
+there is no implicit transaction and no portable auto-chunking. Use
+`db.tx(async (tx) => tx.bulk(inputs, factory))` when all changes must share the
+callback transaction. Drivers report one of `native-bulk`, `pipeline`,
+`prepared-loop`, or `remote-batch`; `db.bulk()` does not promise DML-returning
+rows.
 
 Streaming keeps its lease until iteration finishes, breaks, aborts or fails. Rows are mapped one at a time without buffering. Pooled-root mapper re-entry may acquire another lease; a pool needs available capacity for that nested operation. Same-root direct-stream re-entry fails with `BRAID_STREAM_SCOPE` rather than waiting on itself. Transaction streams prohibit overlapping work on the pinned connection.
 
-All five first-party adapters have native streaming paths: optional `pg-cursor`,
+First-party network and Node adapters have native streaming paths: optional `pg-cursor`,
 mysql2 prepared `Execute.stream()`, SQLite `iterate()`, Oracle `ResultSet`, and
-Tedious bounded row events. Driver cleanup finishes before lease release. MySQL
+Tedious bounded row events; MariaDB uses its connector stream. Driver cleanup finishes before lease release. MySQL
 normal break drains the command for reuse. PostgreSQL and MySQL abort terminate
 and discard the physical connection, including pending reads. Cleanup failures
 discard pooled leases or poison direct resources.
@@ -434,9 +493,10 @@ This SPI is also the intended foundation for a later optional OpenTelemetry inte
 SQLBraid does not need a new dialect for every driver/runtime combination.
 
 ```text
-dialect     PostgreSQL / MySQL / SQLite / Oracle / SQL Server SQL surface
-driver      pg / mysql2 / node:sqlite / node-oracledb / Tedious / future alternatives
-runtime     Node / Bun / Deno
+dialect     PostgreSQL / MySQL / MariaDB / SQLite / Oracle / SQL Server SQL surface
+driver      pg / mysql2 / mariadb / node:sqlite / sqlite-wasm / cloudflare-d1 /
+            node-oracledb / Tedious / future alternatives
+runtime     Node / Bun / Deno / Browser / Worker
 ```
 
 Current first-party adapters and their transport ownership are:
@@ -445,7 +505,10 @@ Current first-party adapters and their transport ownership are:
 | --- | --- | --- |
 | PostgreSQL | `pg` | text-positional `$1..$N`; fresh unnamed simple execution |
 | MySQL | `mysql2` | text-positional `?`; driver-owned reuse for every request |
+| MariaDB | MariaDB Connector/Node.js | text-positional `?`; connector-owned reuse/batch |
 | SQLite | `node:sqlite` | documented `?` prepare path; fresh simple execution |
+| SQLite | `sqlite-wasm` | OO1 prepare/bind/step; direct browser resource |
+| SQLite | `cloudflare-d1` | ordered placeholders; D1 remote batch |
 | Oracle | `node-oracledb` Thin | text-positional `:1..:N`; driver cache reuse |
 | SQL Server | Tedious | typed request `@p1..@pN`; fresh simple execution |
 
@@ -468,24 +531,29 @@ Runtime support uses four labels:
 - **Custom** — connected through the executor/provider SPI.
 - **Unsupported** — a required capability is absent or the combination fails SQLBraid's checks.
 
-### Runtime libraries
+### PV16 evidence status (exact final evidence pending)
 
 | Runtime | core/template/runtime | Tested version | Notes |
 | --- | --- | --- | --- |
-| Node | Official | 22.18.0 | Clean-checkout full release gate; packed smoke including concurrent transaction ALS |
-| Node | Compatible | 24.21.0 | Local packed smoke; not a CI gate |
-| Bun | Official | 1.3.14 | Packed smoke and ALS assertions in CI |
-| Deno | Official | 2.9.3 | Packed smoke and ALS assertions in CI |
+| Node | Pending | 22.18.0 | PV16 exact-SHA release gate is pending |
+| Node | Compatible expectation | 24.21.0 | Local evidence only; not a PV16 CI claim |
+| Bun | Pending | 1.3.14 | Existing packed path retained; PV16 evidence pending |
+| Deno | Pending | 2.9.3 | Existing packed path retained; PV16 evidence pending |
+| Browser | Pending | CI-selected Chromium | SQLite WASM browser gate is pending |
+| Worker | Pending | Local D1 stack | D1 binding gate is pending; no remote production claim |
 
 ### First-party driver adapters
 
 | Adapter | Node 22.18.0 | Node 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
 | --- | --- | --- | --- | --- |
-| PostgreSQL / `pg` 8.23.0 | Official | Compatible | Official | Official |
-| MySQL / `mysql2` 3.24.4 | Official | Compatible | Official | Official |
-| SQLite / `node:sqlite` | Official | Compatible | Unsupported | Official |
-| Oracle Thin / `node-oracledb` 7.0.1 | Official | Compatible | Unsupported | Unsupported |
-| SQL Server / Tedious 20.0.0 | Official | Compatible | Unsupported | Unsupported |
+| PostgreSQL / `pg` 8.23.0 | Pending | Pending | Pending | Pending |
+| MySQL / `mysql2` 3.24.4 | Pending | Pending | Pending | Pending |
+| MariaDB / Connector 3.5.4 | Pending | Pending | Unsupported | Unsupported |
+| SQLite / `node:sqlite` | Pending | Pending | Unsupported | Pending |
+| SQLite / `sqlite-wasm` | Unsupported | Unsupported | Unsupported | Unsupported |
+| SQLite / `cloudflare-d1` | Unsupported | Unsupported | Unsupported | Unsupported |
+| Oracle Thin / `node-oracledb` 7.0.1 | Pending | Pending | Unsupported | Unsupported |
+| SQL Server / Tedious 20.0.0 | Pending | Pending | Unsupported | Unsupported |
 
 The [development documentation's exact-SHA evidence](https://clickin.github.io/SQLBraid/dev/reference/support/#release-evidence-provenance),
 [current runtime runs](https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml?query=branch%3Amain)
@@ -764,7 +832,8 @@ Current workspace packages:
 | `@sqlbraid/runtime` | Execution, mapping, result-kind safety, transactions and streaming |
 | `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg` adapter; optional `/inspector` |
 | `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2` adapter; optional `/inspector` |
-| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite` adapter; optional `/inspector` |
+| `@sqlbraid/mariadb` | MariaDB dialect/TypePolicy; official connector `/mariadb` adapter |
+| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/wasm` and `/d1` adapters; optional `/inspector` |
 | `@sqlbraid/oracle` | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; optional `/inspector` |
 | `@sqlbraid/mssql` | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; optional `/inspector` |
 | `@sqlbraid/compiler` | TypeScript discovery and guarded-template lowering |
@@ -777,7 +846,7 @@ Current workspace packages:
 | `@sqlbraid/language-server` | Editor/LSP integration |
 | `sqlbraid` | Unscoped CLI convenience package; provides the `sqlbraid` executable without database drivers |
 
-The workspace package set is 17 packages: 16 scoped packages plus the unscoped `sqlbraid` CLI convenience package.
+The workspace package set is 18 packages: 17 scoped packages plus the unscoped `sqlbraid` CLI convenience package.
 
 ---
 

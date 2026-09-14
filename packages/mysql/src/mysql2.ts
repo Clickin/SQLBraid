@@ -1,18 +1,22 @@
+import { Buffer } from "node:buffer";
 import type {
   CommandResult,
   ConnectionLease,
   ConnectionProvider,
   DatabaseOptions,
   DriverRoutineResult,
+  BulkBindingDescription,
+  BulkExecutionResult,
   QueryExecutor,
   QueryExecutionResult,
+  RenderedBulk,
   RenderedStatement,
   TypePolicy,
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
 } from "@sqlbraid/core";
-import { createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
+import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -49,8 +53,15 @@ export interface Mysql2RawConnectionLike {
   destroy(): void;
 }
 
+export interface Mysql2PreparedStatementLike {
+  execute(values?: Mysql2Parameter[]): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
+  close(): Promise<void>;
+}
+
 export interface Mysql2ConnectionLike {
   execute(sql: string, values?: Mysql2Parameter[]): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
+  prepare?(sql: string): Promise<Mysql2PreparedStatementLike>;
+  unprepare?(sql: string): void | Promise<void>;
   query?(sql: string): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
   beginTransaction(): Promise<void>;
   commit(): Promise<void>;
@@ -143,6 +154,43 @@ function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   }
 }
 
+function assertMysql2BulkValues(bulk: RenderedBulk): void {
+  for (let rowIndex = 0; rowIndex < bulk.parameterSets.length; rowIndex += 1) {
+    const values = bulk.parameterSets[rowIndex]!;
+    for (let parameterIndex = 0; parameterIndex < values.length; parameterIndex += 1) {
+      const value = values[parameterIndex];
+      const location = `MySQL bulk parameter ${parameterIndex + 1} in row ${rowIndex + 1}`;
+      if (value === undefined) {
+        throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be undefined.`);
+      }
+      if (typeof value === "function") {
+        throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be a function.`);
+      }
+      if (value instanceof Date && !Number.isFinite(value.getTime())) {
+        throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} must be a valid Date.`);
+      }
+      if (value !== null && typeof value === "object") {
+        const candidate = value as { readonly toJSON?: unknown };
+        const isBuffer = Buffer.isBuffer(value);
+        const isJsonValue = !(value instanceof Date)
+          && !isBuffer
+          && (
+            Array.isArray(value)
+            || value.constructor === Object
+            || typeof candidate.toJSON === "function"
+          );
+        if (isJsonValue) {
+          try {
+            if (JSON.stringify(value) === undefined) throw new TypeError("JSON encoding produced undefined.");
+          } catch (error) {
+            throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be JSON encoded.`, { cause: error });
+          }
+        }
+      }
+    }
+  }
+}
+
 function assertNoRoutineOutputsForQuery(rendered: RenderedStatement): void {
   if (rendered.resultKind !== "call" && rendered.parameters.some((parameter) => parameter.direction !== undefined && parameter.direction !== "in")) {
     throw new Error("BRAID_CALL_OUT_UNSUPPORTED: OUT/INOUT parameters are only valid for routine calls.");
@@ -150,6 +198,7 @@ function assertNoRoutineOutputsForQuery(rendered: RenderedStatement): void {
 }
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
+const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 
 export const mysql2StatementBinding: StatementBindingAdapter = Object.freeze({
   id: "mysql2",
@@ -163,6 +212,26 @@ export const mysql2StatementBinding: StatementBindingAdapter = Object.freeze({
       reuse: { effective: "reuse", owner: "driver" },
     });
     describedStatements.set(description, statement);
+    return description;
+  },
+  describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
+    const statement = createRenderedStatement(bulk.statement);
+    if (statement.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: MySQL bulk requires command queries.");
+    if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
+      throw new Error("BRAID_BULK_SHAPE: MySQL bulk does not support OUT or INOUT parameters.");
+    }
+    assertParameterHintsUnsupported(statement);
+    for (const values of bulk.parameterSets) {
+      if (values.length !== statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: MySQL bulk parameter cardinality changed.");
+    }
+    assertMysql2BulkValues(bulk);
+    const description = createBulkBindingDescription(bulk, context, {
+      adapterId: "mysql2",
+      transport: "text-positional",
+      placeholder: () => "?",
+      reuse: { effective: "reuse", owner: "driver" },
+    });
+    describedBulks.set(description, bulk);
     return description;
   },
 });
@@ -210,6 +279,20 @@ function isMultipleResultPayload(payload: unknown): boolean {
   return Array.isArray(payload) && payload.some(Array.isArray);
 }
 
+async function closePrepared(
+  connection: Mysql2ConnectionLike,
+  sql: string,
+  failure: unknown,
+): Promise<void> {
+  try {
+    // Closing the statement alone leaves mysql2's cached handle reusable.
+    await connection.unprepare!(sql);
+  } catch (closeError) {
+    if (failure === undefined) throw cleanupError("MySQL prepared bulk cleanup failed.", closeError);
+    throw cleanupAggregate([failure, closeError], "MySQL prepared bulk cleanup failed.", failure);
+  }
+}
+
 export function createMysql2Executor(connection: Mysql2ConnectionLike, options: Mysql2ExecutorOptions = {}): QueryExecutor {
   assertMysql2Connection(connection);
   const policy = options.typePolicy ?? defaultTypePolicy;
@@ -236,6 +319,39 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       if (!payload || typeof payload !== "object") return { rows: [], rowCount: 0, kind: "command", command: {} };
       const header: Mysql2ResultHeader = { ...payload };
       return { rows: [], rowCount: header.affectedRows, kind: "command", command: header };
+    },
+    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
+      const described = describedBulks.get(binding);
+      if (described !== bulk) throw new TypeError("BRAID_BINDING_IDENTITY: MySQL bulk description belongs to another bulk or adapter.");
+      if (binding.adapterId !== mysql2StatementBinding.id || binding.dialectId !== bulk.statement.dialectId) {
+        throw new TypeError("BRAID_BINDING_IDENTITY: MySQL bulk description belongs to another adapter.");
+      }
+      if (binding.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: MySQL bulk binding did not provide parameterized SQL.");
+      if (typeof connection.prepare !== "function" || typeof connection.unprepare !== "function") {
+        throw new Error("BRAID_BULK_UNSUPPORTED: mysql2 connection must expose prepare() and unprepare().");
+      }
+      const prepared = await connection.prepare(binding.parameterizedSql);
+      let failure: unknown;
+      let affectedRows = 0;
+      let affectedKnown = true;
+      try {
+        for (let index = 0; index < binding.itemCount; index += 1) {
+          const [payload] = await prepared.execute(binding.valuesAt(index) as Mysql2Parameter[]);
+          if (Array.isArray(payload)) throw new Error("BRAID_BULK_RESULT_KIND: MySQL bulk command returned rows.");
+          if (payload && typeof payload === "object" && typeof (payload as Mysql2ResultHeader).affectedRows === "number") {
+            affectedRows += (payload as Mysql2ResultHeader).affectedRows!;
+          } else affectedKnown = false;
+        }
+      } catch (error) {
+        failure = error;
+      }
+      await closePrepared(connection, binding.parameterizedSql, failure);
+      if (failure !== undefined) throw failure;
+      return {
+        inputCount: binding.itemCount,
+        ...(affectedKnown ? { affectedRows } : {}),
+        executionMode: "prepared-loop",
+      };
     },
     async *stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncGenerator<Row> {
       assertParameterHintsUnsupported(rendered);

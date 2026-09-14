@@ -20,7 +20,45 @@ permissions:
   id-token: write
 
 jobs:
+  postgres-current-capabilities:
+    name: PostgreSQL 18 current capability gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: sqlbraid
+          POSTGRES_PASSWORD: sqlbraid-test
+          POSTGRES_DB: sqlbraid
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sqlbraid"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      SQLBRAID_POSTGRES_URL: postgres://sqlbraid:sqlbraid-test@127.0.0.1:5432/sqlbraid
+      SQLBRAID_POSTGRES_VERSION: 18.6
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v7.0.1
+      - name: Set up Node 22.18.0
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22.18.0
+      - name: Set up pnpm 12.3.4
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 12.3.4
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: pnpm run build
+      - name: PostgreSQL 18 capability fixtures
+        run: pnpm exec vitest run --project db-postgres tests/db/postgres/capabilities.test.ts
+
   release:
+    needs: postgres-current-capabilities
     name: Immutable release gates
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -48,9 +86,22 @@ jobs:
         options: >-
           --health-cmd "mysqladmin ping -h 127.0.0.1 -psqlbraid-root-test"
           --health-interval 5s --health-timeout 5s --health-retries 30
+      mariadb:
+        image: mariadb:11.8.9
+        env:
+          MARIADB_DATABASE: sqlbraid
+          MARIADB_USER: sqlbraid
+          MARIADB_PASSWORD: sqlbraid-test
+          MARIADB_ROOT_PASSWORD: sqlbraid-root-test
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "mariadb-admin ping -h 127.0.0.1 -u root -p'sqlbraid-root-test'"
+          --health-interval 5s --health-timeout 5s --health-retries 30
     env:
       SQLBRAID_POSTGRES_URL: postgres://sqlbraid:sqlbraid-test@127.0.0.1:5432/sqlbraid
       SQLBRAID_MYSQL_URL: mysql://sqlbraid:sqlbraid-test@127.0.0.1:3306/sqlbraid
+      SQLBRAID_MARIADB_URL: mariadb://sqlbraid:sqlbraid-test@127.0.0.1:3307/sqlbraid
     steps:
       - name: Check out exact release ref
         uses: actions/checkout@v7.0.1
@@ -84,6 +135,9 @@ jobs:
 
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install browser conformance runtime
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Determine release version from manifest and tag
         shell: bash
@@ -125,6 +179,24 @@ jobs:
 
       - name: Real MySQL gate
         run: pnpm run test:db:mysql
+
+      - name: Real MariaDB gate
+        run: pnpm run test:db:mariadb
+
+      - name: Dialect capability conformance
+        run: pnpm run test:capabilities
+
+      - name: Bulk conformance
+        run: pnpm run test:bulk
+
+      - name: Browser SQLite WASM gate
+        run: pnpm run test:browser
+
+      - name: D1 local binding gate
+        run: pnpm run test:d1
+
+      - name: Bulk structural benchmark
+        run: pnpm run benchmark:bulk
 
       - name: Real Oracle gate
         run: pnpm run test:db:oracle

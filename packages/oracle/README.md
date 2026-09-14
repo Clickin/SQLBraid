@@ -20,6 +20,11 @@ The portable root does not import `oracledb`; the driver subpath is optional. Or
 
 Oracle routine calls use authored PL/SQL/SQL text. Native procedure metadata is not accepted by this adapter. Thin mode is the first-party target; Thick mode is not implied by this package.
 
+Oracle DML that returns rows uses native `RETURNING ... INTO` with
+`sql.out(name, hint?)` and the materialized row APIs. `sql.inOut()` remains
+call-only. The adapter normalizes returned OUT values only after physical
+execution; DML-returning streaming is not a portable PV16 support claim.
+
 CLOB/NCLOB OUT and INOUT values become strings; BLOB values become bytes.
 SQLBraid reads returned Lobs with `getData()` and awaits their `destroy()`/`close`
 event before lease release. Sibling Lobs and ResultSets are cleaned up even

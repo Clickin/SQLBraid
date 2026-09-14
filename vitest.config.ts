@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 const sourceAliases = {
+  "#async-context": resolve("packages/runtime/src/async-context.node.ts"),
   "@sqlbraid/core": resolve("packages/core/src/index.ts"),
   "@sqlbraid/codegen": resolve("packages/codegen/src/index.ts"),
   "@sqlbraid/template": resolve("packages/template/src/index.ts"),
@@ -27,6 +28,10 @@ const sourceAliases = {
   "@sqlbraid/mysql/mysql2": resolve("packages/mysql/src/mysql2.ts"),
   "@sqlbraid/mysql/inspector": resolve("packages/mysql/src/inspector.ts"),
   "@sqlbraid/mysql": resolve("packages/mysql/src/index.ts"),
+  "@sqlbraid/mariadb/mariadb": resolve("packages/mariadb/src/mariadb.ts"),
+  "@sqlbraid/mariadb": resolve("packages/mariadb/src/index.ts"),
+  "@sqlbraid/sqlite/wasm": resolve("packages/sqlite/src/wasm.ts"),
+  "@sqlbraid/sqlite/d1": resolve("packages/sqlite/src/d1.ts"),
   "@sqlbraid/sqlite/node-sqlite": resolve("packages/sqlite/src/node-sqlite.ts"),
   "@sqlbraid/sqlite/inspector": resolve("packages/sqlite/src/inspector.ts"),
   "@sqlbraid/sqlite": resolve("packages/sqlite/src/index.ts"),
@@ -75,6 +80,15 @@ export default defineConfig({
           name: "db-mysql",
           include: ["tests/db/mysql/**/*.test.ts"],
           globalSetup: ["./tests/db/mysql.global.ts"],
+          fileParallelism: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "db-mariadb",
+          include: ["tests/db/mariadb/**/*.test.ts"],
+          globalSetup: ["./tests/db/mariadb.global.ts"],
           fileParallelism: false,
         },
       },

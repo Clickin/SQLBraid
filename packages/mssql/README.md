@@ -15,6 +15,11 @@ const db = createTediousDatabase(connection);
 const rows = await db.all(query);
 ```
 
+SQL Server DML returning uses native `OUTPUT` syntax and the materialized
+`sql.rows` APIs. SQLBraid does not promise rollback-safe
+`db.stream(sql.rows\`... OUTPUT ...\`)` behavior because SQL Server may emit
+rows before a later statement failure.
+
 The `./tedious` and `./inspector` entry points require the optional `tedious` peer; the portable root does not load a driver. Row streaming uses Tedious Request row events with bounded pause/resume; lease release waits for request completion or discards the physical connection on cancellation.
 
 Routine calls support emitted heterogeneous result sets and scalar OUTPUT/INOUT parameters when explicit hints are supplied. A T-SQL integer RETURN status requires explicit native procedure metadata in the query contract, including the procedure name and ordered Tedious parameter names:

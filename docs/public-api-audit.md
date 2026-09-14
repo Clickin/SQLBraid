@@ -1,15 +1,17 @@
 # 0.1.0 public API freeze audit
 
-> PV14/PV15 delta (exact-revision verification pending): the execution SPI has cut over from
+> PV14–PV16 delta (exact-revision verification pending): the execution SPI has cut over from
 > `RenderedQuery` to immutable `RenderedStatement` (`segments` plus atomic
 > `parameters`). Core now owns `parameterizedSql`,
 > `createRenderedStatement`, and `createStatementBindingDescription`; drivers
 > own `StatementBindingAdapter` materialization and named adapter exports.
+> PV16 adds homogeneous `db.bulk()`, bulk binding/observer contracts, MariaDB,
+> SQLite WASM/D1 subpaths and Oracle row-returning OUT parameters.
 > This note records the intended API boundary, not a new SHA, CI result,
 > runtime support label, or publication. Preserve the historical inventory and
 > provenance below until the exact final revision is audited.
 
-Initial audit baseline: `1615311149cce6290976df3ed6e63e41dfe795d7`; PV13 extends the inventory from `d111e116d66ce9fc1b060881778ab1845874ef57`; PV15 starts at `2aa3067dcf0c03ccde58a2eca2940c383a73729e`. All 17 npm packages and every manifest export subpath are inventoried below. This is an API classification, not a claim that release CI or registry publication has passed.
+Initial audit baseline: `1615311149cce6290976df3ed6e63e41dfe795d7`; PV13 extends the inventory from `d111e116d66ce9fc1b060881778ab1845874ef57e`; PV15 starts at `2aa3067dcf0c03ccde58a2eca2940c383a73729e`. PV16 adds the MariaDB package and Browser/Cloud SQLite subpaths. All 18 npm packages and every manifest export subpath are inventoried below. This is an API classification, not a claim that release CI or registry publication has passed.
 
 - **Application**: documented application authoring/execution/configuration API.
 - **SPI**: documented low-level physical driver, provider, dialect, representation or inspector contract.
@@ -70,6 +72,13 @@ capability methods. Raw source metadata is not copied into application result se
 `createStatementBindingDescription`. Observer parameterized/literalized SQL and
 values/hints/maps are derived views; no parallel mutable statement arrays remain.
 
+**PV16 Application:** `BulkResult`.
+
+**PV16 SPI:** `RenderedBulk`, `BulkBindingDescription`, `BulkExecutionMode`,
+`BulkExecutionResult`, `createRenderedBulk`, and `createBulkBindingDescription`. `QueryExecutor.bulk`
+and `StatementBindingAdapter.describeBulk` are optional capabilities; bulk
+materialization remains pre-acquire and command-only.
+
 **Advanced:** `BindNode`, `ChooseNode`, `ChooseWhen`, `FragmentNode`, `IdentifierNode`, `IfNode`, `ListNode`, `RawNode`, `SQL_FRAGMENT`, `SourceRange`, `SqlTagLike`, `TemplateIr`, `TemplateNode`, `TextNode`, `TrimAttributes`, `TrimNode`.
 
 ## @sqlbraid/language-server
@@ -104,9 +113,29 @@ values/hints/maps are derived views; no parallel mutable statement arrays remain
 
 **Advanced:** `Mysql2DatabaseOptions`.
 
+**PV16 SPI:** `Mysql2PreparedStatementLike`. Bulk requires both connection
+`prepare()` and `unprepare()` so closed handles cannot remain in mysql2's cache.
+
 ## @sqlbraid/mysql/inspector
 
 **Advanced:** `createMysqlInspector`.
+
+## @sqlbraid/mariadb
+
+**Application:** `sql`.
+
+**Advanced:** `createSqlTag`, `dialect`, `typePolicy`.
+
+## @sqlbraid/mariadb/mariadb
+
+**Application:** `createMariaDbDatabase`, `createMariaDbPoolDatabase`.
+
+**SPI:** `MariaDbConnectionLike`, `MariaDbPoolConnectionLike`,
+`MariaDbPoolLike`, `MariaDbFieldLike`, `MariaDbStreamLike`,
+`createMariaDbExecutor`, `createMariaDbPoolProvider`,
+`mariaDbStatementBinding`.
+
+**Advanced:** `MariaDbExecutorOptions`, `MariaDbDatabaseOptions`.
 
 ## @sqlbraid/operations
 
@@ -125,6 +154,9 @@ values/hints/maps are derived views; no parallel mutable statement arrays remain
 **SPI:** `OracleMetaDataLike`, `OracleResultSetLike`, `OracleExecuteResultLike`, `OracleBindLike`, `OracleExecuteOptionsLike`, `OracleConnectionLike`, `OraclePoolConnectionLike`, `OraclePoolLike`, `OracleDriverLike`, `createOracledbExecutor`, `createOracledbPoolProvider`, `createOracledbStatementBinding`, `oracledbStatementBinding` (PV14 pending verification).
 
 **Advanced:** `OracleDatabaseOptions`.
+
+**PV16 SPI:** `oracleOutputOrdinals` maps rendered parameter positions to native
+OUT ordinals shared by routine and materialized DML-returning execution.
 
 ## @sqlbraid/oracle/inspector
 
@@ -178,7 +210,8 @@ bounds cursor reads. Public cursor callback metadata drives row normalization.
 
 ## @sqlbraid/sqlite
 
-**Application:** `sql`, `typePolicyForIntegerMode`.
+**Application:** `sql`, `typePolicyForIntegerMode`,
+`createSqliteWasmDatabase`, `createD1Database`.
 
 **PV15 Application:** `SqliteIntegerMode`, `SqliteExecutorOptions`,
 `SqliteDatabaseOptions`, also exported by `/node-sqlite`.
@@ -190,6 +223,20 @@ bounds cursor reads. Public cursor callback metadata drives row normalization.
 **Application:** `createNodeSqliteDatabase`.
 
 **SPI:** `SqliteColumnLike`, `SqliteDatabaseLike`, `SqliteStatementLike`, `createNodeSqliteExecutor`, `nodeSqliteStatementBinding` (PV14 pending verification).
+
+## @sqlbraid/sqlite/wasm
+
+**Application:** `createSqliteWasmDatabase`.
+
+**SPI:** `SqliteWasmDatabaseLike`, `SqliteWasmStatementLike`,
+`createSqliteWasmExecutor`, `sqliteWasmStatementBinding`.
+
+## @sqlbraid/sqlite/d1
+
+**Application:** `createD1Database`.
+
+**SPI:** `D1DatabaseLike`, `D1PreparedStatementLike`, `createD1Executor`,
+`d1StatementBinding`.
 
 ## @sqlbraid/sqlite/inspector
 

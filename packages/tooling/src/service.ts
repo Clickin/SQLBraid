@@ -55,7 +55,7 @@ interface MetadataIndex {
 
 const DEFAULT_MAX_ENTRIES = 100;
 const MAX_EVIDENCE_TEXT = 4096;
-const SQL_MODULES = ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite", "@sqlbraid/oracle", "@sqlbraid/mssql"] as const;
+const SQL_MODULES = ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/mariadb", "@sqlbraid/sqlite", "@sqlbraid/oracle", "@sqlbraid/mssql"] as const;
 const SQL_KEYWORDS = new Set([
   "all", "and", "as", "asc", "between", "by", "case", "cast", "check", "collate", "column", "create", "cross", "delete", "desc", "distinct", "do", "else", "end", "except", "exists", "false", "fetch", "filter", "for", "foreign", "from", "full", "grant", "group", "having", "if", "ilike", "in", "inner", "insert", "intersect", "into", "is", "join", "lateral", "left", "like", "limit", "natural", "not", "null", "offset", "on", "or", "order", "outer", "over", "partition", "primary", "procedure", "references", "returning", "right", "select", "set", "table", "then", "to", "true", "union", "unique", "update", "using", "values", "when", "where", "window", "with", "recursive", "return",
 ]);
@@ -524,7 +524,7 @@ function queryHover(lexical: LexicalQuery, options: LanguageServiceOptions): Hov
   const kind = lexical.query.declaredResultKind;
   const contract = lexical.query.declaredRowType ?? (kind === "command" ? "CommandResult" : "unknown");
   const type = kind === "rows" ? `RowQuery<${contract}>` : kind === "command" ? "CommandQuery" : kind === "call" ? `CallQuery<${contract}>` : `Query<${contract}>`;
-  const dialect = options.dialect?.id ?? (["postgres", "mysql", "sqlite", "oracle", "mssql"].find((candidate) => lexical.query.moduleSpecifier.endsWith(`/${candidate}`)) ?? (() => {
+  const dialect = options.dialect?.id ?? (["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"].find((candidate) => lexical.query.moduleSpecifier.endsWith(`/${candidate}`)) ?? (() => {
     const candidates = unique(metadataEvidence(options).map((item) => item.snapshot.dialect), (candidate) => candidate);
     return candidates.length === 1 ? candidates[0] : "unknown";
   })());

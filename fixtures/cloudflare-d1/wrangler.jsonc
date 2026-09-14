@@ -1,0 +1,12 @@
+{
+  "name": "sqlbraid-pv16-d1",
+  "compatibility_date": "2026-09-14",
+  "main": "worker.mjs",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sqlbraid-pv16-d1",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}

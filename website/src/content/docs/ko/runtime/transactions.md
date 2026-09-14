@@ -38,4 +38,23 @@ SQLBraid 0.1.0은 격리 옵션을 노출하지 않으며 조용히 하나를 �
 
 Batch는 원자적이지 않습니다. 앞선 문장과, 결과 매핑이 실패하는 경우 뒤의 문장도 이미 실행되었을 수 있습니다. 원자성이 필요하면 batch를 `db.tx(...)`로 감싸세요.
 
+`db.bulk(inputs, factory)`는 command-only 동종 DML이며 transaction의 대체물이
+아닙니다. Root bulk는 하나의 physical lease를 사용하지만 portable atomicity
+약속이 없고 암묵적으로 transaction으로 감싸지지 않으며 auto-chunk하지
+않습니다. 모든 항목을 하나의 transaction으로 묶으려면 callback 안에서
+`tx.bulk(inputs, factory)`를 사용하세요.
+
+```ts
+await db.tx(async (tx) => {
+  await tx.bulk(inputs, (input) => sql.command`
+    UPDATE account SET amount = ${input.amount} WHERE id = ${input.id}
+  `);
+});
+```
+
+드라이버는 실제 bulk 모드(`native-bulk`, `pipeline`, `prepared-loop`,
+`remote-batch`)를 보고하며 dialect 간 throughput 또는 transaction을
+약속하지 않습니다. D1에는 현재 이 계약에 맞는 callback transaction
+primitive가 없습니다.
+
 트랜잭션 제어 실패 여부가 불확실하면 물리 리소스가 오염됩니다. 풀 정리는 해당 리소스를 폐기하며, 직접 리소스는 이후 SQLBraid 작업을 거부합니다. 활성 cursor를 commit한 채로 남기지 않도록, 방치된 live stream은 commit 대신 rollback합니다.

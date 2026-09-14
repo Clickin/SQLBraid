@@ -2,9 +2,55 @@
 
 This document records what the repository automates and what a maintainer must configure outside the repository. It contains no credentials or registry tokens.
 
+### PV16 evidence status
+
+PV16 adds named MariaDB, native dialect capability, bulk, Browser SQLite WASM,
+and local D1 gates. The local working-tree checks below pass; exact-final-SHA CI
+remains pending. This document makes no new Official support or publication
+claim for those paths. The PostgreSQL minimum role remains 16.4; the separate
+current capability role uses PostgreSQL 18.6. The Oracle provisioner is Oracle
+Free 23.9, so it must not be cited as Oracle 19c evidence.
+
+### PV16 local working-tree evidence — 2026-09-14
+
+Base commit: `bf9d8f4379e53167d37601dd8c487654395ed296`. No PV16 commit, push,
+tag or publication was performed. The package version remains `0.1.0-rc.0`.
+
+- Frozen installation and `pnpm run test:all` passed: typecheck/build,
+  58 Vitest files / 390 tests, all six local database suites, real Chromium
+  WASM preview and ownership/bulk checks, local D1/workerd, packed TanStack Start
+  dev/HMR/build/SSR, actual VS Code hosts, and 18-package hygiene/consumer checks.
+- The real-engine bulk harness covers pg, mysql2, MariaDB, node:sqlite, Oracle,
+  Tedious, SQLite WASM and D1. It caught mysql2 stale cached handles after
+  statement close and Tedious stale Request errors during unprepare; both
+  regressions now pass. Native bulk cleanup does not fabricate atomicity.
+  Focused follow-up checks also passed positive/empty Oracle DELETE RETURNING
+  and actual D1 `withSession("first-primary")` materialized query/native batch.
+- PostgreSQL 16.4 and 18.6, MySQL 8.4.2, MariaDB 11.8.9, Oracle Free 23.9 and
+  SQL Server 2022-CU18 were exercised. PostgreSQL 18 old/new and MERGE RETURNING
+  use the separate current-version gate.
+- Packed core/runtime/pg/mysql2 passed on Node 22.18.0, Bun 1.3.14 and
+  Deno 2.9.3. Node/Deno node:sqlite passed; Bun's missing node:sqlite remains
+  explicitly Unsupported. This does not certify MariaDB/Oracle/Tedious on Bun
+  or Deno. The final reviewed mysql2 `node:buffer` import passed source/packed
+  audits, typecheck and focused native regressions after the full-suite run.
+- `pnpm run docs:build` passed four history checks, 85 pages and 4,054 local
+  links/anchors. Packed SQLite/PostgreSQL/MySQL/codegen examples passed.
+- SQLite's structural benchmark used N=1/10/100/1000: independent execution
+  prepared N statements, bulk prepared one and ran N times. At N=1000 this local
+  run measured 16.432 ms versus 4.061 ms; there is no timing pass threshold.
+- All 18 packed tarballs passed `npm publish --dry-run --tag next --access public`.
+  This is a non-publishing local check, not the immutable Release workflow.
+
+Oracle 19c is blocked: no test endpoint is configured and the official 19.3
+enterprise image manifest returns `unauthorized: Auth failed`. Runtime, Docs
+and Release CI run IDs for the final changes do not exist yet. A maintainer
+must provide the 19c test environment and obtain green same-revision CI after
+review/commit before treating PV16 as RC-ready.
+
 PV15 native streaming, routine contracts and Vite integration are in final verification
 with verification pending on the exact final revision. RC publication remains
-deferred until PV15 development, review and user acceptance are complete. This
+deferred until PV16 development, review and user acceptance are complete. This
 readiness record therefore makes no new SHA, CI, runtime support, or package
 version claim.
 

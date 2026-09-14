@@ -42,7 +42,10 @@ stream이 살아 있는 동안 transaction callback을 반환하지 마세요.
 | --- | --- | --- |
 | PostgreSQL / `pg` | `pg-cursor` batch read | Optional peer가 없으면 `BRAID_STREAM_UNSUPPORTED`입니다. 정상 종료는 cursor를 닫고, abort는 대기 중 read도 중단하도록 물리적 `Client.end()` 완료 후 lease를 폐기합니다. Abort 후 direct client는 교체해야 합니다. |
 | MySQL / `mysql2` | raw prepared `Execute.stream()` | `mysql2/promise` 뒤의 raw connection을 사용하고 prepared/binary 실행을 보존하며 lease 반환 전에 drain 또는 discard합니다. text `query()`로 낮추지 않습니다. |
+| MariaDB / Connector/Node.js | native stream iterator | `mariadb` dialect의 별도 증거가 필요합니다. MariaDB에서 `mysql2`를 쓰는 경로는 best-effort 호환이지 MariaDB 증거가 아닙니다. |
 | SQLite / `node:sqlite` | `StatementSync.iterate()` | native iterator가 끝난 뒤에만 database 리소스를 재사용합니다. 가짜 서버 cursor close API를 만들지 않습니다. |
+| SQLite / WASM | OO1 step/reset/finalize | browser/worker의 직접 resource이며 한 번에 하나의 owner만 사용합니다. pull 방식이며 pool을 뜻하지 않습니다. |
+| Cloudflare D1 | — | D1 Binding에는 incremental cursor가 없습니다. `db.stream()`은 `BRAID_STREAM_UNSUPPORTED`로 reject하며 pagination으로 streaming을 흉내 내지 않습니다. |
 | Oracle / `node-oracledb` Thin | `ResultSet` | exhaustion, break, abort, mapper 오류에서 ResultSet을 닫으며 close 실패는 lease를 poison/discard합니다. |
 | SQL Server / Tedious | Request row event와 bounded pause/resume queue | lease 반환 전에 request가 완료되어야 하며 cancellation은 물리 연결을 폐기할 수 있습니다. |
 
@@ -51,5 +54,9 @@ stream이 살아 있는 동안 transaction callback을 반환하지 마세요.
 루틴 cursor streaming은 materialized 루틴 계약에 포함되지 않습니다. 정규화되고 닫힌 이질적 result set에는 `db.call()`을, 일반 행 stream에는 이 API를 사용하세요.
 
 MySQL은 두 번째 result-set 메타데이터 경계에서 `BRAID_RESULT_SETS_UNSUPPORTED`로 실패하며 두 번째 집합의 행은 전달하지 않습니다. command를 drain한 뒤 재사용 가능한 연결을 반환합니다. drain 실패 시 result-set 오류와 `BRAID_RESOURCE_CLEANUP`을 함께 보존하고 연결을 폐기합니다. 여러 result set을 내보내는 루틴에는 `db.call()`을 사용하세요.
+
+DML `RETURNING`/`OUTPUT`은 PV16에서 materialized row 계약입니다. 해당 문법이
+streaming 가능하다고 추론하지 마세요. MariaDB, Browser WASM, D1 항목은 정확한
+최종 SHA capability 증거가 pending이며 현재 최종 지원 label이 아닙니다.
 
 [트랜잭션](/SQLBraid/runtime/transactions/), [observer](/SQLBraid/runtime/observers/), [루틴 호출](/SQLBraid/concepts/routines/)도 참고하세요.

@@ -3,7 +3,7 @@ title: 드라이버 작성자 바인딩 가이드
 description: 값 전용 보안 경계를 지키는 사용자 지정 SQLBraid 바인딩 어댑터를 구현합니다.
 ---
 
-이 문서는 사용자 지정 `QueryExecutor`, `ConnectionProvider`, 드라이버 어댑터를 위한 것입니다. PV15 최종 검증은 대기 중이며 현재 CI·SHA·런타임 지원 label·배포 증거를 주장하지 않습니다.
+이 문서는 사용자 지정 `QueryExecutor`, `ConnectionProvider`, 드라이버 어댑터를 위한 것입니다. PV16 최종 검증은 대기 중이며 현재 CI·SHA·런타임 지원 label·배포 증거를 주장하지 않습니다.
 
 ## 논리 문장 불변식
 
@@ -82,6 +82,64 @@ interface ConnectionProvider {
 전달하여 드라이버가 인코딩을 반복하지 않게 하세요. 불투명한 request는
 드라이버 패키지 내부에 두고, 필요하면 description을 키로 하는 `WeakMap`을
 사용하세요.
+
+## 동종 bulk 실행
+
+PV16의 `db.bulk()`는 command 전용입니다. 하나의 논리적 DML shape와 순서가
+있는 parameter matrix를 사용하며, 서로 다른 query를 실행하는 `db.batch()`와
+다릅니다.
+
+```ts
+interface RenderedBulk {
+  readonly statement: RenderedStatement;
+  readonly parameterSets: readonly (readonly unknown[])[];
+}
+
+interface BulkBindingDescription {
+  readonly adapterId: string;
+  readonly dialectId: string;
+  readonly transport: ParameterTransportKind;
+  readonly itemCount: number;
+  readonly valuesAt(index: number): readonly unknown[];
+  readonly literalizedSql(index: number, options?: LiteralizeOptions): LiteralizedSqlResult;
+  readonly parameterizedSql?: string;
+  readonly bindings: readonly BindingDescription[];
+}
+
+interface StatementBindingAdapter {
+  readonly describeBulk?: (
+    bulk: RenderedBulk,
+    context: StatementBindingContext,
+  ) => BulkBindingDescription;
+}
+
+interface BulkExecutionResult {
+  readonly inputCount: number;
+  readonly affectedRows?: number;
+  readonly executionMode: "native-bulk" | "pipeline" | "prepared-loop" | "remote-batch";
+}
+
+interface QueryExecutor {
+  readonly bulk?: (
+    bulk: RenderedBulk,
+    binding: BulkBindingDescription,
+  ) => Promise<BulkExecutionResult>;
+}
+```
+
+Core의 `createBulkBindingDescription`를 사용하면 모든 item이 하나의 불변
+metadata를 공유하고 item별 진단은 lazy로 유지됩니다. 드라이버는 lease를
+얻기 전에 전체 matrix를 인코딩·검증해야 합니다. shape/cardinality, hint,
+`OUT`/`INOUT` 방향 불일치는 I/O 전에 `BRAID_BULK_SHAPE` 또는 구체적인
+materialization 진단으로 실패해야 합니다. `bulk`가 없는 executor는
+`BRAID_BULK_UNSUPPORTED`로 실패하며 일반 query 호출을 조용히 반복하면 안
+됩니다.
+
+Bulk는 하나의 physical lease를 사용하고 실제 실행 모드를 보고합니다. root
+bulk에는 portable atomicity 약속이 없고 자동 transaction으로 감싸지지
+않습니다. atomicity가 필요하면 `db.tx(async (tx) => tx.bulk(...))`를
+사용하세요. portable auto-chunking 계약은 없으며 observer는 N개의 일반
+query가 아닌 하나의 bulk 작업을 기록합니다.
 
 ## 완전한 사용자 지정 어댑터 예시
 
@@ -181,12 +239,13 @@ facet 검증, 인코딩된 값을 내부 request에 보관합니다. Native valu
 value-only native API만 사용하고, 구조로 처리될 수 있는 다형성 tag에 논리
 parameter를 넘기지 마세요.
 
-## 다섯 전송 경로
+## 첫 번째 파티 전송 경로
 
 | 경로 | 전송과 구체화 | reuse 소유자 |
 | --- | --- | --- |
 | PostgreSQL / `pg` | `text-positional`, `$1..$N` | fresh unnamed simple, driver |
 | MySQL / `mysql2` | `text-positional`, `?` | 모든 요청에서 driver reuse |
+| MariaDB / Connector/Node.js | `text-positional`, `?` | connector-owned reuse/batch |
 | SQLite / `node:sqlite` | 문서화된 `DatabaseSync.prepare(text)`와 `?` | fresh simple, driver |
 | Oracle Thin / `node-oracledb` | `text-positional`, `:1..:N`, bind descriptor | driver cache reuse |
 | SQL Server / Tedious | `typed-request`, `@p1..@pN`, `TYPES.*`, facet | fresh Request/`execSql`, simple, driver |
@@ -208,6 +267,9 @@ cursor/request/iterator를 close, drain 또는 cancel해야 합니다.
 들어갑니다. PostgreSQL refcursor는 기존 transaction이 필요하며 안전한
 carrier를 증명할 수 없는 MySQL prepared CALL OUT/INOUT과 SQL Server cursor
 output은 명시적으로 실패해야 합니다.
+MariaDB 고유 syntax와 protocol 증거는 `@sqlbraid/mariadb/mariadb`에
+속합니다. MariaDB에 연결한 `mysql2`는 best-effort 호환일 뿐 Official
+MariaDB 증거가 아닙니다.
 
 ## 힌트·provider·observer 규칙
 

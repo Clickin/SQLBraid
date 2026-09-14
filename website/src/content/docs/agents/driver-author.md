@@ -3,7 +3,7 @@ title: Driver-author binding guide
 description: Implement a custom SQLBraid binding adapter without crossing the value-only security boundary.
 ---
 
-This guide is for custom `QueryExecutor`, `ConnectionProvider`, and driver adapters. PV15 final verification is pending; this page does not claim a current CI result, SHA, runtime support label, or publication evidence.
+This guide is for custom `QueryExecutor`, `ConnectionProvider`, and driver adapters. PV16 final verification is pending; this page does not claim a current CI result, SHA, runtime support label, or publication evidence.
 
 ## Logical statement invariant
 
@@ -70,6 +70,70 @@ interface ConnectionProvider {
 ```
 
 Pass the same optional `StatementBindingDescription` to `query`, `call`, or `stream` so the driver does not encode twice. Keep opaque request objects private to the driver package (a `WeakMap` keyed by the description is suitable).
+
+## Homogeneous bulk execution
+
+PV16 `db.bulk()` is command-only: one logical DML shape is paired with an
+ordered parameter matrix. It is not `db.batch()`, which accepts heterogeneous
+queries.
+
+```ts
+interface RenderedBulk {
+  readonly statement: RenderedStatement;
+  readonly parameterSets: readonly (readonly unknown[])[];
+}
+
+interface BulkBindingDescription {
+  readonly adapterId: string;
+  readonly dialectId: string;
+  readonly transport: ParameterTransportKind;
+  readonly itemCount: number;
+  readonly valuesAt(index: number): readonly unknown[];
+  readonly literalizedSql(
+    index: number,
+    options?: LiteralizeOptions,
+  ): LiteralizedSqlResult;
+  readonly parameterizedSql?: string;
+  readonly bindings: readonly BindingDescription[];
+}
+
+interface StatementBindingAdapter {
+  readonly describeBulk?: (
+    bulk: RenderedBulk,
+    context: StatementBindingContext,
+  ) => BulkBindingDescription;
+}
+
+interface BulkExecutionResult {
+  readonly inputCount: number;
+  readonly affectedRows?: number;
+  readonly executionMode:
+    | "native-bulk"
+    | "pipeline"
+    | "prepared-loop"
+    | "remote-batch";
+}
+
+interface QueryExecutor {
+  readonly bulk?: (
+    bulk: RenderedBulk,
+    binding: BulkBindingDescription,
+  ) => Promise<BulkExecutionResult>;
+}
+```
+
+Use core's `createBulkBindingDescription` for shared immutable metadata and lazy
+per-item diagnostics. Drivers must encode and validate the entire matrix before
+acquiring a lease. Dynamic shape/cardinality changes and `OUT`/`INOUT`
+directions fail before I/O (`BRAID_BULK_SHAPE` or a materialization diagnostic).
+An executor without `bulk` fails with `BRAID_BULK_UNSUPPORTED`; do not silently
+loop through ordinary query calls.
+
+Bulk uses one physical lease and reports the actual mode. Root bulk has no
+portable atomicity promise and is never implicitly transactional; use
+`db.tx(async (tx) => tx.bulk(...))` when callback transaction atomicity is
+required. There is no portable auto-chunking contract, and observers emit one
+bulk operation rather than N ordinary query operations.
 
 ## Complete custom adapter example
 
@@ -169,12 +233,13 @@ export function createAcmeProvider(
 
 For a typed request, keep deterministic names (`p1`, `p2`, …), map every supported hint to a driver type, validate facets, and store encoded values privately. For a native-value-template transport, use the native value-only API; never pass a logical parameter to a polymorphic tag that could treat it as structure.
 
-## Five transport paths
+## First-party transport paths
 
 | Path | Transport and materialization | Reuse owner |
 | --- | --- | --- |
 | PostgreSQL / `pg` | `text-positional`, `$1..$N` | fresh unnamed simple execution, driver |
 | MySQL / `mysql2` | `text-positional`, `?` | driver reuse for every request |
+| MariaDB / Connector/Node.js | `text-positional`, `?` | connector-owned reuse/batch |
 | SQLite / `node:sqlite` | documented `DatabaseSync.prepare(text)` with `?` | fresh simple execution, driver |
 | Oracle Thin / `node-oracledb` | `text-positional`, `:1..:N`, bind descriptors | driver cache reuse |
 | SQL Server / Tedious | `typed-request`, `@p1..@pN`, `TYPES.*` and facets | fresh Request/`execSql`, simple execution, driver |
@@ -194,7 +259,10 @@ discarding the physical lease. Implement `QueryExecutor.call` as a normalized
 and keep raw driver objects out of application results. Cursor OUT values belong
 in `resultSets`, not scalar `output`. PostgreSQL refcursor calls require an
 existing transaction; MySQL prepared CALL OUT/INOUT and SQL Server cursor output
-must fail explicitly when the driver cannot prove a safe carrier.
+must fail explicitly when the driver cannot prove a safe carrier. MariaDB-specific
+syntax and protocol evidence belongs to `@sqlbraid/mariadb/mariadb`; a `mysql2`
+connection to MariaDB is best-effort compatibility, not Official MariaDB
+evidence.
 
 ## Hints, providers, and observers
 

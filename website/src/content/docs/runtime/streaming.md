@@ -42,7 +42,10 @@ Do not return a transaction callback while its stream is live.
 | --- | --- | --- |
 | PostgreSQL / `pg` | `pg-cursor` read batches | Optional peer; missing capability yields `BRAID_STREAM_UNSUPPORTED`. Normal completion closes the cursor; abort awaits physical `Client.end()` and discards the lease, including pending reads. A direct client must be replaced after abort. |
 | MySQL / `mysql2` | raw prepared `Execute.stream()` | SQLBraid uses the raw connection behind `mysql2/promise`, preserves prepared/binary execution, and drains or discards before lease release. It does not downgrade to text `query()`. |
+| MariaDB / Connector/Node.js | native stream iterator | Separate `mariadb` dialect evidence; cleanup and lease reuse are driver-specific. A `mysql2` connection against MariaDB is best-effort compatibility, not MariaDB evidence. |
 | SQLite / `node:sqlite` | `StatementSync.iterate()` | The native iterator must terminate before the database resource is reusable; no fake server cursor close is invented. |
+| SQLite / WASM | OO1 step/reset/finalize | Direct browser/worker resource; one owner at a time. Streaming is pull-based and does not imply a pool. |
+| Cloudflare D1 | — | D1 Binding has no incremental cursor. `db.stream()` rejects with `BRAID_STREAM_UNSUPPORTED`; SQLBraid does not paginate to emulate streaming. |
 | Oracle / `node-oracledb` Thin | `ResultSet` | The ResultSet is closed on exhaustion, break, abort, mapper failure, and close failure poisons/discards the lease. |
 | SQL Server / Tedious | Request row events plus bounded pause/resume queue | The request must complete before lease release; cancellation may discard the physical connection. |
 
@@ -51,5 +54,12 @@ These are driver capabilities, not dialect properties. A custom executor must im
 Routine cursor streaming is not part of the materialized routine contract. Use `db.call()` for normalized, closed, heterogeneous result sets and this API for ordinary row streams.
 
 MySQL rejects a second result-set metadata boundary with `BRAID_RESULT_SETS_UNSUPPORTED` before yielding any second-set row. It drains the command before releasing a reusable connection; drain failure preserves the result-set error with `BRAID_RESOURCE_CLEANUP` and discards the connection. Use `db.call()` for routines that emit multiple result sets.
+
+DML `RETURNING`/`OUTPUT` is a materialized row contract in PV16. Do not infer
+that a dialect's DML-returning syntax is streamable; use an ordinary row query
+when you need the portable streaming lifecycle above.
+
+The MariaDB, Browser WASM, and D1 entries remain pending exact-final-SHA
+capability evidence. They are not current-final support labels.
 
 See [transactions](/SQLBraid/runtime/transactions/), [observers](/SQLBraid/runtime/observers/), and [routine calls](/SQLBraid/concepts/routines/).

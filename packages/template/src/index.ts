@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import {
   SQL_FRAGMENT,
   createBoundParameter,
@@ -31,6 +30,35 @@ import {
   type TrimAttributes,
   type TrimNode,
 } from "@sqlbraid/core";
+
+/**
+ * Return the number of bytes produced by UTF-8 encoding `value`.
+ *
+ * This follows TextEncoder's replacement behavior for lone UTF-16
+ * surrogates without allocating an intermediate byte array.
+ */
+export function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x7f) {
+      bytes += 1;
+    } else if (code <= 0x7ff) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff
+      && index + 1 < value.length
+      && value.charCodeAt(index + 1) >= 0xdc00
+      && value.charCodeAt(index + 1) <= 0xdfff) {
+      bytes += 4;
+      index += 1;
+    } else {
+      // BMP code points and lone surrogates encode as three UTF-8 bytes
+      // (lone surrogates are replaced with U+FFFD).
+      bytes += 3;
+    }
+  }
+  return bytes;
+}
 
 const DEFAULT_LIMITS: Required<RenderLimits> = {
   maxSqlBytes: 1_000_000,
@@ -540,7 +568,7 @@ function addText(state: RenderState, text: string): void {
     state.sqlBytes += 1;
   }
   state.segments[state.segments.length - 1] += text;
-  state.sqlBytes += Buffer.byteLength(text, "utf8");
+  state.sqlBytes += utf8ByteLength(text);
   if (state.sqlBytes > state.limits.maxSqlBytes) throw new SqlRenderError("BRAID_SQL_LIMIT", "Rendered SQL exceeds maxSqlBytes.");
   state.afterParameter = false;
 }
@@ -557,8 +585,16 @@ export function assertDirectiveCondition(value: unknown): boolean {
 
 function appendParameter(state: RenderState, parameter: RenderedParameter): void {
   if (state.parameters.length >= state.limits.maxBindCount) throw new SqlRenderError("BRAID_BIND_LIMIT", "Rendered bind count exceeds maxBindCount.");
-  if (parameter.direction !== undefined && parameter.direction !== "in" && state.resultKind !== "call") {
-    throw new SqlRenderError("BRAID_CALL_ONLY", "sql.out() and sql.inOut() are only valid in sql.call queries.");
+  if (parameter.direction !== undefined && parameter.direction !== "in") {
+    const allowed = state.resultKind === "call" || (state.resultKind === "rows" && parameter.direction === "out");
+    if (!allowed) {
+      throw new SqlRenderError(
+        "BRAID_CALL_ONLY",
+        parameter.direction === "inout"
+          ? "sql.inOut() is only valid in sql.call queries."
+          : "sql.out() is only valid in sql.call or sql.rows queries.",
+      );
+    }
   }
   if (parameter.outputName !== undefined) {
     if (state.outputNames.has(parameter.outputName)) throw new SqlRenderError("BRAID_CALL_OUTPUT_NAME", `Duplicate routine outputName: ${parameter.outputName}`);

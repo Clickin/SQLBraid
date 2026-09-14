@@ -1,5 +1,6 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import sqlbraid from "@sqlbraid/vite";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -74,6 +75,12 @@ const rewriteLinks = {
 export default defineConfig({
   site: "https://clickin.github.io/SQLBraid",
   base,
+  vite: {
+    plugins: [sqlbraid()],
+    optimizeDeps: {
+      exclude: ["@sqlite.org/sqlite-wasm"],
+    },
+  },
   integrations: [
     rewriteLinks,
     starlight({
@@ -89,10 +96,13 @@ export default defineConfig({
       },
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/Clickin/SQLBraid" }],
       sidebar: [
+        { label: "Interactive preview", translations: { ko: "인터랙티브 미리보기" }, link: "/interactive-preview/" },
         { label: "Get started", translations: { ko: "시작하기" }, items: [
           { label: "Five-minute SQLite", translations: { ko: "5분 SQLite 시작하기" }, link: "/getting-started/sqlite/" },
           { label: "PostgreSQL", link: "/getting-started/postgres/" },
           { label: "MySQL", link: "/getting-started/mysql/" },
+          { label: "MariaDB", link: "/getting-started/mariadb/" },
+          { label: "Browser SQLite and D1", translations: { ko: "브라우저 SQLite와 D1" }, link: "/getting-started/sqlite-browser/" },
           { label: "Oracle", link: "/getting-started/oracle/" },
           { label: "SQL Server", link: "/getting-started/mssql/" },
         ] },
@@ -102,6 +112,7 @@ export default defineConfig({
           { label: "Parameter type hints", translations: { ko: "매개변수 타입 힌트" }, link: "/concepts/parameter-hints/" },
           { label: "Dynamic @braid", translations: { ko: "동적 @braid" }, link: "/concepts/dynamic-braid/" },
           { label: "Structural SQL fragments", translations: { ko: "구조적 SQL 조각" }, link: "/concepts/structural-fragments/" },
+          { label: "Homogeneous bulk DML", translations: { ko: "동종 bulk DML" }, link: "/concepts/bulk/" },
           { label: "Standard Schema mapping", translations: { ko: "Standard Schema 매핑" }, link: "/concepts/result-mapping/" },
         ] },
         { label: "Runtime", translations: { ko: "런타임" }, items: [

@@ -3,11 +3,12 @@ import { join } from "node:path";
 import { builtinModules } from "node:module";
 import ts from "typescript";
 
-export const runtimePackages = ["core", "template", "runtime", "postgres", "mysql", "sqlite", "oracle", "mssql"];
+export const runtimePackages = ["core", "template", "runtime", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"];
 const allowedNodeImports = new Set(["node:async_hooks", "node:buffer"]);
 const nodeOnlySubpaths = new Map([
   ["oracle", new Set(["oracledb"])],
   ["mssql", new Set(["tedious", "inspector"])],
+  ["mariadb", new Set(["mariadb"])],
 ]);
 
 export async function auditRuntime(packageRoot, directory, { excludedSubpaths = nodeOnlySubpaths } = {}) {
@@ -15,7 +16,7 @@ export async function auditRuntime(packageRoot, directory, { excludedSubpaths = 
   for (const name of runtimePackages) {
     const folder = join(packageRoot, name, directory);
     const manifest = JSON.parse(await readFile(join(packageRoot, name, "package.json"), "utf8"));
-    const nodeOnlyDriver = name === "oracle" ? "oracledb" : name === "mssql" ? "tedious" : undefined;
+    const nodeOnlyDriver = name === "oracle" ? "oracledb" : name === "mssql" ? "tedious" : name === "mariadb" ? "mariadb" : undefined;
     if (nodeOnlyDriver && [manifest.dependencies, manifest.optionalDependencies].some((dependencies) => dependencies?.[nodeOnlyDriver])) {
       throw new Error(`${manifest.name} portable root has a production dependency on Node-only driver ${nodeOnlyDriver}.`);
     }

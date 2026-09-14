@@ -338,10 +338,12 @@ async function main(argv: readonly string[]): Promise<void> {
     "@sqlbraid/*": [resolve(sourcePackages, "*/src/index.ts")],
     "@sqlbraid/postgres/pg": [resolve(sourcePackages, "postgres/src/pg.ts")],
     "@sqlbraid/mysql/mysql2": [resolve(sourcePackages, "mysql/src/mysql2.ts")],
+    "@sqlbraid/mariadb/mariadb": [resolve(sourcePackages, "mariadb/src/mariadb.ts")],
     "@sqlbraid/sqlite/node-sqlite": [resolve(sourcePackages, "sqlite/src/node-sqlite.ts")],
+    "@sqlbraid/sqlite/wasm": [resolve(sourcePackages, "sqlite/src/wasm.ts")],
+    "@sqlbraid/sqlite/d1": [resolve(sourcePackages, "sqlite/src/d1.ts")],
   } : undefined;
   const options: TypeScriptCheckOptions = {
-    moduleSpecifiers: ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/sqlite"],
     compilerOptions: {
       baseUrl: process.cwd(),
       ...(existsSync(nodeTypes) ? { types: ["node"], typeRoots: [resolve(process.cwd(), "node_modules/@types")] } : {}),

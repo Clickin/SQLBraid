@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { CallQuery, CommandQuery, Query, RowQuery, RoutineCallResult, StandardSchemaV1 } from '@sqlbraid/core';
 import { parameterizedSql } from '@sqlbraid/core';
-import { capture, guarded, sql } from '@sqlbraid/template';
+import { capture, guarded, sql, utf8ByteLength } from '@sqlbraid/template';
 
 function hasCode(code: string): (error: unknown) => boolean {
   return (error): error is { readonly code: string } => typeof error === 'object' && error !== null && 'code' in error && error.code === code;
@@ -137,4 +137,18 @@ test('schema-bound rows reject invalid Standard Schema shapes before query creat
   assert.throws(() => sql.rows([] as never), TypeError);
   assert.throws(() => sql.rows({ '~standard': { version: 2, validate: () => ({ value: 1 }) } } as never), TypeError);
   assert.throws(() => sql.rows({ '~standard': { version: 1, validate: 'nope' } } as never), TypeError);
+});
+
+test('sql.out is legal only for rows and calls, while sql.inOut remains call-only', () => {
+  assert.equal(sql.rows`UPDATE users SET name = ${sql.out('name')}`.render().resultKind, 'rows');
+  assert.equal(sql.call`BEGIN routine(${sql.out('name')}); END;`.render().resultKind, 'call');
+  assert.throws(() => sql.command`UPDATE users SET name = ${sql.out('name')}`.render(), hasCode('BRAID_CALL_ONLY'));
+  assert.throws(() => sql`UPDATE users SET name = ${sql.out('name')}`.render(), hasCode('BRAID_CALL_ONLY'));
+  assert.throws(() => sql.rows`UPDATE users SET name = ${sql.inOut('name', 'Ada')}`.render(), hasCode('BRAID_CALL_ONLY'));
+});
+
+test('portable UTF-8 byte counting matches TextEncoder without allocating bytes', () => {
+  for (const value of ['ascii', '한글', '😀', '\uD800', '\uDC00', 'a\uD800b', '😀\uDC00']) {
+    assert.equal(utf8ByteLength(value), new TextEncoder().encode(value).byteLength, JSON.stringify(value));
+  }
 });

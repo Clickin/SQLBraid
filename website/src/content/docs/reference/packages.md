@@ -10,7 +10,8 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/runtime` | Execution, mapping, result-kind checks, transactions, streaming, and prepared shapes |
 | `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg` adapter; `/inspector` |
 | `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2` adapter; `/inspector` |
-| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite` adapter; `/inspector` |
+| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/wasm`, and `/d1` adapters; `/inspector` |
+| `@sqlbraid/mariadb` | MariaDB dialect/TypePolicy; `/mariadb` adapter |
 | `@sqlbraid/oracle` | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; `/inspector` |
 | `@sqlbraid/mssql` | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; `/inspector` |
 | `@sqlbraid/compiler` | TypeScript discovery and guarded-template lowering |
@@ -23,7 +24,7 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/language-server` | Standard stdio LSP integration |
 | `sqlbraid` | Unscoped CLI convenience package; provides the `sqlbraid` executable without database drivers |
 
-The package set is 17 packages: 16 scoped runtime/tooling packages plus the unscoped CLI convenience package. Runtime packages do not acquire metadata, codegen, compiler, editor, or Vite dependencies. Install tooling packages only in development/build environments. The Oracle and SQL Server driver dependencies are kept out of their portable roots. `@sqlbraid/vite` keeps Vite as a peer and does not import a framework.
+The package set is 18 packages: 17 scoped runtime/tooling packages plus the unscoped CLI convenience package. Runtime packages do not acquire metadata, codegen, compiler, editor, or Vite dependencies. Install tooling packages only in development/build environments. The Oracle, SQL Server, and MariaDB driver dependencies are kept out of their portable roots. `@sqlbraid/vite` keeps Vite as a peer and does not import a framework.
 
 The dependency direction is:
 

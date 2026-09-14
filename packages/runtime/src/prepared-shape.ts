@@ -5,7 +5,9 @@ export function preparedShape(resultKind: QueryResultKind, rendered: RenderedSta
     dialectId: rendered.dialectId,
     resultKind,
     segments: rendered.segments,
-    parameters: rendered.parameters.map(({ hint, direction, outputName }) => ({
+    variantFingerprint: rendered.variantFingerprint ?? null,
+    parameters: rendered.parameters.map(({ hint, direction, outputName, interpolation }) => ({
+      ...(interpolation === undefined ? {} : { interpolation }),
       hint: hint === undefined ? null : {
         databaseType: hint.databaseType,
         ...(hint.length === undefined ? {} : { length: hint.length }),

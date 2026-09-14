@@ -97,11 +97,8 @@ test('routine procedure metadata is snapshotted and parameter-count checked', ()
   );
 });
 
-test('OUT descriptors are call-only and output names are unique', () => {
-  assert.throws(
-    () => sql.rows`SELECT ${sql.out('value')}`.render(),
-    { code: 'BRAID_CALL_ONLY' },
-  );
+test('OUT descriptors are legal for rows and calls, while output names remain unique', () => {
+  assert.equal(sql.rows`SELECT ${sql.out('value')}`.render().resultKind, 'rows');
   assert.throws(
     () => sql.call`CALL work(${sql.out('value')}, ${sql.inOut('value', 1)})`.render(),
     /Duplicate routine outputName/u,

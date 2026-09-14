@@ -3,6 +3,7 @@
 Write SQL. Keep TypeScript. Skip the query-builder translation layer.
 
 Draft release notes; this document does not claim an npm RC or stable publication.
+PV16 exact-final-SHA verification is pending.
 
 SQLBraid 0.1.0 provides:
 
@@ -10,9 +11,11 @@ SQLBraid 0.1.0 provides:
 - Dynamic SQL with `@braid` directives and structural SQL fragments.
 - Standard Schema result mapping without changing the declared query contract.
 - Direct and pool-backed PostgreSQL (`pg`) and MySQL (`mysql2`) adapters, plus SQLite through `node:sqlite`.
+- A separate MariaDB dialect and official Connector/Node.js adapter path, plus
+  Browser SQLite WASM and Cloudflare D1 SQLite adapter paths.
 - Oracle Thin (`node-oracledb`) and SQL Server (`tedious`) adapters, explicit `sql.bind(value, hint)` database parameter metadata, and conservative catalog inspectors.
 - Physical-connection-safe transactions, nested savepoints, streaming, prepared queries, and execution observers.
-- Native streaming for all five drivers with cleanup-before-release, bounded
+- Native streaming for the five PV15 drivers plus MariaDB with cleanup-before-release, bounded
   delivery, MySQL break/drain reuse and abort/discard behavior.
 - Heterogeneous routine result tuples, scalar OUT/INOUT and separate actual
   return/status channels, with query-bound Standard Schema per channel.
@@ -22,6 +25,12 @@ SQLBraid 0.1.0 provides:
 - MySQL ordinary materialized queries, including bare/unknown execution, reject
   multiple result sets with `BRAID_RESULT_SETS_UNSUPPORTED`; use `db.call()` for
   ordered routine sets. Fully materialized rejection leaves the connection reusable.
+- Materialized DML-returning through native PostgreSQL/SQLite/MariaDB
+  `RETURNING`, SQL Server `OUTPUT`, and Oracle `RETURNING ... INTO` with
+  `sql.out()`. DML-returning streaming is not a cross-driver support claim.
+- Command-only `db.bulk(inputs, factory)` with pre-I/O shape validation, one
+  physical lease, and explicit native-bulk/pipeline/prepared-loop/remote-batch
+  modes. Root bulk has no portable transaction or auto-chunking promise.
 - Vite 8 guarded-template pre-transform and original TS/TSX source maps, exercised
   through a packed TanStack Start / Node 24 finance consumer.
 - Explicit SQLite number/bigint integer modes for exact 64-bit application models.
@@ -53,6 +62,9 @@ SQLBraid 0.1.0 provides:
 - Metadata is open-world positive evidence. Unknown tables, routines, temporary objects, CTEs, and runtime UDFs are not rejected merely because they are absent from a snapshot.
 - Generated models are derived artifacts; run `sqlbraid codegen --check` in CI after metadata or configuration changes.
 - The VS Code extension requires a TypeScript project with SQLBraid package/config evidence in the workspace folder.
+- MariaDB 11.8 evidence is separate from MySQL/mysql2; mysql2 on MariaDB is
+  best-effort compatibility. The current Oracle Free 23.9 provisioner does not
+  provide Oracle 19c evidence.
 
 ## Artifact and provenance record
 

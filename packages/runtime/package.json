@@ -20,6 +20,16 @@
   "dependencies": {
     "@sqlbraid/core": "workspace:*"
   },
+  "imports": {
+    "#async-context": {
+      "types": "./dist/async-context.d.ts",
+      "browser": "./dist/async-context.browser.js",
+      "node": "./dist/async-context.node.js",
+      "workerd": "./dist/async-context.node.js",
+      "deno": "./dist/async-context.node.js",
+      "default": "./dist/async-context.browser.js"
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

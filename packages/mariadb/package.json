@@ -1,0 +1,43 @@
+{
+  "name": "@sqlbraid/mariadb",
+  "version": "0.1.0-rc.0",
+  "description": "SQLBraid MariaDB dialect and official Connector/Node.js adapter",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/mariadb"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "typescript", "database", "mariadb", "query"],
+  "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=22.18.0" },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
+  "peerDependencies": {
+    "mariadb": "3.5.4"
+  },
+  "peerDependenciesMeta": {
+    "mariadb": {
+      "optional": true
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./mariadb": {
+      "types": "./dist/mariadb.d.ts",
+      "import": "./dist/mariadb.js"
+    }
+  }
+}

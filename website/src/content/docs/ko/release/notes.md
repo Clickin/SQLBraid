@@ -1,10 +1,11 @@
 ---
-title: PV15 릴리스 노트
-description: 스트리밍, 루틴 채널, Vite 통합을 포함하는 프리릴리스 표면입니다.
+title: PV16 릴리스 노트
+description: DML returning, bulk, MariaDB, Browser WASM, D1을 포함하는 프리릴리스 표면입니다.
 ---
 
-PV15 문서는 프리릴리스 SQLBraid 표면을 설명합니다. 최종 검증은 대기 중이며
-이 노트는 최종 SHA, CI, 배포 또는 Official 지원 주장을 하지 않습니다.
+PV16 문서는 프리릴리스 SQLBraid 표면을 설명합니다. 정확한 최종 SHA 검증은
+대기 중이며 이 노트는 최종 SHA, CI, 배포 또는 Official 지원 주장을 하지
+않습니다.
 
 ## 포함된 계약
 
@@ -15,13 +16,17 @@ PV15 문서는 프리릴리스 SQLBraid 표면을 설명합니다. 최종 검증
 - scalar `output`, 순서가 있는 `resultSets`, 선택적 `returnValue` 루틴 채널과 `sql.out`/`sql.inOut` 방향 helper
 - PostgreSQL transaction-bound refcursor, Oracle explicit/implicit cursor result, native RETURN status용 SQL Server 명시적 procedure metadata, 의도적인 SQLite 루틴 거부
 - MySQL raw prepared `Execute.stream()` 및 검증된 carrier discriminator가 없는 OUT/INOUT의 명시적 거부
+- PostgreSQL/SQLite/MariaDB native `RETURNING`, SQL Server `OUTPUT`, Oracle `RETURNING ... INTO`와 `sql.out()`을 사용하는 materialized DML-returning 계약. dialect 간 SQL rewrite는 하지 않음
+- I/O 전 shape 검증, 하나의 physical lease, `native-bulk`/`pipeline`/`prepared-loop`/`remote-batch` 모드를 사용하는 command-only `db.bulk(inputs, factory)`. implicit transaction과 auto-chunking 약속 없음
+- 별도 `@sqlbraid/mariadb` dialect와 MariaDB Connector/Node.js 어댑터. MariaDB의 `mysql2` 연결은 best-effort 호환
+- Direct Browser SQLite WASM 및 Cloudflare D1 SQLite 어댑터 경로. D1은 materialized 실행과 native remote batch를 사용
 - `durationMs`, 민감하지 않은 call result 구조, lazy diagnostic literalization을 포함하는 execution observer
 - TypeScript와 framework 변환을 Vite에 맡기고 TSX와 source-map 조합을 보존하는 `@sqlbraid/vite` Vite 8 pre-transform
 - 선택적 metadata, inspector, 결정적 codegen, CLI JSON inspection, 표준 stdio LSP, 얇은 VS Code 통합
 
 ## 검증 상태
 
-Main이 PV15 최종 검증을 소유합니다. 해당 증거가 제공되기 전에는 지원
+Main이 PV16 최종 검증을 소유합니다. 해당 증거가 제공되기 전에는 지원
 매트릭스를 Pending으로, 역사적 exact-SHA 링크를 provenance로만 취급하세요.
 이 사이트나 package README에서 배포 또는 릴리스 게이트 완료를 추론하지
 마세요.

@@ -144,6 +144,7 @@ function configuredModules(options: OverlayOptions): readonly string[] {
     "@sqlbraid/template",
     "@sqlbraid/postgres",
     "@sqlbraid/mysql",
+    "@sqlbraid/mariadb",
     "@sqlbraid/sqlite",
     "@sqlbraid/oracle",
     "@sqlbraid/mssql",
@@ -178,7 +179,7 @@ function dialectForModule(moduleSpecifier: string | undefined, options: OverlayO
       backslashEscapes: false,
     },
   };
-  if (moduleSpecifier?.includes("mysql")) return { id: "mysql", quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, backslashEscapes: true } };
+  if (moduleSpecifier?.includes("mysql") || moduleSpecifier?.includes("mariadb")) return { id: moduleSpecifier.includes("mariadb") ? "mariadb" : "mysql", quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, backslashEscapes: true } };
   if (moduleSpecifier?.includes("sqlite")) return { id: "sqlite", quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBracketIdentifiers: true, backslashEscapes: false } };
   return postgresDialect;
 }

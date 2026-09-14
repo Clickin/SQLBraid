@@ -10,6 +10,10 @@
     "check": "astro sync"
   },
   "dependencies": {
+    "@sqlite.org/sqlite-wasm": "3.53.4-build1",
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/sqlite": "workspace:*",
+    "@sqlbraid/vite": "workspace:*",
     "@astrojs/starlight": "0.42.0",
     "astro": "7.3.2",
     "sharp": "0.35.4"

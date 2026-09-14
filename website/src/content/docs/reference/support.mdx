@@ -1,41 +1,82 @@
 ---
 title: Runtime and driver support
-description: Separate implemented capability paths from the pending PV15 release evidence.
+description: Separate implemented capability paths from the pending PV16 release evidence.
 ---
 
-PV15 final verification is pending. This page deliberately makes no current
-SHA, CI, publication, or Official support claim. A package name or a local
-fixture is not release evidence.
+PV16 exact-final-revision verification is pending. This page deliberately makes
+no current SHA, CI success, publication, or Official support claim. A package
+name, local fixture, or planned workflow is not release evidence.
 
 ## Evidence labels
 
-- **Pending** — the implementation path exists, but PV15 final release-gate evidence has not been supplied here.
-- **Historical** — an exact revision or old workflow exercised a combination; it does not prove the current PV15 tree.
+- **Pending** — the implementation path exists, but PV16 final release-gate evidence has not been supplied here.
+- **Historical** — an exact revision or old workflow exercised a combination; it does not prove the current PV16 tree.
 - **Compatible expectation** — based on public APIs and adapter contracts, without a release-gate claim.
 - **Custom** — a user-provided `QueryExecutor` or `ConnectionProvider`.
 - **Unsupported** — the required SQLBraid capability is intentionally absent.
 
-## Current PV15 matrix (final evidence pending)
+## PV16 matrix (final evidence pending)
 
 | Runtime or adapter path | Status | Boundary |
 | --- | --- | --- |
 | Node `>=22.18.0` + core/template/runtime | Pending | Runtime package target |
 | Node 24 + Vite 8 application integration | Pending | `@sqlbraid/vite` pre-transform; server runtime is separate |
-| PostgreSQL / `pg` | Pending | Ordinary execution; `pg-cursor` optional peer for streaming |
-| MySQL / `mysql2` | Pending | Ordinary execution and raw prepared `Execute.stream()` |
+| Browser + SQLite WASM | Pending | One direct OO1-style database; browser gate is pending |
+| Worker + Cloudflare D1 | Pending | Local D1 binding gate only; no remote production claim |
+| PostgreSQL 16.4 / `pg` | Pending | Minimum-role capability and ordinary execution |
+| PostgreSQL 18.6 / `pg` | Pending | Current-role capability job; does not raise the minimum |
+| MySQL 8.4 / `mysql2` | Pending | Ordinary execution; no generic DML `RETURNING` |
+| MariaDB 11.8 / Connector/Node.js | Pending | Separate dialect and official connector evidence |
+| MariaDB / `mysql2` | Compatible expectation | Best-effort compatibility; no MariaDB-specific Official label |
 | SQLite / `node:sqlite` | Pending | Node statement APIs; `integerMode` is explicit |
 | Oracle Thin / `node-oracledb` | Pending | Scalar/cursor/implicit routine resources must close before lease release |
 | SQL Server / Tedious | Pending | Request events, OUTPUT values, and explicit procedure metadata for RETURN |
 | Other driver or database | Custom | Independent adapter evidence required |
 
-The five first-party row-streaming primitives are implemented as distinct driver
+## Capability evidence matrix
+
+Dialect, driver, runtime, and server version are separate evidence axes. The
+plan-time taxonomy is recorded in
+[`docs/pv16-capability-evidence.json`](https://github.com/Clickin/SQLBraid/blob/main/docs/pv16-capability-evidence.json);
+the runtime does not read that file. Every entry remains `Pending` here until
+the named exact-SHA test runs.
+
+| Dialect / driver | Native DML-returning form | Bulk mode | Stream boundary |
+| --- | --- | --- | --- |
+| PostgreSQL / `pg` | `RETURNING` | `prepared-loop` | `pg-cursor`; optional peer |
+| MySQL / `mysql2` | No generic DML `RETURNING` | `prepared-loop` | prepared `Execute.stream()`; drain or discard |
+| MariaDB / Connector/Node.js | `INSERT`, `DELETE`, `REPLACE ... RETURNING` where documented | `native-bulk` via `connection.batch()` | connector stream; exact server forms are tested separately |
+| SQLite / `node:sqlite` | `RETURNING` | prepared-loop | `StatementSync.iterate()` |
+| SQLite / `sqlite-wasm` | `RETURNING` | prepared-loop with one statement reset | one direct browser resource |
+| SQLite / Cloudflare D1 | `RETURNING` where the binding exposes rows | `remote-batch` via one `D1Database.batch()` | Unsupported: no incremental Worker Binding cursor |
+| Oracle Thin | `RETURNING ... INTO` + `sql.out()` | `native-bulk` via `executeMany()` | `ResultSet`; close before lease release |
+| SQL Server / Tedious | `OUTPUT` | `prepared-loop` | bounded Request row events; completion precedes release |
+
+PV16 supports materialized DML-returning through `db.execute`, `db.all`,
+`db.one`, and `db.maybeOne` with `sql.rows`. It does not make
+`db.stream(sql.rows\`... RETURNING/OUTPUT ...\`)` a cross-driver support claim:
+SQLite buffers RETURNING output, and SQL Server can emit OUTPUT rows before a
+later statement failure. MySQL's absence of a generic clause is a server fact,
+not a SQLBraid rewrite opportunity.
+
+`db.bulk(inputs, factory)` is command-only, one shape × N values, one physical
+lease, and one bulk observer operation. Empty input performs no acquire.
+Drivers validate shape/cardinality/hints before I/O and report
+`native-bulk`, `pipeline`, `prepared-loop`, or `remote-batch`. Root bulk has no
+portable transaction or auto-chunking promise; use `db.tx()` for callback
+atomicity.
+
+First-party row-streaming primitives are implemented as distinct driver
 capabilities, not dialect flags:
 
 | Adapter | `db.stream()` primitive | Important boundary |
 | --- | --- | --- |
 | PostgreSQL / `pg` | `pg-cursor` | Optional peer; missing capability yields `BRAID_STREAM_UNSUPPORTED`. |
 | MySQL / `mysql2` | raw prepared `Execute.stream()` | Preserve prepared/binary execution; drain or discard before lease release. |
+| MariaDB / Connector/Node.js | connector stream | MariaDB driver capability; not inherited by `mysql2`. |
 | SQLite / `node:sqlite` | `StatementSync.iterate()` | Native iterator termination is the cleanup boundary. |
+| SQLite / `sqlite-wasm` | OO1 step/pull | One direct browser resource; conflicting root operations reject. |
+| SQLite / Cloudflare D1 | None | `BRAID_STREAM_UNSUPPORTED`; do not paginate to simulate streaming. |
 | Oracle Thin | `ResultSet` | Close every ResultSet; close failure discards the lease. |
 | SQL Server / Tedious | Request row events + bounded queue | Request completion precedes lease release. |
 
@@ -53,8 +94,8 @@ The following links are retained for provenance only:
 - PV13 runtime evidence at revision [`d4bc626`](https://github.com/Clickin/SQLBraid/commit/d4bc626) and its historical workflow run [`34753809318`](https://github.com/Clickin/SQLBraid/actions/runs/34753809318).
 - PV11 evidence at revision [`1615311`](https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7) and historical workflow run [`34745030794`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794).
 
-Those exact revisions predate PV15 and are not claims about the current source,
-current drivers, current Vite integration, or RC publication. Main must replace
-Pending entries with final evidence after PV15 verification.
+Those exact revisions predate PV16 and are not claims about the current source,
+current drivers, current Vite/browser/cloud integration, or RC publication.
+Main must replace Pending entries with final evidence after PV16 verification.
 
 For custom adapters, see the [driver-author binding guide](/SQLBraid/dev/agents/driver-author/).

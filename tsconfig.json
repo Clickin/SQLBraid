@@ -8,6 +8,7 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "#async-context": ["packages/runtime/src/async-context.ts"],
       "@sqlbraid/core": ["packages/core/src/index.ts"],
       "@sqlbraid/codegen": ["packages/codegen/src/index.ts"],
       "@sqlbraid/template": ["packages/template/src/index.ts"],
@@ -33,7 +34,11 @@
       "@sqlbraid/mysql": ["packages/mysql/src/index.ts"],
       "@sqlbraid/mysql/inspector": ["packages/mysql/src/inspector.ts"],
       "@sqlbraid/mysql/mysql2": ["packages/mysql/src/mysql2.ts"],
+      "@sqlbraid/mariadb": ["packages/mariadb/src/index.ts"],
+      "@sqlbraid/mariadb/mariadb": ["packages/mariadb/src/mariadb.ts"],
       "@sqlbraid/sqlite": ["packages/sqlite/src/index.ts"],
+      "@sqlbraid/sqlite/wasm": ["packages/sqlite/src/wasm.ts"],
+      "@sqlbraid/sqlite/d1": ["packages/sqlite/src/d1.ts"],
       "@sqlbraid/sqlite/inspector": ["packages/sqlite/src/inspector.ts"],
       "@sqlbraid/sqlite/node-sqlite": ["packages/sqlite/src/node-sqlite.ts"]
     }

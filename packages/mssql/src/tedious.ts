@@ -5,16 +5,19 @@ import type {
   ConnectionProvider,
   DatabaseOptions,
   DriverRoutineResult,
+  BulkBindingDescription,
+  BulkExecutionResult,
   ParameterTypeHint,
   QueryExecutor,
   QueryExecutionResult,
+  RenderedBulk,
   RenderedStatement,
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
   TypePolicy,
 } from "@sqlbraid/core";
-import { createStatementBindingDescription } from "@sqlbraid/core";
+import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -34,7 +37,9 @@ export interface TediousColumnLike {
 
 export interface TediousRequestLike {
   on(event: string, listener: (...args: any[]) => void): this;
-  addParameter(name: string, type: unknown, value: unknown, options?: { readonly length?: number; readonly precision?: number; readonly scale?: number }): void;
+  once?(event: string, listener: (...args: any[]) => void): this;
+  removeListener?(event: string, listener: (...args: any[]) => void): this;
+  addParameter(name: string, type: unknown, value?: unknown, options?: { readonly length?: number; readonly precision?: number; readonly scale?: number }): void;
   addOutputParameter?(name: string, type: unknown, value?: unknown, options?: { readonly length?: number; readonly precision?: number; readonly scale?: number }): void;
   cancel?(): void;
   pause?(): void;
@@ -43,6 +48,9 @@ export interface TediousRequestLike {
 
 export interface TediousConnectionLike {
   execSql(request: TediousRequestLike): void;
+  prepare?(request: TediousRequestLike): void;
+  execute?(request: TediousRequestLike, parameters: Record<string, unknown>): void;
+  unprepare?(request: TediousRequestLike): void;
   callProcedure?(request: TediousRequestLike): void;
   readonly beginTransaction: (...args: any[]) => void;
   readonly commitTransaction: (...args: any[]) => void;
@@ -88,6 +96,10 @@ interface TediousStatementBindingAdapter extends StatementBindingAdapter {
     statement: RenderedStatement,
     description: StatementBindingDescription,
   ) => readonly TediousMaterializedParameter[] | undefined;
+  readonly materializedBulkParameters: (
+    bulk: RenderedBulk,
+    description: BulkBindingDescription,
+  ) => readonly (readonly TediousMaterializedParameter[])[] | undefined;
 }
 
 export interface TediousStatementBindingOptions {
@@ -438,6 +450,7 @@ function tediousLiteralValue(
 function createBinding(options: TediousStatementBindingOptions = {}): TediousStatementBindingAdapter {
   const policy = options.typePolicy ?? defaultTypePolicy;
   const materialized = new WeakMap<StatementBindingDescription, { readonly statement: RenderedStatement; readonly parameters: readonly TediousMaterializedParameter[] }>();
+  const materializedBulks = new WeakMap<BulkBindingDescription, { readonly bulk: RenderedBulk; readonly parameters: readonly (readonly TediousMaterializedParameter[])[] }>();
   const adapter: TediousStatementBindingAdapter = {
     id: "tedious",
     describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
@@ -471,9 +484,48 @@ function createBinding(options: TediousStatementBindingOptions = {}): TediousSta
       materialized.set(description, { statement, parameters });
       return description;
     },
+    describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
+      const statement = createRenderedStatement(bulk.statement);
+      if (statement.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: SQL Server bulk requires command queries.");
+      if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
+        throw new Error("BRAID_BULK_SHAPE: SQL Server bulk does not support OUT or INOUT parameters.");
+      }
+      const canonicalParameters = statement.parameters.map((parameter, index) =>
+        materializeParameter(index + 1, parameter.value, parameter.hint, policy),
+      );
+      const encodedRows = bulk.parameterSets.map((values) => {
+        if (values.length !== statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: SQL Server bulk parameter cardinality changed.");
+        return values.map((value, index) => {
+          const parameter = statement.parameters[index]!;
+          const materializedParameter = materializeParameter(index + 1, value, parameter.hint, policy);
+          const canonical = canonicalParameters[index]!;
+          if (materializedParameter.databaseType !== canonical.databaseType) {
+            throw new Error(`BRAID_BULK_SHAPE: SQL Server bulk parameter ${index + 1} changed inferred type from ${canonical.databaseType} to ${materializedParameter.databaseType}.`);
+          }
+          return materializedParameter;
+        });
+      });
+      const description = createBulkBindingDescription(bulk, context, {
+        adapterId: "tedious",
+        transport: "typed-request",
+        placeholder: (index) => `@p${index}`,
+        reuse: { effective: "reuse", owner: "driver" },
+        formatLiteral: (_parameter, index, literalOptions) => tediousLiteralValue(
+          encodedRows[0]?.[index]?.value,
+          encodedRows[0]?.[index]?.databaseType ?? "nvarchar",
+          literalOptions.binary,
+        ),
+      });
+      materializedBulks.set(description, { bulk, parameters: encodedRows });
+      return description;
+    },
     materializedParameters(statement: RenderedStatement, description: StatementBindingDescription): readonly TediousMaterializedParameter[] | undefined {
       const prepared = materialized.get(description);
       return prepared?.statement === statement ? prepared.parameters : undefined;
+    },
+    materializedBulkParameters(bulk: RenderedBulk, description: BulkBindingDescription): readonly (readonly TediousMaterializedParameter[])[] | undefined {
+      const prepared = materializedBulks.get(description);
+      return prepared?.bulk === bulk ? prepared.parameters : undefined;
     },
   };
   return Object.freeze(adapter);
@@ -840,6 +892,187 @@ function streamRows(
   })();
 }
 
+interface TediousPreparedRequest {
+  readonly request: TediousRequestLike & { error: unknown };
+  readonly parameters: readonly TediousMaterializedParameter[];
+  readonly setCompletionCallback: (callback: TediousRequestCompletionCallback | undefined) => void;
+}
+
+type TediousRequestCompletionCallback = (error: unknown, rowCount?: number) => void;
+
+function prepareRequest(
+  connection: TediousConnectionLike,
+  sql: string,
+  parameters: readonly TediousMaterializedParameter[],
+): Promise<TediousPreparedRequest> {
+  if (typeof connection.prepare !== "function" || typeof connection.execute !== "function" || typeof connection.unprepare !== "function") {
+    return Promise.reject(new Error("BRAID_BULK_UNSUPPORTED: Tedious connection does not expose prepare/execute/unprepare()."));
+  }
+  const prepare = connection.prepare;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let completionCallback: TediousRequestCompletionCallback | undefined;
+    const request = new Request(sql, ((error: unknown, rowCount?: number) => {
+      completionCallback?.(error, rowCount);
+    })) as unknown as TediousPreparedRequest["request"];
+    const prepared = (error?: unknown): void => {
+      if (settled) return;
+      if (error !== undefined && error !== null) {
+        settled = true;
+        request.removeListener?.("prepared", prepared);
+        request.removeListener?.("error", failed);
+        reject(error);
+        return;
+      }
+      settled = true;
+      request.removeListener?.("prepared", prepared);
+      request.removeListener?.("error", failed);
+      resolve({
+        request,
+        parameters,
+        setCompletionCallback(callback) {
+          completionCallback = callback;
+        },
+      });
+    };
+    const failed = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      request.removeListener?.("prepared", prepared);
+      request.removeListener?.("error", failed);
+      reject(asError(error) ?? new Error("SQL Server prepare failed."));
+    };
+    request.on("prepared", prepared);
+    request.on("error", failed);
+    try {
+      for (const parameter of parameters) request.addParameter(parameter.name, parameter.type, undefined, parameter.options);
+      prepare.call(connection, request);
+    } catch (error) {
+      failed(error);
+    }
+  });
+}
+
+function executePrepared(
+  connection: TediousConnectionLike,
+  prepared: TediousPreparedRequest,
+  parameters: readonly TediousMaterializedParameter[],
+): Promise<number | undefined> {
+  if (typeof connection.execute !== "function") return Promise.reject(new Error("BRAID_BULK_UNSUPPORTED: Tedious connection does not expose execute()."));
+  const execute = connection.execute;
+  const values = Object.fromEntries(parameters.map((parameter) => [parameter.name, parameter.value]));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let completed = false;
+    let callbackError: unknown;
+    let eventError: unknown;
+    let callbackRowCount: number | undefined;
+    let rowBearing = false;
+    const doneRows: number[] = [];
+    const doneInProcRows: number[] = [];
+    const doneProcRows: number[] = [];
+    const markRows = (): void => { rowBearing = true; };
+    const markDone = (target: number[], count?: unknown): void => { if (typeof count === "number") target.push(count); };
+    const markDoneRows = (count?: unknown): void => markDone(doneRows, count);
+    const markDoneInProcRows = (count?: unknown): void => markDone(doneInProcRows, count);
+    const markDoneProcRows = (count?: unknown): void => markDone(doneProcRows, count);
+    const finish = (): void => {
+      if (settled || !completed) return;
+      settled = true;
+      prepared.setCompletionCallback(undefined);
+      prepared.request.removeListener?.("error", failed);
+      prepared.request.removeListener?.("requestCompleted", complete);
+      prepared.request.removeListener?.("columnMetadata", markRows);
+      prepared.request.removeListener?.("row", markRows);
+      prepared.request.removeListener?.("done", markDoneRows);
+      prepared.request.removeListener?.("doneInProc", markDoneInProcRows);
+      prepared.request.removeListener?.("doneProc", markDoneProcRows);
+      const error = asError(callbackError ?? eventError);
+      if (error !== undefined && error !== null) reject(error);
+      else if (rowBearing) reject(new Error("BRAID_BULK_RESULT_KIND: SQL Server bulk command returned rows."));
+      else {
+        const counts = doneInProcRows.length > 0 ? doneInProcRows : doneRows.length > 0 ? doneRows : doneProcRows;
+        resolve(counts.length > 0 ? counts.reduce((total, value) => total + value, 0) : callbackRowCount);
+      }
+    };
+    const complete = (): void => {
+      completed = true;
+      finish();
+    };
+    const callback = (error: unknown, rowCount?: number): void => {
+      callbackError = error;
+      callbackRowCount = rowCount;
+      finish();
+    };
+    const failed = (error: unknown): void => {
+      eventError = error;
+      finish();
+    };
+    prepared.request.on("columnMetadata", markRows);
+    prepared.request.on("row", markRows);
+    prepared.request.on("done", markDoneRows);
+    prepared.request.on("doneInProc", markDoneInProcRows);
+    prepared.request.on("doneProc", markDoneProcRows);
+    prepared.request.on("error", failed);
+    if (typeof prepared.request.once === "function") prepared.request.once("requestCompleted", complete);
+    else prepared.request.on("requestCompleted", complete);
+    prepared.setCompletionCallback(callback);
+    try {
+      execute.call(connection, prepared.request, values);
+    } catch (error) {
+      callbackError ??= error;
+      completed = true;
+      finish();
+    }
+  });
+}
+
+function unprepareRequest(connection: TediousConnectionLike, prepared: TediousPreparedRequest): Promise<void> {
+  if (typeof connection.unprepare !== "function") return Promise.reject(new Error("BRAID_BULK_UNSUPPORTED: Tedious connection does not expose unprepare()."));
+  const unprepare = connection.unprepare;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let completed = false;
+    let callbackError: unknown;
+    let eventError: unknown;
+    const finish = (): void => {
+      if (settled || !completed) return;
+      settled = true;
+      prepared.setCompletionCallback(undefined);
+      prepared.request.removeListener?.("error", failed);
+      prepared.request.removeListener?.("requestCompleted", complete);
+      const error = asError(callbackError ?? eventError);
+      if (error !== undefined) reject(error);
+      else resolve();
+    };
+    const complete = (): void => {
+      completed = true;
+      finish();
+    };
+    const callback = (error: unknown): void => {
+      callbackError = error;
+      finish();
+    };
+    const failed = (error: unknown): void => {
+      eventError = error;
+      finish();
+    };
+    try {
+      prepared.request.on("error", failed);
+      if (prepared.request.once) prepared.request.once("requestCompleted", complete);
+      else prepared.request.on("requestCompleted", complete);
+      prepared.setCompletionCallback(callback);
+      // Tedious retains the prior execute error on a reused Request.
+      prepared.request.error = undefined;
+      unprepare.call(connection, prepared.request);
+    } catch (error) {
+      callbackError ??= error;
+      completed = true;
+      finish();
+    }
+  });
+}
+
 function makeTediousExecutor(
   connection: TediousConnectionLike,
   options: TediousExecutorOptions = {},
@@ -855,6 +1088,37 @@ function makeTediousExecutor(
       const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy);
       if (result.outputSeen) throw new Error("BRAID_CALL_OUT_UNSUPPORTED: SQL Server output parameters are not implemented.");
       return rowResult(result) as QueryExecutionResult<Row>;
+    },
+    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
+      const parameters = bindingAdapter.materializedBulkParameters(bulk, binding);
+      if (parameters === undefined) {
+        throw new TypeError("SQLBraid Tedious executor received a bulk binding description not produced by its adapter.");
+      }
+      if (binding.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: SQL Server bulk binding did not provide parameterized SQL.");
+      const prepared = await prepareRequest(connection, binding.parameterizedSql, parameters[0] ?? []);
+      let failure: unknown;
+      let affectedRows = 0;
+      let affectedKnown = true;
+      try {
+        for (const row of parameters) {
+          const rowCount = await executePrepared(connection, prepared, row);
+          if (typeof rowCount === "number") affectedRows += rowCount;
+          else affectedKnown = false;
+        }
+      } catch (error) {
+        failure = error;
+      }
+      try {
+        await unprepareRequest(connection, prepared);
+      } catch (error) {
+        failure = resourceCleanupError(failure, [error]);
+      }
+      if (failure !== undefined) throw failure;
+      return {
+        inputCount: parameters.length,
+        ...(affectedKnown ? { affectedRows } : {}),
+        executionMode: "prepared-loop",
+      };
     },
     stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncIterable<Row> {
       const execution = executionBinding(bindingAdapter, rendered, binding);

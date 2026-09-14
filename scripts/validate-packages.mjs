@@ -26,7 +26,7 @@ const temp = await mkdtemp(join(tmpdir(), "sqlbraid-pack-check-"));
 const consumer = join(temp, "consumer");
 const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR) : undefined;
 const requiredPackageNames = new Set([
-  "cli", "codegen", "compiler", "core", "language-server", "metadata", "mssql", "mysql",
+  "cli", "codegen", "compiler", "core", "language-server", "mariadb", "metadata", "mssql", "mysql",
   "operations", "oracle", "postgres", "runtime", "sqlbraid", "sqlite", "template", "tooling", "vite",
 ]);
 const packedContainers = [];
@@ -141,6 +141,7 @@ try {
         for (const imported of ts.preProcessFile(text, true, true).importedFiles) {
           const specifier = imported.fileName;
           if (specifier.startsWith(".") || specifier.startsWith("node:") || builtinModules.includes(specifier)) continue;
+          if (specifier.startsWith("#") && Object.hasOwn(manifest.imports ?? {}, specifier)) continue;
           const dependency = specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0];
           if (dependency === manifest.name) continue;
           assert.ok(manifest.dependencies?.[dependency] || manifest.peerDependencies?.[dependency] || manifest.optionalDependencies?.[dependency],
@@ -158,7 +159,7 @@ try {
     if (await readFile(join(packageDir, "LICENSE"), "utf8") !== await readFile(join(root, "LICENSE"), "utf8")) {
       throw new Error(`Packed ${manifest.name} license differs from the root license.`);
     }
-    for (const packagePath of [...collectPackagePaths(manifest.exports), ...collectPackagePaths(manifest.bin)]) {
+    for (const packagePath of [...collectPackagePaths(manifest.exports), ...collectPackagePaths(manifest.imports), ...collectPackagePaths(manifest.bin)]) {
       if (!fileNames.has(packagePath)) throw new Error(`Packed ${manifest.name} references missing ${packagePath}.`);
     }
     if (manifest.engines?.node !== ">=22.18.0") throw new Error(`Unexpected Node engine for ${manifest.name}: ${manifest.engines?.node ?? "missing"}`);
@@ -217,7 +218,7 @@ try {
   if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode"].some((name) => runtimeInstalledPackages.includes(name))) throw new Error("Runtime consumer installed development tooling transitively.");
   const runtimeTopLevelPackages = await readdir(join(boundaryConsumer, "node_modules"));
   if (runtimeTopLevelPackages.includes("sqlbraid")) throw new Error("Runtime consumer installed the unscoped CLI package transitively.");
-  if (["oracledb", "tedious"].some((name) => runtimeTopLevelPackages.includes(name))) throw new Error("Runtime consumer installed a Node-only database driver.");
+  if (["oracledb", "tedious", "mariadb"].some((name) => runtimeTopLevelPackages.includes(name))) throw new Error("Runtime consumer installed a Node-only database driver.");
   await writeFile(join(boundaryConsumer, "runtime.mjs"), [
     'import assert from "node:assert/strict";',
     'import { sql } from "@sqlbraid/postgres";',
@@ -228,7 +229,7 @@ try {
     'assert.equal(typeof createPgDatabase, "function");',
     'assert.deepEqual(oracle`SELECT ${1}`.render().segments, ["SELECT ", ""]);',
     'assert.deepEqual(mssql`SELECT ${1}`.render().segments, ["SELECT ", ""]);',
-    'for (const dialect of ["postgres", "mysql", "sqlite", "oracle", "mssql"]) {',
+    'for (const dialect of ["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"]) {',
     '  const root = await import(`@sqlbraid/${dialect}`);',
     '  assert.ok(!Object.keys(root).some((key) => /Inspector/.test(key)));',
     '}',
@@ -345,13 +346,17 @@ try {
     'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
     'import { sql as mysql } from "@sqlbraid/mysql";',
     'import { createMysql2Database } from "@sqlbraid/mysql/mysql2";',
+    'import { sql as mariadb } from "@sqlbraid/mariadb";',
+    'import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";',
     'import { sql as sqlite } from "@sqlbraid/sqlite";',
     'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
+    'import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";',
+    'import { createD1Database } from "@sqlbraid/sqlite/d1";',
     'import { sql as oracle } from "@sqlbraid/oracle";',
     'import { sql as mssql } from "@sqlbraid/mssql";',
     'import { createLanguageService, startStdioLanguageServer } from "@sqlbraid/language-server";',
-    'for (const [name, tag] of [["postgres", pg], ["mysql", mysql], ["sqlite", sqlite], ["oracle", oracle], ["mssql", mssql]]) { const rendered = tag`SELECT ${1}`.render(); if (rendered.segments.join("") !== "SELECT " || rendered.parameters[0]?.value !== 1) throw new Error(`${name} root failed`); }',
-    'if ([createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("packed subpath failed");',
+    'for (const [name, tag] of [["postgres", pg], ["mysql", mysql], ["mariadb", mariadb], ["sqlite", sqlite], ["oracle", oracle], ["mssql", mssql]]) { const rendered = tag`SELECT ${1}`.render(); if (rendered.segments.join("") !== "SELECT " || rendered.parameters[0]?.value !== 1) throw new Error(`${name} root failed`); }',
+    'if ([createPgDatabase, createMysql2Database, createMariaDbDatabase, createNodeSqliteDatabase, createSqliteWasmDatabase, createD1Database, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("packed subpath failed");',
     'if (defineConfig({})?.codegen !== undefined) throw new Error("packed config helper failed");',
   ].join("\n"));
   await run(process.execPath, [entry], consumer);

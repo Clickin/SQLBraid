@@ -1,0 +1,26 @@
+---
+title: 브라우저 인터랙티브 미리보기
+description: 브라우저 워커에서 SQLite WASM과 실제 SQLBraid 쿼리를 실행합니다.
+---
+
+import InteractivePreview from "../../../components/InteractivePreview.astro";
+
+아래 미리보기는 애플리케이션 번들과 같은 실행 경로를 사용합니다.
+브라우저 워커가 SQLBraid SQLite WASM 어댑터를 가져오고,
+`sql.rows(schema)` 쿼리를 렌더링한 뒤 공식 SQLite WASM `:memory:` 데이터베이스에서
+실행합니다. 한국어와 다른 유니코드 계좌 이름을 포함한 결정적 금융 fixture를
+사용합니다.
+
+다음 내용을 확인할 수 있습니다.
+
+- 지연 평가되는 `@braid if` 분기와 일반 값 바인딩
+- 렌더링된 SQLite SQL과 바인드 값
+- Standard Schema 검증 및 통화 표시 변환
+- WASM 데이터베이스에서 반환된 실제 표 형식 결과
+
+<InteractivePreview />
+
+기본 경로는 OPFS, 영속성, `SharedArrayBuffer`, COOP/COEP 헤더를 요구하지
+않습니다. 실제 애플리케이션은 별도의 SQLite WASM 저장 모드를 선택할 수 있지만,
+문서 미리보기는 GitHub Pages 같은 정적 호스팅에서도 동작하도록
+`:memory:`를 사용합니다.

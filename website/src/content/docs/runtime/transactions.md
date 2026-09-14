@@ -38,4 +38,23 @@ SQLBraid 0.1.0 does **not** expose an isolation option and does not silently cho
 
 Batch is not atomic. Earlier statements—and later statements when result mapping fails—may already have executed. Wrap the batch in `db.tx(...)` when atomicity is required.
 
+`db.bulk(inputs, factory)` is command-only homogeneous DML, not a replacement
+for a transaction. Root bulk acquires one physical lease but has no portable
+atomicity promise, is never implicitly wrapped in a transaction, and does not
+auto-chunk. Use `tx.bulk(inputs, factory)` inside this callback when all items
+must share the transaction:
+
+```ts
+await db.tx(async (tx) => {
+  await tx.bulk(inputs, (input) => sql.command`
+    UPDATE account SET amount = ${input.amount} WHERE id = ${input.id}
+  `);
+});
+```
+
+Drivers report the actual bulk mode (`native-bulk`, `pipeline`,
+`prepared-loop`, or `remote-batch`) rather than making a cross-dialect
+throughput or transaction claim. D1 currently has no callback transaction
+primitive matching this contract.
+
 An uncertain transaction-control failure poisons the physical resource. Pool cleanup discards it; a direct resource rejects further SQLBraid work. An abandoned live stream rolls back instead of committing over an active cursor.

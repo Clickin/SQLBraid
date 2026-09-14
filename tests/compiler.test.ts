@@ -19,6 +19,20 @@ test('discovers aliased SQL tags by import identity', () => {
   assert.equal(result.queries[0].bindings[1].expression, 'name');
 });
 
+test('MariaDB tags preserve native hash comments while finding active directives', () => {
+  const native = [
+    "import { sql } from '@sqlbraid/mariadb';",
+    'const query = sql.rows`SELECT 1 AS id',
+    '# /*@braid otherwise*/ is a native comment',
+    '/*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;',
+  ].join('\n');
+  const result = discoverQueries(native, 'mariadb.ts', {});
+  assert.equal(result.queries.length, 1);
+  assert.equal(result.queries[0].declaredResultKind, 'rows');
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(createVirtualOverlay(native, 'mariadb.ts', {}).diagnostics, []);
+});
+
 test('virtual overlay preserves source and attaches declared query contract', () => {
   const overlay = createVirtualOverlay(source, 'fixture.ts', {
     moduleSpecifier: '@sqlbraid/template',

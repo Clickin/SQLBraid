@@ -16,6 +16,11 @@ const db = createPgDatabase(client);
 const rows = await db.all(sql.rows<{ id: number }>`SELECT id FROM users WHERE id = ${1}`);
 ```
 
+PostgreSQL DML `RETURNING` is a row-producing statement: use
+`db.execute`, `db.all`, `db.one`, or `db.maybeOne` with `sql.rows`. PV16
+documents materialized DML-returning only; `db.stream()` cancellation and
+rollback behavior is not a portable returning contract.
+
 `pg-cursor` is an optional peer. PostgreSQL row streaming uses its cursor protocol and fails with `BRAID_STREAM_UNSUPPORTED` when that peer/capability is unavailable; ordinary queries do not require it. Configure `streamBatchSize` or an explicit cursor factory when needed.
 
 Exhaustion, break and mapper failure close the cursor before lease release.

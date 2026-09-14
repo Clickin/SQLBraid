@@ -53,7 +53,7 @@ try {
   if (topLevelPackages.includes("sqlbraid")) {
     throw new Error("Runtime-only installation pulled in the unscoped CLI package");
   }
-  if (["oracledb", "tedious"].some((name) => topLevelPackages.includes(name))) {
+  if (["oracledb", "tedious", "mariadb"].some((name) => topLevelPackages.includes(name))) {
     throw new Error("Portable runtime installation pulled in a Node-only database driver");
   }
   console.info("PASS runtime-only npm install without metadata, codegen, tooling, CLI, LSP or editor");

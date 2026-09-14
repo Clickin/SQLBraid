@@ -4,7 +4,7 @@ description: Write SQL. Keep TypeScript. Skip the query-builder translation laye
 template: splash
 hero:
   title: Write SQL. Keep TypeScript.
-  tagline: SQLBraid adds safe binds, readable dynamic SQL, explicit result contracts, and a small runtime for PostgreSQL, MySQL, SQLite, Oracle, and SQL Server.
+  tagline: SQLBraid adds safe binds, readable dynamic SQL, explicit result contracts, and a small runtime for PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL Server, with Browser WASM and D1 paths.
   actions:
     - text: Get started
       link: /SQLBraid/getting-started/sqlite/
@@ -23,7 +23,7 @@ SQLBraid is a SQL-first TypeScript data-access toolkit. Keep the SQL you know, w
 - **Tooling stays optional.** Metadata, deterministic code generation, LSP, CLI inspection, and VS Code support do not enter the runtime dependency path.
 
 :::tip Start with SQLite
-The [five-minute SQLite quickstart](/SQLBraid/getting-started/sqlite/) runs without an external server. Move to [PostgreSQL](/SQLBraid/getting-started/postgres/) or [MySQL](/SQLBraid/getting-started/mysql/) when you need a service database.
+The [five-minute SQLite quickstart](/SQLBraid/getting-started/sqlite/) runs without an external server. For browser and Worker resources, see [SQLite WASM and D1](/SQLBraid/getting-started/sqlite-browser/). Move to [PostgreSQL](/SQLBraid/getting-started/postgres/), [MySQL](/SQLBraid/getting-started/mysql/), or [MariaDB](/SQLBraid/getting-started/mariadb/) when you need a service database.
 :::
 
 ## What SQLBraid is not
@@ -32,8 +32,8 @@ SQLBraid does not infer arbitrary SELECT result types, hydrate object graphs, or
 
 ## Launch documentation
 
-This is the 0.1.0 pre-release documentation. PV15 final verification is
-pending; these pages do not claim a final SHA, CI gate, publication, or
+This is the 0.1.0 pre-release documentation. PV16 exact-final-SHA verification
+is pending; these pages do not claim a final SHA, CI gate, publication, or
 release label. See [release notes and limitations](/SQLBraid/release/notes/)
 and the [runtime/driver evidence matrix](/SQLBraid/reference/support/) before
 choosing an integration.

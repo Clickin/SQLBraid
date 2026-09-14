@@ -1,6 +1,6 @@
 # Driver-author guide: binding transport SPI
 
-This guide is for a custom `QueryExecutor`, `ConnectionProvider`, or first-party-style driver adapter. PV15 final verification is pending; this guide does not grant a runtime/driver support label or claim current CI, SHA, publication, or release evidence.
+This guide is for a custom `QueryExecutor`, `ConnectionProvider`, or first-party-style driver adapter. PV16 final verification is pending; this guide does not grant a runtime/driver support label or claim current CI, SHA, publication, or release evidence.
 
 ## 1. The logical statement contract
 
@@ -119,6 +119,72 @@ interface ConnectionProvider {
 ```
 
 A lease must not silently use a different binding adapter. Keep opaque driver requests in the driver package; a `WeakMap<StatementBindingDescription, OpaqueRequest>` is an appropriate private association when the executor needs already-encoded data.
+
+### Homogeneous bulk execution
+
+PV16 `db.bulk()` is command-only and represents one logical DML shape with an
+ordered matrix of values. It is distinct from `db.batch()`, which executes
+heterogeneous queries.
+
+```ts
+interface RenderedBulk {
+  readonly statement: RenderedStatement;
+  readonly parameterSets: readonly (readonly unknown[])[];
+}
+
+interface BulkBindingDescription {
+  readonly adapterId: string;
+  readonly dialectId: string;
+  readonly transport: ParameterTransportKind;
+  readonly itemCount: number;
+  readonly valuesAt(index: number): readonly unknown[];
+  readonly literalizedSql(
+    index: number,
+    options?: LiteralizeOptions,
+  ): LiteralizedSqlResult;
+  readonly parameterizedSql?: string;
+  readonly bindings: readonly BindingDescription[];
+}
+
+interface StatementBindingAdapter {
+  // describe(...) remains required for ordinary statements.
+  readonly describeBulk?: (
+    bulk: RenderedBulk,
+    context: StatementBindingContext,
+  ) => BulkBindingDescription;
+}
+
+interface BulkExecutionResult {
+  readonly inputCount: number;
+  readonly affectedRows?: number;
+  readonly executionMode:
+    | "native-bulk"
+    | "pipeline"
+    | "prepared-loop"
+    | "remote-batch";
+}
+
+interface QueryExecutor {
+  readonly bulk?: (
+    bulk: RenderedBulk,
+    binding: BulkBindingDescription,
+  ) => Promise<BulkExecutionResult>;
+}
+```
+
+Use core's `createBulkBindingDescription` so all items share one immutable
+metadata set while per-item diagnostics remain lazy. Drivers must encode and
+validate the complete matrix before acquiring a lease. Shape, list/cardinality,
+hint, and `OUT`/`INOUT` direction mismatches fail before database I/O
+(`BRAID_BULK_SHAPE` or the specific materialization diagnostic). A custom
+executor without `bulk` fails with `BRAID_BULK_UNSUPPORTED`; do not silently
+loop through ordinary query calls.
+
+Bulk uses one physical lease and reports its actual execution mode. Root bulk
+has no portable atomicity promise and is never implicitly wrapped in a
+transaction; use `db.tx(async (tx) => tx.bulk(...))` when callback transaction
+atomicity is required. There is no portable auto-chunking contract. Bulk
+observers emit one bulk lifecycle operation, not N ordinary query operations.
 
 `call()` returns a raw normalized routine result, not application generic types:
 
@@ -260,12 +326,13 @@ For a typed request, replace the `parameterizedSql`/value-array construction wit
 
 ## 4. Transport and reuse policy
 
-Transport is a driver fact, not a dialect fact. The five first-party paths are documented as follows:
+Transport is a driver fact, not a dialect fact. The first-party paths are documented as follows:
 
 | Database path | Transport | Placeholder/request ownership | Reuse policy |
 | --- | --- | --- | --- |
 | PostgreSQL / `pg` | `text-positional` | adapter emits `$1..$N` | fresh unnamed simple execution, driver-owned |
 | MySQL / `mysql2` | `text-positional` | adapter emits `?` | driver-owned reuse for every request |
+| MariaDB / Connector/Node.js | `text-positional` | adapter emits `?` | connector-owned reuse/batch |
 | SQLite / `node:sqlite` | `text-positional` | adapter prepares documented `?` SQL | fresh simple execution, driver-owned |
 | Oracle Thin / `node-oracledb` | `text-positional` | adapter emits `:1..:N` and bind descriptors | driver cache reuse, driver-owned |
 | SQL Server / Tedious | `typed-request` | adapter emits `@p1..@pN` and `TYPES.*` facets | fresh Request/`execSql`, simple execution, driver-owned |
@@ -281,6 +348,10 @@ SQLite adapters must use the documented `DatabaseSync.prepare(text)` and `Statem
 ## 5. Hints: honor or reject
 
 A hint selects database parameter metadata; it is not application validation or an input codec. An adapter must either map every supported hint to its driver descriptor or reject unsupported hints before I/O with `BRAID_BIND_HINT_UNSUPPORTED` (or a more specific materialization diagnostic). Never silently discard a hint. Keep hint structure in prepared shape identity; parameter values do not participate.
+
+MariaDB-specific syntax and protocol evidence belongs to the official MariaDB
+Connector/Node.js adapter. A `mysql2` connection to MariaDB remains best-effort
+compatibility and must not receive an Official MariaDB label.
 
 Oracle must preserve its null, NUMBER, temporal, LOB, explicit/implicit ResultSet
 policies and close every live ResultSet before lease release. Tedious must
@@ -363,7 +434,8 @@ Before accepting an adapter:
 - preserve transaction pinning and result-kind checks;
 - document unsupported capabilities instead of simulating them.
 
-PV15 completion and release readiness require exact-revision verification across
-unit, packed-runtime, docs, and all five real database paths. Until Main supplies
-that evidence, mark verification pending and do not claim a new SHA, CI success,
-runtime support label, or publication.
+PV16 completion and release readiness require exact-revision verification across
+unit, packed-runtime, docs, capability/bulk suites, Browser WASM, D1, MariaDB,
+and the existing real database paths. Until Main supplies that evidence, mark
+verification pending and do not claim a new SHA, CI success, runtime support
+label, or publication.

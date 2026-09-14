@@ -10,6 +10,11 @@ declare module "vitest" {
       readonly image: string;
       readonly version: string;
     };
+    mariadb: {
+      readonly connectionUri: string;
+      readonly image: string;
+      readonly version: string;
+    };
     oracle: {
       readonly connectionUri: string;
       readonly image: string;

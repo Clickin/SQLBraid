@@ -1,8 +1,12 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-import { createRenderedStatement, RoutineMappingError } from "@sqlbraid/core";
+import { createRenderedStatement, RoutineMappingError, createRenderedBulk } from "@sqlbraid/core";
 import { preparedShape } from "./prepared-shape.js";
+import { createAsyncContextStorage } from "#async-context";
 import type {
+  BulkBindingDescription,
+  BulkExecutionResult,
+  BulkResult,
   CallQuery,
+  CommandQuery,
   ConnectionLease,
   ConnectionProvider,
   Database,
@@ -23,6 +27,7 @@ import type {
   RoutineMappingLocation,
   StatementBindingAdapter,
   StatementBindingDescription,
+  RenderedBulk,
   RenderedStatement,
   RoutineCallResult,
   RowQuery,
@@ -99,6 +104,7 @@ interface ScopeState {
   tail: Promise<void>;
   transactionTail: Promise<void>;
   streamUsers: number;
+  directBusy?: boolean;
   activeScope?: symbol;
   poisoned?: unknown;
 }
@@ -174,8 +180,8 @@ class PreparationFailure extends Error {
   }
 }
 
-const transactionContext = new AsyncLocalStorage<TransactionContext>();
-const physicalContext = new AsyncLocalStorage<PhysicalContext>();
+const transactionContext = createAsyncContextStorage<TransactionContext>();
+const physicalContext = createAsyncContextStorage<PhysicalContext>();
 const scopeStates = new WeakMap<object, ScopeState>();
 let operationSequence = 0;
 let transactionSequence = 0;
@@ -231,6 +237,12 @@ function assertHealthy(state: ScopeState): void {
 }
 
 function assertRootAllowed(rootState: ScopeState, stream: boolean): void {
+  if (transactionContext.conservative && rootState.activeScope !== undefined) {
+    throw new DatabaseScopeError(
+      "BRAID_TX_SCOPE",
+      "The root database handle cannot be used while its direct transaction owns the database.",
+    );
+  }
   for (let transaction = transactionContext.getStore(); transaction; transaction = transaction.parent) {
     if (transaction.rootState === rootState && transaction.activity.active) {
       throw new DatabaseScopeError("BRAID_TX_SCOPE", "The root database handle cannot be used from its own transaction callback.");
@@ -260,6 +272,18 @@ function assertRootAllowed(rootState: ScopeState, stream: boolean): void {
 function acquireDirectRoot(rootState: ScopeState, stream: boolean): Promise<() => void> {
   assertHealthy(rootState);
   assertRootAllowed(rootState, stream);
+  if (physicalContext.conservative && rootState.directBusy) {
+    throw new DatabaseScopeError(
+      stream ? "BRAID_STREAM_SCOPE" : "BRAID_REENTRY",
+      "A direct browser database operation cannot overlap another physical operation.",
+    );
+  }
+  if (physicalContext.conservative) {
+    rootState.directBusy = true;
+    return Promise.resolve(() => {
+      rootState.directBusy = false;
+    });
+  }
   const { promise: turn, resolve: release } = Promise.withResolvers<void>();
   const previous = rootState.tail;
   rootState.tail = previous.then(() => turn);
@@ -274,6 +298,25 @@ function acquireDirectRoot(rootState: ScopeState, stream: boolean): Promise<() =
 
 function malformedExecutionResult(): never {
   throw new TypeError("Executor returned a malformed query execution result.");
+}
+
+function assertBulkExecutionResult(value: unknown, expectedCount: number): BulkExecutionResult {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("Executor returned a malformed bulk execution result.");
+  }
+  const result = value as Partial<BulkExecutionResult>;
+  if (
+    !Number.isSafeInteger(result.inputCount)
+    || result.inputCount !== expectedCount
+    || (result.affectedRows !== undefined && (!Number.isFinite(result.affectedRows) || result.affectedRows < 0))
+    || (result.executionMode !== "native-bulk"
+      && result.executionMode !== "pipeline"
+      && result.executionMode !== "prepared-loop"
+      && result.executionMode !== "remote-batch")
+  ) {
+    throw new TypeError("Executor returned a malformed bulk execution result.");
+  }
+  return result as BulkExecutionResult;
 }
 
 function bindingAdapterFor(resource: QueryExecutor | ConnectionProvider): StatementBindingAdapter {
@@ -356,6 +399,70 @@ function assertBindingDescription(
   if (!Object.isFrozen(description.reuse)) Object.freeze(description.reuse);
   if (!Object.isFrozen(description)) Object.freeze(description);
   return description;
+}
+
+function assertBulkBindingDescription(
+  description: BulkBindingDescription,
+  adapter: StatementBindingAdapter,
+  bulk: RenderedBulk,
+): BulkBindingDescription {
+  const statement = bulk.statement;
+  const validTransport = description !== null
+    && typeof description === "object"
+    && (description.transport === "native-value-template"
+      || description.transport === "text-positional"
+      || description.transport === "text-named"
+      || description.transport === "typed-request");
+  if (
+    description === null
+    || typeof description !== "object"
+    || description.adapterId !== adapter.id
+    || description.dialectId !== statement.dialectId
+    || !validTransport
+    || !Array.isArray(description.bindings)
+    || description.bindings.length !== statement.parameters.length
+    || description.itemCount !== bulk.parameterSets.length
+    || typeof description.valuesAt !== "function"
+    || typeof description.literalizedSql !== "function"
+  ) {
+    throw new TypeError("Statement binding adapter returned an invalid bulk description.");
+  }
+  if ((description.transport === "text-positional" || description.transport === "text-named")
+    && (typeof description.parameterizedSql !== "string")) {
+    throw new TypeError("BRAID_BIND_TRANSPORT: text bulk binding descriptions must provide parameterized SQL.");
+  }
+  for (const [offset, binding] of description.bindings.entries()) {
+    if (
+      binding === null
+      || typeof binding !== "object"
+      || binding.index !== offset + 1
+      || binding.interpolation !== statement.parameters[offset].interpolation
+      || binding.direction !== statement.parameters[offset].direction
+      || binding.outputName !== statement.parameters[offset].outputName
+    ) {
+      throw new TypeError("Statement binding adapter returned misaligned bulk bindings.");
+    }
+    const expectedHint = statement.parameters[offset].hint;
+    const actualHint = binding.hint;
+    if ((expectedHint === undefined) !== (actualHint === undefined)
+      || (expectedHint !== undefined && (
+        actualHint!.databaseType !== expectedHint.databaseType
+        || actualHint!.length !== expectedHint.length
+        || actualHint!.precision !== expectedHint.precision
+        || actualHint!.scale !== expectedHint.scale
+      ))) {
+      throw new TypeError("Statement binding adapter returned misaligned bulk parameter hints.");
+    }
+    if (actualHint !== undefined && !Object.isFrozen(actualHint)) Object.freeze(actualHint);
+    if (!Object.isFrozen(binding)) Object.freeze(binding);
+  }
+  if (!Object.isFrozen(description.bindings)) Object.freeze(description.bindings);
+  if (!Object.isFrozen(description)) Object.freeze(description);
+  return description;
+}
+
+function bulkShape(rendered: RenderedStatement): string {
+  return preparedShape("command", rendered);
 }
 
 function bindingIdentityMismatch(): TypeError {
@@ -680,6 +787,31 @@ function queryReadyEvent(operation: PreparedOperation<Query<unknown, QueryResult
     transactionScoped: meta.transactionScoped,
   };
   if ("parameterizedSql" in binding) eventSql(event, binding);
+  return event;
+}
+
+function bulkReadyEvent(
+  operationId: string,
+  bulk: RenderedBulk,
+  binding: BulkBindingDescription,
+  meta: OperationMeta,
+): ExecutionEvent {
+  const event: ExecutionEvent = {
+    type: "bulk:ready",
+    operationId,
+    itemCount: bulk.parameterSets.length,
+    valuesAt: (index) => binding.valuesAt(index),
+    literalizedSql: (index, options) => binding.literalizedSql(index, options),
+    transactionDepth: meta.transactionDepth,
+    transactionScoped: meta.transactionScoped,
+  };
+  if ("parameterizedSql" in binding) {
+    Object.defineProperty(event, "sql", {
+      configurable: false,
+      enumerable: true,
+      get: () => binding.parameterizedSql,
+    });
+  }
   return event;
 }
 
@@ -1257,6 +1389,188 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       assertRowsQuery(query);
       return maybeOneNamed(query, validationOptions);
     },
+    async bulk<Input>(inputs: readonly Input[], factory: (input: Input, index: number) => CommandQuery): Promise<BulkResult> {
+      assertOpen();
+      assertHealthy(state);
+      if (!Array.isArray(inputs)) throw new TypeError("Bulk inputs must be an array.");
+      if (inputs.length === 0) return Object.freeze({ inputCount: 0, affectedRows: 0 });
+
+      const operationId = nextOperationId();
+      const bulkMeta = metadata(options, operationId);
+      let canonicalRendered: RenderedStatement | undefined;
+      let parameterSets: readonly (readonly unknown[])[] = [];
+      let bulk: RenderedBulk | undefined;
+      let binding: BulkBindingDescription | undefined;
+      try {
+        const snapshots: (readonly unknown[])[] = [];
+        let canonicalShape: string | undefined;
+        for (let index = 0; index < inputs.length; index += 1) {
+          let query: CommandQuery;
+          try {
+            query = factory(inputs[index]!, index);
+          } catch (error) {
+            throw new PreparationFailure("render", error);
+          }
+          if (query === null || typeof query !== "object" || query.resultKind !== "command" || typeof query.render !== "function") {
+            throw codedError("BRAID_BULK_SHAPE", "db.bulk() factory must return a command query.");
+          }
+          let rendered: RenderedStatement;
+          try {
+            rendered = createRenderedStatement(query.render());
+          } catch (error) {
+            throw new PreparationFailure("render", error);
+          }
+          if (rendered.resultKind !== "command") {
+            throw codedError("BRAID_BULK_SHAPE", `Bulk input ${index} rendered a ${rendered.resultKind} statement instead of a command.`);
+          }
+          const shape = bulkShape(rendered);
+          if (canonicalShape === undefined) {
+            canonicalShape = shape;
+            canonicalRendered = rendered;
+          } else if (shape !== canonicalShape) {
+            throw codedError("BRAID_BULK_SHAPE", `Bulk input ${index} changed the canonical rendered statement shape.`);
+          }
+          snapshots.push(Object.freeze(rendered.parameters.map((parameter) => parameter.value)));
+        }
+        parameterSets = Object.freeze(snapshots);
+        bulk = createRenderedBulk({ statement: canonicalRendered!, parameterSets });
+        if (typeof statementBinding.describeBulk !== "function") {
+          throw codedError("BRAID_BULK_UNSUPPORTED", "Statement binding adapter does not support bulk execution.");
+        }
+        binding = assertBulkBindingDescription(
+          statementBinding.describeBulk(bulk, {
+            dialectId: canonicalRendered!.dialectId,
+            requestedReuse: options.reuse ?? "auto",
+            transactionScoped: options.transaction,
+          }),
+          statementBinding,
+          bulk,
+        );
+      } catch (error) {
+        const failure = error instanceof PreparationFailure ? error : undefined;
+        const reported = failure === undefined ? error : failure.cause;
+        const stage = failure?.stage ?? (reported instanceof Error && reported.message.startsWith("BRAID_BULK_SHAPE:")
+          ? "prepared"
+          : "materialize");
+        await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, reported, stage, false, false), reported);
+        throw reported;
+      }
+
+      try {
+        await notify(options.observers ?? [], bulkReadyEvent(operationId, bulk!, binding!, bulkMeta));
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, error, "observer-before", false, false), error);
+      }
+
+      if (!options.pooled && typeof (executor as QueryExecutor).bulk !== "function") {
+        const error = codedError("BRAID_BULK_UNSUPPORTED", "Executor does not support bulk execution.");
+        await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, error, "materialize", false, false), error);
+        throw error;
+      }
+
+      let use: Use;
+      try {
+        use = await leaseForUse(false, statementBinding);
+      } catch (error) {
+        const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
+        await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, error, stage, false, false), error);
+        throw error;
+      }
+      if (typeof use.executor.bulk !== "function") {
+        const unsupported = codedError("BRAID_BULK_UNSUPPORTED", "Leased executor does not support bulk execution.");
+        let cleanupFailure: unknown;
+        try {
+          await use.release();
+        } catch (error) {
+          cleanupFailure = error;
+          poison(use.physicalState, error);
+        }
+        const reported = cleanupFailure === undefined
+          ? unsupported
+          : new AggregateError([unsupported, cleanupFailure], "Bulk capability check and lease release failed.", { cause: unsupported });
+        await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, reported, cleanupFailure === undefined ? "materialize" : "release", false, false), reported);
+        throw reported;
+      }
+
+      const started = now();
+      let physicalResult: BulkExecutionResult | undefined;
+      let driverError: unknown;
+      let driverFailed = false;
+      try {
+        physicalResult = await physicalContext.run(
+          { rootState: options.rootState, direct: use.direct, stream: false },
+          () => use.executor.bulk!(bulk!, binding!),
+        );
+      } catch (error) {
+        driverFailed = true;
+        driverError = error;
+        if (resourceCleanupFailure(error)) poison(use.physicalState, error);
+      }
+      let releaseError: unknown;
+      let releaseFailed = false;
+      try {
+        await use.release(isPoisoned(use.physicalState));
+      } catch (error) {
+        releaseError = error;
+        releaseFailed = true;
+        poison(use.physicalState, error);
+      }
+      let reportedFailure: unknown;
+      let hasReportedFailure = false;
+      if (driverFailed) {
+        hasReportedFailure = true;
+        try {
+          await notifyError(
+            options.observers ?? [],
+            errorEvent({ meta: bulkMeta }, driverError, "driver", true, false, now() - started),
+            driverError,
+          );
+        } catch (error) {
+          reportedFailure = error;
+        }
+      }
+      if (releaseFailed) {
+        hasReportedFailure = true;
+        try {
+          await notifyError(
+            options.observers ?? [],
+            errorEvent({ meta: bulkMeta }, releaseError, "release", true, !driverFailed, now() - started),
+            releaseError,
+          );
+        } catch (error) {
+          reportedFailure = reportedFailure === undefined
+            ? error
+            : new AggregateError([reportedFailure, error], "Bulk execution and lease release failed.", { cause: reportedFailure });
+        }
+      }
+      if (hasReportedFailure) {
+        throw reportedFailure;
+      }
+      let result: BulkExecutionResult;
+      try {
+        result = assertBulkExecutionResult(physicalResult, inputs.length);
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, error, "result-kind", true, true, now() - started), error);
+      }
+      try {
+        await notify(options.observers ?? [], {
+          type: "bulk:result",
+          operationId,
+          itemCount: result!.inputCount,
+          affectedRows: result!.affectedRows,
+          executionMode: result!.executionMode,
+          durationMs: now() - started,
+          transactionDepth: bulkMeta.transactionDepth,
+          transactionScoped: bulkMeta.transactionScoped,
+        });
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, error, "observer-after", true, true, now() - started), error);
+      }
+      return Object.freeze({
+        inputCount: result!.inputCount,
+        ...(result!.affectedRows === undefined ? {} : { affectedRows: result!.affectedRows }),
+      });
+    },
     async batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }> {
       assertOpen();
       for (const query of queries) assertExecutableQuery(query);
@@ -1535,7 +1849,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           physicalState.activeScope = scope;
         }
         const resource = use.executor;
-        if (!nested && (!resource.begin || !resource.commit || !resource.rollback)) throw new Error("Executor does not support transactions.");
+        if (!nested && (!resource.begin || !resource.commit || !resource.rollback)) throw codedError("BRAID_TX_UNSUPPORTED", "Executor does not support callback transactions.");
         scoped = createScopedDatabase(resource, physicalState, {
           ...options, transaction: true, lease: resource as ConnectionLease, leaseState: physicalState, transactionId, depth, scope,
         });

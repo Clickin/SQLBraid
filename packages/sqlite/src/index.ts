@@ -10,4 +10,6 @@ export const dialect: Dialect = {
 export const sql: SqlTag = createSqlTag({ dialect });
 export { typePolicy, typePolicyForIntegerMode } from "./type-policy.js";
 export type { SqliteDatabaseOptions, SqliteExecutorOptions, SqliteIntegerMode } from "./node-sqlite.js";
+export type { SqliteWasmDatabaseLike, SqliteWasmDatabaseOptions, SqliteWasmExecutorOptions, SqliteWasmStatementLike } from "./wasm.js";
+export type { D1DatabaseLike, D1DatabaseOptions, D1ExecutorOptions, D1PreparedStatementLike, D1ResultLike } from "./d1.js";
 export { createSqlTag } from "@sqlbraid/template";

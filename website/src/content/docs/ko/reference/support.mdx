@@ -1,41 +1,80 @@
 ---
 title: 런타임 및 드라이버 지원
-description: 구현된 capability 경로와 대기 중인 PV15 릴리스 증거를 분리합니다.
+description: 구현된 capability 경로와 대기 중인 PV16 릴리스 증거를 분리합니다.
 ---
 
-PV15 최종 검증은 대기 중입니다. 이 페이지는 현재 SHA, CI, 배포 또는
-Official 지원 주장을 의도적으로 하지 않습니다. 패키지 이름이나 로컬
-fixture는 릴리스 증거가 아닙니다.
+PV16 정확한 최종 revision 검증은 대기 중입니다. 이 페이지는 현재 SHA, CI,
+배포 또는 Official 지원 주장을 의도적으로 하지 않습니다. 패키지 이름,
+로컬 fixture 또는 계획된 workflow는 릴리스 증거가 아닙니다.
 
 ## 증거 label
 
-- **Pending** — 구현 경로는 있지만 PV15 최종 릴리스 게이트 증거가 아직 제공되지 않았습니다.
-- **Historical** — 정확한 revision 또는 과거 workflow가 조합을 실행했지만 현재 PV15 tree를 증명하지 않습니다.
+- **Pending** — 구현 경로는 있지만 PV16 최종 릴리스 게이트 증거가 아직 제공되지 않았습니다.
+- **Historical** — 정확한 revision 또는 과거 workflow가 조합을 실행했지만 현재 PV16 tree를 증명하지 않습니다.
 - **Compatible expectation** — public API와 어댑터 계약에 기반한 기대이며 릴리스 게이트 주장이 아닙니다.
 - **Custom** — 사용자가 제공한 `QueryExecutor` 또는 `ConnectionProvider`입니다.
 - **Unsupported** — 필요한 SQLBraid capability가 의도적으로 없습니다.
 
-## 현재 PV15 매트릭스 (최종 증거 대기)
+## PV16 매트릭스 (최종 증거 대기)
 
 | 런타임 또는 어댑터 경로 | 상태 | 경계 |
 | --- | --- | --- |
 | Node `>=22.18.0` + core/template/runtime | Pending | 런타임 패키지 대상 |
 | Node 24 + Vite 8 애플리케이션 통합 | Pending | `@sqlbraid/vite` pre-transform; 서버 런타임은 별도 |
-| PostgreSQL / `pg` | Pending | 일반 실행; 스트리밍에는 `pg-cursor` optional peer |
-| MySQL / `mysql2` | Pending | 일반 실행 및 raw prepared `Execute.stream()` |
+| Browser + SQLite WASM | Pending | 하나의 direct OO1-style DB; browser gate 대기 |
+| Worker + Cloudflare D1 | Pending | local binding gate만 해당; remote production 주장 없음 |
+| PostgreSQL 16.4 / `pg` | Pending | minimum-role capability 및 일반 실행 |
+| PostgreSQL 18.6 / `pg` | Pending | current-role capability job; minimum을 올리지 않음 |
+| MySQL 8.4 / `mysql2` | Pending | 일반 실행; 일반 DML `RETURNING` 없음 |
+| MariaDB 11.8 / Connector/Node.js | Pending | 별도 dialect 및 공식 connector 증거 |
+| MariaDB / `mysql2` | Compatible expectation | best-effort 호환; MariaDB-specific Official label 없음 |
 | SQLite / `node:sqlite` | Pending | Node statement API; `integerMode`는 명시적 |
+| SQLite / `sqlite-wasm` | Pending | 하나의 direct browser resource |
+| SQLite / Cloudflare D1 | Pending | materialized 및 remote batch; stream/tx unsupported |
 | Oracle Thin / `node-oracledb` | Pending | scalar/cursor/implicit 루틴 리소스는 lease 반환 전에 닫아야 함 |
 | SQL Server / Tedious | Pending | Request event, OUTPUT 값, RETURN용 명시적 procedure metadata |
 | 기타 드라이버 또는 데이터베이스 | Custom | 독립적인 어댑터 증거 필요 |
 
-첫 번째 파티 5개 행 스트리밍 primitive는 dialect flag가 아닌 서로 다른
+## Capability 증거 매트릭스
+
+Dialect, driver, runtime, server version은 별도 증거 축입니다. 계획 taxonomy는
+[`docs/pv16-capability-evidence.json`](https://github.com/Clickin/SQLBraid/blob/main/docs/pv16-capability-evidence.json)에
+기록하며 runtime은 이 파일을 읽지 않습니다. 이름이 지정된 exact-SHA 테스트가
+실행될 때까지 모든 항목은 Pending입니다.
+
+| Dialect / driver | Native DML-returning | Bulk mode | Stream 경계 |
+| --- | --- | --- | --- |
+| PostgreSQL / `pg` | `RETURNING` | `prepared-loop` | optional `pg-cursor` |
+| MySQL / `mysql2` | 일반 DML `RETURNING` 없음 | `prepared-loop` | prepared stream; drain 또는 discard |
+| MariaDB / Connector | 문서화된 `INSERT`, `DELETE`, `REPLACE ... RETURNING` | `connection.batch()`의 `native-bulk` | connector stream; 정확한 form은 별도 테스트 |
+| SQLite / `node:sqlite` | `RETURNING` | `prepared-loop` | `StatementSync.iterate()` |
+| SQLite / `sqlite-wasm` | `RETURNING` | statement reset을 통한 `prepared-loop` | 하나의 direct browser resource |
+| SQLite / Cloudflare D1 | binding이 row를 노출하는 `RETURNING` | 한 번의 `batch()`인 `remote-batch` | incremental cursor 없음: `BRAID_STREAM_UNSUPPORTED` |
+| Oracle Thin | `RETURNING ... INTO` + `sql.out()` | `executeMany()`의 `native-bulk` | `ResultSet`을 lease 반환 전에 close |
+| SQL Server / Tedious | `OUTPUT` | `prepared-loop` | bounded Request event; 완료 후 release |
+
+PV16의 DML-returning은 `sql.rows`와 materialized `db.execute`, `db.all`,
+`db.one`, `db.maybeOne`만 지원 범위로 문서화합니다. SQLite RETURNING은
+출력을 먼저 축적하고 SQL Server OUTPUT은 이후 실패 전에 행을 보낼 수 있으므로
+`db.stream()`을 cross-driver 약속으로 만들지 않습니다.
+
+`db.bulk(inputs, factory)`는 command-only, 하나의 shape × N values, 하나의
+physical lease, 하나의 observer 작업입니다. 빈 입력은 acquire하지 않습니다.
+Root bulk에는 portable transaction/auto-chunking 약속이 없고 driver는
+`native-bulk`, `pipeline`, `prepared-loop`, `remote-batch` 중 실제 모드를
+보고합니다.
+
+첫 번째 파티 행 스트리밍 primitive는 dialect flag가 아닌 서로 다른
 드라이버 capability입니다.
 
 | 어댑터 | `db.stream()` primitive | 중요 경계 |
 | --- | --- | --- |
 | PostgreSQL / `pg` | `pg-cursor` | Optional peer이며 capability가 없으면 `BRAID_STREAM_UNSUPPORTED`입니다. |
 | MySQL / `mysql2` | raw prepared `Execute.stream()` | prepared/binary 실행을 유지하고 lease 반환 전에 drain 또는 discard합니다. |
+| MariaDB / Connector/Node.js | connector stream | `mysql2`에서 상속되지 않는 MariaDB driver capability입니다. |
 | SQLite / `node:sqlite` | `StatementSync.iterate()` | native iterator 종료가 정리 경계입니다. |
+| SQLite / `sqlite-wasm` | OO1 step/pull | 하나의 direct browser resource이며 충돌하는 root 작업은 거부합니다. |
+| SQLite / Cloudflare D1 | 없음 | `BRAID_STREAM_UNSUPPORTED`; streaming을 흉내 내기 위해 paginate하지 않습니다. |
 | Oracle Thin | `ResultSet` | 모든 ResultSet을 닫고 close 실패 시 lease를 폐기합니다. |
 | SQL Server / Tedious | Request row event + bounded queue | lease 반환 전에 request가 완료되어야 합니다. |
 
@@ -53,8 +92,8 @@ Server `CURSOR VARYING OUTPUT`은 애플리케이션 cursor 채널이 아닙니�
 - PV13 런타임 증거: revision [`d4bc626`](https://github.com/Clickin/SQLBraid/commit/d4bc626) 및 역사적 workflow [`34753809318`](https://github.com/Clickin/SQLBraid/actions/runs/34753809318)
 - PV11 증거: revision [`1615311`](https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7) 및 역사적 workflow [`34745030794`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794)
 
-이 정확한 revision은 PV15 이전이며 현재 source, 현재 드라이버, 현재 Vite
-통합 또는 RC 배포를 주장하지 않습니다. PV15 검증 후 Main이 Pending 항목을
-최종 증거로 교체해야 합니다.
+이 정확한 revision은 PV16 이전이며 현재 source, 현재 드라이버, 현재
+Vite/browser/cloud 통합 또는 RC 배포를 주장하지 않습니다. PV16 검증 후
+Main이 Pending 항목을 최종 증거로 교체해야 합니다.
 
 사용자 지정 어댑터는 [드라이버 작성자 바인딩 가이드](/SQLBraid/dev/agents/driver-author/)를 참고하세요.

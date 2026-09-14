@@ -12,3 +12,4 @@ allowBuilds:
   oracledb: false
   protobufjs: true
   ssh2: true
+  workerd: true

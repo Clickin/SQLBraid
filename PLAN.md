@@ -237,6 +237,9 @@ per channel. Materialized driver resources close and root leases release before
 asynchronous application mapping. OUT cursor sets precede implicit/emitted sets;
 scalar outputs remain separate. `sql.out()` and `sql.inOut()` are logical
 parameters, never structural SQL. Unsupported driver channels fail explicitly.
+`sql.out()` also supports Oracle materialized `sql.rows` DML `RETURNING ... INTO`;
+`sql.inOut()` remains call-only. PostgreSQL/SQLite `RETURNING` and SQL Server
+`OUTPUT` use native row results, without SQL rewriting or affected-count inference.
 
 ---
 
@@ -499,7 +502,8 @@ instead of accidental `toString()` execution.
 First-party pre-release dialects:
 
 - PostgreSQL;
-- MySQL/MariaDB-compatible MySQL surface where supported by mysql2 tests;
+- MySQL;
+- MariaDB, independently tested with its official connector;
 - SQLite;
 - Oracle;
 - SQL Server.
@@ -513,14 +517,16 @@ Current primary adapters:
 ```text
 PostgreSQL -> pg
 MySQL      -> mysql2
+MariaDB    -> mariadb
 SQLite     -> node:sqlite
+SQLite     -> @sqlite.org/sqlite-wasm OO1 / Cloudflare D1
 Oracle     -> node-oracledb Thin
 SQL Server -> Tedious
 ```
 
 Future adapters may be added only when they provide real value. `QueryExecutor`/provider SPIs remain the escape hatch for other drivers.
 
-The five first-party transports are adapter-owned: pg materializes
+First-party transports are adapter-owned: pg materializes
 `text-positional` `$1..$N` with fresh unnamed simple execution; mysql2
 materializes `text-positional` `?` and uses driver-owned reuse for every
 request; node:sqlite prepares documented `?` text with fresh simple execution;
@@ -530,6 +536,9 @@ creating a fresh request with simple execution. These are physical transport
 details, not logical shape identity. The same adapter object may receive
 multiple dialect contexts. Requested reuse is policy input; never infer the
 effective result from the request alone.
+MariaDB uses its connector's text execution and native batch API. SQLite WASM
+uses OO1 prepared statements; D1 uses materialized results and remote batch.
+Neither adapter introduces a native driver dependency into a dialect root.
 
 ### 8.3 Runtime support policy
 
@@ -550,10 +559,12 @@ Official for the passing combinations above. Node 24.21.0 remains Compatible
 with local evidence only. Node keeps `>=22.18.0`; Bun/Deno promises cover exact
 tested versions only.
 
-Reviewed compatibility imports are `node:buffer` for allocation-free UTF-8 byte
-counting and `node:async_hooks` for transaction context. SQLBraid-owned public
-runtime declarations compile without Node ambient types. Tooling (`compiler`,
-CLI, metadata/codegen, LSP) remains Node-first.
+Template UTF-8 byte counting is allocation-free and browser-safe. Runtime
+transaction context uses an internal conditional-import boundary: Node and
+workerd select `node:async_hooks`, while browsers use conservative direct-resource
+ownership. Browser concurrency is not advertised as AsyncLocalStorage-equivalent.
+SQLBraid-owned public runtime declarations compile without Node ambient types.
+Tooling (`compiler`, CLI, metadata/codegen, LSP) remains Node-first.
 
 ### 8.4 Reserved transaction-profile architecture
 
@@ -904,7 +915,23 @@ Non-negotiable:
 - prepared factory/shape errors are observable before execution, with dialect,
   parameter direction/output identity and hint structure in logical shape.
 
-The workspace has 17 publishable packages. Exact-final-SHA Runtime, Docs and
+### PV16 — Native capabilities, bulk, browser and D1 — exact-SHA evidence pending
+
+- native materialized DML returning, including Oracle OUT ordinal normalization;
+- separate `@sqlbraid/mariadb` dialect and official-connector adapter;
+- homogeneous command-only `db.bulk()` with complete pre-acquire shape/bind
+  validation, one operation lifecycle and truthful native/prepared-loop modes;
+- browser-safe template/runtime, SQLite WASM OO1 adapter and real worker preview;
+- D1 materialized queries and native batch; callback transactions and streaming
+  remain explicitly Unsupported;
+- named native SQL capability gates and structural bulk benchmarks.
+
+Local gates pass on the working tree, including Oracle Free 23.9. Oracle 19c
+remains unverified: its enterprise image requires unavailable registry access.
+Neither local results nor the existing base commit certify the uncommitted
+changes as a final CI revision.
+
+The workspace has 18 publishable packages. Exact-final-SHA Runtime, Docs and
 Release dry-run evidence plus user acceptance remain required. No tag,
 publication or dist-tag mutation is authorized by implementation progress.
 
@@ -914,7 +941,7 @@ publication or dist-tag mutation is authorized by implementation progress.
 - optional DB verifier tooling;
 - Bun.SQL/postgres.js/bun:sqlite adapters where justified;
 - cancellation;
-- bulk/pipeline/COPY/LOAD DATA;
+- pipeline/COPY/LOAD DATA;
 - query transformer/rewrite SPI if demanded;
 - routing/retry policy;
 - OpenTelemetry integration implemented on the observer SPI;

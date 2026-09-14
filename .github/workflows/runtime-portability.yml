@@ -21,12 +21,16 @@ jobs:
         with:
           version: 12.3.4
       - run: pnpm install --frozen-lockfile
+      - name: Install browser conformance runtime
+        run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run typecheck
       - run: pnpm run build
       - run: pnpm test
       - run: pnpm run test:db:sqlite
       - run: pnpm run test:db:postgres
       - run: pnpm run test:db:mysql
+      - name: Real MariaDB capability gate
+        run: pnpm run test:db:mariadb
       - run: pnpm run test:db:oracle
       - run: pnpm run test:db:mssql
       - run: pnpm run test:consumer

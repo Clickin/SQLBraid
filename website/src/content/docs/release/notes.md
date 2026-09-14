@@ -1,11 +1,11 @@
 ---
-title: PV15 release notes
-description: The pre-release surface for streaming, routine channels, and Vite integration.
+title: PV16 release notes
+description: The pre-release surface for DML returning, bulk, MariaDB, Browser WASM, and D1.
 ---
 
-PV15 documentation describes the pre-release SQLBraid surface. Final verification
-is pending; these notes make no final SHA, CI, publication, or Official support
-claim.
+PV16 documentation describes the pre-release SQLBraid surface. Exact-final-SHA
+verification is pending; these notes make no final SHA, CI, publication, or
+Official support claim.
 
 ## Included contract
 
@@ -16,13 +16,17 @@ claim.
 - routine channels for scalar `output`, ordered `resultSets`, and optional `returnValue`, with `sql.out`/`sql.inOut` direction helpers;
 - PostgreSQL transaction-bound refcursor handling, Oracle explicit/implicit cursor results, SQL Server explicit procedure metadata for native RETURN status, and intentional SQLite routine rejection;
 - MySQL raw prepared `Execute.stream()` support and explicit rejection of OUT/INOUT where mysql2 does not expose a proven carrier discriminator;
+- materialized DML-returning contracts using native PostgreSQL/SQLite/MariaDB `RETURNING`, SQL Server `OUTPUT`, and Oracle `RETURNING ... INTO` plus `sql.out()`, without rewriting SQL across dialects;
+- command-only `db.bulk(inputs, factory)` with pre-I/O shape validation, one physical lease, explicit `native-bulk`/`pipeline`/`prepared-loop`/`remote-batch` modes, and no implicit transaction or auto-chunking promise;
+- separate `@sqlbraid/mariadb` dialect and MariaDB Connector/Node.js adapter path; `mysql2` connections to MariaDB remain best-effort compatibility;
+- direct Browser SQLite WASM and Cloudflare D1 SQLite adapter paths, with D1 materialized execution and native remote batch;
 - execution observers with `durationMs`, non-sensitive call result structure, and lazy diagnostic literalization;
 - `@sqlbraid/vite` Vite 8 pre-transform that preserves TSX and source-map composition while leaving TypeScript and framework transforms to Vite;
 - optional metadata, inspectors, deterministic code generation, CLI JSON inspection, standard stdio LSP, and thin VS Code integration.
 
 ## Verification status
 
-Main owns PV15 final verification. Until that evidence is supplied, treat the
+Main owns PV16 final verification. Until that evidence is supplied, treat the
 support matrix as Pending and historical exact-SHA links as provenance only.
 Do not infer publication or release-gate completion from this site or from a
 package README.
