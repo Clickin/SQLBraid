@@ -40,15 +40,10 @@ runtime can actually receive.
 This is the 0.1.0 pre-release documentation. The current tree includes
 session/lease ownership, fixed transaction options, prepared input factories,
 capability-driven cancellation, and explicit unsupported errors. Targets
-affected by this API work remain Pending or Compatible until fresh exact-SHA
-Runtime, Docs, and Release gates pass.
-
-The last exact-SHA verification retained for provenance is revision
-`8da8167e027320fcc9bb2aac16b0903c64147940`: Runtime
-[34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046),
-Docs [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
-and Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)
-all succeeded for that revision. These historical links do not certify the
-current tree or authorize publication. See [release notes and limitations](/SQLBraid/release/notes/)
-and the [runtime/driver evidence matrix](/SQLBraid/reference/support/) before
-choosing an integration.
+are documented by the [runtime and driver support matrix](/SQLBraid/reference/support/),
+which records support labels for exact database/driver/profile/runtime/capability
+tuples and their revision and workflow evidence. A neighboring version or
+package installation is not certification. Final exact-SHA Runtime, Docs, and
+Release gates and explicit release authorization remain separate requirements.
+See [release notes and limitations](/SQLBraid/release/notes/) before choosing an
+integration.

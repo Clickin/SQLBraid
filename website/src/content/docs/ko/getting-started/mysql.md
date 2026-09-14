@@ -101,9 +101,12 @@ function은 result set을 내보낼 수 없습니다.
 `representationProfiles`를 내보냅니다. 기본 `mysql2-lossless-text`
 descriptor는 아래 fidelity-first option을 사용하고 `mysql2-native`는 native
 JSON/temporal 결과를 위한 별도 편의 프로필입니다. Runtime과 codegen은 같은
-descriptor를 선택해야 합니다. 현재 phase-J tree는 새로운 exact-SHA Runtime,
-Docs, Release gate를 기다리며 support matrix는 revision별 증거를 기록합니다.
-Package 설치만으로 이 프로필을 인증하지 않습니다.
+descriptor를 선택해야 합니다. 이 프로필의 지원 label과 증거는 [런타임/드라이버
+지원 매트릭스](/SQLBraid/reference/support/)가 기록한 정확한 database,
+driver, profile, runtime, capability tuple과 revision별 실행 workflow에만
+적용됩니다. Package 설치나 인접한 버전·runtime은 이 프로필을 인증하지
+않습니다. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인 release
+승인은 별도 요구사항입니다.
 
 | mysql2 옵션 | `mysql2-lossless-text` | 효과 |
 | --- | --- | --- |

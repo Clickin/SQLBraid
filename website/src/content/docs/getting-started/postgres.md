@@ -131,9 +131,12 @@ containers even when their scalar element types are exact.
 
 `db.environment()` records `extra_float_digits`, the selected JSON/temporal
 profile and TypePolicy provenance where available. It must not be read as an
-unconditional fidelity guarantee. The current phase-J tree is pending fresh
-exact-SHA Runtime, Docs, and Release gates; the support matrix remains the
-revision-specific evidence source.
+unconditional fidelity guarantee. The [runtime and driver support
+matrix](/SQLBraid/reference/support/) records labels for the exact
+database/driver/profile/runtime/capability tuple and its revision and workflow
+evidence. A neighboring version or package installation is not certification.
+Final exact-SHA Runtime, Docs, and Release gates and explicit release
+authorization remain separate requirements.
 `pg-cursor` supplies the native pull stream; a missing peer is
 `BRAID_STREAM_UNSUPPORTED`. Routine refcursors require an existing transaction
 and are materialized into result sets. Bulk uses the adapter's proven native

@@ -7,21 +7,11 @@ import SupportMatrix from "../../../components/SupportMatrix.astro";
 
 ## Current status
 
-The current support matrix is revision-specific. Targets changed by the phase-J
-SPI work are **Pending** or **Compatible** until fresh executable Runtime,
-Documentation, and Release gates pass on one exact final SHA. Do not infer a
-new Official label from a neighboring server version, runtime, profile, local
-binding, or historical workflow.
-
-The last exact-SHA verification retained for provenance was revision
-`8da8167e027320fcc9bb2aac16b0903c64147940`:
-
-- [Runtime portability 34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)
-- [Documentation site 34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)
-- [Release dry-run 34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)
-
-All three runs succeeded for that revision. They are historical evidence only;
-they do not certify the current tree, and they do not authorize publication.
+This matrix is the canonical evidence authority. Support labels are scoped to
+the exact database/driver/profile/runtime/capability tuple recorded here,
+including its revision and workflow evidence. A neighboring version or package
+installation is not certification. Final exact-SHA Runtime, Docs, and Release
+gates and explicit release authorization remain separate requirements.
 
 ## Evidence labels
 

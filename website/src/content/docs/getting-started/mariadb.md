@@ -44,9 +44,12 @@ not implicitly transactional and has no portable auto-chunking promise. Use
 
 A `mysql2` connection may work against MariaDB as best-effort compatibility, but
 it is not MariaDB protocol evidence. The documented candidate profile is MariaDB
-11.8.9 / Connector 3.5.4 / Node 22.18.0. The current phase-J tree is pending
-fresh exact-SHA Runtime, Docs, and Release gates; package installation and
-historical workflow success do not certify this profile.
+11.8.9 / Connector 3.5.4 / Node 22.18.0. The [runtime and driver support
+matrix](/SQLBraid/reference/support/) records labels for the exact
+database/driver/profile/runtime/capability tuple and its revision and workflow
+evidence. A neighboring version or package installation is not certification.
+Final exact-SHA Runtime, Docs, and Release gates and explicit release
+authorization remain separate requirements.
 
 ## Connector/Node.js representation profile
 

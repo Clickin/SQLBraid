@@ -12,13 +12,11 @@ observer, metadata, 결정적 codegen, 표준 LSP, CLI JSON 검사, 얇은 VS Co
 client, native DML-returning contract, 동종 command bulk, MariaDB, Browser
 SQLite WASM, D1, representation-profile contract가 포함됩니다.
 
-provenance로 보존하는 마지막 exact-SHA 검증은 revision
-`8da8167e027320fcc9bb2aac16b0903c64147940`이며 Runtime
-([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
-Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
-Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326))가
-성공했습니다. 현재 tree는 더 최신이므로 새로운 exact-SHA gate를 기다리는
-pending 상태입니다. 이 link는 현재 지원이나 발행을 의미하지 않습니다.
+지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가
+기록한 정확한 database, driver, profile, runtime, capability tuple과 revision별
+실행 workflow에만 적용됩니다. 인접한 버전·runtime·profile·로컬 binding 또는
+package 설치로 인증을 추론하지 마세요. 최종 exact-SHA Runtime, Docs, Release
+gate와 명시적인 release 승인은 별도 요구사항입니다.
 
 Profile descriptor는 driver option, raw/canonical representation, TypePolicy
 provenance를 묶으며 runtime과 codegen은 동일 descriptor를 재사용해야 합니다.

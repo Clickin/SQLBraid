@@ -3,7 +3,7 @@ title: 현재 제한 사항
 description: 프리릴리스 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
 ---
 
-- **인증은 profile과 revision별입니다.** [지원 매트릭스](/SQLBraid/reference/support/)가 증거 출처입니다. 현재 phase-J tree는 새로운 exact-SHA Runtime, Docs, Release gate를 기다리는 pending이며 과거 link는 이를 인증하지 않습니다. CI 통과는 발행 승인이 아닙니다.
+- **인증은 정확한 tuple과 revision별입니다.** [지원 매트릭스](/SQLBraid/reference/support/)가 기록한 정확한 database, driver, profile, runtime, capability tuple과 revision별 실행 workflow에만 지원 label과 증거가 적용됩니다. 인접한 버전·runtime·profile·로컬 binding 또는 package 설치로 인증을 추론하지 마세요. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인 release 승인은 별도 요구사항이며, CI 통과도 발행 승인이 아닙니다.
 - **`db.all()`은 materialized입니다.** readonly array와 O(row-count) application memory를 사용합니다. 메모리가 중요하면 `db.stream()`을 사용하세요.
 - **Routine streaming은 없습니다.** materialized `db.call()`은 매핑 전에 routine resource를 소비하고 닫으며 raw cursor, portal, request, carrier row는 노출되지 않습니다.
 - **MySQL prepared CALL OUT/INOUT은 지원하지 않습니다.** mysql2 3.x public API가 어떤 추가 결과가 OUT carrier인지 증명하지 못하므로 추측하지 않습니다.

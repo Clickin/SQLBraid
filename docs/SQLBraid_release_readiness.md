@@ -5,15 +5,11 @@ repository. It contains no credentials or registry tokens.
 
 ## Current evidence boundary
 
-The last exact-SHA PV18 verification used
-`8da8167e027320fcc9bb2aac16b0903c64147940`; Runtime
-([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
-Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
-and Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326))
-all succeeded. Those runs are historical evidence for that exact revision. The
-current phase-J tree changes runtime/API and documentation contracts, so it has
-no fresh certification and must not inherit support labels, tuple claims, or
-publication readiness from those runs.
+[Versioned support records](../support/targets/) identify the certified
+implementation revision and immutable workflow evidence for each exact tuple.
+A changed checkout does not inherit that revision's certification. Runtime,
+Documentation, and Release must also pass on the exact final delivery revision,
+including evidence-only changes; implementation progress alone is not proof.
 
 The support manifest and executable CI are the only support evidence sources.
 An Official label requires an exact database, driver, profile, runtime, and

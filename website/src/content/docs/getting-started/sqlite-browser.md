@@ -68,11 +68,14 @@ The native D1 batch may have stronger transaction behavior than root bulk, but
 that is not the portable SQLBraid contract. Root bulk is not implicitly
 transactional and has no portable auto-chunking promise.
 
-Historical SQLite evidence is retained in the release records. The current
-phase-J tree is pending fresh exact-SHA Runtime, Docs, and Release gates. Local
-D1 remains Compatible because its managed SQLite version is unreported. No
-browser gate claims OPFS persistence, SharedArrayBuffer, remote production
-support, or npm publication.
+The [runtime and driver support matrix](/SQLBraid/reference/support/) records
+labels for the exact database/driver/profile/runtime/capability tuple and its
+revision and workflow evidence. A neighboring version or package installation
+is not certification. Final exact-SHA Runtime, Docs, and Release gates and
+explicit release authorization remain separate requirements. D1 remains
+Compatible; its managed SQLite version is unreported. No browser gate claims
+OPFS persistence, SharedArrayBuffer, remote production support, or npm
+publication.
 
 ## Browser and Worker representation profiles
 

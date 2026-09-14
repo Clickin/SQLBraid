@@ -6,9 +6,12 @@ description: Run your first SQLBraid query with Node's built-in SQLite driver.
 This path uses Node `>=22.18.0` and `node:sqlite`; no database server is required. The first query is a plain tagged template and needs no SQLBraid compiler. The second adds dynamic `@braid` and uses the shipped lowering command.
 
 :::note Verification status
-The current phase-J tree is pending fresh exact-SHA Runtime, Docs, and Release
-gates. Historical SQLite evidence is retained for provenance only and does not
-certify this checkout or authorize npm publication.
+The [runtime and driver support matrix](/SQLBraid/reference/support/) records
+labels for the exact database/driver/profile/runtime/capability tuple and its
+revision and workflow evidence. A neighboring version or package installation
+is not certification. Final exact-SHA Runtime, Docs, and Release gates and
+explicit release authorization remain separate requirements; this page does not
+authorize npm publication.
 :::
 
 

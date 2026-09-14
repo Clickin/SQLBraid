@@ -102,10 +102,12 @@ This is an explicit configuration profile, not an implicit assumption.
 immutable `representationProfiles`. The default `mysql2-lossless-text`
 descriptor uses the fidelity-first options below; `mysql2-native` is a
 separate convenience profile with native JSON/temporal results. Runtime and
-codegen must select the same descriptor. The current phase-J tree is pending
-fresh exact-SHA Runtime, Docs, and Release gates; the support matrix records
-revision-specific evidence and package installation does not certify this
-profile.
+codegen must select the same descriptor. The [runtime and driver support
+matrix](/SQLBraid/reference/support/) records labels for the exact
+database/driver/profile/runtime/capability tuple and its revision and workflow
+evidence. A neighboring version or package installation is not certification.
+Final exact-SHA Runtime, Docs, and Release gates and explicit release
+authorization remain separate requirements.
 
 | mysql2 option | `mysql2-lossless-text` | Effect |
 | --- | --- | --- |

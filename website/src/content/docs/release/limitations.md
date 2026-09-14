@@ -3,7 +3,7 @@ title: Current limitations
 description: Know what the pre-release contract deliberately does not promise.
 ---
 
-- **Certification is profile- and revision-specific.** The [support matrix](/SQLBraid/reference/support/) is the evidence source. The current phase-J tree is pending fresh exact-SHA Runtime, Docs, and Release gates; historical links do not certify it. Passing CI does not authorize publication.
+- **Certification is tuple-, revision-, and evidence-specific.** The [runtime and driver support matrix](/SQLBraid/reference/support/) is the canonical evidence source and records the exact database/driver/profile/runtime/capability tuple with its revision and workflow evidence. A neighboring version or package installation is not certification. Final exact-SHA Runtime, Docs, and Release gates and explicit release authorization remain separate requirements. Passing CI does not authorize publication.
 - **`db.all()` is materialized.** It returns a readonly array and uses O(row-count) application memory. Use `db.stream()` when bounded application memory matters.
 - **Routine streaming is not included.** Materialized `db.call()` consumes and closes routine resources before mapping; raw cursors, portals, requests, and carrier rows never escape.
 - **MySQL prepared CALL OUT/INOUT is unsupported.** The mysql2 3.x public API does not prove which extra result is the OUT carrier, so SQLBraid does not guess.

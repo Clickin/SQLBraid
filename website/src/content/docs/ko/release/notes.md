@@ -6,14 +6,11 @@ description: 프리릴리스 SQLBraid 표면과 증거 경계를 설명합니다
 이 문서는 프리릴리스 문서이며 npm, GitHub, VS Code Marketplace 또는 Pages
 발행을 승인하지 않습니다.
 
-provenance로 보존하는 마지막 exact-SHA 검증은 revision
-`8da8167e027320fcc9bb2aac16b0903c64147940`이며 Runtime
-([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
-Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
-Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326))
-run이 성공했습니다. 현재 phase-J tree는 더 최신이므로 영향을 받은 support
-target은 새로운 exact-SHA gate가 통과할 때까지 Pending 또는 Compatible입니다.
-역사 workflow 성공은 현재 tree 인증이 아닙니다.
+지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가
+기록한 정확한 database, driver, profile, runtime, capability tuple과 revision별
+실행 workflow에만 적용됩니다. 인접한 버전·runtime·profile·로컬 binding 또는
+package 설치로 인증을 추론하지 마세요. 최종 exact-SHA Runtime, Docs, Release
+gate와 명시적인 release 승인은 별도 요구사항입니다.
 
 ## 포함된 contract
 

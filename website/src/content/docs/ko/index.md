@@ -40,15 +40,11 @@ temporal, binary 값이 기록되어 있습니다.
 이 문서는 0.1.0 프리릴리스 문서입니다. 현재 tree에는 session/lease 소유권,
 고정 transaction option, prepared input factory, capability 기반
 cancellation, 명시적인 unsupported 오류가 포함됩니다. 이 API 변경의 영향을
-받은 target은 새로운 exact-SHA Runtime, Docs, Release gate가 통과할 때까지
-Pending 또는 Compatible입니다.
-
-provenance로 보존하는 마지막 exact-SHA 검증은 revision
-`8da8167e027320fcc9bb2aac16b0903c64147940`이며 Runtime
-[34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046),
-Docs [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
-Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)가
-해당 revision에서 모두 성공했습니다. 이 역사 link는 현재 tree를 인증하거나
-발행을 승인하지 않습니다. 통합을 선택하기 전에
+받은 target의 지원 label과 증거는 [런타임/드라이버 증거
+매트릭스](/SQLBraid/reference/support/)가 기록한 정확한 database, driver,
+profile, runtime, capability tuple과 revision별 실행 workflow에만 적용됩니다.
+인접한 버전·runtime·profile·로컬 binding 또는 package 설치로 인증을
+추론하지 마세요. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인
+release 승인은 별도 요구사항입니다. 통합을 선택하기 전에
 [릴리스 노트와 제한 사항](/SQLBraid/release/notes/) 및
 [런타임/드라이버 증거 매트릭스](/SQLBraid/reference/support/)를 확인하세요.

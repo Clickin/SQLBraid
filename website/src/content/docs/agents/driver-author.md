@@ -5,12 +5,12 @@ description: Implement a custom SQLBraid adapter without crossing the value-only
 
 This guide covers custom `QueryExecutor`, `ConnectionProvider`, and binding
 adapters. It describes the current API contract; it does not grant a support
-label or publication evidence. The last exact-SHA verification retained for
-provenance was `8da8167e027320fcc9bb2aac16b0903c64147940` with successful
-Runtime [34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046),
-Docs [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
-and Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326).
-The current tree requires fresh exact-SHA gates.
+label or publication evidence. Consult the [runtime and driver support
+matrix](/SQLBraid/reference/support/) for labels scoped to the exact
+database/driver/profile/runtime/capability tuple and its revision and workflow
+evidence. A neighboring version or package installation is not certification.
+Final exact-SHA Runtime, Docs, and Release gates and explicit release
+authorization remain separate requirements.
 
 ## Logical statement invariant
 

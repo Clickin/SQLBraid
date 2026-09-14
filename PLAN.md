@@ -237,15 +237,13 @@ Schema mapping, logical binding transport, observer diagnostics, streaming,
 routines, bulk, representation profiles, metadata/codegen, LSP, Vite, MariaDB,
 Oracle/SQL Server roots, Browser WASM, and D1.
 
-The last exact-SHA PV18 verification used revision
-`8da8167e027320fcc9bb2aac16b0903c64147940` and succeeded in Runtime
-([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
-Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
-and Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)).
-Those runs are historical evidence for that exact revision. The current phase-J
-API/documentation tree requires new exact-final evidence before any support label
-or release claim is updated. No tag, npm publication, Pages deployment, or
-release authorization follows from those past runs.
+The frozen RC SPI adds session scopes, general prepared queries, standard
+transaction options, cancellation, and first-party Bun.SQL/Deno execution.
+[Versioned support records](support/targets/) are authoritative for exact
+tuple/revision/workflow certification, not this plan's implementation history.
+Every changed final revision requires fresh Runtime, Documentation, and Release
+gates. No tag, npm publication, Pages deployment, or release authorization
+follows from implementation progress or an earlier revision's results.
 
 ## 9. Release definition
 

@@ -7,21 +7,13 @@ import SupportMatrix from "../../../../components/SupportMatrix.astro";
 
 ## 현재 상태
 
-현재 지원 매트릭스는 revision별입니다. phase-J SPI 변경의 영향을 받은
-target은 하나의 정확한 최종 SHA에서 새로운 Runtime, Documentation, Release
-실행 gate가 통과할 때까지 **Pending** 또는 **Compatible**입니다. 인접한
-서버 버전, 런타임, 프로필, 로컬 binding 또는 과거 workflow에서 새 Official
-label을 추론하지 마세요.
-
-provenance로 보존하는 마지막 exact-SHA 검증은 revision
-`8da8167e027320fcc9bb2aac16b0903c64147940`입니다.
-
-- [Runtime portability 34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)
-- [Documentation site 34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)
-- [Release dry-run 34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)
-
-세 run은 해당 revision에서 성공했습니다. 이는 역사적 증거일 뿐 현재
-tree를 인증하지 않으며 발행을 승인하지 않습니다.
+현재 지원 매트릭스는 지원 manifest에서 읽은 revision별 증거와 label을
+표시합니다. 각 label과 증거는 매트릭스가 기록한 정확한 database, driver,
+profile, runtime, capability tuple과 해당 revision의 실행 workflow에만
+적용됩니다. 인접한 서버 버전·runtime·profile·로컬 binding 또는 package
+설치로 인증을 추론하지 마세요. 정확한 tuple의 revision별 workflow evidence를
+확인해야 합니다. 최종 exact-SHA Runtime, Documentation, Release gate와
+명시적인 release 승인은 별도 요구사항입니다.
 
 ## 증거 label
 

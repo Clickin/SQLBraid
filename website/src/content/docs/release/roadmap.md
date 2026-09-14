@@ -13,13 +13,11 @@ standard LSP, CLI JSON inspection, a thin VS Code client, native DML-returning
 contracts, homogeneous command bulk, MariaDB, Browser SQLite WASM, D1, and
 representation-profile contracts.
 
-The last exact-SHA verification retained for provenance is revision
-`8da8167e027320fcc9bb2aac16b0903c64147940` with successful Runtime
-([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
-Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
-and Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)).
-The current tree is newer and remains pending fresh exact-SHA gates. These links
-are not a current support or publication claim.
+The [runtime and driver support matrix](/SQLBraid/reference/support/) records
+support labels for the exact database/driver/profile/runtime/capability tuple
+and its revision and workflow evidence. A neighboring version or package
+installation is not certification. Final exact-SHA Runtime, Docs, and Release
+gates and explicit release authorization remain separate requirements.
 
 Profile descriptors pair driver options, raw/canonical representation, and
 TypePolicy provenance; runtime and codegen must reuse the same descriptor.

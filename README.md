@@ -18,15 +18,12 @@ const users = await db.all(sql.rows<UserRow>`
 `);
 ```
 
-> **Release status:** pre-release. The last exact-SHA PV18 verification used
-> revision `8da8167e027320fcc9bb2aac16b0903c64147940`; its Runtime
-> ([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
-> Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
-> and Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326))
-> workflows succeeded. This tree contains subsequent API and documentation
-> work and has no fresh certification. Do not infer a new support label from
-> these historical runs. No tag, npm publication, Pages deployment, or release
-> authorization is claimed.
+> **Release status:** pre-release. [Versioned support records](support/targets/)
+> identify each certified database/driver/profile/runtime tuple, implementation
+> revision, and workflow evidence. Changed revisions require fresh exact-SHA
+> Runtime, Documentation, and Release gates; neighboring versions do not inherit
+> certification. No tag, npm publication, Pages deployment, or release
+> authorization is implied.
 
 [Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) · [Documentation](https://clickin.github.io/SQLBraid/dev/) · [Data representations](https://clickin.github.io/SQLBraid/dev/concepts/data-representation/) · [Public API audit](./docs/public-api-audit.md) · [Driver-author guide](./docs/driver-author-guide.md)
 

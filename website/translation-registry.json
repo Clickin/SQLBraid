@@ -13,7 +13,7 @@
       "source": "website/src/content/docs/agents/driver-author.md",
       "translation": "website/src/content/docs/ko/agents/driver-author.md",
       "translationOf": "website/src/content/docs/agents/driver-author.md",
-      "sourceDigest": "bec91eab12abc237987314aa2b838e61e0e4bd28fc2eddf5c4d06e93573ec6f2"
+      "sourceDigest": "099bd3593543a0c2d27bd48e9d01511861a70c5530325114e43a27f5aaa70b5e"
     },
     {
       "source": "website/src/content/docs/agents/lsp.md",
@@ -91,19 +91,19 @@
       "source": "website/src/content/docs/getting-started/mariadb.md",
       "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
       "translationOf": "website/src/content/docs/getting-started/mariadb.md",
-      "sourceDigest": "b3fe8a292011c22bd9bb6a51b5c80ec93febe4cf97d13d0ac5e8e6760783d2eb"
+      "sourceDigest": "b600293359e67bce12fbca41a323048ceba8e76f912a22ef470ae310253c9552"
     },
     {
       "source": "website/src/content/docs/getting-started/mssql.md",
       "translation": "website/src/content/docs/ko/getting-started/mssql.md",
       "translationOf": "website/src/content/docs/getting-started/mssql.md",
-      "sourceDigest": "2bae40507956b15a3a7b2ae41f9905704997ef22bb94d83b805c29346e22d521"
+      "sourceDigest": "080b902bbe5f874a1fb4e9851c26e7e3e0d53df86c7af9c78936f6fedebbf0f7"
     },
     {
       "source": "website/src/content/docs/getting-started/mysql.md",
       "translation": "website/src/content/docs/ko/getting-started/mysql.md",
       "translationOf": "website/src/content/docs/getting-started/mysql.md",
-      "sourceDigest": "a0127152ab9fdf0796a77159621dece964e7e6eef5e9991ec82d5297f0a13a04"
+      "sourceDigest": "32edcafb08b4555877592105b69f872413339235c9c8145aa894374d0a157da7"
     },
     {
       "source": "website/src/content/docs/getting-started/oracle.md",
@@ -115,19 +115,19 @@
       "source": "website/src/content/docs/getting-started/postgres.md",
       "translation": "website/src/content/docs/ko/getting-started/postgres.md",
       "translationOf": "website/src/content/docs/getting-started/postgres.md",
-      "sourceDigest": "69df8d43204a4deee6a67d8b58df17444fb043335e3d536dede4a44c17b5c564"
+      "sourceDigest": "0130eb9d3be2efa49fa020c80461333ca45660d2ed53946ea62e04d20d82b2e3"
     },
     {
       "source": "website/src/content/docs/getting-started/sqlite-browser.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite-browser.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite-browser.md",
-      "sourceDigest": "7e8f2d2851f6dc54c5425bd5ab5e65a9a4d91ecdfa79277af3ff934746b18c1d"
+      "sourceDigest": "e42fc4102a1f084f575d8d302441ee42d1007562a95d37cd7a4df0b04282b720"
     },
     {
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "df53f0ae28f77af35a95cbd7fd0437aeb24ec99ac5dfebd7cd97951ae27bc7bd"
+      "sourceDigest": "d57fb5a16e8fa34401816e447a8fd143d87530ad3074a2deea1f192205adb135"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",
@@ -139,7 +139,7 @@
       "source": "website/src/content/docs/index.md",
       "translation": "website/src/content/docs/ko/index.md",
       "translationOf": "website/src/content/docs/index.md",
-      "sourceDigest": "743e704fef3cde0843d869bb2812c954d9b3df330ce3c7b67cc4b71564739a50"
+      "sourceDigest": "13031000a7c343285e5c85da70f68db9be8cf1a945c72812f1eb9fe3f604466f"
     },
     {
       "source": "website/src/content/docs/interactive-preview.mdx",
@@ -199,7 +199,7 @@
       "source": "website/src/content/docs/reference/support.mdx",
       "translation": "website/src/content/docs/ko/reference/support.mdx",
       "translationOf": "website/src/content/docs/reference/support.mdx",
-      "sourceDigest": "dbaa535466f0d7cb3603199fabdb0d708a00a16338de34688db924c6c0ba8863"
+      "sourceDigest": "7047a5d34aa12f87b89ef0e3ab41cf5e0b7631d6421c694f3ef8f18a44bf81fd"
     },
     {
       "source": "website/src/content/docs/reference/troubleshooting.md",
@@ -211,19 +211,19 @@
       "source": "website/src/content/docs/release/limitations.md",
       "translation": "website/src/content/docs/ko/release/limitations.md",
       "translationOf": "website/src/content/docs/release/limitations.md",
-      "sourceDigest": "e3984acb1d102a5fa26216b3ac0765f218085403cb9a551026257216c0a08bf9"
+      "sourceDigest": "ae69aaa16806051af0ae9b1d10a789cd66f7e4aa079ad753941eb83d5350012a"
     },
     {
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "607aec9f1525783dc860ac286d9b2b8bf46d7482b66dbcfdbf6177f413c228d0"
+      "sourceDigest": "c5f055c924e4f42192583e8c00650e102e1e5e7284555bc475e65062dfb32f5d"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",
       "translation": "website/src/content/docs/ko/release/roadmap.md",
       "translationOf": "website/src/content/docs/release/roadmap.md",
-      "sourceDigest": "956a1e13d09a3f27c575c7de8c2036c97933b62e568183c4952b892d65e0365b"
+      "sourceDigest": "41d32fc351ae6b9c23c48fb34d6ce7dcca9b4d054594fdb393530f231b951d7a"
     },
     {
       "source": "website/src/content/docs/runtime/direct-pools.md",

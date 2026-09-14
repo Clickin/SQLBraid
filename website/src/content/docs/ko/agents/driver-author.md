@@ -5,12 +5,11 @@ description: 값 전용 경계를 지키는 사용자 지정 SQLBraid adapter를
 
 이 문서는 custom `QueryExecutor`, `ConnectionProvider`, binding adapter를
 위한 현재 API 계약입니다. 지원 label이나 발행 증거를 부여하지 않습니다.
-provenance로 보존하는 마지막 exact-SHA 검증은
-`8da8167e027320fcc9bb2aac16b0903c64147940`이며 Runtime
-[34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046),
-Docs [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
-Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)가
-성공했습니다. 현재 tree에는 새 exact-SHA gate가 필요합니다.
+지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가
+기록한 정확한 database, driver, profile, runtime, capability tuple과
+revision별 실행 workflow에만 적용됩니다. 인접한 버전·runtime·profile·로컬
+binding 또는 package 설치는 이 tuple을 인증하지 않습니다. 최종 exact-SHA
+Runtime, Docs, Release gate와 명시적인 release 승인은 별도 요구사항입니다.
 
 ## 논리 statement 불변식
 

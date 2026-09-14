@@ -3,12 +3,10 @@
 Write SQL. Keep TypeScript. Skip the query-builder translation layer.
 
 These notes describe the pre-release surface; they do not authorize npm,
-GitHub, VS Code Marketplace, or Pages publication. The last exact-SHA PV18
-verification was revision `8da8167e027320fcc9bb2aac16b0903c64147940` with
-successful Runtime ([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
-Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
-and Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326))
-runs. The current phase-J tree is not covered by those historical runs.
+GitHub, VS Code Marketplace, or Pages publication. Consult the
+[versioned support records](../support/targets/) for each exact tuple's
+certified implementation revision and workflow evidence. Changed revisions
+require fresh exact-final Runtime, Documentation, and Release gates.
 
 ## Included surface
 

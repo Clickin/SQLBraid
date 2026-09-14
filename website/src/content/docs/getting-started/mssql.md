@@ -62,8 +62,11 @@ acquisition. Tedious owns effective reuse; failures in this work are
 ## Capability boundaries
 
 - The documented candidate is Tedious 20.0.0 on Node 22.18.0/Linux x64. The
-  current phase-J tree is pending fresh exact-SHA Runtime, Docs, and Release
-  gates; package installation does not certify this profile.
+  [runtime and driver support matrix](/SQLBraid/reference/support/) records
+  labels for the exact database/driver/profile/runtime/capability tuple and its
+  revision and workflow evidence. A neighboring version or package installation
+  is not certification. Final exact-SHA Runtime, Docs, and Release gates and
+  explicit release authorization remain separate requirements.
 - The target uses SQL Server 2022 CU18 Developer, Linux x64;
   local ARM emulation is outside this guide's verification scope.
 - Unhinted common values use adapter-local Tedious inference. Use an explicit hint for `null`, custom objects, precision/scale, lengths, or SQL Server-specific types.
@@ -84,8 +87,6 @@ not arbitrary-precision fidelity. Native temporal values use `Date`, which
 does not preserve SQL Server's 100ns precision or complete offset semantics;
 author `CONVERT(varchar(...), datetime2_or_datetimeoffset, style)` when exact
 temporal text matters.
-
-See [runtime and driver support](/SQLBraid/reference/support/) for the evidence labels and current matrix.
 
 For the explicit procedure metadata shape and heterogeneous `sql.call` result
 contract, see [routine calls](/SQLBraid/concepts/routines/).

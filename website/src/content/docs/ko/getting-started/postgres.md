@@ -131,8 +131,12 @@ unclassified container입니다.
 
 `db.environment()`는 `extra_float_digits`, 선택한 JSON/temporal 프로필과
 가능한 경우 TypePolicy provenance를 기록합니다. 이를 무조건적인 fidelity
-보장으로 읽으면 안 됩니다. 현재 phase-J tree는 새로운 exact-SHA Runtime,
-Docs, Release gate를 기다리며 support matrix가 revision별 증거 출처입니다.
+보장으로 읽으면 안 됩니다. 지원 label과 증거는 [런타임/드라이버 지원
+매트릭스](/SQLBraid/reference/support/)가 기록한 정확한 database, driver,
+profile, runtime, capability tuple과 revision별 실행 workflow에만 적용됩니다.
+인접한 버전·runtime·profile 또는 package 설치는 이 프로필을 인증하지
+않습니다. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인 release
+승인은 별도 요구사항입니다.
 `pg-cursor`는 native pull stream을 제공하며 peer가 없으면
 `BRAID_STREAM_UNSUPPORTED`입니다. Routine refcursor는 기존 transaction이
 필요하고 result set으로 materialize됩니다. Bulk는 SQL rewrite가 아닌

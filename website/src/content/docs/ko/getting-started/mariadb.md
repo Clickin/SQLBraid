@@ -44,9 +44,12 @@ transaction이 되지 않고 portable auto-chunking 약속이 없습니다. 원�
 
 MariaDB에서 `mysql2` connection이 동작할 수 있지만 best-effort 호환일 뿐
 MariaDB protocol 증거가 아닙니다. 문서화된 후보 프로필은 MariaDB 11.8.9 /
-Connector 3.5.4 / Node 22.18.0입니다. 현재 phase-J tree는 새로운 exact-SHA
-Runtime, Docs, Release gate를 기다리며 package 설치나 역사 workflow 성공은
-이 프로필을 인증하지 않습니다.
+Connector 3.5.4 / Node 22.18.0입니다. 이 프로필의 지원 label과 증거는
+[런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가 기록한 정확한
+database, driver, profile, runtime, capability tuple과 revision별 실행
+workflow에만 적용됩니다. package 설치나 인접한 버전·runtime은 이 프로필을
+인증하지 않습니다. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인
+release 승인은 별도 요구사항입니다.
 
 ## Connector/Node.js 표현 프로필
 

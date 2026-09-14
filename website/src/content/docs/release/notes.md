@@ -6,14 +6,11 @@ description: The pre-release SQLBraid surface and its evidence boundary.
 This is pre-release documentation. It does not authorize npm, GitHub, VS Code
 Marketplace, or Pages publication.
 
-The last exact-SHA verification retained for provenance is revision
-`8da8167e027320fcc9bb2aac16b0903c64147940`, with successful Runtime
-([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
-Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
-and Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326))
-runs. The current phase-J tree is newer; affected support targets remain
-Pending or Compatible until fresh exact-SHA gates pass. Historical workflow
-success does not certify the current tree.
+The [runtime and driver support matrix](/SQLBraid/reference/support/) records
+support labels for the exact database/driver/profile/runtime/capability tuple
+and its revision and workflow evidence. A neighboring version or package
+installation is not certification. Final exact-SHA Runtime, Docs, and Release
+gates and explicit release authorization remain separate requirements.
 
 ## Included contract
 
