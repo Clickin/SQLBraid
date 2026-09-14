@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { PerformanceObserver, performance } from "node:perf_hooks";
 import { DatabaseSync } from "node:sqlite";
-import { normalizeExactInteger, decodeExactInteger } from "@sqlbraid/core";
+import { normalizeExactInteger, decodeExactInteger, UnsupportedFeatureError } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
 import { createNodeSqliteDatabase, nodeSqliteStatementBinding } from "@sqlbraid/sqlite/node-sqlite";
 import { sql } from "@sqlbraid/sqlite";
@@ -146,7 +146,7 @@ function createRawExecutor(native, transport, policy) {
       const rows = prepared.statement.all(...prepared.values).map((row) => decodeRow(row, policy));
       return { rows, rowCount: rows.length, kind: "rows" };
     },
-    async *stream(rendered, _signal, binding) {
+    async *stream(rendered, binding) {
       const prepared = prepare(rendered, binding);
       const iterator = prepared.statement.iterate?.(...prepared.values);
       if (iterator === undefined) throw new Error("Benchmark SQLite statement does not expose iteration.");
@@ -157,7 +157,7 @@ function createRawExecutor(native, transport, policy) {
       }
     },
     async call() {
-      throw new Error("BRAID_CALL_UNSUPPORTED: benchmark executor does not support calls.");
+      throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "Benchmark executor does not support calls.");
     },
   };
 }
