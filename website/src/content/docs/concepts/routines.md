@@ -9,6 +9,11 @@ Use `sql.call` when a database routine has channels beyond an ordinary row query
 - `resultSets`: ordered, materialized row sets, each of which may have a different row type;
 - `returnValue`: an optional routine return/status value when the driver exposes one.
 
+Ordinary row operations are single-result-set boundaries: `db.all`, `db.one`,
+`db.maybeOne`, and ordinary `db.execute` allow at most one row result set.
+`db.call` is the explicit multiple-result-set boundary and returns multiple
+ordered routine result sets.
+
 ## Declare the application contract
 
 Attach Standard Schema validators at the query boundary:

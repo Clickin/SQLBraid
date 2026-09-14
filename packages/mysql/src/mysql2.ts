@@ -206,6 +206,10 @@ function resultSetFields(
   return Array.isArray(candidate) ? candidate : fields as readonly Mysql2FieldLike[];
 }
 
+function isMultipleResultPayload(payload: unknown): boolean {
+  return Array.isArray(payload) && payload.some(Array.isArray);
+}
+
 export function createMysql2Executor(connection: Mysql2ConnectionLike, options: Mysql2ExecutorOptions = {}): QueryExecutor {
   assertMysql2Connection(connection);
   const policy = options.typePolicy ?? defaultTypePolicy;
@@ -220,6 +224,9 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       assertNoRoutineOutputsForQuery(rendered);
       const prepared = materialize(rendered, binding);
       const [payload, rawFields] = await connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]);
+      if (isMultipleResultPayload(payload)) {
+        throw new Error("BRAID_RESULT_SETS_UNSUPPORTED: MySQL returned multiple result sets; use database.call().");
+      }
       const fields = resultSetFields(rawFields, 0);
       assertUniqueFields(fields);
       if (Array.isArray(payload)) {
@@ -316,8 +323,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       const prepared = materialize(rendered, binding);
       const [payload, rawFields] = await connection.execute(prepared.text, prepared.values as Mysql2Parameter[]);
       if (!Array.isArray(payload)) return { output: payload && typeof payload === "object" ? Object.fromEntries(Object.entries(payload)) : {}, resultSets: [] };
-      const nested = payload.some((entry) => Array.isArray(entry));
-      const sets = nested ? payload.filter((entry): entry is readonly unknown[] => Array.isArray(entry)) : [payload];
+      const sets = isMultipleResultPayload(payload) ? payload.filter((entry): entry is readonly unknown[] => Array.isArray(entry)) : [payload];
       const resultSets = sets.map((rows, index) => {
         const fields = resultSetFields(rawFields, index);
         assertUniqueFields(fields);

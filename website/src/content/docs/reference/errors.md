@@ -14,7 +14,7 @@ network failures remain stage `"driver"`. A materialization error has
 | Code | Meaning |
 | --- | --- |
 | `BRAID_RESULT_KIND` | Declared result kind disagreed with adapter result after execution. |
-| `BRAID_RESULT_SETS_UNSUPPORTED` | MySQL row streaming encountered a second result set. Use `db.call()` for multi-result routines. |
+| `BRAID_RESULT_SETS_UNSUPPORTED` | An ordinary query or row stream returned additional statement/result sets, including materialized MySQL execution. `db.all`, `db.one`, `db.maybeOne`, and ordinary `db.execute` allow at most one row result set; use `db.call()` for multiple ordered routine result sets. |
 | `BRAID_RESULT_VALIDATION` | Query-bound or execution-level Standard Schema validation failed. |
 | `BRAID_TX_SCOPE` | A root/parent/sibling transaction handle escaped the active scope. |
 | `BRAID_TX_CLOSED` | A transaction handle was used after its callback ended. |
@@ -39,7 +39,6 @@ network failures remain stage `"driver"`. A materialization error has
 | `BRAID_BIND_TYPE_REQUIRED` | Driver inference is ambiguous, including an untyped null in Oracle or SQL Server. |
 | `BRAID_BIND_DECIMAL_EXACTNESS` | Tedious cannot safely encode the supplied decimal value through JavaScript numbers. |
 | `BRAID_CALL_OUT_UNSUPPORTED` | The adapter cannot represent or safely identify the requested OUT/INOUT channel (for example MySQL's unproven prepared-CALL carrier). |
-| `BRAID_RESULT_SETS_UNSUPPORTED` | A row query or stream returned additional statement/result sets; use `call()` where supported. |
 | `BRAID_EMPTY_LIST` | `sql.list([])` was used without an explicit empty strategy. |
 | `BRAID_EMPTY_SET` | `@braid set` rendered no assignment. |
 | `BRAID_DIALECT` | A fragment belongs to a different dialect. |

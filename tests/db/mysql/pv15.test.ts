@@ -165,7 +165,7 @@ test("MySQL streaming rejects multiple result sets and drains before reusing the
   }
 });
 
-test("MySQL prepared CALL keeps emitted result-set metadata independent and rejects OUT", async () => {
+test("MySQL materialized queries reject multiple sets, reuse the connection and keep CALL metadata independent", async () => {
   const pool = createPool({ uri: inject("mysql").connectionUri, connectionLimit: 1, idleTimeout: 0 });
   const db = createMysql2PoolDatabase(pool);
   try {
@@ -185,6 +185,27 @@ test("MySQL prepared CALL keeps emitted result-set metadata independent and reje
         SET counter = counter + p;
       END
     `);
+    const before = await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`);
+    await assert.rejects(
+      () => db.all(sql.rows<Record<string, unknown>>`CALL braid_pv15_sets(${7})`),
+      /BRAID_RESULT_SETS_UNSUPPORTED/u,
+    );
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    assert.deepEqual(
+      await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`),
+      before,
+      "materialized rejection reuses the same physical connection",
+    );
+    await assert.rejects(
+      () => db.execute(sql`CALL braid_pv15_sets(${7})`),
+      /BRAID_RESULT_SETS_UNSUPPORTED/u,
+    );
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    assert.deepEqual(
+      await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`),
+      before,
+      "unknown-result rejection reuses the same physical connection",
+    );
     const sets = await db.call(sql.call`CALL braid_pv15_sets(${7})`);
     assert.deepEqual(sets.output, {});
     assert.equal(sets.returnValue, undefined);

@@ -14,7 +14,7 @@ materialize 오류의 `executionStarted`와 `executionCompleted`는 모두
 | Code | 의미 |
 | --- | --- |
 | `BRAID_RESULT_KIND` | 선언한 결과 종류와 실행 후 어댑터 결과가 다릅니다. |
-| `BRAID_RESULT_SETS_UNSUPPORTED` | MySQL 행 스트리밍에서 두 번째 result set을 발견했습니다. 다중 결과 루틴에는 `db.call()`을 사용하세요. |
+| `BRAID_RESULT_SETS_UNSUPPORTED` | 일반 쿼리 또는 행 스트림이 추가 문장/result set을 반환했습니다. MySQL materialized 실행도 포함합니다. `db.all`, `db.one`, `db.maybeOne`, 일반 `db.execute`는 최대 하나의 행 result set만 허용하며, 순서가 있는 여러 루틴 result set에는 `db.call()`을 사용하세요. |
 | `BRAID_RESULT_VALIDATION` | 쿼리 연결 또는 실행 수준 Standard Schema 검증에 실패했습니다. |
 | `BRAID_TX_SCOPE` | 루트/부모/sibling 트랜잭션 핸들이 활성 범위를 벗어났습니다. |
 | `BRAID_TX_CLOSED` | 콜백이 끝난 뒤 트랜잭션 핸들을 사용했습니다. |
@@ -39,7 +39,6 @@ materialize 오류의 `executionStarted`와 `executionCompleted`는 모두
 | `BRAID_BIND_TYPE_REQUIRED` | Oracle/SQL Server의 타입 없는 null 등 드라이버 추론이 모호합니다. |
 | `BRAID_BIND_DECIMAL_EXACTNESS` | Tedious가 JavaScript 숫자를 통해 해당 소수 값을 안전하게 인코딩할 수 없습니다. |
 | `BRAID_CALL_OUT_UNSUPPORTED` | 어댑터가 요청한 OUT/INOUT 채널을 표현하거나 안전하게 식별할 수 없습니다(예: 검증되지 않은 MySQL prepared-CALL carrier). |
-| `BRAID_RESULT_SETS_UNSUPPORTED` | 행 쿼리/스트림에 추가 문장 또는 결과 집합이 있습니다. 지원되는 경우 `call()`을 사용하세요. |
 | `BRAID_EMPTY_LIST` | 명시적 빈 전략 없이 `sql.list([])`를 사용했습니다. |
 | `BRAID_EMPTY_SET` | `@braid set`에 할당이 렌더링되지 않았습니다. |
 | `BRAID_DIALECT` | 조각이 다른 dialect에 속합니다. |

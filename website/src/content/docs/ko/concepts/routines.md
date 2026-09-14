@@ -9,6 +9,11 @@ description: 명시적인 output, return, 이질적인 result-set 계약으로 �
 - `resultSets`: 순서가 있는 materialized 행 집합. 각 집합은 서로 다른 행 타입일 수 있음
 - `returnValue`: 드라이버가 노출하는 경우의 선택적 루틴 return/status 값
 
+일반 행 작업은 단일 result-set 경계입니다. `db.all`, `db.one`,
+`db.maybeOne`, 일반 `db.execute`는 최대 하나의 행 result set만 허용합니다.
+`db.call`은 명시적인 다중 result-set 경계이며 순서가 있는 여러 루틴 result
+set을 반환합니다.
+
 ## 애플리케이션 계약 선언
 
 쿼리 경계에 Standard Schema 검증기를 연결하세요.

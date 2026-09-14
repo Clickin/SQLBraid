@@ -96,6 +96,47 @@ test("PostgreSQL logical output names cannot select a different physical carrier
   assert.deepEqual(result.output, { second: 9007199254740993n, first: "text output" });
 });
 
+test("MySQL materialized queries reject nested result sets, including empty sets and status headers", async () => {
+  let payload: unknown = [[{ USER_ID: 1 }], [{ PAYMENT_ID: 10 }], { affectedRows: 0 }];
+  const connection: Mysql2ConnectionLike = {
+    execute: async () => [payload, [[{ name: "USER_ID", type: 3 }], [{ name: "PAYMENT_ID", type: 3 }]]],
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  };
+  const executor = createMysql2Executor(connection);
+  const query = mysqlSql.rows`SELECT driver_result`.render();
+  await assert.rejects(() => executor.query(query), /BRAID_RESULT_SETS_UNSUPPORTED/u);
+  payload = [[], [], { affectedRows: 0 }];
+  await assert.rejects(() => executor.query(query), /BRAID_RESULT_SETS_UNSUPPORTED/u);
+});
+
+test("MySQL materialized queries preserve flat rows, empty SELECTs and command metadata", async () => {
+  let payload: unknown = [{ USER_ID: 1 }, { USER_ID: 2 }];
+  const connection: Mysql2ConnectionLike = {
+    execute: async () => [payload, [{ name: "USER_ID", type: 3 }]],
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  };
+  const executor = createMysql2Executor(connection);
+  const query = mysqlSql`SELECT driver_result`.render();
+  assert.deepEqual(await executor.query(query), {
+    kind: "rows",
+    rows: [{ USER_ID: 1 }, { USER_ID: 2 }],
+    rowCount: 2,
+  });
+  payload = [];
+  assert.deepEqual(await executor.query(query), { kind: "rows", rows: [], rowCount: 0 });
+  payload = { affectedRows: 2, insertId: 10, warningStatus: 1 };
+  assert.deepEqual(await executor.query(mysqlSql.command`UPDATE driver_result`.render()), {
+    kind: "command",
+    rows: [],
+    rowCount: 2,
+    command: { affectedRows: 2, insertId: 10, warningStatus: 1 },
+  });
+});
+
 class RowsStream implements Mysql2RawStreamLike {
   readonly readableEnded = false;
   readonly destroyed = false;

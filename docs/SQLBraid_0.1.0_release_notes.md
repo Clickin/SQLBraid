@@ -19,6 +19,9 @@ SQLBraid 0.1.0 provides:
 - MySQL row streams reject multiple result sets and drain before connection
   reuse; cleanup failures discard the connection. A declared routine return
   schema makes the successful result's `returnValue` property required.
+- MySQL ordinary materialized queries, including bare/unknown execution, reject
+  multiple result sets with `BRAID_RESULT_SETS_UNSUPPORTED`; use `db.call()` for
+  ordered routine sets. Fully materialized rejection leaves the connection reusable.
 - Vite 8 guarded-template pre-transform and original TS/TSX source maps, exercised
   through a packed TanStack Start / Node 24 finance consumer.
 - Explicit SQLite number/bigint integer modes for exact 64-bit application models.
