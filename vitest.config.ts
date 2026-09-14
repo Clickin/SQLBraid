@@ -40,6 +40,8 @@ const sourceAliases = {
 
 export default defineConfig({
   test: {
+    // ponytail: leave CI CPU for the real databases; raise workers only with runner capacity.
+    maxWorkers: process.env.CI ? 1 : undefined,
     projects: [
       {
         extends: true,
