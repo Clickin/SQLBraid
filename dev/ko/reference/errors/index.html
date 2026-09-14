@@ -90,7 +90,7 @@ materialize 오류의 <code dir="auto">executionStarted</code>와 <code dir="aut
 </tr>
 <tr>
 <td><code dir="auto">BRAID_RESULT_SETS_UNSUPPORTED</code></td>
-<td>MySQL 행 스트리밍에서 두 번째 result set을 발견했습니다. 다중 결과 루틴에는 <code dir="auto">db.call()</code>을 사용하세요.</td>
+<td>일반 쿼리 또는 행 스트림이 추가 문장/result set을 반환했습니다. MySQL materialized 실행도 포함합니다. <code dir="auto">db.all</code>, <code dir="auto">db.one</code>, <code dir="auto">db.maybeOne</code>, 일반 <code dir="auto">db.execute</code>는 최대 하나의 행 result set만 허용하며, 순서가 있는 여러 루틴 result set에는 <code dir="auto">db.call()</code>을 사용하세요.</td>
 </tr>
 <tr>
 <td><code dir="auto">BRAID_RESULT_VALIDATION</code></td>
@@ -187,10 +187,6 @@ materialize 오류의 <code dir="auto">executionStarted</code>와 <code dir="aut
 <tr>
 <td><code dir="auto">BRAID_CALL_OUT_UNSUPPORTED</code></td>
 <td>어댑터가 요청한 OUT/INOUT 채널을 표현하거나 안전하게 식별할 수 없습니다(예: 검증되지 않은 MySQL prepared-CALL carrier).</td>
-</tr>
-<tr>
-<td><code dir="auto">BRAID_RESULT_SETS_UNSUPPORTED</code></td>
-<td>행 쿼리/스트림에 추가 문장 또는 결과 집합이 있습니다. 지원되는 경우 <code dir="auto">call()</code>을 사용하세요.</td>
 </tr>
 <tr>
 <td><code dir="auto">BRAID_EMPTY_LIST</code></td>

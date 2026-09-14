@@ -90,7 +90,7 @@ network failures remain stage <code dir="auto">"driver"</code>. A materializatio
 </tr>
 <tr>
 <td><code dir="auto">BRAID_RESULT_SETS_UNSUPPORTED</code></td>
-<td>MySQL row streaming encountered a second result set. Use <code dir="auto">db.call()</code> for multi-result routines.</td>
+<td>An ordinary query or row stream returned additional statement/result sets, including materialized MySQL execution. <code dir="auto">db.all</code>, <code dir="auto">db.one</code>, <code dir="auto">db.maybeOne</code>, and ordinary <code dir="auto">db.execute</code> allow at most one row result set; use <code dir="auto">db.call()</code> for multiple ordered routine result sets.</td>
 </tr>
 <tr>
 <td><code dir="auto">BRAID_RESULT_VALIDATION</code></td>
@@ -187,10 +187,6 @@ network failures remain stage <code dir="auto">"driver"</code>. A materializatio
 <tr>
 <td><code dir="auto">BRAID_CALL_OUT_UNSUPPORTED</code></td>
 <td>The adapter cannot represent or safely identify the requested OUT/INOUT channel (for example MySQL’s unproven prepared-CALL carrier).</td>
-</tr>
-<tr>
-<td><code dir="auto">BRAID_RESULT_SETS_UNSUPPORTED</code></td>
-<td>A row query or stream returned additional statement/result sets; use <code dir="auto">call()</code> where supported.</td>
 </tr>
 <tr>
 <td><code dir="auto">BRAID_EMPTY_LIST</code></td>

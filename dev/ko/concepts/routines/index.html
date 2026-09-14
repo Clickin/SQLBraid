@@ -76,6 +76,10 @@
 <li><code dir="auto">resultSets</code>: 순서가 있는 materialized 행 집합. 각 집합은 서로 다른 행 타입일 수 있음</li>
 <li><code dir="auto">returnValue</code>: 드라이버가 노출하는 경우의 선택적 루틴 return/status 값</li>
 </ul>
+<p>일반 행 작업은 단일 result-set 경계입니다. <code dir="auto">db.all</code>, <code dir="auto">db.one</code>,
+<code dir="auto">db.maybeOne</code>, 일반 <code dir="auto">db.execute</code>는 최대 하나의 행 result set만 허용합니다.
+<code dir="auto">db.call</code>은 명시적인 다중 result-set 경계이며 순서가 있는 여러 루틴 result
+set을 반환합니다.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="애플리케이션-계약-선언">애플리케이션 계약 선언</h2><a class="sl-anchor-link" href="#애플리케이션-계약-선언"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “애플리케이션 계약 선언”</span></a></div>
 <p>쿼리 경계에 Standard Schema 검증기를 연결하세요.</p>
 <div class="expressive-code"><link rel="stylesheet" href="/SQLBraid/dev/_astro/ec.w36nc.css"><script type="module" src="/SQLBraid/dev/_astro/ec.0vx5m.js"></script><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="ts"><code><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">import</span><span style="--0:#D6DEEB;--1:#403F53"> { mssqlParameter, sql } </span><span style="--0:#C792EA;--1:#8844AE">from</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#ECC48D;--1:#984E4D">@sqlbraid/mssql</span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#D6DEEB;--1:#403F53">;</span></div></div><div class="ec-line"><div class="code">
