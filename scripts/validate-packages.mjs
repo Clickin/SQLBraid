@@ -27,7 +27,7 @@ const consumer = join(temp, "consumer");
 const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR) : undefined;
 const requiredPackageNames = new Set([
   "cli", "codegen", "compiler", "core", "language-server", "mariadb", "metadata", "mssql", "mysql",
-  "operations", "oracle", "postgres", "runtime", "sqlbraid", "sqlite", "template", "tooling", "vite",
+  "operations", "oracle", "postgres", "runtime", "sqlbraid", "sqlite", "template", "tooling", "vite", "bun-sql",
 ]);
 const packedContainers = [];
 
@@ -162,7 +162,11 @@ try {
     for (const packagePath of [...collectPackagePaths(manifest.exports), ...collectPackagePaths(manifest.imports), ...collectPackagePaths(manifest.bin)]) {
       if (!fileNames.has(packagePath)) throw new Error(`Packed ${manifest.name} references missing ${packagePath}.`);
     }
-    if (manifest.engines?.node !== ">=22.18.0") throw new Error(`Unexpected Node engine for ${manifest.name}: ${manifest.engines?.node ?? "missing"}`);
+    if (packageName === "bun-sql") {
+      if (manifest.engines?.bun !== ">=1.3.14") throw new Error(`Unexpected Bun engine for ${manifest.name}: ${manifest.engines?.bun ?? "missing"}`);
+    } else if (manifest.engines?.node !== ">=22.18.0") {
+      throw new Error(`Unexpected Node engine for ${manifest.name}: ${manifest.engines?.node ?? "missing"}`);
+    }
     for (const validator of ["valibot", "zod", "arktype"]) {
       if (manifest.dependencies?.[validator] || manifest.peerDependencies?.[validator] || manifest.optionalDependencies?.[validator]) {
         throw new Error(`Concrete validator ${validator} is a production dependency of ${manifest.name}.`);
@@ -225,10 +229,12 @@ try {
     'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
     'import { sql as oracle } from "@sqlbraid/oracle";',
     'import { sql as mssql } from "@sqlbraid/mssql";',
+    'import { createBunSqlDatabase } from "@sqlbraid/bun-sql";',
     'assert.deepEqual(sql`SELECT ${1}`.render().segments, ["SELECT ", ""]);',
     'assert.equal(typeof createPgDatabase, "function");',
     'assert.deepEqual(oracle`SELECT ${1}`.render().segments, ["SELECT ", ""]);',
     'assert.deepEqual(mssql`SELECT ${1}`.render().segments, ["SELECT ", ""]);',
+    'assert.equal(typeof createBunSqlDatabase, "function");',
     'for (const dialect of ["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"]) {',
     '  const root = await import(`@sqlbraid/${dialect}`);',
     '  assert.ok(!Object.keys(root).some((key) => /Inspector/.test(key)));',

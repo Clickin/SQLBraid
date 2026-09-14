@@ -12,6 +12,7 @@ const sourceAliases = {
   "@sqlbraid/tooling": resolve("packages/tooling/src/index.ts"),
   "@sqlbraid/cli": resolve("packages/cli/src/index.ts"),
   "@sqlbraid/cli/config": resolve("packages/cli/src/config.ts"),
+  "@sqlbraid/bun-sql": resolve("packages/bun-sql/src/index.ts"),
 
   "@sqlbraid/runtime": resolve("packages/runtime/src/index.ts"),
   "@sqlbraid/operations": resolve("packages/operations/src/index.ts"),
@@ -81,6 +82,15 @@ export default defineConfig({
         test: {
           name: "db-wasm",
           include: ["tests/db/wasm/**/*.test.ts"],
+          fileParallelism: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "db-bun-sql",
+          include: ["tests/db/bun-sql/**/*.test.ts"],
+          globalSetup: ["./tests/db/postgres.global.ts", "./tests/db/mysql.global.ts", "./tests/db/mariadb.global.ts"],
           fileParallelism: false,
         },
       },

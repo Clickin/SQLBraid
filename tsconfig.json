@@ -22,6 +22,7 @@
       "@sqlbraid/language-server": ["packages/language-server/src/index.ts"],
       "@sqlbraid/cli": ["packages/cli/src/index.ts"],
       "@sqlbraid/cli/config": ["packages/cli/src/config.ts"],
+      "@sqlbraid/bun-sql": ["packages/bun-sql/src/index.ts"],
       "@sqlbraid/postgres": ["packages/postgres/src/index.ts"],
       "@sqlbraid/oracle": ["packages/oracle/src/index.ts"],
       "@sqlbraid/oracle/oracledb": ["packages/oracle/src/oracledb.ts"],

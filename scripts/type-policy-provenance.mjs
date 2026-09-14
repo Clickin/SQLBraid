@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const FIRST_PARTY_PACKAGES = ["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"];
+const FIRST_PARTY_PACKAGES = ["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql", "bun-sql"];
 const PROFILE_VALUES = ["text", "native"];
 const HASH_RE = /^[0-9a-f]{64}$/u;
 const NUMERIC_SEMANTICS = new Set(["exact-integer", "exact-decimal", "approximate-binary"]);

@@ -115,6 +115,9 @@ importers:
       '@jridgewell/trace-mapping':
         specifier: 0.3.31
         version: 0.3.31
+      '@sqlbraid/bun-sql':
+        specifier: workspace:*
+        version: link:packages/bun-sql
       '@sqlbraid/cli':
         specifier: workspace:*
         version: link:packages/cli
@@ -272,6 +275,15 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+
+  packages/bun-sql:
+    dependencies:
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sqlbraid/runtime':
+        specifier: workspace:*
+        version: link:../runtime
 
   packages/cli:
     dependencies:
