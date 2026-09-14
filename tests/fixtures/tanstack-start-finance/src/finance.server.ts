@@ -27,13 +27,13 @@ sqlite.prepare('INSERT INTO "재무 거래" ("거래 ID", "고객 이름", "금�
   null,
 );
 
-const db = createNodeSqliteDatabase(sqlite, { integerMode: "bigint" });
+const db = createNodeSqliteDatabase(sqlite);
 
 export async function readFinanceRows() {
   const rows = await db.all(selectFinanceRows(undefined, false));
-  if (rows[0] === undefined || typeof rows[0].id !== "bigint") throw new Error("SQLite integerMode bigint was not applied");
+  if (rows[0] === undefined || typeof rows[0].id !== "string") throw new Error("SQLite INTEGER results must remain canonical text");
   return rows.map((row) => ({
-    id: row.id.toString(),
+    id: row.id,
     customer: row.customer,
     amount: row.amount,
     status: row.status,

@@ -293,7 +293,7 @@ async function main() {
       node: process.versions.node,
       vite: "8.3.0",
       tanstackStart: "1.168.53",
-      checks: ["packed-install", "dev-transform", "source-map-unicode", "hmr", "production-ssr", "client-bundle-boundary"],
+      checks: ["packed-install", "exact-integer-string", "dev-transform", "source-map-unicode", "hmr", "production-ssr", "client-bundle-boundary"],
     }));
   } catch (error) {
     keep = true;

@@ -4,7 +4,7 @@ import { createPgDatabase, createPgPoolDatabase } from "@sqlbraid/postgres/pg";
 import { sql } from "@sqlbraid/postgres";
 
 interface UserRow {
-  readonly id: number;
+  readonly id: string;
   readonly name: string;
 }
 
@@ -27,7 +27,7 @@ try {
     ORDER BY id
   `;
 
-  assert.deepEqual(await db.all(query), [{ id: 1, name: "Ada" }]);
+  assert.deepEqual(await db.all(query), [{ id: "1", name: "Ada" }]);
   console.info("PASS PostgreSQL packed query and dynamic guard");
 } finally {
   await client.end();
@@ -37,7 +37,7 @@ const pool = new Pool({ connectionString });
 try {
   const db = createPgPoolDatabase(pool);
   const name = "Ada";
-  assert.deepEqual(await db.all(sql.rows<UserRow>`SELECT 1 AS id, ${name}::text AS name`), [{ id: 1, name }]);
+  assert.deepEqual(await db.all(sql.rows<UserRow>`SELECT 1 AS id, ${name}::text AS name`), [{ id: "1", name }]);
   console.info("PASS PostgreSQL packed pool query");
 } finally {
   await pool.end();

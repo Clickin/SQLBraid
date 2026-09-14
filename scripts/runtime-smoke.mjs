@@ -58,9 +58,9 @@ function resultFor(rendered, rows) {
   const sqlText = diagnosticSql(rendered);
   if (sqlText.includes("empty")) return { kind: "rows", rows: [], rowCount: 0 };
   if (sqlText.includes("many")) {
-    return { kind: "rows", rows: [{ id: 1 }, { id: 2 }], rowCount: 2 };
+    return { kind: "rows", rows: [{ id: "1" }, { id: "2" }], rowCount: 2 };
   }
-  return { kind: "rows", rows: rows ?? [{ id: 1 }], rowCount: rows?.length ?? 1 };
+  return { kind: "rows", rows: rows ?? [{ id: "1" }], rowCount: rows?.length ?? 1 };
 }
 
 function physical(log, options = {}) {
@@ -77,7 +77,7 @@ function physical(log, options = {}) {
     async *stream(rendered) {
       const sqlText = diagnosticSql(rendered);
       log.push(`stream:${sqlText}`);
-      for (const row of options.streamRows ?? [{ id: 1 }]) yield row;
+      for (const row of options.streamRows ?? [{ id: "1" }]) yield row;
       if (sqlText.includes("stream-failure") && options.streamFailure !== undefined) {
         throw options.streamFailure;
       }
@@ -241,7 +241,7 @@ async function runtimeSmoke() {
   const direct = createDatabase(physical(directLog));
   assert.deepEqual(await direct.execute(sql`SELECT row`), {
     kind: "rows",
-    rows: [{ id: 1 }],
+    rows: [{ id: "1" }],
     rowCount: 1,
   });
   assert.deepEqual(await direct.execute(sql.command`UPDATE users SET active = ${true}`), {
@@ -260,7 +260,7 @@ async function runtimeSmoke() {
     return { value: { ...value, source: "execution" } };
   });
   const mapped = await direct.all(sql.rows(querySchema)`SELECT mapped`, { schema: executionSchema });
-  assert.deepEqual(mapped, [{ id: 1, source: "execution" }]);
+  assert.deepEqual(mapped, [{ id: "1", source: "execution" }]);
 
   const cardinalityEvents = [];
   const cardinality = createDatabase(physical([]), {
@@ -313,7 +313,7 @@ async function runtimeSmoke() {
   pooledMappingDb = createPooledDatabase(pooledMapping.provider);
   assert.deepEqual(
     await pooledMappingDb.all(sql.rows(releaseBeforeMapper)`SELECT mapper-outer`),
-    [{ id: 1, nested: true }],
+    [{ id: "1", nested: true }],
   );
   assert.equal(pooledMapping.records.length, 2);
   assert.deepEqual(pooledMapping.records.map((record) => record.releaseCount), [1, 1]);
@@ -347,7 +347,7 @@ async function runtimeSmoke() {
     await tx.execute(sql.rows(queryEscapeSchema)`SELECT query-mapper`);
     assert.deepEqual(
       await tx.all(sql.rows`SELECT execution-mapper`, { schema: executionEscapeSchema }),
-      [{ id: 1, checked: true }],
+      [{ id: "1", checked: true }],
     );
   });
   assert.equal(observerTrace.length, 2);
@@ -455,7 +455,7 @@ async function runtimeSmoke() {
   for await (const row of directStreamDb.stream(sql.rows(streamEscapeSchema)`SELECT direct-stream`)) {
     directRows.push(row);
   }
-  assert.deepEqual(directRows, [{ id: 1 }]);
+  assert.deepEqual(directRows, [{ id: "1" }]);
 
   const pooledStream = pooledFake();
   let pooledStreamDb;
@@ -471,7 +471,7 @@ async function runtimeSmoke() {
   for await (const row of pooledStreamDb.stream(sql.rows(pooledStreamSchema)`SELECT pooled-stream`)) {
     pooledRows.push(row);
   }
-  assert.deepEqual(pooledRows, [{ id: 1 }]);
+  assert.deepEqual(pooledRows, [{ id: "1" }]);
   assert.equal(pooledStream.records.length, 2);
   assert.deepEqual(pooledStream.records.map((record) => record.releaseCount), [1, 1]);
 

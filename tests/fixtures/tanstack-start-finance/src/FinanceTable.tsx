@@ -3,7 +3,7 @@ import { financeSchema } from "./schema";
 
 interface FinanceTableProps {
   readonly rows: readonly {
-    readonly id: bigint | string;
+    readonly id: string;
     readonly customer: string;
     readonly amount: number;
     readonly status: string;

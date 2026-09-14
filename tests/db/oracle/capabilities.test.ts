@@ -5,6 +5,7 @@ import { decodeExactDecimal, type ExecutionEvent } from "@sqlbraid/core";
 import { createOracledbDatabase } from "@sqlbraid/oracle/oracledb";
 import { oracleParameter, sql } from "@sqlbraid/oracle";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
+import { assertFloatBits, binary32Finite, binary64Finite, exactJsonText } from "../fidelity.js";
 import { runTransparencyCase } from "../../transparency.js";
 
 async function connect() {
@@ -19,6 +20,14 @@ async function connect() {
 
 async function drop(connection: { execute(sql: string): Promise<unknown> }, object: string): Promise<void> {
   await connection.execute(`BEGIN EXECUTE IMMEDIATE 'DROP ${object}'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;`);
+}
+
+function canonicalDecimal(value: string): string {
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/u.exec(value);
+  if (!match) return value;
+  const integer = match[2]!.replace(/^0+(?=\d)/u, "");
+  const fraction = (match[3] ?? "").replace(/0+$/u, "");
+  return `${match[1]}${integer}${fraction.length === 0 ? "" : `.${fraction}`}`;
 }
 
 test("oracle.sql.native-transparency", { timeout: 60_000 }, async () => {
@@ -80,11 +89,48 @@ test("oracle.numeric.exact-decimal", { timeout: 60_000 }, async () => {
           p_decimal := 1234567890123456789012345678.1234567890;
         END;
       BEGIN
-        advance(${sql.inOut("integer", "9007199254740992", oracleParameter.number())},
+        advance(${sql.inOut("integer", 9007199254740992n, oracleParameter.number())},
                 ${sql.out("decimal", oracleParameter.number())});
       END;
     `);
     assert.deepEqual(routine.output, { integer: "9007199254740993", decimal: row.DECIMAL_VALUE });
+  } finally {
+    await connection.close();
+  }
+});
+
+test("oracle.numeric.aggregate-composite", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    const row = await db.one(sql.rows<{
+      readonly EXACT_INTEGER: string;
+      readonly EXACT_DECIMAL: string;
+      readonly FLOAT_FAMILY: string;
+      readonly COUNT_VALUE: string;
+      readonly SUM_VALUE: string;
+      readonly AVG_VALUE: string;
+      readonly BINARY_VALUE: number;
+      readonly INPUT_VALUE: string;
+    }>`
+      SELECT CAST('9007199254740993' AS NUMBER(20, 0)) AS exact_integer,
+             CAST('12345678901234567890.123456789' AS NUMBER(38, 9)) AS exact_decimal,
+             CAST('9007199254740993' AS FLOAT(126)) AS float_family,
+             COUNT(*) AS count_value,
+             SUM(CAST('9007199254740993' AS NUMBER(20, 0))) AS sum_value,
+             AVG(CAST('12345678901234567890.123456789' AS NUMBER(38, 9))) AS avg_value,
+             CAST('1.2345678901234567' AS BINARY_DOUBLE) AS binary_value,
+             CAST(${"12345678901234567890.123456789"} AS VARCHAR2(64)) AS input_value
+      FROM dual
+    `);
+    assert.equal(row.EXACT_INTEGER, "9007199254740993");
+    assert.equal(row.EXACT_DECIMAL, "12345678901234567890.123456789");
+    assert.equal(row.FLOAT_FAMILY, "9007199254740993");
+    assert.equal(row.COUNT_VALUE, "1");
+    assert.equal(row.SUM_VALUE, "9007199254740993");
+    assert.equal(row.AVG_VALUE, "12345678901234567890.123456789");
+    assertFloatBits(row.BINARY_VALUE, 1.2345678901234567, 64);
+    assert.equal(row.INPUT_VALUE, "12345678901234567890.123456789");
   } finally {
     await connection.close();
   }
@@ -111,12 +157,180 @@ test("oracle.data.json-native", { timeout: 60_000 }, async () => {
   }
 });
 
+test("oracle.data.json-native-text", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    await drop(connection, "TABLE braid_pv17_json PURGE").catch(() => undefined);
+    await connection.execute("CREATE TABLE braid_pv17_json (id NUMBER PRIMARY KEY, payload JSON)");
+    await db.execute(sql.command`INSERT INTO braid_pv17_json (id, payload) VALUES (${1}, JSON(${exactJsonText}))`);
+    const row = await db.one(sql.rows<{
+      readonly PAYLOAD: Record<string, unknown>;
+      readonly PAYLOAD_TEXT: string;
+    }>`
+      SELECT payload,
+             JSON_SERIALIZE(payload RETURNING CLOB) AS payload_text
+      FROM braid_pv17_json
+      WHERE id = ${1}
+    `);
+    assert.equal(typeof row.PAYLOAD, "object");
+    assert.equal(typeof row.PAYLOAD_TEXT, "string");
+    assert.match(row.PAYLOAD_TEXT, /9223372036854775807/u);
+    const highPrecision = /"highPrecision":([0-9]+(?:\.[0-9]+)?)/u.exec(row.PAYLOAD_TEXT)?.[1];
+    assert.ok(highPrecision !== undefined);
+    assert.equal(canonicalDecimal(highPrecision), canonicalDecimal("12345678901234567890.12345678901234567890"));
+  } finally {
+    await drop(connection, "TABLE braid_pv17_json PURGE").catch(() => undefined);
+    await connection.close();
+  }
+});
+
 test("oracle.data.temporal", { timeout: 60_000 }, async () => {
   const { connection } = await connect();
   const db = createOracledbDatabase(connection);
   try {
-    const row = await db.one(sql.rows<{ readonly VALUE: Date }>`SELECT TIMESTAMP '2026-09-14 12:34:56' AS value FROM dual`);
+    const row = await db.one(sql.rows<{ readonly VALUE: Date; readonly VALUE_TEXT: string; readonly TZ_TEXT: string }>`
+      SELECT TO_TIMESTAMP('2026-09-14 12:34:56.123456789', 'YYYY-MM-DD HH24:MI:SS.FF9') AS value,
+             TO_CHAR(TO_TIMESTAMP('2026-09-14 12:34:56.123456789', 'YYYY-MM-DD HH24:MI:SS.FF9'), 'YYYY-MM-DD"T"HH24:MI:SS.FF9') AS value_text,
+             TO_CHAR(TO_TIMESTAMP_TZ('2026-09-14 12:34:56.123456789 +05:30', 'YYYY-MM-DD HH24:MI:SS.FF9 TZH:TZM'), 'YYYY-MM-DD"T"HH24:MI:SS.FF9 TZH:TZM') AS tz_text
+      FROM dual
+    `);
     assert.ok(row.VALUE instanceof Date);
+    assert.equal(row.VALUE_TEXT, "2026-09-14T12:34:56.123456789");
+    assert.equal(row.TZ_TEXT, "2026-09-14T12:34:56.123456789 +05:30");
+  } finally {
+    await connection.close();
+  }
+});
+
+test("oracle.numeric.bind-nls-audit", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  const exact = "12345678901234567890.123456789";
+  const castWithoutFormat = async (): Promise<{ readonly value: string } | { readonly error: unknown }> => {
+    try {
+      const row = await db.one(sql.rows<{ readonly VALUE: string }>`
+        SELECT CAST(${exact} AS NUMBER(38, 9)) AS value
+        FROM dual
+      `);
+      return { value: row.VALUE };
+    } catch (error) {
+      return { error };
+    }
+  };
+  const explicitQuery = sql.rows<{ readonly VALUE: string }>`
+    SELECT TO_CHAR(
+      TO_NUMBER(${sql.bind(exact, oracleParameter.varchar2())}, '99999999999999999999D999999999', 'NLS_NUMERIC_CHARACTERS = ''.,'''),
+      'FM99999999999999999999D999999999',
+      'NLS_NUMERIC_CHARACTERS = ''.,'''
+    ) AS value
+    FROM dual
+  `;
+  try {
+    await connection.execute(`ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'`);
+    const dot = await castWithoutFormat();
+    assert.deepEqual(dot, { value: exact });
+    assert.equal((await db.one(explicitQuery)).VALUE, exact);
+
+    await connection.execute(`ALTER SESSION SET NLS_NUMERIC_CHARACTERS = ',.'`);
+    const comma = await castWithoutFormat();
+    if ("error" in comma) {
+      assert.match(String(comma.error), /ORA-01722/u);
+    } else {
+      assert.notEqual(comma.value, exact, "unhinted string NUMBER conversion must not be advertised as NLS-independent");
+    }
+    assert.equal((await db.one(explicitQuery)).VALUE, exact);
+
+    const prepared = db.prepare("oracle-nls-explicit-text", () => explicitQuery);
+    assert.equal((await prepared.execute()).rows[0]?.VALUE, exact);
+
+    await drop(connection, "TABLE braid_pv17_nls_text PURGE").catch(() => undefined);
+    await connection.execute("CREATE TABLE braid_pv17_nls_text (id NUMBER PRIMARY KEY, amount NUMBER(38, 9))");
+    const bulk = await db.bulk(
+      [{ id: 1, value: exact }, { id: 2, value: exact }],
+      (input) => sql.command`
+        INSERT INTO braid_pv17_nls_text (id, amount)
+        VALUES (
+          ${input.id},
+          TO_NUMBER(${sql.bind(input.value, oracleParameter.varchar2())}, '99999999999999999999D999999999', 'NLS_NUMERIC_CHARACTERS = ''.,''')
+        )
+      `,
+    );
+    assert.equal(bulk.inputCount, 2);
+    assert.equal(bulk.affectedRows, 2);
+    const stored = await db.all(sql.rows<{ readonly ID: string; readonly VALUE: string }>`
+      SELECT id, TO_CHAR(amount, 'FM99999999999999999999D999999999', 'NLS_NUMERIC_CHARACTERS = ''.,''') AS value
+      FROM braid_pv17_nls_text
+      ORDER BY id
+    `);
+    assert.deepEqual(stored, [{ ID: "1", VALUE: exact }, { ID: "2", VALUE: exact }]);
+  } finally {
+    await drop(connection, "TABLE braid_pv17_nls_text PURGE").catch(() => undefined);
+    await connection.close();
+  }
+});
+
+test("oracle.command.safe-count", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    await drop(connection, "TABLE braid_pv17_count PURGE").catch(() => undefined);
+    await connection.execute("CREATE TABLE braid_pv17_count (id NUMBER)");
+    const result = await db.execute(sql.command`INSERT INTO braid_pv17_count (id) VALUES (${1})`);
+    assert.equal(result.command.affectedRows, 1);
+  } finally {
+    await drop(connection, "TABLE braid_pv17_count PURGE").catch(() => undefined);
+    await connection.close();
+  }
+});
+
+test("oracle.binary.finite-transport", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    for (const expected of binary32Finite) {
+      const row = await db.one(sql.rows<{ readonly VALUE: number }>`
+        SELECT CAST(${sql.bind(expected, oracleParameter.binaryFloat())} AS BINARY_FLOAT) AS value
+        FROM dual
+      `);
+      if (Object.is(expected, -0)) assert.equal(typeof row.VALUE, "number");
+      else assertFloatBits(row.VALUE, expected, 32);
+    }
+    for (const expected of binary64Finite) {
+      const row = await db.one(sql.rows<{ readonly VALUE: number }>`
+        SELECT CAST(${sql.bind(expected, oracleParameter.binaryDouble())} AS BINARY_DOUBLE) AS value
+        FROM dual
+      `);
+      if (Object.is(expected, -0)) assert.equal(typeof row.VALUE, "number");
+      else assertFloatBits(row.VALUE, expected, 64);
+    }
+  } finally {
+    await connection.close();
+  }
+});
+
+test("oracle.binary.nonfinite-probe", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -0, 0.1]) {
+      const row = await db.one(sql.rows<{ readonly VALUE: number }>`
+        SELECT CAST(${sql.bind(value, oracleParameter.binaryDouble())} AS BINARY_DOUBLE) AS value
+        FROM dual
+      `);
+      if (Number.isNaN(value)) assert.ok(Number.isNaN(row.VALUE));
+      else if (Object.is(value, -0)) assert.ok(Object.is(row.VALUE, -0));
+      else assert.equal(row.VALUE, value);
+    }
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -0, Math.fround(0.1)]) {
+      const row = await db.one(sql.rows<{ readonly VALUE: number }>`
+        SELECT CAST(${sql.bind(value, oracleParameter.binaryFloat())} AS BINARY_FLOAT) AS value
+        FROM dual
+      `);
+      if (Number.isNaN(value)) assert.ok(Number.isNaN(row.VALUE));
+      else if (Object.is(value, -0)) assert.ok(Object.is(row.VALUE, -0));
+      else assertFloatBits(row.VALUE, value, 32);
+    }
   } finally {
     await connection.close();
   }

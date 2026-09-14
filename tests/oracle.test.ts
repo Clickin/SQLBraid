@@ -165,3 +165,89 @@ test("Oracle numeric result transport keeps NUMBER exact and BINARY_FLOAT approx
     { code: "BRAID_RESULT_EXACTNESS" },
   );
 });
+
+test("Oracle NUMBER-family metadata treats FLOAT and ANSI aliases as exact strings", async () => {
+  const exactTypes = new Map(typePolicy.mappings.filter((mapping) => mapping.numeric?.semantics === "exact-decimal").map((mapping) => [mapping.databaseType, mapping.numeric]));
+  assert.deepEqual(exactTypes.get("NUMBER"), { semantics: "exact-decimal", representation: "string", fidelity: "lossless" });
+  assert.deepEqual(exactTypes.get("FLOAT"), { semantics: "exact-decimal", representation: "string", fidelity: "lossless" });
+  assert.deepEqual(exactTypes.get("DOUBLE PRECISION"), { semantics: "exact-decimal", representation: "string", fidelity: "lossless" });
+  assert.deepEqual(typePolicy.mappings.find((mapping) => mapping.databaseType === "INTEGER")?.numeric, {
+    semantics: "exact-integer",
+    representation: "string",
+    fidelity: "lossless",
+  });
+  assert.equal(typePolicy.decode("FLOAT", "9007199254740993"), "9007199254740993");
+  assert.equal(typePolicy.decode("NUMERIC", "12345678901234567890.123"), "12345678901234567890.123");
+
+  const connection = {
+    async execute() {
+      return {
+        rows: [{ VALUE: "9007199254740993" }],
+        metaData: [{ name: "VALUE", dbTypeName: "FLOAT" }],
+      };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  assert.deepEqual(await createOracledbExecutor(connection).query(sql.rows`SELECT value FROM t`.render()), {
+    kind: "rows",
+    rows: [{ VALUE: "9007199254740993" }],
+    rowCount: 1,
+  });
+});
+
+test("Oracle preserves BINARY non-finite input after Thin-mode verification", () => {
+  assert.ok(Number.isNaN(typePolicy.encode("BINARY_FLOAT", Number.NaN)));
+  assert.equal(typePolicy.encode("BINARY_DOUBLE", Number.POSITIVE_INFINITY), Number.POSITIVE_INFINITY);
+  assert.throws(() => typePolicy.encode("BINARY_DOUBLE", "Infinity"), /JavaScript number/u);
+});
+
+test("Oracle environment does not overclaim NLS, JSON, or temporal fidelity", () => {
+  const connection = {
+    async execute() {
+      return { rows: [] };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const capabilities = createOracledbExecutor(connection).environment?.capabilities;
+  assert.equal(capabilities?.["numeric.bind-exact"]?.status, "unsupported");
+  assert.equal(capabilities?.["data.json-parsed"]?.status, "guaranteed");
+  assert.equal(capabilities?.["data.json-lossless-text"]?.status, "unsupported");
+  assert.equal(capabilities?.["data.temporal-native"]?.status, "guarded");
+  assert.equal(capabilities?.["data.temporal-lossless"]?.status, "unsupported");
+});
+
+test("Oracle rejects narrowed command counts and exact numeric OUT values", async () => {
+  const countConnection = {
+    async execute() {
+      return { rowsAffected: Number.MAX_SAFE_INTEGER + 1 };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  await assert.rejects(
+    () => createOracledbExecutor(countConnection).query(sql.command`DELETE FROM account`.render()),
+    { code: "BRAID_RESULT_EXACTNESS" },
+  );
+
+  const outConnection = {
+    async execute() {
+      return { outBinds: [1] };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const driver = {
+    BIND_OUT: "out",
+    OUT_FORMAT_OBJECT: "object",
+    DB_TYPE_VARCHAR: "varchar",
+    DB_TYPE_NUMBER: "number",
+  };
+  await assert.rejects(
+    () => createOracledbExecutor(outConnection, { driver }).call(
+      sql.call`BEGIN answer(${sql.out("answer", oracleParameter.number())}); END;`.render(),
+    ),
+    { code: "BRAID_RESULT_EXACTNESS" },
+  );
+});

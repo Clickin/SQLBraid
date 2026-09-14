@@ -44,26 +44,31 @@ const financeSchema = {
       }
       const row = value as Record<string, unknown>;
       if (
-        typeof row.accountId !== "number"
+        typeof row.accountId !== "string"
         || typeof row.accountName !== "string"
-        || typeof row.balance !== "number"
+        || typeof row.balance !== "string"
         || typeof row.currency !== "string"
         || typeof row.locale !== "string"
       ) {
         return { issues: [{ message: "Finance row columns have unexpected types." }] };
       }
+      const accountId = Number(row.accountId);
+      const balance = Number(row.balance);
+      if (!Number.isSafeInteger(accountId) || !Number.isSafeInteger(balance)) {
+        return { issues: [{ message: "Finance values exceed the application's safe integer range." }] };
+      }
       return {
         value: {
-          accountId: row.accountId,
+          accountId,
           accountName: row.accountName,
-          balance: row.balance,
+          balance,
           currency: row.currency,
           locale: row.locale,
           balanceLabel: new Intl.NumberFormat("ko-KR", {
             style: "currency",
             currency: row.currency,
             maximumFractionDigits: 0,
-          }).format(row.balance),
+          }).format(balance),
         },
       };
     },
@@ -113,7 +118,7 @@ async function initializeDatabase(): Promise<ReturnType<typeof createSqliteWasmD
       (3, '東京パートナーズ', 2400000, 'JPY', 'ja-JP'),
       (4, 'Seoul Capital', 5100000, 'KRW', 'en-KR');
   `);
-  return createSqliteWasmDatabase(database);
+  return createSqliteWasmDatabase(database, { sqlite3 });
 }
 
 function renderedSql(statement: {

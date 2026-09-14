@@ -92,14 +92,14 @@ test("SQL Server binds explicit types, reports kinds, and preserves result-set b
     await db.execute(sql`CREATE TABLE dbo.braid_pv13 (id int NOT NULL PRIMARY KEY, amount decimal(19,4) NULL, label nvarchar(100) NULL, payload varbinary(16) NULL)`);
     await db.execute(sql`INSERT INTO dbo.braid_pv13 (id, amount, label, payload) VALUES (${1}, ${sql.bind("12.3400", mssqlParameter.decimal(19, 4))}, ${sql.bind("Ada", mssqlParameter.nvarchar(100))}, ${sql.bind(new Uint8Array([1, 2]), mssqlParameter.varbinary(16))})`);
 
-    const selected = await db.all(sql.rows<{ readonly id: number; readonly amount: number; readonly label: string; readonly payload: Uint8Array }>`
-      SELECT id, amount, label, payload FROM dbo.braid_pv13
+    const selected = await db.all(sql.rows<{ readonly id: string; readonly amount: string; readonly label: string; readonly payload: Uint8Array }>`
+      SELECT id, CONVERT(varchar(64), amount) AS amount, label, payload FROM dbo.braid_pv13
       WHERE amount = ${sql.bind("12.3400", mssqlParameter.decimal(19, 4))}
         AND id = ${sql.bind(1, mssqlParameter.int())}
     `);
     assert.equal(selected.length, 1);
-    assert.equal(selected[0]?.id, 1);
-    assert.equal(selected[0]?.amount, 12.34);
+    assert.equal(selected[0]?.id, "1");
+    assert.equal(selected[0]?.amount, "12.3400");
     assert.equal(selected[0]?.label, "Ada");
     assert.deepEqual([...selected[0]!.payload], [1, 2]);
 
@@ -114,6 +114,11 @@ test("SQL Server binds explicit types, reports kinds, and preserves result-set b
       () => db.execute(sql`SELECT ${sql.bind("1234567890123456", mssqlParameter.decimal(38, 4))}`),
       /BRAID_BIND_DECIMAL_EXACTNESS/u,
     );
+    await assert.rejects(
+      // @ts-expect-error Invalid typed input from JavaScript must fail before I/O.
+      () => db.execute(sql`SELECT ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}`),
+      /BRAID_BIND_DECIMAL_EXACTNESS/u,
+    );
     await assert.rejects(() => db.execute(sql`SELECT ${null}`), /BRAID_BIND_TYPE_REQUIRED/u);
     await assert.rejects(
       () => db.execute(sql.rows`SELECT 1 AS duplicate, 2 AS duplicate`),
@@ -122,7 +127,7 @@ test("SQL Server binds explicit types, reports kinds, and preserves result-set b
 
     const call = await db.call(sql.call`SELECT 1 AS first; SELECT 2 AS second`);
     assert.equal(call.resultSets.length, 2);
-    assert.deepEqual(call.resultSets.map((set) => set.rows), [[{ first: 1 }], [{ second: 2 }]]);
+    assert.deepEqual(call.resultSets.map((set) => set.rows), [[{ first: "1" }], [{ second: "2" }]]);
   } finally {
     await createTediousDatabase(connection).execute(sql`DROP TABLE IF EXISTS dbo.braid_pv13`).catch(() => undefined);
     await close(connection);
@@ -133,15 +138,15 @@ test("SQL Server transaction entry preserves the actual session isolation level"
   const connection = await connect(inject("mssql") as MssqlSettings, ISOLATION_LEVEL.REPEATABLE_READ);
   try {
     const db = createTediousDatabase(connection);
-    const isolation = sql.rows<{ readonly level: number }>`
+    const isolation = sql.rows<{ readonly level: string }>`
       SELECT transaction_isolation_level AS level FROM sys.dm_exec_sessions WHERE session_id = @@SPID
     `;
-    assert.equal((await db.one(isolation)).level, 3);
+    assert.equal((await db.one(isolation)).level, "3");
     await db.tx(async (tx) => {
-      assert.equal((await tx.one(isolation)).level, 3);
-      await tx.tx(async (nested) => { assert.equal((await nested.one(isolation)).level, 3); });
+      assert.equal((await tx.one(isolation)).level, "3");
+      await tx.tx(async (nested) => { assert.equal((await nested.one(isolation)).level, "3"); });
     });
-    assert.equal((await db.one(isolation)).level, 3);
+    assert.equal((await db.one(isolation)).level, "3");
   } finally {
     await close(connection);
   }
@@ -152,7 +157,7 @@ test("SQL Server row-event streaming supports early break and abort", async () =
   const connection = await connect(settings);
   try {
     const db = createTediousDatabase(connection, { maxBufferedRows: 8 });
-    const stream = db.stream(sql.rows<{ readonly n: number }>`
+    const stream = db.stream(sql.rows<{ readonly n: string }>`
       WITH numbers AS (
         SELECT TOP (100) CAST(ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS int) AS n
         FROM sys.all_objects a CROSS JOIN sys.all_objects b
@@ -161,22 +166,22 @@ test("SQL Server row-event streaming supports early break and abort", async () =
     `);
     let seen = 0;
     for await (const row of stream) {
-      assert.equal(row.n, 1);
+      assert.equal(row.n, "1");
       seen += 1;
       break;
     }
     assert.equal(seen, 1);
-    assert.equal((await db.one(sql.rows<{ readonly n: number }>`SELECT 7 AS n`)).n, 7);
+    assert.equal((await db.one(sql.rows<{ readonly n: string }>`SELECT 7 AS n`)).n, "7");
 
     const controller = new AbortController();
-    const live = db.stream(sql.rows<{ readonly n: number }>`
+    const live = db.stream(sql.rows<{ readonly n: string }>`
       SELECT TOP (100) CAST(ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS int) AS n
       FROM sys.all_objects a CROSS JOIN sys.all_objects b
     `, { signal: controller.signal })[Symbol.asyncIterator]();
-    assert.equal((await live.next()).value?.n, 1);
+    assert.equal((await live.next()).value?.n, "1");
     controller.abort(new Error("live stop"));
     await assert.rejects(() => live.next(), /live stop/u);
-    assert.equal((await db.one(sql.rows<{ readonly n: number }>`SELECT 8 AS n`)).n, 8);
+    assert.equal((await db.one(sql.rows<{ readonly n: string }>`SELECT 8 AS n`)).n, "8");
 
     const preAborted = new AbortController();
     preAborted.abort(new Error("stop"));

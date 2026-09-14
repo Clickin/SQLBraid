@@ -8,6 +8,9 @@ import { sql as mysql } from "@sqlbraid/mysql";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { sql as sqlite } from "@sqlbraid/sqlite";
 
+const exactJsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
+const exactTimestampText = "2026-09-14 12:34:56.123456";
+
 function runtimeName() {
   if (typeof Bun !== "undefined") return "bun";
   if (typeof Deno !== "undefined") return "deno";
@@ -130,7 +133,9 @@ export async function runPostgresSmoke(url) {
       id INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
       amount NUMERIC(12, 3) NOT NULL,
-      big_value BIGINT NOT NULL
+      big_value BIGINT NOT NULL,
+      payload JSON,
+      stamp TIMESTAMP(6)
     )`);
     assert.equal(table.kind, "command");
 
@@ -139,12 +144,15 @@ export async function runPostgresSmoke(url) {
     assert.equal(inserted.kind, "command");
     assert.equal(inserted.command.affectedRows, 1);
 
-    const normalized = await db.one(postgres.rows`SELECT id, name, amount, big_value FROM ${directIdentifier} WHERE id = ${1}`);
+    await db.execute(postgres.command`UPDATE ${directIdentifier} SET payload = ${exactJsonText}, stamp = ${exactTimestampText} WHERE id = ${1}`);
+    const normalized = await db.one(postgres.rows`SELECT id, name, amount, big_value, payload::text AS payload, stamp::text AS stamp FROM ${directIdentifier} WHERE id = ${1}`);
     assert.deepEqual(normalized, {
-      id: 1,
+      id: "1",
       name: "Ada",
       amount: "12.340",
-      big_value: 9007199254740993n,
+      big_value: "9007199254740993",
+      payload: exactJsonText,
+      stamp: exactTimestampText,
     });
 
     const command = await db.execute(postgres.command`UPDATE ${directIdentifier} SET name = ${"Grace"} WHERE id = ${1}`);
@@ -165,7 +173,7 @@ export async function runPostgresSmoke(url) {
         && error.actualKind === "command",
     );
 
-    const queryMapper = schema((value) => ({ id: value.id + 10 }));
+    const queryMapper = schema((value) => ({ id: Number(value.id) + 10 }));
     assert.deepEqual(
       await db.all(postgres.rows(queryMapper)`SELECT id FROM ${directIdentifier} WHERE id = ${1}`),
       [{ id: 11 }],
@@ -179,7 +187,7 @@ export async function runPostgresSmoke(url) {
     const returning = await db.execute(postgres.rows`INSERT INTO ${directIdentifier} (id, name, amount, big_value)
       VALUES (${2}, ${"Bob"}, ${"1.250"}, ${"2"}) RETURNING id`);
     assert.equal(returning.kind, "rows");
-    assert.deepEqual(returning.rows, [{ id: 2 }]);
+    assert.deepEqual(returning.rows, [{ id: "2" }]);
 
     await db.tx(async (tx) => {
       await tx.execute(postgres.command`INSERT INTO ${directIdentifier} (id, name, amount, big_value)
@@ -195,7 +203,7 @@ export async function runPostgresSmoke(url) {
       );
       assert.deepEqual(
         (await tx.all(postgres.rows`SELECT id FROM ${directIdentifier} ORDER BY id`)).map(({ id }) => id),
-        [1, 2, 3],
+        ["1", "2", "3"],
       );
     });
     await assertScopeRejection(db.tx(async () => db.execute(postgres`SELECT ${1}`)));
@@ -209,7 +217,7 @@ export async function runPostgresSmoke(url) {
     );
     assert.deepEqual(
       (await db.all(postgres.rows`SELECT id FROM ${directIdentifier} ORDER BY id`)).map(({ id }) => id),
-      [1, 2, 3],
+      ["1", "2", "3"],
     );
   } finally {
     await client.end();
@@ -253,8 +261,8 @@ export async function runPostgresSmoke(url) {
     });
     assert.equal(new Set(pinned).size, 1);
     assert.deepEqual(await db.all(postgres.rows`SELECT id, name FROM ${poolIdentifier} ORDER BY id`), [
-      { id: 1, name: "initial" },
-      { id: 3, name: "committed" },
+      { id: "1", name: "initial" },
+      { id: "3", name: "committed" },
     ]);
 
     await assertScopeRejection(db.tx(async () => db.execute(postgres`SELECT ${1}`)));
@@ -267,13 +275,13 @@ export async function runPostgresSmoke(url) {
     );
     assert.deepEqual(
       await db.all(postgres.rows`SELECT id FROM ${poolIdentifier} ORDER BY id`),
-      [{ id: 1 }, { id: 3 }],
+      [{ id: "1" }, { id: "3" }],
     );
 
     const singleDb = createPgPoolDatabase(singlePool, { observers: [{ onEvent(event) { events.push(event); } }] });
     const mapper = schema(async (value) => {
       await singleDb.execute(postgres`SELECT ${2}`);
-      return { value: value.value + 1 };
+      return { value: Number(value.value) + 1 };
     });
     const mappedQuery = postgres.rows(mapper)`SELECT ${1}::integer AS value`;
     const operation = (async () => {
@@ -305,7 +313,7 @@ export async function runPostgresSmoke(url) {
     supported: true,
     runtime: runtimeName(),
     adapter: "postgres/pg",
-    checks: ["direct-bind", "result-kind", "type-policy", "schema", "pool-concurrency", "transaction-pinning", "nested-savepoint", "rollback", "root-escape", "observer-events", "max-one-mapper-reentry"],
+    checks: ["direct-bind", "exact-numeric-string", "json-text", "temporal-text", "result-kind", "type-policy", "schema", "pool-concurrency", "transaction-pinning", "nested-savepoint", "rollback", "root-escape", "observer-events", "max-one-mapper-reentry"],
   };
 }
 
@@ -316,13 +324,23 @@ export async function runMysqlSmoke(url) {
   const directIdentifier = mysql.ident(directTable);
   let client;
   try {
-    client = await createConnection({ uri: url, supportBigNumbers: true, bigNumberStrings: true, decimalNumbers: false });
+    client = await createConnection({
+      uri: url,
+      supportBigNumbers: true,
+      bigNumberStrings: true,
+      decimalNumbers: false,
+      rowsAsArray: false,
+      jsonStrings: true,
+      dateStrings: true,
+    });
     const db = createMysql2Database(client);
     const table = await db.execute(mysql.command`CREATE TEMPORARY TABLE ${directIdentifier} (
       id INT PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
       amount DECIMAL(12, 3) NOT NULL,
-      big_value BIGINT NOT NULL
+      big_value BIGINT NOT NULL,
+      payload JSON,
+      stamp DATETIME(6)
     )`);
     assert.equal(table.kind, "command");
 
@@ -331,12 +349,17 @@ export async function runMysqlSmoke(url) {
     assert.equal(inserted.kind, "command");
     assert.equal(inserted.command.affectedRows, 1);
 
-    const normalized = await db.one(mysql.rows`SELECT id, name, amount, big_value FROM ${directIdentifier} WHERE id = ${1}`);
+    await db.execute(mysql.command`UPDATE ${directIdentifier} SET payload = ${exactJsonText}, stamp = ${exactTimestampText} WHERE id = ${1}`);
+    // Native JSON canonicalizes numeric storage; fidelity starts at the DB result.
+    const [nativeJson] = await client.execute(`SELECT CAST(payload AS CHAR) AS payload FROM ${client.escapeId(directTable)} WHERE id = ?`, [1]);
+    const normalized = await db.one(mysql.rows`SELECT id, name, amount, big_value, payload, stamp FROM ${directIdentifier} WHERE id = ${1}`);
     assert.deepEqual(normalized, {
-      id: 1,
+      id: "1",
       name: "Ada",
       amount: "12.340",
-      big_value: 9007199254740993n,
+      big_value: "9007199254740993",
+      payload: nativeJson[0].payload,
+      stamp: exactTimestampText,
     });
 
     const command = await db.execute(mysql.command`UPDATE ${directIdentifier} SET name = ${"Grace"} WHERE id = ${1}`);
@@ -357,7 +380,7 @@ export async function runMysqlSmoke(url) {
         && error.actualKind === "command",
     );
 
-    const queryMapper = schema((value) => ({ id: value.id + 10 }));
+    const queryMapper = schema((value) => ({ id: Number(value.id) + 10 }));
     assert.deepEqual(
       await db.all(mysql.rows(queryMapper)`SELECT id FROM ${directIdentifier} WHERE id = ${1}`),
       [{ id: 11 }],
@@ -382,7 +405,7 @@ export async function runMysqlSmoke(url) {
       );
       assert.deepEqual(
         (await tx.all(mysql.rows`SELECT id FROM ${directIdentifier} ORDER BY id`)).map(({ id }) => id),
-        [1, 2],
+        ["1", "2"],
       );
     });
     await assertScopeRejection(db.tx(async () => db.execute(mysql`SELECT ${1}`)));
@@ -396,7 +419,7 @@ export async function runMysqlSmoke(url) {
     );
     assert.deepEqual(
       (await db.all(mysql.rows`SELECT id FROM ${directIdentifier} ORDER BY id`)).map(({ id }) => id),
-      [1, 2],
+      ["1", "2"],
     );
   } finally {
     if (client) await client.end();
@@ -404,8 +427,27 @@ export async function runMysqlSmoke(url) {
 
   const poolTable = testName("mysql_pool");
   const poolIdentifier = mysql.ident(poolTable);
-  const pool = createPool({ uri: url, connectionLimit: 2, idleTimeout: 0, supportBigNumbers: true, bigNumberStrings: true });
-  const singlePool = createPool({ uri: url, connectionLimit: 1 });
+  const pool = createPool({
+    uri: url,
+    connectionLimit: 2,
+    idleTimeout: 0,
+    supportBigNumbers: true,
+    bigNumberStrings: true,
+    decimalNumbers: false,
+    rowsAsArray: false,
+    jsonStrings: true,
+    dateStrings: true,
+  });
+  const singlePool = createPool({
+    uri: url,
+    connectionLimit: 1,
+    supportBigNumbers: true,
+    bigNumberStrings: true,
+    decimalNumbers: false,
+    rowsAsArray: false,
+    jsonStrings: true,
+    dateStrings: true,
+  });
   try {
     const events = [];
     const db = createMysql2PoolDatabase(pool, { observers: [{ onEvent(event) { events.push(event); } }] });
@@ -440,8 +482,8 @@ export async function runMysqlSmoke(url) {
     });
     assert.equal(new Set(pinned).size, 1);
     assert.deepEqual(await db.all(mysql.rows`SELECT id, name FROM ${poolIdentifier} ORDER BY id`), [
-      { id: 1, name: "initial" },
-      { id: 3, name: "committed" },
+      { id: "1", name: "initial" },
+      { id: "3", name: "committed" },
     ]);
 
     await assertScopeRejection(db.tx(async () => db.execute(mysql`SELECT ${1}`)));
@@ -454,7 +496,7 @@ export async function runMysqlSmoke(url) {
     );
     assert.deepEqual(
       await db.all(mysql.rows`SELECT id FROM ${poolIdentifier} ORDER BY id`),
-      [{ id: 1 }, { id: 3 }],
+      [{ id: "1" }, { id: "3" }],
     );
 
     const singleDb = createMysql2PoolDatabase(singlePool, { observers: [{ onEvent(event) { events.push(event); } }] });
@@ -490,7 +532,7 @@ export async function runMysqlSmoke(url) {
     supported: true,
     runtime: runtimeName(),
     adapter: "mysql/mysql2",
-    checks: ["direct-bind", "result-kind", "type-policy", "schema", "pool-concurrency", "transaction-pinning", "nested-savepoint", "rollback", "root-escape", "observer-events", "max-one-mapper-reentry"],
+    checks: ["direct-bind", "exact-numeric-string", "json-text", "temporal-text", "result-kind", "type-policy", "schema", "pool-concurrency", "transaction-pinning", "nested-savepoint", "rollback", "root-escape", "observer-events", "max-one-mapper-reentry"],
   };
 }
 
@@ -561,7 +603,7 @@ export async function runSqliteSmoke() {
 
     assert.deepEqual(
       await db.one(sqlite.rows`SELECT id, name, amount FROM ${tableIdentifier} WHERE id = ${1}`),
-      { id: 1, name: "Ada", amount: 12.34 },
+      { id: "1", name: "Ada", amount: 12.34 },
     );
     assert.deepEqual(
       await db.one(sqlite.rows`SELECT CAST(${1.5} AS REAL) AS amount`),
@@ -569,6 +611,11 @@ export async function runSqliteSmoke() {
       "SQLite result normalization must preserve native numeric values",
     );
 
+    assert.deepEqual(
+      await db.one(sqlite.rows`SELECT CAST('9007199254740993' AS INTEGER) AS value`),
+      { value: "9007199254740993" },
+      "SQLite exact INTEGER values must remain text",
+    );
     const command = await db.execute(sqlite.command`UPDATE ${tableIdentifier} SET name = ${"Grace"} WHERE id = ${1}`);
     assert.equal(command.kind, "command");
     assert.equal(command.command.affectedRows, 1);
@@ -585,7 +632,7 @@ export async function runSqliteSmoke() {
         && error.actualKind === "command",
     );
 
-    const queryMapper = schema((value) => ({ id: value.id + 10 }));
+    const queryMapper = schema((value) => ({ id: Number(value.id) + 10 }));
     assert.deepEqual(
       await db.all(sqlite.rows(queryMapper)`SELECT id FROM ${tableIdentifier} WHERE id = ${1}`),
       [{ id: 11 }],
@@ -599,7 +646,7 @@ export async function runSqliteSmoke() {
     const returning = await db.execute(sqlite.rows`INSERT INTO ${tableIdentifier} (id, name, amount)
       VALUES (${2}, ${"Bob"}, ${3.45}) RETURNING id`);
     assert.equal(returning.kind, "rows");
-    assert.deepEqual(returning.rows, [{ id: 2 }]);
+    assert.deepEqual(returning.rows, [{ id: "2" }]);
 
     await db.tx(async (tx) => {
       await tx.execute(sqlite.command`INSERT INTO ${tableIdentifier} (id, name, amount) VALUES (${3}, ${"Committed"}, ${4.56})`);
@@ -613,7 +660,7 @@ export async function runSqliteSmoke() {
       );
       assert.deepEqual(
         (await tx.all(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`)).map(({ id }) => id),
-        [1, 2, 3],
+        ["1", "2", "3"],
       );
     });
     await assertScopeRejection(db.tx(async () => db.execute(sqlite`SELECT ${1}`)));
@@ -626,17 +673,17 @@ export async function runSqliteSmoke() {
     );
     assert.deepEqual(
       (await db.all(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`)).map(({ id }) => id),
-      [1, 2, 3],
+      ["1", "2", "3"],
     );
 
     const streamed = [];
     for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`)) streamed.push(row.id);
-    assert.deepEqual(streamed, [1, 2, 3]);
+    assert.deepEqual(streamed, ["1", "2", "3"]);
     for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`)) {
-      assert.equal(row.id, 1);
+      assert.equal(row.id, "1");
       break;
     }
-    assert.deepEqual(await db.one(sqlite.rows`SELECT COUNT(*) AS count FROM ${tableIdentifier}`), { count: 3 });
+    assert.deepEqual(await db.one(sqlite.rows`SELECT COUNT(*) AS count FROM ${tableIdentifier}`), { count: "3" });
 
     await db.execute(sqlite`SELECT ${"observer-secret"}`);
     await db.tx(async (tx) => { await tx.execute(sqlite`SELECT ${1}`); });
@@ -651,6 +698,6 @@ export async function runSqliteSmoke() {
     supported: true,
     runtime: runtimeName(),
     adapter: "sqlite/node:sqlite",
-    checks: ["direct-bind", "rows", "commands", "result-kind", "normalization", "schema", "returning", "transaction-rollback", "root-escape", "observer-events"],
+    checks: ["direct-bind", "exact-numeric-string", "rows", "commands", "result-kind", "normalization", "schema", "returning", "transaction-rollback", "root-escape", "observer-events"],
   };
 }

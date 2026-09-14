@@ -32,13 +32,13 @@ test("PostgreSQL pg-cursor reuses streaming conformance with row schemas and lea
     await pool.query("DROP TABLE IF EXISTS braid_pv15_conformance");
     await pool.query("CREATE TABLE braid_pv15_conformance (id INTEGER PRIMARY KEY, label TEXT NOT NULL)");
     await pool.query("INSERT INTO braid_pv15_conformance (id, label) VALUES (1, 'one'), (2, 'two')");
-    const schema = rowSchema<{ readonly id: number; readonly label: string }>((value) => {
+    const schema = rowSchema<{ readonly id: string; readonly label: string }>((value) => {
       if (
         !value
         || typeof value !== "object"
         || !("id" in value)
         || !("label" in value)
-        || typeof value.id !== "number"
+        || typeof value.id !== "string"
         || typeof value.label !== "string"
       ) return { issues: [{ message: "invalid PostgreSQL conformance row" }] };
       return { value: { id: value.id, label: value.label } };
@@ -60,7 +60,7 @@ test("PostgreSQL pg-cursor reuses streaming conformance with row schemas and lea
       return {
         db,
         query: sql.rows(schema)`SELECT id, label FROM braid_pv15_conformance ORDER BY id`,
-        expected: [{ id: 1, label: "one" }, { id: 2, label: "two" }],
+        expected: [{ id: "1", label: "one" }, { id: "2", label: "two" }],
         mappingQuery: sql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance ORDER BY id`,
         released: () => releases - releaseStart,
         iteratorReturns: () => closes + terminated - terminatedStart,
@@ -86,14 +86,14 @@ test("PostgreSQL abort interrupts native pending Execute and frees a single-conn
   const db = createPgPoolDatabase(pool, { cursor: PendingCursor });
   const controller = new AbortController();
   try {
-    const before = await db.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid`);
+    const before = await db.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
     const iterator = db.stream(sql.rows`SELECT pg_sleep(60)`, { signal: controller.signal })[Symbol.asyncIterator]();
     const next = iterator.next();
     await reading.promise;
     const reason = new Error("abort native pending read");
     controller.abort(reason);
     await assert.rejects(next, (error: unknown) => error instanceof Error && error.cause === reason);
-    const after = await db.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid`);
+    const after = await db.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
     assert.notEqual(after.pid, before.pid);
   } finally {
     controller.abort();
@@ -109,16 +109,16 @@ test("PostgreSQL transaction streaming pins its backend and keeps binds value-on
   try {
     const secret = "x'); DROP TABLE braid_pv15_bind; --";
     await db.tx(async (tx) => {
-      const before = await tx.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid`);
-      const rows: { readonly pid: number; readonly value: string }[] = [];
-      for await (const row of tx.stream(sql.rows<{ readonly pid: number; readonly value: string }>`SELECT pg_backend_pid() AS pid, ${secret}::text AS value`)) {
+      const before = await tx.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
+      const rows: { readonly pid: string; readonly value: string }[] = [];
+      for await (const row of tx.stream(sql.rows<{ readonly pid: string; readonly value: string }>`SELECT pg_backend_pid() AS pid, ${secret}::text AS value`)) {
         rows.push(row);
       }
-      const after = await tx.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid`);
+      const after = await tx.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
       assert.equal(after.pid, before.pid);
       assert.deepEqual(rows, [{ pid: before.pid, value: secret }]);
     });
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: string }>`SELECT 1 AS ok`), { ok: "1" });
   } finally {
     await endPool(pool);
   }
@@ -132,18 +132,18 @@ test("PostgreSQL pg-cursor streams 100k rows and releases after break", async ()
   try {
     await pool.query("DROP TABLE IF EXISTS braid_pv15_stream");
     await pool.query("CREATE TABLE braid_pv15_stream AS SELECT value AS id FROM generate_series(1, 100000) value");
-    const query = sql.rows<{ readonly id: number }>`SELECT id FROM braid_pv15_stream ORDER BY id`;
+    const query = sql.rows<{ readonly id: string }>`SELECT id FROM braid_pv15_stream ORDER BY id`;
     let count = 0;
     for await (const row of db.stream(query)) {
       count += 1;
-      assert.equal(typeof row.id, "number");
+      assert.equal(typeof row.id, "string");
     }
     assert.equal(count, 100_000);
     for await (const row of db.stream(query)) {
-      assert.equal(typeof row.id, "number");
+      assert.equal(typeof row.id, "string");
       break;
     }
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: string }>`SELECT 1 AS ok`), { ok: "1" });
   } finally {
     await pool.query("DROP TABLE IF EXISTS braid_pv15_stream").catch(() => undefined);
     await pool.end();
@@ -198,62 +198,62 @@ test("PostgreSQL refcursor routines require tx and close heterogeneous portals",
       LANGUAGE SQL
       AS $$ VALUES (1, 'table-function'::text), (2, 'table-function-2'::text) $$;
     `);
-    const tableSchema = rowSchema<{ readonly id: number; readonly label: string; readonly source: "table-function" }>((value) => {
+    const tableSchema = rowSchema<{ readonly id: string; readonly label: string; readonly source: "table-function" }>((value) => {
       if (
         !value
         || typeof value !== "object"
         || !("id" in value)
         || !("label" in value)
-        || typeof value.id !== "number"
+        || typeof value.id !== "string"
         || typeof value.label !== "string"
       ) {
         return { issues: [{ message: "invalid table-function row" }] };
       }
-      const row = value as { readonly id: number; readonly label: string };
+      const row = value as { readonly id: string; readonly label: string };
       return { value: { id: row.id, label: row.label, source: "table-function" } };
     });
-    const tableRows: { readonly id: number; readonly label: string; readonly source: "table-function" }[] = [];
+    const tableRows: { readonly id: string; readonly label: string; readonly source: "table-function" }[] = [];
     for await (const row of db.stream(sql.rows(tableSchema)`SELECT * FROM braid_pv15_rows()`)) tableRows.push(row);
     assert.deepEqual(tableRows, [
-      { id: 1, label: "table-function", source: "table-function" },
-      { id: 2, label: "table-function-2", source: "table-function" },
+      { id: "1", label: "table-function", source: "table-function" },
+      { id: "2", label: "table-function-2", source: "table-function" },
     ]);
     assert.deepEqual(
-      await db.all(sql.rows<{ readonly id: number; readonly label: string }>`SELECT * FROM braid_pv15_rows()`),
-      [{ id: 1, label: "table-function" }, { id: 2, label: "table-function-2" }],
+      await db.all(sql.rows<{ readonly id: string; readonly label: string }>`SELECT * FROM braid_pv15_rows()`),
+      [{ id: "1", label: "table-function" }, { id: "2", label: "table-function-2" }],
     );
-    const outputSchema = rowSchema<{ readonly users: number }>((value) => {
-      if (!value || typeof value !== "object" || !("users" in value) || typeof value.users !== "number") {
+    const outputSchema = rowSchema<{ readonly users: string }>((value) => {
+      if (!value || typeof value !== "object" || !("users" in value) || typeof value.users !== "string") {
         return { issues: [{ message: "invalid PostgreSQL OUT values" }] };
       }
       return { value: { users: value.users } };
     });
-    const usersSchema = rowSchema<{ readonly user_id: number; readonly name: string }>((value) => {
+    const usersSchema = rowSchema<{ readonly user_id: string; readonly name: string }>((value) => {
       if (
         !value
         || typeof value !== "object"
         || !("user_id" in value)
         || !("name" in value)
-        || typeof value.user_id !== "number"
+        || typeof value.user_id !== "string"
         || typeof value.name !== "string"
       ) {
         return { issues: [{ message: "invalid PostgreSQL users result set" }] };
       }
-      const row = value as { readonly user_id: number; readonly name: string };
+      const row = value as { readonly user_id: string; readonly name: string };
       return { value: { user_id: row.user_id, name: row.name } };
     });
-    const paymentsSchema = rowSchema<{ readonly payment_id: number; readonly amount: string }>((value) => {
+    const paymentsSchema = rowSchema<{ readonly payment_id: string; readonly amount: string }>((value) => {
       if (
         !value
         || typeof value !== "object"
         || !("payment_id" in value)
         || !("amount" in value)
-        || typeof value.payment_id !== "number"
+        || typeof value.payment_id !== "string"
         || typeof value.amount !== "string"
       ) {
         return { issues: [{ message: "invalid PostgreSQL payments result set" }] };
       }
-      const row = value as { readonly payment_id: number; readonly amount: string };
+      const row = value as { readonly payment_id: string; readonly amount: string };
       return { value: { payment_id: row.payment_id, amount: row.amount } };
     });
     const query = sql.call({
@@ -273,16 +273,16 @@ test("PostgreSQL refcursor routines require tx and close heterogeneous portals",
     `;
     await assert.rejects(() => db.call(query), /BRAID_CALL_CURSOR_TX_REQUIRED/);
     const result = await db.tx(async (tx) => {
-      const before = await tx.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid`);
+      const before = await tx.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
       const called = await tx.call(query);
-      const after = await tx.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid`);
+      const after = await tx.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
       assert.equal(after.pid, before.pid);
       return called;
     });
-    assert.deepEqual(result.output, { users: 14 });
+    assert.deepEqual(result.output, { users: "14" });
     assert.deepEqual(result.resultSets, [
-      { rows: [{ user_id: 1, name: "Ada" }] },
-      { rows: [{ payment_id: 10, amount: "12.5" }] },
+      { rows: [{ user_id: "1", name: "Ada" }] },
+      { rows: [{ payment_id: "10", amount: "12.5" }] },
     ]);
     assert.ok(controlSql.includes('CLOSE "braid_pv15_users"'));
     assert.ok(controlSql.includes('CLOSE "braid_pv15_payments"'));

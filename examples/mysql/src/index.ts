@@ -4,14 +4,23 @@ import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/
 import { sql } from "@sqlbraid/mysql";
 
 interface UserRow {
-  readonly id: number;
+  readonly id: string;
   readonly name: string;
 }
 
 const connectionString = process.env.SQLBRAID_MYSQL_URL;
 if (!connectionString) throw new Error("SQLBRAID_MYSQL_URL is required for the MySQL example.");
 
-const connection = await createConnection(connectionString);
+const mysqlProfile = {
+  uri: connectionString,
+  supportBigNumbers: true,
+  bigNumberStrings: true,
+  decimalNumbers: false,
+  rowsAsArray: false,
+  jsonStrings: true,
+  dateStrings: true,
+};
+const connection = await createConnection(mysqlProfile);
 try {
   await connection.query("CREATE TEMPORARY TABLE users (id INT PRIMARY KEY, name VARCHAR(255) NOT NULL)");
   await connection.query("INSERT INTO users (id, name) VALUES (1, 'Ada'), (2, 'Grace')");
@@ -26,17 +35,17 @@ try {
     ORDER BY id
   `;
 
-  assert.deepEqual(await db.all(query), [{ id: 1, name: "Ada" }]);
+  assert.deepEqual(await db.all(query), [{ id: "1", name: "Ada" }]);
   console.info("PASS MySQL packed query and dynamic guard");
 } finally {
   await connection.end();
 }
 
-const pool = createPool(connectionString);
+const pool = createPool({ ...mysqlProfile, connectionLimit: 2 });
 try {
   const db = createMysql2PoolDatabase(pool);
   const name = "Ada";
-  assert.deepEqual(await db.all(sql.rows<{ readonly id: bigint; readonly name: string }>`SELECT 1 AS id, ${name} AS name`), [{ id: 1n, name }]);
+  assert.deepEqual(await db.all(sql.rows<{ readonly id: string; readonly name: string }>`SELECT 1 AS id, ${name} AS name`), [{ id: "1", name }]);
   console.info("PASS MySQL packed pool query");
 } finally {
   await pool.end();

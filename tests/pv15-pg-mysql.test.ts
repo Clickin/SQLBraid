@@ -67,7 +67,7 @@ test("PostgreSQL cursor metadata preserves exact int8 values and closes on exhau
   const executor = createPgExecutor(client, { cursor: cursorFactory, streamBatchSize: 2 });
   const rows: unknown[] = [];
   for await (const row of executor.stream(pgSql.rows`SELECT 1 AS id`.render())) rows.push(row);
-  assert.deepEqual(rows, [{ id: 9007199254740993n }, { id: 9007199254740994n }]);
+  assert.deepEqual(rows, [{ id: "9007199254740993" }, { id: "9007199254740994" }]);
   assert.equal(Cursor.closes, 1);
 });
 
@@ -93,7 +93,7 @@ test("PostgreSQL logical output names cannot select a different physical carrier
   const result = await createPgExecutor(client).call(pgSql.call`
     CALL outputs(${pgSql.out("second")}, ${pgSql.out("first")})
   `.render());
-  assert.deepEqual(result.output, { second: 9007199254740993n, first: "text output" });
+  assert.deepEqual(result.output, { second: "9007199254740993", first: "text output" });
 });
 
 test("MySQL materialized queries reject nested result sets, including empty sets and status headers", async () => {
@@ -123,7 +123,7 @@ test("MySQL materialized queries preserve flat rows, empty SELECTs and command m
   const query = mysqlSql`SELECT driver_result`.render();
   assert.deepEqual(await executor.query(query), {
     kind: "rows",
-    rows: [{ USER_ID: 1 }, { USER_ID: 2 }],
+    rows: [{ USER_ID: "1" }, { USER_ID: "2" }],
     rowCount: 2,
   });
   payload = [];
@@ -133,7 +133,7 @@ test("MySQL materialized queries preserve flat rows, empty SELECTs and command m
     kind: "command",
     rows: [],
     rowCount: 2,
-    command: { affectedRows: 2, insertId: 10, warningStatus: 1 },
+    command: { affectedRows: 2, insertId: "10", warningStatus: 1 },
   });
 });
 

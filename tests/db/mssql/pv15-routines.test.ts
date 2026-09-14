@@ -50,9 +50,9 @@ test("SQL Server routine fixture exposes OUTPUT, RETURN status, and heterogeneou
     await db.execute(sql`CREATE PROCEDURE dbo.braid_pv15_routine @answer int OUTPUT, @minimum int AS BEGIN SET NOCOUNT ON; SET @answer = @minimum + 41; SELECT @minimum AS USER_ID; SELECT CONCAT('payment-', @minimum) AS PAYMENT_ID; RETURN 17; END`);
     const query = sql.call({ procedure: { name: "dbo.braid_pv15_routine", parameterNames: ["answer", "minimum"] } })`${sql.out("answer", mssqlParameter.int())}, ${1}`;
     const result = await db.call(query);
-    assert.deepEqual(result.output, { answer: 42 });
+    assert.deepEqual(result.output, { answer: "42" });
     assert.equal(result.returnValue, 17);
-    assert.deepEqual(result.resultSets.map((set) => set.rows), [[{ USER_ID: 1 }], [{ PAYMENT_ID: "payment-1" }]]);
+    assert.deepEqual(result.resultSets.map((set) => set.rows), [[{ USER_ID: "1" }], [{ PAYMENT_ID: "payment-1" }]]);
     assert.equal(result.resultSets.some((set) => "source" in set), false);
   } finally {
     await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_pv15_routine`).catch(() => undefined);
@@ -75,7 +75,7 @@ test("SQL Server rejects CURSOR VARYING output before sending a request", { time
 test("SQL Server real streaming satisfies the shared streaming lifecycle contract", { timeout: 120_000 }, async () => {
   const settings = inject("mssql") as MssqlSettings;
   let runs = 0;
-  const expected = [{ VALUE: 1 }, { VALUE: 2 }, { VALUE: 3 }] as const;
+  const expected = [{ VALUE: "1" }, { VALUE: "2" }, { VALUE: "3" }] as const;
   const query = sql.rows<typeof expected[number]>`
     SELECT VALUE
     FROM (VALUES (1), (2), (3)) AS values_table(VALUE)
@@ -113,20 +113,20 @@ test("SQL Server transaction streams retain their pinned session until cleanup",
   const connection = await connect(settings);
   try {
     const db = createTediousDatabase(connection);
-    const query = sql.rows<{ readonly VALUE: number }>`
+    const query = sql.rows<{ readonly VALUE: string }>`
       SELECT VALUE
       FROM (VALUES (1), (2)) AS values_table(VALUE)
       ORDER BY VALUE
     `;
     await db.tx(async (tx) => {
       const iterator = tx.stream(query)[Symbol.asyncIterator]();
-      assert.equal((await iterator.next()).value?.VALUE, 1);
+      assert.equal((await iterator.next()).value?.VALUE, "1");
       await assert.rejects(
-        () => tx.one(sql.rows<{ readonly VALUE: number }>`SELECT 7 AS VALUE`),
+        () => tx.one(sql.rows<{ readonly VALUE: string }>`SELECT 7 AS VALUE`),
         { code: "BRAID_STREAM_SCOPE" },
       );
       await iterator.return?.();
-      assert.equal((await tx.one(sql.rows<{ readonly VALUE: number }>`SELECT 7 AS VALUE`)).VALUE, 7);
+      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT 7 AS VALUE`)).VALUE, "7");
     });
   } finally {
     await close(connection);

@@ -19,11 +19,32 @@ function createTestPool(): Pool {
     database: decodeURIComponent(uri.pathname.slice(1)),
     connectionLimit: 1,
     idleTimeout: 0,
+    decimalAsNumber: false,
+    insertIdAsNumber: false,
+    autoJsonMap: false,
+    dateStrings: true,
+    timezone: "Z",
+  });
+}
+
+function createTestConnection() {
+  const uri = new URL(inject("mariadb").connectionUri);
+  return mariadb.createConnection({
+    host: uri.hostname,
+    port: Number(uri.port || 3306),
+    user: decodeURIComponent(uri.username),
+    password: decodeURIComponent(uri.password),
+    database: decodeURIComponent(uri.pathname.slice(1)),
+    decimalAsNumber: false,
+    insertIdAsNumber: false,
+    autoJsonMap: false,
+    dateStrings: true,
+    timezone: "Z",
   });
 }
 
 test("MariaDB Connector returning DML preserves rows and command metadata", async () => {
-  const connection = await mariadb.createConnection(inject("mariadb").connectionUri);
+  const connection = await createTestConnection();
   const db = createMariaDbDatabase(connection);
   try {
     await connection.query("DROP TABLE IF EXISTS braid_pv16_mariadb_returning");
@@ -33,39 +54,42 @@ test("MariaDB Connector returning DML preserves rows and command metadata", asyn
         label VARCHAR(255) NOT NULL
       )
     `);
+    await connection.query("CREATE TEMPORARY TABLE braid_pv17_mariadb_ids (id BIGINT AUTO_INCREMENT PRIMARY KEY)");
+    const inserted = await db.execute(sql.command`INSERT INTO braid_pv17_mariadb_ids VALUES (NULL)`);
+    assert.equal(inserted.command.insertId, "1");
     assert.deepEqual(
-      await db.all(sql.rows<{ readonly id: number; readonly label: string }>`
+      await db.all(sql.rows<{ readonly id: string; readonly label: string }>`
         INSERT INTO braid_pv16_mariadb_returning (id, label)
         VALUES (1, ${"inserted"})
         RETURNING id, label
       `),
-      [{ id: 1, label: "inserted" }],
+      [{ id: "1", label: "inserted" }],
     );
     assert.deepEqual(
-      await db.all(sql.rows<{ readonly id: number }>`
+      await db.all(sql.rows<{ readonly id: string }>`
         DELETE FROM braid_pv16_mariadb_returning
         WHERE id = 1
         RETURNING id
       `),
-      [{ id: 1 }],
+      [{ id: "1" }],
     );
     await connection.query("INSERT INTO braid_pv16_mariadb_returning (id, label) VALUES (2, 'old')");
     assert.deepEqual(
-      await db.all(sql.rows<{ readonly id: number; readonly label: string }>`
+      await db.all(sql.rows<{ readonly id: string; readonly label: string }>`
         REPLACE INTO braid_pv16_mariadb_returning (id, label)
         VALUES (2, ${"replaced"})
         RETURNING id, label
       `),
-      [{ id: 2, label: "replaced" }],
+      [{ id: "2", label: "replaced" }],
     );
     assert.deepEqual(
-      await db.all(sql.rows<{ readonly id: number; readonly label: string }>`
+      await db.all(sql.rows<{ readonly id: string; readonly label: string }>`
         INSERT INTO braid_pv16_mariadb_returning (id, label)
         VALUES (2, ${"upserted"})
         ON DUPLICATE KEY UPDATE label = VALUES(label)
         RETURNING id, label
       `),
-      [{ id: 2, label: "upserted" }],
+      [{ id: "2", label: "upserted" }],
     );
     const command = await db.execute(sql.command`DELETE FROM braid_pv16_mariadb_returning`);
     assert.equal(command.kind, "command");
@@ -82,8 +106,8 @@ test("MariaDB Connector pool supports native bulk and transaction savepoints", a
   const db = createMariaDbPoolDatabase(pool);
   try {
     await pool.query("DROP TABLE IF EXISTS braid_pv16_mariadb_bulk");
-    await pool.query("CREATE TABLE braid_pv16_mariadb_bulk (id INT PRIMARY KEY, label VARCHAR(255) NOT NULL)");
-    const values = [{ id: 1, label: "one" }, { id: 2, label: "two" }, { id: 3, label: "three" }] as const;
+    await pool.query("CREATE TABLE braid_pv16_mariadb_bulk (id BIGINT PRIMARY KEY, label VARCHAR(255) NOT NULL)");
+    const values = [{ id: "9007199254740993", label: "one" }, { id: "9007199254740994", label: "two" }, { id: "9007199254740995", label: "three" }] as const;
     assert.deepEqual(
       await db.bulk(values, (value) => sql.command`
         INSERT INTO braid_pv16_mariadb_bulk (id, label)
@@ -102,8 +126,8 @@ test("MariaDB Connector pool supports native bulk and transaction savepoints", a
       );
     });
     assert.deepEqual(
-      await db.all(sql.rows<{ readonly id: number }>`SELECT id FROM braid_pv16_mariadb_bulk ORDER BY id`),
-      [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
+      await db.all(sql.rows<{ readonly id: string }>`SELECT id FROM braid_pv16_mariadb_bulk ORDER BY id`),
+      [{ id: "4" }, { id: "9007199254740993" }, { id: "9007199254740994" }, { id: "9007199254740995" }],
     );
   } finally {
     await pool.query("DROP TABLE IF EXISTS braid_pv16_mariadb_bulk").catch(() => undefined);
@@ -120,10 +144,10 @@ test("MariaDB Connector queryStream satisfies shared stream lifecycle", async ()
     const db = createMariaDbPoolDatabase(pool);
     return {
       db,
-      query: sql.rows<{ readonly id: number; readonly label: string }>`
+      query: sql.rows<{ readonly id: string; readonly label: string }>`
         SELECT id, label FROM braid_pv16_mariadb_stream ORDER BY id
       `,
-      expected: [{ id: 1, label: "one" }, { id: 2, label: "two" }],
+      expected: [{ id: "1", label: "one" }, { id: "2", label: "two" }],
       close: async () => {
         await pool.query("DROP TABLE IF EXISTS braid_pv16_mariadb_stream").catch(() => undefined);
         await endPool(pool);

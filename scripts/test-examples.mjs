@@ -151,7 +151,7 @@ try {
     let rows;
     console.log = (value) => { rows = value; };
     await import("./src/docs-quickstart.ts");
-    assert.deepEqual(rows.map((row) => ({ ...row })), [{ id: 1, name: "Ada" }]);
+    assert.deepEqual(rows.map((row) => ({ ...row })), [{ id: "1", name: "Ada" }]);
   `], sqlite);
   console.info("PASS exact published SQLite quickstart without compiler lowering");
   await compileAndRun("sqlite", sqlite);

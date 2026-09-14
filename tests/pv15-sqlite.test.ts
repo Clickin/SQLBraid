@@ -7,7 +7,7 @@ import {
   createNodeSqliteDatabase,
   createNodeSqliteExecutor,
 } from "@sqlbraid/sqlite/node-sqlite";
-import { sql, typePolicy, typePolicyForIntegerMode } from "@sqlbraid/sqlite";
+import { sql, typePolicy } from "@sqlbraid/sqlite";
 import { runStreamingConformance } from "./streaming-conformance.js";
 
 test("SQLite satisfies shared streaming lifecycle and releases only after iterator return", async () => {
@@ -57,11 +57,11 @@ test("SQLite satisfies shared streaming lifecycle and releases only after iterat
     };
     return {
       db,
-      query: sql.rows(rowSchema)`SELECT 1 AS value UNION ALL SELECT 2`,
+      query: sql.rows(rowSchema)`SELECT CAST(1 AS REAL) AS value UNION ALL SELECT CAST(2 AS REAL)`,
       expected: [{ value: 2 }, { value: 4 }],
       mappingQuery: sql.rows({
         "~standard": { version: 1, vendor: "sqlite-conformance", validate() { throw new Error("query mapper failed"); } },
-      })`SELECT 1 AS value`,
+      })`SELECT CAST(1 AS REAL) AS value`,
       released: () => releases,
       iteratorReturns: () => returns,
       close: () => native.close(),
@@ -79,6 +79,7 @@ test("SQLite preserves read and cleanup errors and discards an uncertain lease",
         columns: () => [{ name: "value" }],
         all() { throw new Error("must not materialize"); },
         run() { throw new Error("must not execute a command"); },
+        setReadBigInts() {},
         iterate() {
           return {
             [Symbol.iterator]() { return this; },
@@ -108,33 +109,79 @@ test("SQLite preserves read and cleanup errors and discards an uncertain lease",
   assert.equal(discarded, 1);
 });
 
-test("SQLite integer mode enforces native number and bigint reads", async () => {
+test("SQLite exact INTEGER reads are strings while REAL remains number", async () => {
   const native = new DatabaseSync(":memory:");
   try {
-    const numberDb = createNodeSqliteDatabase(native, { integerMode: "number" });
-    assert.deepEqual(await numberDb.one(sql.rows<{ value: number }>`SELECT 42 AS value`), { value: 42 });
-
-    const bigintDb = createNodeSqliteDatabase(native, { integerMode: "bigint" });
     assert.deepEqual(
-      await bigintDb.one(sql.rows<{ value: bigint }>`SELECT 9007199254740993 AS value`),
-      { value: 9007199254740993n },
+      await createNodeSqliteDatabase(native).one(sql.rows<{ value: string }>`SELECT 9007199254740993 AS value`),
+      { value: "9007199254740993" },
     );
     assert.deepEqual(
-      (await bigintDb.execute(sql.rows<{ value: bigint }>`SELECT 9007199254740993 AS value`)).rows,
-      [{ value: 9007199254740993n }],
+      await createNodeSqliteDatabase(native).one(sql.rows<{ value: string }>`SELECT -9223372036854775808 AS value`),
+      { value: "-9223372036854775808" },
     );
-    const streamed: bigint[] = [];
-    for await (const row of bigintDb.stream(sql.rows<{ value: bigint }>`SELECT 9007199254740993 AS value`)) {
+    assert.deepEqual(
+      await createNodeSqliteDatabase(native).one(sql.rows<{ value: number }>`SELECT CAST(0.1 AS REAL) AS value`),
+      { value: 0.1 },
+    );
+    const streamed: string[] = [];
+    for await (const row of createNodeSqliteDatabase(native).stream(sql.rows<{ value: string }>`SELECT 9223372036854775807 AS value`)) {
       streamed.push(row.value);
     }
-    assert.deepEqual(streamed, [9007199254740993n]);
+    assert.deepEqual(streamed, ["9223372036854775807"]);
 
-    assert.equal(typePolicy.mappings.find((mapping) => mapping.databaseType === "INTEGER")?.outputType, "number | bigint");
-    assert.equal(typePolicyForIntegerMode("number").mappings[0]?.outputType, "number");
-    assert.equal(typePolicyForIntegerMode("bigint").mappings[0]?.outputType, "bigint");
+    assert.equal(typePolicy.mappings.find((mapping) => mapping.databaseType === "INTEGER")?.outputType, "string");
+    assert.equal(typePolicy.mappings.find((mapping) => mapping.databaseType === "INTEGER")?.numeric?.representation, "string");
   } finally {
     native.close();
   }
+});
+
+test("SQLite rejects row reads without native integer transport but keeps command-only usage", async () => {
+  let allCalls = 0;
+  let iterateCalls = 0;
+  let runCalls = 0;
+  const db = createNodeSqliteDatabase({
+    prepare(text) {
+      const rows = text.startsWith("SELECT");
+      return {
+        columns: () => rows ? [{ name: "value" }] : [],
+        all: () => {
+          allCalls += 1;
+          return [{ value: 9007199254740992 }];
+        },
+        iterate: () => {
+          iterateCalls += 1;
+          return [{ value: 9007199254740992 }][Symbol.iterator]();
+        },
+        run: () => {
+          runCalls += 1;
+          return { changes: 1 };
+        },
+      };
+    },
+  });
+
+  await assert.rejects(
+    () => db.all(sql.rows`SELECT 9007199254740993 AS value`),
+    /BRAID_INTEGER_MODE_UNSUPPORTED/,
+  );
+  await assert.rejects(
+    async () => {
+      for await (const row of db.stream(sql.rows`SELECT 9007199254740993 AS value`)) void row;
+    },
+    /BRAID_INTEGER_MODE_UNSUPPORTED/,
+  );
+  assert.equal(allCalls, 0);
+  assert.equal(iterateCalls, 0);
+
+  assert.deepEqual(await db.execute(sql.command`UPDATE values_table SET value = ${1}`), {
+    rows: [],
+    rowCount: 1,
+    kind: "command",
+    command: { affectedRows: 1 },
+  });
+  assert.equal(runCalls, 1);
 });
 
 test("SQLite streams 100k rows without materializing an application array", async () => {
@@ -171,27 +218,27 @@ test("SQLite streams 100k rows without materializing an application array", asyn
     });
     let count = 0;
     let sum = 0;
-    for await (const row of db.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_stream ORDER BY value`)) {
+    for await (const row of db.stream(sql.rows<{ value: string }>`SELECT value FROM pv15_stream ORDER BY value`)) {
       count += 1;
-      sum += row.value;
+      sum += Number(row.value);
     }
     assert.equal(count, 100000);
     assert.equal(sum, 5000050000);
     assert.equal(iterateCalls, 1);
     assert.equal(allCalls, 0);
 
-    let stopped = 0;
-    for await (const row of db.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_stream ORDER BY value`)) {
+    let stopped = "";
+    for await (const row of db.stream(sql.rows<{ value: string }>`SELECT value FROM pv15_stream ORDER BY value`)) {
       stopped = row.value;
       break;
     }
-    assert.equal(stopped, 1);
+    assert.equal(stopped, "1");
 
     const abort = new AbortController();
     abort.abort(new Error("stop"));
     await assert.rejects(
       async () => {
-        for await (const row of db.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_stream`, { signal: abort.signal })) {
+        for await (const row of db.stream(sql.rows<{ value: string }>`SELECT value FROM pv15_stream`, { signal: abort.signal })) {
           void row;
         }
       },
@@ -210,7 +257,7 @@ test("SQLite stream mapper errors and transaction ownership release iteration", 
     const failure = new Error("mapper failed");
     await assert.rejects(
       async () => {
-        for await (const row of db.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_tx`, {
+        for await (const row of db.stream(sql.rows<{ value: string }>`SELECT value FROM pv15_tx`, {
           schema: { "~standard": { version: 1, vendor: "pv15", validate() { throw failure; } } },
         })) {
           void row;
@@ -220,15 +267,15 @@ test("SQLite stream mapper errors and transaction ownership release iteration", 
     );
 
     await db.tx(async (tx) => {
-      const values: number[] = [];
-      for await (const row of tx.stream(sql.rows<{ value: number }>`SELECT value FROM pv15_tx`)) values.push(row.value);
-      assert.deepEqual(values, [1, 2]);
+      const values: string[] = [];
+      for await (const row of tx.stream(sql.rows<{ value: string }>`SELECT value FROM pv15_tx`)) values.push(row.value);
+      assert.deepEqual(values, ["1", "2"]);
       await assert.rejects(
-        () => db.one(sql.rows<{ value: number }>`SELECT value FROM pv15_tx LIMIT 1`),
+        () => db.one(sql.rows<{ value: string }>`SELECT value FROM pv15_tx LIMIT 1`),
         (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_TX_SCOPE",
       );
     });
-    assert.deepEqual(await db.all(sql.rows<{ value: number }>`SELECT value FROM pv15_tx`), [{ value: 1 }, { value: 2 }]);
+    assert.deepEqual(await db.all(sql.rows<{ value: string }>`SELECT value FROM pv15_tx`), [{ value: "1" }, { value: "2" }]);
   } finally {
     native.close();
   }
@@ -248,11 +295,11 @@ test("SQLite custom scalar and aggregate functions remain ordinary row queries",
     });
     const db = createNodeSqliteDatabase(native);
     assert.deepEqual(
-      await db.all(sql.rows<{ value: number }>`SELECT pv15_double(value) AS value FROM (SELECT 3 AS value)`),
+      await db.all(sql.rows<{ value: number }>`SELECT CAST(pv15_double(value) AS REAL) AS value FROM (SELECT 3 AS value)`),
       [{ value: 6 }],
     );
     assert.deepEqual(
-      await db.all(sql.rows<{ value: number }>`SELECT pv15_total(value) AS value FROM (SELECT 3 AS value UNION ALL SELECT 4)`),
+      await db.all(sql.rows<{ value: number }>`SELECT CAST(pv15_total(value) AS REAL) AS value FROM (SELECT 3 AS value UNION ALL SELECT 4)`),
       [{ value: 7 }],
     );
     await assert.rejects(

@@ -40,7 +40,7 @@ test("SQLite materialized query mappers reenter after releasing the root resourc
         version: 1,
         vendor: "reentry",
         async validate() {
-          const row = await db.one(sql.rows<{ value: number }>`SELECT 42 AS value`);
+          const row = await db.one(sql.rows<{ value: number }>`SELECT CAST(42 AS REAL) AS value`);
           return { value: row.value };
         },
       },
@@ -71,7 +71,7 @@ test("SQLite stream mapper reentry rejects without retaining the resource", asyn
     await assert.rejects(async () => {
       for await (const row of db.stream(sql.rows(mapper)`SELECT 1`)) void row;
     }, (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_STREAM_SCOPE");
-    assert.deepEqual(await db.one(sql.rows`SELECT 3 AS value`), { value: 3 });
+    assert.deepEqual(await db.one(sql.rows`SELECT CAST(3 AS REAL) AS value`), { value: 3 });
   } finally {
     native.close();
   }
@@ -81,7 +81,7 @@ test("SQLite streams close native iteration on break, mapper failure and abort",
   const native = new DatabaseSync(":memory:");
   try {
     const db = createNodeSqliteDatabase(native);
-    const query = sql.rows<{ value: number }>`SELECT 1 AS value UNION ALL SELECT 2`;
+    const query = sql.rows<{ value: number }>`SELECT CAST(1 AS REAL) AS value UNION ALL SELECT CAST(2 AS REAL)`;
     for await (const row of db.stream(query)) {
       assert.equal(row.value, 1);
       break;
@@ -100,7 +100,7 @@ test("SQLite streams close native iteration on break, mapper failure and abort",
       }
     }, (error) => error === failure);
     await db.tx(async (tx) => {
-      assert.deepEqual(await tx.one(sql.rows`SELECT 3 AS value`), { value: 3 });
+      assert.deepEqual(await tx.one(sql.rows`SELECT CAST(3 AS REAL) AS value`), { value: 3 });
     });
   } finally {
     native.close();
@@ -124,7 +124,7 @@ test("SQLite observer failures preserve root side effects but roll back transact
       await tx.execute(sql.command`INSERT INTO audit_effect VALUES (2)`);
     }), (error) => error === failure);
     rejectResult = false;
-    assert.deepEqual(await db.all(sql.rows`SELECT id FROM audit_effect`), [{ id: 1 }]);
+    assert.deepEqual(await db.all(sql.rows`SELECT id FROM audit_effect`), [{ id: "1" }]);
   } finally {
     native.close();
   }
@@ -160,9 +160,9 @@ test("SQLite result kinds follow native columns metadata", async () => {
     native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO users (name) VALUES ('Ada');");
     const db = createNodeSqliteDatabase(native);
 
-    const explicitRows = await db.execute(sql.rows<{ readonly id: number; readonly name: string }>`SELECT id, name FROM users`);
+    const explicitRows = await db.execute(sql.rows<{ readonly id: string; readonly name: string }>`SELECT id, name FROM users`);
     assert.equal(explicitRows.kind, "rows");
-    assert.deepEqual(explicitRows.rows, [{ id: 1, name: "Ada" }]);
+    assert.deepEqual(explicitRows.rows, [{ id: "1", name: "Ada" }]);
 
     const commandAsRows = await db.execute(sql`UPDATE users SET name = 'Grace' WHERE id = 1`);
     assert.equal(commandAsRows.kind, "command");
@@ -184,7 +184,7 @@ test("SQLite result kinds follow native columns metadata", async () => {
 
     const returning = await db.execute(sql.rows`INSERT INTO users (name) VALUES ('Bob') RETURNING id`);
     assert.equal(returning.kind, "rows");
-    assert.deepEqual(returning.rows, [{ id: 1 }]);
+    assert.deepEqual(returning.rows, [{ id: "1" }]);
 
     await assert.rejects(
       () => db.execute(sql.command`SELECT name FROM users`),
@@ -309,24 +309,24 @@ test("SQLite inspector evidence generates compiling strict and conservative dyna
       },
     ]);
 
-    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "id", "number | bigint", false);
-    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "count", "number | bigint", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "id", "string", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "count", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9StrictRow", "score", "number", false);
     assertGeneratedProperty(result.source, "BraidPv9StrictRow", "title", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9StrictRow", "bytes", "Uint8Array | null", false);
     assertGeneratedProperty(result.source, "BraidPv9StrictRow", "payload", "unknown | null", false);
-    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "calculated", "number | bigint | null", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictRow", "calculated", "string | null", false);
 
-    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "id", "number | bigint", true);
-    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "count", "number | bigint", false);
+    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "id", "string | number | bigint", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "count", "string | number | bigint", false);
     assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "score", "number", true);
     assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "title", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "bytes", "Uint8Array | null", true);
     assertGeneratedProperty(result.source, "BraidPv9StrictInsert", "payload", "unknown | null", true);
     assertGeneratedPropertyAbsent(result.source, "BraidPv9StrictInsert", "calculated");
 
-    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "id", "number | bigint", true);
-    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "count", "number | bigint", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "id", "string | number | bigint", true);
+    assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "count", "string | number | bigint", true);
     assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "score", "number", true);
     assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "title", "string", true);
     assertGeneratedProperty(result.source, "BraidPv9StrictUpdate", "bytes", "Uint8Array | null", true);

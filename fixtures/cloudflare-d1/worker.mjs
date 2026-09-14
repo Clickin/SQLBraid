@@ -2,6 +2,8 @@ import { createD1Database } from "@sqlbraid/sqlite/d1";
 import { sql } from "@sqlbraid/sqlite";
 import { verifyBulkConformance } from "../bulk-conformance.mjs";
 
+const jsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
+
 export default {
   async fetch(_request, env) {
     let nativeBatchCalls = 0;
@@ -32,9 +34,11 @@ export default {
     const beforeUsersBulk = nativeBatchCalls;
     await db.execute(sql.command`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, payload BLOB)`);
     const inserted = await db.execute(sql.rows`INSERT INTO users (name, payload) VALUES (${"Ada"}, ${new Uint8Array([1, 2, 3])}) RETURNING id, name, payload`);
+    if (typeof inserted.rows[0]?.id !== "string") throw new Error("D1 INTEGER RETURNING values must remain canonical text.");
     const bulk = await db.bulk(["Grace", "Lin"], (name) => sql.command`INSERT INTO users (name) VALUES (${name})`);
     if (nativeBatchCalls !== beforeUsersBulk + 1) throw new Error("D1 users bulk did not use one native batch call.");
     const rows = await db.all(sql.rows`SELECT id, name, payload FROM users ORDER BY id`);
+    if (rows.some((row) => typeof row.id !== "string")) throw new Error("D1 INTEGER rows must remain canonical text.");
     const transparencyQuery = sql.rows`
       SELECT 'literal $1 :1 @p1 ?' AS marker,
              json_extract('{"enabled":true}', '$.enabled') AS enabled,
@@ -49,13 +53,18 @@ export default {
     const numeric = await db.one(sql.rows`
       SELECT CAST('9007199254740991' AS INTEGER) AS safe
     `);
+    if (numeric.safe !== "9007199254740991") throw new Error("D1 safe INTEGER must remain canonical text.");
+    const integralReal = await db.one(sql.rows`SELECT CAST(1 AS REAL) AS value`);
+    if (integralReal.value !== "1") throw new Error("D1 integral REAL must follow its guarded numeric profile.");
     let unsafeCode;
     try { await db.one(sql.rows`SELECT CAST('9007199254740992' AS INTEGER) AS unsafe`); }
     catch (error) { unsafeCode = error?.code ?? (/BRAID_INTEGER_UNSAFE/u.test(error?.message ?? "") ? "BRAID_INTEGER_UNSAFE" : undefined); }
+    if (unsafeCode !== "BRAID_INTEGER_UNSAFE") throw new Error("D1 out-of-range INTEGER must fail closed.");
     const json = await db.one(sql.rows`
-      SELECT '{"enabled":true,"nested":{"count":2}}' AS payload,
+      SELECT ${jsonText} AS payload,
              json_extract('{"enabled":true}', '$.enabled') AS enabled
     `);
+    if (json.payload !== jsonText || json.enabled !== "1") throw new Error("D1 JSON text fidelity changed.");
     const session = createD1Database(env.DB.withSession("first-primary"));
     await session.bulk(["Session"], (name) => sql.command`INSERT INTO users (name) VALUES (${name})`);
     const sessionRows = await session.all(sql.rows`SELECT name FROM users WHERE name = ${"Session"}`);
@@ -68,7 +77,7 @@ export default {
     };
     const mappedQuery = db.prepare("mapped-user", () => sql.rows(schema)`
       SELECT id, name, payload, '{"active":true}' AS profile,
-             '2026-09-14T00:00:00Z' AS stamp,
+             '2026-09-14T00:00:00.123456Z' AS stamp,
              '123e4567-e89b-12d3-a456-426614174000' AS uuid
       FROM users WHERE id = ${1}
     `);
@@ -103,7 +112,7 @@ export default {
       updated,
       deleted,
       environment: await db.environment(),
-      numeric: { ...numeric, unsafeCode },
+      numeric: { ...numeric, integralReal, unsafeCode },
       json,
       streamCode,
       transactionCode,

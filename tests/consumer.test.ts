@@ -37,6 +37,7 @@ test('public package exports resolve in an external consumer directory', async (
     'import { createMysql2Database } from "@sqlbraid/mysql/mysql2";',
     'import { sql as sqlite } from "@sqlbraid/sqlite";',
     'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
+    'import { DatabaseSync } from "node:sqlite";',
     'import { sql as oracle } from "@sqlbraid/oracle";',
     'import { sql as mssql } from "@sqlbraid/mssql";',
     'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
@@ -50,6 +51,8 @@ test('public package exports resolve in an external consumer directory', async (
     'for (const [name, tag] of [["postgres", pg], ["mysql", mysql], ["sqlite", sqlite], ["oracle", oracle], ["mssql", mssql]]) { const rendered = tag`SELECT ${1}`.render(); if (rendered.segments.join("") !== "SELECT " || rendered.parameters[0]?.value !== 1) throw new Error(`${name} export failed`); }',
     'if ([createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("adapter export failed");',
     'if ([createPostgresInspector, createMysqlInspector, createSqliteInspector, createOracleInspector, validateSnapshot].some((value) => typeof value !== "function")) throw new Error("metadata tooling export failed");',
+    'const native = new DatabaseSync(":memory:");',
+    'try { const db = createNodeSqliteDatabase(native); const row = await db.one(sqlite.rows`SELECT CAST(\'9007199254740993\' AS INTEGER) AS value`); if (row.value !== "9007199254740993") throw new Error("exact INTEGER consumer output failed"); } finally { native.close(); }',
     'const generated = generateModels({ format: "sqlbraid-metadata", formatVersion: 1, dialect: "postgres", dialectVersion: "16", server: {}, namespaces: {}, types: { "pg_catalog.int8": { identity: "pg_catalog.int8", name: "int8", kind: "scalar" } }, relations: { "public.users": { identity: "public.users", name: "users", namespace: "public", kind: "table", columns: [{ name: "id", ordinal: 1, type: "pg_catalog.int8", nullable: false, identity: true }] } }, routines: {}, metadata: {} }, { typePolicy: postgresTypePolicy });',
     'if (generated.models[0]?.rowName !== "UsersRow" || !generated.source.includes("export interface UsersRow")) throw new Error("codegen export failed");',
   ].join('\n'));

@@ -4,7 +4,7 @@ import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { sql } from "@sqlbraid/sqlite";
 
 interface UserRow {
-  readonly id: number;
+  readonly id: string;
   readonly name: string;
 }
 
@@ -23,7 +23,7 @@ try {
     ORDER BY id
   `;
 
-  assert.deepEqual(await db.all(query), [{ id: 1, name: "Ada" }]);
+  assert.deepEqual(await db.all(query), [{ id: "1", name: "Ada" }]);
   console.info("PASS sqlite quickstart query and dynamic guard");
 } finally {
   native.close();

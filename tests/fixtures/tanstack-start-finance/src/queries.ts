@@ -21,7 +21,7 @@ export function selectFinanceRows(customer: string | undefined, includePending: 
   `;
 }
 
-export function updateFinanceMemo(id: bigint, memo: string | undefined) {
+export function updateFinanceMemo(id: string, memo: string | undefined) {
   return sql.command`
     UPDATE "재무 거래"
     /*@braid set*/

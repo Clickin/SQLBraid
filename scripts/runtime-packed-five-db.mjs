@@ -101,7 +101,7 @@ export async function runMssqlSmoke(value) {
   const database = createTediousDatabase(connection);
   try {
     const rows = await database.all(mssql.rows`SELECT 1 AS id`);
-    assert.deepEqual(rows, [{ id: 1 }]);
+    assert.deepEqual(rows, [{ id: "1" }]);
     const typed = await database.all(mssql.rows`SELECT ${mssql.bind("packed", mssqlParameter.nvarchar(40))} AS label`);
     assert.deepEqual(typed, [{ label: "packed" }]);
     await database.execute(mssql.command`CREATE TABLE ${mssql.ident(["dbo", table])} (id int NOT NULL, label nvarchar(40) NOT NULL)`);
@@ -116,7 +116,7 @@ export async function runMssqlSmoke(value) {
     };
     const pooled = createTediousPoolDatabase(pool);
     const pooledRows = await pooled.all(mssql.rows`SELECT id, label FROM ${mssql.ident(["dbo", table])}`);
-    assert.deepEqual(pooledRows, [{ id: 1, label: "packed" }]);
+    assert.deepEqual(pooledRows, [{ id: "1", label: "packed" }]);
     const metadata = await createMssqlInspector(connection).inspect();
     assert.ok(Object.values(metadata.relations).some((relation) => relation.name === table));
   } finally {

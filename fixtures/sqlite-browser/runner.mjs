@@ -3,7 +3,7 @@ import { sql } from "@sqlbraid/sqlite";
 import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
 
 const nativeMarkers = "literal $1 :1 @p1 ?";
-const jsonText = '{"enabled":true,"nested":{"count":2}}';
+const jsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
 
 function fail(message) {
   throw new Error(message);
@@ -24,20 +24,19 @@ function errorCode(error) {
 }
 
 function serialValue(value) {
-  if (typeof value === "bigint") return { type: "bigint", value: value.toString() };
   if (value instanceof Uint8Array) return { type: "Uint8Array", value: [...value] };
   return { type: typeof value, value };
 }
 
-function database(sqlite3, integerMode = "number", observers = []) {
+function database(sqlite3, observers = []) {
   const native = new sqlite3.oo1.DB(":memory:");
-  const db = createSqliteWasmDatabase(native, { integerMode, sqlite3, observers });
+  const db = createSqliteWasmDatabase(native, { sqlite3, observers });
   return { native, db };
 }
 
 async function nativeTransparency(sqlite3) {
   const events = [];
-  const { native, db } = database(sqlite3, "number", [{ onEvent(event) { events.push(event); } }]);
+  const { native, db } = database(sqlite3, [{ onEvent(event) { events.push(event); } }]);
   try {
     const query = sql.rows`
       SELECT 'literal $1 :1 @p1 ?' AS marker,
@@ -55,7 +54,7 @@ async function nativeTransparency(sqlite3) {
     const rows = await db.all(query);
     const ready = latestReady(events);
     expect(ready.sql === expectedParameterizedSql, "SQLite WASM observed parameterized SQL changed.");
-    expect(rows.length === 1 && rows[0].marker === nativeMarkers && rows[0].enabled === 1 && rows[0].actual === 7, "SQLite WASM returned an unexpected transparency row.");
+    expect(rows.length === 1 && rows[0].marker === nativeMarkers && rows[0].enabled === "1" && rows[0].actual === "7", "SQLite WASM returned an unexpected transparency row.");
     return {
       logicalSegments: rendered.segments,
       parameterizedSql: ready.sql,
@@ -69,7 +68,7 @@ async function nativeTransparency(sqlite3) {
 
 async function generatedStructure(sqlite3) {
   const events = [];
-  const { native, db } = database(sqlite3, "number", [{ onEvent(event) { events.push(event); } }]);
+  const { native, db } = database(sqlite3, [{ onEvent(event) { events.push(event); } }]);
   try {
     native.exec("CREATE TABLE generated_table (name TEXT NOT NULL)");
     const insert = sql.command`INSERT INTO ${sql.ident("generated_table")} (${sql.ident("name")}) VALUES (${"Ada"})`;
@@ -89,17 +88,17 @@ async function generatedStructure(sqlite3) {
 }
 
 async function exactInteger(sqlite3) {
-  const { native, db } = database(sqlite3, "bigint");
+  const { native, db } = database(sqlite3);
   try {
-    const safe = 9007199254740991n;
-    const safePlusOne = 9007199254740992n;
-    const minimum = -9223372036854775808n;
-    const maximum = 9223372036854775807n;
+    const safe = "9007199254740991";
+    const safePlusOne = "9007199254740992";
+    const minimum = "-9223372036854775808";
+    const maximum = "9223372036854775807";
     const row = await db.one(sql.rows`
-      SELECT ${safe} AS safe,
-             ${safePlusOne} AS safe_plus_one,
-             ${minimum} AS minimum,
-             ${maximum} AS maximum,
+      SELECT CAST(${safe} AS INTEGER) AS safe,
+             CAST(${safePlusOne} AS INTEGER) AS safe_plus_one,
+             CAST(${minimum} AS INTEGER) AS minimum,
+             CAST(${maximum} AS INTEGER) AS maximum,
              CAST(1 AS REAL) AS integral_real,
              CAST(1e20 AS REAL) AS large_real
     `);
@@ -109,34 +108,27 @@ async function exactInteger(sqlite3) {
       minimum: serialValue(row.minimum),
       maximum: serialValue(row.maximum),
     };
-    expect(BigInt(values.safe.value) === safe, "SQLite WASM safe integer changed.");
-    expect(BigInt(values.safePlusOne.value) === safePlusOne, "SQLite WASM safe-plus-one integer changed.");
-    expect(BigInt(values.minimum.value) === minimum, "SQLite WASM signed int64 minimum changed.");
-    expect(BigInt(values.maximum.value) === maximum, "SQLite WASM signed int64 maximum changed.");
-    expect(Object.values(values).every((value) => value.type === "bigint"), "SQLite WASM INTEGER values were not returned uniformly as bigint.");
+    expect(values.safe.type === "string" && values.safe.value === safe, "SQLite WASM safe integer changed.");
+    expect(values.safePlusOne.type === "string" && values.safePlusOne.value === safePlusOne, "SQLite WASM safe-plus-one integer changed.");
+    expect(values.minimum.type === "string" && values.minimum.value === minimum, "SQLite WASM signed int64 minimum changed.");
+    expect(values.maximum.type === "string" && values.maximum.value === maximum, "SQLite WASM signed int64 maximum changed.");
+    expect(Object.values(values).every((value) => value.type === "string"), "SQLite WASM INTEGER values were not returned uniformly as text.");
     const realValues = [serialValue(row.integral_real), serialValue(row.large_real)];
     expect(realValues.every((value) => value.type === "number"), "SQLite WASM confused integral REAL values with INTEGER.");
-    let unsafeRejected = false;
-    try {
-      await createSqliteWasmDatabase(native).one(sql.rows`SELECT ${maximum} AS value`);
-    } catch (error) {
-      unsafeRejected = error instanceof RangeError && error.message.startsWith("BRAID_INTEGER_UNSAFE");
-    }
-    expect(unsafeRejected, "SQLite WASM number mode did not reject an unsafe INTEGER.");
-    return { values, realValues, unsafeRejected };
+    return { values, realValues };
   } finally {
     native.close();
   }
 }
 
 async function jsonTextCase(sqlite3) {
-  const { native, db } = database(sqlite3, "number");
+  const { native, db } = database(sqlite3);
   try {
     const row = await db.one(sql.rows`
       SELECT ${jsonText} AS payload,
              json_extract(${'{"enabled":true}'}, '$.enabled') AS enabled
     `);
-    expect(row.payload === jsonText && row.enabled === 1, "SQLite WASM JSON text row changed.");
+    expect(row.payload === jsonText && row.enabled === "1", "SQLite WASM JSON text row changed.");
     return { rows: [{ payload: row.payload, enabled: row.enabled }] };
   } finally {
     native.close();
@@ -144,7 +136,7 @@ async function jsonTextCase(sqlite3) {
 }
 
 async function streamCase(sqlite3) {
-  const { native, db } = database(sqlite3, "number");
+  const { native, db } = database(sqlite3);
   try {
     const query = sql.rows`
       WITH RECURSIVE numbers(value) AS (
@@ -155,7 +147,7 @@ async function streamCase(sqlite3) {
     `;
     const iterator = db.stream(query)[Symbol.asyncIterator]();
     const first = await iterator.next();
-    expect(first.done === false && first.value.value === 1, "SQLite WASM stream did not yield its first real row.");
+    expect(first.done === false && first.value.value === "1", "SQLite WASM stream did not yield its first real row.");
     let blockedCode = "NONE";
     try {
       await db.all(sql.rows`SELECT 99 AS value`);
@@ -169,9 +161,9 @@ async function streamCase(sqlite3) {
       if (next.done) break;
       rest.push(next.value.value);
     }
-    expect(JSON.stringify(rest) === "[2,3]", "SQLite WASM stream lost rows after its first pull.");
+    expect(JSON.stringify(rest) === '["2","3"]', "SQLite WASM stream lost rows after its first pull.");
     const after = await db.all(sql.rows`SELECT 4 AS value`);
-    expect(after.length === 1 && after[0].value === 4, "SQLite WASM stream did not release its resource after completion.");
+    expect(after.length === 1 && after[0].value === "4", "SQLite WASM stream did not release its resource after completion.");
     return { first: first.value, blockedCode, rows: [first.value.value, ...rest], after };
   } finally {
     native.close();
@@ -191,13 +183,13 @@ async function bulkCase(sqlite3) {
     exec: native.exec.bind(native),
     changes: native.changes.bind(native),
   };
-  const db = createSqliteWasmDatabase(observed, { observers: [{ onEvent(event) { events.push(event); } }] });
+  const db = createSqliteWasmDatabase(observed, { sqlite3, observers: [{ onEvent(event) { events.push(event); } }] });
   try {
     const result = await db.bulk([1, 2, 3], (value) => sql.command`INSERT INTO bulk_values (value) VALUES (${value})`);
     const rows = await db.all(sql.rows`SELECT value FROM bulk_values ORDER BY value`);
     expect(result.inputCount === 3 && result.affectedRows === 3, "SQLite WASM bulk did not report all affected rows.");
     expect(prepareCount === 2, "SQLite WASM bulk did not use one prepared statement for all items.");
-    expect(JSON.stringify(rows) === JSON.stringify([{ value: 1 }, { value: 2 }, { value: 3 }]), "SQLite WASM bulk rows were not stored.");
+    expect(JSON.stringify(rows) === JSON.stringify([{ value: "1" }, { value: "2" }, { value: "3" }]), "SQLite WASM bulk rows were not stored.");
     const ready = events.find((event) => event.type === "bulk:ready");
     const completed = events.find((event) => event.type === "bulk:result");
     expect(ready !== undefined && ready.sql === "INSERT INTO bulk_values (value) VALUES (?1)", "SQLite WASM bulk parameterized SQL was not observed.");
@@ -220,7 +212,7 @@ async function mappedTransaction(sqlite3) {
   try {
     await db.execute(sql.command`CREATE TABLE mapped (id INTEGER PRIMARY KEY, name TEXT, payload TEXT, bytes BLOB, stamp TEXT, uuid TEXT)`);
     const inserted = await db.tx(async (tx) => {
-      const result = await tx.one(sql.rows(schema)`INSERT INTO mapped VALUES (1, ${"Ada"}, ${'{"active":true}'}, ${new Uint8Array([0, 128, 255])}, ${"2026-09-14T00:00:00Z"}, ${"123e4567-e89b-12d3-a456-426614174000"}) RETURNING *`);
+      const result = await tx.one(sql.rows(schema)`INSERT INTO mapped VALUES (1, ${"Ada"}, ${'{"active":true}'}, ${new Uint8Array([0, 128, 255])}, ${"2026-09-14T00:00:00.123456Z"}, ${"123e4567-e89b-12d3-a456-426614174000"}) RETURNING *`);
       const rollback = new Error("rollback nested insert");
       try {
         await tx.tx(async (nested) => {
@@ -235,7 +227,7 @@ async function mappedTransaction(sqlite3) {
       return result;
     });
     const stored = await db.all(sql.rows`SELECT id FROM mapped ORDER BY id`);
-    expect(JSON.stringify(stored) === '[{"id":1}]', "SQLite WASM nested rollback did not preserve only the committed row.");
+    expect(JSON.stringify(stored) === '[{"id":"1"}]', "SQLite WASM nested rollback did not preserve only the committed row.");
     const updated = await db.one(sql.rows`UPDATE mapped SET name = ${"Grace"} WHERE id = 1 RETURNING id, name`);
     const deleted = await db.one(sql.rows`DELETE FROM mapped WHERE id = 1 RETURNING id`);
     const remaining = await db.all(sql.rows`SELECT id FROM mapped`);

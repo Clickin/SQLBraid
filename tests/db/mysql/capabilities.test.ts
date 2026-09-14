@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { createConnection, type Connection } from "mysql2/promise";
+import { createConnection, type Connection, type RowDataPacket } from "mysql2/promise";
 import { inject, test } from "vitest";
-import { decodeExactDecimal, decodeExactInteger, type ExecutionEvent } from "@sqlbraid/core";
+import { type ExecutionEvent } from "@sqlbraid/core";
 import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
 import { sql } from "@sqlbraid/mysql";
+import { assertFloatBits, binary32Finite, binary64Finite, exactJsonText } from "../fidelity.js";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
 import { runTransparencyCase } from "../../transparency.js";
 
@@ -11,7 +12,10 @@ interface Settings {
   readonly connectionUri: string;
 }
 
-async function connect(): Promise<Connection> {
+async function connect(overrides: Partial<{
+  readonly jsonStrings: boolean;
+  readonly dateStrings: boolean;
+}> = {}): Promise<Connection> {
   const settings = inject("mysql") as Settings;
   const uri = new URL(settings.connectionUri);
   return createConnection({
@@ -24,7 +28,8 @@ async function connect(): Promise<Connection> {
     bigNumberStrings: true,
     decimalNumbers: false,
     rowsAsArray: false,
-    jsonStrings: false,
+    jsonStrings: overrides.jsonStrings ?? false,
+    dateStrings: overrides.dateStrings ?? false,
   });
 }
 
@@ -72,10 +77,10 @@ test("mysql.numeric.exact-integer", { timeout: 30_000 }, async () => {
   const db = createMysql2Database(connection);
   try {
     const row = await db.one(sql.rows<{
-      readonly safe: bigint;
-      readonly unsafe: bigint;
-      readonly min: bigint;
-      readonly max: bigint;
+      readonly safe: string;
+      readonly unsafe: string;
+      readonly min: string;
+      readonly max: string;
     }>`
       SELECT
         CAST('9007199254740991' AS SIGNED) AS safe,
@@ -83,10 +88,10 @@ test("mysql.numeric.exact-integer", { timeout: 30_000 }, async () => {
         CAST('-9223372036854775808' AS SIGNED) AS min,
         CAST('9223372036854775807' AS SIGNED) AS max
     `);
-    assert.equal(decodeExactInteger(row.safe), 9007199254740991n);
-    assert.equal(decodeExactInteger(row.unsafe), 9007199254740992n);
-    assert.equal(decodeExactInteger(row.min), -9223372036854775808n);
-    assert.equal(decodeExactInteger(row.max), 9223372036854775807n);
+    assert.equal(row.safe, "9007199254740991");
+    assert.equal(row.unsafe, "9007199254740992");
+    assert.equal(row.min, "-9223372036854775808");
+    assert.equal(row.max, "9223372036854775807");
   } finally {
     await connection.end();
   }
@@ -106,9 +111,58 @@ test("mysql.numeric.exact-decimal", { timeout: 30_000 }, async () => {
         CAST('123.4500' AS DECIMAL(20, 4)) AS trailing_value,
         CAST('123456789012345678901234567890.1234567890' AS DECIMAL(40, 10)) AS large
     `);
-    assert.equal(decodeExactDecimal(row.fraction), "0.1000000000");
-    assert.equal(decodeExactDecimal(row.trailing_value), "123.4500");
-    assert.equal(decodeExactDecimal(row.large), "123456789012345678901234567890.1234567890");
+    assert.equal(row.fraction, "0.1000000000");
+    assert.equal(row.trailing_value, "123.4500");
+    assert.equal(row.large, "123456789012345678901234567890.1234567890");
+  } finally {
+    await connection.end();
+  }
+});
+
+test("mysql.numeric.approximate-float", { timeout: 30_000 }, async () => {
+  const connection = await connect();
+  const db = createMysql2Database(connection);
+  try {
+    for (const expected of binary64Finite) {
+      const literal = Object.is(expected, -0) ? "-0.0e0" : String(expected);
+      const row = await db.one(sql.rows<{ readonly value: number }>`SELECT CAST(${literal} AS DOUBLE) AS value`);
+      assertFloatBits(row.value, expected, 64);
+    }
+    for (const expected of binary32Finite) {
+      const literal = Object.is(expected, -0) ? "-0.0e0" : String(expected);
+      const row = await db.one(sql.rows<{ readonly value: number }>`SELECT CAST(${literal} AS FLOAT) AS value`);
+      assertFloatBits(row.value, expected, 32);
+    }
+  } finally {
+    await connection.end();
+  }
+});
+
+test("mysql.numeric.exact-bind", { timeout: 30_000 }, async () => {
+  const connection = await connect();
+  const db = createMysql2Database(connection);
+  try {
+    await connection.query("CREATE TEMPORARY TABLE braid_pv17_bind (id BIGINT NOT NULL, amount DECIMAL(40, 20) NOT NULL)");
+    const insert = sql.command`INSERT INTO braid_pv17_bind (id, amount) VALUES (${ "9007199254740993" }, ${"12345678901234567890.12345678901234567890"})`;
+    await db.execute(insert);
+    await db.execute(sql.command`INSERT INTO braid_pv17_bind (id, amount) VALUES (${1}, ${"0.10000000000000000001"})`);
+    assert.deepEqual(
+      await db.bulk(
+        [
+          { id: "9007199254740994", amount: "12345678901234567890.12345678901234567891" },
+          { id: "9007199254740995", amount: "12345678901234567890.12345678901234567892" },
+        ],
+        (input) => sql.command`INSERT INTO braid_pv17_bind (id, amount) VALUES (${input.id}, ${input.amount})`,
+      ),
+      { inputCount: 2, affectedRows: 2 },
+    );
+    const rows = await db.all(sql.rows<{ readonly id: string; readonly amount: string }>`SELECT id, amount FROM braid_pv17_bind ORDER BY id`);
+    assert.deepEqual(rows, [
+      { id: "1", amount: "0.10000000000000000001" },
+      { id: "9007199254740993", amount: "12345678901234567890.12345678901234567890" },
+      { id: "9007199254740994", amount: "12345678901234567890.12345678901234567891" },
+      { id: "9007199254740995", amount: "12345678901234567890.12345678901234567892" },
+    ]);
   } finally {
     await connection.end();
   }
@@ -127,6 +181,40 @@ test("mysql.data.json-native", { timeout: 30_000 }, async () => {
     `);
     assert.deepEqual(row.payload, { enabled: true, nested: { count: 2 } });
     assert.equal(row.enabled, 2);
+  } finally {
+    await connection.end();
+  }
+});
+
+test("mysql.data.json-lossless-text", { timeout: 30_000 }, async () => {
+  const connection = await connect({ jsonStrings: true, dateStrings: true });
+  const db = createMysql2Database(connection);
+  try {
+    const environment = await db.environment();
+    assert.equal(environment.driver.profile, "mysql2-lossless-text");
+    assert.equal(environment.capabilities["data.json-lossless-text"]?.status, "guaranteed");
+    assert.equal(environment.capabilities["data.temporal-lossless"]?.status, "guaranteed");
+    await connection.query("CREATE TEMPORARY TABLE braid_pv17_json (payload JSON NOT NULL)");
+    await db.execute(sql.command`INSERT INTO braid_pv17_json (payload) VALUES (${exactJsonText})`);
+    const row = await db.one(sql.rows<{ readonly payload: string }>`SELECT payload FROM braid_pv17_json`);
+    // MySQL JSON canonicalizes its binary representation (including decimal rounding and key/whitespace formatting).
+    // This fixture checks transport of that native JSON text; exact decimal JSON fidelity is covered by the TEXT column below.
+    const [nativeRows] = await connection.query<(RowDataPacket & { readonly payload: string })[]>(
+      "SELECT CAST(payload AS CHAR) AS payload FROM braid_pv17_json",
+    );
+    const nativePayload = nativeRows[0]?.payload;
+    assert.equal(typeof row.payload, "string");
+    assert.equal(typeof nativePayload, "string");
+    assert.equal(row.payload, nativePayload);
+    assert.match(row.payload, /"largeInteger":\s*9223372036854775807/u);
+
+    await connection.query("CREATE TEMPORARY TABLE braid_pv17_json_text (payload TEXT NOT NULL)");
+    await db.execute(sql.command`INSERT INTO braid_pv17_json_text (payload) VALUES (${exactJsonText})`);
+    const text = await db.one(sql.rows<{ readonly payload: string }>`SELECT payload FROM braid_pv17_json_text`);
+    assert.equal(text.payload, exactJsonText);
+
+    const temporal = await db.one(sql.rows<{ readonly value: string }>`SELECT CAST('2026-09-14 12:34:56.123456' AS DATETIME(6)) AS value`);
+    assert.equal(temporal.value, "2026-09-14 12:34:56.123456");
   } finally {
     await connection.end();
   }
@@ -195,14 +283,18 @@ test("mysql.result.command", { timeout: 30_000 }, async () => {
       ),
       { inputCount: 2, affectedRows: 2 },
     );
+    await connection.query("CREATE TEMPORARY TABLE braid_pv17_command (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, amount DECIMAL(40, 20) NOT NULL)");
+    const inserted = await db.execute(sql.command`INSERT INTO braid_pv17_command (amount) VALUES (${"12345678901234567890.12345678901234567890"})`);
+    assert.equal(inserted.command.affectedRows, 1);
+    assert.equal(inserted.command.insertId, "1");
 
-    const lexical = await db.one(sql.rows<{ readonly id: number; readonly enabled: boolean }>`
+    const lexical = await db.one(sql.rows<{ readonly id: string; readonly enabled: boolean }>`
       SELECT /*+ NO_INDEX(braid_pv16_capability) */ \`id\`, JSON_EXTRACT(payload, '$.enabled') AS enabled
       FROM braid_pv16_capability
       WHERE id = ${1} # a MySQL line comment
         AND name <> ${"nobody"}
     `);
-    assert.equal(lexical.id, 1);
+    assert.equal(lexical.id, "1");
     assert.equal(lexical.enabled, true);
 
     const upserted = await db.execute(sql.command`
@@ -222,7 +314,7 @@ test("mysql.result.command", { timeout: 30_000 }, async () => {
       WITH selected AS (SELECT id, name FROM braid_pv16_capability WHERE team_id = ${20})
       SELECT id, name FROM selected ORDER BY id
     `);
-    assert.deepEqual(cte, [{ id: 2, name: "Robert" }, { id: 3, name: "Cara" }]);
+    assert.deepEqual(cte, [{ id: "2", name: "Robert" }, { id: "3", name: "Cara" }]);
 
     const deleted = await db.execute(sql.command`
       DELETE target FROM braid_pv16_capability AS target

@@ -72,9 +72,9 @@ test("MySQL result kinds follow payload metadata", async () => {
     await client.query("CREATE TABLE braid_pv4 (id INT PRIMARY KEY, name VARCHAR(255) NOT NULL)");
     await client.query("INSERT INTO braid_pv4 (id, name) VALUES (1, 'Ada')");
 
-    const rows = await db.execute(sql.rows<{ readonly id: number; readonly name: string }>`SELECT id, name FROM braid_pv4`);
+    const rows = await db.execute(sql.rows<{ readonly id: string; readonly name: string }>`SELECT id, name FROM braid_pv4`);
     assert.equal(rows.kind, "rows");
-    assert.deepEqual(rows.rows, [{ id: 1, name: "Ada" }]);
+    assert.deepEqual(rows.rows, [{ id: "1", name: "Ada" }]);
     const unknownRows = await db.execute(sql`SELECT id FROM braid_pv4`);
     assert.equal(unknownRows.kind, "rows");
     const command = await db.execute(sql.command`UPDATE braid_pv4 SET name = 'Grace' WHERE id = 1`);
@@ -107,8 +107,8 @@ test("MySQL result kinds follow payload metadata", async () => {
         version: 1,
         vendor: "sqlbraid-tests",
         validate(value) {
-          const row = value as { readonly id: number };
-          return { value: { id: row.id + 10 } };
+          const row = value as { readonly id: string };
+          return { value: { id: Number(row.id) + 10 } };
         },
       },
     };
@@ -200,25 +200,25 @@ test("MySQL inspector evidence generates compiling Row Insert and Update models"
       updateName: "BraidPv9CodegenUpdate",
     });
 
-    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "external_id", "number", false);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "identity_value", "bigint", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "external_id", "string", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "identity_value", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "amount", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "label", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "payload", "unknown | null", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "nickname", "string | null", false);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "calculated", "number | null", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "calculated", "string | null", false);
 
-    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "external_id", "number", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "external_id", "number | string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "identity_value", "bigint | string", true);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "amount", "string | number", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "amount", "string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "label", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "payload", "unknown | null", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "nickname", "string | null", true);
     assertGeneratedPropertyAbsent(result.source, "BraidPv9CodegenInsert", "calculated");
 
-    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "external_id", "number", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "external_id", "number | string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "identity_value", "bigint | string", true);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "amount", "string | number", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "amount", "string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "label", "string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "payload", "unknown | null", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "nickname", "string | null", true);
@@ -241,8 +241,8 @@ test("MySQL pool leases run concurrent roots and pin transactions", async () => 
   const db = createMysql2PoolDatabase(pool);
   try {
     const backendIds = await Promise.all([
-      db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId, SLEEP(0.15) AS pause`),
-      db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId, SLEEP(0.15) AS pause`),
+      db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId, SLEEP(0.15) AS pause`),
+      db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId, SLEEP(0.15) AS pause`),
     ]);
     assert.equal(new Set(backendIds.map(({ connectionId }) => String(connectionId))).size, 2);
 
@@ -250,16 +250,16 @@ test("MySQL pool leases run concurrent roots and pin transactions", async () => 
     await db.execute(sql`CREATE TABLE braid_pv6_pool (id VARCHAR(255) PRIMARY KEY) ENGINE=InnoDB`);
     const pinnedIds: string[] = [];
     await db.tx(async (tx) => {
-      pinnedIds.push(String((await tx.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`)).connectionId));
+      pinnedIds.push(String((await tx.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`)).connectionId));
       await assert.rejects(
         tx.tx(async (nested) => {
-          pinnedIds.push(String((await nested.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`)).connectionId));
+          pinnedIds.push(String((await nested.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`)).connectionId));
           await nested.execute(sql`INSERT INTO braid_pv6_pool (id) VALUES ('nested')`);
           throw new Error("rollback savepoint");
         }),
         /rollback savepoint/,
       );
-      pinnedIds.push(String((await tx.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`)).connectionId));
+      pinnedIds.push(String((await tx.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`)).connectionId));
       await tx.execute(sql`INSERT INTO braid_pv6_pool (id) VALUES ('committed')`);
     });
     assert.equal(new Set(pinnedIds).size, 1);
@@ -296,7 +296,7 @@ test("MySQL pool releases before an async mapper can re-enter a max-one pool", a
         vendor: "sqlbraid-tests",
         async validate(value) {
           await db.execute(sql`SELECT 2`);
-          return { value: { value: Number((value as { readonly value: bigint }).value) + 1 } };
+          return { value: { value: Number((value as { readonly value: string }).value) + 1 } };
         },
       },
     };

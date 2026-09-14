@@ -44,13 +44,13 @@ test("MySQL mysql2 reuses streaming conformance with row schemas and lease count
     await pool.query("DROP TABLE IF EXISTS braid_pv15_conformance");
     await pool.query("CREATE TABLE braid_pv15_conformance (id INT PRIMARY KEY, label VARCHAR(255) NOT NULL) ENGINE=InnoDB");
     await pool.query("INSERT INTO braid_pv15_conformance (id, label) VALUES (1, 'one'), (2, 'two')");
-    const schema = rowSchema<{ readonly id: number; readonly label: string }>((value) => {
+    const schema = rowSchema<{ readonly id: string; readonly label: string }>((value) => {
       if (
         !value
         || typeof value !== "object"
         || !("id" in value)
         || !("label" in value)
-        || typeof value.id !== "number"
+        || typeof value.id !== "string"
         || typeof value.label !== "string"
       ) return { issues: [{ message: "invalid MySQL conformance row" }] };
       return { value: { id: value.id, label: value.label } };
@@ -62,7 +62,7 @@ test("MySQL mysql2 reuses streaming conformance with row schemas and lease count
       return {
         db,
         query: sql.rows(schema)`SELECT id, label FROM braid_pv15_conformance ORDER BY id`,
-        expected: [{ id: 1, label: "one" }, { id: 2, label: "two" }],
+        expected: [{ id: "1", label: "one" }, { id: "2", label: "two" }],
         mappingQuery: sql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance ORDER BY id`,
         released: () => releases - releaseStart,
       };
@@ -79,24 +79,24 @@ test("MySQL transaction streaming pins its backend and keeps binds value-only", 
   try {
     const secret = "x'); DROP TABLE braid_pv15_bind; --";
     await db.tx(async (tx) => {
-      const before = await tx.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`);
-      const rows: { readonly connectionId: number; readonly value: string }[] = [];
-      for await (const row of tx.stream(sql.rows<{ readonly connectionId: number; readonly value: string }>`SELECT CONNECTION_ID() AS connectionId, ${secret} AS value`)) {
+      const before = await tx.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
+      const rows: { readonly connectionId: string; readonly value: string }[] = [];
+      for await (const row of tx.stream(sql.rows<{ readonly connectionId: string; readonly value: string }>`SELECT CONNECTION_ID() AS connectionId, ${secret} AS value`)) {
         rows.push(row);
       }
-      const after = await tx.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`);
+      const after = await tx.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
       assert.equal(after.connectionId, before.connectionId);
       assert.deepEqual(rows, [{ connectionId: before.connectionId, value: secret }]);
     });
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: string }>`SELECT 1 AS ok`), { ok: "1" });
     await assert.rejects(async () => {
       for await (const _row of db.stream(sql.rows`SET @braid_pv15_stream_kind = 7`)) {
         assert.fail("a command header must not escape as a row");
       }
     }, /BRAID_RESULT_KIND/u);
     assert.deepEqual(
-      await db.one(sql.rows<{ readonly value: bigint }>`SELECT @braid_pv15_stream_kind AS value`),
-      { value: 7n },
+      await db.one(sql.rows<{ readonly value: string }>`SELECT @braid_pv15_stream_kind AS value`),
+      { value: "7" },
       "result-kind mismatch is post-execution and the drained connection remains reusable",
     );
   } finally {
@@ -119,18 +119,18 @@ test("MySQL prepared Execute.stream handles 100k rows and drains on break", asyn
       CROSS JOIN (SELECT 0 n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) d
       CROSS JOIN (SELECT 0 n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) e
     `);
-    const query = sql.rows<{ readonly id: number }>`SELECT id FROM braid_pv15_stream ORDER BY id`;
+    const query = sql.rows<{ readonly id: string }>`SELECT id FROM braid_pv15_stream ORDER BY id`;
     let count = 0;
     for await (const row of db.stream(query)) {
       count += 1;
-      assert.equal(typeof row.id, "number");
+      assert.equal(typeof row.id, "string");
     }
     assert.equal(count, 100_000);
     for await (const row of db.stream(query)) {
-      assert.equal(typeof row.id, "number");
+      assert.equal(typeof row.id, "string");
       break;
     }
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: string }>`SELECT 1 AS ok`), { ok: "1" });
   } finally {
     await pool.query("DROP TABLE IF EXISTS braid_pv15_stream").catch(() => undefined);
     await endPool(pool);
@@ -149,15 +149,15 @@ test("MySQL streaming rejects multiple result sets and drains before reusing the
         SELECT 10 AS PAYMENT_ID, 12.5 AS AMOUNT;
       END
     `);
-    const before = await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`);
+    const before = await db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
     await assert.rejects(async () => {
       for await (const row of db.stream(sql.rows<Record<string, unknown>>`CALL braid_pv15_stream_multi()`)) {
         assert.equal("PAYMENT_ID" in row, false, "second-result rows must never escape");
-        assert.deepEqual(row, { USER_ID: 1n, NAME: "Ada" });
+        assert.deepEqual(row, { USER_ID: "1", NAME: "Ada" });
       }
     }, /BRAID_RESULT_SETS_UNSUPPORTED/u);
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
-    const after = await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`);
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: string }>`SELECT 1 AS ok`), { ok: "1" });
+    const after = await db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
     assert.equal(after.connectionId, before.connectionId, "a safely drained connection is reused, not replaced");
   } finally {
     await pool.query("DROP PROCEDURE IF EXISTS braid_pv15_stream_multi").catch(() => undefined);
@@ -185,14 +185,14 @@ test("MySQL materialized queries reject multiple sets, reuse the connection and 
         SET counter = counter + p;
       END
     `);
-    const before = await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`);
+    const before = await db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
     await assert.rejects(
       () => db.all(sql.rows<Record<string, unknown>>`CALL braid_pv15_sets(${7})`),
       /BRAID_RESULT_SETS_UNSUPPORTED/u,
     );
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: string }>`SELECT 1 AS ok`), { ok: "1" });
     assert.deepEqual(
-      await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`),
+      await db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`),
       before,
       "materialized rejection reuses the same physical connection",
     );
@@ -200,9 +200,9 @@ test("MySQL materialized queries reject multiple sets, reuse the connection and 
       () => db.execute(sql`CALL braid_pv15_sets(${7})`),
       /BRAID_RESULT_SETS_UNSUPPORTED/u,
     );
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: string }>`SELECT 1 AS ok`), { ok: "1" });
     assert.deepEqual(
-      await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`),
+      await db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`),
       before,
       "unknown-result rejection reuses the same physical connection",
     );
@@ -211,7 +211,7 @@ test("MySQL materialized queries reject multiple sets, reuse the connection and 
     assert.equal(sets.returnValue, undefined);
     assert.deepEqual(sets.resultSets, [
       { rows: [{ value: "7.00", tag: "shape-a" }] },
-      { rows: [{ value: 8n, tag: "shape-b" }] },
+      { rows: [{ value: "8", tag: "shape-b" }] },
     ]);
     await assert.rejects(
       () => db.call(sql.call`CALL braid_pv15_out(${7}, ${sql.out("answer")}, ${sql.inOut("counter", 3)})`),

@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { beforeAll, test } from "vitest";
+import { exactJsonText } from "../fidelity.js";
 
 interface TransparencyEvidence {
   readonly logicalSegments: readonly string[];
   readonly parameterizedSql: string;
   readonly observedValues: readonly unknown[];
-  readonly rows: readonly { readonly marker: string; readonly enabled: number; readonly actual: number }[];
+  readonly rows: readonly { readonly marker: string; readonly enabled: string; readonly actual: string }[];
 }
 
 interface GeneratedEvidence {
@@ -23,7 +24,6 @@ interface IntegerValue {
 
 interface IntegerEvidence {
   readonly realValues: readonly IntegerValue[];
-  readonly unsafeRejected: boolean;
   readonly values: {
     readonly safe: IntegerValue;
     readonly safePlusOne: IntegerValue;
@@ -33,7 +33,7 @@ interface IntegerEvidence {
 }
 
 interface JsonEvidence {
-  readonly rows: readonly { readonly payload: string; readonly enabled: number }[];
+  readonly rows: readonly { readonly payload: string; readonly enabled: string }[];
 }
 
 interface BulkEvidence {
@@ -41,14 +41,14 @@ interface BulkEvidence {
   readonly parameterizedSql: string;
   readonly executionMode: string;
   readonly prepareCount: number;
-  readonly rows: readonly { readonly value: number }[];
+  readonly rows: readonly { readonly value: string }[];
 }
 
 interface StreamEvidence {
-  readonly first: { readonly value: number };
+  readonly first: { readonly value: string };
   readonly blockedCode: string;
-  readonly rows: readonly number[];
-  readonly after: readonly { readonly value: number }[];
+  readonly rows: readonly string[];
+  readonly after: readonly { readonly value: string }[];
 }
 
 interface WasmReport {
@@ -62,9 +62,9 @@ interface WasmReport {
     readonly "wasm.execution.bulk": BulkEvidence;
     readonly "wasm.execution.stream": StreamEvidence;
     readonly "wasm.execution.mapped-transaction": {
-      readonly inserted: { readonly id: number; readonly name: string; readonly payload: { readonly active: boolean }; readonly bytes: readonly number[]; readonly stamp: string; readonly uuid: string };
-      readonly updated: { readonly id: number; readonly name: string };
-      readonly deleted: { readonly id: number };
+      readonly inserted: { readonly id: string; readonly name: string; readonly payload: { readonly active: boolean }; readonly bytes: readonly number[]; readonly stamp: string; readonly uuid: string };
+      readonly updated: { readonly id: string; readonly name: string };
+      readonly deleted: { readonly id: string };
       readonly remaining: readonly unknown[];
     };
   };
@@ -141,7 +141,7 @@ test("wasm.sql.native-transparency", () => {
   ]);
   assert.equal(evidence.parameterizedSql, "\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract(?1, '$.enabled') AS enabled,\n             ?2 AS actual\n    ");
   assert.deepEqual(evidence.observedValues, ['{"enabled":true}', 7]);
-  assert.deepEqual(evidence.rows, [{ marker: "literal $1 :1 @p1 ?", enabled: 1, actual: 7 }]);
+  assert.deepEqual(evidence.rows, [{ marker: "literal $1 :1 @p1 ?", enabled: "1", actual: "7" }]);
 });
 
 test("wasm.sql.generated-structure", () => {
@@ -154,18 +154,17 @@ test("wasm.sql.generated-structure", () => {
 test("wasm.numeric.exact-integer", () => {
   const evidence = report.cases["wasm.numeric.exact-integer"];
   assert.deepEqual(evidence.values, {
-    safe: { type: "bigint", value: "9007199254740991" },
-    safePlusOne: { type: "bigint", value: "9007199254740992" },
-    minimum: { type: "bigint", value: "-9223372036854775808" },
-    maximum: { type: "bigint", value: "9223372036854775807" },
+    safe: { type: "string", value: "9007199254740991" },
+    safePlusOne: { type: "string", value: "9007199254740992" },
+    minimum: { type: "string", value: "-9223372036854775808" },
+    maximum: { type: "string", value: "9223372036854775807" },
   });
   assert.deepEqual(evidence.realValues, [{ type: "number", value: 1 }, { type: "number", value: 1e20 }]);
-  assert.equal(evidence.unsafeRejected, true);
 });
 
 test("wasm.data.json-text", () => {
   const evidence = report.cases["wasm.data.json-text"];
-  assert.deepEqual(evidence.rows, [{ payload: '{"enabled":true,"nested":{"count":2}}', enabled: 1 }]);
+  assert.deepEqual(evidence.rows, [{ payload: exactJsonText, enabled: "1" }]);
 });
 
 test("wasm.execution.bulk", () => {
@@ -174,24 +173,24 @@ test("wasm.execution.bulk", () => {
   assert.equal(evidence.parameterizedSql, "INSERT INTO bulk_values (value) VALUES (?1)");
   assert.equal(evidence.executionMode, "prepared-loop");
   assert.equal(evidence.prepareCount, 2);
-  assert.deepEqual(evidence.rows, [{ value: 1 }, { value: 2 }, { value: 3 }]);
+  assert.deepEqual(evidence.rows, [{ value: "1" }, { value: "2" }, { value: "3" }]);
 });
 
 test("wasm.execution.stream", () => {
   const evidence = report.cases["wasm.execution.stream"];
-  assert.deepEqual(evidence.first, { value: 1 });
+  assert.deepEqual(evidence.first, { value: "1" });
   assert.equal(evidence.blockedCode, "BRAID_STREAM_SCOPE");
-  assert.deepEqual(evidence.rows, [1, 2, 3]);
-  assert.deepEqual(evidence.after, [{ value: 4 }]);
+  assert.deepEqual(evidence.rows, ["1", "2", "3"]);
+  assert.deepEqual(evidence.after, [{ value: "4" }]);
 });
 
 test("wasm.execution.mapped-transaction", () => {
   const evidence = report.cases["wasm.execution.mapped-transaction"];
   assert.deepEqual(evidence.inserted, {
-    id: 1, name: "ADA", payload: { active: true }, bytes: [0, 128, 255],
-    stamp: "2026-09-14T00:00:00Z", uuid: "123e4567-e89b-12d3-a456-426614174000",
+    id: "1", name: "ADA", payload: { active: true }, bytes: [0, 128, 255],
+    stamp: "2026-09-14T00:00:00.123456Z", uuid: "123e4567-e89b-12d3-a456-426614174000",
   });
-  assert.deepEqual(evidence.updated, { id: 1, name: "Grace" });
-  assert.deepEqual(evidence.deleted, { id: 1 });
+  assert.deepEqual(evidence.updated, { id: "1", name: "Grace" });
+  assert.deepEqual(evidence.deleted, { id: "1" });
   assert.deepEqual(evidence.remaining, []);
 });

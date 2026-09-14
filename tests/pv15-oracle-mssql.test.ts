@@ -455,7 +455,7 @@ function mssqlStreamingConnection(options: {
           setImmediate(pump);
           return;
         }
-        if (index === 0) emit(request, "columnMetadata", [{ colName: "VALUE", type: "Int" }]);
+        if (index === 0) emit(request, "columnMetadata", [{ colName: "VALUE", type: "IntN", dataLength: 4 }]);
         if (options.failAt === index) {
           emit(request, "error", new Error("tedious driver failed"));
           setImmediate(finish);
@@ -501,11 +501,11 @@ test("Tedious stream satisfies the shared streaming lifecycle contract", async (
       cancelFailure: run === 8 ? cleanupFailure : undefined,
     });
     const db = createTediousDatabase(connection, { maxBufferedRows: 2 });
-    const query = mssqlSql.rows<{ readonly VALUE: number }>`SELECT value FROM braid_stream`;
+    const query = mssqlSql.rows<{ readonly VALUE: string }>`SELECT value FROM braid_stream`;
     return {
       db,
       query,
-      expected: [{ VALUE: 1 }, { VALUE: 2 }, { VALUE: 3 }],
+      expected: [{ VALUE: "1" }, { VALUE: "2" }, { VALUE: "3" }],
       mappingQuery,
       ...(run === 8 ? { cleanupFailureQuery: query, cleanupFailure } : {}),
     };
@@ -565,10 +565,10 @@ test("Tedious native procedure calls preserve OUTPUT, RETURN status, and heterog
     callProcedure(request: TediousRequestLike) {
       procedureCalls += 1;
       emit(request, "returnValue", "outAnswer", 7, {});
-      emit(request, "columnMetadata", [{ colName: "USER_ID", type: "Int" }]);
+      emit(request, "columnMetadata", [{ colName: "USER_ID", type: "IntN", dataLength: 4 }]);
       emit(request, "row", [{ value: 1 }]);
       emit(request, "doneProc", 1, false, 7);
-      emit(request, "columnMetadata", [{ colName: "PAYMENT_ID", type: "Int" }]);
+      emit(request, "columnMetadata", [{ colName: "PAYMENT_ID", type: "IntN", dataLength: 4 }]);
       emit(request, "row", [{ value: 2 }]);
       emit(request, "doneProc", 1, false, 7);
       emit(request, "requestCompleted");
@@ -578,22 +578,22 @@ test("Tedious native procedure calls preserve OUTPUT, RETURN status, and heterog
   const query = mssqlSql.call({ procedure: { name: "dbo.braid_routine", parameterNames: ["outAnswer", "minimum"] } })`${mssqlSql.out("answer", mssqlParameter.int())}, ${1}`;
   const result = await executor.call(query.render());
   assert.equal(procedureCalls, 1);
-  assert.deepEqual(result.output, { answer: 7 });
+  assert.deepEqual(result.output, { answer: "7" });
   assert.equal(result.returnValue, 7);
-  assert.deepEqual(result.resultSets.map((set) => set.rows), [[{ USER_ID: 1 }], [{ PAYMENT_ID: 2 }]]);
+  assert.deepEqual(result.resultSets.map((set) => set.rows), [[{ USER_ID: "1" }], [{ PAYMENT_ID: "2" }]]);
   assert.deepEqual(result.resultSets.map((set) => set.source), [{ kind: "emitted", index: 0 }, { kind: "emitted", index: 1 }]);
 });
 
 test("Tedious text calls never report the sp_executesql wrapper status", async () => {
   const connection = mssqlConnection((request) => {
-    emit(request, "returnValue", "answer", 4, {});
+    emit(request, "returnValue", "p1", 4, {});
     emit(request, "doneProc", 1, false, 99);
     emit(request, "requestCompleted");
   });
   const executor = createTediousExecutor(connection);
   const query = mssqlSql.call`EXEC dbo.braid_routine ${mssqlSql.out("answer", mssqlParameter.int())} OUTPUT`;
   const result = await executor.call(query.render());
-  assert.deepEqual(result.output, { answer: 4 });
+  assert.deepEqual(result.output, { answer: "4" });
   assert.equal(Object.hasOwn(result, "returnValue"), false);
 });
 

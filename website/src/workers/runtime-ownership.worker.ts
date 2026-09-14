@@ -33,7 +33,7 @@ async function createDatabase(events: ExecutionEvent[]) {
   const sqlite3 = await sqlite3InitModule();
   const native = new sqlite3.oo1.DB(":memory:");
   native.exec("CREATE TABLE ownership (id INTEGER PRIMARY KEY, value TEXT NOT NULL); INSERT INTO ownership VALUES (1, 'one'), (2, 'two'), (3, 'three');");
-  return createSqliteWasmDatabase(native, { observers: [{ onEvent(event) { events.push(event); } }] });
+  return createSqliteWasmDatabase(native, { sqlite3, observers: [{ onEvent(event) { events.push(event); } }] });
 }
 
 async function run(): Promise<OwnershipSuccess> {

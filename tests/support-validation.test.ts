@@ -53,6 +53,10 @@ test("support validation rejects claims without schema, locale, package, CI or r
     ["SUPPORT_TARGET_MISSING_EVIDENCE", async (directory) => mutateJson<{ status: string; evidence: { status: string } }>(join(directory, "support/targets/postgres.json"), (v) => { v.status = "official"; v.evidence.status = "pending"; })],
     ["SUPPORT_TARGET_UNKNOWN_VERSION", async (directory) => mutateJson<{ status: string; database: { version?: string } }>(join(directory, "support/targets/postgres.json"), (v) => { v.status = "official"; delete v.database.version; })],
     ["SUPPORT_NUMERIC_FIDELITY", async (directory) => mutateJson<{ capabilities: Record<string, { rawRepresentations: string[] }> }>(join(directory, "support/targets/postgres.json"), (v) => { v.capabilities["numeric.exact-decimal"]!.rawRepresentations = ["number"]; })],
+    ["SUPPORT_NUMERIC_FIDELITY", async (directory) => mutateJson<{ numeric: Record<string, { representation: string }> }>(join(directory, "support/targets/postgres.json"), (v) => { v.numeric["exact-decimal"]!.representation = "number"; })],
+    ["SUPPORT_NUMERIC_FIDELITY", async (directory) => mutateJson<{ capabilities: Record<string, { representation: string }> }>(join(directory, "support/targets/postgres.json"), (v) => { v.capabilities["numeric.exact-decimal"]!.representation = "number"; })],
+    ["SUPPORT_UNSUPPORTED_SUCCESS", async (directory) => mutateJson<{ capabilities: Record<string, { testIds: string[] }> }>(join(directory, "support/targets/mssql.json"), (v) => { v.capabilities["numeric.exact-decimal"]!.testIds = ["mssql.numeric.exact-integer"]; })],
+    ["SUPPORT_SCHEMA", async (directory) => mutateJson<{ capabilities: Record<string, { canonical?: string }> }>(join(directory, "support/targets/postgres.json"), (v) => { v.capabilities["numeric.exact-decimal"]!.canonical = "string"; })],
   ];
   for (const [code, mutate] of mutations) {
     const directory = await copyDataset();

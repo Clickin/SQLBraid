@@ -69,9 +69,9 @@ test("PostgreSQL result kinds follow driver metadata", async () => {
     await client.query("CREATE TABLE braid_pv4 (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
     await client.query("INSERT INTO braid_pv4 (id, name) VALUES (1, 'Ada')");
 
-    const rows = await db.execute(sql.rows<{ readonly id: number; readonly name: string }>`SELECT id, name FROM braid_pv4`);
+    const rows = await db.execute(sql.rows<{ readonly id: string; readonly name: string }>`SELECT id, name FROM braid_pv4`);
     assert.equal(rows.kind, "rows");
-    assert.deepEqual(rows.rows, [{ id: 1, name: "Ada" }]);
+    assert.deepEqual(rows.rows, [{ id: "1", name: "Ada" }]);
     const unknownRows = await db.execute(sql`SELECT id FROM braid_pv4`);
     assert.equal(unknownRows.kind, "rows");
     const command = await db.execute(sql.command`UPDATE braid_pv4 SET name = 'Grace' WHERE id = 1`);
@@ -86,7 +86,7 @@ test("PostgreSQL result kinds follow driver metadata", async () => {
     await client.query("INSERT INTO braid_pv4 (id, name) VALUES (2, 'Bob')");
     const returning = await db.execute(sql.rows`INSERT INTO braid_pv4 (id, name) VALUES (3, 'Carol') RETURNING id`);
     assert.equal(returning.kind, "rows");
-    assert.deepEqual(returning.rows, [{ id: 3 }]);
+    assert.deepEqual(returning.rows, [{ id: "3" }]);
 
     await assert.rejects(
       () => db.execute(sql.command`SELECT id FROM braid_pv4`),
@@ -108,8 +108,8 @@ test("PostgreSQL result kinds follow driver metadata", async () => {
         version: 1,
         vendor: "sqlbraid-tests",
         validate(value) {
-          const row = value as { readonly id: number };
-          return { value: { id: row.id + 10 } };
+          const row = value as { readonly id: string };
+          return { value: { id: Number(row.id) + 10 } };
         },
       },
     };
@@ -118,7 +118,7 @@ test("PostgreSQL result kinds follow driver metadata", async () => {
       [{ id: 12 }],
     );
     const mapped = v.object({
-      payload: v.object({ enabled: v.boolean() }),
+      payload: v.pipe(v.string(), v.transform((value) => JSON.parse(value) as { readonly enabled: boolean })),
       stamp: v.pipe(v.string(), v.transform((stamp) => new Date(`${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T00:00:00Z`))),
     });
     assert.deepEqual(
@@ -201,25 +201,25 @@ test("PostgreSQL inspector evidence generates compiling Row Insert and Update mo
       updateName: "BraidPv9CodegenUpdate",
     });
 
-    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "id", "number", false);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "identity_value", "bigint", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "id", "string", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "identity_value", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "amount", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "label", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "enabled", "boolean", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "nickname", "string | null", false);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "calculated", "number | null", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "calculated", "string | null", false);
 
-    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "id", "number", false);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "identity_value", "bigint", true);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "amount", "string | number", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "id", "number | string", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "identity_value", "bigint | string", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "amount", "string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "label", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "enabled", "boolean", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenInsert", "nickname", "string | null", true);
     assertGeneratedPropertyAbsent(result.source, "BraidPv9CodegenInsert", "calculated");
 
-    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "id", "number", true);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "identity_value", "bigint", true);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "amount", "string | number", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "id", "number | string", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "identity_value", "bigint | string", true);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "amount", "string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "label", "string", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "enabled", "boolean", true);
     assertGeneratedProperty(result.source, "BraidPv9CodegenUpdate", "nickname", "string | null", true);
@@ -238,25 +238,25 @@ test("PostgreSQL pool leases run concurrent roots and pin transactions", async (
   const db = createPgPoolDatabase(pool);
   try {
     const backendIds = await Promise.all([
-      db.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid, pg_sleep(0.15)`),
-      db.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid, pg_sleep(0.15)`),
+      db.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid, pg_sleep(0.15)`),
+      db.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid, pg_sleep(0.15)`),
     ]);
     assert.equal(new Set(backendIds.map(({ pid }) => pid)).size, 2);
 
     await db.execute(sql`DROP TABLE IF EXISTS braid_pv6_pool`);
     await db.execute(sql`CREATE TABLE braid_pv6_pool (id TEXT PRIMARY KEY)`);
-    const pinnedIds: number[] = [];
+    const pinnedIds: string[] = [];
     await db.tx(async (tx) => {
-      pinnedIds.push((await tx.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid`)).pid);
+      pinnedIds.push((await tx.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`)).pid);
       await assert.rejects(
         tx.tx(async (nested) => {
-          pinnedIds.push((await nested.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid`)).pid);
+          pinnedIds.push((await nested.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`)).pid);
           await nested.execute(sql`INSERT INTO braid_pv6_pool (id) VALUES ('nested')`);
           throw new Error("rollback savepoint");
         }),
         /rollback savepoint/,
       );
-      pinnedIds.push((await tx.one(sql.rows<{ readonly pid: number }>`SELECT pg_backend_pid() AS pid`)).pid);
+      pinnedIds.push((await tx.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`)).pid);
       await tx.execute(sql`INSERT INTO braid_pv6_pool (id) VALUES ('committed')`);
     });
     assert.equal(new Set(pinnedIds).size, 1);
@@ -292,7 +292,7 @@ test("PostgreSQL pool releases before an async mapper can re-enter a max-one poo
         vendor: "sqlbraid-tests",
         async validate(value) {
           await db.execute(sql`SELECT 2`);
-          return { value: { value: (value as { readonly value: number }).value + 1 } };
+          return { value: { value: Number((value as { readonly value: string }).value) + 1 } };
         },
       },
     };

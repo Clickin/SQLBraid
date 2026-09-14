@@ -5,21 +5,22 @@ import { join, resolve } from "node:path";
 import { build as viteBuild } from "vite";
 import { Miniflare } from "miniflare";
 import { test } from "vitest";
+import { exactJsonText } from "../fidelity.js";
 
 type D1Payload = {
-  readonly transparency: readonly { readonly marker: string; readonly enabled: number; readonly actual: number }[];
+  readonly transparency: readonly { readonly marker: string; readonly enabled: string; readonly actual: string }[];
   readonly transparencySql: string;
   readonly transparencySegments: readonly string[];
-  readonly generated: readonly { readonly value: number }[];
+  readonly generated: readonly { readonly value: string }[];
   readonly generatedSql: string;
   readonly generatedSegments: readonly string[];
-  readonly inserted: { readonly kind: string; readonly rows: readonly { readonly id: number; readonly name: string; readonly payload: readonly number[] }[] };
-  readonly mapped: readonly { readonly id: number; readonly name: string; readonly payload: readonly number[]; readonly profile: { readonly active: boolean }; readonly stamp: string; readonly uuid: string }[];
-  readonly updated: readonly { readonly id: number; readonly name: string }[];
-  readonly deleted: readonly { readonly id: number }[];
+  readonly inserted: { readonly kind: string; readonly rows: readonly { readonly id: string; readonly name: string; readonly payload: readonly number[] }[] };
+  readonly mapped: readonly { readonly id: string; readonly name: string; readonly payload: readonly number[]; readonly profile: { readonly active: boolean }; readonly stamp: string; readonly uuid: string }[];
+  readonly updated: readonly { readonly id: string; readonly name: string }[];
+  readonly deleted: readonly { readonly id: string }[];
   readonly environment: { readonly database: { readonly product: string; readonly version?: string }; readonly driver: { readonly id: string }; readonly runtime: { readonly id: string } };
-  readonly numeric: { readonly safe: number; readonly unsafeCode: string };
-  readonly json: { readonly payload: string; readonly enabled: number };
+  readonly numeric: { readonly safe: string; readonly integralReal: { readonly value: string }; readonly unsafeCode: string };
+  readonly json: { readonly payload: string; readonly enabled: string };
   readonly bulk: { readonly inputCount: number; readonly affectedRows: number };
   readonly streamCode: string;
   readonly transactionCode: string;
@@ -74,27 +75,27 @@ test("d1.sql.native-transparency", async () => {
   assert.equal(payload.environment.driver.id, "cloudflare-d1");
   assert.deepEqual(payload.transparencySegments, ["\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract('{\"enabled\":true}', '$.enabled') AS enabled,\n             ", " AS actual\n    "]);
   assert.equal(payload.transparencySql, "\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract('{\"enabled\":true}', '$.enabled') AS enabled,\n             ?1 AS actual\n    ");
-  assert.deepEqual(payload.transparency, [{ marker: "literal $1 :1 @p1 ?", enabled: 1, actual: 7 }]);
+  assert.deepEqual(payload.transparency, [{ marker: "literal $1 :1 @p1 ?", enabled: "1", actual: "7" }]);
 });
 
 test("d1.sql.generated-structure", async () => {
   const payload = await fixture();
   assert.deepEqual(payload.generatedSegments, ['SELECT "value" FROM (SELECT ', " AS value)"]);
   assert.equal(payload.generatedSql, 'SELECT "value" FROM (SELECT ?1 AS value)');
-  assert.deepEqual(payload.generated, [{ value: 8 }]);
+  assert.deepEqual(payload.generated, [{ value: "8" }]);
 });
 
 test("d1.numeric.exact-integer", async () => {
   const payload = await fixture();
-  assert.equal(payload.numeric.safe, 9007199254740991);
+  assert.equal(payload.numeric.safe, "9007199254740991");
+  assert.deepEqual(payload.numeric.integralReal, { value: "1" });
   assert.equal(payload.numeric.unsafeCode, "BRAID_INTEGER_UNSAFE");
-  assert.equal(Number.isSafeInteger(payload.numeric.safe), true);
 });
 
 test("d1.data.json-text", async () => {
   const payload = await fixture();
-  assert.equal(payload.json.payload, '{"enabled":true,"nested":{"count":2}}');
-  assert.equal(payload.json.enabled, 1);
+  assert.equal(payload.json.payload, exactJsonText);
+  assert.equal(payload.json.enabled, "1");
 });
 
 test("d1.execution.bulk", async () => {
@@ -106,11 +107,11 @@ test("d1.execution.bulk", async () => {
 
 test("d1.data.mapping-returning", async () => {
   const payload = await fixture();
-  assert.deepEqual(payload.inserted, { kind: "rows", rows: [{ id: 1, name: "Ada", payload: [1, 2, 3] }] });
+  assert.deepEqual(payload.inserted, { kind: "rows", rows: [{ id: "1", name: "Ada", payload: [1, 2, 3] }] });
   assert.deepEqual(payload.mapped, [{
-    id: 1, name: "ADA", payload: [1, 2, 3], profile: { active: true },
-    stamp: "2026-09-14T00:00:00Z", uuid: "123e4567-e89b-12d3-a456-426614174000",
+    id: "1", name: "ADA", payload: [1, 2, 3], profile: { active: true },
+    stamp: "2026-09-14T00:00:00.123456Z", uuid: "123e4567-e89b-12d3-a456-426614174000",
   }]);
-  assert.deepEqual(payload.updated, [{ id: 1, name: "Updated" }]);
-  assert.deepEqual(payload.deleted, [{ id: 1 }]);
+  assert.deepEqual(payload.updated, [{ id: "1", name: "Updated" }]);
+  assert.deepEqual(payload.deleted, [{ id: "1" }]);
 });

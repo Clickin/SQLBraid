@@ -6,7 +6,9 @@ import { extname, resolve } from "node:path";
 import process from "node:process";
 import { chromium } from "playwright";
 
-const port = Number(process.env.SQLBRAID_BROWSER_PORT ?? 4321);
+const configuredPort = process.env.SQLBRAID_BROWSER_PORT === undefined
+  ? undefined
+  : Number(process.env.SQLBRAID_BROWSER_PORT);
 const basePath = "/SQLBraid/dev";
 const route = `${basePath}/interactive-preview/`;
 const externalUrl = process.env.SQLBRAID_BROWSER_URL;
@@ -37,6 +39,38 @@ async function waitForServer(url) {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(`Timed out waiting for ${url}.`);
+}
+
+async function probePort(port) {
+  const probe = createServer();
+  let listening = false;
+  try {
+    await new Promise((resolvePort, reject) => {
+      probe.once("error", reject);
+      probe.listen(port, "127.0.0.1", () => {
+        listening = true;
+        resolvePort();
+      });
+    });
+    const address = probe.address();
+    if (!address || typeof address === "string") throw new Error("Preview port probe did not expose a TCP port.");
+    return address.port;
+  } finally {
+    if (listening) {
+      await new Promise((resolveClose, reject) => probe.close((error) => error ? reject(error) : resolveClose()));
+    }
+  }
+}
+
+async function previewPort() {
+  if (configuredPort !== undefined) {
+    try {
+      return await probePort(configuredPort);
+    } catch (error) {
+      if (error?.code !== "EADDRINUSE") throw error;
+    }
+  }
+  return probePort(0);
 }
 
 function contentType(file) {
@@ -176,6 +210,7 @@ async function supportMatrix(browser, previewUrl) {
 async function main() {
   let server;
   let fixtureServer;
+  const port = externalUrl === undefined ? await previewPort() : undefined;
   const url = externalUrl ?? `http://127.0.0.1:${port}${route}`;
   try {
     if (!externalUrl) {
@@ -251,6 +286,17 @@ async function main() {
       if (checks.join(",") !== expectedChecks.join(",")) throw new Error(`Unexpected browser ownership checks: ${checks.join(",")}.`);
       console.log(`Browser preview passed: ${url}`);
       const report = await runWasmConformance(browser, fixtureServer.url);
+      const integerEvidence = report.cases?.["wasm.numeric.exact-integer"];
+      if (!integerEvidence || Object.values(integerEvidence.values ?? {}).some((value) => value?.type !== "string")) {
+        throw new Error("Browser WASM exact INTEGER evidence must use canonical strings.");
+      }
+      if (integerEvidence.realValues?.some((value) => value?.type !== "number")) {
+        throw new Error("Browser WASM REAL evidence must remain JavaScript numbers.");
+      }
+      const jsonEvidence = report.cases?.["wasm.data.json-text"]?.rows?.[0]?.payload;
+      if (typeof jsonEvidence !== "string" || !jsonEvidence.includes("9007199254740993")) {
+        throw new Error("Browser WASM nested JSON must remain exact text.");
+      }
       console.log(`SQLBRAID_BROWSER_REPORT=${JSON.stringify({ ...report, browserVersion: browser.version(), matrix: await supportMatrix(browser, url) })}`);
     } finally {
       await browser.close();
