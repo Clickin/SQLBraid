@@ -4,6 +4,7 @@ import type {
   DatabaseOptions,
   DriverRoutineResult,
   DriverEnvironment,
+  ExecutionOptions,
   QueryExecutor,
   QueryExecutionResult,
   RenderedBulk,
@@ -11,6 +12,7 @@ import type {
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
+  TransactionOptions,
 } from "@sqlbraid/core";
 import {
   createBulkBindingDescription,
@@ -18,6 +20,7 @@ import {
   createStatementBindingDescription,
   normalizeExactInteger,
   safeDatabaseCount,
+  UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
@@ -59,7 +62,18 @@ type SqliteWasmCapi = NonNullable<SqliteWasmExecutorOptions["sqlite3"]>["capi"];
 
 function assertRoutineUnsupported(rendered: RenderedStatement): void {
   if (rendered.resultKind === "call" || rendered.routineProcedure !== undefined) {
-    throw new Error("BRAID_CALL_UNSUPPORTED: SQLite WASM adapter does not support routine calls.");
+    throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "SQLite WASM adapter does not support routine calls.");
+  }
+}
+
+function assertRoutineParametersUnsupported(rendered: RenderedStatement): void {
+  for (const parameter of rendered.parameters) {
+    if (parameter.direction === "inout") {
+      throw new UnsupportedFeatureError("routine.inout", "BRAID_CALL_OUT_UNSUPPORTED", "SQLite WASM does not expose a routine INOUT parameter carrier.");
+    }
+    if (parameter.direction === "out" || parameter.outputName !== undefined) {
+      throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "SQLite WASM does not expose a routine OUT parameter carrier.");
+    }
   }
 }
 
@@ -85,6 +99,49 @@ function assertWasmValue(value: unknown): void {
 
 function assertWasmValues(values: readonly unknown[]): void {
   for (const value of values) assertWasmValue(value);
+}
+
+function assertExecutionOptions(options?: ExecutionOptions): void {
+  const signal = options?.signal;
+  if (signal === undefined) return;
+  if (signal.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  throw new UnsupportedFeatureError(
+    "statement.cancel",
+    "BRAID_CANCEL_UNSUPPORTED",
+    "SQLite WASM does not expose a safe statement cancellation primitive.",
+  );
+}
+
+function unsupportedTransactionOption(feature: string, option: string): never {
+  throw new UnsupportedFeatureError(feature, "BRAID_TX_OPTION_UNSUPPORTED", `SQLite WASM does not support transaction option ${option}.`);
+}
+
+function invalidTransactionOptions(message: string): never {
+  const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: ${message}`) as TypeError & { readonly code: string };
+  Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+  throw error;
+}
+
+function validateTransactionOptions(options?: TransactionOptions): void {
+  if (options === undefined) return;
+  if (options === null || typeof options !== "object" || Array.isArray(options)) {
+    invalidTransactionOptions("transaction options must be an object.");
+  }
+  const unexpected = Object.keys(options).find((key) => key !== "isolation" && key !== "readOnly");
+  if (unexpected !== undefined) invalidTransactionOptions(`Unknown SQLite transaction option: ${unexpected}.`);
+  const candidate = options as TransactionOptions & { readonly isolation?: unknown; readonly readOnly?: unknown };
+  if (candidate.readOnly !== undefined && typeof candidate.readOnly !== "boolean") {
+    invalidTransactionOptions("transaction readOnly must be boolean.");
+  }
+  if (
+    candidate.isolation !== undefined
+    && candidate.isolation !== "read-uncommitted"
+    && candidate.isolation !== "read-committed"
+    && candidate.isolation !== "repeatable-read"
+    && candidate.isolation !== "serializable"
+  ) {
+    invalidTransactionOptions("transaction isolation is not a supported standard literal.");
+  }
 }
 
 function assertCommand(rendered: RenderedStatement): void {
@@ -164,6 +221,7 @@ export const sqliteWasmStatementBinding: StatementBindingAdapter = Object.freeze
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
     statement = createRenderedStatement(statement);
     assertRoutineUnsupported(statement);
+    assertRoutineParametersUnsupported(statement);
     assertParameterHintsUnsupported(statement);
     assertWasmValues(statement.parameters.map((parameter) => parameter.value));
     const description = createStatementBindingDescription(statement, context, {
@@ -177,6 +235,7 @@ export const sqliteWasmStatementBinding: StatementBindingAdapter = Object.freeze
   },
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
     const statement = createRenderedStatement(bulk.statement);
+    assertRoutineParametersUnsupported(statement);
     assertCommand(statement);
     assertParameterHintsUnsupported(statement);
     for (const values of bulk.parameterSets) {
@@ -210,15 +269,37 @@ function transactionControl(database: SqliteWasmDatabaseLike, sql: string): Prom
   return Promise.resolve();
 }
 
-function sqliteWasmEnvironment(): DriverEnvironment {
+function sqliteWasmEnvironment(rowReadsSupported: boolean): DriverEnvironment {
   return Object.freeze<DriverEnvironment>({
     database: { product: "sqlite" },
     driver: { id: "sqlite-wasm", profile: "sqlite-wasm-exact-string" },
     typePolicy: { id: typePolicy.id, hash: typePolicy.hash },
     capabilities: {
       "sql.native-transparency": { status: "guaranteed" },
-      "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] },
-      "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+      "numeric.exact-integer": rowReadsSupported
+        ? { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] }
+        : { status: "unsupported", conditionCode: "sqlite-wasm.initialized-capi" },
+      "numeric.approximate-float": rowReadsSupported
+        ? { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] }
+        : { status: "unsupported", conditionCode: "sqlite-wasm.initialized-capi" },
+      "session.pinned": { status: "guaranteed" },
+      "transaction": { status: "guaranteed" },
+      "transaction.savepoint": { status: "guaranteed" },
+      "transaction.read-only": { status: "unsupported" },
+      "transaction.isolation.read-uncommitted": { status: "unsupported" },
+      "transaction.isolation.read-committed": { status: "unsupported" },
+      "transaction.isolation.repeatable-read": { status: "unsupported" },
+      "transaction.isolation.serializable": { status: "guaranteed" },
+      "statement.prepare": { status: "guaranteed" },
+      "statement.cancel": { status: "unsupported" },
+      "statement.stream": rowReadsSupported ? { status: "guaranteed" } : { status: "unsupported", conditionCode: "sqlite-wasm.initialized-capi" },
+      "statement.bulk": { status: "guaranteed" },
+      "routine.call": { status: "unsupported" },
+      "routine.out": { status: "unsupported" },
+      "routine.inout": { status: "unsupported" },
+      "routine.return-value": { status: "unsupported" },
+      "routine.result-sets": { status: "unsupported" },
+      "routine.out-cursor": { status: "unsupported" },
     },
     probe: {
       statement: createRenderedStatement({
@@ -242,9 +323,11 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
   return {
     ownershipKey: database,
     statementBinding: sqliteWasmStatementBinding,
-    environment: sqliteWasmEnvironment(),
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+    environment: sqliteWasmEnvironment(capi !== undefined),
+    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
+      assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
+      assertRoutineParametersUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
       const statement = database.prepare(prepared.text);
@@ -268,7 +351,9 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
         finishStatement(statement, failure);
       }
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
+    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult> {
+      assertExecutionOptions(options);
+      assertRoutineParametersUnsupported(bulk.statement);
       if (!binding || describedBulks.get(binding) !== bulk) throw new TypeError("BRAID_BINDING_IDENTITY: SQLite WASM bulk description belongs to another bulk or adapter.");
       const statement = createRenderedStatement(bulk.statement);
       assertCommand(statement);
@@ -298,13 +383,17 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
       }
       return { inputCount: bulk.parameterSets.length, affectedRows, executionMode: "prepared-loop" };
     },
-    async call(_rendered: RenderedStatement, _binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
-      throw new Error("BRAID_CALL_UNSUPPORTED: SQLite WASM adapter does not support routine calls.");
-    },
-    async *stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncGenerator<Row> {
+    async call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult> {
+      assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
+      assertRoutineParametersUnsupported(rendered);
+      throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "SQLite WASM adapter does not support routine calls.");
+    },
+    async *stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncGenerator<Row> {
+      assertExecutionOptions(options);
+      assertRoutineUnsupported(rendered);
+      assertRoutineParametersUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
-      signal?.throwIfAborted();
       const prepared = materialize(rendered, binding);
       const statement = database.prepare(prepared.text);
       let failure: unknown;
@@ -314,7 +403,6 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
         if (names.length === 0) throw new Error("BRAID_RESULT_KIND: SQLite WASM stream requires a row-producing statement.");
         assertExactIntegerReads(statement, capi);
         while (true) {
-          signal?.throwIfAborted();
           if (!statement.step()) break;
           yield row(statement, names, capi) as Row;
         }
@@ -325,7 +413,14 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
         finishStatement(statement, failure);
       }
     },
-    begin: () => transactionControl(database, "BEGIN"),
+    begin: (options?: TransactionOptions) => {
+      validateTransactionOptions(options);
+      if (options?.readOnly === true) unsupportedTransactionOption("transaction.read-only", "readOnly");
+      if (options?.isolation !== undefined && options.isolation !== "serializable") {
+        unsupportedTransactionOption(`transaction.isolation.${options.isolation}`, options.isolation);
+      }
+      return transactionControl(database, "BEGIN");
+    },
     commit: () => transactionControl(database, "COMMIT"),
     rollback: () => transactionControl(database, "ROLLBACK"),
     savepoint: (name) => transactionControl(database, `SAVEPOINT ${name}`),

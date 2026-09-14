@@ -58,6 +58,9 @@ interface WasmReport {
   readonly runtime: "browser-wasm";
   readonly sqliteVersion: string;
   readonly browserVersion: string;
+  readonly environment: {
+    readonly capabilities: Readonly<Record<string, { readonly status: string }>>;
+  };
   readonly cases: {
     readonly "wasm.sql.native-transparency": TransparencyEvidence;
     readonly "wasm.sql.generated-structure": GeneratedEvidence;
@@ -66,6 +69,10 @@ interface WasmReport {
     readonly "wasm.execution.bulk": BulkEvidence;
     readonly "wasm.execution.stream": StreamEvidence;
     readonly "wasm.execution.mapped-transaction": {
+      readonly session: {
+        readonly preparedRow: { readonly value: string };
+        readonly markers: readonly { readonly value: string }[];
+      };
       readonly inserted: { readonly id: string; readonly name: string; readonly payload: { readonly active: boolean }; readonly bytes: readonly number[]; readonly stamp: string; readonly uuid: string };
       readonly updated: { readonly id: string; readonly name: string };
       readonly deleted: { readonly id: string };
@@ -156,6 +163,18 @@ test("wasm.sql.native-transparency", () => {
   assert.deepEqual(evidence.rows, [{ marker: "literal $1 :1 @p1 ?", enabled: "1", actual: "7" }]);
 });
 
+test("wasm.capabilities.report physical execution boundaries", () => {
+  const capabilities = report.environment?.capabilities;
+  assert.ok(capabilities);
+  assert.equal(capabilities["session.pinned"]?.status, "guaranteed");
+  assert.equal(capabilities.transaction?.status, "guaranteed");
+  assert.equal(capabilities["transaction.isolation.serializable"]?.status, "guaranteed");
+  assert.equal(capabilities["transaction.read-only"]?.status, "unsupported");
+  assert.equal(capabilities["statement.cancel"]?.status, "unsupported");
+  assert.equal(capabilities["statement.stream"]?.status, "guaranteed");
+  assert.equal(capabilities["statement.bulk"]?.status, "guaranteed");
+});
+
 test("wasm.sql.generated-structure", () => {
   const evidence = report.cases["wasm.sql.generated-structure"];
   assert.deepEqual(evidence.logicalSegments, ["INSERT INTO \"generated_table\" (\"name\") VALUES (", ")"]);
@@ -198,6 +217,10 @@ test("wasm.execution.stream", () => {
 
 test("wasm.execution.mapped-transaction", () => {
   const evidence = report.cases["wasm.execution.mapped-transaction"];
+  assert.deepEqual(evidence.session, {
+    preparedRow: { value: "pinned" },
+    markers: [{ value: "nested" }],
+  });
   assert.deepEqual(evidence.inserted, {
     id: "1", name: "ADA", payload: { active: true }, bytes: [0, 128, 255],
     stamp: "2026-09-14T00:00:00.123456Z", uuid: "123e4567-e89b-12d3-a456-426614174000",

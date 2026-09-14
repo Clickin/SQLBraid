@@ -1,5 +1,7 @@
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
+import { createStatementBindingDescription } from "@sqlbraid/core";
 import { sql } from "@sqlbraid/sqlite";
+import { createPooledDatabase } from "@sqlbraid/runtime";
 import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
 
 const nativeMarkers = "literal $1 :1 @p1 ?";
@@ -210,6 +212,16 @@ async function mappedTransaction(sqlite3) {
     },
   };
   try {
+    const session = await db.session(async (scoped) => {
+      await scoped.execute(sql.command`CREATE TEMP TABLE session_marker (value TEXT NOT NULL)`);
+      const prepared = scoped.prepare("session-marker", (value) => sql.rows`SELECT ${value} AS value`);
+      const preparedRow = await prepared.one("pinned");
+      await scoped.tx({ isolation: "serializable" }, async (tx) => {
+        await tx.execute(sql.command`INSERT INTO session_marker VALUES (${"nested"})`);
+      });
+      const markers = await scoped.all(sql.rows`SELECT value FROM session_marker ORDER BY rowid`);
+      return { preparedRow, markers };
+    });
     await db.execute(sql.command`CREATE TABLE mapped (id INTEGER PRIMARY KEY, name TEXT, payload TEXT, bytes BLOB, stamp TEXT, uuid TEXT)`);
     const inserted = await db.tx(async (tx) => {
       const result = await tx.one(sql.rows(schema)`INSERT INTO mapped VALUES (1, ${"Ada"}, ${'{"active":true}'}, ${new Uint8Array([0, 128, 255])}, ${"2026-09-14T00:00:00.123456Z"}, ${"123e4567-e89b-12d3-a456-426614174000"}) RETURNING *`);
@@ -231,18 +243,166 @@ async function mappedTransaction(sqlite3) {
     const updated = await db.one(sql.rows`UPDATE mapped SET name = ${"Grace"} WHERE id = 1 RETURNING id, name`);
     const deleted = await db.one(sql.rows`DELETE FROM mapped WHERE id = 1 RETURNING id`);
     const remaining = await db.all(sql.rows`SELECT id FROM mapped`);
-    return { inserted, updated, deleted, remaining };
+    return { session, inserted, updated, deleted, remaining };
   } finally {
     native.close();
   }
 }
 
+function scopeAdmissionProvider(gate, rejectFirst) {
+  const capabilities = {
+    "session.pinned": { status: "guaranteed" },
+    transaction: { status: "guaranteed" },
+    "transaction.savepoint": { status: "guaranteed" },
+  };
+  const statementBinding = Object.freeze({
+    id: "sqlite-browser-scope",
+    describe(statement, context) {
+      return createStatementBindingDescription(statement, context, {
+        adapterId: "sqlite-browser-scope",
+        transport: "text-positional",
+        placeholder: (index) => `?${index}`,
+        reuse: { effective: "simple", owner: "driver" },
+      });
+    },
+  });
+  let acquires = 0;
+  let first = true;
+  const started = Promise.withResolvers();
+  return {
+    started: started.promise,
+    statementBinding,
+    environment: {
+      database: { product: "sqlite-browser-scope" },
+      driver: { id: "sqlite-browser-scope", version: "fixture", profile: "conformance" },
+      capabilities,
+    },
+    get acquires() {
+      return acquires;
+    },
+    async acquire() {
+      acquires += 1;
+      if (first) {
+        first = false;
+        started.resolve();
+        await gate;
+        if (rejectFirst) throw new Error("fixture acquisition failed");
+      }
+      return {
+        statementBinding,
+        environment: {
+          database: { product: "sqlite-browser-scope" },
+          driver: { id: "sqlite-browser-scope", version: "fixture", profile: "conformance" },
+          capabilities,
+        },
+        async query() { return { kind: "rows", rows: [] }; },
+        async *stream() {},
+        async call() { return { output: {}, resultSets: [{ rows: [], source: { kind: "emitted", index: 0 } }] }; },
+        async begin() {},
+        async commit() {},
+        async rollback() {},
+        async savepoint() {},
+        async rollbackTo() {},
+        async releaseSavepoint() {},
+        release() {},
+      };
+    },
+  };
+}
+
+async function conservativeScopeAdmission() {
+  let sessionResume;
+  const sessionGate = new Promise((resolve) => { sessionResume = resolve; });
+  const sessionProvider = scopeAdmissionProvider(sessionGate, false);
+  const sessionDb = createPooledDatabase(sessionProvider);
+  const sessionFirst = sessionDb.session(async (scoped) => {
+    await scoped.execute(sql`SELECT session`);
+  });
+  await sessionProvider.started;
+  let sessionOverlapCode = "NONE";
+  try {
+    await sessionDb.session(async () => undefined);
+  } catch (error) {
+    sessionOverlapCode = errorCode(error);
+  }
+  expect(sessionOverlapCode === "BRAID_SESSION_SCOPE", "Browser session admission allowed overlapping root sessions.");
+  expect(sessionProvider.acquires === 1, "Browser session admission acquired a second lease before the first completed.");
+  sessionResume();
+  await sessionFirst;
+  await sessionDb.execute(sql`SELECT session-after`);
+  expect(sessionProvider.acquires === 2, "Browser session admission did not restore root usability after completion.");
+
+  let failedSessionResume;
+  const failedSessionGate = new Promise((resolve) => { failedSessionResume = resolve; });
+  const failedSessionProvider = scopeAdmissionProvider(failedSessionGate, true);
+  const failedSessionDb = createPooledDatabase(failedSessionProvider);
+  const failedSession = failedSessionDb.session(async () => undefined);
+  failedSessionResume();
+  await failedSession.then(() => {
+    throw new Error("Browser session acquisition failure was swallowed.");
+  }, (error) => {
+    expect(error?.message === "fixture acquisition failed", "Browser session acquisition failure changed unexpectedly.");
+  });
+  await failedSessionDb.session(async (scoped) => {
+    await scoped.execute(sql`SELECT session-after-failure`);
+  });
+  expect(failedSessionProvider.acquires === 2, "Browser session admission left a stale predecessor marker after failure.");
+
+  let transactionResume;
+  const transactionGate = new Promise((resolve) => { transactionResume = resolve; });
+  const transactionProvider = scopeAdmissionProvider(transactionGate, false);
+  const transactionDb = createPooledDatabase(transactionProvider);
+  const transactionFirst = transactionDb.tx(async (tx) => {
+    await tx.execute(sql`SELECT transaction`);
+  });
+  await transactionProvider.started;
+  let transactionOverlapCode = "NONE";
+  try {
+    await transactionDb.tx(async () => undefined);
+  } catch (error) {
+    transactionOverlapCode = errorCode(error);
+  }
+  expect(transactionOverlapCode === "BRAID_TX_SCOPE", "Browser transaction admission allowed overlapping root transactions.");
+  expect(transactionProvider.acquires === 1, "Browser transaction admission acquired a second lease before the first completed.");
+  transactionResume();
+  await transactionFirst;
+  await transactionDb.execute(sql`SELECT transaction-after`);
+  expect(transactionProvider.acquires === 2, "Browser transaction admission did not restore root usability after completion.");
+
+  let failedTransactionResume;
+  const failedTransactionGate = new Promise((resolve) => { failedTransactionResume = resolve; });
+  const failedTransactionProvider = scopeAdmissionProvider(failedTransactionGate, true);
+  const failedTransactionDb = createPooledDatabase(failedTransactionProvider);
+  const failedTransaction = failedTransactionDb.tx(async () => undefined);
+  failedTransactionResume();
+  await failedTransaction.then(() => {
+    throw new Error("Browser transaction acquisition failure was swallowed.");
+  }, (error) => {
+    expect(error?.message === "fixture acquisition failed", "Browser transaction acquisition failure changed unexpectedly.");
+  });
+  await failedTransactionDb.tx(async (tx) => {
+    await tx.execute(sql`SELECT transaction-after-failure`);
+  });
+  expect(failedTransactionProvider.acquires === 2, "Browser transaction admission left a stale predecessor marker after failure.");
+
+  return {
+    session: { overlapCode: sessionOverlapCode, acquires: sessionProvider.acquires },
+    sessionFailure: { acquires: failedSessionProvider.acquires },
+    transaction: { overlapCode: transactionOverlapCode, acquires: transactionProvider.acquires },
+    transactionFailure: { acquires: failedTransactionProvider.acquires },
+  };
+}
+
 async function run() {
   expect(typeof WebAssembly === "object", "SQLite WASM conformance did not run with WebAssembly.");
   const sqlite3 = await sqlite3InitModule();
+  const environmentDatabase = database(sqlite3);
+  const environment = await environmentDatabase.db.environment();
+  environmentDatabase.native.close();
   const report = {
     runtime: "browser-wasm",
     sqliteVersion: sqlite3.version.libVersion,
+    environment,
     cases: {
       "wasm.sql.native-transparency": await nativeTransparency(sqlite3),
       "wasm.sql.generated-structure": await generatedStructure(sqlite3),
@@ -251,6 +411,7 @@ async function run() {
       "wasm.execution.stream": await streamCase(sqlite3),
       "wasm.execution.bulk": await bulkCase(sqlite3),
       "wasm.execution.mapped-transaction": await mappedTransaction(sqlite3),
+      "wasm.runtime.conservative-scope-admission": await conservativeScopeAdmission(),
     },
   };
   window.__sqlbraidWasmConformance = report;

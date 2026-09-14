@@ -21,6 +21,13 @@ test("sqlite.sql.native-transparency", async () => {
       database: { ...environment.database, edition: "Node bundled SQLite" },
       driver: { ...environment.driver, version: process.versions.node },
     }, "sqlite.sql.native-transparency");
+    assert.equal(environment.capabilities["session.pinned"]?.status, "guaranteed");
+    assert.equal(environment.capabilities.transaction?.status, "guaranteed");
+    assert.equal(environment.capabilities["transaction.isolation.serializable"]?.status, "guaranteed");
+    assert.equal(environment.capabilities["transaction.read-only"]?.status, "unsupported");
+    assert.equal(environment.capabilities["statement.cancel"]?.status, "unsupported");
+    assert.equal(environment.capabilities["statement.stream"]?.status, "guaranteed");
+    assert.equal(environment.capabilities["statement.bulk"]?.status, "guaranteed");
     events.length = 0;
     const query = sql.rows`
       WITH inputs(value) AS (SELECT ${7})

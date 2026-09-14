@@ -4,6 +4,7 @@ import type {
   DatabaseOptions,
   DriverRoutineResult,
   DriverEnvironment,
+  ExecutionOptions,
   BulkBindingDescription,
   BulkExecutionResult,
   QueryExecutor,
@@ -14,8 +15,17 @@ import type {
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
+  TransactionIsolation,
+  TransactionOptions,
 } from "@sqlbraid/core";
-import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription, ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
+import {
+  createBulkBindingDescription,
+  createRenderedStatement,
+  createStatementBindingDescription,
+  ResultExactnessError,
+  safeDatabaseCount,
+  UnsupportedFeatureError,
+} from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import {
   representationProfiles,
@@ -54,6 +64,21 @@ export interface PgClientLike {
   getTypeParser?(oid: number, format?: string): (value: string) => unknown;
   /** Required when streaming with an AbortSignal; ends the physical connection. */
   end?(): Promise<void>;
+}
+
+function unsupported(
+  feature: string,
+  code: `BRAID_${string}`,
+  message: string,
+  cause?: unknown,
+): UnsupportedFeatureError {
+  return new UnsupportedFeatureError(feature, code, message, cause === undefined ? undefined : { cause });
+}
+
+function invalidTransactionOptions(message: string): TypeError & { readonly code: string } {
+  const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: ${message}`) as TypeError & { readonly code: string };
+  Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+  return error;
 }
 
 export interface PgPoolClientLike extends PgClientLike {
@@ -208,7 +233,12 @@ async function optionalCursorFactory(): Promise<PgCursorFactory> {
     if (typeof factory !== "function") throw new TypeError("pg-cursor did not export a constructor.");
     return factory as PgCursorFactory;
   } catch (error) {
-    throw new Error("BRAID_STREAM_UNSUPPORTED: PostgreSQL streaming requires the optional pg-cursor peer.", { cause: error });
+    throw unsupported(
+      "statement.stream",
+      "BRAID_STREAM_UNSUPPORTED",
+      "PostgreSQL streaming requires the optional pg-cursor peer.",
+      error,
+    );
   }
 }
 
@@ -254,6 +284,51 @@ function cleanupAggregate(errors: readonly unknown[], message: string, cause?: u
   return error;
 }
 
+async function withPgCancellation<T>(
+  client: PgClientLike,
+  signal: AbortSignal | undefined,
+  operation: () => Promise<T>,
+): Promise<T> {
+  signal?.throwIfAborted();
+  if (signal === undefined) return operation();
+  if (typeof client.end !== "function") {
+    throw unsupported(
+      "statement.cancel",
+      "BRAID_CANCEL_UNSUPPORTED",
+      "PostgreSQL cancellation requires the physical client's documented end() method.",
+    );
+  }
+  let aborted = false;
+  let termination: Promise<void> | undefined;
+  const abort = (): void => {
+    aborted = true;
+    termination ??= Promise.resolve().then(() => client.end!());
+    void termination.catch(() => undefined);
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    try {
+      const result = await operation();
+      if (!aborted) {
+        signal.throwIfAborted();
+        return result;
+      }
+      await termination;
+      throw cleanupFailure("PostgreSQL physical connection was terminated after statement abort.", signal.reason);
+    } catch (error) {
+      if (!aborted) throw error;
+      try {
+        await termination;
+      } catch (cleanup) {
+        throw cleanupAggregate([error, cleanup], "PostgreSQL statement cancellation cleanup failed.", error);
+      }
+      throw cleanupFailure("PostgreSQL physical connection was terminated after statement abort.", signal.reason);
+    }
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
+
 function assertPgClient(client: PgClientLike): void {
   if (!client || typeof client !== "object" || typeof client.escapeIdentifier !== "function" || typeof client.escapeLiteral !== "function") {
     throw new TypeError("SQLBraid PostgreSQL direct adapter requires a physical pg Client or PoolClient.");
@@ -293,6 +368,29 @@ function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   }
 }
 
+function assertPgRoutineDirections(rendered: RenderedStatement): void {
+  if (rendered.parameters.some((parameter) => parameter.direction === "inout")) {
+    throw unsupported(
+      "routine.inout",
+      "BRAID_CALL_OUT_UNSUPPORTED",
+      "The PostgreSQL adapter does not expose a verified INOUT carrier contract.",
+    );
+  }
+}
+
+function assertPgRoutineCallContext(rendered: RenderedStatement): void {
+  if (
+    rendered.resultKind !== "call"
+    && rendered.parameters.some((parameter) => parameter.direction !== undefined && parameter.direction !== "in")
+  ) {
+    throw unsupported(
+      "routine.out",
+      "BRAID_CALL_OUT_UNSUPPORTED",
+      "PostgreSQL OUT parameters are only valid for routine calls.",
+    );
+  }
+}
+
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
 const bindingContexts = new WeakMap<StatementBindingDescription, StatementBindingContext>();
@@ -312,8 +410,14 @@ export const pgStatementBinding: StatementBindingAdapter = Object.freeze({
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
     statement = createRenderedStatement(statement);
     if (hasRefcursor(statement) && context.transactionScoped !== true) {
-      throw new Error("BRAID_CALL_CURSOR_TX_REQUIRED: PostgreSQL refcursor calls require an existing transaction.");
+      throw unsupported(
+        "routine.out-cursor",
+        "BRAID_CALL_CURSOR_TX_REQUIRED",
+        "PostgreSQL refcursor calls require an existing transaction.",
+      );
     }
+    assertPgRoutineCallContext(statement);
+    assertPgRoutineDirections(statement);
     assertParameterHintsUnsupported(statement);
     const description = createStatementBindingDescription(statement, context, {
       adapterId: "pg",
@@ -329,7 +433,7 @@ export const pgStatementBinding: StatementBindingAdapter = Object.freeze({
     const statement = createRenderedStatement(bulk.statement);
     if (statement.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk requires command queries.");
     if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
-      throw new Error("BRAID_BULK_SHAPE: PostgreSQL bulk does not support OUT or INOUT parameters.");
+      throw unsupported("routine.out", "BRAID_BULK_SHAPE", "PostgreSQL bulk does not support OUT or INOUT parameters.");
     }
     assertParameterHintsUnsupported(statement);
     for (const values of bulk.parameterSets) {
@@ -351,6 +455,33 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   requestedReuse: "auto",
 });
 
+const pgExecutionCapabilities: DriverEnvironment["capabilities"] = Object.freeze({
+  "session.pinned": { status: "guaranteed" },
+  "transaction": { status: "guaranteed" },
+  "transaction.savepoint": { status: "guaranteed" },
+  "transaction.read-only": { status: "guaranteed" },
+  "transaction.isolation.read-uncommitted": {
+    status: "guarded",
+    conditionCode: "pg.read-uncommitted-maps-to-read-committed",
+  },
+  "transaction.isolation.read-committed": { status: "guaranteed" },
+  "transaction.isolation.repeatable-read": { status: "guaranteed" },
+  "transaction.isolation.serializable": { status: "guaranteed" },
+  "statement.prepare": { status: "guaranteed" },
+  "statement.cancel": {
+    status: "guarded",
+    conditionCode: "pg.physical-connection-destroy",
+  },
+  "statement.stream": { status: "guaranteed" },
+  "statement.bulk": { status: "guaranteed" },
+  "routine.call": { status: "guaranteed" },
+  "routine.out": { status: "guaranteed" },
+  "routine.inout": { status: "unsupported" },
+  "routine.return-value": { status: "unsupported" },
+  "routine.result-sets": { status: "guaranteed" },
+  "routine.out-cursor": { status: "guaranteed" },
+});
+
 function pgEnvironmentFor(
   profile: { readonly json: PgJsonProfile; readonly temporal: PgTemporalProfile },
   policy: TypePolicy = typePolicyForProfile(profile),
@@ -367,6 +498,7 @@ function pgEnvironmentFor(
     driver: { id: "pg", profile: profileId },
     typePolicy: { id: policy.id, hash: policy.hash },
     capabilities: {
+      ...pgExecutionCapabilities,
       "sql.native-transparency": { status: "guaranteed" },
       "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
       "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
@@ -615,6 +747,36 @@ function enqueuePgBulk<T>(
   return run;
 }
 
+function postgresIsolationLevel(isolation: TransactionIsolation): string {
+  switch (isolation) {
+    case "read-uncommitted": return "READ UNCOMMITTED";
+    case "read-committed": return "READ COMMITTED";
+    case "repeatable-read": return "REPEATABLE READ";
+    case "serializable": return "SERIALIZABLE";
+    default: throw invalidTransactionOptions(`Unsupported PostgreSQL transaction isolation level: ${String(isolation)}.`);
+  }
+}
+
+function postgresBeginSql(options: TransactionOptions | undefined): string {
+  if (options === undefined) return "BEGIN";
+  if (options === null || typeof options !== "object" || Array.isArray(options)) {
+    throw invalidTransactionOptions("PostgreSQL transaction options must be an object.");
+  }
+  const unexpected = Object.keys(options).find((key) => key !== "isolation" && key !== "readOnly");
+  if (unexpected !== undefined) throw invalidTransactionOptions(`Unknown PostgreSQL transaction option: ${unexpected}.`);
+  if (
+    options.readOnly !== undefined
+    && typeof options.readOnly !== "boolean"
+  ) {
+    throw invalidTransactionOptions("PostgreSQL transaction readOnly must be a boolean.");
+  }
+  const clauses: string[] = [];
+  if (options.isolation !== undefined) clauses.push(`ISOLATION LEVEL ${postgresIsolationLevel(options.isolation)}`);
+  if (options.readOnly === true) clauses.push("READ ONLY");
+  else if (options.readOnly === false) clauses.push("READ WRITE");
+  return clauses.length === 0 ? "BEGIN" : `BEGIN ${clauses.join(" ")}`;
+}
+
 export function createPgExecutor(client: PgClientLike, options: PgExecutorOptions = {}): QueryExecutor {
   assertPgClient(client);
   const profile = parserProfile(options.parserProfile, options.profile);
@@ -635,18 +797,39 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
         ...pgEnvironmentFor(profile, profilePolicy),
         driver: { id: "pg", profile: "custom-type-policy" },
         typePolicy: { id: policy.id, hash: policy.hash },
-        capabilities: {},
+        capabilities: pgExecutionCapabilities,
       },
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<QueryExecutionResult<Row>> {
+      executionOptions?.signal?.throwIfAborted();
       assertParameterHintsUnsupported(rendered);
-      const result = await client.query(materialize(rendered, binding, types));
+      const result = await withPgCancellation(
+        client,
+        executionOptions?.signal,
+        () => client.query(materialize(rendered, binding, types)),
+      );
       assertUniqueFields(result.fields ?? []);
       const rows = result.rows.map((row) => plainRow(row, result.fields ?? [], policy));
       const rowCount = result.rowCount === null || result.rowCount === undefined ? undefined : safeDatabaseCount(result.rowCount);
       const rowBearing = (result.fields?.length ?? 0) > 0 || result.rows.length > 0 || result.command === "SELECT";
       return rowBearing ? { rows: rows as readonly Row[], rowCount, kind: "rows" } : { rows: [], rowCount, kind: "command", command: { affectedRows: rowCount } };
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
+    async bulk(
+      bulk: RenderedBulk,
+      binding: BulkBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<BulkExecutionResult> {
+      executionOptions?.signal?.throwIfAborted();
+      if (executionOptions?.signal !== undefined && typeof client.end !== "function") {
+        throw unsupported(
+          "statement.cancel",
+          "BRAID_CANCEL_UNSUPPORTED",
+          "PostgreSQL cancellation requires the physical client's documented end() method.",
+        );
+      }
       const described = describedBulks.get(binding);
       if (described !== bulk) throw new TypeError("BRAID_BINDING_IDENTITY: PostgreSQL bulk description belongs to another bulk or adapter.");
       if (binding.adapterId !== pgStatementBinding.id || binding.dialectId !== bulk.statement.dialectId) {
@@ -668,8 +851,16 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
           let result: PgResultLike;
           try {
             result = name === undefined
-              ? await client.query({ text: binding.parameterizedSql!, values })
-              : await client.query({ name, text: binding.parameterizedSql!, values });
+              ? await withPgCancellation(
+                client,
+                executionOptions?.signal,
+                () => client.query({ text: binding.parameterizedSql!, values }),
+              )
+              : await withPgCancellation(
+                client,
+                executionOptions?.signal,
+                () => client.query({ name, text: binding.parameterizedSql!, values }),
+              );
           } catch (error) {
             const registry = cache.registry;
             if (
@@ -698,11 +889,20 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
         };
       });
     },
-    async *stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncGenerator<Row> {
+    async *stream<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): AsyncGenerator<Row> {
+      const signal = executionOptions?.signal;
       assertParameterHintsUnsupported(rendered);
       signal?.throwIfAborted();
       if (signal && typeof client.end !== "function") {
-        throw new Error("BRAID_STREAM_UNSUPPORTED: abortable PostgreSQL streams require the physical client's end() method.");
+        throw unsupported(
+          "statement.cancel",
+          "BRAID_CANCEL_UNSUPPORTED",
+          "Abortable PostgreSQL streams require the physical client's documented end() method.",
+        );
       }
       const prepared = materialize(rendered, binding);
       const Cursor = options.cursor ?? await optionalCursorFactory();
@@ -715,6 +915,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
         void ending.catch(() => undefined); // Observed by the cleanup path below.
       };
       signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) abort();
       let streamError: unknown;
       try {
         // pg's optional Submittable overload is used only by the cursor capability.
@@ -758,13 +959,27 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
         }
       }
     },
-    async call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
+    async call(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<DriverRoutineResult> {
+      executionOptions?.signal?.throwIfAborted();
+      assertPgRoutineDirections(rendered);
       assertParameterHintsUnsupported(rendered);
       const transactionScoped = binding === undefined ? false : bindingContexts.get(binding)?.transactionScoped === true;
       if (hasRefcursor(rendered) && !transactionScoped) {
-        throw new Error("BRAID_CALL_CURSOR_TX_REQUIRED: PostgreSQL refcursor calls require an existing transaction.");
+        throw unsupported(
+          "routine.out-cursor",
+          "BRAID_CALL_CURSOR_TX_REQUIRED",
+          "PostgreSQL refcursor calls require an existing transaction.",
+        );
       }
-      const result = await client.query(materialize(rendered, binding, types));
+      const result = await withPgCancellation(
+        client,
+        executionOptions?.signal,
+        () => client.query(materialize(rendered, binding, types)),
+      );
       assertUniqueFields(result.fields ?? []);
       const output = outputRow(result, rendered, policy);
       const cursorParameters = rendered.parameters.filter(isRefcursor);
@@ -780,7 +995,11 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       const portals = cursorParameters.map((parameter) => {
         const name = parameter.outputName;
         if (!name || !Object.hasOwn(output, name) || typeof output[name] !== "string") {
-          throw new Error(`BRAID_CALL_CURSOR: PostgreSQL refcursor output ${name ?? "<unnamed>"} did not return a portal name.`);
+          throw unsupported(
+            "routine.out-cursor",
+            "BRAID_CALL_CURSOR_UNSUPPORTED",
+            `PostgreSQL refcursor output ${name ?? "<unnamed>"} did not return a portal name.`,
+          );
         }
         return { outputName: name, portal: output[name] as string };
       });
@@ -792,7 +1011,11 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       let failure: unknown;
       try {
         for (const entry of portals) {
-          const fetched = await client.query({ text: `FETCH ALL FROM ${quotePortal(entry.portal)}`, values: [], types });
+          const fetched = await withPgCancellation(
+            client,
+            executionOptions?.signal,
+            () => client.query({ text: `FETCH ALL FROM ${quotePortal(entry.portal)}`, values: [], types }),
+          );
           assertUniqueFields(fetched.fields ?? []);
           resultSets.push({
             rows: fetched.rows.map((row) => plainRow(row, fetched.fields ?? [], policy)),
@@ -802,7 +1025,11 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
               parameterIndex: rendered.parameters.findIndex((parameter) => parameter.outputName === entry.outputName),
             },
           });
-          await client.query({ text: `CLOSE ${quotePortal(entry.portal)}`, values: [] });
+          await withPgCancellation(
+            client,
+            executionOptions?.signal,
+            () => client.query({ text: `CLOSE ${quotePortal(entry.portal)}`, values: [] }),
+          );
           live.shift();
         }
       } catch (error) {
@@ -811,7 +1038,11 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       const cleanupErrors: unknown[] = [];
       for (const entry of live) {
         try {
-          await client.query({ text: `CLOSE ${quotePortal(entry.portal)}`, values: [] });
+          await withPgCancellation(
+            client,
+            executionOptions?.signal,
+            () => client.query({ text: `CLOSE ${quotePortal(entry.portal)}`, values: [] }),
+          );
         } catch (error) {
           cleanupErrors.push(cleanupFailure(`PostgreSQL refcursor ${entry.outputName} close failed.`, error));
         }
@@ -823,7 +1054,9 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       if (cleanupErrors.length > 0) throw cleanupAggregate(cleanupErrors, "PostgreSQL refcursor cleanup failed.");
       return { output: normalizedOutput, resultSets };
     },
-    begin: () => runControl("BEGIN"),
+    begin: async (transactionOptions) => {
+      await runControl(postgresBeginSql(transactionOptions));
+    },
     commit: () => runControl("COMMIT"),
     rollback: () => runControl("ROLLBACK"),
     savepoint: (name) => runControl(`SAVEPOINT ${name}`),
@@ -851,7 +1084,7 @@ export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOption
         ...pgEnvironmentFor(profile, profilePolicy),
         driver: { id: "pg", profile: "custom-type-policy" },
         typePolicy: { id: policy.id, hash: policy.hash },
-        capabilities: {},
+        capabilities: pgExecutionCapabilities,
       },
     async acquire(): Promise<ConnectionLease> {
       const client = await pool.connect();

@@ -4,6 +4,7 @@ import type {
   DatabaseOptions,
   DriverRoutineResult,
   DriverEnvironment,
+  ExecutionOptions,
   QueryExecutor,
   QueryExecutionResult,
   RenderedBulk,
@@ -18,6 +19,7 @@ import {
   createStatementBindingDescription,
   normalizeExactInteger,
   safeDatabaseCount,
+  UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
@@ -49,7 +51,18 @@ export interface D1DatabaseOptions extends DatabaseOptions {}
 
 function assertRoutineUnsupported(rendered: RenderedStatement): void {
   if (rendered.resultKind === "call" || rendered.routineProcedure !== undefined) {
-    throw new Error("BRAID_CALL_UNSUPPORTED: Cloudflare D1 does not support routine calls.");
+    throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "Cloudflare D1 does not support routine calls.");
+  }
+}
+
+function assertRoutineParametersUnsupported(rendered: RenderedStatement): void {
+  for (const parameter of rendered.parameters) {
+    if (parameter.direction === "inout") {
+      throw new UnsupportedFeatureError("routine.inout", "BRAID_CALL_OUT_UNSUPPORTED", "Cloudflare D1 does not expose a routine INOUT parameter carrier.");
+    }
+    if (parameter.direction === "out" || parameter.outputName !== undefined) {
+      throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "Cloudflare D1 does not expose a routine OUT parameter carrier.");
+    }
   }
 }
 
@@ -85,6 +98,17 @@ function assertD1Value(value: unknown): void {
 
 function assertD1Values(values: readonly unknown[]): void {
   for (const value of values) assertD1Value(value);
+}
+
+function assertExecutionOptions(options?: ExecutionOptions): void {
+  const signal = options?.signal;
+  if (signal === undefined) return;
+  if (signal.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  throw new UnsupportedFeatureError(
+    "statement.cancel",
+    "BRAID_CANCEL_UNSUPPORTED",
+    "Cloudflare D1 does not expose a safe statement cancellation primitive.",
+  );
 }
 
 function normalizeValue(value: unknown): unknown {
@@ -131,6 +155,7 @@ export const d1StatementBinding: StatementBindingAdapter = Object.freeze({
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
     statement = createRenderedStatement(statement);
     assertRoutineUnsupported(statement);
+    assertRoutineParametersUnsupported(statement);
     assertParameterHintsUnsupported(statement);
     assertD1Values(statement.parameters.map((parameter) => parameter.value));
     const description = createStatementBindingDescription(statement, context, {
@@ -144,6 +169,7 @@ export const d1StatementBinding: StatementBindingAdapter = Object.freeze({
   },
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
     const statement = createRenderedStatement(bulk.statement);
+    assertRoutineParametersUnsupported(statement);
     assertCommand(statement);
     assertParameterHintsUnsupported(statement);
     for (const values of bulk.parameterSets) {
@@ -178,6 +204,24 @@ const d1Environment = Object.freeze<DriverEnvironment>({
     "numeric.exact-integer": { status: "guarded", canonical: "string", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.safe-integer" },
     "numeric.approximate-float": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.numeric-profile" },
     "numeric.bind-exact": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "cloudflare-d1.safe-integer" },
+    "session.pinned": { status: "unsupported", conditionCode: "cloudflare-d1.no-physical-session-pinning" },
+    "transaction": { status: "unsupported" },
+    "transaction.savepoint": { status: "unsupported" },
+    "transaction.read-only": { status: "unsupported" },
+    "transaction.isolation.read-uncommitted": { status: "unsupported" },
+    "transaction.isolation.read-committed": { status: "unsupported" },
+    "transaction.isolation.repeatable-read": { status: "unsupported" },
+    "transaction.isolation.serializable": { status: "unsupported" },
+    "statement.prepare": { status: "guaranteed" },
+    "statement.cancel": { status: "unsupported" },
+    "statement.stream": { status: "unsupported" },
+    "statement.bulk": { status: "guaranteed" },
+    "routine.call": { status: "unsupported" },
+    "routine.out": { status: "unsupported" },
+    "routine.inout": { status: "unsupported" },
+    "routine.return-value": { status: "unsupported" },
+    "routine.result-sets": { status: "unsupported" },
+    "routine.out-cursor": { status: "unsupported" },
   },
   // D1 denies sqlite_version(); unknown server versions stay unreported.
 });
@@ -187,8 +231,10 @@ export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
     ownershipKey: database,
     statementBinding: d1StatementBinding,
     environment: d1Environment,
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
+      assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
+      assertRoutineParametersUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
       const unbound = database.prepare(prepared.text);
@@ -201,7 +247,9 @@ export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
       const rows = raw.slice(1).map((entry) => normalizeRow(entry, names));
       return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
+    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult> {
+      assertExecutionOptions(options);
+      assertRoutineParametersUnsupported(bulk.statement);
       if (!binding || describedBulks.get(binding) !== bulk) throw new TypeError("BRAID_BINDING_IDENTITY: D1 bulk description belongs to another bulk or adapter.");
       const text = binding.parameterizedSql;
       if (text === undefined) throw new Error("BRAID_BIND_TRANSPORT: D1 bulk binding description did not provide parameterized SQL.");
@@ -226,15 +274,16 @@ export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
         executionMode: "remote-batch",
       };
     },
-    async call(_rendered: RenderedStatement, _binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
-      const error = new Error("BRAID_CALL_UNSUPPORTED: Cloudflare D1 does not support routine calls.");
-      Object.defineProperty(error, "code", { value: "BRAID_CALL_UNSUPPORTED", enumerable: true });
-      throw error;
+    async call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult> {
+      assertExecutionOptions(options);
+      assertRoutineUnsupported(rendered);
+      assertRoutineParametersUnsupported(rendered);
+      throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "Cloudflare D1 adapter does not support routine calls.");
     },
-    async *stream<Row>(_rendered: RenderedStatement, _signal?: AbortSignal, _binding?: StatementBindingDescription): AsyncGenerator<Row> {
-      const error = new Error("BRAID_STREAM_UNSUPPORTED: Cloudflare D1 has no incremental row cursor API.");
-      Object.defineProperty(error, "code", { value: "BRAID_STREAM_UNSUPPORTED", enumerable: true });
-      throw error;
+    async *stream<Row>(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncGenerator<Row> {
+      assertExecutionOptions(options);
+      assertRoutineParametersUnsupported(rendered);
+      throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "Cloudflare D1 has no incremental row cursor API.");
     },
   };
 }

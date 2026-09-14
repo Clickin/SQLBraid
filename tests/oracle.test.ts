@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { oracleParameter, sql, typePolicy } from "@sqlbraid/oracle";
-import { createOracledbExecutor, oracledbStatementBinding } from "@sqlbraid/oracle/oracledb";
+import { createOracledbDatabase, createOracledbExecutor, oracledbStatementBinding } from "@sqlbraid/oracle/oracledb";
 import { createOracleInspector } from "@sqlbraid/oracle/inspector";
 
 test("Oracle renders positional binds and doubled quoted identifiers", () => {
@@ -107,6 +107,7 @@ test("Oracle adapter honors hints, rejects untyped null, and closes an aborted R
         metaData: [{ name: "VALUE", dbTypeName: "NUMBER" }],
       };
     },
+    async break() {},
     async commit() {},
     async rollback() {},
   };
@@ -123,7 +124,7 @@ test("Oracle adapter honors hints, rejects untyped null, and closes an aborted R
   );
   assert.equal(calls.length, callsBeforeUnsupportedFacet);
   const controller = new AbortController();
-  const iterator = executor.stream!(sql`SELECT ${1}`.render(), controller.signal)[Symbol.asyncIterator]();
+  const iterator = executor.stream!(sql`SELECT ${1}`.render(), undefined, { signal: controller.signal })[Symbol.asyncIterator]();
   assert.deepEqual(await iterator.next(), { done: false, value: { VALUE: "1" } });
   controller.abort();
   await assert.rejects(() => iterator.next());
@@ -250,4 +251,171 @@ test("Oracle rejects narrowed command counts and exact numeric OUT values", asyn
     ),
     { code: "BRAID_RESULT_EXACTNESS" },
   );
+});
+
+test("Oracle validates transaction options before control SQL", async () => {
+  let executions = 0;
+  const connection = {
+    async execute() {
+      executions += 1;
+      return { rows: [] };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection);
+  await assert.rejects(
+    () => executor.begin!({ isolation: "invalid" as never }),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  await assert.rejects(
+    () => executor.begin!({ readOnly: "yes" as never }),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  await assert.rejects(
+    () => executor.begin!({ unsupported: true } as never),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  assert.equal(executions, 0);
+});
+
+test("Oracle rejects active cancellation before execution without break support", async () => {
+  let executions = 0;
+  const connection = {
+    async execute() {
+      executions += 1;
+      return { rows: [] };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection);
+  const controller = new AbortController();
+  await assert.rejects(
+    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: controller.signal }),
+    (error: unknown) => (error as { readonly code?: string }).code === "BRAID_CANCEL_UNSUPPORTED",
+  );
+  assert.equal(executions, 0);
+});
+
+test("Oracle custom type profiles retain raw break cancellation", async () => {
+  let release: (() => void) | undefined;
+  let breaks = 0;
+  const started = Promise.withResolvers<void>();
+  const connection = {
+    async execute() {
+      return new Promise((resolve) => {
+        release = () => resolve({ rows: [] });
+        started.resolve();
+      });
+    },
+    async break() { breaks += 1; },
+    async commit() {},
+    async rollback() {},
+  };
+  const customPolicy = { ...typePolicy, id: "oracle-test-custom", hash: "oracle-test-custom-v1" };
+  const executor = createOracledbExecutor(connection, { typePolicy: customPolicy });
+  assert.equal(executor.environment?.capabilities["statement.cancel"]?.status, "guarded");
+  const db = createOracledbDatabase(connection, { typePolicy: customPolicy });
+  const controller = new AbortController();
+  const reason = new Error("oracle custom cancellation");
+  const pending = db.execute(sql.command`BEGIN NULL; END;`, { signal: controller.signal });
+  const rejected = assert.rejects(pending, (error: unknown) => error === reason);
+  await started.promise;
+  controller.abort(reason);
+  release?.();
+  await rejected;
+  assert.equal(breaks, 1);
+});
+
+test("Oracle cancellation remains active while reading an OUT cursor", async () => {
+  let releaseRead: ((value: unknown) => void) | undefined;
+  let breaks = 0;
+  let closed = 0;
+  const connection = {
+    async execute() {
+      return {
+        outBinds: [{
+          async getRow() {
+            return new Promise((resolve) => { releaseRead = resolve; });
+          },
+          async close() { closed += 1; },
+        }],
+      };
+    },
+    async break() { breaks += 1; },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection);
+  const controller = new AbortController();
+  let settled = false;
+  const reason = new Error("oracle cursor cancelled");
+  const pending = executor.call(
+    sql.call`BEGIN read_cursor(${sql.out("cursor", oracleParameter.refCursor())}); END;`.render(),
+    undefined,
+    { signal: controller.signal },
+  ).finally(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  assert.ok(releaseRead);
+  controller.abort(reason);
+  await Promise.resolve();
+  assert.equal(breaks, 1);
+  assert.equal(settled, false);
+  releaseRead?.(null);
+  await assert.rejects(pending, (error: unknown) => error === reason);
+  assert.equal(closed, 1);
+});
+
+test("Oracle cancellation remains active while materializing an OUT LOB", async () => {
+  let releaseData: ((value: unknown) => void) | undefined;
+  let onClose: (() => void) | undefined;
+  let breaks = 0;
+  let closed = 0;
+  const lob = {
+    async getData() {
+      return new Promise((resolve) => { releaseData = resolve; });
+    },
+    destroy() {
+      closed += 1;
+      onClose?.();
+    },
+    once(event: string, listener: () => void) {
+      if (event === "close") onClose = listener;
+      return this;
+    },
+    removeListener() {
+      return this;
+    },
+  };
+  const connection = {
+    async execute() {
+      return { outBinds: [lob] };
+    },
+    async break() { breaks += 1; },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection);
+  const controller = new AbortController();
+  const reason = new Error("oracle lob cancelled");
+  let settled = false;
+  const pending = executor.call(
+    sql.call`BEGIN read_lob(${sql.out("body", oracleParameter.clob())}); END;`.render(),
+    undefined,
+    { signal: controller.signal },
+  ).finally(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  assert.ok(releaseData);
+  controller.abort(reason);
+  await Promise.resolve();
+  assert.equal(breaks, 1);
+  assert.equal(settled, false);
+  releaseData?.("body");
+  await assert.rejects(pending, (error: unknown) => error === reason);
+  assert.equal(closed, 1);
 });

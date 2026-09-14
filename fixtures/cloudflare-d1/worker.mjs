@@ -7,8 +7,10 @@ const jsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision"
 export default {
   async fetch(_request, env) {
     let nativeBatchCalls = 0;
+    let prepareCalls = 0;
     const binding = {
       prepare(text) {
+        prepareCalls += 1;
         return env.DB.prepare(text);
       },
       batch(statements) {
@@ -65,6 +67,23 @@ export default {
              json_extract('{"enabled":true}', '$.enabled') AS enabled
     `);
     if (json.payload !== jsonText || json.enabled !== "1") throw new Error("D1 JSON text fidelity changed.");
+    const beforeUnsupported = prepareCalls;
+    let sessionCode;
+    try {
+      await db.session(async (scoped) => scoped.all(sql.rows`SELECT 1 AS value`));
+    } catch (error) {
+      sessionCode = error?.code;
+    }
+    if (prepareCalls !== beforeUnsupported) throw new Error("D1 unsupported session acquired or prepared a statement.");
+    const beforeCancel = prepareCalls;
+    let cancelCode;
+    const active = new AbortController();
+    try {
+      await db.all(sql.rows`SELECT 1 AS value`, { signal: active.signal });
+    } catch (error) {
+      cancelCode = error?.code;
+    }
+    if (prepareCalls !== beforeCancel) throw new Error("D1 unsupported active cancellation prepared a statement.");
     const session = createD1Database(env.DB.withSession("first-primary"));
     await session.bulk(["Session"], (name) => sql.command`INSERT INTO users (name) VALUES (${name})`);
     const sessionRows = await session.all(sql.rows`SELECT name FROM users WHERE name = ${"Session"}`);
@@ -114,6 +133,8 @@ export default {
       environment: await db.environment(),
       numeric: { ...numeric, integralReal, unsafeCode },
       json,
+      sessionCode,
+      cancelCode,
       streamCode,
       transactionCode,
     });

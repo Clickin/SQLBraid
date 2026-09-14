@@ -3,12 +3,20 @@ import { test } from 'vitest';
 import {
   createStatementBindingDescription,
   type CallQuery,
+  type ExecutionOptions,
   type Database,
+  type Query,
   type RoutineCallResult,
   type StandardSchemaV1,
 } from '@sqlbraid/core';
 import { sql } from '@sqlbraid/template';
 import { preparedShape } from '../packages/runtime/src/prepared-shape.js';
+// @ts-expect-error Driver packages must not expose dialect-specific query aliases.
+import type { PgQuery } from '@sqlbraid/postgres';
+// @ts-expect-error Driver packages must not expose dialect-specific query aliases.
+import type { MysqlQuery } from '@sqlbraid/mysql';
+// @ts-expect-error Bun.SQL transport details must not expose a driver-specific query alias.
+import type { BunQuery } from '@sqlbraid/bun-sql';
 
 function schema<Output>(): StandardSchemaV1<unknown, Output> {
   return {
@@ -41,6 +49,75 @@ async function routineContractResultTypeAssertions(): Promise<void> {
   void incompatibleReturn;
   void bare;
   void noReturnContract;
+}
+
+async function publicSpiTypeAssertions(): Promise<void> {
+  type User = { readonly id: number };
+  type Payment = { readonly amount: number };
+  type Dashboard = RoutineCallResult<
+    { readonly generatedAt: Date },
+    readonly [User, Payment],
+    number
+  >;
+
+  // @ts-expect-error Query's second parameter is a result kind, never a dialect.
+  type DialectGenericQuery = Query<User, 'postgres'>;
+
+  const zeroInput = db.prepare('zero-input', () => sql.rows<User>`SELECT 1`);
+  const inputFactory = db.prepare('input-row', (id: number) => sql.rows<User>`SELECT ${id}`);
+  const undefinedInput = db.prepare('undefined-input', (_input: undefined) => sql.rows<User>`SELECT 1`);
+  await undefinedInput.one(undefined, { signal: new AbortController().signal });
+  // @ts-expect-error A required undefined input is not the zero-input options position.
+  await undefinedInput.one({ signal: new AbortController().signal });
+  // @ts-expect-error Optional/default parameters make input/options arity ambiguous.
+  db.prepare('default-input', (id = 1) => sql.rows<User>`SELECT ${id}`);
+  // @ts-expect-error Optional input parameters are not a fixed required input.
+  db.prepare('optional-input', (id?: number) => sql.rows<User>`SELECT ${id ?? 1}`);
+  // @ts-expect-error Rest parameters do not define one fixed application input.
+  db.prepare('rest-input', (...ids: number[]) => sql.rows<User>`SELECT ${ids[0]}`);
+  // @ts-expect-error Put multiple application fields in one input object.
+  db.prepare('multiple-inputs', (id: number, name: string) => sql.rows<User>`SELECT ${id}, ${name}`);
+  const commandFactory = db.prepare('command-input', (input: { readonly id: number; readonly name: string }) =>
+    sql.command`UPDATE users SET name = ${input.name} WHERE id = ${input.id}`);
+  const routineFactory = db.prepare('heterogeneous-call', () => sql.call({
+    output: schema<{ readonly generatedAt: Date }>(),
+    resultSets: [schema<User>(), schema<Payment>()] as const,
+    returnValue: schema<number>(),
+  })`CALL dashboard()`);
+
+  const zeroRow: User = await zeroInput.one({ signal: new AbortController().signal });
+  const zeroResult = await zeroInput.execute();
+  const inputRows: readonly User[] = await inputFactory.all(7, { signal: new AbortController().signal });
+  const maybeInput: User | undefined = await inputFactory.maybeOne(7);
+  const command = await commandFactory.execute({ id: 1, name: 'Ada' });
+  const dashboard: Dashboard = await routineFactory.call();
+  const firstUser: User = dashboard.resultSets[0].rows[0]!;
+  const secondPayment: Payment = dashboard.resultSets[1].rows[0]!;
+  const generatedAt: Date = dashboard.output.generatedAt;
+  const returnValue: number = dashboard.returnValue!;
+  // @ts-expect-error Input factories require their input before execution options.
+  await inputFactory.one({ signal: new AbortController().signal });
+  // @ts-expect-error Command prepared handles expose execute, not row cardinality methods.
+  await commandFactory.one();
+  // @ts-expect-error Call prepared handles expose call, not execute.
+  await routineFactory.execute();
+  type AssertTrue<Value extends true> = Value;
+  type AssertFalse<Value extends false> = Value;
+  type HasTimeout = AssertFalse<'timeoutMs' extends keyof ExecutionOptions ? true : false>;
+  // @ts-expect-error Generated keys require user-authored SQL, not execution rewriting.
+  await db.execute(sql.command`INSERT INTO users DEFAULT VALUES`, { generatedKeys: true });
+  type RowHandleHasStream = AssertTrue<'stream' extends keyof typeof inputFactory ? true : false>;
+  type CommandHandleHasNoStream = AssertFalse<'stream' extends keyof typeof commandFactory ? true : false>;
+  type CallHandleHasNoExecute = AssertFalse<'execute' extends keyof typeof routineFactory ? true : false>;
+  void zeroRow;
+  void zeroResult;
+  void inputRows;
+  void maybeInput;
+  void command;
+  void firstUser;
+  void secondPayment;
+  void generatedAt;
+  void returnValue;
 }
 
 test('routine contracts infer heterogeneous result-set tuples and channels', () => {

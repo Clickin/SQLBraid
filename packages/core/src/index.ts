@@ -974,12 +974,37 @@ export type QueryExecutionResult<Row = unknown> =
   | RowsExecutionResult<Row>
   | CommandExecutionResult;
 
-export interface RowValidationOptions<Row> {
+export interface ExecutionOptions {
+  readonly signal?: AbortSignal;
+}
+
+export interface RowValidationOptions<Row> extends ExecutionOptions {
   readonly schema?: StandardSchemaV1<unknown, NoInfer<Row>>;
 }
 
-export interface StreamOptions<Row> extends RowValidationOptions<Row> {
-  readonly signal?: AbortSignal;
+export interface StreamOptions<Row> extends RowValidationOptions<Row> {}
+
+export type TransactionIsolation =
+  | "read-uncommitted"
+  | "read-committed"
+  | "repeatable-read"
+  | "serializable";
+
+export interface TransactionOptions {
+  readonly isolation?: TransactionIsolation;
+  readonly readOnly?: boolean;
+}
+
+export class UnsupportedFeatureError extends Error {
+  constructor(
+    readonly feature: string,
+    readonly code: `BRAID_${string}`,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(`${code}: ${message}`, options);
+    this.name = "UnsupportedFeatureError";
+  }
 }
 
 export interface RoutineResultSet<Row = unknown> {
@@ -1089,11 +1114,11 @@ export interface QueryExecutor {
   readonly ownershipKey?: object;
   readonly statementBinding: StatementBindingAdapter;
   readonly environment?: DriverEnvironment;
-  query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>>;
-  stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncIterable<Row>;
-  call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult>;
-  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult>;
-  begin?(): Promise<void>;
+  query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>>;
+  stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row>;
+  call(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult>;
+  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult>;
+  begin?(options?: TransactionOptions): Promise<void>;
   commit?(): Promise<void>;
   rollback?(): Promise<void>;
   savepoint?(name: string): Promise<void>;
@@ -1350,13 +1375,22 @@ export interface DatabaseOptions {
   readonly reuse?: RequestedReuse;
 }
 
-export interface PreparedQuery<Row> {
+export type PreparableQuery = ExecutableQuery | CallQuery;
+
+export type PreparedArguments<Input, Options> =
+  [Input] extends [never] ? [options?: Options] : [input: Input, options?: Options];
+
+export type PreparedQuery<Input, Q extends PreparableQuery> = {
   readonly name: string;
-  execute(): Promise<RowsExecutionResult<Row>>;
-  all(options?: RowValidationOptions<Row>): Promise<readonly Row[]>;
-  one(options?: RowValidationOptions<Row>): Promise<Row>;
-  maybeOne(options?: RowValidationOptions<Row>): Promise<Row | undefined>;
-}
+} & (Q extends CallQuery<infer Result>
+  ? { call(...args: PreparedArguments<Input, ExecutionOptions>): Promise<Result> }
+  : { execute(...args: PreparedArguments<Input, ExecutionOptions>): Promise<ExecutionResultOf<Q>> }
+    & (Q extends RowQuery<infer Row> ? {
+      all(...args: PreparedArguments<Input, RowValidationOptions<Row>>): Promise<readonly Row[]>;
+      one(...args: PreparedArguments<Input, RowValidationOptions<Row>>): Promise<Row>;
+      maybeOne(...args: PreparedArguments<Input, RowValidationOptions<Row>>): Promise<Row | undefined>;
+      stream(...args: PreparedArguments<Input, StreamOptions<Row>>): AsyncIterable<Row>;
+    } : {}));
 
 export type ExecutableQuery =
   | RowQuery<unknown>
@@ -1377,13 +1411,22 @@ export interface Database {
   all<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<readonly Row[]>;
   one<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row>;
   maybeOne<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row | undefined>;
-  execute<Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>>;
-  call<Result extends RoutineCallResult>(query: CallQuery<Result>): Promise<Result>;
-  batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }>;
-  bulk<Input>(inputs: readonly Input[], factory: (input: Input, index: number) => CommandQuery): Promise<BulkResult>;
-  prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row>;
+  execute<Q extends ExecutableQuery>(query: Q, options?: ExecutionOptions): Promise<ExecutionResultOf<Q>>;
+  call<Result extends RoutineCallResult>(query: CallQuery<Result>, options?: ExecutionOptions): Promise<Result>;
+  batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries, options?: ExecutionOptions): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }>;
+  bulk<Input>(inputs: readonly Input[], factory: (input: Input, index: number) => CommandQuery, options?: ExecutionOptions): Promise<BulkResult>;
+  prepare<Factory extends () => PreparableQuery>(
+    name: string,
+    factory: Factory & (Parameters<Factory> extends [] ? unknown : never),
+  ): PreparedQuery<never, ReturnType<Factory>>;
+  prepare<Factory extends (input: never) => PreparableQuery>(
+    name: string,
+    factory: Factory & (Parameters<Factory> extends [unknown] ? unknown : never),
+  ): PreparedQuery<Parameters<Factory>[0], ReturnType<Factory>>;
   stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row>;
+  session<T>(callback: (database: Database) => Promise<T>): Promise<T>;
   tx<T>(callback: (database: Database) => Promise<T>): Promise<T>;
+  tx<T>(options: TransactionOptions, callback: (database: Database) => Promise<T>): Promise<T>;
 }
 
 export interface BulkResult {

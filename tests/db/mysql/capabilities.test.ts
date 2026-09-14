@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { createConnection, type Connection, type RowDataPacket } from "mysql2/promise";
+import { createConnection, createPool, type Connection, type RowDataPacket } from "mysql2/promise";
 import { inject, test } from "vitest";
-import { type ExecutionEvent } from "@sqlbraid/core";
-import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
+import { type Database, type ExecutionEvent } from "@sqlbraid/core";
+import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
 import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 import { assertFloatBits, assertRepresentationConformance, binary32Finite, binary64Finite, exactJsonText } from "../fidelity.js";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
@@ -385,5 +385,166 @@ test("mysql.result.command", { timeout: 30_000 }, async () => {
   } finally {
     await connection.query("DROP TABLE IF EXISTS braid_pv16_capability").catch(() => undefined);
     await connection.end();
+  }
+});
+
+test("mysql.rc sessions, prepared execution, and transaction options preserve one connection", { timeout: 30_000 }, async () => {
+  const settings = inject("mysql") as Settings;
+  const pool = createPool({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
+  const db = createMysql2PoolDatabase(pool);
+  try {
+    const environment = await db.environment();
+    for (const capability of [
+      "session.pinned",
+      "statement.prepare",
+      "transaction.read-only",
+      "transaction.isolation.read-uncommitted",
+      "transaction.isolation.read-committed",
+      "transaction.isolation.repeatable-read",
+      "transaction.isolation.serializable",
+      "statement.cancel",
+    ]) assert.ok(environment.capabilities[capability]);
+    await pool.query("CREATE TABLE IF NOT EXISTS braid_rc_mysql_options (value INT NOT NULL)");
+    await db.tx({ readOnly: true }, async (tx) => {
+      await assert.rejects(
+        () => tx.execute(sql.command`INSERT INTO braid_rc_mysql_options (value) VALUES (${1})`),
+        (error: unknown) => error instanceof Error && "code" in error && error.code === "ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION",
+      );
+    });
+
+    let scoped: Database | undefined;
+    await db.session(async (session) => {
+      scoped = session;
+      const first = await session.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
+      await assert.rejects(
+        () => db.execute(sql`SELECT 1`),
+        (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_SESSION_SCOPE",
+      );
+      const prepared = session.prepare(
+        "mysql-rc-session-id",
+        (value: string) => sql.rows<{ readonly connectionId: string; readonly value: string }>`
+          SELECT CONNECTION_ID() AS connectionId, ${value} AS value
+        `,
+      );
+      const row = await prepared.one("prepared");
+      assert.equal(String(row.connectionId), String(first.connectionId));
+      assert.equal(row.value, "prepared");
+      await session.tx({ isolation: "serializable" }, async (tx) => {
+        const nested = await tx.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
+        assert.equal(String(nested.connectionId), String(first.connectionId));
+      });
+      await session.session(async (nestedSession) => {
+        const nested = await nestedSession.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
+        assert.equal(String(nested.connectionId), String(first.connectionId));
+      });
+    });
+    await assert.rejects(
+      () => scoped!.execute(sql`SELECT 1`),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_SESSION_CLOSED",
+    );
+  } finally {
+    await pool.query("DROP TABLE IF EXISTS braid_rc_mysql_options").catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test("mysql.rc transaction isolation has native visibility and locking semantics", { timeout: 30_000 }, async () => {
+  const settings = inject("mysql") as Settings;
+  const pool = createPool({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
+  const db = createMysql2PoolDatabase(pool);
+  const writer = await connect();
+  try {
+    await pool.query("CREATE TABLE IF NOT EXISTS braid_rc_mysql_isolation (id INT PRIMARY KEY, value VARCHAR(32) NOT NULL)");
+    await pool.query("INSERT INTO braid_rc_mysql_isolation (id, value) VALUES (1, 'base') ON DUPLICATE KEY UPDATE value = 'base'");
+    const reset = async (): Promise<void> => {
+      await writer.query("UPDATE braid_rc_mysql_isolation SET value = 'base' WHERE id = 1");
+    };
+    for (const [isolation, dirtyVisible] of [
+      ["read-uncommitted", true],
+      ["read-committed", false],
+      ["repeatable-read", false],
+    ] as const) {
+      await reset();
+      await writer.beginTransaction();
+      await writer.query("UPDATE braid_rc_mysql_isolation SET value = 'dirty' WHERE id = 1");
+      await db.tx({ isolation }, async (tx) => {
+        const row = await tx.one(sql.rows<{ readonly value: string }>`SELECT value FROM braid_rc_mysql_isolation WHERE id = ${1}`);
+        assert.equal(row.value, dirtyVisible ? "dirty" : "base");
+      });
+      await writer.rollback();
+    }
+    for (const [isolation, seesCommit] of [
+      ["read-committed", true],
+      ["repeatable-read", false],
+    ] as const) {
+      await reset();
+      await db.tx({ isolation }, async (tx) => {
+        const before = await tx.one(sql.rows<{ readonly value: string }>`SELECT value FROM braid_rc_mysql_isolation WHERE id = ${1}`);
+        assert.equal(before.value, "base");
+        await writer.query("UPDATE braid_rc_mysql_isolation SET value = 'committed' WHERE id = 1");
+        const after = await tx.one(sql.rows<{ readonly value: string }>`SELECT value FROM braid_rc_mysql_isolation WHERE id = ${1}`);
+        assert.equal(after.value, seesCommit ? "committed" : "base");
+      });
+    }
+    await reset();
+    await writer.query("SET SESSION innodb_lock_wait_timeout = 1");
+    await db.tx({ isolation: "serializable" }, async (tx) => {
+      await tx.one(sql.rows<{ readonly value: string }>`SELECT value FROM braid_rc_mysql_isolation WHERE id = ${1}`);
+      await assert.rejects(
+        () => writer.query("UPDATE braid_rc_mysql_isolation SET value = 'blocked' WHERE id = 1"),
+        /lock wait timeout/iu,
+      );
+    });
+  } finally {
+    await writer.rollback().catch(() => undefined);
+    await writer.end();
+    await pool.query("DROP TABLE IF EXISTS braid_rc_mysql_isolation").catch(() => undefined);
+    await pool.end();
+  }
+});
+
+test("mysql.rc cancellation destroys in-flight query, call, bulk, and prepared leases", { timeout: 30_000 }, async () => {
+  const settings = inject("mysql") as Settings;
+  const pool = createPool({ uri: settings.connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions, connectionLimit: 1, idleTimeout: 0 });
+  const db = createMysql2PoolDatabase(pool);
+  try {
+    await pool.query("CREATE TABLE IF NOT EXISTS braid_rc_mysql_cancel (value INT NOT NULL)");
+    const cancel = async (operation: (signal: AbortSignal) => Promise<unknown>): Promise<void> => {
+      const controller = new AbortController();
+      const reason = new Error("cancel MySQL sleep");
+      const pending = operation(controller.signal);
+      const abortTimer = setTimeout(() => controller.abort(reason), 100);
+      let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+      const outcome = await Promise.race([
+        pending.then(
+          () => ({ kind: "resolved" as const }),
+          (error: unknown) => ({ kind: "rejected" as const, error }),
+        ),
+        new Promise<{ readonly kind: "timeout" }>((resolve) => {
+          timeoutTimer = setTimeout(() => resolve({ kind: "timeout" }), 5_000);
+        }),
+      ]);
+      clearTimeout(abortTimer);
+      if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
+      if (outcome.kind === "resolved") throw new Error("MySQL SLEEP unexpectedly completed after cancellation.");
+      if (outcome.kind === "timeout") throw new Error("MySQL cancellation did not settle within 5 seconds.");
+      assert.equal(outcome.error instanceof Error && "code" in outcome.error ? outcome.error.code : undefined, "BRAID_RESOURCE_CLEANUP");
+      assert.equal(outcome.error instanceof Error ? outcome.error.cause : undefined, reason);
+    };
+
+    const before = await db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
+    await cancel((signal) => db.one(sql.rows`SELECT SLEEP(30) AS slept`, { signal }));
+    const prepared = db.prepare("mysql-rc-cancel-prepared", () => sql.rows`SELECT SLEEP(30) AS slept`);
+    await cancel((signal) => prepared.one({ signal }));
+    await cancel((signal) => db.call(sql.call`SELECT SLEEP(30) AS slept`, { signal }));
+    await cancel((signal) => db.bulk([30], (seconds) =>
+      sql.command`INSERT INTO braid_rc_mysql_cancel (value) SELECT SLEEP(${seconds})`,
+      { signal },
+    ));
+    const after = await db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
+    assert.notEqual(String(after.connectionId), String(before.connectionId));
+  } finally {
+    await pool.query("DROP TABLE IF EXISTS braid_rc_mysql_cancel").catch(() => undefined);
+    await pool.end();
   }
 });

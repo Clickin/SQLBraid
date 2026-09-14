@@ -27,10 +27,15 @@ test('routine database call preserves output and result-set shape', async () => 
           { rows: [{ id: 1 }], source: { kind: 'emitted', index: 0 } },
           { rows: [], source: { kind: 'emitted', index: 1 } },
         ],
+        returnValue: 5,
       };
     },
   };
   const db = createDatabase(executor);
   const query = sql.call`CALL do_work(${1})`;
-  assert.deepEqual(await db.call(query), { output: { ok: true }, resultSets: [{ rows: [{ id: 1 }] }, { rows: [] }] });
+  assert.deepEqual(await db.call(query), {
+    output: { ok: true },
+    resultSets: [{ rows: [{ id: 1 }] }, { rows: [] }],
+    returnValue: 5,
+  });
 });

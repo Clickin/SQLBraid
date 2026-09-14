@@ -5,6 +5,7 @@ import {
   type DriverRoutineResult,
   type ExecutionEvent,
   type QueryExecutor,
+  type RowQuery,
   type StandardSchemaV1,
   type StatementBindingAdapter,
   type Dialect,
@@ -50,7 +51,7 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
   const events: ExecutionEvent[] = [];
   const failure = new Error("factory failed");
   const db = createDatabase(emptyRowsExecutor(), { observers: [{ onEvent(event) { events.push(event); } }] });
-  const prepared = db.prepare("factory-failure", () => { throw failure; });
+  const prepared = db.prepare("factory-failure", (): RowQuery<unknown> => { throw failure; });
   await assert.rejects(() => prepared.execute(), (error) => error === failure);
   let errorEvent = events.at(-1);
   assert.equal(errorEvent?.type, "query:error");

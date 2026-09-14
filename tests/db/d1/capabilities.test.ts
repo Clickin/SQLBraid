@@ -19,9 +19,16 @@ type D1Payload = {
   readonly mapped: readonly { readonly id: string; readonly name: string; readonly payload: readonly number[]; readonly profile: { readonly active: boolean }; readonly stamp: string; readonly uuid: string }[];
   readonly updated: readonly { readonly id: string; readonly name: string }[];
   readonly deleted: readonly { readonly id: string }[];
-  readonly environment: { readonly database: { readonly product: string; readonly version?: string }; readonly driver: { readonly id: string }; readonly runtime: { readonly id: string } };
+  readonly environment: {
+    readonly database: { readonly product: string; readonly version?: string };
+    readonly driver: { readonly id: string };
+    readonly runtime: { readonly id: string };
+    readonly capabilities: Readonly<Record<string, { readonly status: string }>>;
+  };
   readonly numeric: { readonly safe: string; readonly integralReal: { readonly value: string }; readonly unsafeCode: string };
   readonly json: { readonly payload: string; readonly enabled: string };
+  readonly sessionCode: string;
+  readonly cancelCode: string;
   readonly bulk: { readonly inputCount: number; readonly affectedRows: number };
   readonly streamCode: string;
   readonly transactionCode: string;
@@ -76,6 +83,11 @@ test("d1.sql.native-transparency", async () => {
   assert.equal(payload.environment.database.product, "sqlite");
   assert.equal(payload.environment.database.version, undefined);
   assert.equal(payload.environment.driver.id, "cloudflare-d1");
+  assert.equal(payload.environment.capabilities["session.pinned"]?.status, "unsupported");
+  assert.equal(payload.environment.capabilities["transaction"]?.status, "unsupported");
+  assert.equal(payload.environment.capabilities["statement.cancel"]?.status, "unsupported");
+  assert.equal(payload.environment.capabilities["statement.stream"]?.status, "unsupported");
+  assert.equal(payload.environment.capabilities["statement.bulk"]?.status, "guaranteed");
   assert.deepEqual(payload.transparencySegments, ["\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract('{\"enabled\":true}', '$.enabled') AS enabled,\n             ", " AS actual\n    "]);
   assert.equal(payload.transparencySql, "\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract('{\"enabled\":true}', '$.enabled') AS enabled,\n             ?1 AS actual\n    ");
   assert.deepEqual(payload.transparency, [{ marker: "literal $1 :1 @p1 ?", enabled: "1", actual: "7" }]);
@@ -104,6 +116,8 @@ test("d1.data.json-text", async () => {
 test("d1.execution.bulk", async () => {
   const payload = await fixture();
   assert.deepEqual(payload.bulk, { inputCount: 2, affectedRows: 2 });
+  assert.equal(payload.sessionCode, "BRAID_SESSION_UNSUPPORTED");
+  assert.equal(payload.cancelCode, "BRAID_CANCEL_UNSUPPORTED");
   assert.equal(payload.streamCode, "BRAID_STREAM_UNSUPPORTED");
   assert.equal(payload.transactionCode, "BRAID_TX_UNSUPPORTED");
 });

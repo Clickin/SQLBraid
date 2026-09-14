@@ -12,6 +12,7 @@ import {
   type DatabaseOptions,
   type DriverRoutineResult,
   type DriverEnvironment,
+  type ExecutionOptions,
   type ParameterTypeHint,
   type QueryExecutor,
   type QueryExecutionResult,
@@ -20,7 +21,9 @@ import {
   type StatementBindingAdapter,
   type StatementBindingContext,
   type StatementBindingDescription,
+  type TransactionOptions,
   type TypePolicy,
+  UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { utf8ByteLength } from "@sqlbraid/template";
@@ -87,6 +90,7 @@ export interface OracleConnectionLike {
   commit(): Promise<void>;
   rollback(): Promise<void>;
   readonly stmtCacheSize?: number;
+  break?(): Promise<void> | void;
   close?(options?: { readonly drop?: boolean }): Promise<void> | void;
 }
 
@@ -166,6 +170,24 @@ const oracleEnvironment = Object.freeze<DriverEnvironment>({
     "data.temporal-native": { status: "guarded", rawRepresentations: ["Date"], conditionCode: "oracle.date-millisecond-precision" },
     "data.temporal-lossless": { status: "unsupported", canonical: "string", rawRepresentations: ["string"], conditionCode: "oracle.temporal-text-cast-required" },
     "metadata.command-safe": { status: "guarded", rawRepresentations: ["number"], conditionCode: "oracle.count-safe-integer" },
+    "session.pinned": { status: "guaranteed" },
+    "transaction": { status: "guaranteed" },
+    "transaction.savepoint": { status: "guaranteed" },
+    "transaction.read-only": { status: "guaranteed" },
+    "transaction.isolation.read-uncommitted": { status: "unsupported" },
+    "transaction.isolation.read-committed": { status: "guaranteed" },
+    "transaction.isolation.repeatable-read": { status: "unsupported" },
+    "transaction.isolation.serializable": { status: "guaranteed" },
+    "statement.prepare": { status: "guaranteed" },
+    "statement.cancel": { status: "guarded", conditionCode: "oracle.connection-break" },
+    "statement.stream": { status: "guaranteed" },
+    "statement.bulk": { status: "guaranteed" },
+    "routine.call": { status: "guaranteed" },
+    "routine.out": { status: "guaranteed" },
+    "routine.inout": { status: "guaranteed" },
+    "routine.return-value": { status: "unsupported" },
+    "routine.result-sets": { status: "guaranteed" },
+    "routine.out-cursor": { status: "guaranteed" },
   },
   probe: {
     statement: createRenderedStatement({
@@ -182,6 +204,20 @@ const oracleEnvironment = Object.freeze<DriverEnvironment>({
     },
   },
 });
+
+function customOracleEnvironment(
+  policy: TypePolicy,
+  cancellationSupported: boolean,
+): DriverEnvironment {
+  return {
+    ...oracleEnvironment,
+    driver: { id: "node-oracledb", profile: "custom" },
+    typePolicy: { id: policy.id, hash: policy.hash },
+    capabilities: cancellationSupported
+      ? { "statement.cancel": oracleEnvironment.capabilities["statement.cancel"]! }
+      : {},
+  };
+}
 
 interface OracleStatementBindingAdapter extends StatementBindingAdapter {
   readonly materializedBinds: (
@@ -218,6 +254,67 @@ interface OracleRoutineParameter {
 function assertConnection(connection: OracleConnectionLike): void {
   if (!connection || typeof connection !== "object" || typeof connection.execute !== "function" || typeof connection.commit !== "function" || typeof connection.rollback !== "function" || typeof (connection as { readonly getConnection?: unknown }).getConnection === "function") {
     throw new TypeError("SQLBraid Oracle direct adapter requires a physical node-oracledb Connection.");
+  }
+}
+
+function assertExecutionOptions(connection: OracleConnectionLike, options?: ExecutionOptions): void {
+  const signal = options?.signal;
+  if (signal === undefined) return;
+  if (signal.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  if (typeof connection.break !== "function") {
+    throw new UnsupportedFeatureError(
+      "statement.cancel",
+      "BRAID_CANCEL_UNSUPPORTED",
+      "node-oracledb connection does not expose the documented break() cancellation primitive.",
+    );
+  }
+}
+
+async function executeWithCancellation<T>(
+  connection: OracleConnectionLike,
+  operation: () => Promise<T>,
+  options?: ExecutionOptions,
+): Promise<T> {
+  assertExecutionOptions(connection, options);
+  const signal = options?.signal;
+  if (signal === undefined) return operation();
+  let aborted = false;
+  let breakFailure: unknown;
+  let breakPromise: Promise<void> | undefined;
+  const onAbort = (): void => {
+    if (aborted) return;
+    aborted = true;
+    try {
+      breakPromise = Promise.resolve(connection.break!()).catch((error) => {
+        breakFailure = error;
+      });
+    } catch (error) {
+      breakFailure = error;
+      breakPromise = Promise.resolve();
+    }
+  };
+  signal.addEventListener("abort", onAbort, { once: true });
+  try {
+    const result = await operation();
+    if (breakPromise !== undefined) await breakPromise;
+    if (aborted) {
+      if (breakFailure !== undefined) {
+        const cleanup = cleanupError(signal.reason, [breakFailure]);
+        if (cleanup !== undefined) throw cleanup;
+      }
+      throw signal.reason ?? new Error("Execution aborted.");
+    }
+    return result;
+  } catch (error) {
+    if (breakPromise !== undefined) await breakPromise;
+    if (breakFailure !== undefined) {
+      const cleanup = cleanupError(error, [breakFailure]);
+      if (cleanup !== undefined) throw cleanup;
+    }
+    if (aborted) throw signal.reason ?? error;
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
   }
 }
 
@@ -800,7 +897,9 @@ function outBindValue(outBinds: unknown, ordinal: number, outputName?: string): 
   if (Array.isArray(outBinds)) return outBinds[ordinal];
   if (outBinds && typeof outBinds === "object") {
     const object = outBinds as Record<string, unknown>;
-    return object[outputName ?? ""] ?? object[String(ordinal + 1)] ?? object[`p${ordinal + 1}`] ?? object[ordinal];
+    for (const key of [outputName, String(ordinal + 1), `p${ordinal + 1}`, ordinal]) {
+      if (key !== undefined && Object.prototype.hasOwnProperty.call(object, key)) return object[key];
+    }
   }
   return undefined;
 }
@@ -922,15 +1021,62 @@ function makeOracledbExecutor(
   const driver = options.driver ?? defaultDriver;
   const fetchSize = streamFetchSize(options);
   const control = async (text: string): Promise<void> => { await connection.execute(text, [], executeOptions(options, driver)); };
+  const begin = async (transactionOptions?: TransactionOptions): Promise<void> => {
+    if (
+      transactionOptions !== undefined
+      && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
+    ) {
+      const error = new TypeError("BRAID_TX_OPTIONS_INVALID: Oracle transaction options must be an object.");
+      Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+      throw error;
+    }
+    if (transactionOptions !== undefined) {
+      const unexpected = Object.keys(transactionOptions).find((key) => key !== "isolation" && key !== "readOnly");
+      if (unexpected !== undefined) {
+        const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: Unknown Oracle transaction option: ${unexpected}.`);
+        Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+        throw error;
+      }
+    }
+    const isolation = transactionOptions?.isolation;
+    if (isolation !== undefined
+      && isolation !== "read-uncommitted"
+      && isolation !== "read-committed"
+      && isolation !== "repeatable-read"
+      && isolation !== "serializable") {
+      const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: Oracle does not recognize transaction isolation ${String(isolation)}.`);
+      Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+      throw error;
+    }
+    if (transactionOptions?.readOnly !== undefined && typeof transactionOptions.readOnly !== "boolean") {
+      const error = new TypeError("BRAID_TX_OPTIONS_INVALID: Oracle readOnly must be a boolean.");
+      Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+      throw error;
+    }
+    if (isolation === "read-uncommitted" || isolation === "repeatable-read") {
+      throw new UnsupportedFeatureError(
+        `transaction.isolation.${isolation}`,
+        "BRAID_TX_OPTION_UNSUPPORTED",
+        `Oracle does not support transaction isolation ${isolation}.`,
+      );
+    }
+    const clauses: string[] = [];
+    if (isolation === "read-committed") clauses.push("ISOLATION LEVEL READ COMMITTED");
+    if (isolation === "serializable") clauses.push("ISOLATION LEVEL SERIALIZABLE");
+    if (transactionOptions?.readOnly === true) clauses.push("READ ONLY");
+    else if (transactionOptions?.readOnly === false) clauses.push("READ WRITE");
+    if (clauses.length > 0) await control(`SET TRANSACTION ${clauses.join(" ")}`);
+  };
   return {
     ownershipKey: connection,
     statementBinding: bindingAdapter,
     environment: policy === defaultTypePolicy && driver === defaultDriver && oracledb.thin
       ? oracleEnvironment
-      : { ...oracleEnvironment, driver: { id: "node-oracledb", profile: "custom" }, typePolicy: { id: policy.id, hash: policy.hash }, capabilities: {} },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
+      : customOracleEnvironment(policy, typeof connection.break === "function"),
+    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, executionOptions?: ExecutionOptions): Promise<BulkExecutionResult> {
+      assertExecutionOptions(connection, executionOptions);
       if (typeof connection.executeMany !== "function") {
-        throw new Error("BRAID_BULK_UNSUPPORTED: Oracle connection does not expose executeMany().");
+        throw new UnsupportedFeatureError("statement.bulk", "BRAID_BULK_UNSUPPORTED", "Oracle connection does not expose executeMany().");
       }
       if (binding.adapterId !== bindingAdapter.id) {
         throw new TypeError(`SQLBraid Oracle executor requires binding adapter "${bindingAdapter.id}".`);
@@ -951,15 +1097,19 @@ function makeOracledbExecutor(
         dmlRowCounts: _dmlRowCounts,
         ...customOptions
       } = options.executeOptions ?? {};
-      const result = executionResult(await connection.executeMany(
-        binding.parameterizedSql!,
-        materialized.binds,
-        {
-          ...customOptions,
-          bindDefs: materialized.bindDefs,
-          batchErrors: false,
-          dmlRowCounts: false,
-        } satisfies OracleExecuteManyOptionsLike,
+      const result = executionResult(await executeWithCancellation(
+        connection,
+        () => connection.executeMany!(
+          binding.parameterizedSql!,
+          materialized.binds,
+          {
+            ...customOptions,
+            bindDefs: materialized.bindDefs,
+            batchErrors: false,
+            dmlRowCounts: false,
+          } satisfies OracleExecuteManyOptionsLike,
+        ),
+        executionOptions,
       ));
       return {
         inputCount: bulk.parameterSets.length,
@@ -967,23 +1117,33 @@ function makeOracledbExecutor(
         executionMode: "native-bulk",
       };
     },
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
-      const result = executionResult(await connection.execute(execution.description.parameterizedSql!, execution.binds, executeOptions(options, driver)));
-      const returning = await normalizeDmlReturning(rendered, result, policy);
-      if (returning !== undefined) return returning as QueryExecutionResult<Row>;
-      const fields = Array.isArray(result.metaData) ? result.metaData : [];
-      assertUniqueFields(fields);
-      if (Array.isArray(result.rows)) {
-        const rows = result.rows.map((row) => decodeRow(row, fields, policy, driver));
-        return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
-      }
-      const affectedRows = result.rowsAffected === undefined ? undefined : safeDatabaseCount(result.rowsAffected);
-      return { rows: [], ...(affectedRows === undefined ? {} : { rowCount: affectedRows }), kind: "command", command: affectedRows === undefined ? {} : { affectedRows } };
+      return executeWithCancellation<QueryExecutionResult<Row>>(connection, async () => {
+        const result = executionResult(await connection.execute(
+          execution.description.parameterizedSql!,
+          execution.binds,
+          executeOptions(options, driver),
+        ));
+        const returning = await normalizeDmlReturning(rendered, result, policy);
+        if (returning !== undefined) return returning as QueryExecutionResult<Row>;
+        const fields = Array.isArray(result.metaData) ? result.metaData : [];
+        assertUniqueFields(fields);
+        if (Array.isArray(result.rows)) {
+          const rows = result.rows.map((row) => decodeRow(row, fields, policy, driver));
+          return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
+        }
+        const affectedRows = result.rowsAffected === undefined ? undefined : safeDatabaseCount(result.rowsAffected);
+        return { rows: [], ...(affectedRows === undefined ? {} : { rowCount: affectedRows }), kind: "command", command: affectedRows === undefined ? {} : { affectedRows } };
+      }, executionOptions);
     },
-    async call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
+    async call(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<DriverRoutineResult> {
       if (rendered.routineProcedure !== undefined) {
-        throw new Error("BRAID_CALL_UNSUPPORTED: Oracle does not support native routine procedure metadata; author an Oracle PL/SQL call text instead.");
+        throw new UnsupportedFeatureError(
+          "routine.call",
+          "BRAID_CALL_UNSUPPORTED",
+          "Oracle does not support native routine procedure metadata; author an Oracle PL/SQL call text instead.",
+        );
       }
       const execution = executionBinding(bindingAdapter, rendered, binding);
       const parameters = rendered.parameters.map(routineParameter);
@@ -993,93 +1153,95 @@ function makeOracledbExecutor(
       let failure: unknown;
       let value: DriverRoutineResult | undefined;
       try {
-        const result = executionResult(await connection.execute(
-          execution.description.parameterizedSql!,
-          execution.binds,
-          executeOptions(options, driver, true),
-        ));
-        const implicit = Array.isArray(result.implicitResults) ? result.implicitResults : [];
-        resources.push(...implicit);
-        if (result.resultSet) resources.push(result.resultSet);
-        const explicit = parameters
-          .map((parameter, index) => ({ parameter, index, ordinal: ordinals[index], value: ordinals[index] === undefined ? undefined : outBindValue(result.outBinds, ordinals[index]!, parameter.outputName) }))
-          .filter(({ ordinal }) => ordinal !== undefined);
-        const output: Record<string, unknown> = {};
-        const explicitCursors: Array<{ readonly name: string; readonly index: number; readonly resultSet: OracleResultSetLike }> = [];
-        let explicitLobs: Map<number, OracleLobLike> | undefined;
-        let explicitResourceFailure: unknown;
-        for (const { parameter, index, value } of explicit) {
-          const name = parameter.outputName;
-          const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
-          const isCursor = hintType === "REF CURSOR" || hintType === "REFCURSOR" || hintType === "SYS_REFCURSOR" || hintType === "CURSOR";
-          if (isCursor) {
-            if (!name) {
-              explicitResourceFailure ??= new Error(`BRAID_CALL_OUT_UNSUPPORTED: Oracle output parameter ${index + 1} is missing outputName.`);
-            } else if (!value || typeof value !== "object" || typeof (value as OracleResultSetLike).close !== "function") {
-              explicitResourceFailure ??= new Error(`BRAID_CALL_CURSOR_UNSUPPORTED: Oracle output ${name} did not return a ResultSet.`);
-            } else {
-              const resultSet = value as OracleResultSetLike;
-              explicitCursors.push({ name, index, resultSet });
-              resources.push(resultSet);
+        await executeWithCancellation(connection, async () => {
+          const result = executionResult(await connection.execute(
+            execution.description.parameterizedSql!,
+            execution.binds,
+            executeOptions(options, driver, true),
+          ));
+          const implicit = Array.isArray(result.implicitResults) ? result.implicitResults : [];
+          resources.push(...implicit);
+          if (result.resultSet) resources.push(result.resultSet);
+          const explicit = parameters
+            .map((parameter, index) => ({ parameter, index, ordinal: ordinals[index], value: ordinals[index] === undefined ? undefined : outBindValue(result.outBinds, ordinals[index]!, parameter.outputName) }))
+            .filter(({ ordinal }) => ordinal !== undefined);
+          const output: Record<string, unknown> = {};
+          const explicitCursors: Array<{ readonly name: string; readonly index: number; readonly resultSet: OracleResultSetLike }> = [];
+          let explicitLobs: Map<number, OracleLobLike> | undefined;
+          let explicitResourceFailure: unknown;
+          for (const { parameter, index, value } of explicit) {
+            const name = parameter.outputName;
+            const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
+            const isCursor = hintType === "REF CURSOR" || hintType === "REFCURSOR" || hintType === "SYS_REFCURSOR" || hintType === "CURSOR";
+            if (isCursor) {
+              if (!name) {
+                explicitResourceFailure ??= new Error(`BRAID_CALL_OUT_UNSUPPORTED: Oracle output parameter ${index + 1} is missing outputName.`);
+              } else if (!value || typeof value !== "object" || typeof (value as OracleResultSetLike).close !== "function") {
+                explicitResourceFailure ??= new Error(`BRAID_CALL_CURSOR_UNSUPPORTED: Oracle output ${name} did not return a ResultSet.`);
+              } else {
+                const resultSet = value as OracleResultSetLike;
+                explicitCursors.push({ name, index, resultSet });
+                resources.push(resultSet);
+              }
+              if (!name && value && typeof value === "object" && typeof (value as OracleResultSetLike).close === "function") {
+                resources.push(value as OracleResultSetLike);
+              }
+              continue;
             }
-            if (!name && value && typeof value === "object" && typeof (value as OracleResultSetLike).close === "function") {
-              resources.push(value as OracleResultSetLike);
+            if (!materializedLobType(hintType) || value === null || value === undefined) continue;
+            if (isMaterializedLobValue(hintType!, value)) continue;
+            try {
+              const lob = oracleLob(value, name ?? `parameter ${index + 1}`);
+              if (lob === undefined) {
+                explicitResourceFailure ??= new Error(`BRAID_CALL_LOB_UNSUPPORTED: Oracle output ${name ?? `parameter ${index + 1}`} did not return a Lob.`);
+              } else {
+                (explicitLobs ??= new Map()).set(index, lob);
+                resources.push({ close: () => closeLob(lob) });
+              }
+            } catch (error) {
+              explicitResourceFailure ??= error;
             }
-            continue;
           }
-          if (!materializedLobType(hintType) || value === null || value === undefined) continue;
-          if (isMaterializedLobValue(hintType!, value)) continue;
-          try {
-            const lob = oracleLob(value, name ?? `parameter ${index + 1}`);
-            if (lob === undefined) {
-              explicitResourceFailure ??= new Error(`BRAID_CALL_LOB_UNSUPPORTED: Oracle output ${name ?? `parameter ${index + 1}`} did not return a Lob.`);
+          if (explicitResourceFailure !== undefined) throw explicitResourceFailure;
+          for (const { parameter, index, value } of explicit) {
+            const name = parameter.outputName;
+            if (!name) throw new Error(`BRAID_CALL_OUT_UNSUPPORTED: Oracle output parameter ${index + 1} is missing outputName.`);
+            const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
+            const isCursor = hintType === "REF CURSOR" || hintType === "REFCURSOR" || hintType === "SYS_REFCURSOR" || hintType === "CURSOR";
+            if (isCursor) {
+              const resultSet = explicitCursors.find((cursor) => cursor.index === index)!.resultSet;
+              resultSets.push({
+                rows: await readResultSet(resultSet, driver, policy),
+                source: { kind: "out-cursor", name, parameterIndex: index },
+              });
             } else {
-              (explicitLobs ??= new Map()).set(index, lob);
-              resources.push({ close: () => closeLob(lob) });
+              const lob = materializedLobType(hintType) ? explicitLobs?.get(index) : undefined;
+              const outputValue = lob === undefined ? value : await materializeLob(lob, hintType!, name);
+              assertOracleNumericValue(hintType, outputValue);
+              setOutputValue(output, name, hintType === undefined ? outputValue : policy.decode(hintType, outputValue));
             }
-          } catch (error) {
-            explicitResourceFailure ??= error;
           }
-        }
-        if (explicitResourceFailure !== undefined) throw explicitResourceFailure;
-        for (const { parameter, index, value } of explicit) {
-          const name = parameter.outputName;
-          if (!name) throw new Error(`BRAID_CALL_OUT_UNSUPPORTED: Oracle output parameter ${index + 1} is missing outputName.`);
-          const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
-          const isCursor = hintType === "REF CURSOR" || hintType === "REFCURSOR" || hintType === "SYS_REFCURSOR" || hintType === "CURSOR";
-          if (isCursor) {
-            const resultSet = explicitCursors.find((cursor) => cursor.index === index)!.resultSet;
+          for (const [index, resultSet] of implicit.entries()) {
             resultSets.push({
               rows: await readResultSet(resultSet, driver, policy),
-              source: { kind: "out-cursor", name, parameterIndex: index },
+              source: { kind: "implicit", index },
             });
-          } else {
-            const lob = materializedLobType(hintType) ? explicitLobs?.get(index) : undefined;
-            const outputValue = lob === undefined ? value : await materializeLob(lob, hintType!, name);
-            assertOracleNumericValue(hintType, outputValue);
-            setOutputValue(output, name, hintType === undefined ? outputValue : policy.decode(hintType, outputValue));
           }
-        }
-        for (const [index, resultSet] of implicit.entries()) {
-          resultSets.push({
-            rows: await readResultSet(resultSet, driver, policy),
-            source: { kind: "implicit", index },
-          });
-        }
-        if (result.resultSet) {
-          resultSets.push({
-            rows: await readResultSet(result.resultSet, driver, policy),
-            source: { kind: "emitted", index: 0 },
-          });
-        } else if (Array.isArray(result.rows)) {
-          const fields = Array.isArray(result.metaData) ? result.metaData : [];
-          assertUniqueFields(fields);
-          resultSets.push({
-            rows: result.rows.map((row) => decodeRow(row, fields, policy, driver)),
-            source: { kind: "emitted", index: 0 },
-          });
-        }
-        value = { output, resultSets };
+          if (result.resultSet) {
+            resultSets.push({
+              rows: await readResultSet(result.resultSet, driver, policy),
+              source: { kind: "emitted", index: 0 },
+            });
+          } else if (Array.isArray(result.rows)) {
+            const fields = Array.isArray(result.metaData) ? result.metaData : [];
+            assertUniqueFields(fields);
+            resultSets.push({
+              rows: result.rows.map((row) => decodeRow(row, fields, policy, driver)),
+              source: { kind: "emitted", index: 0 },
+            });
+          }
+          value = { output, resultSets };
+        }, executionOptions);
       } catch (error) {
         failure = error;
       }
@@ -1088,16 +1250,21 @@ function makeOracledbExecutor(
       if (failure !== undefined) throw failure;
       return value!;
     },
-    async *stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncGenerator<Row> {
+    async *stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): AsyncGenerator<Row> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
-      signal?.throwIfAborted();
-      const result = executionResult(await connection.execute(execution.description.parameterizedSql!, execution.binds, executeOptions(options, driver, true)));
+      assertExecutionOptions(connection, executionOptions);
+      const signal = executionOptions?.signal;
+      const result = executionResult(await executeWithCancellation(
+        connection,
+        () => connection.execute(execution.description.parameterizedSql!, execution.binds, executeOptions(options, driver, true)),
+        executionOptions,
+      ));
       const resultSet = result.resultSet;
       if (!resultSet) {
         const implicit = Array.isArray(result.implicitResults) ? result.implicitResults : [];
         const cleanup = await closeAllResources(implicit);
         if (cleanup !== undefined) throw cleanup;
-        throw new Error("BRAID_STREAM_UNSUPPORTED: Oracle execute did not return a ResultSet.");
+        throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "Oracle execute did not return a ResultSet.");
       }
       const resources = [resultSet, ...(Array.isArray(result.implicitResults) ? result.implicitResults : [])];
       let closePromise: Promise<Error | undefined> | undefined;
@@ -1105,7 +1272,20 @@ function makeOracledbExecutor(
         if (closePromise === undefined) closePromise = closeAllResources(resources);
         return closePromise;
       };
-      const abort = (): void => { void close(); };
+      let breakFailure: unknown;
+      let breakPromise: Promise<void> | undefined;
+      const abort = (): void => {
+        void close();
+        if (breakPromise !== undefined) return;
+        try {
+          breakPromise = Promise.resolve(connection.break!()).catch((error) => {
+            breakFailure = error;
+          });
+        } catch (error) {
+          breakFailure = error;
+          breakPromise = Promise.resolve();
+        }
+      };
       let failure: unknown;
       signal?.addEventListener("abort", abort, { once: true });
       try {
@@ -1138,7 +1318,7 @@ function makeOracledbExecutor(
             yield decodeRow(row, fields, policy, driver) as Row;
           }
         } else {
-          throw new Error("BRAID_STREAM_UNSUPPORTED: Oracle ResultSet does not expose getRow or async iteration.");
+          throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "Oracle ResultSet does not expose getRow or async iteration.");
         }
       } catch (error) {
         failure = error;
@@ -1146,6 +1326,18 @@ function makeOracledbExecutor(
       } finally {
         signal?.removeEventListener("abort", abort);
         const earlyCleanup = await close();
+        if (breakPromise !== undefined) await breakPromise;
+        if (breakFailure !== undefined) {
+          const cleanup = cleanupError(failure, [breakFailure]);
+          if (cleanup !== undefined) throw cleanup;
+        }
+        if (signal?.aborted && failure !== undefined) {
+          if (earlyCleanup !== undefined) {
+            const failures = earlyCleanup instanceof AggregateError ? earlyCleanup.errors : [earlyCleanup];
+            throw cleanupError(signal.reason, failures);
+          }
+          throw signal.reason ?? failure;
+        }
         if (failure !== undefined && earlyCleanup !== undefined) {
           const failures = earlyCleanup instanceof AggregateError ? earlyCleanup.errors : [earlyCleanup];
           throw cleanupError(failure, failures);
@@ -1153,7 +1345,7 @@ function makeOracledbExecutor(
         if (earlyCleanup !== undefined) throw earlyCleanup;
       }
     },
-    begin: async () => undefined,
+    begin,
     commit: connection.commit.bind(connection),
     rollback: connection.rollback.bind(connection),
     savepoint: async (name) => { await control(`SAVEPOINT ${identifier(name)}`); },
@@ -1185,7 +1377,7 @@ export function createOracledbPoolProvider(pool: OraclePoolLike, options: Omit<O
     statementBinding: bindingAdapter,
     environment: (options.typePolicy === undefined || options.typePolicy === defaultTypePolicy) && (options.driver === undefined || options.driver === defaultDriver) && oracledb.thin
       ? oracleEnvironment
-      : { ...oracleEnvironment, driver: { id: "node-oracledb", profile: "custom" }, typePolicy: { id: (options.typePolicy ?? defaultTypePolicy).id, hash: (options.typePolicy ?? defaultTypePolicy).hash }, capabilities: {} },
+      : customOracleEnvironment(options.typePolicy ?? defaultTypePolicy, true),
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
       assertPoolConnection(connection);

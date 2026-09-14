@@ -97,12 +97,14 @@ test("SQLite WASM rejects row reads without initialized CAPI but keeps command-o
     () => db.all(sql.rows`SELECT ${1} AS value`),
     /BRAID_INTEGER_MODE_UNSUPPORTED/,
   );
+  const beforeStream = native.prepares;
   await assert.rejects(
     async () => {
       for await (const row of db.stream(sql.rows`SELECT ${1} AS value`)) void row;
     },
-    /BRAID_INTEGER_MODE_UNSUPPORTED/,
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_STREAM_UNSUPPORTED",
   );
+  assert.equal(native.prepares, beforeStream);
   assert.deepEqual(await db.execute(sql.command`UPDATE values_table SET value = ${1}`), {
     rows: [],
     rowCount: 1,

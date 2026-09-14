@@ -9,6 +9,7 @@ import * as v from "valibot";
 import { generateModels } from "@sqlbraid/codegen";
 import { hashSnapshot } from "@sqlbraid/metadata";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
+import { UnsupportedFeatureError } from "@sqlbraid/core";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";
 import { sql, typePolicy as sqliteTypePolicy } from "@sqlbraid/sqlite";
@@ -98,7 +99,9 @@ test("SQLite streams close native iteration on break, mapper failure and abort",
         assert.equal(row.value, 1);
         abort.abort(failure);
       }
-    }, (error) => error === failure);
+    }, (error) => error instanceof UnsupportedFeatureError
+      && error.feature === "statement.cancel"
+      && error.code === "BRAID_CANCEL_UNSUPPORTED");
     await db.tx(async (tx) => {
       assert.deepEqual(await tx.one(sql.rows`SELECT CAST(3 AS REAL) AS value`), { value: 3 });
     });

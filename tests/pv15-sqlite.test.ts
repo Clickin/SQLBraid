@@ -66,7 +66,7 @@ test("SQLite satisfies shared streaming lifecycle and releases only after iterat
       iteratorReturns: () => returns,
       close: () => native.close(),
     };
-  });
+  }, { cancellation: "unsupported" });
 });
 
 test("SQLite preserves read and cleanup errors and discards an uncertain lease", async () => {

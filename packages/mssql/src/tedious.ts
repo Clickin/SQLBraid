@@ -7,6 +7,7 @@ import type {
   DatabaseOptions,
   DriverRoutineResult,
   DriverEnvironment,
+  ExecutionOptions,
   BulkBindingDescription,
   BulkExecutionResult,
   ParameterTypeHint,
@@ -17,9 +18,10 @@ import type {
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
+  TransactionOptions,
   TypePolicy,
 } from "@sqlbraid/core";
-import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
+import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription, UnsupportedFeatureError } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -140,7 +142,7 @@ function canonicalType(value: string): string {
 function typeForHint(hint: ParameterTypeHint): DatabaseType {
   const value = canonicalType(hint.databaseType);
   if (value === "cursor" || value === "cursorvarying" || value === "refcursor") {
-    throw new Error("BRAID_CALL_CURSOR_UNSUPPORTED: SQL Server cursor output parameters are not application result cursors.");
+    throw new UnsupportedFeatureError("routine.out-cursor", "BRAID_CALL_CURSOR_UNSUPPORTED", "SQL Server cursor output parameters are not application result cursors.");
   }
   const aliases: Readonly<Record<string, DatabaseType>> = {
     tinyint: "tinyint",
@@ -267,6 +269,28 @@ function assertDirectConnection(connection: TediousConnectionLike): void {
   ) {
     throw new TypeError("SQLBraid SQL Server direct adapter requires a physical Tedious Connection, not a pool.");
   }
+}
+
+function assertExecutionOptions(options?: ExecutionOptions): void {
+  const signal = options?.signal;
+  if (signal?.aborted) throw signal.reason ?? new Error("Execution aborted.");
+}
+
+function unsupportedTransactionOption(option: string): never {
+  const feature = option === "readOnly" ? "transaction.read-only" : `transaction.isolation.${option}`;
+  throw new UnsupportedFeatureError(
+    feature,
+    "BRAID_TX_OPTION_UNSUPPORTED",
+    option === "readOnly"
+      ? "Tedious does not expose a read-only transaction option."
+      : `Tedious does not expose transaction isolation ${option}.`,
+  );
+}
+
+function invalidTransactionOptions(message: string): never {
+  const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: ${message}`);
+  Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+  throw error;
 }
 
 function asError(error: unknown): unknown {
@@ -639,7 +663,9 @@ function collect(
   parameters: readonly TediousMaterializedParameter[],
   policy: TypePolicy,
   routineProcedure?: { readonly name: string; readonly parameterNames: readonly string[] },
+  options?: ExecutionOptions,
 ): Promise<CollectedResult> {
+  assertExecutionOptions(options);
   return new Promise<CollectedResult>((resolve, reject) => {
     let request: TediousRequestLike | undefined;
     let callbackError: unknown;
@@ -649,6 +675,7 @@ function collect(
     let settled = false;
     let started = false;
     let cancellationRequested = false;
+    const signal = options?.signal;
     let current: ResultSetState | undefined;
     const resultSets: ResultSetState[] = [];
     const output: Record<string, unknown> = {};
@@ -678,6 +705,7 @@ function collect(
     const finish = (): void => {
       if (!completed || settled) return;
       settled = true;
+      signal?.removeEventListener("abort", onAbort);
       const error = asError(eventError ?? callbackError);
       if (error !== undefined) {
         reject(cleanupFailure === undefined ? error : resourceCleanupError(error, [cleanupFailure]));
@@ -708,6 +736,9 @@ function collect(
         outputSeen,
         ...(routineProcedure === undefined || procedureReturnValue === undefined ? {} : { returnValue: procedureReturnValue }),
       });
+    };
+    const onAbort = (): void => {
+      fail(signal?.reason ?? new Error("SQL Server request aborted."));
     };
     try {
       const requestParameters = routineProcedure === undefined
@@ -790,10 +821,17 @@ function collect(
       });
       request.on("error", (error: unknown) => { fail(error); });
       request.on("requestCompleted", () => { completed = true; finish(); });
+      signal?.addEventListener("abort", onAbort, { once: true });
       for (const parameter of requestParameters) addParameter(request, parameter);
       started = true;
+      if (signal?.aborted) {
+        fail(signal.reason ?? new Error("SQL Server request aborted."));
+        return;
+      }
       if (routineProcedure !== undefined) {
-        if (typeof connection.callProcedure !== "function") throw new Error("BRAID_CALL_RETURN_UNSUPPORTED: Tedious connection does not expose callProcedure().");
+        if (typeof connection.callProcedure !== "function") {
+          throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_RETURN_UNSUPPORTED", "Tedious connection does not expose callProcedure().");
+        }
         connection.callProcedure(request);
       } else {
         connection.execSql(request);
@@ -805,7 +843,12 @@ function collect(
   });
 }
 
-function control(connection: TediousConnectionLike, method: "beginTransaction" | "commitTransaction" | "rollbackTransaction" | "saveTransaction", name?: string): Promise<void> {
+function control(
+  connection: TediousConnectionLike,
+  method: "beginTransaction" | "commitTransaction" | "rollbackTransaction" | "saveTransaction",
+  name?: string,
+  isolationLevel?: number,
+): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     try {
       const callback = (error?: unknown): void => {
@@ -814,7 +857,7 @@ function control(connection: TediousConnectionLike, method: "beginTransaction" |
         else reject(normalized);
       };
       if (method === "saveTransaction") connection.saveTransaction(callback, name);
-      else if (method === "beginTransaction") connection.beginTransaction(callback, name, ISOLATION_LEVEL.NO_CHANGE);
+      else if (method === "beginTransaction") connection.beginTransaction(callback, name, isolationLevel);
       else connection[method](callback);
     } catch (error) {
       reject(error);
@@ -834,9 +877,11 @@ function rollbackTo(connection: TediousConnectionLike, name: string): Promise<vo
 }
 
 function rowResult(result: CollectedResult): QueryExecutionResult<Record<string, unknown>> {
-  if (result.resultSets.length > 1) throw new Error("BRAID_RESULT_SETS_UNSUPPORTED: SQL Server returned multiple result sets; use database.call().");
+  if (result.resultSets.length > 1) {
+    throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "SQL Server returned multiple result sets; use database.call().");
+  }
   if (result.resultSets.length === 1 && result.statementCount > 1) {
-    throw new Error("BRAID_RESULT_SETS_UNSUPPORTED: SQL Server returned rows and additional statement results; use database.call().");
+    throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "SQL Server returned rows and additional statement results; use database.call().");
   }
   if (result.resultSets.length === 1) {
     return { kind: "rows", rows: result.resultSets[0].rows, rowCount: result.resultSets[0].rows.length };
@@ -847,10 +892,10 @@ function rowResult(result: CollectedResult): QueryExecutionResult<Record<string,
 function assertNativeProcedureStatement(rendered: RenderedStatement): void {
   if (rendered.routineProcedure === undefined) return;
   if (rendered.routineProcedure.parameterNames.length !== rendered.parameters.length) {
-    throw new Error("BRAID_CALL_RETURN_UNSUPPORTED: native procedure parameterNames must match the rendered parameter count.");
+    throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_RETURN_UNSUPPORTED", "native procedure parameterNames must match the rendered parameter count.");
   }
   if (rendered.segments.some((segment) => !/^[\s,]*$/u.test(segment))) {
-    throw new Error("BRAID_CALL_RETURN_UNSUPPORTED: native procedure calls cannot include authored SQL text; use only argument placeholders separated by commas.");
+    throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_RETURN_UNSUPPORTED", "native procedure calls cannot include authored SQL text; use only argument placeholders separated by commas.");
   }
 }
 
@@ -1057,6 +1102,24 @@ const tediousEnvironment = Object.freeze<DriverEnvironment>({
       rawRepresentations: ["Date", "string"],
       conditionCode: "mssql.temporal-text-cast-required",
     },
+    "session.pinned": { status: "guaranteed" },
+    "transaction": { status: "guaranteed" },
+    "transaction.savepoint": { status: "guaranteed" },
+    "transaction.read-only": { status: "unsupported" },
+    "transaction.isolation.read-uncommitted": { status: "guaranteed" },
+    "transaction.isolation.read-committed": { status: "guaranteed" },
+    "transaction.isolation.repeatable-read": { status: "guaranteed" },
+    "transaction.isolation.serializable": { status: "guaranteed" },
+    "statement.prepare": { status: "guaranteed" },
+    "statement.cancel": { status: "guaranteed" },
+    "statement.stream": { status: "guaranteed" },
+    "statement.bulk": { status: "guaranteed" },
+    "routine.call": { status: "guaranteed" },
+    "routine.out": { status: "guaranteed" },
+    "routine.inout": { status: "guaranteed" },
+    "routine.return-value": { status: "guaranteed" },
+    "routine.result-sets": { status: "guaranteed" },
+    "routine.out-cursor": { status: "unsupported" },
   },
   probe: {
     statement: createRenderedStatement({
@@ -1081,29 +1144,80 @@ function prepareRequest(
   connection: TediousConnectionLike,
   sql: string,
   parameters: readonly TediousMaterializedParameter[],
+  options?: ExecutionOptions,
 ): Promise<TediousPreparedRequest> {
+  assertExecutionOptions(options);
   if (typeof connection.prepare !== "function" || typeof connection.execute !== "function" || typeof connection.unprepare !== "function") {
-    return Promise.reject(new Error("BRAID_BULK_UNSUPPORTED: Tedious connection does not expose prepare/execute/unprepare()."));
+    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_BULK_UNSUPPORTED", "Tedious connection does not expose prepare/execute/unprepare()."));
   }
   const prepare = connection.prepare;
   return new Promise((resolve, reject) => {
     let settled = false;
+    let cancellationRequested = false;
+    let cancellationFailure: unknown;
+    let completionError: unknown;
+    let drained = false;
     let completionCallback: TediousRequestCompletionCallback | undefined;
-    const request = new Request(sql, ((error: unknown, rowCount?: number) => {
+    const signal = options?.signal;
+    const removeListeners = (request: TediousPreparedRequest["request"]): void => {
+      signal?.removeEventListener("abort", onAbort);
+      request.removeListener?.("prepared", prepared);
+      request.removeListener?.("error", failed);
+      request.removeListener?.("requestCompleted", completed);
+    };
+    const settleCancellation = (request: TediousPreparedRequest["request"]): void => {
+      if (settled || !cancellationRequested || !drained) return;
+      settled = true;
+      removeListeners(request);
+      if (cancellationFailure !== undefined) {
+        reject(resourceCleanupError(signal?.reason, [cancellationFailure]));
+      } else {
+        reject(signal?.reason ?? completionError ?? new Error("SQL Server request aborted."));
+      }
+    };
+    let request!: TediousPreparedRequest["request"];
+    request = new Request(sql, ((error: unknown, rowCount?: number) => {
+      completionError = error;
+      drained = true;
       completionCallback?.(error, rowCount);
+      if (cancellationRequested) settleCancellation(request);
+      else prepared(error);
     })) as unknown as TediousPreparedRequest["request"];
+    if (signal !== undefined && typeof request.cancel !== "function") {
+      reject(new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "Tedious prepare Request does not expose cancel()."));
+      return;
+    }
+    const cancel = (): void => {
+      if (settled || cancellationRequested) return;
+      cancellationRequested = true;
+      try {
+        request.cancel?.();
+      } catch (error) {
+        cancellationFailure = error;
+        settled = true;
+        removeListeners(request);
+        reject(resourceCleanupError(signal?.reason, [error]));
+        return;
+      }
+      settleCancellation(request);
+    };
+    const onAbort = (): void => { cancel(); };
     const prepared = (error?: unknown): void => {
+      completionError = error;
+      drained = true;
+      if (cancellationRequested) {
+        settleCancellation(request);
+        return;
+      }
       if (settled) return;
       if (error !== undefined && error !== null) {
         settled = true;
-        request.removeListener?.("prepared", prepared);
-        request.removeListener?.("error", failed);
+        removeListeners(request);
         reject(error);
         return;
       }
       settled = true;
-      request.removeListener?.("prepared", prepared);
-      request.removeListener?.("error", failed);
+      removeListeners(request);
       resolve({
         request,
         parameters,
@@ -1113,16 +1227,29 @@ function prepareRequest(
       });
     };
     const failed = (error: unknown): void => {
+      completionError = error;
+      if (cancellationRequested) return;
       if (settled) return;
       settled = true;
-      request.removeListener?.("prepared", prepared);
-      request.removeListener?.("error", failed);
-      reject(asError(error) ?? new Error("SQL Server prepare failed."));
+      removeListeners(request);
+      reject(error);
+    };
+    const completed = (): void => {
+      drained = true;
+      settleCancellation(request);
     };
     request.on("prepared", prepared);
     request.on("error", failed);
+    request.on("requestCompleted", completed);
+    signal?.addEventListener("abort", onAbort, { once: true });
     try {
       for (const parameter of parameters) request.addParameter(parameter.name, parameter.type, undefined, parameter.options);
+      if (signal?.aborted) {
+        settled = true;
+        removeListeners(request);
+        reject(signal.reason ?? new Error("SQL Server request aborted."));
+        return;
+      }
       prepare.call(connection, request);
     } catch (error) {
       failed(error);
@@ -1134,8 +1261,20 @@ function executePrepared(
   connection: TediousConnectionLike,
   prepared: TediousPreparedRequest,
   parameters: readonly TediousMaterializedParameter[],
+  options?: ExecutionOptions,
 ): Promise<number | undefined> {
-  if (typeof connection.execute !== "function") return Promise.reject(new Error("BRAID_BULK_UNSUPPORTED: Tedious connection does not expose execute()."));
+  assertExecutionOptions(options);
+  if (typeof connection.execute !== "function") {
+    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_BULK_UNSUPPORTED", "Tedious connection does not expose execute()."));
+  }
+  const signal = options?.signal;
+  if (signal !== undefined && typeof prepared.request.cancel !== "function") {
+    return Promise.reject(new UnsupportedFeatureError(
+      "statement.cancel",
+      "BRAID_CANCEL_UNSUPPORTED",
+      "Tedious prepared Request does not expose cancel().",
+    ));
+  }
   const execute = connection.execute;
   const values = Object.fromEntries(parameters.map((parameter) => [parameter.name, parameter.value]));
   return new Promise((resolve, reject) => {
@@ -1145,6 +1284,7 @@ function executePrepared(
     let eventError: unknown;
     let callbackRowCount: number | undefined;
     let rowBearing = false;
+    let aborted = false;
     const doneRows: number[] = [];
     const doneInProcRows: number[] = [];
     const doneProcRows: number[] = [];
@@ -1163,6 +1303,7 @@ function executePrepared(
     const finish = (): void => {
       if (settled || !completed) return;
       settled = true;
+      signal?.removeEventListener("abort", onAbort);
       prepared.setCompletionCallback(undefined);
       prepared.request.removeListener?.("error", failed);
       prepared.request.removeListener?.("requestCompleted", complete);
@@ -1171,8 +1312,9 @@ function executePrepared(
       prepared.request.removeListener?.("done", markDoneRows);
       prepared.request.removeListener?.("doneInProc", markDoneInProcRows);
       prepared.request.removeListener?.("doneProc", markDoneProcRows);
-      const error = asError(callbackError ?? eventError);
+      const error = asError(eventError ?? callbackError);
       if (error !== undefined && error !== null) reject(error);
+      else if (aborted) reject(signal?.reason ?? new Error("SQL Server request aborted."));
       else if (rowBearing) reject(new Error("BRAID_BULK_RESULT_KIND: SQL Server bulk command returned rows."));
       else {
         const counts = doneInProcRows.length > 0 ? doneInProcRows : doneRows.length > 0 ? doneRows : doneProcRows;
@@ -1202,6 +1344,14 @@ function executePrepared(
       eventError = error;
       finish();
     };
+    const onAbort = (): void => {
+      aborted = true;
+      try {
+        prepared.request.cancel?.();
+      } catch (error) {
+        eventError = eventError ?? resourceCleanupError(signal?.reason, [error]);
+      }
+    };
     prepared.request.on("columnMetadata", markRows);
     prepared.request.on("row", markRows);
     prepared.request.on("done", markDoneRows);
@@ -1210,8 +1360,16 @@ function executePrepared(
     prepared.request.on("error", failed);
     if (typeof prepared.request.once === "function") prepared.request.once("requestCompleted", complete);
     else prepared.request.on("requestCompleted", complete);
+    signal?.addEventListener("abort", onAbort, { once: true });
     prepared.setCompletionCallback(callback);
     try {
+      if (signal?.aborted) {
+        onAbort();
+        completed = true;
+        callbackError = signal.reason ?? new Error("SQL Server request aborted.");
+        finish();
+        return;
+      }
       execute.call(connection, prepared.request, values);
     } catch (error) {
       callbackError ??= error;
@@ -1222,7 +1380,9 @@ function executePrepared(
 }
 
 function unprepareRequest(connection: TediousConnectionLike, prepared: TediousPreparedRequest): Promise<void> {
-  if (typeof connection.unprepare !== "function") return Promise.reject(new Error("BRAID_BULK_UNSUPPORTED: Tedious connection does not expose unprepare()."));
+  if (typeof connection.unprepare !== "function") {
+    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_BULK_UNSUPPORTED", "Tedious connection does not expose unprepare()."));
+  }
   const unprepare = connection.unprepare;
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -1274,31 +1434,62 @@ function makeTediousExecutor(
 ): QueryExecutor {
   const policy = options.typePolicy ?? defaultTypePolicy;
   const maxBufferedRows = options.maxBufferedRows ?? DEFAULT_MAX_BUFFERED_ROWS;
+  const begin = async (transactionOptions?: TransactionOptions): Promise<void> => {
+    if (
+      transactionOptions !== undefined
+      && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
+    ) {
+      invalidTransactionOptions("Tedious transaction options must be an object.");
+    }
+    if (transactionOptions !== undefined) {
+      const unexpected = Object.keys(transactionOptions).find((key) => key !== "isolation" && key !== "readOnly");
+      if (unexpected !== undefined) invalidTransactionOptions(`Unknown Tedious transaction option: ${unexpected}.`);
+    }
+    if (transactionOptions?.isolation !== undefined
+      && transactionOptions.isolation !== "read-uncommitted"
+      && transactionOptions.isolation !== "read-committed"
+      && transactionOptions.isolation !== "repeatable-read"
+      && transactionOptions.isolation !== "serializable") {
+      invalidTransactionOptions(`Tedious does not recognize transaction isolation ${String(transactionOptions.isolation)}.`);
+    }
+    if (transactionOptions?.readOnly !== undefined && typeof transactionOptions.readOnly !== "boolean") {
+      invalidTransactionOptions("Tedious readOnly must be a boolean.");
+    }
+    if (transactionOptions?.readOnly !== undefined) unsupportedTransactionOption("readOnly");
+    const isolation = transactionOptions?.isolation;
+    const isolationLevel = isolation === undefined ? ISOLATION_LEVEL.NO_CHANGE
+      : isolation === "read-uncommitted" ? ISOLATION_LEVEL.READ_UNCOMMITTED
+        : isolation === "read-committed" ? ISOLATION_LEVEL.READ_COMMITTED
+          : isolation === "repeatable-read" ? ISOLATION_LEVEL.REPEATABLE_READ
+            : ISOLATION_LEVEL.SERIALIZABLE;
+    await control(connection, "beginTransaction", undefined, isolationLevel);
+  };
   return {
     ownershipKey: connection,
     statementBinding: bindingAdapter,
     environment: policy === defaultTypePolicy
       ? tediousEnvironment
       : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, typePolicy: { id: policy.id, hash: policy.hash }, capabilities: {} },
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
-      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy);
+      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy, undefined, executionOptions);
       if (result.outputSeen) throw new Error("BRAID_CALL_OUT_UNSUPPORTED: SQL Server output parameters are not implemented.");
       return rowResult(result) as QueryExecutionResult<Row>;
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
+    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, executionOptions?: ExecutionOptions): Promise<BulkExecutionResult> {
+      assertExecutionOptions(executionOptions);
       const parameters = bindingAdapter.materializedBulkParameters(bulk, binding);
       if (parameters === undefined) {
         throw new TypeError("SQLBraid Tedious executor received a bulk binding description not produced by its adapter.");
       }
       if (binding.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: SQL Server bulk binding did not provide parameterized SQL.");
-      const prepared = await prepareRequest(connection, binding.parameterizedSql, parameters[0] ?? []);
+      const prepared = await prepareRequest(connection, binding.parameterizedSql, parameters[0] ?? [], executionOptions);
       let failure: unknown;
       let affectedRows = 0;
       let affectedKnown = true;
       try {
         for (const row of parameters) {
-          const rowCount = await executePrepared(connection, prepared, row);
+          const rowCount = await executePrepared(connection, prepared, row, executionOptions);
           if (typeof rowCount === "number") {
             affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount(rowCount));
           }
@@ -1319,14 +1510,15 @@ function makeTediousExecutor(
         executionMode: "prepared-loop",
       };
     },
-    stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncIterable<Row> {
+    stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): AsyncIterable<Row> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
-      return streamRows(connection, execution.description.parameterizedSql!, execution.parameters, policy, maxBufferedRows, signal) as AsyncIterable<Row>;
+      assertExecutionOptions(executionOptions);
+      return streamRows(connection, execution.description.parameterizedSql!, execution.parameters, policy, maxBufferedRows, executionOptions?.signal) as AsyncIterable<Row>;
     },
-    async call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
+    async call(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<DriverRoutineResult> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
       assertNativeProcedureStatement(rendered);
-      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy, rendered.routineProcedure);
+      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy, rendered.routineProcedure, executionOptions);
       return {
         output: result.output,
         ...(result.returnValue === undefined ? {} : { returnValue: result.returnValue }),
@@ -1336,7 +1528,7 @@ function makeTediousExecutor(
         })),
       };
     },
-    begin: () => control(connection, "beginTransaction"),
+    begin,
     commit: () => control(connection, "commitTransaction"),
     rollback: () => control(connection, "rollbackTransaction"),
     savepoint: (name) => control(connection, "saveTransaction", name),
@@ -1379,9 +1571,18 @@ export function createTediousPoolProvider(pool: TediousPoolLike, options: Tediou
           if (released) return;
           released = true;
           if (releaseOptions.discard === true) {
-            if (typeof connection.destroy === "function") await connection.destroy();
-            else if (typeof connection.close === "function") await connection.close();
-            else await connection.release();
+            try {
+              if (typeof connection.destroy === "function") await connection.destroy();
+              else if (typeof connection.close === "function") await connection.close();
+              else {
+                const error = new Error("BRAID_RESOURCE_CLEANUP: SQL Server pool connection cannot be discarded safely.");
+                Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
+                throw error;
+              }
+            } catch (error) {
+              if ((error as { readonly code?: unknown }).code === "BRAID_RESOURCE_CLEANUP") throw error;
+              throw resourceCleanupError(undefined, [error]);
+            }
           } else {
             await connection.release();
           }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { UnsupportedFeatureError } from "@sqlbraid/core";
 import type { Mysql2ConnectionLike, Mysql2FieldLike, Mysql2PoolConnectionLike, Mysql2RawCommandLike, Mysql2RawConnectionLike, Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
 import { createMysql2Executor, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
 import type { PgClientLike, PgCursorFactory, PgCursorLike, PgPoolClientLike, PgResultLike } from "@sqlbraid/postgres/pg";
@@ -20,6 +21,26 @@ class Cursor implements PgCursorLike {
 }
 
 const cursorFactory = Cursor as unknown as PgCursorFactory;
+
+test("PostgreSQL OUT parameters are rejected outside calls before driver I/O", async () => {
+  let queryCalls = 0;
+  const client: PgClientLike = {
+    async query() {
+      queryCalls += 1;
+      return { rows: [], fields: [] };
+    },
+    escapeIdentifier: (value) => `"${value}"`,
+    escapeLiteral: (value) => `'${value}'`,
+  };
+  const executor = createPgExecutor(client);
+  await assert.rejects(
+    () => executor.query(pgSql.rows`SELECT ${pgSql.out("value")}`.render()),
+    (error: unknown) => error instanceof UnsupportedFeatureError
+      && error.feature === "routine.out"
+      && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
+  );
+  assert.equal(queryCalls, 0);
+});
 
 test("PostgreSQL abort interrupts a pending read and waits for physical termination before discard", async () => {
   const reading = Promise.withResolvers<void>();

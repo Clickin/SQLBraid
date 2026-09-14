@@ -441,3 +441,144 @@ test("mssql.dml.insert-returning", { timeout: 30_000 }, async () => {
     await close(connection);
   }
 });
+
+test("rc.mssql.session", { timeout: 30_000 }, async () => {
+  const connection = await connect(inject("mssql") as MssqlSettings);
+  const db = createTediousDatabase(connection);
+  let scoped: ReturnType<typeof createTediousDatabase> | undefined;
+  try {
+    const environment = await db.environment();
+    for (const capability of [
+      "session.pinned",
+      "transaction",
+      "transaction.savepoint",
+      "transaction.read-only",
+      "statement.prepare",
+      "statement.cancel",
+      "statement.stream",
+      "statement.bulk",
+      "routine.call",
+      "routine.out",
+      "routine.inout",
+      "routine.return-value",
+      "routine.result-sets",
+      "routine.out-cursor",
+    ]) assert.ok(environment.capabilities[capability]);
+    await db.session(async (session) => {
+      scoped = session;
+      const first = await session.one(sql.rows<{ readonly spid: string }>`SELECT @@SPID AS spid`);
+      const second = await session.one(sql.rows<{ readonly spid: string }>`SELECT @@SPID AS spid`);
+      assert.equal(first.spid, second.spid);
+    });
+    await assert.rejects(
+      () => scoped!.execute(sql`SELECT 1`),
+      (error: unknown) => (error as { readonly code?: string }).code === "BRAID_SESSION_CLOSED",
+    );
+  } finally {
+    await close(connection);
+  }
+});
+
+test("rc.mssql.prepare", { timeout: 30_000 }, async () => {
+  const connection = await connect(inject("mssql") as MssqlSettings);
+  const db = createTediousDatabase(connection);
+  try {
+    await db.execute(sql.command`DROP TABLE IF EXISTS dbo.braid_rc_mssql_prepare`);
+    await db.execute(sql.command`CREATE TABLE dbo.braid_rc_mssql_prepare (value int NOT NULL)`);
+    await db.execute(sql.command`
+      CREATE OR ALTER PROCEDURE dbo.braid_rc_mssql_call
+        @value int,
+        @answer int OUTPUT
+      AS
+      BEGIN
+        SET NOCOUNT ON;
+        SET @answer = @answer + @value;
+      END
+    `);
+    const row = db.prepare(
+      "rc-mssql-row",
+      (value: number) => sql.rows<{ readonly spid: string; readonly value: string }>`
+        SELECT @@SPID AS spid, ${value} AS value
+      `,
+    );
+    const first = await row.one(7);
+    const second = await row.one(11);
+    assert.equal(first.value, "7");
+    assert.equal(second.value, "11");
+    assert.equal(first.spid, second.spid);
+
+    const command = db.prepare(
+      "rc-mssql-command",
+      (value: number) => sql.command`INSERT INTO dbo.braid_rc_mssql_prepare (value) VALUES (${value})`,
+    );
+    await command.execute(1);
+    await command.execute(2);
+    assert.deepEqual(
+      await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM dbo.braid_rc_mssql_prepare ORDER BY value`),
+      [{ value: "1" }, { value: "2" }],
+    );
+
+    const call = db.prepare(
+      "rc-mssql-call",
+      (value: number) => sql.call({ procedure: { name: "dbo.braid_rc_mssql_call", parameterNames: ["value", "answer"] } })`
+        ${value}, ${sql.inOut("answer", 1, mssqlParameter.int())}
+      `,
+    );
+    assert.deepEqual((await call.call(41)).output, { answer: "42" });
+  } finally {
+    await db.execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_rc_mssql_call`).catch(() => undefined);
+    await db.execute(sql`DROP TABLE IF EXISTS dbo.braid_rc_mssql_prepare`).catch(() => undefined);
+    await close(connection);
+  }
+});
+
+test("rc.mssql.transaction-options", { timeout: 30_000 }, async () => {
+  const connection = await connect(inject("mssql") as MssqlSettings);
+  const db = createTediousDatabase(connection);
+  try {
+    for (const [isolation, expected] of [
+      ["read-uncommitted", "1"],
+      ["read-committed", "2"],
+      ["repeatable-read", "3"],
+      ["serializable", "4"],
+    ] as const) {
+      await db.tx({ isolation }, async (tx) => {
+        const row = await tx.one(sql.rows<{ readonly level: string }>`
+          SELECT transaction_isolation_level AS level
+          FROM sys.dm_exec_sessions
+          WHERE session_id = @@SPID
+        `);
+        assert.equal(row.level, expected);
+      });
+    }
+    await assert.rejects(
+      () => db.tx({ readOnly: true }, async () => undefined),
+      (error: unknown) => (error as { readonly code?: string }).code === "BRAID_TX_OPTION_UNSUPPORTED",
+    );
+  } finally {
+    await close(connection);
+  }
+});
+
+test("rc.mssql.cancel", { timeout: 30_000 }, async () => {
+  const connection = await connect(inject("mssql") as MssqlSettings);
+  const db = createTediousDatabase(connection);
+  try {
+    const alreadyAborted = new AbortController();
+    const reason = new Error("rc.mssql.already-aborted");
+    alreadyAborted.abort(reason);
+    await assert.rejects(
+      () => db.execute(sql.command`WAITFOR DELAY '00:00:10'`, { signal: alreadyAborted.signal }),
+      (error: unknown) => error === reason,
+    );
+
+    const controller = new AbortController();
+    const pending = db.execute(sql.command`WAITFOR DELAY '00:01:00'`, { signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    controller.abort(new Error("rc.mssql.cancelled"));
+    await assert.rejects(pending);
+    assert.equal((await db.one(sql.rows<{ readonly value: string }>`SELECT @@SPID AS value`)).value.length > 0, true);
+  } finally {
+    await close(connection);
+  }
+});

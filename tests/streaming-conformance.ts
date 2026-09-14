@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { UnsupportedFeatureError } from "@sqlbraid/core";
 import type { Database, RowQuery } from "@sqlbraid/core";
 
 export interface StreamingConformanceFixture<Row> {
@@ -15,6 +16,7 @@ export interface StreamingConformanceFixture<Row> {
 
 export interface StreamingConformanceOptions {
   readonly abortError?: unknown;
+  readonly cancellation?: "supported" | "unsupported";
 }
 
 function containsError(error: unknown, expected: unknown): boolean {
@@ -98,8 +100,10 @@ export async function runStreamingConformance<Row>(
         void row;
         controller.abort(abortError);
       }
-    }, (error: unknown) => containsError(error, abortError));
-  }, 1);
+    }, (error: unknown) => options.cancellation === "unsupported"
+      ? error instanceof UnsupportedFeatureError && error.feature === "statement.cancel"
+      : containsError(error, abortError));
+  }, options.cancellation === "unsupported" ? 0 : 1);
 
   await runScenario(create, async ({ db, query }) => {
     for await (const row of db.stream(query)) {

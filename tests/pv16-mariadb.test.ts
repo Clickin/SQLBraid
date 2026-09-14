@@ -6,7 +6,7 @@ import type {
   MariaDbStreamLike,
 } from "@sqlbraid/mariadb/mariadb";
 import type { RenderedBulk } from "@sqlbraid/core";
-import { createMariaDbExecutor, mariaDbStatementBinding } from "@sqlbraid/mariadb/mariadb";
+import { createMariaDbExecutor, createMariaDbPoolProvider, mariaDbStatementBinding } from "@sqlbraid/mariadb/mariadb";
 import { createMariaDbInspector } from "@sqlbraid/mariadb/inspector";
 import { sql } from "@sqlbraid/mariadb";
 
@@ -45,6 +45,42 @@ test("MariaDB adapter uses metadata to distinguish row and command results", asy
     rowCount: 2,
     command: { affectedRows: 2, insertId: "9", warningStatus: 1 },
   });
+});
+
+test("MariaDB pool discard never releases a poisoned connection", async () => {
+  let releases = 0;
+  const connection = {
+    ...connectionFor(undefined),
+    release() { releases += 1; },
+  };
+  const provider = createMariaDbPoolProvider({ getConnection: async () => connection });
+  const lease = await provider.acquire();
+  await assert.rejects(
+    async () => lease.release({ discard: true }),
+    (error: unknown) => (error as { readonly code?: string }).code === "BRAID_RESOURCE_CLEANUP",
+  );
+  assert.equal(releases, 0);
+});
+
+test("MariaDB validates transaction options before beginTransaction", async () => {
+  let begins = 0;
+  const executor = createMariaDbExecutor({
+    ...connectionFor(undefined),
+    beginTransaction: async () => { begins += 1; },
+  });
+  await assert.rejects(
+    () => executor.begin!({ isolation: "invalid" as never }),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  await assert.rejects(
+    () => executor.begin!({ readOnly: "yes" as never }),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  await assert.rejects(
+    () => executor.begin!({ unsupported: true } as never),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  assert.equal(begins, 0);
 });
 
 test("MariaDB adapter rejects ordinary multi-result queries but exposes CALL sets", async () => {
@@ -202,4 +238,39 @@ test("MariaDB inspector emits first-party metadata identities and rejects non-Ma
       : [],
   };
   await assert.rejects(() => createMariaDbInspector(wrongProduct).inspect(), /MARIADB_PRODUCT_UNSUPPORTED/u);
+});
+
+test("MariaDB validates transaction options before control SQL", async () => {
+  let executions = 0;
+  const connection = connectionFor(undefined);
+  connection.execute = async () => {
+    executions += 1;
+    return [];
+  };
+  const executor = createMariaDbExecutor(connection);
+  await assert.rejects(
+    () => executor.begin!({ isolation: "invalid" as never }),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  await assert.rejects(
+    () => executor.begin!({ readOnly: "yes" as never }),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  assert.equal(executions, 0);
+});
+
+test("MariaDB rejects active cancellation before execution without destroy support", async () => {
+  let executions = 0;
+  const connection = connectionFor(undefined);
+  connection.execute = async () => {
+    executions += 1;
+    return [];
+  };
+  const executor = createMariaDbExecutor(connection);
+  const controller = new AbortController();
+  await assert.rejects(
+    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: controller.signal }),
+    (error: unknown) => (error as { readonly code?: string }).code === "BRAID_CANCEL_UNSUPPORTED",
+  );
+  assert.equal(executions, 0);
 });

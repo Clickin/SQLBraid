@@ -6,6 +6,7 @@ import type {
   DatabaseOptions,
   DriverRoutineResult,
   DriverEnvironment,
+  ExecutionOptions,
   QueryExecutor,
   QueryExecutionResult,
   RenderedBulk,
@@ -13,6 +14,7 @@ import type {
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
+  TransactionOptions,
   TypePolicy,
 } from "@sqlbraid/core";
 import {
@@ -22,6 +24,7 @@ import {
   ResultExactnessError,
   normalizeExactInteger,
   safeDatabaseCount,
+  UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import {
@@ -149,6 +152,59 @@ function assertMariaDbConnection(connection: MariaDbConnectionLike): void {
   }
 }
 
+function assertExecutionOptions(connection: MariaDbConnectionLike, options?: ExecutionOptions): void {
+  const signal = options?.signal;
+  if (signal?.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  if (signal !== undefined && typeof connection.destroy !== "function") {
+    throw new UnsupportedFeatureError(
+      "statement.cancel",
+      "BRAID_CANCEL_UNSUPPORTED",
+      "MariaDB Connector/Node.js connection does not expose the documented destroy() cancellation primitive.",
+    );
+  }
+}
+
+async function executeWithCancellation<T>(
+  connection: MariaDbConnectionLike,
+  operation: () => Promise<T>,
+  options?: ExecutionOptions,
+): Promise<T> {
+  assertExecutionOptions(connection, options);
+  const signal = options?.signal;
+  if (signal === undefined) return operation();
+  let aborted = false;
+  let destroyFailure: unknown;
+  const onAbort = (): void => {
+    if (aborted) return;
+    aborted = true;
+    try {
+      connection.destroy!();
+    } catch (error) {
+      destroyFailure = error;
+    }
+  };
+  signal.addEventListener("abort", onAbort, { once: true });
+  try {
+    const result = await operation();
+    if (destroyFailure !== undefined) {
+      const cleanup = cleanupError("MariaDB cancellation cleanup failed.", destroyFailure);
+      throw cleanup;
+    }
+    if (aborted) throw cleanupError("MariaDB cancellation discarded the physical connection.", signal.reason ?? new Error("Execution aborted."));
+    return result;
+  } catch (error) {
+    if (destroyFailure !== undefined) {
+      throw cleanupAggregate([error, cleanupError("MariaDB cancellation cleanup failed.", destroyFailure)], "MariaDB cancellation cleanup failed.", error);
+    }
+    if (aborted) {
+      throw cleanupError("MariaDB cancellation discarded the physical connection.", signal.reason ?? error);
+    }
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
+}
+
 function cleanupError(message: string, cause?: unknown): Error & { readonly code: string } {
   const error = new Error(message, cause === undefined ? undefined : { cause }) as Error & { readonly code: string };
   Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
@@ -253,9 +309,13 @@ function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
 }
 
 function assertRoutineOutputsUnsupported(rendered: RenderedStatement): void {
-  if (rendered.parameters.some((parameter) => parameter.direction !== undefined && parameter.direction !== "in")) {
-    throw new Error("BRAID_CALL_OUT_UNSUPPORTED: MariaDB Connector/Node.js does not expose a proven public OUT/INOUT carrier discriminator.");
-  }
+  const direction = rendered.parameters.find((parameter) => parameter.direction !== undefined && parameter.direction !== "in")?.direction;
+  if (direction === undefined) return;
+  throw new UnsupportedFeatureError(
+    direction === "inout" ? "routine.inout" : "routine.out",
+    "BRAID_CALL_OUT_UNSUPPORTED",
+    "MariaDB Connector/Node.js does not expose a proven public OUT/INOUT carrier discriminator.",
+  );
 }
 
 function isNestedResultPayload(value: unknown): value is readonly unknown[][] {
@@ -266,7 +326,7 @@ function isNestedResultPayload(value: unknown): value is readonly unknown[][] {
 
 function resultRows(value: unknown, policy: TypePolicy): QueryExecutionResult<unknown> {
   if (isNestedResultPayload(value)) {
-    throw new Error("BRAID_RESULT_SETS_UNSUPPORTED: MariaDB returned multiple result sets; use database.call().");
+    throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "MariaDB returned multiple result sets; use database.call().");
   }
   if (Array.isArray(value)) {
     const fields = fieldsFor(value);
@@ -426,6 +486,24 @@ function mariaDbEnvironment(
         rawRepresentations: ["number", "bigint", "string"],
         conditionCode: "mariadb.safe-command-count",
       },
+      "session.pinned": { status: "guaranteed" },
+      "transaction": { status: "guaranteed" },
+      "transaction.savepoint": { status: "guaranteed" },
+      "transaction.read-only": { status: "guaranteed" },
+      "transaction.isolation.read-uncommitted": { status: "guaranteed" },
+      "transaction.isolation.read-committed": { status: "guaranteed" },
+      "transaction.isolation.repeatable-read": { status: "guaranteed" },
+      "transaction.isolation.serializable": { status: "guaranteed" },
+      "statement.prepare": { status: "guaranteed" },
+      "statement.cancel": { status: "guarded", conditionCode: "mariadb.connection-destroy" },
+      "statement.stream": { status: "guaranteed" },
+      "statement.bulk": { status: "guaranteed" },
+      "routine.call": { status: "guaranteed" },
+      "routine.out": { status: "unsupported" },
+      "routine.inout": { status: "unsupported" },
+      "routine.return-value": { status: "unsupported" },
+      "routine.result-sets": { status: "guaranteed" },
+      "routine.out-cursor": { status: "unsupported" },
     } : {},
     probe: {
       statement: createRenderedStatement({
@@ -509,33 +587,76 @@ function connectionControl(connection: MariaDbConnectionLike): (sql: string) => 
   };
 }
 
+function invalidTransactionOptions(message: string): never {
+  const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: ${message}`);
+  Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+  throw error;
+}
+
 export function createMariaDbExecutor(connection: MariaDbConnectionLike, options: MariaDbExecutorOptions = {}): QueryExecutor {
   assertMariaDbConnection(connection);
   const representationProfile = mariaDbProfile(options.profile);
   const policy = options.typePolicy ?? representationProfile.typePolicy;
   const control = connectionControl(connection);
+  const begin = async (transactionOptions?: TransactionOptions): Promise<void> => {
+    if (
+      transactionOptions !== undefined
+      && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
+    ) {
+      invalidTransactionOptions("MariaDB transaction options must be an object.");
+    }
+    if (transactionOptions !== undefined) {
+      const unexpected = Object.keys(transactionOptions).find((key) => key !== "isolation" && key !== "readOnly");
+      if (unexpected !== undefined) invalidTransactionOptions(`Unknown MariaDB transaction option: ${unexpected}.`);
+    }
+    const clauses: string[] = [];
+    if (transactionOptions?.isolation !== undefined
+      && transactionOptions.isolation !== "read-uncommitted"
+      && transactionOptions.isolation !== "read-committed"
+      && transactionOptions.isolation !== "repeatable-read"
+      && transactionOptions.isolation !== "serializable") {
+      invalidTransactionOptions(`MariaDB does not recognize transaction isolation ${String(transactionOptions.isolation)}.`);
+    }
+    if (transactionOptions?.readOnly !== undefined && typeof transactionOptions.readOnly !== "boolean") {
+      invalidTransactionOptions("MariaDB readOnly must be a boolean.");
+    }
+    if (transactionOptions?.isolation !== undefined) {
+      const levels: Readonly<Record<NonNullable<TransactionOptions["isolation"]>, string>> = {
+        "read-uncommitted": "READ UNCOMMITTED",
+        "read-committed": "READ COMMITTED",
+        "repeatable-read": "REPEATABLE READ",
+        serializable: "SERIALIZABLE",
+      };
+      clauses.push(`ISOLATION LEVEL ${levels[transactionOptions.isolation]}`);
+    }
+    if (transactionOptions?.readOnly === true) clauses.push("READ ONLY");
+    else if (transactionOptions?.readOnly === false) clauses.push("READ WRITE");
+    if (clauses.length > 0) await control(`SET TRANSACTION ${clauses.join(" ")}`);
+    await connection.beginTransaction();
+  };
   return {
     ownershipKey: connection,
     statementBinding: mariaDbStatementBinding,
     environment: mariaDbEnvironment(options.profile, policy),
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
       assertRoutineOutputsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
-      const result = await connection.execute(prepared.text, prepared.values);
+      const result = await executeWithCancellation(connection, () => connection.execute(prepared.text, prepared.values), executionOptions);
       return resultRows(result, policy) as QueryExecutionResult<Row>;
     },
-    async *stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncGenerator<Row> {
+    async *stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): AsyncGenerator<Row> {
       assertParameterHintsUnsupported(rendered);
       assertRoutineOutputsUnsupported(rendered);
-      signal?.throwIfAborted();
+      assertExecutionOptions(connection, executionOptions);
+      const signal = executionOptions?.signal;
       if (typeof connection.queryStream !== "function") {
-        throw new Error("BRAID_STREAM_UNSUPPORTED: MariaDB Connector/Node.js connection does not expose queryStream().");
+        throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "MariaDB Connector/Node.js connection does not expose queryStream().");
       }
       const prepared = materialize(rendered, binding);
       const stream = connection.queryStream(prepared.text, prepared.values);
       if (typeof stream.close !== "function") {
-        throw new Error("BRAID_STREAM_UNSUPPORTED: MariaDB Connector/Node.js queryStream does not expose close().");
+        throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "MariaDB Connector/Node.js queryStream does not expose close().");
       }
       let fields: readonly MariaDbFieldLike[] = [];
       let fieldsChanged = false;
@@ -547,7 +668,7 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
           fields = Array.isArray(value) ? value as readonly MariaDbFieldLike[] : [];
           fieldsChanged = true;
         } else {
-          pendingError ??= new Error("BRAID_RESULT_SETS_UNSUPPORTED: MariaDB stream returned multiple result sets; use database.call().");
+          pendingError ??= new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "MariaDB stream returned multiple result sets; use database.call().");
         }
       };
       (stream.on ?? stream.once)?.call(stream, "fields", onFields);
@@ -559,9 +680,15 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
       }
       let exhausted = false;
       let streamError: unknown;
+      let destroyFailure: unknown;
       let closing: Promise<void> | undefined;
       const abort = (): void => {
         closing ??= streamClose(stream);
+        try {
+          connection.destroy!();
+        } catch (error) {
+          destroyFailure ??= error;
+        }
       };
       signal?.addEventListener("abort", abort, { once: true });
       if (signal?.aborted) abort();
@@ -591,7 +718,15 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
           if (!exhausted) closing ??= streamClose(stream);
           if (closing !== undefined) await closing;
           if (streamError === undefined && pendingError !== undefined) throw pendingError;
+          if (destroyFailure !== undefined) throw cleanupError("MariaDB stream cancellation cleanup failed.", destroyFailure);
+          if (signal?.aborted) throw cleanupError("MariaDB cancellation discarded the physical connection.", signal.reason ?? streamError);
         } catch (error) {
+          if (typeof error === "object" && error !== null && "code" in error && (error as { readonly code?: unknown }).code === "BRAID_RESOURCE_CLEANUP") {
+            if (streamError !== undefined && error !== streamError) {
+              throw cleanupAggregate([streamError, error], "MariaDB stream cancellation cleanup failed.", signal?.reason ?? streamError);
+            }
+            throw error;
+          }
           const cleanup = cleanupError("MariaDB stream cleanup failed.", error);
           if (streamError !== undefined) throw cleanupAggregate([streamError, cleanup], "MariaDB stream cleanup failed.", streamError);
           throw cleanup;
@@ -600,11 +735,11 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
         }
       }
     },
-    async call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
+    async call(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<DriverRoutineResult> {
       assertRoutineOutputsUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
-      const value = await connection.execute(prepared.text, prepared.values);
+      const value = await executeWithCancellation(connection, () => connection.execute(prepared.text, prepared.values), executionOptions);
       if (!Array.isArray(value)) return { output: {}, resultSets: [] };
       const sets = isNestedResultPayload(value)
         ? value.filter((entry): entry is MariaDbRowSet => Array.isArray(entry))
@@ -619,19 +754,19 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
       });
       return { output: {}, resultSets };
     },
-    async bulk(bulk: RenderedBulk, binding?: BulkBindingDescription) {
+    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, executionOptions?: ExecutionOptions) {
       const prepared = materializeBulk(bulk, binding);
       if (typeof connection.batch !== "function") {
-        throw new Error("BRAID_BULK_UNSUPPORTED: MariaDB Connector/Node.js connection does not expose batch().");
+        throw new UnsupportedFeatureError("statement.bulk", "BRAID_BULK_UNSUPPORTED", "MariaDB Connector/Node.js connection does not expose batch().");
       }
-      const result = await connection.batch(prepared.text, prepared.values);
+      const result = await executeWithCancellation(connection, () => connection.batch!(prepared.text, prepared.values), executionOptions);
       return {
         inputCount: prepared.itemCount,
         affectedRows: affectedRows(result),
         executionMode: "native-bulk" as const,
       };
     },
-    begin: connection.beginTransaction.bind(connection),
+    begin,
     commit: connection.commit.bind(connection),
     rollback: connection.rollback.bind(connection),
     savepoint: (name) => control(`SAVEPOINT ${name}`),
@@ -662,13 +797,19 @@ export function createMariaDbPoolProvider(pool: MariaDbPoolLike, options: MariaD
           if (released) return;
           released = true;
           if (releaseOptions.discard === true) {
-            if (typeof connection.destroy === "function") {
-              connection.destroy();
-              return;
-            }
-            if (typeof connection.end === "function") {
-              await connection.end();
-              return;
+            try {
+              if (typeof connection.destroy === "function") {
+                connection.destroy();
+                return;
+              }
+              if (typeof connection.end === "function") {
+                await connection.end();
+                return;
+              }
+              throw cleanupError("MariaDB pool connection cannot be discarded safely.");
+            } catch (error) {
+              if ((error as { readonly code?: unknown }).code === "BRAID_RESOURCE_CLEANUP") throw error;
+              throw cleanupError("MariaDB pool discard failed.", error);
             }
           }
           await connection.release();

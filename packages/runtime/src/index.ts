@@ -4,6 +4,7 @@ import {
   ResultExactnessError,
   RoutineMappingError,
   safeDatabaseCount,
+  UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { preparedShape } from "./prepared-shape.js";
 import { createAsyncContextStorage } from "#async-context";
@@ -20,9 +21,11 @@ import type {
   DatabaseOptions,
   ExecutableQuery,
   ExecutionEvent,
+  ExecutionOptions,
   ExecutionObserver,
   ExecutionResultOf,
   PreparedQuery,
+  PreparableQuery,
   Query,
   QueryExecutionResult,
   QueryExecutor,
@@ -43,6 +46,7 @@ import type {
   StandardSchemaV1,
   StreamOptions,
   StreamStartEvent,
+  TransactionOptions,
 } from "@sqlbraid/core";
 
 export class DatabaseCardinalityError extends Error {
@@ -58,11 +62,27 @@ export class DatabaseCardinalityError extends Error {
 }
 
 export class DatabaseScopeError extends Error {
-  readonly code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED" | "BRAID_CONNECTION_POISONED" | "BRAID_STREAM_SCOPE" | "BRAID_REENTRY";
+  readonly code:
+    | "BRAID_TX_SCOPE"
+    | "BRAID_TX_CLOSED"
+    | "BRAID_SESSION_SCOPE"
+    | "BRAID_SESSION_CLOSED"
+    | "BRAID_CONNECTION_POISONED"
+    | "BRAID_STREAM_SCOPE"
+    | "BRAID_REENTRY"
+    | "BRAID_TX_OPTIONS_NESTED";
   declare readonly cause?: unknown;
 
   constructor(
-    code: "BRAID_TX_SCOPE" | "BRAID_TX_CLOSED" | "BRAID_CONNECTION_POISONED" | "BRAID_STREAM_SCOPE" | "BRAID_REENTRY",
+    code:
+      | "BRAID_TX_SCOPE"
+      | "BRAID_TX_CLOSED"
+      | "BRAID_SESSION_SCOPE"
+      | "BRAID_SESSION_CLOSED"
+      | "BRAID_CONNECTION_POISONED"
+      | "BRAID_STREAM_SCOPE"
+      | "BRAID_REENTRY"
+      | "BRAID_TX_OPTIONS_NESTED",
     message: string,
     cause?: unknown,
   ) {
@@ -113,16 +133,22 @@ interface ScopeState {
   streamUsers: number;
   directBusy?: boolean;
   activeScope?: symbol;
+  activeSession?: symbol;
   poisoned?: unknown;
 }
 
+type ScopeKind = "root" | "session" | "transaction";
+
 interface RuntimeOptions extends DatabaseOptions {
   readonly transaction: boolean;
+  readonly scopeKind: ScopeKind;
   readonly preparedNames: Set<string>;
   readonly rootState: ScopeState;
+  readonly capabilities?: DatabaseEnvironment["capabilities"];
   readonly pooled: boolean;
   readonly lease?: ConnectionLease;
   readonly leaseState?: ScopeState;
+  readonly pinned?: Use;
   readonly transactionId?: string;
   readonly depth: number;
   readonly scope?: symbol;
@@ -132,6 +158,12 @@ interface TransactionContext {
   readonly rootState: ScopeState;
   readonly activity: { active: boolean };
   readonly parent?: TransactionContext;
+}
+
+interface SessionContext {
+  readonly rootState: ScopeState;
+  readonly activity: { active: boolean };
+  readonly parent?: SessionContext;
 }
 
 interface PhysicalContext {
@@ -167,6 +199,7 @@ interface Use {
   readonly executor: QueryExecutor;
   readonly physicalState: ScopeState;
   readonly direct: boolean;
+  readonly ownsLease: boolean;
   readonly release: (discard?: boolean) => Promise<void>;
 }
 
@@ -189,6 +222,7 @@ class PreparationFailure extends Error {
 }
 
 const transactionContext = createAsyncContextStorage<TransactionContext>();
+const sessionContext = createAsyncContextStorage<SessionContext>();
 const physicalContext = createAsyncContextStorage<PhysicalContext>();
 const scopeStates = new WeakMap<object, ScopeState>();
 const environmentQueries = new WeakSet<object>();
@@ -269,9 +303,20 @@ function assertRootAllowed(rootState: ScopeState, stream: boolean): void {
       "The root database handle cannot be used while its direct transaction owns the database.",
     );
   }
+  if (sessionContext.conservative && rootState.activeSession !== undefined) {
+    throw new DatabaseScopeError(
+      "BRAID_SESSION_SCOPE",
+      "The root database handle cannot be used while its session scope owns the database.",
+    );
+  }
   for (let transaction = transactionContext.getStore(); transaction; transaction = transaction.parent) {
     if (transaction.rootState === rootState && transaction.activity.active) {
       throw new DatabaseScopeError("BRAID_TX_SCOPE", "The root database handle cannot be used from its own transaction callback.");
+    }
+  }
+  for (let session = sessionContext.getStore(); session; session = session.parent) {
+    if (session.rootState === rootState && session.activity.active) {
+      throw new DatabaseScopeError("BRAID_SESSION_SCOPE", "The root database handle cannot be used from its own session callback.");
     }
   }
   const active = physicalContext.getStore();
@@ -295,9 +340,12 @@ function assertRootAllowed(rootState: ScopeState, stream: boolean): void {
   }
 }
 
-function acquireDirectRoot(rootState: ScopeState, stream: boolean): Promise<() => void> {
+function acquireDirectRoot(rootState: ScopeState, stream: boolean, reservedRootScope?: symbol): Promise<() => void> {
   assertHealthy(rootState);
-  assertRootAllowed(rootState, stream);
+  if (reservedRootScope === undefined) assertRootAllowed(rootState, stream);
+  else if (rootState.activeScope !== reservedRootScope && rootState.activeSession !== reservedRootScope) {
+    throw new DatabaseScopeError("BRAID_TX_SCOPE", "The root database handle cannot acquire its reserved physical resource.");
+  }
   if (physicalContext.conservative && rootState.directBusy) {
     throw new DatabaseScopeError(
       stream ? "BRAID_STREAM_SCOPE" : "BRAID_REENTRY",
@@ -320,6 +368,111 @@ function acquireDirectRoot(rootState: ScopeState, stream: boolean): Promise<() =
     }
     return release;
   });
+}
+
+function signalReason(signal: AbortSignal): unknown {
+  return signal.reason;
+}
+
+function capabilityStatus(
+  resource: QueryExecutor | ConnectionProvider,
+  key: string,
+  fallback?: DatabaseEnvironment["capabilities"],
+): "guaranteed" | "guarded" | "unsupported" | undefined {
+  return resource.environment?.capabilities[key]?.status ?? fallback?.[key]?.status;
+}
+
+function assertExecutionOptions(
+  resource: QueryExecutor | ConnectionProvider,
+  executionOptions: ExecutionOptions | undefined,
+  fallback?: DatabaseEnvironment["capabilities"],
+): void {
+  const signal = executionOptions?.signal;
+  if (signal === undefined) return;
+  if (signal.aborted) throw signalReason(signal);
+  const status = capabilityStatus(resource, "statement.cancel", fallback);
+  if (status !== "guaranteed" && status !== "guarded") {
+    throw new UnsupportedFeatureError(
+      "statement.cancel",
+      "BRAID_CANCEL_UNSUPPORTED",
+      "The selected execution resource does not expose a safe statement cancellation mechanism.",
+    );
+  }
+}
+
+function assertTransactionOptions(value: unknown): asserts value is TransactionOptions {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    const error = new TypeError("BRAID_TX_OPTIONS_INVALID: transaction options must be an object.");
+    Object.defineProperty(error, "code", { configurable: false, enumerable: true, value: "BRAID_TX_OPTIONS_INVALID" });
+    throw error;
+  }
+  const options = value as { readonly isolation?: unknown; readonly readOnly?: unknown };
+  for (const key of Object.keys(options)) {
+    if (key !== "isolation" && key !== "readOnly") {
+      const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: unknown transaction option ${key}.`);
+      Object.defineProperty(error, "code", { configurable: false, enumerable: true, value: "BRAID_TX_OPTIONS_INVALID" });
+      throw error;
+    }
+  }
+  if (options.isolation !== undefined
+    && options.isolation !== "read-uncommitted"
+    && options.isolation !== "read-committed"
+    && options.isolation !== "repeatable-read"
+    && options.isolation !== "serializable") {
+    const error = new TypeError("BRAID_TX_OPTIONS_INVALID: transaction isolation is not a supported SQLBraid isolation level.");
+    Object.defineProperty(error, "code", { configurable: false, enumerable: true, value: "BRAID_TX_OPTIONS_INVALID" });
+    throw error;
+  }
+  if (options.readOnly !== undefined && typeof options.readOnly !== "boolean") {
+    const error = new TypeError("BRAID_TX_OPTIONS_INVALID: transaction readOnly must be a boolean.");
+    Object.defineProperty(error, "code", { configurable: false, enumerable: true, value: "BRAID_TX_OPTIONS_INVALID" });
+    throw error;
+  }
+}
+
+function assertSessionCapability(resource: QueryExecutor | ConnectionProvider, fallback?: DatabaseEnvironment["capabilities"]): void {
+  if (capabilityStatus(resource, "session.pinned", fallback) === "unsupported") {
+    throw new UnsupportedFeatureError(
+      "session.pinned",
+      "BRAID_SESSION_UNSUPPORTED",
+      "The selected execution resource cannot pin a session.",
+    );
+  }
+}
+
+function assertFeatureCapability(
+  resource: QueryExecutor | ConnectionProvider,
+  feature: string,
+  code: `BRAID_${string}`,
+  message: string,
+  fallback?: DatabaseEnvironment["capabilities"],
+): void {
+  if (capabilityStatus(resource, feature, fallback) === "unsupported") {
+    throw new UnsupportedFeatureError(feature, code, message);
+  }
+}
+
+function assertTransactionCapability(
+  resource: QueryExecutor | ConnectionProvider,
+  transactionOptions: TransactionOptions | undefined,
+  fallback?: DatabaseEnvironment["capabilities"],
+): void {
+  if (transactionOptions === undefined) return;
+  const checks: readonly [keyof TransactionOptions, string][] = [
+    ["isolation", `transaction.isolation.${transactionOptions.isolation ?? ""}`],
+    ["readOnly", "transaction.read-only"],
+  ];
+  for (const [field, feature] of checks) {
+    if (transactionOptions[field] === undefined) continue;
+    const status = capabilityStatus(resource, feature, fallback);
+    if (status !== "guaranteed" && status !== "guarded") {
+      throw new UnsupportedFeatureError(
+        feature,
+        "BRAID_TX_OPTION_UNSUPPORTED",
+        `The selected execution resource does not support transaction option ${String(field)}.`,
+      );
+    }
+  }
 }
 
 function malformedExecutionResult(): never {
@@ -605,6 +758,39 @@ function callRequiresTransaction(rendered: RenderedStatement): boolean {
     return (direction === "out" || direction === "inout")
       && parameter.hint?.databaseType.toLowerCase() === "refcursor";
   });
+}
+
+type InternalDatabase = Omit<Database, "call" | "stream"> & {
+  call<Result extends RoutineCallResult>(
+    query: CallQuery<Result>,
+    executionOptions?: ExecutionOptions,
+    preparedOperation?: PreparedOperation<CallQuery<Result>>,
+  ): Promise<Result>;
+  stream<Row>(
+    query: RowQuery<Row>,
+    streamOptions?: StreamOptions<Row>,
+    preparedOperation?: PreparedOperation<RowQuery<Row>>,
+  ): AsyncIterable<Row>;
+  close(): void;
+  finish(): Promise<void>;
+};
+
+function executablePreparedOperation(operation: PreparedOperation<PreparableQuery>): PreparedOperation<ExecutableQuery> {
+  const query = operation.query;
+  assertExecutableQuery(query);
+  return { ...operation, query };
+}
+
+function rowPreparedOperation(operation: PreparedOperation<PreparableQuery>): PreparedOperation<RowQuery<unknown>> {
+  const query = operation.query;
+  assertRowsQuery(query);
+  return { ...operation, query };
+}
+
+function callPreparedOperation(operation: PreparedOperation<PreparableQuery>): PreparedOperation<CallQuery> {
+  const query = operation.query;
+  if (query.resultKind !== "call") throw new TypeError("Only call queries may be executed with prepared.call().");
+  return { ...operation, query };
 }
 
 async function mapRoutineValue(
@@ -977,6 +1163,8 @@ export function createDatabase(executor: QueryExecutor, options: DatabaseOptions
     ...options,
     observers: options.observers === undefined ? [] : Object.freeze([...options.observers]),
     transaction: false,
+    scopeKind: "root",
+    capabilities: executor.environment?.capabilities,
     preparedNames: new Set<string>(),
     rootState,
     pooled: false,
@@ -991,6 +1179,8 @@ export function createPooledDatabase(provider: ConnectionProvider, options: Data
     ...options,
     observers: options.observers === undefined ? [] : Object.freeze([...options.observers]),
     transaction: false,
+    scopeKind: "root",
+    capabilities: provider.environment?.capabilities,
     preparedNames: new Set<string>(),
     rootState,
     pooled: true,
@@ -1004,14 +1194,54 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
   const statementBinding = bindingAdapterFor(executor);
   const openStreams = new Set<AsyncGenerator<unknown>>();
   const assertOpen = (): void => {
-    if (closed) throw new DatabaseScopeError("BRAID_TX_CLOSED", "Transaction database is no longer usable.");
-    if (options.transaction && state.activeScope !== options.scope) {
+    if (closed) {
+      throw new DatabaseScopeError(
+        options.scopeKind === "session" ? "BRAID_SESSION_CLOSED" : "BRAID_TX_CLOSED",
+        options.scopeKind === "session" ? "Session database is no longer usable." : "Transaction database is no longer usable.",
+      );
+    }
+    if (options.scopeKind === "transaction" && state.activeScope !== options.scope) {
       throw new DatabaseScopeError("BRAID_TX_SCOPE", "Use the innermost transaction database while its savepoint is active.");
     }
+    if (options.scopeKind === "session" && !options.transaction && state.activeScope !== undefined) {
+      throw new DatabaseScopeError("BRAID_TX_SCOPE", "Use the innermost transaction database while its transaction is active.");
+    }
+    if (options.scopeKind === "session" && state.activeSession !== options.scope) {
+      throw new DatabaseScopeError("BRAID_SESSION_SCOPE", "Use the innermost session database while its nested scope is active.");
+    }
   };
-  const leaseForUse = async (stream: boolean, expectedBinding: StatementBindingAdapter): Promise<Use> => {
+  const leaseForUse = async (
+    stream: boolean,
+    expectedBinding: StatementBindingAdapter,
+    executionOptions?: ExecutionOptions,
+    reservedRootScope?: symbol,
+  ): Promise<Use> => {
     assertOpen();
     assertHealthy(state);
+    assertExecutionOptions(executor, executionOptions, options.capabilities);
+    if (options.pinned) {
+      const pinned = options.pinned;
+      assertHealthy(pinned.physicalState);
+      const active = physicalContext.getStore();
+      if (pinned.physicalState.streamUsers > 0 || (active?.rootState === options.rootState && active.direct)) {
+        if (pinned.physicalState.streamUsers > 0) {
+          throw new DatabaseScopeError("BRAID_STREAM_SCOPE", "A pinned stream cannot re-enter its physical execution resource.");
+        }
+        throw new DatabaseScopeError("BRAID_REENTRY", "A pinned execution resource cannot execute concurrent physical work.");
+      }
+      const releaseTurn = await acquireTransactionTurn(pinned.physicalState);
+      if (pinned.executor.statementBinding !== expectedBinding) {
+        releaseTurn();
+        throw bindingIdentityMismatch();
+      }
+      return {
+        executor: pinned.executor,
+        physicalState: pinned.physicalState,
+        direct: pinned.direct,
+        ownsLease: false,
+        release: async () => { releaseTurn(); },
+      };
+    }
     if (options.transaction) {
       const lease = options.lease;
       if (!lease || !options.leaseState) throw new DatabaseScopeError("BRAID_TX_CLOSED", "Transaction database is no longer usable.");
@@ -1030,12 +1260,15 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         releaseTurn();
         throw bindingIdentityMismatch();
       }
-      return { executor: lease, physicalState: options.leaseState, direct: true, release: async () => { releaseTurn(); } };
+      return { executor: lease, physicalState: options.leaseState, direct: true, ownsLease: false, release: async () => { releaseTurn(); } };
     }
-    assertRootAllowed(options.rootState, stream);
+    if (reservedRootScope === undefined) assertRootAllowed(options.rootState, stream);
+    else if (options.rootState.activeScope !== reservedRootScope && options.rootState.activeSession !== reservedRootScope) {
+      throw new DatabaseScopeError("BRAID_TX_SCOPE", "The root database handle cannot acquire its reserved physical resource.");
+    }
     if (!options.pooled) {
-      const release = await acquireDirectRoot(state, stream);
-      return { executor: executor as QueryExecutor, physicalState: state, direct: true, release: async () => { release(); } };
+      const release = await acquireDirectRoot(state, stream, reservedRootScope);
+      return { executor: executor as QueryExecutor, physicalState: state, direct: true, ownsLease: false, release: async () => { release(); } };
     }
     let lease: ConnectionLease;
     try {
@@ -1065,8 +1298,81 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       executor: lease,
       physicalState: leaseState,
       direct: false,
+      ownsLease: true,
       release: async (discard = false) => { await lease.release(discard ? { discard: true } : undefined); },
     };
+  };
+  const acquireSessionResource = async (reservedRootSession?: symbol): Promise<Use> => {
+    assertOpen();
+    assertHealthy(state);
+    if (reservedRootSession === undefined) assertRootAllowed(options.rootState, false);
+    else if (options.rootState.activeSession !== reservedRootSession) {
+      throw new DatabaseScopeError("BRAID_SESSION_SCOPE", "The root database handle cannot acquire its reserved session resource.");
+    }
+    assertSessionCapability(executor, options.capabilities);
+    if (!options.pooled) {
+      const release = await acquireDirectRoot(state, false, reservedRootSession);
+      return {
+        executor: executor as QueryExecutor,
+        physicalState: state,
+        direct: true,
+        ownsLease: true,
+        release: async () => { release(); },
+      };
+    }
+    let lease: ConnectionLease;
+    try {
+      lease = await (executor as ConnectionProvider).acquire();
+    } catch (error) {
+      throw error;
+    }
+    if (!lease || typeof lease !== "object" || typeof lease.release !== "function" || typeof lease.query !== "function") {
+      throw new TypeError("Connection provider returned an invalid lease.");
+    }
+    if (lease.statementBinding !== statementBinding) {
+      let releaseError: unknown;
+      try { await lease.release({ discard: true }); } catch (error) { releaseError = error; }
+      const mismatch = bindingIdentityMismatch();
+      if (releaseError !== undefined) throw new AggregateError([mismatch, releaseError], "Binding identity mismatch and lease cleanup failed.", { cause: mismatch });
+      throw mismatch;
+    }
+    try {
+      assertSessionCapability(lease, options.capabilities);
+    } catch (error) {
+      try { await lease.release({ discard: true }); } catch (releaseError) {
+        throw new AggregateError([error, releaseError], "Session capability check and lease cleanup failed.", { cause: error });
+      }
+      throw error;
+    }
+    const leaseState = scopeStateFor(lease);
+    try {
+      assertHealthy(leaseState);
+    } catch (error) {
+      try { await lease.release({ discard: true }); } catch (releaseError) {
+        throw new AggregateError([error, releaseError], "Poisoned lease cleanup failed.", { cause: error });
+      }
+      throw error;
+    }
+    return {
+      executor: lease,
+      physicalState: leaseState,
+      direct: false,
+      ownsLease: true,
+      release: async (discard = false) => { await lease.release(discard ? { discard: true } : undefined); },
+    };
+  };
+  const pinnedResource = (): Use | undefined => {
+    if (options.pinned) return options.pinned;
+    if (options.transaction && options.lease && options.leaseState) {
+      return {
+        executor: options.lease,
+        physicalState: options.leaseState,
+        direct: true,
+        ownsLease: false,
+        release: async () => {},
+      };
+    }
+    return undefined;
   };
   const prepare = <Q extends Query<unknown, QueryResultKind>>(
     query: Q,
@@ -1075,6 +1381,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     alreadyRendered?: RenderedStatement,
     operationId = nextOperationId(),
   ): PreparedOperation<Q> => {
+    assertOpen();
     let rendered: RenderedStatement;
     try {
       rendered = alreadyRendered ?? createRenderedStatement(query.render());
@@ -1143,15 +1450,16 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     await observePrepared(operation);
     return operation;
   };
-  const prepareNamedFactoryObserved = async <Row>(
-    factory: () => RowQuery<Row>,
+  const prepareNamedFactoryObserved = async (
+    factory: (...args: any[]) => PreparableQuery,
+    input: unknown,
     preparedName: string,
     shape: { value?: string },
-  ): Promise<PreparedOperation<RowQuery<Row>>> => {
+  ): Promise<PreparedOperation<PreparableQuery>> => {
     const operationId = nextOperationId();
-    let query: RowQuery<Row>;
+    let query: PreparableQuery;
     try {
-      query = factory();
+      query = factory(input);
     } catch (error) {
       const operation = { meta: metadata(options, operationId, preparedName) };
       await notifyError(options.observers ?? [], errorEvent(operation, error, "prepared", false, false), error);
@@ -1173,7 +1481,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       await notifyError(options.observers ?? [], errorEvent(operation, error, "prepared", false, false), error);
       throw error;
     }
-    let operation: PreparedOperation<RowQuery<Row>>;
+    let operation: PreparedOperation<PreparableQuery>;
     try {
       operation = prepare(query, preparedName, undefined, rendered, operationId);
     } catch (error) {
@@ -1190,12 +1498,16 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     await observePrepared(operation);
     return operation;
   };
-  const physical = async <Q extends ExecutableQuery>(operation: PreparedOperation<Q>, use: Use): Promise<RawOperation<Q>> => {
+  const physical = async <Q extends ExecutableQuery>(
+    operation: PreparedOperation<Q>,
+    use: Use,
+    executionOptions?: ExecutionOptions,
+  ): Promise<RawOperation<Q>> => {
     const started = now();
     try {
       const result = await physicalContext.run(
         { rootState: options.rootState, direct: use.direct, stream: false },
-        () => use.executor.query<unknown>(operation.rendered, operation.binding),
+        () => use.executor.query<unknown>(operation.rendered, operation.binding, executionOptions),
       );
       return { ...operation, result, durationMs: now() - started, driverFailed: false };
     } catch (driverError) {
@@ -1275,16 +1587,19 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     const mapped = await processRows(operation, result, executionSchema);
     return mapped.rows[0];
   };
-  const runPrepared = async <Q extends ExecutableQuery>(operation: PreparedOperation<Q>): Promise<RawOperation<Q>> => {
+  const runPrepared = async <Q extends ExecutableQuery>(
+    operation: PreparedOperation<Q>,
+    executionOptions?: ExecutionOptions,
+  ): Promise<RawOperation<Q>> => {
     let use: Use;
     try {
-      use = await leaseForUse(false, statementBinding);
+      use = await leaseForUse(false, statementBinding, executionOptions);
     } catch (error) {
       const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
       await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
       throw error;
     }
-    const raw = await physical(operation, use!);
+    const raw = await physical(operation, use!, executionOptions);
     let releaseError: unknown;
     let releaseFailed = false;
     try {
@@ -1304,29 +1619,45 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     }
     return raw;
   };
-  const runMaterialized = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, batchId?: string): Promise<RawOperation<Q>> => {
+  const runMaterialized = async <Q extends ExecutableQuery>(
+    query: Q,
+    preparedName?: string,
+    batchId?: string,
+    executionOptions?: ExecutionOptions,
+  ): Promise<RawOperation<Q>> => {
     assertExecutableQuery(query);
-    return runPrepared(await prepareObserved(query, preparedName, batchId));
+    return runPrepared(await prepareObserved(query, preparedName, batchId), executionOptions);
   };
   const materializedPreparedResult = async <Q extends ExecutableQuery>(
     operation: PreparedOperation<Q>,
     executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>,
+    executionOptions?: ExecutionOptions,
   ): Promise<QueryExecutionResult<unknown>> => {
-    const raw = await runPrepared(operation);
+    const raw = await runPrepared(operation, executionOptions);
     const result = await finalizePhysical(raw);
     return processRows(raw, result, executionSchema);
   };
-  const materializedResult = async <Q extends ExecutableQuery>(query: Q, preparedName?: string, executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>, batchId?: string): Promise<QueryExecutionResult<unknown>> => {
-    return materializedPreparedResult(await prepareObserved(query, preparedName, batchId), executionSchema);
+  const materializedResult = async <Q extends ExecutableQuery>(
+    query: Q,
+    preparedName?: string,
+    executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>,
+    batchId?: string,
+    executionOptions?: ExecutionOptions,
+  ): Promise<QueryExecutionResult<unknown>> => {
+    return materializedPreparedResult(await prepareObserved(query, preparedName, batchId), executionSchema, executionOptions);
   };
-  const executeNamed = async <Q extends ExecutableQuery>(query: Q, preparedName?: string): Promise<ExecutionResultOf<Q>> => await materializedResult(query, preparedName) as ExecutionResultOf<Q>;
+  const executeNamed = async <Q extends ExecutableQuery>(
+    query: Q,
+    preparedName?: string,
+    executionOptions?: ExecutionOptions,
+  ): Promise<ExecutionResultOf<Q>> => await materializedResult(query, preparedName, undefined, undefined, executionOptions) as ExecutionResultOf<Q>;
   const allNamed = async <Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>, preparedName?: string): Promise<readonly Row[]> => {
-    const result = await materializedResult(query, preparedName, validationOptions?.schema);
+    const result = await materializedResult(query, preparedName, validationOptions?.schema, undefined, validationOptions);
     if (result.kind !== "rows") malformedExecutionResult();
     return result.rows as readonly Row[];
   };
   const oneNamed = async <Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>, preparedName?: string): Promise<Row> => {
-    const raw = await runMaterialized(query, preparedName);
+    const raw = await runMaterialized(query, preparedName, undefined, validationOptions);
     const result = await finalizePhysical(raw);
     if (result.kind !== "rows") malformedExecutionResult();
     if (result.rows.length !== 1) {
@@ -1336,7 +1667,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     return await processOne(raw, result, validationOptions?.schema) as Row;
   };
   const maybeOneNamed = async <Row>(query: RowQuery<Row>, validationOptions?: RowValidationOptions<Row>, preparedName?: string): Promise<Row | undefined> => {
-    const raw = await runMaterialized(query, preparedName);
+    const raw = await runMaterialized(query, preparedName, undefined, validationOptions);
     const result = await finalizePhysical(raw);
     if (result.kind !== "rows") malformedExecutionResult();
     if (result.rows.length > 1) {
@@ -1350,11 +1681,11 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     }
     return await processOne(raw, result, validationOptions?.schema) as Row;
   };
-  const database: Database & { close(): void; finish(): Promise<void> } = {
+  const database: InternalDatabase = {
     async environment(environmentOptions = {}): Promise<DatabaseEnvironment> {
       assertOpen();
       assertHealthy(state);
-      if (!options.transaction) assertRootAllowed(options.rootState, false);
+      if (options.scopeKind === "root") assertRootAllowed(options.rootState, false);
       const refresh = environmentOptions.refresh === true;
       if (refresh || !environmentSnapshot) {
         const descriptor = executor.environment;
@@ -1434,13 +1765,22 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         : { status: "compatible", reason: matches.length > 1 ? "ambiguous-exact-target" : "no-verified-exact-target" };
       return Object.freeze({ ...evidence, supportMatch: Object.freeze(supportMatch) });
     },
-    async execute<Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>> {
-      return await executeNamed(query);
+    async execute<Q extends ExecutableQuery>(query: Q, executionOptions?: ExecutionOptions): Promise<ExecutionResultOf<Q>> {
+      return await executeNamed(query, undefined, executionOptions);
     },
-    async call<Result extends RoutineCallResult>(query: CallQuery<Result>): Promise<Result> {
+    async call<Result extends RoutineCallResult>(
+      query: CallQuery<Result>,
+      executionOptions?: ExecutionOptions,
+      preparedOperation?: PreparedOperation<CallQuery<Result>>,
+    ): Promise<Result> {
       assertOpen();
       if (query.resultKind !== "call") throw new TypeError("Only call queries may be executed with database.call().");
-      const operation = await prepareObserved(query);
+      const operation = preparedOperation ?? await prepareObserved(query);
+      try {
+        assertExecutionOptions(executor, executionOptions, options.capabilities);
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
+      }
       if (!options.transaction && callRequiresTransaction(operation.rendered)) {
         const error = codedError(
           "BRAID_CALL_CURSOR_TX_REQUIRED",
@@ -1448,16 +1788,31 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         );
         await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
       }
+      try {
+        assertFeatureCapability(
+          executor,
+          "routine.call",
+          "BRAID_CALL_UNSUPPORTED",
+          "The selected execution resource does not expose a routine-call protocol.",
+          options.capabilities,
+        );
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
+      }
       let use: Use;
       try {
-        use = await leaseForUse(false, statementBinding);
+        use = await leaseForUse(false, statementBinding, executionOptions);
       } catch (error) {
         const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
         await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
         throw error;
       }
       if (!use!.executor.call) {
-        const error = codedError("BRAID_CALL_UNSUPPORTED", "Executor does not support routine calls.");
+        const error = new UnsupportedFeatureError(
+          "routine.call",
+          "BRAID_CALL_UNSUPPORTED",
+          "The selected execution resource does not expose a routine-call protocol.",
+        );
         let releaseError: unknown;
         try { await use!.release(); } catch (failure) { releaseError = failure; poison(use!.physicalState, failure); }
         const reported = releaseError === undefined ? error : new AggregateError([error, releaseError], "Call and lease release failed.", { cause: error });
@@ -1469,7 +1824,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       try {
         value = await physicalContext.run(
           { rootState: options.rootState, direct: use!.direct, stream: false },
-          () => use!.executor.call!(operation.rendered, operation.binding),
+          () => use!.executor.call!(operation.rendered, operation.binding, executionOptions),
         );
       } catch (error) {
         if (resourceCleanupFailure(error)) poison(use!.physicalState, error);
@@ -1542,10 +1897,15 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       assertRowsQuery(query);
       return maybeOneNamed(query, validationOptions);
     },
-    async bulk<Input>(inputs: readonly Input[], factory: (input: Input, index: number) => CommandQuery): Promise<BulkResult> {
+    async bulk<Input>(
+      inputs: readonly Input[],
+      factory: (input: Input, index: number) => CommandQuery,
+      executionOptions?: ExecutionOptions,
+    ): Promise<BulkResult> {
       assertOpen();
       assertHealthy(state);
       if (!Array.isArray(inputs)) throw new TypeError("Bulk inputs must be an array.");
+      assertExecutionOptions(executor, executionOptions, options.capabilities);
       if (inputs.length === 0) return Object.freeze({ inputCount: 0, affectedRows: 0 });
 
       const operationId = nextOperationId();
@@ -1615,22 +1975,41 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, error, "observer-before", false, false), error);
       }
 
+      try {
+        assertFeatureCapability(
+          executor,
+          "statement.bulk",
+          "BRAID_BULK_UNSUPPORTED",
+          "The selected execution resource does not expose a bulk protocol.",
+          options.capabilities,
+        );
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, error, "materialize", false, false), error);
+      }
       if (!options.pooled && typeof (executor as QueryExecutor).bulk !== "function") {
-        const error = codedError("BRAID_BULK_UNSUPPORTED", "Executor does not support bulk execution.");
+        const error = new UnsupportedFeatureError(
+          "statement.bulk",
+          "BRAID_BULK_UNSUPPORTED",
+          "The selected execution resource does not expose a bulk protocol.",
+        );
         await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, error, "materialize", false, false), error);
         throw error;
       }
 
       let use: Use;
       try {
-        use = await leaseForUse(false, statementBinding);
+        use = await leaseForUse(false, statementBinding, executionOptions);
       } catch (error) {
         const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
         await notifyError(options.observers ?? [], errorEvent({ meta: bulkMeta }, error, stage, false, false), error);
         throw error;
       }
       if (typeof use.executor.bulk !== "function") {
-        const unsupported = codedError("BRAID_BULK_UNSUPPORTED", "Leased executor does not support bulk execution.");
+        const unsupported = new UnsupportedFeatureError(
+          "statement.bulk",
+          "BRAID_BULK_UNSUPPORTED",
+          "The leased execution resource does not expose a bulk protocol.",
+        );
         let cleanupFailure: unknown;
         try {
           await use.release();
@@ -1652,7 +2031,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       try {
         physicalResult = await physicalContext.run(
           { rootState: options.rootState, direct: use.direct, stream: false },
-          () => use.executor.bulk!(bulk!, binding!),
+          () => use.executor.bulk!(bulk!, binding!, executionOptions),
         );
       } catch (error) {
         driverFailed = true;
@@ -1724,7 +2103,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         ...(result!.affectedRows === undefined ? {} : { affectedRows: result!.affectedRows }),
       });
     },
-    async batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }> {
+    async batch<const Queries extends readonly ExecutableQuery[]>(
+      queries: Queries,
+      executionOptions?: ExecutionOptions,
+    ): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }> {
       assertOpen();
       for (const query of queries) assertExecutableQuery(query);
       const batchId = `braid_batch_${nextOperationId()}`;
@@ -1732,7 +2114,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       for (const query of queries) operations.push(await prepareObserved(query, undefined, batchId));
       let use: Use;
       try {
-        use = await leaseForUse(false, statementBinding);
+        use = await leaseForUse(false, statementBinding, executionOptions);
       } catch (error) {
         const operation = operations[0];
         if (operation) {
@@ -1746,12 +2128,12 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       let batchReleaseFailed = false;
       try {
         for (const operation of operations) {
-          const result = await physical(operation, use);
+          const result = await physical(operation, use, executionOptions);
           raw.push(result);
           if (result.driverFailed) break;
         }
       } finally {
-        try { await use.release(); } catch (error) { batchReleaseError = error; batchReleaseFailed = true; poison(use.physicalState, error); }
+        try { await use.release(isPoisoned(use.physicalState)); } catch (error) { batchReleaseError = error; batchReleaseFailed = true; poison(use.physicalState, error); }
       }
       if (batchReleaseFailed) {
         const failed = raw.find((operation) => operation.driverFailed);
@@ -1769,36 +2151,60 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       }
       return output as { readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> };
     },
-    prepare<Row>(name: string, factory: () => RowQuery<Row>): PreparedQuery<Row> {
+    prepare<Factory extends (...args: never[]) => PreparableQuery>(
+      name: string,
+      factory: Factory & (Parameters<Factory> extends [] | [unknown] ? unknown : never),
+    ): PreparedQuery<Parameters<Factory> extends [infer Input] ? Input : never, ReturnType<Factory>> {
+      assertOpen();
       if (!name.trim()) throw new Error("BRAID_PREPARED_NAME: prepared query name must not be empty.");
+      if (factory.length > 1) throw new TypeError("BRAID_PREPARED_FACTORY: prepared query factories must accept zero or one required input.");
       if (options.preparedNames.has(name)) throw new Error(`BRAID_PREPARED_NAME: duplicate prepared query name ${name}.`);
       options.preparedNames.add(name);
       const shape: { value?: string } = {};
-      return {
+      const takesInput = factory.length > 0;
+      const invocation = (args: readonly unknown[]): {
+        readonly options?: ExecutionOptions;
+      } => ({
+        options: (takesInput ? args[1] : args[0]) as ExecutionOptions | undefined,
+      });
+      const operation = async (args: readonly unknown[]): Promise<PreparedOperation<PreparableQuery>> => {
+        assertOpen();
+        return prepareNamedFactoryObserved(factory as (...values: unknown[]) => PreparableQuery, args[0], name, shape);
+      };
+      const prepared: Record<string, unknown> = {
         name,
-        execute: async () => await materializedPreparedResult(
-          await prepareNamedFactoryObserved(factory, name, shape),
-        ) as RowsExecutionResult<Row>,
-        all: async (validationOptions?: RowValidationOptions<Row>) => {
+        execute: async (...args: unknown[]) => {
+          const current = invocation(args);
+          const preparedOperation = executablePreparedOperation(await operation(args));
+          return await materializedPreparedResult(preparedOperation, undefined, current.options);
+        },
+        all: async (...args: unknown[]) => {
+          const current = invocation(args);
+          const preparedOperation = rowPreparedOperation(await operation(args));
           const result = await materializedPreparedResult(
-            await prepareNamedFactoryObserved(factory, name, shape),
-            validationOptions?.schema,
+            preparedOperation,
+            (current.options as RowValidationOptions<unknown> | undefined)?.schema,
+            current.options,
           );
           if (result.kind !== "rows") malformedExecutionResult();
-          return result.rows as readonly Row[];
+          return result.rows;
         },
-        one: async (validationOptions?: RowValidationOptions<Row>) => {
-          const raw = await runPrepared(await prepareNamedFactoryObserved(factory, name, shape));
+        one: async (...args: unknown[]) => {
+          const current = invocation(args);
+          const preparedOperation = rowPreparedOperation(await operation(args));
+          const raw = await runPrepared(preparedOperation, current.options);
           const result = await finalizePhysical(raw);
           if (result.kind !== "rows") malformedExecutionResult();
           if (result.rows.length !== 1) {
             const error = new DatabaseCardinalityError("one", result.rows.length);
             await notifyError(options.observers ?? [], errorEvent(raw as RawOperation<ExecutableQuery>, error, "cardinality", true, true, raw.durationMs), error);
           }
-          return await processOne(raw, result, validationOptions?.schema) as Row;
+          return await processOne(raw, result, (current.options as RowValidationOptions<unknown> | undefined)?.schema);
         },
-        maybeOne: async (validationOptions?: RowValidationOptions<Row>) => {
-          const raw = await runPrepared(await prepareNamedFactoryObserved(factory, name, shape));
+        maybeOne: async (...args: unknown[]) => {
+          const current = invocation(args);
+          const preparedOperation = rowPreparedOperation(await operation(args));
+          const raw = await runPrepared(preparedOperation, current.options);
           const result = await finalizePhysical(raw);
           if (result.kind !== "rows") malformedExecutionResult();
           if (result.rows.length > 1) {
@@ -1811,7 +2217,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
                 raw as RawOperation<ExecutableQuery>,
                 0,
                 raw.query.resultSchema !== undefined,
-                validationOptions?.schema !== undefined,
+                (current.options as RowValidationOptions<unknown> | undefined)?.schema !== undefined,
                 0,
               ));
             } catch (error) {
@@ -1819,21 +2225,56 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
             }
             return undefined;
           }
-          return await processOne(raw, result, validationOptions?.schema) as Row;
+          return await processOne(raw, result, (current.options as RowValidationOptions<unknown> | undefined)?.schema);
+        },
+        stream: (...args: unknown[]) => {
+          const current = invocation(args);
+          const preparedStream = operation(args).then((operationResult) => {
+            const preparedOperation = rowPreparedOperation(operationResult);
+            return database.stream(
+              preparedOperation.query,
+              current.options as StreamOptions<unknown> | undefined,
+              preparedOperation,
+            );
+          });
+          return {
+            async *[Symbol.asyncIterator](): AsyncIterator<unknown> {
+              yield* await preparedStream;
+            },
+          };
+        },
+        call: async (...args: unknown[]) => {
+          const current = invocation(args);
+          const preparedOperation = callPreparedOperation(await operation(args));
+          return database.call(
+            preparedOperation.query,
+            current.options,
+            preparedOperation,
+          );
         },
       };
+      return prepared as PreparedQuery<Parameters<Factory> extends [infer Input] ? Input : never, ReturnType<Factory>>;
     },
-    stream<Row>(query: RowQuery<Row>, streamOptions: StreamOptions<Row> = {}): AsyncIterable<Row> {
+    stream<Row>(
+      query: RowQuery<Row>,
+      streamOptions: StreamOptions<Row> = {},
+      preparedOperation?: PreparedOperation<RowQuery<Row>>,
+    ): AsyncIterable<Row> {
       assertOpen();
       assertHealthy(state);
       assertRowsQuery(query);
-      const operationId = nextOperationId();
+      const operationId = preparedOperation?.meta.operationId ?? nextOperationId();
       let stream!: AsyncGenerator<Row>;
       stream = (async function* (): AsyncGenerator<Row> {
+        assertOpen();
+        openStreams.add(stream);
         let operation: PreparedOperation<ExecutableQuery>;
         try {
-          operation = prepare(query, undefined, undefined, undefined, operationId) as PreparedOperation<ExecutableQuery>;
+          operation = preparedOperation === undefined
+              ? prepare(query, undefined, undefined, undefined, operationId) as PreparedOperation<ExecutableQuery>
+              : preparedOperation as PreparedOperation<ExecutableQuery>;
         } catch (error) {
+          openStreams.delete(stream);
           const failure = error instanceof PreparationFailure ? error : undefined;
           const reported = failure === undefined ? error : failure.cause;
           const fallback = {
@@ -1850,19 +2291,34 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           throw reported;
         }
         try {
-          streamOptions.signal?.throwIfAborted();
+          assertExecutionOptions(executor, streamOptions, options.capabilities);
         } catch (error) {
+          openStreams.delete(stream);
           await notifyError(options.observers ?? [], errorEvent(operation, error, "stream", false, false), error);
+        }
+        try {
+          assertFeatureCapability(
+            executor,
+            "statement.stream",
+            "BRAID_STREAM_UNSUPPORTED",
+            "The selected execution resource does not expose a streaming protocol.",
+            options.capabilities,
+          );
+        } catch (error) {
+          openStreams.delete(stream);
+          await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
         }
         try {
           await notify(options.observers ?? [], streamStartEvent(operation));
         } catch (error) {
+          openStreams.delete(stream);
           await notifyError(options.observers ?? [], errorEvent(operation, error, "observer-before", false, false), error);
         }
         let use: Use;
         try {
-          use = await leaseForUse(true, statementBinding);
+          use = await leaseForUse(true, statementBinding, streamOptions);
         } catch (error) {
+          openStreams.delete(stream);
           const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
           await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
         }
@@ -1874,12 +2330,17 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         let iterator: AsyncIterator<unknown> | undefined;
         const activeContext: PhysicalContext = { rootState: options.rootState, direct: use!.direct, stream: true };
         use!.physicalState.streamUsers += 1;
-        openStreams.add(stream);
         try {
-          if (!use!.executor.stream) throw new Error("BRAID_STREAM_UNSUPPORTED: this adapter does not expose a streaming protocol.");
+          if (!use!.executor.stream) {
+            throw new UnsupportedFeatureError(
+              "statement.stream",
+              "BRAID_STREAM_UNSUPPORTED",
+              "The selected execution resource does not expose a streaming protocol.",
+            );
+          }
           const source = physicalContext.run(
             activeContext,
-            () => use!.executor.stream!(operation.rendered, streamOptions.signal, operation.binding),
+            () => use!.executor.stream!(operation.rendered, operation.binding, streamOptions),
           );
           iterator = source[Symbol.asyncIterator]();
           let queryStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
@@ -1891,11 +2352,11 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           while (true) {
             const next = await physicalContext.run(activeContext, () => iterator!.next());
             if (next.done) {
-              if (streamOptions.signal?.aborted) throw streamOptions.signal.reason ?? new Error("Stream aborted.");
+              if (streamOptions.signal?.aborted) throw streamOptions.signal.reason;
               break;
             }
             const row = next.value;
-            if (streamOptions.signal?.aborted) throw streamOptions.signal.reason ?? new Error("Stream aborted.");
+            if (streamOptions.signal?.aborted) throw streamOptions.signal.reason;
             let mapped: unknown = row;
             if (queryStandard !== undefined) {
               try { mapped = await physicalContext.run(activeContext, () => validateRow(queryStandard!, row, count, "query")); }
@@ -1905,7 +2366,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
               try { mapped = await physicalContext.run(activeContext, () => validateRow(executionStandard!, mapped, count, "execution")); }
               catch (error) { errorAlreadyReported = true; await notifyError(options.observers ?? [], errorEvent(operation, error, "execution-map", true, true, now() - started), error); }
             }
-            if (streamOptions.signal?.aborted) throw streamOptions.signal.reason ?? new Error("Stream aborted.");
+            if (streamOptions.signal?.aborted) throw streamOptions.signal.reason;
             count = addSafeCount(count, 1);
             yield mapped as Row;
           }
@@ -1960,16 +2421,123 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       })();
       return stream;
     },
-    async tx<T>(callback: (database: Database) => Promise<T>): Promise<T> {
+    async session<T>(callback: (database: Database) => Promise<T>): Promise<T> {
       assertOpen();
       assertHealthy(state);
+      if (typeof callback !== "function") throw new TypeError("Session callback is required.");
+      const nested = options.scopeKind !== "root";
+      const scope = Symbol("session scope");
+      const previousRootSession = options.scopeKind === "root" ? options.rootState.activeSession : undefined;
+      const reservedRootSession = !nested && sessionContext.conservative ? scope : undefined;
+      if (reservedRootSession !== undefined) {
+        assertRootAllowed(options.rootState, false);
+        options.rootState.activeSession = reservedRootSession;
+      }
+      let use: Use | undefined;
+      try {
+        use = nested ? pinnedResource() : await acquireSessionResource(reservedRootSession);
+      } catch (error) {
+        if (reservedRootSession !== undefined && options.rootState.activeSession === reservedRootSession) {
+          options.rootState.activeSession = previousRootSession;
+        }
+        throw error;
+      }
+      if (!use) throw new DatabaseScopeError("BRAID_SESSION_CLOSED", "Session database is no longer usable.");
+      const physicalState = use.physicalState;
+      const previousSession = physicalState.activeSession;
+      physicalState.activeSession = scope;
+      if (!nested) options.rootState.activeSession = scope;
+      const activity = { active: true };
+      const parent = sessionContext.getStore();
+      const scoped = createScopedDatabase(use.executor, physicalState, {
+        ...options,
+        transaction: options.transaction,
+        scopeKind: "session",
+        pooled: false,
+        lease: use.executor as ConnectionLease,
+        leaseState: physicalState,
+        pinned: use,
+        scope,
+      });
+      let result!: T;
+      let failure: unknown;
+      let failed = false;
+      try {
+        await sessionContext.run({ rootState: options.rootState, activity, parent }, async () => {
+          try {
+            result = await callback(scoped);
+            await scoped.finish();
+          } catch (error) {
+            failed = true;
+            failure = error;
+            try { await scoped.finish(); } catch (closing) {
+              if (closing !== error) {
+                failure = new AggregateError([error, closing], "Session failed and stream cleanup also failed.", { cause: error });
+              }
+            }
+          }
+        });
+      } finally {
+        scoped.close();
+        activity.active = false;
+        physicalState.activeSession = previousSession;
+        if (!nested) options.rootState.activeSession = previousRootSession;
+        if (!nested && use.ownsLease) {
+          try { await use.release(isPoisoned(physicalState)); }
+          catch (error) {
+            poison(physicalState, error);
+            failed = true;
+            failure = failure === undefined ? error : new AggregateError([failure, error], "Session failed and lease release also failed.", { cause: failure });
+          }
+        }
+      }
+      if (failed) throw failure;
+      return result;
+    },
+    async tx<T>(
+      callbackOrOptions: ((database: Database) => Promise<T>) | TransactionOptions,
+      maybeCallback?: (database: Database) => Promise<T>,
+    ): Promise<T> {
+      assertOpen();
+      assertHealthy(state);
+      const hasOptions = typeof callbackOrOptions !== "function";
+      const transactionOptions = hasOptions ? callbackOrOptions : undefined;
+      const callback = (hasOptions ? maybeCallback : callbackOrOptions) as ((database: Database) => Promise<T>) | undefined;
+      if (callback === undefined) throw new TypeError("Transaction callback is required.");
       const nested = options.transaction;
+      if (nested && hasOptions) {
+        throw new DatabaseScopeError(
+          "BRAID_TX_OPTIONS_NESTED",
+          "Transaction options are not valid for nested savepoint transactions.",
+        );
+      }
+      if (hasOptions) {
+        assertTransactionOptions(transactionOptions);
+        assertTransactionCapability(executor, transactionOptions, options.capabilities);
+      }
       if (nested && state.streamUsers > 0) throw new DatabaseScopeError("BRAID_STREAM_SCOPE", "Close the transaction stream before opening a savepoint.");
+      assertFeatureCapability(
+        executor,
+        nested ? "transaction.savepoint" : "transaction",
+        "BRAID_TX_UNSUPPORTED",
+        nested
+          ? "The selected execution resource does not expose savepoints."
+          : "The selected execution resource does not expose callback transactions.",
+        options.capabilities,
+      );
       const transactionId = options.transactionId ?? nextTransactionId();
       const depth = options.depth + 1;
       const savepointName = nested ? `braid_sp_${nextTransactionId()}` : undefined;
       const scope = Symbol("transaction scope");
       const previousScope = state.activeScope;
+      const previousRootScope = options.scopeKind === "root" ? options.rootState.activeScope : undefined;
+      const reservedRootTransaction = !nested && options.scopeKind === "root" && transactionContext.conservative
+        ? scope
+        : undefined;
+      if (reservedRootTransaction !== undefined) {
+        assertRootAllowed(options.rootState, false);
+        options.rootState.activeScope = reservedRootTransaction;
+      }
       // Reserve the nested scope synchronously so sibling/parent work cannot enter it.
       if (nested) state.activeScope = scope;
       let use: Use | undefined;
@@ -1988,11 +2556,28 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       try {
         if (nested) {
           const lease = options.lease!;
-          if (!lease.savepoint || !lease.rollbackTo || !lease.releaseSavepoint) throw new DatabaseScopeError("BRAID_TX_SCOPE", "Nested transactions require savepoint support.");
-          use = { executor: lease, physicalState: state, direct: true, release: async () => {} };
+          if (!lease.savepoint || !lease.rollbackTo || !lease.releaseSavepoint) {
+            throw new UnsupportedFeatureError(
+              "transaction.savepoint",
+              "BRAID_TX_UNSUPPORTED",
+              "The selected execution resource does not expose savepoints.",
+            );
+          }
+          use = { executor: lease, physicalState: state, direct: true, ownsLease: false, release: async () => {} };
         } else {
           await transactionEvent(observers, transactionId, "begin", "requested", depth);
-          try { use = await leaseForUse(false, statementBinding); }
+          try {
+            if (options.pinned) {
+              use = {
+                ...options.pinned,
+                ownsLease: false,
+                release: async () => {},
+              };
+            } else {
+              use = await leaseForUse(false, statementBinding, undefined, reservedRootTransaction);
+              if (!options.pooled) use = { ...use, ownsLease: true };
+            }
+          }
           catch (error) {
             try { await transactionEvent(observers, transactionId, "begin", "failed", depth, undefined, undefined, error); }
             catch (reporting) { throw combine(error, [reporting]); }
@@ -2000,11 +2585,36 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           }
           physicalState = use.physicalState;
           physicalState.activeScope = scope;
+          if (options.scopeKind === "root") options.rootState.activeScope = scope;
         }
         const resource = use.executor;
-        if (!nested && (!resource.begin || !resource.commit || !resource.rollback)) throw codedError("BRAID_TX_UNSUPPORTED", "Executor does not support callback transactions.");
+        assertFeatureCapability(
+          resource,
+          nested ? "transaction.savepoint" : "transaction",
+          "BRAID_TX_UNSUPPORTED",
+          nested
+            ? "The selected execution resource does not expose savepoints."
+            : "The selected execution resource does not expose callback transactions.",
+          options.capabilities,
+        );
+        if (hasOptions) assertTransactionCapability(resource, transactionOptions, options.capabilities);
+        if (!nested && (!resource.begin || !resource.commit || !resource.rollback)) {
+          throw new UnsupportedFeatureError(
+            "transaction",
+            "BRAID_TX_UNSUPPORTED",
+            "The selected execution resource does not expose callback transactions.",
+          );
+        }
         scoped = createScopedDatabase(resource, physicalState, {
-          ...options, transaction: true, lease: resource as ConnectionLease, leaseState: physicalState, transactionId, depth, scope,
+          ...options,
+          transaction: true,
+          scopeKind: "transaction",
+          lease: resource as ConnectionLease,
+          leaseState: physicalState,
+          pinned: use,
+          transactionId,
+          depth,
+          scope,
         });
         await transactionContext.run({ rootState: options.rootState, activity, parent }, async () => {
           const control = async (
@@ -2036,7 +2646,8 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           try {
             await control(nested ? "savepoint" : "begin", async () => {
               if (nested) await resource.savepoint!(savepointName!);
-              else await resource.begin!();
+              else if (transactionOptions === undefined) await resource.begin!();
+              else await resource.begin!(transactionOptions);
               started = true;
             }, false, nested);
             result = await callback(scoped!);
@@ -2070,7 +2681,8 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         scoped?.close();
         activity.active = false;
         physicalState.activeScope = nested ? previousScope : undefined;
-        if (use && !nested) {
+        if (!nested && options.scopeKind === "root") options.rootState.activeScope = previousRootScope;
+        if (use && !nested && use.ownsLease) {
           try { await use.release(isPoisoned(physicalState)); }
           catch (error) {
             poison(physicalState, error);
@@ -2084,19 +2696,29 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     },
     async finish(): Promise<void> {
       const active = [...openStreams];
+      closed = true;
       const failures: unknown[] = [];
       for (const stream of active) {
         try { await stream.return(undefined); } catch (error) { failures.push(error); }
+        finally { openStreams.delete(stream); }
       }
       await state.transactionTail;
-      closed = true;
       if (active.length > 0) {
-        const error = new DatabaseScopeError("BRAID_STREAM_SCOPE", "A transaction callback must close its streams before completion.");
+        const scopeName = options.scopeKind === "session" ? "session" : "transaction";
+        const error = new DatabaseScopeError("BRAID_STREAM_SCOPE", `A ${scopeName} callback must close its streams before completion.`);
         if (failures.length > 0) throw new AggregateError([error, ...failures], "Transaction streams failed to close.", { cause: error });
         throw error;
       }
     },
     close(): void { closed = true; },
   };
-  return database;
+  return {
+    ...database,
+    stream<Row>(query: RowQuery<Row>, streamOptions?: StreamOptions<Row>): AsyncIterable<Row> {
+      return database.stream(query, streamOptions);
+    },
+    call<Result extends RoutineCallResult>(query: CallQuery<Result>, executionOptions?: ExecutionOptions): Promise<Result> {
+      return database.call(query, executionOptions);
+    },
+  };
 }

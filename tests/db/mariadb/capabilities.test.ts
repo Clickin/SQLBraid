@@ -4,7 +4,7 @@ import { inject, test } from "vitest";
 import * as v from "valibot";
 import { generateModels } from "@sqlbraid/codegen";
 import type { ExecutionEvent } from "@sqlbraid/core";
-import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
+import { createMariaDbDatabase, createMariaDbPoolDatabase } from "@sqlbraid/mariadb/mariadb";
 import { createMariaDbInspector } from "@sqlbraid/mariadb/inspector";
 import { MARIADB_LOSSLESS_TEXT, MARIADB_NATIVE, sql, typePolicy } from "@sqlbraid/mariadb";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
@@ -155,6 +155,134 @@ test("mariadb.routine.resultsets", async () => {
   } finally {
     await connection.query("DROP PROCEDURE IF EXISTS braid_pv16_sets");
     await connection.end();
+  }
+});
+
+test("rc.mariadb.session", async () => {
+  const connection = await connect();
+  const db = createMariaDbDatabase(connection);
+  let scoped: ReturnType<typeof createMariaDbDatabase> | undefined;
+  try {
+    const environment = await db.environment();
+    for (const capability of [
+      "session.pinned",
+      "transaction",
+      "transaction.savepoint",
+      "transaction.read-only",
+      "statement.prepare",
+      "statement.cancel",
+      "statement.stream",
+      "statement.bulk",
+      "routine.call",
+      "routine.out",
+      "routine.inout",
+      "routine.return-value",
+      "routine.result-sets",
+      "routine.out-cursor",
+    ]) assert.ok(environment.capabilities[capability]);
+    await db.session(async (session) => {
+      scoped = session;
+      const first = await session.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
+      const second = await session.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
+      assert.equal(first.connectionId, second.connectionId);
+    });
+    await assert.rejects(
+      () => scoped!.execute(sql`SELECT 1`),
+      (error: unknown) => (error as { readonly code?: string }).code === "BRAID_SESSION_CLOSED",
+    );
+  } finally {
+    await connection.end();
+  }
+});
+
+test("rc.mariadb.prepare", async () => {
+  const connection = await connect();
+  const db = createMariaDbDatabase(connection);
+  try {
+    await connection.query("DROP TEMPORARY TABLE IF EXISTS braid_rc_mariadb_prepare");
+    await connection.query("CREATE TEMPORARY TABLE braid_rc_mariadb_prepare (value INT NOT NULL)");
+    await connection.query("DROP PROCEDURE IF EXISTS braid_rc_mariadb_call");
+    await connection.query(`
+      CREATE PROCEDURE braid_rc_mariadb_call(IN input_value VARCHAR(64))
+      BEGIN SELECT input_value AS value; END
+    `);
+    const row = db.prepare(
+      "rc-mariadb-row",
+      (value: string) => sql.rows<{ readonly connectionId: string; readonly value: string }>`
+        SELECT CONNECTION_ID() AS connectionId, ${value} AS value
+      `,
+    );
+    const first = await row.one("first");
+    const second = await row.one("second");
+    assert.equal(first.value, "first");
+    assert.equal(second.value, "second");
+    assert.equal(first.connectionId, second.connectionId);
+
+    const command = db.prepare(
+      "rc-mariadb-command",
+      (value: number) => sql.command`INSERT INTO braid_rc_mariadb_prepare (value) VALUES (${value})`,
+    );
+    await command.execute(1);
+    await command.execute(2);
+    assert.deepEqual(
+      await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM braid_rc_mariadb_prepare ORDER BY value`),
+      [{ value: "1" }, { value: "2" }],
+    );
+
+    const call = db.prepare(
+      "rc-mariadb-call",
+      (value: string) => sql.call`CALL braid_rc_mariadb_call(${value})`,
+    );
+    assert.deepEqual((await call.call("called")).resultSets.map((set) => set.rows), [[{ value: "called" }]]);
+  } finally {
+    await connection.query("DROP PROCEDURE IF EXISTS braid_rc_mariadb_call").catch(() => undefined);
+    await connection.end();
+  }
+});
+
+test("rc.mariadb.transaction-options", async () => {
+  const connection = await connect();
+  const db = createMariaDbDatabase(connection);
+  try {
+    for (const isolation of ["read-uncommitted", "read-committed", "repeatable-read", "serializable"] as const) {
+      await db.tx({ isolation }, async (tx) => {
+        const row = await tx.one(sql.rows<{ readonly value: string }>`SELECT 1 AS value`);
+        assert.equal(row.value, "1");
+      });
+    }
+    await db.tx({ readOnly: true }, async (tx) => {
+      const row = await tx.one(sql.rows<{ readonly value: string }>`SELECT 1 AS value`);
+      assert.equal(row.value, "1");
+    });
+  } finally {
+    await connection.end();
+  }
+});
+
+test("rc.mariadb.cancel", async () => {
+  const pool = mariadb.createPool({ ...connectorOptions(), connectionLimit: 1, idleTimeout: 0 });
+  const db = createMariaDbPoolDatabase(pool);
+  try {
+    const alreadyAborted = new AbortController();
+    const reason = new Error("rc.mariadb.already-aborted");
+    alreadyAborted.abort(reason);
+    await assert.rejects(
+      () => db.execute(sql.command`SELECT SLEEP(10)`, { signal: alreadyAborted.signal }),
+      (error: unknown) => error === reason,
+    );
+
+    const controller = new AbortController();
+    const pending = db.execute(sql.command`SELECT SLEEP(60)`, { signal: controller.signal });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    controller.abort(new Error("rc.mariadb.cancelled"));
+    await assert.rejects(
+      pending,
+      (error: unknown) => (error as { readonly code?: string; readonly cause?: unknown }).code === "BRAID_RESOURCE_CLEANUP"
+        && (error as { readonly cause?: unknown }).cause === controller.signal.reason,
+    );
+    assert.equal((await db.one(sql.rows<{ readonly value: string }>`SELECT 1 AS value`)).value, "1");
+  } finally {
+    await pool.end();
   }
 });
 

@@ -93,6 +93,7 @@ function oracleStreamingConnection(options: {
         resultSet: oracleCursor(options.rows ?? oracleRows, options.close, options.onRead),
       };
     },
+    async break() {},
     async commit() {},
     async rollback() {},
   };

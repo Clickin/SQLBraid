@@ -152,7 +152,11 @@ test("MSSQL direct adapters reject pool connections while pool leases release on
   assert.throws(() => createTediousExecutor(connection), /not a pool/u);
   const lease = await createTediousPoolProvider({ acquire: async () => connection }).acquire();
   await lease.release();
-  await lease.release({ discard: true });
+  const discarded = await createTediousPoolProvider({ acquire: async () => connection }).acquire();
+  await assert.rejects(
+    async () => discarded.release({ discard: true }),
+    (error: unknown) => (error as { readonly code?: string }).code === "BRAID_RESOURCE_CLEANUP",
+  );
   assert.equal(releases, 1);
 });
 
@@ -199,4 +203,73 @@ test("MSSQL row decode failures reject and cancel the request", async () => {
   assert.ok(activeRequest);
   emit(activeRequest, "requestCompleted");
   await rejected;
+});
+
+test("MSSQL validates transaction options before beginTransaction", async () => {
+  let begins = 0;
+  const executor = createTediousExecutor({
+    ...mockConnection(() => {}),
+    beginTransaction(callback: (error?: unknown) => void) {
+      begins += 1;
+      callback();
+    },
+  });
+  await assert.rejects(
+    () => executor.begin!({ isolation: "invalid" as never }),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  await assert.rejects(
+    () => executor.begin!({ readOnly: "yes" as never }),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  await assert.rejects(
+    () => executor.begin!({ unsupported: true } as never),
+    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  assert.equal(begins, 0);
+});
+
+test("MSSQL prepared cancellation waits for native prepare drain", async () => {
+  let active: TediousRequestLike | undefined;
+  let cancelled = false;
+  let executed = false;
+  let unprepared = false;
+  const connection: TediousConnectionLike = {
+    execSql() {},
+    prepare(request) {
+      active = request;
+      const cancel = request.cancel;
+      request.cancel = () => {
+        cancelled = true;
+        cancel?.call(request);
+      };
+    },
+    execute() { executed = true; },
+    unprepare() { unprepared = true; },
+    beginTransaction() {},
+    commitTransaction() {},
+    rollbackTransaction() {},
+    saveTransaction() {},
+  };
+  const executor = createTediousExecutor(connection);
+  const bulk = {
+    statement: sql.command`INSERT INTO account (id) VALUES (${1})`.render(),
+    parameterSets: [[1]],
+  } as unknown as RenderedBulk;
+  const binding = executor.statementBinding.describeBulk!(bulk, { dialectId: "mssql", requestedReuse: "auto" });
+  const controller = new AbortController();
+  let settled = false;
+  const pending = executor.bulk!(bulk, binding, { signal: controller.signal }).finally(() => {
+    settled = true;
+  });
+  assert.ok(active);
+  const reason = new Error("mssql prepare cancelled");
+  controller.abort(reason);
+  await Promise.resolve();
+  assert.equal(cancelled, true);
+  assert.equal(settled, false);
+  completeRequest(active);
+  await assert.rejects(pending, (error: unknown) => error === reason);
+  assert.equal(executed, false);
+  assert.equal(unprepared, false);
 });

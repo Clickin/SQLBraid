@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { Client, types } from "pg";
+import { Client, Pool, types } from "pg";
 import { inject, test } from "vitest";
-import { type ExecutionEvent } from "@sqlbraid/core";
-import { createPgDatabase } from "@sqlbraid/postgres/pg";
+import { type Database, type ExecutionEvent } from "@sqlbraid/core";
+import { createPgDatabase, createPgPoolDatabase } from "@sqlbraid/postgres/pg";
 import { sql } from "@sqlbraid/postgres";
 import { verifyBulkConformance } from "../../../fixtures/bulk-conformance.mjs";
 import { assertFloatBits, binary32Finite, binary64Finite, exactJsonText } from "../fidelity.js";
@@ -431,5 +431,117 @@ test("postgres.dml.delete-returning", { timeout: 30_000 }, async () => {
     );
   } finally {
     await client.end();
+  }
+});
+
+test("postgres.rc sessions, prepared execution, and transaction options preserve one backend", { timeout: 30_000 }, async () => {
+  const settings = inject("postgres") as Settings;
+  const pool = new Pool({ connectionString: settings.connectionUri, max: 1, idleTimeoutMillis: 0 });
+  const db = createPgPoolDatabase(pool);
+  try {
+    const environment = await db.environment();
+    for (const capability of [
+      "session.pinned",
+      "statement.prepare",
+      "transaction.read-only",
+      "transaction.isolation.read-uncommitted",
+      "transaction.isolation.read-committed",
+      "transaction.isolation.repeatable-read",
+      "transaction.isolation.serializable",
+      "statement.cancel",
+    ]) assert.ok(environment.capabilities[capability]);
+    const levels = [
+      ["read-uncommitted", "read uncommitted"],
+      ["read-committed", "read committed"],
+      ["repeatable-read", "repeatable read"],
+      ["serializable", "serializable"],
+    ] as const;
+    for (const [isolation, expected] of levels) {
+      await db.tx({ isolation }, async (tx) => {
+        const row = await tx.one(sql.rows<{ readonly isolation: string }>`SELECT current_setting('transaction_isolation') AS isolation`);
+        assert.equal(row.isolation, expected);
+      });
+    }
+    await db.tx({ readOnly: true }, async (tx) => {
+      const row = await tx.one(sql.rows<{ readonly readOnly: string }>`SELECT current_setting('transaction_read_only') AS "readOnly"`);
+      assert.equal(row.readOnly, "on");
+    });
+
+    let scoped: Database | undefined;
+    await db.session(async (session) => {
+      scoped = session;
+      const first = await session.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
+      await assert.rejects(
+        () => db.execute(sql`SELECT 1`),
+        (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_SESSION_SCOPE",
+      );
+      const prepared = session.prepare(
+        "postgres-rc-session-pid",
+        (value: string) => sql.rows<{ readonly pid: string; readonly value: string }>`
+          SELECT pg_backend_pid() AS pid, ${value}::text AS value
+        `,
+      );
+      const row = await prepared.one("prepared");
+      assert.equal(row.pid, first.pid);
+      assert.equal(row.value, "prepared");
+      await session.tx({ isolation: "serializable" }, async (tx) => {
+        const nested = await tx.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
+        assert.equal(nested.pid, first.pid);
+      });
+      await session.session(async (nestedSession) => {
+        const nested = await nestedSession.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
+        assert.equal(nested.pid, first.pid);
+      });
+    });
+    await assert.rejects(
+      () => scoped!.execute(sql`SELECT 1`),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_SESSION_CLOSED",
+    );
+  } finally {
+    await pool.end();
+  }
+});
+
+test("postgres.rc cancellation destroys an in-flight pooled connection before reuse", { timeout: 30_000 }, async () => {
+  const settings = inject("postgres") as Settings;
+  const pool = new Pool({ connectionString: settings.connectionUri, max: 1, idleTimeoutMillis: 0 });
+  const db = createPgPoolDatabase(pool);
+  try {
+    const cancel = async (operation: (signal: AbortSignal) => Promise<unknown>): Promise<void> => {
+      const controller = new AbortController();
+      const reason = new Error("cancel PostgreSQL sleep");
+      const pending = operation(controller.signal);
+      const abortTimer = setTimeout(() => controller.abort(reason), 100);
+      let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+      const outcome = await Promise.race([
+        pending.then(
+          () => ({ kind: "resolved" as const }),
+          (error: unknown) => ({ kind: "rejected" as const, error }),
+        ),
+        new Promise<{ readonly kind: "timeout" }>((resolve) => {
+          timeoutTimer = setTimeout(() => resolve({ kind: "timeout" }), 5_000);
+        }),
+      ]);
+      clearTimeout(abortTimer);
+      if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
+      if (outcome.kind === "resolved") throw new Error("PostgreSQL sleep unexpectedly completed after cancellation.");
+      if (outcome.kind === "timeout") throw new Error("PostgreSQL cancellation did not settle within 5 seconds.");
+      assert.equal(outcome.error instanceof Error && "code" in outcome.error ? outcome.error.code : undefined, "BRAID_RESOURCE_CLEANUP");
+      assert.equal(outcome.error instanceof Error ? outcome.error.cause : undefined, reason);
+    };
+
+    const before = await db.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
+    await cancel((signal) => db.one(sql.rows`SELECT pg_sleep(30) AS slept`, { signal }));
+    const prepared = db.prepare("postgres-rc-cancel-prepared", () => sql.rows`SELECT pg_sleep(30) AS slept`);
+    await cancel((signal) => prepared.one({ signal }));
+    await cancel((signal) => db.call(sql.call`SELECT pg_sleep(30) AS slept`, { signal }));
+    await cancel((signal) => db.bulk([30], (seconds) =>
+      sql.command`SELECT pg_sleep(${seconds})`,
+      { signal },
+    ));
+    const after = await db.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
+    assert.notEqual(after.pid, before.pid);
+  } finally {
+    await pool.end();
   }
 });

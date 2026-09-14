@@ -95,6 +95,160 @@ test("oracle.sql.generated-structure", { timeout: 60_000 }, async () => {
   }
 });
 
+test("rc.oracle.session", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  let scoped: ReturnType<typeof createOracledbDatabase> | undefined;
+  try {
+    const environment = await db.environment();
+    for (const capability of [
+      "session.pinned",
+      "transaction",
+      "transaction.savepoint",
+      "transaction.read-only",
+      "statement.prepare",
+      "statement.cancel",
+      "statement.stream",
+      "statement.bulk",
+      "routine.call",
+      "routine.out",
+      "routine.inout",
+      "routine.return-value",
+      "routine.result-sets",
+      "routine.out-cursor",
+    ]) assert.ok(environment.capabilities[capability]);
+    await db.session(async (session) => {
+      scoped = session;
+      const first = await session.one(sql.rows<{ readonly SID: string }>`
+        SELECT SYS_CONTEXT('USERENV', 'SID') AS SID FROM dual
+      `);
+      const second = await session.one(sql.rows<{ readonly SID: string }>`
+        SELECT SYS_CONTEXT('USERENV', 'SID') AS SID FROM dual
+      `);
+      assert.equal(first.SID, second.SID);
+    });
+    await assert.rejects(
+      () => scoped!.execute(sql`SELECT 1 FROM dual`),
+      (error: unknown) => (error as { readonly code?: string }).code === "BRAID_SESSION_CLOSED",
+    );
+  } finally {
+    await connection.close();
+  }
+});
+
+test("rc.oracle.prepare", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    await drop(connection, "TABLE braid_rc_oracle_prepare PURGE").catch(() => undefined);
+    await connection.execute("CREATE TABLE braid_rc_oracle_prepare (value NUMBER NOT NULL)");
+    await connection.execute(`
+      CREATE OR REPLACE PROCEDURE braid_rc_oracle_call (p_value IN NUMBER, p_answer OUT NUMBER, p_nullable OUT VARCHAR2) IS
+      BEGIN p_answer := p_value + 1; p_nullable := NULL; END;
+    `);
+    const row = db.prepare(
+      "rc-oracle-row",
+      (value: number) => sql.rows<{ readonly VALUE: string }>`SELECT ${value} AS VALUE FROM dual`,
+    );
+    assert.equal((await row.one(7)).VALUE, "7");
+    assert.equal((await row.one(11)).VALUE, "11");
+
+    const command = db.prepare(
+      "rc-oracle-command",
+      (value: number) => sql.command`INSERT INTO braid_rc_oracle_prepare (value) VALUES (${value})`,
+    );
+    await command.execute(1);
+    await command.execute(2);
+    assert.deepEqual(
+      await db.all(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_prepare ORDER BY value`),
+      [{ VALUE: "1" }, { VALUE: "2" }],
+    );
+
+    const call = db.prepare(
+      "rc-oracle-call",
+      (value: number) => sql.call`
+        BEGIN braid_rc_oracle_call(${value}, ${sql.out("answer", oracleParameter.number())}, ${sql.out("nullable", oracleParameter.varchar2(32))}); END;
+      `,
+    );
+    assert.deepEqual((await call.call(41)).output, { answer: "42", nullable: null });
+  } finally {
+    await connection.execute("DROP PROCEDURE braid_rc_oracle_call").catch(() => undefined);
+    await drop(connection, "TABLE braid_rc_oracle_prepare PURGE").catch(() => undefined);
+    await connection.close();
+  }
+});
+
+test("rc.oracle.transaction-options", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const { connection: observer } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    await drop(connection, "TABLE braid_rc_oracle_isolation PURGE").catch(() => undefined);
+    await connection.execute("CREATE TABLE braid_rc_oracle_isolation (value NUMBER)");
+    await connection.execute("INSERT INTO braid_rc_oracle_isolation VALUES (0)");
+    await connection.commit();
+    await db.tx({ isolation: "read-committed" }, async (tx) => {
+      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`)).VALUE, "0");
+      await observer.execute("UPDATE braid_rc_oracle_isolation SET value = 1");
+      await observer.commit();
+      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`)).VALUE, "1");
+    });
+    await observer.execute("UPDATE braid_rc_oracle_isolation SET value = 0");
+    await observer.commit();
+    await db.tx({ isolation: "serializable" }, async (tx) => {
+      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`)).VALUE, "0");
+      await observer.execute("UPDATE braid_rc_oracle_isolation SET value = 2");
+      await observer.commit();
+      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`)).VALUE, "0");
+    });
+    for (const isolation of ["read-uncommitted", "repeatable-read"] as const) {
+      await assert.rejects(
+        () => db.tx({ isolation }, async () => undefined),
+        (error: unknown) => (error as { readonly code?: string }).code === "BRAID_TX_OPTION_UNSUPPORTED",
+      );
+    }
+    await drop(connection, "TABLE braid_rc_oracle_read_only PURGE").catch(() => undefined);
+    await connection.execute("CREATE TABLE braid_rc_oracle_read_only (value NUMBER)");
+    await assert.rejects(
+      () => db.tx({ readOnly: true }, (tx) => tx.execute(sql.command`INSERT INTO braid_rc_oracle_read_only VALUES (1)`)),
+      /ORA-01456|read.only/iu,
+    );
+  } finally {
+    await drop(connection, "TABLE braid_rc_oracle_isolation PURGE").catch(() => undefined);
+    await drop(connection, "TABLE braid_rc_oracle_read_only PURGE").catch(() => undefined);
+    await observer.close();
+    await connection.close();
+  }
+});
+
+test("rc.oracle.cancel", { timeout: 60_000 }, async () => {
+  const { connection } = await connect();
+  const db = createOracledbDatabase(connection);
+  try {
+    const alreadyAborted = new AbortController();
+    const reason = new Error("rc.oracle.already-aborted");
+    alreadyAborted.abort(reason);
+    await assert.rejects(
+      () => db.execute(sql.command`BEGIN NULL; END;`, { signal: alreadyAborted.signal }),
+      (error: unknown) => error === reason,
+    );
+
+    const controller = new AbortController();
+    let settled = false;
+    const pending = db.execute(sql.command`BEGIN DBMS_SESSION.SLEEP(2); END;`, { signal: controller.signal }).finally(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    controller.abort(new Error("rc.oracle.cancelled"));
+    await Promise.resolve();
+    assert.equal(settled, false);
+    await assert.rejects(pending, (error: unknown) => error === controller.signal.reason);
+    assert.equal((await db.one(sql.rows<{ readonly VALUE: string }>`SELECT 'reusable' AS VALUE FROM dual`)).VALUE, "reusable");
+  } finally {
+    await connection.close();
+  }
+});
+
 test("oracle.numeric.exact-decimal", { timeout: 60_000 }, async () => {
   const { connection } = await connect();
   const db = createOracledbDatabase(connection);

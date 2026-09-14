@@ -26,6 +26,7 @@ test('manifest preserves declared result kinds for opaque SQL', () => {
   assert.deepEqual(queries.map((query) => Object.keys(createManifest(query))), queries.map(() => ['fingerprint', 'templateFamilyFingerprint', 'resultKind']));
 });
 
+
 test('evidence manifest omits non-portable source paths', () => {
   assert.deepEqual(createManifestFromEvidence({
     fingerprint: 'fingerprint',

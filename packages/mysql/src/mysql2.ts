@@ -6,6 +6,7 @@ import type {
   DatabaseOptions,
   DriverRoutineResult,
   DriverEnvironment,
+  ExecutionOptions,
   BulkBindingDescription,
   BulkExecutionResult,
   QueryExecutor,
@@ -16,6 +17,8 @@ import type {
   StatementBindingAdapter,
   StatementBindingContext,
   StatementBindingDescription,
+  TransactionIsolation,
+  TransactionOptions,
 } from "@sqlbraid/core";
 import {
   createBulkBindingDescription,
@@ -24,6 +27,7 @@ import {
   normalizeExactInteger,
   ResultExactnessError,
   safeDatabaseCount,
+  UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import {
@@ -81,6 +85,10 @@ export interface Mysql2RawCommandLike {
 export interface Mysql2RawConnectionLike {
   execute(sql: string, values?: Mysql2Parameter[]): Mysql2RawCommandLike;
   destroy(): void;
+  readonly stream?: {
+    readonly destroyed?: boolean;
+    destroy(error?: Error): void;
+  };
 }
 
 export interface Mysql2PreparedStatementLike {
@@ -97,6 +105,21 @@ export interface Mysql2ConnectionLike {
   commit(): Promise<void>;
   rollback(): Promise<void>;
   getConnection?: never;
+}
+
+function unsupported(
+  feature: string,
+  code: `BRAID_${string}`,
+  message: string,
+  cause?: unknown,
+): UnsupportedFeatureError {
+  return new UnsupportedFeatureError(feature, code, message, cause === undefined ? undefined : { cause });
+}
+
+function invalidTransactionOptions(message: string): TypeError & { readonly code: string } {
+  const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: ${message}`) as TypeError & { readonly code: string };
+  Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+  return error;
 }
 
 export interface Mysql2PoolConnectionLike extends Mysql2ConnectionLike {
@@ -175,6 +198,13 @@ function rawConnection(connection: Mysql2ConnectionLike): Mysql2RawConnectionLik
   return raw as Mysql2RawConnectionLike;
 }
 
+function destroyMysqlConnection(raw: Mysql2RawConnectionLike, error?: Error): void {
+  // mysql2 3.x destroy() aliases graceful close(); force the raw socket to
+  // reject an unknown in-flight command before the pool can reuse it.
+  raw.destroy();
+  if (raw.stream?.destroyed !== true) raw.stream?.destroy(error);
+}
+
 function cleanupError(message: string, cause?: unknown): Error & { readonly code: string } {
   const error = new Error(message, cause === undefined ? undefined : { cause }) as Error & { readonly code: string };
   Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
@@ -185,6 +215,64 @@ function cleanupAggregate(errors: readonly unknown[], message: string, cause?: u
   const error = new AggregateError(errors, message, cause === undefined ? undefined : { cause }) as AggregateError & { readonly code: string };
   Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
   return error;
+}
+
+function isCleanupFailure(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "BRAID_RESOURCE_CLEANUP";
+}
+
+async function withMysqlCancellation<T>(
+  connection: Mysql2ConnectionLike,
+  signal: AbortSignal | undefined,
+  operation: () => Promise<T>,
+): Promise<T> {
+  signal?.throwIfAborted();
+  if (signal === undefined) return operation();
+  const raw = rawConnection(connection);
+  if (raw === undefined) {
+    throw unsupported(
+      "statement.cancel",
+      "BRAID_CANCEL_UNSUPPORTED",
+      "MySQL cancellation requires the physical connection's documented destroy() method.",
+    );
+  }
+  let aborted = false;
+  let destroyError: unknown;
+  const abort = (): void => {
+    aborted = true;
+    try {
+      const reason = signal.reason;
+      destroyMysqlConnection(
+        raw,
+        reason instanceof Error ? reason : new Error("MySQL statement aborted.", { cause: reason }),
+      );
+    } catch (error) {
+      destroyError = error;
+    }
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    try {
+      const result = await operation();
+      if (!aborted) {
+        signal.throwIfAborted();
+        return result;
+      }
+      if (destroyError !== undefined) {
+        throw cleanupError("MySQL physical connection destruction after statement abort failed.", destroyError);
+      }
+      throw cleanupError("MySQL physical connection was destroyed after statement abort.", signal.reason);
+    } catch (error) {
+      if (!aborted) throw error;
+      if (isCleanupFailure(error)) throw error;
+      if (destroyError !== undefined) {
+        throw cleanupAggregate([error, cleanupError("MySQL physical connection destruction after statement abort failed.", destroyError)], "MySQL statement cancellation cleanup failed.", error);
+      }
+      throw cleanupError("MySQL physical connection was destroyed after statement abort.", signal.reason);
+    }
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
 }
 
 function plainRow(value: unknown, fields: readonly Mysql2FieldLike[], policy: TypePolicy): Record<string, unknown> {
@@ -300,7 +388,11 @@ function assertMysql2BulkValues(bulk: RenderedBulk): void {
 
 function assertNoRoutineOutputsForQuery(rendered: RenderedStatement): void {
   if (rendered.resultKind !== "call" && rendered.parameters.some((parameter) => parameter.direction !== undefined && parameter.direction !== "in")) {
-    throw new Error("BRAID_CALL_OUT_UNSUPPORTED: OUT/INOUT parameters are only valid for routine calls.");
+    throw unsupported(
+      "routine.out",
+      "BRAID_CALL_OUT_UNSUPPORTED",
+      "OUT/INOUT parameters are only valid for routine calls.",
+    );
   }
 }
 
@@ -333,7 +425,7 @@ export const mysql2StatementBinding: StatementBindingAdapter = Object.freeze({
     const statement = createRenderedStatement(bulk.statement);
     if (statement.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: MySQL bulk requires command queries.");
     if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
-      throw new Error("BRAID_BULK_SHAPE: MySQL bulk does not support OUT or INOUT parameters.");
+      throw unsupported("routine.out", "BRAID_BULK_SHAPE", "MySQL bulk does not support OUT or INOUT parameters.");
     }
     assertParameterHintsUnsupported(statement);
     for (const values of bulk.parameterSets) {
@@ -441,8 +533,27 @@ function mysql2Environment(
   const temporalNative = profile.dateStrings === false && rowObjects;
   const profileDimensionsKnown = profile.jsonStrings !== undefined && profile.dateStrings !== undefined;
   const profileName = exactNumeric && rowObjects && profileDimensionsKnown ? representationProfile.id : "mysql2-custom-profile";
-  const capabilities: DriverEnvironment["capabilities"] = policyMatchesProfile
-    ? {
+  const capabilities: DriverEnvironment["capabilities"] = {
+    "session.pinned": { status: "guaranteed" },
+    "transaction": { status: "guaranteed" },
+    "transaction.savepoint": { status: "guaranteed" },
+    "transaction.read-only": { status: "guaranteed" },
+    "transaction.isolation.read-uncommitted": { status: "guaranteed" },
+    "transaction.isolation.read-committed": { status: "guaranteed" },
+    "transaction.isolation.repeatable-read": { status: "guaranteed" },
+    "transaction.isolation.serializable": { status: "guaranteed" },
+    "statement.prepare": { status: "guaranteed" },
+    "statement.cancel": { status: "guarded", conditionCode: "mysql2.physical-connection-destroy" },
+    "statement.stream": { status: "guaranteed" },
+    "statement.bulk": { status: "guaranteed" },
+    "routine.call": { status: "guaranteed" },
+    "routine.out": { status: "unsupported" },
+    "routine.inout": { status: "unsupported" },
+    "routine.return-value": { status: "unsupported" },
+    "routine.result-sets": { status: "guaranteed" },
+    "routine.out-cursor": { status: "unsupported" },
+    ...(policyMatchesProfile
+      ? {
       "sql.native-transparency": { status: "guaranteed" as const },
       "numeric.exact-integer": {
         status: exactNumeric ? "guaranteed" as const : "guarded" as const,
@@ -487,8 +598,9 @@ function mysql2Environment(
             : {}
         ),
       },
-    }
-    : {};
+      }
+      : {}),
+  };
   return Object.freeze<DriverEnvironment>({
     database: { product: "mysql" },
     driver: { id: "mysql2", profile: policyMatchesProfile ? profileName : "custom-type-policy" },
@@ -531,8 +643,19 @@ function materialize(
 }
 
 function assertRoutineOutputsUnsupported(rendered: RenderedStatement): void {
-  if (rendered.parameters.some((parameter) => parameter.direction !== undefined && parameter.direction !== "in")) {
-    throw new Error("BRAID_CALL_OUT_UNSUPPORTED: mysql2 does not expose a proven public discriminator for prepared CALL OUT/INOUT carrier results.");
+  if (rendered.parameters.some((parameter) => parameter.direction === "out")) {
+    throw unsupported(
+      "routine.out",
+      "BRAID_CALL_OUT_UNSUPPORTED",
+      "mysql2 does not expose a proven public discriminator for prepared CALL OUT carrier results.",
+    );
+  }
+  if (rendered.parameters.some((parameter) => parameter.direction === "inout")) {
+    throw unsupported(
+      "routine.inout",
+      "BRAID_CALL_OUT_UNSUPPORTED",
+      "mysql2 does not expose a proven public discriminator for prepared CALL INOUT carrier results.",
+    );
   }
 }
 
@@ -554,12 +677,57 @@ async function closePrepared(
   sql: string,
   failure: unknown,
 ): Promise<void> {
+  // A poisoned connection is discarded as a whole and cannot accept COM_STMT_CLOSE.
+  if (isCleanupFailure(failure)) return;
   try {
     // Closing the statement alone leaves mysql2's cached handle reusable.
     await connection.unprepare!(sql);
   } catch (closeError) {
     if (failure === undefined) throw cleanupError("MySQL prepared bulk cleanup failed.", closeError);
     throw cleanupAggregate([failure, closeError], "MySQL prepared bulk cleanup failed.", failure);
+  }
+}
+
+function mysqlIsolationLevel(isolation: TransactionIsolation): string {
+  switch (isolation) {
+    case "read-uncommitted": return "READ UNCOMMITTED";
+    case "read-committed": return "READ COMMITTED";
+    case "repeatable-read": return "REPEATABLE READ";
+    case "serializable": return "SERIALIZABLE";
+    default: throw invalidTransactionOptions(`Unsupported MySQL transaction isolation level: ${String(isolation)}.`);
+  }
+}
+
+async function beginMysqlTransaction(
+  connection: Mysql2ConnectionLike,
+  control: (sql: string) => Promise<void>,
+  transactionOptions?: TransactionOptions,
+): Promise<void> {
+  if (
+    transactionOptions !== undefined
+    && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
+  ) {
+    throw invalidTransactionOptions("MySQL transaction options must be an object.");
+  }
+  if (transactionOptions !== undefined) {
+    const unexpected = Object.keys(transactionOptions).find((key) => key !== "isolation" && key !== "readOnly");
+    if (unexpected !== undefined) throw invalidTransactionOptions(`Unknown MySQL transaction option: ${unexpected}.`);
+  }
+  if (
+    transactionOptions?.readOnly !== undefined
+    && typeof transactionOptions.readOnly !== "boolean"
+  ) {
+    throw invalidTransactionOptions("MySQL transaction readOnly must be a boolean.");
+  }
+  if (transactionOptions?.isolation !== undefined) {
+    await control(`SET TRANSACTION ISOLATION LEVEL ${mysqlIsolationLevel(transactionOptions.isolation)}`);
+  }
+  if (transactionOptions?.readOnly === true) {
+    await control("START TRANSACTION READ ONLY");
+  } else if (transactionOptions?.readOnly === false) {
+    await control("START TRANSACTION READ WRITE");
+  } else {
+    await connection.beginTransaction();
   }
 }
 
@@ -574,13 +742,26 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
     ownershipKey: connection,
     statementBinding: mysql2StatementBinding,
     environment: mysql2Environment(connection, options.profile, policy),
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<QueryExecutionResult<Row>> {
+      executionOptions?.signal?.throwIfAborted();
       assertParameterHintsUnsupported(rendered);
       assertNoRoutineOutputsForQuery(rendered);
       const prepared = materialize(rendered, binding);
-      const [payload, rawFields] = await connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]);
+      const [payload, rawFields] = await withMysqlCancellation(
+        connection,
+        executionOptions?.signal,
+        () => connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]),
+      );
       if (isMultipleResultPayload(payload)) {
-        throw new Error("BRAID_RESULT_SETS_UNSUPPORTED: MySQL returned multiple result sets; use database.call().");
+        throw unsupported(
+          "routine.result-sets",
+          "BRAID_RESULT_SETS_UNSUPPORTED",
+          "MySQL returned multiple result sets; use database.call().",
+        );
       }
       const fields = resultSetFields(rawFields, 0);
       assertUniqueFields(fields);
@@ -592,7 +773,19 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       const header = normalizeCommandHeader(payload);
       return { rows: [], rowCount: header.affectedRows, kind: "command", command: header };
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
+    async bulk(
+      bulk: RenderedBulk,
+      binding: BulkBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<BulkExecutionResult> {
+      executionOptions?.signal?.throwIfAborted();
+      if (executionOptions?.signal !== undefined && rawConnection(connection) === undefined) {
+        throw unsupported(
+          "statement.cancel",
+          "BRAID_CANCEL_UNSUPPORTED",
+          "MySQL cancellation requires the physical connection's documented destroy() method.",
+        );
+      }
       const described = describedBulks.get(binding);
       if (described !== bulk) throw new TypeError("BRAID_BINDING_IDENTITY: MySQL bulk description belongs to another bulk or adapter.");
       if (binding.adapterId !== mysql2StatementBinding.id || binding.dialectId !== bulk.statement.dialectId) {
@@ -600,15 +793,27 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       }
       if (binding.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: MySQL bulk binding did not provide parameterized SQL.");
       if (typeof connection.prepare !== "function" || typeof connection.unprepare !== "function") {
-        throw new Error("BRAID_BULK_UNSUPPORTED: mysql2 connection must expose prepare() and unprepare().");
+        throw unsupported(
+          "statement.bulk",
+          "BRAID_BULK_UNSUPPORTED",
+          "mysql2 bulk execution requires the documented prepare() and unprepare() methods.",
+        );
       }
-      const prepared = await connection.prepare(binding.parameterizedSql);
+      const prepared = await withMysqlCancellation(
+        connection,
+        executionOptions?.signal,
+        () => connection.prepare!(binding.parameterizedSql!),
+      );
       let failure: unknown;
       let affectedRows = 0;
       let affectedKnown = true;
       try {
         for (let index = 0; index < binding.itemCount; index += 1) {
-          const [payload] = await prepared.execute(binding.valuesAt(index) as Mysql2Parameter[]);
+          const [payload] = await withMysqlCancellation(
+            connection,
+            executionOptions?.signal,
+            () => prepared.execute(binding.valuesAt(index) as Mysql2Parameter[]),
+          );
           if (Array.isArray(payload)) throw new Error("BRAID_BULK_RESULT_KIND: MySQL bulk command returned rows.");
           if (payload && typeof payload === "object" && (payload as Mysql2ResultHeader).affectedRows !== undefined) {
             affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount((payload as Mysql2ResultHeader).affectedRows));
@@ -625,12 +830,30 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
         executionMode: "prepared-loop",
       };
     },
-    async *stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncGenerator<Row> {
+    async *stream<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): AsyncGenerator<Row> {
+      const signal = executionOptions?.signal;
       assertParameterHintsUnsupported(rendered);
       assertNoRoutineOutputsForQuery(rendered);
       signal?.throwIfAborted();
       const raw = rawConnection(connection);
-      if (!raw) throw new Error("BRAID_STREAM_UNSUPPORTED: mysql2 Promise Connection does not expose its raw connection.");
+      if (!raw) {
+        if (signal !== undefined) {
+          throw unsupported(
+            "statement.cancel",
+            "BRAID_CANCEL_UNSUPPORTED",
+            "MySQL cancellation requires the physical connection's documented destroy() method.",
+          );
+        }
+        throw unsupported(
+          "statement.stream",
+          "BRAID_STREAM_UNSUPPORTED",
+          "mysql2 Promise Connection does not expose its raw streaming connection.",
+        );
+      }
       const prepared = materialize(rendered, binding);
       const command = raw.execute(prepared.text, prepared.values as Mysql2Parameter[]);
       const source = command.stream({ highWaterMark });
@@ -644,18 +867,35 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
           fields = Array.isArray(value) ? value : [];
           fieldsChanged = true;
         } else {
-          pendingError ??= new Error("BRAID_RESULT_SETS_UNSUPPORTED: MySQL stream returned multiple result sets; use database.call().");
+          pendingError ??= unsupported(
+            "routine.result-sets",
+            "BRAID_RESULT_SETS_UNSUPPORTED",
+            "MySQL stream returned multiple result sets; use database.call().",
+          );
         }
       });
       const iterator = source[Symbol.asyncIterator]();
       let exhausted = false;
       let aborted = false;
+      let destroyError: unknown;
       let streamError: unknown;
       const abort = (): void => {
         aborted = true;
-        raw.destroy();
+        try {
+          const reason = signal?.reason;
+          destroyMysqlConnection(
+            raw,
+            reason instanceof Error ? reason : new Error("MySQL stream aborted.", { cause: reason }),
+          );
+        } catch (error) {
+          destroyError = error;
+        }
         const reason: unknown = signal?.reason;
-        source.destroy?.(reason instanceof Error ? reason : new Error("MySQL stream aborted.", { cause: reason }));
+        try {
+          source.destroy?.(reason instanceof Error ? reason : new Error("MySQL stream aborted.", { cause: reason }));
+        } catch (error) {
+          destroyError ??= error;
+        }
       };
       signal?.addEventListener("abort", abort, { once: true });
       if (signal?.aborted) abort();
@@ -696,7 +936,9 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
             if (streamError === undefined && pendingError !== undefined) throw pendingError;
           }
           if (aborted) {
-            const cleanup = cleanupError("MySQL physical connection was destroyed after stream abort.", signal?.reason);
+            const cleanup = destroyError === undefined
+              ? cleanupError("MySQL physical connection was destroyed after stream abort.", signal?.reason)
+              : cleanupError("MySQL physical connection destruction after stream abort failed.", destroyError);
             if (streamError !== undefined) throw cleanupAggregate([streamError, cleanup], "MySQL stream abort cleanup failed.", streamError);
             throw cleanup;
           }
@@ -705,11 +947,20 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
         }
       }
     },
-    async call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
+    async call(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<DriverRoutineResult> {
+      executionOptions?.signal?.throwIfAborted();
       assertRoutineOutputsUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
-      const [payload, rawFields] = await connection.execute(prepared.text, prepared.values as Mysql2Parameter[]);
+      const [payload, rawFields] = await withMysqlCancellation(
+        connection,
+        executionOptions?.signal,
+        () => connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]),
+      );
       if (!Array.isArray(payload)) return { output: payload && typeof payload === "object" ? Object.fromEntries(Object.entries(payload)) : {}, resultSets: [] };
       const sets = isMultipleResultPayload(payload) ? payload.filter((entry): entry is readonly unknown[] => Array.isArray(entry)) : [payload];
       const resultSets = sets.map((rows, index) => {
@@ -722,7 +973,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       });
       return { output: {}, resultSets };
     },
-    begin: connection.beginTransaction.bind(connection),
+    begin: (transactionOptions) => beginMysqlTransaction(connection, control, transactionOptions),
     commit: connection.commit.bind(connection),
     rollback: connection.rollback.bind(connection),
     savepoint: (name) => control(`SAVEPOINT ${name}`),
