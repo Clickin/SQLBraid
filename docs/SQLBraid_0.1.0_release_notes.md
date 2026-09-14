@@ -4,6 +4,9 @@ Write SQL. Keep TypeScript. Skip the query-builder translation layer.
 
 Draft release notes; this document does not claim an npm RC or stable publication.
 PV16 exact-final-SHA verification is pending.
+Documentation baseline for the PV16 cleanup is
+`b5600ebf8a3fed4b80c6f31550a37488ef057525`; the final revision is intentionally
+not recorded yet.
 
 SQLBraid 0.1.0 provides:
 
@@ -34,6 +37,10 @@ SQLBraid 0.1.0 provides:
 - Vite 8 guarded-template pre-transform and original TS/TSX source maps, exercised
   through a packed TanStack Start / Node 24 finance consumer.
 - Explicit SQLite number/bigint integer modes for exact 64-bit application models.
+- Numeric fidelity helpers and bilingual data-representation guidance. Exact
+  integers use `bigint`; exact decimals remain strings. Tedious decimal/numeric
+  results remain unsupported as arbitrary-precision decimals, and Oracle
+  `NUMBER` results remain strings.
 - Metadata inspection and deterministic Row / Insert / Update code generation.
 - An agent-native language server, CLI JSON inspection fallback, and a VS Code extension.
 - Five-dialect tooling, a driver-free unscoped `sqlbraid` CLI package, and English/Korean documentation under mutable `/dev/` and immutable `/v/<version>/` URLs.

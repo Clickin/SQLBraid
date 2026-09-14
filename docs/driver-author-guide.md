@@ -434,6 +434,22 @@ Before accepting an adapter:
 - preserve transaction pinning and result-kind checks;
 - document unsupported capabilities instead of simulating them.
 
+### Environment and representation evidence
+
+If an adapter exposes environment metadata, its optional read-only probe must
+use the normal leased query path. Successful `db.environment({ targets? })`
+snapshots are cached per database scope; a provider samples one acquired
+backend, not every pool endpoint. Lifecycle events identify this operation with
+`purpose: "environment"`. Do not guess a driver/runtime version, and do not
+turn a partial tuple into an Official support claim.
+
+Record the exact raw representation for integers, decimals, JSON, temporal, and
+binary values. A custom parser or type-cast option is a separate profile and
+invalidates the default representation evidence until separately tested.
+Tedious JavaScript `decimal`/`numeric` values are not exact decimals; Oracle
+`NUMBER` text and SQLite's explicit `integerMode` must remain visible in the
+profile and TypePolicy.
+
 PV16 completion and release readiness require exact-revision verification across
 unit, packed-runtime, docs, capability/bulk suites, Browser WASM, D1, MariaDB,
 and the existing real database paths. Until Main supplies that evidence, mark

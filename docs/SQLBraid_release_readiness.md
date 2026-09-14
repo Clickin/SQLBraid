@@ -11,10 +11,13 @@ claim for those paths. The PostgreSQL minimum role remains 16.4; the separate
 current capability role uses PostgreSQL 18.6. The Oracle provisioner is Oracle
 Free 23.9, so it must not be cited as Oracle 19c evidence.
 
-### PV16 local working-tree evidence — 2026-09-14
+### Historical PV16 baseline evidence — 2026-09-14
 
-Base commit: `bf9d8f4379e53167d37601dd8c487654395ed296`. No PV16 commit, push,
-tag or publication was performed. The package version remains `0.1.0-rc.0`.
+Original base commit: `bf9d8f4379e53167d37601dd8c487654395ed296`. The existing
+working tree was preserved with user authorization as
+`b5600ebf8a3fed4b80c6f31550a37488ef057525`. The package version remains `0.1.0-rc.0`.
+The documentation phase is compared from baseline
+`b5600ebf8a3fed4b80c6f31550a37488ef057525`; no final-SHA claim is recorded.
 
 - Frozen installation and `pnpm run test:all` passed: typecheck/build,
   58 Vitest files / 390 tests, all six local database suites, real Chromium
@@ -36,20 +39,24 @@ tag or publication was performed. The package version remains `0.1.0-rc.0`.
   audits, typecheck and focused native regressions after the full-suite run.
 - `pnpm run docs:build` passed four history checks, 85 pages and 4,054 local
   links/anchors. Packed SQLite/PostgreSQL/MySQL/codegen examples passed.
+- Translation freshness is checked by `node scripts/validate-translations.mjs`
+  in the documentation gate:
+  All 43 paired English/Korean pages are tracked by English-source digests,
+  with no blanket opt-outs. This check does not auto-translate stale prose.
 - SQLite's structural benchmark used N=1/10/100/1000: independent execution
   prepared N statements, bulk prepared one and ran N times. At N=1000 this local
   run measured 16.432 ms versus 4.061 ms; there is no timing pass threshold.
 - All 18 packed tarballs passed `npm publish --dry-run --tag next --access public`.
   This is a non-publishing local check, not the immutable Release workflow.
 
-Oracle 19c is blocked: no test endpoint is configured and the official 19.3
-enterprise image manifest returns `unauthorized: Auth failed`. Runtime, Docs
-and Release CI run IDs for the final changes do not exist yet. A maintainer
-must provide the 19c test environment and obtain green same-revision CI after
-review/commit before treating PV16 as RC-ready.
+Oracle 19c is excluded from certification: no zero-cost test endpoint is
+configured, and Oracle Free 23.9 is the reproducible target. Adding another
+server line requires contributor-owned reproduction and evidence, not a
+maintainer-funded enterprise environment. Runtime, Docs and Release dry-run
+must succeed on one final revision before treating PV16 as RC-ready.
 
-PV15 native streaming, routine contracts and Vite integration are in final verification
-with verification pending on the exact final revision. RC publication remains
+PV15 native streaming, routine contracts and Vite integration are the implemented
+baseline covered again by PV16's release gates. RC publication remains
 deferred until PV16 development, review and user acceptance are complete. This
 readiness record therefore makes no new SHA, CI, runtime support, or package
 version claim.
@@ -124,9 +131,9 @@ required before RC publication.
 - `workflow_dispatch` with `dry-run` runs every release gate, packs immutable tarballs, and runs `npm publish --dry-run` against those tarballs. `pack-only` runs the same gates and preserves the validated tarballs without contacting npm for publication.
 - A `v*` tag runs the same gates, asserts that the tag version and commit match the checked-out `HEAD`, preserves the tarballs and VSIX as a workflow artifact, and only then invokes `npm publish --provenance` in dependency-derived topological order. Prereleases use the `next` dist-tag. A stable release is staged under `release-<version>`, verified for every package, and promoted to `latest` only after the complete set is present and exact. The final step creates a **draft** GitHub Release with the VSIX attached.
 
-The workflow is pinned to Node 22.18.0, pnpm 12.3.4, npm 11.15.0, Bun 1.3.14, and Deno 2.9.3; the packed TanStack Start finance gate runs separately on Node 24.21.0. It uses GitHub-hosted runners, PostgreSQL and MySQL service containers, the real SQLite, Oracle, and SQL Server gates, packed runtime checks, the VS Code host gate, packed examples, package hygiene, and the website build before any publish step.
+The workflow is pinned to Node 22.18.0, pnpm 12.3.4, npm 11.15.0, Bun 1.3.14, and Deno 2.9.3; the packed TanStack Start finance gate runs separately on Node 24.21.0. It uses GitHub-hosted runners, manifest-pinned Testcontainers for PostgreSQL, MySQL, MariaDB, Oracle and SQL Server, native SQLite and browser/D1 gates, packed runtime checks, the VS Code host gate, packed examples, package hygiene, and the website build before any publish step.
 
-PV15 adds `@sqlbraid/vite`: 17 synchronized npm packages now require tarball,
+PV16 adds `@sqlbraid/mariadb` after PV15's `@sqlbraid/vite`: 18 synchronized npm packages require tarball,
 README/LICENSE, export-resolution and provenance checks. Runtime-only installs
 must exclude compiler, Vite, React, TanStack and metadata/tooling packages.
 Workflow action pins were checked against official latest GitHub releases:

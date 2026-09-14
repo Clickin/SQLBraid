@@ -23,8 +23,12 @@ const users = sql.rows<UserRow>`
 
 > **Status:** pre-release. PV16 adds DML-returning capability evidence, homogeneous bulk, MariaDB, SQLite WASM, and D1 paths on top of PV15 streaming, routine contracts, and Vite 8 integration. Exact-final-revision CI and user acceptance gate RC publication; no release or current support label is implied by the working tree. See [`PLAN.md`](./PLAN.md).
 
+The documentation baseline for this work is `b5600ebf8a3fed4b80c6f31550a37488ef057525`.
+The final revision, CI runs, support labels, and publication remain pending.
+
 [Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) ·
 [Documentation](https://clickin.github.io/SQLBraid/) ·
+[Data representations](https://clickin.github.io/SQLBraid/dev/concepts/data-representation/) ·
 [Packed executable examples](./examples/) ·
 [Public API inventory](./docs/public-api-audit.md) ·
 [Driver-author guide](./docs/driver-author-guide.md)
@@ -336,6 +340,17 @@ await db.tx(async (tx) => {
 Inside that closure, every `tx.*` operation reuses one physical connection until commit/rollback and release. Nested transactions use savepoints on the same connection when supported.
 
 Use the innermost callback handle while a savepoint is active; parent/sibling handle use fails with `BRAID_TX_SCOPE`. Physical transaction operations are serialized. A callback must close its streams: an abandoned live iterator is closed and the transaction rolls back instead of committing over an active cursor.
+
+### Environment evidence
+
+Adapters may expose `db.environment({ targets? })` for an observed snapshot of
+the database, driver, and capability profile. The probe uses the same normal
+leased execution path and emits ordinary lifecycle events with
+`purpose: "environment"`; it does not run hidden constructor I/O. A successful
+snapshot is cached per database scope. Optional targets match only an exact
+verified product/version/edition/driver/profile/runtime tuple; missing version
+evidence remains `Compatible`, not `Official`. The support manifests and their
+CI evidence remain the source of truth.
 
 Using the outer/root database from its own transaction context fails with `BRAID_TX_SCOPE` instead of silently escaping onto another pool connection. Use the callback's `tx` handle, which becomes unusable after the closure ends.
 

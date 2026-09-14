@@ -893,7 +893,7 @@ Non-negotiable:
 - custom-driver author guide and native-template value-only security/conformance
   guidance.
 
-### PV15 — Pre-RC streaming, routines and Vite — final verification pending
+### PV15 — Pre-RC streaming, routines and Vite — implemented baseline
 
 - explicit executor `stream()`/`call()` capabilities with no buffered fallback;
 - cleanup-before-release on exhaustion, break, mapper failure and abort; cleanup
@@ -925,7 +925,17 @@ Non-negotiable:
 - D1 materialized queries and native batch; callback transactions and streaming
   remain explicitly Unsupported;
 - named native SQL capability gates and structural bulk benchmarks.
+- numeric fidelity helpers and driver representation profiles;
+- support manifests as the machine-readable evidence source, with EN/KO
+  translation freshness checks across all paired prose pages, without blanket opt-outs;
+- bilingual data-representation documentation covering exact integers/decimals,
+  custom parser caveats, and the distinction between native SQL transparency and
+  grammar support;
+- `db.environment({ targets? })` is an optional observed, cached snapshot; an
+  unmatched or incomplete tuple remains Compatible rather than a guessed
+  Official claim.
 
+Documentation baseline for this phase: `b5600ebf8a3fed4b80c6f31550a37488ef057525`.
 Local gates pass on the working tree, including Oracle Free 23.9. Oracle 19c
 remains unverified: its enterprise image requires unavailable registry access.
 Neither local results nor the existing base commit certify the uncommitted
