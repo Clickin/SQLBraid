@@ -68,6 +68,9 @@ jobs:
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build compiler and Vite plugin dependencies
+        run: pnpm run build
+
       - name: Select documentation build context
         env:
           HISTORY_DIR: ${{ runner.temp }}/sqlbraid-docs-history
