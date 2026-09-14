@@ -131,11 +131,9 @@ containers even when their scalar element types are exact.
 
 `db.environment()` records `extra_float_digits`, the selected JSON/temporal
 profile and TypePolicy provenance where available. It must not be read as an
-unconditional fidelity guarantee. Stage A evidence for implementation revision
-`53db135bd156b6d65dc91785a671dec5249c95d4` is recorded in the [support
-manifest](/SQLBraid/reference/support/); all three Stage A Runtime, Docs, and
-Release gates passed, and this exact profile is Official for Stage A. Later
-revisions require separate Stage B exact-final SHA verification.
+unconditional fidelity guarantee. The current phase-J tree is pending fresh
+exact-SHA Runtime, Docs, and Release gates; the support matrix remains the
+revision-specific evidence source.
 `pg-cursor` supplies the native pull stream; a missing peer is
 `BRAID_STREAM_UNSUPPORTED`. Routine refcursors require an existing transaction
 and are materialized into result sets. Bulk uses the adapter's proven native

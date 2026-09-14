@@ -30,6 +30,15 @@ SQLBraid reads returned Lobs with `getData()` and awaits their `destroy()`/`clos
 event before lease release. Sibling Lobs and ResultSets are cleaned up even
 when another output fails; no live Lob escapes `db.call()`.
 
+An active signal uses the guarded node-oracledb `connection.break()` path.
+Cancellation is cooperative rather than a prompt or timeout guarantee: the
+documented `DBMS_SESSION.SLEEP` raw probe can reject with `ORA-01013` only when
+the sleep completes, and the adapter holds the physical lease through
+settlement. If the connection does not expose the documented break primitive,
+the operation rejects before I/O with `UnsupportedFeatureError` /
+`BRAID_CANCEL_UNSUPPORTED`. Transaction isolation and read-only options are
+capability-driven.
+
 See the [Oracle setup](https://clickin.github.io/SQLBraid/getting-started/oracle/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
 
 The Thin profile returns Oracle `NUMBER`, `FLOAT`, and ANSI `NUMBER` aliases as

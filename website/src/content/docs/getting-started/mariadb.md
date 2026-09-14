@@ -43,13 +43,10 @@ not implicitly transactional and has no portable auto-chunking promise. Use
 `db.tx()` when callback transaction atomicity is required.
 
 A `mysql2` connection may work against MariaDB as best-effort compatibility, but
-it is not Official MariaDB syntax or protocol evidence. The documented
-candidate profile is MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0. Stage A evidence for
-implementation revision `53db135bd156b6d65dc91785a671dec5249c95d4` is recorded
-in the [support manifest](/SQLBraid/reference/support/); all three Stage A
-Runtime, Docs, and Release gates passed, and this exact profile is Official for
-Stage A. Do not infer certification for later revisions from package
-installation; those revisions require separate Stage B exact-final SHA verification.
+it is not MariaDB protocol evidence. The documented candidate profile is MariaDB
+11.8.9 / Connector 3.5.4 / Node 22.18.0. The current phase-J tree is pending
+fresh exact-SHA Runtime, Docs, and Release gates; package installation and
+historical workflow success do not certify this profile.
 
 ## Connector/Node.js representation profile
 

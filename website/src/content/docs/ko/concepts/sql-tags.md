@@ -46,6 +46,12 @@ const users = await db.all(sql.rows<UserRow>`SELECT id, name FROM users`);
 
 어댑터는 문장이 행 또는 command 메타데이터를 생성했는지 보고합니다. 쿼리가 `rows`를 선언했지만 드라이버가 command를 보고하면 SQLBraid는 실행 후 `BRAID_RESULT_KIND`를 발생시킵니다. 잘못된 선언에서 쓰기를 되돌려야 한다면 쓰기를 `db.tx(...)` 안에 두세요. 결과 종류 검사는 이미 완료된 루트 작업을 되돌릴 수 없습니다.
 
+Bun 1.3.14는 `bun-sql.result-kind-metadata` guarded 조건을 사용합니다.
+MySQL/MariaDB 경로에서는 driver가 `command: null`, `affectedRows: 0`을
+보고할 수 있어 빈 `SELECT`와 영향 행 0인 DML/DDL이 실행 후에만
+`BRAID_RESULT_KIND_AMBIGUOUS`로 실패할 수 있습니다. Side effect가 이미
+발생했을 수 있습니다.
+
 SQLBraid는 임의 SQL에서 TypeScript 행 형태를 추론하지 않습니다. 선택한 열과 선언한 행 타입의 대응은 개발자가 책임집니다.
 
 Set-returning function과 table-valued extension은 일반 행 쿼리입니다.

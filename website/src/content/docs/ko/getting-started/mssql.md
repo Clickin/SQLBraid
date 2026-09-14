@@ -62,10 +62,8 @@ Tedious가 소유하며, 이 단계의 실패는 드라이버 I/O 없이 `materi
 ## 기능 경계
 
 - 문서화된 후보 조합은 Node 22.18.0/Linux x64의 Tedious 20.0.0입니다.
-  `53db135bd156b6d65dc91785a671dec5249c95d4` 구현 revision의 Stage A 증거가
-  [지원 매트릭스](/SQLBraid/reference/support/)에 기록되었고 Runtime, Docs,
-  Release 세 gate를 모두 통과했으며 이 정확한 프로필은 Stage A에서
-  Official입니다. 이후 revision에는 별도 Stage B exact-final SHA 검증이 필요합니다.
+  현재 phase-J tree는 새로운 exact-SHA Runtime, Docs, Release gate를
+  기다리며 package 설치는 이 프로필을 인증하지 않습니다.
 - 대상은 SQL Server 2022 CU18 Developer, Linux x64입니다.
   로컬 ARM 에뮬레이션은 이 문서의 검증 범위 밖입니다.
 - 힌트가 없는 일반 값은 어댑터 로컬 Tedious 추론을 사용합니다. `null`, 사용자 정의 객체, 정밀도/스케일, 길이 또는 SQL Server 전용 타입에는 명시적인 힌트를 사용하세요.

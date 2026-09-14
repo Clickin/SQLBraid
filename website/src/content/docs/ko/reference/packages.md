@@ -13,6 +13,7 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite` 어댑터; `/inspector` |
 | `@sqlbraid/oracle` | Oracle dialect/TypePolicy 및 파라미터 힌트; `/oracledb` 어댑터; `/inspector` |
 | `@sqlbraid/mssql` | SQL Server dialect/TypePolicy 및 파라미터 힌트; `/tedious` 어댑터; `/inspector` |
+| `@sqlbraid/bun-sql` | 사용자가 PostgreSQL/MySQL/MariaDB/SQLite dialect를 선택하는 Bun.SQL adapter family |
 | `@sqlbraid/compiler` | TypeScript 검색 및 보호된 템플릿 lowering |
 | `@sqlbraid/vite` | source map을 보존하는 guarded-template용 Vite 8 pre-transform |
 | `@sqlbraid/metadata` | DB 사실 스냅샷, 검증, identity, drift |
@@ -23,7 +24,21 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/language-server` | 표준 stdio LSP 통합 |
 | `sqlbraid` | 비스코프 CLI 편의 패키지; 데이터베이스 드라이버 없이 `sqlbraid` 실행 파일 제공 |
 
-패키지는 17개입니다. 스코프가 있는 런타임/도구 패키지 16개와 비스코프 CLI 편의 패키지 1개입니다. 런타임 패키지는 메타데이터, codegen, compiler, editor 또는 Vite 의존성을 가져오지 않습니다. tooling 패키지는 개발/빌드 환경에만 설치하세요. Oracle 및 SQL Server 드라이버 의존성은 portable root에서 제외됩니다. `@sqlbraid/vite`는 Vite를 peer로 유지하며 framework를 가져오지 않습니다.
+패키지에는 스코프 런타임/도구 패키지와 비스코프 CLI 편의 패키지가 포함됩니다. `@sqlbraid/bun-sql`은 static Bun import가 없고 명시적인 `dialect`를 요구하며 SQL 의미를 자동 감지하지 않습니다. 런타임 패키지는 metadata, codegen, compiler, editor 또는 Vite 의존성을 가져오지 않습니다. Tooling은 개발/빌드 환경에만 설치하세요. Oracle, SQL Server, MariaDB, Bun driver 의존성은 portable root에서 제외됩니다. `@sqlbraid/vite`는 Vite를 peer로 유지하며 framework를 가져오지 않습니다.
+
+`db.session()`은 하나의 provider lease를 고정하고 `db.tx()`는 이를
+재사용하며 선택한 adapter가 advertise하는 경우에만 savepoint/option을
+지원합니다. Prepared query는 물리 placeholder가 아닌 logical shape를
+lock합니다. Active cancellation은 capability 기반이며 없으면
+`BRAID_CANCEL_UNSUPPORTED`로 실패합니다. Bun 1.3.14는
+PostgreSQL/MySQL/MariaDB에 `{ bigint: true }`, SQLite에
+`{ safeIntegers: true }`를 사용하며 column metadata가 없어 integral 또는
+integral-approximate `Number` row를 ambiguous로 거부합니다. PostgreSQL decimal은
+text이며 MySQL/MariaDB DECIMAL과 binary byte carrier는 직접 작성한 SQL
+text/hex 변환 없이 거부됩니다. SQLite native decimal은 unsupported입니다.
+Bun MySQL/MariaDB의 빈 `SELECT`와
+영향 행 0인 DML/DDL은 `bun-sql.result-kind-metadata` 조건에서 guarded되며
+실행 후 `BRAID_RESULT_KIND_AMBIGUOUS`로 실패할 수 있습니다.
 
 의존성 방향은 다음과 같습니다.
 

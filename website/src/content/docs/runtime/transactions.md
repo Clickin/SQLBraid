@@ -6,7 +6,7 @@ description: Pin one physical connection and make transaction scope explicit.
 `db.tx` is the connection-pinning boundary:
 
 ```ts
-await db.tx(async (tx) => {
+await db.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
   await tx.execute(sql.command`
     INSERT INTO audit_log (account_id) VALUES (${accountId})
   `);
@@ -16,9 +16,12 @@ await db.tx(async (tx) => {
 });
 ```
 
-Every `tx.*` operation in the callback reuses one physical connection until commit or rollback. Use the callback handle—not the outer `db`—for all work inside the transaction. The callback handle is closed after the closure returns.
+Every `tx.*` operation in the callback reuses one physical connection until
+commit or rollback. Use the callback handle—not the outer `db`—for all work
+inside the transaction. The callback handle closes after the callback returns.
 
-Nested `tx` calls use savepoints when the executor supports them:
+Nested `tx` calls use savepoints when the executor advertises
+`transaction.savepoint`:
 
 ```ts
 await db.tx(async (tx) => {
@@ -30,31 +33,65 @@ await db.tx(async (tx) => {
 });
 ```
 
-While a savepoint is active, use the innermost handle. Parent or sibling use fails with `BRAID_TX_SCOPE`. A transaction stream must be closed before opening a savepoint; overlapping pinned work fails rather than moving to another connection.
+While a savepoint is active, use the innermost handle. Parent or sibling use is
+rejected with the runtime scope error. A transaction stream must close before
+opening a savepoint; overlapping pinned work fails instead of moving to another
+connection.
 
-## Isolation default
+## Sessions and physical leases
 
-SQLBraid 0.1.0 does **not** expose an isolation option and does not silently choose one. The transaction uses the database/driver connection's existing default isolation behavior. Explicit isolation setup is database-specific: PostgreSQL permits `SET TRANSACTION` as the first `tx` operation, before any query; MySQL requires transaction-characteristic setup before the transaction begins. Configure the same owned physical connection or its session initialization, not an independent pooled root operation that may use another connection. SQLite does not share this `SET TRANSACTION` syntax. Verify setup with the selected driver; do not infer isolation from a dialect name or from Node/Bun/Deno.
+`db.session(async (session) => ...)` pins one provider lease for its entire
+callback. Nested sessions reuse that lease, and `db.tx(...)` inside a session
+uses it without reacquiring. The outer root database cannot escape the session.
+A provider is a lease source, not a physical connection; root pooled operations
+acquire, execute, release, then map materialized results. A stream holds its
+lease until cursor/request cleanup. An unavailable session primitive rejects
+with `BRAID_SESSION_UNSUPPORTED`.
 
-Batch is not atomic. Earlier statements—and later statements when result mapping fails—may already have executed. Wrap the batch in `db.tx(...)` when atomicity is required.
+## Transaction options
 
-`db.bulk(inputs, factory)` is command-only homogeneous DML, not a replacement
-for a transaction. Root bulk acquires one physical lease but has no portable
-atomicity promise, is never implicitly wrapped in a transaction, and does not
-auto-chunk. Use `tx.bulk(inputs, factory)` inside this callback when all items
-must share the transaction:
+The portable options are deliberately fixed:
 
 ```ts
-await db.tx(async (tx) => {
-  await tx.bulk(inputs, (input) => sql.command`
-    UPDATE account SET amount = ${input.amount} WHERE id = ${input.id}
-  `);
-});
+type TransactionIsolation =
+  | "read-uncommitted"
+  | "read-committed"
+  | "repeatable-read"
+  | "serializable";
+
+interface TransactionOptions {
+  isolation?: TransactionIsolation;
+  readOnly?: boolean;
+}
 ```
 
-Drivers report the actual bulk mode (`native-bulk`, `pipeline`,
-`prepared-loop`, or `remote-batch`) rather than making a cross-dialect
-throughput or transaction claim. D1 currently has no callback transaction
-primitive matching this contract.
+The runtime maps these literals to adapter-owned transaction control. It never
+interpolates arbitrary JavaScript text into `BEGIN`/`SET TRANSACTION`, and it
+never silently changes an omitted option. Omitted options preserve the actual
+connection/session default. A malformed JavaScript value rejects before lease
+acquisition with `TypeError` / `BRAID_TX_OPTIONS_INVALID`. A valid but
+unsupported isolation or access mode rejects with `UnsupportedFeatureError` /
+`BRAID_TX_OPTION_UNSUPPORTED`, whose feature identifies
+`transaction.isolation.<level>` or `transaction.read-only`.
 
-An uncertain transaction-control failure poisons the physical resource. Pool cleanup discards it; a direct resource rejects further SQLBraid work. An abandoned live stream rolls back instead of committing over an active cursor.
+When transactions are unavailable, `BRAID_TX_UNSUPPORTED` is used. Nested
+explicit options, including `{}`, reject with `BRAID_TX_OPTIONS_NESTED`; they
+cannot change an active transaction. Adapters may map PostgreSQL
+`read-uncommitted` to its documented `read-committed` behavior only when their
+capability evidence says so. SQLite, D1, and other drivers expose only the
+combinations their transport actually honors.
+
+## Batch and bulk
+
+`batch` is not atomic. Earlier statements—and later statements when mapping
+fails—may already have executed. Wrap it in `db.tx(...)` when atomicity matters.
+
+`db.bulk(inputs, factory)` is command-only homogeneous DML, not a transaction.
+Root bulk uses one lease but has no portable atomicity or auto-chunking promise.
+Use `tx.bulk(inputs, factory)` inside the callback when every item must share the
+transaction. Drivers report the actual mode (`native-bulk`, `pipeline`,
+`prepared-loop`, or `remote-batch`).
+
+An uncertain transaction-control failure poisons the physical resource. Pool
+cleanup discards it; a direct resource rejects further SQLBraid work. An
+abandoned live stream rolls back instead of committing over an active cursor.

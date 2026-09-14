@@ -36,6 +36,12 @@ rejected rather than ignored.
 
 `CURSOR VARYING OUTPUT` is not exposed as an application cursor: ordinary database APIs do not bind it as a client result cursor, so a cursor-output hint is rejected with `BRAID_CALL_CURSOR_UNSUPPORTED`. If a batch consumes a local cursor and emits `SELECT` rows, those are ordinary emitted result sets. Tedious output/return failures remain explicit; SQLBraid never guesses a procedure identity from arbitrary `EXEC` text.
 
+An active signal uses Tedious request cancellation and discards the physical
+connection before lease release. An adapter without a cancellation path must
+reject before I/O with `UnsupportedFeatureError` /
+`BRAID_CANCEL_UNSUPPORTED`. Transaction options are capability-driven;
+unsupported isolation or read-only combinations reject explicitly.
+
 See the [SQL Server setup](https://clickin.github.io/SQLBraid/getting-started/mssql/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
 
 Tedious returns SQL Server exact integer types (`tinyint`, `smallint`, `int`,

@@ -68,14 +68,11 @@ The native D1 batch may have stronger transaction behavior than root bulk, but
 that is not the portable SQLBraid contract. Root bulk is not implicitly
 transactional and has no portable auto-chunking promise.
 
-Historical PV16 evidence is retained in the release records. Stage A evidence
-for implementation revision `53db135bd156b6d65dc91785a671dec5249c95d4` is
-recorded in the [support matrix](/SQLBraid/reference/support/); all three Stage A
-Runtime, Docs, and Release gates passed, and the WASM profile is Official for
-Stage A. Local D1 remains Compatible because its managed SQLite version is
-unreported. No browser gate claims OPFS persistence, SharedArrayBuffer, remote
-production support or npm publication. Later revisions require separate Stage B
-exact-final SHA verification.
+Historical SQLite evidence is retained in the release records. The current
+phase-J tree is pending fresh exact-SHA Runtime, Docs, and Release gates. Local
+D1 remains Compatible because its managed SQLite version is unreported. No
+browser gate claims OPFS persistence, SharedArrayBuffer, remote production
+support, or npm publication.
 
 ## Browser and Worker representation profiles
 

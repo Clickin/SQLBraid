@@ -100,13 +100,12 @@ for an approximate type.
 
 ## Driver profiles
 
-The following is the PV18 contract. Stage A evidence is recorded for
-implementation revision `53db135bd156b6d65dc91785a671dec5249c95d4`; all three
-Stage A Runtime, Docs, and Release gates passed. The [support
+The following is the current PV18 contract. The [support
 matrix](/SQLBraid/reference/support/) remains the evidence source for each exact
-database/runtime revision. A profile is the complete driver configuration that
-changes result JavaScript types, not a convenient label attached after the fact.
-Later revisions require separate Stage B exact-final SHA verification.
+database/runtime revision. Targets affected by the current API work remain
+Pending or Compatible until fresh exact-SHA gates pass. A profile is the
+complete driver configuration that changes result JavaScript types, not a
+convenient label attached after the fact.
 
 The first-party profile helpers keep runtime and codegen on the same contract:
 
@@ -142,6 +141,7 @@ numbers.
 | MySQL / `mysql2` | exact integer/`DECIMAL` → `string`; `jsonStrings`/`dateStrings` → `string` | native JSON/temporal are separate convenience profile; exact evidence does not transfer |
 | MariaDB Connector | exact integer/`DECIMAL` → `string`; `autoJsonMap:false`/`dateStrings:true` → `string` | native JSON/temporal are separate convenience profile; exact evidence does not transfer |
 | Node SQLite / WASM | INTEGER storage → `string`; REAL storage → `number` | native bigint is transport-only; D1 is guarded to the safe-integer range |
+| Bun SQL 1.3.14 | PostgreSQL/MySQL/MariaDB `{ bigint: true }`; PostgreSQL decimal → `string`; SQLite `{ safeIntegers: true }`; MariaDB/SQLite JSON → text | integral `Number` rows reject; MySQL/MariaDB DECIMAL and binary share ambiguous bytes and reject; author `CAST(... AS CHAR)`/`HEX(...)`; SQLite native decimal is unsupported |
 | Oracle Thin | `NUMBER` family → `string`; approximate binary → `number` | native JSON/temporal values are profile-specific convenience representations |
 | SQL Server / Tedious | preserved exact integer → `string`; approximate binary → `number` | native DECIMAL/NUMERIC/MONEY exact output is unsupported; author text casts |
 

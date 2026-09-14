@@ -37,15 +37,18 @@ runtime can actually receive.
 
 ## Launch documentation
 
-This is the 0.1.0 pre-release documentation. PV18 profile-coherent
-value-fidelity and container work starts from
-`2119d9676b05fb2531eaf7aac1ef37741600ba40`. Stage A implementation evidence
-is recorded for revision `53db135bd156b6d65dc91785a671dec5249c95d4`; all three Stage A Runtime, Docs,
-and Release gates passed. The eight eligible exact profiles are Official for
-Stage A; D1 remains Compatible. See the [revision-specific
-evidence](/SQLBraid/reference/support/#release-evidence-provenance). Any later
-revision requires separate Stage B exact-final SHA verification, and no Stage B completion or
-npm publication is claimed.
-See [release notes and limitations](/SQLBraid/release/notes/)
+This is the 0.1.0 pre-release documentation. The current tree includes
+session/lease ownership, fixed transaction options, prepared input factories,
+capability-driven cancellation, and explicit unsupported errors. Targets
+affected by this API work remain Pending or Compatible until fresh exact-SHA
+Runtime, Docs, and Release gates pass.
+
+The last exact-SHA verification retained for provenance is revision
+`8da8167e027320fcc9bb2aac16b0903c64147940`: Runtime
+[34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046),
+Docs [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
+and Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)
+all succeeded for that revision. These historical links do not certify the
+current tree or authorize publication. See [release notes and limitations](/SQLBraid/release/notes/)
 and the [runtime/driver evidence matrix](/SQLBraid/reference/support/) before
 choosing an integration.

@@ -3,36 +3,43 @@ title: 로드맵
 description: 현재 동작과 별도 설계 및 증거가 필요한 후보를 구분합니다.
 ---
 
-## 0.1.0 후보 표면
+## 현재 프리릴리스 표면
 
-출시 범위에는 SQL 우선 템플릿, 안전한 바인드, 동적 `@braid`, 결과 계약, Standard Schema 매핑, 물리적 연결 leasing, 트랜잭션/savepoint, stream, observer, metadata v1, 결정적 codegen, 표준 LSP, CLI JSON 대체 수단, 얇은 VS Code client, native DML-returning 계약, 동종 command bulk, MariaDB, Browser SQLite WASM, D1, 명시적 PV18 profile-coherent 값 정확도 계약이 포함됩니다.
+현재 API에는 SQL 우선 template, 안전한 bind, 동적 `@braid`, result contract,
+Standard Schema 매핑, 물리 lease/session 소유권, transaction/savepoint 범위,
+capability 기반 cancellation, prepared input/zero-input factory, stream,
+observer, metadata, 결정적 codegen, 표준 LSP, CLI JSON 검사, 얇은 VS Code
+client, native DML-returning contract, 동종 command bulk, MariaDB, Browser
+SQLite WASM, D1, representation-profile contract가 포함됩니다.
 
-PV18은 `2119d9676b05fb2531eaf7aac1ef37741600ba40`에서 시작합니다. Stage A
-구현 revision `53db135bd156b6d65dc91785a671dec5249c95d4`는 Runtime, Docs,
-Release 세 gate를 모두 통과했습니다. [지원
-매트릭스](/SQLBraid/reference/support/)는 revision별 증거를 기록하며 여덟
-개 정확한 프로필은 Stage A에서 Official입니다. D1은 Compatible입니다.
-이후 revision에는 별도 Stage B exact-final SHA 검증이 필요합니다. 인증은 정확한 프로필의
-범위이며 미래 버전을 포함하지 않습니다. RC 발행에는 여전히 사용자 수락과
-명시적인 릴리스 승인이 필요합니다.
+provenance로 보존하는 마지막 exact-SHA 검증은 revision
+`8da8167e027320fcc9bb2aac16b0903c64147940`이며 Runtime
+([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
+Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
+Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326))가
+성공했습니다. 현재 tree는 더 최신이므로 새로운 exact-SHA gate를 기다리는
+pending 상태입니다. 이 link는 현재 지원이나 발행을 의미하지 않습니다.
 
-프로필 descriptor는 driver option, raw/canonical 표현, TypePolicy provenance를
-함께 묶으며 codegen은 runtime에서 선택한 descriptor를 재사용해야 합니다.
-Container 지원은 의도적으로 재귀적이지 않으므로 일반 scalar/array 증거와
-희귀 composite/object/variant/vector 증거를 독립적으로 승격할 수 있습니다.
-이 문서는 Stage B 완료나 이후 revision의 RC 준비 상태를 주장하지 않습니다.
+Profile descriptor는 driver option, raw/canonical representation, TypePolicy
+provenance를 묶으며 runtime과 codegen은 동일 descriptor를 재사용해야 합니다.
+Container 동작은 재귀적으로 추론하지 않습니다. Support label은 revision별,
+capability별입니다.
 
-## 출시 후 후보
+## 향후 후보
 
-현재 API가 아니며 지원되는 것처럼 프로덕션 코드에 복사해서는 안 됩니다.
+현재 API가 아니므로 지원되는 것처럼 production code에 복사하면 안 됩니다.
 
-- 더 넓은 Oracle/server-line 및 추가 첫 번째 파티 드라이버 증거
-- 애플리케이션 input mapping 및 명시적 codec 계약
-- 선택적 데이터베이스 검증 및 더 풍부한 SQL 진단
-- cancellation, pipeline/COPY/LOAD DATA 작업, 쿼리 변환, routing/retry, OpenTelemetry 통합
-- 명시적 격리/세션 동작을 위한 transaction-profile API
+- 더 넓은 database/server-line 및 추가 first-party driver 증거
+- application input mapping과 명시적 codec contract
+- 선택적 database verification과 풍부한 SQL 진단
+- pipeline/COPY/LOAD DATA, query transformation, routing/retry, OpenTelemetry
+- 더 풍부한 container/JSON/temporal representation 증거
 
-후보는 해당 dialect/드라이버/런타임 의미, regression 범위, 패키지 메타데이터, 정확한 릴리스 증거가 독립적으로 완료된 뒤에만 Official 지원 claim이 됩니다. 이 로드맵은 배포나 지원 label을 의미하지 않습니다.
+Cancellation, session, transaction option, prepared input factory, bulk/stream
+지원은 현재 contract이므로 roadmap 후보가 아닙니다. Missing capability는
+숨겨진 fallback이 아니라 명시적인 `UnsupportedFeatureError`로 실패합니다.
+후보가 Official support claim이 되려면 dialect/driver/runtime 의미, 실행 범위,
+package metadata, translation, exact release evidence를 완료해야 합니다.
 
-docs-pages workflow는 push에서 자동으로 검증합니다. Pages 배포와 history
-업데이트에는 `deploy=true`인 명시적 `workflow_dispatch`가 필요합니다.
+Pages 배포와 release history에는 명시적인 승인이 필요합니다. 이 로드맵은
+tag, npm 발행 또는 Pages 배포를 의미하지 않습니다.

@@ -35,6 +35,19 @@ Provider는 불변 `statementBinding` 어댑터를 노출합니다. 바인딩 �
 
 풀은 가짜 executor가 아닙니다. `BEGIN`, 쿼리, `COMMIT`이 서로 다른 물리적 연결에 도착할 수 있다면 트랜잭션은 실제 트랜잭션이 아닙니다. lease를 고정하려면 `db.tx(...)`를 사용하세요.
 
+`db.session(async (session) => ...)`은 callback 동안 하나의 lease를 고정합니다.
+중첩 session은 이를 재사용하고 session 안의 `db.tx(...)`도 재획득하지
+않습니다. 바깥 root database로 이 범위를 빠져나갈 수 없습니다. Stream은
+cursor/request cleanup까지 lease를 유지합니다. Provider/session primitive를
+사용할 수 없으면 `BRAID_SESSION_UNSUPPORTED`로 실패합니다.
+
+이미 abort된 signal은 자신의 `reason`을 보존합니다. 활성 cancellation은
+driver capability이며, 없으면 I/O 전에 `UnsupportedFeatureError` /
+`BRAID_CANCEL_UNSUPPORTED`로 실패합니다. Transaction option은 acquire 전에
+검증됩니다. malformed 값은 `TypeError` / `BRAID_TX_OPTIONS_INVALID`, 유효하지만
+지원하지 않는 값은 `BRAID_TX_OPTION_UNSUPPORTED`, 중첩 명시 option은
+`BRAID_TX_OPTIONS_NESTED`를 사용합니다.
+
 :::caution 팩토리 경계
 `pg.Pool`을 `createPgDatabase`에 전달하거나 mysql2 풀을 `createMysql2Database`에 전달하는 것은 지원되지 않습니다. `createPgPoolDatabase` 또는 `createMysql2PoolDatabase`를 사용하세요.
 :::

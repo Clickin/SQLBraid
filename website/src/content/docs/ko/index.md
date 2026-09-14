@@ -37,14 +37,18 @@ temporal, binary 값이 기록되어 있습니다.
 
 ## 문서 출시 안내
 
-이 문서는 0.1.0 프리릴리스 문서입니다. PV18 profile-coherent 값 정확도와
-container 작업은 `2119d9676b05fb2531eaf7aac1ef37741600ba40`에서 시작합니다.
-Stage A 구현 증거는 `53db135bd156b6d65dc91785a671dec5249c95d4` revision에
-기록되었고 Runtime, Docs, Release 세 gate를 모두 통과했습니다. 여덟 개
-정확한 프로필은 Stage A에서 Official이며 D1은 Compatible입니다.
-[revision별 증거](/SQLBraid/reference/support/#릴리스-증거-출처)를
-확인하세요. 이후 revision에는 별도 Stage B exact-final SHA 검증이 필요하며 Stage B 완료나
-npm 발행은 주장하지 않습니다. 통합을 선택하기 전에
-[릴리스 노트와 제한
-사항](/SQLBraid/release/notes/) 및 [런타임/드라이버 증거
-매트릭스](/SQLBraid/reference/support/)를 확인하세요.
+이 문서는 0.1.0 프리릴리스 문서입니다. 현재 tree에는 session/lease 소유권,
+고정 transaction option, prepared input factory, capability 기반
+cancellation, 명시적인 unsupported 오류가 포함됩니다. 이 API 변경의 영향을
+받은 target은 새로운 exact-SHA Runtime, Docs, Release gate가 통과할 때까지
+Pending 또는 Compatible입니다.
+
+provenance로 보존하는 마지막 exact-SHA 검증은 revision
+`8da8167e027320fcc9bb2aac16b0903c64147940`이며 Runtime
+[34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046),
+Docs [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
+Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)가
+해당 revision에서 모두 성공했습니다. 이 역사 link는 현재 tree를 인증하거나
+발행을 승인하지 않습니다. 통합을 선택하기 전에
+[릴리스 노트와 제한 사항](/SQLBraid/release/notes/) 및
+[런타임/드라이버 증거 매트릭스](/SQLBraid/reference/support/)를 확인하세요.

@@ -1,59 +1,31 @@
 ---
 title: 현재 제한 사항
-description: PV18 프리릴리스 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
+description: 프리릴리스 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
 ---
 
-- **인증은 프로필과 revision별입니다.** [지원 매트릭스](/SQLBraid/reference/support/)에 검증한 구현 증거를 기록합니다. D1은 managed SQLite 버전이 공개되지 않아 Compatible이며 Oracle Free 23.9는 19c를 인증하지 않습니다. CI 통과가 발행을 승인하지는 않습니다.
-- **`db.all()`은 materialized입니다.** readonly 배열을 반환하고 O(row-count) 애플리케이션 메모리를 사용합니다. 메모리를 제한해야 하는 행 쿼리에는 `db.stream()`을 사용하세요.
-- **루틴 스트리밍은 포함되지 않습니다.** materialized `db.call()`은 매핑 전에 루틴 리소스를 소비하고 닫으며 다중 cursor session 소유권은 향후 API로 남겨둡니다.
-- **MySQL prepared CALL OUT/INOUT은 지원하지 않습니다.** mysql2 3.x public API로 추가 결과가 OUT carrier인지 증명할 수 없으므로 SQLBraid는 추측하지 않습니다.
-- **PostgreSQL refcursor 호출은 기존 transaction이 필요합니다.** refcursor는 독립 driver ResultSet이 아닌 transaction-bound portal이며 SQLBraid는 root call을 숨은 transaction으로 감싸지 않습니다.
-- **SQL Server cursor output은 애플리케이션 cursor로 지원하지 않습니다.** `CURSOR VARYING OUTPUT`은 T-SQL 언어 기능이지만 일반 client API는 bind 가능한 ResultSet으로 노출하지 않습니다. emitted `SELECT` 행은 일반 result set입니다.
-- **SQLite 루틴 호출은 지원하지 않습니다.** SQLite scalar/aggregate/window
-  function은 일반 SQL 안에서 실행되고 virtual-table/table-valued extension은
-  일반 행 쿼리입니다. INTEGER storage는 canonical string으로 노출되며
-  native bigint는 내부 전송이지 public mode가 아닙니다.
-- **DML-returning은 materialized만 지원 범위입니다.** `sql.rows`와 `db.execute`, `db.all`, `db.one`, `db.maybeOne`을 사용하세요. `RETURNING`/`OUTPUT`의 `db.stream()`은 cross-driver PV18 지원 주장이 아닙니다.
-- **DML-returning syntax는 native입니다.** PostgreSQL/SQLite/MariaDB는 문서화된 `RETURNING`, SQL Server는 `OUTPUT`, Oracle은 `RETURNING ... INTO`와 `sql.out()`을 사용하며 MySQL에는 일반 DML `RETURNING`이 없습니다.
-- **`db.bulk()`는 command-only입니다.** 하나의 DML shape를 고정하고 I/O 전에 모든 입력을 검증하며 하나의 physical lease를 사용합니다. 빈 입력은 acquire하지 않습니다. Root bulk는 자동 transaction/auto-chunking 약속이 없고 실제 모드로 `native-bulk`, `pipeline`, `prepared-loop`, `remote-batch`를 보고합니다.
-- **MariaDB는 별도 dialect입니다.** MariaDB Connector/Node.js의 증거는 `mysql2`와 독립적이며 MariaDB 연결의 `mysql2`는 best-effort 호환일 뿐 Official MariaDB capability 주장이 아닙니다. 정확한 `UPDATE RETURNING` 지원은 주장하지 않습니다.
-- **Browser SQLite WASM은 direct resource입니다.** pool을 제공하지 않으며 transaction/stream 중 충돌하는 root 작업을 다른 리소스로 보내지 않고 거부합니다.
-- **Cloudflare D1은 materialized/remote-batch 전용입니다.** Worker Binding API에 incremental cursor가 없으므로 `db.stream()`과 callback `db.tx()`는 `BRAID_STREAM_UNSUPPORTED`이며 SQLBraid는 paginate하거나 transaction을 흉내 내지 않습니다.
-- **Native SQL Server RETURN status에는 명시적 procedure metadata가 필요합니다.** `sql.call({ procedure: { name, parameterNames } })`를 사용하며 임의 `EXEC` 텍스트에서 identity를 추측하지 않습니다.
-- **범용 input codec이 없습니다.** 일반 보간은 드라이버에 바인드되며 애플리케이션 JSON, temporal, custom-class, binary 규칙은 드라이버/애플리케이션의 책임입니다.
-- **숫자 정확도는 프로필별입니다.** 정확한 DB 정수와 10진수는 canonical
-  string이고 근사 IEEE 값은 number입니다. `decodeExactInteger`는 애플리케이션이
-  선택하는 `bigint` transform입니다. Tedious native
-  `decimal`/`numeric`/`money`는 exact 출력에서 fail closed하며 Oracle
-  `NUMBER`는 text로 유지하고 D1은 safe integral Number로 guarded됩니다. 전역
-  numeric/integer mode는 없습니다.
-- **JSON과 temporal 정확도는 별도 프로필입니다.** Parsed JSON에는 이미
-  반올림된 중첩 숫자가 있을 수 있고 native `Date`는 fractional precision이나
-  offset/zone 의미를 잃을 수 있습니다. 필요하면 테스트한 text 프로필이나
-  `JSON_SERIALIZE`/`TO_CHAR`/`CONVERT` SQL을 작성하세요.
-- **Container는 scalar 보장이 아닙니다.** 배열, domain, range, multirange,
-  composite, Oracle object/collection, SQL Server `sql_variant`, vector 및
-  기타 중첩 값은 recursive transport가 테스트될 때까지 unclassified 또는
-  unsupported입니다.
-- **Profile과 codegen은 일치해야 합니다.** PostgreSQL, mysql2, MariaDB
-  descriptor에는 matching TypePolicy가 들어 있습니다. Runtime과 생성 모델은
-  같은 descriptor를 재사용해야 하며 JSON/temporal 또는 numeric option을
-  바꾸면 새 evidence profile이 됩니다.
-- **정확한 bind는 별도 capability입니다.** 증명된 프로필에서 exact text 입력을
-  사용하세요. `null`은 SQL `NULL`이고 일반 `undefined`는 acquisition 전에
-  `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다.
-- **환경 증거는 관찰 결과입니다.** `db.environment({ targets? })`는 일반
-  lease probe를 사용하고 성공한 snapshot을 캐시합니다. 불완전하거나 일치하지
-  않는 tuple은 Compatible로 남으며 추측한 Official claim이 되지 않습니다.
-- **SQL에서 TypeScript 추론을 하지 않습니다.** 임의 SELECT/JOIN 결과 추론과 관계 객체 그래프 hydrate는 계약 밖입니다.
-- **격리 API가 없습니다.** 콜백 안에서 애플리케이션이 명시적 SQL을 실행하지 않으면 transaction은 데이터베이스/드라이버 연결 기본값을 사용합니다.
-- **Observer mutation/retry/routing이 없습니다.** Observer는 작업을 검사하거나 실패시킬 수 있지만 SQL 재작성, bind 변경, retry는 할 수 없습니다.
-- **메타데이터는 무효성의 증거가 아닙니다.** 누락 객체는 open-world이며 루틴 인자 목록은 불완전할 수 있습니다.
-- **사용자 지정 드라이버는 릴리스 지원이 아닙니다.** `QueryExecutor`/`ConnectionProvider`를 구현하고 독립 증거를 제공하세요.
-- **지원은 free-only이며 재현 가능해야 합니다.** Official target에는 무료로
-  재현 가능한 CI 환경, 정확한 version/profile tuple, maintainer-safe runtime
-  cost가 필요합니다. 유료 target은 contributor가 유지하는 적합한 외부 CI
-  경로를 제공하기 전에는 승격하지 않습니다.
-- **Tooling은 Node 우선입니다.** compiler, CLI, LSP, metadata/codegen, Vite 통합은 별도 build/runtime 관심사이며 Node 전용 데이터베이스 드라이버를 브라우저 bundle에 넣지 마세요.
+- **인증은 profile과 revision별입니다.** [지원 매트릭스](/SQLBraid/reference/support/)가 증거 출처입니다. 현재 phase-J tree는 새로운 exact-SHA Runtime, Docs, Release gate를 기다리는 pending이며 과거 link는 이를 인증하지 않습니다. CI 통과는 발행 승인이 아닙니다.
+- **`db.all()`은 materialized입니다.** readonly array와 O(row-count) application memory를 사용합니다. 메모리가 중요하면 `db.stream()`을 사용하세요.
+- **Routine streaming은 없습니다.** materialized `db.call()`은 매핑 전에 routine resource를 소비하고 닫으며 raw cursor, portal, request, carrier row는 노출되지 않습니다.
+- **MySQL prepared CALL OUT/INOUT은 지원하지 않습니다.** mysql2 3.x public API가 어떤 추가 결과가 OUT carrier인지 증명하지 못하므로 추측하지 않습니다.
+- **PostgreSQL refcursor call은 기존 transaction이 필요합니다.** refcursor는 transaction-bound portal이며 독립 ResultSet이 아닙니다. 숨은 transaction을 만들지 않습니다.
+- **SQL Server cursor output은 application cursor가 아닙니다.** `CURSOR VARYING OUTPUT`은 bind 가능한 client ResultSet으로 노출되지 않으며 emitted `SELECT` 행은 일반 result set입니다.
+- **SQLite routine call은 지원하지 않습니다.** scalar/aggregate/window function과 virtual-table extension은 일반 SQL입니다. D1에는 callback transaction과 incremental cursor도 없습니다.
+- **DML-returning은 materialized입니다.** `sql.rows`와 `db.execute`, `db.all`, `db.one`, `db.maybeOne`을 사용하고 `RETURNING`/`OUTPUT`의 cross-driver stream을 추론하지 마세요.
+- **`db.bulk()`는 command-only입니다.** 하나의 DML shape를 lock하고 I/O 전에 모든 입력을 검증하며 하나의 lease를 사용하고 실제 mode를 보고합니다. Root bulk에는 portable atomicity/auto-chunking 약속이 없으므로 atomicity에는 `db.tx()`를 사용하세요.
+- **Session과 transaction은 물리 scope API입니다.** `db.session()`은 하나의 provider lease를 고정하고 중첩 session/transaction 작업은 재사용합니다. Root escape 및 closed/sibling handle은 거부됩니다. Primitive가 없으면 `BRAID_SESSION_UNSUPPORTED` 또는 `BRAID_TX_UNSUPPORTED`를 사용합니다.
+- **Transaction option은 고정되고 capability 기반입니다.** Isolation은 `read-uncommitted`, `read-committed`, `repeatable-read`, `serializable` 중 하나이며 `readOnly`는 별도입니다. Malformed runtime 값은 acquire 전에 `TypeError` / `BRAID_TX_OPTIONS_INVALID`, 유효하지만 지원되지 않는 값은 `BRAID_TX_OPTION_UNSUPPORTED`, 중첩 명시 option은 `BRAID_TX_OPTIONS_NESTED`로 실패합니다.
+- **Cancellation은 capability 기반입니다.** 이미 abort된 signal은 자신의 `reason`을 보존합니다. 물리 cancellation이 없는 활성 signal은 I/O 전에 `UnsupportedFeatureError` / `BRAID_CANCEL_UNSUPPORTED`로 실패하며 iteration 중지만 멈추는 것은 cancellation이 아닙니다.
+- **범용 input codec이 없습니다.** 일반 interpolation은 driver-bound이며 JSON, temporal, custom-class, binary 규칙은 application/driver 책임입니다.
+- **숫자 정확도는 profile별입니다.** 정확한 DB integer/decimal은 canonical string이고 근사 IEEE 값은 number입니다. `decodeExactInteger`는 opt-in transform입니다. Bun 1.3.14는 PostgreSQL/MySQL/MariaDB에 `{ bigint: true }`, SQLite에 `{ safeIntegers: true }`를 사용합니다. Integral `Number` row는 거부되며 PostgreSQL decimal은 text입니다. MySQL/MariaDB DECIMAL과 binary byte carrier는 직접 작성한 SQL text/hex 변환 없이 거부되고 SQLite native decimal은 unsupported입니다. D1은 safe-integer 범위의 guarded profile이며 exact text가 필요하면 authored `CAST(... AS TEXT)`를 사용하세요.
+- **JSON과 temporal 정확도는 별도 profile입니다.** Parsed JSON은 nested number가 반올림되었을 수 있고 native `Date`는 fractional precision 또는 offset/zone 의미를 잃을 수 있습니다. 테스트한 text profile이나 authored `JSON_SERIALIZE`/`TO_CHAR`/`CONVERT` SQL을 사용하세요.
+- **Container는 scalar 보장이 아닙니다.** Array, domain, range, multirange, composite, Oracle object/collection, SQL Server `sql_variant`, vector와 nested 값은 테스트 전까지 unclassified 또는 unsupported입니다.
+- **Profile과 codegen은 일치해야 합니다.** Driver JSON/temporal/numeric option을 바꾸면 별도 evidence profile이며 runtime과 generated model은 그 TypePolicy를 재사용해야 합니다.
+- **Bun SQL은 사용자가 dialect를 선택합니다.** `createBunSqlDatabase`는 `dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`를 요구하고 자동 감지하지 않습니다. Bun 1.3.14 active cancellation은 `BRAID_CANCEL_UNSUPPORTED`로 실패하고 stream/routine carrier는 `BRAID_STREAM_UNSUPPORTED`, `BRAID_CALL_UNSUPPORTED`로 명시 실패합니다. `result.rows`/`result.command` metadata는 `bun-sql.result-kind-metadata` 조건에서 guarded됩니다. MySQL/MariaDB의 빈 `SELECT`와 영향 행 0인 DML/DDL은 실행 후 `BRAID_RESULT_KIND_AMBIGUOUS`로 실패할 수 있어 side effect가 이미 발생했을 수 있습니다.
+- **Deno는 기존 adapter를 재사용합니다.** Public Node-compatible driver path가 Deno에서 동작할 수 있지만 Deno dialect를 만들거나 support tuple을 승격하지 않습니다.
+- **SQL에서 TypeScript를 추론하지 않습니다.** 임의 SELECT/JOIN 결과 추론과 relation graph hydrate는 범위 밖입니다.
+- **Observer mutation/retry/routing이 없습니다.** Observer는 검사하거나 실패시킬 수 있지만 SQL/bind를 바꾸거나 retry/route하지 않습니다.
+- **Metadata는 invalidity 증거가 아닙니다.** 누락된 object는 open-world이고 routine argument 목록은 불완전할 수 있습니다.
+- **Custom driver는 release support가 아닙니다.** `QueryExecutor`/`ConnectionProvider`를 구현하고 독립적인 exact evidence를 제공하세요.
+- **Tooling은 Node 우선입니다.** Compiler, CLI, LSP, metadata/codegen, Vite는 별도 build/runtime concern이며 Node-only driver를 browser bundle에 넣지 마세요.
 
-이 제한은 숨겨진 fallback이 아닌 의도적인 경계입니다. [루틴 호출](/SQLBraid/concepts/routines/), [스트리밍](/SQLBraid/runtime/streaming/), [로드맵](/SQLBraid/release/roadmap/)을 참고하세요.
+이는 숨겨진 fallback이 아닌 의도적인 경계입니다. [루틴 호출](/SQLBraid/concepts/routines/), [스트리밍](/SQLBraid/runtime/streaming/), [트랜잭션](/SQLBraid/runtime/transactions/), [지원 매트릭스](/SQLBraid/reference/support/)를 참고하세요.

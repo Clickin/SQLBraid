@@ -131,11 +131,8 @@ unclassified container입니다.
 
 `db.environment()`는 `extra_float_digits`, 선택한 JSON/temporal 프로필과
 가능한 경우 TypePolicy provenance를 기록합니다. 이를 무조건적인 fidelity
-보장으로 읽으면 안 됩니다. `53db135bd156b6d65dc91785a671dec5249c95d4`
-구현 revision의 Stage A 증거가 [support
-manifest](/SQLBraid/reference/support/)에 기록되었고 Runtime, Docs, Release
-세 gate를 모두 통과했으며 이 정확한 프로필은 Stage A에서 Official입니다.
-이후 revision에는 별도 Stage B exact-final SHA 검증이 필요합니다.
+보장으로 읽으면 안 됩니다. 현재 phase-J tree는 새로운 exact-SHA Runtime,
+Docs, Release gate를 기다리며 support matrix가 revision별 증거 출처입니다.
 `pg-cursor`는 native pull stream을 제공하며 peer가 없으면
 `BRAID_STREAM_UNSUPPORTED`입니다. Routine refcursor는 기존 transaction이
 필요하고 result set으로 materialize됩니다. Bulk는 SQL rewrite가 아닌

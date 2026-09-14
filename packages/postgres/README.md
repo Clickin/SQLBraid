@@ -21,7 +21,7 @@ PostgreSQL DML `RETURNING` is a row-producing statement: use
 documents materialized DML-returning only; `db.stream()` cancellation and
 rollback behavior is not a portable returning contract.
 
-`pg-cursor` is an optional peer. PostgreSQL row streaming uses its cursor protocol and fails with `BRAID_STREAM_UNSUPPORTED` when that peer/capability is unavailable; ordinary queries do not require it. Configure `streamBatchSize` or an explicit cursor factory when needed.
+`pg-cursor` is an optional peer. PostgreSQL row streaming uses its cursor protocol and fails with `BRAID_STREAM_UNSUPPORTED` when that peer/capability is unavailable; ordinary queries do not require it. Configure `streamBatchSize` or an explicit cursor factory when needed. An active signal uses the driver's physical cancellation path; a driver without that path must reject before I/O with `BRAID_CANCEL_UNSUPPORTED`.
 
 Exhaustion, break and mapper failure close the cursor before lease release.
 Abort uses the physical client's public `end()` method because closing a portal
@@ -29,7 +29,22 @@ cannot interrupt a pending Execute. SQLBraid awaits termination and discards
 that lease; a pool supplies a replacement connection, while a direct client must
 be replaced. An abortable custom client wrapper must expose `end()`.
 
-Routine calls support scalar OUT/INOUT values. Mark PostgreSQL `refcursor` OUT/INOUT parameters with `postgresParameter.refcursor()`; they become materialized `resultSets`, are removed from scalar `output`, and are fetched/closed on the same physical connection. A refcursor call requires an existing `db.tx(...)` scope because the portal is transaction-bound; SQLBraid does not create a hidden transaction.
+`db.tx({ isolation, readOnly }, callback)` emits PostgreSQL transaction modes
+on the pinned client. `read-uncommitted` is guarded because PostgreSQL maps it
+to `read-committed`.
+Malformed runtime values fail before acquisition as `TypeError` /
+`BRAID_TX_OPTIONS_INVALID`; valid but unsupported options use
+`BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit options use
+`BRAID_TX_OPTIONS_NESTED`.
+
+Routine calls support scalar OUT values. INOUT and return-value carriers are
+rejected with `BRAID_CALL_OUT_UNSUPPORTED` because `pg` does not expose a
+verified portable carrier contract. Mark PostgreSQL `refcursor` OUT parameters
+with `postgresParameter.refcursor()`; they become materialized `resultSets`,
+are removed from scalar `output`, and are fetched/closed on the same physical
+connection. A refcursor call requires an existing `db.tx(...)` scope because
+the portal is transaction-bound; SQLBraid does not create a hidden
+transaction.
 
 Logical `outputName` values rename positional CALL outputs; they do not select
 carrier columns by database field name.

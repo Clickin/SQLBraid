@@ -61,6 +61,12 @@ Thin 바인딩 어댑터는 논리 문장을 text-positional `:1`, `:2`, … 바
 - 이 어댑터는 native `procedure` metadata를 지원하지 않습니다. Oracle
   PL/SQL/SQL 호출 텍스트를 명시적으로 작성하세요.
 - 스트리밍은 드라이버의 ResultSet 프로토콜을 사용하며 완료, 중단, 조기 종료 시 ResultSet을 닫습니다.
+- Cancellation은 guarded `connection.break()` 경로를 사용합니다. 이는 즉시
+  중단이나 timeout을 보장하지 않는 cooperative 동작입니다. 문서화된
+  `DBMS_SESSION.SLEEP` raw probe는 sleep이 끝날 때만 `ORA-01013`으로
+  거부될 수 있으며, 어댑터는 settlement까지 물리 lease를 유지합니다.
+  문서화된 break primitive가 없으면 active cancellation은 I/O 전에
+  `BRAID_CANCEL_UNSUPPORTED`로 실패합니다.
 - 대상 조합은 Node 22.18.0/Linux x64의 Oracle Free 23.9 Thin입니다.
   현재 인증 상태와 정확한 gate는 [런타임 및 드라이버
   지원](/SQLBraid/reference/support/)에서 확인하세요.

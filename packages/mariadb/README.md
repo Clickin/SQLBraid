@@ -2,10 +2,12 @@
 
 MariaDB SQL dialect and official MariaDB Connector/Node.js adapter for SQLBraid.
 
-The MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0 exact profile passed
-[PV16 release dry-run](https://github.com/Clickin/SQLBraid/actions/runs/34818113561)
-at `2890ef65d15ac96a7e3471911b381340aa30579a`. This is not an npm publication
-or a certification of other driver/server profiles.
+The MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0 exact profile passed a
+historical PV16 release dry-run
+([34818113561](https://github.com/Clickin/SQLBraid/actions/runs/34818113561)) at
+`2890ef65d15ac96a7e3471911b381340aa30579a`. This is provenance only: it is not
+fresh evidence for the current tree, an npm publication, or a certification of
+other driver/server profiles.
 
 ```sh
 npm install @sqlbraid/mariadb mariadb
@@ -25,7 +27,19 @@ homogeneous bulk DML. Connector metadata determines row versus command results;
 multiple result sets are available through `db.call()` and are rejected by
 ordinary query methods.
 
-## PV18 representation profiles
+An active `AbortSignal` is honored only when the connector can cancel the
+physical operation. Otherwise the adapter rejects before I/O with
+`UnsupportedFeatureError` / `BRAID_CANCEL_UNSUPPORTED`; an already
+aborted signal preserves its `reason`. Transaction options and stream/call
+support remain capability-driven.
+
+`db.session()` pins one provider lease and nested `db.tx()` work reuses it
+without reacquiring. Transaction options are the fixed isolation literals plus
+`readOnly`; malformed values fail as `BRAID_TX_OPTIONS_INVALID`, unsupported
+valid values as `BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit options as
+`BRAID_TX_OPTIONS_NESTED`.
+
+## Representation profiles
 
 Configure the Connector/Node.js connection with the exported immutable
 `MARIADB_LOSSLESS_TEXT` descriptor:

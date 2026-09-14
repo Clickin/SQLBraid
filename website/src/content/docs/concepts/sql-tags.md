@@ -46,6 +46,11 @@ const users = await db.all(sql.rows<UserRow>`SELECT id, name FROM users`);
 
 Adapters report whether a statement produced rows or command metadata. If a query declared `rows` but the driver reports a command, SQLBraid throws `BRAID_RESULT_KIND` after execution. Put a write in `db.tx(...)` when a wrong declaration must roll back the write; a result-kind check cannot undo an already-completed root operation.
 
+Bun 1.3.14 uses the guarded `bun-sql.result-kind-metadata` condition. For its
+MySQL/MariaDB paths, an empty `SELECT` and zero-affected DML/DDL can produce
+`BRAID_RESULT_KIND_AMBIGUOUS` only after execution because the driver reports
+`command: null` and `affectedRows: 0`; side effects may already have occurred.
+
 SQLBraid does not infer a TypeScript row shape from arbitrary SQL. The developer owns the correspondence between selected columns and the declared row type.
 
 Set-returning functions and table-valued extensions remain ordinary row

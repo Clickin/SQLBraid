@@ -60,6 +60,17 @@ production support from a local Worker/D1 test.
 
 SQLite has no stored-procedure protocol in this adapter. `db.call()` fails with `BRAID_CALL_UNSUPPORTED`. Scalar, aggregate, and window functions registered through SQLite's function API are used inside ordinary SQL; virtual-table/table-valued extensions are ordinary `sql.rows(...)` queries, not routine calls.
 
+Node `node:sqlite` and WASM reject an active `AbortSignal` before I/O with
+`UnsupportedFeatureError` / `BRAID_CANCEL_UNSUPPORTED`; an already
+aborted signal preserves its `reason`. D1 has the same cancellation boundary,
+and also rejects callback transactions and streaming with explicit
+`UnsupportedFeatureError` codes. Transaction isolation/read-only options are
+capability-driven; only options documented by the selected adapter are valid.
+Malformed runtime transaction options fail before acquisition as
+`TypeError` / `BRAID_TX_OPTIONS_INVALID`; valid but unsupported options use
+`BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit options use
+`BRAID_TX_OPTIONS_NESTED`.
+
 `db.bulk()` is command-only and has no portable atomicity promise. Use
 `db.tx(async (tx) => tx.bulk(...))` on adapters that support callback
 transactions. SQLite `RETURNING` remains a materialized row contract; its

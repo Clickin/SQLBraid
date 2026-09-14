@@ -1,29 +1,35 @@
 ---
 title: 런타임 및 드라이버 지원
-description: 정확히 검증한 프로필, capability 경계와 revision별 증거를 설명합니다.
+description: 정확한 증거, capability 경계와 revision별 지원 label을 설명합니다.
 ---
 
 import SupportMatrix from "../../../../components/SupportMatrix.astro";
 
-PV18은 PV17 raw-value 규칙을 유지하면서 profile 계약을 정교화합니다. 정확한 DB 숫자는 string이고
-IEEE-754 근사값은 number이며 JSON/temporal text 프로필은 parsed/native 편의
-프로필과 구분됩니다. Stage A 구현 revision은
-`53db135bd156b6d65dc91785a671dec5249c95d4`입니다. 해당 revision의
-[Runtime portability run 34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821),
-[Documentation site run 34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964),
-[Release dry-run 34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)가
-모두 통과했습니다. 아래의 여덟 exact tuple artifact는 기록된 프로필과
-capability 조건에 따라 Stage A에서 Official입니다. 이후 revision에는 별도의
-Stage B Runtime, Docs, Release exact-final SHA 검증이 필요하며 Stage B 완료나
-package 발행은 주장하지 않습니다.
+## 현재 상태
+
+현재 지원 매트릭스는 revision별입니다. phase-J SPI 변경의 영향을 받은
+target은 하나의 정확한 최종 SHA에서 새로운 Runtime, Documentation, Release
+실행 gate가 통과할 때까지 **Pending** 또는 **Compatible**입니다. 인접한
+서버 버전, 런타임, 프로필, 로컬 binding 또는 과거 workflow에서 새 Official
+label을 추론하지 마세요.
+
+provenance로 보존하는 마지막 exact-SHA 검증은 revision
+`8da8167e027320fcc9bb2aac16b0903c64147940`입니다.
+
+- [Runtime portability 34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)
+- [Documentation site 34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)
+- [Release dry-run 34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)
+
+세 run은 해당 revision에서 성공했습니다. 이는 역사적 증거일 뿐 현재
+tree를 인증하지 않으며 발행을 승인하지 않습니다.
 
 ## 증거 label
 
-- **Official** — 정확한 프로필에 무료 재현 환경과 릴리스 차단 real-engine 증거가 있습니다.
-- **Conditional** — 이름이 지정된 조건에서만 증거가 적용됩니다.
-- **Pending** — 해당 revision의 성공한 게이트가 아직 기록되지 않은 후보입니다.
-- **Historical** — 정확한 revision 또는 과거 workflow가 조합을 실행했지만 현재 PV18 tree를 증명하지 않습니다.
-- **Compatible** — 정확한 인증 대상이 없으며 더 넓은 host 또는 로컬 binding 검사는 통과할 수 있습니다.
+- **Official** — 지정한 database, driver, profile, runtime, capability tuple을 정확한 실행 증거가 다룹니다.
+- **Conditional** — 이름을 지정한 조건에서만 증거가 적용됩니다.
+- **Pending** — 현재 구현 revision에 대한 새로운 성공 gate가 없습니다.
+- **Historical** — 과거 exact revision이 조합을 실행했지만 현재 tree를 증명하지 않습니다.
+- **Compatible** — public API가 동작할 수 있지만 정확한 인증 target을 주장하지 않습니다.
 - **Custom** — 사용자가 제공한 `QueryExecutor` 또는 `ConnectionProvider`입니다.
 - **Unsupported** — 필요한 SQLBraid capability가 의도적으로 없습니다.
 
@@ -31,120 +37,94 @@ package 발행은 주장하지 않습니다.
 
 <SupportMatrix />
 
-## SQLBraid Capability 증거 매트릭스 (SQL 문법 지원 목록이 아님)
+매트릭스는 기계 판독 support target과 capability 조건에서 생성됩니다. 모든
+adapter가 모든 작업을 제공한다는 약속이 아니라 증거 표시입니다.
 
-Dialect, driver, runtime, server version은 별도 증거 축입니다. 검증된 taxonomy는
-[`support/`](https://github.com/Clickin/SQLBraid/tree/main/support)에
-기록하며 runtime은 이 파일을 읽지 않습니다. 대화형 매트릭스는 CI가 검사하는
-동일한 기계 판독 대상, capability 조건, test ID의 정식 표시입니다. Stage A
-기록에서 PG16.4, 범위를 지정한 PG18.6, MySQL 8.4.2, MariaDB 11.8.9,
-Oracle Free 23.9, SQL Server 2022 CU18 Developer, Node SQLite 3.50.2,
-browser WASM 3.53.4의 여덟 tuple artifact는
-`exactTupleObserved=true`, `missingTests=[]`입니다. 이는 revision별 증거
-기록입니다. 해당 exact 프로필은 Stage A에서 Official입니다. D1은 로컬
-workerd binding을 통과했지만 managed SQLite 버전이 공개되지 않아
-Compatible로 유지합니다.
+## Capability 어휘
 
-숫자 capability cell은 semantics와 transport를 구분합니다.
-`numeric.exact-integer`와 `numeric.exact-decimal`은 lossless/guarded 전송일
-때만 string을 노출하고, `numeric.approximate-float`은 binary32 또는
-binary64를 `number`로 노출하며, `numeric.bind-exact`는 별도의 입력 주장입니다.
-`data.json-lossless-text`와 `data.json-parsed`를 합치지 않으며 native temporal
-`Date`는 lossless 주장이 아닙니다. MERGE 반환 행은
-`dml.merge-returning`, UPSERT/REPLACE/ON CONFLICT/ON DUPLICATE KEY 반환 행은
-`dml.upsert-returning`입니다.
+Dialect, driver, runtime, host, database version, representation profile,
+capability는 별도 축입니다. 정식 capability 식별자는 다음과 같습니다.
 
-Support 항목은 driver raw 표현과 SQLBraid canonical 표현을 구분합니다. 정확한
-string ID와 생성된 ID는 canonical decimal text이고 `affectedRows`, `rowCount`,
-procedure status, bulk input count는 safe-range 운영 number입니다. capability
-행이 count를 exact identity로 바꾸지는 않습니다.
+```text
+statement.prepare       statement.stream       statement.bulk
+transaction             transaction.savepoint
+routine.out             routine.result-sets    routine.out-cursor
+routine.return-value
+```
 
-PostgreSQL, mysql2, MariaDB profile descriptor는 `id`, `json`, `temporal`,
-`typePolicy`, 정확한 connection option을 함께 가집니다. runtime과 codegen은
-`typePolicyForProfile`을 재사용해야 합니다. native JSON root는 더 좁은 driver
-계약이 증명되지 않으면 `unknown`이고, PostgreSQL native `time`/`timetz`는
-text이며 `date`/`timestamp`/`timestamptz`는 `Date`입니다. option 하나를
-바꾸면 별도 프로필이므로 다시 테스트하기 전에는 target 증거를 상속하지
-않습니다.
+`execution.prepared`, `execution.stream`, `routine.resultsets`,
+`routine.return-status` 같은 폐기된 alias를 추가하지 마세요.
 
-Container 지원은 묵시적으로 재귀적이지 않습니다. array, domain,
-range/multirange, composite, Oracle object/collection, SQL Server
-`sql_variant`, vector, parsed JSON root에는 별도 증거가 필요합니다. 지원
-container 행은 테스트한 transport만 설명하며 모든 nested member를 인증하지
-않습니다.
+`statementBinding.describe()`와 `describeBulk()`는 lease 획득 전에 논리
+`RenderedStatement`/`RenderedBulk`를 검증합니다. Provider와 lease는 동일한
+불변 binding adapter identity를 노출해야 합니다. Prepared shape는 논리
+result kind, canonical segments, dialect, 순서 있는 hint/direction/output
+metadata이며 물리 placeholder 표기는 shape를 바꾸지 않습니다.
 
-지원 추가는 free-only 정책을 따릅니다. Official target에는 무료로 재현 가능한
-CI 환경, 정확한 version/profile tuple, 기계 판독 manifest row, maintainer-safe
-runtime cost가 필요합니다. 유료 환경은 자동으로 승격하지 않으며 contributor가
-적합한 외부 CI 경로를 제공하고 유지해야 합니다.
+`db.session(callback)`은 하나의 물리 provider lease를 고정하고 중첩 session은
+재사용합니다. `db.tx(callback)`은 그 lease를 사용하거나 root lease를 얻으며,
+중첩 transaction은 advertised savepoint를 사용합니다. 명시적 transaction
+option은 고정된 `read-uncommitted`, `read-committed`, `repeatable-read`,
+`serializable` isolation과 `readOnly`만 사용합니다. 잘못된 runtime option은
+획득 전에 `TypeError` / `BRAID_TX_OPTIONS_INVALID`로 실패하고, 유효하지만
+지원하지 않는 option은 `UnsupportedFeatureError` /
+`BRAID_TX_OPTION_UNSUPPORTED`를 사용하며, 중첩 명시 option은
+`BRAID_TX_OPTIONS_NESTED`를 사용합니다.
 
-역사적 PV16 증거는 `sql.rows`와 materialized `db.execute`, `db.all`,
-`db.one`, `db.maybeOne`의 DML-returning을 다룹니다. SQLite RETURNING은
-출력을 먼저 축적하고 SQL Server OUTPUT은 이후 실패 전에 행을 보낼 수 있으므로
-`db.stream()`을 cross-driver 약속으로 만들지 않습니다. 이 capability의
-Stage A 증거는 `53db135bd156b6d65dc91785a671dec5249c95d4` 구현 revision에
-귀속되며 Runtime, Docs, Release 세 gate를 모두 통과했습니다. 이후 revision은
-최종 인증 전에 별도 Stage B exact-final SHA 검증이 필요합니다.
+이미 abort된 `AbortSignal`은 자신의 `reason`을 보존합니다. 활성 signal에는
+실제 adapter cancellation 경로가 필요하며, 없으면 I/O 전에
+`UnsupportedFeatureError`, feature `statement.cancel`,
+`BRAID_CANCEL_UNSUPPORTED`로 실패합니다. 사용할 수 없는 session 또는
+transaction primitive는 각각 `BRAID_SESSION_UNSUPPORTED` 또는
+`BRAID_TX_UNSUPPORTED`를 사용합니다.
+Oracle의 guarded `oracle.connection-break` 조건은 즉시 중단이나 timeout을
+보장하지 않는 cooperative 동작입니다. 문서화된 `DBMS_SESSION.SLEEP` raw
+probe는 sleep이 끝날 때만 `ORA-01013`으로 거부될 수 있으며, 어댑터는
+settlement까지 물리 lease를 유지합니다.
 
-`db.bulk(inputs, factory)`는 command-only, 하나의 shape × N values, 하나의
-physical lease, 하나의 observer 작업입니다. 빈 입력은 acquire하지 않습니다.
-Root bulk에는 portable transaction/auto-chunking 약속이 없고 driver는
-`native-bulk`, `pipeline`, `prepared-loop`, `remote-batch` 중 실제 모드를
-보고합니다.
+## Driver/runtime 경계
 
-첫 번째 파티 행 스트리밍 primitive는 dialect flag가 아닌 서로 다른
-드라이버 capability입니다.
+First-party root는 PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server입니다.
+Driver subpath가 protocol과 cleanup을 소유합니다: `pg`, `mysql2`, MariaDB
+Connector/Node.js, `node:sqlite`, SQLite WASM, D1, node-oracledb Thin,
+Tedious. Bun은 명시적으로 사용자가 선택하는
+`dialect: "postgres" | "mysql" | "mariadb" | "sqlite"` 하나의 SQL adapter
+family를 사용하며 connection에서 SQL 의미를 추론하지 않습니다. Bun 1.3.14는
+active cancellation을 지원하지 않아 `BRAID_CANCEL_UNSUPPORTED`를 사용하며
+stream/routine carrier도 지원하지 않습니다. `result.rows`/`result.command`
+metadata는 `bun-sql.result-kind-metadata` 조건에서만 guarded됩니다.
+MySQL/MariaDB에서는 `command`가 null이고 `affectedRows`가 0이므로 빈
+`SELECT`와 영향 행이 0인 DML/DDL은 실행 후에만
+`BRAID_RESULT_KIND_AMBIGUOUS`로 실패할 수 있습니다. Deno는 public driver
+API가 동작하는 기존 first-party adapter를 재사용하며 Deno 전용 dialect를
+만들지 않습니다.
 
-| 어댑터 | `db.stream()` primitive | 중요 경계 |
-| --- | --- | --- |
-| PostgreSQL / `pg` | `pg-cursor` | Optional peer이며 capability가 없으면 `BRAID_STREAM_UNSUPPORTED`입니다. |
-| MySQL / `mysql2` | raw prepared `Execute.stream()` | prepared/binary 실행을 유지하고 lease 반환 전에 drain 또는 discard합니다. |
-| MariaDB / Connector/Node.js | connector stream | `mysql2`에서 상속되지 않는 MariaDB driver capability입니다. |
-| SQLite / `node:sqlite` | `StatementSync.iterate()` | native iterator 종료가 정리 경계입니다. |
-| SQLite / `sqlite-wasm` | OO1 step/pull | 하나의 direct browser resource이며 충돌하는 root 작업은 거부합니다. |
-| SQLite / Cloudflare D1 | 없음 | `BRAID_STREAM_UNSUPPORTED`; streaming을 흉내 내기 위해 paginate하지 않습니다. |
-| Oracle Thin | `ResultSet` | 모든 ResultSet을 닫고 close 실패 시 lease를 폐기합니다. |
-| SQL Server / Tedious | Request row event + bounded queue | lease 반환 전에 request가 완료되어야 합니다. |
+stream, routine, output, hint, bulk, transaction, cancellation 지원이 없으면
+명시적인 `UnsupportedFeatureError`로 실패해야 합니다. SQLBraid는 streaming을
+흉내 내려고 paginate하거나 routine carrier를 추측하거나 hint를 무시하거나
+숨은 transaction을 만들거나 검증되지 않은 tuple을 승격하지 않습니다. D1의
+managed SQLite version은 공개되지 않았으므로 local Worker binding 검사는
+version 인증이 아닙니다.
 
-Materialized `db.all()`은 의도적으로 버퍼링합니다. `db.call()`은 이질적인
-result-set schema를 매핑하기 전에 루틴 result 리소스를 materialize하고
-닫습니다. PostgreSQL refcursor 호출에는 기존 transaction이 필요합니다.
-MySQL prepared CALL OUT/INOUT은 mysql2 3.x에 검증된 public carrier
-discriminator가 없어 거부합니다. SQLite 루틴 호출은 지원하지 않으며 SQL
-Server `CURSOR VARYING OUTPUT`은 애플리케이션 cursor 채널이 아닙니다.
+정확한 숫자, JSON/temporal, container 동작은 별도 증거 경계입니다. 정확한
+DB integer와 decimal은 canonical string이고 근사 IEEE 값은 number입니다.
+Profile과 codegen descriptor는 일치해야 합니다. Metadata는 positive open-world
+증거이므로 누락된 사실이 SQL invalid를 뜻하지 않습니다. Bun 1.3.14는
+PostgreSQL/MySQL/MariaDB에 `{ bigint: true }`, SQLite에
+`{ safeIntegers: true }`를 사용합니다. Column metadata가 없으므로
+integral 및 integral-approximate `Number` row는 ambiguous로 거부되고,
+PostgreSQL decimal은 string입니다. MySQL/MariaDB DECIMAL과 binary 출력은
+타입 정보 없는 같은 byte carrier라 거부하며 `CAST(... AS CHAR)` 또는
+`HEX(...)`를 직접 작성해야 합니다. SQLite native decimal은 지원하지 않습니다.
+MariaDB/SQLite JSON은 text이며 PostgreSQL/MySQL native JSON은 중첩 숫자가
+반올림될 수 있습니다. Bun SQLite의 결과 종류는 `bun-sql.sqlite-result-parser`
+조건에서 guarded입니다. Bun이 서로 다른 따옴표가 섞인 SQL literal을 잘못
+분류할 수 있으므로 JSON은 bind하세요. SQLBraid가 SQL을 재작성하지 않습니다.
 
-## 릴리스 증거 출처
+## 증거 추가
 
-Stage A 증거는 구현 revision
-`53db135bd156b6d65dc91785a671dec5249c95d4`에 귀속됩니다. Runtime
-portability run
-[34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821),
-documentation site run
-[34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964),
-Release dry-run
-[34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)가
-모두 통과했습니다. 나열한 여덟 exact 프로필은 Stage A에서 Official입니다.
-이후 revision에는 세 gate를 통한 별도 Stage B exact-final SHA 검증이 필요하며
-Stage B 완료나 package 발행은 주장하지 않습니다.
-
-- [Runtime portability: 34818111424](https://github.com/Clickin/SQLBraid/actions/runs/34818111424) — Node 22.18.0 릴리스 게이트와 packed Bun 1.3.14 / Deno 2.9.3 host 경로
-- [Documentation site: 34818111252](https://github.com/Clickin/SQLBraid/actions/runs/34818111252) — 빌드와 링크 검사 통과, 배포 생략
-- [Release dry-run: 34818113561](https://github.com/Clickin/SQLBraid/actions/runs/34818113561) — real-engine 게이트, immutable package/VSIX와 npm dry-run 통과, 실제 발행 생략
-
-증거에는 검증한 구현 revision을 기록해야 합니다. 이후 revision은 자체 세
-gate가 필요하며 역사 link가 임의 checkout을 인증하지는 않습니다. Node 24.21.0은
-과거 전체 suite/finance 증거가 있지만 별도의 인증 대상은 아닙니다. Oracle
-Free 23.9는 Oracle 19c나 Thick mode를 인증하지 않습니다. RC 발행에는
-사용자 수락과 명시적인 릴리스 승인이 필요합니다.
-
-## 역사적 증거
-
-다음 링크는 provenance만을 위해 보존합니다.
-
-- PV13 런타임 증거: revision [`d4bc626`](https://github.com/Clickin/SQLBraid/commit/d4bc626) 및 역사적 workflow [`34753809318`](https://github.com/Clickin/SQLBraid/actions/runs/34753809318)
-- PV11 증거: revision [`1615311`](https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7) 및 역사적 workflow [`34745030794`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794)
-
-이 정확한 revision은 PV18 이전이며 현재 source, 현재 드라이버, 현재
-Vite/browser/cloud 통합 또는 RC 배포를 주장하지 않습니다.
-
-사용자 지정 어댑터는 [드라이버 작성자 바인딩 가이드](/SQLBraid/dev/agents/driver-author/)를 참고하세요.
+지원 추가에는 정확한 version/profile tuple, 실제 engine 실행 범위, 기계 판독
+target 조건, 새 clean revision이 필요합니다. Release 결정에는 translation
+freshness, package/export 검사와 immutable release dry-run도 필요합니다.
+역사 link와 prose만으로 label을 승격할 수 없습니다. 이 페이지는 npm/tag/Pages
+발행을 의미하지 않습니다.

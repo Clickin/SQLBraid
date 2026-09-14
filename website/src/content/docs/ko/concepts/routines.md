@@ -85,7 +85,7 @@ Oracle CLOB/NCLOB output은 문자열, BLOB output은 바이트 값이 됩니다
 
 | 데이터베이스 | 루틴 동작 |
 | --- | --- |
-| PostgreSQL / `pg` | scalar OUT/INOUT은 `CALL` output 행에서 나옵니다. `refcursor` OUT/INOUT은 `postgresParameter.refcursor()`로 표시하세요. SQLBraid는 같은 transaction-bound portal을 fetch/close하고 이를 `output`에서 제거합니다. refcursor 호출은 기존 `db.tx(...)` 범위가 필요하며 숨은 transaction을 만들지 않습니다. |
+| PostgreSQL / `pg` | scalar OUT은 `CALL` output 행에서 나옵니다. refcursor OUT은 `postgresParameter.refcursor()`로 표시하세요. SQLBraid는 같은 transaction-bound portal을 fetch/close하고 이를 `output`에서 제거합니다. INOUT과 refcursor INOUT은 `BRAID_CALL_OUT_UNSUPPORTED`로 거부합니다. refcursor 호출은 기존 `db.tx(...)` 범위가 필요하며 숨은 transaction을 만들지 않습니다. |
 | MySQL / `mysql2` | emitted 이질적 SELECT result set을 지원합니다. prepared CALL OUT/INOUT은 `BRAID_CALL_OUT_UNSUPPORTED`로 거부합니다. mysql2 3.x에는 protocol의 추가 OUT carrier를 구분하는 검증된 public API가 없으므로 SQLBraid는 carrier 행을 추측하지 않습니다. Stored function은 result set을 내보낼 수 없습니다. |
 | Oracle / `node-oracledb` Thin | scalar OUT/IN OUT, `SYS_REFCURSOR`/REF CURSOR output, implicit result를 `output`과 `resultSets`로 정규화합니다. lease를 반환하기 전에 모든 `ResultSet`을 닫습니다. cursor output에는 `oracleParameter.refCursor()`를 사용하세요. |
 | SQL Server / Tedious | 일반 SELECT는 emitted result set이 되고 scalar OUTPUT은 `output`이 됩니다. T-SQL integer RETURN status는 `sql.call` 계약에 `procedure: { name, parameterNames }`를 명시해야 합니다. 임의 `EXEC` 텍스트를 파싱해 procedure identity를 추측하지 않습니다. `CURSOR VARYING OUTPUT`은 애플리케이션 cursor로 노출하지 않고 `BRAID_CALL_CURSOR_UNSUPPORTED`로 거부합니다. |

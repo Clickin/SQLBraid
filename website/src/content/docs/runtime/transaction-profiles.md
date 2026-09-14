@@ -1,19 +1,40 @@
 ---
-title: Future transaction profile architecture
-description: A conceptual boundary reserved for future isolation/session APIs, not a 0.1.0 feature.
+title: Transaction option capabilities
+description: Fixed transaction options, physical scope, and driver evidence.
 ---
 
-:::caution Concept only
-Nothing on this page is an existing SQLBraid API. Do not pass `isolation`, `transactionProfile`, or similar options to 0.1.0 factories; they are intentionally not accepted.
-:::
+This page describes the current option boundary; it is not a speculative
+transaction-profile API. SQLBraid keeps dialect, driver, execution runtime, and
+host as separate axes:
 
-SQLBraid already separates four concerns:
+1. **Dialect** — SQL surface, lexical profile, quoting, and database semantics.
+2. **Driver** — protocol bridge, placeholders, materialization, and cleanup.
+3. **Runtime** — lease ownership, session pinning, transaction/savepoint scope.
+4. **Host** — Node, Bun, Deno, browser, or Worker evidence.
 
-1. **Dialect** — SQL surface, lexical profile, quoting, and primitive database semantics.
-2. **Driver** — protocol bridge, placeholder/materialization policy, and result normalization (`pg`, `mysql2`, `node:sqlite`, `node-oracledb`, `Tedious`).
-3. **Execution runtime** — physical lease ownership, transaction pinning, savepoints, and scope on Node/Bun/Deno.
-4. **Transaction profile** — a future explicit description of isolation/session behavior.
+Use the fixed public options:
 
-A future profile could describe supported isolation/session operations and their evidence without making a dialect or driver name imply them. That design must account for database defaults, pool lease setup, savepoint behavior, failure/poisoning, and combinations such as a PostgreSQL dialect through a custom driver.
+```ts
+await db.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
+  await tx.execute(query);
+});
+```
 
-For 0.1.0, the practical rule is simpler: `db.tx` pins one physical connection and otherwise leaves isolation at the database/driver default. Explicit isolation setup must follow the selected database's ordering and physical-connection rules; see [transaction isolation defaults](/SQLBraid/runtime/transactions/#isolation-default). This conceptual page must not be read as a promise that a profile object, factory option, or cross-dialect isolation abstraction exists.
+`isolation` accepts only `read-uncommitted`, `read-committed`,
+`repeatable-read`, or `serializable`; `readOnly` is a separate boolean. The
+runtime validates JavaScript values before acquiring a lease. Malformed values
+are `TypeError` / `BRAID_TX_OPTIONS_INVALID`. A valid option not advertised by
+the selected adapter is `UnsupportedFeatureError` /
+`BRAID_TX_OPTION_UNSUPPORTED`, with feature `transaction.isolation.<level>` or
+`transaction.read-only`. Nested explicit options, including `{}`, are
+`BRAID_TX_OPTIONS_NESTED`. A driver without transactions uses
+`BRAID_TX_UNSUPPORTED`.
+
+Omitted options preserve the actual physical connection/session default. The
+runtime maps fixed literals through adapter-owned control SQL and never
+interpolates arbitrary JavaScript text. A dialect name never implies an
+isolation capability. `db.session(callback)` pins one provider lease;
+transaction work inside the session reuses it and does not reacquire.
+
+Provider/lease identity, savepoints, and uncertain cleanup are part of the
+execution runtime. See [transactions](/SQLBraid/runtime/transactions/), [pools](/SQLBraid/runtime/direct-pools/), and [support evidence](/SQLBraid/reference/support/).

@@ -1,9 +1,9 @@
 ---
 title: 스트리밍
-description: SQLBraid가 물리적 lease와 드라이버 정리를 소유하는 동안 버퍼링 없이 행을 순회합니다.
+description: SQLBraid가 물리 lease와 driver cleanup을 소유하는 동안 행을 버퍼링하지 않고 순회합니다.
 ---
 
-일반 행 쿼리에는 `db.stream`을 사용하세요.
+일반적인 row-producing query에는 `db.stream`을 사용합니다.
 
 ```ts
 for await (const row of db.stream(sql.rows<UserRow>`
@@ -13,20 +13,23 @@ for await (const row of db.stream(sql.rows<UserRow>`
 }
 ```
 
-`db.stream()`은 실제 드라이버 스트리밍 경로이며 `db.all()`을 호출해 버퍼 배열을 다시 내보내지 않습니다. `db.all()`은 의도적으로 readonly 배열을 materialize하므로 O(row-count) 애플리케이션 메모리를 사용합니다. Set-returning function과 table-valued extension도 일반 `sql.rows` 쿼리이므로 같은 선택을 사용합니다.
+`db.stream()`은 실제 driver streaming 경로이며 `db.all()`을 호출해 버퍼 배열을
+다시 내보내지 않습니다. `db.all()`은 readonly array를 materialize하고
+O(row-count) application memory를 사용합니다. Set-returning function과
+table-valued extension은 일반 `sql.rows` query입니다.
 
-## 소유권과 정리
+## 소유권과 cleanup
 
-풀 루트 stream은 드라이버 리소스가 terminal 상태가 될 때까지 물리적 lease를 유지합니다. 정리 순서는 다음과 같습니다.
+Pooled root stream은 driver resource가 terminal이 될 때까지 물리 lease를
+유지합니다. Cleanup 순서는 행 전달 중지, driver cursor/request/iterator
+close/drain/cancel, lease 반환 또는 discard, terminal stream event입니다.
+Exhaustion, consumer/mapper 오류, `AbortSignal`, `for await` 조기 `break`에
+모두 적용됩니다.
 
-1. consumer에 행 전달을 중지합니다.
-2. 드라이버 cursor/request/iterator를 close, drain 또는 cancel합니다.
-3. 그 후에만 lease를 반환하며 protocol을 재사용할 수 없으면 폐기합니다.
-4. terminal stream event를 발생시킵니다.
-
-이는 exhaustion, consumer 오류, mapper 오류, `AbortSignal`, `for await` 조기 `break` 모두에 적용됩니다. 직접 stream이 자신의 물리 리소스에 다시 진입하면 deadlock 대신 `BRAID_STREAM_SCOPE`를 발생시킵니다. 트랜잭션 stream은 고정된 연결을 사용하고 겹치는 작업을 금지하며 버려진 iterator는 rollback을 일으킵니다.
-
-consumer가 취소할 수 있다면 `AbortSignal`을 전달하세요.
+Direct stream은 자신의 물리 resource에 재진입할 수 없으며 deadlock 대신
+`BRAID_STREAM_SCOPE`로 거부합니다. Transaction stream은 pinned connection을
+유지하고 겹치는 작업을 금지합니다. Stream이 살아 있는 동안 transaction
+callback을 반환하지 마세요.
 
 ```ts
 const controller = new AbortController();
@@ -34,37 +37,32 @@ const stream = db.stream(query, { signal: controller.signal });
 controller.abort();
 ```
 
-stream이 살아 있는 동안 transaction callback을 반환하지 마세요.
+이미 abort된 signal은 자신의 `reason`으로 거부됩니다. 활성 signal에는 물리
+cancellation capability가 필요합니다. 없으면 adapter가 I/O 전에
+`UnsupportedFeatureError`, feature `statement.cancel`,
+`BRAID_CANCEL_UNSUPPORTED`로 거부합니다. Iteration만 멈추는 것은
+cancellation이 아닙니다.
 
-## 첫 번째 파티 primitive
+## First-party primitive
 
-| 어댑터 | primitive | 경계 |
+| Adapter | Primitive | 경계 |
 | --- | --- | --- |
-| PostgreSQL / `pg` | `pg-cursor` batch read | Optional peer가 없으면 `BRAID_STREAM_UNSUPPORTED`입니다. 정상 종료는 cursor를 닫고, abort는 대기 중 read도 중단하도록 물리적 `Client.end()` 완료 후 lease를 폐기합니다. Abort 후 direct client는 교체해야 합니다. |
-| MySQL / `mysql2` | raw prepared `Execute.stream()` | `mysql2/promise` 뒤의 raw connection을 사용하고 prepared/binary 실행을 보존하며 lease 반환 전에 drain 또는 discard합니다. text `query()`로 낮추지 않습니다. |
-| MariaDB / Connector/Node.js | native stream iterator | `mariadb` dialect의 별도 증거가 필요합니다. MariaDB에서 `mysql2`를 쓰는 경로는 best-effort 호환이지 MariaDB 증거가 아닙니다. |
-| SQLite / `node:sqlite` | `StatementSync.iterate()` | native iterator가 끝난 뒤에만 database 리소스를 재사용합니다. 가짜 서버 cursor close API를 만들지 않습니다. |
-| SQLite / WASM | OO1 step/reset/finalize | browser/worker의 직접 resource이며 한 번에 하나의 owner만 사용합니다. pull 방식이며 pool을 뜻하지 않습니다. |
-| Cloudflare D1 | — | D1 Binding에는 incremental cursor가 없습니다. `db.stream()`은 `BRAID_STREAM_UNSUPPORTED`로 reject하며 pagination으로 streaming을 흉내 내지 않습니다. |
-| Oracle / `node-oracledb` Thin | `ResultSet` | exhaustion, break, abort, mapper 오류에서 ResultSet을 닫으며 close 실패는 lease를 poison/discard합니다. |
-| SQL Server / Tedious | Request row event와 bounded pause/resume queue | lease 반환 전에 request가 완료되어야 하며 cancellation은 물리 연결을 폐기할 수 있습니다. |
+| PostgreSQL / `pg` | `pg-cursor` read batch | Optional peer가 없으면 `BRAID_STREAM_UNSUPPORTED`입니다. Abort는 물리 client cancellation을 사용하고 필요하면 lease를 폐기합니다. |
+| MySQL / `mysql2` | raw prepared `Execute.stream()` | prepared/binary 실행을 유지하고 lease 반환 전에 drain 또는 discard합니다. |
+| MariaDB / Connector/Node.js | native stream iterator | 별도 MariaDB driver 증거이며 `mysql2`에서 상속되지 않습니다. |
+| SQLite / `node:sqlite` | `StatementSync.iterate()` | Native iterator 종료가 cleanup 경계입니다. |
+| SQLite / WASM | OO1 step/reset/finalize | Direct browser/Worker resource이며 한 번에 하나의 owner만 사용합니다. |
+| Cloudflare D1 | 없음 | `BRAID_STREAM_UNSUPPORTED`; streaming을 흉내 내려고 paginate하지 않습니다. |
+| Oracle Thin | `ResultSet` | 모든 ResultSet을 닫고 close 실패 시 lease를 폐기합니다. |
+| SQL Server / Tedious | request row event + bounded queue | Request 완료가 lease 반환보다 먼저입니다. |
 
-이는 dialect가 아닌 드라이버 capability입니다. 사용자 지정 executor는 필요한 `QueryExecutor.stream` 계약을 구현하거나 `BRAID_STREAM_UNSUPPORTED`로 결정적으로 실패해야 합니다. 런타임에서 optional property를 추측하는 방식은 capability 모델이 아닙니다.
+이는 dialect가 아닌 driver capability입니다. Custom executor는
+`QueryExecutor.stream`을 구현하거나 `BRAID_STREAM_UNSUPPORTED`로 결정적으로
+실패해야 합니다. Routine cursor streaming은 materialized routine contract에
+포함되지 않으므로 정규화되고 닫힌 이질적 result set에는 `db.call()`을
+사용하세요.
 
-루틴 cursor streaming은 materialized 루틴 계약에 포함되지 않습니다. 정규화되고 닫힌 이질적 result set에는 `db.call()`을, 일반 행 stream에는 이 API를 사용하세요.
-
-MySQL은 두 번째 result-set 메타데이터 경계에서 `BRAID_RESULT_SETS_UNSUPPORTED`로 실패하며 두 번째 집합의 행은 전달하지 않습니다. command를 drain한 뒤 재사용 가능한 연결을 반환합니다. drain 실패 시 result-set 오류와 `BRAID_RESOURCE_CLEANUP`을 함께 보존하고 연결을 폐기합니다. 여러 result set을 내보내는 루틴에는 `db.call()`을 사용하세요.
-
-DML `RETURNING`/`OUTPUT`은 PV18에서도 materialized row 계약입니다.
-`53db135bd156b6d65dc91785a671dec5249c95d4` 구현 revision의 Stage A 증거가
-[지원 매트릭스](/SQLBraid/reference/support/)에 기록되었고 Runtime, Docs,
-Release 세 gate를 모두 통과했습니다. 해당 문법이 streaming
-가능하다고 추론하지 말고 위의 portable streaming lifecycle이 필요하면
-일반 row query를 사용하세요.
-
-MariaDB, Browser WASM, D1 항목은 revision별 지원 매트릭스를 따릅니다. D1은
-managed SQLite 버전이 공개되지 않아 Compatible이며 MariaDB와 Browser WASM
-프로필은 Stage A에서 Official입니다. 이후 revision에는 별도 Stage B
-exact-final SHA 검증이 필요합니다.
-
-[트랜잭션](/SQLBraid/runtime/transactions/), [observer](/SQLBraid/runtime/observers/), [루틴 호출](/SQLBraid/concepts/routines/)도 참고하세요.
+DML `RETURNING`/`OUTPUT`은 materialized입니다. Authored returning 문법이
+streamable하다고 추론하지 말고 역사 workflow link로 현재 지원을 주장하지
+마세요. 새로운 exact-SHA Runtime, Docs, Release 증거가 생길 때까지 현재
+support matrix target은 pending/compatible입니다.

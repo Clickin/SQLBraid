@@ -35,6 +35,20 @@ adapter object; a lease cannot silently switch transport or dialect identity.
 
 A pool is not a fake executor. If `BEGIN`, a query, and `COMMIT` can land on different physical connections, the transaction is not real; use `db.tx(...)` to pin the lease.
 
+`db.session(async (session) => ...)` pins one acquired lease for the callback;
+nested sessions reuse it, and `db.tx(...)` inside the session does not reacquire.
+The outer root database cannot be used to escape that scope. A stream keeps the
+lease until cursor/request cleanup. An unavailable provider/session primitive
+fails with `BRAID_SESSION_UNSUPPORTED`.
+
+An already-aborted signal preserves its `reason`. Active cancellation is a
+driver capability; without it, the operation fails before I/O with
+`UnsupportedFeatureError` / `BRAID_CANCEL_UNSUPPORTED`. Transaction options are
+validated before acquisition: malformed values use `TypeError` /
+`BRAID_TX_OPTIONS_INVALID`, valid-but-unsupported values use
+`BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit options use
+`BRAID_TX_OPTIONS_NESTED`.
+
 :::caution Factory boundary
 Passing `pg.Pool` to `createPgDatabase` or a mysql2 pool to `createMysql2Database` is unsupported. Use `createPgPoolDatabase` or `createMysql2PoolDatabase`.
 :::

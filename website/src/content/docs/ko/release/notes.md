@@ -1,89 +1,76 @@
 ---
-title: PV18 릴리스 노트
-description: 프로필 일관성, container fidelity, 값 정확도 경계를 포함하는 SQLBraid Stage A 프리릴리스 표면입니다.
+title: 0.1.0 릴리스 노트
+description: 프리릴리스 SQLBraid 표면과 증거 경계를 설명합니다.
 ---
 
-이 문서는 npm RC나 stable 발행을 주장하지 않는 PV18 초안입니다. PV18은
-`2119d9676b05fb2531eaf7aac1ef37741600ba40` review baseline에서 시작했습니다.
-Stage A 구현 revision
-`53db135bd156b6d65dc91785a671dec5249c95d4`는 [Runtime portability run
-34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821)과
-[Documentation site run
-34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964)를
-통과했습니다. [Release dry-run
-34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)도
-통과했습니다. 여덟 개 정확한 프로필은 Stage A에서 Official이며 D1은
-managed SQLite 버전이 공개되지 않아 Compatible입니다. 이 기록은
-revision별입니다. 이후 revision(이 업데이트로 생성되는 revision 포함)에는 별도
-Stage B Runtime, Docs, Release exact-final SHA 검증이 필요하며 Stage B 완료나 package 발행은
-주장하지 않습니다. 과거 PV16/PV17 증거는 provenance로만 보존합니다.
+이 문서는 프리릴리스 문서이며 npm, GitHub, VS Code Marketplace 또는 Pages
+발행을 승인하지 않습니다.
 
-## 포함된 계약
+provenance로 보존하는 마지막 exact-SHA 검증은 revision
+`8da8167e027320fcc9bb2aac16b0903c64147940`이며 Runtime
+([34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046)),
+Documentation ([34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102)),
+Release ([34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326))
+run이 성공했습니다. 현재 phase-J tree는 더 최신이므로 영향을 받은 support
+target은 새로운 exact-SHA gate가 통과할 때까지 Pending 또는 Compatible입니다.
+역사 workflow 성공은 현재 tree 인증이 아닙니다.
 
-- PostgreSQL, MySQL, SQLite, Oracle Thin, SQL Server/Tedious dialect 및 어댑터 경로와 명시적인 direct/pool 소유권 경계
-- `sql.rows`, `sql.command`, `sql.call`, 안전한 value bind, 구조적 fragment, 동적 `@braid` 지시문
-- `all()` buffer가 아닌 실제 드라이버 경로인 `db.stream()`과 물리적 lease 반환 전 어댑터별 정리
-- 행과 이질적인 루틴 result-set tuple의 Standard Schema 매핑
-- scalar `output`, 순서가 있는 `resultSets`, 선택적 `returnValue` 루틴 채널과 `sql.out`/`sql.inOut` 방향 helper
-- PostgreSQL transaction-bound refcursor, Oracle explicit/implicit cursor result, native RETURN status용 SQL Server 명시적 procedure metadata, 의도적인 SQLite 루틴 거부
-- MySQL raw prepared `Execute.stream()` 및 검증된 carrier discriminator가 없는 OUT/INOUT의 명시적 거부
-- PostgreSQL/SQLite/MariaDB native `RETURNING`, SQL Server `OUTPUT`, Oracle `RETURNING ... INTO`와 `sql.out()`을 사용하는 materialized DML-returning 계약. dialect 간 SQL rewrite는 하지 않음
-- I/O 전 shape 검증, 하나의 physical lease, `native-bulk`/`pipeline`/`prepared-loop`/`remote-batch` 모드를 사용하는 command-only `db.bulk(inputs, factory)`. implicit transaction과 auto-chunking 약속 없음
-- 별도 `@sqlbraid/mariadb` dialect와 MariaDB Connector/Node.js 어댑터. MariaDB의 `mysql2` 연결은 best-effort 호환
-- Direct Browser SQLite WASM 및 Cloudflare D1 SQLite 어댑터 경로. D1은 materialized 실행과 native remote batch를 사용
-- `durationMs`, 민감하지 않은 call result 구조, lazy diagnostic literalization을 포함하는 execution observer
-- TypeScript와 framework 변환을 Vite에 맡기고 TSX와 source-map 조합을 보존하는 `@sqlbraid/vite` Vite 8 pre-transform
-- 선택적 metadata, inspector, 결정적 codegen, CLI JSON inspection, 표준 stdio LSP, 얇은 VS Code 통합
-- PV18 숫자 정확도: 정확한 DB 정수와 10진수는 canonical string, IEEE-754
-  근사 이진 값은 JavaScript number입니다. Numeric metadata는 DB semantics,
-  raw representation, transport fidelity를 분리하며 `decodeExactInteger`와
-  Decimal 등 풍부한 타입은 애플리케이션 transform입니다.
-- JSON은 lossless text와 parsed object 편의를 구분하고 temporal text와
-  native `Date` 편의를 구분합니다. Driver option과 사용자가 작성한 SQL
-  cast/format expression은 별도 프로필이며 SQLBraid는 SQL을 rewrite하지
-  않습니다.
-- PostgreSQL, mysql2, MariaDB는 `typePolicyForProfile({ json, temporal })`와
-  profile descriptor를 export합니다. runtime과 codegen은 같은 프로필을
-  재사용해야 하며 native PostgreSQL JSON root는 좁은 계약이 없으면
-  `unknown`, temporal mapping은 DB type별입니다.
-- Driver raw 값과 SQLBraid canonical 값을 구분합니다. 정확한 ID는 canonical
-  decimal string이고 `affectedRows`, `rowCount`, procedure status, bulk input
-  count는 safe operational number입니다.
-- Scalar fidelity는 array, domain, range, composite, Oracle object, SQL
-  Server `sql_variant`, vector, parsed JSON root에 재귀적으로 적용되지
-  않습니다. Container-specific 증거가 생길 때까지 unknown/unclassified/
-  unsupported로 둡니다.
-- 일반 `undefined` IN bind는 acquisition 전에
-  `BRAID_BIND_VALUE_UNSUPPORTED`로 실패하고 `null`은 SQL `NULL`입니다.
-  SQLite INTEGER는 내부 native int64 transport를 사용할 수 있지만 출력은
-  canonical string이며 public integer mode는 없습니다.
+## 포함된 contract
 
-## 검증 상태
+- SQL-first template, 안전한 value bind, 명시적 `rows`, `command`, `call`, `unknown` result kind
+- 제한된 `@braid` directive와 명시적 structural fragment
+- Query-bound 및 실행별 Standard Schema row mapping
+- Direct physical executor와 명시적 provider/lease pool 소유권
+- `db.session(callback)` lease pinning, 중첩 session 재사용, `db.tx`
+- 고정 transaction isolation literal과 `readOnly`, malformed/unsupported/nested option의 구분
+- 후행 execution/row/stream option과 capability 기반 `AbortSignal` cancellation
+- 한 번 렌더링하는 zero-input/input prepared factory와 logical shape lock
+- lease 반환 전 cleanup을 수행하는 native driver stream 또는 명시적 `BRAID_STREAM_UNSUPPORTED`
+- materialized routine `output`, 순서 있는 heterogeneous `resultSets`, 선택적 `returnValue`, 명시적 OUT/INOUT/cursor 경계
+- I/O 전 검증과 실제 실행 mode를 보고하는 동종 command-only bulk
+- observe/fail-only execution observer와 lazy diagnostic literalization
+- PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server dialect root와 driver subpath
+- PostgreSQL, MySQL, MariaDB, SQLite 중 사용자가 선택하는 Bun SQL adapter family; connection auto-detection 없음
+- public API가 동작하는 경우 기존 first-party driver를 재사용하는 Deno; Deno 전용 dialect 없음
+- metadata, codegen, CLI JSON inspection, 표준 LSP, Vite lowering, 얇은 editor 통합
+- 정확한 DB integer/decimal은 canonical string, 근사 IEEE 값은 number이며 JSON/temporal/container profile은 독립적임
 
-Stage A 공유 매니페스트 artifact 중 PG16.4, 범위를 지정한 PG18.6,
-MySQL 8.4.2, MariaDB 11.8.9, Oracle Free 23.9, SQL Server 2022 CU18
-Developer, Node SQLite 3.50.2, browser WASM 3.53.4의 여덟 개는
-`exactTupleObserved=true`, `missingTests=[]`를 보고합니다. 이 기록은 위
-Stage A revision에 귀속된 revision별 증거이며 Stage A에서 Official입니다.
-이후 revision에는 별도 Stage B exact-final SHA 검증이 필요합니다. 실제 발행은 주장하지
-않으며 사용자 수락과 명시적인 릴리스 승인은 별도입니다. D1의 managed
-SQLite 버전은 공개되지 않아 Compatible입니다.
+## 명시적 unsupported 동작
 
-## 업그레이드 규율
+`UnsupportedFeatureError(feature, code, message, options?)`는 안정적인
+`BRAID_*` code를 전달합니다. 물리 driver 지원이 없는 활성 cancellation은
+`BRAID_CANCEL_UNSUPPORTED`를 사용하고 이미 abort된 signal은 자신의
+`reason`을 보존합니다. Stream, routine, output, hint, transaction, bulk
+지원이 없으면 buffering, carrier 추측, hint 무시, 숨은 transaction 대신
+명시적으로 실패합니다.
 
-선택한 TypePolicy/profile에서 생성 모델 파일을 파생 아티팩트로 취급하세요.
-runtime과 codegen에서 같은 descriptor를 사용하고 metadata나 설정을 바꾼 후
-`sqlbraid codegen`을 실행하고 결과를 commit한 다음 `sqlbraid codegen --check`를
-실행하세요. direct-vs-pool factory를 소유한 물리 리소스에 맞추세요. Vite
-transform과 서버 데이터베이스 runtime을 분리하고 Node 전용 데이터베이스
-드라이버를 브라우저 코드로 가져오지 마세요.
+Canonical capability key는 다음과 같습니다.
 
-[루틴 호출](/SQLBraid/concepts/routines/), [스트리밍](/SQLBraid/runtime/streaming/),
-[제한 사항](/SQLBraid/release/limitations/), [런타임/드라이버 지원](/SQLBraid/reference/support/)을 참고하세요.
+```text
+statement.prepare       statement.stream       statement.bulk
+transaction             transaction.savepoint
+routine.out             routine.result-sets    routine.out-cursor
+routine.return-value
+```
 
-## 과거 PV16 기록
+## 의도적인 비기능
 
-이전 PV16/PV17 구현은 SQLite integer mode를 사용했고 일부 정확한 정수를
-`bigint`로 노출했습니다. 당시의 revision별 Runtime, Docs, Release dry-run
-link는 provenance를 위해 보존하지만 현재 source나 PV18 profile/container
-계약을 인증하지 않습니다.
+SQLBraid는 ORM, 완전한 SQL semantic compiler, 범용 input codec, SQL/result
+rewrite interceptor, 자동 retry/router, audit store, 범용 native prepared
+cache가 아닙니다. 임의 SELECT/JOIN result model을 추론하거나 object graph를
+hydrate하지 않습니다. DML `RETURNING`/`OUTPUT`은 선택한 adapter의 정확한
+증거가 달리 말하지 않는 한 materialized입니다. Metadata는 open-world
+positive evidence입니다.
+
+Release에는 하나의 clean exact revision, 실행 가능한 tuple/capability 범위,
+영문/한국어 문서 freshness, package/export 검사, immutable release dry-run이
+필요합니다. 사용자 수락과 명시적 release 승인은 별도 gate입니다.
+
+## Translation freshness
+
+영문 페이지가 source content이며 추적하는 모든 페이지에는 한국어 pair가
+있습니다. 같은 revision에서 영문과 한국어 파일을 함께 변경하고 두 언어의
+code/API 의미를 보존한 뒤 `node scripts/validate-translations.mjs`를
+실행하세요. Translation registry는 영문 source digest를 기록하며 stale 또는
+누락된 entry는 Docs gate를 막습니다. 일반적인 API 변경에 opt-out을 추가하지
+마세요.

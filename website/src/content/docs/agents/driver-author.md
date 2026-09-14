@@ -1,148 +1,104 @@
 ---
 title: Driver-author binding guide
-description: Implement a custom SQLBraid binding adapter without crossing the value-only security boundary.
+description: Implement a custom SQLBraid adapter without crossing the value-only boundary.
 ---
 
-This guide is for custom `QueryExecutor`, `ConnectionProvider`, and driver adapters. Stage A implementation evidence is recorded for revision `53db135bd156b6d65dc91785a671dec5249c95d4`; all three Runtime, Docs, and Release gates passed. See the [revision-specific evidence](/SQLBraid/reference/support/#release-evidence-provenance). This page does not grant a runtime support label or publication evidence; later revisions require separate Stage B exact-final SHA verification.
+This guide covers custom `QueryExecutor`, `ConnectionProvider`, and binding
+adapters. It describes the current API contract; it does not grant a support
+label or publication evidence. The last exact-SHA verification retained for
+provenance was `8da8167e027320fcc9bb2aac16b0903c64147940` with successful
+Runtime [34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046),
+Docs [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
+and Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326).
+The current tree requires fresh exact-SHA gates.
 
 ## Logical statement invariant
 
 Core/template rendering returns one immutable `RenderedStatement`:
 
 ```ts
-interface RenderedParameter {
-  readonly value: unknown;
-  readonly interpolation?: number;
-  readonly hint?: ParameterTypeHint;
-  readonly direction?: "in" | "out" | "inout";
-  readonly outputName?: string;
-}
-
 interface RenderedStatement {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
-  readonly resultKind: QueryResultKind;
+  readonly resultKind: "rows" | "command" | "call" | "unknown";
   readonly dialectId: string;
-  readonly routineProcedure?: {
-    readonly name: string;
-    readonly parameterNames: readonly string[];
-  };
-  readonly fingerprint?: string;
-  readonly variantFingerprint?: string;
 }
 ```
 
-`segments.length === parameters.length + 1`. Segments already include every structural decision (`@braid`, `sql.ident`, `sql.raw`, fragments, lists, joins, and trim). Every parameter is a value. A driver must not reinterpret a parameter as SQL, an identifier, a nested query, a driver fragment, or a native tagged-template command. Use `createRenderedStatement` at custom public boundaries and do not retain parallel mutable text/values/hints/maps.
+`segments.length === parameters.length + 1`. Every parameter is a value. A
+custom driver must not reinterpret it as SQL, an identifier, nested SQL, or a
+native tagged-template command. Structural SQL is authored through explicit
+helpers (`sql.ident`, `sql.fragment`, `sql.raw`, `sql.list`, `sql.join`) and is
+already present in `segments`.
 
-## Binding adapter
+## Binding and leases
 
 ```ts
 interface StatementBindingAdapter {
   readonly id: string;
-  describe(
-    statement: RenderedStatement,
-    context: StatementBindingContext,
-  ): StatementBindingDescription;
+  describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription;
 }
-
 interface StatementBindingContext {
   readonly dialectId: string;
   readonly requestedReuse: "auto" | "simple" | "reuse";
   readonly preparedName?: string;
   readonly transactionScoped?: boolean;
 }
-```
-
-`StatementBindingDescription.bindings` contains immutable metadata records with
-`index`, optional driver `name`, interpolation index, optional hint, direction,
-and output name. It does not expose application values; keep opaque encoded
-requests private.
-
-`describe()` is pure with respect to the database. It selects one transport (`native-value-template`, `text-positional`, `text-named`, or `typed-request`), validates hints, and constructs deterministic typed request data before connection acquisition. A materialization failure is stage `"materialize"`, with both execution flags false. Driver/server/network failures remain stage `"driver"`.
-
-The provider and every lease must expose the same adapter object:
-
-```ts
 interface ConnectionProvider {
   readonly statementBinding: StatementBindingAdapter;
   acquire(): Promise<ConnectionLease>;
 }
+interface ConnectionLease extends QueryExecutor {
+  release(options?: { discard?: boolean }): void | Promise<void>;
+}
 ```
 
-Pass the same optional `StatementBindingDescription` to `query`, `call`, or `stream` so the driver does not encode twice. Keep opaque request objects private to the driver package (a `WeakMap` keyed by the description is suitable).
+`describe()` and `describeBulk()` are pure pre-acquire materialization. Validate
+hints, shape, and transport there; materialization failure has both execution
+flags false. Providers and leases must expose the exact same immutable binding
+adapter object. Keep opaque driver requests private, for example in a `WeakMap`
+keyed by `StatementBindingDescription`.
 
-## Homogeneous bulk execution
+Logical prepared shape is result kind, dialect, canonical segments, and ordered
+hint/direction/output metadata. `$1`, `?`, `:1`, and `@p1` are transport details,
+not shape identity. Values may change; structural shape may not.
 
-The homogeneous `db.bulk()` contract is command-only: one logical DML shape is paired with an
-ordered parameter matrix. It is not `db.batch()`, which accepts heterogeneous
-queries.
+## Executor methods and cancellation
 
 ```ts
-interface RenderedBulk {
-  readonly statement: RenderedStatement;
-  readonly parameterSets: readonly (readonly unknown[])[];
-}
-
-interface BulkBindingDescription {
-  readonly adapterId: string;
-  readonly dialectId: string;
-  readonly transport: ParameterTransportKind;
-  readonly itemCount: number;
-  readonly valuesAt(index: number): readonly unknown[];
-  readonly literalizedSql(
-    index: number,
-    options?: LiteralizeOptions,
-  ): LiteralizedSqlResult;
-  readonly parameterizedSql?: string;
-  readonly bindings: readonly BindingDescription[];
-}
-
-interface StatementBindingAdapter {
-  readonly describeBulk?: (
-    bulk: RenderedBulk,
-    context: StatementBindingContext,
-  ) => BulkBindingDescription;
-}
-
-interface BulkExecutionResult {
-  readonly inputCount: number;
-  readonly affectedRows?: number;
-  readonly executionMode:
-    | "native-bulk"
-    | "pipeline"
-    | "prepared-loop"
-    | "remote-batch";
-}
-
 interface QueryExecutor {
-  readonly bulk?: (
-    bulk: RenderedBulk,
-    binding: BulkBindingDescription,
-  ) => Promise<BulkExecutionResult>;
+  readonly statementBinding: StatementBindingAdapter;
+  query<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>>;
+  stream<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row>;
+  call(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult>;
+  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult>;
+  begin?(options?: TransactionOptions): Promise<void>;
+  commit?(): Promise<void>;
+  rollback?(): Promise<void>;
+  savepoint?(name: string): Promise<void>;
+  rollbackTo?(name: string): Promise<void>;
+  releaseSavepoint?(name: string): Promise<void>;
 }
 ```
 
-Use core's `createBulkBindingDescription` for shared immutable metadata and lazy
-per-item diagnostics. Drivers must encode and validate the entire matrix before
-acquiring a lease. Dynamic shape/cardinality changes and `OUT`/`INOUT`
-directions fail before I/O (`BRAID_BULK_SHAPE` or a materialization diagnostic).
-An executor without `bulk` fails with `BRAID_BULK_UNSUPPORTED`; do not silently
-loop through ordinary query calls.
+An already-aborted signal rejects with its `reason`. An active signal requires a
+physical cancellation path. Without one, reject before I/O with
+`UnsupportedFeatureError`, feature `statement.cancel`, and
+`BRAID_CANCEL_UNSUPPORTED`; stopping iteration alone is not cancellation.
+`stream` must be a real driver path, and `call` must materialize/close every
+cursor, result set, request, and carrier before lease release. Never buffer to
+fake streaming or guess a routine carrier.
 
-Bulk uses one physical lease and reports the actual mode. Root bulk has no
-portable atomicity promise and is never implicitly transactional; use
-`db.tx(async (tx) => tx.bulk(...))` when callback transaction atomicity is
-required. There is no portable auto-chunking contract, and observers emit one
-bulk operation rather than N ordinary query operations.
-
-## Complete custom adapter example
+## Complete text-positional example
 
 ```ts
 import {
+  UnsupportedFeatureError,
   createRenderedStatement,
   createStatementBindingDescription,
   type ConnectionLease,
   type ConnectionProvider,
+  type ExecutionOptions,
   type QueryExecutionResult,
   type QueryExecutor,
   type RenderedStatement,
@@ -152,168 +108,87 @@ import {
 } from "@sqlbraid/core";
 
 interface WireClient {
-  execute<Row>(sql: string, values: readonly unknown[]): Promise<QueryExecutionResult<Row>>;
-  release(options?: { readonly discard?: boolean }): void | Promise<void>;
+  execute<Row>(text: string, values: readonly unknown[]): Promise<QueryExecutionResult<Row>>;
+  release(options?: { discard?: boolean }): void | Promise<void>;
 }
 
-const requests = new WeakMap<StatementBindingDescription, {
-  readonly statement: RenderedStatement;
-  readonly sql: string;
-  readonly values: readonly unknown[];
-}>();
+const requests = new WeakMap<StatementBindingDescription, { statement: RenderedStatement; text: string; values: readonly unknown[] }>();
 
-export const acmeStatementBinding: StatementBindingAdapter = Object.freeze({
+function assertSignal(options?: ExecutionOptions): void {
+  if (options?.signal?.aborted) throw options.signal.reason;
+  if (options?.signal) {
+    throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "acme-wire cannot cancel an active statement");
+  }
+}
+
+export const acmeBinding: StatementBindingAdapter = Object.freeze({
   id: "acme-wire",
   describe(statement: RenderedStatement, context: StatementBindingContext) {
     statement = createRenderedStatement(statement);
-    for (const parameter of statement.parameters) {
-      if (parameter.hint !== undefined) {
-        throw new Error("BRAID_BIND_HINT_UNSUPPORTED");
-      }
+    if (statement.parameters.some((parameter) => parameter.hint !== undefined)) {
+      throw new UnsupportedFeatureError("parameter.hint", "BRAID_BIND_HINT_UNSUPPORTED", "acme-wire has no hint API");
     }
-
-    const description = createStatementBindingDescription(statement, context, {
+    const binding = createStatementBindingDescription(statement, context, {
       adapterId: "acme-wire",
       transport: "text-positional",
-      placeholder: (index) => `$${index}`, // one-based
-      reuse: {
-        effective: "simple",
-        owner: "driver",
-      },
+      placeholder: (index) => `$${index}`,
+      reuse: { effective: "simple", owner: "driver" },
     });
-    const text = description.parameterizedSql;
-    if (text === undefined) throw new Error("BRAID_BIND_TRANSPORT");
-    requests.set(description, {
-      statement,
-      sql: text,
-      values: statement.parameters.map((parameter) => parameter.value),
-    });
-    return description;
+    const text = binding.parameterizedSql;
+    if (text === undefined) throw new TypeError("BRAID_BIND_TRANSPORT: missing parameterized SQL");
+    requests.set(binding, { statement, text, values: statement.parameters.map((parameter) => parameter.value) });
+    return binding;
   },
 });
 
 export function createAcmeExecutor(client: WireClient): QueryExecutor {
   return {
     ownershipKey: client,
-    statementBinding: acmeStatementBinding,
-    async query<Row>(statement: RenderedStatement, binding?: StatementBindingDescription) {
+    statementBinding: acmeBinding,
+    async query<Row>(statement, binding, options) {
+      assertSignal(options);
       statement = createRenderedStatement(statement);
-      const description = binding ?? acmeStatementBinding.describe(statement, {
-        dialectId: statement.dialectId,
-        requestedReuse: "auto",
-      });
+      const description = binding ?? acmeBinding.describe(statement, { dialectId: statement.dialectId, requestedReuse: "auto" });
       const request = requests.get(description);
-      if (request?.statement !== statement) throw new Error("BRAID_BINDING_IDENTITY");
-      return client.execute<Row>(request.sql, request.values);
+      if (request?.statement !== statement) throw new TypeError("BRAID_BINDING_IDENTITY");
+      return client.execute<Row>(request.text, request.values);
+    },
+    stream(_statement, _binding, options): AsyncIterable<never> {
+      assertSignal(options);
+      throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "acme-wire has no stream protocol");
+    },
+    async call(_statement, _binding, options): Promise<never> {
+      assertSignal(options);
+      throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "acme-wire has no routine protocol");
     },
   };
 }
 
-export function createAcmeProvider(
-  acquireClient: () => Promise<WireClient>,
-): ConnectionProvider {
+export function createAcmeProvider(acquireClient: () => Promise<WireClient>): ConnectionProvider {
   return {
-    statementBinding: acmeStatementBinding,
+    statementBinding: acmeBinding,
     async acquire(): Promise<ConnectionLease> {
       const client = await acquireClient();
-      const bound = createAcmeExecutor(client);
+      const executor = createAcmeExecutor(client);
       let released = false;
-      return {
-        ...bound,
-        async release(options) {
-          if (released) return;
-          released = true;
-          await client.release(options);
-        },
-      };
+      return { ...executor, async release(options) { if (released) return; released = true; await client.release(options); } };
     },
   };
 }
 ```
 
-For a typed request, keep deterministic names (`p1`, `p2`, …), map every supported hint to a driver type, validate facets, and store encoded values privately. For a native-value-template transport, use the native value-only API; never pass a logical parameter to a polymorphic tag that could treat it as structure.
+## Capabilities and evidence
 
-## First-party transport paths
+Use only the fixed transaction isolation literals and `readOnly`; malformed
+runtime values fail with `TypeError` / `BRAID_TX_OPTIONS_INVALID`, valid but
+unsupported options use `BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit
+options use `BRAID_TX_OPTIONS_NESTED`. Canonical capability keys are
+`statement.prepare`, `statement.stream`, `statement.bulk`, `transaction`,
+`transaction.savepoint`, `routine.out`, `routine.result-sets`,
+`routine.out-cursor`, and `routine.return-value`.
 
-| Path | Transport and materialization | Reuse owner |
-| --- | --- | --- |
-| PostgreSQL / `pg` | `text-positional`, `$1..$N` | fresh unnamed simple execution, driver |
-| MySQL / `mysql2` | `text-positional`, `?` | driver reuse for every request |
-| MariaDB / Connector/Node.js | `text-positional`, `?` | connector-owned reuse/batch |
-| SQLite / `node:sqlite` | documented `DatabaseSync.prepare(text)` with `?` | fresh simple execution, driver |
-| Oracle Thin / `node-oracledb` | `text-positional`, `:1..:N`, bind descriptors | driver cache reuse |
-| SQL Server / Tedious | `typed-request`, `@p1..@pN`, `TYPES.*` and facets | fresh Request/`execSql`, simple execution, driver |
-
-`auto`, `simple`, and `reuse` are logical requests; the adapter reports the
-effective policy, which must never be inferred from the request. Prepared shape
-is `resultKind` + canonical segments + ordered hint signature, never placeholder
-spelling. A prepared factory renders once. Do not add a universal runtime
-statement cache.
-
-## Routine, stream, and lease boundaries
-
-Implement `QueryExecutor.stream` as a real driver path, not an `all()` buffer.
-Close, drain, or cancel the driver cursor/request/iterator before releasing or
-discarding the physical lease. Implement `QueryExecutor.call` as a normalized
-`{ output, resultSets, returnValue? }` result: consume every cursor/ResultSet
-and keep raw driver objects out of application results. Cursor OUT values belong
-in `resultSets`, not scalar `output`. PostgreSQL refcursor calls require an
-existing transaction; MySQL prepared CALL OUT/INOUT and SQL Server cursor output
-must fail explicitly when the driver cannot prove a safe carrier. MariaDB-specific
-syntax and protocol evidence belongs to `@sqlbraid/mariadb/mariadb`; a `mysql2`
-connection to MariaDB is best-effort compatibility, not Official MariaDB
-evidence.
-
-## Hints, providers, and observers
-
-Honor every supported hint or reject it before I/O; never silently ignore one. Preserve driver-specific null, numeric, temporal, binary, facet, recordset, ResultSet, and unsupported-call behavior. Keep provider and lease binding identity equal, release materialized leases before asynchronous mapping, and retain stream leases until iteration closes.
-
-`query:ready` exposes readonly effective `{ adapterId, dialectId, transport, reuse }` before acquisition. Values, hints, interpolation map, result kind, fingerprints, prepared name, and transaction context remain derived readonly views. `literalizedSql(options?)` is lazy/cached, redacted by default, and diagnostic-only. It reconstructs `segment[0] + literal(parameter[0]) + ...` directly from logical arrays; it never replaces placeholders and must never be sent to the database. Support max length, binary summary/full mode, custom redaction, and complete/redacted/truncated accounting. Unsupported objects receive a safe marker, not accidental `toString()` output.
-
-## Native-value security conformance
-
-Include this negative fixture in the reusable adapter suite:
-
-```ts
-const nativeFragment = { kind: "native-sql-fragment", text: "DROP TABLE accounts" };
-const statement = render(sql`SELECT ${nativeFragment}`);
-const description = acmeStatementBinding.describe(statement, {
-  dialectId: "acme-sql",
-  requestedReuse: "auto",
-});
-
-// One value parameter remains; no fragment text enters statement segments.
-// Materialization sends nativeFragment as a value or rejects it.
-```
-
-Also describe one adapter object under multiple dialect contexts. Context may alter driver policy or diagnostic literal formatting, but never the core value-only invariant. `sql.raw`, `sql.ident`, and explicit fragment helpers are the only structural paths.
-
-Exact database numerics are canonical strings and approximate IEEE values are
-numbers. Keep `semantics`, `representation`, and transport `fidelity`
-independent in TypePolicy metadata; a lossy exact decimal must fail closed, not
-be stringified. Parsed JSON/native `Date` are convenience profiles, while text
-profiles need their own evidence. Scalar guarantees do not automatically apply
-to arrays, ranges, composites, objects, `sql_variant`, or vectors.
-
-If a driver or connection option changes the JavaScript result shape, publish an
-immutable profile descriptor with a stable `id`, JSON/temporal modes,
-connection options, and matching TypePolicy. Export a
-`typePolicyForProfile({ json, temporal })` selector when the package supports
-the shared profile shape. Runtime and codegen must consume that same descriptor;
-the driver author owns a real CI fixture, a codegen/runtime conformance check,
-and a support-matrix capability row. Driver raw values and SQLBraid canonical
-values must be recorded separately.
-
-A scalar exactness fixture does not certify arrays, collections, variants,
-composites, parsed JSON roots, or other containers. A container claim requires
-container-specific transport and codegen evidence and is not recursively
-inherited by every nested member. Keep unclassified/unsupported values
-explicit rather than mapping them to a convenient scalar.
-
-Keep the query-builder/render phase and binder/materializer phase separate: the
-former describes immutable SQL segments and value boundaries, while the latter
-chooses driver transport and parameter descriptors. A query builder must not
-promise numeric output fidelity, and a binder must not rewrite SQL to disguise a
-driver limitation.
-
-For the full contract and checklist, see [`docs/driver-author-guide.md`](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md).
+Bun SQL uses one adapter family with required user-selected
+`dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`; it does not auto-detect.
+Deno may reuse an existing adapter where its public driver API works. Neither
+statement promotes an unverified database/runtime/profile tuple. For the full
+checklist, see the [repository driver-author guide](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md).

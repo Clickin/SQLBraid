@@ -175,8 +175,9 @@ async function supportMatrix(browser, previewUrl) {
       if (focused !== measurements.at(-1).totalRows - 1) throw new Error("Support matrix keyboard cannot reach the last virtual row.");
       await matrix.locator("[data-reset]").click();
       await matrix.locator('[data-view="database"]').click();
-      await matrix.locator("[data-search]").fill("mysql-mysql2");
-      if (await matrix.locator("[data-index]").count() !== 1) throw new Error("Support matrix search did not isolate the MySQL target.");
+      await matrix.locator("[data-search]").fill("mysql-mysql2-deno-2-9-3");
+      const searchRows = await matrix.locator("[data-index]").allTextContents();
+      if (searchRows.length !== 1 || !searchRows[0].includes("mysql-mysql2-deno-2-9-3")) throw new Error("Support matrix search did not isolate the requested runtime tuple.");
       await matrix.locator("[data-reset]").click();
       await matrix.locator('[data-filter="database"]').selectOption("postgres");
       if ((await matrix.locator("[data-index]").allTextContents()).some((text) => !text.includes("postgres"))) throw new Error("Support matrix database filter leaked another engine.");
@@ -184,7 +185,11 @@ async function supportMatrix(browser, previewUrl) {
       await matrix.locator('[data-view="driver"]').click();
       await matrix.locator('[data-filter="profile"]').selectOption("mysql2-lossless-text");
       const profileRows = await matrix.locator("[data-index]").allTextContents();
-      if (profileRows.length !== 1 || !profileRows[0].includes("mysql2-lossless-text")) throw new Error("Support matrix profile filter did not isolate its driver profile.");
+      const expectedProfileTargets = await page.locator("[data-support-matrix]").evaluate((element) =>
+        JSON.parse(element.textContent).targets.filter((target) => target.driver.profile === "mysql2-lossless-text").map((target) => target.id));
+      if (profileRows.length !== expectedProfileTargets.length
+        || expectedProfileTargets.some((id) => !profileRows.some((row) => row.includes(id)))
+        || profileRows.some((row) => !row.includes("mysql2-lossless-text"))) throw new Error("Support matrix profile filter lost a runtime tuple or leaked another profile.");
       measurements.push({ locale, view: "profile-filter", profile: "mysql2-lossless-text", rows: profileRows.length });
       await matrix.locator("[data-reset]").click();
       await page.setViewportSize({ width: 375, height: 812 });

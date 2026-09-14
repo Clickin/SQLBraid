@@ -69,14 +69,11 @@ Native D1 batch의 transaction 동작이 더 강하더라도 portable SQLBraid c
 아닙니다. Root bulk는 암묵적 transaction이 아니며 portable auto-chunking 약속이
 없습니다.
 
-과거 PV16 Chromium/D1 증거는 release records에 보존합니다.
-`53db135bd156b6d65dc91785a671dec5249c95d4` 구현 revision의 Stage A 증거가
-[지원 매트릭스](/SQLBraid/reference/support/)에 기록되었고 Runtime, Docs,
-Release 세 gate를 모두 통과했으며 WASM 프로필은 Stage A에서 Official입니다.
-로컬 D1은 managed SQLite 버전이 공개되지 않아 Compatible입니다. 어떤
-browser gate도 OPFS persistence, SharedArrayBuffer, remote production support
-또는 npm 발행을 주장하지 않습니다. 이후 revision에는 별도 Stage B
-exact-final SHA 검증이 필요합니다.
+과거 SQLite 증거는 release records에 provenance로 보존합니다. 현재 phase-J
+tree는 새로운 exact-SHA Runtime, Docs, Release gate를 기다립니다. 로컬 D1은
+managed SQLite 버전이 공개되지 않아 Compatible입니다. 어떤 browser gate도
+OPFS persistence, SharedArrayBuffer, remote production support 또는 npm
+발행을 주장하지 않습니다.
 
 ## Browser와 Worker 표현 프로필
 

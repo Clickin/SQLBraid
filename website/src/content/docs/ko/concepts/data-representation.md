@@ -98,13 +98,11 @@ DB가 `NaN`, infinity, 음의 0을 정규화하는지 기록합니다. codegen �
 
 ## 드라이버 프로필
 
-아래는 PV18 계약입니다. Stage A 증거는
-`53db135bd156b6d65dc91785a671dec5249c95d4` 구현 revision에 기록되었고
-Runtime, Docs, Release 세 gate를 모두 통과했습니다. [지원
-매트릭스](/SQLBraid/reference/support/)가 각 정확한 DB/runtime revision의
-증거를 소유합니다. 프로필은 결과 JavaScript 타입을 바꾸는 전체 드라이버
-설정이며 사후에 붙이는 설명용 label이 아닙니다. 이후 revision에는 별도
-Stage B exact-final SHA 검증이 필요합니다.
+아래는 현재 PV18 계약입니다. [지원 매트릭스](/SQLBraid/reference/support/)가
+각 정확한 DB/runtime revision의 증거를 소유합니다. 현재 API 변경의 영향을
+받은 target은 새로운 exact-SHA gate가 통과할 때까지 Pending 또는 Compatible입니다.
+프로필은 결과 JavaScript 타입을 바꾸는 전체 드라이버 설정이며 사후에 붙이는
+설명용 label이 아닙니다.
 
 첫 번째 파티 프로필 helper는 runtime과 codegen이 같은 계약을 사용하게 합니다.
 
@@ -140,6 +138,7 @@ count이므로 safe-integer 검사를 하는 number로 남습니다.
 | MySQL / `mysql2` | exact integer/`DECIMAL` → `string`; `jsonStrings`/`dateStrings` → `string` | native JSON/temporal은 별도 편의 프로필이며 exact 증거를 상속하지 않음 |
 | MariaDB Connector | exact integer/`DECIMAL` → `string`; `autoJsonMap:false`/`dateStrings:true` → `string` | native JSON/temporal은 별도 편의 프로필이며 exact 증거를 상속하지 않음 |
 | Node SQLite / WASM | INTEGER storage → `string`; REAL storage → `number` | native bigint는 transport 전용이며 D1은 safe-integer 범위 guarded |
+| Bun SQL 1.3.14 | PostgreSQL/MySQL/MariaDB `{ bigint: true }`; PostgreSQL decimal → `string`; SQLite `{ safeIntegers: true }`; MariaDB/SQLite JSON → text | integral `Number` row 거부; MySQL/MariaDB DECIMAL과 binary는 같은 모호한 byte carrier라 거부하며 `CAST(... AS CHAR)`/`HEX(...)`를 직접 작성; SQLite native decimal은 unsupported |
 | Oracle Thin | `NUMBER` 계열 → `string`; 근사 이진 → `number` | native JSON/temporal은 프로필별 편의 표현 |
 | SQL Server / Tedious | 보존되는 exact integer → `string`; 근사 이진 → `number` | native DECIMAL/NUMERIC/MONEY exact 출력은 unsupported; SQL text cast 작성 |
 

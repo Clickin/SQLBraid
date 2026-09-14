@@ -255,6 +255,12 @@ Requirements:
 
 Outside `db.tx`, each root operation may use any connection supplied by the provider.
 
+`db.session(fn)` pins one lease without starting a transaction. Nested sessions,
+`session.tx()` and `tx.session()` reuse the current lease. Scoped database and
+prepared handles expire with their callback; started streams close before lease
+release. `db.prepare()` accepts row, command or call factories with zero inputs
+or one required input. Preserve once-only rendering and logical shape checks.
+
 ### 8.4 Result mapping and lease lifetime
 
 For materialized results, release the root lease after DB I/O/result materialization and before asynchronous Standard Schema mapping/validation.
@@ -469,8 +475,9 @@ Runtime-only packed installs must exclude metadata/codegen/tooling/CLI/LSP/edito
 
 Preserve PLAN §8.4's independent dialect, driver, transaction-profile and execution
 runtime concerns. Node/Bun/Deno host compatibility is separate deployment evidence.
-PV11 implements no transaction-isolation/profile runtime API; omitted future
-isolation options must preserve the actual DB/session default.
+The frozen RC API supports standard transaction isolation and read-only options;
+omitted options preserve the actual DB/session default. Richer transaction
+profiles and vendor-specific modes remain outside this API.
 
 ---
 

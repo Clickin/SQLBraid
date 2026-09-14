@@ -60,6 +60,12 @@ hint facets fail at the `materialize` stage before database I/O.
 - Native `procedure` metadata is not supported by this adapter; author the
   Oracle PL/SQL/SQL call text explicitly.
 - Streaming uses the driver's ResultSet protocol and closes the ResultSet on completion, abort, or early break.
+- Cancellation uses the guarded `connection.break()` path. It is cooperative,
+  not a prompt or timeout guarantee: the documented `DBMS_SESSION.SLEEP` raw
+  probe can reject with `ORA-01013` only when the sleep completes, and the
+  adapter holds the physical lease through settlement. Without the documented
+  break primitive, active cancellation fails before I/O with
+  `BRAID_CANCEL_UNSUPPORTED`.
 - The target combination is Oracle Free 23.9 Thin on Node 22.18.0/Linux
   x64. Its current certification status and exact gate are recorded in
   [runtime and driver support](/SQLBraid/reference/support/).
