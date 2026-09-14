@@ -12,9 +12,14 @@ import type {
   StatementBindingContext,
   StatementBindingDescription,
 } from "@sqlbraid/core";
-import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
+import {
+  createBulkBindingDescription,
+  createRenderedStatement,
+  createStatementBindingDescription,
+  normalizeExactInteger,
+  safeDatabaseCount,
+} from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
-import type { SqliteIntegerMode } from "./node-sqlite.js";
 
 export interface D1ResultMetaLike {
   readonly changes?: number;
@@ -39,17 +44,7 @@ export interface D1DatabaseLike {
   batch<Row = unknown>(statements: readonly D1PreparedStatementLike[]): Promise<readonly D1ResultLike<Row>[]>;
 }
 
-export interface D1ExecutorOptions {
-  /** D1 exposes JavaScript numbers for INTEGER values; bigint mode is not a public D1 capability. */
-  readonly integerMode?: SqliteIntegerMode;
-}
-
-export interface D1DatabaseOptions extends DatabaseOptions, D1ExecutorOptions {}
-
-function assertIntegerMode(integerMode: SqliteIntegerMode | undefined): "number" {
-  if (integerMode === undefined || integerMode === "number") return "number";
-  throw new Error("BRAID_INTEGER_MODE_UNSUPPORTED: Cloudflare D1 exposes INTEGER values as JavaScript numbers only.");
-}
+export interface D1DatabaseOptions extends DatabaseOptions {}
 
 function assertRoutineUnsupported(rendered: RenderedStatement): void {
   if (rendered.resultKind === "call" || rendered.routineProcedure !== undefined) {
@@ -100,8 +95,11 @@ function normalizeValue(value: unknown): unknown {
   if (Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isInteger(entry) && entry >= 0 && entry < 256)) {
     return Uint8Array.from(value);
   }
-  if (typeof value === "number" && Number.isInteger(value) && !Number.isSafeInteger(value)) {
-    throw new RangeError("BRAID_INTEGER_UNSAFE: D1 returned an integer outside JavaScript's safe range.");
+  if (typeof value === "number" && Number.isInteger(value)) {
+    if (!Number.isSafeInteger(value)) {
+      throw new RangeError("BRAID_INTEGER_UNSAFE: D1 returned an integer outside JavaScript's safe range.");
+    }
+    return normalizeExactInteger(value);
   }
   return value;
 }
@@ -172,17 +170,17 @@ function materialize(statement: RenderedStatement, binding: StatementBindingDesc
 
 const d1Environment = Object.freeze<DriverEnvironment>({
   database: { product: "sqlite" },
-  driver: { id: "cloudflare-d1", profile: "number" },
+  driver: { id: "cloudflare-d1", profile: "guarded-safe-integer" },
   capabilities: {
     "sql.native-transparency": { status: "guaranteed" },
-    "numeric.exact-integer": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.safe-integer" },
-    "numeric.approximate-float": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.safe-integer" },
+    "numeric.exact-integer": { status: "guarded", canonical: "string", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.safe-integer" },
+    "numeric.approximate-float": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.numeric-profile" },
+    "numeric.bind-exact": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "cloudflare-d1.safe-integer" },
   },
   // D1 denies sqlite_version(); unknown server versions stay unreported.
 });
 
-export function createD1Executor(database: D1DatabaseLike, options: D1ExecutorOptions = {}): QueryExecutor {
-  assertIntegerMode(options.integerMode);
+export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
   return {
     ownershipKey: database,
     statementBinding: d1StatementBinding,
@@ -217,7 +215,7 @@ export function createD1Executor(database: D1DatabaseLike, options: D1ExecutorOp
         const changes = result.meta?.changes ?? result.changes;
         if (typeof changes === "number") {
           hasAffectedRows = true;
-          affectedRows += changes;
+          affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount(changes));
         }
       }
       return {
@@ -240,6 +238,5 @@ export function createD1Executor(database: D1DatabaseLike, options: D1ExecutorOp
 }
 
 export function createD1Database(database: D1DatabaseLike, options: D1DatabaseOptions = {}) {
-  const { integerMode, ...databaseOptions } = options;
-  return createDatabase(createD1Executor(database, { integerMode }), databaseOptions);
+  return createDatabase(createD1Executor(database), options);
 }

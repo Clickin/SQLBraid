@@ -15,7 +15,7 @@ import type {
   StatementBindingContext,
   StatementBindingDescription,
 } from "@sqlbraid/core";
-import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
+import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription, ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -23,6 +23,10 @@ export interface PgFieldLike {
   readonly name: string;
   readonly dataTypeID?: number;
   readonly dataType?: string;
+}
+
+export interface PgTypeOverrides {
+  getTypeParser(oid: number, format?: string): (value: string) => unknown;
 }
 
 export interface PgResultLike {
@@ -33,7 +37,7 @@ export interface PgResultLike {
 }
 
 export interface PgClientLike {
-  query(config: { readonly text: string; readonly values: readonly unknown[]; readonly name?: string }): Promise<PgResultLike>;
+  query(config: { readonly text: string; readonly values: readonly unknown[]; readonly name?: string; readonly types?: PgTypeOverrides }): Promise<PgResultLike>;
   query(text: string, values?: readonly unknown[]): Promise<PgResultLike>;
   /**
    * Physical node-postgres clients expose these helpers; pools do not.
@@ -41,6 +45,7 @@ export interface PgClientLike {
    */
   escapeIdentifier(value: string): string;
   escapeLiteral(value: string): string;
+  getTypeParser?(oid: number, format?: string): (value: string) => unknown;
   /** Required when streaming with an AbortSignal; ends the physical connection. */
   end?(): Promise<void>;
 }
@@ -59,18 +64,94 @@ export interface PgCursorLike {
 }
 
 export interface PgCursorFactory {
-  new (text: string, values: readonly unknown[]): PgCursorLike;
+  new (text: string, values: readonly unknown[], config?: { readonly types?: PgTypeOverrides }): PgCursorLike;
+}
+
+export type PgJsonProfile = "text" | "parsed";
+export type PgTemporalProfile = "text" | "date";
+
+export interface PgParserProfile {
+  readonly json?: PgJsonProfile;
+  readonly temporal?: PgTemporalProfile;
 }
 
 export interface PgExecutorOptions {
   readonly typePolicy?: TypePolicy;
   readonly streamBatchSize?: number;
   readonly cursor?: PgCursorFactory;
+  readonly parserProfile?: PgParserProfile;
 }
 
 export type PgDatabaseOptions = DatabaseOptions & PgExecutorOptions;
 
-const oidTypes: Readonly<Record<number, string>> = { 20: "int8", 21: "int2", 23: "int4", 16: "bool", 25: "text", 1700: "numeric" };
+export const pgOidTypes: Readonly<Record<number, string>> = Object.freeze({
+  16: "bool",
+  17: "bytea",
+  20: "int8",
+  21: "int2",
+  23: "int4",
+  25: "text",
+  26: "oid",
+  114: "json",
+  700: "float4",
+  701: "float8",
+  790: "money",
+  1082: "date",
+  1083: "time",
+  1114: "timestamp",
+  1184: "timestamp with time zone",
+  1186: "interval",
+  1266: "time with time zone",
+  1700: "numeric",
+  2950: "uuid",
+  3802: "jsonb",
+});
+
+const defaultParserProfile: Required<PgParserProfile> = Object.freeze({ json: "text", temporal: "text" });
+
+function parserProfile(options: PgParserProfile | undefined): Required<PgParserProfile> {
+  const profile = {
+    json: options?.json ?? defaultParserProfile.json,
+    temporal: options?.temporal ?? defaultParserProfile.temporal,
+  };
+  if (profile.json !== "text" && profile.json !== "parsed") throw new RangeError(`Unsupported PostgreSQL JSON parser profile: ${String(profile.json)}`);
+  if (profile.temporal !== "text" && profile.temporal !== "date") throw new RangeError(`Unsupported PostgreSQL temporal parser profile: ${String(profile.temporal)}`);
+  return profile;
+}
+
+const jsonOids = new Set([114, 3802]);
+const temporalOids = new Set([1082, 1083, 1114, 1184, 1186, 1266]);
+const exactNumericOids = new Set([20, 21, 23, 26, 790, 1700]);
+
+function textValue(value: unknown): unknown {
+  if (typeof value === "string") return value;
+  throw new ResultExactnessError("PostgreSQL lossless text profile requires text-format results.");
+}
+
+function binary64Value(value: unknown): number {
+  return Number(textValue(value));
+}
+
+function binary32Value(value: unknown): number {
+  return Math.fround(binary64Value(value));
+}
+
+function queryTypeOverrides(client: PgClientLike, profile: Required<PgParserProfile>): PgTypeOverrides | undefined {
+  return {
+    getTypeParser(oid, format) {
+      if (oid === 700) return binary32Value;
+      if (oid === 701) return binary64Value;
+      if (
+        exactNumericOids.has(oid)
+        || (profile.json === "text" && jsonOids.has(oid))
+        || (profile.temporal === "text" && temporalOids.has(oid))
+      ) {
+        return textValue;
+      }
+      return client.getTypeParser?.(oid, format) ?? ((value: unknown) => value);
+    },
+  };
+}
 
 async function optionalCursorFactory(): Promise<PgCursorFactory> {
   try {
@@ -136,7 +217,7 @@ function plainRow(value: unknown, fields: readonly PgFieldLike[], policy: TypePo
   const row: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
     const field = fields.find((candidate) => candidate.name === key);
-    const databaseType = field?.dataType ?? (field?.dataTypeID === undefined ? undefined : oidTypes[field.dataTypeID]);
+    const databaseType = field?.dataType ?? (field?.dataTypeID === undefined ? undefined : pgOidTypes[field.dataTypeID]);
     Object.defineProperty(row, key, {
       value: databaseType ? policy.decode(databaseType, entry) : entry,
       enumerable: true,
@@ -222,35 +303,50 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   requestedReuse: "auto",
 });
 
-const pgEnvironment = Object.freeze<DriverEnvironment>({
-  database: { product: "postgres" },
-  driver: { id: "pg", profile: "node-postgres" },
-  capabilities: {
-    "sql.native-transparency": { status: "guaranteed" },
-    "numeric.exact-integer": { status: "guarded", canonical: "bigint", rawRepresentations: ["bigint", "string", "number"], conditionCode: "pg.exact-numeric-profile" },
-    "numeric.exact-decimal": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "pg.exact-numeric-profile" },
-    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-  },
-  probe: {
-    statement: createRenderedStatement({
-      segments: ["SHOW server_version"],
-      parameters: [],
-      resultKind: "rows",
-      dialectId: "postgres",
-    }),
-    read: (rows) => {
-      const row = rows[0];
-      if (!row || typeof row !== "object" || Array.isArray(row)) return {};
-      const version = (row as Record<string, unknown>).server_version;
-      return typeof version === "string" ? { version } : {};
+function pgEnvironmentFor(profile: Required<PgParserProfile>): DriverEnvironment {
+  return Object.freeze<DriverEnvironment>({
+    database: { product: "postgres" },
+    driver: { id: "pg", profile: profile.json === "text" && profile.temporal === "text" ? "node-postgres" : "node-postgres-compatibility" },
+    capabilities: {
+      "sql.native-transparency": { status: "guaranteed" },
+      "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
+      "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
+      "numeric.approximate-float": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "pg.extra-float-digits" },
+      "data.json-lossless-text": { status: profile.json === "text" ? "guaranteed" : "unsupported", canonical: "string", rawRepresentations: ["string"], ...(profile.json === "text" ? {} : { conditionCode: "pg.json-parser-profile" }) },
+      "data.json-parsed": { status: profile.json === "parsed" ? "guarded" : "unsupported", rawRepresentations: ["object"], conditionCode: "pg.json-parser-profile" },
+      "data.temporal-lossless": { status: profile.temporal === "text" ? "guaranteed" : "unsupported", canonical: "string", rawRepresentations: ["string"], ...(profile.temporal === "text" ? {} : { conditionCode: "pg.temporal-parser-profile" }) },
+      "data.temporal-native": { status: profile.temporal === "date" ? "guarded" : "unsupported", rawRepresentations: ["Date"], conditionCode: "pg.temporal-parser-profile" },
     },
-  },
-});
+    probe: {
+      statement: createRenderedStatement({
+        segments: ["SELECT current_setting('server_version') AS server_version, current_setting('extra_float_digits') AS extra_float_digits, current_setting('TimeZone') AS timezone"],
+        parameters: [],
+        resultKind: "rows",
+        dialectId: "postgres",
+      }),
+      read: (rows) => {
+        const row = rows[0];
+        if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+        const record = row as Record<string, unknown>;
+        const version = typeof record.server_version === "string" ? record.server_version : undefined;
+        const extraFloatDigits = typeof record.extra_float_digits === "string" ? Number(record.extra_float_digits) : undefined;
+        const approximateFloat = extraFloatDigits !== undefined && extraFloatDigits > 0
+          ? { status: "guaranteed" as const, canonical: "number" as const, rawRepresentations: ["number"] as const }
+          : { status: "guarded" as const, canonical: "number" as const, rawRepresentations: ["number"] as const, conditionCode: "pg.extra-float-digits" };
+        return {
+          ...(version === undefined ? {} : { version }),
+          capabilities: { "numeric.approximate-float": approximateFloat },
+        };
+      },
+    },
+  });
+}
 
 function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
-): { readonly text: string; readonly values: readonly unknown[] } {
+  types?: PgTypeOverrides,
+): { readonly text: string; readonly values: readonly unknown[]; readonly types?: PgTypeOverrides } {
   statement = createRenderedStatement(statement);
   const description = binding ?? pgStatementBinding.describe(statement, {
     dialectId: statement.dialectId,
@@ -263,6 +359,7 @@ function materialize(
   return {
     text: description.parameterizedSql,
     values: statement.parameters.map((parameter) => parameter.value),
+    ...(types === undefined ? {} : { types }),
   };
 }
 
@@ -287,7 +384,7 @@ function outputRow(
       ? (values ??= Object.values(row))[positional]
       : Object.hasOwn(row, field.name) ? (row as Record<string, unknown>)[field.name] : undefined;
     positional += 1;
-    const databaseType = field?.dataType ?? (field?.dataTypeID === undefined ? undefined : oidTypes[field.dataTypeID]);
+    const databaseType = field?.dataType ?? (field?.dataTypeID === undefined ? undefined : pgOidTypes[field.dataTypeID]);
     Object.defineProperty(output, name, {
       value: databaseType ? policy.decode(databaseType, source) : source,
       enumerable: true,
@@ -462,19 +559,21 @@ function enqueuePgBulk<T>(
 export function createPgExecutor(client: PgClientLike, options: PgExecutorOptions = {}): QueryExecutor {
   assertPgClient(client);
   const policy = options.typePolicy ?? defaultTypePolicy;
+  const profile = parserProfile(options.parserProfile);
+  const types = queryTypeOverrides(client, profile);
   const batchSize = options.streamBatchSize ?? 100;
   if (!Number.isSafeInteger(batchSize) || batchSize < 1) throw new RangeError("PostgreSQL streamBatchSize must be a positive safe integer.");
   const runControl = async (text: string): Promise<void> => { await client.query({ text, values: [] }); };
   return {
     ownershipKey: client,
     statementBinding: pgStatementBinding,
-    environment: policy === defaultTypePolicy ? pgEnvironment : { ...pgEnvironment, driver: { id: "pg", profile: "custom-type-policy" }, capabilities: {} },
+    environment: policy === defaultTypePolicy ? pgEnvironmentFor(profile) : { ...pgEnvironmentFor(profile), driver: { id: "pg", profile: "custom-type-policy" }, capabilities: {} },
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
-      const result = await client.query(materialize(rendered, binding));
+      const result = await client.query(materialize(rendered, binding, types));
       assertUniqueFields(result.fields ?? []);
       const rows = result.rows.map((row) => plainRow(row, result.fields ?? [], policy));
-      const rowCount = result.rowCount ?? undefined;
+      const rowCount = result.rowCount === null || result.rowCount === undefined ? undefined : safeDatabaseCount(result.rowCount);
       const rowBearing = (result.fields?.length ?? 0) > 0 || result.rows.length > 0 || result.command === "SELECT";
       return rowBearing ? { rows: rows as readonly Row[], rowCount, kind: "rows" } : { rows: [], rowCount, kind: "command", command: { affectedRows: rowCount } };
     },
@@ -520,12 +619,12 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
           if ((result.fields?.length ?? 0) > 0 || result.rows.length > 0) {
             throw new Error("BRAID_BULK_RESULT_KIND: PostgreSQL bulk command returned rows.");
           }
-          if (typeof result.rowCount === "number") affectedRows += result.rowCount;
+          if (typeof result.rowCount === "number") affectedRows += safeDatabaseCount(result.rowCount);
           else affectedKnown = false;
         }
         return {
           inputCount: binding.itemCount,
-          ...(affectedKnown ? { affectedRows } : {}),
+          ...(affectedKnown ? { affectedRows: safeDatabaseCount(affectedRows) } : {}),
           executionMode: "prepared-loop",
         };
       });
@@ -539,7 +638,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       const prepared = materialize(rendered, binding);
       const Cursor = options.cursor ?? await optionalCursorFactory();
       signal?.throwIfAborted();
-      const cursor = new Cursor(prepared.text, prepared.values);
+      const cursor = new Cursor(prepared.text, prepared.values, types === undefined ? undefined : { types });
       let ending: Promise<void> | undefined;
       const abort = (): void => {
         // Closing a portal cannot interrupt an in-flight Execute. Disconnect instead.
@@ -596,7 +695,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       if (hasRefcursor(rendered) && !transactionScoped) {
         throw new Error("BRAID_CALL_CURSOR_TX_REQUIRED: PostgreSQL refcursor calls require an existing transaction.");
       }
-      const result = await client.query(materialize(rendered, binding));
+      const result = await client.query(materialize(rendered, binding, types));
       assertUniqueFields(result.fields ?? []);
       const output = outputRow(result, rendered, policy);
       const cursorParameters = rendered.parameters.filter(isRefcursor);
@@ -624,7 +723,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       let failure: unknown;
       try {
         for (const entry of portals) {
-          const fetched = await client.query({ text: `FETCH ALL FROM ${quotePortal(entry.portal)}`, values: [] });
+          const fetched = await client.query({ text: `FETCH ALL FROM ${quotePortal(entry.portal)}`, values: [], types });
           assertUniqueFields(fetched.fields ?? []);
           resultSets.push({
             rows: fetched.rows.map((row) => plainRow(row, fetched.fields ?? [], policy)),
@@ -665,14 +764,15 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
 }
 
 export function createPgDatabase(client: PgClientLike, options: PgDatabaseOptions = {}) {
-  const { typePolicy, cursor, streamBatchSize, ...databaseOptions } = options;
-  return createDatabase(createPgExecutor(client, { typePolicy, cursor, streamBatchSize }), databaseOptions);
+  const { typePolicy, cursor, streamBatchSize, parserProfile, ...databaseOptions } = options;
+  return createDatabase(createPgExecutor(client, { typePolicy, cursor, streamBatchSize, parserProfile }), databaseOptions);
 }
 
 export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOptions = {}): ConnectionProvider {
+  const profile = parserProfile(options.parserProfile);
   return {
     statementBinding: pgStatementBinding,
-    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy ? pgEnvironment : { ...pgEnvironment, driver: { id: "pg", profile: "custom-type-policy" }, capabilities: {} },
+    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy ? pgEnvironmentFor(profile) : { ...pgEnvironmentFor(profile), driver: { id: "pg", profile: "custom-type-policy" }, capabilities: {} },
     async acquire(): Promise<ConnectionLease> {
       const client = await pool.connect();
       const executor = createPgExecutor(client, options);
@@ -691,6 +791,6 @@ export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOption
 }
 
 export function createPgPoolDatabase(pool: PgPoolLike, options: PgDatabaseOptions = {}) {
-  const { typePolicy, cursor, streamBatchSize, ...databaseOptions } = options;
-  return createPooledDatabase(createPgPoolProvider(pool, { typePolicy, cursor, streamBatchSize }), databaseOptions);
+  const { typePolicy, cursor, streamBatchSize, parserProfile, ...databaseOptions } = options;
+  return createPooledDatabase(createPgPoolProvider(pool, { typePolicy, cursor, streamBatchSize, parserProfile }), databaseOptions);
 }

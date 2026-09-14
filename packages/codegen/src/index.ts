@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { NumericFidelityKind, TypePolicy, TypeMapping } from "@sqlbraid/core";
+import type { NumericSemantics, TypePolicy, TypeMapping } from "@sqlbraid/core";
 import {
   hashSnapshot,
   validateSnapshot,
@@ -129,6 +129,33 @@ function canonicalValue(value: unknown): string {
   throw new TypeError(`Unsupported codegen option value: ${typeof value}`);
 }
 
+function validateNumericContract(value: unknown, field: string): void {
+  if (!isRecord(value)) throw new TypeError(`Codegen ${field} must be an object.`);
+  const semantics = value.semantics;
+  const representation = value.representation;
+  if (!["exact-integer", "exact-decimal", "approximate-binary"].includes(semantics as string)) {
+    throw new TypeError(`Codegen ${field}.semantics is unsupported.`);
+  }
+  if (!["string", "number"].includes(representation as string)) {
+    throw new TypeError(`Codegen ${field}.representation is unsupported.`);
+  }
+  if (!["lossless", "guarded", "lossy", "unsupported"].includes(value.fidelity as string)) {
+    throw new TypeError(`Codegen ${field}.fidelity is unsupported.`);
+  }
+  if (value.binaryPrecision !== undefined && value.binaryPrecision !== 32 && value.binaryPrecision !== 64) {
+    throw new TypeError(`Codegen ${field}.binaryPrecision must be 32 or 64.`);
+  }
+  if ((semantics === "exact-integer" || semantics === "exact-decimal") && representation !== "string") {
+    throw new TypeError(`Codegen ${field} exact semantics require string representation.`);
+  }
+  if (semantics === "approximate-binary" && representation !== "number") {
+    throw new TypeError(`Codegen ${field} approximate-binary semantics require number representation.`);
+  }
+  if (semantics !== "approximate-binary" && value.binaryPrecision !== undefined) {
+    throw new TypeError(`Codegen ${field}.binaryPrecision is only valid for approximate-binary semantics.`);
+  }
+}
+
 function validateTypePolicy(policy: unknown): asserts policy is CodegenOptions["typePolicy"] {
   if (!isRecord(policy)) throw new TypeError("Codegen TypePolicy must be an object.");
   for (const field of ["id", "hash"] as const) {
@@ -139,6 +166,9 @@ function validateTypePolicy(policy: unknown): asserts policy is CodegenOptions["
   if (!Array.isArray(policy.mappings)) throw new TypeError("Codegen TypePolicy mappings must be an array.");
   for (const [index, mapping] of policy.mappings.entries()) {
     if (!isRecord(mapping)) throw new TypeError(`Codegen TypePolicy mapping ${index} must be an object.`);
+    if (Object.hasOwn(mapping, "numericFidelity")) {
+      throw new TypeError(`Codegen TypePolicy mapping ${index} uses an obsolete numeric schema.`);
+    }
     for (const field of ["databaseType", "inputType", "outputType"] as const) {
       if (typeof mapping[field] !== "string" || mapping[field].length === 0) {
         throw new TypeError(`Codegen TypePolicy mapping ${index}.${field} must be a non-empty string.`);
@@ -147,12 +177,7 @@ function validateTypePolicy(policy: unknown): asserts policy is CodegenOptions["
     if (typeof mapping.nullable !== "boolean") {
       throw new TypeError(`Codegen TypePolicy mapping ${index}.nullable must be boolean.`);
     }
-    if (
-      mapping.numericFidelity !== undefined
-      && !["exact-integer", "exact-decimal", "approximate-float"].includes(mapping.numericFidelity as string)
-    ) {
-      throw new TypeError(`Codegen TypePolicy mapping ${index}.numericFidelity is unsupported.`);
-    }
+    if (mapping.numeric !== undefined) validateNumericContract(mapping.numeric, `TypePolicy mapping ${index}.numeric`);
   }
 }
 
@@ -235,7 +260,9 @@ function indexTypePolicy(policy: CodegenOptions["typePolicy"], diagnostics: Code
     const conflicting = mappings.some(
       (mapping) => mapping.inputType !== first.inputType
         || mapping.outputType !== first.outputType
-        || mapping.numericFidelity !== first.numericFidelity,
+        || (mapping.numeric === undefined
+          ? first.numeric !== undefined
+          : first.numeric === undefined || canonicalValue(mapping.numeric) !== canonicalValue(first.numeric)),
     );
     entries.set(normalized, conflicting ? undefined : first);
     if (conflicting) {
@@ -243,7 +270,7 @@ function indexTypePolicy(policy: CodegenOptions["typePolicy"], diagnostics: Code
       diagnostics.push({
         code: "CODEGEN_AMBIGUOUS_TYPE_MAPPING",
         severity: "error",
-        message: `TypePolicy mappings ${keys.map((key) => JSON.stringify(key)).join(", ")} normalize to ${JSON.stringify(normalized)} with conflicting input/output/fidelity representations.`,
+        message: `TypePolicy mappings ${keys.map((key) => JSON.stringify(key)).join(", ")} normalize to ${JSON.stringify(normalized)} with conflicting input/output/numeric representations.`,
         databaseType: normalized,
       });
     }
@@ -317,12 +344,15 @@ function resolveType(
 
   const inputType = columnOverride?.inputType ?? databaseOverride?.inputType ?? mapping?.inputType;
   const outputType = columnOverride?.outputType ?? databaseOverride?.outputType ?? mapping?.outputType;
-  const numericFidelity: NumericFidelityKind | undefined = mapping?.numericFidelity;
-  if (numericFidelity === "approximate-float") {
+  const numericSemantics: NumericSemantics | undefined = mapping?.numeric?.semantics;
+  if (
+    (numericSemantics === "exact-integer" || numericSemantics === "exact-decimal")
+    && mapping?.numeric?.fidelity !== "lossless"
+  ) {
     diagnostics.push({
-      code: "CODEGEN_LOSSY_NUMERIC_REPRESENTATION",
+      code: "CODEGEN_NUMERIC_FIDELITY_UNAVAILABLE",
       severity: "warning",
-      message: `Database type ${JSON.stringify(column.type)} is exposed through an approximate JavaScript number; exact numeric precision is not guaranteed.`,
+      message: `Database type ${JSON.stringify(column.type)} has exact SQL semantics, but the selected driver/profile cannot expose a lossless SQLBraid representation. Use an explicit SQL cast to text for a lossless value.`,
       relation: relation.identity,
       column: column.name,
       databaseType: column.type,

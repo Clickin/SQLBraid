@@ -4,6 +4,7 @@ import {
   createRenderedStatement,
   createStatementBindingDescription,
   ResultExactnessError,
+  safeDatabaseCount,
   type BulkBindingDescription,
   type BulkExecutionResult,
   type ConnectionLease,
@@ -23,7 +24,11 @@ import {
 } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { utf8ByteLength } from "@sqlbraid/template";
-import { typePolicy as defaultTypePolicy } from "./type-policy.js";
+import {
+  isOracleBinaryNumericType,
+  isOracleExactNumericType,
+  typePolicy as defaultTypePolicy,
+} from "./type-policy.js";
 
 export interface OracleMetaDataLike {
   readonly name?: string;
@@ -138,8 +143,16 @@ const oracleEnvironment = Object.freeze<DriverEnvironment>({
   driver: { id: "node-oracledb", profile: "thin" },
   capabilities: {
     "sql.native-transparency": { status: "guaranteed" },
+    "numeric.exact-integer": { status: "unsupported", canonical: "string", rawRepresentations: ["string"] },
     "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
     "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+    "numeric.approximate-special": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+    "numeric.bind-exact": { status: "unsupported", conditionCode: "oracle.bind-nls-sensitive" },
+    "data.json-parsed": { status: "guaranteed", rawRepresentations: ["object"] },
+    "data.json-lossless-text": { status: "unsupported", canonical: "string", rawRepresentations: ["string"], conditionCode: "oracle.json-serialize-required" },
+    "data.temporal-native": { status: "guarded", rawRepresentations: ["Date"], conditionCode: "oracle.date-millisecond-precision" },
+    "data.temporal-lossless": { status: "unsupported", canonical: "string", rawRepresentations: ["string"], conditionCode: "oracle.temporal-text-cast-required" },
+    "metadata.command-safe": { status: "guarded", rawRepresentations: ["number"], conditionCode: "oracle.count-safe-integer" },
   },
   probe: {
     statement: createRenderedStatement({
@@ -249,13 +262,13 @@ function decodeRow(value: unknown, fields: readonly OracleMetaDataLike[], policy
 function assertOracleNumericValue(databaseType: string | undefined, value: unknown): void {
   if (value === null || value === undefined || databaseType === undefined) return;
   const type = normalType(databaseType);
-  if (type === "NUMBER") {
+  if (isOracleExactNumericType(type)) {
     if (typeof value !== "string") {
-      throw new ResultExactnessError("Oracle NUMBER results must remain exact strings.");
+      throw new ResultExactnessError(`Oracle ${type} results must remain exact strings.`);
     }
     return;
   }
-  if (type === "BINARY_FLOAT" || type === "BINARY_DOUBLE") {
+  if (isOracleBinaryNumericType(type)) {
     if (typeof value !== "number") {
       throw new ResultExactnessError(`Oracle ${type} results must remain JavaScript numbers, including native non-finite values.`);
     }
@@ -273,7 +286,7 @@ function fetchTypeHandler(driver: OracleDriverLike): NonNullable<OracleExecuteOp
     const named = metadata.dbTypeName ?? (typeof metadata.type === "string" ? metadata.type : undefined);
     const typeName = named === undefined ? undefined : normalType(named);
     const typeValue = metadata.dbType ?? metadata.type;
-    if (typeName === "NUMBER" || typeName === "CLOB" || typeName === "NCLOB"
+    if ((typeName !== undefined && isOracleExactNumericType(typeName)) || typeName === "CLOB" || typeName === "NCLOB"
       || matchesDriverType(typeValue, driver.DB_TYPE_NUMBER)
       || matchesDriverType(typeValue, driver.NUMBER)
       || matchesDriverType(typeValue, driver.DB_TYPE_CLOB)
@@ -303,7 +316,7 @@ function typeConstant(databaseType: string, driver: OracleDriverLike): unknown {
   const value = type === "REF CURSOR" || type === "REFCURSOR" || type === "SYS_REFCURSOR" || type === "CURSOR" ? driver.CURSOR
     : type === "VARCHAR2" ? (driver.DB_TYPE_VARCHAR ?? driver.STRING)
     : type === "NVARCHAR2" ? driver.DB_TYPE_NVARCHAR
-      : type === "NUMBER" ? (driver.DB_TYPE_NUMBER ?? driver.NUMBER)
+      : isOracleExactNumericType(type) ? (driver.DB_TYPE_NUMBER ?? driver.NUMBER)
         : type === "BINARY_FLOAT" ? (driver.DB_TYPE_BINARY_FLOAT ?? driver.BINARY_FLOAT)
           : type === "BINARY_DOUBLE" ? (driver.DB_TYPE_BINARY_DOUBLE ?? driver.BINARY_DOUBLE)
             : type === "DATE" ? (driver.DB_TYPE_DATE ?? driver.DATE)
@@ -371,9 +384,9 @@ function bindValues(rendered: RenderedStatement, policy: TypePolicy, driver: Ora
       throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle bind ${databaseType} does not support length facets.`);
     }
     const encoded = direction === "out" ? undefined : policy.encode(databaseType!, value);
-    const exactNumberOutput = databaseType === "NUMBER" && direction !== "in";
-    if (databaseType === "NUMBER" && typeof encoded === "string" && direction === "in") {
-      throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Oracle NUMBER binds do not accept decimal strings with a NUMBER driver type; use bigint/number or an unhinted decimal string.");
+    const exactNumberOutput = databaseType !== undefined && isOracleExactNumericType(databaseType) && direction !== "in";
+    if (databaseType !== undefined && isOracleExactNumericType(databaseType) && typeof encoded === "string" && direction !== "out") {
+      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle ${databaseType} binds do not accept decimal strings through the exact numeric driver type; use an unhinted string with an explicit user-authored conversion and NLS clause.`);
     }
     values.push({
       dir: direction === "in" ? driver.BIND_IN : direction === "out" ? driver.BIND_OUT : driver.BIND_INOUT,
@@ -398,7 +411,7 @@ function oracleLiteralValue(
 ): string {
   if (value === null || value === undefined) return "NULL";
   const type = databaseType === undefined ? undefined : normalType(databaseType);
-  if (type === "NUMBER" || type === "BINARY_FLOAT" || type === "BINARY_DOUBLE") {
+  if (type !== undefined && (isOracleExactNumericType(type) || isOracleBinaryNumericType(type))) {
     return typeof value === "bigint"
       ? value.toString(10)
       : typeof value === "number" && Number.isFinite(value) ? String(value) : "[unsupported numeric value]";
@@ -501,8 +514,8 @@ function materializeBulk(
     }
     const rawValues = sets.map((values) => values[index]);
     const encoded = rawValues.map((value) => hint === undefined ? value : policy.encode(typeName!, value));
-    if (typeName === "NUMBER" && encoded.some((value) => typeof value === "string")) {
-      throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Oracle NUMBER bulk binds do not accept decimal strings with a NUMBER driver type; use bigint/number or an unhinted decimal string.");
+    if (typeName !== undefined && isOracleExactNumericType(typeName) && encoded.some((value) => typeof value === "string")) {
+      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle ${typeName} bulk binds do not accept decimal strings through the exact numeric driver type; use an unhinted string with an explicit user-authored conversion and NLS clause.`);
     }
     if (hint === undefined) {
       const nonNull = encoded.find((value) => value !== null && value !== undefined);
@@ -835,8 +848,11 @@ async function normalizeDmlReturning(
       throw new Error(`BRAID_RETURNING_LENGTH: Oracle DML RETURNING output arrays have different lengths (output ${index + 1} has ${value.length}, expected ${rowCount}).`);
     }
   }
-  if (result.rowsAffected !== undefined && result.rowsAffected !== rowCount) {
-    throw new Error(`BRAID_RETURNING_ROWCOUNT: Oracle rowsAffected (${result.rowsAffected}) does not match returned row count (${rowCount}).`);
+  if (result.rowsAffected !== undefined) {
+    const affectedRows = safeDatabaseCount(result.rowsAffected);
+    if (affectedRows !== rowCount) {
+      throw new Error(`BRAID_RETURNING_ROWCOUNT: Oracle rowsAffected (${affectedRows}) does not match returned row count (${rowCount}).`);
+    }
   }
 
   const resources: OracleCleanupResource[] = [];
@@ -921,7 +937,7 @@ function makeOracledbExecutor(
       ));
       return {
         inputCount: bulk.parameterSets.length,
-        ...(result.rowsAffected === undefined ? {} : { affectedRows: result.rowsAffected }),
+        ...(result.rowsAffected === undefined ? {} : { affectedRows: safeDatabaseCount(result.rowsAffected) }),
         executionMode: "native-bulk",
       };
     },
@@ -936,7 +952,8 @@ function makeOracledbExecutor(
         const rows = result.rows.map((row) => decodeRow(row, fields, policy, driver));
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
-      return { rows: [], rowCount: result.rowsAffected, kind: "command", command: { affectedRows: result.rowsAffected } };
+      const affectedRows = result.rowsAffected === undefined ? undefined : safeDatabaseCount(result.rowsAffected);
+      return { rows: [], ...(affectedRows === undefined ? {} : { rowCount: affectedRows }), kind: "command", command: affectedRows === undefined ? {} : { affectedRows } };
     },
     async call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult> {
       if (rendered.routineProcedure !== undefined) {

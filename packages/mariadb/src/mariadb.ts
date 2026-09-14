@@ -20,6 +20,8 @@ import {
   createRenderedStatement,
   createStatementBindingDescription,
   ResultExactnessError,
+  normalizeExactInteger,
+  safeDatabaseCount,
 } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
@@ -136,6 +138,9 @@ function cleanupAggregate(errors: readonly unknown[], message: string, cause?: u
 function databaseType(field: MariaDbFieldLike | undefined): string | undefined {
   if (typeof field?.type === "string" && field.type.length > 0) {
     const type = field.type.toUpperCase();
+    if (type === "TINY") return "TINYINT";
+    if (type === "SHORT") return "SMALLINT";
+    if (type === "INT24") return "MEDIUMINT";
     if (type === "LONGLONG") return "BIGINT";
     if (type === "NEWDECIMAL") return "DECIMAL";
     if (type === "VAR_STRING" || type === "STRING") return "VARCHAR";
@@ -183,6 +188,15 @@ function plainRow(value: unknown, fields: readonly MariaDbFieldLike[], policy: T
 function assertMariaDbNumericValue(databaseType: string | undefined, value: unknown): void {
   if (value === null || value === undefined || databaseType === undefined) return;
   const type = databaseType.toUpperCase();
+  if (type === "TINYINT" || type === "SMALLINT" || type === "MEDIUMINT" || type === "INT") {
+    if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
+      throw new ResultExactnessError(`MariaDB ${type} result has an unsupported representation.`);
+    }
+    if (typeof value === "number" && !Number.isSafeInteger(value)) {
+      throw new ResultExactnessError(`MariaDB ${type} result was an unsafe JavaScript number.`);
+    }
+    return;
+  }
   if (type === "DECIMAL" || type === "NEWDECIMAL") {
     if (typeof value !== "string") {
       throw new ResultExactnessError("MariaDB DECIMAL results must remain strings.");
@@ -195,6 +209,12 @@ function assertMariaDbNumericValue(databaseType: string | undefined, value: unkn
     }
     if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
       throw new ResultExactnessError("MariaDB BIGINT result has an unsupported representation.");
+    }
+    return;
+  }
+  if (type === "FLOAT" || type === "DOUBLE") {
+    if (typeof value !== "number") {
+      throw new ResultExactnessError(`MariaDB ${type} result must remain a JavaScript number.`);
     }
   }
 }
@@ -230,7 +250,12 @@ function resultRows(value: unknown, policy: TypePolicy): QueryExecutionResult<un
   if (!value || typeof value !== "object") {
     return { rows: [], rowCount: 0, kind: "command", command: {} };
   }
-  const command: MariaDbCommandResult = { ...value } as MariaDbCommandResult;
+  const rawCommand = { ...value } as MariaDbCommandResult;
+  const command: MariaDbCommandResult = {
+    ...rawCommand,
+    ...(rawCommand.affectedRows === undefined ? {} : { affectedRows: safeDatabaseCount(rawCommand.affectedRows) }),
+    ...(rawCommand.insertId === undefined || rawCommand.insertId === null ? {} : { insertId: normalizeExactInteger(rawCommand.insertId) }),
+  };
   return {
     rows: [],
     rowCount: command.affectedRows,
@@ -241,20 +266,20 @@ function resultRows(value: unknown, policy: TypePolicy): QueryExecutionResult<un
 
 function affectedRows(value: unknown): number | undefined {
   if (Array.isArray(value)) {
-    let total = 0;
+    let total = 0n;
     let found = false;
     for (const item of value) {
       const count = affectedRows(item);
       if (count !== undefined) {
-        total += count;
+        total += BigInt(count);
         found = true;
       }
     }
-    return found ? total : undefined;
+    return found ? safeDatabaseCount(total) : undefined;
   }
   if (!value || typeof value !== "object") return undefined;
   const count = (value as { readonly affectedRows?: unknown }).affectedRows;
-  return typeof count === "number" ? count : typeof count === "bigint" ? Number(count) : undefined;
+  return count === undefined ? undefined : safeDatabaseCount(count);
 }
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
@@ -304,13 +329,13 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
 
 const mariaDbEnvironment = Object.freeze<DriverEnvironment>({
   database: { product: "mariadb" },
-  driver: { id: "mariadb", profile: "connector-node-exact" },
+  driver: { id: "mariadb", profile: "connector-node-pv17" },
   capabilities: {
     "sql.native-transparency": { status: "guaranteed" },
     "numeric.exact-integer": {
       status: "guarded",
-      canonical: "bigint",
-      rawRepresentations: ["bigint", "string", "number"],
+      canonical: "string",
+      rawRepresentations: ["string"],
       conditionCode: "mariadb.exact-numeric-profile",
     },
     "numeric.exact-decimal": {
@@ -320,6 +345,34 @@ const mariaDbEnvironment = Object.freeze<DriverEnvironment>({
       conditionCode: "mariadb.exact-numeric-profile",
     },
     "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+    "data.json-lossless-text": {
+      status: "guarded",
+      canonical: "string",
+      rawRepresentations: ["string"],
+      conditionCode: "mariadb.auto-json-map-false",
+    },
+    "data.json-parsed": {
+      status: "guarded",
+      rawRepresentations: ["object", "array", "null"],
+      conditionCode: "mariadb.auto-json-map-true",
+    },
+    "data.temporal-lossless": {
+      status: "guarded",
+      canonical: "string",
+      rawRepresentations: ["string"],
+      conditionCode: "mariadb.date-strings-true",
+    },
+    "data.temporal-native": {
+      status: "guarded",
+      rawRepresentations: ["Date"],
+      conditionCode: "mariadb.date-strings-false",
+    },
+    "metadata.command-safe": {
+      status: "guarded",
+      canonical: "number",
+      rawRepresentations: ["number", "bigint", "string"],
+      conditionCode: "mariadb.safe-command-count",
+    },
   },
   probe: {
     statement: createRenderedStatement({

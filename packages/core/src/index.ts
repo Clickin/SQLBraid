@@ -24,10 +24,25 @@ export interface RenderLimits {
 
 export type QueryResultKind = "rows" | "command" | "call" | "unknown";
 
-export type NumericFidelityKind =
+export type NumericSemantics =
   | "exact-integer"
   | "exact-decimal"
-  | "approximate-float";
+  | "approximate-binary";
+
+export type NumericRepresentation = "string" | "number";
+
+export type TransportFidelity =
+  | "lossless"
+  | "guarded"
+  | "lossy"
+  | "unsupported";
+
+export interface NumericTypeContract {
+  readonly semantics: NumericSemantics;
+  readonly representation: NumericRepresentation;
+  readonly fidelity: TransportFidelity;
+  readonly binaryPrecision?: 32 | 64;
+}
 
 export interface ExactIntegerRange {
   readonly min?: bigint;
@@ -79,6 +94,45 @@ export function decodeExactInteger(value: unknown, range?: ExactIntegerRange): b
     }
   }
   return result;
+}
+
+/**
+ * Normalize an exact integer at the raw SQLBraid boundary without changing
+ * its textual spelling. This is intentionally not a bigint decoder: callers
+ * that need arithmetic may opt in to decodeExactInteger().
+ */
+export function normalizeExactInteger(value: unknown): string {
+  if (typeof value === "string" && /^[+-]?\d+$/u.test(value)) return value;
+  if (typeof value === "bigint") return value.toString(10);
+  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
+  return exactnessFailure("Result value does not have an exact integer representation.");
+}
+
+/**
+ * Convert a database-reported count to a safe operational Number. Counts are
+ * not application values, so unlike exact SQL numerics they remain numbers,
+ * but narrowing an unsafe value is never implicit.
+ */
+export function safeDatabaseCount(value: unknown): number {
+  if (typeof value === "number") {
+    if (Number.isSafeInteger(value) && value >= 0) return value === 0 ? 0 : value;
+    return exactnessFailure("Database count is not a safe non-negative integer.");
+  }
+  if (typeof value === "bigint") {
+    if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+      return exactnessFailure("Database count is not a safe non-negative integer.");
+    }
+    return Number(value);
+  }
+  if (typeof value === "string" && /^[+]?\d+$/u.test(value)) {
+    try {
+      const count = BigInt(value);
+      if (count >= 0n && count <= BigInt(Number.MAX_SAFE_INTEGER)) return Number(count);
+    } catch {
+      // Fall through to the common exactness error.
+    }
+  }
+  return exactnessFailure("Database count is not a safe non-negative integer.");
 }
 
 export function decodeExactDecimal(value: unknown, options?: { readonly allowBigInt?: boolean }): string {
@@ -370,6 +424,14 @@ export function createRenderedBulk(bulk: RenderedBulk): RenderedBulk {
     if (!Array.isArray(values) || values.length !== parameterCount) {
       throw new TypeError("RenderedBulk parameter sets must match the rendered parameter count.");
     }
+    for (let index = 0; index < values.length; index += 1) {
+      if (values[index] === undefined && statement.parameters[index]?.direction !== "out") {
+        throw new SqlRenderError(
+          "BRAID_BIND_VALUE_UNSUPPORTED",
+          "Undefined bind values are unsupported; use null for SQL NULL.",
+        );
+      }
+    }
     return Object.isFrozen(values) ? values : Object.freeze([...values]);
   }));
   return Object.freeze({ statement, parameterSets });
@@ -407,6 +469,12 @@ function copyRenderedParameter(parameter: RenderedParameter): RenderedParameter 
   }
   if (outputName !== undefined && (direction === undefined || direction === "in")) {
     throw new TypeError("RenderedStatement parameter outputName requires an OUT or INOUT direction.");
+  }
+  if (candidate.value === undefined && direction !== "out") {
+    throw new SqlRenderError(
+      "BRAID_BIND_VALUE_UNSUPPORTED",
+      "Undefined bind values are unsupported; use null for SQL NULL.",
+    );
   }
   return Object.freeze({
     value: candidate.value,
@@ -760,7 +828,7 @@ export interface TypeMapping {
   readonly inputType: string;
   readonly outputType: string;
   readonly nullable: boolean;
-  readonly numericFidelity?: NumericFidelityKind;
+  readonly numeric?: NumericTypeContract;
 }
 
 export interface TypePolicy {
@@ -1226,7 +1294,7 @@ export interface ExecutionObserver {
 
 export interface EnvironmentCapability {
   readonly status: "guaranteed" | "guarded" | "unsupported";
-  readonly canonical?: "bigint" | "string" | "number";
+  readonly canonical?: "string" | "number";
   readonly rawRepresentations?: readonly string[];
   readonly conditionCode?: string;
 }
@@ -1253,6 +1321,7 @@ export interface DriverEnvironment {
     readonly read: (rows: readonly unknown[]) => {
       readonly version?: string;
       readonly edition?: string;
+      readonly capabilities?: Readonly<Record<string, EnvironmentCapability>>;
     };
   };
 }
@@ -1269,6 +1338,8 @@ export interface EnvironmentSupportTarget {
 
 export interface EnvironmentOptions {
   readonly targets?: readonly EnvironmentSupportTarget[];
+  /** Re-probe the current lease instead of returning the cached observation. */
+  readonly refresh?: boolean;
 }
 
 export interface DatabaseOptions {

@@ -12,7 +12,13 @@ import type {
   StatementBindingContext,
   StatementBindingDescription,
 } from "@sqlbraid/core";
-import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
+import {
+  createBulkBindingDescription,
+  createRenderedStatement,
+  createStatementBindingDescription,
+  normalizeExactInteger,
+  safeDatabaseCount,
+} from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
 
 export interface SqliteColumnLike {
@@ -28,6 +34,7 @@ export interface SqliteStatementLike {
   iterate?(...values: readonly unknown[]): IterableIterator<unknown>;
   run(...values: readonly unknown[]): { readonly changes?: number | bigint; readonly lastInsertRowid?: number | bigint };
   columns(): readonly SqliteColumnLike[];
+  /** Required for row-producing statements; command-only adapters may omit it. */
   setReadBigInts?(enabled: boolean): void;
 }
 
@@ -36,18 +43,17 @@ export interface SqliteDatabaseLike {
   exec?(sql: string): void;
 }
 
-export type SqliteIntegerMode = "number" | "bigint";
-
-export interface SqliteExecutorOptions {
-  readonly integerMode?: SqliteIntegerMode;
-}
-
-export interface SqliteDatabaseOptions extends DatabaseOptions, SqliteExecutorOptions {}
+export interface SqliteDatabaseOptions extends DatabaseOptions {}
 
 function plainRow(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { value };
-  // node:sqlite rejects unsafe INTEGER reads itself; integral REAL values remain floats.
-  return Object.fromEntries(Object.entries(value));
+  // setReadBigInts() distinguishes INTEGER storage from integral REAL storage.
+  // Only native bigint values are normalized; numbers retain their SQLite
+  // storage-class semantics for dynamic columns.
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+    key,
+    typeof entry === "bigint" ? normalizeExactInteger(entry) : entry,
+  ]));
 }
 
 function resultColumns(statement: SqliteStatementLike): readonly SqliteColumnLike[] {
@@ -154,33 +160,20 @@ function materialize(
   };
 }
 
-function assertIntegerMode(integerMode: SqliteIntegerMode | undefined): SqliteIntegerMode {
-  if (integerMode === undefined) return "number";
-  if (integerMode !== "number" && integerMode !== "bigint") {
-    throw new TypeError('SQLite integerMode must be "number" or "bigint".');
-  }
-  return integerMode;
-}
-
-function configureIntegerMode(statement: SqliteStatementLike, integerMode: SqliteIntegerMode): void {
+function configureExactIntegerReads(statement: SqliteStatementLike): void {
   if (typeof statement.setReadBigInts !== "function") {
-    if (integerMode === "bigint") {
-      throw new Error("BRAID_INTEGER_MODE_UNSUPPORTED: SQLite statement does not expose setReadBigInts.");
-    }
-    return;
+    throw new Error("BRAID_INTEGER_MODE_UNSUPPORTED: SQLite row reads require StatementSync.setReadBigInts(true).");
   }
-  statement.setReadBigInts(integerMode === "bigint");
+  statement.setReadBigInts(true);
 }
 
-function nodeSqliteEnvironment(integerMode: SqliteIntegerMode): DriverEnvironment {
+function nodeSqliteEnvironment(): DriverEnvironment {
   return Object.freeze<DriverEnvironment>({
     database: { product: "sqlite" },
-    driver: { id: "node-sqlite", profile: integerMode === "bigint" ? "bigint" : "number" },
+    driver: { id: "node-sqlite", profile: "exact-string" },
     capabilities: {
       "sql.native-transparency": { status: "guaranteed" },
-      "numeric.exact-integer": integerMode === "bigint"
-        ? { status: "guaranteed", canonical: "bigint", rawRepresentations: ["bigint"] }
-        : { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "node-sqlite.bigint-mode" },
+      "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] },
       "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
     },
     probe: {
@@ -200,27 +193,35 @@ function nodeSqliteEnvironment(integerMode: SqliteIntegerMode): DriverEnvironmen
   });
 }
 
-export function createNodeSqliteExecutor(database: SqliteDatabaseLike, options: SqliteExecutorOptions = {}): QueryExecutor {
-  const integerMode = assertIntegerMode(options.integerMode);
+export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
   const control = database.exec ? async (sql: string): Promise<void> => { database.exec?.(sql); } : undefined;
   return {
     ownershipKey: database,
     statementBinding: nodeSqliteStatementBinding,
-    environment: nodeSqliteEnvironment(integerMode),
+    environment: nodeSqliteEnvironment(),
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertRoutineUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
       const statement = database.prepare(prepared.text);
-      configureIntegerMode(statement, integerMode);
       const columns = resultColumns(statement);
       if (columns.length > 0) {
+        configureExactIntegerReads(statement);
         const rows = statement.all(...prepared.values).map(plainRow);
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
       const result = statement.run(...prepared.values);
-      const changes = result.changes === undefined ? undefined : Number(result.changes);
-      return { rows: [], rowCount: changes, kind: "command", command: { affectedRows: changes, insertId: result.lastInsertRowid } };
+      const changes = result.changes === undefined ? undefined : safeDatabaseCount(result.changes);
+      const insertId = result.lastInsertRowid === undefined ? undefined : normalizeExactInteger(result.lastInsertRowid);
+      return {
+        rows: [],
+        rowCount: changes,
+        kind: "command",
+        command: {
+          ...(changes === undefined ? {} : { affectedRows: changes }),
+          ...(insertId === undefined ? {} : { insertId }),
+        },
+      };
     },
     async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
       if (!binding || describedBulks.get(binding) !== bulk) {
@@ -229,7 +230,6 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike, options: 
       const prepared = binding.parameterizedSql;
       if (prepared === undefined) throw new Error("BRAID_BIND_TRANSPORT: SQLite bulk binding description did not provide parameterized SQL.");
       const native = database.prepare(prepared);
-      configureIntegerMode(native, integerMode);
       if (resultColumns(native).length > 0) throw new Error("BRAID_BULK_SHAPE: node:sqlite bulk requires a non-row statement.");
       let affectedRows: number | undefined = 0;
       for (let index = 0; index < bulk.parameterSets.length; index += 1) {
@@ -237,7 +237,7 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike, options: 
         if (result.changes === undefined) {
           affectedRows = undefined;
         } else if (affectedRows !== undefined) {
-          affectedRows += Number(result.changes);
+          affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount(result.changes));
         }
       }
       return {
@@ -255,9 +255,9 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike, options: 
       signal?.throwIfAborted();
       const prepared = materialize(rendered, binding);
       const statement = database.prepare(prepared.text);
-      configureIntegerMode(statement, integerMode);
       if (!statement.iterate) throw new Error("BRAID_STREAM_UNSUPPORTED: SQLite statement does not expose iteration.");
       if (resultColumns(statement).length === 0) throw new Error("BRAID_RESULT_KIND: SQLite stream requires a row-producing statement.");
+      configureExactIntegerReads(statement);
       const iterator = statement.iterate(...prepared.values);
       let failed = false;
       let readError: unknown;
@@ -294,6 +294,5 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike, options: 
 }
 
 export function createNodeSqliteDatabase(database: SqliteDatabaseLike, options: SqliteDatabaseOptions = {}) {
-  const { integerMode, ...databaseOptions } = options;
-  return createDatabase(createNodeSqliteExecutor(database, { integerMode }), databaseOptions);
+  return createDatabase(createNodeSqliteExecutor(database), options);
 }

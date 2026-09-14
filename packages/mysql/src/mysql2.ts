@@ -17,7 +17,14 @@ import type {
   StatementBindingContext,
   StatementBindingDescription,
 } from "@sqlbraid/core";
-import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription, ResultExactnessError } from "@sqlbraid/core";
+import {
+  createBulkBindingDescription,
+  createRenderedStatement,
+  createStatementBindingDescription,
+  normalizeExactInteger,
+  ResultExactnessError,
+  safeDatabaseCount,
+} from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -27,11 +34,11 @@ export interface Mysql2FieldLike {
 }
 export type Mysql2FieldPayload = readonly Mysql2FieldLike[] | readonly (readonly Mysql2FieldLike[])[];
 
-export interface Mysql2ResultHeader extends CommandResult {
-  readonly affectedRows?: number;
-  readonly insertId?: number | bigint | string;
-  readonly warningStatus?: number;
-}
+export type Mysql2ResultHeader = Omit<CommandResult, "affectedRows" | "insertId"> & {
+  readonly affectedRows?: unknown;
+  readonly insertId?: unknown;
+  readonly warningStatus?: unknown;
+};
 
 type Mysql2TypedParameter = { readonly type: number; readonly value: unknown; readonly unsigned: boolean };
 export type Mysql2Parameter = string | number | bigint | boolean | Date | null | Blob | Uint8Array | Mysql2TypedParameter | Mysql2Parameter[] | { [key: string]: Mysql2Parameter };
@@ -82,11 +89,55 @@ export interface Mysql2PoolLike {
 export interface Mysql2ExecutorOptions {
   readonly typePolicy?: TypePolicy;
   readonly streamHighWaterMark?: number;
+  /**
+   * Optional evidence for connection options that mysql2 does not expose
+   * consistently across PromiseConnection and PoolConnection wrappers.
+   * Detected physical connection settings always take precedence.
+   */
+  readonly profile?: Mysql2ProfileOptions;
 }
 
 export type Mysql2DatabaseOptions = DatabaseOptions & Mysql2ExecutorOptions;
 
-const mysqlTypes: Readonly<Record<number, string>> = { 3: "INT", 8: "BIGINT", 246: "DECIMAL", 253: "VARCHAR", 245: "JSON" };
+export interface Mysql2ProfileOptions {
+  readonly supportBigNumbers?: boolean;
+  readonly bigNumberStrings?: boolean;
+  readonly decimalNumbers?: boolean;
+  readonly rowsAsArray?: boolean;
+  readonly jsonStrings?: boolean;
+  readonly dateStrings?: boolean;
+  readonly typeCast?: "default" | "custom";
+}
+
+const mysqlTypes: Readonly<Record<number, string>> = {
+  0: "DECIMAL",
+  1: "TINYINT",
+  2: "SMALLINT",
+  3: "INT",
+  4: "FLOAT",
+  5: "DOUBLE",
+  7: "TIMESTAMP",
+  8: "BIGINT",
+  9: "MEDIUMINT",
+  10: "DATE",
+  11: "TIME",
+  12: "DATETIME",
+  13: "YEAR",
+  14: "DATE",
+  15: "VARCHAR",
+  16: "BIT",
+  245: "JSON",
+  246: "DECIMAL",
+  247: "ENUM",
+  248: "SET",
+  249: "BLOB",
+  250: "BLOB",
+  251: "BLOB",
+  252: "BLOB",
+  253: "VARCHAR",
+  254: "VARCHAR",
+  255: "GEOMETRY",
+};
 
 function assertMysql2Connection(connection: Mysql2ConnectionLike): void {
   const candidate = connection as unknown as { readonly getConnection?: unknown };
@@ -147,10 +198,13 @@ function mysqlDatabaseType(field: Mysql2FieldLike | undefined): string | undefin
   if (typeof field?.type === "number") return mysqlTypes[field.type];
   if (typeof field?.type !== "string") return undefined;
   const type = field.type.toUpperCase();
+  if (type === "TINY") return "TINYINT";
+  if (type === "SHORT") return "SMALLINT";
   if (type === "LONGLONG") return "BIGINT";
   if (type === "NEWDECIMAL") return "DECIMAL";
   if (type === "VAR_STRING" || type === "STRING") return "VARCHAR";
   if (type === "LONG") return "INT";
+  if (type === "INT24") return "MEDIUMINT";
   return type;
 }
 
@@ -163,18 +217,18 @@ function assertMysqlNumericValue(databaseType: string | undefined, value: unknow
     }
     return;
   }
-  if (type === "BIGINT" || type === "LONGLONG") {
+  if (type === "BIGINT" || type === "LONGLONG" || type === "INT" || type === "TINYINT" || type === "SMALLINT" || type === "MEDIUMINT") {
     if (typeof value === "number" && !Number.isSafeInteger(value)) {
-      throw new ResultExactnessError("mysql2 BIGINT result was an unsafe JavaScript number.");
+      throw new ResultExactnessError(`mysql2 ${type} result was an unsafe JavaScript number.`);
     }
     if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
-      throw new ResultExactnessError("mysql2 BIGINT result has an unsupported representation.");
+      throw new ResultExactnessError(`mysql2 ${type} result has an unsupported representation.`);
     }
     return;
   }
-  if (type === "INT" || type === "TINYINT" || type === "SMALLINT" || type === "MEDIUMINT") {
-    if (typeof value === "number" && !Number.isSafeInteger(value)) {
-      throw new ResultExactnessError("mysql2 integer result was an invalid JavaScript number.");
+  if (type === "FLOAT" || type === "DOUBLE") {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new ResultExactnessError(`mysql2 ${type} result is not a finite JavaScript number.`);
     }
   }
 }
@@ -194,40 +248,41 @@ function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   }
 }
 
-function assertMysql2BulkValues(bulk: RenderedBulk): void {
-  for (let rowIndex = 0; rowIndex < bulk.parameterSets.length; rowIndex += 1) {
-    const values = bulk.parameterSets[rowIndex]!;
-    for (let parameterIndex = 0; parameterIndex < values.length; parameterIndex += 1) {
-      const value = values[parameterIndex];
-      const location = `MySQL bulk parameter ${parameterIndex + 1} in row ${rowIndex + 1}`;
-      if (value === undefined) {
-        throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be undefined.`);
-      }
-      if (typeof value === "function") {
-        throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be a function.`);
-      }
-      if (value instanceof Date && !Number.isFinite(value.getTime())) {
-        throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} must be a valid Date.`);
-      }
-      if (value !== null && typeof value === "object") {
-        const candidate = value as { readonly toJSON?: unknown };
-        const isBuffer = Buffer.isBuffer(value);
-        const isJsonValue = !(value instanceof Date)
-          && !isBuffer
-          && (
-            Array.isArray(value)
-            || value.constructor === Object
-            || typeof candidate.toJSON === "function"
-          );
-        if (isJsonValue) {
-          try {
-            if (JSON.stringify(value) === undefined) throw new TypeError("JSON encoding produced undefined.");
-          } catch (error) {
-            throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be JSON encoded.`, { cause: error });
-          }
-        }
+function assertMysql2Value(value: unknown, location: string): void {
+  if (value === undefined) throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be undefined.`);
+  if (typeof value === "function") throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be a function.`);
+  if (value instanceof Date && !Number.isFinite(value.getTime())) {
+    throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} must be a valid Date.`);
+  }
+  if (value !== null && typeof value === "object") {
+    const candidate = value as { readonly toJSON?: unknown };
+    const isBuffer = Buffer.isBuffer(value);
+    const isJsonValue = !(value instanceof Date)
+      && !isBuffer
+      && (
+        Array.isArray(value)
+        || value.constructor === Object
+        || typeof candidate.toJSON === "function"
+      );
+    if (isJsonValue) {
+      try {
+        if (JSON.stringify(value) === undefined) throw new TypeError("JSON encoding produced undefined.");
+      } catch (error) {
+        throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be JSON encoded.`, { cause: error });
       }
     }
+  }
+}
+
+function assertMysql2Values(values: readonly unknown[], prefix: string): void {
+  for (let index = 0; index < values.length; index += 1) {
+    assertMysql2Value(values[index], `${prefix} parameter ${index + 1}`);
+  }
+}
+
+function assertMysql2BulkValues(bulk: RenderedBulk): void {
+  for (let rowIndex = 0; rowIndex < bulk.parameterSets.length; rowIndex += 1) {
+    assertMysql2Values(bulk.parameterSets[rowIndex]!, `MySQL bulk row ${rowIndex + 1}`);
   }
 }
 
@@ -235,6 +290,14 @@ function assertNoRoutineOutputsForQuery(rendered: RenderedStatement): void {
   if (rendered.resultKind !== "call" && rendered.parameters.some((parameter) => parameter.direction !== undefined && parameter.direction !== "in")) {
     throw new Error("BRAID_CALL_OUT_UNSUPPORTED: OUT/INOUT parameters are only valid for routine calls.");
   }
+}
+
+function normalizeCommandHeader(value: object): CommandResult {
+  const header: Record<string, unknown> = { ...value };
+  if (header.affectedRows !== undefined) header.affectedRows = safeDatabaseCount(header.affectedRows);
+  if (header.insertId !== undefined) header.insertId = normalizeExactInteger(header.insertId);
+  if (header.warningStatus !== undefined) header.warningStatus = safeDatabaseCount(header.warningStatus);
+  return header as CommandResult;
 }
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
@@ -281,40 +344,119 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   requestedReuse: "auto",
 });
 
-const mysql2Environment = Object.freeze<DriverEnvironment>({
-  database: { product: "mysql" },
-  driver: { id: "mysql2", profile: "mysql2-exact" },
-  capabilities: {
-    "sql.native-transparency": { status: "guaranteed" },
-    "numeric.exact-integer": {
-      status: "guarded",
-      canonical: "bigint",
-      rawRepresentations: ["bigint", "string", "number"],
-      conditionCode: "mysql2.exact-numeric-profile",
+function mysql2Profile(connection: Mysql2ConnectionLike, supplied: Mysql2ProfileOptions | undefined): Mysql2ProfileOptions {
+  const candidate = connection as unknown as {
+    readonly config?: unknown;
+    readonly connection?: { readonly config?: unknown };
+  };
+  const sources = [candidate.config, candidate.connection?.config];
+  const detected = sources.find((value): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value)));
+  if (!detected) return supplied ?? {};
+  const value = (key: string): boolean | undefined => typeof detected[key] === "boolean" ? detected[key] as boolean : undefined;
+  return {
+    ...supplied,
+    supportBigNumbers: value("supportBigNumbers") ?? supplied?.supportBigNumbers,
+    bigNumberStrings: value("bigNumberStrings") ?? supplied?.bigNumberStrings,
+    decimalNumbers: value("decimalNumbers") ?? supplied?.decimalNumbers,
+    rowsAsArray: value("rowsAsArray") ?? supplied?.rowsAsArray,
+    jsonStrings: value("jsonStrings") ?? supplied?.jsonStrings,
+    dateStrings: value("dateStrings") ?? supplied?.dateStrings,
+    typeCast: typeof detected.typeCast === "function"
+      ? "custom"
+      : detected.typeCast === false
+        ? "custom"
+        : supplied?.typeCast ?? "default",
+  };
+}
+
+function mysql2Environment(
+  connection: Mysql2ConnectionLike,
+  supplied: Mysql2ProfileOptions | undefined,
+  policyIsDefault: boolean,
+): DriverEnvironment {
+  const profile = mysql2Profile(connection, supplied);
+  const exactNumeric = profile.supportBigNumbers === true
+    && profile.bigNumberStrings === true
+    && profile.decimalNumbers === false
+    && profile.rowsAsArray === false
+    && profile.typeCast === "default";
+  const rowObjects = profile.rowsAsArray === false && profile.typeCast === "default";
+  const jsonText = profile.jsonStrings === true && rowObjects;
+  const jsonNative = profile.jsonStrings === false && rowObjects;
+  const temporalText = profile.dateStrings === true && rowObjects;
+  const status = (value: boolean | undefined): "guaranteed" | "guarded" | "unsupported" =>
+    value === true ? "guaranteed" : value === false ? "unsupported" : "guarded";
+  const profileName = exactNumeric
+    ? jsonText && temporalText
+      ? "mysql2-lossless-text"
+      : jsonText
+        ? "mysql2-json-text"
+        : temporalText
+          ? "mysql2-date-text"
+          : "mysql2-exact"
+    : "mysql2-custom-profile";
+  const capabilities: DriverEnvironment["capabilities"] = policyIsDefault
+    ? {
+      "sql.native-transparency": { status: "guaranteed" as const },
+      "numeric.exact-integer": {
+        status: exactNumeric ? "guaranteed" as const : "guarded" as const,
+        canonical: "string" as const,
+        rawRepresentations: ["string"],
+        conditionCode: "mysql2.exact-numeric-profile",
+      },
+      "numeric.exact-decimal": {
+        status: exactNumeric ? "guaranteed" as const : "guarded" as const,
+        canonical: "string" as const,
+        rawRepresentations: ["string"],
+        conditionCode: "mysql2.exact-numeric-profile",
+      },
+      "numeric.approximate-float": {
+        status: rowObjects ? "guaranteed" as const : "guarded" as const,
+        canonical: "number" as const,
+        rawRepresentations: ["number"],
+      },
+      "data.json-parsed": {
+        status: jsonNative ? "guaranteed" as const : profile.jsonStrings === true ? "unsupported" as const : "guarded" as const,
+        rawRepresentations: ["object"],
+        conditionCode: "mysql2.json-strings",
+      },
+      "data.json-lossless-text": {
+        status: status(jsonText),
+        rawRepresentations: ["string"],
+        conditionCode: "mysql2.json-strings",
+      },
+      "data.temporal-lossless": {
+        status: temporalText ? "guaranteed" as const : "guarded" as const,
+        rawRepresentations: ["string"],
+        conditionCode: "mysql2.date-strings",
+      },
+      "data.temporal-native": {
+        status: temporalText ? "unsupported" as const : "guarded" as const,
+        rawRepresentations: ["Date"],
+        conditionCode: "mysql2.date-strings",
+      },
+    }
+    : {};
+  return Object.freeze<DriverEnvironment>({
+    database: { product: "mysql" },
+    driver: { id: "mysql2", profile: policyIsDefault ? profileName : "custom-type-policy" },
+    capabilities,
+    probe: {
+      statement: createRenderedStatement({
+        segments: ["SELECT VERSION() AS version"],
+        parameters: [],
+        resultKind: "rows",
+        dialectId: "mysql",
+      }),
+      read: (rows) => {
+        const row = rows[0];
+        if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+        const version = (row as Record<string, unknown>).version;
+        return typeof version === "string" ? { version } : {};
+      },
     },
-    "numeric.exact-decimal": {
-      status: "guarded",
-      canonical: "string",
-      rawRepresentations: ["string"],
-      conditionCode: "mysql2.exact-numeric-profile",
-    },
-    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-  },
-  probe: {
-    statement: createRenderedStatement({
-      segments: ["SELECT VERSION() AS version"],
-      parameters: [],
-      resultKind: "rows",
-      dialectId: "mysql",
-    }),
-    read: (rows) => {
-      const row = rows[0];
-      if (!row || typeof row !== "object" || Array.isArray(row)) return {};
-      const version = (row as Record<string, unknown>).version;
-      return typeof version === "string" ? { version } : {};
-    },
-  },
-});
+  });
+}
 
 function materialize(
   statement: RenderedStatement,
@@ -377,7 +519,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
   return {
     ownershipKey: connection,
     statementBinding: mysql2StatementBinding,
-    environment: policy === defaultTypePolicy ? mysql2Environment : { ...mysql2Environment, driver: { id: "mysql2", profile: "custom-type-policy" }, capabilities: {} },
+    environment: mysql2Environment(connection, options.profile, policy === defaultTypePolicy),
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
       assertNoRoutineOutputsForQuery(rendered);
@@ -393,7 +535,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
       if (!payload || typeof payload !== "object") return { rows: [], rowCount: 0, kind: "command", command: {} };
-      const header: Mysql2ResultHeader = { ...payload };
+      const header = normalizeCommandHeader(payload);
       return { rows: [], rowCount: header.affectedRows, kind: "command", command: header };
     },
     async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
@@ -414,8 +556,8 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
         for (let index = 0; index < binding.itemCount; index += 1) {
           const [payload] = await prepared.execute(binding.valuesAt(index) as Mysql2Parameter[]);
           if (Array.isArray(payload)) throw new Error("BRAID_BULK_RESULT_KIND: MySQL bulk command returned rows.");
-          if (payload && typeof payload === "object" && typeof (payload as Mysql2ResultHeader).affectedRows === "number") {
-            affectedRows += (payload as Mysql2ResultHeader).affectedRows!;
+          if (payload && typeof payload === "object" && (payload as Mysql2ResultHeader).affectedRows !== undefined) {
+            affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount((payload as Mysql2ResultHeader).affectedRows));
           } else affectedKnown = false;
         }
       } catch (error) {
@@ -536,14 +678,20 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
 }
 
 export function createMysql2Database(connection: Mysql2ConnectionLike, options: Mysql2DatabaseOptions = {}) {
-  const { typePolicy, streamHighWaterMark, ...databaseOptions } = options;
-  return createDatabase(createMysql2Executor(connection, { typePolicy, streamHighWaterMark }), databaseOptions);
+  const { typePolicy, streamHighWaterMark, profile, ...databaseOptions } = options;
+  return createDatabase(createMysql2Executor(connection, { typePolicy, streamHighWaterMark, profile }), databaseOptions);
 }
 
 export function createMysql2PoolProvider(pool: Mysql2PoolLike, options: Mysql2ExecutorOptions = {}): ConnectionProvider {
   return {
     statementBinding: mysql2StatementBinding,
-    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy ? mysql2Environment : { ...mysql2Environment, driver: { id: "mysql2", profile: "custom-type-policy" }, capabilities: {} },
+    environment: mysql2Environment(
+      // A pool has no physical config until acquisition. Keep unknown profile
+      // dimensions guarded rather than claiming the pool's hidden options.
+      {} as Mysql2ConnectionLike,
+      options.profile,
+      options.typePolicy === undefined || options.typePolicy === defaultTypePolicy,
+    ),
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
       const executor = createMysql2Executor(connection, options);
@@ -562,6 +710,6 @@ export function createMysql2PoolProvider(pool: Mysql2PoolLike, options: Mysql2Ex
 }
 
 export function createMysql2PoolDatabase(pool: Mysql2PoolLike, options: Mysql2DatabaseOptions = {}) {
-  const { typePolicy, streamHighWaterMark, ...databaseOptions } = options;
-  return createPooledDatabase(createMysql2PoolProvider(pool, { typePolicy, streamHighWaterMark }), databaseOptions);
+  const { typePolicy, streamHighWaterMark, profile, ...databaseOptions } = options;
+  return createPooledDatabase(createMysql2PoolProvider(pool, { typePolicy, streamHighWaterMark, profile }), databaseOptions);
 }

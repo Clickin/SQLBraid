@@ -1,15 +1,81 @@
 import {
-  decodeExactInteger,
+  normalizeExactInteger,
+  ResultExactnessError,
   type ParameterTypeHint,
   type TypePolicy,
 } from "@sqlbraid/core";
 
 const mappings = [
-  { databaseType: "int", inputType: "number", outputType: "number", nullable: true },
-  { databaseType: "bigint", inputType: "bigint | string", outputType: "bigint", nullable: true, numericFidelity: "exact-integer" as const },
-  { databaseType: "decimal", inputType: "string | number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
-  { databaseType: "numeric", inputType: "string | number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
-  { databaseType: "float", inputType: "number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
+  {
+    databaseType: "tinyint",
+    inputType: "number",
+    outputType: "string",
+    nullable: true,
+    numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" },
+  },
+  {
+    databaseType: "smallint",
+    inputType: "number",
+    outputType: "string",
+    nullable: true,
+    numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" },
+  },
+  {
+    databaseType: "int",
+    inputType: "number",
+    outputType: "string",
+    nullable: true,
+    numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" },
+  },
+  {
+    databaseType: "bigint",
+    inputType: "bigint | string",
+    outputType: "string",
+    nullable: true,
+    numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" },
+  },
+  {
+    databaseType: "decimal",
+    inputType: "string",
+    outputType: "unknown",
+    nullable: true,
+    numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" },
+  },
+  {
+    databaseType: "numeric",
+    inputType: "string",
+    outputType: "unknown",
+    nullable: true,
+    numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" },
+  },
+  {
+    databaseType: "money",
+    inputType: "string",
+    outputType: "unknown",
+    nullable: true,
+    numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" },
+  },
+  {
+    databaseType: "smallmoney",
+    inputType: "string",
+    outputType: "unknown",
+    nullable: true,
+    numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" },
+  },
+  {
+    databaseType: "real",
+    inputType: "number",
+    outputType: "number",
+    nullable: true,
+    numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 32 },
+  },
+  {
+    databaseType: "float",
+    inputType: "number",
+    outputType: "number",
+    nullable: true,
+    numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 64 },
+  },
   { databaseType: "bit", inputType: "boolean", outputType: "boolean", nullable: true },
   { databaseType: "nvarchar", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "varchar", inputType: "string", outputType: "string", nullable: true },
@@ -27,7 +93,19 @@ function canonical(databaseType: string): string {
 function decode(databaseType: string, value: unknown): unknown {
   if (value === null || value === undefined) return value;
   const type = canonical(databaseType);
-  if (type === "bigint") return decodeExactInteger(value);
+  if (type === "tinyint" || type === "smallint" || type === "int" || type === "bigint") {
+    return normalizeExactInteger(value);
+  }
+  if (type === "decimal" || type === "numeric" || type === "money" || type === "smallmoney") {
+    throw new ResultExactnessError(
+      `SQL Server ${databaseType} results are exposed by Tedious as JavaScript numbers; use an explicit CONVERT(varchar(...), ...) or CAST(... AS varchar(...)) for exact text.`,
+    );
+  }
+  if (type === "real" || type === "float") {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new ResultExactnessError(`SQL Server ${databaseType} results must be finite JavaScript numbers.`);
+    }
+  }
   return value;
 }
 
@@ -40,7 +118,7 @@ function encode(databaseType: string, value: unknown): unknown {
 
 export const typePolicy: TypePolicy = {
   id: "mssql-default",
-  hash: "mssql-default-v2",
+  hash: "mssql-default-v3",
   mappings,
   decode,
   encode,
@@ -79,10 +157,16 @@ function temporalScale(scale: number | undefined): { scale?: number } {
 }
 
 export const mssqlParameter = Object.freeze({
+  tinyint: (): Hint<number | null> => hint<number | null>("tinyint"),
+  smallint: (): Hint<number | null> => hint<number | null>("smallint"),
   int: (): Hint<number | null> => hint<number | null>("int"),
   bigint: (): Hint<bigint | string | null> => hint<bigint | string | null>("bigint"),
-  decimal: (precision: number, scale: number): Hint<string | number | null> => hint("decimal", decimalValues(precision, scale)),
-  numeric: (precision: number, scale: number): Hint<string | number | null> => hint("numeric", decimalValues(precision, scale)),
+  decimal: (precision: number, scale: number): Hint<string | null> => hint("decimal", decimalValues(precision, scale)),
+  numeric: (precision: number, scale: number): Hint<string | null> => hint("numeric", decimalValues(precision, scale)),
+  money: (): Hint<string | null> => hint("money"),
+  smallmoney: (): Hint<string | null> => hint("smallmoney"),
+  real: (): Hint<number | null> => hint<number | null>("real"),
+  float: (): Hint<number | null> => hint<number | null>("float"),
   nvarchar: (length: number | "max"): Hint<string | null> => hint("nvarchar", { length: lengthValue(length, 4000) }),
   varchar: (length: number | "max"): Hint<string | null> => hint("varchar", { length: lengthValue(length, 8000) }),
   varbinary: (length: number | "max"): Hint<Uint8Array | null> => hint("varbinary", { length: lengthValue(length, 8000) }),

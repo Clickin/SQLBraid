@@ -17,6 +17,7 @@ function transferConfig(config: SqlBraidConfig): SqlBraidConfig {
             inputType: mapping.inputType,
             outputType: mapping.outputType,
             nullable: mapping.nullable,
+            ...(mapping.numeric === undefined ? {} : { numeric: { ...mapping.numeric } }),
           })),
         },
         ...(target.filters ? {

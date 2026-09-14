@@ -19,10 +19,11 @@ const policy: TypePolicy = {
   id: "test-policy",
   hash: "test-policy-v1",
   mappings: [
-    { databaseType: "int2", inputType: "number", outputType: "number", nullable: true },
-    { databaseType: "int4", inputType: "number", outputType: "number", nullable: true },
-    { databaseType: "int8", inputType: "bigint", outputType: "bigint", nullable: true },
-    { databaseType: "numeric", inputType: "string | number", outputType: "string", nullable: true },
+    { databaseType: "int2", inputType: "number | string", outputType: "string", nullable: true, numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" } },
+    { databaseType: "int4", inputType: "number | string", outputType: "string", nullable: true, numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" } },
+    { databaseType: "int8", inputType: "bigint | string", outputType: "string", nullable: true, numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" } },
+    { databaseType: "numeric", inputType: "string", outputType: "string", nullable: true, numeric: { semantics: "exact-decimal", representation: "string", fidelity: "lossless" } },
+    { databaseType: "float8", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 64 } },
     { databaseType: "text", inputType: "string", outputType: "string", nullable: true },
     { databaseType: "bool", inputType: "boolean", outputType: "boolean", nullable: true },
     { databaseType: "json", inputType: "unknown", outputType: "unknown", nullable: true },
@@ -85,16 +86,16 @@ test("generates Row, Insert, and Update with database evidence controlling nulla
   assert.equal(result.models[0]?.rowName, "UsersRow");
   assert.equal(result.models[0]?.insertName, "UsersInsert");
   assert.equal(result.models[0]?.updateName, "UsersUpdate");
-  assertGeneratedProperty(result.source, "UsersRow", "id", "number", false);
+  assertGeneratedProperty(result.source, "UsersRow", "id", "string", false);
   assertGeneratedProperty(result.source, "UsersRow", "nickname", "string | null", false);
-  assertGeneratedProperty(result.source, "UsersInsert", "id", "number", false);
+  assertGeneratedProperty(result.source, "UsersInsert", "id", "number | string", false);
   assertGeneratedProperty(result.source, "UsersInsert", "nickname", "string | null", true);
   assertGeneratedProperty(result.source, "UsersInsert", "created_at", "string", true);
-  assertGeneratedProperty(result.source, "UsersInsert", "identity_id", "number", true);
+  assertGeneratedProperty(result.source, "UsersInsert", "identity_id", "number | string", true);
   assertGeneratedProperty(result.source, "UsersInsert", "locked", "string", false);
   assertGeneratedPropertyAbsent(result.source, "UsersInsert", "computed");
   assertGeneratedPropertyAbsent(result.source, "UsersInsert", "insert_forbidden");
-  assertGeneratedProperty(result.source, "UsersUpdate", "explicit_identity", "number", true);
+  assertGeneratedProperty(result.source, "UsersUpdate", "explicit_identity", "number | string", true);
   assertGeneratedProperty(result.source, "UsersUpdate", "insert_forbidden", "string", true);
   assertGeneratedPropertyAbsent(result.source, "UsersUpdate", "computed");
   assertGeneratedPropertyAbsent(result.source, "UsersUpdate", "locked");
@@ -153,14 +154,14 @@ test("resolves qualified and case-insensitive type evidence without suffix guess
     }),
   }, { typePolicy: postgresTypePolicy });
 
-  assertGeneratedProperty(result.source, "ValuesRow", "small_id", "number", false);
-  assertGeneratedProperty(result.source, "ValuesRow", "id", "number", false);
-  assertGeneratedProperty(result.source, "ValuesRow", "big_id", "bigint", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "small_id", "string", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "id", "string", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "big_id", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "amount", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "label", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "enabled", "boolean", false);
   assertGeneratedProperty(result.source, "ValuesRow", "custom", "unknown", false);
-  assertGeneratedProperty(result.source, "ValuesInsert", "amount", "string | number", false);
+  assertGeneratedProperty(result.source, "ValuesInsert", "amount", "string", false);
   assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE").length, 1);
 });
 
@@ -230,8 +231,8 @@ test("matches MySQL metadata spellings to first-party case-normalized policy map
       ]),
     }, { dialect: "mysql" }),
   }, { typePolicy: mysqlTypePolicy });
-  assertGeneratedProperty(result.source, "ValuesRow", "id", "number", false);
-  assertGeneratedProperty(result.source, "ValuesRow", "big_id", "bigint", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "id", "string", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "big_id", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "amount", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "label", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "payload", "unknown | null", false);
@@ -243,6 +244,7 @@ test("distinguishes exact, lossy, known-open, and unknown type mappings", () => 
     ...snapshot({
       "public.values": relation("public.values", "values", "table", [
         { name: "amount", type: "decimal", nullable: false },
+        { name: "ratio", type: "float8", nullable: false },
         { name: "payload", type: "json", nullable: true },
         { name: "missing", type: "vendor_number", nullable: false },
       ]),
@@ -251,9 +253,10 @@ test("distinguishes exact, lossy, known-open, and unknown type mappings", () => 
     typePolicy: {
       ...policy,
       mappings: [
-        { databaseType: "decimal", inputType: "string | number", outputType: "number", nullable: true, numericFidelity: "approximate-float" },
+        { databaseType: "decimal", inputType: "string", outputType: "unknown", nullable: true, numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" } },
+        { databaseType: "float8", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossy", binaryPrecision: 64 } },
         { databaseType: "json", inputType: "unknown", outputType: "unknown", nullable: true },
-        { databaseType: "int8", inputType: "bigint", outputType: "bigint", nullable: true, numericFidelity: "exact-integer" },
+        { databaseType: "int8", inputType: "string", outputType: "string", nullable: true, numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" } },
       ],
     },
     typeOverrides: {
@@ -262,9 +265,10 @@ test("distinguishes exact, lossy, known-open, and unknown type mappings", () => 
   });
 
   assertGeneratedProperty(result.source, "ValuesRow", "amount", "string", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "ratio", "number", false);
   assertGeneratedProperty(result.source, "ValuesRow", "payload", "unknown | null", false);
   assertGeneratedProperty(result.source, "ValuesRow", "missing", "unknown", false);
-  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_LOSSY_NUMERIC_REPRESENTATION").length, 1);
+  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_NUMERIC_FIDELITY_UNAVAILABLE").length, 1);
   assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE").length, 1);
   assert.equal(result.diagnostics.some((diagnostic) => diagnostic.databaseType === "json"), false);
 });
@@ -281,12 +285,12 @@ test("keeps SQLite non-STRICT columns conservative but maps supported STRICT dec
       ], { strict: true }),
     }, { dialect: "sqlite" }),
   }, { typePolicy: sqliteTypePolicy });
-  assertGeneratedProperty(strict.source, "StrictTableRow", "id", "number | bigint", false);
+  assertGeneratedProperty(strict.source, "StrictTableRow", "id", "string", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "ratio", "number", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "label", "string", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "bytes", "Uint8Array", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "anything", "unknown", false);
-  assert.equal(strict.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_LOSSY_NUMERIC_REPRESENTATION").length, 1);
+  assert.equal(strict.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_NUMERIC_FIDELITY_UNAVAILABLE").length, 0);
   await assertCompilesGeneratedSource(strict.source, "codegen-sqlite-strict");
 
   const dynamic = generateModels({
@@ -553,6 +557,48 @@ test("rejects malformed policies before generation", () => {
   assert.throws(
     () => generateModels(value, { typePolicy: { ...policy, mappings: [{ databaseType: "int4", inputType: "", outputType: "number", nullable: true }] } }),
     TypeError,
+  );
+  assert.throws(
+    () => generateModels(value, {
+      typePolicy: {
+        ...policy,
+        mappings: [{
+          databaseType: "int4",
+          inputType: "string",
+          outputType: "string",
+          nullable: true,
+          // @ts-expect-error Untrusted JavaScript can supply an invalid fidelity tag.
+          numeric: { semantics: "exact-integer", representation: "string", fidelity: "unavailable" },
+        }],
+      },
+    }),
+    (error: unknown) => error instanceof TypeError && /fidelity/u.test(error.message),
+  );
+  assert.throws(
+    () => generateModels(value, {
+      typePolicy: {
+        ...policy,
+        mappings: [{
+          databaseType: "int4",
+          inputType: "number",
+          outputType: "number",
+          nullable: true,
+          numeric: { semantics: "exact-integer", representation: "number", fidelity: "lossless" },
+        }],
+      },
+    }),
+    (error: unknown) => error instanceof TypeError && /string representation/u.test(error.message),
+  );
+  const legacyMapping = {
+    databaseType: "int4",
+    inputType: "number",
+    outputType: "number",
+    nullable: true,
+    numericFidelity: "exact-integer",
+  };
+  assert.throws(
+    () => generateModels(value, { typePolicy: { ...policy, mappings: [legacyMapping] } }),
+    (error: unknown) => error instanceof TypeError && /obsolete numeric schema/u.test(error.message),
   );
   assert.throws(
     () => generateModels(JSON.parse(JSON.stringify({ ...value, format: "wrong" })), { typePolicy: policy }),

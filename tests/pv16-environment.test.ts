@@ -9,8 +9,8 @@ import { sql } from "@sqlbraid/sqlite";
 function environmentDescriptor(): DriverEnvironment {
   return {
     database: { product: "sqlite", edition: "native" },
-    driver: { id: "node-sqlite", version: process.versions.node, profile: "bigint" },
-    capabilities: { "numeric.exact-integer": { status: "guaranteed", canonical: "bigint", rawRepresentations: ["bigint"] } },
+    driver: { id: "node-sqlite", version: process.versions.node, profile: "exact-text" },
+    capabilities: { "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint"] } },
     probe: {
       statement: sql.rows`SELECT sqlite_version() AS version`.render(),
       read(rows) {
@@ -24,7 +24,7 @@ function environmentDescriptor(): DriverEnvironment {
 
 test("environment probes are explicit, observed, released, cached and transaction scoped", async () => {
   const native = new DatabaseSync(":memory:");
-  const executor = { ...createNodeSqliteExecutor(native, { integerMode: "bigint" }), environment: environmentDescriptor() };
+  const executor = { ...createNodeSqliteExecutor(native), environment: environmentDescriptor() };
   let acquired = 0;
   let released = 0;
   const events: ExecutionEvent[] = [];
@@ -65,7 +65,7 @@ test("environment support matching requires exact verified evidence and never gu
     const target: EnvironmentSupportTarget = {
       id: "test-exact-target", status: "conditional",
       database: { product: "sqlite", edition: "native", version: env.database.version! },
-      driver: { id: "node-sqlite", profile: "bigint", version: process.versions.node },
+      driver: { id: "node-sqlite", profile: "exact-text", version: process.versions.node },
       runtime: { id: env.runtime.id, version: env.runtime.version! },
       evidence: { status: "verified" },
     };
@@ -111,5 +111,58 @@ test("failed environment probes are not cached and before observers prevent acqu
     fail = false;
     assert.equal((await db.environment()).database.product, "sqlite");
     assert.equal(acquired, 1);
+  } finally { native.close(); }
+});
+
+test("environment refresh replaces the pooled snapshot without claiming pool-wide probe guarantees", async () => {
+  const native = new DatabaseSync(":memory:");
+  native.exec("PRAGMA user_version = 1");
+  const base = createNodeSqliteExecutor(native);
+  const executor = {
+    ...base,
+    environment: {
+      ...environmentDescriptor(),
+      probe: {
+        statement: sql.rows`PRAGMA user_version`.render(),
+        read(rows: readonly unknown[]) {
+          const row = rows[0];
+          assert.ok(row && typeof row === "object" && "user_version" in row);
+          return {
+            version: String((row as { readonly user_version: number }).user_version),
+            capabilities: {
+              "numeric.approximate-float": {
+                status: "guaranteed" as const,
+                canonical: "number" as const,
+                rawRepresentations: ["number"] as const,
+              },
+            },
+          };
+        },
+      },
+    },
+  };
+  let acquired = 0;
+  let released = 0;
+  const db = createPooledDatabase({
+    statementBinding: executor.statementBinding,
+    environment: executor.environment,
+    async acquire() {
+      acquired++;
+      return { ...executor, release() { released++; } };
+    },
+  });
+  try {
+    assert.equal((await db.environment()).database.version, "1");
+    assert.equal((await db.environment()).capabilities["numeric.approximate-float"]?.status, "guarded");
+    assert.equal(acquired, 1);
+    assert.equal(released, 1);
+    native.exec("PRAGMA user_version = 2");
+    const refreshed = await db.environment({ refresh: true });
+    assert.equal(refreshed.database.version, "2");
+    assert.equal(refreshed.capabilities["numeric.approximate-float"]?.status, "guarded");
+    assert.equal(acquired, 2);
+    assert.equal(released, 2);
+    assert.equal((await db.environment()).database.version, "2");
+    assert.equal(acquired, 2);
   } finally { native.close(); }
 });

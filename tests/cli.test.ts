@@ -169,6 +169,25 @@ test('CLI codegen resolves config-relative paths, preserves unchanged mtimes, an
   }
 }, 15_000);
 
+test('CLI codegen retains unavailable exact numeric evidence across the config worker', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  try {
+    await writeFile(join(directory, 'metadata.json'), JSON.stringify(metadata()));
+    await writeFile(join(directory, 'sqlbraid.config.mjs'), `export default { codegen: { targets: [{
+      name: "main", metadata: "./metadata.json", outFile: "./generated.ts",
+      typePolicy: { id: "unavailable-exact", hash: "pv17", mappings: [{
+        databaseType: "int4", inputType: "string", outputType: "unknown", nullable: false,
+        numeric: { semantics: "exact-integer", representation: "string", fidelity: "unsupported" }
+      }] }
+    }] } };`);
+    const result = await exec(process.execPath, [cliEntry, 'codegen', '--config', join(directory, 'sqlbraid.config.mjs'), '--json']);
+    const reports = JSON.parse(result.stdout);
+    assert.ok(reports[0].diagnostics.some((diagnostic: { code: string }) => diagnostic.code === 'CODEGEN_NUMERIC_FIDELITY_UNAVAILABLE'));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
 test('CLI codegen discovers configs, selects repeated targets, and blocks error writes', async () => {
   const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
   try {

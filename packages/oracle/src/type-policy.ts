@@ -4,16 +4,30 @@ import {
   type TypePolicy,
 } from "@sqlbraid/core";
 
-export type OracleNumberInput = number | string | bigint;
+export type OracleNumberInput = number | bigint;
 export type OracleBinaryInput = Uint8Array;
 type OracleNullable<Input> = Input | null;
+const exactNumericTypes = new Set(["NUMBER", "FLOAT", "DECIMAL", "NUMERIC", "INTEGER", "INT", "SMALLINT", "REAL", "DOUBLE", "DOUBLE PRECISION"]);
 
 const mappings = [
   { databaseType: "VARCHAR2", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "NVARCHAR2", inputType: "string", outputType: "string", nullable: true },
-  { databaseType: "NUMBER", inputType: "string | number | bigint", outputType: "string", nullable: true, numericFidelity: "exact-decimal" as const },
-  { databaseType: "BINARY_FLOAT", inputType: "number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
-  { databaseType: "BINARY_DOUBLE", inputType: "number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
+  ...["NUMBER", "FLOAT", "DECIMAL", "NUMERIC", "REAL", "DOUBLE", "DOUBLE PRECISION"].map((databaseType) => ({
+    databaseType,
+    inputType: "number | bigint",
+    outputType: "string",
+    nullable: true,
+    numeric: { semantics: "exact-decimal", representation: "string", fidelity: "lossless" } as const,
+  })),
+  ...["INTEGER", "INT", "SMALLINT"].map((databaseType) => ({
+    databaseType,
+    inputType: "number | bigint",
+    outputType: "string",
+    nullable: true,
+    numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" } as const,
+  })),
+  { databaseType: "BINARY_FLOAT", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 32 } as const },
+  { databaseType: "BINARY_DOUBLE", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 64 } as const },
   { databaseType: "DATE", inputType: "Date", outputType: "Date", nullable: true },
   { databaseType: "TIMESTAMP", inputType: "Date", outputType: "Date", nullable: true },
   { databaseType: "TIMESTAMP WITH TIME ZONE", inputType: "Date", outputType: "Date", nullable: true },
@@ -32,17 +46,30 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function isNumber(value: unknown): value is number {
+  return typeof value === "number";
+}
+
+export function isOracleExactNumericType(databaseType: string): boolean {
+  return exactNumericTypes.has(normalize(databaseType));
+}
+
+export function isOracleBinaryNumericType(databaseType: string): boolean {
+  const type = normalize(databaseType);
+  return type === "BINARY_FLOAT" || type === "BINARY_DOUBLE";
+}
+
 function encode(databaseType: string, value: unknown): unknown {
   if (value === null || value === undefined) return value;
   const type = normalize(databaseType);
   if ((type === "VARCHAR2" || type === "NVARCHAR2") && typeof value !== "string") {
     throw new TypeError(`Oracle ${type} parameters require a string value.`);
   }
-  if (type === "NUMBER" && typeof value !== "string" && typeof value !== "bigint" && !isFiniteNumber(value)) {
-    throw new TypeError("Oracle NUMBER parameters require a finite number, bigint, or decimal string.");
+  if (isOracleExactNumericType(type) && typeof value !== "bigint" && !isFiniteNumber(value)) {
+    throw new TypeError(`Oracle ${type} parameters require a finite number or bigint; decimal text requires an explicit character conversion.`);
   }
-  if ((type === "BINARY_FLOAT" || type === "BINARY_DOUBLE") && !isFiniteNumber(value)) {
-    throw new TypeError(`Oracle ${type} parameters require a finite number.`);
+  if (isOracleBinaryNumericType(type) && !isNumber(value)) {
+    throw new TypeError(`Oracle ${type} parameters require a JavaScript number.`);
   }
   if ((type === "DATE" || type.startsWith("TIMESTAMP")) && !(value instanceof Date)) {
     throw new TypeError(`Oracle ${type} parameters require a Date value.`);
@@ -56,9 +83,10 @@ function encode(databaseType: string, value: unknown): unknown {
 function decode(databaseType: string, value: unknown): unknown {
   if (value === null || value === undefined) return value;
   const type = normalize(databaseType);
-  // NUMBER is intentionally represented as text. JavaScript Number cannot preserve
-  // Oracle NUMBER precision, and the adapter requests string fetching for columns.
-  if (type === "NUMBER") {
+  // Exact Oracle NUMBER-family values are intentionally represented as text.
+  // JavaScript Number cannot preserve Oracle precision, and the adapter requests
+  // string fetching for exact numeric columns.
+  if (isOracleExactNumericType(type)) {
     return decodeExactDecimal(value, { allowBigInt: true });
   }
   return value;
@@ -66,7 +94,7 @@ function decode(databaseType: string, value: unknown): unknown {
 
 export const typePolicy: TypePolicy = {
   id: "oracle-default",
-  hash: "oracle-default-v2",
+  hash: "oracle-default-v3",
   mappings,
   decode,
   encode,

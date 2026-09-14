@@ -1,4 +1,10 @@
-import { createRenderedStatement, RoutineMappingError, createRenderedBulk } from "@sqlbraid/core";
+import {
+  createRenderedStatement,
+  createRenderedBulk,
+  ResultExactnessError,
+  RoutineMappingError,
+  safeDatabaseCount,
+} from "@sqlbraid/core";
 import { preparedShape } from "./prepared-shape.js";
 import { createAsyncContextStorage } from "#async-context";
 import type {
@@ -320,23 +326,33 @@ function malformedExecutionResult(): never {
   throw new TypeError("Executor returned a malformed query execution result.");
 }
 
+function addSafeCount(left: number, right: number): number {
+  if (!Number.isSafeInteger(left) || left < 0 || !Number.isSafeInteger(right) || right < 0 || left > Number.MAX_SAFE_INTEGER - right) {
+    throw new ResultExactnessError("Database row count exceeds the safe JavaScript integer range.");
+  }
+  return left + right;
+}
+
 function assertBulkExecutionResult(value: unknown, expectedCount: number): BulkExecutionResult {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError("Executor returned a malformed bulk execution result.");
   }
   const result = value as Partial<BulkExecutionResult>;
-  if (
-    !Number.isSafeInteger(result.inputCount)
-    || result.inputCount !== expectedCount
-    || (result.affectedRows !== undefined && (!Number.isFinite(result.affectedRows) || result.affectedRows < 0))
-    || (result.executionMode !== "native-bulk"
-      && result.executionMode !== "pipeline"
-      && result.executionMode !== "prepared-loop"
-      && result.executionMode !== "remote-batch")
-  ) {
+  const inputCount = result.inputCount;
+  const executionMode = result.executionMode;
+  if (typeof inputCount !== "number" || !Number.isSafeInteger(inputCount) || inputCount !== expectedCount
+    || (executionMode !== "native-bulk"
+      && executionMode !== "pipeline"
+      && executionMode !== "prepared-loop"
+      && executionMode !== "remote-batch")) {
     throw new TypeError("Executor returned a malformed bulk execution result.");
   }
-  return result as BulkExecutionResult;
+  const affectedRows = result.affectedRows === undefined ? undefined : safeDatabaseCount(result.affectedRows);
+  return {
+    inputCount,
+    ...(affectedRows === undefined ? {} : { affectedRows }),
+    executionMode,
+  };
 }
 
 function bindingAdapterFor(resource: QueryExecutor | ConnectionProvider): StatementBindingAdapter {
@@ -633,7 +649,8 @@ async function mapRoutineResult(
   contract: RoutineContract | undefined,
 ): Promise<{ readonly value: RoutineCallResult; readonly rowCount: number; readonly mapped: boolean }> {
   assertDriverRoutineResult(raw);
-  const rowCount = raw.resultSets.reduce((count, resultSet) => count + resultSet.rows.length, 0);
+  let rowCount = 0;
+  for (const resultSet of raw.resultSets) rowCount = addSafeCount(rowCount, resultSet.rows.length);
   if (!routineMappingRequested(contract)) {
     const value = {
       output: raw.output,
@@ -694,7 +711,22 @@ function assertExecutionResult<Row>(query: Query<unknown, QueryResultKind>, resu
   if (query.resultKind !== "unknown" && query.resultKind !== result.kind) {
     throw new DatabaseResultKindError(query.resultKind, result.kind);
   }
-  return result;
+  const rowCount = result.rowCount === undefined ? undefined : safeDatabaseCount(result.rowCount);
+  if (result.kind === "rows") {
+    return rowCount === result.rowCount ? result : { ...result, rowCount };
+  }
+  const affectedRows = result.command.affectedRows === undefined
+    ? undefined
+    : safeDatabaseCount(result.command.affectedRows);
+  if (rowCount === result.rowCount && affectedRows === result.command.affectedRows) return result;
+  return {
+    ...result,
+    ...(rowCount === undefined ? {} : { rowCount }),
+    command: {
+      ...result.command,
+      ...(affectedRows === undefined ? {} : { affectedRows }),
+    },
+  };
 }
 
 function frozenEvent(event: ExecutionEvent): ExecutionEvent {
@@ -1320,9 +1352,11 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       assertOpen();
       assertHealthy(state);
       if (!options.transaction) assertRootAllowed(options.rootState, false);
-      if (!environmentSnapshot) {
+      const refresh = environmentOptions.refresh === true;
+      if (refresh || !environmentSnapshot) {
         const descriptor = executor.environment;
         let databaseInfo = descriptor?.database ?? { product: "unknown" };
+        let capabilities = descriptor?.capabilities ?? {};
         if (descriptor?.probe) {
           const rendered = createRenderedStatement(descriptor.probe.statement);
           if (rendered.resultKind !== "rows" || rendered.parameters.length !== 0) {
@@ -1336,14 +1370,30 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           };
           environmentQueries.add(query);
           const rows = await allNamed(query);
-          databaseInfo = { ...databaseInfo, ...descriptor.probe.read(rows) };
+          const observed = descriptor.probe.read(rows);
+          databaseInfo = {
+            ...databaseInfo,
+            ...(observed.version === undefined ? {} : { version: observed.version }),
+            ...(observed.edition === undefined ? {} : { edition: observed.edition }),
+          };
+          if (observed.capabilities !== undefined) {
+            const observedCapabilities = options.pooled && !options.transaction
+              ? Object.fromEntries(Object.entries(observed.capabilities).map(([id, capability]) => [
+                id,
+                capability.status === "guaranteed"
+                  ? { ...capability, status: "guarded" as const }
+                  : capability,
+              ]))
+              : observed.capabilities;
+            capabilities = { ...capabilities, ...observedCapabilities };
+          }
         }
         environmentSnapshot = Object.freeze({
           database: Object.freeze({ ...databaseInfo }),
           driver: Object.freeze({ ...(descriptor?.driver ?? { id: statementBinding.id }) }),
           runtime: runtimeEnvironment(),
           capabilities: Object.freeze(Object.fromEntries(
-            Object.entries(descriptor?.capabilities ?? {}).map(([id, capability]) => [
+            Object.entries(capabilities).map(([id, capability]) => [
               id,
               Object.freeze({
                 ...capability,
@@ -1352,8 +1402,11 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
             ]),
           )),
         });
+        // A pooled probe describes one acquired lease, not every future lease.
+        // Refresh replaces this scope's snapshot, while observed guarantees are
+        // guarded above so the snapshot cannot claim pool-wide certainty.
       }
-      const evidence = environmentSnapshot;
+      const evidence = environmentSnapshot!;
       const matches = (environmentOptions.targets ?? []).filter((target) =>
         (target.status === "official" || target.status === "conditional") &&
         target.evidence.status === "verified" &&
@@ -1424,7 +1477,8 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         }
       }
       assertDriverRoutineResult(value!);
-      const rowCount = value!.resultSets.reduce((count, set) => count + set.rows.length, 0);
+      let rowCount = 0;
+      for (const resultSet of value!.resultSets) rowCount = addSafeCount(rowCount, resultSet.rows.length);
       try {
         await notify(options.observers ?? [], {
           type: "query:result",
@@ -1843,7 +1897,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
               catch (error) { errorAlreadyReported = true; await notifyError(options.observers ?? [], errorEvent(operation, error, "execution-map", true, true, now() - started), error); }
             }
             if (streamOptions.signal?.aborted) throw streamOptions.signal.reason ?? new Error("Stream aborted.");
-            count += 1;
+            count = addSafeCount(count, 1);
             yield mapped as Row;
           }
         } catch (error) {

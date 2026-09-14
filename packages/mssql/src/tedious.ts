@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { ISOLATION_LEVEL, Request, TYPES } from "tedious";
+import { ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
 import type {
   ConnectionLease,
   ConnectionProvider,
@@ -107,13 +108,18 @@ export interface TediousStatementBindingOptions {
   readonly typePolicy?: TypePolicy;
 }
 
-type DatabaseType = "int" | "bigint" | "decimal" | "numeric" | "float" | "bit" | "nvarchar" | "varchar" | "char" | "varbinary" | "binary" | "uniqueidentifier" | "date" | "datetime2" | "datetimeoffset";
+type DatabaseType = "tinyint" | "smallint" | "int" | "bigint" | "decimal" | "numeric" | "money" | "smallmoney" | "real" | "float" | "bit" | "nvarchar" | "varchar" | "char" | "varbinary" | "binary" | "uniqueidentifier" | "date" | "datetime2" | "datetimeoffset";
 
 const typeNames: Readonly<Record<DatabaseType, string>> = {
+  tinyint: "TinyInt",
+  smallint: "SmallInt",
   int: "Int",
   bigint: "BigInt",
   decimal: "Decimal",
   numeric: "Numeric",
+  money: "Money",
+  smallmoney: "SmallMoney",
+  real: "Real",
   float: "Float",
   bit: "Bit",
   nvarchar: "NVarChar",
@@ -137,6 +143,10 @@ function typeForHint(hint: ParameterTypeHint): DatabaseType {
     throw new Error("BRAID_CALL_CURSOR_UNSUPPORTED: SQL Server cursor output parameters are not application result cursors.");
   }
   const aliases: Readonly<Record<string, DatabaseType>> = {
+    tinyint: "tinyint",
+    uint8: "tinyint",
+    smallint: "smallint",
+    int16: "smallint",
     int: "int",
     integer: "int",
     int32: "int",
@@ -144,6 +154,9 @@ function typeForHint(hint: ParameterTypeHint): DatabaseType {
     bigint: "bigint",
     decimal: "decimal",
     numeric: "numeric",
+    money: "money",
+    smallmoney: "smallmoney",
+    real: "real",
     float: "float",
     bit: "bit",
     boolean: "bit",
@@ -220,21 +233,18 @@ function inferType(value: unknown): { readonly type: DatabaseType; readonly valu
 function decimalInput(value: unknown): unknown {
   if (value === null) return value;
   if (typeof value === "number") {
-    if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER) {
-      throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: Tedious sends Decimal/Numeric parameters as JavaScript numbers; use a finite safe number.");
-    }
-    return value;
+    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: exact decimal parameters do not accept JavaScript numbers; use a character bind with user-authored CAST/CONVERT.");
   }
   if (typeof value !== "string" || !/^-?(?:\d+)(?:\.\d+)?$/u.test(value)) {
-    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: Decimal/Numeric parameters accept only finite safe numbers or plain decimal strings.");
+    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: exact decimal parameters accept only finite safe numbers or plain decimal strings; use an explicit character bind with user-authored CAST/CONVERT for larger values.");
   }
   const digits = value.replace(/^-?/u, "").replace(/\./gu, "").replace(/^0+/u, "");
   if (digits.length > 15) {
-    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: Tedious converts Decimal/Numeric parameters through JavaScript Number; strings over 15 significant digits are rejected.");
+    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: Tedious converts exact decimal parameters through JavaScript Number; strings over 15 significant digits are rejected.");
   }
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: Decimal/Numeric strings must fit a finite JavaScript Number.");
+    throw new TypeError("BRAID_BIND_DECIMAL_EXACTNESS: exact decimal strings must fit a finite JavaScript Number.");
   }
   return numeric;
 }
@@ -258,6 +268,13 @@ function assertDirectConnection(connection: TediousConnectionLike): void {
 
 function asError(error: unknown): unknown {
   return error === undefined || error === null ? undefined : error instanceof Error ? error : new Error(String(error));
+}
+
+function safeProcedureStatus(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    throw new ResultExactnessError("SQL Server procedure return status must be a safe integer.");
+  }
+  return value;
 }
 
 function resourceCleanupError(cause: unknown, cleanupFailures: readonly unknown[]): Error {
@@ -301,7 +318,41 @@ function columnName(metadata: TediousColumnMetadataLike, index: number): string 
 }
 
 function columnType(metadata: TediousColumnMetadataLike): string | undefined {
-  return typeof metadata.type === "string" ? metadata.type : metadata.type?.name;
+  const type = typeof metadata.type === "string" ? metadata.type : metadata.type?.name;
+  if (type === undefined) return undefined;
+  // TDS uses nullable protocol types for most SQL Server result columns.
+  // IntN, FloatN, and MoneyN carry the SQL type width in dataLength rather
+  // than exposing the concrete type name Tedious uses for parameters.
+  switch (canonicalType(type)) {
+    case "intn":
+      switch (metadata.dataLength) {
+        case 1: return "tinyint";
+        case 2: return "smallint";
+        case 4: return "int";
+        case 8: return "bigint";
+        default: return type;
+      }
+    case "floatn":
+      switch (metadata.dataLength) {
+        case 4: return "real";
+        case 8: return "float";
+        default: return type;
+      }
+    case "moneyn":
+      switch (metadata.dataLength) {
+        case 4: return "smallmoney";
+        case 8: return "money";
+        default: return type;
+      }
+    case "bitn":
+      return "bit";
+    case "decimaln":
+      return "decimal";
+    case "numericn":
+      return "numeric";
+    default:
+      return type;
+  }
 }
 
 function assertUniqueColumns(columns: readonly TediousColumnMetadataLike[]): void {
@@ -360,7 +411,9 @@ function materializeParameter(
   const type = actualHint === undefined ? inferred!.type : typeForHint(actualHint);
   const input = direction === "out" ? undefined : actualHint === undefined ? inferred!.value : actualValue;
   let encoded = direction === "out" ? undefined : policy.encode(type, input);
-  if (direction !== "out" && (type === "decimal" || type === "numeric")) encoded = decimalInput(encoded);
+  if (direction !== "out" && (type === "decimal" || type === "numeric" || type === "money" || type === "smallmoney")) {
+    encoded = decimalInput(encoded);
+  }
   if (direction !== "out" && (type === "varbinary" || type === "binary") && encoded instanceof Uint8Array && !Buffer.isBuffer(encoded)) encoded = Buffer.from(encoded);
   const options: { length?: number; precision?: number; scale?: number } = {};
   if (actualHint?.length !== undefined) options.length = actualHint.length === "max" ? Infinity : actualHint.length;
@@ -422,7 +475,18 @@ function tediousLiteralValue(
   binary: "summary" | "full" | undefined = "summary",
 ): string {
   if (value === null || value === undefined) return "NULL";
-  if (databaseType === "int" || databaseType === "bigint" || databaseType === "decimal" || databaseType === "numeric" || databaseType === "float") {
+  if (
+    databaseType === "tinyint"
+    || databaseType === "smallint"
+    || databaseType === "int"
+    || databaseType === "bigint"
+    || databaseType === "decimal"
+    || databaseType === "numeric"
+    || databaseType === "money"
+    || databaseType === "smallmoney"
+    || databaseType === "real"
+    || databaseType === "float"
+  ) {
     if (typeof value === "bigint") return value.toString(10);
     if (typeof value === "number") return Number.isFinite(value) ? String(value) : "[unsupported numeric value]";
     if (typeof value === "string" && /^-?(?:\d+)(?:\.\d+)?$/u.test(value)) return value;
@@ -616,9 +680,15 @@ function collect(
       // per statement and doneProc once for the wrapper itself.
       const rowCounts = doneInProcCount > 0 ? doneInProcRowCounts : doneRowCounts;
       const statementCount = doneInProcCount > 0 ? doneInProcCount : doneCount;
-      const affected = rowCounts.length > 0
-        ? rowCounts.filter((count) => Number.isFinite(count)).reduce((total, count) => total + count, 0)
-        : callbackRowCount;
+      let affected: number | undefined;
+      try {
+        affected = rowCounts.length > 0
+          ? rowCounts.reduce((total, count) => safeDatabaseCount(total + count), 0)
+          : callbackRowCount;
+      } catch (error) {
+        reject(error);
+        return;
+      }
       resolve({
         resultSets,
         ...(affected === undefined ? {} : { affectedRows: affected }),
@@ -634,7 +704,13 @@ function collect(
         : parameters.map((parameter, index) => ({ ...parameter, name: routineProcedure.parameterNames[index]! }));
       request = new Request(routineProcedure?.name ?? parameterizedSql, ((error: unknown, rowCount?: number) => {
         callbackError = error;
-        if (typeof rowCount === "number") callbackRowCount = rowCount;
+        if (typeof rowCount === "number") {
+          try {
+            callbackRowCount = safeDatabaseCount(rowCount);
+          } catch (countError) {
+            eventError = eventError ?? countError;
+          }
+        }
         finish();
       })) as unknown as TediousRequestLike;
       request.on("columnMetadata", (columns: unknown) => {
@@ -661,12 +737,24 @@ function collect(
       });
       const done = (rowCount?: number): void => {
         doneCount += 1;
-        if (typeof rowCount === "number") doneRowCounts.push(rowCount);
+        if (typeof rowCount === "number") {
+          try {
+            doneRowCounts.push(safeDatabaseCount(rowCount));
+          } catch (error) {
+            fail(error);
+          }
+        }
       };
       request.on("done", done);
       request.on("doneInProc", (rowCount?: number) => {
         doneInProcCount += 1;
-        if (typeof rowCount === "number") doneInProcRowCounts.push(rowCount);
+        if (typeof rowCount === "number") {
+          try {
+            doneInProcRowCounts.push(safeDatabaseCount(rowCount));
+          } catch (error) {
+            fail(error);
+          }
+        }
       });
       // doneProc is the completion notification for the sp_executesql wrapper.
       request.on("returnValue", (name: unknown, value: unknown) => {
@@ -681,8 +769,13 @@ function collect(
           }
         }
       });
-      request.on("doneProc", (_rowCount: unknown, _more: unknown, status: unknown) => {
-        if (routineProcedure !== undefined && typeof status === "number") procedureReturnValue = status;
+      request.on("doneProc", (rowCount: unknown, _more: unknown, status: unknown) => {
+        try {
+          if (typeof rowCount === "number") safeDatabaseCount(rowCount);
+          if (routineProcedure !== undefined && status !== undefined) procedureReturnValue = safeProcedureStatus(status);
+        } catch (error) {
+          fail(error);
+        }
       });
       request.on("error", (error: unknown) => { fail(error); });
       request.on("requestCompleted", () => { completed = true; finish(); });
@@ -811,8 +904,23 @@ function streamRows(
         let doneCount = 0;
         let doneInProcCount = 0;
         let columns: readonly TediousColumnMetadataLike[] = [];
-        request.on("done", () => { doneCount += 1; });
-        request.on("doneInProc", () => { doneInProcCount += 1; });
+        const observeCount = (rowCount: unknown): void => {
+          if (typeof rowCount !== "number") return;
+          try {
+            safeDatabaseCount(rowCount);
+          } catch (error) {
+            failure = failure ?? error;
+            cancel();
+          }
+        };
+        request.on("done", (rowCount: unknown) => {
+          doneCount += 1;
+          observeCount(rowCount);
+        });
+        request.on("doneInProc", (rowCount: unknown) => {
+          doneInProcCount += 1;
+          observeCount(rowCount);
+        });
         request.on("columnMetadata", (metadata: unknown) => {
           try {
             if (resultSetCount > 0) throw new Error("BRAID_RESULT_SETS_UNSUPPORTED: SQL Server stream returned multiple result sets.");
@@ -906,9 +1014,34 @@ const tediousEnvironment = Object.freeze<DriverEnvironment>({
   driver: { id: "tedious", profile: "typed-request" },
   capabilities: {
     "sql.native-transparency": { status: "guaranteed" },
-    "numeric.exact-integer": { status: "guarded", canonical: "bigint", rawRepresentations: ["bigint", "string", "number"], conditionCode: "tedious.exact-numeric-profile" },
-    "numeric.exact-decimal": { status: "unsupported", rawRepresentations: ["number"] },
+    "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
+    "numeric.exact-decimal": { status: "unsupported", canonical: "string", rawRepresentations: ["number"] },
     "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+    "numeric.bind-exact": {
+      status: "guarded",
+      canonical: "string",
+      rawRepresentations: ["string"],
+      conditionCode: "mssql.character-cast-required",
+    },
+    "numeric.aggregate": {
+      status: "unsupported",
+      canonical: "string",
+      rawRepresentations: ["number"],
+      conditionCode: "mssql.exact-decimal-text-cast-required",
+    },
+    "metadata.command-safe": {
+      status: "guarded",
+      rawRepresentations: ["number"],
+      conditionCode: "mssql.safe-count",
+    },
+    "data.json-lossless-text": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
+    "data.json-parsed": { status: "unsupported" },
+    "data.temporal-lossless": { status: "unsupported", conditionCode: "mssql.temporal-text-cast-required" },
+    "data.temporal-native": {
+      status: "guarded",
+      rawRepresentations: ["Date", "string"],
+      conditionCode: "mssql.temporal-text-cast-required",
+    },
   },
   probe: {
     statement: createRenderedStatement({
@@ -1001,7 +1134,14 @@ function executePrepared(
     const doneInProcRows: number[] = [];
     const doneProcRows: number[] = [];
     const markRows = (): void => { rowBearing = true; };
-    const markDone = (target: number[], count?: unknown): void => { if (typeof count === "number") target.push(count); };
+    const markDone = (target: number[], count?: unknown): void => {
+      if (typeof count !== "number") return;
+      try {
+        target.push(safeDatabaseCount(count));
+      } catch (error) {
+        eventError = eventError ?? error;
+      }
+    };
     const markDoneRows = (count?: unknown): void => markDone(doneRows, count);
     const markDoneInProcRows = (count?: unknown): void => markDone(doneInProcRows, count);
     const markDoneProcRows = (count?: unknown): void => markDone(doneProcRows, count);
@@ -1021,7 +1161,11 @@ function executePrepared(
       else if (rowBearing) reject(new Error("BRAID_BULK_RESULT_KIND: SQL Server bulk command returned rows."));
       else {
         const counts = doneInProcRows.length > 0 ? doneInProcRows : doneRows.length > 0 ? doneRows : doneProcRows;
-        resolve(counts.length > 0 ? counts.reduce((total, value) => total + value, 0) : callbackRowCount);
+        try {
+          resolve(counts.length > 0 ? counts.reduce((total, value) => safeDatabaseCount(total + value), 0) : callbackRowCount);
+        } catch (error) {
+          reject(error);
+        }
       }
     };
     const complete = (): void => {
@@ -1030,7 +1174,13 @@ function executePrepared(
     };
     const callback = (error: unknown, rowCount?: number): void => {
       callbackError = error;
-      callbackRowCount = rowCount;
+      if (typeof rowCount === "number") {
+        try {
+          callbackRowCount = safeDatabaseCount(rowCount);
+        } catch (countError) {
+          eventError = eventError ?? countError;
+        }
+      }
       finish();
     };
     const failed = (error: unknown): void => {

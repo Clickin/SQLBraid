@@ -61,6 +61,12 @@ function validateConfigOptions(target: Record<string, unknown>): void {
     if (!isRecord(mapping) || ["databaseType", "inputType", "outputType"].some((field) => typeof mapping[field] !== "string" || !mapping[field]) || typeof mapping.nullable !== "boolean") {
       throw new ConfigurationError(`Configuration target ${String(target.name)} has an invalid typePolicy mapping ${index}.`);
     }
+    if ("numericFidelity" in mapping) {
+      throw new ConfigurationError("TypePolicy numericFidelity was replaced by the numeric semantics/representation/fidelity contract.");
+    }
+    if (mapping.numeric !== undefined && !isRecord(mapping.numeric)) {
+      throw new ConfigurationError(`Configuration target ${String(target.name)} has an invalid numeric contract at mapping ${index}.`);
+    }
   }
   const filters = target.filters;
   if (filters !== undefined && (!isRecord(filters)
