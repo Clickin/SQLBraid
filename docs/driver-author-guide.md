@@ -1,6 +1,6 @@
 # Driver-author guide: binding transport SPI
 
-This guide is for a custom `QueryExecutor`, `ConnectionProvider`, or first-party-style driver adapter. PV18 final verification is pending; this guide does not grant a runtime/driver support label or claim current CI, SHA, publication, or release evidence.
+This guide is for a custom `QueryExecutor`, `ConnectionProvider`, or first-party-style driver adapter. PV18 Stage A implementation revision `53db135bd156b6d65dc91785a671dec5249c95d4` passed Runtime ([34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821)), Docs ([34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964)), and the required Release dry-run ([34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)). The eight eligible exact tuples are Official for that revision. Stage B is a separate exact-final-SHA verification and is not claimed here; this guide does not grant publication or release authorization.
 
 ## 1. The logical statement contract
 
@@ -486,8 +486,11 @@ container-specific transport and codegen evidence; support is not recursively
 guaranteed for every nested member. Keep unclassified/unsupported values
 explicit instead of assigning a convenient scalar type.
 
-PV18 completion and release readiness require exact-revision verification across
-unit, packed-runtime, docs, capability/bulk suites, Browser WASM, D1, MariaDB,
-and the existing real database paths. Until Main supplies that evidence, mark
-verification pending and do not claim a new SHA, CI success, runtime support
-label, or publication.
+PV18 Stage A records exact tuple observations with `missingTests=[]` for
+PG16.4, scoped PG18.6, MySQL8.4.2, MariaDB11.8.9, OracleFree23.9,
+MSSQL2022CU18Developer, NodeSQLite3.50.2, and browserWASM3.53.4. These
+observations are revision-specific evidence for the corresponding Official
+labels for that revision. Any subsequent final revision requires Stage B to
+pass Runtime, Docs, and Release dry-run on one exact SHA before its evidence
+can supersede this revision; no Stage B result is claimed here. D1 remains
+Compatible because its managed SQLite version is unreported.

@@ -101,8 +101,11 @@ function은 result set을 내보낼 수 없습니다.
 `representationProfiles`를 내보냅니다. 기본 `mysql2-lossless-text`
 descriptor는 아래 fidelity-first option을 사용하고 `mysql2-native`는 native
 JSON/temporal 결과를 위한 별도 편의 프로필입니다. Runtime과 codegen은 같은
-descriptor를 선택해야 합니다. PV18 support 승격은 최종 exact-SHA gate까지
-대기 중입니다.
+descriptor를 선택해야 합니다. `53db135bd156b6d65dc91785a671dec5249c95d4`
+구현 revision의 Stage A 증거가 [지원 매트릭스](/SQLBraid/reference/support/)에
+기록되었고 Runtime, Docs, Release 세 gate를 모두 통과했으며 이 정확한
+프로필은 Stage A에서 Official입니다. 이후 revision에는 별도 Stage B exact-final
+SHA 검증이 필요합니다.
 
 | mysql2 옵션 | `mysql2-lossless-text` | 효과 |
 | --- | --- | --- |

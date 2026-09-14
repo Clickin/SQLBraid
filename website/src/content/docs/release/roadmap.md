@@ -7,17 +7,21 @@ description: Separate current behavior from candidates that need their own desig
 
 The release surface includes SQL-first templates, safe binds, dynamic `@braid`, result contracts, Standard Schema mapping, physical connection leasing, transactions/savepoints, streams, observers, metadata v1, deterministic codegen, standard LSP, CLI JSON fallback, a thin VS Code client, native DML-returning contracts, homogeneous command bulk, MariaDB, Browser SQLite WASM, D1, and explicit PV18 profile-coherent value-fidelity contracts.
 
-PV18 starts from `2119d9676b05fb2531eaf7aac1ef37741600ba40`. Final exact-SHA
-Runtime, Docs, and Release dry-run evidence is pending; the [support
-matrix](/SQLBraid/reference/support/) must not promote changed profiles before
-those gates. Certification covers exact profiles, not future versions; RC
-publication still requires user acceptance and explicit release authorization.
+PV18 starts from `2119d9676b05fb2531eaf7aac1ef37741600ba40`. Stage A
+implementation revision `53db135bd156b6d65dc91785a671dec5249c95d4` has passed
+all three Runtime, Docs, and Release gates for Stage A. The [support
+matrix](/SQLBraid/reference/support/) records the revision-specific evidence
+and promotes the eight exact profiles to Official for Stage A. D1 remains
+Compatible. Later revisions require separate Stage B exact-final SHA verification; certification
+covers exact profiles, not future versions; RC publication still requires user
+acceptance and explicit release authorization.
 
 Profile descriptors pair driver options, raw/canonical representation, and
 TypePolicy provenance. Codegen must reuse the selected runtime descriptor.
 Container support is deliberately non-recursive; common scalar/array evidence
 may be promoted independently of rare composites, objects, variants, or
-vectors. None of these docs imply RC readiness before final exact-SHA gates.
+vectors. None of these docs imply Stage B completion or RC readiness for a later
+revision.
 
 ## Post-release candidates
 

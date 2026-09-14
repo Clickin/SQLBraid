@@ -1,13 +1,22 @@
 ---
 title: PV18 릴리스 노트
-description: 프로필 일관성, container fidelity, 값 정확도 경계를 포함하는 SQLBraid 프리릴리스 표면입니다.
+description: 프로필 일관성, container fidelity, 값 정확도 경계를 포함하는 SQLBraid Stage A 프리릴리스 표면입니다.
 ---
 
 이 문서는 npm RC나 stable 발행을 주장하지 않는 PV18 초안입니다. PV18은
 `2119d9676b05fb2531eaf7aac1ef37741600ba40` review baseline에서 시작했습니다.
-프로필/컨테이너 계약의 최종 Runtime, Docs, Release dry-run gate는 대기
-중이므로 final SHA나 workflow run을 주장하지 않습니다. 과거 PV16/PV17 증거는
-provenance로만 보존합니다.
+Stage A 구현 revision
+`53db135bd156b6d65dc91785a671dec5249c95d4`는 [Runtime portability run
+34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821)과
+[Documentation site run
+34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964)를
+통과했습니다. [Release dry-run
+34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)도
+통과했습니다. 여덟 개 정확한 프로필은 Stage A에서 Official이며 D1은
+managed SQLite 버전이 공개되지 않아 Compatible입니다. 이 기록은
+revision별입니다. 이후 revision(이 업데이트로 생성되는 revision 포함)에는 별도
+Stage B Runtime, Docs, Release exact-final SHA 검증이 필요하며 Stage B 완료나 package 발행은
+주장하지 않습니다. 과거 PV16/PV17 증거는 provenance로만 보존합니다.
 
 ## 포함된 계약
 
@@ -51,15 +60,14 @@ provenance로만 보존합니다.
 
 ## 검증 상태
 
-PV18 프로필의 최종 gate가 아직 없으므로 공유 매니페스트의 변경된 표현
-cell은 Pending입니다. 대기 중인 Runtime gate는 Node 22의 전체 Vitest,
-Node 24의 기존 `test:all`, fidelity benchmark, 하나의 최종 revision에서
-실행하는 Docs/Release dry-run입니다. docs-pages workflow는 push에서
-자동 검증하지만 `deploy=true`인 명시적인 `workflow_dispatch`에서만 Pages
-배포와 history 업데이트를 수행합니다. D1의 managed SQLite 버전은 공개되지
-않으며 Oracle Free 23.9가 19c를 인증하지는 않습니다. 증거는 revision별이며
-이후 변경은 자체 게이트가 필요합니다. 실제 발행은 생략했고, 사용자 수락과
-명시적인 릴리스 승인은 별도입니다.
+Stage A 공유 매니페스트 artifact 중 PG16.4, 범위를 지정한 PG18.6,
+MySQL 8.4.2, MariaDB 11.8.9, Oracle Free 23.9, SQL Server 2022 CU18
+Developer, Node SQLite 3.50.2, browser WASM 3.53.4의 여덟 개는
+`exactTupleObserved=true`, `missingTests=[]`를 보고합니다. 이 기록은 위
+Stage A revision에 귀속된 revision별 증거이며 Stage A에서 Official입니다.
+이후 revision에는 별도 Stage B exact-final SHA 검증이 필요합니다. 실제 발행은 주장하지
+않으며 사용자 수락과 명시적인 릴리스 승인은 별도입니다. D1의 managed
+SQLite 버전은 공개되지 않아 Compatible입니다.
 
 ## 업그레이드 규율
 

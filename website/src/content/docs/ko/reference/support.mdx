@@ -7,11 +7,15 @@ import SupportMatrix from "../../../../components/SupportMatrix.astro";
 
 PV18은 PV17 raw-value 규칙을 유지하면서 profile 계약을 정교화합니다. 정확한 DB 숫자는 string이고
 IEEE-754 근사값은 number이며 JSON/temporal text 프로필은 parsed/native 편의
-프로필과 구분됩니다. 마이그레이션은
-`2119d9676b05fb2531eaf7aac1ef37741600ba40`에서 시작했으며 최종 Runtime,
-Docs, Release dry-run gate는 대기 중입니다. 인증 범위는 이후 gate에 기록한
-정확한 프로필과 capability 조건뿐이며 DB/driver의 모든 버전이 아닙니다.
-CI 성공은 package 발행을 의미하지 않습니다.
+프로필과 구분됩니다. Stage A 구현 revision은
+`53db135bd156b6d65dc91785a671dec5249c95d4`입니다. 해당 revision의
+[Runtime portability run 34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821),
+[Documentation site run 34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964),
+[Release dry-run 34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)가
+모두 통과했습니다. 아래의 여덟 exact tuple artifact는 기록된 프로필과
+capability 조건에 따라 Stage A에서 Official입니다. 이후 revision에는 별도의
+Stage B Runtime, Docs, Release exact-final SHA 검증이 필요하며 Stage B 완료나
+package 발행은 주장하지 않습니다.
 
 ## 증거 label
 
@@ -32,9 +36,13 @@ CI 성공은 package 발행을 의미하지 않습니다.
 Dialect, driver, runtime, server version은 별도 증거 축입니다. 검증된 taxonomy는
 [`support/`](https://github.com/Clickin/SQLBraid/tree/main/support)에
 기록하며 runtime은 이 파일을 읽지 않습니다. 대화형 매트릭스는 CI가 검사하는
-동일한 기계 판독 대상, capability 조건, test ID의 정식 표시입니다. 변경된
-표현 계약에 맞는 exact-SHA gate가 끝날 때까지 PV18 프로필 cell은 Pending입니다.
-D1은 로컬 workerd binding을 통과했지만 managed SQLite 버전이 공개되지 않아
+동일한 기계 판독 대상, capability 조건, test ID의 정식 표시입니다. Stage A
+기록에서 PG16.4, 범위를 지정한 PG18.6, MySQL 8.4.2, MariaDB 11.8.9,
+Oracle Free 23.9, SQL Server 2022 CU18 Developer, Node SQLite 3.50.2,
+browser WASM 3.53.4의 여덟 tuple artifact는
+`exactTupleObserved=true`, `missingTests=[]`입니다. 이는 revision별 증거
+기록입니다. 해당 exact 프로필은 Stage A에서 Official입니다. D1은 로컬
+workerd binding을 통과했지만 managed SQLite 버전이 공개되지 않아
 Compatible로 유지합니다.
 
 숫자 capability cell은 semantics와 transport를 구분합니다.
@@ -73,8 +81,10 @@ runtime cost가 필요합니다. 유료 환경은 자동으로 승격하지 않�
 역사적 PV16 증거는 `sql.rows`와 materialized `db.execute`, `db.all`,
 `db.one`, `db.maybeOne`의 DML-returning을 다룹니다. SQLite RETURNING은
 출력을 먼저 축적하고 SQL Server OUTPUT은 이후 실패 전에 행을 보낼 수 있으므로
-`db.stream()`을 cross-driver 약속으로 만들지 않습니다. 이 capability의 PV18
-승격은 최종 exact-SHA 증거까지 대기 중입니다.
+`db.stream()`을 cross-driver 약속으로 만들지 않습니다. 이 capability의
+Stage A 증거는 `53db135bd156b6d65dc91785a671dec5249c95d4` 구현 revision에
+귀속되며 Runtime, Docs, Release 세 gate를 모두 통과했습니다. 이후 revision은
+최종 인증 전에 별도 Stage B exact-final SHA 검증이 필요합니다.
 
 `db.bulk(inputs, factory)`는 command-only, 하나의 shape × N values, 하나의
 physical lease, 하나의 observer 작업입니다. 빈 입력은 acquire하지 않습니다.
@@ -105,15 +115,24 @@ Server `CURSOR VARYING OUTPUT`은 애플리케이션 cursor 채널이 아닙니�
 
 ## 릴리스 증거 출처
 
-PV18의 최종 workflow run ID는 아직 없습니다. 아래의 과거 PV16/PV17 link는
-증거 provenance를 위해 보존하며 변경된 계약을 인증하지 않습니다.
+Stage A 증거는 구현 revision
+`53db135bd156b6d65dc91785a671dec5249c95d4`에 귀속됩니다. Runtime
+portability run
+[34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821),
+documentation site run
+[34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964),
+Release dry-run
+[34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)가
+모두 통과했습니다. 나열한 여덟 exact 프로필은 Stage A에서 Official입니다.
+이후 revision에는 세 gate를 통한 별도 Stage B exact-final SHA 검증이 필요하며
+Stage B 완료나 package 발행은 주장하지 않습니다.
 
 - [Runtime portability: 34818111424](https://github.com/Clickin/SQLBraid/actions/runs/34818111424) — Node 22.18.0 릴리스 게이트와 packed Bun 1.3.14 / Deno 2.9.3 host 경로
 - [Documentation site: 34818111252](https://github.com/Clickin/SQLBraid/actions/runs/34818111252) — 빌드와 링크 검사 통과, 배포 생략
 - [Release dry-run: 34818113561](https://github.com/Clickin/SQLBraid/actions/runs/34818113561) — real-engine 게이트, immutable package/VSIX와 npm dry-run 통과, 실제 발행 생략
 
-증거에는 검증한 구현 revision을 기록해야 합니다. 이후 revision은 자체 gate가
-필요하며 역사 link가 임의 checkout을 인증하지는 않습니다. Node 24.21.0은
+증거에는 검증한 구현 revision을 기록해야 합니다. 이후 revision은 자체 세
+gate가 필요하며 역사 link가 임의 checkout을 인증하지는 않습니다. Node 24.21.0은
 과거 전체 suite/finance 증거가 있지만 별도의 인증 대상은 아닙니다. Oracle
 Free 23.9는 Oracle 19c나 Thick mode를 인증하지 않습니다. RC 발행에는
 사용자 수락과 명시적인 릴리스 승인이 필요합니다.

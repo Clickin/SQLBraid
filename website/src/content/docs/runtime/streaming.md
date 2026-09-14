@@ -55,12 +55,17 @@ Routine cursor streaming is not part of the materialized routine contract. Use `
 
 MySQL rejects a second result-set metadata boundary with `BRAID_RESULT_SETS_UNSUPPORTED` before yielding any second-set row. It drains the command before releasing a reusable connection; drain failure preserves the result-set error with `BRAID_RESOURCE_CLEANUP` and discards the connection. Use `db.call()` for routines that emit multiple result sets.
 
-DML `RETURNING`/`OUTPUT` remains a materialized row contract in PV18. Final
-exact-SHA capability evidence is pending; do not infer
-that a dialect's DML-returning syntax is streamable; use an ordinary row query
-when you need the portable streaming lifecycle above.
+DML `RETURNING`/`OUTPUT` remains a materialized row contract in PV18. Stage A
+evidence for implementation revision
+`53db135bd156b6d65dc91785a671dec5249c95d4` is recorded in the [support
+matrix](/SQLBraid/reference/support/); all three Stage A Runtime, Docs, and
+Release gates passed. Do not infer that a dialect's
+DML-returning syntax is streamable; use an ordinary row query when you need the
+portable streaming lifecycle above.
 
-The MariaDB, Browser WASM, and D1 entries remain pending exact-final-SHA
-capability evidence. They are not current-final support labels.
+The MariaDB, Browser WASM, and D1 entries follow the revision-specific support
+matrix. D1 remains Compatible because its managed SQLite version is unreported;
+the listed MariaDB and Browser WASM profiles are Official for Stage A. Later
+revisions require separate Stage B exact-final SHA verification.
 
 See [transactions](/SQLBraid/runtime/transactions/), [observers](/SQLBraid/runtime/observers/), and [routine calls](/SQLBraid/concepts/routines/).

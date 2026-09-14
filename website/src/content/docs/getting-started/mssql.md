@@ -61,8 +61,12 @@ acquisition. Tedious owns effective reuse; failures in this work are
 
 ## Capability boundaries
 
-- The documented candidate is Tedious 20.0.0 on Node 22.18.0/Linux x64;
-  PV18 promotion remains pending the final exact-SHA support evidence.
+- The documented candidate is Tedious 20.0.0 on Node 22.18.0/Linux x64.
+  Stage A evidence for implementation revision
+  `53db135bd156b6d65dc91785a671dec5249c95d4` is recorded in the [support
+  matrix](/SQLBraid/reference/support/); all three Stage A Runtime, Docs, and
+  Release gates passed, and this exact profile is Official for Stage A. Later
+  revisions require separate Stage B exact-final SHA verification.
 - The target uses SQL Server 2022 CU18 Developer, Linux x64;
   local ARM emulation is outside this guide's verification scope.
 - Unhinted common values use adapter-local Tedious inference. Use an explicit hint for `null`, custom objects, precision/scale, lengths, or SQL Server-specific types.

@@ -1,6 +1,6 @@
 {
   "id": "sqlite-wasm-browser-3-53-4",
-  "status": "compatible",
+  "status": "official",
   "database": {
     "product": "sqlite",
     "version": "3.53.4",
@@ -252,8 +252,28 @@
     }
   },
   "evidence": {
-    "status": "pending",
-    "runs": []
+    "status": "verified",
+    "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
+    "runs": [
+      {
+        "workflow": ".github/workflows/runtime-portability.yml",
+        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851691821"
+      },
+      {
+        "workflow": ".github/workflows/docs-pages.yml",
+        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851706964"
+      },
+      {
+        "workflow": ".github/workflows/release.yml",
+        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851703042"
+      }
+    ]
   },
   "typePolicy": {
     "id": "sqlite-default",

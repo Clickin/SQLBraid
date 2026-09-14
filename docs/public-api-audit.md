@@ -1,17 +1,23 @@
 # 0.1.0 public API freeze audit
 
-> PV14–PV16 delta (exact-revision verification pending): the execution SPI has cut over from
+> PV14–PV16 delta (historical API inventory): the execution SPI has cut over from
 > `RenderedQuery` to immutable `RenderedStatement` (`segments` plus atomic
 > `parameters`). Core now owns `parameterizedSql`,
 > `createRenderedStatement`, and `createStatementBindingDescription`; drivers
 > own `StatementBindingAdapter` materialization and named adapter exports.
 > PV16 adds homogeneous `db.bulk()`, bulk binding/observer contracts, MariaDB,
 > SQLite WASM/D1 subpaths and Oracle row-returning OUT parameters.
-> This note records the intended API boundary, not a new SHA, CI result,
-> runtime support label, or publication. Preserve the historical inventory and
-> provenance below until the exact final revision is audited.
+> PV18 Stage A implementation revision
+> `53db135bd156b6d65dc91785a671dec5249c95d4` passed Runtime
+> ([34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821)),
+> Docs
+> ([34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964)),
+> and Release dry-run
+> ([34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)).
+> This note records the API boundary, not publication. Any subsequent final
+> revision requires a separate exact-SHA Stage B verification.
 
-Initial audit baseline: `1615311149cce6290976df3ed6e63e41dfe795d7`; PV13 extends the inventory from `d111e116d66ce9fc1b060881778ab1845874ef57e`; PV15 starts at `2aa3067dcf0c03ccde58a2eca2940c383a73729e`. PV16 adds the MariaDB package and Browser/Cloud SQLite subpaths. All 18 npm packages and every manifest export subpath are inventoried below. This is an API classification, not a claim that release CI or registry publication has passed.
+Initial audit baseline: `1615311149cce6290976df3ed6e63e41dfe795d7`; PV13 extends the inventory from `d111e116d66ce9fc1b060881778ab1845874ef57e`; PV15 starts at `2aa3067dcf0c03ccde58a2eca2940c383a73729e`. PV16 adds the MariaDB package and Browser/Cloud SQLite subpaths. All 18 npm packages and every manifest export subpath are inventoried below. This is an API classification; registry publication remains separate.
 
 - **Application**: documented application authoring/execution/configuration API.
 - **SPI**: documented low-level physical driver, provider, dialect, representation or inspector contract.
@@ -72,7 +78,7 @@ executor cannot satisfy this public SPI with an unsafe identity Number.
 
 **PV13 Application:** `BoundParameter`, `ParameterTypeHint` and `SqlTag.bind(value, hint)`.
 
-**PV14 Advanced (pending):** `createBoundParameter`, `createParameterTypeHint`,
+**PV14 Advanced:** `createBoundParameter`, `createParameterTypeHint`,
 `isBoundParameter`, `createRenderedStatement`, `parameterizedSql`, and
 `createStatementBindingDescription`. Observer parameterized/literalized SQL and
 values/hints/maps are derived views; no parallel mutable statement arrays remain.
@@ -124,7 +130,7 @@ profiles have their own TypePolicy and codegen mapping.
 
 **Application:** `createMysql2Database`, `createMysql2PoolDatabase`.
 
-**SPI:** `Mysql2ConnectionLike`, `Mysql2FieldLike`, `Mysql2PoolConnectionLike`, `Mysql2PoolLike`, `Mysql2ResultHeader`, `createMysql2Executor`, `createMysql2PoolProvider`, `mysql2StatementBinding` (PV14 pending verification).
+**SPI:** `Mysql2ConnectionLike`, `Mysql2FieldLike`, `Mysql2PoolConnectionLike`, `Mysql2PoolLike`, `Mysql2ResultHeader`, `createMysql2Executor`, `createMysql2PoolProvider`, `mysql2StatementBinding` (PV14 inventory).
 
 **Advanced:** `Mysql2DatabaseOptions`.
 
@@ -176,7 +182,7 @@ separate evidence; mysql2-on-MariaDB is best-effort compatibility.
 
 **Application:** `createOracledbDatabase`, `createOracledbPoolDatabase`.
 
-**SPI:** `OracleMetaDataLike`, `OracleResultSetLike`, `OracleExecuteResultLike`, `OracleBindLike`, `OracleExecuteOptionsLike`, `OracleConnectionLike`, `OraclePoolConnectionLike`, `OraclePoolLike`, `OracleDriverLike`, `createOracledbExecutor`, `createOracledbPoolProvider`, `createOracledbStatementBinding`, `oracledbStatementBinding` (PV14 pending verification).
+**SPI:** `OracleMetaDataLike`, `OracleResultSetLike`, `OracleExecuteResultLike`, `OracleBindLike`, `OracleExecuteOptionsLike`, `OracleConnectionLike`, `OraclePoolConnectionLike`, `OraclePoolLike`, `OracleDriverLike`, `createOracledbExecutor`, `createOracledbPoolProvider`, `createOracledbStatementBinding`, `oracledbStatementBinding` (PV14 inventory).
 
 **Advanced:** `OracleDatabaseOptions`.
 
@@ -202,7 +208,7 @@ character hint plus authored SQL CAST/CONVERT.
 
 **Application:** `createTediousDatabase`, `createTediousPoolDatabase`.
 
-**SPI:** `TediousColumnMetadataLike`, `TediousColumnLike`, `TediousRequestLike`, `TediousConnectionLike`, `TediousPoolConnectionLike`, `TediousPoolLike`, `createTediousExecutor`, `createTediousPoolProvider`, `createTediousStatementBinding`, `tediousStatementBinding` (PV14 pending verification).
+**SPI:** `TediousColumnMetadataLike`, `TediousColumnLike`, `TediousRequestLike`, `TediousConnectionLike`, `TediousPoolConnectionLike`, `TediousPoolLike`, `createTediousExecutor`, `createTediousPoolProvider`, `createTediousStatementBinding`, `tediousStatementBinding` (PV14 inventory).
 
 **Advanced:** `TediousDatabaseOptions`, `TediousExecutorOptions`.
 
@@ -233,7 +239,7 @@ bounds cursor reads. Public cursor callback metadata drives row normalization.
 
 **Application:** `createPgDatabase`, `createPgPoolDatabase`.
 
-**SPI:** `PgClientLike`, `PgFieldLike`, `PgPoolClientLike`, `PgPoolLike`, `PgResultLike`, `createPgExecutor`, `createPgPoolProvider`, `pgStatementBinding` (PV14 pending verification).
+**SPI:** `PgClientLike`, `PgFieldLike`, `PgPoolClientLike`, `PgPoolLike`, `PgResultLike`, `createPgExecutor`, `createPgPoolProvider`, `pgStatementBinding` (PV14 inventory).
 
 **Advanced:** `PgDatabaseOptions`.
 
@@ -260,7 +266,7 @@ safe-integer range.
 
 **Application:** `createNodeSqliteDatabase`.
 
-**SPI:** `SqliteColumnLike`, `SqliteDatabaseLike`, `SqliteStatementLike`, `createNodeSqliteExecutor`, `nodeSqliteStatementBinding` (PV14 pending verification).
+**SPI:** `SqliteColumnLike`, `SqliteDatabaseLike`, `SqliteStatementLike`, `createNodeSqliteExecutor`, `nodeSqliteStatementBinding` (PV14 inventory).
 
 ## @sqlbraid/sqlite/wasm
 

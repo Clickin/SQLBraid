@@ -38,8 +38,13 @@ temporal, binary 값이 기록되어 있습니다.
 ## 문서 출시 안내
 
 이 문서는 0.1.0 프리릴리스 문서입니다. PV18 profile-coherent 값 정확도와
-container 작업은 `2119d9676b05fb2531eaf7aac1ef37741600ba40`에서 시작하며
-최종 Runtime, Docs, Release dry-run 증거는 대기 중이고 npm 발행을 주장하지 않습니다. 통합을 선택하기 전에
+container 작업은 `2119d9676b05fb2531eaf7aac1ef37741600ba40`에서 시작합니다.
+Stage A 구현 증거는 `53db135bd156b6d65dc91785a671dec5249c95d4` revision에
+기록되었고 Runtime, Docs, Release 세 gate를 모두 통과했습니다. 여덟 개
+정확한 프로필은 Stage A에서 Official이며 D1은 Compatible입니다.
+[revision별 증거](/SQLBraid/reference/support/#릴리스-증거-출처)를
+확인하세요. 이후 revision에는 별도 Stage B exact-final SHA 검증이 필요하며 Stage B 완료나
+npm 발행은 주장하지 않습니다. 통합을 선택하기 전에
 [릴리스 노트와 제한
 사항](/SQLBraid/release/notes/) 및 [런타임/드라이버 증거
 매트릭스](/SQLBraid/reference/support/)를 확인하세요.

@@ -986,11 +986,27 @@ Non-negotiable:
   Official claim.
 
 The PV16 records above are historical evidence only. PV18 starts from review
-baseline `2119d9676b05fb2531eaf7aac1ef37741600ba40`; its profile/container
-contract requires new exact-SHA Runtime, Docs and Release dry-run gates. No
-current run ID, final SHA, or support-label promotion is claimed here. D1 remains
+baseline `2119d9676b05fb2531eaf7aac1ef37741600ba40`; implementation revision
+`53db135bd156b6d65dc91785a671dec5249c95d4` has passed the Stage A Runtime
+[34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821) and
+Docs
+[34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964)
+gates. Stage A Release dry-run
+[34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042) also
+passed. The eight eligible exact tuples are Official for that revision:
+PG16.4, scoped PG18.6, MySQL8.4.2, MariaDB11.8.9, OracleFree23.9,
+MSSQL2022CU18Developer, NodeSQLite3.50.2, and browserWASM3.53.4. D1 remains
 Compatible because its managed SQLite version is unreported, and Oracle Free
-23.9 evidence does not certify Oracle 19c.
+23.9 evidence does not certify Oracle 19c. Stage B is a separate
+exact-final-SHA verification and is not claimed here; publication remains
+unauthorized.
+
+The eight eligible Stage A tuple artifacts report `exactTupleObserved=true` and
+`missingTests=[]`: PG16.4, scoped PG18.6, MySQL8.4.2, MariaDB11.8.9,
+OracleFree23.9, MSSQL2022CU18Developer, NodeSQLite3.50.2, and
+browserWASM3.53.4. These observations are revision-specific implementation
+evidence for the corresponding Official labels; they do not authorize
+publication.
 
 The workspace has 18 publishable packages. Certification records name the
 verified implementation revision; subsequent changes require their own exact-SHA
@@ -998,7 +1014,7 @@ Runtime, Docs and Release dry-run gates. User acceptance and explicit release
 authorization remain required. No tag, publication or dist-tag mutation is
 authorized by implementation progress.
 
-### PV18 — Profile-coherent fidelity, containers, and RC certification — pending
+### PV18 — Profile-coherent fidelity, containers, and RC certification — Stage A verified; Stage B separate
 
 - every effective PostgreSQL, mysql2, and MariaDB representation profile has a
   stable descriptor (`id`, JSON/temporal modes, TypePolicy, and exact connection
@@ -1021,8 +1037,12 @@ authorized by implementation progress.
 - EN/KO data-representation, driver setup, support, limitations, roadmap,
   release notes, driver-author, README, public API, and readiness docs remain
   synchronized. Free-only support policy and contributor-owned CI are required;
-- final Runtime, Docs, benchmark, and Release dry-run gates must pass on one
-  exact final SHA before any RC readiness or support-label promotion claim.
+- All three Stage A gates passed on implementation revision
+  `53db135bd156b6d65dc91785a671dec5249c95d4`. The eight eligible exact tuples
+  are Official under the matching evidence records. Any subsequent final
+  revision requires Stage B to pass Runtime, Docs, and Release dry-run on one
+  exact SHA before its evidence can supersede this revision; no Stage B result
+  is claimed here.
 
 ### Post-release candidates
 

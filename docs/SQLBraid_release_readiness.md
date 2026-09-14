@@ -2,32 +2,50 @@
 
 This document records what the repository automates and what a maintainer must configure outside the repository. It contains no credentials or registry tokens.
 
-### PV18 pending evidence
+### PV18 Stage A evidence and Stage B requirement
 
 PV18 starts from review baseline `2119d9676b05fb2531eaf7aac1ef37741600ba40`
 and keeps the public value boundary: exact database numerics are strings,
 approximate IEEE values are numbers, and JSON/temporal text profiles are
 distinct from parsed/native convenience. PV18 additionally requires each
 effective representation profile to have one matching TypePolicy, codegen
-selection, and support descriptor. No final PV18 SHA or workflow run is
-recorded yet.
+selection, and support descriptor. The implementation revision for Stage A is
+`53db135bd156b6d65dc91785a671dec5249c95d4`.
 
-The pending release gates are the simplified current workflow: one full Vitest
-pass on Node 22, the existing `test:all` pass on Node 24, the fidelity
-benchmark, and the documentation/release dry-run checks on one final revision.
+Stage A Runtime
+([34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821))
+and Docs
+([34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964))
+passed for that revision. Stage A Release dry-run
+([34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042))
+also passed. The eight eligible exact tuples are Official for that revision. Stage B
+is a separate exact-final-SHA verification and is not claimed here; publication
+still requires user acceptance and explicit release authorization.
+
+The release gates are the simplified current workflow: one full Vitest pass on
+Node 22, the existing `test:all` pass on Node 24, the fidelity benchmark, and
+the documentation/release dry-run checks on one final revision.
 The docs-pages workflow validates automatically on push but deploys or updates
 history only when explicitly dispatched with `deploy=true`. A passing
 validation does not deploy Pages, publish packages, mutate tags/dist-tags, or
 authorize a release.
 
-Do not promote a support target or claim an exact profile until these gates
-record the same final commit SHA. Any current matrix cell without that evidence
-is Pending, Guarded, Conditional, Unknown, or Unsupported as appropriate.
+The eight eligible Stage A tuple artifacts report `exactTupleObserved=true` and
+`missingTests=[]`: PG16.4, scoped PG18.6, MySQL8.4.2, MariaDB11.8.9,
+OracleFree23.9, MSSQL2022CU18Developer, NodeSQLite3.50.2, and
+browserWASM3.53.4. These revision-specific observations support the matching
+Official labels; they do not authorize publication. D1 remains Compatible
+because its managed SQLite version is unreported.
+
+Current Official status is limited to those exact tuples. Any matrix cell
+without matching exact evidence is Pending, Guarded, Conditional, Unknown, or
+Unsupported as appropriate.
 In particular, a profile option change is a new target: driver raw
 representation, SQLBraid canonical representation, TypePolicy `id`/`hash`, and
 connection options must agree. Runtime and codegen must reuse that descriptor.
-RC readiness remains Pending until the P0 profile mismatch is fixed, intended
-Official targets have exact evidence, and the final exact-SHA gates are green.
+Any subsequent final revision requires Stage B to pass Runtime, Docs, and
+Release dry-run on one exact SHA before its evidence can supersede this
+revision; no Stage B result is claimed here.
 
 ### Historical PV16 evidence status
 

@@ -100,10 +100,13 @@ for an approximate type.
 
 ## Driver profiles
 
-The following is the PV18 direction; the support matrix remains the evidence
-source for each exact database/runtime revision. A profile is the complete
-driver configuration that changes result JavaScript types, not a convenient
-label attached after the fact.
+The following is the PV18 contract. Stage A evidence is recorded for
+implementation revision `53db135bd156b6d65dc91785a671dec5249c95d4`; all three
+Stage A Runtime, Docs, and Release gates passed. The [support
+matrix](/SQLBraid/reference/support/) remains the evidence source for each exact
+database/runtime revision. A profile is the complete driver configuration that
+changes result JavaScript types, not a convenient label attached after the fact.
+Later revisions require separate Stage B exact-final SHA verification.
 
 The first-party profile helpers keep runtime and codegen on the same contract:
 

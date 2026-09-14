@@ -1,14 +1,24 @@
 ---
 title: PV18 draft release notes
-description: The pending PV18 surface for profile-coherent fidelity, containers, DML returning, bulk, MariaDB, Browser WASM, and D1.
+description: The Stage A PV18 surface for profile-coherent fidelity, containers, DML returning, bulk, MariaDB, Browser WASM, and D1.
 ---
 
 PV18 starts from review baseline `2119d9676b05fb2531eaf7aac1ef37741600ba40`.
-Final Runtime, Docs and Release dry-run evidence is pending; do not infer
-support claims or release authorization from this draft. The docs-pages workflow
+Stage A implementation revision
+`53db135bd156b6d65dc91785a671dec5249c95d4` has passed the [Runtime
+portability run 34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821)
+and [Documentation site run
+34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964).
+The [Release dry-run
+34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)
+also passed. The eight eligible exact profiles are Official for Stage A; D1
+remains Compatible because its managed SQLite version is unreported. These
+records are revision-specific. Any later revision, including the revision
+produced by this update, requires separate Stage B exact-final SHA verification
+by Runtime, Docs, and Release gates; no Stage B completion or package
+publication is claimed. The docs-pages workflow
 validates on push but deploys or updates history only from an explicit
-`workflow_dispatch` with `deploy=true`. No final PV18 SHA, workflow run, npm RC,
-or stable publication is claimed.
+`workflow_dispatch` with `deploy=true`.
 
 ## Included contract
 
@@ -46,11 +56,14 @@ or stable publication is claimed.
 
 ## Verification status
 
-The shared manifest cells are pending PV18's final exact-SHA gates. The pending
-runtime gates are one full Vitest pass on Node 22, the existing `test:all` pass
-on Node 24, the fidelity benchmark, and the documentation/release dry-run on
-one final revision. Actual publication was skipped; user acceptance and
-explicit release authorization remain separate.
+The Stage A shared-manifest artifacts for PG16.4, scoped PG18.6, MySQL 8.4.2,
+MariaDB 11.8.9, Oracle Free 23.9, SQL Server 2022 CU18 Developer, Node SQLite
+3.50.2, and browser WASM 3.53.4 report `exactTupleObserved=true` and
+`missingTests=[]`. These records are tied to the Stage A revision above and
+remain revision-specific and are Official for Stage A. Any later revision
+requires separate Stage B exact-final SHA verification. Actual publication is not claimed, and
+user acceptance plus explicit release authorization remain separate. D1 remains
+Compatible because its managed SQLite version is unreported.
 
 ### Historical PV16 evidence
 

@@ -62,6 +62,8 @@ semantics를 제공하더라도 선택한 어댑터 문서 밖에서 의존하�
 | Oracle Thin | `native-bulk` | `executeMany()` 1회 |
 | SQL Server / Tedious | `prepared-loop` | prepare/unprepare 1회씩, execute N회 |
 
-PV18 지원 및 capability 증거는 정확한 최종 revision을 기다리고 있습니다.
-[런타임 및 드라이버 지원](/SQLBraid/reference/support/)과 [제한 사항](/SQLBraid/release/limitations/)을
-참고하세요.
+Stage A 구현 증거는 `53db135bd156b6d65dc91785a671dec5249c95d4` revision에
+기록되었고 Runtime, Docs, Release 세 gate를 모두 통과했습니다. [런타임 및
+드라이버 지원](/SQLBraid/reference/support/)과 [제한
+사항](/SQLBraid/release/limitations/)에서 정확한 프로필과 capability 조건을
+확인하세요. 이후 revision에는 별도 Stage B exact-final SHA 검증이 필요합니다.

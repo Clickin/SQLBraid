@@ -4,10 +4,17 @@ Write SQL. Keep TypeScript. Skip the query-builder translation layer.
 
 Draft release notes; this document does not claim an npm RC or stable
 publication. PV18 starts from review baseline
-`2119d9676b05fb2531eaf7aac1ef37741600ba40`. Final Runtime, Docs and Release
-dry-run gates for profile-coherent fidelity and container changes are pending,
-so no final SHA or workflow run is claimed. Historical PV16/PV17 evidence remains below as
-provenance only; publication steps remain skipped.
+`2119d9676b05fb2531eaf7aac1ef37741600ba40`. The Stage A implementation
+revision is `53db135bd156b6d65dc91785a671dec5249c95d4`; Runtime
+([34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821))
+and Docs
+([34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964))
+passed, as did the required Release dry-run
+([34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)).
+The eight eligible exact tuples are Official for that revision. Any subsequent
+final revision requires Stage B to pass Runtime, Docs, and Release dry-run on
+one exact SHA before its evidence can supersede this revision; no Stage B result
+is claimed here. Publication steps remain skipped.
 
 SQLBraid 0.1.0 provides:
 
@@ -65,7 +72,10 @@ SQLBraid 0.1.0 provides:
 - An agent-native language server, CLI JSON inspection fallback, and a VS Code extension.
 - Five-dialect tooling, a driver-free unscoped `sqlbraid` CLI package, and English/Korean documentation under mutable `/dev/` and immutable `/v/<version>/` URLs.
 - Historical PV16/PV17 release evidence for Node 22.18.0, Bun 1.3.14, and Deno
-  2.9.3 packed artifacts; PV18 requires new exact-SHA gates.
+  2.9.3 packed artifacts remains provenance only. PV18 Stage A additionally
+  records `exactTupleObserved=true` and `missingTests=[]` for PG16.4, scoped
+  PG18.6, MySQL8.4.2, MariaDB11.8.9, OracleFree23.9,
+  MSSQL2022CU18Developer, NodeSQLite3.50.2, and browserWASM3.53.4.
 
 ## Current limitations
 
@@ -108,7 +118,8 @@ The earlier PV16/PV17 implementations used SQLite integer modes and exposed some
 exact integer values as `bigint`. It also recorded its own revision-specific
 Runtime, Docs and Release dry-run links. Those statements are retained as
 historical provenance only and are superseded by the PV18 canonical-string
-contract; they do not certify the current source or PV18 support targets.
+contract; they do not certify the current source or PV18 support targets. D1
+remains Compatible because its managed SQLite version is unreported.
 
 ## Artifact and provenance record
 

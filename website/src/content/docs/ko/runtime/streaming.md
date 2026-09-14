@@ -55,9 +55,16 @@ stream이 살아 있는 동안 transaction callback을 반환하지 마세요.
 
 MySQL은 두 번째 result-set 메타데이터 경계에서 `BRAID_RESULT_SETS_UNSUPPORTED`로 실패하며 두 번째 집합의 행은 전달하지 않습니다. command를 drain한 뒤 재사용 가능한 연결을 반환합니다. drain 실패 시 result-set 오류와 `BRAID_RESOURCE_CLEANUP`을 함께 보존하고 연결을 폐기합니다. 여러 result set을 내보내는 루틴에는 `db.call()`을 사용하세요.
 
-DML `RETURNING`/`OUTPUT`은 PV18에서도 materialized row 계약입니다. 최종
-exact-SHA capability 증거가 대기 중이므로 해당 문법이 streaming 가능하다고
-추론하지 마세요. MariaDB, Browser WASM, D1 항목은 정확한
-최종 SHA capability 증거가 pending이며 현재 최종 지원 label이 아닙니다.
+DML `RETURNING`/`OUTPUT`은 PV18에서도 materialized row 계약입니다.
+`53db135bd156b6d65dc91785a671dec5249c95d4` 구현 revision의 Stage A 증거가
+[지원 매트릭스](/SQLBraid/reference/support/)에 기록되었고 Runtime, Docs,
+Release 세 gate를 모두 통과했습니다. 해당 문법이 streaming
+가능하다고 추론하지 말고 위의 portable streaming lifecycle이 필요하면
+일반 row query를 사용하세요.
+
+MariaDB, Browser WASM, D1 항목은 revision별 지원 매트릭스를 따릅니다. D1은
+managed SQLite 버전이 공개되지 않아 Compatible이며 MariaDB와 Browser WASM
+프로필은 Stage A에서 Official입니다. 이후 revision에는 별도 Stage B
+exact-final SHA 검증이 필요합니다.
 
 [트랜잭션](/SQLBraid/runtime/transactions/), [observer](/SQLBraid/runtime/observers/), [루틴 호출](/SQLBraid/concepts/routines/)도 참고하세요.

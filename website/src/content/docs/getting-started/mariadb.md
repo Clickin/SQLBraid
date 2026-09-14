@@ -44,9 +44,12 @@ not implicitly transactional and has no portable auto-chunking promise. Use
 
 A `mysql2` connection may work against MariaDB as best-effort compatibility, but
 it is not Official MariaDB syntax or protocol evidence. The documented
-candidate profile is MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0; PV18
-promotion still requires its revision-specific exact-SHA evidence in the
-support manifest, not inference from package installation.
+candidate profile is MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0. Stage A evidence for
+implementation revision `53db135bd156b6d65dc91785a671dec5249c95d4` is recorded
+in the [support manifest](/SQLBraid/reference/support/); all three Stage A
+Runtime, Docs, and Release gates passed, and this exact profile is Official for
+Stage A. Do not infer certification for later revisions from package
+installation; those revisions require separate Stage B exact-final SHA verification.
 
 ## Connector/Node.js representation profile
 

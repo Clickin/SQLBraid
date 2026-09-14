@@ -3,7 +3,7 @@ title: Driver-author binding guide
 description: Implement a custom SQLBraid binding adapter without crossing the value-only security boundary.
 ---
 
-This guide is for custom `QueryExecutor`, `ConnectionProvider`, and driver adapters. PV18 final verification is pending; this page does not claim a current CI result, SHA, runtime support label, or publication evidence.
+This guide is for custom `QueryExecutor`, `ConnectionProvider`, and driver adapters. Stage A implementation evidence is recorded for revision `53db135bd156b6d65dc91785a671dec5249c95d4`; all three Runtime, Docs, and Release gates passed. See the [revision-specific evidence](/SQLBraid/reference/support/#release-evidence-provenance). This page does not grant a runtime support label or publication evidence; later revisions require separate Stage B exact-final SHA verification.
 
 ## Logical statement invariant
 

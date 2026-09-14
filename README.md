@@ -21,12 +21,18 @@ const users = sql.rows<UserRow>`
 `;
 ```
 
-> **Status:** pre-release PV18. Profile-coherent value fidelity and container
-> coverage are in progress from the PV18 review baseline
-> `2119d9676b05fb2531eaf7aac1ef37741600ba40`. Final Runtime, Docs and Release
-> dry-run gates for the changed contract are pending; no current revision or
-> workflow result is claimed. RC publication still requires user acceptance and
-> explicit release authorization. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release PV18 implementation revision
+> `53db135bd156b6d65dc91785a671dec5249c95d4`, from review baseline
+> `2119d9676b05fb2531eaf7aac1ef37741600ba40`. Stage A Runtime
+> ([34851691821](https://github.com/Clickin/SQLBraid/actions/runs/34851691821))
+> and Docs
+> ([34851706964](https://github.com/Clickin/SQLBraid/actions/runs/34851706964))
+> passed, as did the Stage A Release dry-run
+> ([34851703042](https://github.com/Clickin/SQLBraid/actions/runs/34851703042)).
+> The eight eligible exact tuples are current Official evidence; D1 remains
+> Compatible. Stage B is a separate exact-final-SHA verification and is not
+> claimed here. No RC publication is claimed; user acceptance and explicit
+> release authorization remain required. See [`PLAN.md`](./PLAN.md).
 
 [Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) ·
 [Documentation](https://clickin.github.io/SQLBraid/) ·
@@ -225,8 +231,11 @@ The native clauses stay visible and differ by dialect:
 | Oracle | `RETURNING ... INTO` plus `sql.out()` | adapter-specific OUT normalization |
 | MySQL | no generic DML-returning clause | use a native MySQL statement or a separate query |
 
-PV18 retains a materialized DML-returning contract only. Final exact-SHA
-capability evidence is pending; `db.stream()` for DML-returning is not a
+PV18 retains a materialized DML-returning contract only. Stage A capability
+evidence is recorded on implementation revision
+`53db135bd156b6d65dc91785a671dec5249c95d4`; any subsequent final revision
+requires Stage B to pass the same three gates on one exact SHA.
+`db.stream()` for DML-returning is not a
 portable support claim because drivers differ in buffering, statement
 completion, cancellation, and rollback behavior. SQLBraid does not rewrite one
 dialect's clause into another.
@@ -597,15 +606,15 @@ provenance and does not certify the changed PV18 profile/container contract.
 | Node | Compatible | 24.21.0 | Full-suite/finance CI evidence; no separate certified target |
 | Bun | Official | 1.3.14 | Packed core/runtime and pg/mysql2 host paths |
 | Deno | Official | 2.9.3 | Packed core/runtime, pg/mysql2 and node:sqlite host paths |
-| Browser | Historical | Chromium 153.0.8010.12 | SQLite WASM 3.53.4, native int64/CAPI transport with string output (historical PV16 evidence; PV18 gate pending) |
+| Browser | Historical | Chromium 153.0.8010.12 | SQLite WASM 3.53.4, native int64/CAPI transport with string output (historical PV16 evidence; separate from PV18 Stage A tuple evidence) |
 | Worker | Compatible | workerd 1.20260730.1 | Local D1 binding verified; managed SQLite version unreported |
 
 ### First-party driver host support
 
 Host portability does not extend the database versions or native capabilities
 certified by the [target manifests](./support/targets/). The rows below retain
-historical host labels for orientation only; PV18 does not promote them as
-current Official evidence until Main records the exact final-SHA gates.
+historical host labels for orientation only. Current PV18 Official status comes
+only from the exact tuple artifacts listed below.
 
 | Adapter | Node 22.18.0 | Node 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
 | --- | --- | --- | --- | --- |
@@ -621,10 +630,16 @@ current Official evidence until Main records the exact final-SHA gates.
 The [development documentation's exact-SHA evidence](https://clickin.github.io/SQLBraid/dev/reference/support/#release-evidence-provenance),
 [current runtime runs](https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml?query=branch%3Amain)
 and [immutable release workflow](https://github.com/Clickin/SQLBraid/actions/workflows/release.yml)
-are the release evidence entrypoints. Match a future run's commit SHA to the
-artifact you use; PV18 currently has no final run ID or exact-SHA claim.
+are the release evidence entrypoints. For PV18 Stage A, revision
+`53db135bd156b6d65dc91785a671dec5249c95d4` has exact tuple observations with
+`missingTests=[]` for PG16.4, scoped PG18.6, MySQL8.4.2, MariaDB11.8.9,
+OracleFree23.9, MSSQL2022CU18Developer, NodeSQLite3.50.2, and
+browserWASM3.53.4. D1 remains Compatible because its managed SQLite version is
+unreported. Stage B must match each evidence artifact to one exact final SHA for
+any subsequent revision. No SQL keyword classifier or substitute SQLite driver
+is used.
 Historical PostgreSQL/MySQL, Bun/Deno, and SQLite host checks remain historical
-only. No SQL keyword classifier or substitute SQLite driver is used.
+only.
 
 Compiler, CLI, language server, and metadata/codegen tooling remain **Node-first**.
 Other drivers remain **Custom** through `QueryExecutor` / `ConnectionProvider`.

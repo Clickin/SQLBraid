@@ -3,7 +3,7 @@ title: 드라이버 작성자 바인딩 가이드
 description: 값 전용 보안 경계를 지키는 사용자 지정 SQLBraid 바인딩 어댑터를 구현합니다.
 ---
 
-이 문서는 사용자 지정 `QueryExecutor`, `ConnectionProvider`, 드라이버 어댑터를 위한 것입니다. PV18 최종 검증은 대기 중이며 현재 CI·SHA·런타임 지원 label·배포 증거를 주장하지 않습니다.
+이 문서는 사용자 지정 `QueryExecutor`, `ConnectionProvider`, 드라이버 어댑터를 위한 것입니다. Stage A 구현 증거는 `53db135bd156b6d65dc91785a671dec5249c95d4` revision에 기록되었고 Runtime, Docs, Release 세 gate를 모두 통과했습니다. [revision별 증거](/SQLBraid/reference/support/#릴리스-증거-출처)를 참고하세요. 이 페이지 자체는 런타임 지원 label이나 배포 증거를 부여하지 않으며 이후 revision에는 별도 Stage B exact-final SHA 검증이 필요합니다.
 
 ## 논리 문장 불변식
 
