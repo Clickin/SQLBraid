@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { PerformanceObserver, performance } from "node:perf_hooks";
 import { DatabaseSync } from "node:sqlite";
 import { normalizeExactInteger, decodeExactInteger, UnsupportedFeatureError } from "@sqlbraid/core";
@@ -490,25 +490,33 @@ async function runFamily(transport, transportIndex) {
 }
 
 function runFamilyProcess(transport, transportIndex) {
-  const result = spawnSync(process.execPath, [...process.execArgv, process.argv[1], ...process.argv.slice(2)], {
-    env: {
-      ...process.env,
-      PV18_BENCHMARK_CHILD: "1",
-      PV18_CHILD_TRANSPORT: transport,
-      PV18_CHILD_TRANSPORT_INDEX: String(transportIndex),
-    },
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [...process.execArgv, process.argv[1], ...process.argv.slice(2)], {
+      env: {
+        ...process.env,
+        PV18_BENCHMARK_CHILD: "1",
+        PV18_CHILD_TRANSPORT: transport,
+        PV18_CHILD_TRANSPORT_INDEX: String(transportIndex),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (status, signal) => {
+      if (status !== 0) {
+        reject(new Error(`PV18 benchmark child failed for ${transport} (exit ${status ?? signal}): ${stderr.trim()}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (error) {
+        reject(new Error(`PV18 benchmark child emitted invalid JSON for ${transport}: ${error.message}`));
+      }
+    });
   });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`PV18 benchmark child failed for ${transport} (exit ${result.status}): ${result.stderr.trim()}`);
-  }
-  try {
-    return JSON.parse(result.stdout);
-  } catch (error) {
-    throw new Error(`PV18 benchmark child emitted invalid JSON for ${transport}: ${error.message}`);
-  }
 }
 
 async function main() {
@@ -523,9 +531,12 @@ async function main() {
     return;
   }
 
-  const families = [];
-  for (const [transportIndex, transport] of TRANSPORTS.entries()) {
-    families.push(ISOLATION === "family" ? runFamilyProcess(transport, transportIndex) : await runFamily(transport, transportIndex));
+  // Each family is an isolated child process; run them concurrently without sharing DB or heap state.
+  const families = ISOLATION === "family"
+    ? await Promise.all(TRANSPORTS.map((transport, transportIndex) => runFamilyProcess(transport, transportIndex)))
+    : [];
+  if (ISOLATION === "none") {
+    for (const [transportIndex, transport] of TRANSPORTS.entries()) families.push(await runFamily(transport, transportIndex));
   }
   const workloads = families.flatMap((family) => family.workloads);
   const rawDriverProbe = families[0].rawDriverProbe;
