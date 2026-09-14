@@ -4,12 +4,28 @@ This document records what the repository automates and what a maintainer must c
 
 ### PV16 evidence status
 
-PV16 adds named MariaDB, native dialect capability, bulk, Browser SQLite WASM,
-and local D1 gates. The local working-tree checks below pass; exact-final-SHA CI
-remains pending. This document makes no new Official support or publication
-claim for those paths. The PostgreSQL minimum role remains 16.4; the separate
-current capability role uses PostgreSQL 18.6. The Oracle provisioner is Oracle
-Free 23.9, so it must not be cited as Oracle 19c evidence.
+Implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed all
+three required workflows:
+
+| Workflow | Result | Evidence |
+| --- | --- | --- |
+| Runtime portability | Success, all three jobs | [34818111424](https://github.com/Clickin/SQLBraid/actions/runs/34818111424) |
+| Documentation site | Success; deployment skipped | [34818111252](https://github.com/Clickin/SQLBraid/actions/runs/34818111252) |
+| Release dry-run | Success; npm/GitHub publication skipped | [34818113561](https://github.com/Clickin/SQLBraid/actions/runs/34818113561) |
+
+The release run includes PostgreSQL 18.6, immutable packing, all 18 package/VSIX
+checks and npm publication dry-run. The integrated local check passed 63 Vitest
+files / 469 tests, actual WASM/D1 and editor hosts, packed Node/Bun/Deno drivers,
+and 87 documentation pages / 4,347 links before evidence-only documentation
+updates. All 43 EN/KO page pairs are tracked without opt-outs.
+
+Eight exact profiles are certified in `support/targets/`. D1's local binding
+passes but remains Compatible because its managed SQLite version is unreported.
+The PostgreSQL minimum role remains 16.4; the separate current capability role
+uses 18.6. Oracle Free 23.9 does not supply Oracle 19c evidence. Node 24.21.0 has
+full-suite/finance CI evidence but remains outside the separately certified
+target set. Evidence records name their tested revision; later revisions need
+their own gate results.
 
 ### Historical PV16 baseline evidence — 2026-09-14
 
@@ -57,9 +73,8 @@ must succeed on one final revision before treating PV16 as RC-ready.
 
 PV15 native streaming, routine contracts and Vite integration are the implemented
 baseline covered again by PV16's release gates. RC publication remains
-deferred until PV16 development, review and user acceptance are complete. This
-readiness record therefore makes no new SHA, CI, runtime support, or package
-version claim.
+deferred pending user acceptance and explicit release authorization. Verified
+CI does not publish a package, change a dist-tag or authorize a release.
 
 ### PV15 local working-tree evidence
 

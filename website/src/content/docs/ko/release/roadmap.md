@@ -7,6 +7,10 @@ description: 출시된 동작과 별도 설계 및 증거가 필요한 후보를
 
 출시 범위에는 SQL 우선 템플릿, 안전한 바인드, 동적 `@braid`, 결과 계약, Standard Schema 매핑, 물리적 연결 leasing, 트랜잭션/savepoint, stream, observer, metadata v1, 결정적 codegen, 표준 LSP, CLI JSON 대체 수단, 얇은 VS Code client, native DML-returning 계약, 동종 command bulk, MariaDB, Browser SQLite WASM, D1, 명시적 숫자 정확도 프로필이 포함됩니다.
 
+PV16 구현 증거는 [지원 매트릭스](/SQLBraid/reference/support/)에 기록합니다.
+인증은 정확한 프로필의 범위이며 미래 버전을 포함하지 않습니다. RC 발행에는
+여전히 사용자 수락과 명시적인 릴리스 승인이 필요합니다.
+
 ## 출시 후 후보
 
 현재 API가 아니며 지원되는 것처럼 프로덕션 코드에 복사해서는 안 됩니다.

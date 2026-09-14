@@ -2,8 +2,10 @@
 
 MariaDB SQL dialect and official MariaDB Connector/Node.js adapter for SQLBraid.
 
-PV16 exact-SHA MariaDB 11.8 evidence is pending. A package name or local
-fixture is not an Official support claim.
+The MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0 exact profile passed
+[PV16 release dry-run](https://github.com/Clickin/SQLBraid/actions/runs/34818113561)
+at `2890ef65d15ac96a7e3471911b381340aa30579a`. This is not an npm publication
+or a certification of other driver/server profiles.
 
 ```sh
 npm install @sqlbraid/mariadb mariadb

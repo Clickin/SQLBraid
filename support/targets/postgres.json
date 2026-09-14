@@ -1,6 +1,6 @@
 {
   "id": "postgres-pg-node-16-4",
-  "status": "compatible",
+  "status": "official",
   "database": { "product": "postgres", "version": "16.4", "edition": "alpine" },
   "driver": {
     "id": "pg",
@@ -56,10 +56,10 @@
     "dml.delete-returning": { "status": "guaranteed", "testIds": ["postgres.dml.delete-returning"] }
   },
   "evidence": {
-    "status": "pending",
+    "status": "verified",
+    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
     "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "b5600ebf8a3fed4b80c6f31550a37488ef057525", "status": "pending", "details": "Exact final-revision release gate has not run." },
-      { "workflow": ".github/workflows/runtime-portability.yml", "commit": "1615311", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34745030794", "details": "Historical runtime evidence; not a current PV16 certification." }
+      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Release dry-run: pinned profile and linked native capability tests." }
     ]
   }
 }

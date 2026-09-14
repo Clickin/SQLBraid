@@ -3,12 +3,12 @@ title: PV16 release notes
 description: The pre-release surface for DML returning, bulk, MariaDB, Browser WASM, and D1.
 ---
 
-Exact-final-SHA
-verification is pending; these notes make no final SHA, CI, publication, or
-Official support claim.
+Implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed
+Runtime, Docs and Release dry-run. Exact profiles and workflow links are in the
+[support evidence](/SQLBraid/reference/support/#release-evidence-provenance).
 The documentation baseline is
-`b5600ebf8a3fed4b80c6f31550a37488ef057525`; the final revision remains
-unrecorded.
+`b5600ebf8a3fed4b80c6f31550a37488ef057525`. No npm RC or stable publication is
+claimed.
 
 ## Included contract
 
@@ -32,10 +32,11 @@ unrecorded.
 
 ## Verification status
 
-Main owns PV16 final verification. Until that evidence is supplied, treat the
-support matrix as Pending and historical exact-SHA links as provenance only.
-Do not infer publication or release-gate completion from this site or from a
-package README.
+The shared manifest records eight certified exact profiles and the Compatible
+local D1 binding. D1's managed SQLite version is unreported; Oracle Free 23.9
+does not certify 19c. Evidence is revision-specific, and subsequent changes
+need their own gates. Actual publication was skipped; user acceptance and
+explicit release authorization remain separate.
 
 ## Upgrade discipline
 

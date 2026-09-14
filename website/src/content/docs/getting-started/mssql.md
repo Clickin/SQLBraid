@@ -61,16 +61,15 @@ acquisition. Tedious owns effective reuse; failures in this work are
 
 ## Capability boundaries
 
-- The target combination is Tedious on Node 22.18.0/Linux x64. PV15 final
-  verification is pending; do not treat the historical matrix as a current
-  release-gate result.
-- Historical fixtures use SQL Server 2022 CU18 (16.0.4185.3), Linux x64;
+- The certified combination is Tedious 20.0.0 on Node 22.18.0/Linux x64;
+  the support manifest records the exact successful PV16 revision.
+- The target uses SQL Server 2022 CU18 Developer, Linux x64;
   local ARM emulation is outside this guide's verification scope.
 - Unhinted common values use adapter-local Tedious inference. Use an explicit hint for `null`, custom objects, precision/scale, lengths, or SQL Server-specific types.
 - The adapter preserves multiple recordsets instead of flattening them into fabricated single-row results.
 - `CURSOR VARYING OUTPUT` is not an application cursor channel and is rejected with `BRAID_CALL_CURSOR_UNSUPPORTED`. Batches that consume a local cursor and emit `SELECT` rows return those rows as ordinary result sets.
 
-Tedious returns `decimal`/`numeric` as JavaScript numbers; this default policy does not promise arbitrary-precision decimal results. Explicit decimal-text inputs exceeding 15 significant digits are rejected with `BRAID_BIND_DECIMAL_EXACTNESS`. For exact decimal text, select an explicit SQL string conversion and declare a string result contract. `bigint` results use strings. Date/time values use `Date`, which does not preserve the original offset or sub-millisecond precision.
+Tedious returns `decimal`/`numeric` as JavaScript numbers; this default policy does not promise arbitrary-precision decimal results. Explicit decimal-text inputs exceeding 15 significant digits are rejected with `BRAID_BIND_DECIMAL_EXACTNESS`. For exact decimal text, select an explicit SQL string conversion and declare a string result contract. Tedious returns `BIGINT` as text; SQLBraid normalizes it to `bigint`. Date/time values use `Date`, which does not preserve the original offset or sub-millisecond precision.
 
 See [runtime and driver support](/SQLBraid/reference/support/) for the evidence labels and current matrix.
 
@@ -79,8 +78,8 @@ contract, see [routine calls](/SQLBraid/concepts/routines/).
 
 ## Tedious representation profile
 
-The documented free test target is SQL Server Developer/Express-compatible
-testing with Tedious on Node 22.18.0/Linux x64. The support manifest, not this
+The documented free test target is SQL Server 2022 CU18 Developer with
+Tedious 20.0.0 on Node 22.18.0/Linux x64. The support manifest, not this
 page, assigns the evidence label; another SQL Server edition or runtime is a
 separate profile.
 

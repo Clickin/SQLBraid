@@ -1,6 +1,6 @@
 {
   "id": "mysql-mysql2-node-8-4-2",
-  "status": "compatible",
+  "status": "official",
   "database": { "product": "mysql", "version": "8.4.2", "edition": "community" },
   "driver": {
     "id": "mysql2",
@@ -55,10 +55,10 @@
     "dml.merge-returning": { "status": "unsupported", "testIds": [] }
   },
   "evidence": {
-    "status": "pending",
+    "status": "verified",
+    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
     "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "b5600ebf8a3fed4b80c6f31550a37488ef057525", "status": "pending", "details": "Exact final-revision release gate has not run." },
-      { "workflow": ".github/workflows/runtime-portability.yml", "commit": "1615311", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34745030794", "details": "Historical runtime evidence; not a current PV16 certification." }
+      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Release dry-run: mysql2-exact profile and linked native capability tests." }
     ]
   }
 }

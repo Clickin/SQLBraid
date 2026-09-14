@@ -89,8 +89,9 @@ function은 result set을 내보낼 수 없습니다.
 ## mysql2 표현 프로필
 
 이는 암묵적인 가정이 아니라 설정 프로필입니다. 증거 label은 support
-manifest가 소유합니다. 정확한 최종 SHA 매트릭스가 green이 되기 전까지는
-이 프로필을 Official이 아닌 pending/conditional로 취급하세요.
+manifest가 소유하며 아래의 정확한 프로필에서 MySQL 8.4.2 / mysql2 3.24.4 /
+Node 22.18.0을 인증합니다. parser나 표현 옵션을 변경하면 해당 인증을
+상속하지 않습니다.
 
 | mysql2 옵션 | 정확한 프로필 분류 | 효과 |
 | --- | --- | --- |
@@ -106,7 +107,7 @@ manifest가 소유합니다. 정확한 최종 SHA 매트릭스가 green이 되�
 옵션 전체를 기록해야 합니다. SQLBraid는 custom `typeCast` 함수의 출력을
 검사하거나 추론하지 않습니다. 정확한 프로필에서 `DECIMAL`은 문자열이며
 `decodeExactDecimal` 또는 애플리케이션이 선택한 10진 라이브러리를 사용하세요.
-`BIGINT`도 정확한 텍스트로 처리하며 `number`로 강제하지 않습니다. Native
+드라이버의 `BIGINT` text는 `bigint`로 정규화하며 `number`로 강제하지 않습니다. Native
 MySQL SQL은 투명하게 전달되지만, 이것은 SQLBraid가 모든 MySQL grammar를
 파싱한다는 뜻이 아닙니다.
 

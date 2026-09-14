@@ -21,10 +21,14 @@ const users = sql.rows<UserRow>`
 `;
 ```
 
-> **Status:** pre-release. PV16 adds DML-returning capability evidence, homogeneous bulk, MariaDB, SQLite WASM, and D1 paths on top of PV15 streaming, routine contracts, and Vite 8 integration. Exact-final-revision CI and user acceptance gate RC publication; no release or current support label is implied by the working tree. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release. PV16 adds DML-returning capability evidence, homogeneous bulk, MariaDB, SQLite WASM, and D1 paths on top of PV15 streaming, routine contracts, and Vite 8 integration. Verified profiles are listed below; RC publication still requires user acceptance and explicit release authorization. See [`PLAN.md`](./PLAN.md).
 
 The documentation baseline for this work is `b5600ebf8a3fed4b80c6f31550a37488ef057525`.
-The final revision, CI runs, support labels, and publication remain pending.
+Implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed
+[Runtime](https://github.com/Clickin/SQLBraid/actions/runs/34818111424),
+[Docs](https://github.com/Clickin/SQLBraid/actions/runs/34818111252), and
+[Release dry-run](https://github.com/Clickin/SQLBraid/actions/runs/34818113561).
+The recorded evidence is revision-specific, not a publication claim.
 
 [Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) ·
 [Documentation](https://clickin.github.io/SQLBraid/) ·
@@ -542,42 +546,46 @@ keeps these concerns independent, including unusual protocol/dialect combination
 Runtime support uses four labels:
 
 - **Official** — exercised in SQLBraid CI for that runtime + driver;
-- **Compatible** — expected from public APIs but not an SQLBraid CI gate;
+- **Compatible** — no exact certified target, even if broader host or local-binding checks pass;
 - **Custom** — connected through the executor/provider SPI.
 - **Unsupported** — a required capability is absent or the combination fails SQLBraid's checks.
 
-### PV16 evidence status (exact final evidence pending)
+### PV16 runtime evidence
 
 | Runtime | core/template/runtime | Tested version | Notes |
 | --- | --- | --- | --- |
-| Node | Pending | 22.18.0 | PV16 exact-SHA release gate is pending |
-| Node | Compatible expectation | 24.21.0 | Local evidence only; not a PV16 CI claim |
-| Bun | Pending | 1.3.14 | Existing packed path retained; PV16 evidence pending |
-| Deno | Pending | 2.9.3 | Existing packed path retained; PV16 evidence pending |
-| Browser | Pending | CI-selected Chromium | SQLite WASM browser gate is pending |
-| Worker | Pending | Local D1 stack | D1 binding gate is pending; no remote production claim |
+| Node | Official | 22.18.0 | Pinned release and packed-runtime gates |
+| Node | Compatible | 24.21.0 | Full-suite/finance CI evidence; no separate certified target |
+| Bun | Official | 1.3.14 | Packed core/runtime and pg/mysql2 host paths |
+| Deno | Official | 2.9.3 | Packed core/runtime, pg/mysql2 and node:sqlite host paths |
+| Browser | Official | Chromium 153.0.8010.12 | SQLite WASM 3.53.4, explicit bigint/CAPI profile |
+| Worker | Compatible | workerd 1.20260730.1 | Local D1 binding verified; managed SQLite version unreported |
 
-### First-party driver adapters
+### First-party driver host support
+
+Host portability does not extend the database versions or native capabilities
+certified by the [target manifests](./support/targets/).
 
 | Adapter | Node 22.18.0 | Node 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
 | --- | --- | --- | --- | --- |
-| PostgreSQL / `pg` 8.23.0 | Pending | Pending | Pending | Pending |
-| MySQL / `mysql2` 3.24.4 | Pending | Pending | Pending | Pending |
-| MariaDB / Connector 3.5.4 | Pending | Pending | Unsupported | Unsupported |
-| SQLite / `node:sqlite` | Pending | Pending | Unsupported | Pending |
+| PostgreSQL / `pg` 8.23.0 | Official | Compatible | Official | Official |
+| MySQL / `mysql2` 3.24.4 | Official | Compatible | Official | Official |
+| MariaDB / Connector 3.5.4 | Official | Compatible | Unsupported | Unsupported |
+| SQLite / `node:sqlite` | Official | Compatible | Unsupported | Official |
 | SQLite / `sqlite-wasm` | Unsupported | Unsupported | Unsupported | Unsupported |
 | SQLite / `cloudflare-d1` | Unsupported | Unsupported | Unsupported | Unsupported |
-| Oracle Thin / `node-oracledb` 7.0.1 | Pending | Pending | Unsupported | Unsupported |
-| SQL Server / Tedious 20.0.0 | Pending | Pending | Unsupported | Unsupported |
+| Oracle Thin / `node-oracledb` 7.0.1 | Official | Compatible | Unsupported | Unsupported |
+| SQL Server / Tedious 20.0.0 | Official | Compatible | Unsupported | Unsupported |
 
 The [development documentation's exact-SHA evidence](https://clickin.github.io/SQLBraid/dev/reference/support/#release-evidence-provenance),
 [current runtime runs](https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml?query=branch%3Amain)
 and [immutable release workflow](https://github.com/Clickin/SQLBraid/actions/workflows/release.yml)
 are the release evidence entrypoints: match the run's commit SHA to the artifact
-you use. The last reviewed baseline passed all three runtime jobs on
-[`1615311`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794),
-including the clean Node **22.18.0** full release gate and packed Bun **1.3.14** /
-Deno **2.9.3** real-driver checks. Node 24.21.0 has local evidence only.
+you use. Revision
+[`2890ef6`](https://github.com/Clickin/SQLBraid/actions/runs/34818111424)
+passed all three runtime jobs, including the clean Node **22.18.0** release gate
+and packed Bun **1.3.14** / Deno **2.9.3** real-driver checks. Node 24.21.0
+also passed the full-suite/finance CI gates but is not a separate certified target.
 Bun/Deno versions are exact tested versions, not minimum-version promises.
 Node package metadata retains `>=22.18.0`.
 

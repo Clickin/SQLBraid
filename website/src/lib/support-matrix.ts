@@ -47,7 +47,7 @@ export interface SupportTarget {
   readonly reproducibility?: { readonly zeroCost?: boolean; readonly description?: string; readonly url?: string };
   readonly ci?: { readonly command?: string; readonly workflow?: string; readonly releaseBlocking?: boolean };
   readonly capabilities: Readonly<Record<string, TargetCapability>>;
-  readonly evidence?: { readonly status?: string; readonly commit?: string; readonly runs?: readonly string[] };
+  readonly evidence?: { readonly status?: string; readonly commit?: string };
 }
 
 export interface SupportManifest {

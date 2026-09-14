@@ -54,10 +54,10 @@
     "dml.merge-returning": { "status": "unsupported", "testIds": [] }
   },
   "evidence": {
-    "status": "pending",
+    "status": "verified",
+    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
     "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "b5600ebf8a3fed4b80c6f31550a37488ef057525", "status": "pending", "details": "Exact final-revision release gate has not run." },
-      { "workflow": ".github/workflows/runtime-portability.yml", "commit": "bf9d8f4", "status": "pending", "details": "No recorded workflow run; local Miniflare fixture evidence remains pending." }
+      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Local Miniflare/workerd binding only; unreported managed SQLite version prevents exact-target certification." }
     ]
   }
 }

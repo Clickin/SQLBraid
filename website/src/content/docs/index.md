@@ -37,8 +37,8 @@ runtime can actually receive.
 
 ## Launch documentation
 
-This is the 0.1.0 pre-release documentation. PV16 exact-final-SHA verification
-is pending; these pages do not claim a final SHA, CI gate, publication, or
-release label. See [release notes and limitations](/SQLBraid/release/notes/)
+This is the 0.1.0 pre-release documentation. PV16 implementation evidence is
+recorded for exact profiles and revisions; no npm publication is claimed.
+See [release notes and limitations](/SQLBraid/release/notes/)
 and the [runtime/driver evidence matrix](/SQLBraid/reference/support/) before
 choosing an integration.

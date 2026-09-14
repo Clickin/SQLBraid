@@ -3,7 +3,7 @@ title: Current limitations
 description: Know what the PV16 pre-release contract deliberately does not promise.
 ---
 
-- **PV16 final verification is pending.** These docs do not claim a final SHA, CI gate, publication, or release label; historical evidence is marked as historical in the [support matrix](/SQLBraid/reference/support/).
+- **Certification is profile- and revision-specific.** The [support matrix](/SQLBraid/reference/support/) records verified implementation evidence. D1 remains Compatible because its managed SQLite version is unreported; Oracle Free 23.9 does not certify 19c. Passing CI does not authorize publication.
 - **`db.all()` is materialized.** It returns a readonly array and uses O(row-count) application memory. Use `db.stream()` for row-producing queries when bounded application memory matters.
 - **Routine streaming is not included.** Materialized `db.call()` consumes and closes routine resources before mapping; multi-cursor session ownership is reserved for a future API.
 - **MySQL prepared CALL OUT/INOUT is unsupported.** The mysql2 3.x public API does not prove which extra result is the OUT carrier, so SQLBraid does not guess.

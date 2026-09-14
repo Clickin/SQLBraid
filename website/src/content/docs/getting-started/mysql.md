@@ -89,8 +89,9 @@ carrier row. Stored functions cannot emit result sets.
 ## mysql2 representation profile
 
 This is a configuration profile, not an implicit assumption. The support
-manifest owns the evidence label; until the exact final-SHA matrix is green,
-treat this profile as pending/conditional rather than an Official claim.
+manifest certifies MySQL 8.4.2 / mysql2 3.24.4 / Node 22.18.0 under the exact
+profile below. Changing parser or representation options does not inherit
+that certification.
 
 | mysql2 option | Exact-profile classification | Effect |
 | --- | --- | --- |
@@ -106,7 +107,7 @@ The exact tested combination must record the mysql2 version, MySQL/MariaDB
 server, Node version, and every option above. SQLBraid does not inspect a
 custom `typeCast` function or infer its output. `DECIMAL` is a string in the
 exact profile; use `decodeExactDecimal` or an application-selected decimal
-library. `BIGINT` is also handled as exact text rather than coerced to
+library. Driver `BIGINT` text is normalized to `bigint`, never coerced to
 `number`. Native MySQL SQL passes through transparently; this does not mean
 SQLBraid parses every MySQL grammar feature.
 

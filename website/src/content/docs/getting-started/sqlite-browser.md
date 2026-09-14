@@ -72,9 +72,11 @@ The native D1 batch may have stronger transaction behavior than root bulk, but
 that is not the portable SQLBraid contract. Root bulk is not implicitly
 transactional and has no portable auto-chunking promise.
 
-The Browser WASM and local D1 gates are pending exact-final-SHA evidence. They do
-not claim OPFS persistence, SharedArrayBuffer, remote production support, or a
-release label.
+The recorded PV16 revision passed both gates. Chromium 153.0.8010.12 with
+SQLite WASM 3.53.4 is certified under the bigint/CAPI profile. Local D1 remains
+Compatible because its managed SQLite version is unreported. Neither gate
+claims OPFS persistence, SharedArrayBuffer, remote production support or npm
+publication.
 
 ## Browser and Worker representation profiles
 

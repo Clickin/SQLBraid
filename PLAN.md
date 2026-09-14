@@ -915,7 +915,7 @@ Non-negotiable:
 - prepared factory/shape errors are observable before execution, with dialect,
   parameter direction/output identity and hint structure in logical shape.
 
-### PV16 — Native capabilities, bulk, browser and D1 — exact-SHA evidence pending
+### PV16 — Native capabilities, bulk, browser and D1 — implementation verified
 
 - native materialized DML returning, including Oracle OUT ordinal normalization;
 - separate `@sqlbraid/mariadb` dialect and official-connector adapter;
@@ -936,14 +936,19 @@ Non-negotiable:
   Official claim.
 
 Documentation baseline for this phase: `b5600ebf8a3fed4b80c6f31550a37488ef057525`.
-Local gates pass on the working tree, including Oracle Free 23.9. Oracle 19c
-remains unverified: its enterprise image requires unavailable registry access.
-Neither local results nor the existing base commit certify the uncommitted
-changes as a final CI revision.
+Implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed
+[Runtime](https://github.com/Clickin/SQLBraid/actions/runs/34818111424),
+[Docs](https://github.com/Clickin/SQLBraid/actions/runs/34818111252), and
+[Release dry-run](https://github.com/Clickin/SQLBraid/actions/runs/34818113561).
+Eight exact profiles are certified in `support/targets/`; D1 remains Compatible
+because its managed SQLite version is unreported. Oracle Free 23.9 evidence
+does not certify Oracle 19c, which has no configured zero-cost reproduction.
 
-The workspace has 18 publishable packages. Exact-final-SHA Runtime, Docs and
-Release dry-run evidence plus user acceptance remain required. No tag,
-publication or dist-tag mutation is authorized by implementation progress.
+The workspace has 18 publishable packages. Certification records name the
+verified implementation revision; subsequent changes require their own exact-SHA
+Runtime, Docs and Release dry-run gates. User acceptance and explicit release
+authorization remain required. No tag, publication or dist-tag mutation is
+authorized by implementation progress.
 
 ### Post-release candidates
 
@@ -969,17 +974,15 @@ SQLBraid is ready for public pre-release when a developer can:
 4. use a pool for ordinary operations while an explicit transaction closure pins one physical connection;
 5. audit/log SQL, binds, duration, results and transaction boundaries through the observer SPI without SQLBraid imposing a logger;
 6. use PostgreSQL/MySQL/SQLite first-party adapters on the runtimes explicitly marked Official;
-7. understand Oracle/SQL Server Compatible-without-Official and Unsupported evidence labels
-   without a fabricated Official claim;
+7. distinguish the exact Oracle Free/SQL Server Developer profiles from
+   unverified server lines and Unsupported capabilities;
 8. optionally generate table-oriented TypeScript models from metadata;
 9. use compiler/CLI/LSP without mandatory live-DB semantics;
 10. trust unsupported analysis to remain unknown rather than guessed.
 
-PV14 must complete development, review and user acceptance before this
-definition is considered satisfied. In particular, transport materialization,
-observer effective-plan diagnostics and custom-driver conformance remain
-verification-pending until the exact final revision is checked. RC publication
-is deferred; this plan claims no new SHA, CI, runtime support label or package
-version.
+PV16's verified implementation includes transport materialization, observer
+effective-plan diagnostics and custom-driver conformance. Exact-SHA gate
+success is not user acceptance or publication authorization. RC publication
+remains deferred; the existing package version is unchanged.
 
 The success metric is **how little SQLBraid gets in the way of SQL while providing strong TypeScript and execution boundaries around it**.

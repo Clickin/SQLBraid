@@ -3,10 +3,14 @@
 Write SQL. Keep TypeScript. Skip the query-builder translation layer.
 
 Draft release notes; this document does not claim an npm RC or stable publication.
-PV16 exact-final-SHA verification is pending.
 Documentation baseline for the PV16 cleanup is
-`b5600ebf8a3fed4b80c6f31550a37488ef057525`; the final revision is intentionally
-not recorded yet.
+`b5600ebf8a3fed4b80c6f31550a37488ef057525`.
+Implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed
+[Runtime](https://github.com/Clickin/SQLBraid/actions/runs/34818111424),
+[Docs](https://github.com/Clickin/SQLBraid/actions/runs/34818111252), and
+[Release dry-run](https://github.com/Clickin/SQLBraid/actions/runs/34818113561).
+Eight exact profiles are certified; D1 remains Compatible because the managed
+SQLite version is unreported. Publication steps were skipped.
 
 SQLBraid 0.1.0 provides:
 

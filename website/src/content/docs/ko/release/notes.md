@@ -3,12 +3,11 @@ title: PV16 릴리스 노트
 description: DML returning, bulk, MariaDB, Browser WASM, D1을 포함하는 프리릴리스 표면입니다.
 ---
 
-PV16 문서는 프리릴리스 SQLBraid 표면을 설명합니다. 정확한 최종 SHA 검증은
-대기 중이며 이 노트는 최종 SHA, CI, 배포 또는 Official 지원 주장을 하지
-않습니다.
-문서 baseline은
-`b5600ebf8a3fed4b80c6f31550a37488ef057525`이며 final revision은 아직
-기록하지 않습니다.
+구현 revision `2890ef65d15ac96a7e3471911b381340aa30579a`는 Runtime, Docs와
+Release dry-run을 통과했습니다. 정확한 프로필과 workflow 링크는
+[지원 증거](/SQLBraid/ko/reference/support/#릴리스-증거-출처)에 있습니다.
+문서 baseline은 `b5600ebf8a3fed4b80c6f31550a37488ef057525`입니다. npm RC나
+stable 발행은 주장하지 않습니다.
 
 ## 포함된 계약
 
@@ -32,10 +31,11 @@ PV16 문서는 프리릴리스 SQLBraid 표면을 설명합니다. 정확한 최
 
 ## 검증 상태
 
-Main이 PV16 최종 검증을 소유합니다. 해당 증거가 제공되기 전에는 지원
-매트릭스를 Pending으로, 역사적 exact-SHA 링크를 provenance로만 취급하세요.
-이 사이트나 package README에서 배포 또는 릴리스 게이트 완료를 추론하지
-마세요.
+공유 매니페스트에는 정확히 인증한 8개 프로필과 Compatible인 로컬 D1
+binding을 기록합니다. D1의 managed SQLite 버전은 공개되지 않으며 Oracle
+Free 23.9가 19c를 인증하지는 않습니다. 증거는 revision별이며 이후 변경은
+자체 게이트가 필요합니다. 실제 발행은 생략했고, 사용자 수락과 명시적인
+릴리스 승인은 별도입니다.
 
 ## 업그레이드 규율
 

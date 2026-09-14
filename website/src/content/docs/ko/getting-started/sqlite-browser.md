@@ -73,9 +73,11 @@ Native D1 batch의 transaction 동작이 더 강하더라도 portable SQLBraid c
 아닙니다. Root bulk는 암묵적 transaction이 아니며 portable auto-chunking 약속이
 없습니다.
 
-Browser WASM과 local D1 gate는 정확한 최종 SHA 증거를 기다리고 있습니다.
-OPFS persistence, SharedArrayBuffer, remote production support 또는 release
-label을 주장하지 않습니다.
+기록된 PV16 revision은 두 게이트를 통과했습니다. Chromium 153.0.8010.12와
+SQLite WASM 3.53.4는 bigint/CAPI 프로필에서 인증되었습니다. 로컬 D1은
+managed SQLite 버전이 공개되지 않아 Compatible입니다. 두 게이트 모두
+OPFS persistence, SharedArrayBuffer, remote production support나 npm
+발행을 주장하지 않습니다.
 
 ## Browser와 Worker 표현 프로필
 

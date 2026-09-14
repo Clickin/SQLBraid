@@ -3,7 +3,7 @@ title: 현재 제한 사항
 description: PV16 프리릴리스 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
 ---
 
-- **PV16 최종 검증은 대기 중입니다.** 이 문서는 최종 SHA, CI 게이트, 배포 또는 릴리스 label을 주장하지 않으며 역사적 증거는 [지원 매트릭스](/SQLBraid/reference/support/)에서 표시합니다.
+- **인증은 프로필과 revision별입니다.** [지원 매트릭스](/SQLBraid/reference/support/)에 검증한 구현 증거를 기록합니다. D1은 managed SQLite 버전이 공개되지 않아 Compatible이며 Oracle Free 23.9는 19c를 인증하지 않습니다. CI 통과가 발행을 승인하지는 않습니다.
 - **`db.all()`은 materialized입니다.** readonly 배열을 반환하고 O(row-count) 애플리케이션 메모리를 사용합니다. 메모리를 제한해야 하는 행 쿼리에는 `db.stream()`을 사용하세요.
 - **루틴 스트리밍은 포함되지 않습니다.** materialized `db.call()`은 매핑 전에 루틴 리소스를 소비하고 닫으며 다중 cursor session 소유권은 향후 API로 남겨둡니다.
 - **MySQL prepared CALL OUT/INOUT은 지원하지 않습니다.** mysql2 3.x public API로 추가 결과가 OUT carrier인지 증명할 수 없으므로 SQLBraid는 추측하지 않습니다.

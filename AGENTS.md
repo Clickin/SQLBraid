@@ -351,14 +351,15 @@ Do not duplicate PostgreSQL dialect logic merely because `pg`, postgres.js or Bu
 Runtime support labels:
 
 - Official — SQLBraid CI covers runtime + driver;
-- Compatible — public APIs suggest compatibility but no SQLBraid gate;
+- Compatible — no exact certified target, even if broader host or local-binding checks pass;
 - Custom — user integration through executor/provider SPI.
 - Unsupported — a required capability is absent or SQLBraid's checks fail.
 
 PV7's pinned CI gates establish Official support on Node 22.18.0, Bun 1.3.14
 and Deno 2.9.3 for core/template/runtime and pg/mysql2. Node/Deno node:sqlite
 passes; Bun 1.3.14 lacks that module. Node 24.21.0 remains Compatible with
-local evidence only. README links the same-revision CI evidence.
+full-suite/finance CI evidence but no separate certified target. README links
+the same-revision CI evidence.
 Keep Bun/Deno support scoped to exact tested versions, not inferred floors.
 Preserve the runtime source/packed audit. Template byte counting is browser-safe;
 runtime uses conditional internal async-context backends, not a browser ALS
@@ -384,10 +385,11 @@ Oracle NUMBER/LOB/temporal and SQL Server precision/scale semantics require
 driver-specific handling. Unsupported call/OUT or streaming capabilities must
 remain explicit rather than simulated.
 
-PV16 verification is pending on the exact final revision. Do not infer a new
-runtime/driver support label, SHA, CI pass, package version or RC publication
-from in-progress implementation. RC publication remains deferred until PV16
-development, review and user acceptance.
+PV16 certifications in `support/targets/` name the tested revision and CI run.
+Require fresh Runtime, Docs and Release dry-run evidence for a changed revision;
+implementation progress alone does not establish new support labels.
+RC publication remains deferred until user acceptance and explicit release
+authorization.
 
 ---
 

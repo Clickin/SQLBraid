@@ -1,34 +1,38 @@
 ---
 title: Runtime and driver support
-description: Separate implemented capability paths from the pending PV16 release evidence.
+description: Exact tested profiles, capability boundaries, and revision-specific PV16 evidence.
 ---
 
 import SupportMatrix from "../../../components/SupportMatrix.astro";
 
-PV16 exact-final-revision verification is pending. This page deliberately makes
-no current SHA, CI success, publication, or Official support claim. A package
-name, local fixture, or planned workflow is not release evidence.
+PV16 implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed
+the three workflows linked below. Certification applies to the exact profiles
+and capability conditions in the matrix, not every version of a database or
+driver. CI success is not package publication.
 
 ## Evidence labels
 
-- **Pending** — the implementation path exists, but PV16 final release-gate evidence has not been supplied here.
+- **Official** — an exact profile has zero-cost reproduction and release-blocking real-engine evidence.
+- **Conditional** — the evidence applies under the named condition.
+- **Pending** — a candidate has no recorded successful gate for the stated revision.
 - **Historical** — an exact revision or old workflow exercised a combination; it does not prove the current PV16 tree.
-- **Compatible expectation** — based on public APIs and adapter contracts, without a release-gate claim.
+- **Compatible** — no exact certified target; broader host or local-binding checks may still pass.
 - **Custom** — a user-provided `QueryExecutor` or `ConnectionProvider`.
 - **Unsupported** — the required SQLBraid capability is intentionally absent.
 
-## PV16 matrix (final evidence pending)
+## PV16 matrix
 
 <SupportMatrix />
 
 ## Capability evidence matrix
 
 Dialect, driver, runtime, and server version are separate evidence axes. The
-plan-time taxonomy is recorded in
+verified taxonomy is recorded in
 [`support/`](https://github.com/Clickin/SQLBraid/tree/main/support);
-the runtime does not read that file. Every entry remains `Pending` here until
-the named exact-SHA test runs. The interactive matrix above is the canonical
-rendering of this same machine-readable target and capability data.
+the runtime does not read these files. The interactive matrix is the canonical
+rendering of the same machine-readable targets, capability conditions and test
+IDs enforced by CI. Eight exact profiles are certified. D1 remains Compatible:
+its local workerd binding passes, but the managed SQLite version is unreported.
 
 PV16 supports materialized DML-returning through `db.execute`, `db.all`,
 `db.one`, and `db.maybeOne` with `sql.rows`. It does not make
@@ -65,6 +69,21 @@ prepared CALL OUT/INOUT is rejected because mysql2 3.x exposes no proven public
 carrier discriminator; SQLite routine calls remain unsupported; SQL Server
 `CURSOR VARYING OUTPUT` is not an application cursor channel.
 
+## Release evidence provenance
+
+All three runs below passed at implementation revision
+`2890ef65d15ac96a7e3471911b381340aa30579a`:
+
+- [Runtime portability: 34818111424](https://github.com/Clickin/SQLBraid/actions/runs/34818111424) — Node 22.18.0 release gates and packed Bun 1.3.14 / Deno 2.9.3 host paths.
+- [Documentation site: 34818111252](https://github.com/Clickin/SQLBraid/actions/runs/34818111252) — build and links; deployment skipped.
+- [Release dry-run: 34818113561](https://github.com/Clickin/SQLBraid/actions/runs/34818113561) — real-engine gates, immutable packages/VSIX and npm dry-run; actual publication skipped.
+
+Evidence records name the tested implementation revision. Later revisions need
+their own gates; these links do not certify an arbitrary checkout. Node 24.21.0
+has full-suite/finance CI evidence but is not a separate certified target.
+Oracle Free 23.9 does not certify Oracle 19c or Thick mode. RC publication still
+requires user acceptance and explicit release authorization.
+
 ## Historical evidence
 
 The following links are retained for provenance only:
@@ -74,6 +93,5 @@ The following links are retained for provenance only:
 
 Those exact revisions predate PV16 and are not claims about the current source,
 current drivers, current Vite/browser/cloud integration, or RC publication.
-Main must replace Pending entries with final evidence after PV16 verification.
 
 For custom adapters, see the [driver-author binding guide](/SQLBraid/dev/agents/driver-author/).

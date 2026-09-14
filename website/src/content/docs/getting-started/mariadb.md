@@ -42,9 +42,10 @@ not implicitly transactional and has no portable auto-chunking promise. Use
 `db.tx()` when callback transaction atomicity is required.
 
 A `mysql2` connection may work against MariaDB as best-effort compatibility, but
-it is not Official MariaDB syntax or protocol evidence. PV16 exact-final-SHA
-verification remains pending; package installation and a local fixture are not
-release support claims.
+it is not Official MariaDB syntax or protocol evidence. The certified profile
+is MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0; its revision-specific
+release evidence is recorded in the support manifest, not inferred from
+package installation.
 
 ## Connector/Node.js representation profile
 

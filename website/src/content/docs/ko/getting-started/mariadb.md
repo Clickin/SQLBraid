@@ -42,8 +42,9 @@ transaction이 되지 않고 portable auto-chunking 약속이 없습니다. 원�
 필요하면 `db.tx()`를 사용하세요.
 
 MariaDB에서 `mysql2` connection이 동작할 수 있지만 best-effort 호환일 뿐
-Official MariaDB 문법/protocol 증거가 아닙니다. PV16 정확한 최종 SHA 검증은
-아직 pending입니다.
+Official MariaDB 문법/protocol 증거가 아닙니다. 인증한 프로필은 MariaDB
+11.8.9 / Connector 3.5.4 / Node 22.18.0입니다. revision별 릴리스 증거는
+support manifest에 기록하며 패키지 설치 여부에서 추론하지 않습니다.
 
 ## Connector/Node.js 표현 프로필
 

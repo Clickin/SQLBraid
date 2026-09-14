@@ -61,16 +61,15 @@ Tedious가 소유하며, 이 단계의 실패는 드라이버 I/O 없이 `materi
 
 ## 기능 경계
 
-- 대상 조합은 Node 22.18.0/Linux x64의 Tedious입니다. PV15 최종 검증은
-  대기 중이므로 역사적 매트릭스를 현재 릴리스 게이트 결과로 취급하지
-  마세요.
-- 역사적 fixture는 SQL Server 2022 CU18(16.0.4185.3), Linux x64를
-  사용합니다. 로컬 ARM 에뮬레이션은 이 문서의 검증 범위 밖입니다.
+- 인증한 조합은 Node 22.18.0/Linux x64의 Tedious 20.0.0이며 support
+  manifest에 성공한 정확한 PV16 revision을 기록합니다.
+- 대상은 SQL Server 2022 CU18 Developer, Linux x64입니다.
+  로컬 ARM 에뮬레이션은 이 문서의 검증 범위 밖입니다.
 - 힌트가 없는 일반 값은 어댑터 로컬 Tedious 추론을 사용합니다. `null`, 사용자 정의 객체, 정밀도/스케일, 길이 또는 SQL Server 전용 타입에는 명시적인 힌트를 사용하세요.
 - 여러 recordset을 하나의 가짜 단일 행 결과로 평탄화하지 않고 보존합니다.
 - `CURSOR VARYING OUTPUT`은 애플리케이션 cursor 채널이 아니며 `BRAID_CALL_CURSOR_UNSUPPORTED`로 거부합니다. local cursor를 소비한 뒤 `SELECT` 행을 내보내는 batch는 일반 result set으로 반환됩니다.
 
-Tedious는 `decimal`/`numeric` 결과를 JavaScript 숫자로 반환하므로 기본 정책은 임의 정밀도 소수 결과를 보장하지 않습니다. 유효숫자 15자리를 초과하는 명시적인 소수 문자열 입력은 `BRAID_BIND_DECIMAL_EXACTNESS`로 거부합니다. 정확한 소수 텍스트가 필요하면 SELECT에서 명시적으로 문자열로 변환하고 결과 계약을 문자열로 선언하세요. `bigint` 결과는 문자열입니다. 날짜와 시간은 `Date`를 사용하므로 원래 offset이나 밀리초 미만 정밀도를 보존하지 않습니다.
+Tedious는 `decimal`/`numeric` 결과를 JavaScript 숫자로 반환하므로 기본 정책은 임의 정밀도 소수 결과를 보장하지 않습니다. 유효숫자 15자리를 초과하는 명시적인 소수 문자열 입력은 `BRAID_BIND_DECIMAL_EXACTNESS`로 거부합니다. 정확한 소수 텍스트가 필요하면 SELECT에서 명시적으로 문자열로 변환하고 결과 계약을 문자열로 선언하세요. Tedious가 text로 반환한 `BIGINT`는 SQLBraid가 `bigint`로 정규화합니다. 날짜와 시간은 `Date`를 사용하므로 원래 offset이나 밀리초 미만 정밀도를 보존하지 않습니다.
 
 증거 라벨과 현재 매트릭스는 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)을 참고하세요.
 
@@ -79,8 +78,8 @@ Tedious는 `decimal`/`numeric` 결과를 JavaScript 숫자로 반환하므로 �
 
 ## Tedious 표현 프로필
 
-문서의 free test target은 Node 22.18.0/Linux x64의 SQL Server
-Developer/Express 호환 테스트와 Tedious입니다. 증거 라벨은 이 페이지가
+문서의 free test target은 SQL Server 2022 CU18 Developer와 Node
+22.18.0/Linux x64의 Tedious 20.0.0입니다. 증거 라벨은 이 페이지가
 아니라 support manifest가 지정합니다. 다른 SQL Server edition이나 runtime은
 별도의 프로필입니다.
 
