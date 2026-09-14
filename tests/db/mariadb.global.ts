@@ -1,7 +1,8 @@
 import { GenericContainer, Wait } from "testcontainers";
 import type { TestProject } from "vitest/node";
+import { readSupportImage } from "./support-target.js";
 
-export const MARIADB_IMAGE = "mariadb:11.8.9";
+const MARIADB_IMAGE = readSupportImage("mariadb");
 export const MARIADB_VERSION = "11.8.9";
 const DEFAULT_USER = "sqlbraid";
 const DEFAULT_PASSWORD = "sqlbraid";

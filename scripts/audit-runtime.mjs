@@ -8,7 +8,7 @@ const allowedNodeImports = new Set(["node:async_hooks", "node:buffer"]);
 const nodeOnlySubpaths = new Map([
   ["oracle", new Set(["oracledb"])],
   ["mssql", new Set(["tedious", "inspector"])],
-  ["mariadb", new Set(["mariadb"])],
+  ["mariadb", new Set(["mariadb", "inspector"])],
 ]);
 
 export async function auditRuntime(packageRoot, directory, { excludedSubpaths = nodeOnlySubpaths } = {}) {

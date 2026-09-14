@@ -137,10 +137,32 @@ test("MySQL materialized queries preserve flat rows, empty SELECTs and command m
   });
 });
 
+test("MySQL rows fail closed for rowsAsArray and lossy numeric typeCast results", async () => {
+  let payload: unknown = [[1]];
+  let fields: readonly Mysql2FieldLike[] = [{ name: "id", type: 3 }];
+  const connection: Mysql2ConnectionLike = {
+    execute: async () => [payload, fields],
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  };
+  const executor = createMysql2Executor(connection);
+  await assert.rejects(
+    () => executor.query(mysqlSql.rows`SELECT id`.render()),
+    /BRAID_RESULT_(?:COLUMNS|SETS_UNSUPPORTED)/u,
+  );
+  payload = [{ id: 9_007_199_254_740_992 }];
+  fields = [{ name: "id", type: 8 }];
+  await assert.rejects(
+    () => executor.query(mysqlSql.rows`SELECT id`.render()),
+    { code: "BRAID_RESULT_EXACTNESS" },
+  );
+});
+
 class RowsStream implements Mysql2RawStreamLike {
   readonly readableEnded = false;
   readonly destroyed = false;
-  private readonly values: readonly unknown[] = [{ amount: 1.25 }, { amount: 2.5 }];
+  private readonly values: readonly unknown[] = [{ amount: "1.25" }, { amount: "2.5" }];
   private index = 0;
   once(event: string, listener: (...args: readonly unknown[]) => void): this {
     if (event === "fields") listener([{ name: "amount", type: 246 }]);
@@ -196,7 +218,7 @@ class FieldsBoundaryStream implements Mysql2RawStreamLike {
   }
 }
 
-test("MySQL streaming normalizes DECIMAL metadata without materialization and rejects OUT before I/O", async () => {
+test("MySQL streaming preserves exact DECIMAL text without materialization and rejects OUT before I/O", async () => {
   let executeCalls = 0;
   let requestedHighWaterMark: number | undefined;
   const raw: Mysql2RawConnectionLike = {

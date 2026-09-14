@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SQLBraid SQLite WASM conformance</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "@sqlite.org/sqlite-wasm": "/node_modules/@sqlite.org/sqlite-wasm/dist/index.mjs",
+          "@sqlbraid/core": "/packages/core/dist/index.js",
+          "@sqlbraid/template": "/packages/template/dist/index.js",
+          "@sqlbraid/runtime": "/packages/runtime/dist/index.js",
+          "#async-context": "/packages/runtime/dist/async-context.browser.js",
+          "@sqlbraid/sqlite": "/packages/sqlite/dist/index.js",
+          "@sqlbraid/sqlite/wasm": "/packages/sqlite/dist/wasm.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <p>SQLBraid SQLite WASM conformance fixture.</p>
+    <script type="module" src="./runner.mjs"></script>
+  </body>
+</html>

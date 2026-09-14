@@ -5,6 +5,7 @@ import type {
   ConnectionProvider,
   DatabaseOptions,
   DriverRoutineResult,
+  DriverEnvironment,
   BulkBindingDescription,
   BulkExecutionResult,
   QueryExecutor,
@@ -16,7 +17,7 @@ import type {
   StatementBindingContext,
   StatementBindingDescription,
 } from "@sqlbraid/core";
-import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
+import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription, ResultExactnessError } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -124,11 +125,14 @@ function cleanupAggregate(errors: readonly unknown[], message: string, cause?: u
 }
 
 function plainRow(value: unknown, fields: readonly Mysql2FieldLike[], policy: TypePolicy): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { value };
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("BRAID_RESULT_COLUMNS: mysql2 must return object rows; rowsAsArray=true is unsupported.");
+  }
   const row: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
     const field = fields.find((candidate) => candidate.name === key);
-    const databaseType = typeof field?.type === "number" ? mysqlTypes[field.type] : field?.type;
+    const databaseType = mysqlDatabaseType(field);
+    assertMysqlNumericValue(databaseType, entry);
     Object.defineProperty(row, key, {
       value: databaseType ? policy.decode(databaseType, entry) : entry,
       enumerable: true,
@@ -137,6 +141,42 @@ function plainRow(value: unknown, fields: readonly Mysql2FieldLike[], policy: Ty
     });
   }
   return row;
+}
+
+function mysqlDatabaseType(field: Mysql2FieldLike | undefined): string | undefined {
+  if (typeof field?.type === "number") return mysqlTypes[field.type];
+  if (typeof field?.type !== "string") return undefined;
+  const type = field.type.toUpperCase();
+  if (type === "LONGLONG") return "BIGINT";
+  if (type === "NEWDECIMAL") return "DECIMAL";
+  if (type === "VAR_STRING" || type === "STRING") return "VARCHAR";
+  if (type === "LONG") return "INT";
+  return type;
+}
+
+function assertMysqlNumericValue(databaseType: string | undefined, value: unknown): void {
+  if (value === null || value === undefined || databaseType === undefined) return;
+  const type = databaseType.toUpperCase();
+  if (type === "DECIMAL" || type === "NEWDECIMAL") {
+    if (typeof value !== "string") {
+      throw new ResultExactnessError("mysql2 DECIMAL results must remain strings; configure an exact numeric profile.");
+    }
+    return;
+  }
+  if (type === "BIGINT" || type === "LONGLONG") {
+    if (typeof value === "number" && !Number.isSafeInteger(value)) {
+      throw new ResultExactnessError("mysql2 BIGINT result was an unsafe JavaScript number.");
+    }
+    if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
+      throw new ResultExactnessError("mysql2 BIGINT result has an unsupported representation.");
+    }
+    return;
+  }
+  if (type === "INT" || type === "TINYINT" || type === "SMALLINT" || type === "MEDIUMINT") {
+    if (typeof value === "number" && !Number.isSafeInteger(value)) {
+      throw new ResultExactnessError("mysql2 integer result was an invalid JavaScript number.");
+    }
+  }
 }
 
 function assertUniqueFields(fields: readonly Mysql2FieldLike[]): void {
@@ -241,6 +281,41 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   requestedReuse: "auto",
 });
 
+const mysql2Environment = Object.freeze<DriverEnvironment>({
+  database: { product: "mysql" },
+  driver: { id: "mysql2", profile: "mysql2-exact" },
+  capabilities: {
+    "sql.native-transparency": { status: "guaranteed" },
+    "numeric.exact-integer": {
+      status: "guarded",
+      canonical: "bigint",
+      rawRepresentations: ["bigint", "string", "number"],
+      conditionCode: "mysql2.exact-numeric-profile",
+    },
+    "numeric.exact-decimal": {
+      status: "guarded",
+      canonical: "string",
+      rawRepresentations: ["string"],
+      conditionCode: "mysql2.exact-numeric-profile",
+    },
+    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+  },
+  probe: {
+    statement: createRenderedStatement({
+      segments: ["SELECT VERSION() AS version"],
+      parameters: [],
+      resultKind: "rows",
+      dialectId: "mysql",
+    }),
+    read: (rows) => {
+      const row = rows[0];
+      if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+      const version = (row as Record<string, unknown>).version;
+      return typeof version === "string" ? { version } : {};
+    },
+  },
+});
+
 function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
@@ -302,6 +377,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
   return {
     ownershipKey: connection,
     statementBinding: mysql2StatementBinding,
+    environment: policy === defaultTypePolicy ? mysql2Environment : { ...mysql2Environment, driver: { id: "mysql2", profile: "custom-type-policy" }, capabilities: {} },
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
       assertNoRoutineOutputsForQuery(rendered);
@@ -467,6 +543,7 @@ export function createMysql2Database(connection: Mysql2ConnectionLike, options: 
 export function createMysql2PoolProvider(pool: Mysql2PoolLike, options: Mysql2ExecutorOptions = {}): ConnectionProvider {
   return {
     statementBinding: mysql2StatementBinding,
+    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy ? mysql2Environment : { ...mysql2Environment, driver: { id: "mysql2", profile: "custom-type-policy" }, capabilities: {} },
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
       const executor = createMysql2Executor(connection, options);

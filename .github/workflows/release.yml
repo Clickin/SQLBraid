@@ -14,6 +14,8 @@ on:
   push:
     tags:
       - "v*"
+  schedule:
+    - cron: "17 4 * * 1"
 
 permissions:
   contents: write
@@ -24,21 +26,8 @@ jobs:
     name: PostgreSQL 18 current capability gate
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    services:
-      postgres:
-        image: postgres:18.6-alpine
-        env:
-          POSTGRES_USER: sqlbraid
-          POSTGRES_PASSWORD: sqlbraid-test
-          POSTGRES_DB: sqlbraid
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U sqlbraid"
-          --health-interval 5s --health-timeout 5s --health-retries 20
     env:
-      SQLBRAID_POSTGRES_URL: postgres://sqlbraid:sqlbraid-test@127.0.0.1:5432/sqlbraid
-      SQLBRAID_POSTGRES_VERSION: 18.6
+      SQLBRAID_POSTGRES_TARGET: postgres-current
     steps:
       - name: Check out exact source
         uses: actions/checkout@v7.0.1
@@ -58,50 +47,11 @@ jobs:
         run: pnpm exec vitest run --project db-postgres tests/db/postgres/capabilities.test.ts
 
   release:
+    if: github.event_name != 'schedule'
     needs: postgres-current-capabilities
     name: Immutable release gates
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    services:
-      postgres:
-        image: postgres:16.4-alpine
-        env:
-          POSTGRES_USER: sqlbraid
-          POSTGRES_PASSWORD: sqlbraid-test
-          POSTGRES_DB: sqlbraid
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U sqlbraid"
-          --health-interval 5s --health-timeout 5s --health-retries 20
-      mysql:
-        image: mysql:8.4.2
-        env:
-          MYSQL_DATABASE: sqlbraid
-          MYSQL_USER: sqlbraid
-          MYSQL_PASSWORD: sqlbraid-test
-          MYSQL_ROOT_PASSWORD: sqlbraid-root-test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd "mysqladmin ping -h 127.0.0.1 -psqlbraid-root-test"
-          --health-interval 5s --health-timeout 5s --health-retries 30
-      mariadb:
-        image: mariadb:11.8.9
-        env:
-          MARIADB_DATABASE: sqlbraid
-          MARIADB_USER: sqlbraid
-          MARIADB_PASSWORD: sqlbraid-test
-          MARIADB_ROOT_PASSWORD: sqlbraid-root-test
-        ports:
-          - 3307:3306
-        options: >-
-          --health-cmd "mariadb-admin ping -h 127.0.0.1 -u root -p'sqlbraid-root-test'"
-          --health-interval 5s --health-timeout 5s --health-retries 30
-    env:
-      SQLBRAID_POSTGRES_URL: postgres://sqlbraid:sqlbraid-test@127.0.0.1:5432/sqlbraid
-      SQLBRAID_MYSQL_URL: mysql://sqlbraid:sqlbraid-test@127.0.0.1:3306/sqlbraid
-      SQLBRAID_MARIADB_URL: mariadb://sqlbraid:sqlbraid-test@127.0.0.1:3307/sqlbraid
     steps:
       - name: Check out exact release ref
         uses: actions/checkout@v7.0.1
@@ -165,6 +115,9 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      - name: Validate support claims and translation freshness
+        run: pnpm run support:validate && pnpm run docs:translations
+
       - name: Build packages and extension
         run: pnpm run build
 
@@ -185,6 +138,9 @@ jobs:
 
       - name: Dialect capability conformance
         run: pnpm run test:capabilities
+
+      - name: Native SQL transparency
+        run: pnpm run test:transparency
 
       - name: Bulk conformance
         run: pnpm run test:bulk

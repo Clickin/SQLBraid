@@ -240,6 +240,7 @@ try {
   const metadataImports = [
     'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
     'import { createMysqlInspector } from "@sqlbraid/mysql/inspector";',
+    'import { createMariaDbInspector } from "@sqlbraid/mariadb/inspector";',
     'import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";',
     'import { createOracleInspector } from "@sqlbraid/oracle/inspector";',
   ];
@@ -298,9 +299,10 @@ try {
     'import type { MetadataSnapshot, MetadataInspector } from "@sqlbraid/metadata";',
     'import type { PgClientLike } from "@sqlbraid/postgres/pg";',
     'import type { Mysql2ConnectionLike } from "@sqlbraid/mysql/mysql2";',
+    'import type { MariaDbConnectionLike } from "@sqlbraid/mariadb/mariadb";',
     'import type { SqliteDatabaseLike } from "@sqlbraid/sqlite/node-sqlite";',
-    'declare const pg: PgClientLike, mysql: Mysql2ConnectionLike, sqlite: SqliteDatabaseLike;',
-    'const inspectors: MetadataInspector[] = [createPostgresInspector(pg), createMysqlInspector(mysql), createSqliteInspector(sqlite)];',
+    'declare const pg: PgClientLike, mysql: Mysql2ConnectionLike, maria: MariaDbConnectionLike, sqlite: SqliteDatabaseLike;',
+    'const inspectors: MetadataInspector[] = [createPostgresInspector(pg), createMysqlInspector(mysql), createMariaDbInspector(maria), createSqliteInspector(sqlite)];',
     'const results: Promise<MetadataSnapshot>[] = inspectors.map((inspector) => inspector.inspect());',
     'declare const metadata: MetadataSnapshot;',
     'const generated: CodegenResult = generateModels(metadata, { typePolicy: postgresTypePolicy });',

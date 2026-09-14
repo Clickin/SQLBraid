@@ -90,3 +90,26 @@ For a routine with a `refcursor` OUT/INOUT parameter, use
 `db.tx(async (tx) => tx.call(query))` scope. SQLBraid fetches and closes the
 transaction-bound portal, removes it from scalar `output`, and returns its rows
 in `resultSets`; it never creates a hidden transaction.
+
+## pg representation profile
+
+The profile is `pg`'s default parser set on the exact database/runtime
+combination recorded by the support manifest. A custom `pg-types` parser is a
+different, conditional profile and must have its own raw-value evidence.
+
+| Value | Default profile representation | Boundary |
+| --- | --- | --- |
+| `int8` | string | Use `decodeExactInteger` when the application needs `bigint`. |
+| `numeric`/`decimal` | string | Keep text or pass through an application decimal library; do not coerce to `number`. |
+| `json`/`jsonb` | parsed JavaScript value | Validate with Standard Schema; a custom parser may instead return text. |
+| `bytea` | `Buffer` | Keep bytes or explicitly encode them. |
+| `uuid` | string | Validate format in the application schema when needed. |
+| date/time | JavaScript `Date` or driver text for configured variants | `Date` does not preserve every source offset/precision detail. |
+
+The binding transport is text-positional `$1`, `$2`, … with ordered values.
+`pg-cursor` supplies the native pull stream; a missing peer is
+`BRAID_STREAM_UNSUPPORTED`. Routine refcursors require an existing transaction
+and are materialized into result sets. Bulk uses the adapter's proven native
+or prepared strategy, not a SQL rewrite. Native PostgreSQL SQL, including
+`RETURNING`, passes through transparently; this is not PostgreSQL grammar
+support by SQLBraid.

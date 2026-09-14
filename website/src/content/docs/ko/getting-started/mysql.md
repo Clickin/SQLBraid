@@ -85,3 +85,34 @@ Prepared CALL OUT/INOUT은 현재 `BRAID_CALL_OUT_UNSUPPORTED`로 거부합니�
 mysql2 3.x에는 protocol의 추가 OUT carrier result를 구분하는 검증된 public
 discriminator가 없으므로 SQLBraid는 carrier 행을 추측하지 않습니다. Stored
 function은 result set을 내보낼 수 없습니다.
+
+## mysql2 표현 프로필
+
+이는 암묵적인 가정이 아니라 설정 프로필입니다. 증거 label은 support
+manifest가 소유합니다. 정확한 최종 SHA 매트릭스가 green이 되기 전까지는
+이 프로필을 Official이 아닌 pending/conditional로 취급하세요.
+
+| mysql2 옵션 | 정확한 프로필 분류 | 효과 |
+| --- | --- | --- |
+| `supportBigNumbers: true` | Official 프로필 필수 | 큰 정수/10진수가 lossy한 `number` 추론으로 가지 않게 합니다. |
+| `bigNumberStrings: true` | Official 프로필 필수 | 큰 숫자를 문자열로 반환해 애플리케이션이 정확하게 처리합니다. |
+| `decimalNumbers: false` | Official 프로필 필수 | `DECIMAL`을 JavaScript `number`로 변환하지 않습니다. `true`는 lossy/conditional입니다. |
+| `rowsAsArray: false` | Official 프로필 필수 | SQLBraid normalizer와 schema가 기대하는 객체 행을 유지합니다. |
+| `jsonStrings: false` | Conditional | 파싱된 native JSON을 기대합니다. `true`는 별도의 텍스트 schema/parser 프로필입니다. |
+| `dateStrings: false` | Conditional | `Date` 값을 기대합니다. `true`는 별도의 텍스트 temporal 프로필입니다. |
+| `typeCast` (기본값) | Official 프로필 필수 | custom 함수는 raw 표현을 바꾸므로 별도 테스트 전까지 conditional입니다. |
+
+정확한 테스트 조합에는 mysql2 버전, MySQL/MariaDB 서버, Node 버전 및 위
+옵션 전체를 기록해야 합니다. SQLBraid는 custom `typeCast` 함수의 출력을
+검사하거나 추론하지 않습니다. 정확한 프로필에서 `DECIMAL`은 문자열이며
+`decodeExactDecimal` 또는 애플리케이션이 선택한 10진 라이브러리를 사용하세요.
+`BIGINT`도 정확한 텍스트로 처리하며 `number`로 강제하지 않습니다. Native
+MySQL SQL은 투명하게 전달되지만, 이것은 SQLBraid가 모든 MySQL grammar를
+파싱한다는 뜻이 아닙니다.
+
+바인드 전송은 순서가 있는 값과 mysql2 text-positional `?`입니다. 스트리밍은
+prepared `Execute.stream()`을 사용합니다. routine result set은 `db.call()`이
+materialize하며 prepared OUT/INOUT은 지원하지 않습니다. Bulk는 선택한
+adapter capability와 manifest가 증명할 때만 prepared/native driver 연산입니다.
+일반 MySQL DML에는 portable `RETURNING`이 없으므로 반환 행을 만들어내지
+않습니다.

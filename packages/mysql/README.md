@@ -23,3 +23,9 @@ MySQL row streaming uses the raw prepared `Execute.stream()` command behind the 
 The prepared CALL path currently rejects OUT/INOUT with `BRAID_CALL_OUT_UNSUPPORTED`: the real `mysql2` 3.x API does not expose a proven public discriminator for the protocol's extra OUT carrier result. SQLBraid does not guess which result set is the carrier. Emitted heterogeneous result sets remain available through `db.call()`; stored functions cannot emit result sets.
 
 See the [MySQL setup](https://clickin.github.io/SQLBraid/getting-started/mysql/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
+
+The exact mysql2 profile is explicit: `supportBigNumbers: true`,
+`bigNumberStrings: true`, `decimalNumbers: false`, `rowsAsArray: false`,
+`jsonStrings: false`, `dateStrings: false`, and the default `typeCast`.
+Changing any option is a separate conditional profile until separately tested.
+BIGINT results map to `bigint`; exact decimals remain strings. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

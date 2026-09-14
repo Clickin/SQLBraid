@@ -35,3 +35,8 @@ Logical `outputName` values rename positional CALL outputs; they do not select
 carrier columns by database field name.
 
 See the [PostgreSQL setup](https://clickin.github.io/SQLBraid/getting-started/postgres/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
+
+Representation profile: the default `pg` parser returns `int8` and
+`numeric`/`decimal` as strings, `json`/`jsonb` as parsed values, `bytea` as
+`Buffer`, and UUIDs as strings. Custom parsers are separate conditional
+profiles and need their own evidence. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

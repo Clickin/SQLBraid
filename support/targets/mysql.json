@@ -1,0 +1,64 @@
+{
+  "id": "mysql-mysql2-node-8-4-2",
+  "status": "compatible",
+  "database": { "product": "mysql", "version": "8.4.2", "edition": "community" },
+  "driver": {
+    "id": "mysql2",
+    "version": "3.24.4",
+    "profile": "mysql2-exact",
+    "package": "@sqlbraid/mysql",
+    "transport": "text-positional (?)",
+    "stream": "mysql2 prepared Execute.stream",
+    "routine": "prepared CALL emitted result sets; no OUT/INOUT carrier",
+    "bulk": "prepared-loop",
+    "rawRepresentations": { "integer": "string", "decimal": "string", "json": "object", "temporal": "Date" },
+    "exclusions": ["MySQL has no generic DML RETURNING capability", "OUT and INOUT carriers are unsupported for ordinary mysql2 execution", "Bun and Deno mysql2 subpaths are not certified by this target"]
+  },
+  "runtime": { "id": "node", "version": "22.18.0" },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "GitHub Actions MySQL service using mysql:8.4.2.",
+    "image": "mysql:8.4.2",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+  },
+  "ci": { "command": "pnpm run test:db:mysql", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "capabilities": {
+    "sql.native-transparency": { "status": "guaranteed", "testIds": ["mysql.sql.native-transparency"] },
+    "sql.generated-structure": { "status": "guaranteed", "testIds": ["mysql.sql.generated-structure"] },
+    "numeric.exact-integer": { "status": "guarded", "conditionCode": "mysql2.exact-numeric-profile", "canonical": "bigint", "rawRepresentations": ["string"], "testIds": ["mysql.numeric.exact-integer"] },
+    "numeric.exact-decimal": { "status": "guaranteed", "canonical": "string", "rawRepresentations": ["string"], "testIds": ["mysql.numeric.exact-decimal"] },
+    "data.json-native": { "status": "guaranteed", "rawRepresentations": ["object"], "testIds": ["mysql.data.json-native"] },
+    "data.temporal": { "status": "guaranteed", "rawRepresentations": ["Date"], "testIds": ["mysql.data.temporal"] },
+    "data.binary": { "status": "guaranteed", "rawRepresentations": ["Buffer", "Uint8Array"], "testIds": ["mysql.data.binary"] },
+    "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mysql.data.uuid"] },
+    "result.rows": { "status": "guaranteed", "testIds": ["mysql.result.rows"] },
+    "result.command": { "status": "guaranteed", "testIds": ["mysql.result.command"] },
+    "result.multiple-sets": { "status": "guaranteed", "testIds": ["mysql.result.multiple-sets"] },
+    "result.standard-schema": { "status": "guaranteed", "testIds": ["mysql.result.standard-schema"] },
+    "execution.prepared": { "status": "guaranteed", "testIds": ["mysql.execution.prepared"] },
+    "execution.stream": { "status": "guaranteed", "testIds": ["mysql.execution.stream"] },
+    "execution.bulk": { "status": "guaranteed", "testIds": ["mysql.execution.bulk"] },
+    "execution.transaction": { "status": "guaranteed", "testIds": ["mysql.execution.transaction"] },
+    "execution.savepoint": { "status": "guaranteed", "testIds": ["mysql.execution.savepoint"] },
+    "routine.resultsets": { "status": "guaranteed", "testIds": ["mysql.routine.resultsets"] },
+    "routine.scalar-out": { "status": "unsupported", "testIds": [] },
+    "routine.inout": { "status": "unsupported", "testIds": [] },
+    "routine.cursor": { "status": "unsupported", "testIds": [] },
+    "routine.return-status": { "status": "unsupported", "testIds": [] },
+    "metadata.identity": { "status": "guaranteed", "testIds": ["mysql.metadata.identity"] },
+    "metadata.generated": { "status": "guaranteed", "testIds": ["mysql.metadata.generated"] },
+    "metadata.routines": { "status": "guaranteed", "testIds": ["mysql.metadata.routines"] },
+    "metadata.types": { "status": "guaranteed", "testIds": ["mysql.metadata.types"] },
+    "dml.insert-returning": { "status": "unsupported", "testIds": [] },
+    "dml.update-returning": { "status": "unsupported", "testIds": [] },
+    "dml.delete-returning": { "status": "unsupported", "testIds": [] },
+    "dml.merge-returning": { "status": "unsupported", "testIds": [] }
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": [
+      { "workflow": ".github/workflows/release.yml", "commit": "b5600ebf8a3fed4b80c6f31550a37488ef057525", "status": "pending", "details": "Exact final-revision release gate has not run." },
+      { "workflow": ".github/workflows/runtime-portability.yml", "commit": "1615311", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34745030794", "details": "Historical runtime evidence; not a current PV16 certification." }
+    ]
+  }
+}

@@ -31,7 +31,7 @@ network failures remain stage `"driver"`. A materialization error has
 | `BRAID_CALL_CURSOR_UNSUPPORTED` | The adapter cannot expose the requested cursor output as an application result set. |
 | `BRAID_CALL_RETURN_UNSUPPORTED` | A query requested a return/status schema, but the driver call exposed no return/status channel. |
 | `BRAID_RESOURCE_CLEANUP` | Closing, draining, or cancelling a driver resource failed; the physical lease is not treated as safely reusable. |
-| `BRAID_INTEGER_MODE_UNSUPPORTED` | SQLite `integerMode: "bigint"` needs a statement API exposing `setReadBigInts`. |
+| `BRAID_INTEGER_MODE_UNSUPPORTED` | SQLite bigint mode needs `setReadBigInts` on Node, or the initialized `sqlite3` module and official OO1 statement on WASM. |
 | `BRAID_PREPARED_NAME` | Prepared query name is empty or duplicated. |
 | `BRAID_PREPARED_SHAPE` | A prepared query rendered a different structural shape. |
 | `BRAID_BIND_HINT_CONTEXT` | A bound-value wrapper was used as a directive condition instead of a boolean expression. |

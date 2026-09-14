@@ -3,6 +3,7 @@ import type {
   BulkExecutionResult,
   DatabaseOptions,
   DriverRoutineResult,
+  DriverEnvironment,
   QueryExecutor,
   QueryExecutionResult,
   RenderedBulk,
@@ -18,6 +19,7 @@ import type { SqliteIntegerMode } from "./node-sqlite.js";
 /** The subset of the official @sqlite.org/sqlite-wasm OO1 DB used by SQLBraid. */
 export interface SqliteWasmStatementLike {
   readonly columnCount: number;
+  readonly pointer?: number;
   bind(...values: readonly unknown[]): SqliteWasmStatementLike;
   step(): boolean;
   stepReset?(): SqliteWasmStatementLike;
@@ -36,6 +38,14 @@ export interface SqliteWasmDatabaseLike {
 
 export interface SqliteWasmExecutorOptions {
   readonly integerMode?: SqliteIntegerMode;
+  /** Official initialized module; required for INTEGER-only bigint reads. */
+  readonly sqlite3?: {
+    readonly capi: {
+      readonly SQLITE_INTEGER: number;
+      sqlite3_column_type(statement: number, column: number): number;
+      sqlite3_column_int64(statement: number, column: number): bigint;
+    };
+  };
 }
 
 export interface SqliteWasmDatabaseOptions extends DatabaseOptions, SqliteWasmExecutorOptions {}
@@ -49,7 +59,11 @@ function assertIntegerMode(integerMode: SqliteIntegerMode | undefined): SqliteIn
 }
 
 function normalizeValue(value: unknown, integerMode: SqliteIntegerMode): unknown {
-  if (integerMode === "number" && typeof value === "bigint") return Number(value);
+  if (integerMode === "number" && typeof value === "bigint") {
+    const number = Number(value);
+    if (!Number.isSafeInteger(number)) throw new RangeError("BRAID_INTEGER_UNSAFE: SQLite WASM returned an integer outside JavaScript's safe range.");
+    return number;
+  }
   return value;
 }
 
@@ -106,9 +120,15 @@ function columnNames(statement: SqliteWasmStatementLike): readonly string[] {
   return names;
 }
 
-function row(statement: SqliteWasmStatementLike, names: readonly string[], integerMode: SqliteIntegerMode): Record<string, unknown> {
+function row(statement: SqliteWasmStatementLike, names: readonly string[], integerMode: SqliteIntegerMode, capi: NonNullable<SqliteWasmExecutorOptions["sqlite3"]>["capi"] | undefined): Record<string, unknown> {
   const value: Record<string, unknown> = {};
-  for (const [index, name] of names.entries()) value[name] = normalizeValue(statement.get(index), integerMode);
+  const pointer = statement.pointer;
+  if (capi && pointer === undefined) throw new TypeError("BRAID_INTEGER_MODE_UNSUPPORTED: bigint mode requires an official OO1 statement pointer.");
+  for (const [index, name] of names.entries()) {
+    value[name] = capi && capi.sqlite3_column_type(pointer!, index) === capi.SQLITE_INTEGER
+      ? capi.sqlite3_column_int64(pointer!, index)
+      : normalizeValue(statement.get(index), integerMode);
+  }
   return value;
 }
 
@@ -182,11 +202,42 @@ function transactionControl(database: SqliteWasmDatabaseLike, sql: string): Prom
   return Promise.resolve();
 }
 
+function sqliteWasmEnvironment(integerMode: SqliteIntegerMode): DriverEnvironment {
+  return Object.freeze<DriverEnvironment>({
+    database: { product: "sqlite" },
+    driver: { id: "sqlite-wasm", profile: integerMode === "bigint" ? "bigint" : "number" },
+    capabilities: {
+      "sql.native-transparency": { status: "guaranteed" },
+      "numeric.exact-integer": integerMode === "bigint"
+        ? { status: "guaranteed", canonical: "bigint", rawRepresentations: ["bigint"] }
+        : { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "sqlite-wasm.bigint-mode" },
+      "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+    },
+    probe: {
+      statement: createRenderedStatement({
+        segments: ["SELECT sqlite_version() AS version"],
+        parameters: [],
+        resultKind: "rows",
+        dialectId: "sqlite",
+      }),
+      read: (rows) => {
+        const row = rows[0];
+        if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+        const version = (row as Record<string, unknown>).version;
+        return typeof version === "string" ? { version } : {};
+      },
+    },
+  });
+}
+
 export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, options: SqliteWasmExecutorOptions = {}): QueryExecutor {
   const integerMode = assertIntegerMode(options.integerMode);
+  const capi = integerMode === "bigint" ? options.sqlite3?.capi : undefined;
+  if (integerMode === "bigint" && !capi) throw new TypeError("BRAID_INTEGER_MODE_UNSUPPORTED: bigint mode requires the initialized sqlite3 module.");
   return {
     ownershipKey: database,
     statementBinding: sqliteWasmStatementBinding,
+    environment: sqliteWasmEnvironment(integerMode),
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertRoutineUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
@@ -198,7 +249,7 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
         const names = columnNames(statement);
         if (names.length > 0) {
           const rows: Record<string, unknown>[] = [];
-          while (statement.step()) rows.push(row(statement, names, integerMode));
+          while (statement.step()) rows.push(row(statement, names, integerMode, capi));
           return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
         }
         statement.step();
@@ -256,7 +307,7 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
         while (true) {
           signal?.throwIfAborted();
           if (!statement.step()) break;
-          yield row(statement, names, integerMode) as Row;
+          yield row(statement, names, integerMode, capi) as Row;
         }
       } catch (error) {
         failure = error;
@@ -275,6 +326,6 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
 }
 
 export function createSqliteWasmDatabase(database: SqliteWasmDatabaseLike, options: SqliteWasmDatabaseOptions = {}) {
-  const { integerMode, ...databaseOptions } = options;
-  return createDatabase(createSqliteWasmExecutor(database, { integerMode }), databaseOptions);
+  const { integerMode, sqlite3, ...databaseOptions } = options;
+  return createDatabase(createSqliteWasmExecutor(database, { integerMode, sqlite3 }), databaseOptions);
 }

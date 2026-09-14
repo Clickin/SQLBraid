@@ -5,6 +5,7 @@ import type {
   ConnectionProvider,
   DatabaseOptions,
   DriverRoutineResult,
+  DriverEnvironment,
   QueryExecutor,
   QueryExecutionResult,
   RenderedBulk,
@@ -18,6 +19,7 @@ import {
   createBulkBindingDescription,
   createRenderedStatement,
   createStatementBindingDescription,
+  ResultExactnessError,
 } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
@@ -167,6 +169,7 @@ function plainRow(value: unknown, fields: readonly MariaDbFieldLike[], policy: T
   for (const [key, entry] of Object.entries(value)) {
     const field = fields.find((candidate) => (typeof candidate.name === "function" ? candidate.name() : candidate.name) === key);
     const type = databaseType(field);
+    assertMariaDbNumericValue(type, entry);
     Object.defineProperty(row, key, {
       value: type === undefined ? entry : policy.decode(type, entry),
       enumerable: true,
@@ -175,6 +178,25 @@ function plainRow(value: unknown, fields: readonly MariaDbFieldLike[], policy: T
     });
   }
   return row;
+}
+
+function assertMariaDbNumericValue(databaseType: string | undefined, value: unknown): void {
+  if (value === null || value === undefined || databaseType === undefined) return;
+  const type = databaseType.toUpperCase();
+  if (type === "DECIMAL" || type === "NEWDECIMAL") {
+    if (typeof value !== "string") {
+      throw new ResultExactnessError("MariaDB DECIMAL results must remain strings.");
+    }
+    return;
+  }
+  if (type === "BIGINT" || type === "LONGLONG") {
+    if (typeof value === "number" && !Number.isSafeInteger(value)) {
+      throw new ResultExactnessError("MariaDB BIGINT result was an unsafe JavaScript number.");
+    }
+    if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
+      throw new ResultExactnessError("MariaDB BIGINT result has an unsupported representation.");
+    }
+  }
 }
 
 function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
@@ -280,6 +302,41 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   requestedReuse: "auto",
 });
 
+const mariaDbEnvironment = Object.freeze<DriverEnvironment>({
+  database: { product: "mariadb" },
+  driver: { id: "mariadb", profile: "connector-node-exact" },
+  capabilities: {
+    "sql.native-transparency": { status: "guaranteed" },
+    "numeric.exact-integer": {
+      status: "guarded",
+      canonical: "bigint",
+      rawRepresentations: ["bigint", "string", "number"],
+      conditionCode: "mariadb.exact-numeric-profile",
+    },
+    "numeric.exact-decimal": {
+      status: "guarded",
+      canonical: "string",
+      rawRepresentations: ["string"],
+      conditionCode: "mariadb.exact-numeric-profile",
+    },
+    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+  },
+  probe: {
+    statement: createRenderedStatement({
+      segments: ["SELECT VERSION() AS version"],
+      parameters: [],
+      resultKind: "rows",
+      dialectId: "mariadb",
+    }),
+    read: (rows) => {
+      const row = rows[0];
+      if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+      const version = (row as Record<string, unknown>).version;
+      return typeof version === "string" ? { version } : {};
+    },
+  },
+});
+
 function materialize(
   statement: RenderedStatement,
   binding: StatementBindingDescription | undefined,
@@ -352,6 +409,7 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
   return {
     ownershipKey: connection,
     statementBinding: mariaDbStatementBinding,
+    environment: policy === defaultTypePolicy ? mariaDbEnvironment : { ...mariaDbEnvironment, driver: { id: "mariadb", profile: "custom-type-policy" }, capabilities: {} },
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
       assertRoutineOutputsUnsupported(rendered);
@@ -485,6 +543,7 @@ export function createMariaDbPoolProvider(pool: MariaDbPoolLike, options: MariaD
   }
   return {
     statementBinding: mariaDbStatementBinding,
+    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy ? mariaDbEnvironment : { ...mariaDbEnvironment, driver: { id: "mariadb", profile: "custom-type-policy" }, capabilities: {} },
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
       const executor = createMariaDbExecutor(connection, options);

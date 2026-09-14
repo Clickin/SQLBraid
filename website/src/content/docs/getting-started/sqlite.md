@@ -11,6 +11,7 @@ and database verification is pending; this guide does not claim publication,
 CI, or release-gate completion.
 :::
 
+
 ## 1. Create a project
 
 ```bash
@@ -112,5 +113,26 @@ adapter does not support routine calls; streaming uses
 results must be read as `bigint`; use the matching
 `typePolicyForIntegerMode("bigint")`. SQLite scalar/aggregate/window functions
 are ordinary SQL functions, and virtual-table/table-valued extensions are
-ordinary row queries, not stored procedures.
+ordinary SQL queries, not stored procedures.
 :::
+
+## SQLite representation profile
+
+`node:sqlite` is a Node runtime API, not a server version. The exact profile
+records Node, the SQLite library bundled by Node, and `integerMode`.
+
+| SQLite surface | Profile representation | Status/caveat |
+| --- | --- | --- |
+| INTEGER, `integerMode: "number"` | JavaScript `number` | Default and potentially lossy outside the safe integer range. |
+| INTEGER, `integerMode: "bigint"` | `bigint` | Exact int64 path; generated models must use `typePolicyForIntegerMode("bigint")`. |
+| `STRICT` tables | SQLite-native affinity enforcement | A schema feature, not a SQLBraid parser guarantee. |
+| non-STRICT tables / `ANY` | SQLite dynamic values | The returned representation follows the stored value and driver. |
+| JSON1 | text | Parse/validate JSON text with Standard Schema. |
+| BLOB | `Buffer`/bytes | Keep binary or explicitly encode it. |
+| `RETURNING` | materialized rowset | Output is accumulated before delivery; DML-returning streaming is not claimed. |
+
+The native binding uses `?` placeholders and `StatementSync`; `iterate()` is
+the stream primitive and a prepared loop is the bulk strategy. SQLite has no
+stored-procedure transport, so registered functions and table-valued
+extensions remain ordinary SQL row queries. Native SQLite SQL passes through
+without grammar rewriting; transparency is not grammar support.

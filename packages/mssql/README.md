@@ -37,3 +37,8 @@ rejected rather than ignored.
 `CURSOR VARYING OUTPUT` is not exposed as an application cursor: ordinary database APIs do not bind it as a client result cursor, so a cursor-output hint is rejected with `BRAID_CALL_CURSOR_UNSUPPORTED`. If a batch consumes a local cursor and emits `SELECT` rows, those are ordinary emitted result sets. Tedious output/return failures remain explicit; SQLBraid never guesses a procedure identity from arbitrary `EXEC` text.
 
 See the [SQL Server setup](https://clickin.github.io/SQLBraid/getting-started/mssql/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
+
+Tedious returns `bigint` as strings but `decimal`/`numeric` as JavaScript
+numbers; exact decimal support is therefore unsupported in this profile.
+`datetime2`/`datetimeoffset` use `Date`, `uniqueidentifier` uses strings, and
+`varbinary` uses bytes. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

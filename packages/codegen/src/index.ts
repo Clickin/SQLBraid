@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { TypePolicy, TypeMapping } from "@sqlbraid/core";
+import type { NumericFidelityKind, TypePolicy, TypeMapping } from "@sqlbraid/core";
 import {
   hashSnapshot,
   validateSnapshot,
@@ -147,6 +147,12 @@ function validateTypePolicy(policy: unknown): asserts policy is CodegenOptions["
     if (typeof mapping.nullable !== "boolean") {
       throw new TypeError(`Codegen TypePolicy mapping ${index}.nullable must be boolean.`);
     }
+    if (
+      mapping.numericFidelity !== undefined
+      && !["exact-integer", "exact-decimal", "approximate-float"].includes(mapping.numericFidelity as string)
+    ) {
+      throw new TypeError(`Codegen TypePolicy mapping ${index}.numericFidelity is unsupported.`);
+    }
   }
 }
 
@@ -227,7 +233,9 @@ function indexTypePolicy(policy: CodegenOptions["typePolicy"], diagnostics: Code
   for (const [normalized, mappings] of grouped) {
     const first = mappings[0]!;
     const conflicting = mappings.some(
-      (mapping) => mapping.inputType !== first.inputType || mapping.outputType !== first.outputType,
+      (mapping) => mapping.inputType !== first.inputType
+        || mapping.outputType !== first.outputType
+        || mapping.numericFidelity !== first.numericFidelity,
     );
     entries.set(normalized, conflicting ? undefined : first);
     if (conflicting) {
@@ -235,7 +243,7 @@ function indexTypePolicy(policy: CodegenOptions["typePolicy"], diagnostics: Code
       diagnostics.push({
         code: "CODEGEN_AMBIGUOUS_TYPE_MAPPING",
         severity: "error",
-        message: `TypePolicy mappings ${keys.map((key) => JSON.stringify(key)).join(", ")} normalize to ${JSON.stringify(normalized)} with conflicting input/output representations.`,
+        message: `TypePolicy mappings ${keys.map((key) => JSON.stringify(key)).join(", ")} normalize to ${JSON.stringify(normalized)} with conflicting input/output/fidelity representations.`,
         databaseType: normalized,
       });
     }
@@ -309,6 +317,17 @@ function resolveType(
 
   const inputType = columnOverride?.inputType ?? databaseOverride?.inputType ?? mapping?.inputType;
   const outputType = columnOverride?.outputType ?? databaseOverride?.outputType ?? mapping?.outputType;
+  const numericFidelity: NumericFidelityKind | undefined = mapping?.numericFidelity;
+  if (numericFidelity === "approximate-float") {
+    diagnostics.push({
+      code: "CODEGEN_LOSSY_NUMERIC_REPRESENTATION",
+      severity: "warning",
+      message: `Database type ${JSON.stringify(column.type)} is exposed through an approximate JavaScript number; exact numeric precision is not guaranteed.`,
+      relation: relation.identity,
+      column: column.name,
+      databaseType: column.type,
+    });
+  }
   if (isDynamicSqlite && !inputType && !outputType) return { hasPolicyMapping: false };
   if (!inputType && !outputType && !hasPolicyMapping) {
     diagnostics.push({

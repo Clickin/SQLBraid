@@ -76,3 +76,25 @@ See [runtime and driver support](/SQLBraid/reference/support/) for the evidence 
 
 For the explicit procedure metadata shape and heterogeneous `sql.call` result
 contract, see [routine calls](/SQLBraid/concepts/routines/).
+
+## Tedious representation profile
+
+The documented free test target is SQL Server Developer/Express-compatible
+testing with Tedious on Node 22.18.0/Linux x64. The support manifest, not this
+page, assigns the evidence label; another SQL Server edition or runtime is a
+separate profile.
+
+| SQL Server value | Tedious representation | Status/caveat |
+| --- | --- | --- |
+| `bigint` | string | Preserve text or use `decodeExactInteger`; do not coerce blindly. |
+| `decimal` / `numeric` | JavaScript `number` | **Exact decimal unsupported** in this profile; convert to text in authored SQL when needed. |
+| `datetime2` / `datetimeoffset` | `Date` | Offset name and sub-millisecond detail are not preserved. |
+| `uniqueidentifier` | string | Validate with the application schema if required. |
+| `varbinary` | `Buffer` | Keep bytes or explicitly encode. |
+| JSON | text | Parse and validate with Standard Schema; SQL Server JSON functions do not change this boundary. |
+
+The binding transport is a typed Tedious request with deterministic `@p1`,
+`@p2`, … names and `TYPES.*` metadata. Native `OUTPUT` rows are materialized
+through `sql.rows`; output/return routine channels use explicit metadata.
+Prepared-loop is the portable bulk strategy. Native SQL passes through
+transparently, while SQLBraid does not claim to parse all T-SQL grammar.

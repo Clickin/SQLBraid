@@ -1,13 +1,16 @@
 import oracledb from "oracledb";
 import {
   createBulkBindingDescription,
+  createRenderedStatement,
   createStatementBindingDescription,
+  ResultExactnessError,
   type BulkBindingDescription,
   type BulkExecutionResult,
   type ConnectionLease,
   type ConnectionProvider,
   type DatabaseOptions,
   type DriverRoutineResult,
+  type DriverEnvironment,
   type ParameterTypeHint,
   type QueryExecutor,
   type QueryExecutionResult,
@@ -130,6 +133,30 @@ export interface OracleDatabaseOptions extends DatabaseOptions {
 
 const defaultDriver = oracledb as unknown as OracleDriverLike;
 
+const oracleEnvironment = Object.freeze<DriverEnvironment>({
+  database: { product: "oracle" },
+  driver: { id: "node-oracledb", profile: "thin" },
+  capabilities: {
+    "sql.native-transparency": { status: "guaranteed" },
+    "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
+    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+  },
+  probe: {
+    statement: createRenderedStatement({
+      segments: ["SELECT banner AS version FROM v$version WHERE ROWNUM = 1"],
+      parameters: [],
+      resultKind: "rows",
+      dialectId: "oracle",
+    }),
+    read: (rows) => {
+      const row = rows[0];
+      if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+      const version = (row as Record<string, unknown>).VERSION ?? (row as Record<string, unknown>).version;
+      return typeof version === "string" ? { version } : {};
+    },
+  },
+});
+
 interface OracleStatementBindingAdapter extends StatementBindingAdapter {
   readonly materializedBinds: (
     statement: RenderedStatement,
@@ -213,9 +240,26 @@ function decodeRow(value: unknown, fields: readonly OracleMetaDataLike[], policy
   for (const [key, entry] of Object.entries(value)) {
     const field = fields.find((candidate) => candidate.name === key);
     const type = metadataType(field, driver);
+    assertOracleNumericValue(type, entry);
     row[key] = type === undefined ? entry : policy.decode(type, entry);
   }
   return row;
+}
+
+function assertOracleNumericValue(databaseType: string | undefined, value: unknown): void {
+  if (value === null || value === undefined || databaseType === undefined) return;
+  const type = normalType(databaseType);
+  if (type === "NUMBER") {
+    if (typeof value !== "string") {
+      throw new ResultExactnessError("Oracle NUMBER results must remain exact strings.");
+    }
+    return;
+  }
+  if (type === "BINARY_FLOAT" || type === "BINARY_DOUBLE") {
+    if (typeof value !== "number") {
+      throw new ResultExactnessError(`Oracle ${type} results must remain JavaScript numbers, including native non-finite values.`);
+    }
+  }
 }
 
 function matchesDriverType(value: unknown, candidate: unknown): boolean {
@@ -327,13 +371,17 @@ function bindValues(rendered: RenderedStatement, policy: TypePolicy, driver: Ora
       throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle bind ${databaseType} does not support length facets.`);
     }
     const encoded = direction === "out" ? undefined : policy.encode(databaseType!, value);
-    if (databaseType === "NUMBER" && typeof encoded === "string" && direction !== "out") {
+    const exactNumberOutput = databaseType === "NUMBER" && direction !== "in";
+    if (databaseType === "NUMBER" && typeof encoded === "string" && direction === "in") {
       throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Oracle NUMBER binds do not accept decimal strings with a NUMBER driver type; use bigint/number or an unhinted decimal string.");
     }
     values.push({
       dir: direction === "in" ? driver.BIND_IN : direction === "out" ? driver.BIND_OUT : driver.BIND_INOUT,
-      ...(direction === "out" ? {} : { val: encoded }),
-      type: typeConstant(databaseType!, driver),
+      ...(direction === "out" ? {} : { val: exactNumberOutput && (typeof encoded === "bigint" || typeof encoded === "number") ? String(encoded) : encoded }),
+      // fetchTypeHandler covers row columns, not OUT binds. Bind NUMBER outputs
+      // as character carriers so the driver never rounds them through Number.
+      type: typeConstant(exactNumberOutput ? "VARCHAR2" : databaseType!, driver),
+      ...(exactNumberOutput ? { maxSize: 172 } : {}),
       ...(direction !== "in" && hint.length !== undefined
         && (databaseType === "VARCHAR2" || databaseType === "NVARCHAR2" || databaseType === "RAW")
         ? { maxSize: hint.length === "max" ? 32_767 : hint.length }
@@ -810,6 +858,7 @@ async function normalizeDmlReturning(
           resources.push({ close: () => closeLob(lob) });
           value = await materializeLob(lob, hintType, name);
         }
+        assertOracleNumericValue(hintType, value);
         setOutputValue(row, name, hintType === undefined ? value : policy.decode(hintType, value));
       }
       materialized.push(row);
@@ -836,6 +885,7 @@ function makeOracledbExecutor(
   return {
     ownershipKey: connection,
     statementBinding: bindingAdapter,
+    environment: policy === defaultTypePolicy && driver === defaultDriver && oracledb.thin ? oracleEnvironment : { ...oracleEnvironment, driver: { id: "node-oracledb", profile: "custom" }, capabilities: {} },
     async bulk(bulk: RenderedBulk, binding: BulkBindingDescription): Promise<BulkExecutionResult> {
       if (typeof connection.executeMany !== "function") {
         throw new Error("BRAID_BULK_UNSUPPORTED: Oracle connection does not expose executeMany().");
@@ -963,6 +1013,7 @@ function makeOracledbExecutor(
           } else {
             const lob = materializedLobType(hintType) ? explicitLobs?.get(index) : undefined;
             const outputValue = lob === undefined ? value : await materializeLob(lob, hintType!, name);
+            assertOracleNumericValue(hintType, outputValue);
             setOutputValue(output, name, hintType === undefined ? outputValue : policy.decode(hintType, outputValue));
           }
         }
@@ -1089,6 +1140,7 @@ export function createOracledbPoolProvider(pool: OraclePoolLike, options: Omit<O
   });
   return {
     statementBinding: bindingAdapter,
+    environment: (options.typePolicy === undefined || options.typePolicy === defaultTypePolicy) && (options.driver === undefined || options.driver === defaultDriver) && oracledb.thin ? oracleEnvironment : { ...oracleEnvironment, driver: { id: "node-oracledb", profile: "custom" }, capabilities: {} },
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
       assertPoolConnection(connection);

@@ -31,7 +31,7 @@ materialize 오류의 `executionStarted`와 `executionCompleted`는 모두
 | `BRAID_CALL_CURSOR_UNSUPPORTED` | 어댑터가 요청한 cursor output을 애플리케이션 result set으로 노출할 수 없습니다. |
 | `BRAID_CALL_RETURN_UNSUPPORTED` | return/status schema를 요청했지만 driver call이 return/status 채널을 노출하지 않았습니다. |
 | `BRAID_RESOURCE_CLEANUP` | 드라이버 리소스 close, drain 또는 cancel이 실패했으며 물리적 lease를 안전하게 재사용할 수 없습니다. |
-| `BRAID_INTEGER_MODE_UNSUPPORTED` | SQLite `integerMode: "bigint"`에는 `setReadBigInts`를 노출하는 statement API가 필요합니다. |
+| `BRAID_INTEGER_MODE_UNSUPPORTED` | SQLite bigint mode에는 Node의 `setReadBigInts`, 또는 WASM의 초기화한 `sqlite3` module과 공식 OO1 statement가 필요합니다. |
 | `BRAID_PREPARED_NAME` | 준비된 쿼리 이름이 비어 있거나 중복됩니다. |
 | `BRAID_PREPARED_SHAPE` | 준비된 쿼리가 다른 구조를 렌더링했습니다. |
 | `BRAID_BIND_HINT_CONTEXT` | boolean 식 대신 바인드 값 래퍼를 지시문 조건에 사용했습니다. |

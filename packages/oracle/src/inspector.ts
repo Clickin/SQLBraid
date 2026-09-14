@@ -81,6 +81,8 @@ function relationColumn(row: CatalogRow) {
     ordinal: ordinal === undefined ? 0 : Math.max(0, ordinal - 1),
     type,
     nullable: text(row, "nullable") === "Y",
+    ...(numberValue(row, "data_precision") === undefined ? {} : { precision: numberValue(row, "data_precision") }),
+    ...(numberValue(row, "data_scale") === undefined ? {} : { scale: numberValue(row, "data_scale") }),
     ...(defaultExpression === undefined ? {} : { defaultExpression }),
     ...(virtual ? { generated: true, insertable: false, updatable: false } : {}),
     ...(identity ? { identity: true } : {}),
@@ -131,7 +133,7 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
         if (name) namespaces[name] = { name, kind: "schema" };
       }
       const relationRows = await rows(connection, "SELECT owner, table_name AS relation_name, 'TABLE' AS relation_kind FROM all_tables UNION ALL SELECT owner, view_name AS relation_name, 'VIEW' AS relation_kind FROM all_views ORDER BY owner, relation_name");
-      const columnRows = await rows(connection, "SELECT owner, table_name, column_name, internal_column_id AS column_id, data_type, data_type_owner, nullable, data_default, identity_column, virtual_column, char_used, domain_owner, domain_name FROM all_tab_cols WHERE user_generated = 'YES' ORDER BY owner, table_name, internal_column_id");
+      const columnRows = await rows(connection, "SELECT owner, table_name, column_name, internal_column_id AS column_id, data_type, data_type_owner, data_precision, data_scale, nullable, data_default, identity_column, virtual_column, char_used, domain_owner, domain_name FROM all_tab_cols WHERE user_generated = 'YES' ORDER BY owner, table_name, internal_column_id");
       const columnsByRelation = Map.groupBy(columnRows, (column) => JSON.stringify([text(column, "owner"), text(column, "table_name")]));
       const relations: Record<string, RelationSnapshot> = {};
       for (const relation of relationRows) {

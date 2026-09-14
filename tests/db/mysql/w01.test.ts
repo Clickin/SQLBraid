@@ -201,7 +201,7 @@ test("MySQL inspector evidence generates compiling Row Insert and Update models"
     });
 
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "external_id", "number", false);
-    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "identity_value", "bigint | string", false);
+    assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "identity_value", "bigint", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "amount", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "label", "string", false);
     assertGeneratedProperty(result.source, "BraidPv9CodegenRow", "payload", "unknown | null", false);
@@ -296,7 +296,7 @@ test("MySQL pool releases before an async mapper can re-enter a max-one pool", a
         vendor: "sqlbraid-tests",
         async validate(value) {
           await db.execute(sql`SELECT 2`);
-          return { value: { value: (value as { readonly value: number }).value + 1 } };
+          return { value: { value: Number((value as { readonly value: bigint }).value) + 1 } };
         },
       },
     };

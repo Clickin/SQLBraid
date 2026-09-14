@@ -17,7 +17,7 @@ function text(row: CatalogRow | undefined, key: string): string | undefined {
 
 function numberValue(row: CatalogRow | undefined, key: string): number | undefined {
   const value = row?.[key];
-  return typeof value === "number" ? value : typeof value === "string" && /^\d+$/u.test(value) ? Number(value) : undefined;
+  return typeof value === "number" ? value : typeof value === "string" && /^-?\d+$/u.test(value) ? Number(value) : undefined;
 }
 
 async function rows(client: PgClientLike, text: string): Promise<readonly CatalogRow[]> {
@@ -32,7 +32,7 @@ export function createPostgresInspector(client: PgClientLike): MetadataInspector
       const versionRow = (await rows(client, "SELECT current_setting('server_version') AS version"))[0];
       const version = text(versionRow, "version") ?? "unknown";
       const tableRows = await rows(client, "SELECT table_schema, table_name, table_type FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name");
-      const columnRows = await rows(client, "SELECT table_schema, table_name, ordinal_position, column_name, data_type, udt_schema, udt_name, is_nullable, column_default, is_identity, identity_generation, is_generated, generation_expression FROM information_schema.columns WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name, ordinal_position");
+      const columnRows = await rows(client, "SELECT table_schema, table_name, ordinal_position, column_name, data_type, udt_schema, udt_name, numeric_precision, numeric_scale, is_nullable, column_default, is_identity, identity_generation, is_generated, generation_expression FROM information_schema.columns WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name, ordinal_position");
       const relations: Record<string, RelationSnapshot> = {};
       for (const relation of tableRows) {
         const schema = text(relation, "table_schema");
@@ -53,6 +53,8 @@ export function createPostgresInspector(client: PgClientLike): MetadataInspector
             ordinal: ordinal === undefined ? 0 : Math.max(0, ordinal - 1),
             type: `${text(column, "udt_schema") ?? "pg_catalog"}.${text(column, "udt_name") ?? dataType}`,
             nullable: text(column, "is_nullable") === "YES",
+            ...(numberValue(column, "numeric_precision") === undefined ? {} : { precision: numberValue(column, "numeric_precision") }),
+            ...(numberValue(column, "numeric_scale") === undefined ? {} : { scale: numberValue(column, "numeric_scale") }),
             ...(text(column, "column_default") ? { defaultExpression: text(column, "column_default") } : {}),
             ...(generated === undefined ? {} : { generated }),
             ...(generated === true ? { insertable: false, updatable: false, ...(generationExpression ? { generationExpression } : {}) } : {}),

@@ -61,9 +61,9 @@ Thin 바인딩 어댑터는 논리 문장을 text-positional `:1`, `:2`, … 바
 - 이 어댑터는 native `procedure` metadata를 지원하지 않습니다. Oracle
   PL/SQL/SQL 호출 텍스트를 명시적으로 작성하세요.
 - 스트리밍은 드라이버의 ResultSet 프로토콜을 사용하며 완료, 중단, 조기 종료 시 ResultSet을 닫습니다.
-- 대상 조합은 Node 22.18.0/Linux x64의 Oracle 23.9.0.25.07 Thin입니다.
-  PV15 최종 검증은 대기 중이며 [런타임 및 드라이버
-  지원](/SQLBraid/reference/support/)의 역사적 증거를 참고하세요.
+- 대상 조합은 Node 22.18.0/Linux x64의 Oracle Free 23.9 Thin입니다.
+  현재 인증 상태와 정확한 gate는 [런타임 및 드라이버
+  지원](/SQLBraid/reference/support/)에서 확인하세요.
 
 드라이버가 안전한 Oracle 타입을 추론할 수 없는 `null`에는 명시적인 힌트를 사용하세요. 타입이 지정되지 않은 null을 조용히 `VARCHAR2`로 바꾸지 않습니다.
 
@@ -79,3 +79,27 @@ VARCHAR2/NVARCHAR2 OUT/INOUT 길이는 드라이버의 `maxSize`를 지정하며
 
 전체 `sql.out`/`sql.inOut` 및 이질적 result-set 계약은
 [루틴 호출](/SQLBraid/concepts/routines/)을 참고하세요.
+
+## Oracle Thin 표현 프로필
+
+첫 번째 프로필은 node-oracledb Thin 모드입니다. 현재 문서의 free Oracle
+23.9 target을 Oracle 19c 증거로 표현해서는 안 됩니다. Thick 모드나 다른
+server line은 일치하는 manifest 증거가 생길 때까지 별도의 미테스트
+프로필입니다.
+
+| Oracle 값 | Thin 프로필 표현 | 비고 |
+| --- | --- | --- |
+| `NUMBER` | string | 정확한 10진/정수 텍스트이며 필요에 따라 `decodeExactDecimal` 또는 `decodeExactInteger`를 사용합니다. |
+| `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | 정의상 근사값이며 정확한 10진수가 아닙니다. |
+| CLOB / NCLOB | string | Routine LOB는 lease 반환 전에 읽고 destroy합니다. |
+| BLOB / RAW | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
+| DATE / TIMESTAMP variant | `Date` | 원본 timezone 이름과 모든 sub-millisecond 정보는 보존되지 않습니다. |
+
+바인드 전송은 node-oracledb bind descriptor와 text-positional
+`:1`, `:2`, …입니다. OUT ordinal은 중간 IN 값과 무관하게 SQL bind 순서를
+따릅니다. REF CURSOR output은 순서가 있는 materialized `resultSets`가 되고
+implicit result는 추가 set이 됩니다. Native `RETURNING ... INTO`는
+`sql.out()`과 materialized row API를 사용합니다. Manifest가 증명한 경우
+`executeMany()`가 native bulk 전략입니다. Native Oracle SQL은 투명하게
+전달되지만 SQLBraid가 Oracle grammar를 제공하거나 procedure metadata를
+추론하지는 않습니다.

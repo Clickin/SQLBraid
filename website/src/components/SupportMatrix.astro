@@ -1,0 +1,232 @@
+---
+import {
+  loadSupportMatrix,
+  serializeSupportMatrix,
+  type SupportTarget,
+} from "../lib/support-matrix";
+
+const data = loadSupportMatrix();
+const serialized = serializeSupportMatrix(data);
+const locale = Astro.url.pathname.includes("/ko/") ? "ko" : "en";
+const statusLabels: Record<string, string> = {
+  compatible: locale === "ko" ? "호환 가능" : "Compatible",
+  historical: locale === "ko" ? "과거 검증" : "Historical",
+  conditional: locale === "ko" ? "조건부" : "Conditional",
+  official: locale === "ko" ? "공식" : "Official",
+  unsupported: locale === "ko" ? "지원하지 않음" : "Unsupported",
+  guaranteed: locale === "ko" ? "보장됨" : "Guaranteed",
+  guarded: locale === "ko" ? "값 검사" : "Guarded",
+};
+const safeStatus = (value: string) => statusLabels[value.toLowerCase()] ?? value;
+const databaseLabel = (target: SupportTarget) => [target.database.product, target.database.version, target.database.edition].filter(Boolean).join(" ");
+const fallbackRows = data.targets.map((target) => ({ target, native: target.capabilities["sql.native-transparency"]?.status ?? "" }));
+---
+
+<div class="support-matrix" data-support-matrix-root>
+  <support-matrix aria-label={locale === "ko" ? "지원 매트릭스" : "Support matrix"}></support-matrix>
+  <script type="application/json" data-support-matrix set:html={serialized}></script>
+  <table class="support-matrix__fallback">
+    <caption>{locale === "ko" ? "PV16 지원 대상 (정적/인쇄용 요약)" : "PV16 support targets (static/print summary)"}</caption>
+    <thead>
+      <tr>
+        <th scope="col">{locale === "ko" ? "대상" : "Target"}</th>
+        <th scope="col">{locale === "ko" ? "데이터베이스" : "Database"}</th>
+        <th scope="col">{locale === "ko" ? "드라이버" : "Driver"}</th>
+        <th scope="col">{locale === "ko" ? "런타임" : "Runtime"}</th>
+        <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
+        <th scope="col">{locale === "ko" ? "네이티브 SQL 투명성" : "Native SQL transparency"}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {fallbackRows.map(({ target, native }) => (
+        <tr id={target.id}>
+          <th scope="row"><a href={`#${encodeURIComponent(target.id)}`}>{target.id}</a></th>
+          <td>{databaseLabel(target)}</td>
+          <td>{target.driver.id}{target.driver.version ? `@${target.driver.version}` : ""}</td>
+          <td>{target.runtime.id}{target.runtime.version ? `@${target.runtime.version}` : ""}</td>
+          <td>{safeStatus(target.status)}</td>
+          <td>{native ? safeStatus(native) : "—"}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+<script>
+  import "./SupportMatrixElement";
+</script>
+
+<style is:global>
+  .support-matrix {
+    margin-block: 1.5rem;
+  }
+
+  .support-matrix__fallback {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  .support-matrix__fallback caption {
+    margin-block: 0.5rem;
+    text-align: start;
+    font-weight: 600;
+  }
+
+  .support-matrix__fallback th,
+  .support-matrix__fallback td {
+    border: 1px solid var(--sl-color-gray-5);
+    padding: 0.55rem 0.65rem;
+    text-align: start;
+  }
+
+  .support-matrix__interactive {
+    display: none;
+  }
+
+  .support-matrix.has-js .support-matrix__fallback {
+    display: none;
+  }
+
+  .support-matrix__toolbar {
+    display: grid;
+    gap: 0.75rem;
+    margin-block-end: 0.75rem;
+  }
+
+  .support-matrix__views,
+  .support-matrix__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: end;
+  }
+
+  .support-matrix__views button[aria-selected="true"] {
+    background: var(--sl-color-accent-high);
+    color: var(--sl-color-accent-low);
+  }
+
+  .support-matrix__toolbar label {
+    display: grid;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+  }
+
+  .support-matrix__toolbar input,
+  .support-matrix__toolbar select,
+  .support-matrix__toolbar button {
+    min-height: 2rem;
+  }
+
+  .support-matrix.is-ready .support-matrix__interactive,
+  support-matrix.is-ready .support-matrix__interactive {
+    display: block;
+  }
+
+  .support-matrix__viewport {
+    position: relative;
+    overflow: auto;
+    max-height: min(70vh, 42rem);
+    border: 1px solid var(--sl-color-gray-5);
+    isolation: isolate;
+    height: min(70vh, 42rem);
+    max-width: 100%;
+  }
+
+  .support-matrix__header-slot {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    width: max(100%, calc(var(--matrix-columns) * 9rem));
+  }
+
+  .support-matrix__rows {
+    position: relative;
+    width: max(100%, calc(var(--matrix-columns) * 9rem));
+  }
+
+  .support-matrix__row {
+    display: grid;
+    grid-template-columns: repeat(var(--matrix-columns), minmax(0, 1fr));
+    align-items: center;
+    height: 56px;
+    box-sizing: border-box;
+    border-block-end: 1px solid var(--sl-color-gray-5);
+    padding-inline: 0.6rem;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .support-matrix__data-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+  }
+
+  .support-matrix__row > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .support-matrix__row > span:first-child {
+    font-weight: 600;
+  }
+
+  .support-matrix__row:focus-visible {
+    outline: 2px solid var(--sl-color-accent-high);
+    outline-offset: -2px;
+  }
+
+  .support-matrix__header {
+    background: var(--sl-color-bg);
+    font-weight: 700;
+  }
+
+  .support-matrix__status {
+    display: inline-block;
+    border-radius: 0.25rem;
+    padding: 0.15rem 0.35rem;
+    background: var(--sl-color-gray-6);
+    white-space: nowrap;
+  }
+
+  .support-matrix__status--official,
+  .support-matrix__status--guaranteed {
+    background: color-mix(in srgb, var(--sl-color-green-high) 24%, transparent);
+  }
+
+  .support-matrix__status--pending,
+  .support-matrix__status--guarded {
+    background: color-mix(in srgb, var(--sl-color-orange-high) 24%, transparent);
+  }
+
+  @media (max-width: 40rem) {
+    .support-matrix__filters {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .support-matrix__toolbar input,
+    .support-matrix__toolbar select {
+      width: 100%;
+    }
+
+    .support-matrix__viewport {
+      max-height: 65vh;
+    }
+  }
+
+  @media print {
+    .support-matrix__interactive {
+      display: none !important;
+    }
+
+    .support-matrix__fallback {
+      display: table !important;
+      font-size: 8pt;
+    }
+  }
+</style>

@@ -1,0 +1,62 @@
+{
+  "id": "sqlite-node-sqlite-node-22-18-0",
+  "status": "compatible",
+  "database": { "product": "sqlite", "version": "3.50.2", "edition": "Node bundled SQLite" },
+  "driver": {
+    "id": "node-sqlite",
+    "version": "22.18.0",
+    "profile": "integerMode=bigint",
+    "package": "@sqlbraid/sqlite/node-sqlite",
+    "transport": "text-positional (?NNN)",
+    "stream": "StatementSync iterate",
+    "routine": "unsupported by SQLite",
+    "bulk": "prepared-loop",
+    "rawRepresentations": { "integer": "bigint", "decimal": "number or string", "json": "text", "temporal": "text" },
+    "exclusions": ["SQLite call and routine APIs are unsupported", "Bun has no node:sqlite module", "Exact 64-bit integer output requires bigint mode"]
+  },
+  "runtime": { "id": "node", "version": "22.18.0" },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Node 22.18.0's built-in node:sqlite with an in-memory database.",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+  },
+  "ci": { "command": "pnpm run test:db:sqlite", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "capabilities": {
+    "sql.native-transparency": { "status": "guaranteed", "testIds": ["sqlite.sql.native-transparency"] },
+    "sql.generated-structure": { "status": "guaranteed", "testIds": ["sqlite.sql.generated-structure"] },
+    "numeric.exact-integer": { "status": "guarded", "conditionCode": "node-sqlite.bigint-mode", "canonical": "bigint", "rawRepresentations": ["bigint"], "testIds": ["sqlite.numeric.exact-integer"] },
+    "data.json-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["sqlite.data.json-text"] },
+    "data.temporal": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["sqlite.data.temporal"] },
+    "data.binary": { "status": "guaranteed", "rawRepresentations": ["Uint8Array"], "testIds": ["sqlite.data.binary"] },
+    "data.uuid": { "status": "unsupported", "testIds": [] },
+    "result.rows": { "status": "guaranteed", "testIds": ["sqlite.result.rows"] },
+    "result.command": { "status": "guaranteed", "testIds": ["sqlite.result.command"] },
+    "result.multiple-sets": { "status": "unsupported", "testIds": [] },
+    "result.standard-schema": { "status": "guaranteed", "testIds": ["sqlite.result.standard-schema"] },
+    "execution.prepared": { "status": "guaranteed", "testIds": ["sqlite.execution.prepared"] },
+    "execution.stream": { "status": "guaranteed", "testIds": ["sqlite.execution.stream"] },
+    "execution.bulk": { "status": "guaranteed", "testIds": ["sqlite.execution.bulk"] },
+    "execution.transaction": { "status": "guaranteed", "testIds": ["sqlite.execution.transaction"] },
+    "execution.savepoint": { "status": "guaranteed", "testIds": ["sqlite.execution.savepoint"] },
+    "routine.scalar-out": { "status": "unsupported", "testIds": [] },
+    "routine.inout": { "status": "unsupported", "testIds": [] },
+    "routine.resultsets": { "status": "unsupported", "testIds": [] },
+    "routine.cursor": { "status": "unsupported", "testIds": [] },
+    "routine.return-status": { "status": "unsupported", "testIds": [] },
+    "metadata.identity": { "status": "guaranteed", "testIds": ["sqlite.metadata.identity"] },
+    "metadata.generated": { "status": "guaranteed", "testIds": ["sqlite.metadata.generated"] },
+    "metadata.routines": { "status": "unsupported", "testIds": [] },
+    "metadata.types": { "status": "guaranteed", "testIds": ["sqlite.metadata.types"] },
+    "dml.insert-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.insert-returning"] },
+    "dml.update-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.update-returning"] },
+    "dml.delete-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.delete-returning"] },
+    "dml.merge-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.merge-returning"] }
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": [
+      { "workflow": ".github/workflows/release.yml", "commit": "b5600ebf8a3fed4b80c6f31550a37488ef057525", "status": "pending", "details": "Exact final-revision release gate has not run." },
+      { "workflow": ".github/workflows/runtime-portability.yml", "commit": "1615311", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34745030794", "details": "Historical runtime evidence; not a current PV16 certification." }
+    ]
+  }
+}

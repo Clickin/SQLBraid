@@ -30,6 +30,11 @@ SQLBraid는 SQL 우선 TypeScript 데이터 액세스 도구입니다. 쿼리 �
 
 SQLBraid는 임의의 SELECT 결과 타입을 추론하거나, 객체 그래프를 생성하거나, 모델 DSL 뒤에 SQL을 숨기지 않습니다. 작성한 SQL과 선언한 행 타입이 계약입니다. 행에 검증이나 변환이 필요할 때는 Standard Schema 매핑을 사용할 수 있습니다.
 
+데이터베이스에서 애플리케이션으로 값이 이동하는 경계는 [데이터 표현과
+숫자 정확도](/SQLBraid/concepts/data-representation/)를 참고하세요. 각
+driver 프로필에는 런타임이 실제로 받을 수 있는 정수, 10진수, JSON,
+temporal, binary 값이 기록되어 있습니다.
+
 ## 문서 출시 안내
 
 이 문서는 0.1.0 프리릴리스 문서입니다. PV15 최종 검증이 대기 중이며 이

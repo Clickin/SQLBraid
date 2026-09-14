@@ -1,7 +1,8 @@
 import { GenericContainer, Wait } from "testcontainers";
 import type { TestProject } from "vitest/node";
+import { readSupportImage } from "./support-target.js";
 
-export const ORACLE_IMAGE = "gvenzl/oracle-free:23.9-slim-faststart";
+const ORACLE_IMAGE = readSupportImage("oracle");
 export const ORACLE_VERSION = "23.9";
 const DEFAULT_USER = "sqlbraid";
 const DEFAULT_PASSWORD = "SqlbraidTest13";

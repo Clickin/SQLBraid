@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Clickin/SQLBraid/blob/main/support/schema.json",
+  "title": "SQLBraid support dataset",
+  "description": "Strict schema for support capability catalogs, target manifests, and the Vitest capability registry.",
+  "oneOf": [
+    { "$ref": "#/$defs/catalog" },
+    { "$ref": "#/$defs/target" },
+    { "$ref": "#/$defs/registry" },
+    { "$ref": "#/$defs/dataset" }
+  ],
+  "$defs": {
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["en", "ko"],
+      "properties": {
+        "en": { "type": "string", "minLength": 1 },
+        "ko": { "type": "string", "minLength": 1 }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "labels"],
+      "properties": {
+        "id": { "$ref": "#/$defs/capabilityId" },
+        "labels": { "$ref": "#/$defs/label" }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "labels"],
+      "properties": {
+        "code": { "$ref": "#/$defs/conditionCode" },
+        "labels": { "$ref": "#/$defs/label" }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilities", "conditions"],
+      "properties": {
+        "capabilities": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/capability" } },
+        "conditions": { "type": "array", "items": { "$ref": "#/$defs/condition" } }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "database", "driver", "runtime", "reproducibility", "ci", "capabilities", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/targetId" },
+        "status": { "enum": ["official", "conditional", "compatible", "historical", "unsupported"] },
+        "conditionCode": { "$ref": "#/$defs/conditionCode" },
+        "database": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["product", "edition"],
+          "properties": {
+            "product": { "enum": ["postgres", "mysql", "sqlite", "oracle", "mssql", "mariadb"] },
+            "version": { "$ref": "#/$defs/exactVersion" },
+            "edition": { "type": "string", "minLength": 1 }
+          }
+        },
+        "driver": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version", "profile", "package", "transport", "stream", "routine", "bulk", "rawRepresentations", "exclusions"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$" },
+            "version": { "$ref": "#/$defs/exactVersion" },
+            "profile": { "type": "string", "minLength": 1 },
+            "package": { "type": "string", "minLength": 1 },
+            "transport": { "type": "string", "minLength": 1 },
+            "stream": { "type": "string", "minLength": 1 },
+            "routine": { "type": "string", "minLength": 1 },
+            "bulk": { "type": "string", "minLength": 1 },
+            "rawRepresentations": { "$ref": "#/$defs/representationMap" },
+            "exclusions": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          }
+        },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version"],
+          "properties": {
+            "id": { "enum": ["node", "bun", "deno", "browser", "workerd"] },
+            "version": { "$ref": "#/$defs/exactVersion" }
+          }
+        },
+        "reproducibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["zeroCost", "description", "url"],
+          "properties": {
+            "zeroCost": { "type": "boolean" },
+            "description": { "type": "string", "minLength": 1 },
+            "url": { "type": "string", "format": "uri", "minLength": 1 },
+            "image": { "type": "string", "minLength": 1 }
+          }
+        },
+        "ci": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command", "workflow", "releaseBlocking"],
+          "properties": {
+            "command": { "type": "string", "minLength": 1 },
+            "workflow": { "type": "string", "minLength": 1 },
+            "releaseBlocking": { "type": "boolean" }
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/capabilityId" },
+          "additionalProperties": { "$ref": "#/$defs/capabilityClaim" }
+        },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "capabilityClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "testIds"],
+      "properties": {
+        "status": { "enum": ["guaranteed", "guarded", "unsupported"] },
+        "conditionCode": { "$ref": "#/$defs/conditionCode" },
+        "testIds": { "type": "array", "items": { "$ref": "#/$defs/testId" }, "uniqueItems": true },
+        "canonical": { "enum": ["bigint", "string", "number"] },
+        "rawRepresentations": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "representationMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["integer", "decimal", "json", "temporal"],
+      "properties": {
+        "integer": { "type": "string", "minLength": 1 },
+        "decimal": { "type": "string", "minLength": 1 },
+        "json": { "type": "string", "minLength": 1 },
+        "temporal": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "runs"],
+      "properties": {
+        "status": { "enum": ["verified", "pending", "historical"] },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["workflow", "commit", "status"],
+            "properties": {
+              "workflow": { "type": "string", "minLength": 1 },
+              "commit": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
+              "status": { "enum": ["passed", "failed", "pending"] },
+              "run": { "type": "string", "minLength": 1 },
+              "details": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "registryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "title"],
+      "properties": {
+        "file": { "type": "string", "pattern": "^tests/[a-zA-Z0-9_./-]+\\.test\\.ts$" },
+        "title": { "type": "string", "minLength": 1 }
+      }
+    },
+    "registry": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/testId" },
+      "additionalProperties": { "$ref": "#/$defs/registryEntry" }
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog", "targets", "testRegistry"],
+      "properties": {
+        "catalog": { "$ref": "#/$defs/catalog" },
+        "targets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/target" } },
+        "testRegistry": { "$ref": "#/$defs/registry" }
+      }
+    },
+    "capabilityId": { "type": "string", "pattern": "^(?:sql|result|numeric|data|dml|execution|routine|metadata)\\.[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "conditionCode": { "type": "string", "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+$" },
+    "testId": { "type": "string", "pattern": "^[a-z0-9-]+\\.(?:sql|result|numeric|data|dml|execution|routine|metadata)\\.[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "targetId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "exactVersion": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:\\d+(?:\\.\\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?|\\d{4}-\\d{2}-\\d{2}|\\d+-CU\\d+)$"
+    }
+  }
+}

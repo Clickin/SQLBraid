@@ -1,4 +1,8 @@
-import type { ParameterTypeHint, TypePolicy } from "@sqlbraid/core";
+import {
+  decodeExactDecimal,
+  type ParameterTypeHint,
+  type TypePolicy,
+} from "@sqlbraid/core";
 
 export type OracleNumberInput = number | string | bigint;
 export type OracleBinaryInput = Uint8Array;
@@ -7,9 +11,9 @@ type OracleNullable<Input> = Input | null;
 const mappings = [
   { databaseType: "VARCHAR2", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "NVARCHAR2", inputType: "string", outputType: "string", nullable: true },
-  { databaseType: "NUMBER", inputType: "string | number | bigint", outputType: "string", nullable: true },
-  { databaseType: "BINARY_FLOAT", inputType: "number", outputType: "number", nullable: true },
-  { databaseType: "BINARY_DOUBLE", inputType: "number", outputType: "number", nullable: true },
+  { databaseType: "NUMBER", inputType: "string | number | bigint", outputType: "string", nullable: true, numericFidelity: "exact-decimal" as const },
+  { databaseType: "BINARY_FLOAT", inputType: "number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
+  { databaseType: "BINARY_DOUBLE", inputType: "number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
   { databaseType: "DATE", inputType: "Date", outputType: "Date", nullable: true },
   { databaseType: "TIMESTAMP", inputType: "Date", outputType: "Date", nullable: true },
   { databaseType: "TIMESTAMP WITH TIME ZONE", inputType: "Date", outputType: "Date", nullable: true },
@@ -55,17 +59,14 @@ function decode(databaseType: string, value: unknown): unknown {
   // NUMBER is intentionally represented as text. JavaScript Number cannot preserve
   // Oracle NUMBER precision, and the adapter requests string fetching for columns.
   if (type === "NUMBER") {
-    if (typeof value === "string") return value;
-    if (typeof value === "bigint") return value.toString();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-    throw new TypeError("Oracle NUMBER result is not an exact numeric representation.");
+    return decodeExactDecimal(value, { allowBigInt: true });
   }
   return value;
 }
 
 export const typePolicy: TypePolicy = {
   id: "oracle-default",
-  hash: "oracle-default-v1",
+  hash: "oracle-default-v2",
   mappings,
   decode,
   encode,

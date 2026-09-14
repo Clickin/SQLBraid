@@ -30,6 +30,11 @@ The [five-minute SQLite quickstart](/SQLBraid/getting-started/sqlite/) runs with
 
 SQLBraid does not infer arbitrary SELECT result types, hydrate object graphs, or hide SQL behind a model DSL. Your SQL and declared row type remain the contract. Standard Schema mapping is available when a row needs validation or transformation.
 
+For the database-to-application value boundary, see [data representations and
+numeric fidelity](/SQLBraid/concepts/data-representation/). Driver profiles
+document the raw integer, decimal, JSON, temporal, and binary values that the
+runtime can actually receive.
+
 ## Launch documentation
 
 This is the 0.1.0 pre-release documentation. PV16 exact-final-SHA verification

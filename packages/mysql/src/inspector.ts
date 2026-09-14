@@ -37,7 +37,7 @@ export function createMysqlInspector(connection: Mysql2ConnectionLike): Metadata
       const databaseRows = await rows(connection, "SELECT SCHEMA_NAME AS schema_name FROM information_schema.schemata ORDER BY schema_name");
       const namespaces = Object.fromEntries(databaseRows.flatMap((entry) => { const name = text(entry, "schema_name"); return name ? [[name, { name, kind: "database" as const }]] : []; }));
       const tableRows = await rows(connection, "SELECT TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, TABLE_TYPE AS table_type FROM information_schema.tables ORDER BY table_schema, table_name");
-      const columnRows = await rows(connection, "SELECT TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, ORDINAL_POSITION AS ordinal_position, COLUMN_NAME AS column_name, DATA_TYPE AS data_type, IS_NULLABLE AS is_nullable, COLUMN_DEFAULT AS column_default, EXTRA AS extra, COLUMN_KEY AS column_key, GENERATION_EXPRESSION AS generation_expression, CHARACTER_SET_NAME AS character_set_name, COLLATION_NAME AS collation_name FROM information_schema.columns ORDER BY table_schema, table_name, ordinal_position");
+      const columnRows = await rows(connection, "SELECT TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name, ORDINAL_POSITION AS ordinal_position, COLUMN_NAME AS column_name, DATA_TYPE AS data_type, NUMERIC_PRECISION AS numeric_precision, NUMERIC_SCALE AS numeric_scale, IS_NULLABLE AS is_nullable, COLUMN_DEFAULT AS column_default, EXTRA AS extra, COLUMN_KEY AS column_key, GENERATION_EXPRESSION AS generation_expression, CHARACTER_SET_NAME AS character_set_name, COLLATION_NAME AS collation_name FROM information_schema.columns ORDER BY table_schema, table_name, ordinal_position");
       const relations: Record<string, RelationSnapshot> = {};
       const types: Record<string, TypeSnapshot> = {};
       for (const table of tableRows) {
@@ -58,6 +58,8 @@ export function createMysqlInspector(connection: Mysql2ConnectionLike): Metadata
             ordinal: Math.max(0, (integer(column, "ordinal_position") ?? 1) - 1),
             type: dataType,
             nullable: text(column, "is_nullable") === "YES",
+            ...(integer(column, "numeric_precision") === undefined ? {} : { precision: integer(column, "numeric_precision") }),
+            ...(integer(column, "numeric_scale") === undefined ? {} : { scale: integer(column, "numeric_scale") }),
             ...(text(column, "column_default") ? { defaultExpression: text(column, "column_default") } : {}),
             ...(generated === undefined ? {} : { generated }),
             ...(generated === true ? { insertable: false, updatable: false, ...(generationExpression ? { generationExpression } : {}) } : {}),

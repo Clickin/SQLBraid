@@ -3,6 +3,8 @@ title: Runtime and driver support
 description: Separate implemented capability paths from the pending PV16 release evidence.
 ---
 
+import SupportMatrix from "../../../components/SupportMatrix.astro";
+
 PV16 exact-final-revision verification is pending. This page deliberately makes
 no current SHA, CI success, publication, or Official support claim. A package
 name, local fixture, or planned workflow is not release evidence.
@@ -17,40 +19,16 @@ name, local fixture, or planned workflow is not release evidence.
 
 ## PV16 matrix (final evidence pending)
 
-| Runtime or adapter path | Status | Boundary |
-| --- | --- | --- |
-| Node `>=22.18.0` + core/template/runtime | Pending | Runtime package target |
-| Node 24 + Vite 8 application integration | Pending | `@sqlbraid/vite` pre-transform; server runtime is separate |
-| Browser + SQLite WASM | Pending | One direct OO1-style database; browser gate is pending |
-| Worker + Cloudflare D1 | Pending | Local D1 binding gate only; no remote production claim |
-| PostgreSQL 16.4 / `pg` | Pending | Minimum-role capability and ordinary execution |
-| PostgreSQL 18.6 / `pg` | Pending | Current-role capability job; does not raise the minimum |
-| MySQL 8.4 / `mysql2` | Pending | Ordinary execution; no generic DML `RETURNING` |
-| MariaDB 11.8 / Connector/Node.js | Pending | Separate dialect and official connector evidence |
-| MariaDB / `mysql2` | Compatible expectation | Best-effort compatibility; no MariaDB-specific Official label |
-| SQLite / `node:sqlite` | Pending | Node statement APIs; `integerMode` is explicit |
-| Oracle Thin / `node-oracledb` | Pending | Scalar/cursor/implicit routine resources must close before lease release |
-| SQL Server / Tedious | Pending | Request events, OUTPUT values, and explicit procedure metadata for RETURN |
-| Other driver or database | Custom | Independent adapter evidence required |
+<SupportMatrix />
 
 ## Capability evidence matrix
 
 Dialect, driver, runtime, and server version are separate evidence axes. The
 plan-time taxonomy is recorded in
-[`docs/pv16-capability-evidence.json`](https://github.com/Clickin/SQLBraid/blob/main/docs/pv16-capability-evidence.json);
+[`support/`](https://github.com/Clickin/SQLBraid/tree/main/support);
 the runtime does not read that file. Every entry remains `Pending` here until
-the named exact-SHA test runs.
-
-| Dialect / driver | Native DML-returning form | Bulk mode | Stream boundary |
-| --- | --- | --- | --- |
-| PostgreSQL / `pg` | `RETURNING` | `prepared-loop` | `pg-cursor`; optional peer |
-| MySQL / `mysql2` | No generic DML `RETURNING` | `prepared-loop` | prepared `Execute.stream()`; drain or discard |
-| MariaDB / Connector/Node.js | `INSERT`, `DELETE`, `REPLACE ... RETURNING` where documented | `native-bulk` via `connection.batch()` | connector stream; exact server forms are tested separately |
-| SQLite / `node:sqlite` | `RETURNING` | prepared-loop | `StatementSync.iterate()` |
-| SQLite / `sqlite-wasm` | `RETURNING` | prepared-loop with one statement reset | one direct browser resource |
-| SQLite / Cloudflare D1 | `RETURNING` where the binding exposes rows | `remote-batch` via one `D1Database.batch()` | Unsupported: no incremental Worker Binding cursor |
-| Oracle Thin | `RETURNING ... INTO` + `sql.out()` | `native-bulk` via `executeMany()` | `ResultSet`; close before lease release |
-| SQL Server / Tedious | `OUTPUT` | `prepared-loop` | bounded Request row events; completion precedes release |
+the named exact-SHA test runs. The interactive matrix above is the canonical
+rendering of this same machine-readable target and capability data.
 
 PV16 supports materialized DML-returning through `db.execute`, `db.all`,
 `db.one`, and `db.maybeOne` with `sql.rows`. It does not make

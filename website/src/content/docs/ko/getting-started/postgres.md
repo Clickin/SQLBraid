@@ -89,3 +89,26 @@ cursor batch read를 사용하며 capability가 없으면
 `db.tx(async (tx) => tx.call(query))` 범위 안에서 호출하세요. SQLBraid는
 transaction-bound portal을 fetch/close하고 scalar `output`에서 제거한 뒤
 행을 `resultSets`로 반환하며 숨은 transaction을 만들지 않습니다.
+
+## pg 표현 프로필
+
+이 프로필은 support manifest가 기록한 정확한 database/runtime 조합에서
+`pg` 기본 parser를 사용합니다. custom `pg-types` parser는 별도의
+conditional 프로필이며 자체 raw-value 증거가 필요합니다.
+
+| 값 | 기본 프로필 표현 | 경계 |
+| --- | --- | --- |
+| `int8` | string | 애플리케이션에서 `bigint`가 필요하면 `decodeExactInteger`를 사용합니다. |
+| `numeric`/`decimal` | string | 텍스트를 유지하거나 애플리케이션 10진 라이브러리를 사용하며 `number`로 변환하지 않습니다. |
+| `json`/`jsonb` | 파싱된 JavaScript 값 | Standard Schema로 검증합니다. custom parser는 텍스트를 반환할 수도 있습니다. |
+| `bytea` | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
+| `uuid` | string | 필요하면 애플리케이션 schema에서 형식을 검증합니다. |
+| 날짜/시간 | 설정한 variant에 따라 JavaScript `Date` 또는 driver text | `Date`는 모든 원본 offset/precision을 보존하지 않습니다. |
+
+바인드 전송은 순서가 있는 값과 text-positional `$1`, `$2`, …입니다.
+`pg-cursor`가 native pull stream을 제공하며 peer가 없으면
+`BRAID_STREAM_UNSUPPORTED`입니다. Routine refcursor는 기존 transaction이
+필요하고 result set으로 materialize됩니다. Bulk는 SQL rewrite가 아닌
+검증된 adapter native 또는 prepared 전략을 사용합니다. `RETURNING`을
+포함한 native PostgreSQL SQL은 투명하게 전달되지만, 이것은 SQLBraid의
+PostgreSQL grammar 지원을 의미하지 않습니다.

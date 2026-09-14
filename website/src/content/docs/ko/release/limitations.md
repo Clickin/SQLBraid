@@ -18,6 +18,13 @@ description: PV16 프리릴리스 계약이 의도적으로 약속하지 않는 
 - **Cloudflare D1은 materialized/remote-batch 전용입니다.** Worker Binding API에 incremental cursor가 없으므로 `db.stream()`과 callback `db.tx()`는 `BRAID_STREAM_UNSUPPORTED`이며 SQLBraid는 paginate하거나 transaction을 흉내 내지 않습니다.
 - **Native SQL Server RETURN status에는 명시적 procedure metadata가 필요합니다.** `sql.call({ procedure: { name, parameterNames } })`를 사용하며 임의 `EXEC` 텍스트에서 identity를 추측하지 않습니다.
 - **범용 input codec이 없습니다.** 일반 보간은 드라이버에 바인드되며 애플리케이션 JSON, temporal, custom-class, binary 규칙은 드라이버/애플리케이션의 책임입니다.
+- **숫자 정확도는 프로필별입니다.** `decodeExactInteger`는 `bigint`를 반환하고
+  `decodeExactDecimal`은 정확한 텍스트를 받아 `string`을 반환합니다. Tedious
+  `decimal`/`numeric` JavaScript number는 정확한 10진수가 아니며 Oracle
+  `NUMBER` 텍스트와 SQLite `integerMode`는 명시적으로 유지해야 합니다.
+- **환경 증거는 관찰 결과입니다.** `db.environment({ targets? })`는 일반
+  lease probe를 사용하고 성공한 snapshot을 캐시합니다. 불완전하거나 일치하지
+  않는 tuple은 Compatible로 남으며 추측한 Official claim이 되지 않습니다.
 - **SQL에서 TypeScript 추론을 하지 않습니다.** 임의 SELECT/JOIN 결과 추론과 관계 객체 그래프 hydrate는 계약 밖입니다.
 - **격리 API가 없습니다.** 콜백 안에서 애플리케이션이 명시적 SQL을 실행하지 않으면 transaction은 데이터베이스/드라이버 연결 기본값을 사용합니다.
 - **Observer mutation/retry/routing이 없습니다.** Observer는 작업을 검사하거나 실패시킬 수 있지만 SQL 재작성, bind 변경, retry는 할 수 없습니다.

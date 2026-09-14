@@ -33,3 +33,8 @@ Bulk uses one Connector/Node.js `connection.batch()` call with one SQL shape and
 N value sets. Root bulk has no portable transaction or auto-chunking promise;
 use `db.tx(async (tx) => tx.bulk(...))` for callback atomicity. Native
 DML-returning streams are not a PV16 support claim.
+
+The Connector/Node.js profile records exact server and runtime versions in the
+support manifest. BIGINT `bigint`, DECIMAL strings, JSON parser settings, temporal values,
+and binary bytes are profile data, not assumptions shared with mysql2. See the
+[data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

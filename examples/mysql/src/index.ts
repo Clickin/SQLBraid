@@ -36,7 +36,7 @@ const pool = createPool(connectionString);
 try {
   const db = createMysql2PoolDatabase(pool);
   const name = "Ada";
-  assert.deepEqual(await db.all(sql.rows<UserRow>`SELECT 1 AS id, ${name} AS name`), [{ id: 1, name }]);
+  assert.deepEqual(await db.all(sql.rows<{ readonly id: bigint; readonly name: string }>`SELECT 1 AS id, ${name} AS name`), [{ id: 1n, name }]);
   console.info("PASS MySQL packed pool query");
 } finally {
   await pool.end();

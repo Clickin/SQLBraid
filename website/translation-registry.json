@@ -1,0 +1,265 @@
+{
+  "version": 1,
+  "sourceLocale": "en",
+  "targetLocale": "ko",
+  "entries": [
+    {
+      "source": "website/src/content/docs/agents/cli.md",
+      "translation": "website/src/content/docs/ko/agents/cli.md",
+      "translationOf": "website/src/content/docs/agents/cli.md",
+      "sourceDigest": "4cb925302b17502381cde299e70cf965f11cc3cc20c019b0977cfb4fb6a38c62"
+    },
+    {
+      "source": "website/src/content/docs/agents/driver-author.md",
+      "translation": "website/src/content/docs/ko/agents/driver-author.md",
+      "translationOf": "website/src/content/docs/agents/driver-author.md",
+      "sourceDigest": "69a48b4f189162be4f1d43f3436bffa109b1c0fd2dffe7fdf7c3c48a51947614"
+    },
+    {
+      "source": "website/src/content/docs/agents/lsp.md",
+      "translation": "website/src/content/docs/ko/agents/lsp.md",
+      "translationOf": "website/src/content/docs/agents/lsp.md",
+      "sourceDigest": "2e63c5bc9abfb0d84509232b9168a4d42b6b18f6e416dea368a3575a30766a64"
+    },
+    {
+      "source": "website/src/content/docs/agents/skill.md",
+      "translation": "website/src/content/docs/ko/agents/skill.md",
+      "translationOf": "website/src/content/docs/agents/skill.md",
+      "sourceDigest": "96bbeb4232ab09ccd4649625a9e2ba91e23d8cdb9633124b734e4e454ea24855"
+    },
+    {
+      "source": "website/src/content/docs/agents/vscode.md",
+      "translation": "website/src/content/docs/ko/agents/vscode.md",
+      "translationOf": "website/src/content/docs/agents/vscode.md",
+      "sourceDigest": "7c575be8c3735eb268e0d825257bfa45b2eae994c0f3152aa5df8c2c717766c7"
+    },
+    {
+      "source": "website/src/content/docs/concepts/bulk.md",
+      "translation": "website/src/content/docs/ko/concepts/bulk.md",
+      "translationOf": "website/src/content/docs/concepts/bulk.md",
+      "sourceDigest": "2a833928dc1a2a8b0e6b15a93b92f218684e4f42486e033de39a7aec3516ffd1"
+    },
+    {
+      "source": "website/src/content/docs/concepts/data-representation.md",
+      "translation": "website/src/content/docs/ko/concepts/data-representation.md",
+      "translationOf": "website/src/content/docs/concepts/data-representation.md",
+      "sourceDigest": "dabd39732a8b12d166ad547fd69962494885b3e8ce3634465ad22cd9106ac68b"
+    },
+    {
+      "source": "website/src/content/docs/concepts/dynamic-braid.md",
+      "translation": "website/src/content/docs/ko/concepts/dynamic-braid.md",
+      "translationOf": "website/src/content/docs/concepts/dynamic-braid.md",
+      "sourceDigest": "5edf350eb174f382453cdb41fbceebf36e9c50cbafe047a976e431f8cc670e7a"
+    },
+    {
+      "source": "website/src/content/docs/concepts/parameter-hints.md",
+      "translation": "website/src/content/docs/ko/concepts/parameter-hints.md",
+      "translationOf": "website/src/content/docs/concepts/parameter-hints.md",
+      "sourceDigest": "a58da08d305510e7bc696d30f219069041cc1ccc9f0ca9d7fa3cfde8fe63c795"
+    },
+    {
+      "source": "website/src/content/docs/concepts/result-mapping.md",
+      "translation": "website/src/content/docs/ko/concepts/result-mapping.md",
+      "translationOf": "website/src/content/docs/concepts/result-mapping.md",
+      "sourceDigest": "b2ea12f79718d8e2f9deee699760ad1d9ef4ff739d7ce0e1666f23c094332d08"
+    },
+    {
+      "source": "website/src/content/docs/concepts/routines.md",
+      "translation": "website/src/content/docs/ko/concepts/routines.md",
+      "translationOf": "website/src/content/docs/concepts/routines.md",
+      "sourceDigest": "2fa80888ef608b74af5c335230eaa2bdd6ef5e2622f644eb78335704d3b93438"
+    },
+    {
+      "source": "website/src/content/docs/concepts/safe-binds.md",
+      "translation": "website/src/content/docs/ko/concepts/safe-binds.md",
+      "translationOf": "website/src/content/docs/concepts/safe-binds.md",
+      "sourceDigest": "d3150b3f095cea202fb3db5c6241e3c3f22dc63822a61af0f1c2e1d9f931e33a"
+    },
+    {
+      "source": "website/src/content/docs/concepts/sql-tags.md",
+      "translation": "website/src/content/docs/ko/concepts/sql-tags.md",
+      "translationOf": "website/src/content/docs/concepts/sql-tags.md",
+      "sourceDigest": "0ed97f954e3bb7e80f1706f742336fe3e6b27c851e1566e6bb64573b6f7e388b"
+    },
+    {
+      "source": "website/src/content/docs/concepts/structural-fragments.md",
+      "translation": "website/src/content/docs/ko/concepts/structural-fragments.md",
+      "translationOf": "website/src/content/docs/concepts/structural-fragments.md",
+      "sourceDigest": "24291f975c39c52dbc11b63f3e0654f0533b3529c215eb80736e97cdfd8eaefe"
+    },
+    {
+      "source": "website/src/content/docs/getting-started/mariadb.md",
+      "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
+      "translationOf": "website/src/content/docs/getting-started/mariadb.md",
+      "sourceDigest": "0fc4d3cd5f28593833ddee0e6a7d2087f31004d254e9b5b0d17a79d3457dbfc3"
+    },
+    {
+      "source": "website/src/content/docs/getting-started/mssql.md",
+      "translation": "website/src/content/docs/ko/getting-started/mssql.md",
+      "translationOf": "website/src/content/docs/getting-started/mssql.md",
+      "sourceDigest": "e3fc16f5eb42d0672e9f17a0870dad7e3077b991292ffd4cccc8640112ebafee"
+    },
+    {
+      "source": "website/src/content/docs/getting-started/mysql.md",
+      "translation": "website/src/content/docs/ko/getting-started/mysql.md",
+      "translationOf": "website/src/content/docs/getting-started/mysql.md",
+      "sourceDigest": "508747d4ab68ec9b5e9df92b2f2325ab5b320347914395beb4da424d6d926445"
+    },
+    {
+      "source": "website/src/content/docs/getting-started/oracle.md",
+      "translation": "website/src/content/docs/ko/getting-started/oracle.md",
+      "translationOf": "website/src/content/docs/getting-started/oracle.md",
+      "sourceDigest": "b4e7bd290185c3972ea336ec54812b8ee8f9c0ebc03d417ffb2fdd909b18a239"
+    },
+    {
+      "source": "website/src/content/docs/getting-started/postgres.md",
+      "translation": "website/src/content/docs/ko/getting-started/postgres.md",
+      "translationOf": "website/src/content/docs/getting-started/postgres.md",
+      "sourceDigest": "5e942036de31e06fb205b15d454a0eea8f0eb088c27728678b255b92c20bc561"
+    },
+    {
+      "source": "website/src/content/docs/getting-started/sqlite-browser.md",
+      "translation": "website/src/content/docs/ko/getting-started/sqlite-browser.md",
+      "translationOf": "website/src/content/docs/getting-started/sqlite-browser.md",
+      "sourceDigest": "955fdf793daff744fac00b4af318f268bf12a8d33901f80e5670fb00b6c44aba"
+    },
+    {
+      "source": "website/src/content/docs/getting-started/sqlite.md",
+      "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
+      "translationOf": "website/src/content/docs/getting-started/sqlite.md",
+      "sourceDigest": "05df17ff3b5122aa2782b17dab7576b5db08ecff9032a5e6474680f507d0ff66"
+    },
+    {
+      "source": "website/src/content/docs/getting-started/vite.md",
+      "translation": "website/src/content/docs/ko/getting-started/vite.md",
+      "translationOf": "website/src/content/docs/getting-started/vite.md",
+      "sourceDigest": "b53830609cb0a7b2589baaaacc18ebd9e81a159ea44c3e5a78cba2861772a919"
+    },
+    {
+      "source": "website/src/content/docs/index.md",
+      "translation": "website/src/content/docs/ko/index.md",
+      "translationOf": "website/src/content/docs/index.md",
+      "sourceDigest": "c80ec66ec39344ddb0f53c56d709644d0cb5a0f1d5fc1c8a91a892966316fe1d"
+    },
+    {
+      "source": "website/src/content/docs/interactive-preview.mdx",
+      "translation": "website/src/content/docs/ko/interactive-preview.mdx",
+      "translationOf": "website/src/content/docs/interactive-preview.mdx",
+      "sourceDigest": "a802aaf6b5625b7e1368308c475d4d37c891fb709ada84828d6e479f9f666a08"
+    },
+    {
+      "source": "website/src/content/docs/metadata/ci.md",
+      "translation": "website/src/content/docs/ko/metadata/ci.md",
+      "translationOf": "website/src/content/docs/metadata/ci.md",
+      "sourceDigest": "600e0c2cbf2513dcd64955749587b65fba79542157b458e4bf34e59616abe9db"
+    },
+    {
+      "source": "website/src/content/docs/metadata/config.md",
+      "translation": "website/src/content/docs/ko/metadata/config.md",
+      "translationOf": "website/src/content/docs/metadata/config.md",
+      "sourceDigest": "a1012e0714e29890c5423511d1c8f398769e5262629a0d619f214e255e727f89"
+    },
+    {
+      "source": "website/src/content/docs/metadata/inspectors.md",
+      "translation": "website/src/content/docs/ko/metadata/inspectors.md",
+      "translationOf": "website/src/content/docs/metadata/inspectors.md",
+      "sourceDigest": "81b60827c1b1839a1dd23b3c7dd27bff824f63fa00b194e8c2aba093afeecd15"
+    },
+    {
+      "source": "website/src/content/docs/metadata/models.md",
+      "translation": "website/src/content/docs/ko/metadata/models.md",
+      "translationOf": "website/src/content/docs/metadata/models.md",
+      "sourceDigest": "b3ebe960530a725cdf0517d93ee7d31b61a5710ff4c4b60ced3c31b1856ef0ce"
+    },
+    {
+      "source": "website/src/content/docs/metadata/overrides.md",
+      "translation": "website/src/content/docs/ko/metadata/overrides.md",
+      "translationOf": "website/src/content/docs/metadata/overrides.md",
+      "sourceDigest": "466e8ca2afcf544cf0bb9468dc5e9e7c816cef378e640c069faf642eaee08f69"
+    },
+    {
+      "source": "website/src/content/docs/reference/configuration.md",
+      "translation": "website/src/content/docs/ko/reference/configuration.md",
+      "translationOf": "website/src/content/docs/reference/configuration.md",
+      "sourceDigest": "329a268d2ed170e4e6ba728e71375d3f5045607c96f8211130d6abf93e8edb17"
+    },
+    {
+      "source": "website/src/content/docs/reference/errors.md",
+      "translation": "website/src/content/docs/ko/reference/errors.md",
+      "translationOf": "website/src/content/docs/reference/errors.md",
+      "sourceDigest": "ddd6908ed40af951da9b479ca80edd6612fdbf138550c8c6b773b3816aa9c5e5"
+    },
+    {
+      "source": "website/src/content/docs/reference/packages.md",
+      "translation": "website/src/content/docs/ko/reference/packages.md",
+      "translationOf": "website/src/content/docs/reference/packages.md",
+      "sourceDigest": "878422c8639d8721fd8b0e9d6c9a7dc8b8b617cc37ecf2242ea4d26df7813db2"
+    },
+    {
+      "source": "website/src/content/docs/reference/support.mdx",
+      "translation": "website/src/content/docs/ko/reference/support.mdx",
+      "translationOf": "website/src/content/docs/reference/support.mdx",
+      "sourceDigest": "c94fdc84a52527769fe30306fe310f6a3bd035999c99d50b3ca76eefb5a9a2e5"
+    },
+    {
+      "source": "website/src/content/docs/reference/troubleshooting.md",
+      "translation": "website/src/content/docs/ko/reference/troubleshooting.md",
+      "translationOf": "website/src/content/docs/reference/troubleshooting.md",
+      "sourceDigest": "203c95a4b51731add59e3b10d025d3328842eb555ad72b1a9b79615168ec9ad8"
+    },
+    {
+      "source": "website/src/content/docs/release/limitations.md",
+      "translation": "website/src/content/docs/ko/release/limitations.md",
+      "translationOf": "website/src/content/docs/release/limitations.md",
+      "sourceDigest": "10c0e6c0fd7e0a085cae7082758eb738cbb3cd251ee262ec9b898c47afc915e4"
+    },
+    {
+      "source": "website/src/content/docs/release/notes.md",
+      "translation": "website/src/content/docs/ko/release/notes.md",
+      "translationOf": "website/src/content/docs/release/notes.md",
+      "sourceDigest": "27e84f14aaec20190698929c5dbffae672e44fba65d2ce680fae72f090f0d205"
+    },
+    {
+      "source": "website/src/content/docs/release/roadmap.md",
+      "translation": "website/src/content/docs/ko/release/roadmap.md",
+      "translationOf": "website/src/content/docs/release/roadmap.md",
+      "sourceDigest": "d7878441539b2981b16f18d1fbf8c47f1f336ab8bbaf9677fc6f4d027baa3425"
+    },
+    {
+      "source": "website/src/content/docs/runtime/direct-pools.md",
+      "translation": "website/src/content/docs/ko/runtime/direct-pools.md",
+      "translationOf": "website/src/content/docs/runtime/direct-pools.md",
+      "sourceDigest": "4da8ea866ffcd80254f4993f8580042dc1041c9b2440691dfb8db6ef767fc131"
+    },
+    {
+      "source": "website/src/content/docs/runtime/observers.md",
+      "translation": "website/src/content/docs/ko/runtime/observers.md",
+      "translationOf": "website/src/content/docs/runtime/observers.md",
+      "sourceDigest": "e84d98515c265b17a8d98cb4bff40378bd4fc1898a3fde90aa8265221a979786"
+    },
+    {
+      "source": "website/src/content/docs/runtime/prepared.md",
+      "translation": "website/src/content/docs/ko/runtime/prepared.md",
+      "translationOf": "website/src/content/docs/runtime/prepared.md",
+      "sourceDigest": "6c96820552d078540f2abb3c3b1111dc5f82c6fd17775af364507a3f82df0959"
+    },
+    {
+      "source": "website/src/content/docs/runtime/streaming.md",
+      "translation": "website/src/content/docs/ko/runtime/streaming.md",
+      "translationOf": "website/src/content/docs/runtime/streaming.md",
+      "sourceDigest": "dc15445d5cfc5d5deae6ce04eac53046b2f4232635d543f102912294e11285f8"
+    },
+    {
+      "source": "website/src/content/docs/runtime/transaction-profiles.md",
+      "translation": "website/src/content/docs/ko/runtime/transaction-profiles.md",
+      "translationOf": "website/src/content/docs/runtime/transaction-profiles.md",
+      "sourceDigest": "a9593e5afd5f0bebbf843dbae070bc50a087fa34b971abe99e20c88c7b149ef9"
+    },
+    {
+      "source": "website/src/content/docs/runtime/transactions.md",
+      "translation": "website/src/content/docs/ko/runtime/transactions.md",
+      "translationOf": "website/src/content/docs/runtime/transactions.md",
+      "sourceDigest": "62ba9b24b0ba8f3091d557cdf026b252bd181ec2cdc5c6e428d8060d1540cbfd"
+    }
+  ]
+}

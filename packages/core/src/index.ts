@@ -24,6 +24,69 @@ export interface RenderLimits {
 
 export type QueryResultKind = "rows" | "command" | "call" | "unknown";
 
+export type NumericFidelityKind =
+  | "exact-integer"
+  | "exact-decimal"
+  | "approximate-float";
+
+export interface ExactIntegerRange {
+  readonly min?: bigint;
+  readonly max?: bigint;
+}
+
+export class ResultExactnessError extends Error {
+  readonly code = "BRAID_RESULT_EXACTNESS";
+
+  constructor(message = "Result value does not have an exact representation.") {
+    super(message);
+    this.name = "ResultExactnessError";
+  }
+}
+
+function exactnessFailure(message: string): never {
+  throw new ResultExactnessError(message);
+}
+
+export function decodeExactInteger(value: unknown, range?: ExactIntegerRange): bigint {
+  let result: bigint;
+  if (typeof value === "bigint") {
+    result = value;
+  } else if (typeof value === "string" && /^[+-]?\d+$/u.test(value)) {
+    try {
+      result = BigInt(value);
+    } catch {
+      return exactnessFailure("Result value does not have an exact integer representation.");
+    }
+  } else if (typeof value === "number" && Number.isSafeInteger(value)) {
+    result = BigInt(value);
+  } else {
+    return exactnessFailure("Result value does not have an exact integer representation.");
+  }
+
+  if (range !== undefined) {
+    if (
+      (range.min !== undefined && typeof range.min !== "bigint")
+      || (range.max !== undefined && typeof range.max !== "bigint")
+      || (range.min !== undefined && range.max !== undefined && range.min > range.max)
+    ) {
+      throw new TypeError("Exact integer range bounds must be ordered bigint values.");
+    }
+    if (range.min !== undefined && result < range.min) {
+      return exactnessFailure("Result exact integer is below the configured minimum.");
+    }
+    if (range.max !== undefined && result > range.max) {
+      return exactnessFailure("Result exact integer is above the configured maximum.");
+    }
+  }
+  return result;
+}
+
+export function decodeExactDecimal(value: unknown, options?: { readonly allowBigInt?: boolean }): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "bigint" && options?.allowBigInt === true) return value.toString();
+  return exactnessFailure("Result value does not have an exact decimal representation.");
+}
+
 export type RoutineParameterDirection = "in" | "out" | "inout";
 
 export interface RoutineProcedure {
@@ -697,6 +760,7 @@ export interface TypeMapping {
   readonly inputType: string;
   readonly outputType: string;
   readonly nullable: boolean;
+  readonly numericFidelity?: NumericFidelityKind;
 }
 
 export interface TypePolicy {
@@ -956,6 +1020,7 @@ export interface QueryExecutor {
   /** Stable identity for the physical execution resource shared by wrappers; pools must use a leased resource. */
   readonly ownershipKey?: object;
   readonly statementBinding: StatementBindingAdapter;
+  readonly environment?: DriverEnvironment;
   query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>>;
   stream<Row>(rendered: RenderedStatement, signal?: AbortSignal, binding?: StatementBindingDescription): AsyncIterable<Row>;
   call(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<DriverRoutineResult>;
@@ -974,6 +1039,7 @@ export interface ConnectionLease extends QueryExecutor {
 
 export interface ConnectionProvider {
   readonly statementBinding: StatementBindingAdapter;
+  readonly environment?: DriverEnvironment;
   acquire(): Promise<ConnectionLease>;
 }
 
@@ -986,6 +1052,7 @@ export interface QueryExecutionPlan {
 
 export interface QueryReadyEvent {
   readonly type: "query:ready";
+  readonly purpose?: "environment";
   readonly operationId: string;
   readonly batchId?: string;
   readonly sql?: string;
@@ -1009,6 +1076,7 @@ export interface QueryReadyEvent {
 
 export interface QueryResultEvent {
   readonly type: "query:result";
+  readonly purpose?: "environment";
   readonly operationId: string;
   readonly preparedName?: string;
   readonly batchId?: string;
@@ -1025,6 +1093,7 @@ export interface QueryResultEvent {
 
 export interface QueryMappedEvent {
   readonly type: "query:mapped";
+  readonly purpose?: "environment";
   readonly operationId: string;
   readonly preparedName?: string;
   readonly batchId?: string;
@@ -1076,6 +1145,7 @@ export type QueryErrorStage =
 
 export interface QueryErrorEvent {
   readonly type: "query:error";
+  readonly purpose?: "environment";
   readonly operationId: string;
   readonly preparedName?: string;
   readonly batchId?: string;
@@ -1154,6 +1224,53 @@ export interface ExecutionObserver {
   onEvent(event: ExecutionEvent): void | Promise<void>;
 }
 
+export interface EnvironmentCapability {
+  readonly status: "guaranteed" | "guarded" | "unsupported";
+  readonly canonical?: "bigint" | "string" | "number";
+  readonly rawRepresentations?: readonly string[];
+  readonly conditionCode?: string;
+}
+
+export interface DatabaseEnvironment {
+  readonly database: { readonly product: string; readonly version?: string; readonly edition?: string };
+  readonly driver: { readonly id: string; readonly version?: string; readonly profile?: string };
+  readonly runtime: { readonly id: string; readonly version?: string };
+  readonly capabilities: Readonly<Record<string, EnvironmentCapability>>;
+  readonly supportMatch: {
+    readonly status: "official" | "conditional" | "compatible";
+    readonly targetId?: string;
+    readonly reason?: string;
+  };
+}
+
+/** Adapter evidence only. Probes run through the ordinary observed, leased query path. */
+export interface DriverEnvironment {
+  readonly database: DatabaseEnvironment["database"];
+  readonly driver: DatabaseEnvironment["driver"];
+  readonly capabilities: DatabaseEnvironment["capabilities"];
+  readonly probe?: {
+    readonly statement: RenderedStatement;
+    readonly read: (rows: readonly unknown[]) => {
+      readonly version?: string;
+      readonly edition?: string;
+    };
+  };
+}
+
+/** Structural subset of a support manifest; importing support tooling is unnecessary. */
+export interface EnvironmentSupportTarget {
+  readonly id: string;
+  readonly status: string;
+  readonly database: { readonly product: string; readonly version: string; readonly edition: string };
+  readonly driver: { readonly id: string; readonly version: string; readonly profile: string };
+  readonly runtime: { readonly id: string; readonly version: string };
+  readonly evidence: { readonly status: string };
+}
+
+export interface EnvironmentOptions {
+  readonly targets?: readonly EnvironmentSupportTarget[];
+}
+
 export interface DatabaseOptions {
   readonly observers?: readonly ExecutionObserver[];
   readonly reuse?: RequestedReuse;
@@ -1182,6 +1299,7 @@ export type ExecutionResultOf<Q> =
         : never;
 
 export interface Database {
+  environment(options?: EnvironmentOptions): Promise<DatabaseEnvironment>;
   all<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<readonly Row[]>;
   one<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row>;
   maybeOne<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row | undefined>;

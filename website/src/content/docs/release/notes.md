@@ -3,9 +3,12 @@ title: PV16 release notes
 description: The pre-release surface for DML returning, bulk, MariaDB, Browser WASM, and D1.
 ---
 
-PV16 documentation describes the pre-release SQLBraid surface. Exact-final-SHA
+Exact-final-SHA
 verification is pending; these notes make no final SHA, CI, publication, or
 Official support claim.
+The documentation baseline is
+`b5600ebf8a3fed4b80c6f31550a37488ef057525`; the final revision remains
+unrecorded.
 
 ## Included contract
 
@@ -23,6 +26,9 @@ Official support claim.
 - execution observers with `durationMs`, non-sensitive call result structure, and lazy diagnostic literalization;
 - `@sqlbraid/vite` Vite 8 pre-transform that preserves TSX and source-map composition while leaving TypeScript and framework transforms to Vite;
 - optional metadata, inspectors, deterministic code generation, CLI JSON inspection, standard stdio LSP, and thin VS Code integration.
+- numeric fidelity helpers and data-representation profiles: exact integers use
+  `bigint`, exact decimals remain strings, Oracle `NUMBER` remains text, and
+  Tedious `decimal`/`numeric` is not exact decimal support;
 
 ## Verification status
 

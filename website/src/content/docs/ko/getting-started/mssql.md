@@ -76,3 +76,26 @@ Tedious는 `decimal`/`numeric` 결과를 JavaScript 숫자로 반환하므로 �
 
 명시적 procedure metadata와 이질적인 `sql.call` result 계약은
 [루틴 호출](/SQLBraid/concepts/routines/)을 참고하세요.
+
+## Tedious 표현 프로필
+
+문서의 free test target은 Node 22.18.0/Linux x64의 SQL Server
+Developer/Express 호환 테스트와 Tedious입니다. 증거 라벨은 이 페이지가
+아니라 support manifest가 지정합니다. 다른 SQL Server edition이나 runtime은
+별도의 프로필입니다.
+
+| SQL Server 값 | Tedious 표현 | 상태/주의 |
+| --- | --- | --- |
+| `bigint` | string | 텍스트를 유지하거나 `decodeExactInteger`를 사용하며 무작정 변환하지 않습니다. |
+| `decimal` / `numeric` | JavaScript `number` | 이 프로필에서 **정확한 10진수는 지원하지 않습니다**. 필요하면 SQL에서 텍스트로 변환합니다. |
+| `datetime2` / `datetimeoffset` | `Date` | Offset 이름과 sub-millisecond 정보는 보존되지 않습니다. |
+| `uniqueidentifier` | string | 필요하면 애플리케이션 schema로 검증합니다. |
+| `varbinary` | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
+| JSON | text | Standard Schema로 파싱/검증하며 SQL Server JSON function이 경계를 바꾸지 않습니다. |
+
+바인드 전송은 deterministic `@p1`, `@p2`, … 이름과 `TYPES.*` metadata를
+사용하는 typed Tedious request입니다. Native `OUTPUT` 행은 `sql.rows`로
+materialize하고 output/return routine channel은 명시적 metadata를
+사용합니다. Portable bulk 전략은 prepared-loop입니다. Native SQL은
+투명하게 전달되지만 SQLBraid가 모든 T-SQL grammar를 파싱한다고 주장하지
+않습니다.

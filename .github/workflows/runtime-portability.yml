@@ -52,33 +52,6 @@ jobs:
       fail-fast: false
       matrix:
         runtime: [bun, deno]
-    services:
-      postgres:
-        image: postgres:16.4-alpine
-        env:
-          POSTGRES_USER: sqlbraid
-          POSTGRES_PASSWORD: sqlbraid-test
-          POSTGRES_DB: sqlbraid
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U sqlbraid"
-          --health-interval 5s --health-timeout 5s --health-retries 20
-      mysql:
-        image: mysql:8.4.2
-        env:
-          MYSQL_DATABASE: sqlbraid
-          MYSQL_USER: sqlbraid
-          MYSQL_PASSWORD: sqlbraid-test
-          MYSQL_ROOT_PASSWORD: sqlbraid-root-test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd "mysqladmin ping -h 127.0.0.1 -psqlbraid-root-test"
-          --health-interval 5s --health-timeout 5s --health-retries 30
-    env:
-      SQLBRAID_POSTGRES_URL: postgres://sqlbraid:sqlbraid-test@127.0.0.1:5432/sqlbraid
-      SQLBRAID_MYSQL_URL: mysql://sqlbraid:sqlbraid-test@127.0.0.1:3306/sqlbraid
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.0.0

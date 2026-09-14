@@ -1,0 +1,63 @@
+{
+  "id": "d1-cloudflare-workerd-2026-07-30",
+  "status": "compatible",
+  "database": { "product": "sqlite", "edition": "Cloudflare D1 managed SQLite (version unreported)" },
+  "driver": {
+    "id": "cloudflare-d1",
+    "version": "1.20260730.1",
+    "profile": "number",
+    "package": "@sqlbraid/sqlite/d1",
+    "transport": "ordered placeholders and D1 prepared binds",
+    "stream": "unsupported by D1 API",
+    "routine": "unsupported by D1 API",
+    "bulk": "native D1 batch",
+    "rawRepresentations": { "integer": "number", "decimal": "number or string", "json": "text", "temporal": "text" },
+    "exclusions": ["D1 callback transactions are unsupported", "D1 streaming is unsupported without a bounded native primitive", "Remote production D1 evidence is not claimed", "The API denies sqlite_version(); the compatibility date is not a database version", "Integral REAL values outside the safe range are excluded by the untyped-number guard"]
+  },
+  "runtime": { "id": "workerd", "version": "1.20260730.1" },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Local Miniflare 4.20260730.0 with compatibility date 2026-07-30 and a D1 binding.",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+  },
+  "ci": { "command": "pnpm run test:d1", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "capabilities": {
+    "sql.native-transparency": { "status": "guaranteed", "testIds": ["d1.sql.native-transparency"] },
+    "sql.generated-structure": { "status": "guaranteed", "testIds": ["d1.sql.generated-structure"] },
+    "numeric.exact-integer": { "status": "guarded", "conditionCode": "cloudflare-d1.safe-integer", "canonical": "number", "rawRepresentations": ["number"], "testIds": ["d1.numeric.exact-integer"] },
+    "numeric.exact-decimal": { "status": "unsupported", "testIds": [] },
+    "data.json-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["d1.data.json-text"] },
+    "data.binary": { "status": "guaranteed", "rawRepresentations": ["number[]"], "testIds": ["d1.data.mapping-returning"] },
+    "data.temporal": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["d1.data.mapping-returning"] },
+    "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["d1.data.mapping-returning"] },
+    "result.rows": { "status": "guaranteed", "testIds": ["d1.sql.native-transparency"] },
+    "result.command": { "status": "guaranteed", "testIds": ["d1.execution.bulk"] },
+    "result.multiple-sets": { "status": "unsupported", "testIds": [] },
+    "result.standard-schema": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] },
+    "execution.bulk": { "status": "guaranteed", "testIds": ["d1.execution.bulk"] },
+    "execution.prepared": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] },
+    "execution.stream": { "status": "unsupported", "testIds": ["d1.execution.bulk"] },
+    "execution.transaction": { "status": "unsupported", "testIds": ["d1.execution.bulk"] },
+    "execution.savepoint": { "status": "unsupported", "testIds": [] },
+    "routine.scalar-out": { "status": "unsupported", "testIds": [] },
+    "routine.inout": { "status": "unsupported", "testIds": [] },
+    "routine.resultsets": { "status": "unsupported", "testIds": [] },
+    "routine.cursor": { "status": "unsupported", "testIds": [] },
+    "routine.return-status": { "status": "unsupported", "testIds": [] },
+    "metadata.identity": { "status": "unsupported", "testIds": [] },
+    "metadata.generated": { "status": "unsupported", "testIds": [] },
+    "metadata.routines": { "status": "unsupported", "testIds": [] },
+    "metadata.types": { "status": "unsupported", "testIds": [] },
+    "dml.insert-returning": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] },
+    "dml.update-returning": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] },
+    "dml.delete-returning": { "status": "guaranteed", "testIds": ["d1.data.mapping-returning"] },
+    "dml.merge-returning": { "status": "unsupported", "testIds": [] }
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": [
+      { "workflow": ".github/workflows/release.yml", "commit": "b5600ebf8a3fed4b80c6f31550a37488ef057525", "status": "pending", "details": "Exact final-revision release gate has not run." },
+      { "workflow": ".github/workflows/runtime-portability.yml", "commit": "bf9d8f4", "status": "pending", "details": "No recorded workflow run; local Miniflare fixture evidence remains pending." }
+    ]
+  }
+}

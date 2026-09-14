@@ -58,3 +58,9 @@ output is accumulated before rows are delivered, so DML-returning streaming is
 not a bounded-memory support claim.
 
 See the [SQLite setup](https://clickin.github.io/SQLBraid/getting-started/sqlite/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
+
+SQLite representation depends on the selected driver: Node `integerMode:
+"number"` is the default and `"bigint"` is the exact int64 path; WASM and D1
+have separate profiles. JSON1 is text unless the selected build proves
+otherwise, BLOB is bytes, and `RETURNING` is materialized. See the [data
+representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

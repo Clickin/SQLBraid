@@ -23,9 +23,13 @@
     "@sqlbraid/template": "workspace:*"
   },
   "peerDependencies": {
+    "@sqlbraid/metadata": "workspace:*",
     "mariadb": "3.5.4"
   },
   "peerDependenciesMeta": {
+    "@sqlbraid/metadata": {
+      "optional": true
+    },
     "mariadb": {
       "optional": true
     }
@@ -38,6 +42,10 @@
     "./mariadb": {
       "types": "./dist/mariadb.d.ts",
       "import": "./dist/mariadb.js"
+    },
+    "./inspector": {
+      "types": "./dist/inspector.d.ts",
+      "import": "./dist/inspector.js"
     }
   }
 }

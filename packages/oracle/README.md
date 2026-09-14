@@ -31,3 +31,8 @@ event before lease release. Sibling Lobs and ResultSets are cleaned up even
 when another output fails; no live Lob escapes `db.call()`.
 
 See the [Oracle setup](https://clickin.github.io/SQLBraid/getting-started/oracle/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
+
+The Thin profile returns Oracle `NUMBER` as strings for exact handling,
+`BINARY_FLOAT`/`BINARY_DOUBLE` as approximate JavaScript numbers, LOB text as
+strings, and BLOB/RAW as bytes. The free 23.9 target is not Oracle 19c
+evidence; Thick mode is separate. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

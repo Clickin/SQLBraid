@@ -82,13 +82,15 @@ try {
   await writeFile(join(consumer, "deno.json"), JSON.stringify({ nodeModulesDir: "manual" }));
   if (!databaseUrls.postgres) {
     const { PostgreSqlContainer } = await import("@testcontainers/postgresql");
-    const container = await new PostgreSqlContainer("postgres:16.4-alpine").start();
+    const target = JSON.parse(await readFile(join(root, "support/targets/postgres.json"), "utf8"));
+    const container = await new PostgreSqlContainer(target.reproducibility.image).start();
     containers.push(container);
     databaseUrls.postgres = container.getConnectionUri();
   }
   if (!databaseUrls.mysql) {
     const { MySqlContainer } = await import("@testcontainers/mysql");
-    const container = await new MySqlContainer("mysql:8.4.2").start();
+    const target = JSON.parse(await readFile(join(root, "support/targets/mysql.json"), "utf8"));
+    const container = await new MySqlContainer(target.reproducibility.image).start();
     containers.push(container);
     databaseUrls.mysql = container.getConnectionUri();
   }

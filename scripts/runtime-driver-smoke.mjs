@@ -316,7 +316,7 @@ export async function runMysqlSmoke(url) {
   const directIdentifier = mysql.ident(directTable);
   let client;
   try {
-    client = await createConnection({ uri: url, supportBigNumbers: true, bigNumberStrings: true, decimalNumbers: true });
+    client = await createConnection({ uri: url, supportBigNumbers: true, bigNumberStrings: true, decimalNumbers: false });
     const db = createMysql2Database(client);
     const table = await db.execute(mysql.command`CREATE TEMPORARY TABLE ${directIdentifier} (
       id INT PRIMARY KEY,
@@ -335,8 +335,8 @@ export async function runMysqlSmoke(url) {
     assert.deepEqual(normalized, {
       id: 1,
       name: "Ada",
-      amount: "12.34",
-      big_value: "9007199254740993",
+      amount: "12.340",
+      big_value: 9007199254740993n,
     });
 
     const command = await db.execute(mysql.command`UPDATE ${directIdentifier} SET name = ${"Grace"} WHERE id = ${1}`);
@@ -460,7 +460,7 @@ export async function runMysqlSmoke(url) {
     const singleDb = createMysql2PoolDatabase(singlePool, { observers: [{ onEvent(event) { events.push(event); } }] });
     const mapper = schema(async (value) => {
       await singleDb.execute(mysql`SELECT ${2}`);
-      return { value: value.value + 1 };
+      return { value: Number(value.value) + 1 };
     });
     const mappedQuery = mysql.rows(mapper)`SELECT ${1} AS value`;
     const operation = (async () => {

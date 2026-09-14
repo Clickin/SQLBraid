@@ -7,6 +7,7 @@ import type {
 } from "@sqlbraid/mariadb/mariadb";
 import type { RenderedBulk } from "@sqlbraid/core";
 import { createMariaDbExecutor, mariaDbStatementBinding } from "@sqlbraid/mariadb/mariadb";
+import { createMariaDbInspector } from "@sqlbraid/mariadb/inspector";
 import { sql } from "@sqlbraid/mariadb";
 
 function rowSet(rows: readonly Record<string, unknown>[], meta: readonly MariaDbFieldLike[]) {
@@ -135,4 +136,45 @@ test("MariaDB adapter sends one parameterized SQL shape to native batch", async 
   });
   assert.equal(batchSql, "INSERT INTO t (id) VALUES (?)");
   assert.deepEqual(batchValues, [[1], [2], [3]]);
+});
+
+test("MariaDB inspector emits first-party metadata identities and rejects non-MariaDB servers", async () => {
+  const connection: MariaDbConnectionLike = {
+    execute: async (text) => {
+      if (text.includes("@@version AS version")) return [{ version: "11.4.2-MariaDB", product: "MariaDB Server", sqlMode: "", charset: "utf8mb4", collation: "utf8mb4_general_ci" }];
+      if (text.includes("information_schema.schemata")) return [{ schema_name: "app" }];
+      if (text.includes("information_schema.tables")) return [{ table_schema: "app", table_name: "users", table_type: "BASE TABLE" }];
+      if (text.includes("information_schema.columns")) {
+        return [{
+          table_schema: "app",
+          table_name: "users",
+          ordinal_position: 1,
+          column_name: "id",
+          data_type: "bigint",
+          is_nullable: "NO",
+          extra: "auto_increment",
+          column_key: "PRI",
+          generation_expression: null,
+          character_set_name: null,
+          collation_name: null,
+          column_default: null,
+        }];
+      }
+      return [{ routine_schema: "app", routine_name: "find_user", routine_type: "FUNCTION", data_type: "bigint", dtd_identifier: "BIGINT", is_deterministic: "YES", sql_data_access: "READS SQL DATA" }];
+    },
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  };
+  const snapshot = await createMariaDbInspector(connection).inspect();
+  assert.equal(snapshot.dialect, "mariadb");
+  assert.equal(snapshot.relations["app.users"]?.columns[0]?.identity, true);
+  assert.equal(snapshot.routines.find_user?.[0]?.argumentsComplete, false);
+  const wrongProduct = {
+    ...connection,
+    execute: async (text: string) => text.includes("@@version AS version")
+      ? [{ version: "8.4.0", product: "MySQL Community" }]
+      : [],
+  };
+  await assert.rejects(() => createMariaDbInspector(wrongProduct).inspect(), /MARIADB_PRODUCT_UNSUPPORTED/u);
 });

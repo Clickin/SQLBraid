@@ -231,11 +231,42 @@ test("matches MySQL metadata spellings to first-party case-normalized policy map
     }, { dialect: "mysql" }),
   }, { typePolicy: mysqlTypePolicy });
   assertGeneratedProperty(result.source, "ValuesRow", "id", "number", false);
-  assertGeneratedProperty(result.source, "ValuesRow", "big_id", "bigint | string", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "big_id", "bigint", false);
   assertGeneratedProperty(result.source, "ValuesRow", "amount", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "label", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "payload", "unknown | null", false);
   assert.equal(result.diagnostics.length, 0);
+});
+
+test("distinguishes exact, lossy, known-open, and unknown type mappings", () => {
+  const result = generateModels({
+    ...snapshot({
+      "public.values": relation("public.values", "values", "table", [
+        { name: "amount", type: "decimal", nullable: false },
+        { name: "payload", type: "json", nullable: true },
+        { name: "missing", type: "vendor_number", nullable: false },
+      ]),
+    }),
+  }, {
+    typePolicy: {
+      ...policy,
+      mappings: [
+        { databaseType: "decimal", inputType: "string | number", outputType: "number", nullable: true, numericFidelity: "approximate-float" },
+        { databaseType: "json", inputType: "unknown", outputType: "unknown", nullable: true },
+        { databaseType: "int8", inputType: "bigint", outputType: "bigint", nullable: true, numericFidelity: "exact-integer" },
+      ],
+    },
+    typeOverrides: {
+      columns: { "public.values": { amount: { outputType: "string" } } },
+    },
+  });
+
+  assertGeneratedProperty(result.source, "ValuesRow", "amount", "string", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "payload", "unknown | null", false);
+  assertGeneratedProperty(result.source, "ValuesRow", "missing", "unknown", false);
+  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_LOSSY_NUMERIC_REPRESENTATION").length, 1);
+  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE").length, 1);
+  assert.equal(result.diagnostics.some((diagnostic) => diagnostic.databaseType === "json"), false);
 });
 
 test("keeps SQLite non-STRICT columns conservative but maps supported STRICT declarations", async () => {
@@ -255,7 +286,7 @@ test("keeps SQLite non-STRICT columns conservative but maps supported STRICT dec
   assertGeneratedProperty(strict.source, "StrictTableRow", "label", "string", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "bytes", "Uint8Array", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "anything", "unknown", false);
-  assert.equal(strict.diagnostics.length, 0);
+  assert.equal(strict.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_LOSSY_NUMERIC_REPRESENTATION").length, 1);
   await assertCompilesGeneratedSource(strict.source, "codegen-sqlite-strict");
 
   const dynamic = generateModels({

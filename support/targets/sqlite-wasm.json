@@ -1,0 +1,63 @@
+{
+  "id": "sqlite-wasm-browser-3-53-4",
+  "status": "compatible",
+  "database": { "product": "sqlite", "version": "3.53.4", "edition": "official SQLite WASM OO1" },
+  "driver": {
+    "id": "sqlite-wasm",
+    "version": "3.53.4-build1",
+    "profile": "bigint",
+    "package": "@sqlbraid/sqlite/wasm",
+    "transport": "OO1 prepare/bind/step",
+    "stream": "OO1 step",
+    "routine": "unsupported by SQLite",
+    "bulk": "prepared-loop with stepReset",
+    "rawRepresentations": { "integer": "bigint", "decimal": "number or string", "json": "text", "temporal": "text" },
+    "exclusions": ["Exact INTEGER output requires bigint mode and the initialized sqlite3 module for native column typing", "This browser target does not certify Node database drivers"]
+  },
+  "runtime": { "id": "browser", "version": "153.0.8010.12" },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Chromium installed by the pinned Playwright 1.63.0 dependency and exercised by scripts/test-browser.mjs.",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+  },
+  "ci": { "command": "pnpm run test:browser", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "capabilities": {
+  "sql.native-transparency": { "status": "guaranteed", "testIds": ["wasm.sql.native-transparency"] },
+  "sql.generated-structure": { "status": "guaranteed", "testIds": ["wasm.sql.generated-structure"] },
+  "numeric.exact-integer": { "status": "guarded", "conditionCode": "sqlite-wasm.bigint-mode", "canonical": "bigint", "rawRepresentations": ["bigint"], "testIds": ["wasm.numeric.exact-integer"] },
+  "data.json-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["wasm.data.json-text"] },
+  "result.rows": { "status": "guaranteed", "testIds": ["wasm.sql.native-transparency"] },
+  "result.command": { "status": "guaranteed", "testIds": ["wasm.execution.bulk"] },
+  "result.multiple-sets": { "status": "unsupported", "testIds": [] },
+  "result.standard-schema": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
+  "execution.prepared": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
+  "execution.bulk": { "status": "guaranteed", "testIds": ["wasm.execution.bulk"] },
+  "execution.stream": { "status": "guaranteed", "testIds": ["wasm.execution.stream"] },
+  "execution.transaction": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
+  "execution.savepoint": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
+  "routine.scalar-out": { "status": "unsupported", "testIds": [] },
+  "routine.inout": { "status": "unsupported", "testIds": [] },
+  "routine.resultsets": { "status": "unsupported", "testIds": [] },
+  "routine.cursor": { "status": "unsupported", "testIds": [] },
+  "routine.return-status": { "status": "unsupported", "testIds": [] },
+  "metadata.identity": { "status": "unsupported", "testIds": [] },
+  "metadata.generated": { "status": "unsupported", "testIds": [] },
+  "metadata.routines": { "status": "unsupported", "testIds": [] },
+  "metadata.types": { "status": "unsupported", "testIds": [] },
+  "numeric.exact-decimal": { "status": "unsupported", "testIds": [] },
+  "data.binary": { "status": "guaranteed", "rawRepresentations": ["Uint8Array"], "testIds": ["wasm.execution.mapped-transaction"] },
+  "data.temporal": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["wasm.execution.mapped-transaction"] },
+  "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["wasm.execution.mapped-transaction"] },
+  "dml.insert-returning": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
+  "dml.update-returning": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
+  "dml.delete-returning": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
+  "dml.merge-returning": { "status": "unsupported", "testIds": [] }
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": [
+      { "workflow": ".github/workflows/release.yml", "commit": "b5600ebf8a3fed4b80c6f31550a37488ef057525", "status": "pending", "details": "Exact final-revision release gate has not run." },
+      { "workflow": ".github/workflows/runtime-portability.yml", "commit": "bf9d8f4", "status": "pending", "details": "No recorded workflow run; local browser fixture evidence remains pending." }
+    ]
+  }
+}

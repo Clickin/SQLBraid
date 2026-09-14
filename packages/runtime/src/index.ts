@@ -10,6 +10,7 @@ import type {
   ConnectionLease,
   ConnectionProvider,
   Database,
+  DatabaseEnvironment,
   DatabaseOptions,
   ExecutableQuery,
   ExecutionEvent,
@@ -135,6 +136,7 @@ interface PhysicalContext {
 
 interface OperationMeta {
   readonly operationId: string;
+  readonly purpose?: "environment";
   readonly transactionDepth: number;
   readonly transactionScoped: boolean;
   readonly preparedName?: string;
@@ -183,11 +185,29 @@ class PreparationFailure extends Error {
 const transactionContext = createAsyncContextStorage<TransactionContext>();
 const physicalContext = createAsyncContextStorage<PhysicalContext>();
 const scopeStates = new WeakMap<object, ScopeState>();
+const environmentQueries = new WeakSet<object>();
 let operationSequence = 0;
 let transactionSequence = 0;
 
 function now(): number {
   return typeof performance === "undefined" ? Date.now() : performance.now();
+}
+
+function runtimeEnvironment(): DatabaseEnvironment["runtime"] {
+  const host = globalThis as typeof globalThis & {
+    Deno?: { version?: { deno?: string } };
+    Bun?: { version?: string };
+    navigator?: { userAgent?: string };
+  };
+  if (host.Deno) return Object.freeze({ id: "deno", version: host.Deno.version?.deno });
+  if (host.Bun) return Object.freeze({ id: "bun", version: host.Bun.version });
+  if (host.navigator?.userAgent === "Cloudflare-Workers") return Object.freeze({ id: "workerd" });
+  // Optional host reflection keeps Node globals/types out of the browser contract.
+  const nodeVersion: unknown = Reflect.get(globalThis, "process")?.versions?.node;
+  if (typeof nodeVersion === "string") {
+    return Object.freeze({ id: "node", version: nodeVersion });
+  }
+  return Object.freeze({ id: "browser" });
 }
 
 function nextOperationId(): string {
@@ -767,6 +787,7 @@ function queryReadyEvent(operation: PreparedOperation<Query<unknown, QueryResult
   const parameterHints = rendered.parameters.map((parameter) => parameter.hint);
   const event: QueryReadyEvent = {
     type: "query:ready",
+    purpose: meta.purpose,
     literalizedSql: (options) => binding.literalizedSql(options),
     operationId: meta.operationId,
     batchId: meta.batchId,
@@ -818,6 +839,7 @@ function bulkReadyEvent(
 function queryResultEvent(operation: RawOperation<ExecutableQuery>, result: QueryExecutionResult<unknown>): ExecutionEvent {
   return {
     type: "query:result",
+    purpose: operation.meta.purpose,
     operationId: operation.meta.operationId,
     preparedName: operation.meta.preparedName,
     batchId: operation.meta.batchId,
@@ -833,6 +855,7 @@ function queryResultEvent(operation: RawOperation<ExecutableQuery>, result: Quer
 function queryMappedEvent(operation: RawOperation<ExecutableQuery>, rowCount: number, queryMapped: boolean, executionMapped: boolean, durationMs: number): ExecutionEvent {
   return {
     type: "query:mapped",
+    purpose: operation.meta.purpose,
     operationId: operation.meta.operationId,
     preparedName: operation.meta.preparedName,
     batchId: operation.meta.batchId,
@@ -848,6 +871,7 @@ function queryMappedEvent(operation: RawOperation<ExecutableQuery>, rowCount: nu
 function errorEvent(operation: { readonly meta: OperationMeta }, error: unknown, stage: QueryErrorEventStage, started: boolean, completed: boolean, durationMs?: number): ExecutionEvent {
   return {
     type: "query:error",
+    purpose: operation.meta.purpose,
     operationId: operation.meta.operationId,
     preparedName: operation.meta.preparedName,
     batchId: operation.meta.batchId,
@@ -941,6 +965,7 @@ export function createPooledDatabase(provider: ConnectionProvider, options: Data
 
 function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, state: ScopeState, options: RuntimeOptions): Database & { close(): void; finish(): Promise<void> } {
   let closed = false;
+  let environmentSnapshot: Omit<DatabaseEnvironment, "supportMatch"> | undefined;
   const statementBinding = bindingAdapterFor(executor);
   const openStreams = new Set<AsyncGenerator<unknown>>();
   const assertOpen = (): void => {
@@ -1047,7 +1072,13 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     } catch (error) {
       throw new PreparationFailure("materialize", error);
     }
-    return { query, rendered, binding, meta: metadata(options, operationId, preparedName, batchId) };
+    return {
+      query, rendered, binding,
+      meta: {
+        ...metadata(options, operationId, preparedName, batchId),
+        ...(environmentQueries.has(query) ? { purpose: "environment" as const } : {}),
+      },
+    };
   };
   const observePrepared = async <Q extends Query<unknown, QueryResultKind>>(operation: PreparedOperation<Q>): Promise<void> => {
     try {
@@ -1066,7 +1097,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       const reported = failure === undefined ? error : failure.cause;
       await notifyError(
         options.observers ?? [],
-        errorEvent({ meta: metadata(options, operationId, preparedName, batchId) }, reported, failure?.stage ?? "render", false, false),
+        errorEvent({ meta: {
+          ...metadata(options, operationId, preparedName, batchId),
+          ...(environmentQueries.has(query) ? { purpose: "environment" as const } : {}),
+        } }, reported, failure?.stage ?? "render", false, false),
         reported,
       );
       throw reported;
@@ -1282,6 +1316,62 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     return await processOne(raw, result, validationOptions?.schema) as Row;
   };
   const database: Database & { close(): void; finish(): Promise<void> } = {
+    async environment(environmentOptions = {}): Promise<DatabaseEnvironment> {
+      assertOpen();
+      assertHealthy(state);
+      if (!options.transaction) assertRootAllowed(options.rootState, false);
+      if (!environmentSnapshot) {
+        const descriptor = executor.environment;
+        let databaseInfo = descriptor?.database ?? { product: "unknown" };
+        if (descriptor?.probe) {
+          const rendered = createRenderedStatement(descriptor.probe.statement);
+          if (rendered.resultKind !== "rows" || rendered.parameters.length !== 0) {
+            throw new TypeError("Environment probes must be parameter-free row statements.");
+          }
+          const query: RowQuery = {
+            ir: { version: 1, nodes: [], sourceLength: rendered.segments[0]!.length },
+            values: [],
+            resultKind: "rows",
+            render: () => rendered,
+          };
+          environmentQueries.add(query);
+          const rows = await allNamed(query);
+          databaseInfo = { ...databaseInfo, ...descriptor.probe.read(rows) };
+        }
+        environmentSnapshot = Object.freeze({
+          database: Object.freeze({ ...databaseInfo }),
+          driver: Object.freeze({ ...(descriptor?.driver ?? { id: statementBinding.id }) }),
+          runtime: runtimeEnvironment(),
+          capabilities: Object.freeze(Object.fromEntries(
+            Object.entries(descriptor?.capabilities ?? {}).map(([id, capability]) => [
+              id,
+              Object.freeze({
+                ...capability,
+                ...(capability.rawRepresentations ? { rawRepresentations: Object.freeze([...capability.rawRepresentations]) } : {}),
+              }),
+            ]),
+          )),
+        });
+      }
+      const evidence = environmentSnapshot;
+      const matches = (environmentOptions.targets ?? []).filter((target) =>
+        (target.status === "official" || target.status === "conditional") &&
+        target.evidence.status === "verified" &&
+        target.database.product === evidence.database.product &&
+        target.database.version === evidence.database.version &&
+        target.database.edition === evidence.database.edition &&
+        target.driver.id === evidence.driver.id &&
+        target.driver.version === evidence.driver.version &&
+        target.driver.profile === evidence.driver.profile &&
+        target.runtime.id === evidence.runtime.id &&
+        target.runtime.version === evidence.runtime.version,
+      );
+      const target = matches.length === 1 ? matches[0] : undefined;
+      const supportMatch: DatabaseEnvironment["supportMatch"] = target
+        ? { status: target.status === "official" ? "official" : "conditional", targetId: target.id }
+        : { status: "compatible", reason: matches.length > 1 ? "ambiguous-exact-target" : "no-verified-exact-target" };
+      return Object.freeze({ ...evidence, supportMatch: Object.freeze(supportMatch) });
+    },
     async execute<Q extends ExecutableQuery>(query: Q): Promise<ExecutionResultOf<Q>> {
       return await executeNamed(query);
     },

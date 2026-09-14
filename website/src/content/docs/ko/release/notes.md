@@ -6,6 +6,9 @@ description: DML returning, bulk, MariaDB, Browser WASM, D1을 포함하는 프�
 PV16 문서는 프리릴리스 SQLBraid 표면을 설명합니다. 정확한 최종 SHA 검증은
 대기 중이며 이 노트는 최종 SHA, CI, 배포 또는 Official 지원 주장을 하지
 않습니다.
+문서 baseline은
+`b5600ebf8a3fed4b80c6f31550a37488ef057525`이며 final revision은 아직
+기록하지 않습니다.
 
 ## 포함된 계약
 
@@ -23,6 +26,9 @@ PV16 문서는 프리릴리스 SQLBraid 표면을 설명합니다. 정확한 최
 - `durationMs`, 민감하지 않은 call result 구조, lazy diagnostic literalization을 포함하는 execution observer
 - TypeScript와 framework 변환을 Vite에 맡기고 TSX와 source-map 조합을 보존하는 `@sqlbraid/vite` Vite 8 pre-transform
 - 선택적 metadata, inspector, 결정적 codegen, CLI JSON inspection, 표준 stdio LSP, 얇은 VS Code 통합
+- 숫자 정확도 helper와 데이터 표현 프로필: 정확한 정수는 `bigint`, 정확한
+  10진수는 문자열이며 Oracle `NUMBER`는 text로 유지하고 Tedious
+  `decimal`/`numeric`은 정확한 10진수 지원이 아님
 
 ## 검증 상태
 

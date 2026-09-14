@@ -3,6 +3,7 @@ import type {
   BulkExecutionResult,
   DatabaseOptions,
   DriverRoutineResult,
+  DriverEnvironment,
   QueryExecutor,
   QueryExecutionResult,
   RenderedBulk,
@@ -45,6 +46,7 @@ export interface SqliteDatabaseOptions extends DatabaseOptions, SqliteExecutorOp
 
 function plainRow(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return { value };
+  // node:sqlite rejects unsafe INTEGER reads itself; integral REAL values remain floats.
   return Object.fromEntries(Object.entries(value));
 }
 
@@ -170,12 +172,41 @@ function configureIntegerMode(statement: SqliteStatementLike, integerMode: Sqlit
   statement.setReadBigInts(integerMode === "bigint");
 }
 
+function nodeSqliteEnvironment(integerMode: SqliteIntegerMode): DriverEnvironment {
+  return Object.freeze<DriverEnvironment>({
+    database: { product: "sqlite" },
+    driver: { id: "node-sqlite", profile: integerMode === "bigint" ? "bigint" : "number" },
+    capabilities: {
+      "sql.native-transparency": { status: "guaranteed" },
+      "numeric.exact-integer": integerMode === "bigint"
+        ? { status: "guaranteed", canonical: "bigint", rawRepresentations: ["bigint"] }
+        : { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "node-sqlite.bigint-mode" },
+      "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+    },
+    probe: {
+      statement: createRenderedStatement({
+        segments: ["SELECT sqlite_version() AS version"],
+        parameters: [],
+        resultKind: "rows",
+        dialectId: "sqlite",
+      }),
+      read: (rows) => {
+        const row = rows[0];
+        if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+        const version = (row as Record<string, unknown>).version;
+        return typeof version === "string" ? { version } : {};
+      },
+    },
+  });
+}
+
 export function createNodeSqliteExecutor(database: SqliteDatabaseLike, options: SqliteExecutorOptions = {}): QueryExecutor {
   const integerMode = assertIntegerMode(options.integerMode);
   const control = database.exec ? async (sql: string): Promise<void> => { database.exec?.(sql); } : undefined;
   return {
     ownershipKey: database,
     statementBinding: nodeSqliteStatementBinding,
+    environment: nodeSqliteEnvironment(integerMode),
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertRoutineUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);

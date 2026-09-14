@@ -1,7 +1,8 @@
 import { GenericContainer, Wait } from "testcontainers";
 import type { TestProject } from "vitest/node";
+import { readSupportImage } from "./support-target.js";
 
-export const MSSQL_IMAGE = "mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04";
+const MSSQL_IMAGE = readSupportImage("mssql");
 export const MSSQL_USER = "sa";
 export const MSSQL_PASSWORD = "Sqlbraid_Test13!";
 export const MSSQL_DATABASE = "master";

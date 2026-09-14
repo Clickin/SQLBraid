@@ -26,6 +26,17 @@ const db = createSqliteWasmDatabase(wasmDatabase);
 const rows = await db.all(sql.rows<{ id: number }>`SELECT id FROM account`);
 ```
 
+For uniform, exact `bigint` INTEGER output, pass the initialized official module:
+
+```ts
+const db = createSqliteWasmDatabase(wasmDatabase, { integerMode: "bigint", sqlite3 });
+```
+
+This uses native column types and `sqlite3_column_int64`, not a numeric-value
+heuristic: integral REAL values remain `number`. Number mode rejects INTEGER
+values outside JavaScript's safe range. Bigint mode without `sqlite3` rejects
+with `BRAID_INTEGER_MODE_UNSUPPORTED`.
+
 The adapter supports prepare/bind/step/finalize, row streaming by pull,
 callback transactions, and command-only bulk with one prepared statement reset
 per item. It is a direct resource, not a pool. While a transaction or stream
@@ -43,6 +54,13 @@ import { createD1Database } from "@sqlbraid/sqlite/d1";
 const db = createD1Database(env.DB);
 ```
 
+D1 exposes untyped JavaScript numbers. Its guarded profile rejects integral
+numbers outside the safe range; this also excludes integral REAL values outside
+that range because the public result API cannot distinguish them from rounded
+INTEGER values. It does not promise full int64 or exact decimal output.
+The API denies `sqlite_version()`, so `db.environment()` leaves the server
+version unknown. A Worker compatibility date is not a database version.
+
 D1 uses ordered `?1`, `?2`, … binds and public result metadata for materialized
 queries. `db.bulk()` maps one logical shape to one `D1Database.batch()` call and
 reports `remote-batch`. D1 has no incremental row cursor in the Worker Binding
@@ -57,3 +75,19 @@ transactional and has no portable auto-chunking promise.
 The Browser WASM and local D1 gates are pending exact-final-SHA evidence. They do
 not claim OPFS persistence, SharedArrayBuffer, remote production support, or a
 release label.
+
+## Browser and Worker representation profiles
+
+SQLite remains the dialect, but WASM and D1 are different drivers and must not
+share an evidence label.
+
+| Driver | Raw/profile boundary | Stream/bulk/transaction |
+| --- | --- | --- |
+| SQLite WASM OO1 | SQLite dynamic values; INTEGER mode is driver-configured | pull iteration, prepared-loop bulk, callback transaction |
+| Cloudflare D1 binding | materialized rows and ordered `?1`, `?2`, … binds | native `batch()` bulk; streaming and callback transaction are unsupported |
+
+JSON1 is text unless the selected WASM build/parser proves another
+representation. BLOB values remain bytes. Native `RETURNING` is materialized
+before delivery. Browser SQL is sent through transparently; this does not make
+the browser runtime a SQL grammar implementation or make Node-only adapters
+browser-compatible.

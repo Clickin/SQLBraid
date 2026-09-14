@@ -60,9 +60,9 @@ hint facets fail at the `materialize` stage before database I/O.
 - Native `procedure` metadata is not supported by this adapter; author the
   Oracle PL/SQL/SQL call text explicitly.
 - Streaming uses the driver's ResultSet protocol and closes the ResultSet on completion, abort, or early break.
-- The target combination is Oracle 23.9.0.25.07 Thin on Node 22.18.0/Linux
-  x64. PV15 final verification is pending; see [runtime and driver
-  support](/SQLBraid/reference/support/) for historical evidence only.
+- The target combination is Oracle Free 23.9 Thin on Node 22.18.0/Linux
+  x64. Its current certification status and exact gate are recorded in
+  [runtime and driver support](/SQLBraid/reference/support/).
 
 Use an explicit hint for `null` when the driver cannot infer a safe Oracle type. Do not silently turn an untyped null into `VARCHAR2`.
 
@@ -78,3 +78,27 @@ use `Date`, not a preserved source timezone name or sub-millisecond precision.
 
 Use [routine calls](/SQLBraid/concepts/routines/) for the complete
 `sql.out`/`sql.inOut` and heterogeneous result-set contract.
+
+## Oracle Thin representation profile
+
+The first-party profile is node-oracledb Thin mode. The free Oracle 23.9 target
+is the currently documented environment; it must not be presented as Oracle
+19c evidence. Thick mode and another server line are separate, untested
+profiles until their manifests contain matching evidence.
+
+| Oracle value | Thin profile representation | Notes |
+| --- | --- | --- |
+| `NUMBER` | string | Exact decimal/integer text; use `decodeExactDecimal` or `decodeExactInteger` as appropriate. |
+| `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | Approximate by definition, never exact decimal. |
+| CLOB / NCLOB | string | Routine LOBs are read and destroyed before lease release. |
+| BLOB / RAW | `Buffer` | Keep bytes or explicitly encode them. |
+| DATE / TIMESTAMP variants | `Date` | Source timezone name and all sub-millisecond detail are not preserved. |
+
+The binding transport is text-positional `:1`, `:2`, … with node-oracledb bind
+descriptors. OUT ordinals follow the SQL bind order, independently of
+intervening IN values. REF CURSOR outputs become ordered materialized
+`resultSets`; implicit results are additional sets. Native
+`RETURNING ... INTO` uses `sql.out()` and materialized row APIs. `executeMany()`
+is the supported native bulk strategy where the manifest proves it. Native
+Oracle SQL passes through transparently; SQLBraid does not provide an Oracle
+grammar or infer procedure metadata.

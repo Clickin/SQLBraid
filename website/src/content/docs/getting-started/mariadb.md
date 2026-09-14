@@ -45,3 +45,29 @@ A `mysql2` connection may work against MariaDB as best-effort compatibility, but
 it is not Official MariaDB syntax or protocol evidence. PV16 exact-final-SHA
 verification remains pending; package installation and a local fixture are not
 release support claims.
+
+## Connector/Node.js representation profile
+
+The first-party MariaDB profile is the official Connector/Node.js adapter on
+the exact Node/server combination named by the support manifest. A mysql2
+connection to MariaDB is a separate best-effort compatibility profile.
+
+| MariaDB value | Connector representation | Caveat |
+| --- | --- | --- |
+| BIGINT | `bigint` | Preserve exact integers; explicitly choose an encoding before JSON serialization. |
+| DECIMAL | `string` | Preserve precision and scale; application decimal libraries remain optional. |
+| JSON alias | Object with default `autoJsonMap: true`; explicit SQL `CAST(... AS CHAR)` returns text | Record parser options and validate with Standard Schema. |
+| DATE/TIMESTAMP | Driver temporal value | `Date` may lose source offset/precision details. |
+| BLOB | bytes/Buffer | Preserve bytes or explicitly encode. |
+
+The adapter uses value-only execution, native `queryStream()`, and one
+`connection.batch()` call for homogeneous bulk. Native `RETURNING` is a
+materialized row contract only where the exact server form is evidenced:
+`INSERT`, `DELETE`, and `REPLACE` are separate capabilities; `UPDATE` is not
+claimed. SQL passes through transparently; this is not MariaDB grammar support.
+
+`db.call()` materializes heterogeneous emitted sets from prepared `CALL`; OUT,
+INOUT and cursor descriptors remain unsupported. `db.prepare()` preserves
+query-bound Standard Schema mapping. The optional `/inspector` subpath records
+identity, generated/write flags and numeric precision/scale for offline
+`generateModels()`; routine signatures remain incomplete positive evidence.

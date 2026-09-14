@@ -1,7 +1,8 @@
 import { MySqlContainer } from "@testcontainers/mysql";
 import type { TestProject } from "vitest/node";
+import { readSupportImage } from "./support-target.js";
 
-export const MYSQL_IMAGE = "mysql:8.4.2";
+const MYSQL_IMAGE = readSupportImage("mysql");
 
 export default async function setup(project: TestProject) {
   const external = process.env.SQLBRAID_MYSQL_URL;

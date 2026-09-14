@@ -5,6 +5,7 @@ import type {
   ConnectionProvider,
   DatabaseOptions,
   DriverRoutineResult,
+  DriverEnvironment,
   BulkBindingDescription,
   BulkExecutionResult,
   ParameterTypeHint,
@@ -900,6 +901,34 @@ interface TediousPreparedRequest {
 
 type TediousRequestCompletionCallback = (error: unknown, rowCount?: number) => void;
 
+const tediousEnvironment = Object.freeze<DriverEnvironment>({
+  database: { product: "mssql" },
+  driver: { id: "tedious", profile: "typed-request" },
+  capabilities: {
+    "sql.native-transparency": { status: "guaranteed" },
+    "numeric.exact-integer": { status: "guarded", canonical: "bigint", rawRepresentations: ["bigint", "string", "number"], conditionCode: "tedious.exact-numeric-profile" },
+    "numeric.exact-decimal": { status: "unsupported", rawRepresentations: ["number"] },
+    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+  },
+  probe: {
+    statement: createRenderedStatement({
+      segments: ["SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version, CAST(SERVERPROPERTY('Edition') AS nvarchar(128)) AS edition"],
+      parameters: [],
+      resultKind: "rows",
+      dialectId: "mssql",
+    }),
+    read: (rows) => {
+      const row = rows[0];
+      if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+      const record = row as Record<string, unknown>;
+      return {
+        ...(typeof record.version === "string" ? { version: record.version } : {}),
+        ...(typeof record.edition === "string" ? { edition: record.edition } : {}),
+      };
+    },
+  },
+});
+
 function prepareRequest(
   connection: TediousConnectionLike,
   sql: string,
@@ -1083,6 +1112,7 @@ function makeTediousExecutor(
   return {
     ownershipKey: connection,
     statementBinding: bindingAdapter,
+    environment: policy === defaultTypePolicy ? tediousEnvironment : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, capabilities: {} },
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
       const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy);
@@ -1166,6 +1196,7 @@ export function createTediousPoolProvider(pool: TediousPoolLike, options: Tediou
   const bindingAdapter = createBinding(options);
   return {
     statementBinding: bindingAdapter,
+    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy ? tediousEnvironment : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, capabilities: {} },
     async acquire(): Promise<ConnectionLease> {
       const connection = await acquireConnection();
       if (!connection || typeof connection.release !== "function") throw new TypeError("SQL Server pool returned a connection without explicit release ownership.");

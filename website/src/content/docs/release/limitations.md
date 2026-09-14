@@ -18,6 +18,13 @@ description: Know what the PV16 pre-release contract deliberately does not promi
 - **Cloudflare D1 is materialized and remote-batch only.** The Worker Binding API has no incremental cursor, so `db.stream()` and callback `db.tx()` are `BRAID_STREAM_UNSUPPORTED`; SQLBraid does not paginate or emulate transactions.
 - **Native SQL Server RETURN status needs explicit procedure metadata.** Use `sql.call({ procedure: { name, parameterNames } })`; SQLBraid does not parse arbitrary `EXEC` text to guess identity.
 - **No universal input codec.** Ordinary interpolation is driver-bound; application JSON, temporal, custom-class, and binary conventions remain driver/application concerns.
+- **Numeric fidelity is profile-specific.** `decodeExactInteger` returns
+  `bigint`, while `decodeExactDecimal` accepts exact text and returns `string`.
+  Tedious `decimal`/`numeric` JavaScript numbers are not exact decimals; Oracle
+  `NUMBER` text and SQLite `integerMode` remain explicit.
+- **Environment evidence is observational.** `db.environment({ targets? })`
+  uses a normal leased probe and caches successful snapshots; incomplete or
+  unmatched tuples remain Compatible and never become guessed Official claims.
 - **No SQL-to-TypeScript inference.** Arbitrary SELECT/JOIN result inference and relation object-graph hydration are outside the contract.
 - **No isolation API.** Transactions use the database/driver connection default unless the application issues explicit database SQL inside the callback.
 - **No observer mutation/retry/routing.** Observers inspect or fail an operation but cannot rewrite SQL, change binds, or retry.

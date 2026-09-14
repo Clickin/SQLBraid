@@ -3,6 +3,7 @@ import type {
   ConnectionProvider,
   DatabaseOptions,
   DriverRoutineResult,
+  DriverEnvironment,
   BulkBindingDescription,
   BulkExecutionResult,
   QueryExecutor,
@@ -219,6 +220,31 @@ export const pgStatementBinding: StatementBindingAdapter = Object.freeze({
 const defaultBindingContext: StatementBindingContext = Object.freeze({
   dialectId: "postgres",
   requestedReuse: "auto",
+});
+
+const pgEnvironment = Object.freeze<DriverEnvironment>({
+  database: { product: "postgres" },
+  driver: { id: "pg", profile: "node-postgres" },
+  capabilities: {
+    "sql.native-transparency": { status: "guaranteed" },
+    "numeric.exact-integer": { status: "guarded", canonical: "bigint", rawRepresentations: ["bigint", "string", "number"], conditionCode: "pg.exact-numeric-profile" },
+    "numeric.exact-decimal": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "pg.exact-numeric-profile" },
+    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+  },
+  probe: {
+    statement: createRenderedStatement({
+      segments: ["SHOW server_version"],
+      parameters: [],
+      resultKind: "rows",
+      dialectId: "postgres",
+    }),
+    read: (rows) => {
+      const row = rows[0];
+      if (!row || typeof row !== "object" || Array.isArray(row)) return {};
+      const version = (row as Record<string, unknown>).server_version;
+      return typeof version === "string" ? { version } : {};
+    },
+  },
 });
 
 function materialize(
@@ -442,6 +468,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
   return {
     ownershipKey: client,
     statementBinding: pgStatementBinding,
+    environment: policy === defaultTypePolicy ? pgEnvironment : { ...pgEnvironment, driver: { id: "pg", profile: "custom-type-policy" }, capabilities: {} },
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
       const result = await client.query(materialize(rendered, binding));
@@ -645,6 +672,7 @@ export function createPgDatabase(client: PgClientLike, options: PgDatabaseOption
 export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOptions = {}): ConnectionProvider {
   return {
     statementBinding: pgStatementBinding,
+    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy ? pgEnvironment : { ...pgEnvironment, driver: { id: "pg", profile: "custom-type-policy" }, capabilities: {} },
     async acquire(): Promise<ConnectionLease> {
       const client = await pool.connect();
       const executor = createPgExecutor(client, options);

@@ -1,11 +1,15 @@
-import type { ParameterTypeHint, TypePolicy } from "@sqlbraid/core";
+import {
+  decodeExactInteger,
+  type ParameterTypeHint,
+  type TypePolicy,
+} from "@sqlbraid/core";
 
 const mappings = [
   { databaseType: "int", inputType: "number", outputType: "number", nullable: true },
-  { databaseType: "bigint", inputType: "bigint | string", outputType: "string", nullable: true },
-  { databaseType: "decimal", inputType: "string | number", outputType: "number", nullable: true },
-  { databaseType: "numeric", inputType: "string | number", outputType: "number", nullable: true },
-  { databaseType: "float", inputType: "number", outputType: "number", nullable: true },
+  { databaseType: "bigint", inputType: "bigint | string", outputType: "bigint", nullable: true, numericFidelity: "exact-integer" as const },
+  { databaseType: "decimal", inputType: "string | number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
+  { databaseType: "numeric", inputType: "string | number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
+  { databaseType: "float", inputType: "number", outputType: "number", nullable: true, numericFidelity: "approximate-float" as const },
   { databaseType: "bit", inputType: "boolean", outputType: "boolean", nullable: true },
   { databaseType: "nvarchar", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "varchar", inputType: "string", outputType: "string", nullable: true },
@@ -23,7 +27,7 @@ function canonical(databaseType: string): string {
 function decode(databaseType: string, value: unknown): unknown {
   if (value === null || value === undefined) return value;
   const type = canonical(databaseType);
-  if (type === "bigint") return String(value);
+  if (type === "bigint") return decodeExactInteger(value);
   return value;
 }
 
@@ -36,7 +40,7 @@ function encode(databaseType: string, value: unknown): unknown {
 
 export const typePolicy: TypePolicy = {
   id: "mssql-default",
-  hash: "mssql-default-v1",
+  hash: "mssql-default-v2",
   mappings,
   decode,
   encode,

@@ -113,6 +113,7 @@ export default defineConfig({
           { label: "Dynamic @braid", translations: { ko: "동적 @braid" }, link: "/concepts/dynamic-braid/" },
           { label: "Structural SQL fragments", translations: { ko: "구조적 SQL 조각" }, link: "/concepts/structural-fragments/" },
           { label: "Homogeneous bulk DML", translations: { ko: "동종 bulk DML" }, link: "/concepts/bulk/" },
+          { label: "Data representations", translations: { ko: "데이터 표현" }, link: "/concepts/data-representation/" },
           { label: "Standard Schema mapping", translations: { ko: "Standard Schema 매핑" }, link: "/concepts/result-mapping/" },
         ] },
         { label: "Runtime", translations: { ko: "런타임" }, items: [

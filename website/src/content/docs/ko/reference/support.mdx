@@ -3,6 +3,8 @@ title: 런타임 및 드라이버 지원
 description: 구현된 capability 경로와 대기 중인 PV16 릴리스 증거를 분리합니다.
 ---
 
+import SupportMatrix from "../../../../components/SupportMatrix.astro";
+
 PV16 정확한 최종 revision 검증은 대기 중입니다. 이 페이지는 현재 SHA, CI,
 배포 또는 Official 지원 주장을 의도적으로 하지 않습니다. 패키지 이름,
 로컬 fixture 또는 계획된 workflow는 릴리스 증거가 아닙니다.
@@ -17,41 +19,15 @@ PV16 정확한 최종 revision 검증은 대기 중입니다. 이 페이지는 �
 
 ## PV16 매트릭스 (최종 증거 대기)
 
-| 런타임 또는 어댑터 경로 | 상태 | 경계 |
-| --- | --- | --- |
-| Node `>=22.18.0` + core/template/runtime | Pending | 런타임 패키지 대상 |
-| Node 24 + Vite 8 애플리케이션 통합 | Pending | `@sqlbraid/vite` pre-transform; 서버 런타임은 별도 |
-| Browser + SQLite WASM | Pending | 하나의 direct OO1-style DB; browser gate 대기 |
-| Worker + Cloudflare D1 | Pending | local binding gate만 해당; remote production 주장 없음 |
-| PostgreSQL 16.4 / `pg` | Pending | minimum-role capability 및 일반 실행 |
-| PostgreSQL 18.6 / `pg` | Pending | current-role capability job; minimum을 올리지 않음 |
-| MySQL 8.4 / `mysql2` | Pending | 일반 실행; 일반 DML `RETURNING` 없음 |
-| MariaDB 11.8 / Connector/Node.js | Pending | 별도 dialect 및 공식 connector 증거 |
-| MariaDB / `mysql2` | Compatible expectation | best-effort 호환; MariaDB-specific Official label 없음 |
-| SQLite / `node:sqlite` | Pending | Node statement API; `integerMode`는 명시적 |
-| SQLite / `sqlite-wasm` | Pending | 하나의 direct browser resource |
-| SQLite / Cloudflare D1 | Pending | materialized 및 remote batch; stream/tx unsupported |
-| Oracle Thin / `node-oracledb` | Pending | scalar/cursor/implicit 루틴 리소스는 lease 반환 전에 닫아야 함 |
-| SQL Server / Tedious | Pending | Request event, OUTPUT 값, RETURN용 명시적 procedure metadata |
-| 기타 드라이버 또는 데이터베이스 | Custom | 독립적인 어댑터 증거 필요 |
+<SupportMatrix />
 
-## Capability 증거 매트릭스
+## SQLBraid Capability 증거 매트릭스 (SQL 문법 지원 목록이 아님)
 
 Dialect, driver, runtime, server version은 별도 증거 축입니다. 계획 taxonomy는
-[`docs/pv16-capability-evidence.json`](https://github.com/Clickin/SQLBraid/blob/main/docs/pv16-capability-evidence.json)에
+[`support/`](https://github.com/Clickin/SQLBraid/tree/main/support)에
 기록하며 runtime은 이 파일을 읽지 않습니다. 이름이 지정된 exact-SHA 테스트가
-실행될 때까지 모든 항목은 Pending입니다.
-
-| Dialect / driver | Native DML-returning | Bulk mode | Stream 경계 |
-| --- | --- | --- | --- |
-| PostgreSQL / `pg` | `RETURNING` | `prepared-loop` | optional `pg-cursor` |
-| MySQL / `mysql2` | 일반 DML `RETURNING` 없음 | `prepared-loop` | prepared stream; drain 또는 discard |
-| MariaDB / Connector | 문서화된 `INSERT`, `DELETE`, `REPLACE ... RETURNING` | `connection.batch()`의 `native-bulk` | connector stream; 정확한 form은 별도 테스트 |
-| SQLite / `node:sqlite` | `RETURNING` | `prepared-loop` | `StatementSync.iterate()` |
-| SQLite / `sqlite-wasm` | `RETURNING` | statement reset을 통한 `prepared-loop` | 하나의 direct browser resource |
-| SQLite / Cloudflare D1 | binding이 row를 노출하는 `RETURNING` | 한 번의 `batch()`인 `remote-batch` | incremental cursor 없음: `BRAID_STREAM_UNSUPPORTED` |
-| Oracle Thin | `RETURNING ... INTO` + `sql.out()` | `executeMany()`의 `native-bulk` | `ResultSet`을 lease 반환 전에 close |
-| SQL Server / Tedious | `OUTPUT` | `prepared-loop` | bounded Request event; 완료 후 release |
+실행될 때까지 모든 항목은 Pending입니다. 위의 대화형 매트릭스는 이 기계 판독
+대상 및 capability 데이터의 정식 표시입니다.
 
 PV16의 DML-returning은 `sql.rows`와 materialized `db.execute`, `db.all`,
 `db.one`, `db.maybeOne`만 지원 범위로 문서화합니다. SQLite RETURNING은

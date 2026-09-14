@@ -88,15 +88,15 @@ test("MySQL transaction streaming pins its backend and keeps binds value-only", 
       assert.equal(after.connectionId, before.connectionId);
       assert.deepEqual(rows, [{ connectionId: before.connectionId, value: secret }]);
     });
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
     await assert.rejects(async () => {
       for await (const _row of db.stream(sql.rows`SET @braid_pv15_stream_kind = 7`)) {
         assert.fail("a command header must not escape as a row");
       }
     }, /BRAID_RESULT_KIND/u);
     assert.deepEqual(
-      await db.one(sql.rows<{ readonly value: number }>`SELECT @braid_pv15_stream_kind AS value`),
-      { value: 7 },
+      await db.one(sql.rows<{ readonly value: bigint }>`SELECT @braid_pv15_stream_kind AS value`),
+      { value: 7n },
       "result-kind mismatch is post-execution and the drained connection remains reusable",
     );
   } finally {
@@ -130,7 +130,7 @@ test("MySQL prepared Execute.stream handles 100k rows and drains on break", asyn
       assert.equal(typeof row.id, "number");
       break;
     }
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
   } finally {
     await pool.query("DROP TABLE IF EXISTS braid_pv15_stream").catch(() => undefined);
     await endPool(pool);
@@ -153,10 +153,10 @@ test("MySQL streaming rejects multiple result sets and drains before reusing the
     await assert.rejects(async () => {
       for await (const row of db.stream(sql.rows<Record<string, unknown>>`CALL braid_pv15_stream_multi()`)) {
         assert.equal("PAYMENT_ID" in row, false, "second-result rows must never escape");
-        assert.deepEqual(row, { USER_ID: 1, NAME: "Ada" });
+        assert.deepEqual(row, { USER_ID: 1n, NAME: "Ada" });
       }
     }, /BRAID_RESULT_SETS_UNSUPPORTED/u);
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
     const after = await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`);
     assert.equal(after.connectionId, before.connectionId, "a safely drained connection is reused, not replaced");
   } finally {
@@ -190,7 +190,7 @@ test("MySQL materialized queries reject multiple sets, reuse the connection and 
       () => db.all(sql.rows<Record<string, unknown>>`CALL braid_pv15_sets(${7})`),
       /BRAID_RESULT_SETS_UNSUPPORTED/u,
     );
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
     assert.deepEqual(
       await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`),
       before,
@@ -200,7 +200,7 @@ test("MySQL materialized queries reject multiple sets, reuse the connection and 
       () => db.execute(sql`CALL braid_pv15_sets(${7})`),
       /BRAID_RESULT_SETS_UNSUPPORTED/u,
     );
-    assert.deepEqual(await db.one(sql.rows<{ readonly ok: number }>`SELECT 1 AS ok`), { ok: 1 });
+    assert.deepEqual(await db.one(sql.rows<{ readonly ok: bigint }>`SELECT 1 AS ok`), { ok: 1n });
     assert.deepEqual(
       await db.one(sql.rows<{ readonly connectionId: number }>`SELECT CONNECTION_ID() AS connectionId`),
       before,
@@ -211,7 +211,7 @@ test("MySQL materialized queries reject multiple sets, reuse the connection and 
     assert.equal(sets.returnValue, undefined);
     assert.deepEqual(sets.resultSets, [
       { rows: [{ value: "7.00", tag: "shape-a" }] },
-      { rows: [{ value: 8, tag: "shape-b" }] },
+      { rows: [{ value: 8n, tag: "shape-b" }] },
     ]);
     await assert.rejects(
       () => db.call(sql.call`CALL braid_pv15_out(${7}, ${sql.out("answer")}, ${sql.inOut("counter", 3)})`),

@@ -3,6 +3,7 @@ import type {
   BulkExecutionResult,
   DatabaseOptions,
   DriverRoutineResult,
+  DriverEnvironment,
   QueryExecutor,
   QueryExecutionResult,
   RenderedBulk,
@@ -169,11 +170,23 @@ function materialize(statement: RenderedStatement, binding: StatementBindingDesc
   return { text: description.parameterizedSql, values: statement.parameters.map((parameter) => parameter.value) };
 }
 
+const d1Environment = Object.freeze<DriverEnvironment>({
+  database: { product: "sqlite" },
+  driver: { id: "cloudflare-d1", profile: "number" },
+  capabilities: {
+    "sql.native-transparency": { status: "guaranteed" },
+    "numeric.exact-integer": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.safe-integer" },
+    "numeric.approximate-float": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.safe-integer" },
+  },
+  // D1 denies sqlite_version(); unknown server versions stay unreported.
+});
+
 export function createD1Executor(database: D1DatabaseLike, options: D1ExecutorOptions = {}): QueryExecutor {
   assertIntegerMode(options.integerMode);
   return {
     ownershipKey: database,
     statementBinding: d1StatementBinding,
+    environment: d1Environment,
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription): Promise<QueryExecutionResult<Row>> {
       assertRoutineUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);

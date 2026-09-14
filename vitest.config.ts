@@ -29,6 +29,7 @@ const sourceAliases = {
   "@sqlbraid/mysql/inspector": resolve("packages/mysql/src/inspector.ts"),
   "@sqlbraid/mysql": resolve("packages/mysql/src/index.ts"),
   "@sqlbraid/mariadb/mariadb": resolve("packages/mariadb/src/mariadb.ts"),
+  "@sqlbraid/mariadb/inspector": resolve("packages/mariadb/src/inspector.ts"),
   "@sqlbraid/mariadb": resolve("packages/mariadb/src/index.ts"),
   "@sqlbraid/sqlite/wasm": resolve("packages/sqlite/src/wasm.ts"),
   "@sqlbraid/sqlite/d1": resolve("packages/sqlite/src/d1.ts"),
@@ -62,6 +63,22 @@ export default defineConfig({
         test: {
           name: "db-sqlite",
           include: ["tests/db/sqlite/**/*.test.ts"],
+          fileParallelism: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "db-d1",
+          include: ["tests/db/d1/**/*.test.ts"],
+          fileParallelism: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "db-wasm",
+          include: ["tests/db/wasm/**/*.test.ts"],
           fileParallelism: false,
         },
       },

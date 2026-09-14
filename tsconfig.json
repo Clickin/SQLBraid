@@ -36,6 +36,7 @@
       "@sqlbraid/mysql/mysql2": ["packages/mysql/src/mysql2.ts"],
       "@sqlbraid/mariadb": ["packages/mariadb/src/index.ts"],
       "@sqlbraid/mariadb/mariadb": ["packages/mariadb/src/mariadb.ts"],
+      "@sqlbraid/mariadb/inspector": ["packages/mariadb/src/inspector.ts"],
       "@sqlbraid/sqlite": ["packages/sqlite/src/index.ts"],
       "@sqlbraid/sqlite/wasm": ["packages/sqlite/src/wasm.ts"],
       "@sqlbraid/sqlite/d1": ["packages/sqlite/src/d1.ts"],

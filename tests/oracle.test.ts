@@ -129,3 +129,39 @@ test("Oracle adapter honors hints, rejects untyped null, and closes an aborted R
   await assert.rejects(() => iterator.next());
   assert.equal(closed, 1);
 });
+
+test("Oracle numeric result transport keeps NUMBER exact and BINARY_FLOAT approximate", async () => {
+  let mode: "number" | "float" = "number";
+  const connection = {
+    async execute() {
+      return mode === "number"
+        ? { rows: [{ VALUE: "12345678901234567890.12" }], metaData: [{ name: "VALUE", dbTypeName: "NUMBER" }] }
+        : { rows: [{ VALUE: 1.25 }], metaData: [{ name: "VALUE", dbTypeName: "BINARY_FLOAT" }] };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection);
+  assert.deepEqual(await executor.query(sql.rows`SELECT value FROM t`.render()), {
+    kind: "rows",
+    rows: [{ VALUE: "12345678901234567890.12" }],
+    rowCount: 1,
+  });
+  mode = "float";
+  assert.deepEqual(await executor.query(sql.rows`SELECT value FROM t`.render()), {
+    kind: "rows",
+    rows: [{ VALUE: 1.25 }],
+    rowCount: 1,
+  });
+  mode = "number";
+  const lossyConnection = {
+    ...connection,
+    async execute() {
+      return { rows: [{ VALUE: 1.25 }], metaData: [{ name: "VALUE", dbTypeName: "NUMBER" }] };
+    },
+  };
+  await assert.rejects(
+    () => createOracledbExecutor(lossyConnection).query(sql.rows`SELECT value FROM t`.render()),
+    { code: "BRAID_RESULT_EXACTNESS" },
+  );
+});

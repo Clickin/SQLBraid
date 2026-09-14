@@ -11,6 +11,27 @@ description: Node에 내장된 SQLite 드라이버로 첫 SQLBraid 쿼리를 실
 완료를 주장하지 않습니다.
 :::
 
+## SQLite 표현 프로필
+
+`node:sqlite`는 server version이 아니라 Node runtime API입니다. 정확한
+프로필에는 Node, Node에 번들된 SQLite library, `integerMode`를 기록합니다.
+
+| SQLite 표면 | 프로필 표현 | 상태/주의 |
+| --- | --- | --- |
+| INTEGER, `integerMode: "number"` | JavaScript `number` | 기본값이며 safe integer 범위를 벗어나면 lossy할 수 있습니다. |
+| INTEGER, `integerMode: "bigint"` | `bigint` | 정확한 int64 경로이며 생성 모델에는 `typePolicyForIntegerMode("bigint")`를 사용합니다. |
+| `STRICT` table | SQLite native affinity enforcement | schema 기능이며 SQLBraid parser 보장이 아닙니다. |
+| non-STRICT table / `ANY` | SQLite dynamic value | 저장된 값과 driver에 따라 반환 표현이 달라집니다. |
+| JSON1 | text | Standard Schema로 JSON text를 파싱/검증합니다. |
+| BLOB | `Buffer`/bytes | binary로 유지하거나 명시적으로 encode합니다. |
+| `RETURNING` | materialized rowset | 전달 전에 output을 축적하며 DML-returning stream은 주장하지 않습니다. |
+
+Native binding은 `?` placeholder와 `StatementSync`를 사용하고, `iterate()`가
+stream primitive이며 prepared loop가 bulk 전략입니다. SQLite에는
+stored-procedure transport가 없으므로 등록 function과 table-valued extension은
+일반 SQL row query입니다. Native SQLite SQL은 grammar rewrite 없이 전달되며,
+투명성은 grammar 지원을 뜻하지 않습니다.
+
 ## 1. 프로젝트 만들기
 
 ```bash
@@ -113,3 +134,24 @@ SQLite 어댑터는 루틴 호출을 지원하지 않으며 스트리밍에는
 scalar/aggregate/window function은 일반 SQL 함수이며 virtual-table/table-valued
 extension도 stored procedure가 아닌 일반 행 쿼리입니다.
 :::
+
+## SQLite 표현 프로필
+
+`node:sqlite`는 server version이 아니라 Node runtime API입니다. 정확한
+프로필에는 Node, Node에 번들된 SQLite library, `integerMode`를 기록합니다.
+
+| SQLite 표면 | 프로필 표현 | 상태/주의 |
+| --- | --- | --- |
+| INTEGER, `integerMode: "number"` | JavaScript `number` | 기본값이며 safe integer 범위를 벗어나면 lossy할 수 있습니다. |
+| INTEGER, `integerMode: "bigint"` | `bigint` | 정확한 int64 경로이며 생성 모델에는 `typePolicyForIntegerMode("bigint")`를 사용합니다. |
+| `STRICT` table | SQLite native affinity enforcement | schema 기능이며 SQLBraid parser 보장이 아닙니다. |
+| non-STRICT table / `ANY` | SQLite dynamic value | 저장된 값과 driver에 따라 반환 표현이 달라집니다. |
+| JSON1 | text | Standard Schema로 JSON text를 파싱/검증합니다. |
+| BLOB | `Buffer`/bytes | binary로 유지하거나 명시적으로 encode합니다. |
+| `RETURNING` | materialized rowset | 전달 전에 output을 축적하며 DML-returning stream은 주장하지 않습니다. |
+
+Native binding은 `?` placeholder와 `StatementSync`를 사용하고, `iterate()`가
+stream primitive이며 prepared loop가 bulk 전략입니다. SQLite에는
+stored-procedure transport가 없으므로 등록 function과 table-valued extension은
+일반 SQL row query입니다. Native SQLite SQL은 grammar rewrite 없이 전달되며,
+투명성은 grammar 지원을 뜻하지 않습니다.
