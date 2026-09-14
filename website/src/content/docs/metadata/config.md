@@ -7,7 +7,9 @@ Install `@sqlbraid/cli`, `@sqlbraid/codegen`, the selected dialect, and the driv
 
 ```js
 import { defineConfig } from "@sqlbraid/cli/config";
-import { typePolicy } from "@sqlbraid/postgres";
+import { typePolicyForProfile } from "@sqlbraid/postgres";
+
+const typePolicy = typePolicyForProfile({ json: "text", temporal: "text" });
 
 export default defineConfig({
   codegen: {
@@ -34,3 +36,9 @@ sqlbraid codegen --json
 Metadata and output paths are relative to the config file. Repeated `--target` selects targets. Validation completes for every selected target before output is written; unchanged generated files retain their mtime. The JSON result reports `written` only after successful I/O.
 
 The config is trusted executable Node code, not a sandbox. Keep metadata and generated output under version control when the project needs reviewable schema changes.
+
+The selected TypePolicy is a representation profile, not a cosmetic codegen
+option. Reuse the same PostgreSQL/mysql2/MariaDB profile descriptor at runtime
+and in this config. Native JSON roots intentionally remain `unknown` unless a
+driver-specific contract narrows them; a manual output override changes emitted
+TypeScript only and does not change runtime decoding.

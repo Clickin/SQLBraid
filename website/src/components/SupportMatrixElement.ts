@@ -5,8 +5,8 @@ type Locale = "en" | "ko";
 interface Row { target: SupportTarget; capabilityId?: string; capability?: TargetCapability }
 const ROW_HEIGHT = 56;
 const labels = {
-  en: { database: "Database", driver: "Driver", capability: "Capability", version: "Version", edition: "Edition", runtime: "Runtime", status: "Support status", search: "Search", all: "All", reset: "Reset", results: "results", condition: "Condition", test: "Test ID", ci: "CI gate", profile: "Profile", integer: "Raw integer", decimal: "Raw decimal", json: "JSON fidelity", temporal: "Temporal fidelity", transport: "Numeric transport", stream: "Streaming", routine: "Routines", bulk: "Bulk", exclusions: "Excluded profiles", target: "Target", transparency: "Native SQL transparency", generated: "Generated structure", exactNumeric: "Exact numeric", approximate: "Approximate float", returning: "Returned rows", metadata: "Metadata" },
-  ko: { database: "데이터베이스", driver: "드라이버", capability: "기능", version: "버전", edition: "에디션", runtime: "런타임", status: "지원 상태", search: "검색", all: "전체", reset: "초기화", results: "개 결과", condition: "조건", test: "테스트 ID", ci: "CI 게이트", profile: "프로필", integer: "원시 정수", decimal: "원시 소수", json: "JSON 충실도", temporal: "시간 충실도", transport: "숫자 전송", stream: "스트리밍", routine: "루틴", bulk: "벌크", exclusions: "제외 프로필", target: "대상", transparency: "네이티브 SQL 투명성", generated: "생성 구조", exactNumeric: "정확한 숫자", approximate: "근사 부동소수점", returning: "반환 행", metadata: "메타데이터" },
+  en: { database: "Database", driver: "Driver", capability: "Capability", version: "Version", edition: "Edition", runtime: "Runtime", status: "Support status", search: "Search", all: "All", reset: "Reset", results: "results", condition: "Condition", test: "Test ID", ci: "CI gate", profile: "Profile", integer: "Driver raw integer", decimal: "Driver raw decimal", json: "Driver raw JSON", temporal: "Driver raw temporal", canonical: "SQLBraid canonical", policy: "TypePolicy", options: "Required options", transport: "Numeric transport", stream: "Streaming", routine: "Routines", bulk: "Bulk", exclusions: "Excluded profiles", target: "Target", transparency: "Native SQL transparency", generated: "Generated structure", exactNumeric: "Exact numeric", approximate: "Approximate float", returning: "Returned rows", metadata: "Metadata" },
+  ko: { database: "데이터베이스", driver: "드라이버", capability: "기능", version: "버전", edition: "에디션", runtime: "런타임", status: "지원 상태", search: "검색", all: "전체", reset: "초기화", results: "개 결과", condition: "조건", test: "테스트 ID", ci: "CI 게이트", profile: "프로필", integer: "드라이버 원시 정수", decimal: "드라이버 원시 소수", json: "드라이버 원시 JSON", temporal: "드라이버 원시 시간", canonical: "SQLBraid 표준 표현", policy: "TypePolicy", options: "필수 옵션", transport: "숫자 전송", stream: "스트리밍", routine: "루틴", bulk: "벌크", exclusions: "제외 프로필", target: "대상", transparency: "네이티브 SQL 투명성", generated: "생성 구조", exactNumeric: "정확한 숫자", approximate: "근사 부동소수점", returning: "반환 행", metadata: "메타데이터" },
 };
 const states: Record<string, readonly [string, string]> = {
   official: ["Official", "공식"], conditional: ["Conditional", "조건부"], compatible: ["Compatible", "호환 가능"], historical: ["Historical", "과거 검증"], unsupported: ["Unsupported", "지원하지 않음"], guaranteed: ["Guaranteed", "보장됨"], guarded: ["Guarded", "값 검사"], pending: ["Pending", "검증 대기"],
@@ -51,7 +51,7 @@ class SupportMatrixElement extends HTMLElement {
       <div class="support-matrix__toolbar">
         <div role="tablist" aria-label="${l.capability}" class="support-matrix__views">${(["database", "driver", "capability"] as const).map((view) => `<button type="button" role="tab" data-view="${view}" id="matrix-${this.locale}-${view}" aria-controls="matrix-${this.locale}-panel">${l[view]}</button>`).join("")}</div>
         <label>${l.search}<input type="search" data-search /></label>
-        <div class="support-matrix__filters">${(["database", "driver", "runtime", "status", "capability"] as const).map((key) => `<label>${l[key]}<select data-filter="${key}"><option value="">${l.all}</option></select></label>`).join("")}</div>
+        <div class="support-matrix__filters">${(["database", "driver", "runtime", "status", "profile", "capability"] as const).map((key) => `<label>${l[key]}<select data-filter="${key}"><option value="">${l.all}</option></select></label>`).join("")}</div>
         <button type="button" data-reset>${l.reset}</button><output data-count aria-live="polite"></output>
       </div>
       <div role="tabpanel" id="matrix-${this.locale}-panel" data-panel>
@@ -65,7 +65,7 @@ class SupportMatrixElement extends HTMLElement {
     this.search = this.querySelector<HTMLInputElement>("[data-search]")!;
     this.filters = Object.fromEntries([...this.querySelectorAll<HTMLSelectElement>("[data-filter]")].map((select) => [select.dataset.filter!, select]));
     for (const [key, select] of Object.entries(this.filters)) {
-      const values = key === "capability" ? this.data.capabilities.map((c) => c.id) : [...new Set(this.data.targets.map((t) => key === "status" ? t.status : key === "database" ? t.database.product : key === "driver" ? t.driver.id : t.runtime.id))];
+      const values = key === "capability" ? this.data.capabilities.map((c) => c.id) : [...new Set(this.data.targets.map((t) => key === "status" ? t.status : key === "database" ? t.database.product : key === "driver" ? t.driver.id : key === "profile" ? t.driver.profile : t.runtime.id).filter((value): value is string => Boolean(value)))];
       for (const value of values.sort()) select.add(new Option(key === "capability" ? this.capabilityLabel(value) : key === "status" ? this.status(value) : value, value));
     }
     this.addEventListener("input", (event) => { if (event.target === this.search) this.rebuild(); });
@@ -114,7 +114,7 @@ class SupportMatrixElement extends HTMLElement {
   private rebuild(): void {
     const f = this.filters;
     const search = this.search.value.trim().toLocaleLowerCase(this.locale);
-    const targets = this.data.targets.filter((t) => (!f.database.value || t.database.product === f.database.value) && (!f.driver.value || t.driver.id === f.driver.value) && (!f.runtime.value || t.runtime.id === f.runtime.value) && (!f.status.value || t.status === f.status.value) && (!f.capability.value || Object.hasOwn(t.capabilities, f.capability.value)));
+    const targets = this.data.targets.filter((t) => (!f.database.value || t.database.product === f.database.value) && (!f.driver.value || t.driver.id === f.driver.value) && (!f.runtime.value || t.runtime.id === f.runtime.value) && (!f.status.value || t.status === f.status.value) && (!f.profile.value || t.driver.profile === f.profile.value) && (!f.capability.value || Object.hasOwn(t.capabilities, f.capability.value)));
     this.rows = targets.flatMap((target): Row[] => this.view === "capability" ? Object.entries(target.capabilities).filter(([id]) => !f.capability.value || id === f.capability.value).map(([capabilityId, capability]) => ({ target, capabilityId, capability })) : [{ target }]).filter((row) => !search || JSON.stringify([row.target.id, row.target.database, row.target.driver, row.target.runtime, row.target.status, row.capabilityId ? this.capabilityLabel(row.capabilityId) : "", row.capability]).toLocaleLowerCase(this.locale).includes(search));
     const columns = this.columns();
     this.style.setProperty("--matrix-columns", String(columns.length));
@@ -131,15 +131,18 @@ class SupportMatrixElement extends HTMLElement {
 
   private columns(): string[] {
     const l = labels[this.locale];
-    return this.view === "database" ? [l.target, l.database, l.version, l.edition, l.driver, l.runtime, l.status, l.transparency, l.generated, l.exactNumeric, l.approximate, l.transport, l.json, l.temporal, l.returning, l.stream, l.routine, l.bulk, l.metadata] : this.view === "driver" ? [l.driver, l.version, l.target, l.runtime, l.profile, l.integer, l.decimal, l.approximate, l.transport, l.json, l.temporal, l.stream, l.routine, l.bulk, l.exclusions] : [l.capability, l.target, l.status, l.condition, l.test, l.ci];
+    return this.view === "database" ? [l.target, l.database, l.version, l.edition, l.driver, l.runtime, l.status, l.transparency, l.generated, l.exactNumeric, l.approximate, l.transport, l.json, l.temporal, l.returning, l.stream, l.routine, l.bulk, l.metadata] : this.view === "driver" ? [l.driver, l.version, l.target, l.runtime, l.profile, l.integer, l.decimal, l.json, l.temporal, l.canonical, l.policy, l.options, l.stream, l.routine, l.bulk, l.exclusions] : [l.capability, l.target, l.status, l.condition, l.test, l.ci];
   }
 
   private cells(row: Row): string[] {
     const t = row.target;
     if (this.view === "capability") return [this.capabilityLabel(row.capabilityId!), t.id, this.status(row.capability!.status), this.condition(row.capability!.conditionCode), row.capability!.testIds?.join(", ") ?? "—", [t.ci?.command, t.ci?.workflow].filter(Boolean).join(" · ")];
     if (this.view === "driver") {
-      const raw = t.driver.rawRepresentations ?? {};
-      return [t.driver.id, t.driver.version ?? "—", t.id, `${t.runtime.id} ${t.runtime.version ?? ""}`, t.driver.profile ?? "—", raw.integer ?? "—", raw.decimal ?? "—", this.numeric(t, "approximate-binary"), this.numeric(t, "exact-integer"), raw.json ?? "—", raw.temporal ?? "—", t.driver.stream ?? "—", t.driver.routine ?? "—", t.driver.bulk ?? "—", t.driver.exclusions?.join(", ") ?? "—"];
+      const driver = t.driver as SupportTarget["driver"] & { driverRawRepresentations?: Readonly<Record<string, string>>; sqlbraidRepresentations?: Readonly<Record<string, string>>; requiredOptions?: unknown };
+      const raw = driver.driverRawRepresentations ?? {};
+      const canonical = driver.sqlbraidRepresentations ?? {};
+      const policy = (t as SupportTarget & { typePolicy?: { id: string; hash: string } }).typePolicy;
+      return [t.driver.id, t.driver.version ?? "—", t.id, `${t.runtime.id} ${t.runtime.version ?? ""}`, t.driver.profile ?? "—", raw.integer ?? "—", raw.decimal ?? "—", raw.json ?? "—", raw.temporal ?? "—", [canonical.integer, canonical.decimal, canonical.json, canonical.temporal].filter(Boolean).join(" · ") || "—", policy ? `${policy.id}@${policy.hash}` : "—", driver.requiredOptions ? JSON.stringify(driver.requiredOptions) : "—", t.driver.stream ?? "—", t.driver.routine ?? "—", t.driver.bulk ?? "—", t.driver.exclusions?.join(", ") ?? "—"];
     }
     return [t.id, t.database.product, t.database.version ?? "—", t.database.edition ?? "—", `${t.driver.id} ${t.driver.version ?? ""}`, `${t.runtime.id} ${t.runtime.version ?? ""}`, this.status(t.status), this.capabilities(t, "sql.native-transparency"), this.capabilities(t, "sql.generated-structure"), [this.numeric(t, "exact-integer"), this.numeric(t, "exact-decimal")].join(" / "), this.numeric(t, "approximate-binary"), [this.numeric(t, "exact-integer"), this.numeric(t, "exact-decimal")].join(" / "), [this.capabilities(t, "data.json-parsed"), this.capabilities(t, "data.json-lossless-text")].filter((value) => value !== "—").join(" / ") || "—", [this.capabilities(t, "data.temporal-native"), this.capabilities(t, "data.temporal-lossless")].filter((value) => value !== "—").join(" / ") || "—", this.capabilities(t, "dml"), this.capabilities(t, "execution.stream"), this.capabilities(t, "routine"), this.capabilities(t, "execution.bulk"), this.capabilities(t, "metadata")];
   }

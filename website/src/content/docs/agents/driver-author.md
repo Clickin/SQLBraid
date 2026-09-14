@@ -3,7 +3,7 @@ title: Driver-author binding guide
 description: Implement a custom SQLBraid binding adapter without crossing the value-only security boundary.
 ---
 
-This guide is for custom `QueryExecutor`, `ConnectionProvider`, and driver adapters. PV16 final verification is pending; this page does not claim a current CI result, SHA, runtime support label, or publication evidence.
+This guide is for custom `QueryExecutor`, `ConnectionProvider`, and driver adapters. PV18 final verification is pending; this page does not claim a current CI result, SHA, runtime support label, or publication evidence.
 
 ## Logical statement invariant
 
@@ -73,7 +73,7 @@ Pass the same optional `StatementBindingDescription` to `query`, `call`, or `str
 
 ## Homogeneous bulk execution
 
-PV16 `db.bulk()` is command-only: one logical DML shape is paired with an
+The homogeneous `db.bulk()` contract is command-only: one logical DML shape is paired with an
 ordered parameter matrix. It is not `db.batch()`, which accepts heterogeneous
 queries.
 
@@ -294,6 +294,21 @@ independent in TypePolicy metadata; a lossy exact decimal must fail closed, not
 be stringified. Parsed JSON/native `Date` are convenience profiles, while text
 profiles need their own evidence. Scalar guarantees do not automatically apply
 to arrays, ranges, composites, objects, `sql_variant`, or vectors.
+
+If a driver or connection option changes the JavaScript result shape, publish an
+immutable profile descriptor with a stable `id`, JSON/temporal modes,
+connection options, and matching TypePolicy. Export a
+`typePolicyForProfile({ json, temporal })` selector when the package supports
+the shared profile shape. Runtime and codegen must consume that same descriptor;
+the driver author owns a real CI fixture, a codegen/runtime conformance check,
+and a support-matrix capability row. Driver raw values and SQLBraid canonical
+values must be recorded separately.
+
+A scalar exactness fixture does not certify arrays, collections, variants,
+composites, parsed JSON roots, or other containers. A container claim requires
+container-specific transport and codegen evidence and is not recursively
+inherited by every nested member. Keep unclassified/unsupported values
+explicit rather than mapping them to a convenient scalar.
 
 Keep the query-builder/render phase and binder/materializer phase separate: the
 former describes immutable SQL segments and value boundaries, while the latter

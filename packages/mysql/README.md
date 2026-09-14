@@ -24,16 +24,33 @@ The prepared CALL path currently rejects OUT/INOUT with `BRAID_CALL_OUT_UNSUPPOR
 
 See the [MySQL setup](https://clickin.github.io/SQLBraid/getting-started/mysql/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
 
-The exact mysql2 profile is explicit: `supportBigNumbers: true`,
-`bigNumberStrings: true`, `decimalNumbers: false`, `rowsAsArray: false`,
-`jsonStrings: false`, `dateStrings: false`, and the default `typeCast`.
-Changing any option is a separate conditional profile until separately tested.
-All exact integer and decimal results are canonical `string` values; FLOAT and
-DOUBLE remain JavaScript `number` values. Set `jsonStrings: true` for the
-lossless JSON-text profile and `dateStrings: true` for the lossless temporal
-text profile, and pass matching `profile` evidence to the adapter when the
-physical connection wrapper does not expose its options. See the [data
-representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+## PV18 representation profiles
+
+The exported `MYSQL2_LOSSLESS_TEXT` profile is the default SQLBraid
+representation: `supportBigNumbers: true`, `bigNumberStrings: true`,
+`decimalNumbers: false`, `rowsAsArray: false`, `jsonStrings: true`, and
+`dateStrings: true`. Use its immutable options when creating a connection and
+pass the descriptor to the adapter:
+
+```ts
+import mysql from "mysql2/promise";
+import { MYSQL2_LOSSLESS_TEXT } from "@sqlbraid/mysql";
+import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
+
+const connection = await mysql.createConnection({
+  ...MYSQL2_LOSSLESS_TEXT.connectionOptions,
+  uri,
+});
+const db = createMysql2Database(connection, { profile: MYSQL2_LOSSLESS_TEXT });
+```
+
+`representationProfiles` also exports `MYSQL2_NATIVE`,
+`MYSQL2_JSON_TEXT`, and `MYSQL2_DATE_TEXT`. The adapter auto-recognizes
+`mysql2`'s public connection configuration when available; pass the matching
+descriptor when a wrapper does not expose it. All exact integer and decimal
+results are canonical `string` values; FLOAT and DOUBLE remain JavaScript
+`number` values. See the [data representation
+guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
 
 JSON-text fidelity preserves the database's returned representation, not the
 original JSON source: MySQL native JSON storage canonicalizes keys/whitespace

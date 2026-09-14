@@ -36,13 +36,23 @@ carrier columns by database field name.
 
 See the [PostgreSQL setup](https://clickin.github.io/SQLBraid/getting-started/postgres/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
 
-Representation profile: SQLBraid's default `pg` profile uses query-local
-public parser overrides, returning exact numerics and JSON/temporal values as
-text, approximate floats as JavaScript `number`, `bytea` as `Buffer`, and UUIDs
-as strings. Pass `parserProfile: { json: "parsed", temporal: "date" }` only
-when convenience conversion is preferred; that is a conditional profile.
+Representation profiles are reusable runtime/codegen contracts. The default
+`pg-lossless-text` profile uses query-local public parser overrides,
+returning exact numerics and JSON/temporal values as text, approximate floats
+as JavaScript `number`, `bytea` as `Uint8Array` (node-postgres supplies a
+`Buffer`), and UUIDs as strings. The `pg-native` profile delegates JSON
+and temporal values to node-postgres: JSON roots are `unknown`, date and
+timestamp families are `Date`, time families are strings, and interval output
+is `unknown`.
+
+Use `typePolicyForProfile({ json: "text" | "native", temporal: "text" | "native" })`
+or select a descriptor from `representationProfiles` so runtime and codegen
+use the same policy. `parserProfile: { json: "native", temporal: "native" }`
+selects the native profile.
 Custom parsers are separate conditional profiles and need their own evidence.
 PostgreSQL `money` is unsupported by the exact output profile because its
 textual form is locale-sensitive; use an explicit native numeric cast when
 exact text is required. PostgreSQL arrays, domains, ranges/multiranges, and
-composites are not recursively normalized. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+composites are not recursively normalized: lossless text exposes common
+containers as one raw PostgreSQL text value, while native containers remain
+driver-defined `unknown`. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

@@ -37,8 +37,9 @@ runtime can actually receive.
 
 ## Launch documentation
 
-This is the 0.1.0 pre-release documentation. PV17 value-fidelity work starts
-from `dccb69763e9e4a070280cf580d8f7b76368ec3d5`; final Runtime, Docs and Release
+This is the 0.1.0 pre-release documentation. PV18 profile-coherent
+value-fidelity and container work starts from
+`2119d9676b05fb2531eaf7aac1ef37741600ba40`; final Runtime, Docs and Release
 dry-run evidence is pending, and no npm publication is claimed.
 See [release notes and limitations](/SQLBraid/release/notes/)
 and the [runtime/driver evidence matrix](/SQLBraid/reference/support/) before

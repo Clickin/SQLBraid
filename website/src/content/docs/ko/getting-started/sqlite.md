@@ -6,9 +6,10 @@ description: Node에 내장된 SQLite 드라이버로 첫 SQLBraid 쿼리를 실
 이 경로는 Node `>=22.18.0` 및 `node:sqlite`를 사용하며 데이터베이스 서버가 필요하지 않습니다. 첫 번째 쿼리는 단순한 태그 템플릿이므로 SQLBraid 컴파일러가 필요하지 않습니다. 두 번째 쿼리는 동적 `@braid`를 추가하고 함께 제공되는 lowering 명령을 사용합니다.
 
 :::note 검증 상태
-PV17의 최종 exact-SHA Runtime, Docs, Release gate는 아직 대기 중입니다.
-기록된 PV16 revision은 역사적 SQLite 및 packed quickstart 증거일 뿐이며,
-npm 발행이나 현재 PV17 프로필을 인증하지 않습니다.
+PV18의 profile/container migration에 대한 최종 exact-SHA Runtime, Docs,
+Release gate는 아직 대기 중입니다. 기록된 PV16/PV17 revision은 역사적
+SQLite 및 packed quickstart 증거일 뿐이며, npm 발행이나 현재 PV18 프로필을
+인증하지 않습니다.
 :::
 
 ## SQLite 표현 프로필

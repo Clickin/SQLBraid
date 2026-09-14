@@ -3,7 +3,7 @@ title: Browser SQLite and D1
 description: Use the SQLite WASM and Cloudflare D1 adapters without inventing a browser pool or cursor.
 ---
 
-PV16 keeps SQLite as one dialect while separating the execution driver and
+PV18 keeps SQLite as one dialect while separating the execution driver and
 runtime. Browser code uses SQLite WASM; a Worker binding uses Cloudflare D1.
 Neither path changes the SQLBraid query contract.
 
@@ -68,9 +68,9 @@ The native D1 batch may have stronger transaction behavior than root bulk, but
 that is not the portable SQLBraid contract. Root bulk is not implicitly
 transactional and has no portable auto-chunking promise.
 
-Historical PV16 Chromium/D1 evidence is retained in the release records. PV17
-requires a new exact-SHA gate for the changed representation contract. Local D1
-remains Compatible because its managed SQLite version is unreported. No browser
+Historical PV16 evidence is retained in the release records. PV18 requires a
+new exact-SHA gate for the changed representation contract. Local D1 remains
+Compatible because its managed SQLite version is unreported. No browser
 gate claims OPFS persistence, SharedArrayBuffer, remote production support or
 npm publication.
 
@@ -79,7 +79,7 @@ npm publication.
 SQLite remains the dialect, but WASM and D1 are different drivers and must not
 share an evidence label.
 
-| Driver | Raw/profile boundary | Stream/bulk/transaction |
+| Driver | Driver raw / SQLBraid canonical boundary | Stream/bulk/transaction |
 | --- | --- | --- |
 | SQLite WASM OO1 | SQLite dynamic values; INTEGER storage is canonical string | pull iteration, prepared-loop bulk, callback transaction |
 | Cloudflare D1 binding | materialized rows and ordered `?1`, `?2`, … binds | native `batch()` bulk; streaming and callback transaction are unsupported |

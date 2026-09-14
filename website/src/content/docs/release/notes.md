@@ -1,13 +1,13 @@
 ---
-title: PV17 draft release notes
-description: The pending PV17 surface for value fidelity, DML returning, bulk, MariaDB, Browser WASM, and D1.
+title: PV18 draft release notes
+description: The pending PV18 surface for profile-coherent fidelity, containers, DML returning, bulk, MariaDB, Browser WASM, and D1.
 ---
 
-PV17 starts from baseline `dccb69763e9e4a070280cf580d8f7b76368ec3d5`. Final
-Runtime, Docs and Release dry-run evidence is pending; do not infer support
-claims or release authorization from this draft. The docs-pages workflow
+PV18 starts from review baseline `2119d9676b05fb2531eaf7aac1ef37741600ba40`.
+Final Runtime, Docs and Release dry-run evidence is pending; do not infer
+support claims or release authorization from this draft. The docs-pages workflow
 validates on push but deploys or updates history only from an explicit
-`workflow_dispatch` with `deploy=true`. No final PV17 SHA, workflow run, npm RC,
+`workflow_dispatch` with `deploy=true`. No final PV18 SHA, workflow run, npm RC,
 or stable publication is claimed.
 
 ## Included contract
@@ -26,12 +26,18 @@ or stable publication is claimed.
 - execution observers with `durationMs`, non-sensitive call result structure, and lazy diagnostic literalization;
 - `@sqlbraid/vite` Vite 8 pre-transform that preserves TSX and source-map composition while leaving TypeScript and framework transforms to Vite;
 - optional metadata, inspectors, deterministic code generation, CLI JSON inspection, standard stdio LSP, and thin VS Code integration.
-- numeric fidelity helpers and data-representation profiles: exact numerics are
+- numeric fidelity helpers and profile-coherent data-representation contracts: exact numerics are
   canonical strings, approximate IEEE values are numbers, and
   `decodeExactInteger` is an opt-in application helper;
 - JSON parsed/native and lossless-text profiles, temporal native convenience
   versus precision-preserving text profiles, and explicit SQL conversion
   workarounds where a driver cannot preserve exactness;
+- profile descriptors and `typePolicyForProfile({ json, temporal })` selectors
+  shared by runtime and codegen for PostgreSQL, mysql2, and MariaDB;
+- separate driver-raw and SQLBraid-canonical evidence, exact string IDs versus
+  safe operational counts, and container-specific (not recursive) support
+  status for arrays, domains, ranges, composites, objects, `sql_variant`,
+  vectors, and parsed JSON roots;
 - ordinary `undefined` IN values fail before physical acquisition while `null`
   means SQL `NULL`; exact bind capabilities remain driver-specific and separate
   from query-builder SQL generation;
@@ -40,7 +46,7 @@ or stable publication is claimed.
 
 ## Verification status
 
-The shared manifest cells are pending PV17's final exact-SHA gates. The pending
+The shared manifest cells are pending PV18's final exact-SHA gates. The pending
 runtime gates are one full Vitest pass on Node 22, the existing `test:all` pass
 on Node 24, the fidelity benchmark, and the documentation/release dry-run on
 one final revision. Actual publication was skipped; user acceptance and
@@ -48,9 +54,9 @@ explicit release authorization remain separate.
 
 ### Historical PV16 evidence
 
-The prior PV16 revision-specific evidence and support labels remain available
+The prior PV16/PV17 revision-specific evidence and support labels remain available
 in the [historical support evidence](/SQLBraid/reference/support/#release-evidence-provenance).
-Those records do not certify PV17's changed value-fidelity contract.
+Those records do not certify PV18's changed profile/container contract.
 
 ## Upgrade discipline
 

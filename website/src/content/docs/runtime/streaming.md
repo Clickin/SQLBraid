@@ -55,7 +55,8 @@ Routine cursor streaming is not part of the materialized routine contract. Use `
 
 MySQL rejects a second result-set metadata boundary with `BRAID_RESULT_SETS_UNSUPPORTED` before yielding any second-set row. It drains the command before releasing a reusable connection; drain failure preserves the result-set error with `BRAID_RESOURCE_CLEANUP` and discards the connection. Use `db.call()` for routines that emit multiple result sets.
 
-DML `RETURNING`/`OUTPUT` is a materialized row contract in PV16. Do not infer
+DML `RETURNING`/`OUTPUT` remains a materialized row contract in PV18. Final
+exact-SHA capability evidence is pending; do not infer
 that a dialect's DML-returning syntax is streamable; use an ordinary row query
 when you need the portable streaming lifecycle above.
 

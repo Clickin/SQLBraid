@@ -5,13 +5,19 @@ description: Separate current behavior from candidates that need their own desig
 
 ## Candidate surface for 0.1.0
 
-The release surface includes SQL-first templates, safe binds, dynamic `@braid`, result contracts, Standard Schema mapping, physical connection leasing, transactions/savepoints, streams, observers, metadata v1, deterministic codegen, standard LSP, CLI JSON fallback, a thin VS Code client, native DML-returning contracts, homogeneous command bulk, MariaDB, Browser SQLite WASM, D1, and explicit PV17 value-fidelity profiles.
+The release surface includes SQL-first templates, safe binds, dynamic `@braid`, result contracts, Standard Schema mapping, physical connection leasing, transactions/savepoints, streams, observers, metadata v1, deterministic codegen, standard LSP, CLI JSON fallback, a thin VS Code client, native DML-returning contracts, homogeneous command bulk, MariaDB, Browser SQLite WASM, D1, and explicit PV18 profile-coherent value-fidelity contracts.
 
-PV17 starts from `dccb69763e9e4a070280cf580d8f7b76368ec3d5`. Final exact-SHA
-Runtime, Docs and Release dry-run evidence is pending; the [support
+PV18 starts from `2119d9676b05fb2531eaf7aac1ef37741600ba40`. Final exact-SHA
+Runtime, Docs, and Release dry-run evidence is pending; the [support
 matrix](/SQLBraid/reference/support/) must not promote changed profiles before
 those gates. Certification covers exact profiles, not future versions; RC
 publication still requires user acceptance and explicit release authorization.
+
+Profile descriptors pair driver options, raw/canonical representation, and
+TypePolicy provenance. Codegen must reuse the selected runtime descriptor.
+Container support is deliberately non-recursive; common scalar/array evidence
+may be promoted independently of rare composites, objects, variants, or
+vectors. None of these docs imply RC readiness before final exact-SHA gates.
 
 ## Post-release candidates
 

@@ -51,8 +51,22 @@ const amount = sql.rows`
 `;
 ```
 
+The `mssqlParameter.decimal()`, `.numeric()`, `.money()`, and `.smallmoney()`
+helpers are bounded native compatibility inputs, not exact decimal binds. They
+accept only finite plain JavaScript numbers (at most 15 significant decimal
+digits, with the declared/fixed scale) because Tedious transports them through
+`Number`; string inputs are rejected. For exact text, bind
+`mssqlParameter.nvarchar(...)` and author the `CAST`/`CONVERT` yourself as
+shown above. SQLBraid never inserts that cast or rewrites authored SQL.
+
 `real` and `float` remain finite IEEE-754 JavaScript numbers. `datetime2` and
 `datetimeoffset` use `Date` for convenience, but fractional 100ns digits and
 offset text are not lossless; use an explicit ISO `CONVERT(varchar(...), ...,
 127)` expression when those values matter. `uniqueidentifier` uses strings,
 and `varbinary` uses bytes. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+
+`sql_variant` is intentionally unclassified: Tedious exposes a
+driver-native value whose nested type and numeric transport are not stable
+enough for recursive fidelity claims. Generated types are based on a
+TypePolicy/representation profile; runtime and codegen must use matching
+policies.

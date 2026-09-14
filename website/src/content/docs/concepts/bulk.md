@@ -63,7 +63,7 @@ selected adapter's documentation.
 | Oracle Thin | `native-bulk` | one `executeMany()` call |
 | SQL Server / Tedious | `prepared-loop` | one prepare/unprepare around N executes |
 
-PV16 support and capability evidence is pending the exact final revision. See
+PV18 support and capability evidence is pending the exact final revision. See
 [Runtime and driver support](/SQLBraid/reference/support/) and the
 [limitations](/SQLBraid/release/limitations/) before treating a mode as a
 release claim.

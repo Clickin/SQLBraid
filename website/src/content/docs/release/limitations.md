@@ -1,6 +1,6 @@
 ---
 title: Current limitations
-description: Know what the PV17 pre-release contract deliberately does not promise.
+description: Know what the PV18 pre-release contract deliberately does not promise.
 ---
 
 - **Certification is profile- and revision-specific.** The [support matrix](/SQLBraid/reference/support/) records verified implementation evidence. D1 remains Compatible because its managed SQLite version is unreported; Oracle Free 23.9 does not certify 19c. Passing CI does not authorize publication.
@@ -13,7 +13,7 @@ description: Know what the PV17 pre-release contract deliberately does not promi
   functions run inside ordinary SQL, and virtual-table/table-valued extensions
   are ordinary row queries. INTEGER storage is exposed as canonical string;
   native bigint is internal transport, not a public mode.
-- **DML-returning is materialized only.** Use `sql.rows` with `db.execute`, `db.all`, `db.one`, or `db.maybeOne`; `db.stream()` for `RETURNING`/`OUTPUT` is not a cross-driver PV17 support claim.
+- **DML-returning is materialized only.** Use `sql.rows` with `db.execute`, `db.all`, `db.one`, or `db.maybeOne`; `db.stream()` for `RETURNING`/`OUTPUT` is not a cross-driver PV18 support claim.
 - **DML-returning syntax is native.** PostgreSQL/SQLite/MariaDB use documented `RETURNING` forms, SQL Server uses `OUTPUT`, Oracle uses `RETURNING ... INTO` with `sql.out()`, and MySQL has no generic DML `RETURNING` clause.
 - **`db.bulk()` is command-only.** It locks one DML shape, validates all inputs before I/O, uses one physical lease, and reports `native-bulk`, `pipeline`, `prepared-loop`, or `remote-batch`. Empty input performs no acquire. Root bulk is not implicitly transactional and has no portable auto-chunking promise; use `db.tx()` for atomicity.
 - **MariaDB is a separate dialect.** MariaDB Connector/Node.js evidence is independent from `mysql2`; a `mysql2` connection to MariaDB is best-effort compatibility and not an Official MariaDB capability claim. Exact `UPDATE RETURNING` support is not claimed.
@@ -35,6 +35,10 @@ description: Know what the PV17 pre-release contract deliberately does not promi
   multiranges, composites, Oracle objects/collections, SQL Server `sql_variant`,
   vectors, and other nested values remain unclassified or unsupported until
   recursive transport is tested.
+- **Profile and codegen must agree.** PostgreSQL, mysql2, and MariaDB profile
+  descriptors include the matching TypePolicy. Runtime and generated models
+  must reuse that descriptor; changing JSON/temporal or numeric options creates
+  a new evidence profile.
 - **Exact bind fidelity is separate.** Use proven exact text inputs through the
   documented profile. `null` is SQL `NULL`; ordinary `undefined` fails before
   acquisition with `BRAID_BIND_VALUE_UNSUPPORTED`.
@@ -46,6 +50,10 @@ description: Know what the PV17 pre-release contract deliberately does not promi
 - **No observer mutation/retry/routing.** Observers inspect or fail an operation but cannot rewrite SQL, change binds, or retry.
 - **Metadata is evidence, not proof of invalidity.** Missing objects are open-world and routine argument lists may be incomplete.
 - **Custom drivers are not release support.** Implement `QueryExecutor`/`ConnectionProvider` and provide independent evidence.
+- **Support is free-only and reproducible.** An Official target needs a
+  zero-cost reproducible CI environment, an exact version/profile tuple, and
+  maintainer-safe runtime cost. A proprietary target is not promoted unless a
+  contributor supplies and maintains an acceptable external CI path.
 - **Tooling is Node-first.** Compiler, CLI, LSP, metadata/codegen, and Vite integration have separate build/runtime concerns; do not ship Node-only database drivers into a browser bundle.
 
 These are intentional boundaries, not hidden fallback behavior. See [routine

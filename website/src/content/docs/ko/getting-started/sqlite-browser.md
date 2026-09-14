@@ -3,7 +3,7 @@ title: 브라우저 SQLite와 D1
 description: 브라우저 SQLite WASM과 Cloudflare D1 어댑터를 pool이나 cursor를 발명하지 않고 사용합니다.
 ---
 
-PV16은 SQLite dialect를 하나로 유지하면서 execution driver와 runtime을
+PV18은 SQLite dialect를 하나로 유지하면서 execution driver와 runtime을
 분리합니다. 브라우저 코드는 SQLite WASM을 사용하고 Worker binding은
 Cloudflare D1을 사용합니다. 두 경로 모두 SQLBraid query contract를
 바꾸지 않습니다.
@@ -70,7 +70,7 @@ Native D1 batch의 transaction 동작이 더 강하더라도 portable SQLBraid c
 없습니다.
 
 과거 PV16 Chromium/D1 증거는 release records에 보존합니다. 표현 계약이
-변경되었으므로 PV17에는 새 exact-SHA gate가 필요합니다. 로컬 D1은 managed
+변경되었으므로 PV18에는 새 exact-SHA gate가 필요합니다. 로컬 D1은 managed
 SQLite 버전이 공개되지 않아 Compatible입니다. 어떤 browser gate도 OPFS
 persistence, SharedArrayBuffer, remote production support 또는 npm 발행을
 주장하지 않습니다.
@@ -80,7 +80,7 @@ persistence, SharedArrayBuffer, remote production support 또는 npm 발행을
 SQLite는 같은 dialect이지만 WASM과 D1은 서로 다른 driver이므로 하나의
 증거 label을 공유하면 안 됩니다.
 
-| Driver | Raw/프로필 경계 | Stream/bulk/transaction |
+| Driver | Driver raw / SQLBraid canonical 경계 | Stream/bulk/transaction |
 | --- | --- | --- |
 | SQLite WASM OO1 | SQLite dynamic value이며 INTEGER storage는 canonical string | pull iteration, prepared-loop bulk, callback transaction |
 | Cloudflare D1 binding | materialized 행과 순서가 있는 `?1`, `?2`, … bind | native `batch()` bulk; streaming과 callback transaction은 지원하지 않음 |

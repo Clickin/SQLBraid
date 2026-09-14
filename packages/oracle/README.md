@@ -38,6 +38,13 @@ JavaScript numbers (including verified `NaN`/infinity values), LOB text as
 strings, and BLOB/RAW as bytes. The free 23.9 target is not Oracle 19c
 evidence; Thick mode is separate. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
 
+Common catalog spellings are mapped directly (`CHAR`, `NCHAR`, `VARCHAR`,
+`VARCHAR2`, `NVARCHAR2`, `RAW`, `ROWID`, and `UROWID`). Native `JSON` metadata
+is recognized through node-oracledb's stable `DB_TYPE_JSON` constant. Parsed
+JSON may have any root value (object, array, string, number, boolean, or
+null), and nested numbers remain driver-native values rather than a
+recursive SQLBraid numeric guarantee.
+
 Exact decimal strings are not a generic typed Oracle `NUMBER` bind guarantee:
 unhinted string-to-number conversion follows the session NLS settings, while
 `oracleParameter.number()` rejects decimal strings rather than silently
@@ -55,3 +62,9 @@ JavaScript `number`s. Use the user-authored
 JSON text and chooses its own lossless parser. Native temporal values are
 guarded JavaScript `Date`s; use `TO_CHAR(..., 'YYYY-MM-DD"T"HH24:MI:SS.FF9')`
 (and an explicit offset format where needed) for precision/time-zone text.
+
+Oracle objects, collections, and vectors remain explicitly unsupported for
+recursive fidelity. The adapter preserves their driver-owned values but does
+not decode nested attributes or elements. Generated types are based on a
+TypePolicy/representation profile; runtime and codegen must use matching
+policies.

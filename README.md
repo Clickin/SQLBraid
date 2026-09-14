@@ -21,12 +21,12 @@ const users = sql.rows<UserRow>`
 `;
 ```
 
-> **Status:** pre-release PV17. The value-fidelity migration is in progress on
-> baseline `dccb69763e9e4a070280cf580d8f7b76368ec3d5`. Final Runtime, Docs and
-> Release dry-run gates for the changed contract are pending; no current
-> revision or workflow result is claimed. Historical PV16 evidence remains in
-> the release records and is not PV17 evidence. RC publication still requires
-> user acceptance and explicit release authorization. See [`PLAN.md`](./PLAN.md).
+> **Status:** pre-release PV18. Profile-coherent value fidelity and container
+> coverage are in progress from the PV18 review baseline
+> `2119d9676b05fb2531eaf7aac1ef37741600ba40`. Final Runtime, Docs and Release
+> dry-run gates for the changed contract are pending; no current revision or
+> workflow result is claimed. RC publication still requires user acceptance and
+> explicit release authorization. See [`PLAN.md`](./PLAN.md).
 
 [Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) ·
 [Documentation](https://clickin.github.io/SQLBraid/) ·
@@ -62,27 +62,34 @@ const report = sql.rows<ReportRow>`
 
 ## Value fidelity
 
-PV17 preserves database value semantics before application convenience:
+PV18 preserves database value semantics before application convenience:
 
 ```text
-exact integer or decimal  → string
+exact database numeric    → string
 IEEE-754 approximate float → number
 ```
 
-`TypePolicy.numeric` separates `semantics`, raw `representation`, and transport
+`TypeMapping.numeric` separates `semantics`, raw `representation`, and transport
 `fidelity` (`lossless`, `guarded`, `lossy`, or `unsupported`). Exact output is
 never promoted to `number` or `bigint` merely because the current value is
 small. Use `decodeExactInteger` or an application-selected Decimal, Money, or
 domain transform through Standard Schema when the application needs a richer
 type. There is no global numeric mode.
 
-JSON and temporal values follow the same boundary: a lossless text profile is
-distinct from parsed JSON or native `Date` convenience. Driver options such as
-PostgreSQL query-local parsers, mysql2 `jsonStrings`/`dateStrings`, MariaDB
-`autoJsonMap`/`dateStrings`, and explicit Oracle/SQL Server text expressions
-are profile evidence, not automatic rewrites. Exact driver-limited paths fail
+Driver profiles that parse JSON or temporal values into JavaScript objects are
+convenience profiles; fidelity-first profiles preserve text where the driver
+can provide it. PostgreSQL, mysql2 and MariaDB expose matching profile
+descriptors and TypePolicies; selecting one profile for runtime and a different
+one for codegen is a contract error. Explicit Oracle/SQL Server text expressions
+remain authored SQL, not automatic rewrites. Exact driver-limited paths fail
 closed or remain unsupported. `null` is SQL `NULL`; ordinary `undefined` binds
 fail before connection acquisition with `BRAID_BIND_VALUE_UNSUPPORTED`.
+
+Container values are a separate evidence boundary: scalar exactness does not
+recursively certify arrays, domains, ranges, composites, objects,
+`sql_variant`, vectors, or parsed JSON roots. Unclassified containers remain
+unknown or unsupported until a container-specific transport and codegen test
+proves otherwise.
 
 See [data representations](https://clickin.github.io/SQLBraid/dev/concepts/data-representation/)
 for the EN/KO driver matrix, JSON/temporal examples, container classification,
@@ -209,7 +216,7 @@ const inserted = await db.all(sql.rows<AccountRow>`
 
 The native clauses stay visible and differ by dialect:
 
-| Dialect | Native form | PV16 materialized contract |
+| Dialect | Native form | Materialized row contract |
 | --- | --- | --- |
 | PostgreSQL | `RETURNING` | `db.execute`, `db.all`, `db.one`, `db.maybeOne` with `sql.rows` |
 | SQLite | `RETURNING` | same row APIs; SQLite accumulates output before delivery |
@@ -218,8 +225,9 @@ The native clauses stay visible and differ by dialect:
 | Oracle | `RETURNING ... INTO` plus `sql.out()` | adapter-specific OUT normalization |
 | MySQL | no generic DML-returning clause | use a native MySQL statement or a separate query |
 
-PV16 claims materialized DML-returning only. `db.stream()` for DML-returning is
-not a portable support claim because drivers differ in buffering, statement
+PV18 retains a materialized DML-returning contract only. Final exact-SHA
+capability evidence is pending; `db.stream()` for DML-returning is not a
+portable support claim because drivers differ in buffering, statement
 completion, cancellation, and rollback behavior. SQLBraid does not rewrite one
 dialect's clause into another.
 
@@ -580,8 +588,8 @@ Runtime support uses four labels:
 
 ### Historical PV16 runtime evidence
 
-The following table records the prior PV16 profile only. It is retained for
-provenance and does not certify the changed PV17 value-fidelity contract.
+The following table records prior PV16 host evidence only. It is retained for
+provenance and does not certify the changed PV18 profile/container contract.
 
 | Runtime | core/template/runtime | Tested version | Notes |
 | --- | --- | --- | --- |
@@ -589,13 +597,15 @@ provenance and does not certify the changed PV17 value-fidelity contract.
 | Node | Compatible | 24.21.0 | Full-suite/finance CI evidence; no separate certified target |
 | Bun | Official | 1.3.14 | Packed core/runtime and pg/mysql2 host paths |
 | Deno | Official | 2.9.3 | Packed core/runtime, pg/mysql2 and node:sqlite host paths |
-| Browser | Official | Chromium 153.0.8010.12 | SQLite WASM 3.53.4, native int64/CAPI transport with string output (historical PV16 evidence; PV17 gate pending) |
+| Browser | Historical | Chromium 153.0.8010.12 | SQLite WASM 3.53.4, native int64/CAPI transport with string output (historical PV16 evidence; PV18 gate pending) |
 | Worker | Compatible | workerd 1.20260730.1 | Local D1 binding verified; managed SQLite version unreported |
 
 ### First-party driver host support
 
 Host portability does not extend the database versions or native capabilities
-certified by the [target manifests](./support/targets/).
+certified by the [target manifests](./support/targets/). The rows below retain
+historical host labels for orientation only; PV18 does not promote them as
+current Official evidence until Main records the exact final-SHA gates.
 
 | Adapter | Node 22.18.0 | Node 24.21.0 | Bun 1.3.14 | Deno 2.9.3 |
 | --- | --- | --- | --- | --- |
@@ -612,7 +622,7 @@ The [development documentation's exact-SHA evidence](https://clickin.github.io/S
 [current runtime runs](https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml?query=branch%3Amain)
 and [immutable release workflow](https://github.com/Clickin/SQLBraid/actions/workflows/release.yml)
 are the release evidence entrypoints. Match a future run's commit SHA to the
-artifact you use; PV17 currently has no final run ID or exact-SHA claim.
+artifact you use; PV18 currently has no final run ID or exact-SHA claim.
 Historical PostgreSQL/MySQL, Bun/Deno, and SQLite host checks remain historical
 only. No SQL keyword classifier or substitute SQLite driver is used.
 
@@ -675,10 +685,12 @@ Install `@sqlbraid/codegen` explicitly. Pass an inspected or parsed
 
 ```ts
 import { generateModels } from "@sqlbraid/codegen";
-import { typePolicy } from "@sqlbraid/postgres";
+import { typePolicyForProfile } from "@sqlbraid/postgres";
+
+const profile = typePolicyForProfile({ json: "text", temporal: "text" });
 
 const generated = generateModels(metadata, {
-  typePolicy,
+  typePolicy: profile,
   filters: { includeNamespaces: ["public"] },
   naming: { relations: { "public.user_account": "User" } },
   typeOverrides: {
@@ -691,6 +703,12 @@ const generated = generateModels(metadata, {
 });
 console.log(generated.source);
 ```
+
+Generated types are based on a TypePolicy/representation profile. Runtime and
+codegen must use matching profiles; for example, a PostgreSQL adapter configured
+with native JSON/temporal parsing must pass the corresponding native policy to
+`generateModels`, rather than reusing the fidelity-first text policy. The same
+rule applies to mysql2 and MariaDB profile descriptors.
 
 The generator is pure and offline: no filesystem writes, DB connection, config
 lookup or codec execution. Exact relation filters, model-name overrides,

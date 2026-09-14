@@ -93,18 +93,33 @@ in `resultSets`; it never creates a hidden transaction.
 
 ## pg representation profile
 
-The profile is `pg`'s parser/configuration on the exact database/runtime
-combination recorded by the support manifest. A custom `pg-types` parser is a
-different, conditional profile and must have its own raw-value evidence.
+The default `pg` profile is `pg-lossless-text`: JSON and temporal values
+remain text where the driver can provide them. `@sqlbraid/postgres` exports
+`typePolicyForProfile({ json, temporal })` and immutable
+`representationProfiles` descriptors so runtime and codegen can reuse exactly
+the same policy:
 
-| Value | SQLBraid raw representation | Fidelity boundary |
+```ts
+import { typePolicyForProfile } from "@sqlbraid/postgres";
+import { generateModels } from "@sqlbraid/codegen";
+
+const typePolicy = typePolicyForProfile({ json: "text", temporal: "text" });
+const generated = generateModels(snapshot, { typePolicy });
+```
+
+`{ json: "native", temporal: "native" }` selects the separate
+`pg-native` compatibility profile. Native means node-postgres's normal
+per-OID parser behavior, not that every temporal type becomes `Date`. A custom
+`pg-types` parser is another profile and needs its own raw-value evidence.
+
+| Value | Driver raw / SQLBraid canonical output | Fidelity boundary |
 | --- | --- | --- |
-| `int2` / `int4` / `int8` | string | Safe integral driver values are normalized to text; exact output is never `number` or `bigint`. |
-| `numeric` / `decimal` | string | Exact text is preserved; a JavaScript `number` is not accepted as exact. |
-| `float4` / `float8` | number | Approximate binary value; `SHOW extra_float_digits` must be positive for the lossless text read profile. |
+| `int2` / `int4` / `int8` / `oid` | driver-dependent → `string` | Exact output is canonical text, never `number` or `bigint`. |
+| `numeric` / `decimal` | text → `string` | A JavaScript `number` is not accepted as exact. |
+| `float4` / `float8` | number → `number` | Approximate binary value; `SHOW extra_float_digits` must be positive for the lossless text read profile. |
 | `money` | unsupported | PostgreSQL's locale-formatted text is not a canonical numeric value; use an authored conversion with an explicit format. |
-| `json` / `jsonb` | text or parsed value | `data.json-text-lossless` is query-local and profile-selected; the default parsed path is convenience only. |
-| date/time | text or `Date` | Text is the fidelity-first profile; `Date` loses microseconds and some timezone semantics. |
+| `json` / `jsonb` | text → `string`; native → `unknown` | Parsed roots may be string, number, boolean, `null`, array, or object; native nested numeric fidelity is not guaranteed. |
+| `date` / `timestamp` / `timestamptz` | text → `string`; native → `Date` | `time`/`timetz` remain text in native mode; `interval` is `unknown`. |
 | `bytea` | `Buffer` | Keep bytes or explicitly encode them. |
 | `uuid` | string | Validate format in the application schema when needed. |
 
@@ -114,8 +129,10 @@ binds fail with `BRAID_BIND_VALUE_UNSUPPORTED` before acquisition; `null` is SQL
 `NULL`. Arrays, domains, ranges/multiranges and composites are unclassified
 containers even when their scalar element types are exact.
 
-`db.environment()` records `extra_float_digits` and the selected JSON/temporal
-parser profile. It must not be read as an unconditional fidelity guarantee.
+`db.environment()` records `extra_float_digits`, the selected JSON/temporal
+profile and TypePolicy provenance where available. It must not be read as an
+unconditional fidelity guarantee. The support manifest remains the evidence
+source; this page does not claim a final PV18 certification.
 `pg-cursor` supplies the native pull stream; a missing peer is
 `BRAID_STREAM_UNSUPPORTED`. Routine refcursors require an existing transaction
 and are materialized into result sets. Bulk uses the adapter's proven native

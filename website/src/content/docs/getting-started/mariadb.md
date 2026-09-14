@@ -14,7 +14,7 @@ pool factory:
 
 ```ts
 import mariadb from "mariadb";
-import { sql } from "@sqlbraid/mariadb";
+import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
 import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
 
 const connection = await mariadb.createConnection({
@@ -22,8 +22,9 @@ const connection = await mariadb.createConnection({
   user: "sqlbraid",
   password: "password",
   database: "app",
+  ...MARIADB_LOSSLESS_TEXT.connectionOptions,
 });
-const db = createMariaDbDatabase(connection);
+const db = createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT });
 const users = await db.all(sql.rows<{ id: string; name: string }>`
   SELECT id, name FROM users WHERE id = ${1}
 `);
@@ -42,24 +43,31 @@ not implicitly transactional and has no portable auto-chunking promise. Use
 `db.tx()` when callback transaction atomicity is required.
 
 A `mysql2` connection may work against MariaDB as best-effort compatibility, but
-it is not Official MariaDB syntax or protocol evidence. The certified profile
-is MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0; its revision-specific
-release evidence is recorded in the support manifest, not inferred from
-package installation.
+it is not Official MariaDB syntax or protocol evidence. The documented
+candidate profile is MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0; PV18
+promotion still requires its revision-specific exact-SHA evidence in the
+support manifest, not inference from package installation.
 
 ## Connector/Node.js representation profile
 
-The first-party MariaDB profile is the official Connector/Node.js adapter on
-the exact Node/server combination named by the support manifest. A mysql2
-connection to MariaDB is a separate best-effort compatibility profile.
+The first-party MariaDB profile is `mariadb-lossless-text`: the official
+Connector/Node.js adapter with the exact options selected by its
+`representationProfiles` descriptor. `@sqlbraid/mariadb` exports
+`typePolicyForProfile({ json, temporal })` so runtime and codegen reuse one
+immutable TypePolicy. `mariadb-native` is a separate convenience profile. A
+mysql2 connection to MariaDB is a separate best-effort compatibility profile.
 
-| MariaDB value | Connector representation | Caveat |
+Connector/Node.js does not expose effective options. An omitted descriptor or
+partial option declaration reports `mariadb-custom-profile`, not a certified
+profile. Explicit descriptors remain guarded declarations, not observations.
+
+| MariaDB value | Driver raw / SQLBraid canonical representation | Caveat |
 | --- | --- | --- |
-| TINYINT/SMALLINT/INT/BIGINT | `string` | Exact integer results are canonical text; `decodeExactInteger` is an application opt-in. |
-| DECIMAL/NUMERIC | `string` | Exact precision and scale remain text; use an application decimal transform if needed. |
-| FLOAT/DOUBLE | `number` | Approximate binary values remain JavaScript numbers. |
-| JSON alias | text with `autoJsonMap: false` | Parsed `autoJsonMap: true` is a convenience profile and does not guarantee nested numeric fidelity. |
-| DATE/TIME/DATETIME | text with `dateStrings: true` | Native `Date` is a separate convenience profile and may lose fractional/zone detail. |
+| TINYINT/SMALLINT/INT/BIGINT | driver-dependent → `string` | Exact integer results are canonical text; `decodeExactInteger` is an application opt-in. |
+| DECIMAL/NUMERIC | text → `string` | Exact precision and scale remain text; use an application decimal transform if needed. |
+| FLOAT/DOUBLE | number → `number` | Approximate binary values remain JavaScript numbers. |
+| JSON alias | text with `autoJsonMap:false` → `string` | `autoJsonMap:true` is a separate convenience profile and does not guarantee nested numeric fidelity. |
+| DATE/TIME/DATETIME | text with `dateStrings:true` → `string` | Native `Date` is a separate convenience profile and may lose fractional/zone detail. |
 | BLOB | bytes/Buffer | Preserve bytes or explicitly encode. |
 
 The adapter uses value-only execution, native `queryStream()`, and one
@@ -74,8 +82,9 @@ query-bound Standard Schema mapping. The optional `/inspector` subpath records
 identity, generated/write flags and numeric precision/scale for offline
 `generateModels()`; routine signatures remain incomplete positive evidence.
 
-The documented exact profile keeps `decimalAsNumber: false` and
-`insertIdAsNumber: false`. Exact integer/decimal strings are the bind path for
+The `mariadb-lossless-text` descriptor keeps `bigintAsNumber: false`,
+`decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`,
+`dateStrings: true`, and `timezone: "Z"`. Exact integer/decimal strings are the bind path for
 round-trip fidelity through execute, prepared and the proven bulk strategy.
 `affectedRows` is an operational count with safe-range validation. `undefined`
 ordinary IN values fail before acquisition with

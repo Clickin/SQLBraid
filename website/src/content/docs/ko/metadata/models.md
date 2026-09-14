@@ -34,4 +34,9 @@ export interface UsersUpdate {
 
 View, materialized view, foreign, virtual 관계에는 Row 모델만 부여됩니다. 열이 있는 알 수 없는 관계 종류에는 경고와 함께 Row 모델이 부여됩니다. 지원되지 않거나 입증되지 않은 타입은 `any`가 아니라 계속 `unknown`입니다. 생성된 소스를 사용하기 전에 진단을 확인하세요.
 
+Native parsed JSON root는 선택한 profile이 더 좁은 root 형태를 증명하지
+않는 한 `unknown`입니다. Scalar mapping도 array, range, composite, object,
+`sql_variant`, vector 및 기타 container를 재귀적으로 인증하지 않습니다.
+Nested application type을 생성하려면 container-specific 증거가 필요합니다.
+
 열 이름은 필요한 경우 인용된 TypeScript 속성으로 정확한 데이터베이스 키를 유지합니다. namespace 증거와 안정적인 identity 접미사가 충돌을 방지합니다. 결정적인 출력은 메타데이터 캡처 타임스탬프나 객체 삽입 순서에 의존하지 않습니다.

@@ -14,7 +14,7 @@ npm install @sqlbraid/mariadb mariadb
 
 ```ts
 import mariadb from "mariadb";
-import { sql } from "@sqlbraid/mariadb";
+import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
 import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
 
 const connection = await mariadb.createConnection({
@@ -22,8 +22,9 @@ const connection = await mariadb.createConnection({
   user: "sqlbraid",
   password: "password",
   database: "app",
+  ...MARIADB_LOSSLESS_TEXT.connectionOptions,
 });
-const db = createMariaDbDatabase(connection);
+const db = createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT });
 const users = await db.all(sql.rows<{ id: string; name: string }>`
   SELECT id, name FROM users WHERE id = ${1}
 `);
@@ -42,23 +43,31 @@ transaction이 되지 않고 portable auto-chunking 약속이 없습니다. 원�
 필요하면 `db.tx()`를 사용하세요.
 
 MariaDB에서 `mysql2` connection이 동작할 수 있지만 best-effort 호환일 뿐
-Official MariaDB 문법/protocol 증거가 아닙니다. 인증한 프로필은 MariaDB
-11.8.9 / Connector 3.5.4 / Node 22.18.0입니다. revision별 릴리스 증거는
-support manifest에 기록하며 패키지 설치 여부에서 추론하지 않습니다.
+Official MariaDB 문법/protocol 증거가 아닙니다. 문서화된 후보 프로필은
+MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0이며, PV18 승격에는
+support manifest의 revision별 exact-SHA 증거가 필요합니다. 패키지 설치 여부에서
+추론하지 않습니다.
 
 ## Connector/Node.js 표현 프로필
 
-첫 번째 MariaDB 프로필은 support manifest가 지정한 정확한 Node/server
-조합에서 공식 Connector/Node.js adapter를 사용하는 것입니다. MariaDB에
-대한 mysql2 connection은 별도의 best-effort 호환 프로필입니다.
+첫 번째 MariaDB 프로필은 `mariadb-lossless-text`입니다. 공식
+Connector/Node.js adapter와 `representationProfiles` descriptor의 정확한
+option을 사용합니다. `@sqlbraid/mariadb`는 runtime과 codegen이 하나의
+immutable TypePolicy를 재사용하도록 `typePolicyForProfile({ json, temporal })`를
+내보냅니다. `mariadb-native`는 별도 편의 프로필이며 MariaDB에 대한 mysql2
+connection도 별도의 best-effort 호환 프로필입니다.
 
-| MariaDB 값 | Connector 표현 | 주의 |
+Connector/Node.js는 유효 option을 노출하지 않습니다. descriptor를 생략하거나
+일부 option만 선언하면 인증 프로필이 아닌 `mariadb-custom-profile`로 표시합니다.
+명시한 descriptor도 관측이 아니라 조건부 선언입니다.
+
+| MariaDB 값 | Driver raw / SQLBraid canonical 표현 | 주의 |
 | --- | --- | --- |
-| TINYINT/SMALLINT/INT/BIGINT | `string` | 정확한 정수 결과는 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다. |
-| DECIMAL/NUMERIC | `string` | 정확한 precision과 scale을 text로 유지하며 필요하면 애플리케이션 decimal transform을 사용합니다. |
-| FLOAT/DOUBLE | `number` | 근사 이진 값은 JavaScript number로 유지합니다. |
-| JSON 별칭 | `autoJsonMap: false`에서 text | `autoJsonMap: true` parsed는 편의 프로필이며 중첩 숫자 정확도를 보장하지 않습니다. |
-| DATE/TIME/DATETIME | `dateStrings: true`에서 text | native `Date`는 별도 편의 프로필이며 fractional/zone 정보를 잃을 수 있습니다. |
+| TINYINT/SMALLINT/INT/BIGINT | driver 의존 → `string` | 정확한 정수 결과는 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다. |
+| DECIMAL/NUMERIC | text → `string` | 정확한 precision과 scale을 text로 유지하며 필요하면 애플리케이션 decimal transform을 사용합니다. |
+| FLOAT/DOUBLE | number → `number` | 근사 이진 값은 JavaScript number로 유지합니다. |
+| JSON 별칭 | `autoJsonMap:false` text → `string` | `autoJsonMap:true` parsed는 별도 편의 프로필이며 중첩 숫자 정확도를 보장하지 않습니다. |
+| DATE/TIME/DATETIME | `dateStrings:true` text → `string` | native `Date`는 별도 편의 프로필이며 fractional/zone 정보를 잃을 수 있습니다. |
 | BLOB | bytes/Buffer | byte로 유지하거나 명시적으로 encode합니다. |
 
 어댑터는 value-only 실행, native `queryStream()`, 동종 bulk를 위한
@@ -73,8 +82,9 @@ Standard Schema 매핑을 보존합니다. 선택적 `/inspector` subpath는 오
 `generateModels()`를 위한 identity, generated/write 플래그, 숫자 precision/scale을
 기록하며 루틴 signature는 불완전한 positive evidence로 유지합니다.
 
-문서화된 exact 프로필은 `decimalAsNumber: false`와
-`insertIdAsNumber: false`를 유지합니다. 정확한 정수/10진수 string은 execute,
+`mariadb-lossless-text` descriptor는 `bigintAsNumber: false`,
+`decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`,
+`dateStrings: true`, `timezone: "Z"`를 사용합니다. 정확한 정수/10진수 string은 execute,
 prepared 및 증명된 bulk 전략에서 왕복 정확도를 위한 bind 경로입니다.
 `affectedRows`는 safe-range 검사를 하는 운영 count입니다. 일반 IN 값의
 `undefined`는 acquisition 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패하고

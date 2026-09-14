@@ -18,7 +18,7 @@ DB type and expression
   → application value
 ```
 
-`TypePolicy.numeric` keeps three independent facts visible:
+`TypeMapping.numeric` keeps three independent facts visible:
 
 ```ts
 interface NumericTypeContract {
@@ -100,17 +100,47 @@ for an approximate type.
 
 ## Driver profiles
 
-The following are the documented PV17 direction; the support matrix remains the
-evidence source for each exact database/runtime revision.
+The following is the PV18 direction; the support matrix remains the evidence
+source for each exact database/runtime revision. A profile is the complete
+driver configuration that changes result JavaScript types, not a convenient
+label attached after the fact.
 
-| Target | Exact numeric output | Approximate output | Profile boundary |
-| --- | --- | --- | --- |
-| PostgreSQL / `pg` | `int2`/`int4`/`int8`/`numeric` → string | float4/float8 → number | `extra_float_digits > 0` is required for a lossless text read; `money` is unsupported when locale-formatted; JSON/temporal text profiles are explicit |
-| MySQL / `mysql2` | integer and `DECIMAL` → string | `FLOAT`/`DOUBLE` → number | exact profile requires `supportBigNumbers`, `bigNumberStrings`, `decimalNumbers: false`; `jsonStrings: true` and `dateStrings: true` are separate profiles |
-| MariaDB Connector | integer and `DECIMAL` → string | `FLOAT`/`DOUBLE` → number | `decimalAsNumber: false`, `insertIdAsNumber: false`; `autoJsonMap: false` and `dateStrings: true` select text profiles |
-| Node SQLite / WASM | INTEGER storage → string | REAL storage → number | native bigint is an internal transport detail; D1 is guarded to the safe-integer range |
-| Oracle Thin | NUMBER family → string | BINARY_FLOAT/DOUBLE → number | native decimal-string bind and native JSON/temporal text depend on driver/profile evidence |
-| SQL Server / Tedious | exact integer → string where preserved | REAL/FLOAT → number | native DECIMAL/NUMERIC/MONEY values are unsupported for exact output; use authored text casts |
+The first-party profile helpers keep runtime and codegen on the same contract:
+
+```ts
+const profile = typePolicyForProfile({ json: "text", temporal: "text" });
+const generated = generateModels(snapshot, { typePolicy: profile });
+```
+
+PostgreSQL exports `typePolicyForProfile` and `representationProfiles` from
+`@sqlbraid/postgres`; mysql2 and MariaDB expose the same shape from their
+portable roots. Each descriptor has a stable `id`, `json`, `temporal`,
+`typePolicy`, and (where relevant) the exact `connectionOptions`. The default
+is the lossless text profile. Native/compatibility profiles are separate
+descriptors, not a second name for the default policy.
+
+The current descriptor IDs are explicit: PostgreSQL uses
+`pg-lossless-text`, `pg-native`, `pg-json-native-temporal-text`, and
+`pg-json-text-temporal-native`; mysql2 uses `mysql2-lossless-text`,
+`mysql2-native`, `mysql2-json-text`, and `mysql2-date-text`; MariaDB uses
+the corresponding `mariadb-lossless-text`, `mariadb-native`,
+`mariadb-json-text`, and `mariadb-date-text`.
+
+At the driver boundary, **raw** means what the driver actually returned;
+**canonical** means SQLBraid's post-`TypePolicy` application value. They are
+not interchangeable. Exact string IDs and database-generated IDs are exact
+database values and use canonical decimal text. `affectedRows`, `rowCount`,
+and bulk input counts are operational counts and remain safe-integer-guarded
+numbers.
+
+| Target | Fidelity-first canonical output | Compatibility boundary |
+| --- | --- | --- |
+| PostgreSQL / `pg` | exact numerics → `string`; JSON/temporal text → `string`; floats → `number` | native JSON → `unknown`; native `date`/`timestamp`/`timestamptz` → `Date`; `time`/`timetz` remain `string`; `interval` is `unknown` |
+| MySQL / `mysql2` | exact integer/`DECIMAL` → `string`; `jsonStrings`/`dateStrings` → `string` | native JSON/temporal are separate convenience profile; exact evidence does not transfer |
+| MariaDB Connector | exact integer/`DECIMAL` → `string`; `autoJsonMap:false`/`dateStrings:true` → `string` | native JSON/temporal are separate convenience profile; exact evidence does not transfer |
+| Node SQLite / WASM | INTEGER storage → `string`; REAL storage → `number` | native bigint is transport-only; D1 is guarded to the safe-integer range |
+| Oracle Thin | `NUMBER` family → `string`; approximate binary → `number` | native JSON/temporal values are profile-specific convenience representations |
+| SQL Server / Tedious | preserved exact integer → `string`; approximate binary → `number` | native DECIMAL/NUMERIC/MONEY exact output is unsupported; author text casts |
 
 SQLite dynamic-typing columns follow the runtime storage class, not declared
 INTEGER affinity. Arrays, domains, ranges, multiranges, composites, Oracle
@@ -131,6 +161,12 @@ Profiles must distinguish:
   parsing; the application chooses `JSON.parse`, a lossless parser, or a schema;
 - **parsed** — the driver returns an object/value; nested numeric fidelity is
   not guaranteed.
+
+Parsed JSON is not synonymous with an object. A root may be a string, number,
+boolean, `null`, array, or object. Native profiles therefore use `unknown`
+unless a driver-specific root contract and codegen mapping prove more. A schema
+can narrow that value after it reaches the application boundary; it cannot
+recover digits already converted to JavaScript `number`.
 
 PostgreSQL uses a query-local raw-text profile where supported; the default
 parsed compatibility path remains explicitly parsed. MySQL and MariaDB text
@@ -158,7 +194,10 @@ not a blanket lossless claim.
 
 Where the driver/profile preserves it, prefer temporal text at the raw boundary
 and transform with Standard Schema into `Date`, `Temporal.*`, Luxon, or an
-application domain type. Use non-zero fractional fixtures such as
+application domain type. Temporal policy is per database type, not one broad
+“Date” switch: PostgreSQL native `date`, `timestamp`, and `timestamptz` use
+`Date`, while native `time` and `timetz` remain text and `interval` is
+intentionally open. Use non-zero fractional fixtures such as
 `2026-09-14 12:34:56.123456` when assessing fidelity. PostgreSQL `pg`, MySQL
 `dateStrings`, MariaDB `dateStrings`, and explicit user SQL text conversions
 are separate profiles; SQLite temporal values remain application/storage
@@ -186,11 +225,25 @@ error (`BRAID_BIND_VALUE_UNSUPPORTED`) and is rejected before connection
 acquisition in execute, prepared, bulk, stream, and routine IN paths. OUT
 placeholder semantics remain driver-specific.
 
+## Containers are a separate evidence boundary
+
+Scalar fidelity does not recursively certify a container. PostgreSQL arrays,
+domains, ranges/multiranges, and composites; Oracle objects/collections; SQL
+Server `sql_variant`; vectors; and parsed JSON roots each need their own
+transport and codegen evidence. Until then, classify the value as `unknown`,
+`unclassified`, or `unsupported` rather than inheriting a scalar mapping.
+PostgreSQL lossless array output may remain raw text; native array parsing is
+not a promise of recursively exact nested values. A “supported container”
+status means the tested container path works; it does not mean every nested
+member is recursively guaranteed.
+
 ## Profiles, codegen, and transparency
 
 Custom `pg` parsers, mysql2 `typeCast`, MariaDB JSON/temporal options, Oracle
 fetch handlers, and equivalent overrides are separate profiles. They invalidate
 the default evidence until tested and selected in both runtime and codegen.
+The selected profile descriptor and its TypePolicy must be reused by codegen;
+manually reconstructing a “matching” mapping is not evidence.
 `db.environment()` returns a cached scope observation. Use
 `db.environment({ refresh: true })` after changing session settings. A pooled
 probe samples one lease; its observed guarantees remain guarded, not promises

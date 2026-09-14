@@ -16,12 +16,13 @@ The direct factory receives a connected `Connection` or `PoolConnection` object 
 ```ts
 import mysql from "mysql2/promise";
 import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
-import { sql } from "@sqlbraid/mysql";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 
-const connection = await mysql.createConnection(
-  process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
-);
-const db = createMysql2Database(connection);
+const connection = await mysql.createConnection({
+  uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
+  ...MYSQL2_LOSSLESS_TEXT.connectionOptions,
+});
+const db = createMysql2Database(connection, { profile: MYSQL2_LOSSLESS_TEXT });
 
 try {
   const rows = await db.all(sql.rows<{ id: string; name: string }>`
@@ -40,10 +41,13 @@ Use the pool factory for `mysql2/promise` pools:
 ```ts
 import mysql from "mysql2/promise";
 import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
-import { sql } from "@sqlbraid/mysql";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 
-const pool = mysql.createPool(process.env.DATABASE_URL ?? "mysql://root:password@localhost/app");
-const db = createMysql2PoolDatabase(pool);
+const pool = mysql.createPool({
+  uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
+  ...MYSQL2_LOSSLESS_TEXT.connectionOptions,
+});
+const db = createMysql2PoolDatabase(pool, { profile: MYSQL2_LOSSLESS_TEXT });
 const userId = 1;
 try {
   const user = await db.maybeOne(sql.rows<{ id: string; name: string }>`
@@ -56,6 +60,11 @@ try {
 ```
 
 The pool remains the application's resource. SQLBraid acquires and releases a physical connection for each independent root operation; `db.tx(...)` pins one lease for the callback.
+
+Without a selected profile or policy, each lease derives its policy from the
+observed connection; the pool does not claim a policy before acquisition.
+An explicit descriptor stays authoritative: incompatible native results fail
+rather than silently switching the runtime contract away from codegen.
 
 The mysql2 binding adapter materializes the logical statement as text-positional
 `?` placeholders plus the ordered value array. Binding description and hint
@@ -88,24 +97,28 @@ carrier row. Stored functions cannot emit result sets.
 
 ## mysql2 representation profile
 
-This is a configuration profile, not an implicit assumption. The support
-manifest certifies MySQL 8.4.2 / mysql2 3.24.4 / Node 22.18.0 under the exact
-profile below. Changing parser or representation options does not inherit
-that certification.
+This is an explicit configuration profile, not an implicit assumption.
+`@sqlbraid/mysql` exports `typePolicyForProfile({ json, temporal })` and
+immutable `representationProfiles`. The default `mysql2-lossless-text`
+descriptor uses the fidelity-first options below; `mysql2-native` is a
+separate convenience profile with native JSON/temporal results. Runtime and
+codegen must select the same descriptor. PV18 support promotion remains
+pending the final exact-SHA gates.
 
-| mysql2 option | Exact-profile classification | Effect |
+| mysql2 option | `mysql2-lossless-text` | Effect |
 | --- | --- | --- |
-| `supportBigNumbers: true` | Official profile requirement | Keeps large integer/decimal values out of lossy `number` inference. |
-| `bigNumberStrings: true` | Official profile requirement | Returns big-number values as strings for exact application handling. |
-| `decimalNumbers: false` | Official profile requirement | Avoids converting `DECIMAL` to JavaScript `number`. `true` is lossy/conditional. |
-| `rowsAsArray: false` | Official profile requirement | Keeps object rows, which SQLBraid's normalizer and schemas expect. |
-| `jsonStrings: true` | Lossless-text profile | Returns JSON text without `JSON.parse`; parsed JSON is a separate convenience profile. |
-| `dateStrings: true` | Lossless-text profile | Returns temporal text so fractional precision is visible; `Date` is a separate convenience profile. |
-| `typeCast` (default) | Official profile requirement | A custom function changes raw representations and is conditional until separately tested. |
+| `supportBigNumbers: true` | Required | Keeps large integer/decimal values out of lossy `number` inference. |
+| `bigNumberStrings: true` | Required | Returns big-number values as strings for exact application handling. |
+| `decimalNumbers: false` | Required | Avoids converting `DECIMAL` to JavaScript `number`; `true` is a different profile. |
+| `rowsAsArray: false` | Required | Keeps object rows, which SQLBraid's normalizer and schemas expect. |
+| `jsonStrings: true` | Required | Returns JSON text without `JSON.parse`; parsed JSON is a separate profile. |
+| `dateStrings: true` | Required | Returns temporal text so fractional precision is visible; `Date` is a separate profile. |
+| `typeCast` (default) | Required | A custom function changes raw representations and is a separate profile until tested. |
 
-The exact tested combination must record the mysql2 version, MySQL server, Node
-version, and every option above. SQLBraid does not inspect a custom `typeCast`
-function or infer its output. Integer and `DECIMAL` results are canonical
+The effective profile records the mysql2 version, MySQL server, Node version,
+and every option above. SQLBraid does not inspect a custom `typeCast` function
+or infer its output. Driver raw values and SQLBraid canonical values are
+separate facts. Integer and `DECIMAL` results are canonical
 strings in the exact profile; use `decodeExactInteger`, `decodeExactDecimal`, or
 an application-selected numeric transform at the application boundary. `FLOAT`
 and `DOUBLE` remain JavaScript `number` (binary32/binary64). `insertId` is an

@@ -18,7 +18,7 @@ DB 타입과 표현식
   → 애플리케이션 값
 ```
 
-`TypePolicy.numeric`은 서로 다른 세 가지 사실을 분리해 보여 줍니다.
+`TypeMapping.numeric`은 서로 다른 세 가지 사실을 분리해 보여 줍니다.
 
 ```ts
 interface NumericTypeContract {
@@ -98,17 +98,46 @@ DB가 `NaN`, infinity, 음의 0을 정규화하는지 기록합니다. codegen �
 
 ## 드라이버 프로필
 
-아래는 PV17의 문서화 방향이며, 각 정확한 DB/runtime revision의 증거는 지원
-매트릭스가 소유합니다.
+아래는 PV18 방향이며, 각 정확한 DB/runtime revision의 증거는 지원 매트릭스가
+소유합니다. 프로필은 결과 JavaScript 타입을 바꾸는 전체 드라이버 설정이며,
+사후에 붙이는 설명용 label이 아닙니다.
 
-| 대상 | 정확한 숫자 출력 | 근사 출력 | 프로필 경계 |
-| --- | --- | --- | --- |
-| PostgreSQL / `pg` | `int2`/`int4`/`int8`/`numeric` → string | float4/float8 → number | lossless text read에는 `extra_float_digits > 0` 필요; locale 형식인 `money`는 unsupported; JSON/temporal text는 별도 프로필 |
-| MySQL / `mysql2` | 정수와 `DECIMAL` → string | `FLOAT`/`DOUBLE` → number | exact 프로필은 `supportBigNumbers`, `bigNumberStrings`, `decimalNumbers: false` 필요; `jsonStrings: true`와 `dateStrings: true`는 별도 프로필 |
-| MariaDB Connector | 정수와 `DECIMAL` → string | `FLOAT`/`DOUBLE` → number | `decimalAsNumber: false`, `insertIdAsNumber: false`; `autoJsonMap: false`, `dateStrings: true`가 text 프로필 |
-| Node SQLite / WASM | INTEGER storage → string | REAL storage → number | native bigint는 내부 전송 세부사항이며 D1은 safe-integer 범위로 guarded |
-| Oracle Thin | NUMBER 계열 → string | BINARY_FLOAT/DOUBLE → number | decimal-string bind와 native JSON/temporal text는 드라이버/프로필 증거에 따름 |
-| SQL Server / Tedious | 보존되는 정확한 정수 → string | REAL/FLOAT → number | native DECIMAL/NUMERIC/MONEY의 exact 출력은 unsupported; SQL에서 text cast 사용 |
+첫 번째 파티 프로필 helper는 runtime과 codegen이 같은 계약을 사용하게 합니다.
+
+```ts
+const profile = typePolicyForProfile({ json: "text", temporal: "text" });
+const generated = generateModels(snapshot, { typePolicy: profile });
+```
+
+PostgreSQL은 `@sqlbraid/postgres` portable root에서
+`typePolicyForProfile`와 `representationProfiles`를 내보내며 mysql2와
+MariaDB도 같은 형태를 제공합니다. 각 descriptor에는 안정적인 `id`,
+`json`, `temporal`, `typePolicy`와 필요한 경우 정확한
+`connectionOptions`가 있습니다. 기본값은 lossless text 프로필입니다.
+native/호환 프로필은 기본 정책의 다른 이름이 아니라 별도 descriptor입니다.
+
+현재 descriptor ID는 명시적입니다. PostgreSQL은
+`pg-lossless-text`, `pg-native`, `pg-json-native-temporal-text`,
+`pg-json-text-temporal-native`를 사용하고, mysql2는
+`mysql2-lossless-text`, `mysql2-native`, `mysql2-json-text`,
+`mysql2-date-text`를 사용합니다. MariaDB는 이에 대응하는
+`mariadb-lossless-text`, `mariadb-native`, `mariadb-json-text`,
+`mariadb-date-text`를 사용합니다.
+
+드라이버 경계에서 **raw**는 드라이버가 실제 반환한 값이고 **canonical**은
+`TypePolicy`를 적용한 SQLBraid 애플리케이션 값입니다. 둘을 섞지 마세요.
+정확한 string ID와 DB가 생성한 ID는 정확한 DB 값이므로 canonical decimal
+text를 사용합니다. `affectedRows`, `rowCount`, bulk input count는 운영
+count이므로 safe-integer 검사를 하는 number로 남습니다.
+
+| 대상 | 정확도 우선 canonical 출력 | 호환 프로필 경계 |
+| --- | --- | --- |
+| PostgreSQL / `pg` | exact numeric → `string`; JSON/temporal text → `string`; float → `number` | native JSON → `unknown`; native `date`/`timestamp`/`timestamptz` → `Date`; `time`/`timetz`는 `string`; `interval`은 `unknown` |
+| MySQL / `mysql2` | exact integer/`DECIMAL` → `string`; `jsonStrings`/`dateStrings` → `string` | native JSON/temporal은 별도 편의 프로필이며 exact 증거를 상속하지 않음 |
+| MariaDB Connector | exact integer/`DECIMAL` → `string`; `autoJsonMap:false`/`dateStrings:true` → `string` | native JSON/temporal은 별도 편의 프로필이며 exact 증거를 상속하지 않음 |
+| Node SQLite / WASM | INTEGER storage → `string`; REAL storage → `number` | native bigint는 transport 전용이며 D1은 safe-integer 범위 guarded |
+| Oracle Thin | `NUMBER` 계열 → `string`; 근사 이진 → `number` | native JSON/temporal은 프로필별 편의 표현 |
+| SQL Server / Tedious | 보존되는 exact integer → `string`; 근사 이진 → `number` | native DECIMAL/NUMERIC/MONEY exact 출력은 unsupported; SQL text cast 작성 |
 
 SQLite 동적 타입 열은 선언된 INTEGER affinity가 아니라 runtime storage class를
 따릅니다. 배열, domain, range/multirange, composite, Oracle object/collection,
@@ -127,6 +156,12 @@ SQL Server `sql_variant`, vector 및 기타 container는 scalar 보장을 상속
 - **lossless text** — JS Number 파싱 없이 직렬화된 JSON이 텍스트로 SQLBraid에
   도달하며, 애플리케이션이 `JSON.parse`, lossless parser 또는 schema를 선택함;
 - **parsed** — 드라이버가 object/value를 반환하며 중첩 숫자 정확도는 보장되지 않음.
+
+Parsed JSON은 object만을 뜻하지 않습니다. root는 string, number, boolean,
+`null`, array 또는 object일 수 있습니다. 따라서 native 프로필은 driver별
+root 계약과 codegen mapping이 증명되지 않는 한 `unknown`을 사용합니다.
+schema는 애플리케이션 경계에서 값을 좁힐 수 있지만 JavaScript `number`로
+이미 변환된 숫자를 복구할 수는 없습니다.
 
 PostgreSQL은 가능한 경로에서 query-local raw-text 프로필을 사용하고 기본
 parsed 호환 경로는 parsed라고 명시합니다. MySQL과 MariaDB text 프로필은
@@ -154,6 +189,9 @@ JavaScript `Date`는 모든 SQL temporal 의미를 담지 못합니다. 날짜 �
 
 드라이버/프로필이 보존할 수 있다면 raw 경계에서는 temporal text를 우선하고
 Standard Schema로 `Date`, `Temporal.*`, Luxon 또는 도메인 타입으로 변환하세요.
+Temporal 정책은 모든 타입에 적용하는 하나의 “Date” switch가 아니라 타입별입니다.
+PostgreSQL native `date`, `timestamp`, `timestamptz`는 `Date`이고 native
+`time`, `timetz`는 text로 남으며 `interval`은 의도적으로 열어 둡니다.
 정확도를 평가할 때 `2026-09-14 12:34:56.123456`처럼 0이 아닌 소수를 사용합니다.
 PostgreSQL `pg`, MySQL `dateStrings`, MariaDB `dateStrings`, 명시적 SQL text
 conversion은 서로 다른 프로필입니다. SQLite temporal 값은 저장 관례입니다.
@@ -181,11 +219,24 @@ CAST(@nvarchar_parameter AS decimal(38, 18))
 일반 IN 경로에서 connection을 얻기 전에 거부됩니다. OUT placeholder 의미는
 드라이버별입니다.
 
+## Container는 별도의 증거 경계
+
+Scalar fidelity는 container에 재귀적으로 적용되지 않습니다. PostgreSQL
+array, domain, range/multirange, composite, Oracle object/collection,
+SQL Server `sql_variant`, vector 및 parsed JSON root는 각각 별도의 transport와
+codegen 증거가 필요합니다. 그 전에는 scalar mapping을 상속하지 말고
+`unknown`, `unclassified`, `unsupported`로 분류하세요. PostgreSQL lossless
+array 결과가 raw text일 수 있어도 native array parser가 중첩 값을 재귀적으로
+정확하다는 뜻은 아닙니다. “supported container”는 테스트한 container 경로만
+의미하며 모든 중첩 member를 보장하지 않습니다.
+
 ## 프로필, codegen, 투명성
 
 custom `pg` parser, mysql2 `typeCast`, MariaDB JSON/temporal option, Oracle
 fetch handler와 같은 override는 별도 프로필입니다. 테스트하여 runtime과
-codegen에서 선택하기 전에는 기본 증거를 무효화합니다.
+codegen에서 선택하기 전에는 기본 증거를 무효화합니다. 선택한 profile
+descriptor와 TypePolicy를 codegen에서 재사용해야 하며, “맞아 보이는” mapping을
+수동으로 다시 만드는 것은 증거가 아닙니다.
 `db.environment()`는 scope별 캐시된 관측값입니다. 세션 설정을 바꾼 뒤에는
 `db.environment({ refresh: true })`로 갱신하세요. 풀 probe는 lease 하나를
 관측하므로 해당 보장은 guarded이며 이후 모든 풀 세션을 보장하지 않습니다.

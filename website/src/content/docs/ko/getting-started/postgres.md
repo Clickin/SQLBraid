@@ -92,18 +92,34 @@ transaction-bound portal을 fetch/close하고 scalar `output`에서 제거한 �
 
 ## pg 표현 프로필
 
-이 프로필은 support manifest가 기록한 정확한 database/runtime 조합의
-`pg` parser/configuration을 사용합니다. custom `pg-types` parser는 별도의
-conditional 프로필이며 자체 raw-value 증거가 필요합니다.
+기본 `pg` 프로필은 `pg-lossless-text`이며 driver가 제공할 수 있는
+JSON과 temporal 값을 text로 유지합니다. `@sqlbraid/postgres`는
+`typePolicyForProfile({ json, temporal })`와 immutable
+`representationProfiles` descriptor를 내보내므로 runtime과 codegen이 같은
+정책을 재사용할 수 있습니다.
 
-| 값 | SQLBraid raw 표현 | 정확도 경계 |
+```ts
+import { typePolicyForProfile } from "@sqlbraid/postgres";
+import { generateModels } from "@sqlbraid/codegen";
+
+const typePolicy = typePolicyForProfile({ json: "text", temporal: "text" });
+const generated = generateModels(snapshot, { typePolicy });
+```
+
+`{ json: "native", temporal: "native" }`는 별도
+`pg-native` 호환 프로필을 선택합니다. native는 node-postgres의 일반
+OID별 parser 동작을 뜻하며 모든 temporal 타입이 `Date`가 된다는 뜻이
+아닙니다. custom `pg-types` parser는 또 다른 프로필이므로 자체 raw-value
+증거가 필요합니다.
+
+| 값 | Driver raw / SQLBraid canonical 출력 | 정확도 경계 |
 | --- | --- | --- |
-| `int2` / `int4` / `int8` | string | 안전한 정수 driver 값도 text로 정규화하며 exact 출력은 `number`나 `bigint`가 아닙니다. |
-| `numeric` / `decimal` | string | exact text를 보존하며 JavaScript `number`는 exact로 허용하지 않습니다. |
-| `float4` / `float8` | number | 근사 이진 값이며 lossless text read 프로필에는 `SHOW extra_float_digits` 양수가 필요합니다. |
+| `int2` / `int4` / `int8` / `oid` | driver 의존 → `string` | exact 출력은 `number`나 `bigint`가 아닌 canonical text입니다. |
+| `numeric` / `decimal` | text → `string` | JavaScript `number`는 exact로 허용하지 않습니다. |
+| `float4` / `float8` | number → `number` | 근사 이진 값이며 lossless text read에는 `SHOW extra_float_digits` 양수가 필요합니다. |
 | `money` | unsupported | locale 형식 text는 표준 숫자값이 아니므로 사용자가 명시적 format 변환을 작성해야 합니다. |
-| `json` / `jsonb` | text 또는 parsed 값 | `data.json-text-lossless`는 query-local 프로필이며 기본 parsed 경로는 편의 기능입니다. |
-| 날짜/시간 | text 또는 `Date` | 정확도 우선 프로필은 text이고 `Date`는 microsecond와 일부 timezone 의미를 잃습니다. |
+| `json` / `jsonb` | text → `string`; native → `unknown` | Parsed root는 string, number, boolean, `null`, array, object일 수 있어 중첩 숫자 정확도를 보장하지 않습니다. |
+| `date` / `timestamp` / `timestamptz` | text → `string`; native → `Date` | native `time`/`timetz`는 text이며 `interval`은 `unknown`입니다. |
 | `bytea` | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
 | `uuid` | string | 필요하면 애플리케이션 schema에서 형식을 검증합니다. |
 
@@ -113,8 +129,10 @@ conditional 프로필이며 자체 raw-value 증거가 필요합니다.
 배열, domain, range/multirange, composite는 scalar 원소 타입이 exact여도
 unclassified container입니다.
 
-`db.environment()`는 `extra_float_digits`와 선택한 JSON/temporal parser
-프로필을 기록합니다. 이를 무조건적인 fidelity 보장으로 읽으면 안 됩니다.
+`db.environment()`는 `extra_float_digits`, 선택한 JSON/temporal 프로필과
+가능한 경우 TypePolicy provenance를 기록합니다. 이를 무조건적인 fidelity
+보장으로 읽으면 안 됩니다. support manifest가 증거의 출처이며 이 페이지는
+PV18 최종 인증을 주장하지 않습니다.
 `pg-cursor`는 native pull stream을 제공하며 peer가 없으면
 `BRAID_STREAM_UNSUPPORTED`입니다. Routine refcursor는 기존 transaction이
 필요하고 result set으로 materialize됩니다. Bulk는 SQL rewrite가 아닌

@@ -5,10 +5,10 @@ description: Exact tested profiles, capability boundaries, and revision-specific
 
 import SupportMatrix from "../../../components/SupportMatrix.astro";
 
-PV17 changes the raw value contract: exact database numerics are strings,
+PV18 changes the profile contract around the PV17 raw-value rule: exact database numerics are strings,
 IEEE-754 approximate values are numbers, and JSON/temporal text profiles are
 distinct from parsed/native convenience. The migration starts at
-`dccb69763e9e4a070280cf580d8f7b76368ec3d5`; final Runtime, Docs and Release
+`2119d9676b05fb2531eaf7aac1ef37741600ba40`; final Runtime, Docs and Release
 dry-run gates are pending. Certification applies only to exact profiles and
 capability conditions recorded after those gates, not every database or driver
 version. CI success is not package publication.
@@ -18,7 +18,7 @@ version. CI success is not package publication.
 - **Official** — an exact profile has zero-cost reproduction and release-blocking real-engine evidence.
 - **Conditional** — the evidence applies under the named condition.
 - **Pending** — a candidate has no recorded successful gate for the stated revision.
-- **Historical** — an exact revision or old workflow exercised a combination; it does not prove the current PV17 tree.
+- **Historical** — an exact revision or old workflow exercised a combination; it does not prove the current PV18 tree.
 - **Compatible** — no exact certified target; broader host or local-binding checks may still pass.
 - **Custom** — a user-provided `QueryExecutor` or `ConnectionProvider`.
 - **Unsupported** — the required SQLBraid capability is intentionally absent.
@@ -34,7 +34,7 @@ verified taxonomy is recorded in
 [`support/`](https://github.com/Clickin/SQLBraid/tree/main/support);
 the runtime does not read these files. The interactive matrix is the canonical
 rendering of the same machine-readable targets, capability conditions and test
-IDs enforced by CI. PV17 profile cells remain Pending until the changed
+IDs enforced by CI. PV18 profile cells remain Pending until the changed
 representation contract has a matching exact-SHA gate. D1 remains Compatible:
 its local workerd binding passes, but the managed SQLite version is unreported.
 
@@ -47,12 +47,39 @@ temporal native `Date` is not a lossless claim. MERGE returned rows use
 `dml.merge-returning`; UPSERT/REPLACE/ON CONFLICT/ON DUPLICATE KEY returned rows
 use `dml.upsert-returning`.
 
-PV16 supports materialized DML-returning through `db.execute`, `db.all`,
-`db.one`, and `db.maybeOne` with `sql.rows`. It does not make
+Support entries distinguish driver raw representation from SQLBraid canonical
+representation. An exact string ID or generated ID is canonical decimal text;
+`affectedRows`, `rowCount`, procedure status, and bulk input counts are
+operational safe-range numbers. A green capability row never turns one of
+those counts into an exact identity claim.
+
+PostgreSQL, mysql2, and MariaDB profile descriptors pair `id`, `json`,
+`temporal`, `typePolicy`, and exact connection options. `typePolicyForProfile`
+is the reuse point for runtime and codegen. Native JSON roots use `unknown`
+unless a narrower driver contract is proven; native PostgreSQL `time` and
+`timetz` remain text while `date`, `timestamp`, and `timestamptz` use `Date`.
+Changing one option creates a different profile and invalidates the target
+evidence until retested.
+
+Container support is not recursive by implication. Arrays, domains, ranges,
+multiranges, composites, Oracle objects/collections, SQL Server `sql_variant`,
+vectors, and parsed JSON roots require container-specific evidence. A supported
+container row describes the tested transport only; it does not certify every
+nested member.
+
+Support additions follow the free-only policy: an Official target needs a
+zero-cost reproducible CI environment, an exact version/profile tuple, a
+machine-readable manifest row, and maintainer-safe runtime cost. A proprietary
+or paid environment is not promoted automatically; its contributor must
+provide and maintain an acceptable external CI path.
+
+Historical PV16 evidence covers materialized DML-returning through `db.execute`,
+`db.all`, `db.one`, and `db.maybeOne` with `sql.rows`. It does not make
 `db.stream(sql.rows\`... RETURNING/OUTPUT ...\`)` a cross-driver support claim:
 SQLite buffers RETURNING output, and SQL Server can emit OUTPUT rows before a
 later statement failure. MySQL's absence of a generic clause is a server fact,
-not a SQLBraid rewrite opportunity.
+not a SQLBraid rewrite opportunity. PV18 promotion of this capability remains
+pending the final exact-SHA evidence.
 
 `db.bulk(inputs, factory)` is command-only, one shape × N values, one physical
 lease, and one bulk observer operation. Empty input performs no acquire.
@@ -84,8 +111,8 @@ carrier discriminator; SQLite routine calls remain unsupported; SQL Server
 
 ## Release evidence provenance
 
-PV17 has no final workflow run IDs yet. The historical PV16 links below are
-retained for provenance and do not certify the changed contract:
+PV18 has no final workflow run IDs yet. The historical PV16/PV17 links below
+are retained for provenance and do not certify the changed contract:
 
 - [Runtime portability: 34818111424](https://github.com/Clickin/SQLBraid/actions/runs/34818111424) — Node 22.18.0 release gates and packed Bun 1.3.14 / Deno 2.9.3 host paths.
 - [Documentation site: 34818111252](https://github.com/Clickin/SQLBraid/actions/runs/34818111252) — build and links; deployment skipped.
@@ -104,7 +131,7 @@ The following links are retained for provenance only:
 - PV13 runtime evidence at revision [`d4bc626`](https://github.com/Clickin/SQLBraid/commit/d4bc626) and its historical workflow run [`34753809318`](https://github.com/Clickin/SQLBraid/actions/runs/34753809318).
 - PV11 evidence at revision [`1615311`](https://github.com/Clickin/SQLBraid/commit/1615311149cce6290976df3ed6e63e41dfe795d7) and historical workflow run [`34745030794`](https://github.com/Clickin/SQLBraid/actions/runs/34745030794).
 
-Those exact revisions predate PV16 and are not claims about the current source,
+Those exact revisions predate PV18 and are not claims about the current source,
 current drivers, current Vite/browser/cloud integration, or RC publication.
 
 For custom adapters, see the [driver-author binding guide](/SQLBraid/dev/agents/driver-author/).

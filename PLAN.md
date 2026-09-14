@@ -319,7 +319,7 @@ Streaming is the exception: the stream owns its physical lease until iteration c
 
 Ordinary `${value}` continues through the dialect/driver bind boundary. Do not add `sql.bind(value, codec)` or a general input-mapper framework before pre-release.
 
-### 5.6 PV17 value-fidelity boundary
+### 5.6 PV17/PV18 value-fidelity boundary
 
 PV17 makes raw value semantics explicit before application mapping:
 
@@ -356,6 +356,17 @@ vectors, or other containers. Such values are `unclassified` or `unsupported`
 until a recursive transport test proves otherwise. Native SQL remains
 transparent: `MERGE` and UPSERT/REPLACE/ON CONFLICT are distinct support
 capabilities (`merge-returning` versus `upsert-returning`).
+
+PV18 makes representation profiles first-class evidence. PostgreSQL, mysql2,
+and MariaDB expose immutable profile descriptors and
+`typePolicyForProfile({ json, temporal })`; runtime and codegen must reuse the
+same descriptor. Driver raw values and SQLBraid canonical values are separate
+facts. Exact string IDs and generated IDs are canonical decimal text, while
+`affectedRows`, `rowCount`, procedure status, and bulk input counts are
+safe-range operational numbers. Native JSON roots use `unknown` unless narrowed
+by explicit driver evidence, and temporal mappings are per database type rather
+than one broad Date mapping. A supported container path is not a recursive
+guarantee for every nested member.
 
 ---
 
@@ -974,10 +985,10 @@ Non-negotiable:
   unmatched or incomplete tuple remains Compatible rather than a guessed
   Official claim.
 
-The PV16 records above are historical evidence only. PV17 starts from baseline
-`dccb69763e9e4a070280cf580d8f7b76368ec3d5`; its changed representation contract
-requires new exact-SHA Runtime, Docs and Release dry-run gates. No current run
-ID, final SHA, or support-label promotion is claimed here. D1 remains
+The PV16 records above are historical evidence only. PV18 starts from review
+baseline `2119d9676b05fb2531eaf7aac1ef37741600ba40`; its profile/container
+contract requires new exact-SHA Runtime, Docs and Release dry-run gates. No
+current run ID, final SHA, or support-label promotion is claimed here. D1 remains
 Compatible because its managed SQLite version is unreported, and Oracle Free
 23.9 evidence does not certify Oracle 19c.
 
@@ -986,6 +997,32 @@ verified implementation revision; subsequent changes require their own exact-SHA
 Runtime, Docs and Release dry-run gates. User acceptance and explicit release
 authorization remain required. No tag, publication or dist-tag mutation is
 authorized by implementation progress.
+
+### PV18 — Profile-coherent fidelity, containers, and RC certification — pending
+
+- every effective PostgreSQL, mysql2, and MariaDB representation profile has a
+  stable descriptor (`id`, JSON/temporal modes, TypePolicy, and exact connection
+  options where relevant);
+- portable `typePolicyForProfile({ json, temporal })` selectors are reused by
+  runtime and codegen, with immutable mappings and provenance hashes;
+- driver raw representation is recorded separately from SQLBraid canonical
+  representation. Exact string IDs and generated IDs remain canonical decimal
+  text; affected/row counts and bulk input counts remain safe operational
+  numbers;
+- PostgreSQL native JSON roots are `unknown` unless a narrower root contract is
+  proven. Native temporal mappings are per type (`date`/`timestamp`/
+  `timestamptz` versus `time`/`timetz`/`interval`), not one broad Date mapping;
+- scalar fidelity does not recursively certify arrays, domains, ranges,
+  composites, Oracle objects, SQL Server `sql_variant`, vectors, or parsed
+  JSON roots. Container claims require container-specific transport and codegen
+  evidence;
+- SQL Server exact decimal/money output remains fail-closed under Tedious
+  Number transport; exact input uses a character hint plus authored CAST/CONVERT;
+- EN/KO data-representation, driver setup, support, limitations, roadmap,
+  release notes, driver-author, README, public API, and readiness docs remain
+  synchronized. Free-only support policy and contributor-owned CI are required;
+- final Runtime, Docs, benchmark, and Release dry-run gates must pass on one
+  exact final SHA before any RC readiness or support-label promotion claim.
 
 ### Post-release candidates
 

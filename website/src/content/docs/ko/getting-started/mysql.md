@@ -16,12 +16,13 @@ npm install @sqlbraid/mysql mysql2
 ```ts
 import mysql from "mysql2/promise";
 import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
-import { sql } from "@sqlbraid/mysql";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 
-const connection = await mysql.createConnection(
-  process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
-);
-const db = createMysql2Database(connection);
+const connection = await mysql.createConnection({
+  uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
+  ...MYSQL2_LOSSLESS_TEXT.connectionOptions,
+});
+const db = createMysql2Database(connection, { profile: MYSQL2_LOSSLESS_TEXT });
 
 try {
   const rows = await db.all(sql.rows<{ id: string; name: string }>`
@@ -40,10 +41,13 @@ try {
 ```ts
 import mysql from "mysql2/promise";
 import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
-import { sql } from "@sqlbraid/mysql";
+import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
 
-const pool = mysql.createPool(process.env.DATABASE_URL ?? "mysql://root:password@localhost/app");
-const db = createMysql2PoolDatabase(pool);
+const pool = mysql.createPool({
+  uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
+  ...MYSQL2_LOSSLESS_TEXT.connectionOptions,
+});
+const db = createMysql2PoolDatabase(pool, { profile: MYSQL2_LOSSLESS_TEXT });
 const userId = 1;
 try {
   const user = await db.maybeOne(sql.rows<{ id: string; name: string }>`
@@ -56,6 +60,10 @@ try {
 ```
 
 풀은 애플리케이션의 리소스로 남습니다. SQLBraid는 독립적인 각 루트 작업마다 물리적 연결을 얻고 반환하며, `db.tx(...)`는 콜백 동안 하나의 lease를 고정합니다. 풀 종료는 애플리케이션이 소유합니다.
+
+프로필이나 정책을 선택하지 않으면 각 lease가 관측한 연결에서 정책을 선택하며,
+풀은 연결 획득 전에 정책을 단정하지 않습니다. 명시한 descriptor는 유지됩니다.
+호환되지 않는 native 결과는 runtime 계약을 codegen과 다르게 바꾸는 대신 거부합니다.
 
 mysql2 바인딩 어댑터는 논리 문장을 text-positional `?` placeholder와 순서가
 있는 값 배열로 구체화합니다. 바인딩 설명과 힌트 검증은 연결을 얻기 전에
@@ -88,24 +96,28 @@ function은 result set을 내보낼 수 없습니다.
 
 ## mysql2 표현 프로필
 
-이는 암묵적인 가정이 아니라 설정 프로필입니다. 증거 label은 support
-manifest가 소유하며 아래의 정확한 프로필에서 MySQL 8.4.2 / mysql2 3.24.4 /
-Node 22.18.0을 인증합니다. parser나 표현 옵션을 변경하면 해당 인증을
-상속하지 않습니다.
+이는 암묵적인 가정이 아니라 명시적 설정 프로필입니다.
+`@sqlbraid/mysql`은 `typePolicyForProfile({ json, temporal })`와 immutable
+`representationProfiles`를 내보냅니다. 기본 `mysql2-lossless-text`
+descriptor는 아래 fidelity-first option을 사용하고 `mysql2-native`는 native
+JSON/temporal 결과를 위한 별도 편의 프로필입니다. Runtime과 codegen은 같은
+descriptor를 선택해야 합니다. PV18 support 승격은 최종 exact-SHA gate까지
+대기 중입니다.
 
-| mysql2 옵션 | 정확한 프로필 분류 | 효과 |
+| mysql2 옵션 | `mysql2-lossless-text` | 효과 |
 | --- | --- | --- |
-| `supportBigNumbers: true` | Official 프로필 필수 | 큰 정수/10진수가 lossy한 `number` 추론으로 가지 않게 합니다. |
-| `bigNumberStrings: true` | Official 프로필 필수 | 큰 숫자를 문자열로 반환해 애플리케이션이 정확하게 처리합니다. |
-| `decimalNumbers: false` | Official 프로필 필수 | `DECIMAL`을 JavaScript `number`로 변환하지 않습니다. `true`는 lossy/conditional입니다. |
-| `rowsAsArray: false` | Official 프로필 필수 | SQLBraid normalizer와 schema가 기대하는 객체 행을 유지합니다. |
-| `jsonStrings: true` | Lossless-text 프로필 | `JSON.parse` 없이 JSON text를 반환하며 parsed JSON은 별도 편의 프로필입니다. |
-| `dateStrings: true` | Lossless-text 프로필 | fractional precision이 보이는 temporal text를 반환하며 `Date`는 별도 편의 프로필입니다. |
-| `typeCast` (기본값) | Official 프로필 필수 | custom 함수는 raw 표현을 바꾸므로 별도 테스트 전까지 conditional입니다. |
+| `supportBigNumbers: true` | 필수 | 큰 정수/10진수가 lossy한 `number` 추론으로 가지 않게 합니다. |
+| `bigNumberStrings: true` | 필수 | 큰 숫자를 문자열로 반환해 애플리케이션이 정확하게 처리합니다. |
+| `decimalNumbers: false` | 필수 | `DECIMAL`을 JavaScript `number`로 변환하지 않습니다. `true`는 별도 프로필입니다. |
+| `rowsAsArray: false` | 필수 | SQLBraid normalizer와 schema가 기대하는 객체 행을 유지합니다. |
+| `jsonStrings: true` | 필수 | `JSON.parse` 없이 JSON text를 반환하며 parsed JSON은 별도 프로필입니다. |
+| `dateStrings: true` | 필수 | fractional precision이 보이는 temporal text를 반환하며 `Date`는 별도 프로필입니다. |
+| `typeCast` (기본값) | 필수 | custom 함수는 raw 표현을 바꾸므로 테스트 전까지 별도 프로필입니다. |
 
-정확한 테스트 조합에는 mysql2 버전, MySQL server, Node 버전 및 위 옵션
-전체를 기록해야 합니다. SQLBraid는 custom `typeCast` 함수의 출력을
-검사하거나 추론하지 않습니다. exact 프로필의 정수와 `DECIMAL` 결과는
+유효 프로필에는 mysql2 버전, MySQL server, Node 버전 및 위 option 전체를
+기록합니다. SQLBraid는 custom `typeCast` 함수의 출력을 검사하거나 추론하지
+않습니다. Driver raw 값과 SQLBraid canonical 값은 별개의 사실입니다. exact
+프로필의 정수와 `DECIMAL` 결과는
 canonical string이며 애플리케이션 경계에서 `decodeExactInteger`,
 `decodeExactDecimal` 또는 선택한 숫자 transform을 사용합니다. `FLOAT`와
 `DOUBLE`은 JavaScript `number` (binary32/binary64)로 유지합니다. driver가

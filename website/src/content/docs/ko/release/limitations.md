@@ -1,6 +1,6 @@
 ---
 title: 현재 제한 사항
-description: PV17 프리릴리스 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
+description: PV18 프리릴리스 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
 ---
 
 - **인증은 프로필과 revision별입니다.** [지원 매트릭스](/SQLBraid/reference/support/)에 검증한 구현 증거를 기록합니다. D1은 managed SQLite 버전이 공개되지 않아 Compatible이며 Oracle Free 23.9는 19c를 인증하지 않습니다. CI 통과가 발행을 승인하지는 않습니다.
@@ -13,7 +13,7 @@ description: PV17 프리릴리스 계약이 의도적으로 약속하지 않는 
   function은 일반 SQL 안에서 실행되고 virtual-table/table-valued extension은
   일반 행 쿼리입니다. INTEGER storage는 canonical string으로 노출되며
   native bigint는 내부 전송이지 public mode가 아닙니다.
-- **DML-returning은 materialized만 지원 범위입니다.** `sql.rows`와 `db.execute`, `db.all`, `db.one`, `db.maybeOne`을 사용하세요. `RETURNING`/`OUTPUT`의 `db.stream()`은 cross-driver PV17 지원 주장이 아닙니다.
+- **DML-returning은 materialized만 지원 범위입니다.** `sql.rows`와 `db.execute`, `db.all`, `db.one`, `db.maybeOne`을 사용하세요. `RETURNING`/`OUTPUT`의 `db.stream()`은 cross-driver PV18 지원 주장이 아닙니다.
 - **DML-returning syntax는 native입니다.** PostgreSQL/SQLite/MariaDB는 문서화된 `RETURNING`, SQL Server는 `OUTPUT`, Oracle은 `RETURNING ... INTO`와 `sql.out()`을 사용하며 MySQL에는 일반 DML `RETURNING`이 없습니다.
 - **`db.bulk()`는 command-only입니다.** 하나의 DML shape를 고정하고 I/O 전에 모든 입력을 검증하며 하나의 physical lease를 사용합니다. 빈 입력은 acquire하지 않습니다. Root bulk는 자동 transaction/auto-chunking 약속이 없고 실제 모드로 `native-bulk`, `pipeline`, `prepared-loop`, `remote-batch`를 보고합니다.
 - **MariaDB는 별도 dialect입니다.** MariaDB Connector/Node.js의 증거는 `mysql2`와 독립적이며 MariaDB 연결의 `mysql2`는 best-effort 호환일 뿐 Official MariaDB capability 주장이 아닙니다. 정확한 `UPDATE RETURNING` 지원은 주장하지 않습니다.
@@ -35,6 +35,10 @@ description: PV17 프리릴리스 계약이 의도적으로 약속하지 않는 
   composite, Oracle object/collection, SQL Server `sql_variant`, vector 및
   기타 중첩 값은 recursive transport가 테스트될 때까지 unclassified 또는
   unsupported입니다.
+- **Profile과 codegen은 일치해야 합니다.** PostgreSQL, mysql2, MariaDB
+  descriptor에는 matching TypePolicy가 들어 있습니다. Runtime과 생성 모델은
+  같은 descriptor를 재사용해야 하며 JSON/temporal 또는 numeric option을
+  바꾸면 새 evidence profile이 됩니다.
 - **정확한 bind는 별도 capability입니다.** 증명된 프로필에서 exact text 입력을
   사용하세요. `null`은 SQL `NULL`이고 일반 `undefined`는 acquisition 전에
   `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다.
@@ -46,6 +50,10 @@ description: PV17 프리릴리스 계약이 의도적으로 약속하지 않는 
 - **Observer mutation/retry/routing이 없습니다.** Observer는 작업을 검사하거나 실패시킬 수 있지만 SQL 재작성, bind 변경, retry는 할 수 없습니다.
 - **메타데이터는 무효성의 증거가 아닙니다.** 누락 객체는 open-world이며 루틴 인자 목록은 불완전할 수 있습니다.
 - **사용자 지정 드라이버는 릴리스 지원이 아닙니다.** `QueryExecutor`/`ConnectionProvider`를 구현하고 독립 증거를 제공하세요.
+- **지원은 free-only이며 재현 가능해야 합니다.** Official target에는 무료로
+  재현 가능한 CI 환경, 정확한 version/profile tuple, maintainer-safe runtime
+  cost가 필요합니다. 유료 target은 contributor가 유지하는 적합한 외부 CI
+  경로를 제공하기 전에는 승격하지 않습니다.
 - **Tooling은 Node 우선입니다.** compiler, CLI, LSP, metadata/codegen, Vite 통합은 별도 build/runtime 관심사이며 Node 전용 데이터베이스 드라이버를 브라우저 bundle에 넣지 마세요.
 
 이 제한은 숨겨진 fallback이 아닌 의도적인 경계입니다. [루틴 호출](/SQLBraid/concepts/routines/), [스트리밍](/SQLBraid/runtime/streaming/), [로드맵](/SQLBraid/release/roadmap/)을 참고하세요.

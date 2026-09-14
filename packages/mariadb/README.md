@@ -25,19 +25,20 @@ homogeneous bulk DML. Connector metadata determines row versus command results;
 multiple result sets are available through `db.call()` and are rejected by
 ordinary query methods.
 
-## PV17 value profile
+## PV18 representation profiles
 
-Configure the Connector/Node.js connection with the documented exact-value options:
+Configure the Connector/Node.js connection with the exported immutable
+`MARIADB_LOSSLESS_TEXT` descriptor:
 
 ```ts
+import mariadb from "mariadb";
+import { MARIADB_LOSSLESS_TEXT } from "@sqlbraid/mariadb";
+
 const connection = await mariadb.createConnection({
   ...connectionOptions,
-  decimalAsNumber: false,
-  insertIdAsNumber: false,
-  autoJsonMap: false,
-  dateStrings: true,
-  timezone: "Z",
+  ...MARIADB_LOSSLESS_TEXT.connectionOptions,
 });
+const db = createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT });
 ```
 
 `DECIMAL`/`NUMERIC` and all integer result columns are exposed by SQLBraid as
@@ -46,12 +47,14 @@ normalized to a decimal string, while `affectedRows` is returned as a safe
 non-negative number and rejects an unsafe connector count. Native connector
 batch execution uses the same string bind values as ordinary execution.
 
-`autoJsonMap: false` is the lossless JSON-text profile. `autoJsonMap: true` is
-available as a parsed-object compatibility profile, but nested JSON numbers may
-already have passed through JavaScript `JSON.parse` and therefore are not
-lossless. `dateStrings: true` preserves DATE/TIME/DATETIME text, including
-fractional seconds; `timezone` must be chosen explicitly when TIMESTAMP values
-are used. SQLBraid does not add a JSON parser or temporal type dependency.
+`MARIADB_NATIVE` is available as a parsed-object/Date compatibility profile;
+nested JSON numbers may already have passed through JavaScript `JSON.parse` and
+therefore are not lossless. `dateStrings: true` preserves DATE/TIME/DATETIME
+text, including fractional seconds; `timezone` must be chosen explicitly when
+TIMESTAMP values are used. MariaDB Connector does not expose effective
+connection options publicly, so pass the matching descriptor explicitly when
+using a non-default profile. SQLBraid does not add a JSON parser or temporal
+type dependency.
 
 MariaDB-specific DML `RETURNING` is supported by the database's native syntax:
 use `sql.rows` with `INSERT ... RETURNING`, `DELETE ... RETURNING`, or

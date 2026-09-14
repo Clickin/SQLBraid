@@ -2,12 +2,15 @@
 
 This document records what the repository automates and what a maintainer must configure outside the repository. It contains no credentials or registry tokens.
 
-### PV17 pending evidence
+### PV18 pending evidence
 
-PV17 starts from baseline `dccb69763e9e4a070280cf580d8f7b76368ec3d5` and changes
-the public value boundary: exact database numerics are strings, approximate
-IEEE values are numbers, and JSON/temporal text profiles are distinct from
-parsed/native convenience. No final PV17 SHA or workflow run is recorded yet.
+PV18 starts from review baseline `2119d9676b05fb2531eaf7aac1ef37741600ba40`
+and keeps the public value boundary: exact database numerics are strings,
+approximate IEEE values are numbers, and JSON/temporal text profiles are
+distinct from parsed/native convenience. PV18 additionally requires each
+effective representation profile to have one matching TypePolicy, codegen
+selection, and support descriptor. No final PV18 SHA or workflow run is
+recorded yet.
 
 The pending release gates are the simplified current workflow: one full Vitest
 pass on Node 22, the existing `test:all` pass on Node 24, the fidelity
@@ -20,6 +23,11 @@ authorize a release.
 Do not promote a support target or claim an exact profile until these gates
 record the same final commit SHA. Any current matrix cell without that evidence
 is Pending, Guarded, Conditional, Unknown, or Unsupported as appropriate.
+In particular, a profile option change is a new target: driver raw
+representation, SQLBraid canonical representation, TypePolicy `id`/`hash`, and
+connection options must agree. Runtime and codegen must reuse that descriptor.
+RC readiness remains Pending until the P0 profile mismatch is fixed, intended
+Official targets have exact evidence, and the final exact-SHA gates are green.
 
 ### Historical PV16 evidence status
 
@@ -38,7 +46,8 @@ files / 469 tests, actual WASM/D1 and editor hosts, packed Node/Bun/Deno drivers
 and 87 documentation pages / 4,347 links before evidence-only documentation
 updates. All 43 EN/KO page pairs are tracked without opt-outs.
 
-Eight exact profiles are certified in `support/targets/`. D1's local binding
+Historically, eight exact profiles were certified in `support/targets/`; those
+records are PV16 provenance, not current PV18 promotion. D1's local binding
 passes but remains Compatible because its managed SQLite version is unreported.
 The PostgreSQL minimum role remains 16.4; the separate current capability role
 uses 18.6. Oracle Free 23.9 does not supply Oracle 19c evidence. Node 24.21.0 has
@@ -87,8 +96,9 @@ The documentation phase is compared from baseline
 Oracle 19c is excluded from certification: no zero-cost test endpoint is
 configured, and Oracle Free 23.9 is the reproducible target. Adding another
 server line requires contributor-owned reproduction and evidence, not a
-maintainer-funded enterprise environment. Runtime, Docs and Release dry-run
-must succeed on one final revision before treating PV16 as RC-ready.
+maintainer-funded enterprise environment. Those checks are historical baseline
+evidence only; PV18 RC readiness requires Runtime, Docs and Release dry-run
+success on one final revision.
 
 PV15 native streaming, routine contracts and Vite integration are the implemented
 baseline covered again by PV16's release gates. RC publication remains

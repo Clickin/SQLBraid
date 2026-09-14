@@ -1,6 +1,6 @@
 # Driver-author guide: binding transport SPI
 
-This guide is for a custom `QueryExecutor`, `ConnectionProvider`, or first-party-style driver adapter. PV16 final verification is pending; this guide does not grant a runtime/driver support label or claim current CI, SHA, publication, or release evidence.
+This guide is for a custom `QueryExecutor`, `ConnectionProvider`, or first-party-style driver adapter. PV18 final verification is pending; this guide does not grant a runtime/driver support label or claim current CI, SHA, publication, or release evidence.
 
 ## 1. The logical statement contract
 
@@ -122,7 +122,7 @@ A lease must not silently use a different binding adapter. Keep opaque driver re
 
 ### Homogeneous bulk execution
 
-PV16 `db.bulk()` is command-only and represents one logical DML shape with an
+The homogeneous `db.bulk()` contract is command-only and represents one logical DML shape with an
 ordered matrix of values. It is distinct from `db.batch()`, which executes
 heterogeneous queries.
 
@@ -451,6 +451,8 @@ observed lease does not establish every future session's settings.
 Lifecycle events identify this operation with
 `purpose: "environment"`. Do not guess a driver/runtime version, and do not
 turn a partial tuple into an Official support claim.
+`EnvironmentSupportTarget.typePolicy` is required. Missing or mismatched policy
+IDs/hashes cannot match a certified target, including for JavaScript callers.
 
 Record the exact raw representation for integers, decimals, JSON, temporal, and
 binary values. `TypeMapping.numeric` must keep database semantics
@@ -469,7 +471,22 @@ mode. JSON parsed objects and native `Date` values are convenience profiles;
 lossless text requires separate evidence. Arrays, ranges, composites, objects,
 `sql_variant`, vectors, and other containers do not inherit scalar guarantees.
 
-PV17 completion and release readiness require exact-revision verification across
+If a driver or connection option changes the JavaScript result shape, publish
+an immutable profile descriptor with a stable `id`, JSON/temporal modes, exact
+connection options, and a matching TypePolicy. Expose
+`typePolicyForProfile({ json, temporal })` when using the first-party profile
+shape, and make runtime and codegen consume the same descriptor. The driver
+author owns the real CI fixture, codegen/runtime conformance check, and support
+matrix row. Record driver raw representation and SQLBraid canonical
+representation as separate facts.
+
+A scalar exactness test does not certify an array, collection, variant,
+composite, parsed JSON root, or any other container. Container claims require
+container-specific transport and codegen evidence; support is not recursively
+guaranteed for every nested member. Keep unclassified/unsupported values
+explicit instead of assigning a convenient scalar type.
+
+PV18 completion and release readiness require exact-revision verification across
 unit, packed-runtime, docs, capability/bulk suites, Browser WASM, D1, MariaDB,
 and the existing real database paths. Until Main supplies that evidence, mark
 verification pending and do not claim a new SHA, CI success, runtime support

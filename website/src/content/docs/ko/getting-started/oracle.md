@@ -68,7 +68,9 @@ Thin 바인딩 어댑터는 논리 문장을 text-positional `:1`, `:2`, … 바
 드라이버가 안전한 Oracle 타입을 추론할 수 없는 `null`에는 명시적인 힌트를 사용하세요. 타입이 지정되지 않은 null을 조용히 `VARCHAR2`로 바꾸지 않습니다.
 
 기본 정책은 정확한 `NUMBER` 계열(Oracle `FLOAT`와 ANSI numeric 별칭 포함)
-결과를 정밀도 보존을 위해 string으로 가져옵니다. `NUMBER` decimal-string
+결과를 정밀도 보존을 위해 string으로 가져옵니다. Oracle `NUMBER(p,0)`도 이
+exact-decimal family에 속하며 support taxonomy는 별도의 native exact-integer
+transport category를 만들지 않습니다. `NUMBER` decimal-string
 입력은 인증된 exact bind 경로가 아닙니다. typed `number`/`bigint` 입력은
 JavaScript 표현 범위에 묶이고, 힌트 없는 string은
 `NLS_NUMERIC_CHARACTERS`에 의존할 수 있습니다. session/profile이 이를
@@ -97,9 +99,9 @@ guarded 편의 프로필이며 원래 timezone 이름이나 sub-millisecond prec
 server line은 일치하는 manifest 증거가 생길 때까지 별도의 미테스트
 프로필입니다.
 
-| Oracle 값 | Thin 프로필 표현 | 비고 |
+| Oracle 값 | Driver raw / SQLBraid canonical 표현 | 비고 |
 | --- | --- | --- |
-| `NUMBER` / `FLOAT` / ANSI numeric 별칭 | string | 정확한 text이며 `decodeExactDecimal` 또는 `decodeExactInteger`는 애플리케이션 변환입니다. |
+| `NUMBER` / `FLOAT` / ANSI numeric 별칭 | text → `string` | `NUMBER(p,0)`을 포함하는 하나의 exact-decimal family이며 `decodeExactDecimal` 또는 `decodeExactInteger`는 애플리케이션 변환입니다. |
 | `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | 근사 binary32/binary64 값이며 특수 값 지원은 프로필 테스트에 따릅니다. |
 | CLOB / NCLOB | string | Routine LOB는 lease 반환 전에 읽고 destroy합니다. |
 | BLOB / RAW | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |

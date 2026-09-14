@@ -63,6 +63,11 @@ capability methods. Raw source metadata is not copied into application result se
 
 **Application:** `CallQuery`, `CommandExecutionResult`, `CommandQuery`, `CommandResult`, `Database`, `DatabaseOptions`, `ExecutableQuery`, `ExecutionEvent`, `ExecutionObserver`, `ExecutionResultOf`, `PreparedQuery`, `Query`, `QueryErrorEvent`, `QueryErrorStage`, `QueryExecutionResult`, `QueryMappedEvent`, `QueryReadyEvent`, `QueryResultEvent`, `QueryResultKind`, `QueryRow`, `RenderLimits`, `RoutineCallResult`, `RoutineResultSet`, `RowQuery`, `RowValidationOptions`, `RowsExecutionResult`, `RowsTag`, `SqlFragment`, `SqlRenderError`, `SqlTag`, `StandardSchemaV1`, `StreamEndEvent`, `StreamOptions`, `StreamStartEvent`, `TransactionEvent`, `TransactionEventPhase`.
 
+PV18 command metadata keeps `CommandResult.insertId?: string` for exact
+database-generated identities. `affectedRows`, `rowCount`, procedure status,
+and bulk input counts remain safe operational `number` values; a custom
+executor cannot satisfy this public SPI with an unsafe identity Number.
+
 **SPI:** `ConnectionLease`, `ConnectionProvider`, `Dialect`, `DialectLexicalProfile`, `QueryExecutor`, `RenderedStatement`, `RenderedParameter`, `ParameterTransportKind`, `StatementBindingAdapter`, `StatementBindingContext`, `StatementBindingDescription`, `BindingDescription`, `LiteralizeOptions`, `LiteralizedSqlResult`, `TypeMapping`, `TypePolicy`.
 
 **PV13 Application:** `BoundParameter`, `ParameterTypeHint` and `SqlTag.bind(value, hint)`.
@@ -99,7 +104,17 @@ materialization remains pre-acquire and command-only.
 
 **Application:** `sql`.
 
-**Advanced:** `createSqlTag`, `dialect`, `typePolicy`.
+**Advanced:** `createSqlTag`, `dialect`, `typePolicy`,
+`typePolicyForProfile`, `representationProfiles`, `Mysql2JsonProfile`,
+`Mysql2TemporalProfile`, `Mysql2RepresentationProfile`, `Mysql2ProfileOptions`,
+`Mysql2ConnectionOptions`,
+`MYSQL2_LOSSLESS_TEXT`, `MYSQL2_NATIVE`, `MYSQL2_JSON_TEXT`,
+`MYSQL2_DATE_TEXT`.
+
+PV18 profile descriptors are immutable and pair stable `id`, JSON/temporal
+selection, TypePolicy provenance, and (for driver subpaths) connection options.
+The default is the fidelity-first lossless-text profile; native/compatibility
+profiles have their own TypePolicy and codegen mapping.
 
 ## @sqlbraid/mysql/mysql2
 
@@ -124,7 +139,17 @@ materialization remains pre-acquire and command-only.
 
 **Application:** `sql`.
 
-**Advanced:** `createSqlTag`, `dialect`, `typePolicy`.
+**Advanced:** `createSqlTag`, `dialect`, `typePolicy`,
+`typePolicyForProfile`, `representationProfiles`, `MariaDbJsonProfile`,
+`MariaDbTemporalProfile`, `MariaDbRepresentationProfile`, `MariaDbProfileOptions`,
+`MariaDbConnectionOptions`,
+`MARIADB_LOSSLESS_TEXT`, `MARIADB_NATIVE`, `MARIADB_JSON_TEXT`,
+`MARIADB_DATE_TEXT`.
+
+The MariaDB fidelity-first descriptor records `bigintAsNumber: false`,
+`decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`,
+`dateStrings: true`, and `timezone: "Z"`. Its native convenience profile is
+separate evidence; mysql2-on-MariaDB is best-effort compatibility.
 
 ## @sqlbraid/mariadb/mariadb
 
@@ -168,7 +193,10 @@ OUT ordinals shared by routine and materialized DML-returning execution.
 
 **Application:** `sql`, `mssqlParameter`.
 
-**Advanced:** `createSqlTag`, `dialect`, `typePolicy`. This root is portable and does not load Tedious.
+**Advanced:** `createSqlTag`, `dialect`, `typePolicy`. This root remains
+portable and does not load Tedious. Native DECIMAL/NUMERIC/MONEY exact output
+is unsupported when Tedious returns JavaScript Number; exact input uses a
+character hint plus authored SQL CAST/CONVERT.
 
 ## @sqlbraid/mssql/tedious
 
@@ -186,7 +214,16 @@ OUT ordinals shared by routine and materialized DML-returning execution.
 
 **Application:** `sql`, `postgresParameter.refcursor()`.
 
-**Advanced:** `createSqlTag`, `dialect`, `typePolicy`.
+**Advanced:** `createSqlTag`, `dialect`, `typePolicy`,
+`typePolicyForProfile`, `representationProfiles`, `PgJsonProfile`,
+`PgTemporalProfile`, `PgRepresentationProfile`, `PgRepresentationProfileOptions`.
+
+PostgreSQL profile descriptors include `pg-lossless-text`, `pg-native`,
+`pg-json-native-temporal-text`, and `pg-json-text-temporal-native`. Native JSON
+maps to `unknown`; native
+date/timestamp/timestamptz map to `Date`, while native time/timetz remain text
+and interval remains open. Runtime and codegen must reuse the selected
+descriptor.
 
 ## @sqlbraid/postgres/pg
 
@@ -212,7 +249,7 @@ bounds cursor reads. Public cursor callback metadata drives row normalization.
 
 **Application:** `sql`, `createSqliteWasmDatabase`, `createD1Database`.
 
-**PV17 representation:** SQLite INTEGER storage is normalized to canonical
+**PV18 representation:** SQLite INTEGER storage is normalized to canonical
 decimal `string`; native bigint is an internal transport detail, not a public
 integer mode or TypePolicy selector. D1 remains guarded to the JavaScript
 safe-integer range.

@@ -34,12 +34,13 @@ const fallbackRows = data.targets.map((target) => ({ target }));
   <support-matrix aria-label={locale === "ko" ? "지원 매트릭스" : "Support matrix"}></support-matrix>
   <script type="application/json" data-support-matrix set:html={serialized}></script>
   <table class="support-matrix__fallback">
-    <caption>{locale === "ko" ? "PV17 지원 대상 (정적/인쇄용 요약)" : "PV17 support targets (static/print summary)"}</caption>
+    <caption>{locale === "ko" ? "PV18 지원 대상 (정적/인쇄용 요약)" : "PV18 support targets (static/print summary)"}</caption>
     <thead>
       <tr>
         <th scope="col">{locale === "ko" ? "대상" : "Target"}</th>
         <th scope="col">{locale === "ko" ? "데이터베이스" : "Database"}</th>
         <th scope="col">{locale === "ko" ? "드라이버" : "Driver"}</th>
+        <th scope="col">{locale === "ko" ? "프로필" : "Profile"}</th>
         <th scope="col">{locale === "ko" ? "런타임" : "Runtime"}</th>
         <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
         <th scope="col">{locale === "ko" ? "정확한 숫자" : "Exact numeric"}</th>
@@ -54,6 +55,7 @@ const fallbackRows = data.targets.map((target) => ({ target }));
           <th scope="row"><a href={`#${encodeURIComponent(target.id)}`}>{target.id}</a></th>
           <td>{databaseLabel(target)}</td>
           <td>{target.driver.id}{target.driver.version ? `@${target.driver.version}` : ""}</td>
+          <td>{target.driver.profile ?? "—"}</td>
           <td>{target.runtime.id}{target.runtime.version ? `@${target.runtime.version}` : ""}</td>
           <td>{safeStatus(target.status)}</td>
           <td>{numericLabel(target, "exact-integer")} / {numericLabel(target, "exact-decimal")}</td>
@@ -158,6 +160,11 @@ const fallbackRows = data.targets.map((target) => ({ target }));
   .support-matrix__rows {
     position: relative;
     width: max(100%, calc(var(--matrix-columns) * 9rem));
+  }
+
+  .support-matrix .support-matrix__rows,
+  .support-matrix .support-matrix__row {
+    margin: 0;
   }
 
   .support-matrix__row {

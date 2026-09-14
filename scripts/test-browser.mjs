@@ -159,12 +159,13 @@ async function supportMatrix(browser, previewUrl) {
             totalRows: Number(viewport.getAttribute("aria-rowcount")) - 1,
             renderedRows: rows.length,
             rowHeights: rows.map((row) => row.getBoundingClientRect().height),
+            rowGaps: rows.slice(1).map((row, index) => row.getBoundingClientRect().top - rows[index].getBoundingClientRect().bottom),
             viewportWidth: viewport.getBoundingClientRect().width,
             documentWidth: document.documentElement.scrollWidth,
             windowWidth: innerWidth,
           };
         });
-        if (geometry.renderedRows > 20 || geometry.rowHeights.some((height) => height !== 56)) throw new Error("Support matrix lost bounded fixed-height virtualization.");
+        if (geometry.renderedRows > 20 || geometry.rowHeights.some((height) => height !== 56) || geometry.rowGaps.some((gap) => gap !== 0)) throw new Error("Support matrix lost bounded fixed-height virtualization.");
         if (geometry.documentWidth > geometry.windowWidth) throw new Error("Support matrix overflows the document.");
         measurements.push({ locale, view, ...geometry });
       }
@@ -179,6 +180,12 @@ async function supportMatrix(browser, previewUrl) {
       await matrix.locator("[data-reset]").click();
       await matrix.locator('[data-filter="database"]').selectOption("postgres");
       if ((await matrix.locator("[data-index]").allTextContents()).some((text) => !text.includes("postgres"))) throw new Error("Support matrix database filter leaked another engine.");
+      await matrix.locator("[data-reset]").click();
+      await matrix.locator('[data-view="driver"]').click();
+      await matrix.locator('[data-filter="profile"]').selectOption("mysql2-lossless-text");
+      const profileRows = await matrix.locator("[data-index]").allTextContents();
+      if (profileRows.length !== 1 || !profileRows[0].includes("mysql2-lossless-text")) throw new Error("Support matrix profile filter did not isolate its driver profile.");
+      measurements.push({ locale, view: "profile-filter", profile: "mysql2-lossless-text", rows: profileRows.length });
       await matrix.locator("[data-reset]").click();
       await page.setViewportSize({ width: 375, height: 812 });
       await matrix.scrollIntoViewIfNeeded();
@@ -200,7 +207,7 @@ async function supportMatrix(browser, previewUrl) {
       await noScript.close();
     }
     await writeFile(resolve(directory, "measurements.json"), JSON.stringify(measurements, null, 2));
-    await writeFile(resolve(directory, "report.md"), "# Support matrix browser evidence\n\nEN/KO database, driver and capability views; bounded rows; End navigation; search and database filtering; 375px mobile layout; print and no-JavaScript fallback passed.\n");
+    await writeFile(resolve(directory, "report.md"), "# Support matrix browser evidence\n\nEN/KO database, driver and capability views; bounded contiguous 56px rows; End navigation; search, database and profile filtering; 375px mobile layout; print and no-JavaScript fallback passed.\n");
     return { directory, measurements };
   } finally {
     await page.close();

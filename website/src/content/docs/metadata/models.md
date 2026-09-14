@@ -34,4 +34,10 @@ types are `number`. Generated models do not silently decode exact strings to
 
 Views, materialized views, foreign, and virtual relations receive Row models only. Unknown relation kinds with columns receive a Row model plus a warning. Unsupported or unproven types remain `unknown`, never `any`; inspect diagnostics before consuming generated source.
 
+Native parsed JSON roots use `unknown` unless the selected profile proves a
+narrower root shape. Scalar mappings also do not recursively certify arrays,
+ranges, composites, objects, `sql_variant`, vectors, or other containers.
+Container-specific evidence is required before generating a nested application
+type.
+
 Column names remain exact database keys as quoted TypeScript properties when needed. Namespace evidence and stable identity suffixes prevent collisions. Deterministic output does not depend on metadata capture timestamps or object insertion order.

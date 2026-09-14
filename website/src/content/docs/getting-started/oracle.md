@@ -67,7 +67,9 @@ hint facets fail at the `materialize` stage before database I/O.
 Use an explicit hint for `null` when the driver cannot infer a safe Oracle type. Do not silently turn an untyped null into `VARCHAR2`.
 
 The default policy fetches the exact `NUMBER` family (including Oracle's
-`FLOAT` and ANSI numeric aliases) as strings to preserve precision. `NUMBER`
+`FLOAT` and ANSI numeric aliases) as strings to preserve precision. Oracle
+`NUMBER(p,0)` remains part of that exact-decimal family; the support taxonomy
+does not invent a separate native exact-integer transport category. `NUMBER`
 decimal-string input is not a certified exact bind path: typed `number`/`bigint`
 inputs are bounded by their JavaScript representation and unhinted strings can
 depend on `NLS_NUMERIC_CHARACTERS`. Keep this capability unsupported unless the
@@ -96,9 +98,9 @@ is the currently documented environment; it must not be presented as Oracle
 19c evidence. Thick mode and another server line are separate, untested
 profiles until their manifests contain matching evidence.
 
-| Oracle value | Thin profile representation | Notes |
+| Oracle value | Driver raw / SQLBraid canonical representation | Notes |
 | --- | --- | --- |
-| `NUMBER` / `FLOAT` / ANSI numeric aliases | string | Exact text; `decodeExactDecimal` or `decodeExactInteger` is an application transform. |
+| `NUMBER` / `FLOAT` / ANSI numeric aliases | text → `string` | One exact-decimal family, including `NUMBER(p,0)`; `decodeExactDecimal` or `decodeExactInteger` is an application transform. |
 | `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | Approximate binary32/binary64 values; special-value support is profile-tested. |
 | CLOB / NCLOB | string | Routine LOBs are read and destroyed before lease release. |
 | BLOB / RAW | `Buffer` | Keep bytes or explicitly encode them. |

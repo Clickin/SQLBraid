@@ -1,12 +1,12 @@
 ---
-title: PV17 릴리스 노트
-description: 값 정확도 경계를 포함하는 SQLBraid 프리릴리스 표면입니다.
+title: PV18 릴리스 노트
+description: 프로필 일관성, container fidelity, 값 정확도 경계를 포함하는 SQLBraid 프리릴리스 표면입니다.
 ---
 
-이 문서는 npm RC나 stable 발행을 주장하지 않는 PV17 초안입니다. PV17은
-`dccb69763e9e4a070280cf580d8f7b76368ec3d5` baseline에서 시작했습니다.
-변경된 값 정확도 계약의 최종 Runtime, Docs, Release dry-run gate는 대기
-중이므로 final SHA나 workflow run을 주장하지 않습니다. 과거 PV16 증거는
+이 문서는 npm RC나 stable 발행을 주장하지 않는 PV18 초안입니다. PV18은
+`2119d9676b05fb2531eaf7aac1ef37741600ba40` review baseline에서 시작했습니다.
+프로필/컨테이너 계약의 최종 Runtime, Docs, Release dry-run gate는 대기
+중이므로 final SHA나 workflow run을 주장하지 않습니다. 과거 PV16/PV17 증거는
 provenance로만 보존합니다.
 
 ## 포함된 계약
@@ -25,7 +25,7 @@ provenance로만 보존합니다.
 - `durationMs`, 민감하지 않은 call result 구조, lazy diagnostic literalization을 포함하는 execution observer
 - TypeScript와 framework 변환을 Vite에 맡기고 TSX와 source-map 조합을 보존하는 `@sqlbraid/vite` Vite 8 pre-transform
 - 선택적 metadata, inspector, 결정적 codegen, CLI JSON inspection, 표준 stdio LSP, 얇은 VS Code 통합
-- PV17 숫자 정확도: 정확한 DB 정수와 10진수는 canonical string, IEEE-754
+- PV18 숫자 정확도: 정확한 DB 정수와 10진수는 canonical string, IEEE-754
   근사 이진 값은 JavaScript number입니다. Numeric metadata는 DB semantics,
   raw representation, transport fidelity를 분리하며 `decodeExactInteger`와
   Decimal 등 풍부한 타입은 애플리케이션 transform입니다.
@@ -33,6 +33,17 @@ provenance로만 보존합니다.
   native `Date` 편의를 구분합니다. Driver option과 사용자가 작성한 SQL
   cast/format expression은 별도 프로필이며 SQLBraid는 SQL을 rewrite하지
   않습니다.
+- PostgreSQL, mysql2, MariaDB는 `typePolicyForProfile({ json, temporal })`와
+  profile descriptor를 export합니다. runtime과 codegen은 같은 프로필을
+  재사용해야 하며 native PostgreSQL JSON root는 좁은 계약이 없으면
+  `unknown`, temporal mapping은 DB type별입니다.
+- Driver raw 값과 SQLBraid canonical 값을 구분합니다. 정확한 ID는 canonical
+  decimal string이고 `affectedRows`, `rowCount`, procedure status, bulk input
+  count는 safe operational number입니다.
+- Scalar fidelity는 array, domain, range, composite, Oracle object, SQL
+  Server `sql_variant`, vector, parsed JSON root에 재귀적으로 적용되지
+  않습니다. Container-specific 증거가 생길 때까지 unknown/unclassified/
+  unsupported로 둡니다.
 - 일반 `undefined` IN bind는 acquisition 전에
   `BRAID_BIND_VALUE_UNSUPPORTED`로 실패하고 `null`은 SQL `NULL`입니다.
   SQLite INTEGER는 내부 native int64 transport를 사용할 수 있지만 출력은
@@ -40,7 +51,7 @@ provenance로만 보존합니다.
 
 ## 검증 상태
 
-PV17 프로필의 최종 gate가 아직 없으므로 공유 매니페스트의 변경된 표현
+PV18 프로필의 최종 gate가 아직 없으므로 공유 매니페스트의 변경된 표현
 cell은 Pending입니다. 대기 중인 Runtime gate는 Node 22의 전체 Vitest,
 Node 24의 기존 `test:all`, fidelity benchmark, 하나의 최종 revision에서
 실행하는 Docs/Release dry-run입니다. docs-pages workflow는 push에서
@@ -52,7 +63,8 @@ Node 24의 기존 `test:all`, fidelity benchmark, 하나의 최종 revision에�
 
 ## 업그레이드 규율
 
-생성 모델 파일을 파생 아티팩트로 취급하세요. metadata나 설정을 바꾼 후
+선택한 TypePolicy/profile에서 생성 모델 파일을 파생 아티팩트로 취급하세요.
+runtime과 codegen에서 같은 descriptor를 사용하고 metadata나 설정을 바꾼 후
 `sqlbraid codegen`을 실행하고 결과를 commit한 다음 `sqlbraid codegen --check`를
 실행하세요. direct-vs-pool factory를 소유한 물리 리소스에 맞추세요. Vite
 transform과 서버 데이터베이스 runtime을 분리하고 Node 전용 데이터베이스
@@ -63,7 +75,7 @@ transform과 서버 데이터베이스 runtime을 분리하고 Node 전용 데�
 
 ## 과거 PV16 기록
 
-이전 PV16 구현은 SQLite integer mode를 사용했고 일부 정확한 정수를
+이전 PV16/PV17 구현은 SQLite integer mode를 사용했고 일부 정확한 정수를
 `bigint`로 노출했습니다. 당시의 revision별 Runtime, Docs, Release dry-run
-link는 provenance를 위해 보존하지만 현재 source나 PV17 canonical-string
+link는 provenance를 위해 보존하지만 현재 source나 PV18 profile/container
 계약을 인증하지 않습니다.

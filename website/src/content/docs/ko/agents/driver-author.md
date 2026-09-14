@@ -3,7 +3,7 @@ title: 드라이버 작성자 바인딩 가이드
 description: 값 전용 보안 경계를 지키는 사용자 지정 SQLBraid 바인딩 어댑터를 구현합니다.
 ---
 
-이 문서는 사용자 지정 `QueryExecutor`, `ConnectionProvider`, 드라이버 어댑터를 위한 것입니다. PV16 최종 검증은 대기 중이며 현재 CI·SHA·런타임 지원 label·배포 증거를 주장하지 않습니다.
+이 문서는 사용자 지정 `QueryExecutor`, `ConnectionProvider`, 드라이버 어댑터를 위한 것입니다. PV18 최종 검증은 대기 중이며 현재 CI·SHA·런타임 지원 label·배포 증거를 주장하지 않습니다.
 
 ## 논리 문장 불변식
 
@@ -85,7 +85,7 @@ interface ConnectionProvider {
 
 ## 동종 bulk 실행
 
-PV16의 `db.bulk()`는 command 전용입니다. 하나의 논리적 DML shape와 순서가
+동질적인 `db.bulk()` 계약은 command 전용입니다. 하나의 논리적 DML shape와 순서가
 있는 parameter matrix를 사용하며, 서로 다른 query를 실행하는 `db.batch()`와
 다릅니다.
 
@@ -315,6 +315,20 @@ TypePolicy metadata에서 `semantics`, `representation`, transport `fidelity`를
 Parsed JSON과 native `Date`는 편의 프로필이고 text 프로필은 자체 증거가
 필요합니다. 배열, range, composite, object, `sql_variant`, vector에는 scalar
 보장을 자동으로 적용하지 않습니다.
+
+드라이버나 connection option이 JavaScript 결과 형태를 바꾸면 안정적인 `id`,
+JSON/temporal mode, connection option, matching TypePolicy를 포함한 immutable
+profile descriptor를 제공하세요. 공통 형태를 지원하는 패키지는
+`typePolicyForProfile({ json, temporal })` selector를 export해야 합니다.
+Runtime과 codegen은 같은 descriptor를 사용해야 하며, 실제 CI fixture,
+codegen/runtime conformance check, support-matrix capability row는 driver
+작성자가 소유합니다. Driver raw 값과 SQLBraid canonical 값은 분리해
+기록하세요.
+
+Scalar exactness fixture는 array, collection, variant, composite, parsed JSON
+root 또는 기타 container를 인증하지 않습니다. Container claim에는 별도
+transport와 codegen 증거가 필요하며 모든 nested member에 재귀 상속되지
+않습니다. 편의 scalar로 매핑하지 말고 unclassified/unsupported를 명시하세요.
 
 query-builder/render 단계와 binder/materializer 단계를 분리하세요. 전자는
 불변 SQL segment와 value boundary를 설명하고, 후자는 driver transport와

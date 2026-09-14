@@ -61,8 +61,8 @@ acquisition. Tedious owns effective reuse; failures in this work are
 
 ## Capability boundaries
 
-- The certified combination is Tedious 20.0.0 on Node 22.18.0/Linux x64;
-  the support manifest records the exact successful PV16 revision.
+- The documented candidate is Tedious 20.0.0 on Node 22.18.0/Linux x64;
+  PV18 promotion remains pending the final exact-SHA support evidence.
 - The target uses SQL Server 2022 CU18 Developer, Linux x64;
   local ARM emulation is outside this guide's verification scope.
 - Unhinted common values use adapter-local Tedious inference. Use an explicit hint for `null`, custom objects, precision/scale, lengths, or SQL Server-specific types.
@@ -75,10 +75,11 @@ JavaScript `number`; SQLBraid therefore fails closed with
 `BIGINT` text is normalized to the canonical exact string. For exact decimal or
 money results, author a text expression such as
 `CONVERT(varchar(100), exact_column)` with an appropriate length and
-declare a string result contract. For exact input, bind character text and let
-authored SQL choose conversion, for example
-`CAST(@nvarchar_parameter AS decimal(38, 18))`; typed Tedious DECIMAL input is
-not a lossless arbitrary-precision path. Native temporal values use `Date`, which
+declare a string result contract. For exact input, use a character hint
+(`mssqlParameter.nvarchar(...)`) and let authored SQL choose conversion, for
+example `CAST(@nvarchar_parameter AS decimal(38, 18))`; the native typed
+DECIMAL/NUMERIC/MONEY convenience path is bounded JavaScript `number` input,
+not arbitrary-precision fidelity. Native temporal values use `Date`, which
 does not preserve SQL Server's 100ns precision or complete offset semantics;
 author `CONVERT(varchar(...), datetime2_or_datetimeoffset, style)` when exact
 temporal text matters.
@@ -95,10 +96,10 @@ Tedious 20.0.0 on Node 22.18.0/Linux x64. The support manifest, not this
 page, assigns the evidence label; another SQL Server edition or runtime is a
 separate profile.
 
-| SQL Server value | Tedious representation | Status/caveat |
+| SQL Server value | Driver raw / SQLBraid canonical representation | Status/caveat |
 | --- | --- | --- |
 | `tinyint` / `smallint` / `int` / `bigint` | string | Exact integer transport is canonical text; `decodeExactInteger` is an application opt-in. |
-| `decimal` / `numeric` / `money` / `smallmoney` | unsupported | Tedious native values are JavaScript `number`; use an authored text `CAST`/`CONVERT` expression. |
+| `decimal` / `numeric` / `money` / `smallmoney` | number → unsupported for exact output | Use a character bind plus authored text `CAST`/`CONVERT`; do not stringify a lossy Number. |
 | `real` / `float` | JavaScript `number` | Approximate binary32/binary64 values; SQL Server does not claim NaN/Infinity support. |
 | `datetime2` / `datetimeoffset` | `Date` | Native convenience profile; use authored ISO/text conversion for 100ns or offset fidelity. |
 | `uniqueidentifier` | string | Validate with the application schema if required. |

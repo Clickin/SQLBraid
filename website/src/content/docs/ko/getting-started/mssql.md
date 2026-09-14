@@ -61,8 +61,8 @@ Tedious가 소유하며, 이 단계의 실패는 드라이버 I/O 없이 `materi
 
 ## 기능 경계
 
-- 인증한 조합은 Node 22.18.0/Linux x64의 Tedious 20.0.0이며 support
-  manifest에 성공한 정확한 PV16 revision을 기록합니다.
+- 문서화된 후보 조합은 Node 22.18.0/Linux x64의 Tedious 20.0.0이며,
+  PV18 승격은 최종 exact-SHA support 증거까지 대기 중입니다.
 - 대상은 SQL Server 2022 CU18 Developer, Linux x64입니다.
   로컬 ARM 에뮬레이션은 이 문서의 검증 범위 밖입니다.
 - 힌트가 없는 일반 값은 어댑터 로컬 Tedious 추론을 사용합니다. `null`, 사용자 정의 객체, 정밀도/스케일, 길이 또는 SQL Server 전용 타입에는 명시적인 힌트를 사용하세요.
@@ -74,10 +74,11 @@ Tedious는 `decimal`/`numeric`, `money`, `smallmoney`를 JavaScript
 `BRAID_RESULT_EXACTNESS`로 fail closed합니다. Tedious의 `BIGINT` text는
 canonical exact string으로 정규화됩니다. 정확한 decimal/money 결과에는
 `CONVERT(varchar(...), exact_column)` 같은 사용자가 작성한 text 표현식을
-선택하고 문자열 결과 계약을 선언하세요. 정확한 입력은 character text로
-bind한 뒤 `CAST(@nvarchar_parameter AS decimal(38, 18))`처럼 SQL에서 변환을
-선택합니다. typed Tedious DECIMAL 입력은 임의 정밀도를 보존하는 경로가
-아닙니다. Native temporal 값은 `Date`이므로 SQL Server의 100ns precision과
+선택하고 문자열 결과 계약을 선언하세요. 정확한 입력은
+`mssqlParameter.nvarchar(...)` character hint로 bind한 뒤
+`CAST(@nvarchar_parameter AS decimal(38, 18))`처럼 SQL에서 변환을 선택합니다.
+native typed DECIMAL/NUMERIC/MONEY 편의 경로는 JavaScript `number` 범위에
+묶이며 임의 정밀도를 보존하지 않습니다. Native temporal 값은 `Date`이므로 SQL Server의 100ns precision과
 전체 offset 의미를 보존하지 않습니다. 필요하면
 `CONVERT(varchar(...), datetime2_or_datetimeoffset, style)`로 text를
 작성하세요.
@@ -94,10 +95,10 @@ bind한 뒤 `CAST(@nvarchar_parameter AS decimal(38, 18))`처럼 SQL에서 변�
 아니라 support manifest가 지정합니다. 다른 SQL Server edition이나 runtime은
 별도의 프로필입니다.
 
-| SQL Server 값 | Tedious 표현 | 상태/주의 |
+| SQL Server 값 | Driver raw / SQLBraid canonical 표현 | 상태/주의 |
 | --- | --- | --- |
 | `tinyint` / `smallint` / `int` / `bigint` | string | 정확한 정수 전송은 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다. |
-| `decimal` / `numeric` / `money` / `smallmoney` | unsupported | Tedious native 값은 JavaScript `number`이므로 SQL에서 text `CAST`/`CONVERT`를 작성합니다. |
+| `decimal` / `numeric` / `money` / `smallmoney` | number → exact output unsupported | character bind와 authored text `CAST`/`CONVERT`를 사용하며 손실된 Number를 stringify하지 않습니다. |
 | `real` / `float` | JavaScript `number` | 근사 binary32/binary64 값이며 SQL Server는 NaN/Infinity를 지원한다고 주장하지 않습니다. |
 | `datetime2` / `datetimeoffset` | `Date` | Native 편의 프로필이며 100ns나 offset 정확도에는 ISO/text conversion을 작성합니다. |
 | `uniqueidentifier` | string | 필요하면 애플리케이션 schema로 검증합니다. |
