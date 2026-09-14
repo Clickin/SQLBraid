@@ -9,6 +9,16 @@ const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 function fail(code, detail) { throw Object.assign(new Error(`[${code}] ${detail}`), { code }); }
 async function json(path) { return JSON.parse(await readFile(path, "utf8")); }
 
+const numericCapabilities = new Map([
+  ["numeric.exact-integer", "exact-integer"],
+  ["numeric.exact-decimal", "exact-decimal"],
+  ["numeric.approximate-float", "approximate-binary"],
+  ["numeric.approximate-special", "approximate-binary"],
+]);
+const numericSemantics = new Set(["exact-integer", "exact-decimal", "approximate-binary"]);
+const numericRepresentations = new Set(["string", "number"]);
+const transportFidelity = new Set(["lossless", "guarded", "lossy", "unsupported"]);
+
 /** Validate shape with JSON Schema, then resolve every claimed package, gate and test. */
 export async function validateSupport({ root = scriptRoot } = {}) {
   const folder = join(root, "support");
@@ -65,7 +75,7 @@ export async function validateSupport({ root = scriptRoot } = {}) {
     const subpath = packageParts.length > 2 ? `./${packageParts.slice(2).join("/")}` : ".";
     if (!packages.get(packageName)?.exports?.[subpath]) fail("SUPPORT_TARGET_MISSING_PACKAGE", `${target.id}: no exported ${target.driver.package}.`);
     const command = /^pnpm run ([\w:-]+)$/u.exec(target.ci.command)?.[1];
-    const registeredCommand = command ? Object.hasOwn(workspace.scripts ?? {}, command) : /^pnpm exec vitest run /u.test(target.ci.command) && Object.hasOwn(workspace.devDependencies ?? {}, "vitest");
+    const registeredCommand = command ? Object.hasOwn(workspace.scripts ?? {}, command) : /^pnpm exec vitest run(?:\s|$)/u.test(target.ci.command) && Object.hasOwn(workspace.devDependencies ?? {}, "vitest");
     let workflow;
     try { workflow = await readFile(join(root, target.ci.workflow), "utf8"); } catch { fail("SUPPORT_TARGET_MISSING_CI", `${target.id}: workflow missing.`); }
     if (!registeredCommand || !workflow.includes(target.ci.command)) fail("SUPPORT_TARGET_MISSING_CI", `${target.id}: command is not registered in its workflow.`);
@@ -75,14 +85,46 @@ export async function validateSupport({ root = scriptRoot } = {}) {
     if (certified && !target.ci.releaseBlocking) fail("SUPPORT_TARGET_MISSING_CI", `${target.id}: certified target requires release-equivalent CI.`);
     if (certified && (target.evidence.status !== "verified" || !/^[a-f0-9]{40}$/u.test(target.evidence.commit ?? "") || !target.evidence.runs.some((r) => r.commit === target.evidence.commit && r.status === "passed" && /^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/\d+$/u.test(r.run ?? "") && r.workflow === target.ci.workflow))) fail("SUPPORT_TARGET_MISSING_EVIDENCE", `${target.id}: no verified exact-commit gate evidence.`);
     if (target.status === "conditional" && !conditions.has(target.conditionCode)) fail("SUPPORT_CAPABILITY_MISSING_CONDITION", `${target.id}: conditional target needs a catalog condition.`);
+    for (const [kind, contract] of Object.entries(target.numeric)) {
+      if (!numericSemantics.has(contract.semantics) || !numericRepresentations.has(contract.representation) || !transportFidelity.has(contract.fidelity)) {
+        fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: invalid numeric contract for ${kind}.`);
+      }
+      if (contract.semantics !== kind) fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: ${kind} declares ${contract.semantics} semantics.`);
+      const expectedRepresentation = contract.semantics === "approximate-binary" ? "number" : "string";
+      if (contract.representation !== expectedRepresentation) fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: ${kind} must use ${expectedRepresentation} representation.`);
+
+    }
+    const numericContracts = Object.values(target.numeric);
+    const numericProfiles = [...new Set(numericContracts.map((contract) => contract.profile).filter((profile) => profile !== undefined))];
+    if (numericProfiles.length === 1 && numericContracts.every((contract) => contract.profile !== undefined) && target.driver.profile !== numericProfiles[0]) {
+      fail("SUPPORT_NUMERIC_PROFILE", `${target.id}: driver profile ${target.driver.profile} disagrees with numeric profile ${numericProfiles[0]}.`);
+    }
     for (const [id, claim] of Object.entries(target.capabilities)) {
       if (!capabilities.has(id)) fail("SUPPORT_UNKNOWN_CAPABILITY", `${target.id}: ${id} is not cataloged.`);
       if (claim.status === "guarded" && !claim.conditionCode) fail("SUPPORT_CAPABILITY_MISSING_CONDITION", `${target.id}: ${id} needs a condition.`);
       if (claim.conditionCode && !conditions.has(claim.conditionCode)) fail("SUPPORT_UNKNOWN_CONDITION", `${target.id}: unknown ${claim.conditionCode}.`);
       if (claim.status !== "unsupported" && !claim.testIds.length) fail("SUPPORT_TARGET_MISSING_TEST", `${target.id}: ${id} has no tests.`);
-      for (const testId of claim.testIds) if (!Object.hasOwn(registry, testId)) fail("SUPPORT_UNKNOWN_TEST", `${target.id}: unknown ${testId}.`);
-      if (id === "numeric.exact-decimal" && claim.status !== "unsupported" && (claim.canonical !== "string" || claim.rawRepresentations?.includes("number"))) fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: exact decimals cannot use a Number carrier.`);
-      if (id === "numeric.exact-integer" && claim.status === "guaranteed" && claim.canonical !== "bigint") fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: guaranteed exact integers require bigint.`);
+      for (const testId of claim.testIds) {
+        if (!Object.hasOwn(registry, testId)) fail("SUPPORT_UNKNOWN_TEST", `${target.id}: unknown ${testId}.`);
+        if (claim.status === "unsupported" && (registry[testId].outcome ?? "success") === "success") {
+          fail("SUPPORT_UNSUPPORTED_SUCCESS", `${target.id}: unsupported ${id} is backed by success test ${testId}.`);
+        }
+      }
+      const kind = numericCapabilities.get(id);
+      if (kind) {
+        const contract = target.numeric[kind];
+        if (!contract || claim.semantics !== contract.semantics || claim.representation !== contract.representation || claim.fidelity !== contract.fidelity) {
+          fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: ${id} does not match its TypePolicy numeric contract.`);
+        }
+        if (claim.semantics !== kind) fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: ${id} declares ${claim.semantics} semantics.`);
+        const expectedRepresentation = kind === "approximate-binary" ? "number" : "string";
+        if (claim.representation !== expectedRepresentation) fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: ${id} must use ${expectedRepresentation} representation.`);
+        if (kind !== "approximate-binary" && claim.fidelity === "lossless" && claim.rawRepresentations?.some((value) => /(?:^|[\s/,(])number(?:$|[\s/),])/iu.test(value))) {
+          fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: lossless ${id} cannot advertise a Number carrier.`);
+        }
+        if (claim.fidelity === "unsupported" && claim.status !== "unsupported") fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: unsupported ${id} must use unsupported status.`);
+        if (claim.status === "unsupported" && claim.fidelity !== "unsupported") fail("SUPPORT_NUMERIC_FIDELITY", `${target.id}: unsupported ${id} must declare unsupported fidelity.`);
+      }
     }
   }
   return { targets: targets.map((t) => t.id), capabilities: [...capabilities], conditions: [...conditions], tests: Object.keys(registry) };

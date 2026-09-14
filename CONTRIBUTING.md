@@ -12,7 +12,8 @@ A pull request requesting a new **Official** target must include all of the foll
 - the exact database product, version, and edition;
 - the exact driver package and version, including the selected profile/options;
 - a `support/targets/<target>.json` manifest with honest capability statuses and conditions;
-- capability tests in `tests/db/<dialect>/capabilities.test.ts` with stable literal IDs in the form `<dialect>.<capability>`;
+- structured numeric contracts in the target manifest (`semantics`, canonical `representation`, and transport `fidelity`), plus explicit parsed/lossless JSON and native/lossless temporal profiles where applicable;
+- capability tests in `tests/db/<dialect>/capabilities.test.ts` with stable literal IDs in the form `<dialect>.<capability>`; tests exercise the target's native SQL transport and returned values, not SQL grammar that SQLBraid does not own;
 - the matching `support/test-registry.json` entries and English/Korean labels in `support/capabilities.json`;
 - CI configuration that runs the same capability suite on the declared target and records the workflow/command;
 - driver profile constraints and known exclusions;
@@ -20,7 +21,7 @@ A pull request requesting a new **Official** target must include all of the foll
 
 Adapter code alone is not enough for an Official support claim. If zero-cost reproducibility disappears, downgrade the target from Official to Compatible or Historical and keep the implementation separate from the certification claim.
 
-Do not add per-database SQL grammar feature IDs to the support taxonomy. SQLBraid does not certify a DBMS grammar it does not own. Use the common SQL transparency, generated-structure, result, numeric, data-representation, DML-returning, execution, routine, and metadata capability families.
+Do not add per-database SQL grammar feature IDs to the support taxonomy. SQLBraid does not certify a DBMS grammar it does not own. Use the common SQL transparency, generated-structure, result, numeric, data-representation, DML-returning, execution, routine, and metadata capability families. Keep native `MERGE` and native UPSERT/REPLACE/ON CONFLICT claims separate.
 
 ## Changes to support data
 
@@ -30,7 +31,7 @@ Run the support validator from the repository root before requesting review:
 node scripts/validate-support.mjs
 ```
 
-Every target must have exact versions, a package/adapter name, bilingual labels, and machine-linked evidence. Conditional claims require a catalogued condition code. Keep evidence status `pending` until the matching final CI run exists; never infer an Official claim from a local run, a different revision, or a compatible driver.
+Every target must have exact versions, a package/adapter name, bilingual labels, structured numeric semantics/representation/fidelity, container classifications, and machine-linked evidence. Conditional claims require a catalogued condition code. Keep evidence status `pending` until the matching final CI run exists; never infer an Official claim from a local run, a different revision, or a compatible driver.
 
 ## Pull request checklist
 

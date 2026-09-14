@@ -26,6 +26,22 @@ const rows = await db.all(events);
 await db.all(events, { schema: ExtraSchema });
 ```
 
+정확한 데이터베이스 숫자는 string으로, 근사 IEEE 값은 number로 도착합니다.
+드라이버 프로필을 바꾸지 말고 schema에서 애플리케이션 의미를 선택하세요.
+
+```ts
+const Account = v.object({
+  id: v.pipe(v.string(), v.transform(BigInt)),
+  amount: v.string(), // 또는 v.transform(value => new Decimal(value))
+});
+```
+
+`Decimal`/Money 객체는 애플리케이션 선택이며 SQLBraid 의존성이 아닙니다.
+이미 parsed JSON number나 native temporal `Date`에서 잃은 정밀도를 schema가
+복구할 수는 없습니다. JSON 중첩 숫자에는 lossless-text 프로필과 애플리케이션
+선택 parser를 사용하고, fractional/offset temporal 정확도에는 테스트된 text
+프로필이나 사용자가 작성한 SQL 변환을 사용하세요.
+
 루틴 계약은 각 채널을 독립적으로 매핑합니다. `sql.call({ output,
 resultSets: [UserSchema, PaymentSchema] as const, returnValue })`는 scalar
 객체에 output schema를, 각 tuple schema를 대응하는 result set의 행에,
@@ -45,4 +61,8 @@ driver row -> dialect TypePolicy normalization -> plain row -> query schema -> e
 
 `DatabaseResultValidationError`는 `BRAID_RESULT_VALIDATION` 코드를 사용하고 쿼리 또는 실행 단계를 행 인덱스와 함께 보고하며 원시 행이나 바인드를 덤프하지 않습니다. 매핑은 한 행을 한 행으로 변환합니다. SQLBraid는 관계를 hydrate하거나 identity map을 유지하거나 객체 그래프를 조립하지 않습니다.
 
-입력 측은 0.1.0에서 의도적으로 더 작습니다. 일반 값 보간은 계속 드라이버 바인드 값이며, 아직 범용 애플리케이션 입력 codec 프레임워크는 없습니다. 드라이버별 JSON, temporal, binary 규칙은 계속 드라이버의 책임입니다.
+입력 측은 0.1.0에서 의도적으로 더 작습니다. 일반 값 보간은 계속 드라이버
+바인드 값이며, 아직 범용 애플리케이션 입력 codec 프레임워크는 없습니다.
+정확한 numeric bind fidelity는 별도 driver capability이고, 일반 `undefined`
+IN 값은 acquisition 전에 실패하며 `null`은 SQL `NULL`입니다. 드라이버별
+JSON, temporal, binary 규칙은 계속 드라이버의 책임입니다.

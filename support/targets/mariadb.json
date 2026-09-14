@@ -1,11 +1,11 @@
 {
   "id": "mariadb-connector-node-11-8-9",
-  "status": "official",
+  "status": "compatible",
   "database": { "product": "mariadb", "version": "11.8.9", "edition": "community" },
   "driver": {
     "id": "mariadb",
     "version": "3.5.4",
-    "profile": "connector-node-exact",
+    "profile": "connector-node-pv17",
     "package": "@sqlbraid/mariadb",
     "transport": "text-positional (?)",
     "stream": "MariaDB Connector stream",
@@ -21,14 +21,34 @@
     "image": "mariadb:11.8.9",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm run test:db:mariadb", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": { "command": "pnpm exec vitest run", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "numeric": {
+    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "guarded", "profile": "connector-node-pv17" },
+    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "guarded", "profile": "connector-node-pv17" },
+    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless" }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
   "capabilities": {
     "sql.native-transparency": { "status": "guaranteed", "testIds": ["mariadb.sql.native-transparency"] },
     "sql.generated-structure": { "status": "guaranteed", "testIds": ["mariadb.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "guaranteed", "canonical": "bigint", "rawRepresentations": ["bigint"], "testIds": ["mariadb.numeric.exact-integer"] },
-    "numeric.exact-decimal": { "status": "guaranteed", "canonical": "string", "rawRepresentations": ["string"], "testIds": ["mariadb.numeric.exact-decimal"] },
-    "data.json-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mariadb.data.json-text"] },
-    "data.temporal": { "status": "guaranteed", "rawRepresentations": ["Date"], "testIds": ["mariadb.data.temporal"] },
+    "numeric.exact-integer": { "status": "guarded", "conditionCode": "mariadb.exact-numeric-profile", "semantics": "exact-integer", "representation": "string", "fidelity": "guarded", "rawRepresentations": ["bigint", "string"], "testIds": ["mariadb.numeric.exact-integer"] },
+    "numeric.exact-decimal": { "status": "guarded", "conditionCode": "mariadb.exact-numeric-profile", "semantics": "exact-decimal", "representation": "string", "fidelity": "guarded", "rawRepresentations": ["string"], "testIds": ["mariadb.numeric.exact-decimal"] },
+    "numeric.approximate-float": { "status": "guaranteed", "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless", "rawRepresentations": ["number"], "testIds": ["mariadb.numeric.approximate-ieee"] },
+    "numeric.bind-exact": { "status": "guarded", "conditionCode": "mariadb.exact-numeric-profile", "testIds": ["mariadb.numeric.bind-exact"] },
+    "numeric.aggregate": { "status": "guarded", "conditionCode": "mariadb.exact-numeric-profile", "testIds": ["mariadb.numeric.aggregate"] },
+    "data.json-lossless-text": { "status": "guarded", "conditionCode": "mariadb.auto-json-map-false", "rawRepresentations": ["string"], "testIds": ["mariadb.data.json-lossless-text"] },
+    "data.json-parsed": { "status": "guarded", "conditionCode": "mariadb.auto-json-map-true", "rawRepresentations": ["object", "array", "null"], "testIds": ["mariadb.data.json-parsed"] },
+    "data.temporal-lossless": { "status": "guarded", "conditionCode": "mariadb.date-strings-true", "rawRepresentations": ["string"], "testIds": ["mariadb.data.temporal-lossless"] },
+    "data.temporal-native": { "status": "guarded", "conditionCode": "mariadb.date-strings-false", "rawRepresentations": ["Date"], "testIds": ["mariadb.data.temporal-native"] },
     "data.binary": { "status": "guaranteed", "rawRepresentations": ["Buffer", "Uint8Array"], "testIds": ["mariadb.data.binary"] },
     "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mariadb.data.uuid"] },
     "result.rows": { "status": "guaranteed", "testIds": ["mariadb.result.rows"] },
@@ -52,13 +72,7 @@
     "dml.insert-returning": { "status": "guaranteed", "testIds": ["mariadb.dml.insert-returning"] },
     "dml.update-returning": { "status": "unsupported", "testIds": [] },
     "dml.delete-returning": { "status": "guaranteed", "testIds": ["mariadb.dml.delete-returning"] },
-    "dml.merge-returning": { "status": "guaranteed", "testIds": ["mariadb.dml.merge-returning"] }
+    "dml.upsert-returning": { "status": "guaranteed", "testIds": ["mariadb.dml.upsert-returning"] }
   },
-  "evidence": {
-    "status": "verified",
-    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
-    "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Release dry-run: Connector/Node.js exact profile and linked native capability tests." }
-    ]
-  }
+  "evidence": { "status": "pending", "runs": [] }
 }

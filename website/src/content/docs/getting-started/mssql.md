@@ -17,7 +17,7 @@ import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
 import { mssqlParameter, sql } from "@sqlbraid/mssql";
 
 interface UserRow {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -69,7 +69,19 @@ acquisition. Tedious owns effective reuse; failures in this work are
 - The adapter preserves multiple recordsets instead of flattening them into fabricated single-row results.
 - `CURSOR VARYING OUTPUT` is not an application cursor channel and is rejected with `BRAID_CALL_CURSOR_UNSUPPORTED`. Batches that consume a local cursor and emit `SELECT` rows return those rows as ordinary result sets.
 
-Tedious returns `decimal`/`numeric` as JavaScript numbers; this default policy does not promise arbitrary-precision decimal results. Explicit decimal-text inputs exceeding 15 significant digits are rejected with `BRAID_BIND_DECIMAL_EXACTNESS`. For exact decimal text, select an explicit SQL string conversion and declare a string result contract. Tedious returns `BIGINT` as text; SQLBraid normalizes it to `bigint`. Date/time values use `Date`, which does not preserve the original offset or sub-millisecond precision.
+Tedious exposes `decimal`/`numeric`, `money`, and `smallmoney` through
+JavaScript `number`; SQLBraid therefore fails closed with
+`BRAID_RESULT_EXACTNESS` instead of stringifying a lossy exact value. Tedious
+`BIGINT` text is normalized to the canonical exact string. For exact decimal or
+money results, author a text expression such as
+`CONVERT(varchar(100), exact_column)` with an appropriate length and
+declare a string result contract. For exact input, bind character text and let
+authored SQL choose conversion, for example
+`CAST(@nvarchar_parameter AS decimal(38, 18))`; typed Tedious DECIMAL input is
+not a lossless arbitrary-precision path. Native temporal values use `Date`, which
+does not preserve SQL Server's 100ns precision or complete offset semantics;
+author `CONVERT(varchar(...), datetime2_or_datetimeoffset, style)` when exact
+temporal text matters.
 
 See [runtime and driver support](/SQLBraid/reference/support/) for the evidence labels and current matrix.
 
@@ -85,15 +97,20 @@ separate profile.
 
 | SQL Server value | Tedious representation | Status/caveat |
 | --- | --- | --- |
-| `bigint` | string | Preserve text or use `decodeExactInteger`; do not coerce blindly. |
-| `decimal` / `numeric` | JavaScript `number` | **Exact decimal unsupported** in this profile; convert to text in authored SQL when needed. |
-| `datetime2` / `datetimeoffset` | `Date` | Offset name and sub-millisecond detail are not preserved. |
+| `tinyint` / `smallint` / `int` / `bigint` | string | Exact integer transport is canonical text; `decodeExactInteger` is an application opt-in. |
+| `decimal` / `numeric` / `money` / `smallmoney` | unsupported | Tedious native values are JavaScript `number`; use an authored text `CAST`/`CONVERT` expression. |
+| `real` / `float` | JavaScript `number` | Approximate binary32/binary64 values; SQL Server does not claim NaN/Infinity support. |
+| `datetime2` / `datetimeoffset` | `Date` | Native convenience profile; use authored ISO/text conversion for 100ns or offset fidelity. |
 | `uniqueidentifier` | string | Validate with the application schema if required. |
 | `varbinary` | `Buffer` | Keep bytes or explicitly encode. |
-| JSON | text | Parse and validate with Standard Schema; SQL Server JSON functions do not change this boundary. |
+| JSON | text | SQL Server JSON is character data; SQLBraid does not parse it, so text can preserve nested numeric lexemes. |
 
 The binding transport is a typed Tedious request with deterministic `@p1`,
 `@p2`, … names and `TYPES.*` metadata. Native `OUTPUT` rows are materialized
 through `sql.rows`; output/return routine channels use explicit metadata.
-Prepared-loop is the portable bulk strategy. Native SQL passes through
-transparently, while SQLBraid does not claim to parse all T-SQL grammar.
+Prepared-loop is the portable bulk strategy. `affectedRows` and procedure status
+remain operational counts with safe-range checks; database-generated IDs use
+exact text where the driver exposes it. Ordinary `undefined` IN values fail
+before acquisition with `BRAID_BIND_VALUE_UNSUPPORTED`; `null` is SQL `NULL`.
+Native SQL passes through transparently, while SQLBraid does not claim to parse
+all T-SQL grammar.

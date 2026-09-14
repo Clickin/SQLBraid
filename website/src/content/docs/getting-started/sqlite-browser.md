@@ -22,20 +22,16 @@ Create one direct database from the OO1-style object in the current realm:
 import { sql } from "@sqlbraid/sqlite";
 import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
 
-const db = createSqliteWasmDatabase(wasmDatabase);
-const rows = await db.all(sql.rows<{ id: number }>`SELECT id FROM account`);
+const db = createSqliteWasmDatabase(wasmDatabase, { sqlite3 });
+const rows = await db.all(sql.rows<{ id: string }>`SELECT id FROM account`);
 ```
 
-For uniform, exact `bigint` INTEGER output, pass the initialized official module:
-
-```ts
-const db = createSqliteWasmDatabase(wasmDatabase, { integerMode: "bigint", sqlite3 });
-```
-
-This uses native column types and `sqlite3_column_int64`, not a numeric-value
-heuristic: integral REAL values remain `number`. Number mode rejects INTEGER
-values outside JavaScript's safe range. Bigint mode without `sqlite3` rejects
-with `BRAID_INTEGER_MODE_UNSUPPORTED`.
+INTEGER storage is exposed as a canonical decimal string. The WASM adapter uses
+native column types and `sqlite3_column_int64`, not a numeric-value heuristic;
+integral REAL values remain `number`. Native bigint is an internal transport
+detail and is not a public integer mode. D1 is a separate guarded profile:
+safe integral JavaScript Numbers become strings, while values outside the safe
+range are unsupported rather than rounded.
 
 The adapter supports prepare/bind/step/finalize, row streaming by pull,
 callback transactions, and command-only bulk with one prepared statement reset
@@ -72,11 +68,11 @@ The native D1 batch may have stronger transaction behavior than root bulk, but
 that is not the portable SQLBraid contract. Root bulk is not implicitly
 transactional and has no portable auto-chunking promise.
 
-The recorded PV16 revision passed both gates. Chromium 153.0.8010.12 with
-SQLite WASM 3.53.4 is certified under the bigint/CAPI profile. Local D1 remains
-Compatible because its managed SQLite version is unreported. Neither gate
-claims OPFS persistence, SharedArrayBuffer, remote production support or npm
-publication.
+Historical PV16 Chromium/D1 evidence is retained in the release records. PV17
+requires a new exact-SHA gate for the changed representation contract. Local D1
+remains Compatible because its managed SQLite version is unreported. No browser
+gate claims OPFS persistence, SharedArrayBuffer, remote production support or
+npm publication.
 
 ## Browser and Worker representation profiles
 
@@ -85,7 +81,7 @@ share an evidence label.
 
 | Driver | Raw/profile boundary | Stream/bulk/transaction |
 | --- | --- | --- |
-| SQLite WASM OO1 | SQLite dynamic values; INTEGER mode is driver-configured | pull iteration, prepared-loop bulk, callback transaction |
+| SQLite WASM OO1 | SQLite dynamic values; INTEGER storage is canonical string | pull iteration, prepared-loop bulk, callback transaction |
 | Cloudflare D1 binding | materialized rows and ordered `?1`, `?2`, … binds | native `batch()` bulk; streaming and callback transaction are unsupported |
 
 JSON1 is text unless the selected WASM build/parser proves another

@@ -1,6 +1,6 @@
 {
   "id": "mysql-mysql2-node-8-4-2",
-  "status": "official",
+  "status": "compatible",
   "database": { "product": "mysql", "version": "8.4.2", "edition": "community" },
   "driver": {
     "id": "mysql2",
@@ -21,14 +21,32 @@
     "image": "mysql:8.4.2",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm run test:db:mysql", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": { "command": "pnpm exec vitest run", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "numeric": {
+    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "guarded", "profile": "mysql2-exact" },
+    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless", "profile": "mysql2-exact" },
+    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless" }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
   "capabilities": {
     "sql.native-transparency": { "status": "guaranteed", "testIds": ["mysql.sql.native-transparency"] },
     "sql.generated-structure": { "status": "guaranteed", "testIds": ["mysql.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "guarded", "conditionCode": "mysql2.exact-numeric-profile", "canonical": "bigint", "rawRepresentations": ["string"], "testIds": ["mysql.numeric.exact-integer"] },
-    "numeric.exact-decimal": { "status": "guaranteed", "canonical": "string", "rawRepresentations": ["string"], "testIds": ["mysql.numeric.exact-decimal"] },
-    "data.json-native": { "status": "guaranteed", "rawRepresentations": ["object"], "testIds": ["mysql.data.json-native"] },
-    "data.temporal": { "status": "guaranteed", "rawRepresentations": ["Date"], "testIds": ["mysql.data.temporal"] },
+    "numeric.exact-integer": { "status": "guarded", "conditionCode": "mysql2.exact-numeric-profile", "semantics": "exact-integer", "representation": "string", "fidelity": "guarded", "rawRepresentations": ["string"], "testIds": ["mysql.numeric.exact-integer"] },
+    "numeric.exact-decimal": { "status": "guaranteed", "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["mysql.numeric.exact-decimal"] },
+    "numeric.approximate-float": { "status": "guaranteed", "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless", "rawRepresentations": ["number"], "testIds": ["mysql.numeric.approximate-float"] },
+    "numeric.bind-exact": { "status": "guarded", "conditionCode": "mysql2.exact-numeric-profile", "testIds": ["mysql.numeric.exact-bind"] },
+    "data.json-lossless-text": { "status": "guaranteed", "conditionCode": "mysql2.json-strings", "rawRepresentations": ["string"], "testIds": ["mysql.data.json-lossless-text"] },
+    "data.temporal-native": { "status": "guarded", "conditionCode": "mysql2.date-strings", "rawRepresentations": ["Date"], "testIds": ["mysql.data.temporal-native"] },
+    "data.temporal-lossless": { "status": "guarded", "conditionCode": "mysql2.date-strings", "rawRepresentations": ["string"], "testIds": ["mysql.data.temporal-native"] },
     "data.binary": { "status": "guaranteed", "rawRepresentations": ["Buffer", "Uint8Array"], "testIds": ["mysql.data.binary"] },
     "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mysql.data.uuid"] },
     "result.rows": { "status": "guaranteed", "testIds": ["mysql.result.rows"] },
@@ -51,14 +69,7 @@
     "metadata.types": { "status": "guaranteed", "testIds": ["mysql.metadata.types"] },
     "dml.insert-returning": { "status": "unsupported", "testIds": [] },
     "dml.update-returning": { "status": "unsupported", "testIds": [] },
-    "dml.delete-returning": { "status": "unsupported", "testIds": [] },
-    "dml.merge-returning": { "status": "unsupported", "testIds": [] }
+    "dml.delete-returning": { "status": "unsupported", "testIds": [] }
   },
-  "evidence": {
-    "status": "verified",
-    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
-    "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Release dry-run: mysql2-exact profile and linked native capability tests." }
-    ]
-  }
+  "evidence": { "status": "pending", "runs": [] }
 }

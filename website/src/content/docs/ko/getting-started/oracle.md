@@ -67,15 +67,25 @@ Thin 바인딩 어댑터는 논리 문장을 text-positional `:1`, `:2`, … 바
 
 드라이버가 안전한 Oracle 타입을 추론할 수 없는 `null`에는 명시적인 힌트를 사용하세요. 타입이 지정되지 않은 null을 조용히 `VARCHAR2`로 바꾸지 않습니다.
 
-기본 정책은 정밀도를 보존하기 위해 `NUMBER` 결과를 문자열로 가져옵니다. 명시적인 `NUMBER` 입력은 `number` 또는 `bigint`를 받으며, 소수 문자열은 손실 변환하지 않고 거부합니다. SQL에서 소수 문자열 입력이 필요하면 일반 문자열 바인드와 명시적인 SQL 변환을 사용하세요.
+기본 정책은 정확한 `NUMBER` 계열(Oracle `FLOAT`와 ANSI numeric 별칭 포함)
+결과를 정밀도 보존을 위해 string으로 가져옵니다. `NUMBER` decimal-string
+입력은 인증된 exact bind 경로가 아닙니다. typed `number`/`bigint` 입력은
+JavaScript 표현 범위에 묶이고, 힌트 없는 string은
+`NLS_NUMERIC_CHARACTERS`에 의존할 수 있습니다. session/profile이 이를
+증명하지 않는 한 unsupported로 유지하고, 필요하면 일반 character bind와
+명시적이고 통제된 SQL 변환을 사용하세요.
 
 Thin 어댑터는 precision/scale 속성과 IN 길이 제약을 거부합니다.
 VARCHAR2/NVARCHAR2 OUT/INOUT 길이는 드라이버의 `maxSize`를 지정하며
 다른 길이 속성은 거부합니다. DB 제약은 SQL이나 스키마에 선언하세요.
 구체화된 CLOB/NCLOB는 문자열, BLOB/RAW는 버퍼입니다. 루틴 LOB output은
 `getData()`로 읽고 lease 반환 전에 destroy 완료를 기다립니다. 읽기 실패 시
-아직 방문하지 않은 sibling 리소스도 정리합니다. 시간 값은 `Date`를 사용하므로
-원래 시간대 이름이나 밀리초 미만 정밀도를 보존하지 않습니다.
+아직 방문하지 않은 sibling 리소스도 정리합니다. 시간 값은 `Date`를 사용하는
+guarded 편의 프로필이며 원래 timezone 이름이나 sub-millisecond precision을
+보존하지 않습니다. lossless text 경로에는 사용자가 작성한 `TO_CHAR`/format
+표현식을 사용하세요. Native JSON은 parsed 편의 값이며 직렬화된 text가
+필요하면 테스트한 fetch handler 또는 `JSON_SERIALIZE(... RETURNING CLOB)`를
+사용합니다.
 
 전체 `sql.out`/`sql.inOut` 및 이질적 result-set 계약은
 [루틴 호출](/SQLBraid/concepts/routines/)을 참고하세요.
@@ -89,17 +99,21 @@ server line은 일치하는 manifest 증거가 생길 때까지 별도의 미테
 
 | Oracle 값 | Thin 프로필 표현 | 비고 |
 | --- | --- | --- |
-| `NUMBER` | string | 정확한 10진/정수 텍스트이며 필요에 따라 `decodeExactDecimal` 또는 `decodeExactInteger`를 사용합니다. |
-| `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | 정의상 근사값이며 정확한 10진수가 아닙니다. |
+| `NUMBER` / `FLOAT` / ANSI numeric 별칭 | string | 정확한 text이며 `decodeExactDecimal` 또는 `decodeExactInteger`는 애플리케이션 변환입니다. |
+| `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | 근사 binary32/binary64 값이며 특수 값 지원은 프로필 테스트에 따릅니다. |
 | CLOB / NCLOB | string | Routine LOB는 lease 반환 전에 읽고 destroy합니다. |
 | BLOB / RAW | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
-| DATE / TIMESTAMP variant | `Date` | 원본 timezone 이름과 모든 sub-millisecond 정보는 보존되지 않습니다. |
+| DATE / TIMESTAMP variant | `Date` | Guarded 편의 프로필이며 fractional/zone 정확도에는 `TO_CHAR` text를 작성합니다. |
+| Native JSON | parsed object | 편의 기능일 뿐 중첩 숫자 정확도를 보장하지 않습니다. |
 
 바인드 전송은 node-oracledb bind descriptor와 text-positional
 `:1`, `:2`, …입니다. OUT ordinal은 중간 IN 값과 무관하게 SQL bind 순서를
 따릅니다. REF CURSOR output은 순서가 있는 materialized `resultSets`가 되고
 implicit result는 추가 set이 됩니다. Native `RETURNING ... INTO`는
 `sql.out()`과 materialized row API를 사용합니다. Manifest가 증명한 경우
-`executeMany()`가 native bulk 전략입니다. Native Oracle SQL은 투명하게
-전달되지만 SQLBraid가 Oracle grammar를 제공하거나 procedure metadata를
-추론하지는 않습니다.
+`executeMany()`가 native bulk 전략입니다. `rowsAffected`는 safe-range 검사를
+하는 운영 count이고 `RETURNING INTO` 값은 동일한 exact string 계약을
+따릅니다. 일반 `undefined` IN 값은 acquisition 전에
+`BRAID_BIND_VALUE_UNSUPPORTED`로 실패하며 `null`은 SQL `NULL`입니다. Native
+Oracle SQL은 투명하게 전달되지만 SQLBraid가 Oracle grammar를 제공하거나
+procedure metadata를 추론하지는 않습니다.

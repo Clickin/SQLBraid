@@ -24,7 +24,7 @@ const connection = await mariadb.createConnection({
   database: "app",
 });
 const db = createMariaDbDatabase(connection);
-const users = await db.all(sql.rows<{ id: number; name: string }>`
+const users = await db.all(sql.rows<{ id: string; name: string }>`
   SELECT id, name FROM users WHERE id = ${1}
 `);
 ```
@@ -54,10 +54,11 @@ support manifest에 기록하며 패키지 설치 여부에서 추론하지 않�
 
 | MariaDB 값 | Connector 표현 | 주의 |
 | --- | --- | --- |
-| BIGINT | `bigint` | 정확한 정수를 유지하며 JSON 직렬화 전에 인코딩을 명시적으로 선택합니다. |
-| DECIMAL | `string` | precision과 scale을 유지하며 애플리케이션 10진 라이브러리는 선택 사항입니다. |
-| JSON 별칭 | 기본 `autoJsonMap: true`에서는 객체, 명시적 SQL `CAST(... AS CHAR)`에서는 텍스트 | parser 옵션을 기록하고 Standard Schema로 검증합니다. |
-| DATE/TIMESTAMP | driver temporal 값 | `Date`는 원본 offset/precision 세부 정보를 잃을 수 있습니다. |
+| TINYINT/SMALLINT/INT/BIGINT | `string` | 정확한 정수 결과는 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다. |
+| DECIMAL/NUMERIC | `string` | 정확한 precision과 scale을 text로 유지하며 필요하면 애플리케이션 decimal transform을 사용합니다. |
+| FLOAT/DOUBLE | `number` | 근사 이진 값은 JavaScript number로 유지합니다. |
+| JSON 별칭 | `autoJsonMap: false`에서 text | `autoJsonMap: true` parsed는 편의 프로필이며 중첩 숫자 정확도를 보장하지 않습니다. |
+| DATE/TIME/DATETIME | `dateStrings: true`에서 text | native `Date`는 별도 편의 프로필이며 fractional/zone 정보를 잃을 수 있습니다. |
 | BLOB | bytes/Buffer | byte로 유지하거나 명시적으로 encode합니다. |
 
 어댑터는 value-only 실행, native `queryStream()`, 동종 bulk를 위한
@@ -71,3 +72,12 @@ OUT, INOUT, cursor descriptor는 지원하지 않습니다. `db.prepare()`는 qu
 Standard Schema 매핑을 보존합니다. 선택적 `/inspector` subpath는 오프라인
 `generateModels()`를 위한 identity, generated/write 플래그, 숫자 precision/scale을
 기록하며 루틴 signature는 불완전한 positive evidence로 유지합니다.
+
+문서화된 exact 프로필은 `decimalAsNumber: false`와
+`insertIdAsNumber: false`를 유지합니다. 정확한 정수/10진수 string은 execute,
+prepared 및 증명된 bulk 전략에서 왕복 정확도를 위한 bind 경로입니다.
+`affectedRows`는 safe-range 검사를 하는 운영 count입니다. 일반 IN 값의
+`undefined`는 acquisition 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패하고
+`null`은 SQL `NULL`입니다. Connector 3.5.4의 public typings에는
+`jsonStrings` 옵션이 없으므로 text에는 `autoJsonMap: false`를 사용하며
+mysql2 프로필이라고 설명하지 않습니다.

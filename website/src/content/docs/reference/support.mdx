@@ -1,26 +1,29 @@
 ---
 title: Runtime and driver support
-description: Exact tested profiles, capability boundaries, and revision-specific PV16 evidence.
+description: Exact tested profiles, capability boundaries, and revision-specific evidence.
 ---
 
 import SupportMatrix from "../../../components/SupportMatrix.astro";
 
-PV16 implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed
-the three workflows linked below. Certification applies to the exact profiles
-and capability conditions in the matrix, not every version of a database or
-driver. CI success is not package publication.
+PV17 changes the raw value contract: exact database numerics are strings,
+IEEE-754 approximate values are numbers, and JSON/temporal text profiles are
+distinct from parsed/native convenience. The migration starts at
+`dccb69763e9e4a070280cf580d8f7b76368ec3d5`; final Runtime, Docs and Release
+dry-run gates are pending. Certification applies only to exact profiles and
+capability conditions recorded after those gates, not every database or driver
+version. CI success is not package publication.
 
 ## Evidence labels
 
 - **Official** — an exact profile has zero-cost reproduction and release-blocking real-engine evidence.
 - **Conditional** — the evidence applies under the named condition.
 - **Pending** — a candidate has no recorded successful gate for the stated revision.
-- **Historical** — an exact revision or old workflow exercised a combination; it does not prove the current PV16 tree.
+- **Historical** — an exact revision or old workflow exercised a combination; it does not prove the current PV17 tree.
 - **Compatible** — no exact certified target; broader host or local-binding checks may still pass.
 - **Custom** — a user-provided `QueryExecutor` or `ConnectionProvider`.
 - **Unsupported** — the required SQLBraid capability is intentionally absent.
 
-## PV16 matrix
+## Current matrix
 
 <SupportMatrix />
 
@@ -31,8 +34,18 @@ verified taxonomy is recorded in
 [`support/`](https://github.com/Clickin/SQLBraid/tree/main/support);
 the runtime does not read these files. The interactive matrix is the canonical
 rendering of the same machine-readable targets, capability conditions and test
-IDs enforced by CI. Eight exact profiles are certified. D1 remains Compatible:
+IDs enforced by CI. PV17 profile cells remain Pending until the changed
+representation contract has a matching exact-SHA gate. D1 remains Compatible:
 its local workerd binding passes, but the managed SQLite version is unreported.
+
+Numeric capability cells distinguish exact semantics from transport:
+`numeric.exact-integer` and `numeric.exact-decimal` expose strings only when
+transport is lossless/guarded; `numeric.approximate-float` exposes binary32 or
+binary64 as `number`; `numeric.bind-exact` is a separate input claim.
+`data.json-lossless-text` and `data.json-parsed` must not be conflated, and
+temporal native `Date` is not a lossless claim. MERGE returned rows use
+`dml.merge-returning`; UPSERT/REPLACE/ON CONFLICT/ON DUPLICATE KEY returned rows
+use `dml.upsert-returning`.
 
 PV16 supports materialized DML-returning through `db.execute`, `db.all`,
 `db.one`, and `db.maybeOne` with `sql.rows`. It does not make
@@ -71,18 +84,18 @@ carrier discriminator; SQLite routine calls remain unsupported; SQL Server
 
 ## Release evidence provenance
 
-All three runs below passed at implementation revision
-`2890ef65d15ac96a7e3471911b381340aa30579a`:
+PV17 has no final workflow run IDs yet. The historical PV16 links below are
+retained for provenance and do not certify the changed contract:
 
 - [Runtime portability: 34818111424](https://github.com/Clickin/SQLBraid/actions/runs/34818111424) — Node 22.18.0 release gates and packed Bun 1.3.14 / Deno 2.9.3 host paths.
 - [Documentation site: 34818111252](https://github.com/Clickin/SQLBraid/actions/runs/34818111252) — build and links; deployment skipped.
 - [Release dry-run: 34818113561](https://github.com/Clickin/SQLBraid/actions/runs/34818113561) — real-engine gates, immutable packages/VSIX and npm dry-run; actual publication skipped.
 
-Evidence records name the tested implementation revision. Later revisions need
-their own gates; these links do not certify an arbitrary checkout. Node 24.21.0
-has full-suite/finance CI evidence but is not a separate certified target.
-Oracle Free 23.9 does not certify Oracle 19c or Thick mode. RC publication still
-requires user acceptance and explicit release authorization.
+Evidence records must name the tested implementation revision. Later revisions
+need their own gates; historical links do not certify an arbitrary checkout.
+Node 24.21.0 has historical full-suite/finance evidence but is not a separate
+certified target. Oracle Free 23.9 does not certify Oracle 19c or Thick mode. RC
+publication still requires user acceptance and explicit release authorization.
 
 ## Historical evidence
 

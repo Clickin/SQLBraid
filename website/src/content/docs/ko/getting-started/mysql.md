@@ -24,7 +24,7 @@ const connection = await mysql.createConnection(
 const db = createMysql2Database(connection);
 
 try {
-  const rows = await db.all(sql.rows<{ id: number; name: string }>`
+  const rows = await db.all(sql.rows<{ id: string; name: string }>`
     SELECT id, name FROM users ORDER BY id
   `);
   console.log(rows);
@@ -46,7 +46,7 @@ const pool = mysql.createPool(process.env.DATABASE_URL ?? "mysql://root:password
 const db = createMysql2PoolDatabase(pool);
 const userId = 1;
 try {
-  const user = await db.maybeOne(sql.rows<{ id: number; name: string }>`
+  const user = await db.maybeOne(sql.rows<{ id: string; name: string }>`
     SELECT id, name FROM users WHERE id = ${userId}
   `);
   console.log(user);
@@ -99,17 +99,25 @@ Node 22.18.0을 인증합니다. parser나 표현 옵션을 변경하면 해당 
 | `bigNumberStrings: true` | Official 프로필 필수 | 큰 숫자를 문자열로 반환해 애플리케이션이 정확하게 처리합니다. |
 | `decimalNumbers: false` | Official 프로필 필수 | `DECIMAL`을 JavaScript `number`로 변환하지 않습니다. `true`는 lossy/conditional입니다. |
 | `rowsAsArray: false` | Official 프로필 필수 | SQLBraid normalizer와 schema가 기대하는 객체 행을 유지합니다. |
-| `jsonStrings: false` | Conditional | 파싱된 native JSON을 기대합니다. `true`는 별도의 텍스트 schema/parser 프로필입니다. |
-| `dateStrings: false` | Conditional | `Date` 값을 기대합니다. `true`는 별도의 텍스트 temporal 프로필입니다. |
+| `jsonStrings: true` | Lossless-text 프로필 | `JSON.parse` 없이 JSON text를 반환하며 parsed JSON은 별도 편의 프로필입니다. |
+| `dateStrings: true` | Lossless-text 프로필 | fractional precision이 보이는 temporal text를 반환하며 `Date`는 별도 편의 프로필입니다. |
 | `typeCast` (기본값) | Official 프로필 필수 | custom 함수는 raw 표현을 바꾸므로 별도 테스트 전까지 conditional입니다. |
 
-정확한 테스트 조합에는 mysql2 버전, MySQL/MariaDB 서버, Node 버전 및 위
-옵션 전체를 기록해야 합니다. SQLBraid는 custom `typeCast` 함수의 출력을
-검사하거나 추론하지 않습니다. 정확한 프로필에서 `DECIMAL`은 문자열이며
-`decodeExactDecimal` 또는 애플리케이션이 선택한 10진 라이브러리를 사용하세요.
-드라이버의 `BIGINT` text는 `bigint`로 정규화하며 `number`로 강제하지 않습니다. Native
-MySQL SQL은 투명하게 전달되지만, 이것은 SQLBraid가 모든 MySQL grammar를
-파싱한다는 뜻이 아닙니다.
+정확한 테스트 조합에는 mysql2 버전, MySQL server, Node 버전 및 위 옵션
+전체를 기록해야 합니다. SQLBraid는 custom `typeCast` 함수의 출력을
+검사하거나 추론하지 않습니다. exact 프로필의 정수와 `DECIMAL` 결과는
+canonical string이며 애플리케이션 경계에서 `decodeExactInteger`,
+`decodeExactDecimal` 또는 선택한 숫자 transform을 사용합니다. `FLOAT`와
+`DOUBLE`은 JavaScript `number` (binary32/binary64)로 유지합니다. driver가
+제공하는 `insertId`는 exact string이며 `affectedRows`는 safe-range 검사를
+하는 운영 count입니다. Native MySQL SQL은 투명하게 전달되지만 모든
+MySQL grammar를 파싱한다는 뜻은 아닙니다.
+
+정수/10진수 string은 prepared 및 bulk 실행에서 왕복 정확도를 위한
+문서화된 bind 경로입니다. 일반 `undefined` bind는 acquisition 전에
+`BRAID_BIND_VALUE_UNSUPPORTED`로 실패하며 `null`은 SQL `NULL`입니다.
+`decimalNumbers`, `jsonStrings`, `dateStrings`, `typeCast`를 바꾸면 별도
+프로필이 되므로 다시 테스트하기 전에는 위 증거를 상속하지 않습니다.
 
 바인드 전송은 순서가 있는 값과 mysql2 text-positional `?`입니다. 스트리밍은
 prepared `Execute.stream()`을 사용합니다. routine result set은 `db.call()`이

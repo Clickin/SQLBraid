@@ -37,8 +37,9 @@ runtime can actually receive.
 
 ## Launch documentation
 
-This is the 0.1.0 pre-release documentation. PV16 implementation evidence is
-recorded for exact profiles and revisions; no npm publication is claimed.
+This is the 0.1.0 pre-release documentation. PV17 value-fidelity work starts
+from `dccb69763e9e4a070280cf580d8f7b76368ec3d5`; final Runtime, Docs and Release
+dry-run evidence is pending, and no npm publication is claimed.
 See [release notes and limitations](/SQLBraid/release/notes/)
 and the [runtime/driver evidence matrix](/SQLBraid/reference/support/) before
 choosing an integration.

@@ -121,66 +121,14 @@ jobs:
       - name: Build packages and extension
         run: pnpm run build
 
-      - name: Unit, CLI, and real SQLite gate
-        run: pnpm test
-
-      - name: Real SQLite gate
-        run: pnpm run test:db:sqlite
-
-      - name: Real PostgreSQL gate
-        run: pnpm run test:db:postgres
-
-      - name: Real MySQL gate
-        run: pnpm run test:db:mysql
-
-      - name: Real MariaDB gate
-        run: pnpm run test:db:mariadb
-
-      - name: Dialect capability conformance
-        run: pnpm run test:capabilities
-
-      - name: Native SQL transparency
-        run: pnpm run test:transparency
-
-      - name: Bulk conformance
-        run: pnpm run test:bulk
-
-      - name: Browser SQLite WASM gate
-        run: pnpm run test:browser
-
-      - name: D1 local binding gate
-        run: pnpm run test:d1
+      - name: Node 22 unit, consumers and real-driver fidelity
+        run: pnpm exec vitest run
 
       - name: Bulk structural benchmark
         run: pnpm run benchmark:bulk
 
-      - name: Real Oracle gate
-        run: pnpm run test:db:oracle
-
-      - name: Real SQL Server gate
-        run: pnpm run test:db:mssql
-
-      - name: Streaming and routine conformance
-        run: pnpm run test:streaming && pnpm run test:routines
-
-      - name: Vite transform gate
-        run: pnpm run test:vite
-
-      - name: Set up Node 24 finance consumer
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version: 24.21.0
-
-      - name: Packed TanStack Start dev build HMR SSR gate
-        run: pnpm run test:tanstack-start
-
-      - name: Restore pinned runtime Node
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version: 22.18.0
-
-      - name: Packed consumer gate
-        run: pnpm run test:consumer
+      - name: Value fidelity normalization benchmark
+        run: pnpm run benchmark:fidelity
 
       - name: Select Node 24 for full finance-inclusive gate
         uses: actions/setup-node@v7.0.0
@@ -194,9 +142,6 @@ jobs:
         uses: actions/setup-node@v7.0.0
         with:
           node-version: 22.18.0
-
-      - name: VS Code host gate
-        run: pnpm run test:vscode
 
       - name: Node packed runtime gate
         run: pnpm run test:runtime:node

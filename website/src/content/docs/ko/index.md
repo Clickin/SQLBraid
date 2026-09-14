@@ -37,8 +37,9 @@ temporal, binary 값이 기록되어 있습니다.
 
 ## 문서 출시 안내
 
-이 문서는 0.1.0 프리릴리스 문서입니다. PV16 구현 증거는 정확한 프로필과
-revision별로 기록하며 npm 발행을 주장하지 않습니다. 통합을 선택하기 전에
+이 문서는 0.1.0 프리릴리스 문서입니다. PV17 값 정확도 작업은
+`dccb69763e9e4a070280cf580d8f7b76368ec3d5`에서 시작하며 최종 Runtime, Docs,
+Release dry-run 증거는 대기 중이고 npm 발행을 주장하지 않습니다. 통합을 선택하기 전에
 [릴리스 노트와 제한
 사항](/SQLBraid/release/notes/) 및 [런타임/드라이버 증거
 매트릭스](/SQLBraid/reference/support/)를 확인하세요.

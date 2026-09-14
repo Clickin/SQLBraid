@@ -32,7 +32,26 @@ when another output fails; no live Lob escapes `db.call()`.
 
 See the [Oracle setup](https://clickin.github.io/SQLBraid/getting-started/oracle/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
 
-The Thin profile returns Oracle `NUMBER` as strings for exact handling,
-`BINARY_FLOAT`/`BINARY_DOUBLE` as approximate JavaScript numbers, LOB text as
+The Thin profile returns Oracle `NUMBER`, `FLOAT`, and ANSI `NUMBER` aliases as
+strings for exact handling, `BINARY_FLOAT`/`BINARY_DOUBLE` as approximate
+JavaScript numbers (including verified `NaN`/infinity values), LOB text as
 strings, and BLOB/RAW as bytes. The free 23.9 target is not Oracle 19c
 evidence; Thick mode is separate. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+
+Exact decimal strings are not a generic typed Oracle `NUMBER` bind guarantee:
+unhinted string-to-number conversion follows the session NLS settings, while
+`oracleParameter.number()` rejects decimal strings rather than silently
+rounding them. When exact input matters, author the conversion in SQL with an
+explicit format and NLS clause, for example:
+
+```sql
+TO_NUMBER(:value, 'TM9', 'NLS_NUMERIC_CHARACTERS = ''.,''')
+```
+
+SQLBraid does not rewrite that SQL. Native Oracle JSON is exposed as the
+driver's parsed object convenience value; nested JSON numbers may already be
+JavaScript `number`s. Use the user-authored
+`JSON_SERIALIZE(payload RETURNING CLOB)` expression when the application needs
+JSON text and chooses its own lossless parser. Native temporal values are
+guarded JavaScript `Date`s; use `TO_CHAR(..., 'YYYY-MM-DD"T"HH24:MI:SS.FF9')`
+(and an explicit offset format where needed) for precision/time-zone text.

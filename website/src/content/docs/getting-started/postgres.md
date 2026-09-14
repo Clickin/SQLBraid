@@ -18,7 +18,7 @@ import { Client } from "pg";
 import { createPgDatabase } from "@sqlbraid/postgres/pg";
 import { sql } from "@sqlbraid/postgres";
 
-interface UserRow { id: number; name: string }
+interface UserRow { id: string; name: string }
 
 const client = new Client({ connectionString: process.env.DATABASE_URL });
 await client.connect();
@@ -48,7 +48,7 @@ const db = createPgPoolDatabase(pool);
 const accountId = 1;
 
 try {
-  const account = await db.one(sql.rows<{ id: number; email: string }>`
+  const account = await db.one(sql.rows<{ id: string; email: string }>`
     SELECT id, email FROM accounts WHERE id = ${accountId}
   `);
   console.log(account);
@@ -93,20 +93,29 @@ in `resultSets`; it never creates a hidden transaction.
 
 ## pg representation profile
 
-The profile is `pg`'s default parser set on the exact database/runtime
+The profile is `pg`'s parser/configuration on the exact database/runtime
 combination recorded by the support manifest. A custom `pg-types` parser is a
 different, conditional profile and must have its own raw-value evidence.
 
-| Value | Default profile representation | Boundary |
+| Value | SQLBraid raw representation | Fidelity boundary |
 | --- | --- | --- |
-| `int8` | string | Use `decodeExactInteger` when the application needs `bigint`. |
-| `numeric`/`decimal` | string | Keep text or pass through an application decimal library; do not coerce to `number`. |
-| `json`/`jsonb` | parsed JavaScript value | Validate with Standard Schema; a custom parser may instead return text. |
+| `int2` / `int4` / `int8` | string | Safe integral driver values are normalized to text; exact output is never `number` or `bigint`. |
+| `numeric` / `decimal` | string | Exact text is preserved; a JavaScript `number` is not accepted as exact. |
+| `float4` / `float8` | number | Approximate binary value; `SHOW extra_float_digits` must be positive for the lossless text read profile. |
+| `money` | unsupported | PostgreSQL's locale-formatted text is not a canonical numeric value; use an authored conversion with an explicit format. |
+| `json` / `jsonb` | text or parsed value | `data.json-text-lossless` is query-local and profile-selected; the default parsed path is convenience only. |
+| date/time | text or `Date` | Text is the fidelity-first profile; `Date` loses microseconds and some timezone semantics. |
 | `bytea` | `Buffer` | Keep bytes or explicitly encode them. |
 | `uuid` | string | Validate format in the application schema when needed. |
-| date/time | JavaScript `Date` or driver text for configured variants | `Date` does not preserve every source offset/precision detail. |
 
-The binding transport is text-positional `$1`, `$2`, … with ordered values.
+Exact string inputs are supported through the text-positional bind path when
+the documented profile proves an end-to-end round trip. Ordinary `undefined`
+binds fail with `BRAID_BIND_VALUE_UNSUPPORTED` before acquisition; `null` is SQL
+`NULL`. Arrays, domains, ranges/multiranges and composites are unclassified
+containers even when their scalar element types are exact.
+
+`db.environment()` records `extra_float_digits` and the selected JSON/temporal
+parser profile. It must not be read as an unconditional fidelity guarantee.
 `pg-cursor` supplies the native pull stream; a missing peer is
 `BRAID_STREAM_UNSUPPORTED`. Routine refcursors require an existing transaction
 and are materialized into result sets. Bulk uses the adapter's proven native

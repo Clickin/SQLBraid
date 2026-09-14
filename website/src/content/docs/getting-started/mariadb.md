@@ -24,7 +24,7 @@ const connection = await mariadb.createConnection({
   database: "app",
 });
 const db = createMariaDbDatabase(connection);
-const users = await db.all(sql.rows<{ id: number; name: string }>`
+const users = await db.all(sql.rows<{ id: string; name: string }>`
   SELECT id, name FROM users WHERE id = ${1}
 `);
 ```
@@ -55,10 +55,11 @@ connection to MariaDB is a separate best-effort compatibility profile.
 
 | MariaDB value | Connector representation | Caveat |
 | --- | --- | --- |
-| BIGINT | `bigint` | Preserve exact integers; explicitly choose an encoding before JSON serialization. |
-| DECIMAL | `string` | Preserve precision and scale; application decimal libraries remain optional. |
-| JSON alias | Object with default `autoJsonMap: true`; explicit SQL `CAST(... AS CHAR)` returns text | Record parser options and validate with Standard Schema. |
-| DATE/TIMESTAMP | Driver temporal value | `Date` may lose source offset/precision details. |
+| TINYINT/SMALLINT/INT/BIGINT | `string` | Exact integer results are canonical text; `decodeExactInteger` is an application opt-in. |
+| DECIMAL/NUMERIC | `string` | Exact precision and scale remain text; use an application decimal transform if needed. |
+| FLOAT/DOUBLE | `number` | Approximate binary values remain JavaScript numbers. |
+| JSON alias | text with `autoJsonMap: false` | Parsed `autoJsonMap: true` is a convenience profile and does not guarantee nested numeric fidelity. |
+| DATE/TIME/DATETIME | text with `dateStrings: true` | Native `Date` is a separate convenience profile and may lose fractional/zone detail. |
 | BLOB | bytes/Buffer | Preserve bytes or explicitly encode. |
 
 The adapter uses value-only execution, native `queryStream()`, and one
@@ -72,3 +73,12 @@ INOUT and cursor descriptors remain unsupported. `db.prepare()` preserves
 query-bound Standard Schema mapping. The optional `/inspector` subpath records
 identity, generated/write flags and numeric precision/scale for offline
 `generateModels()`; routine signatures remain incomplete positive evidence.
+
+The documented exact profile keeps `decimalAsNumber: false` and
+`insertIdAsNumber: false`. Exact integer/decimal strings are the bind path for
+round-trip fidelity through execute, prepared and the proven bulk strategy.
+`affectedRows` is an operational count with safe-range validation. `undefined`
+ordinary IN values fail before acquisition with
+`BRAID_BIND_VALUE_UNSUPPORTED`; `null` is SQL `NULL`. Connector 3.5.4 does not
+expose a `jsonStrings` option in its public typings, so use `autoJsonMap: false`
+for text and do not describe it as a mysql2 profile.

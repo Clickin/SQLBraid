@@ -1,178 +1,210 @@
 ---
-title: Data representations and numeric fidelity
-description: Follow a database value from the driver boundary to a typed application value without losing precision.
+title: Data representations and value fidelity
+description: Preserve database value semantics at the driver boundary, then choose application types with Standard Schema.
 ---
 
-SQLBraid keeps database representation decisions explicit. A TypeScript type in
-`sql.rows<T>` does not change the value returned by a driver, and SQLBraid does
-not silently turn a decimal or 64-bit integer into a JavaScript `number`.
+SQLBraid preserves the value a selected driver/profile can actually carry. A
+TypeScript type in `sql.rows<T>` does not convert a result, and SQLBraid does
+not silently narrow an exact database value to JavaScript `number`.
 
 ## The value pipeline
 
-Every mapped row follows this boundary:
-
 ```text
-DB type
-  → driver raw value
-  → dialect TypePolicy / Numeric Fidelity
+DB type and expression
+  → driver/profile raw value
+  → dialect TypePolicy normalization
   → plain normalized row
-  → Standard Schema (optional)
+  → query-bound Standard Schema (optional)
   → application value
 ```
 
-The driver profile determines the raw value. The dialect `TypePolicy` makes the
-profile's integer, decimal, JSON, temporal, and binary rules visible to runtime
-and code generation. A Standard Schema can then validate or transform one row;
-it is not a replacement for a fidelity-preserving driver profile.
+`TypePolicy.numeric` keeps three independent facts visible:
 
 ```ts
-interface AccountRow {
-  id: bigint;
-  balance: string;
+interface NumericTypeContract {
+  semantics: "exact-integer" | "exact-decimal" | "approximate-binary";
+  representation: "string" | "number";
+  fidelity: "lossless" | "guarded" | "lossy" | "unsupported";
+  binaryPrecision?: 32 | 64;
 }
-
-const accounts = sql.rows<AccountRow>`
-  SELECT id, balance FROM account
-`;
 ```
 
-`sql.rows<AccountRow>` is a compile-time declaration only. It does not validate,
-parse, or convert a result. `sql.rows(AccountSchema)` invokes the Standard
-Schema protocol at runtime and may validate or transform each row:
+`semantics` describes the database domain. `representation` is SQLBraid's raw
+application boundary. `fidelity` describes the selected driver/profile
+transport. A database expression has its own result type; do not infer it only
+from a source column. Aggregates, casts and arithmetic need the metadata and
+profile evidence for that expression.
 
-```ts
-const accounts = sql.rows(AccountSchema)`
-  SELECT id, balance FROM account
-`;
+## Canonical numeric boundary
+
+The portable rule is simple:
+
+```text
+exact integer or exact decimal → string
+IEEE-754 approximate binary    → number
 ```
 
-The declaration and the runtime mapper must agree with the selected driver
-profile. A type assertion cannot recover digits already lost by a driver.
+The JavaScript type does not change with the current value. `42` from an exact
+`BIGINT` is still `"42"`, and a wide value is not sometimes a string. Exact
+integer aliases, `BIGINT`, `DECIMAL`/`NUMERIC`, `MONEY`-style types and vendor
+aliases are exact only when the driver can preserve them. An exact type exposed
+as a lossy JavaScript `number` is `unsupported` (or explicitly `guarded`), not a
+stringified exact result.
 
-## Exact integers
-
-JavaScript `number` cannot represent every signed 64-bit integer. Use a driver
-profile that returns an integer as `bigint` or decimal text, then choose the
-application representation deliberately. SQLBraid's exact integer helper
-accepts an integer-shaped driver value and returns a `bigint`:
+`decodeExactInteger` remains an opt-in application helper:
 
 ```ts
 import { decodeExactInteger } from "@sqlbraid/core";
 
-const id = decodeExactInteger(rawId, { min: 0n });
+const id = decodeExactInteger(row.id, { min: 0n }); // bigint in this app
 ```
 
-The optional `min` and `max` bounds are checked as `bigint`; an invalid or
-out-of-range value throws `ResultExactnessError` with code
-`BRAID_RESULT_EXACTNESS`. Do not use `Number(id)` unless the application has
-first proved that the value is inside the safe integer range.
+It does not change SQLBraid's canonical row type. `decodeExactDecimal` validates
+exact decimal text and returns a string; use an application-selected Decimal,
+BigInt, Money, or domain transform only after the row reaches the application
+boundary. There is no global `numericMode` switch.
 
-SQLite is the explicit exception to a one-size-fits-all rule: the Node adapter's
-`integerMode` is `"number"` by default and `"bigint"` when exact int64 results
-are required. Generated models must use the matching
-`typePolicyForIntegerMode()`.
+## Standard Schema application choices
 
-## Exact decimals
-
-A decimal is not a floating-point number. SQLBraid's exact decimal helper is
-conservative and returns a canonical decimal string; the default API accepts a
-string only:
+Keep exact values as text when that is the domain contract:
 
 ```ts
-import { decodeExactDecimal } from "@sqlbraid/core";
-
-const amount = decodeExactDecimal(rawAmount);
-// amount: string
+const Row = v.object({ id: v.string(), amount: v.string() });
 ```
 
-A JavaScript `number` has already rounded a decimal before this helper sees it,
-so it is rejected rather than presented as exact. `ResultExactnessError` uses
-`BRAID_RESULT_EXACTNESS`. Keep the string in the application or pass it to an
-explicit decimal library (for example, a project-selected arbitrary-precision
-package) at the application boundary. SQLBraid does not add a decimal library
-or choose rounding/scale policy.
-
-Oracle Thin `NUMBER` results are strings. SQL Server Tedious `decimal` and
-`numeric` results are JavaScript numbers in the supported default path and are
-therefore **not exact decimal support**. For Tedious, select an explicit SQL
-conversion to text when decimal fidelity matters and declare a string result
-contract. MySQL exactness depends on the tested mysql2 profile; do not enable
-`decimalNumbers` in an exact-decimal profile.
-
-## Approximate floats
-
-`REAL`, `FLOAT`, `BINARY_FLOAT`, and `BINARY_DOUBLE` are approximate by design.
-Keep them as numbers when approximate arithmetic is intended. Do not reuse an
-exact-integer or exact-decimal declaration for a floating-point column.
-
-## JSON
-
-JSON may arrive as a native object, a text string, or a driver-specific value.
-The profile must document which one is expected:
-
-- native JSON objects can be sent directly to a Standard Schema object schema;
-- JSON text should be parsed and validated by the schema (`parseJson`, or an
-  equivalent transform);
-- malformed JSON is a data/driver error, not evidence that SQLBraid supports a
-  different representation.
-
-`jsonStrings` and custom parser/type-cast options are profile choices. Changing
-them without changing the TypePolicy and schema contract is unsupported.
-
-## Temporal, binary, and NULL values
-
-Temporal values are driver-specific (`Date` or an explicit text/binary profile).
-A JavaScript `Date` does not preserve every source timezone name or sub-
-millisecond detail. Use a string contract when those details are significant.
-
-Binary values are usually `Buffer`/`Uint8Array` on Node adapters. Keep binary
-columns out of text/JSON schemas unless an explicit encoding transform is part
-of the application contract.
-
-`NULL` is not a zero, empty string, epoch, or empty object. Preserve it as
-`null` in the result contract, and make the Standard Schema nullable when the
-column is nullable.
-
-## Custom parsers and profiles
-
-A custom `pg` parser, mysql2 `typeCast`, Oracle fetch option, or equivalent
-changes the raw-value boundary. It invalidates the default representation
-profile unless the exact configuration has its own evidence. The safe sequence
-is:
-
-1. record the exact database, driver, runtime, and parser/options;
-2. verify the raw value for every affected type;
-3. select or define the matching TypePolicy;
-4. validate/transform with Standard Schema;
-5. use the same profile in code generation.
-
-SQLBraid does not inspect arbitrary parser functions to infer fidelity. A
-profile that cannot prove exact transport is `guarded` or `unsupported`, not
-silently exact.
-
-## Code generation versus runtime validation
-
-Code generation emits TypeScript declarations from metadata and the selected
-TypePolicy. It does not validate a live row. Runtime validation requires
-`sql.rows(StandardSchema)` or an execution-level schema:
+Opt into a BigInt identifier:
 
 ```ts
-const row = sql.rows(AccountSchema)`SELECT id, balance FROM account`;
-await db.one(row); // validates/transforms at execution time
+const Id = v.pipe(v.string(), v.transform(BigInt));
 ```
 
-Keep output and input representations separate in generated models. A manual
-TypeScript override changes declarations only; it does not make a lossy driver
-transport exact.
+Or choose an arbitrary-precision decimal library in application code (the
+library is documentation-only, not an SQLBraid dependency):
 
-## Native SQL transparency is not grammar support
+```ts
+import Decimal from "decimal.js";
+const Amount = v.pipe(v.string(), v.transform(value => new Decimal(value)));
+```
 
-SQLBraid sends user-authored SQL through the selected driver without rewriting
-its database-specific syntax. A native `RETURNING`, `OUTPUT`, cast, function,
-or extension can remain visible in the query. Passing it through proves
-transparency, not that SQLBraid parses or semantically supports every grammar
-feature. Generated structural helpers have their own narrow quoting and shape
-contracts; unsupported analysis remains unknown.
+A schema cannot recover digits a driver already rounded.
 
-See the driver setup pages for exact profile/options and the [runtime and driver
-support matrix](/SQLBraid/reference/support/).
+## Approximate binary values
+
+`REAL`, `FLOAT`, `DOUBLE`, PostgreSQL `real`/`double precision`, Oracle
+`BINARY_FLOAT`/`BINARY_DOUBLE`, and SQL Server `real`/`float` are approximate
+binary domains. SQLBraid exposes a proven binary32 or binary64 value as
+`number`; this is not an exact-decimal guarantee. Profiles record whether the
+database normalizes `NaN`, infinities, or negative zero. A codegen diagnostic is
+appropriate for an exact DB type with lossy/unsupported transport, not merely
+for an approximate type.
+
+## Driver profiles
+
+The following are the documented PV17 direction; the support matrix remains the
+evidence source for each exact database/runtime revision.
+
+| Target | Exact numeric output | Approximate output | Profile boundary |
+| --- | --- | --- | --- |
+| PostgreSQL / `pg` | `int2`/`int4`/`int8`/`numeric` → string | float4/float8 → number | `extra_float_digits > 0` is required for a lossless text read; `money` is unsupported when locale-formatted; JSON/temporal text profiles are explicit |
+| MySQL / `mysql2` | integer and `DECIMAL` → string | `FLOAT`/`DOUBLE` → number | exact profile requires `supportBigNumbers`, `bigNumberStrings`, `decimalNumbers: false`; `jsonStrings: true` and `dateStrings: true` are separate profiles |
+| MariaDB Connector | integer and `DECIMAL` → string | `FLOAT`/`DOUBLE` → number | `decimalAsNumber: false`, `insertIdAsNumber: false`; `autoJsonMap: false` and `dateStrings: true` select text profiles |
+| Node SQLite / WASM | INTEGER storage → string | REAL storage → number | native bigint is an internal transport detail; D1 is guarded to the safe-integer range |
+| Oracle Thin | NUMBER family → string | BINARY_FLOAT/DOUBLE → number | native decimal-string bind and native JSON/temporal text depend on driver/profile evidence |
+| SQL Server / Tedious | exact integer → string where preserved | REAL/FLOAT → number | native DECIMAL/NUMERIC/MONEY values are unsupported for exact output; use authored text casts |
+
+SQLite dynamic-typing columns follow the runtime storage class, not declared
+INTEGER affinity. Arrays, domains, ranges, multiranges, composites, Oracle
+objects/collections, SQL Server `sql_variant`, vectors, and other containers do
+not inherit scalar guarantees: each is `unclassified` or `unsupported` until a
+recursive transport test exists. JSON is handled separately below.
+
+## JSON: parsed convenience versus lossless text
+
+A parsed JavaScript JSON object is convenient, but ordinary `JSON.parse()` turns
+every JSON number into a JavaScript `number`. Nested values such as
+`9223372036854775807` or a high-precision decimal are therefore not a generic
+lossless guarantee.
+
+Profiles must distinguish:
+
+- **lossless text** — serialized JSON reaches SQLBraid as text without JS Number
+  parsing; the application chooses `JSON.parse`, a lossless parser, or a schema;
+- **parsed** — the driver returns an object/value; nested numeric fidelity is
+  not guaranteed.
+
+PostgreSQL uses a query-local raw-text profile where supported; the default
+parsed compatibility path remains explicitly parsed. MySQL and MariaDB text
+profiles use `jsonStrings: true` where their driver exposes it (`autoJsonMap:
+false` for MariaDB Connector). SQLite/WASM/D1 and SQL Server are text-oriented
+in their documented paths. Oracle may use a tested fetch handler or an
+explicit user-authored `JSON_SERIALIZE(...)` expression. SQLBraid never mutates
+a global parser and never rewrites a user's SQL.
+
+This guarantee starts at the database result. MySQL native JSON storage can
+round decimal tokens and canonicalize keys/whitespace before any driver reads
+them. Use a text column when the original JSON digits must round-trip.
+
+```text
+lossless JSON text → Standard Schema → application-selected parser
+parsed object      → Standard Schema → convenient, not automatically lossless
+```
+
+## Temporal values
+
+A JavaScript `Date` cannot carry every SQL temporal semantic: date-only and
+local-time meaning, fractional precision beyond milliseconds, offset, zone
+identity, or values outside its range. Native `Date` is a convenience profile,
+not a blanket lossless claim.
+
+Where the driver/profile preserves it, prefer temporal text at the raw boundary
+and transform with Standard Schema into `Date`, `Temporal.*`, Luxon, or an
+application domain type. Use non-zero fractional fixtures such as
+`2026-09-14 12:34:56.123456` when assessing fidelity. PostgreSQL `pg`, MySQL
+`dateStrings`, MariaDB `dateStrings`, and explicit user SQL text conversions
+are separate profiles; SQLite temporal values remain application/storage
+conventions. For Oracle and SQL Server, use tested text formatting or an
+explicit `TO_CHAR`/`CONVERT` expression when native `Date` loses precision,
+offset, or session-zone semantics.
+
+## Binds, `null`, and `undefined`
+
+Exact input fidelity is a separate capability from exact output. When a profile
+claims it, bind decimal text or an exact integer string through the documented
+path and round-trip it through the database. Do not pass a precise value through
+JavaScript `number` first. SQLBraid does not rewrite a cast for you:
+
+```sql
+CAST(@nvarchar_parameter AS decimal(38, 18))
+```
+
+is an authored SQL Server workaround, not a universal input codec. Oracle
+string-to-number binds can depend on NLS settings; use an explicit controlled
+conversion or classify the path as unsupported.
+
+`null` means SQL `NULL`. Ordinary `undefined` is a programming/configuration
+error (`BRAID_BIND_VALUE_UNSUPPORTED`) and is rejected before connection
+acquisition in execute, prepared, bulk, stream, and routine IN paths. OUT
+placeholder semantics remain driver-specific.
+
+## Profiles, codegen, and transparency
+
+Custom `pg` parsers, mysql2 `typeCast`, MariaDB JSON/temporal options, Oracle
+fetch handlers, and equivalent overrides are separate profiles. They invalidate
+the default evidence until tested and selected in both runtime and codegen.
+`db.environment()` returns a cached scope observation. Use
+`db.environment({ refresh: true })` after changing session settings. A pooled
+probe samples one lease; its observed guarantees remain guarded, not promises
+about every future pool session.
+Codegen emits output and input representations separately; a manual TypeScript
+override cannot make lossy transport exact.
+
+SQLBraid sends user-authored SQL without automatic casts, parser rewrites, or
+query-builder translation. Native `RETURNING`, `OUTPUT`, `MERGE`, UPSERT,
+`CAST`, `CONVERT`, `JSON_SERIALIZE`, and temporal formatting remain visible SQL.
+A support capability names the statement actually executed: `merge-returning`
+is native `MERGE`; `upsert-returning` is native UPSERT/REPLACE/ON CONFLICT/ON
+DUPLICATE KEY. Similar outcomes do not imply interchangeable syntax.
+
+See the driver setup pages and [runtime and driver support matrix](/SQLBraid/reference/support/)
+for revision-specific evidence. Unknown evidence stays unknown; it is never
+promoted to `lossless` by a type assertion or a green-looking matrix cell.

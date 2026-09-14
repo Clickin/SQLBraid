@@ -19,14 +19,22 @@ const statusLabels: Record<string, string> = {
 };
 const safeStatus = (value: string) => statusLabels[value.toLowerCase()] ?? value;
 const databaseLabel = (target: SupportTarget) => [target.database.product, target.database.version, target.database.edition].filter(Boolean).join(" ");
-const fallbackRows = data.targets.map((target) => ({ target, native: target.capabilities["sql.native-transparency"]?.status ?? "" }));
+const numericLabel = (target: SupportTarget, kind: keyof SupportTarget["numeric"]) => {
+  const contract = target.numeric[kind];
+  return `${contract.representation} · ${contract.fidelity}${contract.profile ? ` · ${contract.profile}` : ""}`;
+};
+const capabilityLabel = (target: SupportTarget, prefix: string) => Object.entries(target.capabilities)
+  .filter(([id]) => id === prefix || id.startsWith(`${prefix}.`))
+  .map(([id, claim]) => `${id === prefix ? "" : `${id}: `}${safeStatus(claim.status)}`)
+  .join("; ") || "—";
+const fallbackRows = data.targets.map((target) => ({ target }));
 ---
 
 <div class="support-matrix" data-support-matrix-root>
   <support-matrix aria-label={locale === "ko" ? "지원 매트릭스" : "Support matrix"}></support-matrix>
   <script type="application/json" data-support-matrix set:html={serialized}></script>
   <table class="support-matrix__fallback">
-    <caption>{locale === "ko" ? "PV16 지원 대상 (정적/인쇄용 요약)" : "PV16 support targets (static/print summary)"}</caption>
+    <caption>{locale === "ko" ? "PV17 지원 대상 (정적/인쇄용 요약)" : "PV17 support targets (static/print summary)"}</caption>
     <thead>
       <tr>
         <th scope="col">{locale === "ko" ? "대상" : "Target"}</th>
@@ -34,18 +42,24 @@ const fallbackRows = data.targets.map((target) => ({ target, native: target.capa
         <th scope="col">{locale === "ko" ? "드라이버" : "Driver"}</th>
         <th scope="col">{locale === "ko" ? "런타임" : "Runtime"}</th>
         <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
-        <th scope="col">{locale === "ko" ? "네이티브 SQL 투명성" : "Native SQL transparency"}</th>
+        <th scope="col">{locale === "ko" ? "정확한 숫자" : "Exact numeric"}</th>
+        <th scope="col">{locale === "ko" ? "근사 부동소수점" : "Approximate float"}</th>
+        <th scope="col">{locale === "ko" ? "JSON 충실도" : "JSON fidelity"}</th>
+        <th scope="col">{locale === "ko" ? "시간 충실도" : "Temporal fidelity"}</th>
       </tr>
     </thead>
     <tbody>
-      {fallbackRows.map(({ target, native }) => (
+      {fallbackRows.map(({ target }) => (
         <tr id={target.id}>
           <th scope="row"><a href={`#${encodeURIComponent(target.id)}`}>{target.id}</a></th>
           <td>{databaseLabel(target)}</td>
           <td>{target.driver.id}{target.driver.version ? `@${target.driver.version}` : ""}</td>
           <td>{target.runtime.id}{target.runtime.version ? `@${target.runtime.version}` : ""}</td>
           <td>{safeStatus(target.status)}</td>
-          <td>{native ? safeStatus(native) : "—"}</td>
+          <td>{numericLabel(target, "exact-integer")} / {numericLabel(target, "exact-decimal")}</td>
+          <td>{numericLabel(target, "approximate-binary")}</td>
+          <td>{[capabilityLabel(target, "data.json-parsed"), capabilityLabel(target, "data.json-lossless-text")].filter((value) => value !== "—").join(" / ") || "—"}</td>
+          <td>{[capabilityLabel(target, "data.temporal-native"), capabilityLabel(target, "data.temporal-lossless")].filter((value) => value !== "—").join(" / ") || "—"}</td>
         </tr>
       ))}
     </tbody>

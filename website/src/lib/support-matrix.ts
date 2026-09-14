@@ -19,8 +19,19 @@ export interface TargetCapability {
   readonly status: string;
   readonly conditionCode?: string;
   readonly testIds?: readonly string[];
-  readonly canonical?: string;
+  readonly semantics?: "exact-integer" | "exact-decimal" | "approximate-binary";
+  readonly representation?: "string" | "number";
+  readonly fidelity?: "lossless" | "guarded" | "lossy" | "unsupported";
+  readonly binaryPrecision?: 32 | 64;
   readonly rawRepresentations?: readonly string[];
+}
+
+export interface NumericContract {
+  readonly semantics: "exact-integer" | "exact-decimal" | "approximate-binary";
+  readonly representation: "string" | "number";
+  readonly fidelity: "lossless" | "guarded" | "lossy" | "unsupported";
+  readonly binaryPrecision?: 32 | 64;
+  readonly profile?: string;
 }
 
 export interface SupportTarget {
@@ -46,6 +57,8 @@ export interface SupportTarget {
   readonly runtime: { readonly id: string; readonly version?: string };
   readonly reproducibility?: { readonly zeroCost?: boolean; readonly description?: string; readonly url?: string };
   readonly ci?: { readonly command?: string; readonly workflow?: string; readonly releaseBlocking?: boolean };
+  readonly numeric: Readonly<Record<"exact-integer" | "exact-decimal" | "approximate-binary", NumericContract>>;
+  readonly containers: Readonly<Record<string, "lossless" | "unclassified" | "unsupported">>;
   readonly capabilities: Readonly<Record<string, TargetCapability>>;
   readonly evidence?: { readonly status?: string; readonly commit?: string };
 }

@@ -66,7 +66,13 @@ hint facets fail at the `materialize` stage before database I/O.
 
 Use an explicit hint for `null` when the driver cannot infer a safe Oracle type. Do not silently turn an untyped null into `VARCHAR2`.
 
-The default policy fetches `NUMBER` results as strings to preserve precision. Explicit `NUMBER` input accepts `number` or `bigint`; decimal strings are rejected by this adapter rather than converted lossily. Use an ordinary string bind with an explicit SQL conversion when your SQL requires decimal-text input.
+The default policy fetches the exact `NUMBER` family (including Oracle's
+`FLOAT` and ANSI numeric aliases) as strings to preserve precision. `NUMBER`
+decimal-string input is not a certified exact bind path: typed `number`/`bigint`
+inputs are bounded by their JavaScript representation and unhinted strings can
+depend on `NLS_NUMERIC_CHARACTERS`. Keep this capability unsupported unless the
+session/profile proves it; use an ordinary character bind plus an explicit,
+controlled SQL conversion when needed.
 
 The Thin adapter rejects precision/scale facets and IN length constraints.
 VARCHAR2/NVARCHAR2 OUT/INOUT lengths select the driver's `maxSize`; other
@@ -74,7 +80,11 @@ length facets are rejected. Put database constraints in SQL/schema.
 Materialized CLOB/NCLOB values are strings and BLOB/RAW values are buffers.
 Routine LOB outputs are read with `getData()` and destroyed before lease
 release, including unvisited siblings after a read failure. Temporal values
-use `Date`, not a preserved source timezone name or sub-millisecond precision.
+use `Date` as a guarded convenience profile, not a preserved source timezone
+name or sub-millisecond precision. Use user-authored `TO_CHAR`/format
+expressions for a lossless text path. Native JSON is a parsed convenience value;
+use a tested fetch handler or `JSON_SERIALIZE(... RETURNING CLOB)` when
+serialized text is required.
 
 Use [routine calls](/SQLBraid/concepts/routines/) for the complete
 `sql.out`/`sql.inOut` and heterogeneous result-set contract.
@@ -88,17 +98,22 @@ profiles until their manifests contain matching evidence.
 
 | Oracle value | Thin profile representation | Notes |
 | --- | --- | --- |
-| `NUMBER` | string | Exact decimal/integer text; use `decodeExactDecimal` or `decodeExactInteger` as appropriate. |
-| `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | Approximate by definition, never exact decimal. |
+| `NUMBER` / `FLOAT` / ANSI numeric aliases | string | Exact text; `decodeExactDecimal` or `decodeExactInteger` is an application transform. |
+| `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | Approximate binary32/binary64 values; special-value support is profile-tested. |
 | CLOB / NCLOB | string | Routine LOBs are read and destroyed before lease release. |
 | BLOB / RAW | `Buffer` | Keep bytes or explicitly encode them. |
-| DATE / TIMESTAMP variants | `Date` | Source timezone name and all sub-millisecond detail are not preserved. |
+| DATE / TIMESTAMP variants | `Date` | Guarded convenience profile; use authored `TO_CHAR` text for fractional/zone fidelity. |
+| Native JSON | parsed object | Convenience only; nested numeric exactness is not guaranteed. |
 
 The binding transport is text-positional `:1`, `:2`, … with node-oracledb bind
 descriptors. OUT ordinals follow the SQL bind order, independently of
 intervening IN values. REF CURSOR outputs become ordered materialized
 `resultSets`; implicit results are additional sets. Native
 `RETURNING ... INTO` uses `sql.out()` and materialized row APIs. `executeMany()`
-is the supported native bulk strategy where the manifest proves it. Native
-Oracle SQL passes through transparently; SQLBraid does not provide an Oracle
-grammar or infer procedure metadata.
+is the supported native bulk strategy where the manifest proves
+it. `rowsAffected` is an operational count with safe-range validation, while
+`RETURNING INTO` values follow the same exact string contract. Ordinary
+`undefined` IN values fail before acquisition with
+`BRAID_BIND_VALUE_UNSUPPORTED`; `null` is SQL `NULL`. Native Oracle SQL passes
+through transparently; SQLBraid does not provide an Oracle grammar or infer
+procedure metadata.

@@ -5,8 +5,8 @@ type Locale = "en" | "ko";
 interface Row { target: SupportTarget; capabilityId?: string; capability?: TargetCapability }
 const ROW_HEIGHT = 56;
 const labels = {
-  en: { database: "Database", driver: "Driver", capability: "Capability", version: "Version", edition: "Edition", runtime: "Runtime", status: "Support status", search: "Search", all: "All", reset: "Reset", results: "results", condition: "Condition", test: "Test ID", ci: "CI gate", profile: "Profile", integer: "Raw integer", decimal: "Raw decimal", json: "JSON", temporal: "Temporal / binary", transport: "Bind transport", stream: "Streaming", routine: "Routines", bulk: "Bulk", exclusions: "Excluded profiles", target: "Target", transparency: "Native SQL transparency", generated: "Generated structure", exactInteger: "Exact integer", exactDecimal: "Exact decimal", returning: "Returned rows", metadata: "Metadata" },
-  ko: { database: "데이터베이스", driver: "드라이버", capability: "기능", version: "버전", edition: "에디션", runtime: "런타임", status: "지원 상태", search: "검색", all: "전체", reset: "초기화", results: "개 결과", condition: "조건", test: "테스트 ID", ci: "CI 게이트", profile: "프로필", integer: "원시 정수", decimal: "원시 소수", json: "JSON", temporal: "시간 / 바이너리", transport: "바인드 전송", stream: "스트리밍", routine: "루틴", bulk: "벌크", exclusions: "제외 프로필", target: "대상", transparency: "네이티브 SQL 투명성", generated: "생성 구조", exactInteger: "정확한 정수", exactDecimal: "정확한 소수", returning: "반환 행", metadata: "메타데이터" },
+  en: { database: "Database", driver: "Driver", capability: "Capability", version: "Version", edition: "Edition", runtime: "Runtime", status: "Support status", search: "Search", all: "All", reset: "Reset", results: "results", condition: "Condition", test: "Test ID", ci: "CI gate", profile: "Profile", integer: "Raw integer", decimal: "Raw decimal", json: "JSON fidelity", temporal: "Temporal fidelity", transport: "Numeric transport", stream: "Streaming", routine: "Routines", bulk: "Bulk", exclusions: "Excluded profiles", target: "Target", transparency: "Native SQL transparency", generated: "Generated structure", exactNumeric: "Exact numeric", approximate: "Approximate float", returning: "Returned rows", metadata: "Metadata" },
+  ko: { database: "데이터베이스", driver: "드라이버", capability: "기능", version: "버전", edition: "에디션", runtime: "런타임", status: "지원 상태", search: "검색", all: "전체", reset: "초기화", results: "개 결과", condition: "조건", test: "테스트 ID", ci: "CI 게이트", profile: "프로필", integer: "원시 정수", decimal: "원시 소수", json: "JSON 충실도", temporal: "시간 충실도", transport: "숫자 전송", stream: "스트리밍", routine: "루틴", bulk: "벌크", exclusions: "제외 프로필", target: "대상", transparency: "네이티브 SQL 투명성", generated: "생성 구조", exactNumeric: "정확한 숫자", approximate: "근사 부동소수점", returning: "반환 행", metadata: "메타데이터" },
 };
 const states: Record<string, readonly [string, string]> = {
   official: ["Official", "공식"], conditional: ["Conditional", "조건부"], compatible: ["Compatible", "호환 가능"], historical: ["Historical", "과거 검증"], unsupported: ["Unsupported", "지원하지 않음"], guaranteed: ["Guaranteed", "보장됨"], guarded: ["Guarded", "값 검사"], pending: ["Pending", "검증 대기"],
@@ -23,12 +23,27 @@ class SupportMatrixElement extends HTMLElement {
   private search!: HTMLInputElement;
   private filters!: Record<string, HTMLSelectElement>;
   private frame = 0;
+  private payloadObserver?: MutationObserver;
   private hashListener = () => this.followHash();
 
   connectedCallback(): void {
     if (this.classList.contains("is-ready")) return;
-    const payload = this.parentElement?.querySelector<HTMLScriptElement>("script[data-support-matrix]")?.textContent;
-    if (!payload) return;
+    const parent = this.parentElement;
+    const script = parent?.querySelector<HTMLScriptElement>("script[data-support-matrix]");
+    const payload = script?.textContent;
+    if (!payload) {
+      if (parent && !this.payloadObserver) {
+        this.payloadObserver = new MutationObserver(() => {
+          const next = parent.querySelector<HTMLScriptElement>("script[data-support-matrix]")?.textContent;
+          if (!next) return;
+          this.payloadObserver?.disconnect();
+          this.payloadObserver = undefined;
+          this.connectedCallback();
+        });
+        this.payloadObserver.observe(parent, { childList: true, subtree: true });
+      }
+      return;
+    }
     this.data = JSON.parse(payload) as SupportMatrixData;
     this.locale = document.documentElement.lang.startsWith("ko") ? "ko" : "en";
     const l = labels[this.locale];
@@ -75,6 +90,8 @@ class SupportMatrixElement extends HTMLElement {
   }
 
   disconnectedCallback(): void {
+    this.payloadObserver?.disconnect();
+    this.payloadObserver = undefined;
     window.removeEventListener("hashchange", this.hashListener);
     cancelAnimationFrame(this.frame);
   }
@@ -85,6 +102,13 @@ class SupportMatrixElement extends HTMLElement {
   private capabilities(target: SupportTarget, prefix: string): string {
     const entries = Object.entries(target.capabilities).filter(([id]) => id === prefix || id.startsWith(`${prefix}.`));
     return entries.map(([id, cap]) => `${entries.length > 1 ? `${this.capabilityLabel(id)}: ` : ""}${this.status(cap.status)}${cap.conditionCode ? ` (${this.condition(cap.conditionCode)})` : ""}`).join("; ") || "—";
+  }
+
+  private numeric(target: SupportTarget, kind: keyof SupportTarget["numeric"]): string {
+    const contract = target.numeric[kind];
+    if (!contract) return "—";
+    const precision = contract.binaryPrecision === undefined ? "" : `/${contract.binaryPrecision}`;
+    return `${contract.representation} · ${contract.fidelity}${precision}${contract.profile ? ` · ${contract.profile}` : ""}`;
   }
 
   private rebuild(): void {
@@ -107,7 +131,7 @@ class SupportMatrixElement extends HTMLElement {
 
   private columns(): string[] {
     const l = labels[this.locale];
-    return this.view === "database" ? [l.target, l.database, l.version, l.edition, l.driver, l.runtime, l.status, l.transparency, l.generated, l.exactInteger, l.exactDecimal, l.json, l.temporal, l.returning, l.stream, l.routine, l.bulk, l.metadata] : this.view === "driver" ? [l.driver, l.version, l.target, l.runtime, l.profile, l.integer, l.decimal, l.json, l.temporal, l.transport, l.stream, l.routine, l.bulk, l.exclusions] : [l.capability, l.target, l.status, l.condition, l.test, l.ci];
+    return this.view === "database" ? [l.target, l.database, l.version, l.edition, l.driver, l.runtime, l.status, l.transparency, l.generated, l.exactNumeric, l.approximate, l.transport, l.json, l.temporal, l.returning, l.stream, l.routine, l.bulk, l.metadata] : this.view === "driver" ? [l.driver, l.version, l.target, l.runtime, l.profile, l.integer, l.decimal, l.approximate, l.transport, l.json, l.temporal, l.stream, l.routine, l.bulk, l.exclusions] : [l.capability, l.target, l.status, l.condition, l.test, l.ci];
   }
 
   private cells(row: Row): string[] {
@@ -115,9 +139,9 @@ class SupportMatrixElement extends HTMLElement {
     if (this.view === "capability") return [this.capabilityLabel(row.capabilityId!), t.id, this.status(row.capability!.status), this.condition(row.capability!.conditionCode), row.capability!.testIds?.join(", ") ?? "—", [t.ci?.command, t.ci?.workflow].filter(Boolean).join(" · ")];
     if (this.view === "driver") {
       const raw = t.driver.rawRepresentations ?? {};
-      return [t.driver.id, t.driver.version ?? "—", t.id, `${t.runtime.id} ${t.runtime.version ?? ""}`, t.driver.profile ?? "—", raw.integer ?? "—", raw.decimal ?? "—", raw.json ?? "—", raw.temporal ?? "—", t.driver.transport ?? "—", t.driver.stream ?? "—", t.driver.routine ?? "—", t.driver.bulk ?? "—", t.driver.exclusions?.join(", ") ?? "—"];
+      return [t.driver.id, t.driver.version ?? "—", t.id, `${t.runtime.id} ${t.runtime.version ?? ""}`, t.driver.profile ?? "—", raw.integer ?? "—", raw.decimal ?? "—", this.numeric(t, "approximate-binary"), this.numeric(t, "exact-integer"), raw.json ?? "—", raw.temporal ?? "—", t.driver.stream ?? "—", t.driver.routine ?? "—", t.driver.bulk ?? "—", t.driver.exclusions?.join(", ") ?? "—"];
     }
-    return [t.id, t.database.product, t.database.version ?? "—", t.database.edition ?? "—", `${t.driver.id} ${t.driver.version ?? ""}`, `${t.runtime.id} ${t.runtime.version ?? ""}`, this.status(t.status), this.capabilities(t, "sql.native-transparency"), this.capabilities(t, "sql.generated-structure"), this.capabilities(t, "numeric.exact-integer"), this.capabilities(t, "numeric.exact-decimal"), [this.capabilities(t, "data.json-native"), this.capabilities(t, "data.json-text")].join(" / "), [this.capabilities(t, "data.temporal"), this.capabilities(t, "data.binary")].join(" / "), this.capabilities(t, "dml"), this.capabilities(t, "execution.stream"), this.capabilities(t, "routine"), this.capabilities(t, "execution.bulk"), this.capabilities(t, "metadata")];
+    return [t.id, t.database.product, t.database.version ?? "—", t.database.edition ?? "—", `${t.driver.id} ${t.driver.version ?? ""}`, `${t.runtime.id} ${t.runtime.version ?? ""}`, this.status(t.status), this.capabilities(t, "sql.native-transparency"), this.capabilities(t, "sql.generated-structure"), [this.numeric(t, "exact-integer"), this.numeric(t, "exact-decimal")].join(" / "), this.numeric(t, "approximate-binary"), [this.numeric(t, "exact-integer"), this.numeric(t, "exact-decimal")].join(" / "), [this.capabilities(t, "data.json-parsed"), this.capabilities(t, "data.json-lossless-text")].filter((value) => value !== "—").join(" / ") || "—", [this.capabilities(t, "data.temporal-native"), this.capabilities(t, "data.temporal-lossless")].filter((value) => value !== "—").join(" / ") || "—", this.capabilities(t, "dml"), this.capabilities(t, "execution.stream"), this.capabilities(t, "routine"), this.capabilities(t, "execution.bulk"), this.capabilities(t, "metadata")];
   }
 
   private renderVisible(): void {

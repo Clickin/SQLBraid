@@ -26,6 +26,24 @@ The schema output becomes the query row type. Mapping applies consistently to `a
 await db.all(events, { schema: ExtraSchema });
 ```
 
+Exact database numerics arrive as strings; approximate IEEE values arrive as
+numbers. Choose application semantics in the schema rather than changing the
+driver profile:
+
+```ts
+const Account = v.object({
+  id: v.pipe(v.string(), v.transform(BigInt)),
+  amount: v.string(), // or v.transform(value => new Decimal(value))
+});
+```
+
+`Decimal`/Money objects are application choices and are not SQLBraid
+dependencies. A schema cannot recover precision already lost by a parsed JSON
+number or a native temporal `Date`. For JSON nested numerics, use a
+lossless-text profile and an application-selected parser; for fractional or
+offset temporal fidelity, use a tested text profile or an authored SQL
+conversion.
+
 Routine contracts map their channels independently. `sql.call({ output,
 resultSets: [UserSchema, PaymentSchema] as const, returnValue })` applies the
 output schema to the scalar object, each tuple schema to rows in its matching
@@ -47,4 +65,9 @@ driver row -> dialect TypePolicy normalization -> plain row -> query schema -> e
 
 `DatabaseResultValidationError` uses code `BRAID_RESULT_VALIDATION`, reports the query or execution stage and row index, and does not dump raw rows or binds. Mapping is one row to one row: SQLBraid does not hydrate relations, maintain identity maps, or assemble object graphs.
 
-The input side is deliberately smaller in 0.1.0. Ordinary value interpolation remains a driver-bound value; there is no universal application input codec framework yet. Driver-specific JSON, temporal, and binary conventions remain the driver's responsibility.
+The input side is deliberately smaller in 0.1.0. Ordinary value interpolation
+remains a driver-bound value; there is no universal application input codec
+framework yet. Exact numeric bind fidelity is a separate driver capability, and
+`undefined` ordinary IN values fail before acquisition while `null` means SQL
+`NULL`. Driver-specific JSON, temporal, and binary conventions remain the
+driver's responsibility.

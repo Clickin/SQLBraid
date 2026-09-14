@@ -309,4 +309,17 @@ const description = acmeStatementBinding.describe(statement, {
 core의 value-only 불변식은 바꾸면 안 됩니다. 구조적 경로는 `sql.raw`,
 `sql.ident`, 명시적 fragment helper뿐입니다.
 
+정확한 데이터베이스 숫자는 canonical string이고 근사 IEEE 값은 number입니다.
+TypePolicy metadata에서 `semantics`, `representation`, transport `fidelity`를
+분리하며 손실된 exact decimal은 string으로 바꾸지 말고 fail closed해야 합니다.
+Parsed JSON과 native `Date`는 편의 프로필이고 text 프로필은 자체 증거가
+필요합니다. 배열, range, composite, object, `sql_variant`, vector에는 scalar
+보장을 자동으로 적용하지 않습니다.
+
+query-builder/render 단계와 binder/materializer 단계를 분리하세요. 전자는
+불변 SQL segment와 value boundary를 설명하고, 후자는 driver transport와
+parameter descriptor를 선택합니다. query builder가 numeric output fidelity를
+보장해서는 안 되며, binder도 driver 제한을 exact해 보이도록 SQL을 rewrite해서는
+안 됩니다.
+
 전체 계약과 체크리스트는 [영문 driver-author guide](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md)를 참고하세요.

@@ -28,4 +28,14 @@ The exact mysql2 profile is explicit: `supportBigNumbers: true`,
 `bigNumberStrings: true`, `decimalNumbers: false`, `rowsAsArray: false`,
 `jsonStrings: false`, `dateStrings: false`, and the default `typeCast`.
 Changing any option is a separate conditional profile until separately tested.
-BIGINT results map to `bigint`; exact decimals remain strings. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+All exact integer and decimal results are canonical `string` values; FLOAT and
+DOUBLE remain JavaScript `number` values. Set `jsonStrings: true` for the
+lossless JSON-text profile and `dateStrings: true` for the lossless temporal
+text profile, and pass matching `profile` evidence to the adapter when the
+physical connection wrapper does not expose its options. See the [data
+representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+
+JSON-text fidelity preserves the database's returned representation, not the
+original JSON source: MySQL native JSON storage canonicalizes keys/whitespace
+and can round decimal tokens. Store JSON in a text column when those original
+digits must round-trip unchanged.

@@ -1,18 +1,18 @@
 {
   "id": "sqlite-node-sqlite-node-22-18-0",
-  "status": "official",
+  "status": "compatible",
   "database": { "product": "sqlite", "version": "3.50.2", "edition": "Node bundled SQLite" },
   "driver": {
     "id": "node-sqlite",
     "version": "22.18.0",
-    "profile": "integerMode=bigint",
+    "profile": "exact-string",
     "package": "@sqlbraid/sqlite/node-sqlite",
     "transport": "text-positional (?NNN)",
     "stream": "StatementSync iterate",
     "routine": "unsupported by SQLite",
     "bulk": "prepared-loop",
     "rawRepresentations": { "integer": "bigint", "decimal": "number or string", "json": "text", "temporal": "text" },
-    "exclusions": ["SQLite call and routine APIs are unsupported", "Bun has no node:sqlite module", "Exact 64-bit integer output requires bigint mode"]
+    "exclusions": ["SQLite call and routine APIs are unsupported", "Bun has no node:sqlite module"]
   },
   "runtime": { "id": "node", "version": "22.18.0" },
   "reproducibility": {
@@ -20,13 +20,31 @@
     "description": "Node 22.18.0's built-in node:sqlite with an in-memory database.",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm run test:db:sqlite", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": { "command": "pnpm exec vitest run", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "numeric": {
+    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "profile": "exact-string" },
+    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported" },
+    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless" }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unsupported"
+  },
   "capabilities": {
     "sql.native-transparency": { "status": "guaranteed", "testIds": ["sqlite.sql.native-transparency"] },
     "sql.generated-structure": { "status": "guaranteed", "testIds": ["sqlite.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "guarded", "conditionCode": "node-sqlite.bigint-mode", "canonical": "bigint", "rawRepresentations": ["bigint"], "testIds": ["sqlite.numeric.exact-integer"] },
-    "data.json-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["sqlite.data.json-text"] },
-    "data.temporal": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["sqlite.data.temporal"] },
+    "numeric.exact-integer": { "status": "guaranteed", "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["bigint", "string"], "testIds": ["sqlite.numeric.exact-integer"] },
+    "numeric.exact-decimal": { "status": "unsupported", "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported", "testIds": [] },
+    "numeric.approximate-float": { "status": "guaranteed", "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless", "rawRepresentations": ["number"], "testIds": ["sqlite.numeric.approximate-float"] },
+    "numeric.bind-exact": { "status": "guaranteed", "testIds": ["sqlite.numeric.dynamic-storage-and-bind-exact"] },
+    "data.json-lossless-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["sqlite.data.json-lossless-text"] },
+    "data.temporal-lossless": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["sqlite.data.temporal-lossless"] },
     "data.binary": { "status": "guaranteed", "rawRepresentations": ["Uint8Array"], "testIds": ["sqlite.data.binary"] },
     "data.uuid": { "status": "unsupported", "testIds": [] },
     "result.rows": { "status": "guaranteed", "testIds": ["sqlite.result.rows"] },
@@ -47,16 +65,11 @@
     "metadata.generated": { "status": "guaranteed", "testIds": ["sqlite.metadata.generated"] },
     "metadata.routines": { "status": "unsupported", "testIds": [] },
     "metadata.types": { "status": "guaranteed", "testIds": ["sqlite.metadata.types"] },
-    "dml.insert-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.insert-returning"] },
+    "dml.insert-returning": { "status": "guaranteed", "testIds": ["sqlite.result.rows"] },
+    "dml.upsert-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.upsert-returning"] },
     "dml.update-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.update-returning"] },
-    "dml.delete-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.delete-returning"] },
-    "dml.merge-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.merge-returning"] }
+    "dml.delete-returning": { "status": "guaranteed", "testIds": ["sqlite.dml.delete-returning"] }
+
   },
-  "evidence": {
-    "status": "verified",
-    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
-    "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Release dry-run: Node 22.18.0 bundled SQLite 3.50.2 with explicit bigint mode." }
-    ]
-  }
+  "evidence": { "status": "pending", "runs": [] }
 }

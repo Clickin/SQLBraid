@@ -8,7 +8,7 @@ SQLBraid's tag is ordinary TypeScript plus SQL. The dialect package exports a co
 ```ts
 import { sql } from "@sqlbraid/postgres";
 
-const users = sql.rows<{ id: number; name: string }>`
+const users = sql.rows<{ id: string; name: string }>`
   SELECT id, name FROM users
 `;
 const update = sql.command`
@@ -16,8 +16,13 @@ const update = sql.command`
 `;
 const routine = sql.call({
   resultSets: [RefreshSchema] as const,
-})`CALL refresh_accounts(${accountId})`;
+`;
 ```
+
+For the exact integer driver profiles documented here, the `id` field is
+canonical decimal text. Approximate floating-point columns are declared as
+`number`; use a Standard Schema transform when the application needs `bigint`
+or an arbitrary-precision decimal.
 
 Use the matching runtime operation:
 

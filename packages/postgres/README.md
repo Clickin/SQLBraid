@@ -36,7 +36,13 @@ carrier columns by database field name.
 
 See the [PostgreSQL setup](https://clickin.github.io/SQLBraid/getting-started/postgres/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
 
-Representation profile: the default `pg` parser returns `int8` and
-`numeric`/`decimal` as strings, `json`/`jsonb` as parsed values, `bytea` as
-`Buffer`, and UUIDs as strings. Custom parsers are separate conditional
-profiles and need their own evidence. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+Representation profile: SQLBraid's default `pg` profile uses query-local
+public parser overrides, returning exact numerics and JSON/temporal values as
+text, approximate floats as JavaScript `number`, `bytea` as `Buffer`, and UUIDs
+as strings. Pass `parserProfile: { json: "parsed", temporal: "date" }` only
+when convenience conversion is preferred; that is a conditional profile.
+Custom parsers are separate conditional profiles and need their own evidence.
+PostgreSQL `money` is unsupported by the exact output profile because its
+textual form is locale-sensitive; use an explicit native numeric cast when
+exact text is required. PostgreSQL arrays, domains, ranges/multiranges, and
+composites are not recursively normalized. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

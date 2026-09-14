@@ -288,4 +288,17 @@ const description = acmeStatementBinding.describe(statement, {
 
 Also describe one adapter object under multiple dialect contexts. Context may alter driver policy or diagnostic literal formatting, but never the core value-only invariant. `sql.raw`, `sql.ident`, and explicit fragment helpers are the only structural paths.
 
+Exact database numerics are canonical strings and approximate IEEE values are
+numbers. Keep `semantics`, `representation`, and transport `fidelity`
+independent in TypePolicy metadata; a lossy exact decimal must fail closed, not
+be stringified. Parsed JSON/native `Date` are convenience profiles, while text
+profiles need their own evidence. Scalar guarantees do not automatically apply
+to arrays, ranges, composites, objects, `sql_variant`, or vectors.
+
+Keep the query-builder/render phase and binder/materializer phase separate: the
+former describes immutable SQL segments and value boundaries, while the latter
+chooses driver transport and parameter descriptors. A query builder must not
+promise numeric output fidelity, and a binder must not rewrite SQL to disguise a
+driver limitation.
+
 For the full contract and checklist, see [`docs/driver-author-guide.md`](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md).

@@ -18,7 +18,7 @@ import { Client } from "pg";
 import { createPgDatabase } from "@sqlbraid/postgres/pg";
 import { sql } from "@sqlbraid/postgres";
 
-interface UserRow { id: number; name: string }
+interface UserRow { id: string; name: string }
 
 const client = new Client({ connectionString: process.env.DATABASE_URL });
 await client.connect();
@@ -48,7 +48,7 @@ const db = createPgPoolDatabase(pool);
 const accountId = 1;
 
 try {
-  const account = await db.one(sql.rows<{ id: number; email: string }>`
+  const account = await db.one(sql.rows<{ id: string; email: string }>`
     SELECT id, email FROM accounts WHERE id = ${accountId}
   `);
   console.log(account);
@@ -92,21 +92,30 @@ transaction-bound portal을 fetch/close하고 scalar `output`에서 제거한 �
 
 ## pg 표현 프로필
 
-이 프로필은 support manifest가 기록한 정확한 database/runtime 조합에서
-`pg` 기본 parser를 사용합니다. custom `pg-types` parser는 별도의
+이 프로필은 support manifest가 기록한 정확한 database/runtime 조합의
+`pg` parser/configuration을 사용합니다. custom `pg-types` parser는 별도의
 conditional 프로필이며 자체 raw-value 증거가 필요합니다.
 
-| 값 | 기본 프로필 표현 | 경계 |
+| 값 | SQLBraid raw 표현 | 정확도 경계 |
 | --- | --- | --- |
-| `int8` | string | 애플리케이션에서 `bigint`가 필요하면 `decodeExactInteger`를 사용합니다. |
-| `numeric`/`decimal` | string | 텍스트를 유지하거나 애플리케이션 10진 라이브러리를 사용하며 `number`로 변환하지 않습니다. |
-| `json`/`jsonb` | 파싱된 JavaScript 값 | Standard Schema로 검증합니다. custom parser는 텍스트를 반환할 수도 있습니다. |
+| `int2` / `int4` / `int8` | string | 안전한 정수 driver 값도 text로 정규화하며 exact 출력은 `number`나 `bigint`가 아닙니다. |
+| `numeric` / `decimal` | string | exact text를 보존하며 JavaScript `number`는 exact로 허용하지 않습니다. |
+| `float4` / `float8` | number | 근사 이진 값이며 lossless text read 프로필에는 `SHOW extra_float_digits` 양수가 필요합니다. |
+| `money` | unsupported | locale 형식 text는 표준 숫자값이 아니므로 사용자가 명시적 format 변환을 작성해야 합니다. |
+| `json` / `jsonb` | text 또는 parsed 값 | `data.json-text-lossless`는 query-local 프로필이며 기본 parsed 경로는 편의 기능입니다. |
+| 날짜/시간 | text 또는 `Date` | 정확도 우선 프로필은 text이고 `Date`는 microsecond와 일부 timezone 의미를 잃습니다. |
 | `bytea` | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
 | `uuid` | string | 필요하면 애플리케이션 schema에서 형식을 검증합니다. |
-| 날짜/시간 | 설정한 variant에 따라 JavaScript `Date` 또는 driver text | `Date`는 모든 원본 offset/precision을 보존하지 않습니다. |
 
-바인드 전송은 순서가 있는 값과 text-positional `$1`, `$2`, …입니다.
-`pg-cursor`가 native pull stream을 제공하며 peer가 없으면
+문서화된 프로필에서 end-to-end 왕복이 증명된 경우 text-positional bind로
+정확한 문자열 입력을 지원합니다. 일반 `undefined` bind는 connection을
+얻기 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패하며 `null`은 SQL `NULL`입니다.
+배열, domain, range/multirange, composite는 scalar 원소 타입이 exact여도
+unclassified container입니다.
+
+`db.environment()`는 `extra_float_digits`와 선택한 JSON/temporal parser
+프로필을 기록합니다. 이를 무조건적인 fidelity 보장으로 읽으면 안 됩니다.
+`pg-cursor`는 native pull stream을 제공하며 peer가 없으면
 `BRAID_STREAM_UNSUPPORTED`입니다. Routine refcursor는 기존 transaction이
 필요하고 result set으로 materialize됩니다. Bulk는 SQL rewrite가 아닌
 검증된 adapter native 또는 prepared 전략을 사용합니다. `RETURNING`을

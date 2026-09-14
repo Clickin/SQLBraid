@@ -319,6 +319,44 @@ Streaming is the exception: the stream owns its physical lease until iteration c
 
 Ordinary `${value}` continues through the dialect/driver bind boundary. Do not add `sql.bind(value, codec)` or a general input-mapper framework before pre-release.
 
+### 5.6 PV17 value-fidelity boundary
+
+PV17 makes raw value semantics explicit before application mapping:
+
+```text
+exact database integer/decimal → string
+IEEE-754 approximate binary    → number
+```
+
+`TypeMapping.numeric` separates the database `semantics`, SQLBraid
+`representation`, and transport `fidelity` (`lossless`, `guarded`, `lossy`, or
+`unsupported`), with optional `binaryPrecision: 32 | 64`. Exact output must not
+vary with the current value and must never use `bigint` or JavaScript `number`
+as a convenience fallback. `decodeExactInteger` is an opt-in application
+helper; arbitrary-precision Decimal, Money, and domain values remain
+application-owned Standard Schema transforms. There is no global `numericMode`.
+
+The same rule applies to JSON and temporal values. Lossless JSON text is
+distinct from a parsed object whose nested numbers may already be JavaScript
+`number`; temporal text is distinct from native `Date`, which can lose
+fractional precision, offsets, zones, or local/date-only meaning. Driver options
+and query-authored casts/format expressions are separate profiles. SQLBraid
+never rewrites SQL to manufacture fidelity.
+
+`null` means SQL `NULL`. Ordinary `undefined` IN parameters are programming
+errors and fail with `BRAID_BIND_VALUE_UNSUPPORTED` before acquisition across
+execute, prepared, bulk, stream, and routine paths. Database-generated IDs and
+affected-row metadata are audited separately from runtime cardinality counters;
+database values remain exact text or fail closed, while operational counts use
+safe-range checks.
+
+Scalar guarantees do not automatically apply to arrays, domains, ranges,
+multiranges, composites, Oracle objects/collections, SQL Server `sql_variant`,
+vectors, or other containers. Such values are `unclassified` or `unsupported`
+until a recursive transport test proves otherwise. Native SQL remains
+transparent: `MERGE` and UPSERT/REPLACE/ON CONFLICT are distinct support
+capabilities (`merge-returning` versus `upsert-returning`).
+
 ---
 
 ## 6. Execution and connection ownership
@@ -911,7 +949,8 @@ Non-negotiable:
 - `@sqlbraid/vite` pre-transform and compiler `transformSource` original-source maps,
   with Vite owning TS/JSX transpilation;
 - packed TanStack Start / Node 24 finance acceptance with Korean STRICT tables,
-  explicit SQLite number/bigint mode and server-only database dependencies;
+  native SQLite int64 transport and canonical string output, and server-only
+  database dependencies;
 - prepared factory/shape errors are observable before execution, with dialect,
   parameter direction/output identity and hint structure in logical shape.
 
@@ -935,14 +974,12 @@ Non-negotiable:
   unmatched or incomplete tuple remains Compatible rather than a guessed
   Official claim.
 
-Documentation baseline for this phase: `b5600ebf8a3fed4b80c6f31550a37488ef057525`.
-Implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed
-[Runtime](https://github.com/Clickin/SQLBraid/actions/runs/34818111424),
-[Docs](https://github.com/Clickin/SQLBraid/actions/runs/34818111252), and
-[Release dry-run](https://github.com/Clickin/SQLBraid/actions/runs/34818113561).
-Eight exact profiles are certified in `support/targets/`; D1 remains Compatible
-because its managed SQLite version is unreported. Oracle Free 23.9 evidence
-does not certify Oracle 19c, which has no configured zero-cost reproduction.
+The PV16 records above are historical evidence only. PV17 starts from baseline
+`dccb69763e9e4a070280cf580d8f7b76368ec3d5`; its changed representation contract
+requires new exact-SHA Runtime, Docs and Release dry-run gates. No current run
+ID, final SHA, or support-label promotion is claimed here. D1 remains
+Compatible because its managed SQLite version is unreported, and Oracle Free
+23.9 evidence does not certify Oracle 19c.
 
 The workspace has 18 publishable packages. Certification records name the
 verified implementation revision; subsequent changes require their own exact-SHA

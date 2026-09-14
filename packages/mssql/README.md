@@ -10,7 +10,7 @@ npm install @sqlbraid/mssql tedious
 import { mssqlParameter, sql } from "@sqlbraid/mssql";
 import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
 
-const query = sql.rows<{ id: number }>`SELECT id FROM dbo.users`;
+const query = sql.rows<{ id: string }>`SELECT id FROM dbo.users`;
 const db = createTediousDatabase(connection);
 const rows = await db.all(query);
 ```
@@ -38,7 +38,21 @@ rejected rather than ignored.
 
 See the [SQL Server setup](https://clickin.github.io/SQLBraid/getting-started/mssql/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
 
-Tedious returns `bigint` as strings but `decimal`/`numeric` as JavaScript
-numbers; exact decimal support is therefore unsupported in this profile.
-`datetime2`/`datetimeoffset` use `Date`, `uniqueidentifier` uses strings, and
-`varbinary` uses bytes. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+Tedious returns SQL Server exact integer types (`tinyint`, `smallint`, `int`,
+and `bigint`) as canonical decimal strings. Native `decimal`, `numeric`,
+`money`, and `smallmoney` results arrive as JavaScript numbers and fail with
+`BRAID_RESULT_EXACTNESS`; SQLBraid does not stringify a lossy value. Use an
+explicit character expression when exact text is required:
+
+```ts
+const amount = sql.rows`
+  SELECT CONVERT(varchar(64), CAST(${sql.bind("12345678901234567890.1234", mssqlParameter.nvarchar(80))}
+    AS decimal(38, 4))) AS amount
+`;
+```
+
+`real` and `float` remain finite IEEE-754 JavaScript numbers. `datetime2` and
+`datetimeoffset` use `Date` for convenience, but fractional 100ns digits and
+offset text are not lossless; use an explicit ISO `CONVERT(varchar(...), ...,
+127)` expression when those values matter. `uniqueidentifier` uses strings,
+and `varbinary` uses bytes. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

@@ -49,7 +49,7 @@
     "target": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "status", "database", "driver", "runtime", "reproducibility", "ci", "capabilities", "evidence"],
+      "required": ["id", "status", "database", "driver", "runtime", "reproducibility", "ci", "numeric", "containers", "capabilities", "evidence"],
       "properties": {
         "id": { "$ref": "#/$defs/targetId" },
         "status": { "enum": ["official", "conditional", "compatible", "historical", "unsupported"] },
@@ -111,6 +111,22 @@
             "releaseBlocking": { "type": "boolean" }
           }
         },
+        "numeric": { "$ref": "#/$defs/numericProfile" },
+        "containers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["postgres-arrays", "postgres-domains", "postgres-ranges", "postgres-composites", "oracle-objects", "sql-server-variant", "json-nested", "vector"],
+          "properties": {
+            "postgres-arrays": { "$ref": "#/$defs/containerStatus" },
+            "postgres-domains": { "$ref": "#/$defs/containerStatus" },
+            "postgres-ranges": { "$ref": "#/$defs/containerStatus" },
+            "postgres-composites": { "$ref": "#/$defs/containerStatus" },
+            "oracle-objects": { "$ref": "#/$defs/containerStatus" },
+            "sql-server-variant": { "$ref": "#/$defs/containerStatus" },
+            "json-nested": { "$ref": "#/$defs/containerStatus" },
+            "vector": { "$ref": "#/$defs/containerStatus" }
+          }
+        },
         "capabilities": {
           "type": "object",
           "propertyNames": { "$ref": "#/$defs/capabilityId" },
@@ -127,10 +143,39 @@
         "status": { "enum": ["guaranteed", "guarded", "unsupported"] },
         "conditionCode": { "$ref": "#/$defs/conditionCode" },
         "testIds": { "type": "array", "items": { "$ref": "#/$defs/testId" }, "uniqueItems": true },
-        "canonical": { "enum": ["bigint", "string", "number"] },
+        "semantics": { "$ref": "#/$defs/numericSemantics" },
+        "representation": { "$ref": "#/$defs/numericRepresentation" },
+        "fidelity": { "$ref": "#/$defs/transportFidelity" },
+        "binaryPrecision": { "enum": [32, 64] },
         "rawRepresentations": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
       }
     },
+    "numericProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exact-integer", "exact-decimal", "approximate-binary"],
+      "properties": {
+        "exact-integer": { "$ref": "#/$defs/numericContract" },
+        "exact-decimal": { "$ref": "#/$defs/numericContract" },
+        "approximate-binary": { "$ref": "#/$defs/numericContract" }
+      }
+    },
+    "numericContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantics", "representation", "fidelity"],
+      "properties": {
+        "semantics": { "$ref": "#/$defs/numericSemantics" },
+        "representation": { "$ref": "#/$defs/numericRepresentation" },
+        "fidelity": { "$ref": "#/$defs/transportFidelity" },
+        "binaryPrecision": { "enum": [32, 64] },
+        "profile": { "type": "string", "minLength": 1 }
+      }
+    },
+    "numericSemantics": { "enum": ["exact-integer", "exact-decimal", "approximate-binary"] },
+    "numericRepresentation": { "enum": ["string", "number"] },
+    "transportFidelity": { "enum": ["lossless", "guarded", "lossy", "unsupported"] },
+    "containerStatus": { "enum": ["lossless", "unclassified", "unsupported"] },
     "representationMap": {
       "type": "object",
       "additionalProperties": false,
@@ -172,7 +217,8 @@
       "required": ["file", "title"],
       "properties": {
         "file": { "type": "string", "pattern": "^tests/[a-zA-Z0-9_./-]+\\.test\\.ts$" },
-        "title": { "type": "string", "minLength": 1 }
+        "title": { "type": "string", "minLength": 1 },
+        "outcome": { "enum": ["success", "failure"] }
       }
     },
     "registry": {
@@ -192,7 +238,7 @@
     },
     "capabilityId": { "type": "string", "pattern": "^(?:sql|result|numeric|data|dml|execution|routine|metadata)\\.[a-z0-9]+(?:-[a-z0-9]+)*$" },
     "conditionCode": { "type": "string", "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+$" },
-    "testId": { "type": "string", "pattern": "^[a-z0-9-]+\\.(?:sql|result|numeric|data|dml|execution|routine|metadata)\\.[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "testId": { "type": "string", "pattern": "^[a-z0-9-]+\\.(?:sql|result|numeric|data|dml|execution|routine|metadata|binary|command)\\.[a-z0-9]+(?:-[a-z0-9]+)*$" },
     "targetId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
     "exactVersion": {
       "type": "string",

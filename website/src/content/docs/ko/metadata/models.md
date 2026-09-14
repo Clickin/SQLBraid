@@ -9,17 +9,17 @@ description: 생성된 선언과 보수적인 증거 규칙을 이해합니다.
 
 ```ts
 export interface UsersRow {
-  id: number;
+  id: string;
   email: string;
 }
 
 export interface UsersInsert {
-  id?: number;
+  id?: string;
   email: string;
 }
 
 export interface UsersUpdate {
-  id?: number;
+  id?: string;
   email?: string;
 }
 ```
@@ -27,6 +27,10 @@ export interface UsersUpdate {
 - **Row**는 TypePolicy의 `outputType`을 사용하며, 데이터베이스 nullable은 `| null`을 추가합니다.
 - **Insert**는 `inputType`을 사용합니다. nullable/default/identity 열은 optional이 되고, 삽입할 수 없거나 생성된 것으로 입증된 열은 제외됩니다.
 - **Update**는 `inputType`을 사용합니다. 포함된 속성은 optional이며, 업데이트할 수 없거나 생성된 것으로 입증된 열은 제외됩니다. identity만으로 금지하지는 않습니다.
+
+정확한 정수와 10진수의 output type은 canonical `string`이고, 근사 이진
+타입은 `number`입니다. 생성된 모델은 exact string을 `bigint`나 decimal
+객체로 조용히 decode하지 않습니다.
 
 View, materialized view, foreign, virtual 관계에는 Row 모델만 부여됩니다. 열이 있는 알 수 없는 관계 종류에는 경고와 함께 Row 모델이 부여됩니다. 지원되지 않거나 입증되지 않은 타입은 `any`가 아니라 계속 `unknown`입니다. 생성된 소스를 사용하기 전에 진단을 확인하세요.
 

@@ -1,18 +1,18 @@
 {
   "id": "sqlite-wasm-browser-3-53-4",
-  "status": "official",
+  "status": "compatible",
   "database": { "product": "sqlite", "version": "3.53.4", "edition": "official SQLite WASM OO1" },
   "driver": {
     "id": "sqlite-wasm",
     "version": "3.53.4-build1",
-    "profile": "bigint",
+    "profile": "exact-string",
     "package": "@sqlbraid/sqlite/wasm",
     "transport": "OO1 prepare/bind/step",
     "stream": "OO1 step",
     "routine": "unsupported by SQLite",
     "bulk": "prepared-loop with stepReset",
     "rawRepresentations": { "integer": "bigint", "decimal": "number or string", "json": "text", "temporal": "text" },
-    "exclusions": ["Exact INTEGER output requires bigint mode and the initialized sqlite3 module for native column typing", "This browser target does not certify Node database drivers"]
+    "exclusions": ["This browser target does not certify Node database drivers"]
   },
   "runtime": { "id": "browser", "version": "153.0.8010.12" },
   "reproducibility": {
@@ -20,12 +20,28 @@
     "description": "Chromium installed by the pinned Playwright 1.63.0 dependency and exercised by scripts/test-browser.mjs.",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm run test:browser", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": { "command": "pnpm run test:all", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "numeric": {
+    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "profile": "exact-string" },
+    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported" },
+    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless" }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unsupported"
+  },
   "capabilities": {
   "sql.native-transparency": { "status": "guaranteed", "testIds": ["wasm.sql.native-transparency"] },
   "sql.generated-structure": { "status": "guaranteed", "testIds": ["wasm.sql.generated-structure"] },
-  "numeric.exact-integer": { "status": "guarded", "conditionCode": "sqlite-wasm.bigint-mode", "canonical": "bigint", "rawRepresentations": ["bigint"], "testIds": ["wasm.numeric.exact-integer"] },
-  "data.json-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["wasm.data.json-text"] },
+  "numeric.exact-integer": { "status": "guaranteed", "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["bigint"], "testIds": ["wasm.numeric.exact-integer"] },
+  "numeric.exact-decimal": { "status": "unsupported", "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported", "testIds": [] },
+  "data.json-lossless-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["wasm.data.json-lossless-text"] },
   "result.rows": { "status": "guaranteed", "testIds": ["wasm.sql.native-transparency"] },
   "result.command": { "status": "guaranteed", "testIds": ["wasm.execution.bulk"] },
   "result.multiple-sets": { "status": "unsupported", "testIds": [] },
@@ -44,20 +60,12 @@
   "metadata.generated": { "status": "unsupported", "testIds": [] },
   "metadata.routines": { "status": "unsupported", "testIds": [] },
   "metadata.types": { "status": "unsupported", "testIds": [] },
-  "numeric.exact-decimal": { "status": "unsupported", "testIds": [] },
   "data.binary": { "status": "guaranteed", "rawRepresentations": ["Uint8Array"], "testIds": ["wasm.execution.mapped-transaction"] },
-  "data.temporal": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["wasm.execution.mapped-transaction"] },
+  "data.temporal-lossless": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["wasm.data.temporal-lossless"] },
   "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["wasm.execution.mapped-transaction"] },
   "dml.insert-returning": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
   "dml.update-returning": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
-  "dml.delete-returning": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
-  "dml.merge-returning": { "status": "unsupported", "testIds": [] }
+  "dml.delete-returning": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] }
   },
-  "evidence": {
-    "status": "verified",
-    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
-    "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Release dry-run: Chromium 153.0.8010.12 and SQLite WASM 3.53.4 bigint/CAPI profile." }
-    ]
-  }
+  "evidence": { "status": "pending", "runs": [] }
 }

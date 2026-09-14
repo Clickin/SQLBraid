@@ -210,11 +210,12 @@ bounds cursor reads. Public cursor callback metadata drives row normalization.
 
 ## @sqlbraid/sqlite
 
-**Application:** `sql`, `typePolicyForIntegerMode`,
-`createSqliteWasmDatabase`, `createD1Database`.
+**Application:** `sql`, `createSqliteWasmDatabase`, `createD1Database`.
 
-**PV15 Application:** `SqliteIntegerMode`, `SqliteExecutorOptions`,
-`SqliteDatabaseOptions`, also exported by `/node-sqlite`.
+**PV17 representation:** SQLite INTEGER storage is normalized to canonical
+decimal `string`; native bigint is an internal transport detail, not a public
+integer mode or TypePolicy selector. D1 remains guarded to the JavaScript
+safe-integer range.
 
 **Advanced:** `createSqlTag`, `dialect`, `typePolicy`.
 

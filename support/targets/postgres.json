@@ -1,6 +1,6 @@
 {
   "id": "postgres-pg-node-16-4",
-  "status": "official",
+  "status": "compatible",
   "database": { "product": "postgres", "version": "16.4", "edition": "alpine" },
   "driver": {
     "id": "pg",
@@ -11,7 +11,7 @@
     "stream": "pg-cursor",
     "routine": "SQL CALL; OUT row and transaction-owned refcursor FETCH",
     "bulk": "prepared-loop",
-    "rawRepresentations": { "integer": "int8 string", "decimal": "string", "json": "object", "temporal": "Date or string by OID" },
+    "rawRepresentations": { "integer": "string", "decimal": "string", "json": "text (parsed profile optional)", "temporal": "text (Date profile optional)" },
     "exclusions": ["PostgreSQL 18-only syntax is not covered by this 16.4 target", "Bun and Deno pg subpaths are not certified by this target"]
   },
   "runtime": { "id": "node", "version": "22.18.0" },
@@ -21,16 +21,36 @@
     "image": "postgres:16.4-alpine",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm run test:db:postgres", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": { "command": "pnpm exec vitest run", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "numeric": {
+    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "lossless" },
+    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless" },
+    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "guarded", "profile": "extra_float_digits>0" }
+  },
+  "containers": {
+    "postgres-arrays": "unclassified",
+    "postgres-domains": "unclassified",
+    "postgres-ranges": "unclassified",
+    "postgres-composites": "unclassified",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
   "capabilities": {
     "sql.native-transparency": { "status": "guaranteed", "testIds": ["postgres.sql.native-transparency"] },
     "sql.generated-structure": { "status": "guaranteed", "testIds": ["postgres.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "guaranteed", "canonical": "bigint", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.exact-integer"] },
-    "numeric.exact-decimal": { "status": "guaranteed", "canonical": "string", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.exact-decimal"] },
-    "numeric.scale-greater-than-precision": { "status": "guaranteed", "canonical": "string", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.scale-greater-than-precision"] },
-    "numeric.negative-scale": { "status": "guaranteed", "canonical": "string", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.negative-scale"] },
-    "data.json-native": { "status": "guaranteed", "rawRepresentations": ["object"], "testIds": ["postgres.data.json-native"] },
-    "data.temporal": { "status": "guaranteed", "rawRepresentations": ["Date", "string"], "testIds": ["postgres.data.temporal"] },
+    "numeric.exact-integer": { "status": "guaranteed", "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.exact-integer"] },
+    "numeric.exact-decimal": { "status": "guaranteed", "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.exact-decimal"] },
+    "numeric.approximate-float": { "status": "guarded", "conditionCode": "pg.extra-float-digits", "semantics": "approximate-binary", "representation": "number", "fidelity": "guarded", "rawRepresentations": ["number"], "testIds": ["postgres.numeric.transport"] },
+    "numeric.bind-exact": { "status": "guaranteed", "testIds": ["postgres.numeric.transport"] },
+    "numeric.aggregate": { "status": "guaranteed", "testIds": ["postgres.numeric.transport"] },
+    "numeric.scale-greater-than-precision": { "status": "guaranteed", "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.scale-greater-than-precision"] },
+    "numeric.negative-scale": { "status": "guaranteed", "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.negative-scale"] },
+    "data.json-parsed": { "status": "guarded", "conditionCode": "pg.json-parser-profile", "rawRepresentations": ["object"], "testIds": ["postgres.data.parser-profiles"] },
+    "data.json-lossless-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["postgres.numeric.transport"] },
+    "data.temporal-native": { "status": "guarded", "conditionCode": "pg.temporal-parser-profile", "rawRepresentations": ["Date"], "testIds": ["postgres.data.parser-profiles"] },
+    "data.temporal-lossless": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["postgres.data.temporal-lossless"] },
     "data.binary": { "status": "guaranteed", "rawRepresentations": ["Buffer", "Uint8Array"], "testIds": ["postgres.data.binary"] },
     "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["postgres.data.uuid"] },
     "result.rows": { "status": "guaranteed", "testIds": ["postgres.result.rows"] },
@@ -52,14 +72,10 @@
     "metadata.routines": { "status": "guaranteed", "testIds": ["postgres.metadata.routines"] },
     "metadata.types": { "status": "guaranteed", "testIds": ["postgres.metadata.types"] },
     "dml.insert-returning": { "status": "guaranteed", "testIds": ["postgres.dml.insert-returning"] },
+    "dml.upsert-returning": { "status": "guaranteed", "testIds": ["postgres.dml.upsert-returning"] },
     "dml.update-returning": { "status": "guaranteed", "testIds": ["postgres.dml.update-returning"] },
     "dml.delete-returning": { "status": "guaranteed", "testIds": ["postgres.dml.delete-returning"] }
+
   },
-  "evidence": {
-    "status": "verified",
-    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
-    "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Release dry-run: pinned profile and linked native capability tests." }
-    ]
-  }
+  "evidence": { "status": "pending", "runs": [] }
 }

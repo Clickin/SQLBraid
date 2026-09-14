@@ -271,9 +271,19 @@ row events. MySQL break drains for reuse; abort destroys/discards. Cleanup
 failure poisons/discards the physical resource. No SQLBraid full-result array is
 permitted on `db.stream()`.
 
-SQLite `integerMode` is explicit (`number` default, `bigint` for exact int64).
-Use the matching `typePolicyForIntegerMode()` for generated models; do not
-silently coerce bigint through number or claim JSON serializability.
+PV17 exact SQL numerics are raw `string`; IEEE-754 approximate types are
+`number`. TypeMapping separates database semantics, representation and transport
+fidelity. Application BigInt/Decimal/Money transformations belong to Standard
+Schema. SQLite uses bigint internally for int64 transport, not as public output;
+D1 remains guarded to values its Number transport preserves. Reject lossy exact
+decimal transport rather than stringifying an already-rounded Number.
+
+Ordinary `undefined` IN parameters reject before acquisition; `null` is SQL NULL.
+JSON text and parsed JSON have separate fidelity claims. Temporal Date convenience
+does not establish fractional precision or zone fidelity. User-authored SQL owns
+explicit text conversions where native driver transport is lossy; SQLBraid never
+rewrites SQL to supply them. Capability fixtures prove driver input/output and
+resource ownership using native SQL, not database syntax support.
 
 ---
 

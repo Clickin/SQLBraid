@@ -1,6 +1,6 @@
 {
   "id": "oracle-oracledb-thin-node-23-9",
-  "status": "official",
+  "status": "compatible",
   "database": { "product": "oracle", "version": "23.9", "edition": "Free" },
   "driver": {
     "id": "node-oracledb",
@@ -21,14 +21,35 @@
     "image": "gvenzl/oracle-free:23.9-slim-faststart",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm run test:db:oracle", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": { "command": "pnpm exec vitest run", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "numeric": {
+    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "unsupported", "profile": "thin" },
+    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless", "profile": "thin" },
+    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless", "profile": "thin" }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unclassified",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
   "capabilities": {
     "sql.native-transparency": { "status": "guaranteed", "testIds": ["oracle.sql.native-transparency"] },
     "sql.generated-structure": { "status": "guaranteed", "testIds": ["oracle.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "unsupported", "testIds": [] },
-    "numeric.exact-decimal": { "status": "guaranteed", "canonical": "string", "rawRepresentations": ["string"], "testIds": ["oracle.numeric.exact-decimal"] },
-    "data.json-native": { "status": "guaranteed", "rawRepresentations": ["object"], "testIds": ["oracle.data.json-native"] },
-    "data.temporal": { "status": "guaranteed", "rawRepresentations": ["Date"], "testIds": ["oracle.data.temporal"] },
+    "numeric.exact-integer": { "status": "unsupported", "semantics": "exact-integer", "representation": "string", "fidelity": "unsupported", "testIds": [] },
+    "numeric.exact-decimal": { "status": "guaranteed", "semantics": "exact-decimal", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["oracle.numeric.exact-decimal"] },
+    "numeric.approximate-float": { "status": "guaranteed", "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless", "rawRepresentations": ["number"], "testIds": ["oracle.binary.finite-transport"] },
+    "numeric.approximate-special": { "status": "guaranteed", "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless", "rawRepresentations": ["number"], "testIds": ["oracle.binary.nonfinite-probe"] },
+    "numeric.bind-exact": { "status": "guarded", "conditionCode": "oracle.bind-nls-sensitive", "testIds": ["oracle.numeric.bind-nls-audit"] },
+    "numeric.aggregate": { "status": "guaranteed", "testIds": ["oracle.numeric.aggregate-composite"] },
+    "data.json-parsed": { "status": "guaranteed", "rawRepresentations": ["object"], "testIds": ["oracle.data.json-parsed"] },
+    "data.json-lossless-text": { "status": "guarded", "conditionCode": "oracle.json-serialize-required", "rawRepresentations": ["string"], "testIds": ["oracle.data.json-lossless-text"] },
+    "data.temporal-native": { "status": "guarded", "conditionCode": "oracle.date-millisecond-precision", "rawRepresentations": ["Date"], "testIds": ["oracle.data.temporal-lossless"] },
+    "data.temporal-lossless": { "status": "guarded", "conditionCode": "oracle.temporal-text-cast-required", "rawRepresentations": ["string"], "testIds": ["oracle.data.temporal-lossless"] },
     "data.binary": { "status": "guaranteed", "rawRepresentations": ["Buffer", "Uint8Array"], "testIds": ["oracle.data.binary"] },
     "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["oracle.data.uuid"] },
     "result.rows": { "status": "guaranteed", "testIds": ["oracle.result.rows"] },
@@ -52,13 +73,7 @@
     "dml.insert-returning": { "status": "guaranteed", "testIds": ["oracle.dml.insert-returning"] },
     "dml.update-returning": { "status": "guaranteed", "testIds": ["oracle.dml.update-returning"] },
     "dml.delete-returning": { "status": "guaranteed", "testIds": ["oracle.dml.delete-returning"] },
-    "dml.merge-returning": { "status": "unsupported", "testIds": [] }
+    "metadata.command-safe": { "status": "guarded", "conditionCode": "oracle.count-safe-integer", "testIds": ["oracle.command.safe-count"] }
   },
-  "evidence": {
-    "status": "verified",
-    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
-    "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Release dry-run: Oracle Free 23.9 Thin only; not Oracle 19c or Thick evidence." }
-    ]
-  }
+  "evidence": { "status": "pending", "runs": [] }
 }

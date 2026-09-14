@@ -1,6 +1,6 @@
 {
   "id": "mssql-tedious-developer-node-2022-cu18",
-  "status": "official",
+  "status": "compatible",
   "database": { "product": "mssql", "version": "2022-CU18", "edition": "Developer" },
   "driver": {
     "id": "tedious",
@@ -21,18 +21,37 @@
     "image": "mcr.microsoft.com/mssql/server:2022-CU18-ubuntu-22.04",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
-  "ci": { "command": "pnpm run test:db:mssql", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "ci": { "command": "pnpm exec vitest run", "workflow": ".github/workflows/release.yml", "releaseBlocking": true },
+  "numeric": {
+    "exact-integer": { "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "profile": "typed-request" },
+    "exact-decimal": { "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported", "profile": "typed-request" },
+    "approximate-binary": { "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless" }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unclassified",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
   "capabilities": {
     "sql.native-transparency": { "status": "guaranteed", "testIds": ["mssql.sql.native-transparency"] },
     "sql.generated-structure": { "status": "guaranteed", "testIds": ["mssql.sql.generated-structure"] },
-    "numeric.exact-integer": { "status": "guarded", "conditionCode": "tedious.exact-numeric-profile", "canonical": "bigint", "rawRepresentations": ["string"], "testIds": ["mssql.numeric.exact-integer"] },
-    "numeric.exact-decimal": { "status": "unsupported", "testIds": ["mssql.numeric.exact-decimal"] },
-    "data.json-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mssql.data.json-text"] },
-    "data.temporal": { "status": "guaranteed", "rawRepresentations": ["Date", "string"], "testIds": ["mssql.data.temporal"] },
+    "numeric.exact-integer": { "status": "guaranteed", "semantics": "exact-integer", "representation": "string", "fidelity": "lossless", "rawRepresentations": ["string"], "testIds": ["mssql.numeric.exact-integer"] },
+    "numeric.exact-decimal": { "status": "unsupported", "conditionCode": "mssql.exact-decimal-text-cast-required", "semantics": "exact-decimal", "representation": "string", "fidelity": "unsupported", "testIds": ["mssql.numeric.exact-decimal"] },
+    "numeric.approximate-float": { "status": "guaranteed", "semantics": "approximate-binary", "representation": "number", "fidelity": "lossless", "rawRepresentations": ["number"], "testIds": ["mssql.numeric.approximate-float"] },
+    "numeric.bind-exact": { "status": "guarded", "conditionCode": "mssql.character-cast-required", "testIds": ["mssql.numeric.exact-bind-character"] },
+    "numeric.aggregate": { "status": "unsupported", "conditionCode": "mssql.exact-decimal-text-cast-required", "testIds": ["mssql.numeric.exact-decimal"] },
+    "data.json-lossless-text": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mssql.data.json-lossless-text"] },
+    "data.temporal-native": { "status": "guarded", "conditionCode": "mssql.temporal-text-cast-required", "rawRepresentations": ["Date"], "testIds": ["mssql.data.temporal-native"] },
     "data.binary": { "status": "guaranteed", "rawRepresentations": ["Buffer", "Uint8Array"], "testIds": ["mssql.data.binary"] },
     "data.uuid": { "status": "guaranteed", "rawRepresentations": ["string"], "testIds": ["mssql.data.uuid"] },
     "result.rows": { "status": "guaranteed", "testIds": ["mssql.result.rows"] },
     "result.command": { "status": "guaranteed", "testIds": ["mssql.result.command"] },
+    "metadata.command-safe": { "status": "guarded", "conditionCode": "mssql.safe-count", "testIds": ["mssql.result.command"] },
     "result.multiple-sets": { "status": "guaranteed", "testIds": ["mssql.result.multiple-sets"] },
     "result.standard-schema": { "status": "guaranteed", "testIds": ["mssql.result.standard-schema"] },
     "execution.prepared": { "status": "guaranteed", "testIds": ["mssql.execution.prepared"] },
@@ -54,11 +73,5 @@
     "dml.delete-returning": { "status": "guaranteed", "testIds": ["mssql.dml.delete-returning"] },
     "dml.merge-returning": { "status": "guaranteed", "testIds": ["mssql.dml.merge-returning"] }
   },
-  "evidence": {
-    "status": "verified",
-    "commit": "2890ef65d15ac96a7e3471911b381340aa30579a",
-    "runs": [
-      { "workflow": ".github/workflows/release.yml", "commit": "2890ef65d15ac96a7e3471911b381340aa30579a", "status": "passed", "run": "https://github.com/Clickin/SQLBraid/actions/runs/34818113561", "details": "Release dry-run: SQL Server Developer 2022-CU18 and Tedious typed-request profile." }
-    ]
-  }
+  "evidence": { "status": "pending", "runs": [] }
 }

@@ -38,6 +38,7 @@
     "test:browser": "node scripts/test-browser.mjs",
     "test:d1": "node scripts/test-d1.mjs",
     "benchmark:bulk": "node scripts/pv16-benchmark.mjs",
+    "benchmark:fidelity": "node --expose-gc scripts/pv17-benchmark.mjs",
     "test:db:oracle": "pnpm run build && vitest run --project db-oracle",
     "test:db:mssql": "pnpm run build && vitest run --project db-mssql",
     "test:db:sqlite": "pnpm run build && vitest run --project db-sqlite",

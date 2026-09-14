@@ -2,7 +2,26 @@
 
 This document records what the repository automates and what a maintainer must configure outside the repository. It contains no credentials or registry tokens.
 
-### PV16 evidence status
+### PV17 pending evidence
+
+PV17 starts from baseline `dccb69763e9e4a070280cf580d8f7b76368ec3d5` and changes
+the public value boundary: exact database numerics are strings, approximate
+IEEE values are numbers, and JSON/temporal text profiles are distinct from
+parsed/native convenience. No final PV17 SHA or workflow run is recorded yet.
+
+The pending release gates are the simplified current workflow: one full Vitest
+pass on Node 22, the existing `test:all` pass on Node 24, the fidelity
+benchmark, and the documentation/release dry-run checks on one final revision.
+The docs-pages workflow validates automatically on push but deploys or updates
+history only when explicitly dispatched with `deploy=true`. A passing
+validation does not deploy Pages, publish packages, mutate tags/dist-tags, or
+authorize a release.
+
+Do not promote a support target or claim an exact profile until these gates
+record the same final commit SHA. Any current matrix cell without that evidence
+is Pending, Guarded, Conditional, Unknown, or Unsupported as appropriate.
+
+### Historical PV16 evidence status
 
 Implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed all
 three required workflows:
@@ -169,7 +188,7 @@ Before the first final tag workflow run, a maintainer must complete these steps 
 3. Configure npm Trusted Publishing for each package using the GitHub owner `Clickin`, repository `SQLBraid`, and the workflow filename `release.yml` (the repository file is `.github/workflows/release.yml`). Leave the environment field unset: this workflow does not select a named environment. npm's current trusted-publisher configuration requires npm CLI >=11.15.0 and Node >=22.14, and the workflow installs npm 11.15.0 before dry-run/final publication. The package must already exist, so complete and verify the local `rc.0` bootstrap first.
 4. In npm's current publishing settings, explicitly enable the direct npm publish action for the trusted publisher. New configurations may default to a staged-publish action; the release workflow invokes direct `npm publish` and will fail closed if that action is not enabled.
 5. Confirm GitHub Actions is allowed to write packages/releases and that the repository's Actions policy permits the pinned actions used by the workflows. The final job requests `id-token: write` for OIDC and `contents: write` for the draft Release.
-6. GitHub Pages is enabled with **GitHub Actions** as the source/build type. `.github/workflows/docs-pages.yml` builds `website/` with the frozen lockfile and deploys the Pages artifact. Verify the successful deployment at `https://clickin.github.io/SQLBraid/`.
+6. GitHub Pages is enabled with **GitHub Actions** as the source/build type. `.github/workflows/docs-pages.yml` validates `website/` automatically on push; it deploys or updates history only from an explicit `workflow_dispatch` with `deploy=true`. Verify deployment only after that explicit operation at `https://clickin.github.io/SQLBraid/`.
 7. If Marketplace distribution is desired, register and verify the `sqlbraid` publisher and its ownership in the Visual Studio Marketplace. A GitHub Release VSIX is the documented fallback; the npm/docs release does not depend on Marketplace administration.
 
 Current operator checks are intentionally treated as unready external state: `npm whoami` returned `E401`, each `@sqlbraid/*` registry lookup returned `E404`, and the Marketplace `sqlbraid` publisher lookup returned `404`. These observations do not create credentials or claim ownership; an administrator must complete and re-check the setup above.

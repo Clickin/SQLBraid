@@ -9,17 +9,17 @@ For a table with a numeric identity `id`, required `email`, and no generated/non
 
 ```ts
 export interface UsersRow {
-  id: number;
+  id: string;
   email: string;
 }
 
 export interface UsersInsert {
-  id?: number;
+  id?: string;
   email: string;
 }
 
 export interface UsersUpdate {
-  id?: number;
+  id?: string;
   email?: string;
 }
 ```
@@ -27,6 +27,10 @@ export interface UsersUpdate {
 - **Row** uses the TypePolicy `outputType`; database nullability adds `| null`.
 - **Insert** uses `inputType`; nullable/default/identity columns are optional, while proven non-insertable/generated columns are omitted.
 - **Update** uses `inputType`; included properties are optional, and proven non-updatable/generated columns are omitted. Identity alone is not a ban.
+
+Exact integer and decimal output types are canonical `string`; approximate binary
+types are `number`. Generated models do not silently decode exact strings to
+`bigint` or a decimal object.
 
 Views, materialized views, foreign, and virtual relations receive Row models only. Unknown relation kinds with columns receive a Row model plus a warning. Unsupported or unproven types remain `unknown`, never `any`; inspect diagnostics before consuming generated source.
 

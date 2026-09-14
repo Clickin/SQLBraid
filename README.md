@@ -6,7 +6,7 @@ SQLBraid is a SQL-first data-access toolkit for TypeScript. It keeps ordinary SQ
 
 ```ts
 interface UserRow {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -21,14 +21,12 @@ const users = sql.rows<UserRow>`
 `;
 ```
 
-> **Status:** pre-release. PV16 adds DML-returning capability evidence, homogeneous bulk, MariaDB, SQLite WASM, and D1 paths on top of PV15 streaming, routine contracts, and Vite 8 integration. Verified profiles are listed below; RC publication still requires user acceptance and explicit release authorization. See [`PLAN.md`](./PLAN.md).
-
-The documentation baseline for this work is `b5600ebf8a3fed4b80c6f31550a37488ef057525`.
-Implementation revision `2890ef65d15ac96a7e3471911b381340aa30579a` passed
-[Runtime](https://github.com/Clickin/SQLBraid/actions/runs/34818111424),
-[Docs](https://github.com/Clickin/SQLBraid/actions/runs/34818111252), and
-[Release dry-run](https://github.com/Clickin/SQLBraid/actions/runs/34818113561).
-The recorded evidence is revision-specific, not a publication claim.
+> **Status:** pre-release PV17. The value-fidelity migration is in progress on
+> baseline `dccb69763e9e4a070280cf580d8f7b76368ec3d5`. Final Runtime, Docs and
+> Release dry-run gates for the changed contract are pending; no current
+> revision or workflow result is claimed. Historical PV16 evidence remains in
+> the release records and is not PV17 evidence. RC publication still requires
+> user acceptance and explicit release authorization. See [`PLAN.md`](./PLAN.md).
 
 [Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) ·
 [Documentation](https://clickin.github.io/SQLBraid/) ·
@@ -61,6 +59,34 @@ const report = sql.rows<ReportRow>`
   FROM reporting_view
 `;
 ```
+
+## Value fidelity
+
+PV17 preserves database value semantics before application convenience:
+
+```text
+exact integer or decimal  → string
+IEEE-754 approximate float → number
+```
+
+`TypePolicy.numeric` separates `semantics`, raw `representation`, and transport
+`fidelity` (`lossless`, `guarded`, `lossy`, or `unsupported`). Exact output is
+never promoted to `number` or `bigint` merely because the current value is
+small. Use `decodeExactInteger` or an application-selected Decimal, Money, or
+domain transform through Standard Schema when the application needs a richer
+type. There is no global numeric mode.
+
+JSON and temporal values follow the same boundary: a lossless text profile is
+distinct from parsed JSON or native `Date` convenience. Driver options such as
+PostgreSQL query-local parsers, mysql2 `jsonStrings`/`dateStrings`, MariaDB
+`autoJsonMap`/`dateStrings`, and explicit Oracle/SQL Server text expressions
+are profile evidence, not automatic rewrites. Exact driver-limited paths fail
+closed or remain unsupported. `null` is SQL `NULL`; ordinary `undefined` binds
+fail before connection acquisition with `BRAID_BIND_VALUE_UNSUPPORTED`.
+
+See [data representations](https://clickin.github.io/SQLBraid/dev/concepts/data-representation/)
+for the EN/KO driver matrix, JSON/temporal examples, container classification,
+and user-authored SQL workarounds.
 
 ---
 
@@ -403,9 +429,11 @@ Custom executors must implement `stream()` explicitly, rejecting unsupported
 capabilities rather than wrapping a materialized query. `callStream()` is not
 available.
 
-SQLite defaults to `integerMode: "number"`. Select `"bigint"` for exact 64-bit
-integers, and use `typePolicyForIntegerMode("bigint")` consistently for codegen.
-JavaScript JSON does not serialize bigint automatically.
+SQLite INTEGER storage is exposed as a canonical decimal string; native bigint
+may be used internally by the Node/WASM drivers but is not a public integer
+mode. REAL storage remains a JavaScript `number`, and D1 is guarded to the
+safe-integer range. JavaScript JSON serialization therefore follows ordinary
+string/number rules rather than requiring bigint encoding.
 
 Uncertain transaction-control failures poison the physical resource. Pooled cleanup discards it (`pg` release-with-destroy; mysql2 `destroy()`); direct resources reject further SQLBraid work.
 
@@ -550,7 +578,10 @@ Runtime support uses four labels:
 - **Custom** — connected through the executor/provider SPI.
 - **Unsupported** — a required capability is absent or the combination fails SQLBraid's checks.
 
-### PV16 runtime evidence
+### Historical PV16 runtime evidence
+
+The following table records the prior PV16 profile only. It is retained for
+provenance and does not certify the changed PV17 value-fidelity contract.
 
 | Runtime | core/template/runtime | Tested version | Notes |
 | --- | --- | --- | --- |
@@ -558,7 +589,7 @@ Runtime support uses four labels:
 | Node | Compatible | 24.21.0 | Full-suite/finance CI evidence; no separate certified target |
 | Bun | Official | 1.3.14 | Packed core/runtime and pg/mysql2 host paths |
 | Deno | Official | 2.9.3 | Packed core/runtime, pg/mysql2 and node:sqlite host paths |
-| Browser | Official | Chromium 153.0.8010.12 | SQLite WASM 3.53.4, explicit bigint/CAPI profile |
+| Browser | Official | Chromium 153.0.8010.12 | SQLite WASM 3.53.4, native int64/CAPI transport with string output (historical PV16 evidence; PV17 gate pending) |
 | Worker | Compatible | workerd 1.20260730.1 | Local D1 binding verified; managed SQLite version unreported |
 
 ### First-party driver host support
@@ -580,22 +611,10 @@ certified by the [target manifests](./support/targets/).
 The [development documentation's exact-SHA evidence](https://clickin.github.io/SQLBraid/dev/reference/support/#release-evidence-provenance),
 [current runtime runs](https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml?query=branch%3Amain)
 and [immutable release workflow](https://github.com/Clickin/SQLBraid/actions/workflows/release.yml)
-are the release evidence entrypoints: match the run's commit SHA to the artifact
-you use. Revision
-[`2890ef6`](https://github.com/Clickin/SQLBraid/actions/runs/34818111424)
-passed all three runtime jobs, including the clean Node **22.18.0** release gate
-and packed Bun **1.3.14** / Deno **2.9.3** real-driver checks. Node 24.21.0
-also passed the full-suite/finance CI gates but is not a separate certified target.
-Bun/Deno versions are exact tested versions, not minimum-version promises.
-Node package metadata retains `>=22.18.0`.
-
-PostgreSQL 16.4 and MySQL 8.4.2 smokes exercise direct clients, concurrent pools,
-physical transaction identity, savepoint rollback, root escape protection, observer
-events, and asynchronous mapper re-entry with pool size one.
-Bun 1.3.14 has no `node:sqlite` module. Deno 2.9.3 does provide `columns()` and
-passes the existing adapter smoke; older documentation omitting that method is
-not evidence of its absence. No SQL keyword classifier or substitute SQLite driver
-is used.
+are the release evidence entrypoints. Match a future run's commit SHA to the
+artifact you use; PV17 currently has no final run ID or exact-SHA claim.
+Historical PostgreSQL/MySQL, Bun/Deno, and SQLite host checks remain historical
+only. No SQL keyword classifier or substitute SQLite driver is used.
 
 Compiler, CLI, language server, and metadata/codegen tooling remain **Node-first**.
 Other drivers remain **Custom** through `QueryExecutor` / `ConnectionProvider`.

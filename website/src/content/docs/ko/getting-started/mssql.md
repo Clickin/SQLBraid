@@ -17,7 +17,7 @@ import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
 import { mssqlParameter, sql } from "@sqlbraid/mssql";
 
 interface UserRow {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -69,7 +69,18 @@ Tedious가 소유하며, 이 단계의 실패는 드라이버 I/O 없이 `materi
 - 여러 recordset을 하나의 가짜 단일 행 결과로 평탄화하지 않고 보존합니다.
 - `CURSOR VARYING OUTPUT`은 애플리케이션 cursor 채널이 아니며 `BRAID_CALL_CURSOR_UNSUPPORTED`로 거부합니다. local cursor를 소비한 뒤 `SELECT` 행을 내보내는 batch는 일반 result set으로 반환됩니다.
 
-Tedious는 `decimal`/`numeric` 결과를 JavaScript 숫자로 반환하므로 기본 정책은 임의 정밀도 소수 결과를 보장하지 않습니다. 유효숫자 15자리를 초과하는 명시적인 소수 문자열 입력은 `BRAID_BIND_DECIMAL_EXACTNESS`로 거부합니다. 정확한 소수 텍스트가 필요하면 SELECT에서 명시적으로 문자열로 변환하고 결과 계약을 문자열로 선언하세요. Tedious가 text로 반환한 `BIGINT`는 SQLBraid가 `bigint`로 정규화합니다. 날짜와 시간은 `Date`를 사용하므로 원래 offset이나 밀리초 미만 정밀도를 보존하지 않습니다.
+Tedious는 `decimal`/`numeric`, `money`, `smallmoney`를 JavaScript
+`number`로 노출하므로 SQLBraid는 손실된 exact 값을 string으로 바꾸지 않고
+`BRAID_RESULT_EXACTNESS`로 fail closed합니다. Tedious의 `BIGINT` text는
+canonical exact string으로 정규화됩니다. 정확한 decimal/money 결과에는
+`CONVERT(varchar(...), exact_column)` 같은 사용자가 작성한 text 표현식을
+선택하고 문자열 결과 계약을 선언하세요. 정확한 입력은 character text로
+bind한 뒤 `CAST(@nvarchar_parameter AS decimal(38, 18))`처럼 SQL에서 변환을
+선택합니다. typed Tedious DECIMAL 입력은 임의 정밀도를 보존하는 경로가
+아닙니다. Native temporal 값은 `Date`이므로 SQL Server의 100ns precision과
+전체 offset 의미를 보존하지 않습니다. 필요하면
+`CONVERT(varchar(...), datetime2_or_datetimeoffset, style)`로 text를
+작성하세요.
 
 증거 라벨과 현재 매트릭스는 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)을 참고하세요.
 
@@ -85,16 +96,20 @@ Tedious는 `decimal`/`numeric` 결과를 JavaScript 숫자로 반환하므로 �
 
 | SQL Server 값 | Tedious 표현 | 상태/주의 |
 | --- | --- | --- |
-| `bigint` | string | 텍스트를 유지하거나 `decodeExactInteger`를 사용하며 무작정 변환하지 않습니다. |
-| `decimal` / `numeric` | JavaScript `number` | 이 프로필에서 **정확한 10진수는 지원하지 않습니다**. 필요하면 SQL에서 텍스트로 변환합니다. |
-| `datetime2` / `datetimeoffset` | `Date` | Offset 이름과 sub-millisecond 정보는 보존되지 않습니다. |
+| `tinyint` / `smallint` / `int` / `bigint` | string | 정확한 정수 전송은 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다. |
+| `decimal` / `numeric` / `money` / `smallmoney` | unsupported | Tedious native 값은 JavaScript `number`이므로 SQL에서 text `CAST`/`CONVERT`를 작성합니다. |
+| `real` / `float` | JavaScript `number` | 근사 binary32/binary64 값이며 SQL Server는 NaN/Infinity를 지원한다고 주장하지 않습니다. |
+| `datetime2` / `datetimeoffset` | `Date` | Native 편의 프로필이며 100ns나 offset 정확도에는 ISO/text conversion을 작성합니다. |
 | `uniqueidentifier` | string | 필요하면 애플리케이션 schema로 검증합니다. |
 | `varbinary` | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
-| JSON | text | Standard Schema로 파싱/검증하며 SQL Server JSON function이 경계를 바꾸지 않습니다. |
+| JSON | text | SQL Server JSON은 character data이며 SQLBraid가 파싱하지 않으므로 중첩 숫자 lexeme을 text로 보존할 수 있습니다. |
 
 바인드 전송은 deterministic `@p1`, `@p2`, … 이름과 `TYPES.*` metadata를
 사용하는 typed Tedious request입니다. Native `OUTPUT` 행은 `sql.rows`로
 materialize하고 output/return routine channel은 명시적 metadata를
-사용합니다. Portable bulk 전략은 prepared-loop입니다. Native SQL은
-투명하게 전달되지만 SQLBraid가 모든 T-SQL grammar를 파싱한다고 주장하지
-않습니다.
+사용합니다. Portable bulk 전략은 prepared-loop입니다. `affectedRows`와
+procedure status는 safe-range 검사를 하는 운영 count이며 driver가 제공하는
+DB 생성 ID는 exact text를 사용합니다. 일반 `undefined` IN 값은 acquisition
+전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패하고 `null`은 SQL `NULL`입니다.
+Native SQL은 투명하게 전달되지만 SQLBraid가 모든 T-SQL grammar를 파싱한다고
+주장하지 않습니다.

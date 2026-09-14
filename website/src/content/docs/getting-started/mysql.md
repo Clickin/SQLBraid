@@ -24,7 +24,7 @@ const connection = await mysql.createConnection(
 const db = createMysql2Database(connection);
 
 try {
-  const rows = await db.all(sql.rows<{ id: number; name: string }>`
+  const rows = await db.all(sql.rows<{ id: string; name: string }>`
     SELECT id, name FROM users ORDER BY id
   `);
   console.log(rows);
@@ -46,7 +46,7 @@ const pool = mysql.createPool(process.env.DATABASE_URL ?? "mysql://root:password
 const db = createMysql2PoolDatabase(pool);
 const userId = 1;
 try {
-  const user = await db.maybeOne(sql.rows<{ id: number; name: string }>`
+  const user = await db.maybeOne(sql.rows<{ id: string; name: string }>`
     SELECT id, name FROM users WHERE id = ${userId}
   `);
   console.log(user);
@@ -99,17 +99,25 @@ that certification.
 | `bigNumberStrings: true` | Official profile requirement | Returns big-number values as strings for exact application handling. |
 | `decimalNumbers: false` | Official profile requirement | Avoids converting `DECIMAL` to JavaScript `number`. `true` is lossy/conditional. |
 | `rowsAsArray: false` | Official profile requirement | Keeps object rows, which SQLBraid's normalizer and schemas expect. |
-| `jsonStrings: false` | Conditional | Native parsed JSON is expected; `true` requires a text schema/parser profile. |
-| `dateStrings: false` | Conditional | `Date` values are expected; `true` is a separate text-temporal profile. |
+| `jsonStrings: true` | Lossless-text profile | Returns JSON text without `JSON.parse`; parsed JSON is a separate convenience profile. |
+| `dateStrings: true` | Lossless-text profile | Returns temporal text so fractional precision is visible; `Date` is a separate convenience profile. |
 | `typeCast` (default) | Official profile requirement | A custom function changes raw representations and is conditional until separately tested. |
 
-The exact tested combination must record the mysql2 version, MySQL/MariaDB
-server, Node version, and every option above. SQLBraid does not inspect a
-custom `typeCast` function or infer its output. `DECIMAL` is a string in the
-exact profile; use `decodeExactDecimal` or an application-selected decimal
-library. Driver `BIGINT` text is normalized to `bigint`, never coerced to
-`number`. Native MySQL SQL passes through transparently; this does not mean
-SQLBraid parses every MySQL grammar feature.
+The exact tested combination must record the mysql2 version, MySQL server, Node
+version, and every option above. SQLBraid does not inspect a custom `typeCast`
+function or infer its output. Integer and `DECIMAL` results are canonical
+strings in the exact profile; use `decodeExactInteger`, `decodeExactDecimal`, or
+an application-selected numeric transform at the application boundary. `FLOAT`
+and `DOUBLE` remain JavaScript `number` (binary32/binary64). `insertId` is an
+exact string where the driver exposes it; `affectedRows` is an operational count
+with safe-range validation. Native MySQL SQL passes through transparently; this
+does not mean SQLBraid parses every MySQL grammar feature.
+
+Exact integer/decimal strings are the documented bind path for round-trip
+fidelity through prepared and bulk execution. Ordinary `undefined` binds fail
+with `BRAID_BIND_VALUE_UNSUPPORTED` before acquisition; `null` is SQL `NULL`.
+Changing `decimalNumbers`, `jsonStrings`, `dateStrings`, or `typeCast` selects a
+different profile and invalidates the evidence above until retested.
 
 The binding transport is mysql2 text-positional `?` with ordered values.
 Streaming uses prepared `Execute.stream()`. Routine result sets are

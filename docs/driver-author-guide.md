@@ -349,6 +349,12 @@ SQLite adapters must use the documented `DatabaseSync.prepare(text)` and `Statem
 
 A hint selects database parameter metadata; it is not application validation or an input codec. An adapter must either map every supported hint to its driver descriptor or reject unsupported hints before I/O with `BRAID_BIND_HINT_UNSUPPORTED` (or a more specific materialization diagnostic). Never silently discard a hint. Keep hint structure in prepared shape identity; parameter values do not participate.
 
+Keep the query-builder/render phase and the binder/materializer phase separate:
+the former describes immutable SQL segments and value boundaries, while the
+latter chooses driver transport and parameter descriptors. A query builder must
+not promise numeric output fidelity, and a binder must not rewrite SQL to make a
+driver limitation look exact.
+
 MariaDB-specific syntax and protocol evidence belongs to the official MariaDB
 Connector/Node.js adapter. A `mysql2` connection to MariaDB remains best-effort
 compatibility and must not receive an Official MariaDB label.
@@ -437,20 +443,33 @@ Before accepting an adapter:
 ### Environment and representation evidence
 
 If an adapter exposes environment metadata, its optional read-only probe must
-use the normal leased query path. Successful `db.environment({ targets? })`
+use the normal leased query path. Successful `db.environment({ targets?, refresh? })`
 snapshots are cached per database scope; a provider samples one acquired
-backend, not every pool endpoint. Lifecycle events identify this operation with
+backend, not every pool endpoint. `refresh: true` re-probes and replaces the
+cached observation. Probe-derived pool guarantees remain guarded because one
+observed lease does not establish every future session's settings.
+Lifecycle events identify this operation with
 `purpose: "environment"`. Do not guess a driver/runtime version, and do not
 turn a partial tuple into an Official support claim.
 
 Record the exact raw representation for integers, decimals, JSON, temporal, and
-binary values. A custom parser or type-cast option is a separate profile and
-invalidates the default representation evidence until separately tested.
-Tedious JavaScript `decimal`/`numeric` values are not exact decimals; Oracle
-`NUMBER` text and SQLite's explicit `integerMode` must remain visible in the
-profile and TypePolicy.
+binary values. `TypeMapping.numeric` must keep database semantics
+(`exact-integer`, `exact-decimal`, or `approximate-binary`), SQLBraid raw
+representation (`string` or `number`), and transport fidelity (`lossless`,
+`guarded`, `lossy`, or `unsupported`) as separate dimensions. A custom parser
+or type-cast option is a separate profile and invalidates the default evidence
+until separately tested.
 
-PV16 completion and release readiness require exact-revision verification across
+Exact database numerics are canonical strings; approximate IEEE values are
+numbers. Never stringify a lossy exact decimal or expose it as an exact value.
+Tedious `decimal`/`numeric`/`money` values therefore fail closed unless the
+user-authored SQL returns text. Oracle `NUMBER` text and SQLite native int64
+transport remain visible profile details, but neither creates a public bigint
+mode. JSON parsed objects and native `Date` values are convenience profiles;
+lossless text requires separate evidence. Arrays, ranges, composites, objects,
+`sql_variant`, vectors, and other containers do not inherit scalar guarantees.
+
+PV17 completion and release readiness require exact-revision verification across
 unit, packed-runtime, docs, capability/bulk suites, Browser WASM, D1, MariaDB,
 and the existing real database paths. Until Main supplies that evidence, mark
 verification pending and do not claim a new SHA, CI success, runtime support

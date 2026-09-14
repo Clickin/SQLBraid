@@ -6,20 +6,21 @@ description: Node에 내장된 SQLite 드라이버로 첫 SQLBraid 쿼리를 실
 이 경로는 Node `>=22.18.0` 및 `node:sqlite`를 사용하며 데이터베이스 서버가 필요하지 않습니다. 첫 번째 쿼리는 단순한 태그 템플릿이므로 SQLBraid 컴파일러가 필요하지 않습니다. 두 번째 쿼리는 동적 `@braid`를 추가하고 함께 제공되는 lowering 명령을 사용합니다.
 
 :::note 검증 상태
-기록된 PV16 revision은 실제 SQLite와 packed quickstart 게이트를
-통과했습니다. 인증한 대상은 Node 22.18.0과 내장 SQLite 3.50.2이며 정확한
-int64에는 명시적인 bigint 모드를 사용합니다. npm 발행은 주장하지 않습니다.
+PV17의 최종 exact-SHA Runtime, Docs, Release gate는 아직 대기 중입니다.
+기록된 PV16 revision은 역사적 SQLite 및 packed quickstart 증거일 뿐이며,
+npm 발행이나 현재 PV17 프로필을 인증하지 않습니다.
 :::
 
 ## SQLite 표현 프로필
 
-`node:sqlite`는 server version이 아니라 Node runtime API입니다. 정확한
-프로필에는 Node, Node에 번들된 SQLite library, `integerMode`를 기록합니다.
+`node:sqlite`는 server version이 아니라 Node runtime API입니다. 프로필에는
+Node와 Node에 번들된 SQLite library를 기록합니다. INTEGER는 public 결과에서
+canonical `string`이며 native `bigint`는 어댑터 내부 표현일 뿐입니다.
 
 | SQLite 표면 | 프로필 표현 | 상태/주의 |
 | --- | --- | --- |
-| INTEGER, `integerMode: "number"` | JavaScript `number` | 기본값이며 safe integer 범위를 벗어나면 lossy할 수 있습니다. |
-| INTEGER, `integerMode: "bigint"` | `bigint` | 정확한 int64 경로이며 생성 모델에는 `typePolicyForIntegerMode("bigint")`를 사용합니다. |
+| INTEGER | JavaScript `string` | int64를 lossless하게 보존합니다. native `bigint`는 public API가 아닙니다. |
+| REAL | JavaScript `number` | IEEE binary 부동소수점이며 decimal exactness를 주장하지 않습니다. |
 | `STRICT` table | SQLite native affinity enforcement | schema 기능이며 SQLBraid parser 보장이 아닙니다. |
 | non-STRICT table / `ANY` | SQLite dynamic value | 저장된 값과 driver에 따라 반환 표현이 달라집니다. |
 | JSON1 | text | Standard Schema로 JSON text를 파싱/검증합니다. |
@@ -53,7 +54,7 @@ import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { sql } from "@sqlbraid/sqlite";
 
 interface UserRow {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -79,7 +80,7 @@ Node 22.18.0은 이 삭제 가능한 TypeScript를 직접 실행할 수 있습�
 node src/index.ts
 ```
 
-출력은 `[{ id: 1, name: "Ada" }]`와 같은 행 배열입니다. 요청한 ID는 드라이버에 바인드되는 값이며 SQL 텍스트에 삽입되지 않습니다.
+출력은 `[{ id: "1", name: "Ada" }]`와 같은 행 배열입니다. 요청한 ID는 드라이버에 바인드되는 값이며 SQL 텍스트에 삽입되지 않습니다.
 
 node:sqlite 어댑터는 논리 문장을 `?` placeholder가 있는 텍스트로 만든 뒤
 문서화된 `DatabaseSync.prepare(text)`와 `StatementSync` API를 사용합니다.
@@ -128,30 +129,12 @@ node build/index.js
 :::caution Node SQLite 지원
 `node:sqlite`는 이 릴리스에서 사용하는 첫 번째 파티 SQLite 어댑터입니다.
 SQLite 어댑터는 루틴 호출을 지원하지 않으며 스트리밍에는
-`StatementSync.iterate()`를 사용합니다. INTEGER 결과를 `bigint`로 읽어야
-하면 `createNodeSqliteDatabase(native, { integerMode: "bigint" })`를
-설정하고 `typePolicyForIntegerMode("bigint")`를 사용하세요. SQLite
+`StatementSync.iterate()`를 사용합니다. INTEGER 결과는 public API에서
+canonical string으로 반환되며, 정밀도가 필요한 REAL/JSON/temporal 값은
+`CAST(... AS TEXT)` 또는 lossless text profile을 명시하세요. `undefined` 일반
+IN 값은 acquire 전에 거부되고 `null`은 SQL `NULL`입니다. SQLite
 scalar/aggregate/window function은 일반 SQL 함수이며 virtual-table/table-valued
 extension도 stored procedure가 아닌 일반 행 쿼리입니다.
 :::
 
-## SQLite 표현 프로필
 
-`node:sqlite`는 server version이 아니라 Node runtime API입니다. 정확한
-프로필에는 Node, Node에 번들된 SQLite library, `integerMode`를 기록합니다.
-
-| SQLite 표면 | 프로필 표현 | 상태/주의 |
-| --- | --- | --- |
-| INTEGER, `integerMode: "number"` | JavaScript `number` | 기본값이며 safe integer 범위를 벗어나면 lossy할 수 있습니다. |
-| INTEGER, `integerMode: "bigint"` | `bigint` | 정확한 int64 경로이며 생성 모델에는 `typePolicyForIntegerMode("bigint")`를 사용합니다. |
-| `STRICT` table | SQLite native affinity enforcement | schema 기능이며 SQLBraid parser 보장이 아닙니다. |
-| non-STRICT table / `ANY` | SQLite dynamic value | 저장된 값과 driver에 따라 반환 표현이 달라집니다. |
-| JSON1 | text | Standard Schema로 JSON text를 파싱/검증합니다. |
-| BLOB | `Buffer`/bytes | binary로 유지하거나 명시적으로 encode합니다. |
-| `RETURNING` | materialized rowset | 전달 전에 output을 축적하며 DML-returning stream은 주장하지 않습니다. |
-
-Native binding은 `?` placeholder와 `StatementSync`를 사용하고, `iterate()`가
-stream primitive이며 prepared loop가 bulk 전략입니다. SQLite에는
-stored-procedure transport가 없으므로 등록 function과 table-valued extension은
-일반 SQL row query입니다. Native SQLite SQL은 grammar rewrite 없이 전달되며,
-투명성은 grammar 지원을 뜻하지 않습니다.

@@ -23,20 +23,16 @@ npm install @sqlbraid/sqlite @sqlite.org/sqlite-wasm
 import { sql } from "@sqlbraid/sqlite";
 import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
 
-const db = createSqliteWasmDatabase(wasmDatabase);
-const rows = await db.all(sql.rows<{ id: number }>`SELECT id FROM account`);
+const db = createSqliteWasmDatabase(wasmDatabase, { sqlite3 });
+const rows = await db.all(sql.rows<{ id: string }>`SELECT id FROM account`);
 ```
 
-INTEGER를 항상 정확한 `bigint`로 받으려면 초기화한 공식 module을 전달하세요.
-
-```ts
-const db = createSqliteWasmDatabase(wasmDatabase, { integerMode: "bigint", sqlite3 });
-```
-
-숫자 값의 모양을 추측하지 않고 native column type과 `sqlite3_column_int64`를
-사용하므로 정수 모양 REAL도 `number`로 유지됩니다. Number mode는 JavaScript
-safe range 밖의 INTEGER를 거부합니다. `sqlite3` 없이 bigint mode를 선택하면
-`BRAID_INTEGER_MODE_UNSUPPORTED`로 거부합니다.
+INTEGER storage는 canonical decimal string으로 노출됩니다. WASM adapter는
+숫자 모양을 추측하지 않고 native column type과 `sqlite3_column_int64`를
+사용하므로 정수 모양 REAL은 `number`로 유지됩니다. Native bigint는 내부
+전송 세부사항이며 public integer mode가 아닙니다. D1은 별도의 guarded
+프로필입니다. safe range의 정수형 JavaScript Number는 string이 되며 범위를
+벗어난 값은 반올림하지 않고 unsupported입니다.
 
 어댑터는 prepare/bind/step/finalize, pull 방식 row streaming, callback
 transaction, item마다 prepared statement를 reset하는 command-only bulk를
@@ -73,11 +69,11 @@ Native D1 batch의 transaction 동작이 더 강하더라도 portable SQLBraid c
 아닙니다. Root bulk는 암묵적 transaction이 아니며 portable auto-chunking 약속이
 없습니다.
 
-기록된 PV16 revision은 두 게이트를 통과했습니다. Chromium 153.0.8010.12와
-SQLite WASM 3.53.4는 bigint/CAPI 프로필에서 인증되었습니다. 로컬 D1은
-managed SQLite 버전이 공개되지 않아 Compatible입니다. 두 게이트 모두
-OPFS persistence, SharedArrayBuffer, remote production support나 npm
-발행을 주장하지 않습니다.
+과거 PV16 Chromium/D1 증거는 release records에 보존합니다. 표현 계약이
+변경되었으므로 PV17에는 새 exact-SHA gate가 필요합니다. 로컬 D1은 managed
+SQLite 버전이 공개되지 않아 Compatible입니다. 어떤 browser gate도 OPFS
+persistence, SharedArrayBuffer, remote production support 또는 npm 발행을
+주장하지 않습니다.
 
 ## Browser와 Worker 표현 프로필
 
@@ -86,7 +82,7 @@ SQLite는 같은 dialect이지만 WASM과 D1은 서로 다른 driver이므로 �
 
 | Driver | Raw/프로필 경계 | Stream/bulk/transaction |
 | --- | --- | --- |
-| SQLite WASM OO1 | SQLite dynamic value이며 INTEGER mode는 driver 설정 | pull iteration, prepared-loop bulk, callback transaction |
+| SQLite WASM OO1 | SQLite dynamic value이며 INTEGER storage는 canonical string | pull iteration, prepared-loop bulk, callback transaction |
 | Cloudflare D1 binding | materialized 행과 순서가 있는 `?1`, `?2`, … bind | native `batch()` bulk; streaming과 callback transaction은 지원하지 않음 |
 
 선택한 WASM build/parser가 다른 표현을 증명하지 않는 한 JSON1은 text입니다.

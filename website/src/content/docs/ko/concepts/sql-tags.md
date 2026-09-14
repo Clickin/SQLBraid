@@ -8,7 +8,7 @@ SQLBraid의 태그는 일반 TypeScript와 SQL입니다. dialect 패키지는 �
 ```ts
 import { sql } from "@sqlbraid/postgres";
 
-const users = sql.rows<{ id: number; name: string }>`
+const users = sql.rows<{ id: string; name: string }>`
   SELECT id, name FROM users
 `;
 const update = sql.command`
@@ -16,8 +16,13 @@ const update = sql.command`
 `;
 const routine = sql.call({
   resultSets: [RefreshSchema] as const,
-})`CALL refresh_accounts(${accountId})`;
+`;
 ```
+
+여기에 설명된 exact integer driver profile에서 `id` 필드는 canonical 10진
+텍스트입니다. 근사 부동소수점 열은 `number`로 선언하고, 애플리케이션에
+`bigint`나 임의 정밀도 decimal이 필요하면 Standard Schema transform을
+사용하세요.
 
 일치하는 런타임 작업을 사용하세요.
 

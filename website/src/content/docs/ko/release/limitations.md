@@ -1,6 +1,6 @@
 ---
 title: 현재 제한 사항
-description: PV16 프리릴리스 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
+description: PV17 프리릴리스 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
 ---
 
 - **인증은 프로필과 revision별입니다.** [지원 매트릭스](/SQLBraid/reference/support/)에 검증한 구현 증거를 기록합니다. D1은 managed SQLite 버전이 공개되지 않아 Compatible이며 Oracle Free 23.9는 19c를 인증하지 않습니다. CI 통과가 발행을 승인하지는 않습니다.
@@ -9,8 +9,11 @@ description: PV16 프리릴리스 계약이 의도적으로 약속하지 않는 
 - **MySQL prepared CALL OUT/INOUT은 지원하지 않습니다.** mysql2 3.x public API로 추가 결과가 OUT carrier인지 증명할 수 없으므로 SQLBraid는 추측하지 않습니다.
 - **PostgreSQL refcursor 호출은 기존 transaction이 필요합니다.** refcursor는 독립 driver ResultSet이 아닌 transaction-bound portal이며 SQLBraid는 root call을 숨은 transaction으로 감싸지 않습니다.
 - **SQL Server cursor output은 애플리케이션 cursor로 지원하지 않습니다.** `CURSOR VARYING OUTPUT`은 T-SQL 언어 기능이지만 일반 client API는 bind 가능한 ResultSet으로 노출하지 않습니다. emitted `SELECT` 행은 일반 result set입니다.
-- **SQLite 루틴 호출은 지원하지 않습니다.** SQLite scalar/aggregate/window function은 일반 SQL 안에서 실행되고 virtual-table/table-valued extension은 일반 행 쿼리입니다. `integerMode: "bigint"`는 명시적이며 native statement capability가 필요합니다.
-- **DML-returning은 materialized만 지원 범위입니다.** `sql.rows`와 `db.execute`, `db.all`, `db.one`, `db.maybeOne`을 사용하세요. `RETURNING`/`OUTPUT`의 `db.stream()`은 cross-driver PV16 지원 주장이 아닙니다.
+- **SQLite 루틴 호출은 지원하지 않습니다.** SQLite scalar/aggregate/window
+  function은 일반 SQL 안에서 실행되고 virtual-table/table-valued extension은
+  일반 행 쿼리입니다. INTEGER storage는 canonical string으로 노출되며
+  native bigint는 내부 전송이지 public mode가 아닙니다.
+- **DML-returning은 materialized만 지원 범위입니다.** `sql.rows`와 `db.execute`, `db.all`, `db.one`, `db.maybeOne`을 사용하세요. `RETURNING`/`OUTPUT`의 `db.stream()`은 cross-driver PV17 지원 주장이 아닙니다.
 - **DML-returning syntax는 native입니다.** PostgreSQL/SQLite/MariaDB는 문서화된 `RETURNING`, SQL Server는 `OUTPUT`, Oracle은 `RETURNING ... INTO`와 `sql.out()`을 사용하며 MySQL에는 일반 DML `RETURNING`이 없습니다.
 - **`db.bulk()`는 command-only입니다.** 하나의 DML shape를 고정하고 I/O 전에 모든 입력을 검증하며 하나의 physical lease를 사용합니다. 빈 입력은 acquire하지 않습니다. Root bulk는 자동 transaction/auto-chunking 약속이 없고 실제 모드로 `native-bulk`, `pipeline`, `prepared-loop`, `remote-batch`를 보고합니다.
 - **MariaDB는 별도 dialect입니다.** MariaDB Connector/Node.js의 증거는 `mysql2`와 독립적이며 MariaDB 연결의 `mysql2`는 best-effort 호환일 뿐 Official MariaDB capability 주장이 아닙니다. 정확한 `UPDATE RETURNING` 지원은 주장하지 않습니다.
@@ -18,10 +21,23 @@ description: PV16 프리릴리스 계약이 의도적으로 약속하지 않는 
 - **Cloudflare D1은 materialized/remote-batch 전용입니다.** Worker Binding API에 incremental cursor가 없으므로 `db.stream()`과 callback `db.tx()`는 `BRAID_STREAM_UNSUPPORTED`이며 SQLBraid는 paginate하거나 transaction을 흉내 내지 않습니다.
 - **Native SQL Server RETURN status에는 명시적 procedure metadata가 필요합니다.** `sql.call({ procedure: { name, parameterNames } })`를 사용하며 임의 `EXEC` 텍스트에서 identity를 추측하지 않습니다.
 - **범용 input codec이 없습니다.** 일반 보간은 드라이버에 바인드되며 애플리케이션 JSON, temporal, custom-class, binary 규칙은 드라이버/애플리케이션의 책임입니다.
-- **숫자 정확도는 프로필별입니다.** `decodeExactInteger`는 `bigint`를 반환하고
-  `decodeExactDecimal`은 정확한 텍스트를 받아 `string`을 반환합니다. Tedious
-  `decimal`/`numeric` JavaScript number는 정확한 10진수가 아니며 Oracle
-  `NUMBER` 텍스트와 SQLite `integerMode`는 명시적으로 유지해야 합니다.
+- **숫자 정확도는 프로필별입니다.** 정확한 DB 정수와 10진수는 canonical
+  string이고 근사 IEEE 값은 number입니다. `decodeExactInteger`는 애플리케이션이
+  선택하는 `bigint` transform입니다. Tedious native
+  `decimal`/`numeric`/`money`는 exact 출력에서 fail closed하며 Oracle
+  `NUMBER`는 text로 유지하고 D1은 safe integral Number로 guarded됩니다. 전역
+  numeric/integer mode는 없습니다.
+- **JSON과 temporal 정확도는 별도 프로필입니다.** Parsed JSON에는 이미
+  반올림된 중첩 숫자가 있을 수 있고 native `Date`는 fractional precision이나
+  offset/zone 의미를 잃을 수 있습니다. 필요하면 테스트한 text 프로필이나
+  `JSON_SERIALIZE`/`TO_CHAR`/`CONVERT` SQL을 작성하세요.
+- **Container는 scalar 보장이 아닙니다.** 배열, domain, range, multirange,
+  composite, Oracle object/collection, SQL Server `sql_variant`, vector 및
+  기타 중첩 값은 recursive transport가 테스트될 때까지 unclassified 또는
+  unsupported입니다.
+- **정확한 bind는 별도 capability입니다.** 증명된 프로필에서 exact text 입력을
+  사용하세요. `null`은 SQL `NULL`이고 일반 `undefined`는 acquisition 전에
+  `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다.
 - **환경 증거는 관찰 결과입니다.** `db.environment({ targets? })`는 일반
   lease probe를 사용하고 성공한 snapshot을 캐시합니다. 불완전하거나 일치하지
   않는 tuple은 Compatible로 남으며 추측한 Official claim이 되지 않습니다.

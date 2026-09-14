@@ -1,173 +1,207 @@
 ---
-title: 데이터 표현과 숫자 정확도
-description: 정밀도를 잃지 않고 데이터베이스 값이 드라이버 경계에서 타입이 있는 애플리케이션 값으로 가는 과정을 이해합니다.
+title: 데이터 표현과 값 정확도
+description: 드라이버 경계에서 데이터베이스 값 의미를 보존하고 Standard Schema로 애플리케이션 타입을 선택합니다.
 ---
 
-SQLBraid는 데이터베이스 표현 방식을 명시적으로 유지합니다. `sql.rows<T>`의
-TypeScript 타입은 드라이버가 반환하는 값을 바꾸지 않으며, SQLBraid는 10진수나
-64비트 정수를 JavaScript `number`로 조용히 변환하지 않습니다.
+SQLBraid는 선택한 드라이버/프로필이 실제로 전달할 수 있는 값을 보존합니다.
+`sql.rows<T>`의 TypeScript 타입은 결과를 변환하지 않으며 SQLBraid는 정확한
+데이터베이스 값을 JavaScript `number`로 조용히 축소하지 않습니다.
 
-## 값의 파이프라인
-
-매핑되는 모든 행은 다음 경계를 통과합니다.
+## 값 파이프라인
 
 ```text
-DB 타입
-  → 드라이버 raw 값
-  → dialect TypePolicy / Numeric Fidelity
+DB 타입과 표현식
+  → 드라이버/프로필 raw 값
+  → dialect TypePolicy 정규화
   → 일반(normalized) 행
-  → Standard Schema (선택 사항)
+  → query-bound Standard Schema (선택 사항)
   → 애플리케이션 값
 ```
 
-드라이버 프로필이 raw 값을 결정합니다. dialect의 `TypePolicy`는 정수, 10진수,
-JSON, temporal, binary 규칙을 런타임과 코드 생성에 노출합니다. 그 다음
-Standard Schema는 한 행을 검증하거나 변환할 수 있지만, 정밀도를 보존하는
-드라이버 프로필을 대신하지는 않습니다.
+`TypePolicy.numeric`은 서로 다른 세 가지 사실을 분리해 보여 줍니다.
 
 ```ts
-interface AccountRow {
-  id: bigint;
-  balance: string;
+interface NumericTypeContract {
+  semantics: "exact-integer" | "exact-decimal" | "approximate-binary";
+  representation: "string" | "number";
+  fidelity: "lossless" | "guarded" | "lossy" | "unsupported";
+  binaryPrecision?: 32 | 64;
 }
-
-const accounts = sql.rows<AccountRow>`
-  SELECT id, balance FROM account
-`;
 ```
 
-`sql.rows<AccountRow>`는 컴파일 타임 선언일 뿐입니다. 결과를 검증하거나
-파싱하거나 변환하지 않습니다. `sql.rows(AccountSchema)`는 런타임에
-Standard Schema 프로토콜을 호출해 각 행을 검증하고 변환할 수 있습니다.
+`semantics`는 데이터베이스 값 영역이고, `representation`은 SQLBraid의 raw
+애플리케이션 경계이며, `fidelity`는 선택한 드라이버/프로필의 전송 상태입니다.
+표현식에는 자체 결과 타입이 있으므로 원본 열만 보고 추론하지 마세요. 집계,
+cast, 산술식은 그 표현식에 대한 metadata와 프로필 증거가 필요합니다.
 
-```ts
-const accounts = sql.rows(AccountSchema)`
-  SELECT id, balance FROM account
-`;
+## 표준 숫자 경계
+
+이식 가능한 규칙은 간단합니다.
+
+```text
+정확한 정수 또는 정확한 10진수 → string
+IEEE-754 근사 이진수             → number
 ```
 
-선언과 런타임 mapper는 선택한 드라이버 프로필과 일치해야 합니다. 드라이버가
-이미 잃은 숫자를 타입 assertion으로 복구할 수는 없습니다.
+현재 값에 따라 JavaScript 타입을 바꾸지 않습니다. 정확한 `BIGINT`의 `42`도
+`"42"`이며, 큰 값일 때만 string이 되지 않습니다. 정수 별칭, `BIGINT`,
+`DECIMAL`/`NUMERIC`, `MONEY` 계열 및 vendor 별칭은 드라이버가 보존할 수 있을
+때만 exact입니다. 정확한 타입을 손실이 있는 JavaScript `number`로 받은 경로는
+string으로 다시 바꾼 exact 결과가 아니라 `unsupported`(또는 명시적인
+`guarded`)입니다.
 
-## 정확한 정수
-
-JavaScript `number`는 모든 signed 64비트 정수를 표현할 수 없습니다. 정수를
-`bigint` 또는 10진 텍스트로 반환하는 드라이버 프로필을 사용한 뒤 애플리케이션
-표현을 선택하세요. SQLBraid의 정확한 정수 헬퍼는 정수 형태의 드라이버 값을
-받아 `bigint`를 반환합니다.
+`decodeExactInteger`는 애플리케이션이 선택적으로 사용하는 helper입니다.
 
 ```ts
 import { decodeExactInteger } from "@sqlbraid/core";
 
-const id = decodeExactInteger(rawId, { min: 0n });
+const id = decodeExactInteger(row.id, { min: 0n }); // 이 애플리케이션에서는 bigint
 ```
 
-선택 사항인 `min`, `max` 범위는 `bigint`로 검사합니다. 유효하지 않거나
-범위를 벗어난 값은 `ResultExactnessError`를 발생시키며 코드는
-`BRAID_RESULT_EXACTNESS`입니다. 값이 안전한 정수 범위에 있다는 것을 먼저
-증명하지 않았다면 `Number(id)`를 사용하지 마세요.
+이 helper는 SQLBraid의 표준 행 타입을 바꾸지 않습니다. `decodeExactDecimal`은
+정확한 10진 텍스트를 검증하고 string을 반환합니다. 행이 애플리케이션 경계에
+도달한 뒤에만 애플리케이션이 선택한 Decimal, BigInt, Money 또는 도메인 변환을
+사용하세요. 전역 `numericMode` 스위치는 없습니다.
 
-SQLite는 하나의 규칙으로 통합할 수 없는 명시적 예외입니다. Node adapter의
-`integerMode` 기본값은 `"number"`이고 정확한 int64 결과가 필요할 때
-`"bigint"`로 설정합니다. 생성 모델에는 대응하는
-`typePolicyForIntegerMode()`를 사용해야 합니다.
+## Standard Schema로 애플리케이션 타입 선택
 
-## 정확한 10진수
-
-10진수는 부동소수점 숫자가 아닙니다. SQLBraid의 정확한 10진수 헬퍼는
-보수적으로 canonical 10진 문자열을 반환하며, 기본 API는 문자열만 받습니다.
+도메인 계약이 텍스트라면 그대로 유지하세요.
 
 ```ts
-import { decodeExactDecimal } from "@sqlbraid/core";
-
-const amount = decodeExactDecimal(rawAmount);
-// amount: string
+const Row = v.object({ id: v.string(), amount: v.string() });
 ```
 
-JavaScript `number`는 이 헬퍼에 도달하기 전에 이미 10진수를 반올림할 수
-있으므로 정확한 값으로 제시하지 않고 거부합니다. `ResultExactnessError`의
-코드는 `BRAID_RESULT_EXACTNESS`입니다. 문자열을 애플리케이션에 보관하거나
-애플리케이션 경계에서 선택한 임의 정밀도 10진 라이브러리로 넘기세요.
-SQLBraid는 10진 라이브러리를 추가하거나 반올림/scale 정책을 정하지 않습니다.
-
-Oracle Thin의 `NUMBER` 결과는 문자열입니다. SQL Server Tedious의
-`decimal`과 `numeric` 결과는 지원되는 기본 경로에서 JavaScript number이며,
-따라서 **정확한 10진수 지원이 아닙니다**. Tedious에서 정밀도가 필요하면
-SQL에서 명시적으로 텍스트로 변환하고 문자열 결과 계약을 선언하세요.
-MySQL의 정확도는 테스트된 mysql2 프로필에 달려 있으며, 정확한 10진수
-프로필에서는 `decimalNumbers`를 켜지 마세요.
-
-## 근사 부동소수점
-
-`REAL`, `FLOAT`, `BINARY_FLOAT`, `BINARY_DOUBLE`은 설계상 근사값입니다.
-근사 연산이 목적이면 number로 유지하세요. 부동소수점 열에 정확한 정수나
-정확한 10진수 선언을 재사용하지 마세요.
-
-## JSON
-
-JSON은 native object, 텍스트 문자열 또는 드라이버별 값으로 도착할 수
-있습니다. 어떤 값을 기대하는지는 프로필에 기록해야 합니다.
-
-- native JSON object는 Standard Schema object schema에 바로 전달할 수 있습니다.
-- JSON 텍스트는 schema(`parseJson` 또는 동등한 transform)에서 파싱하고
-  검증해야 합니다.
-- 잘못된 JSON은 데이터/드라이버 오류이며 다른 표현을 지원한다는 증거가
-  아닙니다.
-
-`jsonStrings`와 custom parser/type-cast 옵션은 프로필 선택입니다. 이를
-바꾸면서 TypePolicy와 schema 계약을 바꾸지 않으면 지원되지 않습니다.
-
-## Temporal, binary, NULL 값
-
-Temporal 값은 드라이버별입니다(`Date` 또는 명시적인 text/binary 프로필).
-JavaScript `Date`는 원본 timezone 이름이나 sub-millisecond 세부 정보를 모두
-보존하지 않습니다. 이 정보가 중요하면 문자열 계약을 사용하세요.
-
-Binary 값은 Node adapter에서 보통 `Buffer`/`Uint8Array`입니다. 명시적인
-encoding transform이 애플리케이션 계약에 포함되지 않는 한 binary 열을
-text/JSON schema에 넣지 마세요.
-
-`NULL`은 0, 빈 문자열, epoch, 빈 객체가 아닙니다. 결과 계약에서는 `null`로
-보존하고, nullable 열에는 nullable Standard Schema를 사용하세요.
-
-## Custom parser와 프로필
-
-custom `pg` parser, mysql2 `typeCast`, Oracle fetch option 또는 동등한 설정은
-raw-value 경계를 바꿉니다. 정확한 설정에 별도 증거가 없는 한 기본 표현
-프로필은 무효가 됩니다. 안전한 순서는 다음과 같습니다.
-
-1. 정확한 database, driver, runtime, parser/options를 기록합니다.
-2. 영향을 받는 각 타입의 raw 값을 확인합니다.
-3. 일치하는 TypePolicy를 선택하거나 정의합니다.
-4. Standard Schema로 검증/변환합니다.
-5. code generation에서도 같은 프로필을 사용합니다.
-
-SQLBraid는 임의 parser 함수를 검사해 정확도를 추론하지 않습니다. 정확한
-전송을 증명할 수 없는 프로필은 `guarded` 또는 `unsupported`이며, 조용히
-exact가 되지 않습니다.
-
-## Codegen과 런타임 검증
-
-Codegen은 metadata와 선택한 TypePolicy에서 TypeScript 선언을 생성합니다.
-실제 행을 검증하지는 않습니다. 런타임 검증에는
-`sql.rows(StandardSchema)` 또는 실행 수준 schema가 필요합니다.
+BigInt 식별자를 선택적으로 사용합니다.
 
 ```ts
-const row = sql.rows(AccountSchema)`SELECT id, balance FROM account`;
-await db.one(row); // 실행 시 검증/변환
+const Id = v.pipe(v.string(), v.transform(BigInt));
 ```
 
-생성 모델에서는 output과 input 표현을 분리하세요. 수동 TypeScript override는
-선언만 바꾸며 lossy한 드라이버 전송을 exact하게 만들지 않습니다.
+또는 애플리케이션 코드에서 임의 정밀도 10진 라이브러리를 선택할 수 있습니다
+(문서 예일 뿐 SQLBraid 의존성이 아닙니다).
 
-## Native SQL 투명성은 grammar 지원이 아닙니다
+```ts
+import Decimal from "decimal.js";
+const Amount = v.pipe(v.string(), v.transform(value => new Decimal(value)));
+```
 
-SQLBraid는 사용자가 작성한 SQL의 데이터베이스별 문법을 다시 쓰지 않고
-선택한 드라이버로 전달합니다. native `RETURNING`, `OUTPUT`, cast, function,
-extension을 쿼리에 그대로 둘 수 있습니다. 이를 전달할 수 있다는 것은
-투명성의 증거이지 SQLBraid가 모든 grammar 기능을 파싱하거나 의미론적으로
-지원한다는 뜻이 아닙니다. 생성 structural helper에는 별도의 좁은 quoting과
-shape 계약이 있으며, 지원하지 않는 분석은 unknown으로 남습니다.
+드라이버가 이미 반올림한 숫자를 schema가 복구할 수는 없습니다.
+
+## 근사 이진 값
+
+`REAL`, `FLOAT`, `DOUBLE`, PostgreSQL `real`/`double precision`, Oracle
+`BINARY_FLOAT`/`BINARY_DOUBLE`, SQL Server `real`/`float`은 본래 근사 이진
+영역입니다. 근사 연산을 원할 때 SQLBraid는 검증된 binary32 또는 binary64
+값을 `number`로 노출합니다. 이것은 정확한 10진수 보장이 아닙니다. 프로필은
+DB가 `NaN`, infinity, 음의 0을 정규화하는지 기록합니다. codegen 진단은 근사
+타입 자체가 아니라 exact DB 타입의 손실/미지원 전송에만 발생해야 합니다.
+
+## 드라이버 프로필
+
+아래는 PV17의 문서화 방향이며, 각 정확한 DB/runtime revision의 증거는 지원
+매트릭스가 소유합니다.
+
+| 대상 | 정확한 숫자 출력 | 근사 출력 | 프로필 경계 |
+| --- | --- | --- | --- |
+| PostgreSQL / `pg` | `int2`/`int4`/`int8`/`numeric` → string | float4/float8 → number | lossless text read에는 `extra_float_digits > 0` 필요; locale 형식인 `money`는 unsupported; JSON/temporal text는 별도 프로필 |
+| MySQL / `mysql2` | 정수와 `DECIMAL` → string | `FLOAT`/`DOUBLE` → number | exact 프로필은 `supportBigNumbers`, `bigNumberStrings`, `decimalNumbers: false` 필요; `jsonStrings: true`와 `dateStrings: true`는 별도 프로필 |
+| MariaDB Connector | 정수와 `DECIMAL` → string | `FLOAT`/`DOUBLE` → number | `decimalAsNumber: false`, `insertIdAsNumber: false`; `autoJsonMap: false`, `dateStrings: true`가 text 프로필 |
+| Node SQLite / WASM | INTEGER storage → string | REAL storage → number | native bigint는 내부 전송 세부사항이며 D1은 safe-integer 범위로 guarded |
+| Oracle Thin | NUMBER 계열 → string | BINARY_FLOAT/DOUBLE → number | decimal-string bind와 native JSON/temporal text는 드라이버/프로필 증거에 따름 |
+| SQL Server / Tedious | 보존되는 정확한 정수 → string | REAL/FLOAT → number | native DECIMAL/NUMERIC/MONEY의 exact 출력은 unsupported; SQL에서 text cast 사용 |
+
+SQLite 동적 타입 열은 선언된 INTEGER affinity가 아니라 runtime storage class를
+따릅니다. 배열, domain, range/multirange, composite, Oracle object/collection,
+SQL Server `sql_variant`, vector 및 기타 container는 scalar 보장을 상속하지
+않습니다. 재귀 전송 테스트가 없으면 `unclassified` 또는 `unsupported`로
+남깁니다. JSON은 아래에서 별도로 다룹니다.
+
+## JSON: 파싱 편의성과 lossless text
+
+파싱된 JavaScript JSON 객체는 편리하지만 일반 `JSON.parse()`는 모든 JSON
+숫자를 JavaScript `number`로 만듭니다. 따라서 `9223372036854775807`이나 고정밀
+소수 같은 중첩 값은 일반적인 lossless 보장이 아닙니다.
+
+프로필은 다음을 구분해야 합니다.
+
+- **lossless text** — JS Number 파싱 없이 직렬화된 JSON이 텍스트로 SQLBraid에
+  도달하며, 애플리케이션이 `JSON.parse`, lossless parser 또는 schema를 선택함;
+- **parsed** — 드라이버가 object/value를 반환하며 중첩 숫자 정확도는 보장되지 않음.
+
+PostgreSQL은 가능한 경로에서 query-local raw-text 프로필을 사용하고 기본
+parsed 호환 경로는 parsed라고 명시합니다. MySQL과 MariaDB text 프로필은
+드라이버가 제공하는 `jsonStrings: true` (`MariaDB Connector`는
+`autoJsonMap: false`)를 사용합니다. SQLite/WASM/D1과 SQL Server는 문서화된
+경로에서 text 중심입니다. Oracle은 검증된 fetch handler 또는 사용자가 작성한
+`JSON_SERIALIZE(...)` 표현식을 사용할 수 있습니다. SQLBraid는 전역 parser를
+바꾸거나 사용자 SQL을 다시 쓰지 않습니다.
+
+이 보장은 DB 결과에서 시작합니다. MySQL native JSON 저장소는 드라이버가
+읽기 전에 소수 토큰을 반올림하고 키/공백을 정규화할 수 있습니다. 원본 JSON
+숫자를 그대로 왕복해야 하면 text 열을 사용하세요.
+
+```text
+lossless JSON text → Standard Schema → 애플리케이션 선택 parser
+parsed object      → Standard Schema → 편리하지만 자동 lossless 아님
+```
+
+## Temporal 값
+
+JavaScript `Date`는 모든 SQL temporal 의미를 담지 못합니다. 날짜 전용/로컬
+시간 의미, 밀리초를 넘는 소수 정밀도, offset, zone identity, Date 범위 밖 값이
+손실될 수 있습니다. native `Date`는 편의 프로필이지 포괄적인 lossless 보장이
+아닙니다.
+
+드라이버/프로필이 보존할 수 있다면 raw 경계에서는 temporal text를 우선하고
+Standard Schema로 `Date`, `Temporal.*`, Luxon 또는 도메인 타입으로 변환하세요.
+정확도를 평가할 때 `2026-09-14 12:34:56.123456`처럼 0이 아닌 소수를 사용합니다.
+PostgreSQL `pg`, MySQL `dateStrings`, MariaDB `dateStrings`, 명시적 SQL text
+conversion은 서로 다른 프로필입니다. SQLite temporal 값은 저장 관례입니다.
+Oracle과 SQL Server에서 native `Date`가 precision/offset/session-zone 의미를
+잃으면 테스트된 text format 또는 사용자가 작성한 `TO_CHAR`/`CONVERT` 표현식을
+사용하세요.
+
+## Bind, `null`, `undefined`
+
+정확한 입력 전송은 정확한 출력과 별도의 capability입니다. 프로필이 이를
+주장한다면 정밀한 decimal text 또는 정수 string을 문서화된 경로로 bind하여
+DB에 저장하고 lossless 출력 경로로 왕복시키세요. 먼저 JavaScript `number`를
+거치지 않습니다. SQLBraid는 cast를 대신 삽입하지 않습니다.
+
+```sql
+CAST(@nvarchar_parameter AS decimal(38, 18))
+```
+
+이는 SQL Server에서 사용자가 작성하는 우회 경로이지 범용 input codec이
+아닙니다. Oracle string-to-number bind는 NLS 설정에 의존할 수 있으므로 명시적
+제어 변환을 사용하거나 unsupported로 분류합니다.
+
+`null`은 SQL `NULL`입니다. 일반 `undefined`는 프로그래밍/설정 오류
+(`BRAID_BIND_VALUE_UNSUPPORTED`)이며 execute, prepared, bulk, stream, routine의
+일반 IN 경로에서 connection을 얻기 전에 거부됩니다. OUT placeholder 의미는
+드라이버별입니다.
+
+## 프로필, codegen, 투명성
+
+custom `pg` parser, mysql2 `typeCast`, MariaDB JSON/temporal option, Oracle
+fetch handler와 같은 override는 별도 프로필입니다. 테스트하여 runtime과
+codegen에서 선택하기 전에는 기본 증거를 무효화합니다.
+`db.environment()`는 scope별 캐시된 관측값입니다. 세션 설정을 바꾼 뒤에는
+`db.environment({ refresh: true })`로 갱신하세요. 풀 probe는 lease 하나를
+관측하므로 해당 보장은 guarded이며 이후 모든 풀 세션을 보장하지 않습니다.
+Codegen은 output/input
+표현을 분리하며, 수동 TypeScript override가 손실 전송을 exact로 바꾸지는
+않습니다.
+
+SQLBraid는 자동 cast, parser rewrite, query-builder translation 없이 사용자가
+작성한 SQL을 드라이버로 전달합니다. native `RETURNING`, `OUTPUT`, `MERGE`,
+UPSERT, `CAST`, `CONVERT`, `JSON_SERIALIZE`, temporal formatting은 SQL에 그대로
+남습니다. 지원 capability도 실제 실행한 문장을 이름으로 구분합니다.
+`merge-returning`은 native `MERGE`, `upsert-returning`은 native
+UPSERT/REPLACE/ON CONFLICT/ON DUPLICATE KEY입니다. 결과가 비슷해도 문법은
+서로 대체되지 않습니다.
 
 정확한 프로필/options는 드라이버 설정 페이지와 [런타임 및 드라이버 지원
-매트릭스](/SQLBraid/reference/support/)를 참고하세요.
+매트릭스](/SQLBraid/reference/support/)를 참고하세요. 증거를 알 수 없으면
+`unknown`으로 남기며 TypeScript assertion이나 보기 좋은 매트릭스 셀만으로
+`lossless`로 승격하지 않습니다.

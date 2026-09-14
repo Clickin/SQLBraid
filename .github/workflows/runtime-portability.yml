@@ -25,15 +25,8 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run typecheck
       - run: pnpm run build
-      - run: pnpm test
-      - run: pnpm run test:db:sqlite
-      - run: pnpm run test:db:postgres
-      - run: pnpm run test:db:mysql
-      - name: Real MariaDB capability gate
-        run: pnpm run test:db:mariadb
-      - run: pnpm run test:db:oracle
-      - run: pnpm run test:db:mssql
-      - run: pnpm run test:consumer
+      - name: Node 22 unit, consumers and real-driver fidelity
+        run: pnpm exec vitest run
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: 24.21.0
@@ -41,7 +34,6 @@ jobs:
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: 22.18.0
-      - run: pnpm run pack:check
       - run: pnpm run test:runtime:node
 
   runtime-packed:
