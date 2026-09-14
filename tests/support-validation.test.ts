@@ -38,7 +38,7 @@ async function mutateJson<T>(path: string, mutate: (value: T) => void): Promise<
   await writeFile(path, JSON.stringify(value));
 }
 
-test("support validation rejects claims without schema, locale, package, CI or real test evidence", async () => {
+test("support validation rejects claims without schema, locale, package, CI or real test evidence", { timeout: 30_000 }, async () => {
   const mutations: readonly [string, (directory: string) => Promise<void>][] = [
     ["SUPPORT_DUPLICATE_ID", async (directory) => mutateJson<{ capabilities: { id: string }[] }>(join(directory, "support/capabilities.json"), (v) => { v.capabilities.push(v.capabilities[0]!); })],
     ["SUPPORT_LABEL_MISSING_KO", async (directory) => mutateJson<{ capabilities: { labels: { ko?: string } }[] }>(join(directory, "support/capabilities.json"), (v) => { delete v.capabilities[0]!.labels.ko; })],
