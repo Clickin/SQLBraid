@@ -60,7 +60,7 @@ export function createPostgresInspector(client: PgClientLike): MetadataInspector
       const versionRow = (await rows(client, "SELECT current_setting('server_version') AS version"))[0];
       const version = text(versionRow, "version") ?? "unknown";
       const tableRows = await rows(client, "SELECT table_schema, table_name, table_type FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name");
-      const columnRows = await rows(client, "SELECT table_schema, table_name, ordinal_position, column_name, data_type, udt_schema, udt_name, numeric_precision, numeric_scale, is_nullable, column_default, is_identity, identity_generation, is_generated, generation_expression FROM information_schema.columns WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name, ordinal_position");
+      const columnRows = await rows(client, "SELECT table_schema, table_name, ordinal_position, column_name, data_type, udt_schema, udt_name, domain_schema, domain_name, numeric_precision, numeric_scale, is_nullable, column_default, is_identity, identity_generation, is_generated, generation_expression FROM information_schema.columns WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name, ordinal_position");
       const relations: Record<string, RelationSnapshot> = {};
       for (const relation of tableRows) {
         const schema = text(relation, "table_schema");
@@ -69,6 +69,7 @@ export function createPostgresInspector(client: PgClientLike): MetadataInspector
         const identity = `${schema}.${name}`;
         const columns = columnRows.filter((column) => text(column, "table_schema") === schema && text(column, "table_name") === name).map((column) => {
           const dataType = text(column, "data_type") ?? "unknown";
+          const domainName = text(column, "domain_name");
           const ordinal = numberValue(column, "ordinal_position");
           const generationExpression = text(column, "generation_expression");
           const generatedEvidence = text(column, "is_generated");
@@ -79,7 +80,9 @@ export function createPostgresInspector(client: PgClientLike): MetadataInspector
           return {
             name: text(column, "column_name") ?? "unknown",
             ordinal: ordinal === undefined ? 0 : Math.max(0, ordinal - 1),
-            type: `${text(column, "udt_schema") ?? "pg_catalog"}.${text(column, "udt_name") ?? dataType}`,
+            type: domainName
+              ? `${text(column, "domain_schema") ?? schema}.${domainName}`
+              : `${text(column, "udt_schema") ?? "pg_catalog"}.${text(column, "udt_name") ?? dataType}`,
             nullable: text(column, "is_nullable") === "YES",
             ...(numberValue(column, "numeric_precision") === undefined ? {} : { precision: numberValue(column, "numeric_precision") }),
             ...(numberValue(column, "numeric_scale") === undefined ? {} : { scale: numberValue(column, "numeric_scale") }),

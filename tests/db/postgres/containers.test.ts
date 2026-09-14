@@ -210,54 +210,103 @@ test("postgres.pv18.containers.native-classification", { timeout: 30_000 }, asyn
   try {
     await client.query("DROP DOMAIN IF EXISTS braid_pv18_json_domain CASCADE");
     await client.query("DROP DOMAIN IF EXISTS braid_pv18_numeric_domain CASCADE");
+    await client.query("DROP DOMAIN IF EXISTS braid_pv18_int8_domain CASCADE");
+    await client.query("DROP DOMAIN IF EXISTS braid_pv18_timestamp_domain CASCADE");
     await client.query("DROP TYPE IF EXISTS braid_pv18_composite CASCADE");
     await client.query("CREATE DOMAIN braid_pv18_json_domain AS jsonb");
     await client.query("CREATE DOMAIN braid_pv18_numeric_domain AS numeric");
+    await client.query("CREATE DOMAIN braid_pv18_int8_domain AS int8");
+    await client.query("CREATE DOMAIN braid_pv18_timestamp_domain AS timestamp");
     await client.query("CREATE TYPE braid_pv18_composite AS (id bigint, payload jsonb)");
     await client.query(`
       CREATE TABLE braid_pv18_containers (
         domain_json braid_pv18_json_domain,
         domain_numeric braid_pv18_numeric_domain,
+        domain_int8 braid_pv18_int8_domain,
+        domain_timestamp braid_pv18_timestamp_domain,
         range_value int8range,
+        numeric_range numrange,
+        timestamp_range tsrange,
+        zoned_range tstzrange,
         multirange_value int8multirange,
+        numeric_multirange nummultirange,
+        timestamp_multirange tsmultirange,
+        zoned_multirange tstzmultirange,
         composite_value braid_pv18_composite
       )
     `);
     const db = createPgDatabase(client, { profile: profile("pg-native") });
-    const row = await db.one(sql.rows<Record<string, unknown>>`
+    const query = sql.rows<Record<string, unknown>>`
       SELECT ARRAY[9007199254740993::int8] AS int8_values,
              ARRAY['{"n":9007199254740993}'::jsonb] AS jsonb_values,
              TIMESTAMP '2026-09-14 12:34:56.123456' AS stamped,
              '9007199254740993'::braid_pv18_numeric_domain AS domain_value,
-             int8range(1, 3) AS range_value,
-             '{[1,3)}'::int8multirange AS multirange_value,
+             '9007199254740993'::braid_pv18_int8_domain AS domain_int8,
+             '{"n":9007199254740993}'::braid_pv18_json_domain AS domain_json,
+             '2026-09-14 12:34:56.123456'::braid_pv18_timestamp_domain AS domain_timestamp,
+             int8range(9007199254740993, 9007199254740995) AS range_value,
+             numrange(12345678901234567890.123456789, 12345678901234567891) AS numeric_range,
+             tsrange('2026-09-14 12:34:56.123456', '2026-09-15') AS timestamp_range,
+             tstzrange('2026-09-14 12:34:56.123456+00', '2026-09-15 00:00:00+00') AS zoned_range,
+             int8multirange(int8range(9007199254740993, 9007199254740995)) AS multirange_value,
+             nummultirange(numrange(12345678901234567890.123456789, 12345678901234567891)) AS numeric_multirange,
+             tsmultirange(tsrange('2026-09-14 12:34:56.123456', '2026-09-15')) AS timestamp_multirange,
+             tstzmultirange(tstzrange('2026-09-14 12:34:56.123456+00', '2026-09-15 00:00:00+00')) AS zoned_multirange,
              ROW(9007199254740993::bigint, '{"n":1}'::jsonb)::braid_pv18_composite AS composite_value
-    `);
+    `;
+    const row = await db.one(query);
     assert.ok(Array.isArray(row.int8_values));
     assert.ok(Array.isArray(row.jsonb_values));
     assert.deepEqual(row.jsonb_values, [{ n: 9007199254740993 }]);
     assert.ok(row.stamped instanceof Date);
     assert.equal(typeof row.domain_value, "string");
-    assert.equal(typeof row.range_value, "string");
-    assert.equal(typeof row.multirange_value, "string");
+    assert.equal(row.domain_int8, "9007199254740993");
+    assert.deepEqual(row.domain_json, { n: 9007199254740993 });
+    assert.ok(row.domain_timestamp instanceof Date);
+    for (const key of ["range_value", "numeric_range", "timestamp_range", "zoned_range", "multirange_value", "numeric_multirange", "timestamp_multirange", "zoned_multirange"]) {
+      assert.equal(typeof row[key], "string");
+    }
     assert.equal(typeof row.composite_value, "string");
+    const textRow = await createPgDatabase(client, { profile: profile("pg-lossless-text") }).one(query);
+    assert.ok(Object.values(textRow).every((value) => typeof value === "string"));
+    for (const key of ["domain_value", "domain_int8", "domain_json", "range_value", "multirange_value", "composite_value"]) {
+      assert.match(String(textRow[key]), /9007199254740993/u);
+    }
+    for (const key of ["numeric_range", "numeric_multirange"]) assert.match(String(textRow[key]), /12345678901234567890\.123456789/u);
+    for (const key of ["domain_timestamp", "timestamp_range", "zoned_range", "timestamp_multirange", "zoned_multirange"]) assert.match(String(textRow[key]), /\.123456/u);
+    const domainDescription = await client.query(`
+      SELECT 1::braid_pv18_int8_domain AS integer_value,
+             1.25::braid_pv18_numeric_domain AS decimal_value,
+             '{}'::braid_pv18_json_domain AS json_value,
+             '2026-09-14'::braid_pv18_timestamp_domain AS temporal_value
+    `);
+    assert.deepEqual(domainDescription.fields.map((field) => field.dataTypeID), [20, 1700, 3802, 1114]);
 
     const snapshot = await createPostgresInspector(client).inspect();
     assert.equal(snapshot.types["public.braid_pv18_json_domain"]?.kind, "domain");
     assert.equal(snapshot.types["public.braid_pv18_numeric_domain"]?.kind, "domain");
+    assert.equal(snapshot.types["public.braid_pv18_int8_domain"]?.kind, "domain");
+    assert.equal(snapshot.types["public.braid_pv18_timestamp_domain"]?.kind, "domain");
     assert.equal(snapshot.types["public.braid_pv18_composite"]?.kind, "composite");
     assert.equal(snapshot.types["pg_catalog.int8range"]?.kind, "range");
     assert.equal(snapshot.types["pg_catalog.int8multirange"]?.kind, "multirange");
+    for (const name of ["numrange", "tsrange", "tstzrange"]) assert.equal(snapshot.types[`pg_catalog.${name}`]?.kind, "range");
+    for (const name of ["nummultirange", "tsmultirange", "tstzmultirange"]) assert.equal(snapshot.types[`pg_catalog.${name}`]?.kind, "multirange");
     const generated = generateModels(snapshot, { typePolicy: profile("pg-native").typePolicy });
     assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", "domain_json", "unknown | null", false);
     assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", "range_value", "unknown | null", false);
     assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", "multirange_value", "unknown | null", false);
     assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", "composite_value", "unknown | null", false);
+    for (const name of ["domain_numeric", "domain_int8", "domain_timestamp", "numeric_range", "timestamp_range", "zoned_range", "numeric_multirange", "timestamp_multirange", "zoned_multirange"]) {
+      assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", name, "unknown | null", false);
+    }
     await assertCompilesGeneratedSource(generated.source, "postgres-pv18-containers");
   } finally {
     await client.query("DROP TABLE IF EXISTS braid_pv18_containers CASCADE").catch(() => undefined);
     await client.query("DROP DOMAIN IF EXISTS braid_pv18_json_domain CASCADE").catch(() => undefined);
     await client.query("DROP DOMAIN IF EXISTS braid_pv18_numeric_domain CASCADE").catch(() => undefined);
+    await client.query("DROP DOMAIN IF EXISTS braid_pv18_int8_domain CASCADE").catch(() => undefined);
+    await client.query("DROP DOMAIN IF EXISTS braid_pv18_timestamp_domain CASCADE").catch(() => undefined);
     await client.query("DROP TYPE IF EXISTS braid_pv18_composite CASCADE").catch(() => undefined);
     await client.end();
   }
