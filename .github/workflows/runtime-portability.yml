@@ -109,7 +109,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ci-evidence/ci-evidence-common/observations"
           report="$RUNNER_TEMP/ci-evidence/ci-evidence-common/results.json"
           set +e
-          pnpm run test:unit -- --maxWorkers=2 --reporter=default --reporter=json --outputFile.json="$report"
+          pnpm exec vitest run --project unit --project cli --maxWorkers=2 --reporter=default --reporter=json --outputFile.json="$report"
           status=$?
           printf '{"success":%s}\n' "$([ "$status" -eq 0 ] && echo true || echo false)" > "$RUNNER_TEMP/ci-evidence/ci-evidence-common/status.json"
           exit "$status"
