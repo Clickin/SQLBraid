@@ -1,0 +1,224 @@
+{
+  "id": "sqlite-node-sqlite-deno-2-9-3",
+  "status": "compatible",
+  "database": {
+    "product": "sqlite",
+    "version": "3.53.2",
+    "edition": "Deno bundled SQLite"
+  },
+  "driver": {
+    "id": "node-sqlite",
+    "version": "2.9.3",
+    "profile": "sqlite-exact-string",
+    "package": "@sqlbraid/sqlite/node-sqlite",
+    "transport": "text-positional (?NNN)",
+    "stream": "StatementSync iterate",
+    "routine": "unsupported by SQLite",
+    "bulk": "prepared-loop",
+    "exclusions": [
+      "Only this exact Deno runtime, driver, database and representation profile tuple is covered.",
+      "Capabilities omitted from this target are not certified by its packed fixture."
+    ],
+    "requiredOptions": {},
+    "driverRawRepresentations": {
+      "integer": "bigint or string",
+      "decimal": "storage-dependent bigint, number or string",
+      "json": "string",
+      "temporal": "string"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+      "json": "string",
+      "temporal": "string"
+    }
+  },
+  "runtime": {
+    "id": "deno",
+    "version": "2.9.3"
+  },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Packed Deno 2.9.3 consumer with its bundled node:sqlite module.",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml"
+  },
+  "ci": {
+    "command": "pnpm run test:runtime:deno",
+    "workflow": ".github/workflows/runtime-portability.yml",
+    "releaseBlocking": true
+  },
+  "numeric": {
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "sqlite-exact-string"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "profile": "sqlite-exact-string"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "lossless",
+      "profile": "sqlite-exact-string"
+    }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unsupported"
+  },
+  "capabilities": {
+    "session.pinned": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "transaction.read-only": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction.isolation.read-uncommitted": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction.isolation.read-committed": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction.isolation.repeatable-read": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction.isolation.serializable": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "statement.cancel": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.call": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "numeric.exact-integer": {
+      "status": "guaranteed",
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ],
+      "driverRawRepresentations": [
+        "bigint",
+        "string"
+      ]
+    },
+    "numeric.exact-decimal": {
+      "status": "unsupported",
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "testIds": []
+    },
+    "data.json-lossless-text": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "data.temporal-lossless": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ]
+    },
+    "result.rows": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "result.command": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "result.standard-schema": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "statement.prepare": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "statement.stream": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "statement.bulk": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "transaction": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "transaction.savepoint": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-sqlite.data.profile"
+      ]
+    },
+    "routine.out": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.inout": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.return-value": {
+      "status": "unsupported",
+      "testIds": []
+    }
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  },
+  "typePolicy": {
+    "id": "sqlite-default",
+    "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
+  }
+}

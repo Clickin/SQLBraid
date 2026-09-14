@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createStatementBindingDescription, parameterizedSql } from "@sqlbraid/core";
+import { createStatementBindingDescription, parameterizedSql, UnsupportedFeatureError } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase, DatabaseCardinalityError } from "@sqlbraid/runtime";
 import { capture, createSqlTag, guarded, sql } from "@sqlbraid/template";
 import { sql as mysql } from "@sqlbraid/mysql";
@@ -16,6 +16,26 @@ const syntheticStatementBinding = Object.freeze({
       reuse: { effective: "simple", owner: "sqlbraid" },
     });
   },
+});
+
+const syntheticEnvironment = Object.freeze({
+  database: { product: "synthetic", version: "1", edition: "runtime-smoke" },
+  driver: { id: "runtime-smoke", version: "1", profile: "synthetic" },
+  runtime: { id: "portable", version: "1" },
+  capabilities: Object.freeze({
+    "session.pinned": { status: "guaranteed" },
+    "statement.prepare": { status: "guaranteed" },
+    "statement.cancel": { status: "guaranteed" },
+    "statement.stream": { status: "guaranteed" },
+    "statement.bulk": { status: "guaranteed" },
+    transaction: { status: "guaranteed" },
+    "transaction.savepoint": { status: "guaranteed" },
+    "transaction.read-only": { status: "guaranteed" },
+    "transaction.isolation.read-uncommitted": { status: "guaranteed" },
+    "transaction.isolation.read-committed": { status: "guaranteed" },
+    "transaction.isolation.repeatable-read": { status: "guaranteed" },
+    "transaction.isolation.serializable": { status: "guaranteed" },
+  }),
 });
 
 function diagnosticSql(statement, placeholder = () => "?") {
@@ -66,23 +86,26 @@ function resultFor(rendered, rows) {
 function physical(log, options = {}) {
   return {
     statementBinding: syntheticStatementBinding,
-    async query(rendered) {
+    environment: options.environment ?? syntheticEnvironment,
+    async query(rendered, _binding, executionOptions) {
       const sqlText = diagnosticSql(rendered);
       if (sqlText.includes("driver-failure") && options.driverFailure !== undefined) {
         throw options.driverFailure;
       }
       log.push(`query:${sqlText}`);
+      if (executionOptions?.signal?.aborted) throw executionOptions.signal.reason;
       return resultFor(rendered, options.rows);
     },
-    async *stream(rendered) {
+    async *stream(rendered, _binding, executionOptions) {
       const sqlText = diagnosticSql(rendered);
       log.push(`stream:${sqlText}`);
       for (const row of options.streamRows ?? [{ id: "1" }]) yield row;
+      if (executionOptions?.signal?.aborted) throw executionOptions.signal.reason;
       if (sqlText.includes("stream-failure") && options.streamFailure !== undefined) {
         throw options.streamFailure;
       }
     },
-    async begin() { log.push("begin"); },
+    async begin(transactionOptions) { log.push(transactionOptions ? `begin:${JSON.stringify(transactionOptions)}` : "begin"); },
     async commit() { log.push("commit"); },
     async rollback() { log.push("rollback"); },
     async savepoint(name) { log.push(`savepoint:${name}`); },
@@ -95,6 +118,7 @@ function pooledFake(options = {}) {
   const records = [];
   const provider = {
     statementBinding: syntheticStatementBinding,
+    environment: options.environment ?? syntheticEnvironment,
     async acquire() {
       const record = {
         id: `lease-${records.length + 1}`,
@@ -442,6 +466,75 @@ async function runtimeSmoke() {
   assert.equal(pinned.records[0].log.filter((entry) => entry.startsWith("query:")).length, 3);
   assert.ok(pinned.records[0].log.some((entry) => entry.startsWith("savepoint:")));
   assert.ok(pinned.records[0].log.some((entry) => entry.startsWith("release:")));
+
+  const sessionPool = pooledFake();
+  const sessionDb = createPooledDatabase(sessionPool.provider);
+  let sessionHandle;
+  let escapedSessionStream;
+  await sessionDb.session(async (session) => {
+    sessionHandle = session;
+    escapedSessionStream = session.stream(sql.rows`SELECT escaped-session-stream`);
+    await session.execute(sql`SELECT session-one`);
+    await session.session(async (nested) => {
+      await nested.execute(sql`SELECT session-two`);
+    });
+    await session.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
+      await tx.execute(sql`SELECT session-tx`);
+    });
+    await expectCode(() => sessionDb.execute(sql`SELECT outer-root-forbidden`), "BRAID_SESSION_SCOPE");
+  });
+  assert.equal(sessionPool.records.length, 1);
+  assert.equal(sessionPool.records[0].releaseCount, 1);
+  assert.deepEqual(
+    sessionPool.records[0].log.filter((entry) => entry.startsWith("query:")).map((entry) => entry.slice("query:".length)),
+    ["SELECT session-one", "SELECT session-two", "SELECT session-tx"],
+  );
+  assert.ok(sessionPool.records[0].log.includes('begin:{"isolation":"serializable","readOnly":true}'));
+  assert.ok(sessionPool.records[0].log.includes("commit"));
+  await expectCode(() => sessionHandle.execute(sql`SELECT closed-session`), "BRAID_SESSION_CLOSED");
+  await assert.rejects(
+    async () => { for await (const row of escapedSessionStream) void row; },
+    (error) => error?.code === "BRAID_SESSION_CLOSED" || error?.code === "BRAID_SESSION_SCOPE",
+  );
+
+  const preparedInputs = [];
+  const prepared = direct.prepare("runtime-input-prepared", (input) => {
+    preparedInputs.push(input);
+    return sql.rows`SELECT ${input} AS value`;
+  });
+  await prepared.one("first");
+  await prepared.one("second");
+  assert.deepEqual(preparedInputs, ["first", "second"]);
+  const zeroInput = direct.prepare("runtime-zero-prepared", () => sql.rows`SELECT zero-input`);
+  await zeroInput.execute();
+  const commandPrepared = direct.prepare("runtime-command-prepared", () => sql.command`UPDATE users SET active = ${true}`);
+  assert.equal((await commandPrepared.execute()).kind, "command");
+
+  const unsupportedCancellationEnvironment = Object.freeze({
+    ...syntheticEnvironment,
+    capabilities: Object.freeze({
+      ...syntheticEnvironment.capabilities,
+      "statement.cancel": { status: "unsupported" },
+    }),
+  });
+  const unsupportedCancellation = pooledFake({ environment: unsupportedCancellationEnvironment });
+  const unsupportedCancellationDb = createPooledDatabase(unsupportedCancellation.provider);
+  const alreadyAborted = new Error("already aborted");
+  const alreadyAbortedController = new AbortController();
+  alreadyAbortedController.abort(alreadyAborted);
+  await expectSame(
+    () => unsupportedCancellationDb.execute(sql`SELECT no-io`, { signal: alreadyAbortedController.signal }),
+    alreadyAborted,
+  );
+  assert.equal(unsupportedCancellation.records.length, 0);
+  const activeController = new AbortController();
+  await assert.rejects(
+    () => unsupportedCancellationDb.execute(sql`SELECT unsupported-active`, { signal: activeController.signal }),
+    (error) => error instanceof UnsupportedFeatureError
+      && error.feature === "statement.cancel"
+      && error.code === "BRAID_CANCEL_UNSUPPORTED",
+  );
+  assert.equal(unsupportedCancellation.records.length, 0);
 
   const directStreamLog = [];
   let directStreamDb;

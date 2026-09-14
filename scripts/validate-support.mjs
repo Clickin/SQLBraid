@@ -101,7 +101,10 @@ export async function validateSupport({ root = scriptRoot } = {}) {
       const source = ts.createSourceFile(entry.file, content, ts.ScriptTarget.Latest, true);
       function visit(node) {
         if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && ["skip", "skipIf", "todo"].includes(node.expression.name.text)) return;
-        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ["test", "it"].includes(node.expression.text) && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0])) titles.add(node.arguments[0].text);
+        if (ts.isCallExpression(node) && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0])
+          && ((ts.isIdentifier(node.expression) && ["test", "it"].includes(node.expression.text))
+            || (ts.isPropertyAccessExpression(node.expression) && ts.isIdentifier(node.expression.expression)
+              && node.expression.expression.text === "Deno" && node.expression.name.text === "test"))) titles.add(node.arguments[0].text);
         ts.forEachChild(node, visit);
       }
       visit(source);

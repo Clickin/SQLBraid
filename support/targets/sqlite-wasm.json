@@ -1,6 +1,6 @@
 {
   "id": "sqlite-wasm-browser-3-53-4",
-  "status": "official",
+  "status": "compatible",
   "database": {
     "product": "sqlite",
     "version": "3.53.4",
@@ -77,6 +77,14 @@
     "vector": "unsupported"
   },
   "capabilities": {
+    "session.pinned": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
+    "transaction.read-only": { "status": "unsupported", "testIds": [] },
+    "transaction.isolation.read-uncommitted": { "status": "unsupported", "testIds": [] },
+    "transaction.isolation.read-committed": { "status": "unsupported", "testIds": [] },
+    "transaction.isolation.repeatable-read": { "status": "unsupported", "testIds": [] },
+    "transaction.isolation.serializable": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
+    "statement.cancel": { "status": "unsupported", "testIds": [] },
+    "routine.call": { "status": "unsupported", "testIds": [] },
     "sql.native-transparency": {
       "status": "guaranteed",
       "testIds": [
@@ -139,37 +147,37 @@
         "wasm.execution.mapped-transaction"
       ]
     },
-    "execution.prepared": {
+    "statement.prepare": {
       "status": "guaranteed",
       "testIds": [
         "wasm.execution.mapped-transaction"
       ]
     },
-    "execution.bulk": {
+    "statement.bulk": {
       "status": "guaranteed",
       "testIds": [
         "wasm.execution.bulk"
       ]
     },
-    "execution.stream": {
+    "statement.stream": {
       "status": "guaranteed",
       "testIds": [
         "wasm.execution.stream"
       ]
     },
-    "execution.transaction": {
+    "transaction": {
       "status": "guaranteed",
       "testIds": [
         "wasm.execution.mapped-transaction"
       ]
     },
-    "execution.savepoint": {
+    "transaction.savepoint": {
       "status": "guaranteed",
       "testIds": [
         "wasm.execution.mapped-transaction"
       ]
     },
-    "routine.scalar-out": {
+    "routine.out": {
       "status": "unsupported",
       "testIds": []
     },
@@ -177,15 +185,15 @@
       "status": "unsupported",
       "testIds": []
     },
-    "routine.resultsets": {
+    "routine.result-sets": {
       "status": "unsupported",
       "testIds": []
     },
-    "routine.cursor": {
+    "routine.out-cursor": {
       "status": "unsupported",
       "testIds": []
     },
-    "routine.return-status": {
+    "routine.return-value": {
       "status": "unsupported",
       "testIds": []
     },
@@ -252,7 +260,7 @@
     }
   },
   "evidence": {
-    "status": "verified",
+    "status": "pending",
     "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
     "runs": [
       {

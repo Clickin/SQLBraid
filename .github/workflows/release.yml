@@ -62,6 +62,38 @@ jobs:
     name: Immutable release gates
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: sqlbraid
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+      mysql:
+        image: mysql:8.4.2
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -psqlbraid"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+        env:
+          MYSQL_ROOT_PASSWORD: sqlbraid
+          MYSQL_DATABASE: mysql
+        ports:
+          - 3306:3306
+      mariadb:
+        image: mariadb:11.8.9
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+        env:
+          MARIADB_ROOT_PASSWORD: sqlbraid
+          MARIADB_DATABASE: mysql
+        ports:
+          - 3307:3306
     steps:
       - name: Check out exact release ref
         uses: actions/checkout@v7.0.1
@@ -156,13 +188,43 @@ jobs:
           node-version: 22.18.0
 
       - name: Node packed runtime gate
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
         run: pnpm run test:runtime:node
 
       - name: Bun packed runtime gate
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
         run: pnpm run test:runtime:bun
 
+      - name: Bun.SQL first-party driver matrix gate
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/bun-sql-observations
+          SQLBRAID_BUN_SQL_POSTGRES_URL: postgres://postgres:sqlbraid@127.0.0.1:5432/postgres
+          SQLBRAID_BUN_SQL_MYSQL_URL: mysql://root:sqlbraid@127.0.0.1:3306/mysql
+          SQLBRAID_BUN_SQL_MARIADB_URL: mysql://root:sqlbraid@127.0.0.1:3307/mysql
+        run: pnpm run test:runtime:bun-sql
+
+      - name: Preserve Bun.SQL tuple evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: bun-sql-runtime-tuple-evidence
+          path: ${{ runner.temp }}/bun-sql-observations
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Deno packed runtime gate
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations
         run: pnpm run test:runtime:deno
+
+      - name: Preserve packed runtime tuple evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: packed-runtime-tuple-evidence
+          path: ${{ runner.temp }}/runtime-observations
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Documentation site gate
         run: pnpm run docs:build

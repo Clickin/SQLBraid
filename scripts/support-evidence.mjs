@@ -6,22 +6,38 @@ import { dirname, resolve } from "node:path";
 
 // Evidence is derived from successful test results, never from test-title existence.
 const [resultsPath, outputPath, stampsDirectory] = process.argv.slice(2);
-assert.ok(resultsPath && outputPath, "Usage: node scripts/support-evidence.mjs <vitest.json> <evidence.json> [stamps-directory]");
+assert.ok(resultsPath && outputPath, "Usage: node scripts/support-evidence.mjs <test-results.json> <evidence.json> [stamps-directory]");
 const results = JSON.parse(await readFile(resultsPath, "utf8"));
-assert.equal(results.success, true, "Failed test runs cannot certify support.");
 const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 if (process.env.GITHUB_SHA) assert.equal(commit, process.env.GITHUB_SHA, "Evidence must describe the checked-out CI SHA.");
 const registry = JSON.parse(await readFile("support/test-registry.json", "utf8"));
 const passed = new Map();
-for (const file of results.testResults) {
-  for (const test of file.assertionResults) {
-    if (test.status !== "passed") continue;
-    for (const [id, entry] of Object.entries(registry)) {
-      if (resolve(entry.file) === resolve(file.name) && (test.title === entry.title || test.fullName === entry.title)) passed.set(id, test.fullName);
+const observations = [];
+if (results.format === "sqlbraid-runtime-tests") {
+  assert.equal(results.version, 1);
+  assert.equal(results.commit, commit, "Native runtime evidence must describe this revision.");
+  if (process.env.GITHUB_RUN_ID) assert.equal(results.run, process.env.GITHUB_RUN_ID);
+  assert.ok(Array.isArray(results.testIds) && results.testIds.length > 0);
+  assert.ok(Array.isArray(results.observations) && results.observations.length > 0);
+  for (const id of results.testIds) {
+    assert.ok(registry[id], `Unregistered native runtime test: ${id}`);
+    assert.ok(results.observations.some((entry) => entry.testIds?.includes(id)
+      && entry.runtime.id === results.runtime.id && entry.runtime.version === results.runtime.version),
+    `Missing matching native runtime observation: ${id}`);
+    passed.set(id, registry[id].title);
+  }
+  observations.push(...results.observations);
+} else {
+  assert.equal(results.success, true, "Failed test runs cannot certify support.");
+  for (const file of results.testResults) {
+    for (const test of file.assertionResults) {
+      if (test.status !== "passed") continue;
+      for (const [id, entry] of Object.entries(registry)) {
+        if (resolve(entry.file) === resolve(file.name) && (test.title === entry.title || test.fullName === entry.title)) passed.set(id, test.fullName);
+      }
     }
   }
 }
-const observations = [];
 if (stampsDirectory) {
   for (const name of (await readdir(stampsDirectory)).sort()) {
     if (!name.endsWith(".json") && !name.endsWith(".jsonl")) continue;
@@ -38,7 +54,8 @@ for (const name of (await readdir("support/targets")).sort()) {
   const tests = claimed.filter(id => passed.has(id));
   if (!tests.length) continue;
   // PG18 shares fixture titles, not execution identity: retain only the selected target.
-  if (target.database.product === "postgres" && name !== `${process.env.SQLBRAID_POSTGRES_TARGET ?? "postgres"}.json`) continue;
+  if (target.database.product === "postgres" && target.driver.id === "pg" && target.runtime.id === "node"
+    && name !== `${process.env.SQLBRAID_POSTGRES_TARGET ?? "postgres"}.json`) continue;
   const observed = observations.filter(entry => entry.targetId === name.slice(0, -5) || entry.targetId === target.id);
   const exactTupleObserved = observed.some(entry =>
     entry.database.product === target.database.product
@@ -69,7 +86,9 @@ assert.ok(targets.length, "No real registered capability tests passed.");
 const evidence = {
   format: "sqlbraid-support-evidence", version: 1, commit,
   run: process.env.GITHUB_RUN_ID ?? null,
-  runtime: { id: "node", version: process.versions.node, execArgv: process.execArgv, platform: process.platform, architecture: process.arch },
+  runtime: results.format === "sqlbraid-runtime-tests"
+    ? results.runtime
+    : { id: "node", version: process.versions.node, execArgv: process.execArgv, platform: process.platform, architecture: process.arch },
   targets, observations,
 };
 await mkdir(dirname(resolve(outputPath)), { recursive: true });

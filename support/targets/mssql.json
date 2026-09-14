@@ -1,6 +1,6 @@
 {
   "id": "mssql-tedious-developer-node-2022-cu18",
-  "status": "official",
+  "status": "compatible",
   "database": {
     "product": "mssql",
     "version": "2022-CU18",
@@ -80,6 +80,14 @@
     "vector": "unclassified"
   },
   "capabilities": {
+    "session.pinned": { "status": "guaranteed", "testIds": ["mssql.execution.rc-session"] },
+    "transaction.read-only": { "status": "unsupported", "testIds": [] },
+    "transaction.isolation.read-uncommitted": { "status": "guaranteed", "testIds": ["mssql.execution.rc-options"] },
+    "transaction.isolation.read-committed": { "status": "guaranteed", "testIds": ["mssql.execution.rc-options"] },
+    "transaction.isolation.repeatable-read": { "status": "guaranteed", "testIds": ["mssql.execution.rc-options"] },
+    "transaction.isolation.serializable": { "status": "guaranteed", "testIds": ["mssql.execution.rc-options"] },
+    "statement.cancel": { "status": "guaranteed", "testIds": ["mssql.execution.rc-cancel"] },
+    "routine.call": { "status": "guaranteed", "testIds": ["mssql.execution.rc-prepare"] },
     "sql.native-transparency": {
       "status": "guaranteed",
       "testIds": [
@@ -210,59 +218,59 @@
         "mssql.result.standard-schema"
       ]
     },
-    "execution.prepared": {
+    "statement.prepare": {
       "status": "guaranteed",
       "testIds": [
         "mssql.execution.prepared"
       ]
     },
-    "execution.stream": {
+    "statement.stream": {
       "status": "guaranteed",
       "testIds": [
         "mssql.execution.stream"
       ]
     },
-    "execution.bulk": {
+    "statement.bulk": {
       "status": "guaranteed",
       "testIds": [
         "mssql.execution.bulk"
       ]
     },
-    "execution.transaction": {
+    "transaction": {
       "status": "guaranteed",
       "testIds": [
         "mssql.execution.transaction"
       ]
     },
-    "execution.savepoint": {
+    "transaction.savepoint": {
       "status": "guaranteed",
       "testIds": [
         "mssql.execution.savepoint"
       ]
     },
-    "routine.scalar-out": {
+    "routine.out": {
       "status": "guaranteed",
       "testIds": [
         "mssql.routine.scalar-out"
       ]
     },
     "routine.inout": {
-      "status": "unsupported",
-      "testIds": []
+      "status": "guaranteed",
+      "testIds": ["mssql.execution.rc-prepare"]
     },
-    "routine.resultsets": {
+    "routine.result-sets": {
       "status": "guaranteed",
       "testIds": [
         "mssql.routine.resultsets"
       ]
     },
-    "routine.cursor": {
+    "routine.out-cursor": {
       "status": "unsupported",
       "testIds": [
         "mssql.routine.cursor"
       ]
     },
-    "routine.return-status": {
+    "routine.return-value": {
       "status": "guaranteed",
       "testIds": [
         "mssql.routine.return-status"
@@ -318,7 +326,7 @@
     }
   },
   "evidence": {
-    "status": "verified",
+    "status": "pending",
     "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
     "runs": [
       {

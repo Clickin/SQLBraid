@@ -33,7 +33,8 @@
         "postgres.data.temporal-lossless",
         "postgres.data.profile-runtime-codegen",
         "postgres.data.containers-lossless-text",
-        "postgres.numeric.environment-refresh"
+        "postgres.numeric.environment-refresh",
+        "deno-postgres.data.profile"
       ]
     },
     "pg-native": {
@@ -102,7 +103,8 @@
         "mysql.numeric.exact-decimal",
         "mysql.data.json-lossless-text",
         "mysql.data.temporal-lossless",
-        "mysql.data.profile-conformance"
+        "mysql.data.profile-conformance",
+        "deno-mysql.data.profile"
       ]
     },
     "mysql2-native": {
@@ -295,7 +297,8 @@
       "fixtureTestIds": [
         "sqlite.numeric.exact-integer",
         "sqlite.data.json-lossless-text",
-        "sqlite.data.temporal-lossless"
+        "sqlite.data.temporal-lossless",
+        "deno-sqlite.data.profile"
       ]
     },
     "sqlite-wasm-exact-string": {
@@ -546,6 +549,122 @@
       },
       "fixtureTestIds": [
         "mariadb.data.mariadb-date-text-conformance"
+      ]
+    },
+    "bun-sql-mariadb-1.3.14": {
+      "id": "bun-sql-mariadb-1.3.14",
+      "driverId": "bun-sql",
+      "json": "text",
+      "temporal": "native",
+      "requiredOptions": {
+        "bigint": true
+      },
+      "driverRawRepresentations": {
+        "integer": "number or bigint; explicit text casts return string",
+        "decimal": "Uint8Array containing decimal text",
+        "json": "string",
+        "temporal": "Date or string",
+        "binary": "Uint8Array"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string; ambiguous integral Number rejects",
+        "decimal": "unsupported native bytes; explicit SQL text conversion returns string",
+        "json": "string",
+        "temporal": "Date or string",
+        "binary": "unsupported ambiguous bytes; explicit SQL HEX conversion returns string"
+      },
+      "typePolicy": {
+        "id": "bun-sql-mariadb-1.3.14",
+        "hash": "23a4d18d16ad0ccc16c28e2a61037ad4c07d213e7b57c05b41ce61fced69c5c1"
+      },
+      "fixtureTestIds": [
+        "bun-sql-mariadb.data.profile"
+      ]
+    },
+    "bun-sql-mysql-1.3.14": {
+      "id": "bun-sql-mysql-1.3.14",
+      "driverId": "bun-sql",
+      "json": "native",
+      "temporal": "native",
+      "requiredOptions": {
+        "bigint": true
+      },
+      "driverRawRepresentations": {
+        "integer": "number or bigint; explicit text casts return string",
+        "decimal": "Uint8Array containing decimal text",
+        "json": "object or array",
+        "temporal": "Date or string",
+        "binary": "Uint8Array"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string; ambiguous integral Number rejects",
+        "decimal": "unsupported native bytes; explicit SQL text conversion returns string",
+        "json": "object or array",
+        "temporal": "Date or string",
+        "binary": "unsupported ambiguous bytes; explicit SQL HEX conversion returns string"
+      },
+      "typePolicy": {
+        "id": "bun-sql-mysql-1.3.14",
+        "hash": "edee9e61c170a31cfeb0c196065a176af3e218f7b36a93ee952359325f68de28"
+      },
+      "fixtureTestIds": [
+        "bun-sql-mysql.data.profile"
+      ]
+    },
+    "bun-sql-postgres-1.3.14": {
+      "id": "bun-sql-postgres-1.3.14",
+      "driverId": "bun-sql",
+      "json": "native",
+      "temporal": "native",
+      "requiredOptions": {
+        "bigint": true
+      },
+      "driverRawRepresentations": {
+        "integer": "number or bigint; explicit text casts return string",
+        "decimal": "string",
+        "json": "object or array",
+        "temporal": "Date or string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string; ambiguous integral Number rejects",
+        "decimal": "string",
+        "json": "object or array",
+        "temporal": "Date or string"
+      },
+      "typePolicy": {
+        "id": "bun-sql-postgres-1.3.14",
+        "hash": "e25904b7284db8a2277358bca08473eb97f128bd513b75702af9b183f890bc87"
+      },
+      "fixtureTestIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    },
+    "bun-sql-sqlite-1.3.14": {
+      "id": "bun-sql-sqlite-1.3.14",
+      "driverId": "bun-sql",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {
+        "safeIntegers": true
+      },
+      "driverRawRepresentations": {
+        "integer": "number or bigint; explicit text casts return string",
+        "decimal": "number (rejected); string for explicit text casts",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string; ambiguous integral Number rejects",
+        "decimal": "unsupported",
+        "json": "string",
+        "temporal": "string"
+      },
+      "typePolicy": {
+        "id": "bun-sql-sqlite-1.3.14",
+        "hash": "ff6fa6dee6180525bdcac0c046ac2c58631d05ed5402e9175ea26e79134299f0"
+      },
+      "fixtureTestIds": [
+        "bun-sql-sqlite.data.profile"
       ]
     }
   },
@@ -920,6 +1039,115 @@
       "profile": "mariadb-date-text",
       "driverRawRepresentations": {},
       "sqlbraidRepresentations": {}
+    },
+    "deno-postgres.data.profile": {
+      "profile": "pg-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      }
+    },
+    "deno-mysql.data.profile": {
+      "profile": "mysql2-lossless-text",
+      "driverRawRepresentations": {
+        "integer": "number (INT); string (BIGINT)",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "string",
+        "json": "string",
+        "temporal": "string"
+      }
+    },
+    "deno-sqlite.data.profile": {
+      "profile": "sqlite-exact-string",
+      "driverRawRepresentations": {
+        "integer": "bigint or string",
+        "decimal": "storage-dependent bigint, number or string",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+        "json": "string",
+        "temporal": "string"
+      }
+    },
+    "bun-sql-mariadb.data.profile": {
+      "profile": "bun-sql-mariadb-1.3.14",
+      "driverRawRepresentations": {
+        "integer": "number or bigint; explicit text casts return string",
+        "decimal": "Uint8Array containing decimal text",
+        "json": "string",
+        "temporal": "Date or string",
+        "binary": "Uint8Array"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string; ambiguous integral Number rejects",
+        "decimal": "unsupported native bytes; explicit SQL text conversion returns string",
+        "json": "string",
+        "temporal": "Date or string",
+        "binary": "unsupported ambiguous bytes; explicit SQL HEX conversion returns string"
+      }
+    },
+    "bun-sql-mysql.data.profile": {
+      "profile": "bun-sql-mysql-1.3.14",
+      "driverRawRepresentations": {
+        "integer": "number or bigint; explicit text casts return string",
+        "decimal": "Uint8Array containing decimal text",
+        "json": "object or array",
+        "temporal": "Date or string",
+        "binary": "Uint8Array"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string; ambiguous integral Number rejects",
+        "decimal": "unsupported native bytes; explicit SQL text conversion returns string",
+        "json": "object or array",
+        "temporal": "Date or string",
+        "binary": "unsupported ambiguous bytes; explicit SQL HEX conversion returns string"
+      }
+    },
+    "bun-sql-postgres.data.profile": {
+      "profile": "bun-sql-postgres-1.3.14",
+      "driverRawRepresentations": {
+        "integer": "number or bigint; explicit text casts return string",
+        "decimal": "string",
+        "json": "object or array",
+        "temporal": "Date or string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string; ambiguous integral Number rejects",
+        "decimal": "string",
+        "json": "object or array",
+        "temporal": "Date or string"
+      }
+    },
+    "bun-sql-sqlite.data.profile": {
+      "profile": "bun-sql-sqlite-1.3.14",
+      "driverRawRepresentations": {
+        "integer": "number or bigint; explicit text casts return string",
+        "decimal": "number (rejected); string for explicit text casts",
+        "json": "string",
+        "temporal": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string; ambiguous integral Number rejects",
+        "decimal": "unsupported",
+        "json": "string",
+        "temporal": "string"
+      }
     }
   }
 }

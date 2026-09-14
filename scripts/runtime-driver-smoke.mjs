@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { UnsupportedFeatureError } from "@sqlbraid/core";
 import { Client, Pool } from "pg";
 import { createConnection, createPool } from "mysql2/promise";
 import { createPgDatabase, createPgPoolDatabase } from "@sqlbraid/postgres/pg";
 import { sql as postgres } from "@sqlbraid/postgres";
-import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
+import { createMysql2Database, createMysql2PoolDatabase, MYSQL2_LOSSLESS_TEXT } from "@sqlbraid/mysql/mysql2";
 import { sql as mysql } from "@sqlbraid/mysql";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { sql as sqlite } from "@sqlbraid/sqlite";
@@ -35,6 +36,50 @@ function schema(map) {
 
 function errorCode(error) {
   return error && typeof error === "object" && "code" in error ? error.code : undefined;
+}
+
+function capabilityStatus(environment, key) {
+  return environment.capabilities?.[key]?.status;
+}
+
+function capabilitySupported(environment, key) {
+  const status = capabilityStatus(environment, key);
+  return status === "guaranteed" || status === "guarded";
+}
+
+async function assertSessionPrepareAndOptions(db, tag, identityQuery, prefix) {
+  let environment = await db.environment();
+  assert.ok(environment.driver.id, `${prefix} environment must identify its driver`);
+  assert.ok(environment.typePolicy?.id, `${prefix} environment must identify its representation profile`);
+  assert.equal(capabilityStatus(environment, "session.pinned"), "guaranteed", `${prefix} must guarantee pinned sessions`);
+  assert.equal(capabilityStatus(environment, "statement.prepare"), "guaranteed", `${prefix} must guarantee prepared execution`);
+
+  const ids = [];
+  let escaped;
+  await db.session(async (session) => {
+    environment = await session.environment();
+    ids.push(await session.one(identityQuery));
+    const prepared = session.prepare(`${prefix}-input-${Date.now()}`, (value) => tag.rows`SELECT ${value} AS prepared_value`);
+    assert.deepEqual(await prepared.one("prepared"), { prepared_value: "prepared" });
+    ids.push(await session.one(identityQuery));
+
+    const isolationLevels = ["read-uncommitted", "read-committed", "repeatable-read", "serializable"];
+    for (const isolation of isolationLevels.filter((level) => capabilitySupported(environment, `transaction.isolation.${level}`))) {
+      const options = capabilitySupported(environment, "transaction.read-only")
+        ? { isolation, readOnly: true }
+        : { isolation };
+      await session.tx(options, async (tx) => {
+        ids.push(await tx.one(identityQuery));
+      });
+    }
+    escaped = session.stream(tag.rows`SELECT 1 AS escaped_session_stream`);
+  });
+  assert.equal(new Set(ids.map((row) => JSON.stringify(row))).size, 1, `${prefix} session must pin one physical connection`);
+  await assert.rejects(
+    async () => { for await (const row of escaped) void row; },
+    (error) => ["BRAID_SESSION_CLOSED", "BRAID_SESSION_SCOPE"].includes(errorCode(error)),
+  );
+  return environment;
 }
 
 async function assertScopeRejection(operation) {
@@ -225,11 +270,26 @@ export async function runPostgresSmoke(url) {
 
   const poolTable = testName("pg_pool");
   const poolIdentifier = postgres.ident(poolTable);
+  const preparedTable = testName("pg_prepared");
+  const preparedIdentifier = postgres.ident(preparedTable);
+  const routineName = testName("pg_call");
   const pool = new Pool({ connectionString: url, max: 2, idleTimeoutMillis: 0 });
   const singlePool = new Pool({ connectionString: url, max: 1 });
+  let environment;
+  let databaseVersion;
   try {
     const events = [];
     const db = createPgPoolDatabase(pool, { observers: [{ onEvent(event) { events.push(event); } }] });
+    const pgEnvironment = await assertSessionPrepareAndOptions(
+      db,
+      postgres,
+      postgres.rows`SELECT pg_backend_pid() AS pid`,
+      "postgres",
+    );
+    environment = pgEnvironment;
+    databaseVersion = String((await db.one(postgres.rows`SELECT version() AS version`)).version);
+    assert.equal(pgEnvironment.driver.id, "pg");
+    if (runtimeName() === "deno") assert.equal(pgEnvironment.runtime.id, "deno");
     await streamingSmoke(db, postgres);
 
     const concurrent = await Promise.all([
@@ -243,6 +303,47 @@ export async function runPostgresSmoke(url) {
       name TEXT NOT NULL
     )`);
     await db.execute(postgres.command`INSERT INTO ${poolIdentifier} (id, name) VALUES (${1}, ${"initial"})`);
+    await db.execute(postgres.command`CREATE TABLE ${preparedIdentifier} (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL
+    )`);
+    await db.session(async (session) => {
+      const preparedCommand = session.prepare(
+        "runtime-smoke-postgres-command",
+        (name) => postgres.command`INSERT INTO ${preparedIdentifier} (id, name) VALUES (${1}, ${name})`,
+      );
+      const result = await preparedCommand.execute("prepared-command");
+      assert.equal(result.kind, "command");
+      assert.equal(result.command.affectedRows, 1);
+    });
+    const bulk = await db.bulk(
+      ["bulk-a", "bulk-b"],
+      (name) => postgres.command`INSERT INTO ${preparedIdentifier} (id, name) VALUES (${name === "bulk-a" ? 2 : 3}, ${name})`,
+    );
+    assert.equal(bulk.inputCount, 2);
+    assert.equal(bulk.affectedRows, 2);
+    assert.deepEqual(await db.all(postgres.rows`SELECT id, name FROM ${preparedIdentifier} ORDER BY id`), [
+      { id: "1", name: "prepared-command" },
+      { id: "2", name: "bulk-a" },
+      { id: "3", name: "bulk-b" },
+    ]);
+    await pool.query(`
+      CREATE OR REPLACE PROCEDURE "${routineName}"(IN input_value text, OUT output_value text)
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        output_value := input_value || '-out';
+      END;
+      $$;
+    `);
+    const preparedCall = db.prepare(
+      "runtime-smoke-postgres-call",
+      (value) => postgres.call({
+        output: schema((row) => ({ output_value: String(row.output_value) })),
+        procedure: { name: routineName, parameterNames: ["input_value", "output_value"] },
+      })`CALL ${postgres.ident(routineName)}(${value}, ${postgres.out("output_value")})`,
+    );
+    const callResult = await preparedCall.call("prepared-call");
+    assert.deepEqual(callResult.output, { output_value: "prepared-call-out" });
 
     const pinned = [];
     await db.tx(async (tx) => {
@@ -303,6 +404,8 @@ export async function runPostgresSmoke(url) {
     assert.ok(pool.totalCount > 0);
   } finally {
     try {
+      await pool.query(`DROP PROCEDURE IF EXISTS "${routineName.replaceAll('"', '""')}"`);
+      await pool.query(`DROP TABLE IF EXISTS "${preparedTable.replaceAll('"', '""')}"`);
       await pool.query(`DROP TABLE IF EXISTS "${poolTable.replaceAll('"', '""')}"`);
     } finally {
       await Promise.all([pool.end(), singlePool.end()]);
@@ -311,8 +414,12 @@ export async function runPostgresSmoke(url) {
 
   return {
     supported: true,
-    runtime: runtimeName(),
+    runtime: environment?.runtime,
     adapter: "postgres/pg",
+    database: { ...environment?.database, version: databaseVersion },
+    driver: environment?.driver,
+    profile: environment?.driver.profile,
+    typePolicy: environment?.typePolicy,
     checks: ["direct-bind", "exact-numeric-string", "json-text", "temporal-text", "result-kind", "type-policy", "schema", "pool-concurrency", "transaction-pinning", "nested-savepoint", "rollback", "root-escape", "observer-events", "max-one-mapper-reentry"],
   };
 }
@@ -333,7 +440,7 @@ export async function runMysqlSmoke(url) {
       jsonStrings: true,
       dateStrings: true,
     });
-    const db = createMysql2Database(client);
+    const db = createMysql2Database(client, { profile: MYSQL2_LOSSLESS_TEXT });
     const table = await db.execute(mysql.command`CREATE TEMPORARY TABLE ${directIdentifier} (
       id INT PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
@@ -427,6 +534,9 @@ export async function runMysqlSmoke(url) {
 
   const poolTable = testName("mysql_pool");
   const poolIdentifier = mysql.ident(poolTable);
+  const preparedTable = testName("mysql_prepared");
+  const preparedIdentifier = mysql.ident(preparedTable);
+  const routineName = testName("mysql_call");
   const pool = createPool({
     uri: url,
     connectionLimit: 2,
@@ -448,9 +558,21 @@ export async function runMysqlSmoke(url) {
     jsonStrings: true,
     dateStrings: true,
   });
+  let environment;
+  let databaseVersion;
   try {
     const events = [];
-    const db = createMysql2PoolDatabase(pool, { observers: [{ onEvent(event) { events.push(event); } }] });
+    const db = createMysql2PoolDatabase(pool, { profile: MYSQL2_LOSSLESS_TEXT, observers: [{ onEvent(event) { events.push(event); } }] });
+    const mysqlEnvironment = await assertSessionPrepareAndOptions(
+      db,
+      mysql,
+      mysql.rows`SELECT CONNECTION_ID() AS connectionId`,
+      "mysql",
+    );
+    environment = mysqlEnvironment;
+    databaseVersion = String((await db.one(mysql.rows`SELECT VERSION() AS version`)).version);
+    assert.equal(mysqlEnvironment.driver.id, "mysql2");
+    if (runtimeName() === "deno") assert.equal(mysqlEnvironment.runtime.id, "deno");
     await streamingSmoke(db, mysql);
 
     const concurrent = await Promise.all([
@@ -464,6 +586,40 @@ export async function runMysqlSmoke(url) {
       name VARCHAR(255) NOT NULL
     ) ENGINE=InnoDB`);
     await db.execute(mysql.command`INSERT INTO ${poolIdentifier} (id, name) VALUES (${1}, ${"initial"})`);
+    await db.execute(mysql.command`CREATE TABLE ${preparedIdentifier} (
+      id INT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    ) ENGINE=InnoDB`);
+    await db.session(async (session) => {
+      const preparedCommand = session.prepare(
+        "runtime-smoke-mysql-command",
+        (name) => mysql.command`INSERT INTO ${preparedIdentifier} (id, name) VALUES (${1}, ${name})`,
+      );
+      const result = await preparedCommand.execute("prepared-command");
+      assert.equal(result.kind, "command");
+      assert.equal(result.command.affectedRows, 1);
+    });
+    const bulk = await db.bulk(
+      ["bulk-a", "bulk-b"],
+      (name) => mysql.command`INSERT INTO ${preparedIdentifier} (id, name) VALUES (${name === "bulk-a" ? 2 : 3}, ${name})`,
+    );
+    assert.equal(bulk.inputCount, 2);
+    assert.equal(bulk.affectedRows, 2);
+    assert.deepEqual(await db.all(mysql.rows`SELECT id, name FROM ${preparedIdentifier} ORDER BY id`), [
+      { id: "1", name: "prepared-command" },
+      { id: "2", name: "bulk-a" },
+      { id: "3", name: "bulk-b" },
+    ]);
+    await pool.query(`
+      CREATE PROCEDURE \`${routineName}\`(IN input_value VARCHAR(255))
+      SELECT CONCAT(input_value, '-out') AS value
+    `);
+    const preparedCall = db.prepare(
+      "runtime-smoke-mysql-call",
+      (value) => mysql.call`CALL ${mysql.ident(routineName)}(${value})`,
+    );
+    const callResult = await preparedCall.call("prepared-call");
+    assert.deepEqual(callResult.resultSets.map((set) => set.rows), [[{ value: "prepared-call-out" }]]);
 
     const pinned = [];
     await db.tx(async (tx) => {
@@ -499,7 +655,7 @@ export async function runMysqlSmoke(url) {
       [{ id: "1" }, { id: "3" }],
     );
 
-    const singleDb = createMysql2PoolDatabase(singlePool, { observers: [{ onEvent(event) { events.push(event); } }] });
+    const singleDb = createMysql2PoolDatabase(singlePool, { profile: MYSQL2_LOSSLESS_TEXT, observers: [{ onEvent(event) { events.push(event); } }] });
     const mapper = schema(async (value) => {
       await singleDb.execute(mysql`SELECT ${2}`);
       return { value: Number(value.value) + 1 };
@@ -522,6 +678,8 @@ export async function runMysqlSmoke(url) {
     assert.ok(events.some((event) => event.type === "query:error" && event.stage === "driver" && event.executionStarted), "observer must receive driver errors");
   } finally {
     try {
+      await pool.query(`DROP PROCEDURE IF EXISTS \`${routineName.replaceAll("`", "``")}\``);
+      await pool.query(`DROP TABLE IF EXISTS \`${preparedTable.replaceAll("`", "``")}\``);
       await pool.query(`DROP TABLE IF EXISTS \`${poolTable.replaceAll("`", "``")}\``);
     } finally {
       await Promise.all([pool.end(), singlePool.end()]);
@@ -530,8 +688,12 @@ export async function runMysqlSmoke(url) {
 
   return {
     supported: true,
-    runtime: runtimeName(),
+    runtime: environment?.runtime,
     adapter: "mysql/mysql2",
+    database: { ...environment?.database, version: databaseVersion },
+    driver: environment?.driver,
+    profile: environment?.driver.profile,
+    typePolicy: environment?.typePolicy,
     checks: ["direct-bind", "exact-numeric-string", "json-text", "temporal-text", "result-kind", "type-policy", "schema", "pool-concurrency", "transaction-pinning", "nested-savepoint", "rollback", "root-escape", "observer-events", "max-one-mapper-reentry"],
   };
 }
@@ -585,10 +747,71 @@ export async function runSqliteSmoke() {
 
   const tableName = testName("sqlite");
   const tableIdentifier = sqlite.ident(tableName);
+  const preparedTableName = testName("sqlite_prepared");
+  const preparedTableIdentifier = sqlite.ident(preparedTableName);
   const native = new module.DatabaseSync(":memory:");
   const events = [];
+  let environment;
+  let sqliteVersion;
   try {
     const db = createNodeSqliteDatabase(native, { observers: [{ onEvent(event) { events.push(event); } }] });
+    const sqliteEnvironment = await db.environment();
+    sqliteVersion = String(native.prepare("SELECT sqlite_version() AS version").get().version);
+    environment = sqliteEnvironment;
+    assert.equal(sqliteEnvironment.driver.id, "node-sqlite");
+    assert.ok(sqliteEnvironment.typePolicy?.id, "SQLite environment must identify its representation profile");
+    assert.equal(capabilityStatus(sqliteEnvironment, "statement.prepare"), "guaranteed");
+    assert.equal(capabilityStatus(sqliteEnvironment, "statement.cancel"), "unsupported");
+    assert.equal(capabilityStatus(sqliteEnvironment, "transaction.read-only"), "unsupported");
+    if (runtimeName() === "deno") assert.equal(sqliteEnvironment.runtime.id, "deno");
+    const sqlitePrepared = db.prepare(`${tableName}-input-prepared`, (value) => sqlite.rows`SELECT ${value} AS prepared_value`);
+    assert.deepEqual(await sqlitePrepared.one("prepared"), { prepared_value: "prepared" });
+    await assert.rejects(
+      () => db.tx({ readOnly: true }, async () => undefined),
+      (error) => error instanceof UnsupportedFeatureError
+        && error.feature === "transaction.read-only",
+    );
+    const sqliteCancellation = new AbortController();
+    await assert.rejects(
+      () => db.execute(sqlite`SELECT 1`, { signal: sqliteCancellation.signal }),
+      (error) => error instanceof UnsupportedFeatureError
+        && error.feature === "statement.cancel",
+    );
+    await db.execute(sqlite.command`CREATE TABLE ${preparedTableIdentifier} (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      amount REAL NOT NULL
+    )`);
+    const preparedCommand = db.prepare(
+      `${preparedTableName}-command`,
+      (value) => sqlite.command`INSERT INTO ${preparedTableIdentifier} (id, name, amount) VALUES (${1}, ${value}, ${1.25})`,
+    );
+    const preparedCommandResult = await preparedCommand.execute("prepared-command");
+    assert.equal(preparedCommandResult.kind, "command");
+    assert.equal(preparedCommandResult.command.affectedRows, 1);
+    const preparedBulk = await db.bulk(
+      ["bulk-a", "bulk-b"],
+      (value) => sqlite.command`INSERT INTO ${preparedTableIdentifier} (id, name, amount) VALUES (${value === "bulk-a" ? 2 : 3}, ${value}, ${2.5})`,
+    );
+    assert.equal(preparedBulk.inputCount, 2);
+    assert.equal(preparedBulk.affectedRows, 2);
+    assert.deepEqual(await db.all(sqlite.rows`SELECT id, name FROM ${preparedTableIdentifier} ORDER BY id`), [
+      { id: "1", name: "prepared-command" },
+      { id: "2", name: "bulk-a" },
+      { id: "3", name: "bulk-b" },
+    ]);
+    const preparedCall = db.prepare(
+      `${preparedTableName}-call`,
+      (value) => sqlite.call`CALL unsupported(${value})`,
+    );
+    await assert.rejects(
+      () => db.call(sqlite.call`CALL unsupported()`),
+      (error) => errorCode(error) === "BRAID_CALL_UNSUPPORTED",
+    );
+    await assert.rejects(
+      () => preparedCall.call("prepared-call"),
+      (error) => errorCode(error) === "BRAID_CALL_UNSUPPORTED",
+    );
     const table = await db.execute(sqlite.command`CREATE TABLE ${tableIdentifier} (
       id INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
@@ -696,8 +919,12 @@ export async function runSqliteSmoke() {
 
   return {
     supported: true,
-    runtime: runtimeName(),
+    runtime: environment?.runtime,
     adapter: "sqlite/node:sqlite",
+    database: { ...environment?.database, version: sqliteVersion },
+    driver: environment?.driver,
+    profile: environment?.driver.profile,
+    typePolicy: environment?.typePolicy,
     checks: ["direct-bind", "exact-numeric-string", "rows", "commands", "result-kind", "normalization", "schema", "returning", "transaction-rollback", "root-escape", "observer-events"],
   };
 }

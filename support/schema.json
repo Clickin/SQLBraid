@@ -197,7 +197,8 @@
         "integer": { "type": "string", "minLength": 1 },
         "decimal": { "type": "string", "minLength": 1 },
         "json": { "type": "string", "minLength": 1 },
-        "temporal": { "type": "string", "minLength": 1 }
+        "temporal": { "type": "string", "minLength": 1 },
+        "binary": { "type": "string", "minLength": 1 }
       }
     },
     "profile": {
@@ -286,7 +287,7 @@
       "additionalProperties": false,
       "required": ["file", "title"],
       "properties": {
-        "file": { "type": "string", "pattern": "^tests/[a-zA-Z0-9_./-]+\\.test\\.ts$" },
+        "file": { "type": "string", "pattern": "^tests/[a-zA-Z0-9_./-]+\\.test\\.(?:ts|mjs)$" },
         "title": { "type": "string", "minLength": 1 },
         "outcome": { "enum": ["success", "failure"] }
       }
@@ -306,7 +307,7 @@
         "testRegistry": { "$ref": "#/$defs/registry" }
       }
     },
-    "capabilityId": { "type": "string", "pattern": "^(?:sql|result|numeric|data|dml|execution|routine|metadata)\\.[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "capabilityId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)*$" },
     "conditionCode": { "type": "string", "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+$" },
     "testId": { "type": "string", "pattern": "^[a-z0-9-]+\\.(?:sql|result|numeric|data|dml|execution|routine|metadata|binary|command)\\.[a-z0-9]+(?:-[a-z0-9]+)*$" },
     "targetId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },

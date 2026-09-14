@@ -1,5 +1,5 @@
 {
-  "id": "mysql-mysql2-node-8-4-2",
+  "id": "mysql-mysql2-deno-2-9-3",
   "status": "compatible",
   "database": {
     "product": "mysql",
@@ -16,9 +16,8 @@
     "routine": "prepared CALL emitted result sets; no OUT/INOUT carrier",
     "bulk": "prepared-loop",
     "exclusions": [
-      "MySQL has no generic DML RETURNING capability",
-      "OUT and INOUT carriers are unsupported for ordinary mysql2 execution",
-      "Bun and Deno mysql2 subpaths are not certified by this target"
+      "Only this exact Deno runtime, driver, database and representation profile tuple is covered.",
+      "Capabilities omitted from this target are not certified by its packed fixture."
     ],
     "requiredOptions": {
       "supportBigNumbers": true,
@@ -42,18 +41,18 @@
     }
   },
   "runtime": {
-    "id": "node",
-    "version": "22.18.0"
+    "id": "deno",
+    "version": "2.9.3"
   },
   "reproducibility": {
     "zeroCost": true,
-    "description": "GitHub Actions MySQL service using mysql:8.4.2.",
+    "description": "Packed Deno 2.9.3 consumer with mysql:8.4.2.",
     "image": "mysql:8.4.2",
-    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml"
   },
   "ci": {
-    "command": "pnpm exec vitest run",
-    "workflow": ".github/workflows/release.yml",
+    "command": "pnpm run test:runtime:deno",
+    "workflow": ".github/workflows/runtime-portability.yml",
     "releaseBlocking": true
   },
   "numeric": {
@@ -90,62 +89,50 @@
     "session.pinned": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.rc-session"
+        "deno-mysql.data.profile"
       ]
     },
     "transaction.read-only": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.rc-session"
+        "deno-mysql.data.profile"
       ]
     },
     "transaction.isolation.read-uncommitted": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.rc-isolation"
+        "deno-mysql.data.profile"
       ]
     },
     "transaction.isolation.read-committed": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.rc-isolation"
+        "deno-mysql.data.profile"
       ]
     },
     "transaction.isolation.repeatable-read": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.rc-isolation"
+        "deno-mysql.data.profile"
       ]
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.rc-isolation"
+        "deno-mysql.data.profile"
       ]
     },
     "statement.cancel": {
       "status": "guarded",
       "conditionCode": "mysql2.physical-connection-destroy",
       "testIds": [
-        "mysql.execution.rc-cancel"
+        "deno-mysql.data.profile"
       ]
     },
     "routine.call": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.routine.resultsets"
-      ]
-    },
-    "sql.native-transparency": {
-      "status": "guaranteed",
-      "testIds": [
-        "mysql.sql.native-transparency"
-      ]
-    },
-    "sql.generated-structure": {
-      "status": "guaranteed",
-      "testIds": [
-        "mysql.sql.generated-structure"
+        "deno-mysql.data.profile"
       ]
     },
     "numeric.exact-integer": {
@@ -155,7 +142,7 @@
       "representation": "string",
       "fidelity": "guarded",
       "testIds": [
-        "mysql.numeric.exact-integer"
+        "deno-mysql.data.profile"
       ],
       "driverRawRepresentations": [
         "number",
@@ -168,35 +155,16 @@
       "representation": "string",
       "fidelity": "lossless",
       "testIds": [
-        "mysql.numeric.exact-decimal"
+        "deno-mysql.data.profile"
       ],
       "driverRawRepresentations": [
         "string"
       ]
     },
-    "numeric.approximate-float": {
-      "status": "guaranteed",
-      "semantics": "approximate-binary",
-      "representation": "number",
-      "fidelity": "lossless",
-      "testIds": [
-        "mysql.numeric.approximate-float"
-      ],
-      "driverRawRepresentations": [
-        "number"
-      ]
-    },
-    "numeric.bind-exact": {
-      "status": "guarded",
-      "conditionCode": "mysql2.exact-numeric-profile",
-      "testIds": [
-        "mysql.numeric.exact-bind"
-      ]
-    },
     "data.json-lossless-text": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.data.json-lossless-text"
+        "deno-mysql.data.profile"
       ],
       "driverRawRepresentations": [
         "string"
@@ -205,26 +173,7 @@
     "data.temporal-lossless": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.data.temporal-lossless"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
-    },
-    "data.binary": {
-      "status": "guaranteed",
-      "testIds": [
-        "mysql.data.binary"
-      ],
-      "driverRawRepresentations": [
-        "Buffer",
-        "Uint8Array"
-      ]
-    },
-    "data.uuid": {
-      "status": "guaranteed",
-      "testIds": [
-        "mysql.data.uuid"
+        "deno-mysql.data.profile"
       ],
       "driverRawRepresentations": [
         "string"
@@ -233,61 +182,49 @@
     "result.rows": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.result.rows"
+        "deno-mysql.data.profile"
       ]
     },
     "result.command": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.result.command"
-      ]
-    },
-    "result.multiple-sets": {
-      "status": "guaranteed",
-      "testIds": [
-        "mysql.result.multiple-sets"
+        "deno-mysql.data.profile"
       ]
     },
     "result.standard-schema": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.result.standard-schema"
+        "deno-mysql.data.profile"
       ]
     },
     "statement.prepare": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.prepared"
+        "deno-mysql.data.profile"
       ]
     },
     "statement.stream": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.stream"
+        "deno-mysql.data.profile"
       ]
     },
     "statement.bulk": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.bulk"
+        "deno-mysql.data.profile"
       ]
     },
     "transaction": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.transaction"
+        "deno-mysql.data.profile"
       ]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.execution.savepoint"
-      ]
-    },
-    "routine.result-sets": {
-      "status": "guaranteed",
-      "testIds": [
-        "mysql.routine.resultsets"
+        "deno-mysql.data.profile"
       ]
     },
     "routine.out": {
@@ -298,74 +235,20 @@
       "status": "unsupported",
       "testIds": []
     },
-    "routine.out-cursor": {
-      "status": "unsupported",
-      "testIds": []
-    },
     "routine.return-value": {
       "status": "unsupported",
       "testIds": []
     },
-    "metadata.identity": {
+    "routine.result-sets": {
       "status": "guaranteed",
       "testIds": [
-        "mysql.metadata.identity"
+        "deno-mysql.data.profile"
       ]
-    },
-    "metadata.generated": {
-      "status": "guaranteed",
-      "testIds": [
-        "mysql.metadata.generated"
-      ]
-    },
-    "metadata.routines": {
-      "status": "guaranteed",
-      "testIds": [
-        "mysql.metadata.routines"
-      ]
-    },
-    "metadata.types": {
-      "status": "guaranteed",
-      "testIds": [
-        "mysql.metadata.types"
-      ]
-    },
-    "dml.insert-returning": {
-      "status": "unsupported",
-      "testIds": []
-    },
-    "dml.update-returning": {
-      "status": "unsupported",
-      "testIds": []
-    },
-    "dml.delete-returning": {
-      "status": "unsupported",
-      "testIds": []
     }
   },
   "evidence": {
     "status": "pending",
-    "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
-    "runs": [
-      {
-        "workflow": ".github/workflows/runtime-portability.yml",
-        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
-        "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851691821"
-      },
-      {
-        "workflow": ".github/workflows/docs-pages.yml",
-        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
-        "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851706964"
-      },
-      {
-        "workflow": ".github/workflows/release.yml",
-        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
-        "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851703042"
-      }
-    ]
+    "runs": []
   },
   "typePolicy": {
     "id": "mysql2-lossless-text",

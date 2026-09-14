@@ -32,6 +32,7 @@ test('public package exports resolve in an external consumer directory', async (
   await writeFile(entry, [
     'import { sql as pg } from "@sqlbraid/postgres";',
     'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
+    'import { createBunSqlDatabase } from "@sqlbraid/bun-sql";',
     'import { sql as mysql } from "@sqlbraid/mysql";',
     'import { createMysql2Database } from "@sqlbraid/mysql/mysql2";',
     'import { sql as sqlite } from "@sqlbraid/sqlite";',
@@ -48,7 +49,7 @@ test('public package exports resolve in an external consumer directory', async (
     'import { typePolicy as postgresTypePolicy } from "@sqlbraid/postgres";',
     'import { createLanguageService, startStdioLanguageServer } from "@sqlbraid/language-server";',
     'for (const [name, tag] of [["postgres", pg], ["mysql", mysql], ["sqlite", sqlite], ["oracle", oracle], ["mssql", mssql]]) { const rendered = tag`SELECT ${1}`.render(); if (rendered.segments.join("") !== "SELECT " || rendered.parameters[0]?.value !== 1) throw new Error(`${name} export failed`); }',
-    'if ([createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("adapter export failed");',
+    'if ([createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createBunSqlDatabase, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("adapter export failed");',
     'if ([createPostgresInspector, createMysqlInspector, createSqliteInspector, createOracleInspector, validateSnapshot].some((value) => typeof value !== "function")) throw new Error("metadata tooling export failed");',
     'const native = new DatabaseSync(":memory:");',
     'try { const db = createNodeSqliteDatabase(native); const row = await db.one(sqlite.rows`SELECT CAST(\'9007199254740993\' AS INTEGER) AS value`); if (row.value !== "9007199254740993") throw new Error("exact INTEGER consumer output failed"); } finally { native.close(); }',

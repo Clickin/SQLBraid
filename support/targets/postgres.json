@@ -1,6 +1,6 @@
 {
   "id": "postgres-pg-node-16-4",
-  "status": "official",
+  "status": "compatible",
   "database": {
     "product": "postgres",
     "version": "16.4",
@@ -84,6 +84,14 @@
     "vector": "unclassified"
   },
   "capabilities": {
+    "session.pinned": { "status": "guaranteed", "testIds": ["postgres.execution.rc-session"] },
+    "transaction.read-only": { "status": "guaranteed", "testIds": ["postgres.execution.rc-session"] },
+    "transaction.isolation.read-uncommitted": { "status": "guarded", "conditionCode": "pg.read-uncommitted-maps-to-read-committed", "testIds": ["postgres.execution.rc-session"] },
+    "transaction.isolation.read-committed": { "status": "guaranteed", "testIds": ["postgres.execution.rc-session"] },
+    "transaction.isolation.repeatable-read": { "status": "guaranteed", "testIds": ["postgres.execution.rc-session"] },
+    "transaction.isolation.serializable": { "status": "guaranteed", "testIds": ["postgres.execution.rc-session"] },
+    "statement.cancel": { "status": "guarded", "conditionCode": "pg.physical-connection-destroy", "testIds": ["postgres.execution.rc-cancel"] },
+    "routine.call": { "status": "guaranteed", "testIds": ["postgres.routine.scalar-out"] },
     "sql.native-transparency": {
       "status": "guaranteed",
       "testIds": [
@@ -233,49 +241,49 @@
         "postgres.result.standard-schema"
       ]
     },
-    "execution.prepared": {
+    "statement.prepare": {
       "status": "guaranteed",
       "testIds": [
         "postgres.execution.prepared"
       ]
     },
-    "execution.stream": {
+    "statement.stream": {
       "status": "guaranteed",
       "testIds": [
         "postgres.execution.stream"
       ]
     },
-    "execution.bulk": {
+    "statement.bulk": {
       "status": "guaranteed",
       "testIds": [
         "postgres.execution.bulk"
       ]
     },
-    "execution.transaction": {
+    "transaction": {
       "status": "guaranteed",
       "testIds": [
         "postgres.execution.transaction"
       ]
     },
-    "execution.savepoint": {
+    "transaction.savepoint": {
       "status": "guaranteed",
       "testIds": [
         "postgres.execution.savepoint"
       ]
     },
-    "routine.scalar-out": {
+    "routine.out": {
       "status": "guaranteed",
       "testIds": [
         "postgres.routine.scalar-out"
       ]
     },
-    "routine.resultsets": {
+    "routine.result-sets": {
       "status": "guaranteed",
       "testIds": [
         "postgres.routine.resultsets"
       ]
     },
-    "routine.cursor": {
+    "routine.out-cursor": {
       "status": "guaranteed",
       "testIds": [
         "postgres.routine.cursor"
@@ -285,7 +293,7 @@
       "status": "unsupported",
       "testIds": []
     },
-    "routine.return-status": {
+    "routine.return-value": {
       "status": "unsupported",
       "testIds": []
     },
@@ -339,7 +347,7 @@
     }
   },
   "evidence": {
-    "status": "verified",
+    "status": "pending",
     "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
     "runs": [
       {

@@ -1,0 +1,279 @@
+{
+  "id": "bun-sql-postgres",
+  "status": "compatible",
+  "database": {
+    "product": "postgres",
+    "version": "16.4",
+    "edition": "alpine"
+  },
+  "driver": {
+    "id": "bun-sql",
+    "version": "1.3.14",
+    "profile": "bun-sql-postgres-1.3.14",
+    "package": "@sqlbraid/bun-sql",
+    "transport": "text-positional ($1..$N)",
+    "stream": "unsupported",
+    "routine": "unsupported",
+    "bulk": "prepared-loop",
+    "requiredOptions": {
+      "bigint": true
+    },
+    "driverRawRepresentations": {
+      "integer": "number or bigint; explicit text casts return string",
+      "decimal": "string",
+      "json": "object or array",
+      "temporal": "Date or string"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string; ambiguous integral Number rejects",
+      "decimal": "string",
+      "json": "object or array",
+      "temporal": "Date or string"
+    },
+    "exclusions": [
+      "Only the exact pinned Bun.SQL backend and configured representation profile are covered.",
+      "Integral Number results without database type metadata reject rather than risk exact-numeric loss.",
+      "Streaming, routine channels and active statement cancellation are unsupported."
+    ]
+  },
+  "runtime": {
+    "id": "bun",
+    "version": "1.3.14"
+  },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Bun 1.3.14 with postgres:16.4-alpine.",
+    "image": "postgres:16.4-alpine",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml"
+  },
+  "ci": {
+    "command": "pnpm run test:db:bun-sql",
+    "workflow": ".github/workflows/runtime-portability.yml",
+    "releaseBlocking": true
+  },
+  "numeric": {
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded",
+      "profile": "bun-sql-postgres-1.3.14"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "bun-sql-postgres-1.3.14"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "guarded",
+      "binaryPrecision": 64,
+      "profile": "bun-sql-postgres-1.3.14"
+    }
+  },
+  "containers": {
+    "postgres-arrays": "unclassified",
+    "postgres-domains": "unclassified",
+    "postgres-ranges": "unclassified",
+    "postgres-composites": "unclassified",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
+  "capabilities": {
+    "result.rows": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    },
+    "result.command": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    },
+    "result.standard-schema": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    },
+    "numeric.exact-integer": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "conditionCode": "bun-sql.integer-width-profile",
+      "driverRawRepresentations": [
+        "number",
+        "bigint",
+        "string"
+      ],
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded"
+    },
+    "numeric.exact-decimal": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "driverRawRepresentations": [
+        "string"
+      ],
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "lossless"
+    },
+    "numeric.approximate-float": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "conditionCode": "bun-sql.float-profile",
+      "driverRawRepresentations": [
+        "number"
+      ],
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "guarded",
+      "binaryPrecision": 64
+    },
+    "data.json-parsed": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "conditionCode": "bun-sql.json-parser-profile"
+    },
+    "data.json-lossless-text": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "data.temporal-native": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "conditionCode": "bun-sql.temporal-profile"
+    },
+    "data.temporal-lossless": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "session.pinned": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    },
+    "statement.prepare": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    },
+    "statement.bulk": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    },
+    "statement.stream": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "statement.cancel": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    },
+    "transaction.savepoint": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    },
+    "transaction.read-only": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "transaction.isolation.read-uncommitted": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "transaction.isolation.read-committed": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "transaction.isolation.repeatable-read": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "transaction.isolation.serializable": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "routine.call": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.out": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.inout": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.result-sets": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.out-cursor": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.return-value": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "data.binary": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-postgres.data.profile"
+      ]
+    }
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  },
+  "typePolicy": {
+    "id": "bun-sql-postgres-1.3.14",
+    "hash": "e25904b7284db8a2277358bca08473eb97f128bd513b75702af9b183f890bc87"
+  }
+}

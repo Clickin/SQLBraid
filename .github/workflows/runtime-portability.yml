@@ -21,6 +21,9 @@ jobs:
         with:
           version: 12.3.4
       - run: pnpm install --frozen-lockfile
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.3.14
       - name: Install browser conformance runtime
         run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run typecheck
@@ -36,7 +39,16 @@ jobs:
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: 22.18.0
-      - run: pnpm run test:runtime:node
+      - name: Node packed runtime gate
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations-node
+        run: pnpm run test:runtime:node
+      - name: Preserve Node runtime tuple evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: node-runtime-tuple-evidence
+          path: ${{ runner.temp }}/runtime-observations-node
+          if-no-files-found: error
       - name: Record executed support evidence
         run: node scripts/support-evidence.mjs "${{ runner.temp }}/support-results.json" "${{ runner.temp }}/support-evidence.json" "${{ runner.temp }}/support-observations"
       - name: Preserve exact profile evidence
@@ -72,4 +84,85 @@ jobs:
         with:
           deno-version: v2.9.3
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run test:runtime:${{ matrix.runtime }}
+      - name: Packed Bun runtime gate
+        if: matrix.runtime == 'bun'
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations-${{ matrix.runtime }}
+        run: pnpm run test:runtime:bun
+      - name: Packed Deno runtime gate
+        if: matrix.runtime == 'deno'
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/runtime-observations-${{ matrix.runtime }}
+        run: pnpm run test:runtime:deno
+      - name: Record native Deno support evidence
+        if: matrix.runtime == 'deno'
+        run: node scripts/support-evidence.mjs "${{ runner.temp }}/runtime-observations-deno/deno-deno-runtime-tests.json" "${{ runner.temp }}/runtime-observations-deno/support-evidence-deno.json"
+      - name: Preserve packed runtime tuple evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ matrix.runtime }}-runtime-tuple-evidence
+          path: ${{ runner.temp }}/runtime-observations-${{ matrix.runtime }}
+          if-no-files-found: error
+
+  bun-sql-matrix:
+    name: Bun.SQL first-party driver matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: sqlbraid
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+      mysql:
+        image: mysql:8.4.2
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -psqlbraid"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+        env:
+          MYSQL_ROOT_PASSWORD: sqlbraid
+          MYSQL_DATABASE: mysql
+        ports:
+          - 3306:3306
+      mariadb:
+        image: mariadb:11.8.9
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+        env:
+          MARIADB_ROOT_PASSWORD: sqlbraid
+          MARIADB_DATABASE: mysql
+        ports:
+          - 3307:3306
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22.18.0
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 12.3.4
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.3.14
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Run Bun.SQL backend matrix
+        env:
+          SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/bun-sql-observations
+          SQLBRAID_POSTGRES_URL: postgres://postgres:sqlbraid@127.0.0.1:5432/postgres
+          SQLBRAID_MYSQL_URL: mysql://root:sqlbraid@127.0.0.1:3306/mysql
+          SQLBRAID_MARIADB_URL: mysql://root:sqlbraid@127.0.0.1:3307/mysql
+        run: pnpm run test:db:bun-sql
+      - name: Preserve Bun.SQL tuple evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: bun-sql-runtime-tuple-evidence
+          path: ${{ runner.temp }}/bun-sql-observations
+          if-no-files-found: error

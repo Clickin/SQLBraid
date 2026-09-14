@@ -1,4 +1,110 @@
 {
+  "deno-postgres.data.profile": {
+    "file": "tests/db/deno/packed-runtime.test.mjs",
+    "title": "deno-postgres.data.profile"
+  },
+  "deno-mysql.data.profile": {
+    "file": "tests/db/deno/packed-runtime.test.mjs",
+    "title": "deno-mysql.data.profile"
+  },
+  "deno-sqlite.data.profile": {
+    "file": "tests/db/deno/packed-runtime.test.mjs",
+    "title": "deno-sqlite.data.profile"
+  },
+  "bun-sql-postgres.data.profile": {
+    "file": "tests/db/bun-sql/capabilities.test.ts",
+    "title": "bun-sql-postgres.data.profile"
+  },
+  "bun-sql-mysql.data.profile": {
+    "file": "tests/db/bun-sql/capabilities.test.ts",
+    "title": "bun-sql-mysql.data.profile"
+  },
+  "bun-sql-mariadb.data.profile": {
+    "file": "tests/db/bun-sql/capabilities.test.ts",
+    "title": "bun-sql-mariadb.data.profile"
+  },
+  "bun-sql-sqlite.data.profile": {
+    "file": "tests/db/bun-sql/capabilities.test.ts",
+    "title": "bun-sql-sqlite.data.profile"
+  },
+  "postgres.execution.rc-cancel": {
+    "file": "tests/db/postgres/capabilities.test.ts",
+    "title": "postgres.rc cancellation destroys an in-flight pooled connection before reuse"
+  },
+  "mysql.execution.rc-cancel": {
+    "file": "tests/db/mysql/capabilities.test.ts",
+    "title": "mysql.rc cancellation destroys in-flight query, call, bulk, and prepared leases"
+  },
+  "postgres.execution.rc-session": {
+    "file": "tests/db/postgres/capabilities.test.ts",
+    "title": "postgres.rc sessions, prepared execution, and transaction options preserve one backend"
+  },
+  "mysql.execution.rc-session": {
+    "file": "tests/db/mysql/capabilities.test.ts",
+    "title": "mysql.rc sessions, prepared execution, and transaction options preserve one connection"
+  },
+  "oracle.execution.rc-session": {
+    "file": "tests/db/oracle/capabilities.test.ts",
+    "title": "rc.oracle.session"
+  },
+  "oracle.execution.rc-prepare": {
+    "file": "tests/db/oracle/capabilities.test.ts",
+    "title": "rc.oracle.prepare"
+  },
+  "oracle.execution.rc-options": {
+    "file": "tests/db/oracle/capabilities.test.ts",
+    "title": "rc.oracle.transaction-options"
+  },
+  "oracle.execution.rc-cancel": {
+    "file": "tests/db/oracle/capabilities.test.ts",
+    "title": "rc.oracle.cancel"
+  },
+  "mssql.execution.rc-session": {
+    "file": "tests/db/mssql/capabilities.test.ts",
+    "title": "rc.mssql.session"
+  },
+  "mssql.execution.rc-prepare": {
+    "file": "tests/db/mssql/capabilities.test.ts",
+    "title": "rc.mssql.prepare"
+  },
+  "mssql.execution.rc-options": {
+    "file": "tests/db/mssql/capabilities.test.ts",
+    "title": "rc.mssql.transaction-options"
+  },
+  "mssql.execution.rc-cancel": {
+    "file": "tests/db/mssql/capabilities.test.ts",
+    "title": "rc.mssql.cancel"
+  },
+  "mariadb.execution.rc-session": {
+    "file": "tests/db/mariadb/capabilities.test.ts",
+    "title": "rc.mariadb.session"
+  },
+  "mariadb.execution.rc-prepare": {
+    "file": "tests/db/mariadb/capabilities.test.ts",
+    "title": "rc.mariadb.prepare"
+  },
+  "mariadb.execution.rc-options": {
+    "file": "tests/db/mariadb/capabilities.test.ts",
+    "title": "rc.mariadb.transaction-options"
+  },
+  "mariadb.execution.rc-cancel": {
+    "file": "tests/db/mariadb/capabilities.test.ts",
+    "title": "rc.mariadb.cancel"
+  },
+  "sqlite.execution.rc-session": {
+    "file": "tests/rc-sqlite-drivers.test.ts",
+    "title": "native SQLite sessions retain TEMP state, nested transactions, prepared inputs, and closure"
+  },
+  "sqlite.execution.rc-options": {
+    "file": "tests/rc-sqlite-drivers.test.ts",
+    "title": "native SQLite transaction options and active cancellation fail before user SQL",
+    "outcome": "failure"
+  },
+  "d1.execution.rc-session": {
+    "file": "tests/db/d1/capabilities.test.ts",
+    "title": "d1.execution.bulk",
+    "outcome": "failure"
+  },
   "postgres.sql.native-transparency": {
     "file": "tests/db/postgres/capabilities.test.ts",
     "title": "postgres.sql.native-transparency"
@@ -842,5 +948,9 @@
   "mariadb.data.mariadb-date-text-conformance": {
     "file": "tests/db/mariadb/profiles.test.ts",
     "title": "mariadb.data.profile-conformance"
+  },
+  "mysql.execution.rc-isolation": {
+    "file": "tests/db/mysql/capabilities.test.ts",
+    "title": "mysql.rc transaction isolation has native visibility and locking semantics"
   }
 }

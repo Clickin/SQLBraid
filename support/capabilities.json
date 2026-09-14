@@ -1,76 +1,622 @@
 {
   "capabilities": [
-    { "id": "sql.native-transparency", "labels": { "en": "Native SQL transparency", "ko": "네이티브 SQL 투명성" } },
-    { "id": "sql.generated-structure", "labels": { "en": "Generated SQL structure", "ko": "생성된 SQL 구조" } },
-    { "id": "result.rows", "labels": { "en": "Row results", "ko": "행 결과" } },
-    { "id": "result.command", "labels": { "en": "Command results", "ko": "명령 결과" } },
-    { "id": "result.multiple-sets", "labels": { "en": "Multiple result sets", "ko": "다중 결과 집합" } },
-    { "id": "result.standard-schema", "labels": { "en": "Standard Schema mapping", "ko": "Standard Schema 매핑" } },
-    { "id": "numeric.exact-integer", "labels": { "en": "Exact integer", "ko": "정확한 정수" } },
-    { "id": "numeric.exact-decimal", "labels": { "en": "Exact decimal", "ko": "정확한 십진수" } },
-    { "id": "numeric.approximate-float", "labels": { "en": "Approximate IEEE-754 float", "ko": "근사 IEEE-754 부동소수점" } },
-    { "id": "numeric.approximate-special", "labels": { "en": "IEEE-754 special values", "ko": "IEEE-754 특수값" } },
-    { "id": "numeric.bind-exact", "labels": { "en": "Exact numeric binds", "ko": "정확한 숫자 바인드" } },
-    { "id": "numeric.aggregate", "labels": { "en": "Numeric aggregate promotion", "ko": "숫자 집계 승격" } },
-    { "id": "numeric.command-metadata", "labels": { "en": "Safe numeric command metadata", "ko": "안전한 숫자 명령 메타데이터" } },
-
-    { "id": "numeric.special-values", "labels": { "en": "Numeric special values", "ko": "숫자 특수값" } },
-    { "id": "numeric.scale-greater-than-precision", "labels": { "en": "Scale greater than precision", "ko": "정밀도보다 큰 스케일" } },
-    { "id": "numeric.negative-scale", "labels": { "en": "Negative numeric scale", "ko": "음수 숫자 스케일" } },
-    { "id": "data.json-parsed", "labels": { "en": "Parsed JSON representation", "ko": "파싱된 JSON 표현" } },
-    { "id": "data.json-lossless-text", "labels": { "en": "Lossless JSON text", "ko": "손실 없는 JSON 텍스트" } },
-    { "id": "data.binary", "labels": { "en": "Binary representation", "ko": "바이너리 표현" } },
-    { "id": "data.uuid", "labels": { "en": "UUID representation", "ko": "UUID 표현" } },
-    { "id": "data.temporal-native", "labels": { "en": "Native temporal representation", "ko": "네이티브 시간 표현" } },
-    { "id": "data.temporal-lossless", "labels": { "en": "Lossless temporal text", "ko": "손실 없는 시간 텍스트" } },
-    { "id": "data.timezone", "labels": { "en": "Timezone preservation", "ko": "시간대 보존" } },
-    { "id": "metadata.command-safe", "labels": { "en": "Safe command counts", "ko": "안전한 명령 개수" } },
-    { "id": "dml.insert-returning", "labels": { "en": "Insert returned rows", "ko": "INSERT 반환 행" } },
-    { "id": "dml.update-returning", "labels": { "en": "Update returned rows", "ko": "UPDATE 반환 행" } },
-    { "id": "dml.delete-returning", "labels": { "en": "Delete returned rows", "ko": "DELETE 반환 행" } },
-    { "id": "dml.merge-returning", "labels": { "en": "Merge returned rows", "ko": "MERGE 반환 행" } },
-    { "id": "dml.upsert-returning", "labels": { "en": "Upsert returned rows", "ko": "UPSERT 반환 행" } },
-    { "id": "execution.prepared", "labels": { "en": "Prepared execution", "ko": "준비된 실행" } },
-    { "id": "execution.stream", "labels": { "en": "Streaming execution", "ko": "스트리밍 실행" } },
-    { "id": "execution.bulk", "labels": { "en": "Bulk execution", "ko": "대량 실행" } },
-    { "id": "execution.bulk-fidelity", "labels": { "en": "Bulk value fidelity", "ko": "벌크 값 충실도" } },
-    { "id": "execution.transaction", "labels": { "en": "Transactions", "ko": "트랜잭션" } },
-    { "id": "execution.savepoint", "labels": { "en": "Savepoints", "ko": "세이브포인트" } },
-    { "id": "routine.scalar-out", "labels": { "en": "Scalar OUT parameters", "ko": "스칼라 OUT 매개변수" } },
-    { "id": "routine.inout", "labels": { "en": "INOUT parameters", "ko": "INOUT 매개변수" } },
-    { "id": "routine.resultsets", "labels": { "en": "Routine result sets", "ko": "루틴 결과 집합" } },
-    { "id": "routine.cursor", "labels": { "en": "Routine cursors", "ko": "루틴 커서" } },
-    { "id": "routine.return-status", "labels": { "en": "Routine return status", "ko": "루틴 반환 상태" } },
-    { "id": "metadata.identity", "labels": { "en": "Identity metadata", "ko": "ID 메타데이터" } },
-    { "id": "metadata.generated", "labels": { "en": "Generated-column metadata", "ko": "생성 열 메타데이터" } },
-    { "id": "metadata.routines", "labels": { "en": "Routine metadata", "ko": "루틴 메타데이터" } },
-    { "id": "metadata.types", "labels": { "en": "Type metadata", "ko": "타입 메타데이터" } }
+    {
+      "id": "sql.native-transparency",
+      "labels": {
+        "en": "Native SQL transparency",
+        "ko": "네이티브 SQL 투명성"
+      }
+    },
+    {
+      "id": "sql.generated-structure",
+      "labels": {
+        "en": "Generated SQL structure",
+        "ko": "생성된 SQL 구조"
+      }
+    },
+    {
+      "id": "result.rows",
+      "labels": {
+        "en": "Row results",
+        "ko": "행 결과"
+      }
+    },
+    {
+      "id": "result.command",
+      "labels": {
+        "en": "Command results",
+        "ko": "명령 결과"
+      }
+    },
+    {
+      "id": "result.multiple-sets",
+      "labels": {
+        "en": "Multiple result sets",
+        "ko": "다중 결과 집합"
+      }
+    },
+    {
+      "id": "result.standard-schema",
+      "labels": {
+        "en": "Standard Schema mapping",
+        "ko": "Standard Schema 매핑"
+      }
+    },
+    {
+      "id": "numeric.exact-integer",
+      "labels": {
+        "en": "Exact integer",
+        "ko": "정확한 정수"
+      }
+    },
+    {
+      "id": "numeric.exact-decimal",
+      "labels": {
+        "en": "Exact decimal",
+        "ko": "정확한 십진수"
+      }
+    },
+    {
+      "id": "numeric.approximate-float",
+      "labels": {
+        "en": "Approximate IEEE-754 float",
+        "ko": "근사 IEEE-754 부동소수점"
+      }
+    },
+    {
+      "id": "numeric.approximate-special",
+      "labels": {
+        "en": "IEEE-754 special values",
+        "ko": "IEEE-754 특수값"
+      }
+    },
+    {
+      "id": "numeric.bind-exact",
+      "labels": {
+        "en": "Exact numeric binds",
+        "ko": "정확한 숫자 바인드"
+      }
+    },
+    {
+      "id": "numeric.aggregate",
+      "labels": {
+        "en": "Numeric aggregate promotion",
+        "ko": "숫자 집계 승격"
+      }
+    },
+    {
+      "id": "numeric.command-metadata",
+      "labels": {
+        "en": "Safe numeric command metadata",
+        "ko": "안전한 숫자 명령 메타데이터"
+      }
+    },
+    {
+      "id": "numeric.special-values",
+      "labels": {
+        "en": "Numeric special values",
+        "ko": "숫자 특수값"
+      }
+    },
+    {
+      "id": "numeric.scale-greater-than-precision",
+      "labels": {
+        "en": "Scale greater than precision",
+        "ko": "정밀도보다 큰 스케일"
+      }
+    },
+    {
+      "id": "numeric.negative-scale",
+      "labels": {
+        "en": "Negative numeric scale",
+        "ko": "음수 숫자 스케일"
+      }
+    },
+    {
+      "id": "data.json-parsed",
+      "labels": {
+        "en": "Parsed JSON representation",
+        "ko": "파싱된 JSON 표현"
+      }
+    },
+    {
+      "id": "data.json-lossless-text",
+      "labels": {
+        "en": "Lossless JSON text",
+        "ko": "손실 없는 JSON 텍스트"
+      }
+    },
+    {
+      "id": "data.binary",
+      "labels": {
+        "en": "Binary representation",
+        "ko": "바이너리 표현"
+      }
+    },
+    {
+      "id": "data.uuid",
+      "labels": {
+        "en": "UUID representation",
+        "ko": "UUID 표현"
+      }
+    },
+    {
+      "id": "data.temporal-native",
+      "labels": {
+        "en": "Native temporal representation",
+        "ko": "네이티브 시간 표현"
+      }
+    },
+    {
+      "id": "data.temporal-lossless",
+      "labels": {
+        "en": "Lossless temporal text",
+        "ko": "손실 없는 시간 텍스트"
+      }
+    },
+    {
+      "id": "data.timezone",
+      "labels": {
+        "en": "Timezone preservation",
+        "ko": "시간대 보존"
+      }
+    },
+    {
+      "id": "metadata.command-safe",
+      "labels": {
+        "en": "Safe command counts",
+        "ko": "안전한 명령 개수"
+      }
+    },
+    {
+      "id": "dml.insert-returning",
+      "labels": {
+        "en": "Insert returned rows",
+        "ko": "INSERT 반환 행"
+      }
+    },
+    {
+      "id": "dml.update-returning",
+      "labels": {
+        "en": "Update returned rows",
+        "ko": "UPDATE 반환 행"
+      }
+    },
+    {
+      "id": "dml.delete-returning",
+      "labels": {
+        "en": "Delete returned rows",
+        "ko": "DELETE 반환 행"
+      }
+    },
+    {
+      "id": "dml.merge-returning",
+      "labels": {
+        "en": "Merge returned rows",
+        "ko": "MERGE 반환 행"
+      }
+    },
+    {
+      "id": "dml.upsert-returning",
+      "labels": {
+        "en": "Upsert returned rows",
+        "ko": "UPSERT 반환 행"
+      }
+    },
+    {
+      "id": "session.pinned",
+      "labels": {
+        "en": "Pinned physical session",
+        "ko": "고정 물리 세션"
+      }
+    },
+    {
+      "id": "statement.prepare",
+      "labels": {
+        "en": "Prepared execution",
+        "ko": "준비된 실행"
+      }
+    },
+    {
+      "id": "statement.cancel",
+      "labels": {
+        "en": "Execution cancellation",
+        "ko": "실행 취소"
+      }
+    },
+    {
+      "id": "statement.stream",
+      "labels": {
+        "en": "Streaming execution",
+        "ko": "스트리밍 실행"
+      }
+    },
+    {
+      "id": "statement.bulk",
+      "labels": {
+        "en": "Bulk execution",
+        "ko": "대량 실행"
+      }
+    },
+    {
+      "id": "execution.bulk-fidelity",
+      "labels": {
+        "en": "Bulk value fidelity",
+        "ko": "벌크 값 충실도"
+      }
+    },
+    {
+      "id": "transaction",
+      "labels": {
+        "en": "Transactions",
+        "ko": "트랜잭션"
+      }
+    },
+    {
+      "id": "transaction.savepoint",
+      "labels": {
+        "en": "Savepoints",
+        "ko": "세이브포인트"
+      }
+    },
+    {
+      "id": "transaction.read-only",
+      "labels": {
+        "en": "Read-only transactions",
+        "ko": "읽기 전용 트랜잭션"
+      }
+    },
+    {
+      "id": "transaction.isolation.read-uncommitted",
+      "labels": {
+        "en": "Read uncommitted isolation",
+        "ko": "Read uncommitted 격리"
+      }
+    },
+    {
+      "id": "transaction.isolation.read-committed",
+      "labels": {
+        "en": "Read committed isolation",
+        "ko": "Read committed 격리"
+      }
+    },
+    {
+      "id": "transaction.isolation.repeatable-read",
+      "labels": {
+        "en": "Repeatable read isolation",
+        "ko": "Repeatable read 격리"
+      }
+    },
+    {
+      "id": "transaction.isolation.serializable",
+      "labels": {
+        "en": "Serializable isolation",
+        "ko": "Serializable 격리"
+      }
+    },
+    {
+      "id": "routine.call",
+      "labels": {
+        "en": "Routine calls",
+        "ko": "루틴 호출"
+      }
+    },
+    {
+      "id": "routine.out",
+      "labels": {
+        "en": "Scalar OUT parameters",
+        "ko": "스칼라 OUT 매개변수"
+      }
+    },
+    {
+      "id": "routine.inout",
+      "labels": {
+        "en": "INOUT parameters",
+        "ko": "INOUT 매개변수"
+      }
+    },
+    {
+      "id": "routine.result-sets",
+      "labels": {
+        "en": "Routine result sets",
+        "ko": "루틴 결과 집합"
+      }
+    },
+    {
+      "id": "routine.out-cursor",
+      "labels": {
+        "en": "Routine cursors",
+        "ko": "루틴 커서"
+      }
+    },
+    {
+      "id": "routine.return-value",
+      "labels": {
+        "en": "Routine return value",
+        "ko": "루틴 반환 값"
+      }
+    },
+    {
+      "id": "metadata.identity",
+      "labels": {
+        "en": "Identity metadata",
+        "ko": "ID 메타데이터"
+      }
+    },
+    {
+      "id": "metadata.generated",
+      "labels": {
+        "en": "Generated-column metadata",
+        "ko": "생성 열 메타데이터"
+      }
+    },
+    {
+      "id": "metadata.routines",
+      "labels": {
+        "en": "Routine metadata",
+        "ko": "루틴 메타데이터"
+      }
+    },
+    {
+      "id": "metadata.types",
+      "labels": {
+        "en": "Type metadata",
+        "ko": "타입 메타데이터"
+      }
+    }
   ],
   "conditions": [
-    { "code": "pg.exact-numeric-profile", "labels": { "en": "pg exact numeric parser profile", "ko": "pg 정확한 숫자 파서 프로필" } },
-    { "code": "mysql2.exact-numeric-profile", "labels": { "en": "mysql2 exact numeric profile", "ko": "mysql2 정확한 숫자 프로필" } },
-    { "code": "mariadb.exact-numeric-profile", "labels": { "en": "MariaDB exact numeric profile", "ko": "MariaDB 정확한 숫자 프로필" } },
-
-    { "code": "cloudflare-d1.safe-integer", "labels": { "en": "Cloudflare D1 safe integer range", "ko": "Cloudflare D1 안전한 정수 범위" } },
-    { "code": "pg.extra-float-digits", "labels": { "en": "PostgreSQL extra_float_digits profile", "ko": "PostgreSQL extra_float_digits 프로필" } },
-    { "code": "pg.json-parser-profile", "labels": { "en": "PostgreSQL JSON parser profile", "ko": "PostgreSQL JSON 파서 프로필" } },
-    { "code": "pg.temporal-parser-profile", "labels": { "en": "PostgreSQL temporal parser profile", "ko": "PostgreSQL 시간 파서 프로필" } },
-    { "code": "mysql2.json-strings", "labels": { "en": "mysql2 jsonStrings profile", "ko": "mysql2 jsonStrings 프로필" } },
-    { "code": "mysql2.date-strings", "labels": { "en": "mysql2 dateStrings profile", "ko": "mysql2 dateStrings 프로필" } },
-    { "code": "mariadb.auto-json-map-false", "labels": { "en": "MariaDB autoJsonMap false profile", "ko": "MariaDB autoJsonMap false 프로필" } },
-    { "code": "mariadb.auto-json-map-true", "labels": { "en": "MariaDB autoJsonMap true profile", "ko": "MariaDB autoJsonMap true 프로필" } },
-    { "code": "mariadb.date-strings-true", "labels": { "en": "MariaDB dateStrings true profile", "ko": "MariaDB dateStrings true 프로필" } },
-    { "code": "mariadb.date-strings-false", "labels": { "en": "MariaDB dateStrings false profile", "ko": "MariaDB dateStrings false 프로필" } },
-    { "code": "mariadb.safe-command-count", "labels": { "en": "MariaDB safe command count", "ko": "MariaDB 안전한 명령 개수" } },
-    { "code": "oracle.bind-nls-sensitive", "labels": { "en": "Oracle NLS-sensitive exact bind", "ko": "Oracle NLS 의존 정확한 바인드" } },
-    { "code": "oracle.json-serialize-required", "labels": { "en": "Oracle JSON_SERIALIZE text path", "ko": "Oracle JSON_SERIALIZE 텍스트 경로" } },
-    { "code": "oracle.temporal-text-cast-required", "labels": { "en": "Oracle temporal text cast path", "ko": "Oracle 시간 텍스트 캐스트 경로" } },
-    { "code": "oracle.date-millisecond-precision", "labels": { "en": "Oracle Date millisecond precision", "ko": "Oracle Date 밀리초 정밀도" } },
-    { "code": "oracle.count-safe-integer", "labels": { "en": "Oracle safe command count", "ko": "Oracle 안전한 명령 개수" } },
-    { "code": "mssql.character-cast-required", "labels": { "en": "SQL Server character exact-value path", "ko": "SQL Server 문자 정확값 경로" } },
-    { "code": "mssql.exact-decimal-text-cast-required", "labels": { "en": "SQL Server exact decimal text cast path", "ko": "SQL Server 정확한 십진수 텍스트 캐스트 경로" } },
-    { "code": "mssql.safe-count", "labels": { "en": "SQL Server safe command count", "ko": "SQL Server 안전한 명령 개수" } },
-    { "code": "mssql.temporal-text-cast-required", "labels": { "en": "SQL Server temporal text cast path", "ko": "SQL Server 시간 텍스트 캐스트 경로" } },
-    { "code": "d1.numeric-profile", "labels": { "en": "D1 numeric profile", "ko": "D1 숫자 프로필" } }
+    {
+      "code": "pg.read-uncommitted-maps-to-read-committed",
+      "labels": {
+        "en": "PostgreSQL READ UNCOMMITTED uses READ COMMITTED semantics",
+        "ko": "PostgreSQL READ UNCOMMITTED는 READ COMMITTED 의미론 사용"
+      }
+    },
+    {
+      "code": "pg.physical-connection-destroy",
+      "labels": {
+        "en": "Cancellation destroys and discards the pg connection",
+        "ko": "취소 시 pg 물리 연결 종료 및 폐기"
+      }
+    },
+    {
+      "code": "mysql2.physical-connection-destroy",
+      "labels": {
+        "en": "Cancellation destroys and discards the mysql2 connection",
+        "ko": "취소 시 mysql2 물리 연결 종료 및 폐기"
+      }
+    },
+    {
+      "code": "mariadb.connection-destroy",
+      "labels": {
+        "en": "Cancellation destroys and discards the MariaDB connection",
+        "ko": "취소 시 MariaDB 물리 연결 종료 및 폐기"
+      }
+    },
+    {
+      "code": "oracle.connection-break",
+      "labels": {
+        "en": "Oracle break is cooperative; the lease stays held until driver settlement",
+        "ko": "Oracle break는 협력적 취소이며 드라이버 완료까지 연결을 유지"
+      }
+    },
+    {
+      "code": "pg.exact-numeric-profile",
+      "labels": {
+        "en": "pg exact numeric parser profile",
+        "ko": "pg 정확한 숫자 파서 프로필"
+      }
+    },
+    {
+      "code": "mysql2.exact-numeric-profile",
+      "labels": {
+        "en": "mysql2 exact numeric profile",
+        "ko": "mysql2 정확한 숫자 프로필"
+      }
+    },
+    {
+      "code": "mariadb.exact-numeric-profile",
+      "labels": {
+        "en": "MariaDB exact numeric profile",
+        "ko": "MariaDB 정확한 숫자 프로필"
+      }
+    },
+    {
+      "code": "cloudflare-d1.safe-integer",
+      "labels": {
+        "en": "Cloudflare D1 safe integer range",
+        "ko": "Cloudflare D1 안전한 정수 범위"
+      }
+    },
+    {
+      "code": "pg.extra-float-digits",
+      "labels": {
+        "en": "PostgreSQL extra_float_digits profile",
+        "ko": "PostgreSQL extra_float_digits 프로필"
+      }
+    },
+    {
+      "code": "pg.json-parser-profile",
+      "labels": {
+        "en": "PostgreSQL JSON parser profile",
+        "ko": "PostgreSQL JSON 파서 프로필"
+      }
+    },
+    {
+      "code": "pg.temporal-parser-profile",
+      "labels": {
+        "en": "PostgreSQL temporal parser profile",
+        "ko": "PostgreSQL 시간 파서 프로필"
+      }
+    },
+    {
+      "code": "mysql2.json-strings",
+      "labels": {
+        "en": "mysql2 jsonStrings profile",
+        "ko": "mysql2 jsonStrings 프로필"
+      }
+    },
+    {
+      "code": "mysql2.date-strings",
+      "labels": {
+        "en": "mysql2 dateStrings profile",
+        "ko": "mysql2 dateStrings 프로필"
+      }
+    },
+    {
+      "code": "mariadb.auto-json-map-false",
+      "labels": {
+        "en": "MariaDB autoJsonMap false profile",
+        "ko": "MariaDB autoJsonMap false 프로필"
+      }
+    },
+    {
+      "code": "mariadb.auto-json-map-true",
+      "labels": {
+        "en": "MariaDB autoJsonMap true profile",
+        "ko": "MariaDB autoJsonMap true 프로필"
+      }
+    },
+    {
+      "code": "mariadb.date-strings-true",
+      "labels": {
+        "en": "MariaDB dateStrings true profile",
+        "ko": "MariaDB dateStrings true 프로필"
+      }
+    },
+    {
+      "code": "mariadb.date-strings-false",
+      "labels": {
+        "en": "MariaDB dateStrings false profile",
+        "ko": "MariaDB dateStrings false 프로필"
+      }
+    },
+    {
+      "code": "mariadb.safe-command-count",
+      "labels": {
+        "en": "MariaDB safe command count",
+        "ko": "MariaDB 안전한 명령 개수"
+      }
+    },
+    {
+      "code": "oracle.bind-nls-sensitive",
+      "labels": {
+        "en": "Oracle NLS-sensitive exact bind",
+        "ko": "Oracle NLS 의존 정확한 바인드"
+      }
+    },
+    {
+      "code": "oracle.json-serialize-required",
+      "labels": {
+        "en": "Oracle JSON_SERIALIZE text path",
+        "ko": "Oracle JSON_SERIALIZE 텍스트 경로"
+      }
+    },
+    {
+      "code": "oracle.temporal-text-cast-required",
+      "labels": {
+        "en": "Oracle temporal text cast path",
+        "ko": "Oracle 시간 텍스트 캐스트 경로"
+      }
+    },
+    {
+      "code": "oracle.date-millisecond-precision",
+      "labels": {
+        "en": "Oracle Date millisecond precision",
+        "ko": "Oracle Date 밀리초 정밀도"
+      }
+    },
+    {
+      "code": "oracle.count-safe-integer",
+      "labels": {
+        "en": "Oracle safe command count",
+        "ko": "Oracle 안전한 명령 개수"
+      }
+    },
+    {
+      "code": "mssql.character-cast-required",
+      "labels": {
+        "en": "SQL Server character exact-value path",
+        "ko": "SQL Server 문자 정확값 경로"
+      }
+    },
+    {
+      "code": "mssql.exact-decimal-text-cast-required",
+      "labels": {
+        "en": "SQL Server exact decimal text cast path",
+        "ko": "SQL Server 정확한 십진수 텍스트 캐스트 경로"
+      }
+    },
+    {
+      "code": "mssql.safe-count",
+      "labels": {
+        "en": "SQL Server safe command count",
+        "ko": "SQL Server 안전한 명령 개수"
+      }
+    },
+    {
+      "code": "mssql.temporal-text-cast-required",
+      "labels": {
+        "en": "SQL Server temporal text cast path",
+        "ko": "SQL Server 시간 텍스트 캐스트 경로"
+      }
+    },
+    {
+      "code": "d1.numeric-profile",
+      "labels": {
+        "en": "D1 numeric profile",
+        "ko": "D1 숫자 프로필"
+      }
+    },
+    {
+      "code": "bun-sql.result-kind-metadata",
+      "labels": {
+        "en": "Bun MySQL/MariaDB cannot distinguish empty rows from zero-affected commands; ambiguity rejects after execution",
+        "ko": "Bun MySQL/MariaDB의 빈 행과 영향받은 행이 0인 명령은 실행 후 구분 불가로 거부"
+      }
+    },
+    {
+      "code": "bun-sql.integer-width-profile",
+      "labels": {
+        "en": "BigInt transport for wide integers; integral Numbers without column metadata reject",
+        "ko": "큰 정수는 BigInt 전송 사용; 열 메타데이터 없는 정수 Number 거부"
+      }
+    },
+    {
+      "code": "bun-sql.float-profile",
+      "labels": {
+        "en": "Fractional Numbers are preserved; integral Numbers without column metadata reject",
+        "ko": "소수 Number 유지; 열 메타데이터 없는 정수 Number 거부"
+      }
+    },
+    {
+      "code": "bun-sql.json-parser-profile",
+      "labels": {
+        "en": "Native parsed JSON is not a lossless numeric representation",
+        "ko": "네이티브 JSON 파싱은 숫자 무손실 표현이 아님"
+      }
+    },
+    {
+      "code": "bun-sql.temporal-profile",
+      "labels": {
+        "en": "Native Date convenience does not preserve fractional precision or zone identity",
+        "ko": "네이티브 Date 편의 변환은 소수초 정밀도나 시간대 식별을 보존하지 않음"
+      }
+    },
+    {
+      "code": "bun-sql.transaction-options",
+      "labels": {
+        "en": "Only native isolation and read-only mappings verified for this backend",
+        "ko": "이 백엔드에서 검증된 네이티브 격리 수준과 읽기 전용 매핑만 지원"
+      }
+    },
+    {
+      "code": "bun-sql.sqlite-result-parser",
+      "labels": {
+        "en": "Bun SQLite native SQL classification can misread mixed-quote literals; bind JSON values and preserve result-kind failures",
+        "ko": "Bun SQLite의 native SQL 분류는 혼합 따옴표 literal을 오인할 수 있음; JSON 값을 bind하고 결과 종류 실패를 보존"
+      }
+    }
   ]
 }

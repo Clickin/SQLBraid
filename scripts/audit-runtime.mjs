@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { builtinModules } from "node:module";
 import ts from "typescript";
 
-export const runtimePackages = ["core", "template", "runtime", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"];
+export const runtimePackages = ["core", "template", "runtime", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql", "bun-sql"];
 const allowedNodeImports = new Set(["node:async_hooks", "node:buffer"]);
 const nodeOnlySubpaths = new Map([
   ["oracle", new Set(["oracledb"])],
@@ -65,5 +65,5 @@ export async function auditRuntime(packageRoot, directory, { excludedSubpaths = 
       checked++;
     }
   }
-  console.info(`Portability audit: ${checked} ${directory} source/declaration files passed; reviewed node:buffer and node:async_hooks only; explicitly excluded Oracle oracledb and MSSQL tedious/inspector driver subpaths.`);
+  console.info(`Portability audit: ${checked} ${directory} source/declaration files passed; reviewed node:buffer and node:async_hooks only; explicitly excluded Oracle oracledb and MSSQL tedious/inspector driver subpaths; Bun.SQL remains structural and runtime-neutral until a Bun client is supplied.`);
 }

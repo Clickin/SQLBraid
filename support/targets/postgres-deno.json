@@ -1,9 +1,9 @@
 {
-  "id": "postgres-current",
+  "id": "postgres-pg-deno-2-9-3",
   "status": "compatible",
   "database": {
     "product": "postgres",
-    "version": "18.6",
+    "version": "16.4",
     "edition": "alpine"
   },
   "driver": {
@@ -16,7 +16,8 @@
     "routine": "SQL CALL; OUT row and transaction-owned refcursor FETCH",
     "bulk": "prepared-loop",
     "exclusions": [
-      "Only the PostgreSQL capability fixture is covered by this current target's gate"
+      "Only this exact Deno runtime, driver, database and representation profile tuple is covered.",
+      "Capabilities omitted from this target are not certified by its packed fixture."
     ],
     "requiredOptions": {
       "parserProfile": {
@@ -38,18 +39,18 @@
     }
   },
   "runtime": {
-    "id": "node",
-    "version": "22.18.0"
+    "id": "deno",
+    "version": "2.9.3"
   },
   "reproducibility": {
     "zeroCost": true,
-    "description": "GitHub Actions PostgreSQL current capability job using postgres:18.6-alpine.",
-    "image": "postgres:18.6-alpine",
-    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+    "description": "Packed Deno 2.9.3 consumer with postgres:16.4-alpine.",
+    "image": "postgres:16.4-alpine",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml"
   },
   "ci": {
-    "command": "pnpm exec vitest run --project db-postgres tests/db/postgres/capabilities.test.ts",
-    "workflow": ".github/workflows/release.yml",
+    "command": "pnpm run test:runtime:deno",
+    "workflow": ".github/workflows/runtime-portability.yml",
     "releaseBlocking": true
   },
   "numeric": {
@@ -83,16 +84,54 @@
     "vector": "unclassified"
   },
   "capabilities": {
-    "sql.native-transparency": {
+    "session.pinned": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.sql.native-transparency"
+        "deno-postgres.data.profile"
       ]
     },
-    "sql.generated-structure": {
+    "transaction.read-only": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.sql.generated-structure"
+        "deno-postgres.data.profile"
+      ]
+    },
+    "transaction.isolation.read-uncommitted": {
+      "status": "guarded",
+      "conditionCode": "pg.read-uncommitted-maps-to-read-committed",
+      "testIds": [
+        "deno-postgres.data.profile"
+      ]
+    },
+    "transaction.isolation.read-committed": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-postgres.data.profile"
+      ]
+    },
+    "transaction.isolation.repeatable-read": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-postgres.data.profile"
+      ]
+    },
+    "transaction.isolation.serializable": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-postgres.data.profile"
+      ]
+    },
+    "statement.cancel": {
+      "status": "guarded",
+      "conditionCode": "pg.physical-connection-destroy",
+      "testIds": [
+        "deno-postgres.data.profile"
+      ]
+    },
+    "routine.call": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-postgres.data.profile"
       ]
     },
     "numeric.exact-integer": {
@@ -101,7 +140,7 @@
       "representation": "string",
       "fidelity": "lossless",
       "testIds": [
-        "postgres.numeric.exact-integer"
+        "deno-postgres.data.profile"
       ],
       "driverRawRepresentations": [
         "string"
@@ -113,41 +152,16 @@
       "representation": "string",
       "fidelity": "lossless",
       "testIds": [
-        "postgres.numeric.exact-decimal"
+        "deno-postgres.data.profile"
       ],
       "driverRawRepresentations": [
         "string"
       ]
     },
-    "numeric.approximate-float": {
-      "status": "guarded",
-      "conditionCode": "pg.extra-float-digits",
-      "semantics": "approximate-binary",
-      "representation": "number",
-      "fidelity": "guarded",
-      "testIds": [
-        "postgres.numeric.transport"
-      ],
-      "driverRawRepresentations": [
-        "number"
-      ]
-    },
-    "numeric.bind-exact": {
-      "status": "guaranteed",
-      "testIds": [
-        "postgres.numeric.transport"
-      ]
-    },
-    "numeric.aggregate": {
-      "status": "guaranteed",
-      "testIds": [
-        "postgres.numeric.transport"
-      ]
-    },
     "data.json-lossless-text": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.numeric.transport"
+        "deno-postgres.data.profile"
       ],
       "driverRawRepresentations": [
         "string"
@@ -156,78 +170,78 @@
     "data.temporal-lossless": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.data.temporal-lossless"
+        "deno-postgres.data.profile"
       ],
       "driverRawRepresentations": [
         "string"
       ]
     },
-    "data.binary": {
+    "result.rows": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.data.binary"
-      ],
-      "driverRawRepresentations": [
-        "Buffer"
+        "deno-postgres.data.profile"
       ]
     },
-    "data.uuid": {
+    "result.command": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.data.uuid"
-      ],
-      "driverRawRepresentations": [
-        "string"
+        "deno-postgres.data.profile"
       ]
     },
-    "dml.insert-returning": {
+    "result.standard-schema": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.dml.insert-returning"
+        "deno-postgres.data.profile"
       ]
     },
-    "dml.upsert-returning": {
+    "statement.prepare": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.dml.upsert-returning"
+        "deno-postgres.data.profile"
       ]
     },
-    "dml.update-returning": {
+    "statement.stream": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.dml.update-returning"
+        "deno-postgres.data.profile"
       ]
     },
-    "dml.delete-returning": {
+    "statement.bulk": {
       "status": "guaranteed",
       "testIds": [
-        "postgres.dml.delete-returning"
+        "deno-postgres.data.profile"
       ]
+    },
+    "transaction": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-postgres.data.profile"
+      ]
+    },
+    "transaction.savepoint": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-postgres.data.profile"
+      ]
+    },
+    "routine.out": {
+      "status": "guaranteed",
+      "testIds": [
+        "deno-postgres.data.profile"
+      ]
+    },
+    "routine.inout": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.return-value": {
+      "status": "unsupported",
+      "testIds": []
     }
   },
   "evidence": {
     "status": "pending",
-    "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
-    "runs": [
-      {
-        "workflow": ".github/workflows/runtime-portability.yml",
-        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
-        "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851691821"
-      },
-      {
-        "workflow": ".github/workflows/docs-pages.yml",
-        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
-        "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851706964"
-      },
-      {
-        "workflow": ".github/workflows/release.yml",
-        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
-        "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851703042"
-      }
-    ]
+    "runs": []
   },
   "typePolicy": {
     "id": "postgres-lossless-text",

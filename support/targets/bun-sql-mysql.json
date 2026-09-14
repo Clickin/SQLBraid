@@ -1,0 +1,282 @@
+{
+  "id": "bun-sql-mysql",
+  "status": "compatible",
+  "database": {
+    "product": "mysql",
+    "version": "8.4.2",
+    "edition": "community"
+  },
+  "driver": {
+    "id": "bun-sql",
+    "version": "1.3.14",
+    "profile": "bun-sql-mysql-1.3.14",
+    "package": "@sqlbraid/bun-sql",
+    "transport": "text-positional (?)",
+    "stream": "unsupported",
+    "routine": "unsupported",
+    "bulk": "prepared-loop",
+    "requiredOptions": {
+      "bigint": true
+    },
+    "driverRawRepresentations": {
+      "integer": "number or bigint; explicit text casts return string",
+      "decimal": "Uint8Array containing decimal text",
+      "json": "object or array",
+      "temporal": "Date or string",
+      "binary": "Uint8Array"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string; ambiguous integral Number rejects",
+      "decimal": "unsupported native bytes; explicit SQL text conversion returns string",
+      "json": "object or array",
+      "temporal": "Date or string",
+      "binary": "unsupported ambiguous bytes; explicit SQL HEX conversion returns string"
+    },
+    "exclusions": [
+      "Only the exact pinned Bun.SQL backend and configured representation profile are covered.",
+      "Integral Number results without database type metadata reject rather than risk exact-numeric loss.",
+      "Streaming, routine channels and active statement cancellation are unsupported.",
+      "Empty SELECT and zero-affected commands are indistinguishable in Bun metadata and reject after execution; side effects may already have occurred.",
+      "Use string input for wide integer binds where the pinned MySQL transport rejects BigInt.",
+      "DECIMAL and binary outputs are indistinguishable Uint8Array carriers and reject; author explicit CAST AS CHAR or HEX SQL."
+    ]
+  },
+  "runtime": {
+    "id": "bun",
+    "version": "1.3.14"
+  },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Bun 1.3.14 with mysql:8.4.2.",
+    "image": "mysql:8.4.2",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/runtime-portability.yml"
+  },
+  "ci": {
+    "command": "pnpm run test:db:bun-sql",
+    "workflow": ".github/workflows/runtime-portability.yml",
+    "releaseBlocking": true
+  },
+  "numeric": {
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded",
+      "profile": "bun-sql-mysql-1.3.14"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "profile": "bun-sql-mysql-1.3.14"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "guarded",
+      "binaryPrecision": 64,
+      "profile": "bun-sql-mysql-1.3.14"
+    }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unclassified"
+  },
+  "capabilities": {
+    "result.rows": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.result-kind-metadata"
+    },
+    "result.command": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.result-kind-metadata"
+    },
+    "result.standard-schema": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ]
+    },
+    "numeric.exact-integer": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.integer-width-profile",
+      "driverRawRepresentations": [
+        "number",
+        "bigint",
+        "string"
+      ],
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "guarded"
+    },
+    "numeric.exact-decimal": {
+      "status": "unsupported",
+      "testIds": [],
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "driverRawRepresentations": [
+        "Uint8Array"
+      ]
+    },
+    "numeric.approximate-float": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.float-profile",
+      "driverRawRepresentations": [
+        "number"
+      ],
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "guarded",
+      "binaryPrecision": 64
+    },
+    "data.json-parsed": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.json-parser-profile"
+    },
+    "data.json-lossless-text": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "data.temporal-native": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.temporal-profile"
+    },
+    "data.temporal-lossless": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "session.pinned": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ]
+    },
+    "statement.prepare": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ]
+    },
+    "statement.bulk": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ]
+    },
+    "statement.stream": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "statement.cancel": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ]
+    },
+    "transaction.savepoint": {
+      "status": "guaranteed",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ]
+    },
+    "transaction.read-only": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "transaction.isolation.read-uncommitted": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "transaction.isolation.read-committed": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "transaction.isolation.repeatable-read": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "transaction.isolation.serializable": {
+      "status": "guarded",
+      "testIds": [
+        "bun-sql-mysql.data.profile"
+      ],
+      "conditionCode": "bun-sql.transaction-options"
+    },
+    "routine.call": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.out": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.inout": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.result-sets": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.out-cursor": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.return-value": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "data.binary": {
+      "status": "unsupported",
+      "testIds": []
+    }
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  },
+  "typePolicy": {
+    "id": "bun-sql-mysql-1.3.14",
+    "hash": "edee9e61c170a31cfeb0c196065a176af3e218f7b36a93ee952359325f68de28"
+  }
+}
