@@ -1,6 +1,6 @@
 {
   "id": "postgres-pg-deno-2-9-3",
-  "status": "compatible",
+  "status": "official",
   "database": {
     "product": "postgres",
     "version": "16.4",
@@ -240,8 +240,28 @@
     }
   },
   "evidence": {
-    "status": "pending",
-    "runs": []
+    "status": "verified",
+    "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
+    "runs": [
+      {
+        "workflow": ".github/workflows/runtime-portability.yml",
+        "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34883654865"
+      },
+      {
+        "workflow": ".github/workflows/docs-pages.yml",
+        "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34883654892"
+      },
+      {
+        "workflow": ".github/workflows/release.yml",
+        "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34883652538"
+      }
+    ]
   },
   "typePolicy": {
     "id": "postgres-lossless-text",

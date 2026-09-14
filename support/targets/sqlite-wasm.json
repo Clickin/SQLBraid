@@ -1,6 +1,6 @@
 {
   "id": "sqlite-wasm-browser-3-53-4",
-  "status": "compatible",
+  "status": "official",
   "database": {
     "product": "sqlite",
     "version": "3.53.4",
@@ -77,14 +77,42 @@
     "vector": "unsupported"
   },
   "capabilities": {
-    "session.pinned": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
-    "transaction.read-only": { "status": "unsupported", "testIds": [] },
-    "transaction.isolation.read-uncommitted": { "status": "unsupported", "testIds": [] },
-    "transaction.isolation.read-committed": { "status": "unsupported", "testIds": [] },
-    "transaction.isolation.repeatable-read": { "status": "unsupported", "testIds": [] },
-    "transaction.isolation.serializable": { "status": "guaranteed", "testIds": ["wasm.execution.mapped-transaction"] },
-    "statement.cancel": { "status": "unsupported", "testIds": [] },
-    "routine.call": { "status": "unsupported", "testIds": [] },
+    "session.pinned": {
+      "status": "guaranteed",
+      "testIds": [
+        "wasm.execution.mapped-transaction"
+      ]
+    },
+    "transaction.read-only": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction.isolation.read-uncommitted": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction.isolation.read-committed": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction.isolation.repeatable-read": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "transaction.isolation.serializable": {
+      "status": "guaranteed",
+      "testIds": [
+        "wasm.execution.mapped-transaction"
+      ]
+    },
+    "statement.cancel": {
+      "status": "unsupported",
+      "testIds": []
+    },
+    "routine.call": {
+      "status": "unsupported",
+      "testIds": []
+    },
     "sql.native-transparency": {
       "status": "guaranteed",
       "testIds": [
@@ -260,26 +288,26 @@
     }
   },
   "evidence": {
-    "status": "pending",
-    "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
+    "status": "verified",
+    "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
     "runs": [
       {
         "workflow": ".github/workflows/runtime-portability.yml",
-        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
+        "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
         "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851691821"
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34883654865"
       },
       {
         "workflow": ".github/workflows/docs-pages.yml",
-        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
+        "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
         "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851706964"
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34883654892"
       },
       {
         "workflow": ".github/workflows/release.yml",
-        "commit": "53db135bd156b6d65dc91785a671dec5249c95d4",
+        "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
         "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34851703042"
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34883652538"
       }
     ]
   },
