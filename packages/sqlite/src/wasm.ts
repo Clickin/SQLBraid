@@ -15,6 +15,7 @@ import type {
   TransactionOptions,
 } from "@sqlbraid/core";
 import {
+  AdapterError,
   createBulkBindingDescription,
   createRenderedStatement,
   createStatementBindingDescription,
@@ -79,14 +80,18 @@ function assertRoutineParametersUnsupported(rendered: RenderedStatement): void {
 
 function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   if (rendered.parameters.some((parameter) => parameter.hint !== undefined)) {
-    throw new Error("BRAID_BIND_HINT_UNSUPPORTED: SQLite WASM adapter does not support explicit bind type hints.");
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      "SQLite WASM adapter does not support explicit bind type hints.",
+    );
   }
 }
 
 function assertWasmValue(value: unknown): void {
   if (value === null || typeof value === "string" || typeof value === "boolean") return;
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new TypeError("BRAID_BIND_VALUE_UNSUPPORTED: SQLite WASM binds require finite numbers.");
+    if (!Number.isFinite(value)) throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "SQLite WASM binds require finite numbers.");
     return;
   }
   if (typeof value === "bigint") {
@@ -94,7 +99,7 @@ function assertWasmValue(value: unknown): void {
     return;
   }
   if ((typeof ArrayBuffer !== "undefined" && value instanceof ArrayBuffer) || (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView(value))) return;
-  throw new TypeError("BRAID_BIND_VALUE_UNSUPPORTED: SQLite WASM binds support SQLite scalar values and binary buffers.");
+  throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "SQLite WASM binds support SQLite scalar values and binary buffers.");
 }
 
 function assertWasmValues(values: readonly unknown[]): void {
@@ -178,7 +183,11 @@ function assertExactIntegerReads(
     || typeof capi.sqlite3_column_type !== "function"
     || typeof capi.sqlite3_column_int64 !== "function"
   ) {
-    throw new Error("BRAID_INTEGER_MODE_UNSUPPORTED: SQLite WASM row reads require an initialized sqlite3 CAPI.");
+    throw new UnsupportedFeatureError(
+      "result.exact-integer",
+      "BRAID_INTEGER_MODE_UNSUPPORTED",
+      "SQLite WASM row reads require an initialized sqlite3 CAPI.",
+    );
   }
   if (statement.pointer === undefined) {
     throw new TypeError("BRAID_RESULT_EXACTNESS: SQLite WASM exact INTEGER reads require an official OO1 statement pointer.");

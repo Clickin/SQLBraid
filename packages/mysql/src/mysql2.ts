@@ -21,6 +21,7 @@ import type {
   TransactionOptions,
 } from "@sqlbraid/core";
 import {
+  AdapterError,
   createBulkBindingDescription,
   createRenderedStatement,
   createStatementBindingDescription,
@@ -344,15 +345,19 @@ function assertUniqueFields(fields: readonly Mysql2FieldLike[]): void {
 
 function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   if (rendered.parameters.some((parameter) => parameter.hint !== undefined)) {
-    throw new Error("BRAID_BIND_HINT_UNSUPPORTED: MySQL adapter does not support explicit bind type hints.");
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      "MySQL adapter does not support explicit bind type hints.",
+    );
   }
 }
 
 function assertMysql2Value(value: unknown, location: string): void {
-  if (value === undefined) throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be undefined.`);
-  if (typeof value === "function") throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be a function.`);
+  if (value === undefined) throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `${location} cannot be undefined.`);
+  if (typeof value === "function") throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `${location} cannot be a function.`);
   if (value instanceof Date && !Number.isFinite(value.getTime())) {
-    throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} must be a valid Date.`);
+    throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `${location} must be a valid Date.`);
   }
   if (value !== null && typeof value === "object") {
     const candidate = value as { readonly toJSON?: unknown };
@@ -368,7 +373,7 @@ function assertMysql2Value(value: unknown, location: string): void {
       try {
         if (JSON.stringify(value) === undefined) throw new TypeError("JSON encoding produced undefined.");
       } catch (error) {
-        throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: ${location} cannot be JSON encoded.`, { cause: error });
+        throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `${location} cannot be JSON encoded.`, { cause: error });
       }
     }
   }

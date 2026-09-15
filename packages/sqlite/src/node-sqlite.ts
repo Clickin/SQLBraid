@@ -15,6 +15,7 @@ import type {
   TransactionOptions,
 } from "@sqlbraid/core";
 import {
+  AdapterError,
   createBulkBindingDescription,
   createRenderedStatement,
   createStatementBindingDescription,
@@ -92,7 +93,11 @@ function assertRoutineParametersUnsupported(rendered: RenderedStatement): void {
 
 function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   if (rendered.parameters.some((parameter) => parameter.hint !== undefined)) {
-    throw new Error("BRAID_BIND_HINT_UNSUPPORTED: SQLite adapter does not support explicit bind type hints.");
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      "SQLite adapter does not support explicit bind type hints.",
+    );
   }
 }
 
@@ -105,7 +110,7 @@ function assertNodeSqliteValue(value: unknown): void {
     return;
   }
   if (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView(value)) return;
-  throw new TypeError("BRAID_BIND_VALUE_UNSUPPORTED: node:sqlite binds support null, numbers, bigint, strings, and ArrayBufferView values.");
+  throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "node:sqlite binds support null, numbers, bigint, strings, and ArrayBufferView values.");
 }
 
 function assertNodeSqliteValues(values: readonly unknown[]): void {
@@ -222,7 +227,11 @@ function materialize(
 
 function configureExactIntegerReads(statement: SqliteStatementLike): void {
   if (typeof statement.setReadBigInts !== "function") {
-    throw new Error("BRAID_INTEGER_MODE_UNSUPPORTED: SQLite row reads require StatementSync.setReadBigInts(true).");
+    throw new UnsupportedFeatureError(
+      "result.exact-integer",
+      "BRAID_INTEGER_MODE_UNSUPPORTED",
+      "SQLite row reads require StatementSync.setReadBigInts(true).",
+    );
   }
   statement.setReadBigInts(true);
 }

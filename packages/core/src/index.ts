@@ -58,6 +58,75 @@ export class ResultExactnessError extends Error {
   }
 }
 
+export type PublicErrorCategory = "runtime" | "adapter" | "compiler";
+
+export interface PublicErrorDefinition {
+  readonly code: string;
+  readonly category: PublicErrorCategory;
+  readonly owner: string;
+}
+
+/**
+ * The intentionally small compatibility boundary for SQLBraid-owned errors.
+ *
+ * Keep this registry explicit.  In particular, a BRAID_ token in a driver
+ * message or an internal compiler fallback is not public merely because it
+ * happens to use the project prefix.
+ */
+export const PUBLIC_ERROR_DEFINITIONS: readonly PublicErrorDefinition[] = Object.freeze([
+  { code: "BRAID_RESULT_EXACTNESS", category: "runtime", owner: "ResultExactnessError" },
+  { code: "BRAID_CALL_MAP", category: "runtime", owner: "RoutineMappingError" },
+  { code: "BRAID_RESULT_KIND", category: "runtime", owner: "@sqlbraid/runtime:DatabaseResultKindError" },
+  { code: "BRAID_RESULT_VALIDATION", category: "runtime", owner: "@sqlbraid/runtime:DatabaseResultValidationError" },
+  { code: "BRAID_TX_SCOPE", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
+  { code: "BRAID_TX_CLOSED", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
+  { code: "BRAID_SESSION_SCOPE", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
+  { code: "BRAID_SESSION_CLOSED", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
+  { code: "BRAID_CONNECTION_POISONED", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
+  { code: "BRAID_STREAM_SCOPE", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
+  { code: "BRAID_REENTRY", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
+  { code: "BRAID_TX_OPTIONS_NESTED", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
+  { code: "BRAID_CALL_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_RESULT_SETS_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_STREAM_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_CANCEL_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_SESSION_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_TX_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_TX_OPTIONS_INVALID", category: "runtime", owner: "TypeError with code" },
+  { code: "BRAID_TX_OPTION_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_CALL_RESULT_SETS", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_CALL_CURSOR_TX_REQUIRED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_CALL_OUT_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_CALL_RETURN_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_CALL_CURSOR_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_RESOURCE_CLEANUP", category: "adapter", owner: "adapter cleanup error with code" },
+  { code: "BRAID_BIND_HINT_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_BIND_VALUE_UNSUPPORTED", category: "adapter", owner: "AdapterError" },
+  { code: "BRAID_INTEGER_MODE_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_CALL_LOB_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_BULK_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_DIALECT_MISMATCH", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_RESULT_KIND_AMBIGUOUS", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_PREPARED_NAME", category: "runtime", owner: "prepared query validation" },
+  { code: "BRAID_PREPARED_SHAPE", category: "runtime", owner: "prepared query validation" },
+  { code: "BRAID_BIND_TYPE_REQUIRED", category: "adapter", owner: "AdapterError" },
+  { code: "BRAID_EMPTY_LIST", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_EMPTY_SET", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_DIALECT", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_ASYNC_CONTEXT", category: "compiler", owner: "compiler diagnostic" },
+  { code: "BRAID_DIRECTIVE_UNTERMINATED", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_DIRECTIVE", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_CONDITION", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_ATTRIBUTES", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_STRUCTURE", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_HOLE_CONTEXT", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_SQL_LEX", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_DEPTH", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_STRUCTURE_LIMIT", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_SQL_LIMIT", category: "runtime", owner: "SqlRenderError" },
+  { code: "BRAID_BIND_LIMIT", category: "runtime", owner: "SqlRenderError" },
+] as const);
+
 function exactnessFailure(message: string): never {
   throw new ResultExactnessError(message);
 }
@@ -1046,6 +1115,18 @@ export class UnsupportedFeatureError extends Error {
   ) {
     super(`${code}: ${message}`, options);
     this.name = "UnsupportedFeatureError";
+  }
+}
+
+/** An adapter-owned input/transport failure that retains TypeError semantics. */
+export class AdapterError extends TypeError {
+  constructor(
+    readonly code: `BRAID_${string}`,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(`${code}: ${message}`, options);
+    this.name = "AdapterError";
   }
 }
 

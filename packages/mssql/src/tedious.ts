@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { ISOLATION_LEVEL, Request, TYPES } from "tedious";
-import { ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
+import { AdapterError, ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
 import type {
   ConnectionLease,
   ConnectionProvider,
@@ -174,9 +174,9 @@ function typeForHint(hint: ParameterTypeHint): DatabaseType {
     datetimeoffset: "datetimeoffset",
   };
   const result = aliases[value];
-  if (!result) throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: unsupported SQL Server parameter type ${hint.databaseType}.`);
+  if (!result) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `unsupported SQL Server parameter type ${hint.databaseType}.`);
   const hasUnsupportedFacet = (facet: string): never => {
-    throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: ${hint.databaseType} does not support ${facet}.`);
+    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} does not support ${facet}.`);
   };
   if (result !== "decimal" && result !== "numeric" && hint.precision !== undefined) hasUnsupportedFacet("precision");
   if (result !== "decimal" && result !== "numeric" && result !== "datetime2" && result !== "datetimeoffset" && hint.scale !== undefined) {
@@ -188,24 +188,24 @@ function typeForHint(hint: ParameterTypeHint): DatabaseType {
   if ((result === "decimal" || result === "numeric") && hint.length !== undefined) hasUnsupportedFacet("length");
   if ((result === "datetime2" || result === "datetimeoffset") && hint.length !== undefined) hasUnsupportedFacet("length");
   if ((result === "decimal" || result === "numeric") && (hint.precision === undefined || hint.scale === undefined)) {
-    throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: ${hint.databaseType} requires precision and scale.`);
+    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} requires precision and scale.`);
   }
   if ((result === "decimal" || result === "numeric")
     && (hint.precision! < 1 || hint.precision! > 38 || hint.scale! < 0 || hint.scale! > hint.precision!)) {
-    throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: ${hint.databaseType} precision must be 1..38 and scale must be 0..precision.`);
+    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} precision must be 1..38 and scale must be 0..precision.`);
   }
   if ((result === "datetime2" || result === "datetimeoffset")
     && (hint.scale !== undefined && (!Number.isSafeInteger(hint.scale) || hint.scale < 0 || hint.scale > 7))) {
-    throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: ${hint.databaseType} scale must be an integer from 0 through 7.`);
+    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} scale must be an integer from 0 through 7.`);
   }
   if (result === "nvarchar" || result === "varchar" || result === "char" || result === "varbinary" || result === "binary") {
-    if (hint.length === undefined) throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: ${hint.databaseType} requires a length or "max".`);
+    if (hint.length === undefined) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} requires a length or "max".`);
     if (hint.length !== "max" && (!Number.isSafeInteger(hint.length) || hint.length <= 0)) {
-      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: ${hint.databaseType} length must be a positive integer or "max".`);
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} length must be a positive integer or "max".`);
     }
     const maximum = result === "nvarchar" ? 4000 : 8000;
     if (hint.length !== "max" && hint.length > maximum) {
-      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: ${hint.databaseType} length exceeds SQL Server's ${maximum}-character limit.`);
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} length exceeds SQL Server's ${maximum}-character limit.`);
     }
   }
   return result;
@@ -215,13 +215,13 @@ function inferType(value: unknown): { readonly type: DatabaseType; readonly valu
   if (typeof value === "string") return { type: "nvarchar", value };
   if (typeof value === "boolean") return { type: "bit", value };
   if (value instanceof Date) {
-    if (!Number.isFinite(value.getTime())) throw new TypeError("BRAID_BIND_TYPE_REQUIRED: invalid Date requires an explicit SQL Server hint.");
+    if (!Number.isFinite(value.getTime())) throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "invalid Date requires an explicit SQL Server hint.");
     return { type: "datetime2", value };
   }
   if (typeof value === "bigint") return { type: "bigint", value: value.toString() };
   if (typeof value === "number") {
     if (!Number.isFinite(value) || !Number.isSafeInteger(value) && Number.isInteger(value)) {
-      throw new TypeError("BRAID_BIND_TYPE_REQUIRED: non-finite or unsafe number requires an explicit SQL Server hint.");
+      throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "non-finite or unsafe number requires an explicit SQL Server hint.");
     }
     if (Number.isInteger(value)) {
       return Math.abs(value) <= 2_147_483_647 ? { type: "int", value } : { type: "bigint", value: String(value) };
@@ -229,7 +229,7 @@ function inferType(value: unknown): { readonly type: DatabaseType; readonly valu
     return { type: "float", value };
   }
   if (value instanceof Uint8Array) return { type: "varbinary", value };
-  throw new TypeError("BRAID_BIND_TYPE_REQUIRED: this value requires an explicit SQL Server parameter hint.");
+  throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "this value requires an explicit SQL Server parameter hint.");
 }
 
 function decimalInput(
@@ -434,9 +434,9 @@ function materializeParameter(
   outputName?: string,
 ): TediousMaterializedParameter {
   if (direction !== "in" && actualHint === undefined) {
-    throw new TypeError("BRAID_BIND_HINT_UNSUPPORTED: SQL Server OUTPUT and INOUT parameters require an explicit type hint.");
+    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "SQL Server OUTPUT and INOUT parameters require an explicit type hint.");
   }
-  if (direction === "in" && actualValue === undefined) throw new TypeError("BRAID_BIND_TYPE_REQUIRED: undefined is not a SQL Server parameter value.");
+  if (direction === "in" && actualValue === undefined) throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "undefined is not a SQL Server parameter value.");
   const inferred = direction === "in" && actualHint === undefined ? inferType(actualValue) : undefined;
   const type = actualHint === undefined ? inferred!.type : typeForHint(actualHint);
   const input = direction === "out" ? undefined : actualHint === undefined ? inferred!.value : actualValue;
@@ -455,7 +455,7 @@ function materializeParameter(
   if (actualHint?.precision !== undefined) options.precision = actualHint.precision;
   if (actualHint?.scale !== undefined) options.scale = actualHint.scale;
   const tediousType = TYPES[typeNames[type] as keyof typeof TYPES];
-  if (!tediousType) throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Tedious does not expose SQL Server type ${type}.`);
+  if (!tediousType) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Tedious does not expose SQL Server type ${type}.`);
   // Tedious repeats this validation from Request just before sending. Run the
   // collation-independent part here so bad values fail before a pooled lease
   // is acquired. Text encoding is checked for its stable JS shape here; any
@@ -464,7 +464,7 @@ function materializeParameter(
     // Tedious validates the output value when the server sends it.
   } else if (type === "nvarchar" || type === "varchar" || type === "char") {
     if (encoded !== null && typeof encoded !== "string") {
-      throw new TypeError(`BRAID_BIND_TYPE_REQUIRED: invalid SQL Server ${type} parameter: expected a string.`);
+      throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", `invalid SQL Server ${type} parameter: expected a string.`);
     }
   } else {
     const validate = (tediousType as { readonly validate?: (value: unknown, collation?: unknown) => unknown }).validate;
@@ -473,7 +473,7 @@ function materializeParameter(
         encoded = validate(encoded);
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        throw new TypeError(`BRAID_BIND_TYPE_REQUIRED: invalid SQL Server ${type} parameter: ${detail}`, { cause: error });
+        throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", `invalid SQL Server ${type} parameter: ${detail}`, { cause: error });
       }
     }
   }
@@ -494,7 +494,7 @@ function addParameter(request: TediousRequestLike, parameter: TediousMaterialize
     return;
   }
   if (typeof request.addOutputParameter !== "function") {
-    throw new Error("BRAID_CALL_OUT_UNSUPPORTED: Tedious Request does not expose addOutputParameter().");
+    throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "Tedious Request does not expose addOutputParameter().");
   }
   request.addOutputParameter(
     parameter.name,
@@ -558,11 +558,11 @@ function createBinding(options: TediousStatementBindingOptions = {}): TediousSta
       const parameters = statement.parameters.map((parameter, index) => {
         const direction = parameter.direction ?? "in";
         if (direction !== "in" && statement.resultKind !== "call") {
-          throw new Error("BRAID_CALL_OUT_UNSUPPORTED: OUT and INOUT parameters are legal only for sql.call().");
+          throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "OUT and INOUT parameters are legal only for sql.call().");
         }
         if (direction !== "in") {
-          if (!parameter.outputName) throw new Error("BRAID_CALL_OUT_UNSUPPORTED: OUT and INOUT parameters require outputName.");
-          if (outputNames.has(parameter.outputName)) throw new Error(`BRAID_CALL_OUT_UNSUPPORTED: duplicate outputName ${parameter.outputName}.`);
+          if (!parameter.outputName) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "OUT and INOUT parameters require outputName.");
+          if (outputNames.has(parameter.outputName)) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", `duplicate outputName ${parameter.outputName}.`);
           outputNames.add(parameter.outputName);
         }
         return materializeParameter(index + 1, parameter.value, parameter.hint, policy, direction, parameter.outputName);
@@ -979,7 +979,7 @@ function streamRows(
         });
         request.on("columnMetadata", (metadata: unknown) => {
           try {
-            if (resultSetCount > 0) throw new Error("BRAID_RESULT_SETS_UNSUPPORTED: SQL Server stream returned multiple result sets.");
+            if (resultSetCount > 0) throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "SQL Server stream returned multiple result sets.");
             resultSetCount += 1;
             columns = metadataColumns(metadata);
             assertUniqueColumns(columns);
@@ -1473,7 +1473,7 @@ function makeTediousExecutor(
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
       const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy, undefined, executionOptions);
-      if (result.outputSeen) throw new Error("BRAID_CALL_OUT_UNSUPPORTED: SQL Server output parameters are not implemented.");
+      if (result.outputSeen) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "SQL Server output parameters are not implemented.");
       return rowResult(result) as QueryExecutionResult<Row>;
     },
     async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, executionOptions?: ExecutionOptions): Promise<BulkExecutionResult> {
