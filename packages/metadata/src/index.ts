@@ -1,28 +1,15 @@
 import { createHash } from "node:crypto";
 
+export {
+  qualifiedIdentity,
+  qualifiedIdentitySegments,
+  qualifiedIdentitySegmentsWithSuffix,
+  qualifiedIdentityWithSuffix,
+  QUALIFIED_IDENTITY_ENCODING,
+} from "./qualified-identity.js";
+import { isQualifiedIdentity, qualifiedIdentity, QUALIFIED_IDENTITY_ENCODING } from "./qualified-identity.js";
+
 export const CURRENT_FORMAT_VERSION = 1 as const;
-export const QUALIFIED_IDENTITY_ENCODING = "escaped-qualified-v1" as const;
-
-function escapeQualifiedPart(value: string): string {
-  return value
-    .replaceAll("\\", "\\\\")
-    .replaceAll(".", "\\.")
-    .replaceAll(":", "\\:")
-    .replaceAll("#", "\\#");
-}
-
-/**
- * Builds the canonical identity used by metadata producers for a
- * namespace-qualified database object. Unescaped dots remain stable for
- * ordinary names; delimiters inside either segment are escaped.
- */
-export function qualifiedIdentity(namespace: string, name: string): string {
-  return `${escapeQualifiedPart(namespace)}.${escapeQualifiedPart(name)}`;
-}
-
-export function qualifiedIdentityWithSuffix(namespace: string, name: string, suffix: string): string {
-  return `${qualifiedIdentity(namespace, name)}:${escapeQualifiedPart(suffix)}`;
-}
 
 export interface ServerEvidence {
   readonly version?: string;
@@ -127,6 +114,7 @@ export type RoutineResult =
 export interface RoutineSnapshot {
   readonly name: string;
   readonly schema?: string;
+  readonly packageName?: string;
   readonly identity: string;
   readonly kind: "function" | "procedure" | "aggregate" | "window";
   readonly arguments: readonly RoutineArgument[];
@@ -198,6 +186,12 @@ function add(diagnostics: SnapshotDiagnostic[], code: string, message: string, p
   diagnostics.push({ code, message, path });
 }
 
+function validateMarkedIdentity(value: unknown, path: string, marked: boolean, diagnostics: SnapshotDiagnostic[]): void {
+  if (marked && (typeof value !== "string" || !isQualifiedIdentity(value))) {
+    add(diagnostics, "SNAPSHOT_IDENTITY", "Marked qualified identities must use escaped-qualified-v1 encoding.", path);
+  }
+}
+
 function scanSnapshotValues(value: unknown, path: string, diagnostics: SnapshotDiagnostic[]): void {
   if (typeof value === "number" && !Number.isFinite(value)) { add(diagnostics, "SNAPSHOT_NUMBER", "Snapshot numbers must be finite.", path); return; }
   if (typeof value === "bigint" || typeof value === "function" || typeof value === "symbol") { add(diagnostics, "SNAPSHOT_VALUE", `Unsupported snapshot value: ${typeof value}.`, path); return; }
@@ -243,6 +237,8 @@ function validateRoutine(value: unknown, path: string, diagnostics: SnapshotDiag
   if (!isRecord(value)) { add(diagnostics, "SNAPSHOT_ROUTINE", "Routine must be an object.", path); return; }
   if (typeof value.identity !== "string" || !value.identity) add(diagnostics, "SNAPSHOT_ROUTINE_ID", "Routine identity must be non-empty.", `${path}.identity`);
   if (typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_ROUTINE_NAME", "Routine name must be non-empty.", `${path}.name`);
+  if (value.schema !== undefined && typeof value.schema !== "string") add(diagnostics, "SNAPSHOT_ROUTINE_SCHEMA", "Routine schema must be a string.", `${path}.schema`);
+  if (value.packageName !== undefined && typeof value.packageName !== "string") add(diagnostics, "SNAPSHOT_ROUTINE_PACKAGE", "Routine packageName must be a string.", `${path}.packageName`);
   if (!["function", "procedure", "aggregate", "window"].includes(String(value.kind))) add(diagnostics, "SNAPSHOT_ROUTINE_KIND", "Routine kind is invalid.", `${path}.kind`);
   if (!Array.isArray(value.arguments)) add(diagnostics, "SNAPSHOT_ROUTINE_ARGS", "Routine arguments must be an array.", `${path}.arguments`);
   else {
@@ -317,10 +313,12 @@ export function validateSnapshot(snapshot: unknown): asserts snapshot is Metadat
   if (isRecord(snapshot.metadata) && snapshot.metadata.identityEncoding !== undefined && snapshot.metadata.identityEncoding !== QUALIFIED_IDENTITY_ENCODING) {
     add(diagnostics, "SNAPSHOT_IDENTITY_ENCODING", `Unsupported qualified identity encoding: ${String(snapshot.metadata.identityEncoding)}.`, "metadata.identityEncoding");
   }
+  const marked = isRecord(snapshot.metadata) && snapshot.metadata.identityEncoding === QUALIFIED_IDENTITY_ENCODING;
   if (isRecord(snapshot.namespaces)) for (const [key, value] of Object.entries(snapshot.namespaces)) if (!isRecord(value) || typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_NAMESPACE", `Invalid namespace entry: ${key}.`, `namespaces.${key}`);
   const identities = new Set<string>();
   if (isRecord(snapshot.types)) for (const [key, value] of Object.entries(snapshot.types)) {
     if (!isRecord(value)) { add(diagnostics, "SNAPSHOT_TYPE", "Type entry must be an object.", `types.${key}`); continue; }
+    validateMarkedIdentity(value.identity, `types.${key}.identity`, marked, diagnostics);
     if (typeof value.identity !== "string" || !value.identity || typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_TYPE_ID", "Type identity and name must be non-empty.", `types.${key}`);
     else if (identities.has(value.identity)) add(diagnostics, "SNAPSHOT_DUPLICATE_IDENTITY", `Duplicate type identity: ${value.identity}.`, `types.${key}.identity`);
     else identities.add(value.identity);
@@ -334,6 +332,7 @@ export function validateSnapshot(snapshot: unknown): asserts snapshot is Metadat
   if (isRecord(snapshot.relations)) for (const [key, value] of Object.entries(snapshot.relations)) {
     validateRelation(value, `relations.${key}`, diagnostics);
     if (isRecord(value) && typeof value.identity === "string") {
+      validateMarkedIdentity(value.identity, `relations.${key}.identity`, marked, diagnostics);
       if (
         isRecord(snapshot.metadata)
         && snapshot.metadata.identityEncoding === QUALIFIED_IDENTITY_ENCODING
@@ -358,6 +357,7 @@ export function validateSnapshot(snapshot: unknown): asserts snapshot is Metadat
     value.forEach((routine, index) => {
       validateRoutine(routine, `routines.${key}[${index}]`, diagnostics);
       if (isRecord(routine) && typeof routine.identity === "string") {
+        validateMarkedIdentity(routine.identity, `routines.${key}[${index}].identity`, marked, diagnostics);
         if (routineIdentities.has(routine.identity)) add(diagnostics, "SNAPSHOT_DUPLICATE_IDENTITY", `Duplicate routine identity: ${routine.identity}.`, `routines.${key}[${index}].identity`);
         routineIdentities.add(routine.identity);
       }

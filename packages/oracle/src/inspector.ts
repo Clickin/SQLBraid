@@ -1,4 +1,4 @@
-import { qualifiedIdentity, qualifiedIdentityWithSuffix, QUALIFIED_IDENTITY_ENCODING } from "@sqlbraid/metadata";
+import { qualifiedIdentity, qualifiedIdentitySegments, qualifiedIdentitySegmentsWithSuffix, QUALIFIED_IDENTITY_ENCODING } from "../../metadata/src/qualified-identity.js";
 import type { MetadataInspector, MetadataSnapshot, NamespaceSnapshot, RelationSnapshot, RoutineArgument, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
 
 interface CatalogRow {
@@ -103,9 +103,9 @@ function routineParts(row: CatalogRow): { readonly owner: string; readonly objec
 function routineName(row: CatalogRow): { readonly name: string; readonly identity: string; readonly schema: string } | undefined {
   const parts = routineParts(row);
   if (!parts) return undefined;
-  const objectName = parts.packageName ? `${parts.packageName}.${parts.procedure}` : parts.procedure;
-  const base = qualifiedIdentity(parts.owner, objectName);
-  return { name: parts.procedure, identity: parts.overload ? qualifiedIdentityWithSuffix(parts.owner, objectName, parts.overload) : base, schema: parts.owner };
+  const segments = parts.packageName ? [parts.owner, parts.packageName, parts.procedure] : [parts.owner, parts.procedure];
+  const base = qualifiedIdentitySegments(segments);
+  return { name: parts.procedure, identity: parts.overload ? qualifiedIdentitySegmentsWithSuffix(segments, parts.overload) : base, schema: parts.owner };
 }
 
 function routineKey(row: CatalogRow, argument: boolean): string {
@@ -169,7 +169,12 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
         const objectId = numberValue(procedure, "object_id");
         if (duplicateIdentity && objectId === undefined) continue;
         const identity = duplicateIdentity
-          ? qualifiedIdentityWithSuffix(procedureParts.owner, procedureParts.packageName ? `${procedureParts.packageName}.${procedureParts.procedure}` : procedureParts.procedure, `${procedureParts.overload}\u0000${objectId}`)
+          ? qualifiedIdentitySegmentsWithSuffix(
+            procedureParts.packageName
+              ? [procedureParts.owner, procedureParts.packageName, procedureParts.procedure]
+              : [procedureParts.owner, procedureParts.procedure],
+            `${procedureParts.overload}\u0000${objectId}`,
+          )
           : named.identity;
         const routineArguments: RoutineArgument[] = [];
         let result: RoutineSnapshot["result"] = { kind: "void" };
@@ -188,7 +193,16 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
           });
         }
         const kind = text(procedure, "object_type") === "FUNCTION" || result.kind === "scalar" ? "function" : "procedure";
-        const routine: RoutineSnapshot = { name: named.name, schema: named.schema, identity, kind, arguments: routineArguments, argumentsComplete: true, result };
+        const routine: RoutineSnapshot = {
+          name: named.name,
+          schema: named.schema,
+          ...(procedureParts.packageName ? { packageName: procedureParts.packageName } : {}),
+          identity,
+          kind,
+          arguments: routineArguments,
+          argumentsComplete: true,
+          result,
+        };
         const current = Object.hasOwn(routines, named.name) ? routines[named.name] : undefined;
         routines[named.name] = [...current ?? [], routine];
       }

@@ -1,4 +1,4 @@
-import { qualifiedIdentity, QUALIFIED_IDENTITY_ENCODING } from "@sqlbraid/metadata";
+import { qualifiedIdentity, QUALIFIED_IDENTITY_ENCODING } from "../../metadata/src/qualified-identity.js";
 import type { MetadataInspector, MetadataSnapshot, RelationSnapshot, RoutineArgument, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
 import type { TediousConnectionLike } from "./tedious.js";
 import { createTediousExecutor } from "./tedious.js";

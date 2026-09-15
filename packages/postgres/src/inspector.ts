@@ -1,4 +1,4 @@
-import { qualifiedIdentity, QUALIFIED_IDENTITY_ENCODING } from "@sqlbraid/metadata";
+import { qualifiedIdentity, QUALIFIED_IDENTITY_ENCODING } from "../../metadata/src/qualified-identity.js";
 import type { MetadataInspector, MetadataSnapshot, RelationSnapshot, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
 import type { PgClientLike } from "./pg.js";
 
@@ -123,7 +123,7 @@ export function createPostgresInspector(client: PgClientLike): MetadataInspector
         const name = text(column, "udt_name");
         if (!schema || !name) continue;
         const identity = qualifiedIdentity(schema, name);
-        const element = schema === "pg_catalog" ? builtinArrayElements[name] : undefined;
+        const element = schema === "pg_catalog" && Object.hasOwn(builtinArrayElements, name) ? builtinArrayElements[name] : undefined;
         if (!types[identity]) {
           types[identity] = element
             ? { identity, name, kind: "array", elementType: `pg_catalog.${element}` }

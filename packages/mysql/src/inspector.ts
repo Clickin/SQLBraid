@@ -1,4 +1,4 @@
-import { qualifiedIdentity, qualifiedIdentityWithSuffix, QUALIFIED_IDENTITY_ENCODING } from "@sqlbraid/metadata";
+import { qualifiedIdentity, qualifiedIdentityWithSuffix, QUALIFIED_IDENTITY_ENCODING } from "../../metadata/src/qualified-identity.js";
 import type { MetadataInspector, MetadataSnapshot, RelationSnapshot, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
 import type { Mysql2ConnectionLike } from "./mysql2.js";
 

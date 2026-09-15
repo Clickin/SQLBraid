@@ -367,6 +367,20 @@ test('SQLite inspector uses structured table flags instead of matching DDL text'
   }
 });
 
+test('SQLite inspector keeps main table flags separate from same-name temp tables', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const native = new DatabaseSync(':memory:');
+  try {
+    native.exec('CREATE TABLE shadow(id INTEGER PRIMARY KEY) STRICT, WITHOUT ROWID; CREATE TEMP TABLE shadow(id INTEGER PRIMARY KEY);');
+    const relation = (await createSqliteInspector(native).inspect()).relations['main.shadow'];
+    assert.equal(relation?.strict, true);
+    assert.equal(relation?.withoutRowid, true);
+    assert.equal(relation?.columns[0]?.identity, undefined);
+  } finally {
+    native.close();
+  }
+});
+
 test('MySQL inspector rejects MariaDB as a different product', async () => {
   const connection = {
     async execute(_sql: string) { return [[{ version: '10.11.0-MariaDB', product: 'MariaDB' }], []] as const; },
@@ -509,6 +523,7 @@ test('PostgreSQL inspector keeps delimiter-like qualified names and prototype-na
     { rows: [
       { table_schema: 'a.b', table_name: 'c', ordinal_position: '1', column_name: 'id', data_type: 'integer', udt_schema: 'pg_catalog', udt_name: 'int4', is_nullable: 'NO', is_identity: 'NO', is_generated: 'NEVER' },
       { table_schema: 'a', table_name: 'b.c', ordinal_position: '1', column_name: 'id', data_type: 'integer', udt_schema: 'pg_catalog', udt_name: 'int4', is_nullable: 'NO', is_identity: 'NO', is_generated: 'NEVER' },
+      { table_schema: 'a.b', table_name: 'c', ordinal_position: '2', column_name: 'constructor_value', data_type: 'constructor', udt_schema: 'pg_catalog', udt_name: 'constructor', is_nullable: 'YES', is_identity: 'NO', is_generated: 'NEVER' },
     ] },
     { rows: [
       { routine_schema: 'public', routine_name: 'constructor', routine_type: 'FUNCTION', data_type: 'text', specific_name: 'constructor_1' },
@@ -531,6 +546,8 @@ test('PostgreSQL inspector keeps delimiter-like qualified names and prototype-na
   validateSnapshot(roundTripped);
   assert.equal(roundTripped.relations[left]?.name, 'c');
   assert.equal(roundTripped.relations[right]?.name, 'b.c');
+  assert.equal(roundTripped.types['pg_catalog.constructor']?.kind, 'scalar');
+  assert.equal('elementType' in (roundTripped.types['pg_catalog.constructor'] ?? {}), false);
   assert.equal(roundTripped.routines.constructor?.length, 1);
   assert.equal(roundTripped.routines.toString?.length, 1);
   assert.equal(roundTripped.routines.__proto__?.length, 1);

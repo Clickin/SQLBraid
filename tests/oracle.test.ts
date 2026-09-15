@@ -78,6 +78,31 @@ test("Oracle inspector keeps catalog-qualified object and domain type evidence",
   assert.equal(statements.find((statement) => statement.includes("all_tab_cols"))?.includes("data_type_owner"), true);
 });
 
+test("Oracle inspector keeps package and procedure identity segments distinct", async () => {
+  const connection = {
+    async execute(statement: string) {
+      if (statement.includes("v$version")) return { rows: [{ VERSION: "Oracle Database 23c" }] };
+      if (statement.includes("all_users")) return { rows: [] };
+      if (statement.includes("all_tables")) return { rows: [] };
+      if (statement.includes("all_tab_cols")) return { rows: [] };
+      if (statement.includes("all_procedures")) return {
+        rows: [
+          { OWNER: "APP", OBJECT_NAME: "A.B", PROCEDURE_NAME: "C", OBJECT_TYPE: "FUNCTION", OBJECT_ID: 1, SUBPROGRAM_ID: 1 },
+          { OWNER: "APP", OBJECT_NAME: "A", PROCEDURE_NAME: "B.C", OBJECT_TYPE: "FUNCTION", OBJECT_ID: 2, SUBPROGRAM_ID: 1 },
+        ],
+      };
+      if (statement.includes("all_arguments")) return { rows: [] };
+      throw new Error(`Unexpected Oracle catalog query: ${statement}`);
+    },
+  };
+  const snapshot = await createOracleInspector(connection).inspect();
+  assert.equal(snapshot.routines.C?.length, 1);
+  assert.equal(snapshot.routines["B.C"]?.length, 1);
+  assert.ok(snapshot.routines.C?.[0]?.identity !== snapshot.routines["B.C"]?.[0]?.identity);
+  assert.equal(snapshot.routines.C?.[0]?.identity, "APP.A\\.B.C");
+  assert.equal(snapshot.routines["B.C"]?.[0]?.identity, "APP.A.B\\.C");
+});
+
 test("Oracle parameter hints are aligned and NUMBER policy stays exact", () => {
   const query = sql`SELECT ${sql.bind(null, oracleParameter.number(38, -2))}, ${sql.bind("Ada", oracleParameter.nvarchar2(40))}`;
   const rendered = query.render();

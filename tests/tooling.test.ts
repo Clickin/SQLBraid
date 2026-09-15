@@ -153,6 +153,48 @@ test('identifier folding is deterministic while quoted identifiers preserve case
   assert.doesNotMatch(service.hover(quoted, 'quoted-case.ts', quoted.indexOf('"I"'))?.contents ?? '', /^Relation public.i/u);
 });
 
+test('quoted qualified names preserve dotted metadata segments for navigation', () => {
+  const snapshot = {
+    ...metadata,
+    relations: {
+      'a\\.b.c': { ...users, identity: 'a\\.b.c', name: 'c', namespace: 'a.b' },
+      'a.b\\.c': { ...users, identity: 'a.b\\.c', name: 'b.c', namespace: 'a' },
+    },
+  } as const satisfies MetadataSnapshot;
+  const service = createLanguageService({ metadata: snapshot });
+  const source = 'import { sql } from "@sqlbraid/postgres"; const q = sql`SELECT * FROM "a.b"."c"`;';
+  const offset = source.indexOf('"c"');
+  assert.equal(service.hover(source, 'quoted-qualified.ts', offset)?.contents.split('\n')[0], 'Relation a\\.b.c');
+  assert.ok(service.definition(source, 'quoted-qualified.ts', offset));
+  const other = source.replace('"a.b"."c"', '"a"."b.c"');
+  const otherOffset = other.indexOf('"b.c"');
+  assert.equal(service.hover(other, 'quoted-qualified-other.ts', otherOffset)?.contents.split('\n')[0], 'Relation a.b\\.c');
+});
+
+test('Oracle package routines resolve each quoted identity segment', () => {
+  const snapshot = {
+    ...metadata,
+    dialect: 'oracle',
+    relations: {},
+    routines: {
+      PROC: [{
+        name: 'PROC',
+        schema: 'APP',
+        packageName: 'PKG',
+        identity: 'APP.PKG.PROC',
+        kind: 'function',
+        arguments: [],
+        argumentsComplete: true,
+        result: { kind: 'scalar', type: 'NUMBER' },
+      }],
+    },
+  } as const satisfies MetadataSnapshot;
+  const service = createLanguageService({ metadata: snapshot });
+  const source = 'import { sql } from "@sqlbraid/oracle"; const q = sql`SELECT "APP"."PKG"."PROC"() FROM dual`;';
+  const offset = source.indexOf('"PROC"');
+  assert.match(service.hover(source, 'oracle-package.ts', offset)?.contents ?? '', /^Routine APP\.PKG\.PROC/u);
+});
+
 test('references exceed the analysis cache bound and honor cancellation', async () => {
   const source = 'import { sql } from "@sqlbraid/postgres"; const q = sql`SELECT id FROM public.users`;';
   const sources = Array.from({ length: 260 }, (_, index) => ({

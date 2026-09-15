@@ -62,13 +62,39 @@ const SQL_KEYWORDS = new Set([
 
 export function normalizeIdentifier(value: string): string { return value.toLowerCase(); }
 function lower(value: string): string { return normalizeIdentifier(value); }
-function identifierKey(value: string, fold = true): string {
-  return value.split(".").map((part) => {
+function identifierSegments(value: string, fold = true): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let quote: string | undefined;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote) {
+        if (value[index + 1] === quote) { index += 1; continue; }
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "`") { quote = character; continue; }
+    if (character === "[") { quote = "]"; continue; }
+    if (character === ".") {
+      parts.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts.map((part) => {
     const quote = part[0];
     const end = quote === "[" ? "]" : quote;
     if ((quote === '"' || quote === "`" || quote === "[") && part.endsWith(end!)) return part.slice(1, -1).replaceAll(`${end}${end}`, end!);
     return fold ? lower(part) : part;
-  }).join(".");
+  });
+}
+function identifierKey(value: string, fold = true): string {
+  return identifierSegments(value, fold).join(".");
+}
+function metadataIdentifier(value: string, fold: boolean): string {
+  return fold ? lower(value) : value;
 }
 function sourceRange(start: number, end: number): Range { return { start, end }; }
 function unique<T>(values: readonly T[], key: (value: T) => string): T[] {
@@ -277,13 +303,24 @@ function allRoutines(options: LanguageServiceOptions): readonly RoutineSnapshot[
   return [...groups.values()].filter((group) => new Set(group.map(evidenceKey)).size === 1).map((group) => group[0]).filter((routine): routine is RoutineSnapshot => routine !== undefined);
 }
 function findRelation(name: string, options: LanguageServiceOptions, fold: boolean): RelationSnapshot | undefined {
-  const key = identifierKey(name, fold);
-  const matches = allRelations(options).filter((relation) => relation.name === key || relation.namespace !== undefined && `${relation.namespace}.${relation.name}` === key);
+  const key = identifierSegments(name, fold);
+  const matches = allRelations(options).filter((relation) =>
+    key.length === 1 && metadataIdentifier(relation.name, fold) === key[0]
+    || key.length === 2 && relation.namespace !== undefined
+      && metadataIdentifier(relation.namespace, fold) === key[0]
+      && metadataIdentifier(relation.name, fold) === key[1],
+  );
   return matches.length === 1 ? matches[0] : undefined;
 }
 function findRoutine(name: string, options: LanguageServiceOptions, fold: boolean): RoutineSnapshot | undefined {
-  const key = identifierKey(name, fold);
-  const matches = allRoutines(options).filter((routine) => routine.name === key || routine.schema !== undefined && `${routine.schema}.${routine.name}` === key);
+  const key = identifierSegments(name, fold);
+  const matches = allRoutines(options).filter((routine) => {
+    const routineParts = routine.packageName === undefined
+      ? [routine.schema, routine.name]
+      : [routine.schema, routine.packageName, routine.name];
+    return key.length === 1 && metadataIdentifier(routine.name, fold) === key[0]
+      || key.length === routineParts.length && routineParts.every((part, index) => part !== undefined && metadataIdentifier(part, fold) === key[index]);
+  });
   return matches.length === 1 ? matches[0] : undefined;
 }
 function cteNames(tokens: readonly LexToken[]): ReadonlySet<string> {

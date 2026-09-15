@@ -5,6 +5,8 @@ import {
   canonicalizeSnapshot,
   diffSnapshots,
   hashSnapshot,
+  qualifiedIdentitySegments,
+  qualifiedIdentitySegmentsWithSuffix,
   qualifiedIdentity,
   validateSnapshot,
   type MetadataSnapshot,
@@ -97,6 +99,9 @@ test('qualified identities escape delimiters without colliding', () => {
   const right = qualifiedIdentity('a', 'b.c');
   assert.notEqual(left, right);
   assert.equal(qualifiedIdentity('public', 'users'), 'public.users');
+  assert.equal(qualifiedIdentity('owner', 'package.name', 'procedure'), 'owner.package\\.name.procedure');
+  assert.equal(qualifiedIdentitySegments(['owner', 'package.name', 'procedure']), 'owner.package\\.name.procedure');
+  assert.equal(qualifiedIdentitySegmentsWithSuffix(['owner', 'package', 'procedure'], '1.2'), 'owner.package.procedure:1\\.2');
 });
 
 test('marked snapshots reject inconsistent qualified relation identities', () => {
@@ -111,6 +116,20 @@ test('marked snapshots reject inconsistent qualified relation identities', () =>
   assert.doesNotThrow(() => validateSnapshot({
     ...marked,
     metadata: {},
+  }));
+});
+
+test('marked snapshots reject malformed encoded identities while legacy identities remain valid', () => {
+  assert.throws(() => validateSnapshot({
+    ...snapshot,
+    metadata: { identityEncoding: 'escaped-qualified-v1' },
+    types: {
+      malformed: { identity: 'public\\q.type', name: 'type', kind: 'scalar' },
+    },
+  }), /SNAPSHOT_IDENTITY/u);
+  assert.doesNotThrow(() => validateSnapshot({
+    ...snapshot,
+    types: { malformed: { identity: 'public\\q.type', name: 'type', kind: 'scalar' } },
   }));
 });
 
