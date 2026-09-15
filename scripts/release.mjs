@@ -48,11 +48,11 @@ function releaseTag() {
 }
 
 function commandErrorText(error) {
-  return [error?.message, error?.stdout, error?.stderr].filter((value) => typeof value === "string").join("\n");
+  return [error?.message, error?.code, error?.stdout, error?.stderr].filter((value) => typeof value === "string").join("\n");
 }
 
 function registryNotFound(error) {
-  return /\bE404\b|ERR_PNPM_FETCH_404|404 Not Found|No match found/iu.test(commandErrorText(error));
+  return /\b(?:E404|ERR_PNPM_FETCH_404|ERR_PNPM_PACKAGE_NOT_FOUND)\b|404 Not Found|No matching version found|No match found/iu.test(commandErrorText(error));
 }
 
 async function defaultCommand(file, args, cwd = root, { quiet = false } = {}) {

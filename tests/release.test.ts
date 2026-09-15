@@ -45,7 +45,8 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   const calls: string[][] = [];
   const requests: { url: URL; method: string }[] = [];
   const behavior = { failAfterUpload: false, failBeforeUpload: false, corruptStage: false, invalidSummary: false,
-    listStatus: 200, downloadStatus: 200, provenance: true, extraTotal: 0, changeLatest: false, advanceNext: false, failPackage: "" };
+    listStatus: 200, downloadStatus: 200, provenance: true, extraTotal: 0, changeLatest: false, advanceNext: false, failPackage: "",
+    packageNotFound: false };
   const addStage = (name = names[0]) => {
     const stage: Stage = { id: uuid(stages.length + 1), packageName: name, version, tag: version.includes("-") ? "next" : `release-${version}`, bytes: bytes.get(name)! };
     stages.push(stage);
@@ -58,6 +59,9 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
     if (args[0] === "config") return "https://registry.npmjs.org/";
     if (args[0] === "ping") return "";
     if (args[0] === "view") {
+      if (behavior.packageNotFound && (args[2] === "dist.integrity" || args[2] === "version")) {
+        throw Object.assign(new Error(`No matching version found for ${args[1]}`), { code: "ERR_PNPM_PACKAGE_NOT_FOUND" });
+      }
       const name = names.find((name) => args[1] === name || args[1] === `${name}@${version}`)!;
       if (args[2] === "dist-tags") return JSON.stringify(tags.get(name));
       if (args[2] === "dist.integrity") return JSON.stringify(publicIntegrity.get(name) ?? null);
@@ -111,6 +115,14 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   const uploads = () => calls.filter((args) => args[0] === "stage" && args[1] === "publish" && !args.includes("--dry-run"));
   return { manifest, directory, stages, publicIntegrity, tags, calls, requests, behavior, addStage, run, evidence, uploads };
 }
+
+test("pnpm missing-version errors are treated as absent registry versions", async () => {
+  const f = await fixture();
+  f.behavior.packageNotFound = true;
+  const result = await f.run();
+  assert.ok(result?.complete);
+  assert.equal(f.uploads().length, 1);
+ });
 
  test("staging records exact candidate IDs, requests provenance and next, and never changes latest", async () => {
   const f = await fixture();
