@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/tooling",
-  "version": "0.1.0-rc.0",
+  "version": "0.1.0-rc.1",
   "description": "SQLBraid Node-first semantic tooling shared by the CLI and language server",
   "license": "Apache-2.0",
   "repository": {

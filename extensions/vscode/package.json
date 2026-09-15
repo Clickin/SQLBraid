@@ -2,7 +2,7 @@
   "name": "sqlbraid-vscode",
   "displayName": "SQLBraid",
   "description": "SQLBraid language tooling for TypeScript projects",
-  "version": "0.1.0-rc.0",
+  "version": "0.1.0-rc.1",
   "type": "commonjs",
   "publisher": "sqlbraid",
   "license": "Apache-2.0",
@@ -58,8 +58,8 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@sqlbraid/cli": "workspace:0.1.0-rc.0",
-    "@sqlbraid/language-server": "workspace:0.1.0-rc.0",
+    "@sqlbraid/cli": "workspace:0.1.0-rc.1",
+    "@sqlbraid/language-server": "workspace:0.1.0-rc.1",
     "vscode-languageclient": "9.0.1"
   },
   "devDependencies": {

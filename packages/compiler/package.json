@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/compiler",
-  "version": "0.1.0-rc.0",
+  "version": "0.1.0-rc.1",
   "description": "Compile SQLBraid tagged templates into typed SQL query definitions",
   "license": "Apache-2.0",
   "repository": {

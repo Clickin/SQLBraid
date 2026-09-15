@@ -17,7 +17,7 @@
     "bulk": "prepared-loop",
     "exclusions": [
       "SQLite call and routine APIs are unsupported",
-      "Bun has no node:sqlite module"
+      "Bun uses its earlier bun:sqlite API; this Node node:sqlite target does not apply to Bun"
     ],
     "requiredOptions": {},
     "driverRawRepresentations": {

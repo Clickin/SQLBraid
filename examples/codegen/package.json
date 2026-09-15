@@ -6,9 +6,9 @@
     "node": ">=22.18.0"
   },
   "dependencies": {
-    "@sqlbraid/cli": "0.1.0-rc.0",
-    "@sqlbraid/codegen": "0.1.0-rc.0",
-    "@sqlbraid/sqlite": "0.1.0-rc.0"
+    "@sqlbraid/cli": "0.1.0-rc.1",
+    "@sqlbraid/codegen": "0.1.0-rc.1",
+    "@sqlbraid/sqlite": "0.1.0-rc.1"
   },
   "devDependencies": {
     "typescript": "5.9.3",
