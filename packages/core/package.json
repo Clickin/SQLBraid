@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/core",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "Core SQLBraid types and SQL template interfaces for typed database applications",
   "license": "Apache-2.0",
   "repository": {
