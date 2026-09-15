@@ -1,6 +1,6 @@
 {
   "id": "bun-sql-mariadb",
-  "status": "compatible",
+  "status": "official",
   "database": {
     "product": "mariadb",
     "version": "11.8.9",
@@ -271,8 +271,28 @@
     }
   },
   "evidence": {
-    "status": "pending",
-    "runs": []
+    "status": "verified",
+    "commit": "5cfe3058959e8c6b458f81aa02a969b1f020cca9",
+    "runs": [
+      {
+        "workflow": ".github/workflows/runtime-portability.yml",
+        "commit": "5cfe3058959e8c6b458f81aa02a969b1f020cca9",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34957982863"
+      },
+      {
+        "workflow": ".github/workflows/docs-pages.yml",
+        "commit": "5cfe3058959e8c6b458f81aa02a969b1f020cca9",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34957982849"
+      },
+      {
+        "workflow": ".github/workflows/release.yml",
+        "commit": "5cfe3058959e8c6b458f81aa02a969b1f020cca9",
+        "status": "passed",
+        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34958050276"
+      }
+    ]
   },
   "typePolicy": {
     "id": "bun-sql-mariadb-1.3.14",
