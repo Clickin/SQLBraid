@@ -187,7 +187,7 @@
       "source": "website/src/content/docs/reference/errors.md",
       "translation": "website/src/content/docs/ko/reference/errors.md",
       "translationOf": "website/src/content/docs/reference/errors.md",
-      "sourceDigest": "e7813688a38505412aca8e651e742b918cfb83ece1028c855ef51e2e74c3b01a"
+      "sourceDigest": "dc93cab69a9b0ebda3388514c3be8642df0a6ce125644da745d0ac1cbb5017d5"
     },
     {
       "source": "website/src/content/docs/reference/packages.md",
@@ -235,7 +235,7 @@
       "source": "website/src/content/docs/runtime/observers.md",
       "translation": "website/src/content/docs/ko/runtime/observers.md",
       "translationOf": "website/src/content/docs/runtime/observers.md",
-      "sourceDigest": "56be136fb6b86818b338fa4a6ba2ca5dd6d1405765d6ce7c965cd7d35308a273"
+      "sourceDigest": "01e0b28abc55bdd813a7ac77f3aa4335f00a5bfe4096b4d58b6422b1ad30bb31"
     },
     {
       "source": "website/src/content/docs/runtime/prepared.md",
@@ -259,7 +259,7 @@
       "source": "website/src/content/docs/runtime/transactions.md",
       "translation": "website/src/content/docs/ko/runtime/transactions.md",
       "translationOf": "website/src/content/docs/runtime/transactions.md",
-      "sourceDigest": "0154c80bf8b081f282db10bc353c758affe9e0af54ea715f771ab7aa3888785c"
+      "sourceDigest": "6963f913eac26752c93f6dd5409c5f9d5af90804ae0380b2991952e4ecf8c81e"
     }
   ]
 }
