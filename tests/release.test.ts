@@ -45,7 +45,7 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   const calls: string[][] = [];
   const requests: { url: URL; method: string }[] = [];
   const behavior = { failAfterUpload: false, failBeforeUpload: false, corruptStage: false, invalidSummary: false,
-    listStatus: 200, downloadStatus: 200, provenance: true, extraTotal: 0, changeLatest: false, failPackage: "" };
+    listStatus: 200, downloadStatus: 200, provenance: true, extraTotal: 0, changeLatest: false, advanceNext: false, failPackage: "" };
   const addStage = (name = names[0]) => {
     const stage: Stage = { id: uuid(stages.length + 1), packageName: name, version, tag: version.includes("-") ? "next" : `release-${version}`, bytes: bytes.get(name)! };
     stages.push(stage);
@@ -74,6 +74,7 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
       const stage = addStage(entry.name);
       if (behavior.corruptStage) stage.bytes = Buffer.from("different archive");
       if (behavior.changeLatest) tags.get(entry.name)!.latest = version;
+      if (behavior.advanceNext) tags.get(entry.name)!.next = "0.1.0-rc.1";
       if (behavior.failAfterUpload) throw new Error("connection lost after upload");
       return behavior.invalidSummary ? "truncated JSON" : JSON.stringify({ [entry.name]: { ...summary, stageId: stage.id } });
     }
@@ -239,6 +240,10 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   other.behavior.changeLatest = true;
   await assert.rejects(other.run(), /latest tag changed/);
   assert.equal((await other.evidence()).complete, false);
+  const advanced = await fixture();
+  advanced.behavior.advanceNext = true;
+  await assert.rejects(advanced.run(), /Refusing to move .* backward/);
+  assert.equal((await advanced.evidence()).complete, false);
  });
 
  test("partial package staging preserves recoverable IDs and stable latest remains untouched", async () => {
@@ -257,8 +262,8 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   const report = await f.evidence();
   assert.equal(report.complete, true);
   assert.deepEqual(report.approvalCommands, [
-    { layer: 1, command: `pnpm stage approve ${uuid(1)}` },
-    { layer: 2, command: `pnpm stage approve ${uuid(2)}` },
+    { layer: 1, command: `pnpm stage approve ${uuid(1)} --registry https://registry.npmjs.org/` },
+    { layer: 2, command: `pnpm stage approve ${uuid(2)} --registry https://registry.npmjs.org/` },
   ]);
   assert.equal(f.uploads().length, 2);
   assert.ok(report.packages.every(({ tag }) => tag === "release-0.1.0"));

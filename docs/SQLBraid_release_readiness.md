@@ -268,7 +268,7 @@ The following are maintainer actions, **not** actions performed by certification
    dependency layer in order from a human interactive terminal, for example:
 
    ```sh
-   pnpm stage approve <stage-id> [<stage-id> ...]
+   pnpm stage approve <stage-id> [<stage-id> ...] --registry https://registry.npmjs.org/
    ```
 
    Do not collapse dependency layers, and never run approval in Actions. A

@@ -398,9 +398,18 @@ async function verifyStage(entry, id, token) {
   }
   // This endpoint returns the stored archive, not a repack. Require exact bytes;
   // an unavailable endpoint or a registry re-encoding fails closed.
-  const bytes = new Uint8Array(await (await stageGet(`-/stage/${id}/tarball`, token)).arrayBuffer());
-  if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256
-    || `sha512-${createHash("sha512").update(bytes).digest("base64")}` !== entry.integrity) {
+  const response = await stageGet(`-/stage/${id}/tarball`, token);
+  if (!response.body) throw new Error(`Missing staged tarball for ${entry.name}.`);
+  const sha256 = createHash("sha256");
+  const sha512 = createHash("sha512");
+  let size = 0;
+  for await (const bytes of response.body) {
+    size += bytes.byteLength;
+    if (size > 512 * 1024 * 1024) throw new Error("Staged tarball exceeds pnpm's 512 MiB download limit.");
+    sha256.update(bytes);
+    sha512.update(bytes);
+  }
+  if (sha256.digest("hex") !== entry.sha256 || `sha512-${sha512.digest("base64")}` !== entry.integrity) {
     throw new Error(`Staged tarball integrity mismatch for ${entry.name}@${entry.version}.`);
   }
 }
@@ -420,7 +429,7 @@ function approvalCommands(manifest, records) {
     const record = records.find(({ name }) => name === entry.name);
     if (record?.state === "staged") (layers[level] ??= []).push(assertStageId(record.stageId));
   }
-  return layers.flatMap((ids, index) => ids?.length ? [{ layer: index + 1, command: `pnpm stage approve ${ids.join(" ")}` }] : []);
+  return layers.flatMap((ids, index) => ids?.length ? [{ layer: index + 1, command: `pnpm stage approve ${ids.join(" ")} --registry ${registry}` }] : []);
 }
 
 async function persistStaging(manifest, evidence, directory) {
@@ -554,7 +563,9 @@ async function stageCandidates(manifest, { dryRun = false, directory = artifactD
       }
     }
     for (const entry of manifest.packages) {
-      assertLatestUnchanged(evidence.latestBefore[entry.name], await registryDistTags(entry.name), entry.name);
+      const tags = await registryDistTags(entry.name);
+      assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
+      assertNoTagDowngrade(entry.name, releaseTag(), tags[releaseTag()]);
     }
     evidence.complete = true;
   } finally {
