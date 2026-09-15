@@ -87,6 +87,7 @@ Oracle CLOB/NCLOB output은 문자열, BLOB output은 바이트 값이 됩니다
 | --- | --- |
 | PostgreSQL / `pg` | scalar OUT은 `CALL` output 행에서 나옵니다. refcursor OUT은 `postgresParameter.refcursor()`로 표시하세요. SQLBraid는 같은 transaction-bound portal을 fetch/close하고 이를 `output`에서 제거합니다. INOUT과 refcursor INOUT은 `BRAID_CALL_OUT_UNSUPPORTED`로 거부합니다. refcursor 호출은 기존 `db.tx(...)` 범위가 필요하며 숨은 transaction을 만들지 않습니다. |
 | MySQL / `mysql2` | emitted 이질적 SELECT result set을 지원합니다. prepared CALL OUT/INOUT은 `BRAID_CALL_OUT_UNSUPPORTED`로 거부합니다. mysql2 3.x에는 protocol의 추가 OUT carrier를 구분하는 검증된 public API가 없으므로 SQLBraid는 carrier 행을 추측하지 않습니다. Stored function은 result set을 내보낼 수 없습니다. |
+| MariaDB / Connector/Node.js | emitted 이질적 SELECT result set을 지원합니다. prepared CALL OUT/INOUT은 `BRAID_CALL_OUT_UNSUPPORTED`로 거부합니다. Connector/Node.js에는 prepared call용 OUT 파라미터 carrier를 구분하는 공개 API가 없으므로 SQLBraid는 carrier 행을 추측하지 않습니다. Stored function은 result set을 내보낼 수 없습니다. |
 | Oracle / `node-oracledb` Thin | scalar OUT/IN OUT, `SYS_REFCURSOR`/REF CURSOR output, implicit result를 `output`과 `resultSets`로 정규화합니다. lease를 반환하기 전에 모든 `ResultSet`을 닫습니다. cursor output에는 `oracleParameter.refCursor()`를 사용하세요. |
 | SQL Server / Tedious | 일반 SELECT는 emitted result set이 되고 scalar OUTPUT은 `output`이 됩니다. T-SQL integer RETURN status는 `sql.call` 계약에 `procedure: { name, parameterNames }`를 명시해야 합니다. 임의 `EXEC` 텍스트를 파싱해 procedure identity를 추측하지 않습니다. `CURSOR VARYING OUTPUT`은 애플리케이션 cursor로 노출하지 않고 `BRAID_CALL_CURSOR_UNSUPPORTED`로 거부합니다. |
 | SQLite / `node:sqlite` | `db.call()`은 지원하지 않습니다. SQLite function API로 등록한 scalar/aggregate/window function은 일반 SQL 안에서 사용하며 virtual-table/table-valued extension은 일반 `sql.rows(...)` 쿼리입니다. |
@@ -107,6 +108,6 @@ procedure metadata는 명시적인 native-driver seam이지 일반 stored-proced
 
 ## 루틴 스트리밍
 
-PV15는 materialized `db.call()`만 제공합니다. 일반 행 쿼리와 set-returning function에는 `db.stream(sql.rows(...))`를 사용하세요. 향후 routine stream은 다중 cursor 소유권과 transaction 수명을 해결해야 하므로, 현재 SQLBraid는 루틴 cursor result set을 독립적인 일반 stream인 것처럼 가장하지 않습니다.
+SQLBraid는 현재 결과가 모두 구체화(materialized)되는 `db.call()`만 제공합니다. 일반 행 쿼리와 set-returning function에는 `db.stream(sql.rows(...))`를 사용하세요. 향후 routine stream은 다중 cursor 소유권과 transaction 수명을 해결해야 하므로, 현재 SQLBraid는 루틴 cursor result set을 독립적인 일반 stream인 것처럼 가장하지 않습니다.
 
 [SQL 태그와 결과 종류](/SQLBraid/concepts/sql-tags/), [스트리밍](/SQLBraid/runtime/streaming/), [진단](/SQLBraid/reference/errors/)도 참고하세요.

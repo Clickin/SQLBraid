@@ -23,7 +23,8 @@ const users = await db.all(sql.rows<UserRow>`
 
 Application code installs the unscoped `sqlbraid` facade and imports a
 combined driver+dialect/query subpath such as `sqlbraid/pg`, `sqlbraid/mysql2`,
-`sqlbraid/node-sqlite`, or `sqlbraid/oracledb`. The facade has no implicit
+`sqlbraid/mariadb`, `sqlbraid/node-sqlite`, `sqlbraid/sqlite-wasm`,
+`sqlbraid/d1`, `sqlbraid/oracledb`, or `sqlbraid/tedious`. The facade has no implicit
 default dialect; its root exports only common runtime contracts. The granular
 `@sqlbraid/*` packages remain available for custom integrations and tooling.
 
@@ -39,7 +40,7 @@ default dialect; its root exports only common runtime contracts. The granular
 ## The core boundary
 
 - Ordinary `${value}` interpolation is always a value bind.
-- Structural SQL uses explicit helpers such as `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, and `sql.raw`.
+- Structural SQL uses explicit helpers such as `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, `sql.raw`, and `sql.empty`.
 - `@braid` directives (`if`, `choose`, `when`, `otherwise`, `where`, `set`, `trim`) are lowered by the compiler; inactive branches stay lazy.
 - The renderer produces one immutable logical `RenderedStatement`: `segments.length === parameters.length + 1`. A rendered parameter is never SQL, an identifier, a nested query, or a driver fragment.
 - The selected adapter owns placeholder materialization. `$1`, `?`, `:1`, `@p1`, and native value-template syntax are transport details, not logical shape identity.
@@ -103,6 +104,7 @@ await db.maybeOne(rows, options?);
 await db.call(call, options?);
 await db.batch(queries, options?);
 await db.bulk(inputs, factory, options?);
+await db.environment(options?);
 db.stream(rows, options?);
 await db.session(callback);
 await db.tx(callback);
@@ -207,6 +209,7 @@ SQLBraid is not an ORM, query-builder-first language, complete SQL parser, unive
 | `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/wasm`, `/d1`; `/inspector` |
 | `@sqlbraid/oracle` | Oracle portable dialect/TypePolicy; `/oracledb`; `/inspector` |
 | `@sqlbraid/mssql` | SQL Server portable dialect/TypePolicy; `/tedious`; `/inspector` |
+| `@sqlbraid/bun-sql` | Bun.SQL multi-dialect driver adapter; requires user-selected dialect |
 | `@sqlbraid/compiler` | Guarded-template lowering and source maps |
 | `@sqlbraid/vite` | Vite pre-transform |
 | `@sqlbraid/metadata` | Database-fact snapshots, validation, hashing, drift |

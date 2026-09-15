@@ -4,7 +4,7 @@ description: SQL을 작성하고 TypeScript를 유지하세요. 쿼리 빌더 �
 template: splash
 hero:
   title: SQL을 작성하고 TypeScript를 유지하세요.
-  tagline: SQLBraid는 PostgreSQL, MySQL, SQLite, Oracle, SQL Server를 위한 안전한 바인드, 읽기 쉬운 동적 SQL, 명시적 결과 계약, 소형 런타임을 제공합니다.
+  tagline: SQLBraid는 PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server 및 브라우저 WASM, D1을 위한 안전한 바인딩, 읽기 쉬운 동적 SQL, 명시적 결과 계약, 소형 런타임을 제공합니다.
   actions:
     - text: 시작하기
       link: /SQLBraid/getting-started/sqlite/
@@ -23,7 +23,7 @@ SQLBraid는 SQL 우선 TypeScript 데이터 액세스 도구입니다. 쿼리 �
 - **도구는 선택 사항입니다.** 메타데이터, 결정적 코드 생성, LSP, CLI 검사, VS Code 지원은 런타임 의존성 경로에 들어오지 않습니다.
 
 :::tip SQLite로 시작하기
-외부 서버 없이 실행되는 [5분 SQLite 빠른 시작](/SQLBraid/getting-started/sqlite/)으로 시작하세요. 서비스 데이터베이스가 필요해지면 [PostgreSQL](/SQLBraid/getting-started/postgres/) 또는 [MySQL](/SQLBraid/getting-started/mysql/)로 이동하세요.
+외부 서버 없이 실행되는 [5분 SQLite 빠른 시작](/SQLBraid/getting-started/sqlite/)으로 시작하세요. 브라우저 및 Worker 환경은 [SQLite WASM과 D1](/SQLBraid/getting-started/sqlite-browser/)을 참고하세요. 서비스 데이터베이스가 필요하면 [PostgreSQL](/SQLBraid/getting-started/postgres/), [MySQL](/SQLBraid/getting-started/mysql/), 또는 [MariaDB](/SQLBraid/getting-started/mariadb/)로 이동하세요.
 :::
 
 ## SQLBraid가 아닌 것

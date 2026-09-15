@@ -13,7 +13,7 @@ Use the `tx` callback handle for every operation inside `db.tx`. Do not call the
 
 ## Pool operations use the wrong connection
 
-Do not pass a pool to a direct adapter factory. Use `createPgPoolDatabase` or `createMysql2PoolDatabase`; use `db.tx` when multiple statements must share one physical connection.
+Do not pass a pool to a direct adapter factory. Use `createPgPoolDatabase`, `createMysql2PoolDatabase`, or `createMariaDbPoolDatabase`; use `db.tx` when multiple statements must share one physical connection.
 
 ## `sql.list([])` fails
 

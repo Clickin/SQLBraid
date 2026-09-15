@@ -22,7 +22,7 @@ const db = createPgPoolDatabase(pool, {
 });
 ```
 
-이벤트에는 `query:ready`, `query:result`, `query:mapped`, `query:error`, `stream:start`, `stream:end`, `transaction`이 있습니다. `query:ready`는 렌더링과 순수한 바인딩 설명이 끝났지만 lease를 얻기 전 발생합니다. 다음 불변 실행 계획을 포함합니다.
+이벤트에는 `query:ready`, `query:result`, `query:mapped`, `query:error`, `bulk:ready`, `bulk:result`, `stream:start`, `stream:end`, `transaction`이 있습니다. `query:ready`는 렌더링과 순수한 바인딩 설명이 끝났지만 lease를 얻기 전 발생합니다. 다음 불변 실행 계획을 포함합니다.
 
 ```ts
 const {

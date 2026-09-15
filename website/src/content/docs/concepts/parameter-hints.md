@@ -64,15 +64,15 @@ or `@p1` spelling is not part of the shape.
 
 ## Adapter support
 
-The PostgreSQL, MySQL, and SQLite adapters explicitly reject ordinary
+The PostgreSQL, MySQL, MariaDB, and SQLite adapters explicitly reject ordinary
 parameter hints with `BRAID_BIND_HINT_UNSUPPORTED`; they do not silently ignore
 one. PostgreSQL's routine-only `postgresParameter.refcursor()` is the narrow
 exception that classifies an OUT/INOUT portal. Use ordinary unhinted binds for
 all other parameters until an adapter with the required type API is available.
 
 Oracle and SQL Server portable roots expose the hint descriptors. Their Node
-adapters perform adapter-specific capability checks; PV15 final evidence is
-pending in [runtime and driver support](/SQLBraid/reference/support/). Oracle
+adapters perform adapter-specific capability checks. Consult [runtime and driver
+support](/SQLBraid/reference/support/) for verified driver capabilities. Oracle
 rejects IN length/precision/scale facets because node-oracledb cannot apply
 them. Neither adapter silently ignores unsupported facets.
 

@@ -42,7 +42,7 @@ transaction이 되지 않고 portable auto-chunking 약속이 없습니다. 원�
 필요하면 `db.tx()`를 사용하세요.
 
 MariaDB에서 `mysql2` connection이 동작할 수 있지만 best-effort 호환일 뿐
-MariaDB protocol 증거가 아닙니다. 문서화된 후보 프로필은 MariaDB 11.8.9 /
+MariaDB protocol 증거가 아닙니다. 공식 인증 프로필은 MariaDB 11.8.9 /
 Connector 3.5.4 / Node 22.18.0입니다. 이 프로필의 지원 label과 증거는
 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가 기록한 정확한
 database, driver, profile, runtime, capability tuple과 revision별 실행

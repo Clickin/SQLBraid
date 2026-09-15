@@ -105,6 +105,7 @@ export default defineConfig({
           { label: "Browser SQLite and D1", translations: { ko: "브라우저 SQLite와 D1" }, link: "/getting-started/sqlite-browser/" },
           { label: "Oracle", link: "/getting-started/oracle/" },
           { label: "SQL Server", link: "/getting-started/mssql/" },
+          { label: "Vite", translations: { ko: "Vite" }, link: "/getting-started/vite/" },
         ] },
         { label: "Core concepts", translations: { ko: "핵심 개념" }, items: [
           { label: "SQL tags and result kinds", translations: { ko: "SQL 태그와 결과 종류" }, link: "/concepts/sql-tags/" },
@@ -112,6 +113,7 @@ export default defineConfig({
           { label: "Parameter type hints", translations: { ko: "매개변수 타입 힌트" }, link: "/concepts/parameter-hints/" },
           { label: "Dynamic @braid", translations: { ko: "동적 @braid" }, link: "/concepts/dynamic-braid/" },
           { label: "Structural SQL fragments", translations: { ko: "구조적 SQL 조각" }, link: "/concepts/structural-fragments/" },
+          { label: "Routine calls", translations: { ko: "루틴 호출" }, link: "/concepts/routines/" },
           { label: "Homogeneous bulk DML", translations: { ko: "동종 bulk DML" }, link: "/concepts/bulk/" },
           { label: "Data representations", translations: { ko: "데이터 표현" }, link: "/concepts/data-representation/" },
           { label: "Standard Schema mapping", translations: { ko: "Standard Schema 매핑" }, link: "/concepts/result-mapping/" },
@@ -136,6 +138,7 @@ export default defineConfig({
           { label: "CLI inspect fallback", translations: { ko: "CLI inspect 대안" }, link: "/agents/cli/" },
           { label: "Portable skill", translations: { ko: "이식 가능한 스킬" }, link: "/agents/skill/" },
           { label: "VS Code extension", translations: { ko: "VS Code 확장" }, link: "/agents/vscode/" },
+          { label: "Driver authoring", translations: { ko: "드라이버 작성 가이드" }, link: "/agents/driver-author/" },
         ] },
         { label: "Reference", translations: { ko: "레퍼런스" }, items: [
           { label: "Package map", translations: { ko: "패키지 구성" }, link: "/reference/packages/" },

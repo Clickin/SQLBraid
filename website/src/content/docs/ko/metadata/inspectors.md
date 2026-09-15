@@ -22,7 +22,14 @@ validateSnapshot(metadata);
 console.log(hashSnapshot(metadata));
 ```
 
-다른 첫 번째 파티 dialect에는 `@sqlbraid/mysql/inspector`의 `createMysqlInspector` 또는 `@sqlbraid/sqlite/inspector`의 `createSqliteInspector`를 사용하세요. Inspector subpath는 의도적으로 dialect 루트와 분리되어 있습니다.
+모든 퍼스트 파티 dialect는 `/inspector` 서브패스에서 전용 inspector를 내보냅니다:
+`createPostgresInspector` (`@sqlbraid/postgres/inspector`),
+`createMysqlInspector` (`@sqlbraid/mysql/inspector`),
+`createMariaDbInspector` (`@sqlbraid/mariadb/inspector`),
+`createSqliteInspector` (`@sqlbraid/sqlite/inspector`),
+`createOracleInspector` (`@sqlbraid/oracle/inspector`),
+`createMssqlInspector` (`@sqlbraid/mssql/inspector`).
+Inspector 서브패스는 dialect 루트와 의도적으로 분리되어 있습니다.
 
 스냅샷은 다음 형식을 사용합니다.
 

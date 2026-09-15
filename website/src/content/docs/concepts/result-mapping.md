@@ -10,7 +10,7 @@ import * as v from "valibot";
 import { sql } from "sqlbraid/postgres";
 
 const EventSchema = v.object({
-  id: v.number(),
+  id: v.pipe(v.string(), v.transform(Number)),
   payload: v.string(),
 });
 

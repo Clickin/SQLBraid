@@ -24,6 +24,7 @@ const db = createNodeSqliteDatabase(native);
 ```ts
 const pgDb = createPgPoolDatabase(pgPool);
 const mysqlDb = createMysql2PoolDatabase(mysqlPool);
+const mariadbDb = createMariaDbPoolDatabase(mariadbPool);
 const customDb = createPooledDatabase(connectionProvider);
 ```
 
@@ -49,5 +50,5 @@ driver capability이며, 없으면 I/O 전에 `UnsupportedFeatureError` /
 `BRAID_TX_OPTIONS_NESTED`를 사용합니다.
 
 :::caution 팩토리 경계
-`pg.Pool`을 `createPgDatabase`에 전달하거나 mysql2 풀을 `createMysql2Database`에 전달하는 것은 지원되지 않습니다. `createPgPoolDatabase` 또는 `createMysql2PoolDatabase`를 사용하세요.
+`pg.Pool`을 `createPgDatabase`에 전달하거나, mysql2 풀을 `createMysql2Database`에 전달하거나, mariadb 풀을 `createMariaDbDatabase`에 전달하는 것은 지원되지 않습니다. `createPgPoolDatabase`, `createMysql2PoolDatabase`, 또는 `createMariaDbPoolDatabase`를 사용하세요.
 :::

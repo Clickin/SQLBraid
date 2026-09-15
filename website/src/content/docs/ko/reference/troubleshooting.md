@@ -13,7 +13,7 @@ SQL 텍스트는 실행되었지만 선언한 태그가 어댑터의 실제 행/
 
 ## 풀이 잘못된 연결을 사용함
 
-직접 어댑터 팩토리에 풀을 전달하지 마세요. `createPgPoolDatabase` 또는 `createMysql2PoolDatabase`를 사용하고, 여러 문장이 하나의 물리적 연결을 공유해야 할 때는 `db.tx`를 사용하세요.
+직접 어댑터 팩토리에 풀을 전달하지 마세요. `createPgPoolDatabase`, `createMysql2PoolDatabase`, 또는 `createMariaDbPoolDatabase`를 사용하고, 여러 문장이 하나의 물리적 연결을 공유해야 할 때는 `db.tx`를 사용하세요.
 
 ## `sql.list([])` 실패
 

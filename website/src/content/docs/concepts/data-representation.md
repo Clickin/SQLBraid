@@ -100,12 +100,10 @@ for an approximate type.
 
 ## Driver profiles
 
-The following is the current PV18 contract. The [support
-matrix](/SQLBraid/reference/support/) remains the evidence source for each exact
-database/runtime revision. Targets affected by the current API work remain
-Pending or Compatible until fresh exact-SHA gates pass. A profile is the
-complete driver configuration that changes result JavaScript types, not a
-convenient label attached after the fact.
+The following is the SQLBraid representation contract. The [support
+matrix](/SQLBraid/reference/support/) remains the evidence authority for each exact
+database and runtime revision. A profile is the complete driver configuration that
+determines result JavaScript types, not a cosmetic label attached after the fact.
 
 The first-party profile helpers keep runtime and codegen on the same contract:
 

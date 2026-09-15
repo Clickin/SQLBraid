@@ -22,7 +22,7 @@ const db = createPgPoolDatabase(pool, {
 });
 ```
 
-Events include `query:ready`, `query:result`, `query:mapped`, `query:error`, `stream:start`, `stream:end`, and `transaction`. `query:ready` is emitted after rendering and pure binding description but before lease acquisition. It carries an immutable effective execution plan:
+Events include `query:ready`, `query:result`, `query:mapped`, `query:error`, `bulk:ready`, `bulk:result`, `stream:start`, `stream:end`, and `transaction`. `query:ready` is emitted after rendering and pure binding description but before lease acquisition. It carries an immutable effective execution plan:
 
 ```ts
 const {

@@ -3,7 +3,7 @@ title: Browser SQLite and D1
 description: Use the SQLite WASM and Cloudflare D1 adapters without inventing a browser pool or cursor.
 ---
 
-PV18 keeps SQLite as one dialect while separating the execution driver and
+SQLBraid keeps SQLite as one dialect while separating the execution driver and
 runtime. Browser code uses SQLite WASM; a Worker binding uses Cloudflare D1.
 Neither path changes the SQLBraid query contract.
 

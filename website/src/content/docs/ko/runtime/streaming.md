@@ -62,7 +62,7 @@ cancellation이 아닙니다.
 포함되지 않으므로 정규화되고 닫힌 이질적 result set에는 `db.call()`을
 사용하세요.
 
-DML `RETURNING`/`OUTPUT`은 materialized입니다. Authored returning 문법이
-streamable하다고 추론하지 말고 역사 workflow link로 현재 지원을 주장하지
-마세요. 새로운 exact-SHA Runtime, Docs, Release 증거가 생길 때까지 현재
-support matrix target은 pending/compatible입니다.
+DML `RETURNING`/`OUTPUT` 결과는 버퍼링되어 구체화(materialized)됩니다. 작성된
+returning 구문이 드라이버 전반에서 스트리밍 가능하다고 가정하지 마세요.
+검증된 드라이버별 세부 기능은 [지원 매트릭스](/SQLBraid/reference/support/)를
+참고하세요.

@@ -42,7 +42,7 @@ not implicitly transactional and has no portable auto-chunking promise. Use
 `db.tx()` when callback transaction atomicity is required.
 
 A `mysql2` connection may work against MariaDB as best-effort compatibility, but
-it is not MariaDB protocol evidence. The documented candidate profile is MariaDB
+it is not MariaDB protocol evidence. The official certified profile is MariaDB
 11.8.9 / Connector 3.5.4 / Node 22.18.0. The [runtime and driver support
 matrix](/SQLBraid/reference/support/) records labels for the exact
 database/driver/profile/runtime/capability tuple and its revision and workflow

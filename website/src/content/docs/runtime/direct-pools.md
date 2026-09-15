@@ -24,6 +24,7 @@ Use an explicit pool factory:
 ```ts
 const pgDb = createPgPoolDatabase(pgPool);
 const mysqlDb = createMysql2PoolDatabase(mysqlPool);
+const mariadbDb = createMariaDbPoolDatabase(mariadbPool);
 const customDb = createPooledDatabase(connectionProvider);
 ```
 
@@ -50,5 +51,5 @@ validated before acquisition: malformed values use `TypeError` /
 `BRAID_TX_OPTIONS_NESTED`.
 
 :::caution Factory boundary
-Passing `pg.Pool` to `createPgDatabase` or a mysql2 pool to `createMysql2Database` is unsupported. Use `createPgPoolDatabase` or `createMysql2PoolDatabase`.
+Passing `pg.Pool` to `createPgDatabase`, a mysql2 pool to `createMysql2Database`, or a mariadb pool to `createMariaDbDatabase` is unsupported. Use `createPgPoolDatabase`, `createMysql2PoolDatabase`, or `createMariaDbPoolDatabase`.
 :::

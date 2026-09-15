@@ -16,6 +16,8 @@ const update = sql.command`
 `;
 const routine = sql.call({
   resultSets: [RefreshSchema] as const,
+})`
+  CALL refresh_users()
 `;
 ```
 

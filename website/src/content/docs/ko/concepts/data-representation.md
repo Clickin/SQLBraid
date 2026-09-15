@@ -98,11 +98,9 @@ DB가 `NaN`, infinity, 음의 0을 정규화하는지 기록합니다. codegen �
 
 ## 드라이버 프로필
 
-아래는 현재 PV18 계약입니다. [지원 매트릭스](/SQLBraid/reference/support/)가
-각 정확한 DB/runtime revision의 증거를 소유합니다. 현재 API 변경의 영향을
-받은 target은 새로운 exact-SHA gate가 통과할 때까지 Pending 또는 Compatible입니다.
-프로필은 결과 JavaScript 타입을 바꾸는 전체 드라이버 설정이며 사후에 붙이는
-설명용 label이 아닙니다.
+아래는 SQLBraid의 데이터 표현 계약입니다. [지원 매트릭스](/SQLBraid/reference/support/)가
+각 데이터베이스 및 런타임의 인증 기준입니다. 드라이버 프로필은 결과 JavaScript 타입을
+결정하는 완전한 드라이버 설정이며, 사후에 붙이는 단순 설명용 라벨이 아닙니다.
 
 첫 번째 파티 프로필 helper는 runtime과 codegen이 같은 계약을 사용하게 합니다.
 

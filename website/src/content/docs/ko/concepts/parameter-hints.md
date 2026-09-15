@@ -63,16 +63,16 @@ Prepared query의 shape는 결과 종류, 정규화된 논리 `segments`, 순서
 
 ## 어댑터 지원
 
-PostgreSQL, MySQL, SQLite 어댑터는 일반 파라미터 힌트를
+PostgreSQL, MySQL, MariaDB, SQLite 어댑터는 일반 파라미터 힌트를
 `BRAID_BIND_HINT_UNSUPPORTED`로 명시적으로 거부하며 힌트를 조용히 무시하지
 않습니다. PostgreSQL의 루틴 전용 `postgresParameter.refcursor()`는
 OUT/INOUT portal을 분류하는 좁은 예외입니다. 그 외에는 필요한 타입 API가
 있는 어댑터가 준비될 때까지 힌트 없는 바인드를 사용하세요.
 
 Oracle 및 SQL Server portable root는 힌트 디스크립터를 내보냅니다. 두 Node
-어댑터는 어댑터별 capability 검사를 수행하며 PV15 최종 증거는 [런타임 및
-드라이버 지원](/SQLBraid/reference/support/)에서 대기 중입니다. Oracle은
-node-oracledb가 적용할 수 없는 IN 길이·precision·scale 속성을 거부합니다.
+어댑터는 지원되는 타입 매핑을 엄격히 검사합니다. 검증된 드라이버별 기능은
+[런타임 및 드라이버 지원](/SQLBraid/reference/support/)에서 확인할 수 있습니다.
+Oracle은 node-oracledb가 적용할 수 없는 IN 길이·precision·scale 속성을 거부합니다.
 두 어댑터 모두 지원하지 않는 속성을 조용히 무시하지 않습니다.
 
 ## 루틴 방향

@@ -22,7 +22,13 @@ validateSnapshot(metadata);
 console.log(hashSnapshot(metadata));
 ```
 
-Use `createMysqlInspector` from `@sqlbraid/mysql/inspector` or `createSqliteInspector` from `@sqlbraid/sqlite/inspector` for the other first-party dialects. Inspector subpaths are intentionally separate from dialect roots.
+All first-party dialects export dedicated inspectors from their `/inspector` subpaths:
+`createPostgresInspector` (`@sqlbraid/postgres/inspector`),
+`createMysqlInspector` (`@sqlbraid/mysql/inspector`),
+`createMariaDbInspector` (`@sqlbraid/mariadb/inspector`),
+`createSqliteInspector` (`@sqlbraid/sqlite/inspector`),
+`createOracleInspector` (`@sqlbraid/oracle/inspector`), and
+`createMssqlInspector` (`@sqlbraid/mssql/inspector`). Inspector subpaths are intentionally separate from dialect roots.
 
 Snapshots use:
 

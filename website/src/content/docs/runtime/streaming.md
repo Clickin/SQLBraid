@@ -62,6 +62,5 @@ materialized routine contract; use `db.call()` for normalized, closed,
 heterogeneous result sets.
 
 DML `RETURNING`/`OUTPUT` remains materialized. Do not infer that authored
-returning syntax is streamable, and do not claim current support from historical
-workflow links. The current support matrix records pending/compatible targets
-until fresh exact-SHA runtime, docs, and release evidence exists.
+returning syntax is streamable across drivers. See the [support
+matrix](/SQLBraid/reference/support/) for verified driver capabilities.

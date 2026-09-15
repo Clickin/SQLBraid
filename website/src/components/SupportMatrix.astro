@@ -34,7 +34,7 @@ const fallbackRows = data.targets.map((target) => ({ target }));
   <support-matrix aria-label={locale === "ko" ? "지원 매트릭스" : "Support matrix"}></support-matrix>
   <script type="application/json" data-support-matrix set:html={serialized}></script>
   <table class="support-matrix__fallback">
-    <caption>{locale === "ko" ? "PV18 지원 대상 (정적/인쇄용 요약)" : "PV18 support targets (static/print summary)"}</caption>
+    <caption>{locale === "ko" ? "SQLBraid 지원 대상 (정적/인쇄용 요약)" : "SQLBraid support targets (static/print summary)"}</caption>
     <thead>
       <tr>
         <th scope="col">{locale === "ko" ? "대상" : "Target"}</th>

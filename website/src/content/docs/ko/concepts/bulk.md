@@ -62,7 +62,4 @@ semantics를 제공하더라도 선택한 어댑터 문서 밖에서 의존하�
 | Oracle Thin | `native-bulk` | `executeMany()` 1회 |
 | SQL Server / Tedious | `prepared-loop` | prepare/unprepare 1회씩, execute N회 |
 
-현재 구현은 새로운 exact-SHA Runtime, Docs, Release gate를 기다리는
-pending입니다. Revision별 profile과 capability 조건은 [런타임 및 드라이버
-지원](/SQLBraid/reference/support/)에서 확인하세요. 역사 workflow link는
-현재 tree를 인증하지 않습니다.
+각 데이터베이스 및 드라이버별 상세 프로필과 기능 조건은 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)을 참고하세요.

@@ -63,7 +63,4 @@ selected adapter's documentation.
 | Oracle Thin | `native-bulk` | one `executeMany()` call |
 | SQL Server / Tedious | `prepared-loop` | one prepare/unprepare around N executes |
 
-The current implementation is pending fresh exact-SHA Runtime, Docs, and
-Release gates. See [Runtime and driver
-support](/SQLBraid/reference/support/) for revision-specific profile and
-capability conditions; historical workflow links do not certify this tree.
+See [Runtime and driver support](/SQLBraid/reference/support/) for revision-specific profile and capability conditions.
