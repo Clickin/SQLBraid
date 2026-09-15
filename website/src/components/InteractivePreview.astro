@@ -2,65 +2,67 @@
   <div class="preview-heading">
     <div>
       <p class="preview-kicker">Live browser preview</p>
-      <h2>Real SQLBraid + SQLite WASM</h2>
+      <h2>Write SQL against real SQLite WASM</h2>
       <p>
-        The query runs in a Web Worker against an in-memory SQLite database. There is no
-        demo executor, persistence requirement, or server connection.
+        Edit the SQL below and run it in a disposable in-memory database. Queries and
+        commands execute in a Web Worker; nothing is sent to a server or saved.
       </p>
     </div>
     <span class="preview-badge">worker · :memory:</span>
   </div>
 
-  <div class="preview-controls" aria-label="Preview filters">
-    <label>
-      <span>Korean accounts only</span>
-      <input type="checkbox" data-preview-korean data-testid="preview-korean" checked />
-    </label>
-    <label>
-      <span>Minimum balance (₩)</span>
-      <input type="number" min="0" step="100000" value="1000000" data-preview-minimum data-testid="preview-minimum" />
-    </label>
-    <button type="button" data-preview-run data-testid="preview-run">Run query</button>
+  <div class="preview-editor">
+    <label for="preview-sql">SQL statement</label>
+    <textarea id="preview-sql" data-preview-sql data-testid="preview-sql" rows="10" spellcheck="false">SELECT
+  account_id,
+  account_name,
+  balance,
+  currency,
+  locale
+FROM finance_accounts
+ORDER BY account_id;</textarea>
+  </div>
+
+  <div class="preview-controls" aria-label="SQL preview controls">
+    <button type="button" data-preview-run data-testid="preview-run">Run SQL</button>
+    <button type="button" class="preview-secondary" data-preview-reset data-testid="preview-reset">
+      Reset seeded database
+    </button>
+    <button type="button" class="preview-secondary" data-preview-schema data-testid="preview-schema">
+      Inspect schema
+    </button>
     <button type="button" data-browser-ownership-run data-testid="browser-ownership-run" hidden>
       Run browser ownership conformance
     </button>
   </div>
 
-  <p class="preview-status" data-preview-status data-testid="preview-status" aria-live="polite">Ready to run.</p>
-  <p class="preview-error" data-preview-error data-testid="preview-error" hidden></p>
+  <p class="preview-status" data-preview-status data-testid="preview-status" aria-live="polite">
+    Ready. Edit the SQL and run it.
+  </p>
+  <p class="preview-error" data-preview-error data-testid="preview-error" role="alert" hidden></p>
   <p data-browser-ownership-status data-testid="browser-ownership-status" hidden></p>
 
   <div class="preview-grid">
     <div>
-      <h3>TypeScript / SQL source</h3>
-      <pre data-preview-source data-testid="preview-source"><code>const accounts = sql.rows(financeSchema)`
-  SELECT account_id AS accountId,
-         account_name AS accountName,
-         balance,
-         currency,
-         locale
-  FROM finance_accounts
-  /*@braid where*/
-    /*@braid if $&#123;koreanOnly&#125;*/
-      AND locale = $&#123;"ko-KR"&#125;
-    /*@braid end*/
-    /*@braid if $&#123;minimumBalance &gt; 0&#125;*/
-      AND balance &gt;= $&#123;minimumBalance&#125;
-    /*@braid end*/
-  /*@braid end*/
-  ORDER BY account_id
-`;</code></pre>
-    </div>
-    <div>
-      <h3>Rendered SQL</h3>
-      <pre data-preview-rendered data-testid="preview-rendered"><code>Run the preview to render this statement.</code></pre>
-      <h3>Bind values</h3>
-      <pre data-preview-binds data-testid="preview-binds"><code>[]</code></pre>
+      <h3>Executed SQL</h3>
+      <pre data-preview-rendered data-testid="preview-rendered"><code>Run SQL to show the statement sent to SQLite.</code></pre>
     </div>
   </div>
 
+  <details class="preview-schema" open>
+    <summary>Database schema</summary>
+    <pre data-preview-schema-output data-testid="preview-schema-output"><code>finance_accounts (
+  account_id INTEGER PRIMARY KEY,
+  account_name TEXT NOT NULL,
+  balance INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  locale TEXT NOT NULL
+)</code></pre>
+  </details>
+
   <div class="preview-results">
-    <h3>Standard Schema transformed rows</h3>
+    <h3>Query results</h3>
+    <p class="preview-command" data-preview-command data-testid="preview-command" hidden></p>
     <div class="preview-table-wrap">
       <table data-preview-table data-testid="preview-table">
         <thead></thead>
@@ -77,10 +79,18 @@
 
   interface PreviewSuccess {
     readonly type: "success";
-    readonly source: string;
-    readonly renderedSql: string;
-    readonly binds: readonly unknown[];
+    readonly sql: string;
+    readonly kind: "rows" | "command";
+    readonly columns: readonly string[];
     readonly rows: readonly PreviewRow[];
+    readonly rowCount: number;
+    readonly truncated?: boolean;
+    readonly affectedRows?: number;
+  }
+
+  interface PreviewSchemaSuccess {
+    readonly type: "schema";
+    readonly tables: readonly { readonly type: string; readonly name: string; readonly sql: string }[];
   }
 
   interface PreviewFailure {
@@ -89,43 +99,68 @@
     readonly message: string;
   }
 
+  type PreviewResponse = PreviewSuccess | PreviewSchemaSuccess | PreviewFailure;
+
   const roots = document.querySelectorAll<HTMLElement>("[data-sqlbraid-preview]");
   for (const root of roots) {
-    const worker = new Worker(new URL("../workers/preview.worker.ts", import.meta.url), { type: "module" });
+    const createPreviewWorker = (): Worker =>
+      new Worker(new URL("../workers/preview.worker.ts", import.meta.url), { type: "module" });
+    let worker = createPreviewWorker();
     const ownershipWorker = new Worker(new URL("../workers/runtime-ownership.worker.ts", import.meta.url), { type: "module" });
-    const korean = root.querySelector<HTMLInputElement>("[data-preview-korean]");
-    const minimum = root.querySelector<HTMLInputElement>("[data-preview-minimum]");
+    const sqlInput = root.querySelector<HTMLTextAreaElement>("[data-preview-sql]");
     const runButton = root.querySelector<HTMLButtonElement>("[data-preview-run]");
+    const resetButton = root.querySelector<HTMLButtonElement>("[data-preview-reset]");
+    const schemaButton = root.querySelector<HTMLButtonElement>("[data-preview-schema]");
     const status = root.querySelector<HTMLElement>("[data-preview-status]");
     const error = root.querySelector<HTMLElement>("[data-preview-error]");
-    const source = root.querySelector<HTMLElement>("[data-preview-source] code");
     const rendered = root.querySelector<HTMLElement>("[data-preview-rendered] code");
-    const binds = root.querySelector<HTMLElement>("[data-preview-binds] code");
+    const schemaOutput = root.querySelector<HTMLElement>("[data-preview-schema-output] code");
+    const command = root.querySelector<HTMLElement>("[data-preview-command]");
     const table = root.querySelector<HTMLTableElement>("[data-preview-table]");
     const ownershipRun = root.querySelector<HTMLButtonElement>("[data-browser-ownership-run]");
     const ownershipStatus = root.querySelector<HTMLElement>("[data-browser-ownership-status]");
-    if (!korean || !minimum || !runButton || !status || !error || !source || !rendered || !binds || !table || !ownershipRun || !ownershipStatus) {
+    if (!sqlInput || !runButton || !resetButton || !schemaButton || !status || !error || !rendered
+      || !schemaOutput || !command || !table || !ownershipRun || !ownershipStatus) {
       worker.terminate();
       ownershipWorker.terminate();
       continue;
     }
 
-    const renderRows = (rows: readonly PreviewRow[]): void => {
-      const columns = ["accountId", "accountName", "balance", "currency", "locale", "balanceLabel"];
+    let timeoutId: number | undefined;
+    const clearTimeout = (): void => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      timeoutId = undefined;
+    };
+    const setBusy = (value: boolean): void => {
+      runButton.disabled = value;
+      schemaButton.disabled = value;
+    };
+    const seededSchema = schemaOutput.textContent;
+    const clearResults = (): void => {
+      table.tHead?.replaceChildren();
+      table.tBodies[0]?.replaceChildren();
+      rendered.textContent = "No completed statement.";
+      command.hidden = true;
+    };
+
+    const renderRows = (rows: readonly PreviewRow[], columns: readonly string[]): void => {
+      const visibleColumns = columns.length > 0 ? columns : Object.keys(rows[0] ?? {});
       const head = table.tHead ?? table.createTHead();
       head.replaceChildren();
-      const headerRow = head.insertRow();
-      for (const column of columns) {
-        const cell = document.createElement("th");
-        cell.scope = "col";
-        cell.textContent = column;
-        headerRow.append(cell);
+      if (visibleColumns.length > 0) {
+        const headerRow = head.insertRow();
+        for (const column of visibleColumns) {
+          const cell = document.createElement("th");
+          cell.scope = "col";
+          cell.textContent = column;
+          headerRow.append(cell);
+        }
       }
       const body = table.tBodies[0] ?? table.createTBody();
       body.replaceChildren();
       for (const row of rows) {
         const tableRow = body.insertRow();
-        for (const column of columns) {
+        for (const column of visibleColumns) {
           const cell = tableRow.insertCell();
           cell.textContent = String(row[column] ?? "");
         }
@@ -133,34 +168,58 @@
       if (rows.length === 0) {
         const tableRow = body.insertRow();
         const cell = tableRow.insertCell();
-        cell.colSpan = columns.length;
-        cell.textContent = "No matching accounts.";
+        cell.colSpan = Math.max(visibleColumns.length, 1);
+        cell.textContent = "No rows returned.";
       }
     };
 
-    worker.addEventListener("message", (event: MessageEvent<PreviewSuccess | PreviewFailure>) => {
-      runButton.disabled = false;
-      if (event.data.type === "error") {
-        status.textContent = `Error (${event.data.code})`;
+    const handleWorkerMessage = (event: MessageEvent<PreviewResponse>): void => {
+      clearTimeout();
+      setBusy(false);
+      const response = event.data;
+      if (response.type === "error") {
+        status.textContent = `SQL error (${response.code}).`;
         error.hidden = false;
-        error.textContent = event.data.message;
+        error.textContent = response.message;
         return;
       }
-      status.textContent = `${event.data.rows.length} account${event.data.rows.length === 1 ? "" : "s"} returned.`;
       error.hidden = true;
       error.textContent = "";
-      source.textContent = event.data.source;
-      rendered.textContent = event.data.renderedSql;
-      binds.textContent = JSON.stringify(event.data.binds, null, 2);
-      renderRows(event.data.rows);
-    });
+      if (response.type === "schema") {
+        status.textContent = "Schema loaded.";
+        schemaOutput.textContent = JSON.stringify(response.tables, null, 2);
+        const details = schemaOutput.closest("details");
+        if (details) details.open = true;
+        return;
+      }
+      status.textContent = response.kind === "rows"
+        ? `${response.rowCount} row${response.rowCount === 1 ? "" : "s"} returned${response.truncated ? " (showing the first 1,000)." : "."}`
+        : `Command completed${response.affectedRows === undefined ? "." : ` (${response.affectedRows} row${response.affectedRows === 1 ? "" : "s"} affected).`}`;
+      rendered.textContent = response.sql;
+      command.hidden = response.kind !== "command";
+      command.textContent = response.kind === "command" ? "This statement changed the disposable database." : "";
+      renderRows(response.rows, response.columns);
+    };
 
-    worker.addEventListener("error", (event) => {
-      runButton.disabled = false;
-      status.textContent = "Worker failed.";
-      error.hidden = false;
-      error.textContent = event.message || "The preview worker could not be loaded.";
-    });
+    const attachWorker = (current: Worker): void => {
+      current.addEventListener("message", handleWorkerMessage);
+      current.addEventListener("error", (event) => {
+        clearTimeout();
+        setBusy(false);
+        status.textContent = "Worker failed.";
+        error.hidden = false;
+        error.textContent = event.message || "The preview worker could not be loaded.";
+      });
+    };
+    const restartWorker = (): void => {
+      worker.terminate();
+      worker = createPreviewWorker();
+      attachWorker(worker);
+      clearResults();
+      schemaOutput.textContent = seededSchema;
+    };
+
+    attachWorker(worker);
 
     ownershipWorker.addEventListener("message", (event: MessageEvent<{ readonly type: "success"; readonly checks: readonly string[] } | { readonly type: "error"; readonly code: string; readonly message: string }>) => {
       if (event.data.type === "error") {
@@ -180,16 +239,45 @@
       ownershipStatus.textContent = `Browser ownership worker failed: ${event.message || "unknown error"}`;
     });
 
+    const startTimeout = (): void => {
+      clearTimeout();
+      timeoutId = window.setTimeout(() => {
+        clearTimeout();
+        restartWorker();
+        setBusy(false);
+        status.textContent = "Query timed out; worker restarted and database reset to seeded data.";
+        error.hidden = false;
+        error.textContent = "The SQL worker exceeded the 10-second preview limit.";
+      }, 10_000);
+    };
+
     runButton.addEventListener("click", () => {
-      runButton.disabled = true;
-      status.textContent = "Loading SQLite WASM and running query…";
+      setBusy(true);
+      clearResults();
+      startTimeout();
+      status.textContent = "Running SQL in SQLite WASM…";
       error.hidden = true;
       error.textContent = "";
-      worker.postMessage({
-        type: "run",
-        koreanOnly: korean.checked,
-        minimumBalance: minimum.valueAsNumber,
-      });
+      worker.postMessage({ type: "run", sql: sqlInput.value });
+    });
+
+    resetButton.addEventListener("click", () => {
+      clearTimeout();
+      restartWorker();
+      setBusy(false);
+      status.textContent = "Database reset to seeded data.";
+      error.hidden = true;
+      error.textContent = "";
+      command.hidden = true;
+    });
+
+    schemaButton.addEventListener("click", () => {
+      setBusy(true);
+      startTimeout();
+      status.textContent = "Inspecting schema…";
+      error.hidden = true;
+      error.textContent = "";
+      worker.postMessage({ type: "schema" });
     });
 
     ownershipRun.addEventListener("click", () => {
@@ -201,154 +289,39 @@
 </script>
 
 <style>
-  .sqlbraid-preview {
-    border: 1px solid var(--sl-color-gray-5);
-    border-radius: 0.75rem;
-    padding: 1.25rem;
-    margin: 2rem 0;
-    background: var(--sl-color-gray-7);
-  }
-
-  .preview-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  .preview-heading h2,
-  .preview-heading p {
-    margin: 0;
-  }
-
-  .preview-heading h2 {
-    margin-top: 0.25rem;
-  }
-
-  .preview-kicker {
-    color: var(--sl-color-accent);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .preview-badge {
-    border: 1px solid var(--sl-color-accent);
-    border-radius: 999px;
-    color: var(--sl-color-accent);
-    font-size: 0.75rem;
-    padding: 0.25rem 0.6rem;
-    white-space: nowrap;
-  }
-
-  .preview-controls {
-    align-items: end;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem 1rem;
-    margin: 1.25rem 0 0.5rem;
-  }
-
-  .preview-controls label {
-    display: grid;
-    gap: 0.3rem;
-    font-size: 0.85rem;
-  }
-
-  .preview-controls label:first-child {
-    align-items: center;
-    display: flex;
-    gap: 0.45rem;
-    padding-bottom: 0.45rem;
-  }
-
-  .preview-controls input[type="number"] {
-    border: 1px solid var(--sl-color-gray-5);
-    border-radius: 0.35rem;
-    padding: 0.4rem 0.5rem;
-    width: 10rem;
-  }
-
-  .preview-controls button {
-    background: var(--sl-color-accent);
-    border: 0;
-    border-radius: 0.35rem;
-    color: var(--sl-color-white);
-    cursor: pointer;
-    font: inherit;
-    font-weight: 650;
-    padding: 0.45rem 0.8rem;
-  }
-
-  .preview-controls button:disabled {
-    cursor: progress;
-    opacity: 0.65;
-  }
-
-  .preview-status {
-    color: var(--sl-color-gray-2);
-    font-size: 0.9rem;
-    min-height: 1.35rem;
-  }
-
-  .preview-error {
-    background: color-mix(in srgb, var(--sl-color-red-high) 18%, transparent);
-    border: 1px solid var(--sl-color-red-high);
-    border-radius: 0.35rem;
-    color: var(--sl-color-red-high);
-    padding: 0.55rem 0.7rem;
-  }
-
-  .preview-grid {
-    display: grid;
-    gap: 1rem;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  }
-
-  .preview-grid h3,
-  .preview-results h3 {
-    font-size: 0.95rem;
-    margin-bottom: 0.45rem;
-  }
-
-  .preview-grid pre {
-    min-height: 9rem;
-  }
-
-  .preview-grid pre,
-  .preview-results {
-    margin: 0;
-  }
-
-  .preview-grid pre code {
-    font-size: 0.75rem;
-    white-space: pre-wrap;
-  }
-
-  .preview-results {
-    margin-top: 1.25rem;
-  }
-
-  .preview-table-wrap {
-    overflow-x: auto;
-  }
-
-  .preview-table-wrap table {
-    border-collapse: collapse;
-    font-size: 0.82rem;
-    width: 100%;
-  }
-
-  .preview-table-wrap th,
-  .preview-table-wrap td {
-    border: 1px solid var(--sl-color-gray-5);
-    padding: 0.45rem 0.55rem;
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  .preview-table-wrap th {
-    background: var(--sl-color-gray-6);
+  .sqlbraid-preview { border: 1px solid var(--sl-color-gray-5); border-radius: 0.75rem; padding: 1.25rem; margin: 2rem 0; background: var(--sl-color-gray-7); }
+  .preview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .preview-heading h2, .preview-heading p { margin: 0; }
+  .preview-heading h2 { margin-top: 0.25rem; }
+  .preview-kicker { color: var(--sl-color-accent); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .preview-badge { border: 1px solid var(--sl-color-accent); border-radius: 999px; color: var(--sl-color-accent); font-size: 0.75rem; padding: 0.25rem 0.6rem; white-space: nowrap; }
+  .preview-editor { display: grid; gap: 0.4rem; margin-top: 1.25rem; }
+  .preview-editor label { font-size: 0.9rem; font-weight: 650; }
+  .preview-editor textarea { border: 1px solid var(--sl-color-gray-5); border-radius: 0.35rem; box-sizing: border-box; font: 0.85rem/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; min-height: 12rem; padding: 0.7rem; resize: vertical; width: 100%; }
+  .preview-controls { align-items: center; display: flex; flex-wrap: wrap; gap: 0.65rem; margin: 0.75rem 0 0.5rem; }
+  .preview-controls button { background: var(--sl-color-accent); border: 0; border-radius: 0.35rem; color: var(--sl-color-white); cursor: pointer; font: inherit; font-weight: 650; padding: 0.45rem 0.8rem; margin-top: 0; }
+  .preview-controls button.preview-secondary { background: transparent; border: 1px solid var(--sl-color-accent); color: var(--sl-color-accent); }
+  .preview-controls button:disabled { cursor: progress; opacity: 0.65; }
+  .preview-status { color: var(--sl-color-gray-2); font-size: 0.9rem; min-height: 1.35rem; }
+  .preview-error { background: color-mix(in srgb, var(--sl-color-red-high) 18%, transparent); border: 1px solid var(--sl-color-red-high); border-radius: 0.35rem; color: var(--sl-color-red-high); padding: 0.55rem 0.7rem; }
+  .preview-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+  .preview-grid h3, .preview-results h3 { font-size: 0.95rem; margin-bottom: 0.45rem; }
+  .preview-grid pre, .preview-results, .preview-schema { margin: 0; }
+  .preview-grid pre { min-height: 5rem; }
+  .preview-grid pre code, .preview-schema pre { font-size: 0.75rem; white-space: pre-wrap; }
+  .preview-schema { margin-top: 1.25rem; }
+  .preview-schema summary { cursor: pointer; font-weight: 650; }
+  .preview-schema pre { margin: 0.6rem 0 0; }
+  .preview-command { color: var(--sl-color-gray-2); font-size: 0.85rem; }
+  .preview-results { margin-top: 1.25rem; }
+  .preview-table-wrap { overflow-x: auto; }
+  .preview-table-wrap table { border-collapse: collapse; font-size: 0.82rem; width: 100%; }
+  .preview-table-wrap th, .preview-table-wrap td { border: 1px solid var(--sl-color-gray-5); padding: 0.45rem 0.55rem; text-align: left; white-space: nowrap; }
+  .preview-table-wrap th { background: var(--sl-color-gray-6); }
+  @media (max-width: 36rem) {
+    .sqlbraid-preview { padding: 1rem; }
+    .preview-heading { display: block; }
+    .preview-badge { display: inline-block; margin-top: 0.7rem; }
+    .preview-controls button { flex: 1 1 100%; }
   }
 </style>

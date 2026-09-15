@@ -4,6 +4,6 @@ export function routeForVersion({ version, locale = "root", page = "", pages }) 
   const normalizedPage = page.replace(/^\/+|\/+$/gu, "");
   const available = pages?.[version]?.[language];
   const targetPage = Array.isArray(available) && available.includes(normalizedPage) ? normalizedPage : "";
-  const base = version === "dev" ? "/SQLBraid/dev" : `/SQLBraid/v/${encodeURIComponent(version)}`;
+  const base = version === "latest" ? "/SQLBraid/latest" : `/SQLBraid/v/${encodeURIComponent(version)}`;
   return `${base}${language === "ko" ? "/ko" : ""}/${targetPage ? `${targetPage}/` : ""}`;
 }

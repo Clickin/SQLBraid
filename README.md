@@ -35,7 +35,7 @@ default dialect; its root exports only common runtime contracts. The granular
 > certification. No tag, npm publication, Pages deployment, or release
 > authorization is implied.
 
-[Get started](https://clickin.github.io/SQLBraid/dev/getting-started/sqlite/) · [Documentation](https://clickin.github.io/SQLBraid/dev/) · [Data representations](https://clickin.github.io/SQLBraid/dev/concepts/data-representation/) · [Public API audit](./docs/public-api-audit.md) · [Driver-author guide](./docs/driver-author-guide.md)
+[Get started](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [Documentation](https://clickin.github.io/SQLBraid/latest/) · [Data representations](https://clickin.github.io/SQLBraid/latest/concepts/data-representation/) · [Public API audit](./docs/public-api-audit.md) · [Driver-author guide](./docs/driver-author-guide.md)
 
 ## The core boundary
 
@@ -221,7 +221,7 @@ SQLBraid is not an ORM, query-builder-first language, complete SQL parser, unive
 
 Runtime packages do not pull tooling, metadata, codegen, editor, or Vite
 dependencies. The facade also does not install database drivers; install the
-database driver separately. See the [package map](https://clickin.github.io/SQLBraid/dev/reference/packages/) and [release readiness](./docs/SQLBraid_release_readiness.md).
+database driver separately. See the [package map](https://clickin.github.io/SQLBraid/latest/reference/packages/) and [release readiness](./docs/SQLBraid_release_readiness.md).
 
 ## Development
 

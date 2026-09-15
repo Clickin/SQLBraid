@@ -7,7 +7,7 @@ import { allPlan, planChanges } from "../scripts/ci-plan.mjs";
 interface Step { name?: string; if?: string; run?: string; uses?: string; env?: Record<string, string>; with?: Record<string, unknown> }
 interface Job { name?: string; if?: string; needs?: string | string[]; permissions?: Record<string, string>; env?: Record<string, string>; concurrency?: Record<string, unknown>; steps: Step[] }
 interface Workflow {
-  on: Record<string, { tags?: string[]; inputs?: Record<string, { default?: unknown; options?: string[]; description?: string }> } | null>;
+  on: Record<string, { tags?: string[]; paths?: string[]; inputs?: Record<string, { default?: unknown; options?: string[]; description?: string }> } | null>;
   permissions: Record<string, string>;
   env?: Record<string, string>;
   jobs: Record<string, Job>;
@@ -29,7 +29,7 @@ function evaluate(expression: string | undefined, github: object, inputs: object
 
 function graph(workflow: Workflow, event: string, mode = "certify", ref = "refs/heads/main", failed?: string, deploy = false) {
   const results: Record<string, { result: string }> = {};
-  const github = { event_name: event, ref };
+  const github = { event_name: event, ref, ref_type: ref.startsWith("refs/tags/") ? "tag" : "branch" };
   const inputs = { release_mode: event === "workflow_dispatch" ? mode : undefined, deploy };
   const env = { SQLBRAID_RELEASE_MODE: event === "workflow_dispatch" ? mode : "certify" };
   const pending = new Set(Object.keys(workflow.jobs));
@@ -157,14 +157,19 @@ test("preparation enforces an exact version tag for staging", () => {
   assert.match(determine.run ?? "", /tag_version.*manifest_version/u);
 });
 
-test("documentation tags and default dispatch validate without history or Pages mutation", () => {
+test("documentation pushes publish automatically while manual dispatch remains opt-in", () => {
   assert.deepEqual(docs.permissions, { contents: "read" });
-  for (const event of ["push", "workflow_dispatch"]) {
-    const { results } = graph(docs, event, "certify", "refs/tags/v0.1.0-rc.0");
+  assert.equal(docs.on.push?.paths, undefined);
+  for (const ref of ["refs/heads/main", "refs/tags/v0.1.0-rc.0"]) {
+    const { results } = graph(docs, "push", "certify", ref);
     assert.equal(results.build.result, "success");
-    assert.equal(results["publish-history"].result, "skipped");
-    assert.equal(results.deploy.result, "skipped");
+    assert.equal(results["publish-history"].result, "success");
+    assert.equal(results.deploy.result, "success");
   }
+  const manual = graph(docs, "workflow_dispatch", "certify", "refs/heads/main").results;
+  assert.equal(manual.build.result, "success");
+  assert.equal(manual["publish-history"].result, "skipped");
+  assert.equal(manual.deploy.result, "skipped");
   const authorized = graph(docs, "workflow_dispatch", "certify", "refs/heads/main", undefined, true).results;
   assert.equal(authorized["publish-history"].result, "success");
   assert.equal(authorized.deploy.result, "success");

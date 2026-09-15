@@ -6,16 +6,6 @@ on:
       - main
     tags:
       - "v*"
-    paths:
-      - "website/**"
-      - "support/**"
-      - "scripts/validate-support.mjs"
-      - "scripts/validate-translations.mjs"
-      - "scripts/docs-history.mjs"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "package.json"
-      - ".github/workflows/docs-pages.yml"
   workflow_dispatch:
     inputs:
       deploy:
@@ -84,8 +74,8 @@ jobs:
               --commit "$GITHUB_SHA" \
               --ref "$GITHUB_REF"
           else
-            echo "SQLBRAID_DOCS_CHANNEL=dev" >> "$GITHUB_ENV"
-            echo "SQLBRAID_DOCS_BASE=/SQLBraid/dev" >> "$GITHUB_ENV"
+            echo "SQLBRAID_DOCS_CHANNEL=latest" >> "$GITHUB_ENV"
+            echo "SQLBRAID_DOCS_BASE=/SQLBraid/latest" >> "$GITHUB_ENV"
           fi
           echo "SQLBRAID_DOCS_VERSIONS=$(node scripts/docs-history.mjs versions --history "$HISTORY_DIR")" >> "$GITHUB_ENV"
 
@@ -105,10 +95,62 @@ jobs:
               --commit "$GITHUB_SHA" \
               --ref "$GITHUB_REF"
           else
-            node scripts/docs-history.mjs sync-dev \
+            node scripts/docs-history.mjs sync-latest \
               --history "$HISTORY_DIR" \
               --source "$GITHUB_WORKSPACE/website/dist"
           fi
+
+      - name: Backfill missing tagged documentation
+        if: ${{ github.ref_type != 'tag' }}
+        env:
+          HISTORY_DIR: ${{ runner.temp }}/sqlbraid-docs-history
+        shell: bash
+        run: |
+          git fetch --force --tags origin
+          missing_tags="$(node scripts/docs-history.mjs missing-tags \
+            --root "$GITHUB_WORKSPACE" \
+            --history "$HISTORY_DIR")"
+          while IFS=$'\t' read -r tag version; do
+            [[ -n "$tag" && -n "$version" ]] || continue
+            tag_dir="$RUNNER_TEMP/sqlbraid-docs-$version"
+            git worktree add --detach "$tag_dir" "$tag"
+            tag_commit="$(git -C "$tag_dir" rev-parse HEAD)"
+            patched=()
+            for file in website/src/components/DocsVersionSelect.astro website/src/components/BuildProvenance.astro website/version-routes.mjs; do
+              if git -C "$tag_dir" ls-files --error-unmatch "$file" >/dev/null 2>&1; then
+                cp "$GITHUB_WORKSPACE/$file" "$tag_dir/$file"
+                patched+=("$file")
+              fi
+            done
+            (
+              cd "$tag_dir"
+              export GITHUB_SHA="$tag_commit"
+              export GITHUB_REF="refs/tags/$tag"
+              export SQLBRAID_DOCS_CHANNEL=release
+              export SQLBRAID_DOCS_VERSION="$version"
+              export SQLBRAID_DOCS_BASE="/SQLBraid/v/$version"
+              export SQLBRAID_DOCS_VERSIONS="$(node "$GITHUB_WORKSPACE/scripts/docs-history.mjs" versions --history "$HISTORY_DIR")"
+              pnpm install --frozen-lockfile
+              pnpm run build
+              pnpm --dir website build
+              node "$GITHUB_WORKSPACE/scripts/docs-history.mjs" rewrite-links \
+                --source "$tag_dir/website/dist" \
+                --base "/SQLBraid/v/$version"
+            )
+            for file in "${patched[@]}"; do git -C "$tag_dir" checkout -- "$file"; done
+            node scripts/docs-history.mjs archive \
+              --root "$tag_dir" \
+              --history "$HISTORY_DIR" \
+              --source "$tag_dir/website/dist" \
+              --version "$version" \
+              --commit "$tag_commit" \
+              --ref "refs/tags/$tag"
+            git worktree remove --force "$tag_dir"
+          done < <(node --input-type=module - "$missing_tags" <<'NODE'
+          const tags = JSON.parse(process.argv[2]);
+          for (const { tag, version } of tags) console.log(`${tag}\t${version}`);
+          NODE
+          )
 
       - name: Assemble persistent Pages artifact
         env:
@@ -120,7 +162,7 @@ jobs:
             --public-root /SQLBraid
 
       - name: Preserve staged Pages artifact
-        if: github.event_name == 'workflow_dispatch' && inputs.deploy
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
         uses: actions/upload-artifact@v7.0.1
         with:
           name: docs-pages-deploy
@@ -129,11 +171,11 @@ jobs:
           retention-days: 1
 
       - name: Preserve generated docs history
-        if: github.event_name == 'workflow_dispatch' && inputs.deploy
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
         run: tar --exclude='./.git' -czf "$RUNNER_TEMP/docs-history.tar.gz" -C "$RUNNER_TEMP/sqlbraid-docs-history" .
 
       - name: Upload generated docs history
-        if: github.event_name == 'workflow_dispatch' && inputs.deploy
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
         uses: actions/upload-artifact@v7.0.1
         with:
           name: docs-history
@@ -142,7 +184,7 @@ jobs:
           retention-days: 1
 
   publish-history:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
     needs: build
     permissions:
       contents: write
@@ -184,7 +226,7 @@ jobs:
           fi
 
   deploy:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
     needs: [build, publish-history]
     permissions:
       contents: read

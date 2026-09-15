@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -10,7 +10,10 @@ import {
   assertReleaseSource,
   isSemVer,
   readVersions,
+  rewriteLegacyBaseLinks,
   rootRedirect,
+  stageDeployment,
+  syncLatest,
 } from "./docs-history.mjs";
 import { routeForVersion } from "../website/version-routes.mjs";
 
@@ -87,10 +90,85 @@ test("release archives require the exact tagged source commit", async () => {
 
 test("version routes preserve locale and fall back to the locale root", () => {
   const pages = {
+    latest: { root: ["", "runtime/transactions"], ko: [""] },
     "0.1.0": { root: ["", "runtime/transactions"], ko: [""] },
   };
+  assert.equal(routeForVersion({ version: "latest", locale: "root", page: "runtime/transactions", pages }), "/SQLBraid/latest/runtime/transactions/");
+  assert.equal(routeForVersion({ version: "latest", locale: "ko", page: "runtime/transactions", pages }), "/SQLBraid/latest/ko/");
   assert.equal(routeForVersion({ version: "0.1.0", locale: "root", page: "runtime/transactions", pages }), "/SQLBraid/v/0.1.0/runtime/transactions/");
   assert.equal(routeForVersion({ version: "0.1.0", locale: "ko", page: "runtime/transactions", pages }), "/SQLBraid/v/0.1.0/ko/");
-  assert.equal(/content="0;url=([^"]+)"/u.exec(rootRedirect(null))?.[1], "/SQLBraid/dev/");
+  assert.equal(/content="0;url=([^"]+)"/u.exec(rootRedirect(null))?.[1], "/SQLBraid/latest/");
   assert.equal(/content="0;url=([^"]+)"/u.exec(rootRedirect("0.1.0"))?.[1], "/SQLBraid/v/0.1.0/");
+});
+
+test("latest sync replaces only the mutable channel while staging keeps archives", async () => {
+  const history = await mkdtemp(join(tmpdir(), "sqlbraid-docs-history-"));
+  const latest = await mkdtemp(join(tmpdir(), "sqlbraid-docs-latest-"));
+  const release = await mkdtemp(join(tmpdir(), "sqlbraid-docs-release-"));
+  const output = await mkdtemp(join(tmpdir(), "sqlbraid-docs-deploy-"));
+  try {
+    await writeFile(join(latest, "index.html"), "latest one\n");
+    await writeFile(join(release, "index.html"), "immutable release\n");
+    await archiveRelease({ sourceDirectory: release, historyDirectory: history, version: "1.2.3", verifySource: false });
+    await syncLatest({ sourceDirectory: latest, historyDirectory: history });
+    await writeFile(join(latest, "index.html"), "latest two\n");
+    await syncLatest({ sourceDirectory: latest, historyDirectory: history });
+    const staged = await stageDeployment({ historyDirectory: history, outputDirectory: output });
+    assert.equal(await readFile(join(output, "latest", "index.html"), "utf8"), "latest two\n");
+    assert.equal(await readFile(join(output, "v", "1.2.3", "index.html"), "utf8"), "immutable release\n");
+    assert.deepEqual(staged.pages.latest.root, [""]);
+    assert.deepEqual(staged.pages["1.2.3"].root, [""]);
+    assert.equal(/content="0;url=([^"]+)"/u.exec(await readFile(join(output, "index.html"), "utf8"))?.[1], "/SQLBraid/v/1.2.3/");
+  } finally {
+    await rm(history, { recursive: true, force: true });
+    await rm(latest, { recursive: true, force: true });
+    await rm(release, { recursive: true, force: true });
+    await rm(output, { recursive: true, force: true });
+  }
+});
+
+test("staging migrates the legacy development tree to latest", async () => {
+  const history = await mkdtemp(join(tmpdir(), "sqlbraid-docs-history-"));
+  const output = await mkdtemp(join(tmpdir(), "sqlbraid-docs-deploy-"));
+  try {
+    await mkdir(join(history, "dev", "_astro"), { recursive: true });
+    await writeFile(join(history, "dev", "index.html"), '<script src="/SQLBraid/dev/_astro/app.js"></script>');
+    await writeFile(join(history, "dev", "_astro", "app.js"), 'new Worker("/SQLBraid/dev/_astro/worker.js")');
+    await writeFile(join(history, "versions.json"), `${JSON.stringify({
+      stable: null,
+      versions: [],
+      pages: { dev: { root: [""] } },
+    })}\n`);
+    const staged = await stageDeployment({ historyDirectory: history, outputDirectory: output });
+    assert.equal(await readFile(join(output, "latest", "index.html"), "utf8"), '<script src="/SQLBraid/latest/_astro/app.js"></script>');
+    assert.equal(await readFile(join(output, "latest", "_astro", "app.js"), "utf8"), 'new Worker("/SQLBraid/latest/_astro/worker.js")');
+    assert.deepEqual(staged.pages.latest.root, [""]);
+    assert.equal(staged.pages.dev, undefined);
+    assert.match(await readFile(join(output, "index.html"), "utf8"), /\/SQLBraid\/latest\//u);
+  } finally {
+    await rm(history, { recursive: true, force: true });
+    await rm(output, { recursive: true, force: true });
+  }
+});
+
+test("legacy links migrate both development and unversioned targets", async () => {
+  const output = await mkdtemp(join(tmpdir(), "sqlbraid-docs-links-"));
+  try {
+    await writeFile(join(output, "index.html"), '<a href="/SQLBraid/dev/getting-started/">dev</a><script src="/SQLBraid/dev/_astro/app.js"></script><a href="https://clickin.github.io/SQLBraid/reference/">root</a><a href="/SQLBraid/v/0.1.0/">release</a>\n');
+    await rewriteLegacyBaseLinks(output, "/SQLBraid/v/1.2.3");
+    const html = await readFile(join(output, "index.html"), "utf8");
+    assert.match(html, /href="\/SQLBraid\/v\/1\.2\.3\/getting-started\/"/u);
+    assert.match(html, /src="\/SQLBraid\/v\/1\.2\.3\/_astro\/app\.js"/u);
+    assert.match(html, /href="https:\/\/clickin\.github\.io\/SQLBraid\/v\/1\.2\.3\/reference\/"/u);
+    assert.match(html, /href="\/SQLBraid\/v\/0\.1\.0\/"/u);
+    await mkdir(join(output, "ko"), { recursive: true });
+    await writeFile(join(output, "ko", "index.html"), '<link href="/SQLBraid/dev/_astro/site.css"><a href="/SQLBraid/dev/ko/concepts/">guide</a><a href="/SQLBraid/reference/">guide</a>');
+    await rewriteLegacyBaseLinks(output, "/SQLBraid/v/1.2.3");
+    const korean = await readFile(join(output, "ko", "index.html"), "utf8");
+    assert.match(korean, /href="\/SQLBraid\/v\/1\.2\.3\/_astro\/site\.css"/u);
+    assert.match(korean, /href="\/SQLBraid\/v\/1\.2\.3\/ko\/concepts\/"/u);
+    assert.match(korean, /href="\/SQLBraid\/v\/1\.2\.3\/ko\/reference\/"/u);
+  } finally {
+    await rm(output, { recursive: true, force: true });
+  }
 });

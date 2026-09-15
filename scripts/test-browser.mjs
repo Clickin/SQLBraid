@@ -9,7 +9,7 @@ import { chromium } from "playwright";
 const configuredPort = process.env.SQLBRAID_BROWSER_PORT === undefined
   ? undefined
   : Number(process.env.SQLBRAID_BROWSER_PORT);
-const basePath = "/SQLBraid/dev";
+const basePath = "/SQLBraid/latest";
 const route = `${basePath}/interactive-preview/`;
 const externalUrl = process.env.SQLBRAID_BROWSER_URL;
 const children = [];
@@ -228,7 +228,7 @@ async function main() {
     if (!externalUrl) {
       const env = {
         ...process.env,
-        SQLBRAID_DOCS_CHANNEL: "dev",
+        SQLBRAID_DOCS_CHANNEL: "latest",
         SQLBRAID_DOCS_VERSION: "",
         SQLBRAID_DOCS_BASE: basePath,
         ASTRO_PREVIEW_BACKGROUND: "0",
@@ -252,43 +252,65 @@ async function main() {
       await page.goto(url, { waitUntil: "networkidle" });
       const preview = page.getByTestId("interactive-preview");
       await preview.waitFor();
-      const source = preview.getByTestId("preview-source");
-      if (!(await source.textContent()).includes("@braid if")) throw new Error("Preview source does not show @braid lowering.");
-
-      const runButton = preview.getByRole("button", { name: "Run query" });
+      const editor = preview.getByTestId("preview-sql");
+      const runButton = preview.getByTestId("preview-run");
       const status = preview.getByTestId("preview-status");
-      const rendered = preview.getByTestId("preview-rendered");
-      const binds = preview.getByTestId("preview-binds");
       const table = preview.getByTestId("preview-table");
-      const korean = preview.locator("[data-preview-korean]");
-      const minimum = preview.locator("[data-preview-minimum]");
       const ownershipRun = preview.getByTestId("browser-ownership-run");
       const ownershipStatus = preview.getByTestId("browser-ownership-status");
 
-      await runButton.click();
-      await page.waitForFunction(() => document.querySelector("[data-testid='preview-status']")?.textContent?.includes("1 account") ?? false);
-      if (!(await rendered.textContent()).includes("locale = ?")) throw new Error("Korean branch was not rendered.");
-      if ((await binds.textContent()).trim() !== '[\n  "ko-KR",\n  1000000\n]') throw new Error("Unexpected Korean filter binds.");
-      const firstRows = await table.textContent();
-      if (!firstRows.includes("한빛증권") || !firstRows.includes("balanceLabel")) {
-        throw new Error("Expected Korean finance row or Standard Schema transformation is missing.");
+      const executeSql = async (text) => {
+        await editor.fill(text);
+        await runButton.click();
+        await page.waitForFunction(() => !document.querySelector("[data-testid='preview-run']")?.disabled);
+      };
+      const cells = () => table.locator("tbody tr").evaluateAll((rows) =>
+        rows.map((row) => [...row.cells].map((cell) => cell.textContent)));
+
+      await preview.getByTestId("preview-schema").click();
+      await page.waitForFunction(() => !document.querySelector("[data-testid='preview-run']")?.disabled);
+      const schema = await preview.getByTestId("preview-schema-output").textContent();
+      if (!schema.includes("finance_accounts") || !schema.includes("account_name")) {
+        throw new Error("The SQL editor does not expose the available database schema.");
       }
 
-      await korean.uncheck();
-      await runButton.click();
-      await page.waitForFunction(() => document.querySelector("[data-testid='preview-status']")?.textContent?.includes("3 accounts") ?? false);
-      if ((await rendered.textContent()).includes("locale = ?")) throw new Error("Inactive Korean branch rendered SQL.");
-      if ((await binds.textContent()).trim() !== "[\n  1000000\n]") throw new Error("Unexpected unfiltered binds.");
-      const rows = await table.textContent();
-      if (!rows.includes("東京パートナーズ") || !rows.includes("Seoul Capital") || rows.includes("푸른은행")) {
-        throw new Error("Filter result rows are incorrect.");
+      await executeSql("SELECT account_name FROM finance_accounts WHERE locale = 'ko-KR' ORDER BY account_id;");
+      if (JSON.stringify(await cells()) !== JSON.stringify([["한빛증권"], ["푸른은행"]])) {
+        throw new Error("User-authored SQL did not select the expected Unicode rows.");
       }
-
-      await minimum.fill("-1");
+      await executeSql("SELECT a.account_name, b.account_name AS other FROM finance_accounts a JOIN finance_accounts b ON b.account_id = a.account_id + 1 WHERE a.account_id = 1;");
+      if (JSON.stringify(await cells()) !== JSON.stringify([["한빛증권", "푸른은행"]])) {
+        throw new Error("User-authored JOIN did not execute against the seeded database.");
+      }
+      await executeSql("SELECT FROM");
+      if (!(await preview.getByTestId("preview-error").isVisible()) || !(await status.textContent()).includes("error")) {
+        throw new Error("Invalid SQL did not expose the actual execution error.");
+      }
+      await executeSql("SELECT account_name FROM finance_accounts WHERE account_id = 3;");
+      if (await preview.getByTestId("preview-error").isVisible() || JSON.stringify(await cells()) !== JSON.stringify([["東京パートナーズ"]])) {
+        throw new Error("The SQL editor did not recover after a syntax error.");
+      }
+      await executeSql("UPDATE finance_accounts SET balance = 0 WHERE account_id = 1;");
+      await executeSql("SELECT balance FROM finance_accounts WHERE account_id = 1;");
+      if (JSON.stringify(await cells()) !== JSON.stringify([["0"]])) throw new Error("Edited SQL did not mutate the disposable database.");
+      await preview.getByTestId("preview-reset").click();
+      await page.waitForFunction(() => !document.querySelector("[data-testid='preview-run']")?.disabled);
+      await executeSql("SELECT balance FROM finance_accounts WHERE account_id = 1;");
+      if (JSON.stringify(await cells()) !== JSON.stringify([["1250000"]])) throw new Error("Database reset did not restore seeded data.");
+      await executeSql("SELECT account_name FROM finance_accounts WHERE 0;");
+      if ((await table.locator("thead th").allTextContents()).join(",") !== "account_name" || !(await table.textContent()).includes("No rows")) {
+        throw new Error("An empty query result lost its column metadata.");
+      }
+      await executeSql("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM n WHERE x < 1002) SELECT x FROM n;");
+      if (await table.locator("tbody tr").count() !== 1000 || !(await status.textContent()).includes("first 1,000")) {
+        throw new Error("The playground did not bound displayed results or disclose truncation.");
+      }
+      await editor.fill("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM n) SELECT sum(x) FROM n;");
       await runButton.click();
-      await page.waitForFunction(() => document.querySelector("[data-testid='preview-status']")?.textContent?.includes("PREVIEW_INPUT") ?? false);
-      if (!(await preview.getByTestId("preview-error").textContent()).includes("non-negative")) {
-        throw new Error("Invalid filter did not produce the expected worker error.");
+      await preview.getByTestId("preview-reset").click();
+      await executeSql("SELECT COUNT(*) AS count FROM finance_accounts;");
+      if (JSON.stringify(await cells()) !== JSON.stringify([["4"]])) {
+        throw new Error("Reset failed to interrupt busy SQL and restore the disposable database.");
       }
 
       await ownershipRun.evaluate((button) => (button instanceof HTMLButtonElement ? button.click() : undefined));

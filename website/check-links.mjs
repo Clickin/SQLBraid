@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 const output = fileURLToPath(new URL("./dist/", import.meta.url));
-const configuredBase = process.env.SQLBRAID_DOCS_BASE?.trim() || "/SQLBraid/dev";
+const configuredBase = process.env.SQLBRAID_DOCS_BASE?.trim() || "/SQLBraid/latest";
 const base = new URL(`https://clickin.github.io${configuredBase.replace(/\/+$/u, "")}/`);
 const basePath = base.pathname;
 const files = await readdir(output, { recursive: true });

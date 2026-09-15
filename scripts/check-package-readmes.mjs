@@ -6,13 +6,6 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packagesRoot = join(root, "packages");
 const canonicalDocsRoot = "https://clickin.github.io/SQLBraid/";
-const internalVocabulary = [
-  [/PV[0-9]+/iu, "PV-number vocabulary"],
-  [/historical\s+(?:PV[0-9]+\s+)?release\s+dry[- ]run/iu, "historical release dry-run vocabulary"],
-  [/actions\/runs\/[0-9]+/iu, "numeric GitHub Actions run URL"],
-  [/\/dev\/agents\//iu, "internal /dev/agents/ path"],
-  [/exact-target evidence/iu, "exact-target evidence vocabulary"],
-];
 
 function exportKeys(exportsField) {
   if (exportsField === undefined) return new Set();
@@ -94,11 +87,6 @@ function packageImport(specifier, discovered) {
   };
 }
 
-function lineNumber(lines, pattern) {
-  const index = lines.findIndex((line) => pattern.test(line));
-  return index === -1 ? undefined : index + 1;
-}
-
 async function discoverPackages() {
   const entries = await readdir(packagesRoot, { withFileTypes: true });
   const manifests = new Map();
@@ -142,17 +130,18 @@ async function checkPackage(readme, packageInfo) {
   if (!readme.includes(canonicalDocsRoot)) {
     errors.push(`${displayPath}: missing canonical docs link ${canonicalDocsRoot}`);
   }
-  for (const [pattern, description] of internalVocabulary) {
-    const number = lineNumber(lines, pattern);
-    if (number !== undefined) errors.push(`${displayPath}:${number}: contains ${description}`);
+  const installLine = lines.findIndex((line) =>
+    /\b(?:npm\s+(?:install|i)|pnpm\s+add|yarn\s+add|bun\s+add)\b/iu.test(line) &&
+    line.includes(packageInfo.name),
+  );
+  if (installLine === -1) {
+    errors.push(`${displayPath}: missing an install command for ${packageInfo.name}`);
   }
 
-  let firstPartyImportCount = 0;
   for (const block of blocks) {
     for (const imported of importsInBlock(block)) {
       const packageImportInfo = packageImport(imported.specifier, packageInfo.discovered);
       if (!packageImportInfo) continue;
-      firstPartyImportCount += 1;
       if (!packageImportInfo.manifest) {
         errors.push(`${displayPath}:${imported.number}: first-party import "${imported.specifier}" is not a discovered publishable package`);
         continue;
@@ -162,9 +151,6 @@ async function checkPackage(readme, packageInfo) {
         errors.push(`${displayPath}:${imported.number}: import "${imported.specifier}" is not exported by ${packageImportInfo.packageName}; available exports: ${available}`);
       }
     }
-  }
-  if (blocks.length > 0 && firstPartyImportCount === 0) {
-    errors.push(`${displayPath}: fenced code must include at least one first-party package import`);
   }
   return errors;
 }

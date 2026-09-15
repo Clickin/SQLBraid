@@ -1,15 +1,22 @@
 ---
-const sha = import.meta.env.GITHUB_SHA || "main";
-const runId = import.meta.env.GITHUB_RUN_ID || "";
+const channel = process.env.SQLBRAID_DOCS_CHANNEL || "latest";
+const version = process.env.SQLBRAID_DOCS_VERSION || "";
+const sha = process.env.GITHUB_SHA || "main";
+const runId = process.env.GITHUB_RUN_ID || "";
+const ref = process.env.GITHUB_REF || "";
 const commitUrl = `https://github.com/Clickin/SQLBraid/commit/${sha}`;
 const runUrl = runId ? `https://github.com/Clickin/SQLBraid/actions/runs/${runId}` : "https://github.com/Clickin/SQLBraid/actions";
 const evidenceBase = "https://api.github.com/repos/Clickin/SQLBraid/actions/workflows";
+const releaseSource = channel === "release" && version
+  ? `release tag v${version}`
+  : "latest docs from main";
+const sourceRef = ref || (channel === "release" && version ? `refs/tags/v${version}` : "refs/heads/main");
 ---
 
 <div class="build-provenance">
   <p>
-    <strong>Docs build candidate:</strong>
-    <a href={commitUrl}>{sha}</a>
+    <strong>{releaseSource}:</strong>
+    <a href={commitUrl}>{sha}</a> ({sourceRef})
     · <a href={runUrl}>{runId ? `workflow run ${runId}` : "workflow history"}</a>
   </p>
   {sha !== "main" && (

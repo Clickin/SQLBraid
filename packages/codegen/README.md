@@ -1,28 +1,13 @@
 # @sqlbraid/codegen
 
-Generate TypeScript relation models from an existing SQLBraid metadata
-snapshot. Database-specific packages are responsible for obtaining snapshots
-and supplying a matching `TypePolicy`.
+Generate TypeScript relation models from SQLBraid database metadata snapshots.
 
 ```sh
-npm install @sqlbraid/codegen @sqlbraid/metadata @sqlbraid/postgres
+npm install @sqlbraid/codegen @sqlbraid/metadata
 ```
 
-```ts
-import { readFile, writeFile } from "node:fs/promises";
-import { generateModels } from "@sqlbraid/codegen";
-import { parseSnapshotJson } from "@sqlbraid/metadata";
-import { typePolicy } from "@sqlbraid/postgres";
-
-const metadata = parseSnapshotJson(await readFile("metadata.json", "utf8")); // supplied snapshot
-const result = generateModels(metadata, { typePolicy });
-await writeFile("database.generated.ts", result.source, "utf8");
-console.log(result.models, result.diagnostics);
-```
-
-`CodegenOptions` supports relation filters, naming suffixes and overrides for
-database types or individual columns. `CodegenResult` includes generated source,
-model names, diagnostics, and metadata/type-policy/options hashes. Generation
-targets relations; routine result-set shapes remain explicit query contracts.
+Pass a validated snapshot and matching database type policy to generate source
+for application models. Database-specific packages obtain snapshots; this
+package does not connect to databases.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

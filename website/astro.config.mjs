@@ -1,30 +1,29 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import sqlbraid from "@sqlbraid/vite";
-import { readdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { rewriteLegacyBaseLinks } from "../scripts/docs-history.mjs";
 
 const publicRoot = "/SQLBraid";
 const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
-const channel = process.env.SQLBRAID_DOCS_CHANNEL ?? "dev";
+const channel = process.env.SQLBRAID_DOCS_CHANNEL ?? "latest";
 const version = process.env.SQLBRAID_DOCS_VERSION?.trim() ?? "";
 const configuredBase = process.env.SQLBRAID_DOCS_BASE?.trim() || (channel === "release" && version
   ? `${publicRoot}/v/${version}`
-  : `${publicRoot}/dev`);
+  : `${publicRoot}/latest`);
 
-if (channel !== "dev" && channel !== "release") {
-  throw new Error(`SQLBRAID_DOCS_CHANNEL must be "dev" or "release", received ${JSON.stringify(channel)}.`);
+if (channel !== "latest" && channel !== "release") {
+  throw new Error(`SQLBRAID_DOCS_CHANNEL must be "latest" or "release", received ${JSON.stringify(channel)}.`);
 }
 if (channel === "release" && !semver.test(version)) {
   throw new Error(`SQLBRAID_DOCS_VERSION must be a SemVer for a release build, received ${JSON.stringify(version)}.`);
 }
-if (channel === "dev" && version) {
+if (channel === "latest" && version) {
   throw new Error("SQLBRAID_DOCS_VERSION is only valid for release builds.");
 }
 
 const base = configuredBase.replace(/\/+$/u, "") || "/";
-const expectedBase = channel === "release" ? `${publicRoot}/v/${version}` : `${publicRoot}/dev`;
+const expectedBase = channel === "release" ? `${publicRoot}/v/${version}` : `${publicRoot}/latest`;
 if (base !== expectedBase) {
   throw new Error(`SQLBRAID_DOCS_BASE must be ${expectedBase} for ${channel} builds, received ${configuredBase}.`);
 }
@@ -47,27 +46,11 @@ const versions = parseVersions(process.env.SQLBRAID_DOCS_VERSIONS);
 const stable = process.env.SQLBRAID_DOCS_STABLE?.trim() || "";
 if (stable && !semver.test(stable)) throw new Error(`SQLBRAID_DOCS_STABLE must be SemVer, received ${JSON.stringify(stable)}.`);
 
-async function rewriteLegacyBaseLinks(outputDir) {
-  const files = await readdir(outputDir, { recursive: true });
-  for (const file of files) {
-    if (!file.endsWith(".html")) continue;
-    const path = join(outputDir, file);
-    const source = await readFile(path, "utf8");
-    const localePrefix = file.split("/")[0] === "ko" ? "ko/" : "";
-    // Existing pages predate the versioned base and intentionally use /SQLBraid/ links.
-    const rewritten = source.replace(/(href=")\/SQLBraid\/(?!dev\/|v\/)([^"]*)/gu, (match, prefix, target) => {
-      const localizedTarget = target.startsWith("ko/") ? target : `${localePrefix}${target}`;
-      return `${prefix}${base}/${localizedTarget}`;
-    });
-    if (rewritten !== source) await writeFile(path, rewritten);
-  }
-}
-
 const rewriteLinks = {
   name: "sqlbraid-versioned-links",
   hooks: {
     "astro:build:done": async ({ dir }) => {
-      await rewriteLegacyBaseLinks(fileURLToPath(dir));
+      await rewriteLegacyBaseLinks(fileURLToPath(dir), base);
     },
   },
 };

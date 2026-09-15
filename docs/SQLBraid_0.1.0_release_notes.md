@@ -41,6 +41,20 @@ require fresh exact-final Runtime, Documentation, and Release gates.
 - canonical exact numeric output (exact integer/decimal → `string`, approximate
   IEEE binary → `number`) and explicit JSON/temporal/container evidence boundaries.
 
+## Documentation and browser playground
+
+- Scoped package READMEs provide a short introduction, installation command,
+  and official documentation link; `sqlbraid` retains detailed usage examples.
+- Main-branch pushes publish `/latest/`; version-tag pushes publish immutable
+  `/v/<version>/` documentation. Missing tag archives are built from their
+  tagged sources, and the version selector preserves the current locale/page
+  when that page exists. Manual documentation runs remain validation-only
+  unless deployment is explicitly selected.
+- The browser playground accepts editable SQL against a seeded, disposable
+  SQLite WASM database. It exposes the table schema, actual query results and
+  errors, and database reset. Results are capped at 1,000 displayed rows;
+  a ten-second worker timeout resets the database without blocking the page.
+
 ## Unsupported behavior is visible
 
 Adapters use `UnsupportedFeatureError(feature, code, message, options?)` with a

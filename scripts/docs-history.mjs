@@ -180,6 +180,29 @@ async function writeVersions(historyDirectory, index) {
   await rename(temporary, path);
 }
 
+async function migrateLegacyLatest(historyDirectory, index) {
+  const legacyDirectory = join(historyDirectory, "dev");
+  const latestDirectory = join(historyDirectory, "latest");
+  let changed = false;
+  if (await exists(legacyDirectory)) {
+    if (await exists(latestDirectory)) await rm(legacyDirectory, { recursive: true, force: true });
+    else {
+      await rename(legacyDirectory, latestDirectory);
+      await rewriteLegacyBaseLinks(latestDirectory, "/SQLBraid/latest");
+    }
+    changed = true;
+  }
+  if (index.pages.dev !== undefined) {
+    const pages = { ...index.pages };
+    if (pages.latest === undefined) pages.latest = pages.dev;
+    delete pages.dev;
+    index = { ...index, pages };
+    changed = true;
+  }
+  if (changed) await writeVersions(historyDirectory, index);
+  return index;
+}
+
 async function git(rootDirectory, args) {
   try {
     const result = await execFileAsync("git", ["-C", rootDirectory, ...args], { encoding: "utf8" });
@@ -224,17 +247,16 @@ export async function archiveRelease({
   }
   if (!sourceDirectory || !historyDirectory) throw new Error("Release archive requires sourceDirectory and historyDirectory.");
   if (verifySource) await assertReleaseSource({ rootDirectory, version, commit, ref });
-  const index = await readVersions(historyDirectory);
+  const index = await migrateLegacyLatest(historyDirectory, await readVersions(historyDirectory));
   const destination = join(historyDirectory, "v", version);
   if (await exists(destination)) {
     const provenancePath = join(destination, ".sqlbraid-source.json");
     const provenance = await exists(provenancePath) ? JSON.parse(await readFile(provenancePath, "utf8")) : undefined;
-    if (!verifySource || provenance?.commit !== commit || provenance?.version !== version) {
+    if (!verifySource || (provenance && (provenance.commit !== commit || provenance.version !== version))) {
       throw new Error(`Documentation archive v/${version} already exists and cannot be overwritten.`);
     }
     // A deployment retry reuses the recorded archive, never the newly built tree.
   } else {
-    if (index.versions.includes(version)) throw new Error(`Documentation archive v/${version} is indexed but missing.`);
     await mkdir(dirname(destination), { recursive: true });
     const temporary = await mkdtemp(join(dirname(destination), `.v-${version}-`));
     try {
@@ -256,41 +278,101 @@ export async function archiveRelease({
   return next;
 }
 
-export async function syncDevelopment({ sourceDirectory, historyDirectory } = {}) {
-  if (!sourceDirectory || !historyDirectory) throw new Error("Development docs sync requires sourceDirectory and historyDirectory.");
-  const destination = join(historyDirectory, "dev");
+export async function syncLatest({ sourceDirectory, historyDirectory } = {}) {
+  if (!sourceDirectory || !historyDirectory) throw new Error("Latest docs sync requires sourceDirectory and historyDirectory.");
+  const destination = join(historyDirectory, "latest");
   await mkdir(historyDirectory, { recursive: true });
+  await migrateLegacyLatest(historyDirectory, await readVersions(historyDirectory));
   await replaceDirectory(sourceDirectory, destination);
   const index = await readVersions(historyDirectory);
-  const next = { ...index, pages: { ...index.pages, dev: await collectRoutes(destination) } };
+  const next = { ...index, pages: { ...index.pages, latest: await collectRoutes(destination) } };
   await writeVersions(historyDirectory, next);
   return next;
 }
 
 export function rootRedirect(stable, publicRoot = "/SQLBraid") {
-  const target = stable ? `${publicRoot}/v/${stable}/` : `${publicRoot}/dev/`;
+  const target = stable ? `${publicRoot}/v/${stable}/` : `${publicRoot}/latest/`;
   return `<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${target}"><link rel="canonical" href="${target}"><title>SQLBraid documentation</title></head><body><p>Continue to <a href="${target}">SQLBraid documentation</a>.</p></body></html>\n`;
 }
 
-export async function stageDeployment({ historyDirectory, outputDirectory, developmentDirectory, publicRoot = "/SQLBraid" } = {}) {
+export async function rewriteLegacyBaseLinks(outputDirectory, base) {
+  if (!outputDirectory || !base) throw new Error("Legacy documentation links require an output directory and base.");
+  const normalizedBase = base.replace(/\/+$/u, "");
+  for (const file of await walkFiles(outputDirectory)) {
+    if (!/\.(?:html|css|m?js)$/u.test(file)) continue;
+    const source = await readFile(file, "utf8");
+    // Generated workers and stylesheets also embed their build's asset base.
+    let rewritten = source.replaceAll("/SQLBraid/dev/", `${normalizedBase}/`);
+    if (!file.endsWith(".html")) {
+      if (rewritten !== source) await writeFile(file, rewritten);
+      continue;
+    }
+    const localePrefix = relative(outputDirectory, file).split(sep)[0] === "ko" ? "ko/" : "";
+    rewritten = rewritten.replace(/((?:href|src)=")(https:\/\/clickin\.github\.io)?\/SQLBraid\/(?!v\/)(latest\/)?([^"]*)/gu, (match, prefix, origin, channel, target) => {
+      const isPage = prefix.startsWith("href=") && !channel && !target.startsWith("_") && !/\.[^/]+(?:[?#].*)?$/u.test(target);
+      const localizedTarget = isPage && !target.startsWith("ko/") ? `${localePrefix}${target}` : target;
+      return `${prefix}${origin ?? ""}${normalizedBase}/${localizedTarget}`;
+    });
+    if (rewritten !== source) await writeFile(file, rewritten);
+  }
+}
+
+export async function releaseTags({ rootDirectory = root } = {}) {
+  const tags = await git(rootDirectory, ["tag", "--list", "v*"]);
+  return tags.split("\n").filter(Boolean)
+    .map((tag) => ({ tag, version: tag.slice(1) }))
+    .filter(({ version }) => isSemVer(version))
+    .sort((left, right) => compareSemVer(right.version, left.version));
+}
+
+export async function missingReleaseTags({ historyDirectory, rootDirectory = root } = {}) {
+  if (!historyDirectory) throw new Error("Missing documentation history directory.");
+  const index = await readVersions(historyDirectory);
+  const tags = await releaseTags({ rootDirectory });
+  const missing = [];
+  for (const entry of tags) {
+    const destination = join(historyDirectory, "v", entry.version);
+    if (!index.versions.includes(entry.version) || !(await exists(destination))) missing.push(entry);
+  }
+  for (const version of index.versions) {
+    if (!(await exists(join(historyDirectory, "v", version)))
+      && !tags.some((entry) => entry.version === version)) {
+      throw new Error(`Documentation versions.json indexes a missing release archive v/${version}.`);
+    }
+  }
+  return missing;
+}
+
+export async function stageDeployment({ historyDirectory, outputDirectory, latestDirectory, publicRoot = "/SQLBraid" } = {}) {
   if (!historyDirectory || !outputDirectory) throw new Error("Documentation deployment requires historyDirectory and outputDirectory.");
   await rm(outputDirectory, { recursive: true, force: true });
   await mkdir(outputDirectory, { recursive: true });
   const index = await readVersions(historyDirectory);
   const versionsDirectory = join(historyDirectory, "v");
   if (await exists(versionsDirectory)) await copyTree(versionsDirectory, join(outputDirectory, "v"));
-  const devSource = developmentDirectory ?? join(historyDirectory, "dev");
-  if (await exists(devSource)) await copyTree(devSource, join(outputDirectory, "dev"));
+  let latestSource = latestDirectory ?? join(historyDirectory, "latest");
+  if (!(await exists(latestSource))) {
+    const legacySource = join(historyDirectory, "dev");
+    if (await exists(legacySource)) latestSource = legacySource;
+  }
+  if (await exists(latestSource)) {
+    await copyTree(latestSource, join(outputDirectory, "latest"));
+    await rewriteLegacyBaseLinks(join(outputDirectory, "latest"), `${publicRoot}/latest`);
+  }
   const pages = { ...index.pages };
-  for (const entry of ["dev", ...index.versions]) {
-    const siteDirectory = entry === "dev" ? join(outputDirectory, "dev") : join(outputDirectory, "v", entry);
+  if (pages.dev !== undefined) {
+    if (pages.latest === undefined) pages.latest = pages.dev;
+    delete pages.dev;
+  }
+  for (const entry of ["latest", ...index.versions]) {
+    const siteDirectory = entry === "latest" ? join(outputDirectory, "latest") : join(outputDirectory, "v", entry);
     if (await exists(siteDirectory)) pages[entry] = await collectRoutes(siteDirectory);
   }
   const stagedIndex = { ...index, pages };
   await writeFile(join(outputDirectory, "versions.json"), `${JSON.stringify(stagedIndex, null, 2)}\n`);
   await writeFile(join(outputDirectory, "index.html"), rootRedirect(stagedIndex.stable, publicRoot));
   if (!(await exists(join(outputDirectory, "404.html")))) {
-    const fallback = join(outputDirectory, "dev", "404.html");
+    const fallback = join(outputDirectory, "latest", "404.html");
     const releaseFallback = stagedIndex.stable ? join(outputDirectory, "v", stagedIndex.stable, "404.html") : undefined;
     if (await exists(fallback)) await copyFile(fallback, join(outputDirectory, "404.html"));
     else if (releaseFallback && await exists(releaseFallback)) await copyFile(releaseFallback, join(outputDirectory, "404.html"));
@@ -338,20 +420,32 @@ async function cli(args) {
     });
     return;
   }
-  if (command === "sync-dev") {
-    await syncDevelopment({ sourceDirectory: required(args, "--source"), historyDirectory });
+  if (command === "sync-latest") {
+    await syncLatest({ sourceDirectory: required(args, "--source"), historyDirectory });
+    return;
+  }
+  if (command === "rewrite-links") {
+    await rewriteLegacyBaseLinks(required(args, "--source"), required(args, "--base"));
+    return;
+  }
+  if (command === "missing-tags") {
+    const missing = await missingReleaseTags({
+      historyDirectory,
+      rootDirectory: option(args, "--root", root),
+    });
+    process.stdout.write(`${JSON.stringify(missing)}\n`);
     return;
   }
   if (command === "stage" || command === "deploy") {
     await stageDeployment({
       historyDirectory,
       outputDirectory: required(args, "--output"),
-      developmentDirectory: option(args, "--dev-source"),
+      latestDirectory: option(args, "--latest-source"),
       publicRoot: option(args, "--public-root", "/SQLBraid"),
     });
     return;
   }
-  throw new Error("Usage: docs-history.mjs assert-source|versions|archive|sync-dev|stage");
+  throw new Error("Usage: docs-history.mjs assert-source|versions|archive|sync-latest|missing-tags|rewrite-links|stage");
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

@@ -1,12 +1,12 @@
 ---
 import DefaultSocialIcons from "@astrojs/starlight/components/SocialIcons.astro";
 
-const channel = process.env.SQLBRAID_DOCS_CHANNEL ?? "dev";
+const channel = process.env.SQLBRAID_DOCS_CHANNEL ?? "latest";
 const version = process.env.SQLBRAID_DOCS_VERSION ?? "";
 const versionsValue = process.env.SQLBRAID_DOCS_VERSIONS ?? "[]";
 const publicRoot = "/SQLBraid";
 const route = Astro.locals.starlightRoute;
-const currentValue = channel === "release" && version ? version : "dev";
+const currentValue = channel === "release" && version ? version : "latest";
 let versions: string[] = [];
 try {
   const parsed = JSON.parse(versionsValue);
@@ -28,7 +28,7 @@ versions = [...new Set(versions)];
     data-docs-current={currentValue}
     data-docs-index={`${publicRoot}/versions.json`}
   >
-    <option value="dev" selected={currentValue === "dev"}>{route.locale === "ko" ? "개발 버전" : "Development"}</option>
+    <option value="latest" selected={currentValue === "latest"}>{route.locale === "ko" ? "최신 버전" : "Latest"}</option>
     {versions.map((entry) => (
       <option value={entry} selected={entry === currentValue}>{entry}</option>
     ))}
@@ -55,15 +55,15 @@ versions = [...new Set(versions)];
         const historical = Array.isArray(index.versions)
           ? index.versions.filter((value): value is string => typeof value === "string")
           : [];
-        const values = ["dev", ...historical];
+        const values = ["latest", ...historical];
         for (const value of values) {
           if ([...select.options].some((option) => option.value === value)) continue;
           const option = document.createElement("option");
           option.value = value;
-          option.textContent = value === "dev" ? "Development" : value;
+          option.textContent = value === "latest" ? (select.dataset.docsLocale === "ko" ? "최신 버전" : "Latest") : value;
           select.append(option);
         }
-        select.value = select.dataset.docsCurrent ?? "dev";
+        select.value = select.dataset.docsCurrent ?? "latest";
       } catch {
         // A release archive must remain usable even while the index is unavailable.
       }

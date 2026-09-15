@@ -1,22 +1,30 @@
 ---
 title: Interactive browser preview
-description: Run a production SQLBraid query with SQLite WASM in a browser worker.
+description: Edit and run real SQL against a disposable SQLite WASM database in your browser.
 ---
 
 import InteractivePreview from "../../components/InteractivePreview.astro";
 
-The preview below is the same execution path used by an application bundle:
-the browser worker imports the SQLBraid SQLite WASM adapter, renders a
-`sql.rows(schema)` query, and executes it against an official SQLite WASM
-`:memory:` database. The fixture is deterministic finance data with Korean and
-other Unicode account names.
+The preview below uses the same SQLBraid SQLite WASM adapter that an application
+bundle can use. Write or paste a SQL statement, then run it against an official
+SQLite WASM `:memory:` database in a Web Worker. The fixture is deterministic
+finance data with Korean and other Unicode account names.
 
-It demonstrates:
+Try:
 
-- guarded `@braid if` branches and ordinary value binds;
-- rendered SQLite SQL and its bind values;
-- Standard Schema validation plus a currency-label transformation; and
-- a real tabular result from the WASM database.
+- `SELECT` statements, including your own filters and joins;
+- `INSERT`, `UPDATE`, and other single-statement commands against the disposable database;
+- readable SQLite syntax/runtime errors, followed by a corrected query;
+- **Inspect schema** to see the seeded table definition; and
+- **Reset seeded database** to restore the original rows after a mutation.
+
+The result table shows at most the first 1,000 rows so exploratory queries stay
+responsive. A worker that runs longer than ten seconds is replaced and its
+database is reset.
+
+The SQL is intentionally user-authored raw text inside this disposable database:
+the preview does not interpolate it into a server query, claim injection safety,
+or persist any changes.
 
 <InteractivePreview />
 
