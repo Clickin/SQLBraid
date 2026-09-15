@@ -11,7 +11,7 @@ import { afterEach, test, vi } from "vitest";
 import {
   assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertTaggedSha,
   stageCandidates, verifyPublished, parseSemver, readReleaseManifest,
-  setReleaseCommand, setReleaseRequest, setReleaseVersion,
+  setReleaseCommand, setReleaseVersion,
   type ReleaseManifest, type StagedPublication,
 } from "../scripts/release.mjs";
 
@@ -20,12 +20,10 @@ const directories: string[] = [];
 const uuid = (index: number) => `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`;
 afterEach(async () => {
   vi.unstubAllEnvs();
-  setReleaseRequest(fetch);
   setReleaseVersion("0.1.0-rc.0");
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-interface Stage { id: string; packageName: string; version: string; tag: string; bytes: Buffer }
 async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   setReleaseVersion(version);
   vi.stubEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://oidc.actions.example/token");
@@ -39,19 +37,13 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
     integrity: `sha512-${createHash("sha512").update(bytes.get(name)!).digest("base64")}`, dependencies: names.slice(0, index),
   })) };
   for (const entry of manifest.packages) await writeFile(join(directory, entry.file), bytes.get(entry.name)!);
-  const stages: Stage[] = [];
   const publicIntegrity = new Map<string, string>();
   const tags = new Map(names.map((name) => [name, { latest: "0.0.9" } as Record<string, string>]));
   const calls: string[][] = [];
-  const requests: { url: URL; method: string }[] = [];
-  const behavior = { failAfterUpload: false, failBeforeUpload: false, corruptStage: false, invalidSummary: false,
-    listStatus: 200, downloadStatus: 200, provenance: true, extraTotal: 0, changeLatest: false, advanceNext: false, failPackage: "",
+  const behavior = { failAfterUpload: false, failBeforeUpload: false, invalidSummary: false,
+    provenance: true, changeLatest: false, advanceNext: false, failPackage: "",
     packageNotFound: false };
-  const addStage = (name = names[0]) => {
-    const stage: Stage = { id: uuid(stages.length + 1), packageName: name, version, tag: version.includes("-") ? "next" : `release-${version}`, bytes: bytes.get(name)! };
-    stages.push(stage);
-    return stage;
-  };
+  let stagedCount = 0;
   setReleaseCommand(async (file, args) => {
     assert.equal(file, "pnpm");
     calls.push([...args]);
@@ -75,45 +67,18 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
       if (behavior.failBeforeUpload || behavior.failPackage === entry.name) throw new Error("upload interrupted");
       const summary = { name: entry.name, version, integrity: entry.integrity };
       if (args.includes("--dry-run")) return JSON.stringify({ [entry.name]: summary });
-      const stage = addStage(entry.name);
-      if (behavior.corruptStage) stage.bytes = Buffer.from("different archive");
+      stagedCount += 1;
       if (behavior.changeLatest) tags.get(entry.name)!.latest = version;
       if (behavior.advanceNext) tags.get(entry.name)!.next = "0.1.0-rc.1";
       if (behavior.failAfterUpload) throw new Error("connection lost after upload");
-      return behavior.invalidSummary ? "truncated JSON" : JSON.stringify({ [entry.name]: { ...summary, stageId: stage.id } });
+      return behavior.invalidSummary ? "truncated JSON" : JSON.stringify({ [entry.name]: { ...summary, stageId: uuid(stagedCount) } });
     }
     throw new Error(`Unexpected command: ${args.join(" ")}`);
-  });
-  setReleaseRequest(async (url, init = {}) => {
-    requests.push({ url, method: init.method ?? "GET" });
-    const auth = new Headers(init.headers).get("authorization");
-    assert.equal(init.redirect, "error");
-    if (url.hostname === "oidc.actions.example") {
-      assert.equal(url.searchParams.get("audience"), "npm:registry.npmjs.org");
-      assert.equal(auth, "Bearer actions-fixture");
-      return Response.json({ value: "github-fixture" });
-    }
-    if (init.method === "POST") {
-      assert.match(url.pathname, /^\/-\/npm\/v1\/oidc\/token\/exchange\/package\//u);
-      assert.equal(auth, "Bearer github-fixture");
-      return Response.json({ token: "ephemeral-fixture" });
-    }
-    assert.equal(auth, "Bearer ephemeral-fixture");
-    if (url.pathname === "/-/stage") {
-      const items = stages.filter(({ packageName }) => packageName === url.searchParams.get("package"));
-      const page = Number(url.searchParams.get("page"));
-      return Response.json({ items: items.slice(page * 100, (page + 1) * 100).map(({ bytes: _bytes, ...item }) => item), total: items.length + behavior.extraTotal }, { status: behavior.listStatus });
-    }
-    const stage = stages.find(({ id }) => url.pathname.startsWith(`/-/stage/${id}`));
-    assert.ok(stage);
-    if (url.pathname.endsWith("/tarball")) return new Response(new Uint8Array(stage.bytes), { status: behavior.downloadStatus });
-    const { bytes: _bytes, ...metadata } = stage;
-    return Response.json(metadata);
   });
   const run = (dryRun = false) => stageCandidates(manifest, { directory, dryRun });
   const evidence = async (): Promise<StagedPublication> => JSON.parse(await readFile(join(directory, "staged-publication.json"), "utf8"));
   const uploads = () => calls.filter((args) => args[0] === "stage" && args[1] === "publish" && !args.includes("--dry-run"));
-  return { manifest, directory, stages, publicIntegrity, tags, calls, requests, behavior, addStage, run, evidence, uploads };
+  return { manifest, directory, publicIntegrity, tags, calls, behavior, run, evidence, uploads };
 }
 
 test("pnpm missing-version errors are treated as absent registry versions", async () => {
@@ -139,7 +104,7 @@ test("pnpm missing-version errors are treated as absent registry versions", asyn
   assert.equal(args[args.indexOf("--access") + 1], "public");
   assert.equal(args[args.indexOf("--npmrc-auth-file") + 1], "/dev/null");
   assert.equal(f.calls.some(([cmd]) => ["publish", "dist-tag", "pack"].includes(cmd)), false);
-  assert.equal(f.requests.some(({ method, url }) => method !== "GET" && !url.pathname.includes("/oidc/token/exchange/")), false);
+  assert.deepEqual(f.calls.filter(([cmd]) => cmd === "stage").map(([, subcommand]) => subcommand), ["publish"]);
   const summary = await readFile(join(f.directory, "summary"), "utf8");
   assert.match(summary, /human approval required/);
   assert.ok(summary.includes(uuid(1)));
@@ -150,21 +115,23 @@ test("pnpm missing-version errors are treated as absent registry versions", asyn
   const f = await fixture();
   await f.run(true);
   assert.equal(f.uploads().length, 0);
-  assert.equal(f.requests.length, 0);
-  assert.equal(f.stages.length, 0);
+  assert.equal(f.calls.some(([command]) => command === "view"), false);
   assert.equal(f.calls.filter(([cmd]) => cmd === "stage").length, 1);
   setReleaseCommand(async () => "12.3.3");
   await assert.rejects(f.run(true), /requires pnpm/);
  });
 
- test("uncertain uploads and truncated summaries recover only by exact staged tarball verification", async () => {
+ test("uncertain uploads retain pending evidence and never retry blindly", async () => {
   for (const flag of ["failAfterUpload", "invalidSummary"] as const) {
     const f = await fixture();
     f.behavior[flag] = true;
-    await f.run();
-    await f.run();
+    await assert.rejects(f.run(), /outcome unresolved/);
     assert.equal(f.uploads().length, 1);
-    assert.equal((await f.evidence()).packages[0].state, "staged");
+    const report = await f.evidence();
+    assert.equal(report.packages[0].state, "pending");
+    assert.equal(report.packages[0].stageId, undefined);
+    await assert.rejects(f.run(), /Uncertain prior stage/);
+    assert.equal(f.uploads().length, 1);
   }
  });
 
@@ -178,43 +145,17 @@ test("pnpm missing-version errors are treated as absent registry versions", asyn
   assert.equal((await f.evidence()).packages[0].state, "pending");
  });
 
- test("existing staged versions are reused only with unique identity, requested tag and exact bytes", async () => {
+ test("returned stage evidence is sufficient for the approval handoff", async () => {
   const f = await fixture();
-  const stage = f.addStage();
   await f.run();
-  assert.equal(f.uploads().length, 0);
-  assert.equal((await f.evidence()).packages[0].stageId, stage.id);
-  stage.tag = "latest";
-  await assert.rejects(f.run(), /identity or requested tag mismatch/);
-  stage.tag = "next";
-  stage.bytes = Buffer.from("tampered");
-  await assert.rejects(f.run(), /Staged tarball integrity mismatch/);
-  f.addStage();
-  await assert.rejects(f.run(), /Multiple stages/);
-  assert.equal(f.uploads().length, 0);
- });
-
- test("new stages retain IDs but fail certification when downloaded bytes differ or cannot be read", async () => {
-  for (const inaccessible of [false, true]) {
-    const f = await fixture();
-    f.behavior.corruptStage = !inaccessible;
-    f.behavior.downloadStatus = inaccessible ? 403 : 200;
-    await assert.rejects(f.run(), inaccessible ? /HTTP 403/ : /Staged tarball integrity mismatch/);
-    const report = await f.evidence();
-    assert.equal(report.complete, false);
-    assert.equal(report.packages[0].stageId, uuid(1));
-    assert.equal(report.packages[0].state, "pending");
-  }
- });
-
- test("registry list failure or incomplete pagination never implies absence", async () => {
-  const f = await fixture();
-  f.behavior.listStatus = 403;
-  await assert.rejects(f.run(), /HTTP 403/);
-  f.behavior.listStatus = 200;
-  f.behavior.extraTotal = 1;
-  await assert.rejects(f.run(), /Incomplete stage list/);
-  assert.equal(f.uploads().length, 0);
+  const report = await f.evidence();
+  assert.equal(report.packages[0].stageId, uuid(1));
+  assert.equal(report.packages[0].state, "staged");
+  assert.deepEqual(report.approvalCommands, [
+    { layer: 1, command: `pnpm stage approve ${uuid(1)} --registry https://registry.npmjs.org/` },
+  ]);
+  await assert.rejects(f.run(), /Uncertain prior stage/);
+  assert.equal(f.uploads().length, 1);
  });
 
  test("already public exact integrity is deterministic and never triggers staging or tag repair", async () => {
@@ -226,7 +167,6 @@ test("pnpm missing-version errors are treated as absent registry versions", asyn
   await f.run();
   assert.equal((await f.evidence()).packages[0].state, "public");
   assert.equal(f.uploads().length, 0);
-  assert.equal(f.requests.some(({ url }) => url.pathname.startsWith("/-/stage")), false);
   delete f.tags.get(entry.name)!.next;
   await assert.rejects(f.run(), /incorrect next tag/);
   assert.equal((await f.evidence()).complete, false);
@@ -258,7 +198,7 @@ test("pnpm missing-version errors are treated as absent registry versions", asyn
   assert.equal((await advanced.evidence()).complete, false);
  });
 
- test("partial package staging preserves recoverable IDs and stable latest remains untouched", async () => {
+ test("partial package staging preserves IDs and blocks automatic recovery", async () => {
   const f = await fixture("0.1.0", ["@sqlbraid/core", "@sqlbraid/template"]);
   f.behavior.failPackage = "@sqlbraid/template";
   await assert.rejects(f.run(), /outcome unresolved/);
@@ -268,17 +208,11 @@ test("pnpm missing-version errors are treated as absent registry versions", asyn
   assert.equal(partial.complete, false);
   for (const tag of f.tags.values()) assert.deepEqual(tag, { latest: "0.0.9" });
   f.behavior.failPackage = "";
-  // A later registry observation resolves the uncertain second upload.
-  f.addStage("@sqlbraid/template");
-  await f.run();
-  const report = await f.evidence();
-  assert.equal(report.complete, true);
-  assert.deepEqual(report.approvalCommands, [
+  assert.deepEqual(partial.approvalCommands, [
     { layer: 1, command: `pnpm stage approve ${uuid(1)} --registry https://registry.npmjs.org/` },
-    { layer: 2, command: `pnpm stage approve ${uuid(2)} --registry https://registry.npmjs.org/` },
   ]);
+  await assert.rejects(f.run(), /Uncertain prior stage/);
   assert.equal(f.uploads().length, 2);
-  assert.ok(report.packages.every(({ tag }) => tag === "release-0.1.0"));
   assertManifestOrder(f.manifest, ["@sqlbraid/core", "@sqlbraid/template"]);
   assert.throws(() => assertManifestOrder(f.manifest, ["@sqlbraid/template", "@sqlbraid/core"]), /dependency-derived/);
  });

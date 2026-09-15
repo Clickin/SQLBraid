@@ -259,8 +259,11 @@ The following are maintainer actions, **not** actions performed by certification
 
    This runs the complete current-run certification DAG, verifies exact-tag-SHA
    Runtime and Documentation evidence, verifies candidate hashes, then stages
-   validated tarballs in dependency order using OIDC. It records stage IDs but
-   does **not** approve them.
+   validated tarballs in dependency order using OIDC. It records the stage IDs
+   returned by `stage publish` but does **not** list, view, or download staged
+   packages with the OIDC credential, and does **not** approve them. Those
+   read/approval operations remain in the maintainer's authenticated review
+   boundary.
 
 4. Review `staged-publication.json` and each registry stage record. Confirm
    candidate identity, exact tarball hashes, stage IDs, provenance, `next`, and

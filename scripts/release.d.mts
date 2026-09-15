@@ -54,5 +54,4 @@ export declare function parseSemver(value: string): ReleaseSemver;
 export declare function readReleaseManifest(directory?: string): Promise<ReleaseManifest>;
 export declare function releaseTag(): string;
 export declare function setReleaseCommand(command: (file: string, args: readonly string[], cwd?: string, options?: { quiet?: boolean }) => Promise<string>): void;
-export declare function setReleaseRequest(request: (url: URL, init?: RequestInit) => Promise<Response>): void;
 export declare function setReleaseVersion(version: string): void;

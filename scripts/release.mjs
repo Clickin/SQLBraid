@@ -67,8 +67,6 @@ async function defaultCommand(file, args, cwd = root, { quiet = false } = {}) {
 }
 
 let command = defaultCommand;
-let request = fetch;
-
 async function json(path) {
   return JSON.parse(await readFile(path, "utf8"));
 }
@@ -335,96 +333,9 @@ async function assertRegistryIntegrity(entry) {
   if (found !== entry.integrity) throw new Error(`Registry integrity mismatch for ${entry.name}@${version}: expected ${entry.integrity}, found ${found ?? "absent"}.`);
 }
 
-async function oidcToken(name) {
-  let idToken;
-  if (process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
-    const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
-    url.searchParams.set("audience", `npm:${new URL(registry).hostname}`);
-    const response = await request(url, {
-      headers: { accept: "application/json", authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
-      signal: AbortSignal.timeout(30_000),
-      redirect: "error",
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok || typeof body.value !== "string" || !body.value) throw new Error(`GitHub OIDC token request failed (${response.status}).`);
-    idToken = body.value;
-  }
-  if (!idToken) throw new Error("OIDC publication requires GitHub Actions id-token permissions.");
-  const escapedName = encodeURIComponent(name);
-  const response = await request(new URL(`-/npm/v1/oidc/token/exchange/package/${escapedName}`, registry), {
-    method: "POST",
-    headers: { accept: "application/json", authorization: `Bearer ${idToken}` },
-    signal: AbortSignal.timeout(30_000),
-    redirect: "error",
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || typeof body.token !== "string" || !body.token) throw new Error(`npm OIDC token exchange failed for ${name} (${response.status}).`);
-  return body.token;
-}
-
-// pnpm 12.3.4 stage reads do not exchange OIDC themselves. Use its same
-// registry GET protocol with a fresh package-scoped OIDC token, kept in memory.
-async function stageGet(path, token) {
-  const response = await request(new URL(path, registry), {
-    headers: { authorization: `Bearer ${token}`, "npm-auth-type": "web", "npm-command": "stage" },
-    signal: AbortSignal.timeout(30_000), redirect: "error",
-  });
-  if (!response.ok) throw new Error(`npm stage read failed (HTTP ${response.status}); refusing to assume absence.`);
-  return response;
-}
-
 function assertStageId(id) {
   if (typeof id !== "string" || !/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/iu.test(id)) throw new Error("Missing or invalid npm stage ID.");
   return id;
-}
-
-async function findStage(entry, token) {
-  const items = [];
-  let total;
-  for (let page = 0; page < 1000; page += 1) {
-    const query = new URLSearchParams({ package: entry.name, page: String(page), perPage: "100" });
-    const body = await (await stageGet(`-/stage?${query}`, token)).json();
-    if (!Array.isArray(body.items) || !Number.isSafeInteger(body.total) || body.total < 0
-      || (total !== undefined && total !== body.total)) throw new Error("Invalid or changing stage list; retry after registry state settles.");
-    total = body.total;
-    for (const item of body.items) {
-      if (item.packageName !== entry.name || typeof item.version !== "string") throw new Error("Stage list returned an unexpected package identity.");
-      assertStageId(item.id);
-      if (items.some((previous) => previous.id === item.id)) throw new Error("Duplicate stage list entry; cannot prove complete registry state.");
-      items.push(item);
-    }
-    if (items.length === total) {
-      const matches = items.filter((item) => item.version === entry.version);
-      if (matches.length > 1) throw new Error(`Multiple stages for ${entry.name}@${entry.version}; maintainer must resolve ambiguity.`);
-      return matches[0];
-    }
-    if (!body.items.length || items.length > total) break;
-  }
-  throw new Error("Incomplete stage list; refusing to create a potentially duplicate stage.");
-}
-
-async function verifyStage(entry, id, token) {
-  assertStageId(id);
-  const metadata = await (await stageGet(`-/stage/${id}`, token)).json();
-  if (metadata.id !== id || metadata.packageName !== entry.name || metadata.version !== entry.version || metadata.tag !== releaseTag()) {
-    throw new Error(`Staged package identity or requested tag mismatch for ${entry.name}.`);
-  }
-  // This endpoint returns the stored archive, not a repack. Require exact bytes;
-  // an unavailable endpoint or a registry re-encoding fails closed.
-  const response = await stageGet(`-/stage/${id}/tarball`, token);
-  if (!response.body) throw new Error(`Missing staged tarball for ${entry.name}.`);
-  const sha256 = createHash("sha256");
-  const sha512 = createHash("sha512");
-  let size = 0;
-  for await (const bytes of response.body) {
-    size += bytes.byteLength;
-    if (size > 512 * 1024 * 1024) throw new Error("Staged tarball exceeds pnpm's 512 MiB download limit.");
-    sha256.update(bytes);
-    sha512.update(bytes);
-  }
-  if (sha256.digest("hex") !== entry.sha256 || `sha512-${sha512.digest("base64")}` !== entry.integrity) {
-    throw new Error(`Staged tarball integrity mismatch for ${entry.name}@${entry.version}.`);
-  }
 }
 
 function manifestDigest(manifest) {
@@ -467,7 +378,7 @@ async function stagingSummary(evidence) {
   await writeFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`, { flag: "a" });
 }
 
-async function stagePackage(entry, record, token, persist, directory) {
+async function stagePackage(entry, record, persist, directory) {
   const existing = await registryIntegrity(entry.name, entry.version);
   if (existing) {
     if (existing !== entry.integrity) throw new Error(`Registry integrity mismatch for ${entry.name}@${entry.version}.`);
@@ -475,40 +386,29 @@ async function stagePackage(entry, record, token, persist, directory) {
     await persist();
     return;
   }
-  let stage = await findStage(entry, token);
-  if (!stage) {
-    if (record.state === "pending" || record.stageId) throw new Error(`Uncertain prior stage for ${entry.name}; no visible stage. Refusing another upload; maintainer must reconcile registry state.`);
-    record.state = "pending";
-    await persist(); // durable intent before any upload, including network ambiguity
-    let uploadError;
-    try {
-      const output = await pnpm(["stage", "publish", join(directory, entry.file), "--access", "public", "--tag", releaseTag(),
-        "--no-git-checks", "--ignore-scripts", "--provenance", "--json", "--reporter=silent", "--npmrc-auth-file", "/dev/null"], root, { quiet: true });
-      const summary = JSON.parse(output)?.[entry.name];
-      record.stageId = assertStageId(summary?.stageId);
-      await persist(); // keep the ID even if subsequent verification fails
-      if (summary.name !== entry.name || summary.version !== entry.version || summary.integrity !== entry.integrity) throw new Error("pnpm stage summary does not match the validated candidate.");
-    } catch (error) {
-      uploadError = error;
-    }
-    // Always discover the registry state after upload; no automatic second POST.
-    stage = await findStage(entry, token);
-    if (!stage) {
-      const publicIntegrity = await registryIntegrity(entry.name, entry.version);
-      if (publicIntegrity) {
-        if (publicIntegrity !== entry.integrity) throw new Error(`Registry integrity mismatch for ${entry.name}@${entry.version}.`);
-        record.state = "public";
-        await persist();
-        return;
-      }
-      throw new Error(`Staging outcome unresolved for ${entry.name}; retained pending evidence, refusing another upload.`, { cause: uploadError });
-    }
-    if (record.stageId && record.stageId !== stage.id) throw new Error("Upload and registry stage IDs disagree; maintainer reconciliation required.");
+  if (record.state === "pending" || record.stageId) {
+    throw new Error(`Uncertain prior stage for ${entry.name}; refusing another upload. Maintainer must reconcile the staged publication before retrying.`);
   }
-  record.stageId = assertStageId(stage.id);
   record.state = "pending";
-  await persist();
-  await verifyStage(entry, stage.id, token);
+  await persist(); // durable intent before the OIDC stage upload
+  let output;
+  try {
+    output = await pnpm(["stage", "publish", join(directory, entry.file), "--access", "public", "--tag", releaseTag(),
+      "--no-git-checks", "--ignore-scripts", "--provenance", "--json", "--reporter=silent", "--npmrc-auth-file", "/dev/null"], root, { quiet: true });
+  } catch (error) {
+    throw new Error(`Staging outcome unresolved for ${entry.name}; retained pending evidence, refusing another upload.`, { cause: error });
+  }
+  let summary;
+  try {
+    summary = JSON.parse(output)?.[entry.name];
+    record.stageId = assertStageId(summary?.stageId);
+    await persist(); // keep the returned ID if later validation fails
+  } catch (error) {
+    throw new Error(`Staging outcome unresolved for ${entry.name}; retained pending evidence, refusing another upload.`, { cause: error });
+  }
+  if (summary.name !== entry.name || summary.version !== entry.version || summary.integrity !== entry.integrity) {
+    throw new Error("pnpm stage summary does not match the validated candidate.");
+  }
   record.state = "staged";
   await persist();
 }
@@ -567,9 +467,10 @@ async function stageCandidates(manifest, { dryRun = false, directory = artifactD
       if (semver.isPrerelease && tags.latest === version) throw new Error(`Refusing prerelease ${version} under latest for ${entry.name}.`);
     }
     for (const [index, entry] of manifest.packages.entries()) {
-      // Reads authenticate with OIDC too, never an npm token fallback. pnpm
-      // obtains its own per-package OIDC credential for the stage upload.
-      await stagePackage(entry, evidence.packages[index], await oidcToken(entry.name), persist, directory);
+      // pnpm obtains its own short-lived OIDC credential for stage publish.
+      // Staged-package list/view/download endpoints require maintainer auth and
+      // are intentionally left to the post-CI review boundary.
+      await stagePackage(entry, evidence.packages[index], persist, directory);
       const tags = await registryDistTags(entry.name);
       assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
       if (evidence.packages[index].state === "public" && tags[releaseTag()] !== version) {
@@ -693,7 +594,6 @@ if (invokedPath === fileURLToPath(import.meta.url)) {
 }
 
 function setReleaseCommand(nextCommand) { command = nextCommand; }
-function setReleaseRequest(nextRequest) { request = nextRequest; }
 function setReleaseVersion(nextVersion) {
   version = nextVersion;
   semver = parseSemver(nextVersion);
@@ -701,4 +601,4 @@ function setReleaseVersion(nextVersion) {
   if (!artifactArgument) artifactDir = resolve(join(tmpdir(), `sqlbraid-release-${nextVersion}`));
 }
 
-export { assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertTaggedSha, stageCandidates, verifyPublished, parseSemver, readReleaseManifest, releaseTag, setReleaseCommand, setReleaseRequest, setReleaseVersion };
+export { assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertTaggedSha, stageCandidates, verifyPublished, parseSemver, readReleaseManifest, releaseTag, setReleaseCommand, setReleaseVersion };
