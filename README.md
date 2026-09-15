@@ -22,7 +22,7 @@ const users = await db.all(sql.rows<UserRow>`
 ```
 
 Application code installs the unscoped `sqlbraid` facade and imports a
-driver-oriented subpath such as `sqlbraid/pg`, `sqlbraid/mysql2`,
+combined driver+dialect/query subpath such as `sqlbraid/pg`, `sqlbraid/mysql2`,
 `sqlbraid/node-sqlite`, or `sqlbraid/oracledb`. The facade has no implicit
 default dialect; its root exports only common runtime contracts. The granular
 `@sqlbraid/*` packages remain available for custom integrations and tooling.
@@ -197,7 +197,7 @@ SQLBraid is not an ORM, query-builder-first language, complete SQL parser, unive
 
 | Package | Responsibility |
 | --- | --- |
-| `sqlbraid` | Canonical runtime facade; driver-oriented subpaths combine a dialect/query API with an adapter |
+| `sqlbraid` | Canonical runtime facade; combined driver+dialect/query subpaths use matching adapters, while `/bun-sql` is a multi-dialect adapter with an explicit dialect |
 | `@sqlbraid/core` | Public contracts, rendered statements, binding SPI, observers, Standard Schema types |
 | `@sqlbraid/template` | Dialect-neutral tags, directives, fragments, `sql.bind` |
 | `@sqlbraid/runtime` | Execution, sessions, leases, transactions, prepared shapes, streams, mapping |
@@ -217,8 +217,8 @@ SQLBraid is not an ORM, query-builder-first language, complete SQL parser, unive
 | `@sqlbraid/language-server` | Standard stdio LSP |
 
 Runtime packages do not pull tooling, metadata, codegen, editor, or Vite
-dependencies. The facade also does not install database drivers; install a
-driver peer explicitly. See the [package map](https://clickin.github.io/SQLBraid/dev/reference/packages/) and [release readiness](./docs/SQLBraid_release_readiness.md).
+dependencies. The facade also does not install database drivers; install the
+database driver separately. See the [package map](https://clickin.github.io/SQLBraid/dev/reference/packages/) and [release readiness](./docs/SQLBraid_release_readiness.md).
 
 ## Development
 

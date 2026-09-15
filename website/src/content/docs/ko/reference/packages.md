@@ -5,7 +5,7 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 
 | 패키지 | 책임 |
 | --- | --- |
-| `sqlbraid` | 표준 runtime facade; driver-oriented subpath에서 dialect/query API와 adapter를 결합 |
+| `sqlbraid` | 표준 runtime facade; 결합된 driver+dialect/query subpath는 matching adapter를 사용하며 `/bun-sql`은 명시적 dialect를 받는 multi-dialect adapter |
 | `@sqlbraid/core` | 공개 계약, Standard Schema 대상 타입, 렌더링된 파라미터 메타데이터 |
 | `@sqlbraid/template` | 태그 템플릿, 지시문, 렌더링, 구조적 조각, `sql.bind` |
 | `@sqlbraid/runtime` | 실행, 매핑, 결과 종류 검사, 트랜잭션, 스트리밍, prepared shape |
@@ -25,12 +25,24 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/cli` | codegen, inspect, diagnostics, drift, 명령줄 대체 수단 |
 | `@sqlbraid/language-server` | 표준 stdio LSP 통합 |
 
-애플리케이션 코드는 `sqlbraid`를 설치한 뒤 `sqlbraid/pg`,
+애플리케이션 코드는 `sqlbraid`를 설치한 뒤 결합된 driver+dialect/query
+subpath인 `sqlbraid/pg`,
 `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
 `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
-`sqlbraid/tedious`, `sqlbraid/bun-sql` 같은 driver-oriented subpath를
-사용합니다. 루트는 database-neutral이며 암묵적인 `sql` tag를 내보내지
-않습니다. `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`,
+`sqlbraid/tedious`를 사용합니다. Bun.SQL은 multi-dialect
+`sqlbraid/bun-sql` adapter를 사용하며, 선택한 dialect root에서 `sql`을
+가져오고 같은 dialect를 명시적으로 전달합니다.
+
+```ts
+import { createBunSqlDatabase } from "sqlbraid/bun-sql";
+import { sql } from "sqlbraid/postgres";
+
+const client = new Bun.SQL(process.env.DATABASE_URL!);
+const db = createBunSqlDatabase(client, { dialect: "postgres" });
+```
+
+루트는 database-neutral이며 암묵적인 `sql` tag를 내보내지 않습니다.
+`sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`,
 `sqlbraid/oracle`, `sqlbraid/mssql` dialect-only subpath는 custom adapter용이며
 세분화된 `@sqlbraid/*` 패키지도 계속 지원합니다. `@sqlbraid/bun-sql`은 static
 Bun import가 없고 명시적인 `dialect`를 요구하며 SQL 의미를 자동 감지하지

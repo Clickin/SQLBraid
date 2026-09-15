@@ -71,20 +71,31 @@ Canonical environment capability keys are `statement.prepare`,
 ### `sqlbraid`
 
 **Application:** the canonical runtime facade. The root re-exports common
-contracts and runtime constructors without selecting a dialect. Driver-oriented
-subpaths combine the matching dialect/query surface with its adapter:
+contracts and runtime constructors without selecting a dialect. Combined
+driver+dialect/query subpaths use the matching adapter:
 `/pg`, `/mysql2`, `/mariadb`, `/node-sqlite`, `/sqlite-wasm`, `/d1`,
-`/oracledb`, `/tedious`, and `/bun-sql`. Dialect-only subpaths
+`/oracledb`, and `/tedious`. The `/bun-sql` subpath is a multi-dialect Bun.SQL
+adapter; import `sql` from the selected dialect root and pass that dialect to
+`createBunSqlDatabase`. Dialect-only subpaths
 `/postgres`, `/mysql`, `/sqlite`, `/oracle`, and `/mssql` support custom
 adapters. The facade has no CLI, database-driver, metadata, codegen, tooling,
 compiler, editor, or Vite dependency.
+
+```ts
+import { createBunSqlDatabase } from "sqlbraid/bun-sql";
+import { sql } from "sqlbraid/postgres";
+
+const client = new Bun.SQL(process.env.DATABASE_URL!);
+const db = createBunSqlDatabase(client, { dialect: "postgres" });
+const rows = await db.all(sql.rows`SELECT id FROM users`);
+```
 
 | Package | Application surface | SPI / advanced surface |
 | --- | --- | --- |
 | `@sqlbraid/postgres` | `sql`, `postgresParameter.refcursor()` | dialect, TypePolicy, representation profiles, `/pg`, `/inspector` |
 | `@sqlbraid/mysql` | `sql` | dialect, TypePolicy, representation profiles, `/mysql2`, `/inspector` |
 | `@sqlbraid/mariadb` | `sql` | dialect, TypePolicy, representation profiles, `/mariadb`, `/inspector` |
-| `@sqlbraid/bun-sql` | `sql` | Bun.SQL adapter family; required user-selected `postgres`, `mysql`, `mariadb`, or `sqlite` dialect |
+| `@sqlbraid/bun-sql` | `createBunSqlDatabase`, `createBunSqlProvider` | Bun.SQL multi-dialect adapter; requires a user-selected `postgres`, `mysql`, `mariadb`, or `sqlite` dialect |
 | `@sqlbraid/sqlite` | `sql` | dialect, TypePolicy, `/node-sqlite`, `/wasm`, `/d1`, `/inspector` |
 | `@sqlbraid/oracle` | `sql`, `oracleParameter` | portable dialect/TypePolicy, `/oracledb`, `/inspector` |
 | `@sqlbraid/mssql` | `sql`, `mssqlParameter` | portable dialect/TypePolicy, `/tedious`, `/inspector` |

@@ -5,7 +5,7 @@ description: Find the SQLBraid package that owns each concern.
 
 | Package | Responsibility |
 | --- | --- |
-| `sqlbraid` | Canonical runtime facade; driver-oriented subpaths combine a dialect/query API with an adapter |
+| `sqlbraid` | Canonical runtime facade; combined driver+dialect/query subpaths use matching adapters, while `/bun-sql` is a multi-dialect adapter with an explicit dialect |
 | `@sqlbraid/core` | Public contracts, Standard Schema-facing types, and rendered parameter metadata |
 | `@sqlbraid/template` | Tagged templates, directives, rendering, structural fragments, and `sql.bind` |
 | `@sqlbraid/runtime` | Execution, mapping, result-kind checks, transactions, streaming, and prepared shapes |
@@ -25,14 +25,27 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/cli` | Optional codegen, inspect, diagnostics, drift, and command-line tooling |
 | `@sqlbraid/language-server` | Standard stdio LSP integration |
 
-Install `sqlbraid` in application code, then use a driver-oriented subpath:
+Install `sqlbraid` in application code, then use a combined driver+dialect/query
+subpath:
 `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
 `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
-`sqlbraid/tedious`, or `sqlbraid/bun-sql`. The root is database-neutral and
-does not export an implicit `sql` tag. The dialect-only subpaths
-`sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle`, and
-`sqlbraid/mssql` are for custom adapters. The granular `@sqlbraid/*` packages
-remain supported for library authors and deliberately narrower dependencies.
+or `sqlbraid/tedious`. For Bun.SQL, use the multi-dialect `sqlbraid/bun-sql`
+adapter, import `sql` from the selected dialect root, and pass that dialect
+explicitly:
+
+```ts
+import { createBunSqlDatabase } from "sqlbraid/bun-sql";
+import { sql } from "sqlbraid/postgres";
+
+const client = new Bun.SQL(process.env.DATABASE_URL!);
+const db = createBunSqlDatabase(client, { dialect: "postgres" });
+```
+
+The root is database-neutral and does not export an implicit `sql` tag. The
+dialect-only subpaths `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`,
+`sqlbraid/oracle`, and `sqlbraid/mssql` are for custom adapters. The granular
+`@sqlbraid/*` packages remain supported for library authors and deliberately
+narrower dependencies.
 `@sqlbraid/bun-sql` has no static Bun import and requires an explicit `dialect`;
 it does not auto-detect SQL semantics. Runtime packages do not acquire metadata,
 codegen, compiler, editor, or Vite dependencies. Install tooling packages only
