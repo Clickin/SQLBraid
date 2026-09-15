@@ -251,6 +251,40 @@ test("SQLite inspector reports only proven rowid identity", async () => {
   }
 });
 
+test("SQLite inspector reads structured STRICT and WITHOUT ROWID flags in either order", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    native.exec(`
+      CREATE TABLE braid_pv18_order_a (id INTEGER PRIMARY KEY) STRICT, WITHOUT ROWID;
+      CREATE TABLE braid_pv18_order_b (id INTEGER PRIMARY KEY) WITHOUT ROWID, STRICT;
+      CREATE TABLE braid_pv18_strict (id INTEGER PRIMARY KEY) STRICT;
+      CREATE TABLE braid_pv18_without (id INTEGER PRIMARY KEY) WITHOUT ROWID;
+      CREATE TABLE braid_pv18_words (
+        id INTEGER CHECK (id <> 'WITHOUT ROWID, STRICT')
+      ) /* STRICT WITHOUT ROWID */;
+    `);
+    const snapshot = await createSqliteInspector(native).inspect();
+    const relation = (name: string) => snapshot.relations[`main.${name}`];
+    for (const name of ["braid_pv18_order_a", "braid_pv18_order_b"] as const) {
+      assert.equal(relation(name)?.strict, true);
+      assert.equal(relation(name)?.withoutRowid, true);
+    }
+    assert.equal(relation("braid_pv18_strict")?.strict, true);
+    assert.equal(relation("braid_pv18_strict")?.withoutRowid, false);
+    assert.equal(relation("braid_pv18_without")?.strict, false);
+    assert.equal(relation("braid_pv18_without")?.withoutRowid, true);
+    assert.equal(relation("braid_pv18_words")?.strict, false);
+    assert.equal(relation("braid_pv18_words")?.withoutRowid, false);
+    const generated = generateModels(snapshot, { typePolicy: sqliteTypePolicy });
+    assertGeneratedProperty(generated.source, "BraidPv18StrictRow", "id", "string", false);
+    assert.ok(generated.diagnostics.some((diagnostic) =>
+      diagnostic.code === "CODEGEN_SQLITE_DYNAMIC_TYPE"
+      && diagnostic.relation === "main.braid_pv18_words"));
+  } finally {
+    native.close();
+  }
+});
+
 test("SQLite inspector evidence generates compiling strict and conservative dynamic models", async () => {
   const native = new DatabaseSync(":memory:");
   try {

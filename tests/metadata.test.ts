@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import * as metadata from '@sqlbraid/metadata';
-import { canonicalizeSnapshot, diffSnapshots, hashSnapshot, validateSnapshot, type MetadataSnapshot } from '@sqlbraid/metadata';
+import {
+  canonicalizeSnapshot,
+  diffSnapshots,
+  hashSnapshot,
+  qualifiedIdentity,
+  validateSnapshot,
+  type MetadataSnapshot,
+} from '@sqlbraid/metadata';
 
 const snapshot = {
   format: 'sqlbraid-metadata',
@@ -83,6 +90,28 @@ test('snapshot identity preserves prototype-named relation map keys', () => {
   const named = { ...snapshot, relations: { ['__proto__']: snapshot.relations['public.users'] } };
   assert.notEqual(hashSnapshot(named), hashSnapshot({ ...snapshot, relations: {} }));
   assert.ok(Object.hasOwn(JSON.parse(canonicalizeSnapshot(named)).relations, '__proto__'));
+});
+
+test('qualified identities escape delimiters without colliding', () => {
+  const left = qualifiedIdentity('a.b', 'c');
+  const right = qualifiedIdentity('a', 'b.c');
+  assert.notEqual(left, right);
+  assert.equal(qualifiedIdentity('public', 'users'), 'public.users');
+});
+
+test('marked snapshots reject inconsistent qualified relation identities', () => {
+  const marked = {
+    ...snapshot,
+    metadata: { identityEncoding: 'escaped-qualified-v1' },
+    relations: {
+      users: { ...snapshot.relations['public.users'], identity: qualifiedIdentity('other', 'users') },
+    },
+  };
+  assert.throws(() => validateSnapshot(marked), /SNAPSHOT_RELATION_IDENTITY/);
+  assert.doesNotThrow(() => validateSnapshot({
+    ...marked,
+    metadata: {},
+  }));
 });
 
 test('metadata package has no speculative migration API', () => {

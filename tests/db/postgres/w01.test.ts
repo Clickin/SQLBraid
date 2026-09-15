@@ -4,7 +4,7 @@ import { inject, test } from "vitest";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import * as v from "valibot";
 import { generateModels } from "@sqlbraid/codegen";
-import { hashSnapshot } from "@sqlbraid/metadata";
+import { diffSnapshots, hashSnapshot, parseSnapshotJson, qualifiedIdentity, validateSnapshot } from "@sqlbraid/metadata";
 import { DatabaseResultKindError } from "@sqlbraid/runtime";
 import { createPgDatabase, createPgPoolDatabase } from "@sqlbraid/postgres/pg";
 import { createPostgresInspector } from "@sqlbraid/postgres/inspector";
@@ -153,6 +153,46 @@ test("PostgreSQL inspector preserves identity and generated-column evidence", as
     await client.query("DROP TABLE IF EXISTS braid_pv8_inspector").catch(() => undefined);
     await client.query("DROP FUNCTION IF EXISTS braid_pv8_routine(integer)").catch(() => undefined);
     await client.end();
+  }
+});
+
+test("PostgreSQL inspector preserves collision-free identities through tooling", async () => {
+  const settings = inject("postgres");
+  const client = new Client({ connectionString: settings.connectionUri });
+  const schemaWithDot = "braid_pv18.a";
+  const plainSchema = "braid_pv18";
+  try {
+    await client.connect();
+    await client.query(`DROP SCHEMA IF EXISTS "${schemaWithDot}" CASCADE`);
+    await client.query(`DROP SCHEMA IF EXISTS "${plainSchema}" CASCADE`);
+    await client.query(`CREATE SCHEMA "${schemaWithDot}"`);
+    await client.query(`CREATE SCHEMA "${plainSchema}"`);
+    await client.query(`CREATE TABLE "${schemaWithDot}"."c" (id int4 NOT NULL)`);
+    await client.query(`CREATE TABLE "${plainSchema}"."b.c" (id int4 NOT NULL)`);
+    const snapshot = await createPostgresInspector(client).inspect();
+    const left = qualifiedIdentity(schemaWithDot, "c");
+    const right = qualifiedIdentity(plainSchema, "b.c");
+    assert.notEqual(left, right);
+    assert.ok(snapshot.relations[left]);
+    assert.ok(snapshot.relations[right]);
+    const roundTrip = parseSnapshotJson(JSON.stringify(snapshot));
+    validateSnapshot(roundTrip);
+    assert.equal(hashSnapshot(snapshot), hashSnapshot(roundTrip));
+    assert.deepEqual(diffSnapshots(snapshot, roundTrip), []);
+    const generated = generateModels(roundTrip, {
+      typePolicy: postgresTypePolicy,
+      filters: { includeRelations: [left, right] },
+      naming: { relations: { [left]: "DotSchema", [right]: "DotTable" } },
+      typeOverrides: { columns: { [right]: { id: { outputType: "number" } } } },
+    });
+    assert.equal(generated.models.length, 2);
+    assertGeneratedProperty(generated.source, "DotTableRow", "id", "number", false);
+  } finally {
+    if (client) {
+      await client.query(`DROP SCHEMA IF EXISTS "${schemaWithDot}" CASCADE`).catch(() => undefined);
+      await client.query(`DROP SCHEMA IF EXISTS "${plainSchema}" CASCADE`).catch(() => undefined);
+      await client.end().catch(() => undefined);
+    }
   }
 });
 

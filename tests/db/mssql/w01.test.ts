@@ -198,11 +198,17 @@ test("SQL Server inspector captures conservative catalogs for codegen", async ()
     const db = createTediousDatabase(connection);
     await db.execute(sql`DROP TABLE IF EXISTS dbo.braid_pv13_codegen`);
     await db.execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_pv13_proc`);
+    await db.execute(sql`DROP PROCEDURE IF EXISTS dbo.[constructor]`);
+    await db.execute(sql`DROP PROCEDURE IF EXISTS dbo.[toString]`);
+    await db.execute(sql`DROP PROCEDURE IF EXISTS dbo.[__proto__]`);
     await db.execute(sql`DROP FUNCTION IF EXISTS dbo.braid_pv13_tvf`);
     await db.execute(sql`DROP TYPE IF EXISTS dbo.braid_pv13_alias`);
     await db.execute(sql`CREATE TYPE dbo.braid_pv13_alias FROM int NOT NULL`);
     await db.execute(sql`CREATE TABLE dbo.braid_pv13_codegen (external_id int NOT NULL PRIMARY KEY, alias_id dbo.braid_pv13_alias, identity_value bigint IDENTITY(1,1) NOT NULL, amount decimal(12,2) NOT NULL DEFAULT 0, label nvarchar(100) NOT NULL, computed AS (external_id + 1))`);
     await db.execute(sql`CREATE PROCEDURE dbo.braid_pv13_proc @value int AS SELECT @value AS value`);
+    await db.execute(sql`CREATE PROCEDURE dbo.[constructor] AS SELECT 1 AS value`);
+    await db.execute(sql`CREATE PROCEDURE dbo.[toString] AS SELECT 1 AS value`);
+    await db.execute(sql`CREATE PROCEDURE dbo.[__proto__] AS SELECT 1 AS value`);
     await db.execute(sql`CREATE FUNCTION dbo.braid_pv13_tvf(@minimum int) RETURNS TABLE AS RETURN (SELECT alias_id FROM dbo.braid_pv13_codegen WHERE external_id >= @minimum)`);
 
     const snapshot = await createMssqlInspector(connection).inspect();
@@ -218,6 +224,9 @@ test("SQL Server inspector captures conservative catalogs for codegen", async ()
     const routine = Object.values(snapshot.routines).flat().find((entry) => entry.name === "braid_pv13_proc");
     assert.equal(routine?.argumentsComplete, true);
     assert.equal(routine?.arguments[0]?.type, "int");
+    assert.equal(snapshot.routines.constructor?.length, 1);
+    assert.equal(snapshot.routines.toString?.length, 1);
+    assert.equal(snapshot.routines.__proto__?.length, 1);
     const tvf = Object.values(snapshot.routines).flat().find((entry) => entry.name === "braid_pv13_tvf");
     assert.equal(tvf?.result.kind, "table");
     assert.equal(tvf?.result.kind === "table" ? tvf.result.columns?.[0]?.name : undefined, "alias_id");
@@ -229,6 +238,9 @@ test("SQL Server inspector captures conservative catalogs for codegen", async ()
   } finally {
     await createTediousDatabase(connection).execute(sql`DROP FUNCTION IF EXISTS dbo.braid_pv13_tvf`).catch(() => undefined);
     await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_pv13_proc`).catch(() => undefined);
+    await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.[constructor]`).catch(() => undefined);
+    await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.[toString]`).catch(() => undefined);
+    await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.[__proto__]`).catch(() => undefined);
     await createTediousDatabase(connection).execute(sql`DROP TABLE IF EXISTS dbo.braid_pv13_codegen`).catch(() => undefined);
     await createTediousDatabase(connection).execute(sql`DROP TYPE IF EXISTS dbo.braid_pv13_alias`).catch(() => undefined);
     await close(connection);

@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { generateModels } from "@sqlbraid/codegen";
 import type { TypePolicy } from "@sqlbraid/core";
 import type { ColumnSnapshot, MetadataSnapshot, RelationSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
-import { SnapshotValidationError } from "@sqlbraid/metadata";
+import { qualifiedIdentity, SnapshotValidationError } from "@sqlbraid/metadata";
 import { typePolicy as mysqlTypePolicy } from "@sqlbraid/mysql";
 import { typePolicy as postgresTypePolicy } from "@sqlbraid/postgres";
 import { typePolicy as sqliteTypePolicy } from "@sqlbraid/sqlite";
@@ -101,6 +101,24 @@ test("generates Row, Insert, and Update with database evidence controlling nulla
   assertGeneratedPropertyAbsent(result.source, "UsersUpdate", "locked");
   assert.equal(result.diagnostics.length, 0);
   await assertCompilesGeneratedSource(result.source, "codegen-write-matrix");
+});
+
+test("qualified relation identities remain distinct through filters and overrides", async () => {
+  const leftIdentity = qualifiedIdentity("a.b", "c");
+  const rightIdentity = qualifiedIdentity("a", "b.c");
+  const result = generateModels(snapshot({
+    [leftIdentity]: relation(leftIdentity, "c", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "a.b" }),
+    [rightIdentity]: relation(rightIdentity, "b.c", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "a" }),
+  }), {
+    typePolicy: policy,
+    filters: { includeRelations: [leftIdentity, rightIdentity] },
+    naming: { relations: { [leftIdentity]: "DotSchema", [rightIdentity]: "DotTable" } },
+    typeOverrides: { columns: { [rightIdentity]: { value: { outputType: "number" } } } },
+  });
+  assert.equal(result.models.length, 2);
+  assert.equal(result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_TYPE_RELATION_NOT_FOUND"), false);
+  assertGeneratedProperty(result.source, "DotSchemaRow", "value", "string", false);
+  assertGeneratedProperty(result.source, "DotTableRow", "value", "number", false);
 });
 
 test("keeps Row-only models for non-table relations and warns for unknown kinds", () => {

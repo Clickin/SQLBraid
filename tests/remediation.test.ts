@@ -8,6 +8,7 @@ import ts from 'typescript';
 import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import { createStatementBindingDescription, parameterizedSql } from '@sqlbraid/core';
 import type { RenderedStatement, StatementBindingContext } from '@sqlbraid/core';
+import { parseSnapshotJson, qualifiedIdentity, validateSnapshot } from '@sqlbraid/metadata';
 import { checkProject, checkSource, createProjectContext, createVirtualOverlay, discoverQueries, emitSource, sourcePosition } from '@sqlbraid/compiler';
 import { fingerprintQuery, templateFamilyFingerprint } from '@sqlbraid/operations';
 import { createPgDatabase } from '@sqlbraid/postgres/pg';
@@ -15,6 +16,7 @@ import { createPostgresInspector } from '@sqlbraid/postgres/inspector';
 import { createNodeSqliteDatabase } from '@sqlbraid/sqlite/node-sqlite';
 import { createSqliteInspector } from '@sqlbraid/sqlite/inspector';
 import { createMysqlInspector } from '@sqlbraid/mysql/inspector';
+import { createMariaDbInspector } from '@sqlbraid/mariadb/inspector';
 import { createDatabase } from '@sqlbraid/runtime';
 import { createSqlTag } from '@sqlbraid/template';
 import { sql as postgres } from '@sqlbraid/postgres';
@@ -338,6 +340,33 @@ test('SQLite inspector records strict and dynamic table evidence', async () => {
   }
 });
 
+test('SQLite inspector uses structured table flags instead of matching DDL text', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const native = new DatabaseSync(':memory:');
+  try {
+    native.exec(`
+      CREATE TABLE ordered_a(id INTEGER PRIMARY KEY) STRICT, WITHOUT ROWID;
+      CREATE TABLE ordered_b(id INTEGER PRIMARY KEY) WITHOUT ROWID, STRICT;
+      CREATE TABLE strict_only(id INTEGER) STRICT;
+      CREATE TABLE rowid_only(id INTEGER PRIMARY KEY) WITHOUT ROWID;
+      CREATE TABLE neither(id INTEGER CHECK (id != 'WITHOUT ROWID STRICT'));
+    `);
+    const snapshot = await createSqliteInspector(native).inspect();
+    for (const name of ['ordered_a', 'ordered_b'] as const) {
+      assert.equal(snapshot.relations[`main.${name}`]?.strict, true);
+      assert.equal(snapshot.relations[`main.${name}`]?.withoutRowid, true);
+    }
+    assert.equal(snapshot.relations['main.strict_only']?.strict, true);
+    assert.equal(snapshot.relations['main.strict_only']?.withoutRowid, false);
+    assert.equal(snapshot.relations['main.rowid_only']?.strict, false);
+    assert.equal(snapshot.relations['main.rowid_only']?.withoutRowid, true);
+    assert.equal(snapshot.relations['main.neither']?.strict, false);
+    assert.equal(snapshot.relations['main.neither']?.withoutRowid, false);
+  } finally {
+    native.close();
+  }
+});
+
 test('MySQL inspector rejects MariaDB as a different product', async () => {
   const connection = {
     async execute(_sql: string) { return [[{ version: '10.11.0-MariaDB', product: 'MariaDB' }], []] as const; },
@@ -376,6 +405,72 @@ test('MySQL inspector separates primary-key, auto-increment, and generated facts
   assert.equal('tsType' in columns[0], false);
 });
 
+test('MySQL inspector preserves empty-string defaults as database facts', async () => {
+  const responses = [
+    [[{ version: '8.4.0', product: 'MySQL', sqlMode: '', charset: 'utf8mb4', collation: 'utf8mb4_0900_ai_ci' }], []],
+    [[{ schema_name: 'app' }], []],
+    [[{ table_schema: 'app', table_name: 'defaults', table_type: 'BASE TABLE' }], []],
+    [[
+      { table_schema: 'app', table_name: 'defaults', ordinal_position: '1', column_name: 'empty_text', data_type: 'varchar', is_nullable: 'NO', column_default: '' },
+      { table_schema: 'app', table_name: 'defaults', ordinal_position: '2', column_name: 'zero_text', data_type: 'varchar', is_nullable: 'NO', column_default: '0' },
+      { table_schema: 'app', table_name: 'defaults', ordinal_position: '3', column_name: 'zero_number', data_type: 'int', is_nullable: 'NO', column_default: '0' },
+      { table_schema: 'app', table_name: 'defaults', ordinal_position: '4', column_name: 'required', data_type: 'varchar', is_nullable: 'NO', column_default: null },
+    ], []],
+    [[], []],
+  ] as const;
+  let index = 0;
+  const snapshot = await createMysqlInspector({
+    async execute() { return responses[index++]; },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+  }).inspect();
+  const columns = new Map(snapshot.relations['app.defaults'].columns.map((column) => [column.name, column]));
+  assert.equal(columns.get('empty_text')?.defaultExpression, '');
+  assert.equal(columns.get('zero_text')?.defaultExpression, '0');
+  assert.equal(columns.get('zero_number')?.defaultExpression, '0');
+  assert.equal(columns.get('required')?.defaultExpression, undefined);
+});
+
+test('MySQL and MariaDB routine dictionaries accept prototype-named identifiers', async () => {
+  const routineRows = [
+    { routine_schema: 'app', routine_name: 'constructor', routine_type: 'FUNCTION', data_type: 'text', dtd_identifier: 'constructor_1', is_deterministic: 'NO', sql_data_access: 'CONTAINS SQL' },
+    { routine_schema: 'app', routine_name: 'toString', routine_type: 'FUNCTION', data_type: 'text', dtd_identifier: 'toString_1', is_deterministic: 'NO', sql_data_access: 'CONTAINS SQL' },
+    { routine_schema: 'app', routine_name: '__proto__', routine_type: 'FUNCTION', data_type: 'text', dtd_identifier: '__proto___1', is_deterministic: 'NO', sql_data_access: 'CONTAINS SQL' },
+  ] as const;
+  const mysqlResponses = [
+    [[{ version: '8.4.0', product: 'MySQL', sqlMode: '', charset: 'utf8mb4', collation: 'utf8mb4_0900_ai_ci' }], []],
+    [[{ schema_name: 'app' }], []],
+    [[], []],
+    [[], []],
+    [routineRows, []],
+  ] as const;
+  let mysqlIndex = 0;
+  const mysql = await createMysqlInspector({
+    async execute() { return mysqlResponses[mysqlIndex++]; },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+  }).inspect();
+  const mariaResponses = [
+    [[{ version: '11.8.0-MariaDB', product: 'MariaDB', sqlMode: '', charset: 'utf8mb4', collation: 'utf8mb4_general_ci' }], []],
+    [[{ schema_name: 'app' }], []],
+    [[], []],
+    [[], []],
+    [routineRows, []],
+  ] as const;
+  let mariaIndex = 0;
+  const maria = await createMariaDbInspector({
+    async execute() { return mariaResponses[mariaIndex++]; },
+  }).inspect();
+  for (const snapshot of [mysql, maria]) {
+    assert.equal(snapshot.routines.constructor?.length, 1);
+    assert.equal(snapshot.routines.toString?.length, 1);
+    assert.equal(snapshot.routines.__proto__?.length, 1);
+    validateSnapshot(parseSnapshotJson(JSON.stringify(snapshot)));
+  }
+});
+
 test('PostgreSQL inspector records relation and routine metadata', async () => {
   const responses = [
     { rows: [{ version: '16.4' }] },
@@ -399,6 +494,43 @@ test('PostgreSQL inspector records relation and routine metadata', async () => {
   assert.equal(snapshot.relations['public.users'].columns[1].insertable, false);
   assert.equal('tsType' in snapshot.relations['public.users'].columns[0], false);
   assert.equal(snapshot.routines.ping[0].result.kind, 'scalar');
+});
+
+test('PostgreSQL inspector keeps delimiter-like qualified names and prototype-named routines distinct', async () => {
+  const responses = [
+    { rows: [{ version: '16.4' }] },
+    { rows: [
+      { table_schema: 'a.b', table_name: 'c', table_type: 'BASE TABLE' },
+      { table_schema: 'a', table_name: 'b.c', table_type: 'BASE TABLE' },
+    ] },
+    { rows: [
+      { table_schema: 'a.b', table_name: 'c', ordinal_position: '1', column_name: 'id', data_type: 'integer', udt_schema: 'pg_catalog', udt_name: 'int4', is_nullable: 'NO', is_identity: 'NO', is_generated: 'NEVER' },
+      { table_schema: 'a', table_name: 'b.c', ordinal_position: '1', column_name: 'id', data_type: 'integer', udt_schema: 'pg_catalog', udt_name: 'int4', is_nullable: 'NO', is_identity: 'NO', is_generated: 'NEVER' },
+    ] },
+    { rows: [
+      { routine_schema: 'public', routine_name: 'constructor', routine_type: 'FUNCTION', data_type: 'text', specific_name: 'constructor_1' },
+      { routine_schema: 'public', routine_name: 'toString', routine_type: 'FUNCTION', data_type: 'text', specific_name: 'toString_1' },
+      { routine_schema: 'public', routine_name: '__proto__', routine_type: 'FUNCTION', data_type: 'text', specific_name: '__proto___1' },
+    ] },
+  ];
+  let index = 0;
+  const snapshot = await createPostgresInspector({
+    async query() { return responses[index++]; },
+    escapeIdentifier(value: string) { return value; },
+    escapeLiteral(value: string) { return value; },
+  }).inspect();
+  const left = qualifiedIdentity('a.b', 'c');
+  const right = qualifiedIdentity('a', 'b.c');
+  assert.notEqual(left, right);
+  assert.ok(snapshot.relations[left]);
+  assert.ok(snapshot.relations[right]);
+  const roundTripped = parseSnapshotJson(JSON.stringify(snapshot));
+  validateSnapshot(roundTripped);
+  assert.equal(roundTripped.relations[left]?.name, 'c');
+  assert.equal(roundTripped.relations[right]?.name, 'b.c');
+  assert.equal(roundTripped.routines.constructor?.length, 1);
+  assert.equal(roundTripped.routines.toString?.length, 1);
+  assert.equal(roundTripped.routines.__proto__?.length, 1);
 });
 
 test('prepared queries reject shape drift and streams honor adapter capability', async () => {

@@ -39,7 +39,12 @@ test("Oracle inspector keeps catalog-qualified object and domain type evidence",
         ],
       };
       if (statement.includes("all_procedures")) return {
-        rows: [{ OWNER: "APP", OBJECT_NAME: "USE_UDT", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 1 }],
+        rows: [
+          { OWNER: "APP", OBJECT_NAME: "USE_UDT", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 1 },
+          { OWNER: "APP", OBJECT_NAME: "constructor", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 2 },
+          { OWNER: "APP", OBJECT_NAME: "toString", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 3 },
+          { OWNER: "APP", OBJECT_NAME: "__proto__", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 4 },
+        ],
       };
       if (statement.includes("all_arguments")) return {
         rows: [{
@@ -67,6 +72,9 @@ test("Oracle inspector keeps catalog-qualified object and domain type evidence",
   assert.equal(Object.hasOwn(snapshot.types, "SYS.NUMBER"), false);
   const routine = snapshot.routines.USE_UDT?.[0];
   assert.equal(routine?.arguments[0]?.type, "TYPES.UDT_OBJECT");
+  assert.equal(snapshot.routines.constructor?.length, 1);
+  assert.equal(snapshot.routines.toString?.length, 1);
+  assert.equal(snapshot.routines.__proto__?.length, 1);
   assert.equal(statements.find((statement) => statement.includes("all_tab_cols"))?.includes("data_type_owner"), true);
 });
 
