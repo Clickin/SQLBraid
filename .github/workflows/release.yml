@@ -402,12 +402,12 @@ jobs:
           SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
         run: pnpm run test:examples
 
-  release-benchmarks:
+  release-benchmark-smoke:
     if: github.event_name != 'schedule'
     needs: release-prep
-    name: Release benchmarks
+    name: Release benchmark smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
@@ -423,7 +423,7 @@ jobs:
           path: ${{ runner.temp }}/prepared
       - name: Restore prepared build
         run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
-      - run: pnpm run benchmark:bulk && pnpm run benchmark:fidelity
+      - run: pnpm run benchmark:release-smoke
 
   release-runtime:
     if: github.event_name != 'schedule'
@@ -607,7 +607,7 @@ jobs:
 
   release-final:
     if: github.event_name != 'schedule'
-    needs: [release-prep, release-common, release-db, release-node24, release-browser, release-vscode, release-pack, release-docs, release-examples, release-benchmarks, release-runtime, release-bun-sql, release-support-evidence, release-target-evidence]
+    needs: [release-prep, release-common, release-db, release-node24, release-browser, release-vscode, release-pack, release-docs, release-examples, release-benchmark-smoke, release-runtime, release-bun-sql, release-support-evidence, release-target-evidence]
     name: Final release certification
     permissions:
       contents: read

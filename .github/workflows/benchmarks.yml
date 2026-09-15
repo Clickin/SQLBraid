@@ -1,0 +1,114 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 0"
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22.18.0
+
+jobs:
+  benchmark-prep:
+    name: Prepare benchmark packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: pnpm run build:packages
+      - name: Archive prepared package output
+        run: tar -czf "$RUNNER_TEMP/prepared-build.tar.gz" packages/*/dist
+      - name: Preserve prepared package output
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: benchmark-prepared
+          path: ${{ runner.temp }}/prepared-build.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  bulk-execution:
+    name: Bulk execution benchmark
+    needs: benchmark-prep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: benchmark-prepared
+          path: ${{ runner.temp }}/prepared
+      - name: Restore prepared build
+        run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Run bulk execution benchmark
+        run: pnpm run benchmark:bulk-execution -- --output "$RUNNER_TEMP/benchmark-results/bulk-execution.json"
+      - name: Preserve bulk execution result
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: benchmark-bulk-execution
+          path: ${{ runner.temp }}/benchmark-results/bulk-execution.json
+          if-no-files-found: error
+          retention-days: 14
+
+  value-fidelity:
+    name: Value fidelity (${{ matrix.transport }})
+    needs: benchmark-prep
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        transport:
+          - number
+          - bigint
+          - string
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: benchmark-prepared
+          path: ${{ runner.temp }}/prepared
+      - name: Restore prepared build
+        run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Run full value-fidelity benchmark
+        run: >-
+          pnpm run benchmark:value-fidelity --
+          --transport "${{ matrix.transport }}"
+          --output "$RUNNER_TEMP/benchmark-results/value-fidelity-${{ matrix.transport }}.json"
+      - name: Preserve value-fidelity result
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: benchmark-value-fidelity-${{ matrix.transport }}
+          path: ${{ runner.temp }}/benchmark-results/value-fidelity-${{ matrix.transport }}.json
+          if-no-files-found: error
+          retention-days: 14

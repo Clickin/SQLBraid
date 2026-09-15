@@ -88,7 +88,7 @@ test("explicit staging reaches only the staging job and a successful stage autho
 
 test("full certification and mutation prerequisites include every release lane and pnpm stage dry-run", () => {
   const lanes = dependencies(release.jobs["release-final"]);
-  for (const name of ["release-prep", "release-common", "release-db", "release-node24", "release-browser", "release-vscode", "release-pack", "release-docs", "release-examples", "release-benchmarks", "release-runtime", "release-bun-sql", "release-support-evidence", "release-target-evidence"]) assert.ok(lanes.includes(name), `missing ${name}`);
+  for (const name of ["release-prep", "release-common", "release-db", "release-node24", "release-browser", "release-vscode", "release-pack", "release-docs", "release-examples", "release-benchmark-smoke", "release-runtime", "release-bun-sql", "release-support-evidence", "release-target-evidence"]) assert.ok(lanes.includes(name), `missing ${name}`);
   const dryRun = release.jobs["release-final"].steps.find((step) => step.run?.includes("--mode stage-dry-run"));
   assert.ok(dryRun);
   for (const mode of ["certify", "stage"]) assert.equal(graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0").stepRuns(dryRun), true);

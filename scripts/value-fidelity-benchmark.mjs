@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
 import { PerformanceObserver, performance } from "node:perf_hooks";
 import { DatabaseSync } from "node:sqlite";
 import { normalizeExactInteger, decodeExactInteger, UnsupportedFeatureError } from "@sqlbraid/core";
@@ -8,15 +10,24 @@ import { createDatabase } from "@sqlbraid/runtime";
 import { createNodeSqliteDatabase, nodeSqliteStatementBinding } from "@sqlbraid/sqlite/node-sqlite";
 import { sql } from "@sqlbraid/sqlite";
 
-const MATERIALIZED_ROWS = positiveInteger("PV18_MATERIALIZED_ROWS", 100_000);
-const STREAMED_ROWS = positiveInteger("PV18_STREAMED_ROWS", 1_000_000);
-const WARMUP_ITERATIONS = positiveInteger("PV18_WARMUPS", 1);
-const REPEAT_COUNT = positiveInteger("PV18_REPEATS", 3);
-const SHUFFLE_SEED = positiveInteger("PV18_SEED", 18_092_026);
-const ISOLATION = process.env.PV18_ISOLATION ?? "family";
+const PROFILE_DEFAULTS = Object.freeze({
+  full: Object.freeze({
+    materializedRows: 100_000,
+    streamedRows: 1_000_000,
+    warmupIterations: 1,
+    measuredRepeats: 3,
+  }),
+  smoke: Object.freeze({
+    materializedRows: 10_000,
+    streamedRows: 100_000,
+    warmupIterations: 0,
+    measuredRepeats: 1,
+  }),
+});
 const WIDTHS = [1, 5, 10];
 const TRANSPORTS = ["number", "bigint", "string"];
-const TRANSFORMS = ["raw", "pv16-bigint", "pv17-string", "app-number", "app-bigint", "app-decimal"];
+const TRANSFORMS = ["raw", "exact-bigint", "exact-string", "app-number", "app-bigint", "app-decimal"];
+const STREAM_WIDTH = 5;
 const MASK_64 = (1n << 64n) - 1n;
 const expectedChecksums = new Map();
 const TRANSPORT_SEMANTICS = {
@@ -25,11 +36,77 @@ const TRANSPORT_SEMANTICS = {
   string: "exact-integer",
 };
 
+function parseArguments(args) {
+  let profile;
+  let transport;
+  let output;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === "--") continue;
+    if (argument === "--profile" || argument === "--transport" || argument === "--output") {
+      const value = args[++index];
+      if (value === undefined || value.startsWith("--")) throw new Error(`${argument} requires a value.`);
+      if (argument === "--profile") profile = value;
+      else if (argument === "--transport") transport = value;
+      else output = value;
+      continue;
+    }
+    if (argument.startsWith("--profile=")) profile = argument.slice("--profile=".length);
+    else if (argument.startsWith("--transport=")) transport = argument.slice("--transport=".length);
+    else if (argument.startsWith("--output=")) output = argument.slice("--output=".length);
+    else throw new Error(`Unknown option: ${argument}`);
+  }
+  if (profile !== undefined && !Object.hasOwn(PROFILE_DEFAULTS, profile)) {
+    throw new Error(`Unknown profile "${profile}". Expected smoke or full.`);
+  }
+  if (profile === "") throw new Error("Profile cannot be empty.");
+  if (transport === "") throw new Error("Transport cannot be empty.");
+  if (output === "") throw new Error("Output path cannot be empty.");
+  return { profile: profile ?? "full", transport, output };
+}
+
+const CLI = parseArguments(process.argv.slice(2));
+const PROFILE = CLI.profile;
+const PROFILE_DEFAULT = PROFILE_DEFAULTS[PROFILE];
+
+function resolveTransport(cliTransport) {
+  if (process.env.SQLBRAID_VALUE_FIDELITY_CHILD === "1") {
+    const childTransport = process.env.SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT;
+    if (!TRANSPORTS.includes(childTransport)) {
+      throw new Error("SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT must be number, bigint, or string.");
+    }
+    return childTransport;
+  }
+  const transport = cliTransport ?? process.env.SQLBRAID_VALUE_FIDELITY_TRANSPORT ?? "all";
+  if (!["all", ...TRANSPORTS].includes(transport)) {
+    throw new Error(`Unknown transport "${transport}". Expected number, bigint, string, or all.`);
+  }
+  return transport;
+}
+
+const SELECTED_TRANSPORT = resolveTransport(CLI.transport);
+const ACTIVE_TRANSPORTS = SELECTED_TRANSPORT === "all" ? TRANSPORTS : [SELECTED_TRANSPORT];
+const MATERIALIZED_ROWS = positiveInteger("SQLBRAID_VALUE_FIDELITY_MATERIALIZED_ROWS", PROFILE_DEFAULT.materializedRows);
+const STREAMED_ROWS = positiveInteger("SQLBRAID_VALUE_FIDELITY_STREAMED_ROWS", PROFILE_DEFAULT.streamedRows);
+const WARMUP_ITERATIONS = nonNegativeInteger("SQLBRAID_VALUE_FIDELITY_WARMUPS", PROFILE_DEFAULT.warmupIterations);
+const MEASURED_REPEATS = positiveInteger("SQLBRAID_VALUE_FIDELITY_REPEATS", PROFILE_DEFAULT.measuredRepeats);
+const SHUFFLE_SEED = positiveInteger("SQLBRAID_VALUE_FIDELITY_SEED", 18_092_026);
+const ISOLATION = process.env.SQLBRAID_VALUE_FIDELITY_ISOLATION ?? "family";
+const OUTPUT_PATH = CLI.output;
+
 function positiveInteger(name, fallback) {
   const value = process.env[name];
   if (value === undefined) return fallback;
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`${name} must be a positive safe integer.`);
+  return parsed;
+}
+
+function nonNegativeInteger(name, fallback) {
+  const value = process.env[name];
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(`${name} must be a non-negative safe integer.`);
   return parsed;
 }
 
@@ -96,24 +173,24 @@ function queryFor(transport, rows, width, schema) {
 }
 
 const rawTypePolicy = Object.freeze({
-  id: "pv17-benchmark-raw",
-  hash: "pv17-benchmark-raw-v1",
+  id: "value-fidelity-raw-v1",
+  hash: "value-fidelity-raw-v1",
   mappings: [],
   decode: (_databaseType, value) => value,
   encode: (_databaseType, value) => value,
 });
 
-const pv16TypePolicy = Object.freeze({
-  id: "pv17-benchmark-pv16",
-  hash: "pv17-benchmark-pv16-v1",
+const exactBigIntTypePolicy = Object.freeze({
+  id: "value-fidelity-exact-bigint-v1",
+  hash: "value-fidelity-exact-bigint-v1",
   mappings: [],
   decode: (_databaseType, value) => value == null ? value : decodeExactInteger(value),
   encode: (_databaseType, value) => value,
 });
 
-const pv17TypePolicy = Object.freeze({
-  id: "pv17-benchmark-pv17",
-  hash: "pv17-benchmark-pv17-v1",
+const exactStringTypePolicy = Object.freeze({
+  id: "value-fidelity-exact-string-v1",
+  hash: "value-fidelity-exact-string-v1",
   mappings: [],
   decode: (_databaseType, value) => value == null ? value : normalizeExactInteger(value),
   encode: (_databaseType, value) => value,
@@ -178,11 +255,11 @@ function canonicalText(value) {
 }
 
 function transformSchema(width, transform) {
-  if (transform === "raw" || transform === "pv16-bigint" || transform === "pv17-string") return undefined;
+  if (transform === "raw" || transform === "exact-bigint" || transform === "exact-string") return undefined;
   return {
     "~standard": {
       version: 1,
-      vendor: "sqlbraid-pv17-benchmark",
+      vendor: "sqlbraid-value-fidelity-benchmark",
       validate(input) {
         assert.ok(input !== null && typeof input === "object" && !Array.isArray(input), "SQLBraid returned a row object.");
         const output = {};
@@ -251,7 +328,7 @@ function makeCases(transport) {
     }
   }
   for (const transform of TRANSFORMS) {
-    cases.push({ transport, kind: "stream", rows: STREAMED_ROWS, width: 5, transform });
+    cases.push({ transport, kind: "stream", rows: STREAMED_ROWS, width: STREAM_WIDTH, transform });
   }
   return cases;
 }
@@ -428,7 +505,7 @@ function rawDriverProbe(native) {
 }
 
 function policyFor(transform) {
-  return transform === "raw" ? rawTypePolicy : transform === "pv16-bigint" ? pv16TypePolicy : pv17TypePolicy;
+  return transform === "raw" ? rawTypePolicy : transform === "exact-bigint" ? exactBigIntTypePolicy : exactStringTypePolicy;
 }
 
 async function runCase(native, transport, rawObserved, workload, events) {
@@ -472,13 +549,13 @@ async function runFamily(transport, transportIndex) {
       }
     }
     for (let iteration = 0; iteration < WARMUP_ITERATIONS; iteration += 1) await runCycle(iteration, false);
-    for (let iteration = 1; iteration <= REPEAT_COUNT; iteration += 1) await runCycle(iteration, true);
+    for (let iteration = 1; iteration <= MEASURED_REPEATS; iteration += 1) await runCycle(iteration, true);
 
     observer.disconnect();
     return {
       transport,
       invocation,
-      rawDriverProbe: rawProbe,
+      rawDriverProbe: { [transport]: rawProbe[transport] },
       sqlbraidRawRepresentation: sqlbraidRaw,
       correctness: { wideExactInteger: "9007199254740993", checksum: "BigInt 64-bit modular sum" },
       workloads,
@@ -489,14 +566,65 @@ async function runFamily(transport, transportIndex) {
   }
 }
 
+function resolvedMethodology() {
+  return {
+    profile: PROFILE,
+    transport: SELECTED_TRANSPORT,
+    transports: ACTIVE_TRANSPORTS,
+    warmupIterations: WARMUP_ITERATIONS,
+    measuredRepeats: MEASURED_REPEATS,
+    measuredIterations: MEASURED_REPEATS,
+    deterministicSeed: SHUFFLE_SEED,
+    order: "seeded Fisher-Yates shuffle per transport and iteration",
+    isolation: ISOLATION,
+    materializedRows: MATERIALIZED_ROWS,
+    streamedRows: STREAMED_ROWS,
+    widths: [...WIDTHS],
+    streamWidth: STREAM_WIDTH,
+    transforms: [...TRANSFORMS],
+  };
+}
+
+function writeJsonAtomically(path, json) {
+  const target = resolve(path);
+  const temporary = `${target}.${process.pid}.tmp`;
+  mkdirSync(dirname(target), { recursive: true });
+  try {
+    writeFileSync(temporary, json);
+    renameSync(temporary, target);
+  } catch (error) {
+    try {
+      unlinkSync(temporary);
+    } catch {
+      // Preserve the write failure.
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not write benchmark output to ${target}: ${message}`, { cause: error });
+  }
+}
+
+function emitResult(result) {
+  const json = `${JSON.stringify(result, null, 2)}\n`;
+  if (OUTPUT_PATH === undefined) process.stdout.write(json);
+  else {
+    writeJsonAtomically(OUTPUT_PATH, json);
+    console.error(`Wrote value-fidelity benchmark output to ${resolve(OUTPUT_PATH)}`);
+  }
+}
+
 function runFamilyProcess(transport, transportIndex) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [...process.execArgv, process.argv[1], ...process.argv.slice(2)], {
+    const script = process.argv[1];
+    if (script === undefined) {
+      reject(new Error("Value-fidelity benchmark requires a script path for family isolation."));
+      return;
+    }
+    const child = spawn(process.execPath, [...process.execArgv, script, "--profile", PROFILE, "--transport", transport], {
       env: {
         ...process.env,
-        PV18_BENCHMARK_CHILD: "1",
-        PV18_CHILD_TRANSPORT: transport,
-        PV18_CHILD_TRANSPORT_INDEX: String(transportIndex),
+        SQLBRAID_VALUE_FIDELITY_CHILD: "1",
+        SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT: transport,
+        SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT_INDEX: String(transportIndex),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -507,13 +635,13 @@ function runFamilyProcess(transport, transportIndex) {
     child.once("error", reject);
     child.once("close", (status, signal) => {
       if (status !== 0) {
-        reject(new Error(`PV18 benchmark child failed for ${transport} (exit ${status ?? signal}): ${stderr.trim()}`));
+        reject(new Error(`Value-fidelity benchmark child failed for ${transport} (exit ${status ?? signal}): ${stderr.trim()}`));
         return;
       }
       try {
         resolve(JSON.parse(stdout));
       } catch (error) {
-        reject(new Error(`PV18 benchmark child emitted invalid JSON for ${transport}: ${error.message}`));
+        reject(new Error(`Value-fidelity benchmark child emitted invalid JSON for ${transport}: ${error.message}`));
       }
     });
   });
@@ -521,39 +649,38 @@ function runFamilyProcess(transport, transportIndex) {
 
 async function main() {
   if (ISOLATION !== "family" && ISOLATION !== "none") {
-    throw new Error("PV18_ISOLATION must be family or none.");
+    throw new Error("SQLBRAID_VALUE_FIDELITY_ISOLATION must be family or none.");
   }
-  if (process.env.PV18_BENCHMARK_CHILD === "1") {
-    const transport = process.env.PV18_CHILD_TRANSPORT;
-    if (!TRANSPORTS.includes(transport)) throw new Error("PV18_CHILD_TRANSPORT is invalid.");
-    const family = await runFamily(transport, Number(process.env.PV18_CHILD_TRANSPORT_INDEX ?? 0));
-    console.log(JSON.stringify({ benchmark: "pv18-value-fidelity", schemaVersion: 1, role: "family", ...family }, null, 2));
+  if (process.env.SQLBRAID_VALUE_FIDELITY_CHILD === "1") {
+    const transport = process.env.SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT;
+    if (!TRANSPORTS.includes(transport)) throw new Error("SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT is invalid.");
+    const family = await runFamily(transport, Number(process.env.SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT_INDEX ?? 0));
+    process.stdout.write(`${JSON.stringify({
+      benchmark: "value-fidelity",
+      schemaVersion: 2,
+      profile: PROFILE,
+      role: "family",
+      methodology: resolvedMethodology(),
+      ...family,
+    }, null, 2)}\n`);
     return;
   }
 
   // Each family is an isolated child process; run them concurrently without sharing DB or heap state.
   const families = ISOLATION === "family"
-    ? await Promise.all(TRANSPORTS.map((transport, transportIndex) => runFamilyProcess(transport, transportIndex)))
+    ? await Promise.all(ACTIVE_TRANSPORTS.map((transport) => runFamilyProcess(transport, TRANSPORTS.indexOf(transport))))
     : [];
   if (ISOLATION === "none") {
-    for (const [transportIndex, transport] of TRANSPORTS.entries()) families.push(await runFamily(transport, transportIndex));
+    for (const transport of ACTIVE_TRANSPORTS) families.push(await runFamily(transport, TRANSPORTS.indexOf(transport)));
   }
   const workloads = families.flatMap((family) => family.workloads);
-  const rawDriverProbe = families[0].rawDriverProbe;
+  const rawDriverProbe = Object.assign({}, ...families.map((family) => family.rawDriverProbe));
   const sqlbraidRawRepresentation = Object.assign({}, ...families.map((family) => family.sqlbraidRawRepresentation));
-  console.log(JSON.stringify({
-    benchmark: "pv18-value-fidelity",
-    schemaVersion: 1,
-    methodology: {
-      warmupIterations: WARMUP_ITERATIONS,
-      measuredIterations: REPEAT_COUNT,
-      deterministicSeed: SHUFFLE_SEED,
-      order: "seeded Fisher-Yates shuffle per transport and iteration",
-      isolation: ISOLATION,
-      materializedRows: MATERIALIZED_ROWS,
-      streamedRows: STREAMED_ROWS,
-      widths: WIDTHS,
-    },
+  emitResult({
+    benchmark: "value-fidelity",
+    schemaVersion: 2,
+    profile: PROFILE,
+    methodology: resolvedMethodology(),
     invocation: invocationMetadata(),
     runtime: {
       id: runtimeName(),
@@ -570,16 +697,17 @@ async function main() {
     workloads,
     summary: summarize(workloads),
     observations: [
-      "PV16-style exact integers use a TypePolicy.decode path that returns BigInt; PV17 uses a TypePolicy.decode path that returns strings.",
-      "Number, BigInt and Decimal-like transforms are application-owned Standard Schema mappings after the raw SQLBraid boundary.",
+      "Exact-integer BigInt decoding uses the SQLBraid TypePolicy decode path.",
+      "Exact-integer string normalization uses the SQLBraid TypePolicy decode path.",
+      "Number, BigInt and Decimal-like application transforms are application-owned Standard Schema mappings after the raw SQLBraid boundary.",
       "The Number transport uses integral safe-range INTEGER values with native bigint reads disabled; it is reported as guarded exact-integer transport.",
       "Every measured case validates row count, boundary samples and a modular BigInt checksum before its metric is retained.",
-      "Median and spread summarize repeated wall-clock observations; no performance threshold or release claim is applied.",
+      "Wall-clock summaries reflect the configured observation count; no performance threshold or release claim is applied.",
       ISOLATION === "family"
         ? "RSS and heap metrics are observational within fresh transport-family processes; they are not a sequential peak-RSS performance claim."
         : "RSS and heap metrics are observational in one process; do not interpret sequential peak-RSS differences as memory performance.",
     ],
-  }, null, 2));
+  });
 }
 
 await main();
