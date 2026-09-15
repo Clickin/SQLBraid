@@ -1,0 +1,91 @@
+name: Bug report
+description: Report a reproducible SQLBraid problem with its support tuple.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Provide the smallest reproducible report you can. Database fields are
+        optional for compiler, tooling, and documentation-only issues.
+  - type: input
+    id: sqlbraid-version
+    attributes:
+      label: SQLBraid version
+      description: Package version, commit SHA, or checkout revision.
+      placeholder: 0.1.0-rc.2
+    validations:
+      required: true
+  - type: input
+    id: package-subpath
+    attributes:
+      label: Package and import subpath
+      description: Include the package name and subpath involved.
+      placeholder: sqlbraid/node-sqlite
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime and exact version
+      placeholder: Node.js 22.18.0
+    validations:
+      required: true
+  - type: input
+    id: database
+    attributes:
+      label: Database/server and exact version
+      description: Optional for compiler/tooling-only reports.
+      placeholder: SQLite 3.x bundled with Node
+  - type: input
+    id: driver
+    attributes:
+      label: Driver and exact version
+      description: Optional for compiler/tooling-only reports.
+      placeholder: node:sqlite
+  - type: input
+    id: profile
+    attributes:
+      label: Data-representation/profile options
+      description: Include JSON, temporal, numeric, or connection profile settings.
+      placeholder: default fidelity profile
+  - type: input
+    id: operation
+    attributes:
+      label: Operation or capability
+      placeholder: transaction.savepoint, db.all, compiler lowering
+    validations:
+      required: true
+  - type: input
+    id: error-code
+    attributes:
+      label: Observed BRAID_* code
+      description: Include the exact code, if one was reported.
+      placeholder: BRAID_RESULT_KIND
+  - type: textarea
+    id: sql-schema
+    attributes:
+      label: Minimal SQL/schema
+      description: Remove secrets and unrelated objects.
+      render: sql
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include a complete runnable snippet or a link to a minimal repository.
+      render: typescript
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

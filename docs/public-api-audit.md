@@ -136,3 +136,65 @@ universal prepared cache, or fabricated stream/call fallback. `db.environment()`
 is observational and returns `compatible` when no exact verified target matches.
 A neighboring runtime, server version, profile option, or local test cannot
 promote an unverified tuple.
+
+## Compatibility policy
+
+This audit classifies the public boundary; it does not turn every exported
+symbol into a support promise. Compatibility is evaluated by surface and by
+the exact database, driver, profile, runtime, and capability tuple described in
+the support records.
+
+### Application API
+
+Within a minor release line, documented application imports, subpaths, call
+shapes, query/result-kind contracts, trailing execution options, and
+SQLBraid-owned error codes are compatibility contracts. `AbortSignal` handling
+preserves an already-aborted signal's `reason`; unsupported active cancellation
+and unsupported database capabilities remain explicit errors rather than
+silently changing execution. Session, transaction, savepoint, and stream
+ownership rules are part of the contract: a conflicting handle fails instead
+of moving work to another connection, buffering a stream, or changing
+transaction scope. A prepared query's documented zero-input/options-only and
+input/options calling forms are stable; its logical shape lock is not a
+promise of a server-side prepared cache.
+
+### SPI
+
+`QueryExecutor`, provider, lease, binding/materialization, and observer
+interfaces are compatibility contracts for integrations that implement them.
+The `(statement, binding?, options?)` argument order, immutable shared
+statement-binding adapter identity, pre-acquire binding validation, explicit
+cleanup ownership, and observe/fail-only observer behavior must not be changed
+silently. Drivers retain their native error identity unless SQLBraid owns the
+error. Missing stream, call, cancellation, transaction, or hint capabilities
+must continue to use documented `UnsupportedFeatureError` codes; a fallback
+that changes physical ownership or SQL semantics is not compatible.
+
+### Serialized and tooling contracts
+
+Metadata snapshots use the `sqlbraid-metadata` discriminator and a versioned
+`formatVersion`; relation and type identities are qualified evidence, not
+display names. Generated models record the metadata hash and the selected
+TypePolicy id/hash, so changing representation policy is a new codegen input,
+not an invisible output rewrite. A future snapshot identity or format migration
+must increment its format version, describe the migration in release notes, and
+keep validation failure explicit; readers must not silently reinterpret an old
+snapshot as a new format.
+
+Codegen input/output options remain deterministic and preserve their documented
+diagnostic behavior. CLI JSON output is machine-readable and its documented
+exit status is part of the tooling contract. Compiler and LSP diagnostics keep
+their source positions and severity conventions. Tooling consumers should
+select the matching metadata and TypePolicy versions rather than infer support
+from a neighboring database or runtime.
+
+### Advanced and internal-facing surfaces
+
+Compiler lowering details, metadata inspector coverage, generated source
+formatting, editor integration, and other explicitly Advanced surfaces may
+evolve more aggressively than the Application and SPI layers. Their serialized
+boundaries still require versioning and migration notes. During the 0.x period,
+SQLBraid does not use SemVer's pre-1.0 flexibility as permission for silent
+breakage: breaking Application, SPI, or serialized changes require a new minor
+release, an explicit release-note entry, and migration guidance. Patch releases
+are reserved for compatible fixes, documentation, and evidence corrections.
