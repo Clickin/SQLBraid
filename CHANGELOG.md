@@ -10,9 +10,11 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 - RC2 hardening documents the compatibility discipline for the Application,
   SPI, serialized metadata, compiler, and tooling surfaces.
-- Prepared-query documentation now treats zero-input/options-only and
-  input/options calls as separate public forms; implementations must not infer
-  the form from JavaScript `Function.length`.
+- Prepared-query calling semantics are explicit: input factories use the
+  required-input form by default (or `{ input: "required" }`), while
+  zero-input factories must declare `{ input: "none" }` and remain
+  options-only at execution. Implementations must not infer the form from
+  JavaScript `Function.length` or option-shaped input values.
 - Any metadata identity or format migration must be called out here with its
   format version and migration guidance before release.
 

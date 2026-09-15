@@ -31,8 +31,10 @@ The current tree is newer and requires fresh evidence before labels change.
 options. Prepared queries are row-kind aware: row queries expose `execute`,
 `all`, `one`, `maybeOne`, and `stream`; command/unknown queries expose `execute`;
 call queries expose `call`. Input factories use
-`prepare(name, (input) => query)` and zero-input factories use options as their
-only execution argument.
+`prepare(name, (input) => query)` (or explicitly
+`{ input: "required" }`). Zero-input factories must declare
+`prepare(name, () => query, { input: "none" })` and use options as their only
+execution argument.
 
 **SPI:** `BindingDescription`, `BulkBindingDescription`, `BulkExecutionMode`,
 `BulkExecutionResult`, `ConnectionLease`, `ConnectionProvider`, `Dialect`,
@@ -154,9 +156,11 @@ and unsupported database capabilities remain explicit errors rather than
 silently changing execution. Session, transaction, savepoint, and stream
 ownership rules are part of the contract: a conflicting handle fails instead
 of moving work to another connection, buffering a stream, or changing
-transaction scope. A prepared query's documented zero-input/options-only and
-input/options calling forms are stable; its logical shape lock is not a
-promise of a server-side prepared cache.
+transaction scope. Prepared input factories default to the required-input form
+(and may declare `{ input: "required" }`); zero-input factories explicitly
+declare `{ input: "none" }` and remain options-only at execution. This explicit
+arity declaration avoids JavaScript `Function.length` and options-key guesses.
+The logical shape lock is not a promise of a server-side prepared cache.
 
 ### SPI
 

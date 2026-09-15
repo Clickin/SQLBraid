@@ -3,7 +3,7 @@ title: Prepared queries
 description: Reuse a stable SQLBraid query shape without promising native driver preparation.
 ---
 
-Register a named zero-input or input factory:
+Register a named input factory (required input by default):
 
 ```ts
 const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`
@@ -15,20 +15,33 @@ const all = await byId.all("u_1", { schema: UserSchema });
 for await (const row of byId.stream("u_1", { signal })) consume(row);
 ```
 
-A zero-input factory uses options as its only argument:
+You may make the required-input contract explicit:
 
 ```ts
-const users = db.prepare("users", () => sql.rows<UserRow>`SELECT id, name FROM users`);
+const byId = db.prepare(
+  "user-by-id",
+  (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`,
+  { input: "required" },
+);
+```
+
+Declare a zero-input factory explicitly with `{ input: "none" }`:
+
+```ts
+const users = db.prepare(
+  "users",
+  () => sql.rows<UserRow>`SELECT id, name FROM users`,
+  { input: "none" },
+);
 await users.all({ signal });
 ```
 
-Factory inference accepts exactly two public forms: a factory with no
-parameters, or a factory with one required input parameter. Optional, default,
-rest, and two-or-more parameters are rejected by TypeScript because input and
-trailing options would otherwise be ambiguous. A required input whose value is
-`undefined` is still an input; only the zero-input form uses
-`PreparedQuery<never, Q>`. Pass one object when a query needs multiple input
-fields:
+The input shape is an explicit public contract rather than a guess from
+`Function.length` or option-shaped input values. Optional, default, rest, and
+wrapped one-input factories may declare `{ input: "required" }`. A required
+input whose value is `undefined` is still an input; only the zero-input form
+uses `PreparedQuery<never, Q>`. Pass one object when a query needs multiple
+input fields:
 
 ```ts
 const byAccount = db.prepare(

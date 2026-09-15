@@ -3,7 +3,7 @@ title: 준비된 쿼리
 description: 네이티브 driver 준비를 약속하지 않고 안정적인 SQLBraid query shape를 재사용합니다.
 ---
 
-이름이 있는 zero-input 또는 input factory를 등록합니다.
+이름이 있는 input factory를 등록합니다(기본값은 required input입니다).
 
 ```ts
 const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`
@@ -15,17 +15,30 @@ const all = await byId.all("u_1", { schema: UserSchema });
 for await (const row of byId.stream("u_1", { signal })) consume(row);
 ```
 
-Zero-input factory는 option을 유일한 argument로 사용합니다.
+required-input contract를 명시하려면 다음과 같이 작성할 수 있습니다.
 
 ```ts
-const users = db.prepare("users", () => sql.rows<UserRow>`SELECT id, name FROM users`);
+const byId = db.prepare(
+  "user-by-id",
+  (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`,
+  { input: "required" },
+);
+```
+
+zero-input factory는 `{ input: "none" }`을 명시해야 합니다.
+
+```ts
+const users = db.prepare(
+  "users",
+  () => sql.rows<UserRow>`SELECT id, name FROM users`,
+  { input: "none" },
+);
 await users.all({ signal });
 ```
 
-Factory inference는 두 가지 public 형식만 허용합니다. parameter가 없는
-factory 또는 하나의 required input parameter를 가진 factory입니다.
-Optional/default/rest parameter나 두 개 이상의 parameter는 input과 trailing
-option이 모호해지므로 TypeScript에서 거부됩니다. 값이 `undefined`인
+input shape는 `Function.length`나 option처럼 보이는 input 값의 추측이 아니라
+명시적인 public contract입니다. Optional/default/rest/wrapped one-input
+factory는 `{ input: "required" }`를 명시할 수 있습니다. 값이 `undefined`인
 required input도 여전히 input이며, zero-input 형식만
 `PreparedQuery<never, Q>`를 사용합니다. 여러 필드가 필요하면 하나의
 object를 전달하세요.
