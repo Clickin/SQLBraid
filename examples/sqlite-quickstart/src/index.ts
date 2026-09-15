@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
-import { sql } from "@sqlbraid/sqlite";
+import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
 
 interface UserRow {
   readonly id: string;

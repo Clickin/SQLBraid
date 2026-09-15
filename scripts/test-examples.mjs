@@ -14,6 +14,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(root, "packages");
 const examplesRoot = join(root, "examples");
 const temp = await mkdtemp(join(tmpdir(), "sqlbraid-examples-"));
+const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR
+  ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR)
+  : undefined;
+
+function isFirstPartyPackage(packageName) {
+  return packageName === "sqlbraid" || packageName.startsWith("@sqlbraid/");
+}
 
 async function run(command, args, cwd, env = {}) {
   try {
@@ -33,7 +40,50 @@ async function packageManifest(tarball) {
   return JSON.parse(stdout);
 }
 
+async function suppliedPackages() {
+  let entries;
+  try {
+    entries = await readdir(packInputDir, { withFileTypes: true });
+  } catch (error) {
+    throw new Error(`Cannot read supplied SQLBraid artifacts at ${packInputDir}`, { cause: error });
+  }
+  const files = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".tgz"))
+    .map((entry) => entry.name)
+    .sort();
+  assert.ok(files.length > 0, `No .tgz artifacts found in ${packInputDir}`);
+
+  const tarballs = new Map();
+  for (const file of files) {
+    const tarball = join(packInputDir, file);
+    let manifest;
+    try {
+      manifest = await packageManifest(tarball);
+    } catch (error) {
+      throw new Error(`Malformed supplied SQLBraid artifact ${file}`, { cause: error });
+    }
+    assert.ok(
+      manifest && typeof manifest === "object" && typeof manifest.name === "string" && manifest.name.length > 0,
+      `Supplied artifact ${file} has an invalid package manifest`,
+    );
+    assert.ok(isFirstPartyPackage(manifest.name), `Unexpected non-first-party supplied artifact ${manifest.name}`);
+    assert.ok(!tarballs.has(manifest.name), `Duplicate supplied artifact for ${manifest.name}`);
+    tarballs.set(manifest.name, { tarball, manifest });
+  }
+  const packageEntries = (await readdir(packageRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => (entry.name === "sqlbraid" ? "sqlbraid" : `@sqlbraid/${entry.name}`));
+  for (const packageName of packageEntries) {
+    assert.ok(tarballs.has(packageName), `Missing supplied first-party artifact for ${packageName}`);
+  }
+  assert.equal(tarballs.size, packageEntries.length, "supplied artifacts must cover every workspace package");
+  console.info(`PASS loaded ${tarballs.size} supplied SQLBraid package artifacts`);
+  return tarballs;
+}
+
 async function packPackages() {
+  if (packInputDir) return suppliedPackages();
+
   const tarballs = new Map();
   const packageEntries = (await readdir(packageRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
@@ -45,6 +95,8 @@ async function packPackages() {
     assert.equal(added.length, 1, `expected one tarball for ${entry.name}`);
     const tarball = join(temp, added[0]);
     const manifest = await packageManifest(tarball);
+    assert.ok(manifest && typeof manifest.name === "string" && manifest.name.length > 0, `invalid package manifest for ${entry.name}`);
+    assert.ok(!tarballs.has(manifest.name), `duplicate package manifest for ${manifest.name}`);
     tarballs.set(manifest.name, { tarball, manifest });
   }
   assert.equal(tarballs.size, packageEntries.length, "every package must produce one tarball");
@@ -57,18 +109,34 @@ async function installExample(name, tarballs) {
   await cp(join(examplesRoot, name), directory, { recursive: true });
   const packageJsonPath = join(directory, "package.json");
   const manifest = JSON.parse(await readFile(packageJsonPath, "utf8"));
-  const dependencies = { ...(manifest.dependencies ?? {}) };
+  const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies"];
+  const dependencies = Object.fromEntries(
+    dependencyFields.map((field) => [field, { ...(manifest[field] ?? {}) }]),
+  );
   const included = new Set();
   function include(packageName) {
-    if (!packageName.startsWith("@sqlbraid/") || included.has(packageName)) return;
+    if (!isFirstPartyPackage(packageName) || included.has(packageName)) return;
     const packed = tarballs.get(packageName);
     assert.ok(packed, `missing packed dependency ${packageName}`);
     included.add(packageName);
-    dependencies[packageName] = `file:${packed.tarball}`;
-    for (const dependency of Object.keys({ ...packed.manifest.dependencies, ...packed.manifest.optionalDependencies })) include(dependency);
+    for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+      for (const dependency of Object.keys(packed.manifest[field] ?? {})) include(dependency);
+    }
   }
-  for (const name of Object.keys(dependencies)) include(name);
-  await writeFile(packageJsonPath, `${JSON.stringify({ ...manifest, dependencies }, null, 2)}\n`);
+
+  for (const field of dependencyFields) {
+    for (const packageName of Object.keys(dependencies[field])) {
+      if (!isFirstPartyPackage(packageName)) continue;
+      include(packageName);
+      dependencies[field][packageName] = `file:${tarballs.get(packageName).tarball}`;
+    }
+  }
+  for (const packageName of included) {
+    if (dependencyFields.some((field) => Object.hasOwn(dependencies[field], packageName))) continue;
+    dependencies.dependencies[packageName] = `file:${tarballs.get(packageName).tarball}`;
+  }
+
+  await writeFile(packageJsonPath, `${JSON.stringify({ ...manifest, ...dependencies }, null, 2)}\n`);
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], directory);
   console.info(`PASS ${name} installed from packed tarballs`);
   return directory;

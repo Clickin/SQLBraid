@@ -45,7 +45,7 @@
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
   "ci": {
-    "command": "pnpm exec vitest run",
+    "command": "pnpm exec vitest run --project \"${{ matrix.project }}\"",
     "workflow": ".github/workflows/release.yml",
     "releaseBlocking": true
   },
