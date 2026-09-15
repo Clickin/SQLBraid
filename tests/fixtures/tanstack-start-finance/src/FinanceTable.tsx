@@ -1,5 +1,6 @@
 import { sql } from "@sqlbraid/sqlite";
 import { financeSchema } from "./schema";
+import { previewJavaScript } from "./query-preview.js";
 
 interface FinanceTableProps {
   readonly rows: readonly {
@@ -26,10 +27,12 @@ export function previewQuery(includePending: boolean) {
 }
 
 export function FinanceTable({ rows, queryText }: FinanceTableProps) {
+  const javascriptQueryText = previewJavaScript(false).render().segments.join("");
   return (
     <section>
       <h1>재무 거래</h1>
       <code data-query-preview={queryText}>SQLBraid finance preview</code>
+      <code data-js-query-preview={javascriptQueryText}>JavaScript query preview</code>
       <table>
         <thead>
           <tr><th>거래 ID</th><th>고객</th><th>금액</th><th>상태</th></tr>

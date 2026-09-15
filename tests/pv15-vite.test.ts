@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { promisify } from "node:util";
 import ts from "typescript";
 import { test } from "vitest";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import { parameterizedSql, type RenderedStatement } from "@sqlbraid/core";
 import { transformSource, type SourceMap } from "@sqlbraid/compiler";
 import sqlbraid from "@sqlbraid/vite";
+
+const execFile = promisify(execFileCallback);
 
 const modules = [
   "@sqlbraid/template",
@@ -104,6 +111,70 @@ export { evaluations, schema };`;
     assert.equal(parameterizedSql(output.query.render(), () => "?").trim(), "CALL routine()");
     assert.equal(output.evaluations, 0);
     assert.equal(output.query.routineContract?.output, output.schema);
+  }
+});
+
+test("runtime lowering emits executable JavaScript for JS and preserves TS/JSX syntax", async () => {
+  const guarded = [
+    'import { sql } from "@sqlbraid/template";',
+    'export const query = sql`SELECT 1 /*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;',
+  ].join("\n");
+  const unguarded = 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT 1`;';
+  const directory = mkdtempSync(join(tmpdir(), "sqlbraid-compiler-output-"));
+  try {
+    const javascript = transformSource(guarded, "probe.js");
+    assert.deepEqual(javascript.diagnostics, []);
+    writeFileSync(join(directory, "probe.js"), javascript.code);
+    await execFile(process.execPath, ["--check", join(directory, "probe.js")]);
+    assert.doesNotMatch(javascript.code, /\b(?:index|thunk)\s*:\s*/u);
+
+    const jsx = transformSource(`${guarded}\nexport const view = <section data-query={query} />;`, "probe.jsx");
+    assert.deepEqual(jsx.diagnostics, []);
+    assert.equal(ts.createSourceFile("probe.jsx", jsx.code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX).parseDiagnostics.length, 0);
+
+    for (const [fileName, source] of [["probe.ts", guarded], ["probe.tsx", `${guarded}\nexport const view = <section data-query={query} />;`], ["plain.ts", unguarded]] as const) {
+      const result = transformSource(source, fileName);
+      assert.deepEqual(result.diagnostics, []);
+      assert.equal(ts.createSourceFile(fileName, result.code, ts.ScriptTarget.Latest, true).parseDiagnostics.length, 0);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("runtime helper insertion keeps hashbangs and directive prologues first", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "sqlbraid-compiler-hashbang-"));
+  try {
+    for (const [index, prologue] of [
+      ["#!/usr/bin/env node"],
+      ["#!/usr/bin/env node", '"use strict";'],
+      ["#!/usr/bin/env node", '"use client";'],
+      ['"use strict";'],
+      [],
+    ].entries()) {
+      const source = [
+        ...prologue,
+        'import { sql } from "@sqlbraid/template";',
+        'export const query = sql`SELECT 1 /*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;',
+      ].join("\n");
+      const result = transformSource(source, "probe.js");
+      assert.deepEqual(result.diagnostics, []);
+      if (prologue[0]?.startsWith("#!")) assert.ok(result.code.startsWith(`${prologue[0]}\n`));
+      const firstDirective = prologue.find((line) => line.startsWith('"'));
+      if (firstDirective) assert.ok(result.code.indexOf(firstDirective) < result.code.indexOf("import { capture"));
+      const file = join(directory, `probe-${index}.js`);
+      writeFileSync(file, result.code);
+      await execFile(process.execPath, ["--check", file]);
+      assert.ok(result.map);
+      const generatedQuery = result.code.indexOf("__sqlbraidCapture(sql");
+      assert.ok(generatedQuery >= 0);
+      const mappedQuery = originalPositionFor(new TraceMap(result.map as SourceMap), lineAndColumn(result.code, generatedQuery));
+      const expectedQuery = lineAndColumn(source, source.indexOf("sql`"));
+      assert.equal(mappedQuery.line, expectedQuery.line);
+      assert.equal(mappedQuery.column, expectedQuery.column);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });
 
