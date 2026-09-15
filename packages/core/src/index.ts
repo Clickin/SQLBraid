@@ -1419,6 +1419,10 @@ export interface DatabaseOptions {
 
 export type PreparableQuery = ExecutableQuery | CallQuery;
 
+export type PreparedFactoryOptions =
+  | { readonly input: "none" }
+  | { readonly input: "required" };
+
 export type PreparedArguments<Input, Options> =
   [Input] extends [never] ? [options?: Options] : [input: Input, options?: Options];
 
@@ -1460,10 +1464,22 @@ export interface Database {
   prepare<Factory extends () => PreparableQuery>(
     name: string,
     factory: Factory & (Parameters<Factory> extends [] ? unknown : never),
+    options: { readonly input: "none" },
   ): PreparedQuery<never, ReturnType<Factory>>;
   prepare<Factory extends (input: never) => PreparableQuery>(
     name: string,
     factory: Factory & (Parameters<Factory> extends [unknown] ? unknown : never),
+  ): PreparedQuery<Parameters<Factory>[0], ReturnType<Factory>>;
+  prepare<Factory extends (input: never) => PreparableQuery>(
+    name: string,
+    factory: Factory & (
+      number extends Parameters<Factory>["length"]
+        ? unknown
+        : Parameters<Factory>["length"] extends 0 | 1
+          ? unknown
+          : never
+    ),
+    options: { readonly input: "required" },
   ): PreparedQuery<Parameters<Factory>[0], ReturnType<Factory>>;
   stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row>;
   session<T>(callback: (database: Database) => Promise<T>): Promise<T>;

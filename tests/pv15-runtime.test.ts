@@ -51,7 +51,7 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
   const events: ExecutionEvent[] = [];
   const failure = new Error("factory failed");
   const db = createDatabase(emptyRowsExecutor(), { observers: [{ onEvent(event) { events.push(event); } }] });
-  const prepared = db.prepare("factory-failure", (): RowQuery<unknown> => { throw failure; });
+  const prepared = db.prepare("factory-failure", (): RowQuery<unknown> => { throw failure; }, { input: "none" });
   await assert.rejects(() => prepared.execute(), (error) => error === failure);
   let errorEvent = events.at(-1);
   assert.equal(errorEvent?.type, "query:error");
@@ -65,7 +65,7 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
   const renderPrepared = db.prepare("render-failure", () => {
     const query = sql.rows`SELECT 1`;
     return { ...query, render: () => { throw renderFailure; } };
-  });
+  }, { input: "none" });
   await assert.rejects(() => renderPrepared.execute(), (error) => error === renderFailure);
   errorEvent = events.at(-1);
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.stage : undefined, "render");
@@ -76,10 +76,13 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
   events.length = 0;
   let alternate = false;
   const otherSql = createSqlTag({ dialect: alternateDialect("other") });
-  const shapePrepared = db.prepare("dialect-shape", () => alternate ? otherSql.rows`SELECT 1` : sql.rows`SELECT 1`);
+  const shapePrepared = db.prepare("dialect-shape", () => alternate ? otherSql.rows`SELECT 1` : sql.rows`SELECT 1`, { input: "none" });
   await shapePrepared.execute();
   alternate = true;
-  await assert.rejects(() => shapePrepared.execute(), /BRAID_PREPARED_SHAPE/u);
+  await assert.rejects(
+    () => shapePrepared.execute(),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_PREPARED_SHAPE",
+  );
   errorEvent = events.at(-1);
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.stage : undefined, "prepared");
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.executionStarted : undefined, false);
@@ -91,7 +94,7 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
   const bindingDb = createDatabase(emptyRowsExecutor({
     statementBinding: { id: "failing-binding", describe() { throw bindingFailure; } },
   }), { observers: [{ onEvent(event) { events.push(event); } }] });
-  const bindingPrepared = bindingDb.prepare("binding-failure", () => sql.rows`SELECT 1`);
+  const bindingPrepared = bindingDb.prepare("binding-failure", () => sql.rows`SELECT 1`, { input: "none" });
   await assert.rejects(() => bindingPrepared.execute(), (error) => error === bindingFailure);
   errorEvent = events.at(-1);
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.stage : undefined, "materialize");

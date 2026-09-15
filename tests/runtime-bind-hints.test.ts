@@ -86,7 +86,7 @@ test("prepared queries treat hint metadata as shape but ignore values", async ()
   let parameterHint: ParameterTypeHint = hint;
   const values: unknown[] = [];
   const db = createDatabase(noRowsExecutor(values));
-  const prepared = db.prepare("hint-shape", () => hintedQuery(value, parameterHint));
+  const prepared = db.prepare("hint-shape", () => hintedQuery(value, parameterHint), { input: "none" });
 
   await prepared.execute();
   value = 2;
@@ -151,7 +151,7 @@ test("prepared segment changes fail before typed materialization even with inval
       },
     },
   });
-  const prepared = db.prepare("segment-shape", () => changed ? sql.rows`SELECT ${"invalid"} AS changed` : sql.rows`SELECT ${1}`);
+  const prepared = db.prepare("segment-shape", () => changed ? sql.rows`SELECT ${"invalid"} AS changed` : sql.rows`SELECT ${1}`, { input: "none" });
   await prepared.execute();
   changed = true;
   await assert.rejects(() => prepared.execute(), /BRAID_PREPARED_SHAPE/);

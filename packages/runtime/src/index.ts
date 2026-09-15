@@ -24,6 +24,7 @@ import type {
   ExecutionOptions,
   ExecutionObserver,
   ExecutionResultOf,
+  PreparedFactoryOptions,
   PreparedQuery,
   PreparableQuery,
   Query,
@@ -152,6 +153,7 @@ interface RuntimeOptions extends DatabaseOptions {
   readonly transactionId?: string;
   readonly depth: number;
   readonly scope?: symbol;
+  readonly transactionScope?: symbol;
 }
 
 interface TransactionContext {
@@ -1203,6 +1205,9 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     if (options.scopeKind === "transaction" && state.activeScope !== options.scope) {
       throw new DatabaseScopeError("BRAID_TX_SCOPE", "Use the innermost transaction database while its savepoint is active.");
     }
+    if (options.scopeKind === "session" && options.transaction && options.transactionScope !== state.activeScope) {
+      throw new DatabaseScopeError("BRAID_TX_SCOPE", "Use the innermost transaction database while its savepoint is active.");
+    }
     if (options.scopeKind === "session" && !options.transaction && state.activeScope !== undefined) {
       throw new DatabaseScopeError("BRAID_TX_SCOPE", "Use the innermost transaction database while its transaction is active.");
     }
@@ -1451,15 +1456,14 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     return operation;
   };
   const prepareNamedFactoryObserved = async (
-    factory: (...args: any[]) => PreparableQuery,
-    input: unknown,
+    factory: () => PreparableQuery,
     preparedName: string,
     shape: { value?: string },
   ): Promise<PreparedOperation<PreparableQuery>> => {
     const operationId = nextOperationId();
     let query: PreparableQuery;
     try {
-      query = factory(input);
+      query = factory();
     } catch (error) {
       const operation = { meta: metadata(options, operationId, preparedName) };
       await notifyError(options.observers ?? [], errorEvent(operation, error, "prepared", false, false), error);
@@ -2109,6 +2113,8 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     ): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }> {
       assertOpen();
       for (const query of queries) assertExecutableQuery(query);
+      assertExecutionOptions(executor, executionOptions, options.capabilities);
+      if (queries.length === 0) return [] as { readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> };
       const batchId = `braid_batch_${nextOperationId()}`;
       const operations: PreparedOperation<ExecutableQuery>[] = [];
       for (const query of queries) operations.push(await prepareObserved(query, undefined, batchId));
@@ -2153,15 +2159,22 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
     },
     prepare<Factory extends (...args: never[]) => PreparableQuery>(
       name: string,
-      factory: Factory & (Parameters<Factory> extends [] | [unknown] ? unknown : never),
-    ): PreparedQuery<Parameters<Factory> extends [infer Input] ? Input : never, ReturnType<Factory>> {
+      factory: Factory,
+      prepareOptions?: PreparedFactoryOptions,
+    ): PreparedQuery<Parameters<Factory> extends [] ? never : Parameters<Factory>[0], ReturnType<Factory>> {
       assertOpen();
-      if (!name.trim()) throw new Error("BRAID_PREPARED_NAME: prepared query name must not be empty.");
-      if (factory.length > 1) throw new TypeError("BRAID_PREPARED_FACTORY: prepared query factories must accept zero or one required input.");
-      if (options.preparedNames.has(name)) throw new Error(`BRAID_PREPARED_NAME: duplicate prepared query name ${name}.`);
+      if (!name.trim()) throw codedError("BRAID_PREPARED_NAME", "prepared query name must not be empty.");
+      if (options.preparedNames.has(name)) throw codedError("BRAID_PREPARED_NAME", `duplicate prepared query name ${name}.`);
       options.preparedNames.add(name);
       const shape: { value?: string } = {};
-      const takesInput = factory.length > 0;
+      if (
+        prepareOptions !== undefined
+        && prepareOptions.input !== "none"
+        && prepareOptions.input !== "required"
+      ) {
+        throw new TypeError("Prepared input mode must be either \"none\" or \"required\".");
+      }
+      const takesInput = prepareOptions?.input !== "none";
       const invocation = (args: readonly unknown[]): {
         readonly options?: ExecutionOptions;
       } => ({
@@ -2169,7 +2182,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       });
       const operation = async (args: readonly unknown[]): Promise<PreparedOperation<PreparableQuery>> => {
         assertOpen();
-        return prepareNamedFactoryObserved(factory as (...values: unknown[]) => PreparableQuery, args[0], name, shape);
+        const invoke = takesInput
+          ? () => (factory as (input: unknown) => PreparableQuery)(args[0])
+          : () => (factory as () => PreparableQuery)();
+        return prepareNamedFactoryObserved(invoke, name, shape);
       };
       const prepared: Record<string, unknown> = {
         name,
@@ -2253,7 +2269,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           );
         },
       };
-      return prepared as PreparedQuery<Parameters<Factory> extends [infer Input] ? Input : never, ReturnType<Factory>>;
+      return prepared as PreparedQuery<Parameters<Factory> extends [] ? never : Parameters<Factory>[0], ReturnType<Factory>>;
     },
     stream<Row>(
       query: RowQuery<Row>,
@@ -2458,6 +2474,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         leaseState: physicalState,
         pinned: use,
         scope,
+        transactionScope: options.transaction ? state.activeScope : undefined,
       });
       let result!: T;
       let failure: unknown;

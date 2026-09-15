@@ -126,6 +126,10 @@ test("prepared input queries cover row, command, and call kinds without construc
   const log: string[] = [];
   let factoryCalls = 0;
   const db = createDatabase(rowsExecutor(log));
+  assert.throws(
+    () => db.prepare("invalid-mode", () => sql.rows`SELECT 0`, { input: "invalid" } as never),
+    (error: unknown) => error instanceof TypeError && error.message.includes("Prepared input mode"),
+  );
   const byId = db.prepare("by-id", (id: number) => {
     factoryCalls += 1;
     return sql.rows`SELECT ${id}`;
@@ -136,9 +140,189 @@ test("prepared input queries cover row, command, and call kinds without construc
   assert.equal(factoryCalls, 2);
   const command = db.prepare("command", (input: { readonly id: number }) => sql.command`UPDATE users SET id = ${input.id}`);
   await command.execute({ id: 3 });
-  const call = db.prepare("call", () => sql.call`CALL routine()`);
+  const call = db.prepare("call", () => sql.call`CALL routine()`, { input: "none" });
   await call.call();
   assert.equal(log.length, 3);
+});
+
+test("prepared invocation modes keep input/options distinct for every query kind", async () => {
+  const log: string[] = [];
+  const db = createDatabase({
+    ...rowsExecutor(log),
+    async query<Row>(statement: RenderedStatement) {
+      log.push(statement.segments.join("?"));
+      if (statement.resultKind === "command") {
+        return { kind: "command" as const, rows: [], command: { affectedRows: 1 } };
+      }
+      return {
+        kind: "rows" as const,
+        rows: [{ value: statement.parameters[0]?.value }] as readonly Row[],
+      };
+    },
+    async call(statement: RenderedStatement) {
+      log.push(statement.segments.join("?"));
+      return { output: {}, resultSets: [{ rows: [], source: { kind: "emitted" as const, index: 0 } }] };
+    },
+  });
+  const inputValues: unknown[] = [];
+  const schemaCalls: unknown[] = [];
+  const executionSchema = {
+    "~standard": {
+      version: 1,
+      vendor: "prepared-invocation-test",
+      validate(value: unknown) {
+        schemaCalls.push(value);
+        return { value };
+      },
+    },
+  } satisfies import("@sqlbraid/core").StandardSchemaV1<unknown, unknown>;
+
+  const normal = db.prepare("normal-input", (input: { readonly signal: string; readonly schema: string }) => {
+    inputValues.push(input);
+    return sql.rows`SELECT ${input.signal}`;
+  });
+  const rest = db.prepare(
+    "rest-input",
+    (...[input]: [{ readonly value: number }]) => sql.rows`SELECT ${input.value}`,
+    { input: "required" },
+  );
+  const defaulted = db.prepare(
+    "default-input",
+    (input = "default") => sql.rows`SELECT ${input}`,
+    { input: "required" },
+  );
+  const wrappedFactory = ((input: { readonly value: string }) => sql.rows`SELECT ${input.value}`) as
+    (...args: [{ readonly value: string }]) => ReturnType<typeof sql.rows>;
+  const wrapped = db.prepare("wrapped-input", wrappedFactory, { input: "required" });
+  const command = db.prepare(
+    "command-input",
+    (input: { readonly value: number }) => sql.command`UPDATE users SET id = ${input.value}`,
+  );
+  const call = db.prepare(
+    "call-input",
+    (...[input]: [{ readonly value: string }]) => sql.call`CALL routine(${input.value})`,
+    { input: "required" },
+  );
+  const zero = db.prepare("zero-input", () => sql.rows`SELECT 0`, { input: "none" });
+
+  await normal.all({ signal: "ordinary", schema: "ordinary-schema" }, { schema: executionSchema });
+  await rest.all({ value: 1 }, { schema: executionSchema });
+  await defaulted.all("provided", { schema: executionSchema });
+  await wrapped.all({ value: "wrapped" }, { schema: executionSchema });
+  await command.execute({ value: 2 });
+  await call.call({ value: "called" });
+  await zero.execute();
+
+  assert.deepEqual(inputValues, [{ signal: "ordinary", schema: "ordinary-schema" }]);
+  assert.deepEqual(schemaCalls, [
+    { value: "ordinary" },
+    { value: 1 },
+    { value: "provided" },
+    { value: "wrapped" },
+  ]);
+  assert.equal(log.length, 7);
+});
+
+test("prepared execution options preflight before I/O without guessing application input fields", async () => {
+  let queries = 0;
+  let acquires = 0;
+  const provider: ConnectionProvider = {
+    statementBinding,
+    environment: environment(),
+    async acquire() {
+      acquires += 1;
+      return {
+        ...rowsExecutor([]),
+        async query<Row>() {
+          queries += 1;
+          return { kind: "rows" as const, rows: [] as readonly Row[] };
+        },
+        release() {},
+      };
+    },
+  };
+  const db = createPooledDatabase(provider);
+  const reason = new Error("prepared-aborted");
+  const controller = new AbortController();
+  controller.abort(reason);
+
+  const command = db.prepare("aborted-command", (input: { readonly signal: string }) =>
+    sql.command`UPDATE users SET name = ${input.signal}`,
+  );
+  const rows = db.prepare(
+    "aborted-rows",
+    (...[input]: [{ readonly signal: string }]) => sql.rows`SELECT ${input.signal}`,
+    { input: "required" },
+  );
+  const call = db.prepare("aborted-call", (input: { readonly signal: string }) =>
+    sql.call`CALL routine(${input.signal})`,
+  );
+
+  await assert.rejects(
+    () => command.execute({ signal: "application" }, { signal: controller.signal }),
+    (error: unknown) => error === reason,
+  );
+  await assert.rejects(
+    () => rows.all({ signal: "application" }, { signal: controller.signal }),
+    (error: unknown) => error === reason,
+  );
+  await assert.rejects(
+    () => call.call({ signal: "application" }, { signal: controller.signal }),
+    (error: unknown) => error === reason,
+  );
+  assert.equal(acquires, 0);
+  assert.equal(queries, 0);
+});
+
+test("empty batch is a no-op with cancellation preflight and no lease lifecycle", async () => {
+  let acquires = 0;
+  let releases = 0;
+  const provider: ConnectionProvider = {
+    statementBinding,
+    environment: environment(),
+    async acquire() {
+      acquires += 1;
+      return { ...rowsExecutor([]), release() { releases += 1; } };
+    },
+  };
+  const db = createPooledDatabase(provider);
+  const result = await db.batch([]);
+  assert.deepEqual(result, []);
+  assert.equal(acquires, 0);
+  assert.equal(releases, 0);
+
+  const reason = new Error("empty-batch-aborted");
+  const controller = new AbortController();
+  controller.abort(reason);
+  await assert.rejects(
+    () => db.batch([], { signal: controller.signal }),
+    (error: unknown) => error === reason,
+  );
+  assert.equal(acquires, 0);
+  assert.equal(releases, 0);
+});
+
+test("non-empty batch surfaces a lease cleanup failure", async () => {
+  const releaseFailure = new Error("batch release failed");
+  let releases = 0;
+  const db = createPooledDatabase({
+    statementBinding,
+    environment: environment(),
+    async acquire() {
+      return {
+        ...rowsExecutor([]),
+        release() {
+          releases += 1;
+          throw releaseFailure;
+        },
+      };
+    },
+  });
+  await assert.rejects(
+    () => db.batch([sql`SELECT 1`]),
+    (error: unknown) => error === releaseFailure,
+  );
+  assert.equal(releases, 1);
 });
 
 test("transaction options are forwarded, nested options reject, and malformed options fail before I/O", async () => {

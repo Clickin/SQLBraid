@@ -489,7 +489,7 @@ test("oracle.numeric.bind-nls-audit", { timeout: 60_000 }, async () => {
     }
     assert.equal((await db.one(explicitQuery)).VALUE, exact);
 
-    const prepared = db.prepare("oracle-nls-explicit-text", () => explicitQuery);
+    const prepared = db.prepare("oracle-nls-explicit-text", () => explicitQuery, { input: "none" });
     assert.equal((await prepared.execute()).rows[0]?.VALUE, exact);
 
     await drop(connection, "TABLE braid_pv17_nls_text PURGE").catch(() => undefined);

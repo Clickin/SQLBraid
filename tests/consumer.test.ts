@@ -62,3 +62,49 @@ test('public package exports resolve in an external consumer directory', async (
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('packed consumer types require explicit prepared factory modes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sqlbraid-prepared-consumer-'));
+  await mkdir(join(directory, 'node_modules', '@sqlbraid'), { recursive: true });
+  for (const name of ['core', 'template']) await linkPackage(directory, name);
+  await writeFile(join(directory, 'package.json'), '{"type":"module"}\n');
+  await writeFile(join(directory, 'tsconfig.json'), JSON.stringify({
+    compilerOptions: {
+      target: 'ES2022',
+      module: 'NodeNext',
+      moduleResolution: 'NodeNext',
+      strict: true,
+      noEmit: true,
+      skipLibCheck: true,
+    },
+    include: ['index.ts'],
+  }));
+  await writeFile(join(directory, 'index.ts'), [
+    'import type { Database } from "@sqlbraid/core";',
+    'import { sql } from "@sqlbraid/template";',
+    'declare const db: Database;',
+    'const zero = db.prepare("zero", () => sql.rows<{ readonly id: number }>`SELECT 1`, { input: "none" });',
+    'zero.execute({ signal: new AbortController().signal });',
+    'const input = db.prepare("input", (id: number) => sql.rows`SELECT ${id}`);',
+    'input.execute(1, { signal: new AbortController().signal });',
+    'const rest = db.prepare("rest", (...ids: number[]) => sql.rows`SELECT ${ids[0]}`, { input: "required" });',
+    'rest.execute(1);',
+    'const defaulted = db.prepare("defaulted", (id = 1) => sql.rows`SELECT ${id}`, { input: "required" });',
+    'defaulted.execute(1);',
+    '// @ts-expect-error Zero-input factories need the explicit options-only mode.',
+    'db.prepare("unmarked-zero", () => sql.rows`SELECT 1`);',
+    '// @ts-expect-error One-input factories still require their input before execution options.',
+    'input.execute({ signal: new AbortController().signal });',
+  ].join('\n'));
+  try {
+    await run(process.execPath, [
+      join(process.cwd(), 'node_modules/typescript/bin/tsc'),
+      '--project',
+      join(directory, 'tsconfig.json'),
+      '--pretty',
+      'false',
+    ], { cwd: directory });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

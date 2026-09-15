@@ -137,7 +137,7 @@ test("mariadb.result.standard-schema", async () => {
   const db = createMariaDbDatabase(connection);
   try {
     const mapper = v.pipe(v.object({ label: v.string() }), v.transform(({ label }) => label.toUpperCase()));
-    const prepared = db.prepare("mariadb-mapped", () => sql.rows(mapper)`SELECT ${"Ada"} AS label`);
+    const prepared = db.prepare("mariadb-mapped", () => sql.rows(mapper)`SELECT ${"Ada"} AS label`, { input: "none" });
     assert.deepEqual((await prepared.execute()).rows, ["ADA"]);
   } finally { await connection.end(); }
 });

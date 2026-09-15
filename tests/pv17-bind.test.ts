@@ -78,7 +78,7 @@ test("all ordinary undefined IN paths fail before a pooled lease is acquired", a
   const acquired = { value: 0 };
   const db = createPooledDatabase(provider(acquired));
   await assert.rejects(() => db.execute(sql`SELECT ${undefined}`), hasUnsupportedBindCode);
-  const prepared = db.prepare("undefined-input", () => sql.rows`SELECT ${undefined}`);
+  const prepared = db.prepare("undefined-input", () => sql.rows`SELECT ${undefined}`, { input: "none" });
   await assert.rejects(() => prepared.execute(), hasUnsupportedBindCode);
   await assert.rejects(
     () => db.bulk([undefined], (value) => sql.command`INSERT INTO values (value) VALUES (${value})`),

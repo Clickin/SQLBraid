@@ -331,7 +331,7 @@ test("prepared invocation renders once and passes one binding description to exe
         return query.render();
       },
     };
-  });
+  }, { input: "none" });
 
   await prepared.execute();
   assert.equal(renders, 1);
