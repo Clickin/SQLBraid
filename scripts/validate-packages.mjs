@@ -115,7 +115,7 @@ try {
     if (JSON.stringify(manifest).includes("workspace:")) throw new Error(`Workspace dependency protocol leaked into ${manifest.name} metadata.`);
 
     if (manifest.version !== expectedVersion) throw new Error(`Packed ${manifest.name} is not synchronized to workspace version ${expectedVersion}.`);
-    if (manifest.license !== "MIT") throw new Error(`Packed ${manifest.name} is missing the MIT license.`);
+    if (manifest.license !== "Apache-2.0") throw new Error(`Packed ${manifest.name} is missing the Apache-2.0 license.`);
     if (!manifest.description || !manifest.repository?.url || !manifest.repository?.directory || !manifest.homepage || !manifest.bugs?.url || !Array.isArray(manifest.keywords) || manifest.keywords.length === 0) {
       throw new Error(`Packed ${manifest.name} is missing public package metadata.`);
     }
@@ -711,7 +711,7 @@ try {
   const licensePath = vsixFiles.split("\n").find((file) => /^extension\/license(?:\.(?:txt|md))?$/iu.test(file));
   assert.ok(licensePath, "VSIX must include its license document.");
   const { stdout: vsixLicense } = await execFile("unzip", ["-p", packagedVsix, licensePath]);
-  assert.equal(vsixLicense, await readFile(join(root, "LICENSE"), "utf8"), "VSIX must ship the same MIT license as npm.");
+  assert.equal(vsixLicense, await readFile(join(root, "LICENSE"), "utf8"), "VSIX must ship the same Apache-2.0 license as npm.");
   await mkdir(dirname(vsixOutput), { recursive: true });
   await copyFile(packagedVsix, vsixOutput);
   const previousVsix = process.env.SQLBRAID_VSIX_PATH;

@@ -2,7 +2,7 @@
   "name": "@sqlbraid/compiler",
   "version": "0.1.0-rc.0",
   "description": "Compile SQLBraid tagged templates into typed SQL query definitions",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
