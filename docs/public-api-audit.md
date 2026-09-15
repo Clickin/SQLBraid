@@ -18,7 +18,8 @@ The current tree is newer and requires fresh evidence before labels change.
 
 **Application:** `CallQuery`, `CommandQuery`, `CommandResult`, `Database`,
 `DatabaseOptions`, `ExecutableQuery`, `ExecutionEvent`, `ExecutionObserver`,
-`ExecutionOptions`, `ExecutionResultOf`, `PreparedQuery`, `Query`,
+`ExecutionOptions`, `ExecutionResultOf`, `PreparedFactoryOptions`,
+`PreparedQuery`, `Query`,
 `QueryExecutionResult`, `QueryResultKind`, `QueryRow`, `RowQuery`,
 `RowValidationOptions`, `RowsExecutionResult`, `StreamOptions`, `TransactionOptions`,
 `TransactionIsolation`, `RoutineCallResult`, `RoutineContract`,
