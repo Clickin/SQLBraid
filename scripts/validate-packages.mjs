@@ -258,6 +258,21 @@ try {
   ].join("\n"));
   await run(process.execPath, ["runtime.mjs"], boundaryConsumer);
   console.info("PASS packed runtime-only npm consumer without metadata, codegen, tooling, CLI, LSP or editor");
+  const metadataAbsentImports = [
+    'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
+    'import { createMysqlInspector } from "@sqlbraid/mysql/inspector";',
+    'import { createMariaDbInspector } from "@sqlbraid/mariadb/inspector";',
+    'import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";',
+    'import { createOracleInspector } from "@sqlbraid/oracle/inspector";',
+    'import { createMssqlInspector } from "@sqlbraid/mssql/inspector";',
+  ];
+  await writeFile(join(boundaryConsumer, "metadata-absent.mjs"), [
+    ...metadataAbsentImports,
+    'import assert from "node:assert/strict";',
+    'for (const inspector of [createPostgresInspector, createMysqlInspector, createMariaDbInspector, createSqliteInspector, createOracleInspector, createMssqlInspector]) assert.equal(typeof inspector, "function");',
+  ].join("\n"));
+  await run(process.execPath, ["metadata-absent.mjs"], boundaryConsumer);
+  console.info("PASS packed inspector imports without optional @sqlbraid/metadata");
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", dependencies["@sqlbraid/metadata"], dependencies["@sqlbraid/codegen"]], boundaryConsumer);
   const metadataImports = [
     'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
@@ -265,6 +280,7 @@ try {
     'import { createMariaDbInspector } from "@sqlbraid/mariadb/inspector";',
     'import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";',
     'import { createOracleInspector } from "@sqlbraid/oracle/inspector";',
+    'import { createMssqlInspector } from "@sqlbraid/mssql/inspector";',
   ];
   await writeFile(join(boundaryConsumer, "metadata.mjs"), [
     ...metadataImports,
@@ -281,6 +297,7 @@ try {
     'assert.equal(typeof createPostgresInspector, "function");',
     'assert.equal(typeof createMysqlInspector, "function");',
     'assert.equal(typeof createOracleInspector, "function");',
+    'assert.equal(typeof createMssqlInspector, "function");',
   ].join("\n"));
   await run(process.execPath, ["metadata.mjs"], boundaryConsumer);
   await writeFile(join(boundaryConsumer, "codegen.mjs"), [
@@ -695,6 +712,9 @@ try {
   const extension = join(temp, "vscode");
   const extensionManifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
   const vsixOutput = resolve(process.env.SQLBRAID_VSIX_OUTPUT ?? join(root, "sqlbraid.vsix"));
+  const suppliedVsix = process.env.SQLBRAID_VSIX_INPUT ? resolve(process.env.SQLBRAID_VSIX_INPUT) : undefined;
+  if (suppliedVsix && !packInputDir) throw new Error("Supplied VSIX validation requires a supplied release artifact directory.");
+  if (suppliedVsix && resolve(dirname(suppliedVsix)) !== packInputDir) throw new Error("Supplied VSIX must be stored beside the supplied release manifest.");
   const extensionDependencies = Object.fromEntries(Object.entries(extensionManifest.dependencies).map(([name, version]) => [name, version.replace(/^workspace:/u, "")]));
   const bundledVersions = {};
   for (const [key, packageName] of [["cli", "@sqlbraid/cli"], ["languageServer", "@sqlbraid/language-server"]]) {
@@ -722,8 +742,8 @@ try {
   await run("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], extension);
   await writeFile(join(extension, "package.json"), JSON.stringify({ ...extensionManifest, devDependencies: {}, dependencies: extensionDependencies }));
   await rm(join(extension, "package-lock.json"), { force: true });
-  const packagedVsix = join(temp, "sqlbraid.vsix");
-  await run(join(root, "node_modules/.bin/vsce"), ["package", "--no-yarn", "--out", packagedVsix], extension);
+  const packagedVsix = suppliedVsix ?? join(temp, "sqlbraid.vsix");
+  if (!suppliedVsix) await run(join(root, "node_modules/.bin/vsce"), ["package", "--no-yarn", "--out", packagedVsix], extension);
   const { stdout: vsixFiles } = await execFile("unzip", ["-Z1", packagedVsix]);
   for (const file of [
     "readme.md",
@@ -748,7 +768,11 @@ try {
     assert.equal(bundledManifest.version, bundledVersions[key], `VSIX must bundle the validated ${packageName} version.`);
   }
   await mkdir(dirname(vsixOutput), { recursive: true });
-  await copyFile(packagedVsix, vsixOutput);
+  if (suppliedVsix) {
+    if (vsixOutput !== suppliedVsix) throw new Error("Supplied VSIX output must be validated in place without copying or repacking.");
+  } else {
+    await copyFile(packagedVsix, vsixOutput);
+  }
   const previousVsix = process.env.SQLBRAID_VSIX_PATH;
   process.env.SQLBRAID_VSIX_PATH = vsixOutput;
   try {
@@ -771,6 +795,16 @@ try {
     };
     const releasePath = join(packInputDir, "release-manifest.json");
     const release = JSON.parse(await readFile(releasePath, "utf8"));
+    if (suppliedVsix && (!release.extension
+      || release.extension.file !== extensionIdentity.file
+      || release.extension.sha256 !== extensionIdentity.sha256
+      || release.extension.integrity !== extensionIdentity.integrity
+      || release.extension.version !== extensionIdentity.version
+      || release.extension.publisher !== extensionIdentity.publisher
+      || release.extension.name !== extensionIdentity.name
+      || JSON.stringify(release.extension.bundled) !== JSON.stringify(extensionIdentity.bundled))) {
+      throw new Error("Supplied VSIX does not match the immutable release manifest identity.");
+    }
     release.extension = extensionIdentity;
     await writeFile(releasePath, `${JSON.stringify(release, null, 2)}\n`);
     const { stdout: commit } = await execFile("git", ["rev-parse", "HEAD"], { cwd: root });

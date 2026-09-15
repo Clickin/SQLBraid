@@ -40,6 +40,7 @@ jobs:
     name: Prepare immutable release candidate
     permissions:
       contents: read
+      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -54,6 +55,25 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: Validate prior candidate run ID
+        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
+        env:
+          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
+        shell: bash
+        run: |
+          [[ "$PRIOR_RUN_ID" =~ ^[0-9]+$ ]] || {
+            echo "prior_run_id must be numeric."
+            exit 1
+          }
+      - name: Download prior validated candidate
+        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-candidate-validated
+          path: ${{ runner.temp }}/prior-validated
+          run-id: ${{ inputs.prior_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
       - name: Determine release version
         shell: bash
         run: |
@@ -81,9 +101,13 @@ jobs:
       - name: Build packages and extension once
         run: pnpm run build
       - name: Pack immutable release candidate
+        if: inputs.release_mode != 'stage' || inputs.prior_run_id == ''
         env:
           SQLBRAID_RELEASE_ARTIFACT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
         run: node scripts/release.mjs --mode pack --artifact-dir "$SQLBRAID_RELEASE_ARTIFACT_DIR"
+      - name: Restore prior validated candidate
+        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
+        run: tar -xzf "$RUNNER_TEMP/prior-validated/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP"
       - name: Archive candidate and prepared build
         run: |
           tar -czf "$RUNNER_TEMP/release-candidate.tar.gz" -C "$RUNNER_TEMP" sqlbraid-release-artifacts
@@ -348,6 +372,7 @@ jobs:
         env:
           SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
           SQLBRAID_VSIX_OUTPUT: ${{ runner.temp }}/sqlbraid-release-artifacts/sqlbraid.vsix
+          SQLBRAID_VSIX_INPUT: ${{ inputs.release_mode == 'stage' && inputs.prior_run_id != '' && format('{0}/sqlbraid-release-artifacts/sqlbraid.vsix', runner.temp) || '' }}
         run: pnpm run pack:check
       - name: Preserve validated candidate
         run: tar -czf "$RUNNER_TEMP/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP" sqlbraid-release-artifacts
@@ -640,7 +665,15 @@ jobs:
         run: node scripts/release.mjs --mode preflight
       - name: pnpm stage dry run
         if: env.SQLBRAID_RELEASE_MODE != 'pack-only'
-        run: node scripts/release.mjs --mode stage-dry-run --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts"
+        env:
+          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
+        shell: bash
+        run: |
+          args=(node scripts/release.mjs --mode stage-dry-run --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
+          if [[ -n "$PRIOR_RUN_ID" ]]; then
+            args+=(--prior-candidate-run-id "$PRIOR_RUN_ID")
+          fi
+          "${args[@]}"
 
   release-stage:
     if: github.event_name == 'workflow_dispatch' && inputs.release_mode == 'stage'
@@ -690,7 +723,8 @@ jobs:
           args=(node scripts/release.mjs --mode stage --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
           if [[ -n "$PRIOR_RUN_ID" ]]; then
             [[ "$PRIOR_RUN_ID" =~ ^[0-9]+$ ]] || { echo "prior_run_id must be numeric."; exit 1; }
-            args+=(--prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json")
+            args+=(--prior-candidate-run-id "$PRIOR_RUN_ID"
+              --prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json")
           fi
           "${args[@]}"
       - name: Preserve staged publication evidence
@@ -752,7 +786,7 @@ jobs:
           args=(gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft
             --title "SQLBraid $GITHUB_REF_NAME"
             --notes-file docs/SQLBraid_0.1.0_release_notes.md)
-          if node -e 'const version = JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).version; process.exit(version.includes("-") ? 0 : 1)'; then
+          if [[ "$(node scripts/release.mjs --mode release-prerelease-flag --version "${GITHUB_REF_NAME#v}")" == "--prerelease" ]]; then
             args+=(--prerelease)
           fi
           args+=(

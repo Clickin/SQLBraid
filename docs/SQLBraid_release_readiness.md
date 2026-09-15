@@ -135,38 +135,44 @@ the compact `release-evidence.json` to the approval-pending draft GitHub
 Release. Save the durable summary with them: post-approval verification needs
 neither the tarballs nor an unexpired Actions artifact.
 
-Before an upload, the script checks public integrity and the paginated staged
-package listing. An existing stage must be unique for the package/version,
-request the correct dist-tag, and return a tarball matching **both** candidate
-SHA-256 and SHA-512. New stages undergo the same download check. Missing read
-permission, incomplete listings, duplicate stages, and mismatched bytes fail
-closed. pnpm's stage-read commands do not perform OIDC exchange themselves, so
-the script uses their registry GET protocol with an in-memory package-scoped
-OIDC credential; pnpm obtains its own OIDC credential for each upload.
+Before an upload, the script checks public package integrity and the requested
+dist-tags. It intentionally does not read npm's staged-package listing or
+download staged tarballs: those maintainer-authenticated reads are outside
+GitHub Actions' OIDC capability. A mismatch, unexpected tag movement, or
+unavailable registry read fails closed. pnpm obtains its own short-lived OIDC
+credential for each upload; no static token or in-memory registry credential is
+used.
 
 An upload intent and any returned stage ID are written before follow-up
-verification. A network failure triggers registry reconciliation, never an
-automatic second upload. On retry, a matching public version or verified stage
-is reused; a retained unresolved intent with no visible stage requires human
+verification. A network failure retains `pending` evidence and never triggers
+an automatic second upload. On retry, an exact public version is reused; a
+retained unresolved intent or stage ID requires human authenticated
 reconciliation. Dispatches for the same tag serialize staging. Do not delete
 partial evidence or approve partial layers to work around an ambiguous result.
-The workflow cannot prove absence while registry reads fail, and it does not
-claim to have tested real npm OIDC permissions through a dry-run or fake registry.
+The workflow does not claim to have tested real npm OIDC permissions through a
+dry-run or fake registry.
 
 Fresh staging is the default: the current run's candidate manifest and
 `runId`/`runAttempt` must match, and no prior publication report is imported.
+Before a fresh upload, the stage job checks bounded authenticated Actions
+run/job history for another non-skipped staging job for the exact tag and
+commit. A rerun (`runAttempt > 1`) also fails before upload when no prior
+evidence is supplied. This prevents a blank new artifact directory from
+turning an earlier uncertain or failed attempt into a second upload.
 Cross-run recovery is an explicit workflow dispatch: provide the prior Release
-run ID in `prior_run_id`. The workflow downloads only that run's
-`release-staged-publication` artifact and passes its report with
-`--prior-staged-publication`. The candidate commit, package/VSIX hashes, and
-package order must match; the new report is rewritten with the current run
-identity and retains the prior report identity. `pending` or `staged` prior
-states are uncertain and fail closed without another upload. An `absent` state
-may be staged after the normal registry checks; an exact public state is
-reconciled without upload. If the prior artifact is unavailable, corrupt, or
-from another candidate, start a new explicit maintainer reconciliation rather
-than guessing absence. Actions never performs authenticated staged-list reads,
-approval, or tag promotion on a maintainer's behalf.
+run ID in `prior_run_id`. The workflow downloads that run's staged report and
+validated candidate archive (including the original tarballs, VSIX, manifest,
+and pack-check stamp), validates all hashes and identities, and passes the
+report with `--prior-staged-publication`. No candidate or VSIX is repacked.
+The original candidate run identity remains in the manifest; the new staged
+report records the current run and retains a digest/link to the prior report.
+`pending` or `staged` prior states are uncertain and fail closed without
+another upload. An `absent` state may be staged after the normal registry
+checks; an exact public state is reconciled without upload. If the prior
+artifact is unavailable, corrupt, or from another candidate, stop for explicit
+maintainer reconciliation rather than guessing absence. Actions never performs
+authenticated staged-list reads, approval, or tag promotion on a maintainer's
+behalf.
 
 The validated `release-manifest.json` includes every package and the VSIX:
 filename, SHA-256, SHA-512 integrity, extension version/publisher/name, and

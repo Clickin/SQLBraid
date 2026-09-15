@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { assertReleaseWorkflows, requiredReleaseWorkflows, successfulExactRun } from "../scripts/assert-release-workflows.mjs";
+import {
+  assertNoPriorStageAttempt, assertReleaseWorkflows, requiredReleaseWorkflows, successfulExactRun,
+} from "../scripts/assert-release-workflows.mjs";
 
 const sha = "a".repeat(40);
 const ref = "refs/tags/v0.1.0-rc.0";
@@ -55,4 +57,43 @@ test("workflow verification checks later result pages without polling unfinished
   });
   assert.equal(calls, 4);
   assert.equal(evidence.length, 2);
+});
+
+const stageHistoryEnv = {
+  GITHUB_SHA: sha,
+  GITHUB_REF: ref,
+  GITHUB_REPOSITORY: "Clickin/SQLBraid",
+  GITHUB_TOKEN: "test-token",
+  GITHUB_RUN_ID: "999",
+  GITHUB_RUN_ATTEMPT: "1",
+};
+
+test("staging rejects any prior same-candidate stage attempt unless explicit evidence is supplied", async () => {
+  const priorRun = { id: 111, head_sha: sha, head_branch: "v0.1.0-rc.0", event: "workflow_dispatch" };
+  const calls: string[] = [];
+  const request = async (url: URL) => {
+    calls.push(url.pathname);
+    if (url.pathname.endsWith("/runs")) return Response.json({ workflow_runs: [priorRun] });
+    if (url.pathname.endsWith("/jobs")) return Response.json({
+      jobs: [{ name: "Stage validated packages with pnpm OIDC", status: "completed", conclusion: "failure" }],
+    });
+    throw new Error(`Unexpected URL ${url}`);
+  };
+  await assert.rejects(assertNoPriorStageAttempt(stageHistoryEnv, request), /Prior staging attempt/);
+  assert.deepEqual(calls, ["/repos/Clickin/SQLBraid/actions/workflows/release.yml/runs", "/repos/Clickin/SQLBraid/actions/runs/111/jobs"]);
+  await assert.doesNotReject(assertNoPriorStageAttempt({ ...stageHistoryEnv, GITHUB_RUN_ATTEMPT: "2" }, request, { allowReconciliation: true }));
+});
+
+test("staging rejects a rerun with no prior evidence before querying history", async () => {
+  await assert.rejects(assertNoPriorStageAttempt({ ...stageHistoryEnv, GITHUB_RUN_ATTEMPT: "2" }, async () => {
+    throw new Error("history should not be queried");
+  }), /rerun requires explicit prior staged evidence/);
+});
+
+test("staging history fails closed on API errors and treats skipped stage jobs as certification-only", async () => {
+  await assert.rejects(assertNoPriorStageAttempt(stageHistoryEnv, async () => new Response(null, { status: 403 })), /history verification failed/);
+  await assert.doesNotReject(assertNoPriorStageAttempt(stageHistoryEnv, async (url) => {
+    if (url.pathname.endsWith("/runs")) return Response.json({ workflow_runs: [{ id: 111, head_sha: sha, head_branch: "v0.1.0-rc.0", event: "workflow_dispatch" }] });
+    return Response.json({ jobs: [{ name: "Stage validated packages with pnpm OIDC", status: "completed", conclusion: "skipped" }] });
+  }));
 });

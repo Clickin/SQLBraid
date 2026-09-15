@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "vitest";
 import { parse } from "yaml";
 import { allPlan, planChanges } from "../scripts/ci-plan.mjs";
+import { releasePrereleaseArg } from "../scripts/release.mjs";
 
 interface Step { name?: string; if?: string; run?: string; uses?: string; env?: Record<string, string>; with?: Record<string, unknown> }
 interface Job { name?: string; if?: string; needs?: string | string[]; permissions?: Record<string, string>; env?: Record<string, string>; concurrency?: Record<string, unknown>; steps: Step[] }
@@ -149,13 +150,29 @@ test("staging has no approval or direct publication path and draft release remai
   const create = draft.steps.find((step) => step.run?.includes("gh release create"))?.run ?? "";
   assert.match(create, /--draft/u);
   assert.match(create, /--notes-file docs\/SQLBraid_0\.1\.0_release_notes\.md/u);
-  assert.match(create, /--prerelease/u);
+  assert.match(create, /release-prerelease-flag/u);
+  assert.match(create, /args\+=\(--prerelease\)/u);
+  assert.doesNotMatch(create, /generate-notes/u);
+  assert.equal(releasePrereleaseArg("0.1.0-rc.2"), "--prerelease");
+  assert.equal(releasePrereleaseArg("0.1.0"), undefined);
   assert.match(draft.steps.find((step) => step.run?.includes("--mode durable-evidence"))?.run ?? "", /--artifact-dir/u);
   assert.match(create, /release-evidence\.json/u);
   assert.match(draft.if ?? "", /needs\.release-stage\.result == 'success'/u);
 });
 
 test("staging distinguishes fresh and explicit cross-run reconciliation", () => {
+  const prep = release.jobs["release-prep"];
+  const priorCandidate = prep.steps.find((step) => step.name?.includes("prior validated candidate"));
+  assert.equal(priorCandidate?.uses, "actions/download-artifact@v8.0.1");
+  assert.equal(priorCandidate?.if, "inputs.release_mode == 'stage' && inputs.prior_run_id != ''");
+  assert.equal(priorCandidate?.with?.name, "release-candidate-validated");
+  assert.equal(priorCandidate?.with?.["run-id"], "${{ inputs.prior_run_id }}");
+  assert.ok(prep.steps.some((step) => step.name?.includes("Restore prior validated candidate")));
+  const pack = release.jobs["release-pack"];
+  const packCheck = pack.steps.find((step) => step.name?.includes("Validate candidate package"));
+  assert.match(packCheck?.env?.SQLBRAID_VSIX_INPUT ?? "", /sqlbraid-release-artifacts\/sqlbraid\.vsix/u);
+  assert.ok(packCheck?.env?.SQLBRAID_VSIX_INPUT?.includes("prior_run_id"));
+  assert.match(prep.steps.find((step) => step.name?.includes("Pack immutable"))?.if ?? "", /prior_run_id/u);
   const stage = release.jobs["release-stage"];
   const prior = stage.steps.find((step) => step.name?.includes("prior staged evidence"));
   assert.equal(prior?.if, "inputs.prior_run_id != ''");
@@ -163,6 +180,9 @@ test("staging distinguishes fresh and explicit cross-run reconciliation", () => 
   assert.equal(prior?.with?.["run-id"], "${{ inputs.prior_run_id }}");
   const run = stage.steps.find((step) => step.name?.includes("Stage validated"));
   assert.match(run?.run ?? "", /--prior-staged-publication/u);
+  assert.match(run?.run ?? "", /--prior-candidate-run-id/u);
+  const dryRun = release.jobs["release-final"].steps.find((step) => step.run?.includes("--mode stage-dry-run"));
+  assert.match(dryRun?.run ?? "", /--prior-candidate-run-id/u);
   assert.match(String(release.env?.SQLBRAID_TAG_BEFORE), /github\.event\.before/u);
 });
 

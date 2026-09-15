@@ -41,12 +41,15 @@ export interface StagedPublication {
   readonly commit: string;
   readonly runId?: string | null;
   readonly runAttempt?: string | null;
+  readonly candidateRunId?: string | null;
+  readonly candidateRunAttempt?: string | null;
   readonly manifestSha256: string;
   readonly candidateIdentitySha256: string;
   readonly reconciledFrom?: Readonly<{
     readonly runId?: string | null;
     readonly runAttempt?: string | null;
     readonly manifestSha256: string;
+    readonly candidateIdentitySha256?: string;
   }>;
   readonly latestBefore: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly complete: boolean;
@@ -117,10 +120,17 @@ export declare function stageCandidates(manifest: ReleaseManifest, options?: {
   dryRun?: boolean;
   directory?: string;
   priorEvidence?: StagedPublication;
+  priorRunId?: string;
+  currentRunId?: string | null;
+  currentRunAttempt?: string | null;
 }): Promise<StagedPublication | undefined>;
 export declare function verifyPublished(manifest: ReleaseManifest, evidence: StagedPublication, options?: { requireLatest?: boolean }): Promise<void>;
 export declare function parseSemver(value: string): ReleaseSemver;
-export declare function readReleaseManifest(directory?: string): Promise<ReleaseManifest>;
+export declare function releasePrereleaseArg(value: string): "--prerelease" | undefined;
+export declare function readReleaseManifest(directory?: string, options?: {
+  priorCandidateRunId?: string;
+  allowCurrentAttemptMismatch?: boolean;
+}): Promise<ReleaseManifest>;
 export declare function releaseTag(): string;
 export declare function setReleaseCommand(command: (file: string, args: readonly string[], cwd?: string, options?: { quiet?: boolean }) => Promise<string>): void;
 export declare function setReleaseVersion(version: string): void;

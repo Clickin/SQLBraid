@@ -222,8 +222,9 @@ test("pnpm missing-version errors are treated as absent registry versions", asyn
   assert.deepEqual(partial.approvalCommands, [
     { layer: 1, command: `pnpm stage approve ${uuid(1)} --registry https://registry.npmjs.org/` },
   ]);
-  await assert.rejects(f.run(), /Uncertain prior stage/);
-  assert.equal(f.uploads().length, 2);
+  const uploadsBeforeRetry = f.uploads().length;
+  await assert.rejects(f.run());
+  assert.equal(f.uploads().length, uploadsBeforeRetry);
   assertManifestOrder(f.manifest, ["@sqlbraid/core", "@sqlbraid/template"]);
   assert.throws(() => assertManifestOrder(f.manifest, ["@sqlbraid/template", "@sqlbraid/core"]), /dependency-derived/);
  });
@@ -241,16 +242,20 @@ test("cross-run reconciliation imports only explicit prior evidence and preserve
   f.tags.get("@sqlbraid/core")!.next = f.manifest.version;
   await f.run();
   const prior = await f.evidence();
-  const current: ReleaseManifest = { ...f.manifest, runId: "456", runAttempt: "1" };
   await rm(join(f.directory, "staged-publication.json"));
-  const report = await stageCandidates(current, { directory: f.directory, priorEvidence: prior });
+  const report = await stageCandidates(f.manifest, {
+    directory: f.directory, priorEvidence: prior, priorRunId: "123", currentRunId: "456", currentRunAttempt: "1",
+  });
   assert.equal(report?.mode, "reconcile");
   assert.equal(report?.runId, "456");
   assert.equal(report?.runAttempt, "1");
+  assert.equal(report?.candidateRunId, "123");
+  assert.equal(report?.candidateRunAttempt, "1");
   assert.deepEqual(report?.reconciledFrom, {
     runId: "123",
     runAttempt: "1",
     manifestSha256: prior.manifestSha256,
+    candidateIdentitySha256: prior.candidateIdentitySha256,
  });
   assert.equal(report?.packages[0].state, "public");
   assert.equal(f.uploads().length, 0);
@@ -261,9 +266,28 @@ test("cross-run reconciliation refuses an uncertain prior upload without retryin
   f.behavior.failAfterUpload = true;
   await assert.rejects(f.run(), /outcome unresolved/);
   const prior = await f.evidence();
-  const current: ReleaseManifest = { ...f.manifest, runId: "456", runAttempt: "1" };
   await rm(join(f.directory, "staged-publication.json"));
-  await assert.rejects(stageCandidates(current, { directory: f.directory, priorEvidence: prior }), /Uncertain prior stage/);
+  await assert.rejects(stageCandidates(f.manifest, {
+    directory: f.directory, priorEvidence: prior, priorRunId: "123", currentRunId: "456", currentRunAttempt: "1",
+  }));
+  assert.equal(f.uploads().length, 1);
+ });
+
+test("cross-run reconciliation binds the requested run and original manifest digest", async () => {
+  const f = await fixture();
+  await f.run();
+  const prior = await f.evidence();
+  await rm(join(f.directory, "staged-publication.json"));
+  await assert.rejects(stageCandidates(f.manifest, {
+    directory: f.directory, priorEvidence: prior, priorRunId: "999", currentRunId: "456", currentRunAttempt: "1",
+  }), /requested prior candidate run/);
+  await assert.rejects(stageCandidates(f.manifest, {
+    directory: f.directory,
+    priorEvidence: { ...prior, manifestSha256: "f".repeat(64) },
+    priorRunId: "123",
+    currentRunId: "456",
+    currentRunAttempt: "1",
+  }), /immutable prior candidate manifest/);
   assert.equal(f.uploads().length, 1);
  });
 
@@ -477,6 +501,12 @@ test("candidate validation rejects changed bytes, missing integrity, stale runs,
     await writeFile(manifestFile, JSON.stringify(candidate));
     await writeFile(stampFile, JSON.stringify(stamp));
     assert.equal((await readReleaseManifest(directory)).packages[0].integrity, entry.integrity);
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "2");
+    await assert.rejects(readReleaseManifest(directory), /attempt/);
+    assert.equal((await readReleaseManifest(directory, { priorCandidateRunId: "456" })).runId, "123");
+    await assert.rejects(readReleaseManifest(directory, { priorCandidateRunId: "not-a-run" }), /requested prior candidate run/);
+    assert.equal((await readReleaseManifest(directory, { allowCurrentAttemptMismatch: true })).runAttempt, "1");
+    vi.stubEnv("GITHUB_RUN_ATTEMPT", "1");
     for (const changed of [
       { ...candidate, runId: "122" }, { ...candidate, runAttempt: "2" },
       { ...candidate, packages: [{ ...entry, sha256: "changed" }] },

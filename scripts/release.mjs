@@ -7,7 +7,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { compareSemVer, isSemVer } from "./docs-history.mjs";
-import { assertReleaseWorkflows } from "./assert-release-workflows.mjs";
+import { assertNoPriorStageAttempt, assertReleaseWorkflows } from "./assert-release-workflows.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -41,6 +41,10 @@ function parseSemver(value) {
     prerelease: match[4]?.split(".") ?? [],
     isPrerelease: Boolean(match[4]),
   };
+}
+
+function releasePrereleaseArg(value) {
+  return parseSemver(value).isPrerelease ? "--prerelease" : undefined;
 }
 
 function releaseTag() {
@@ -278,11 +282,18 @@ function assertManifestIdentity(manifest, { requireExtension = false } = {}) {
   }
 }
 
-async function readReleaseManifest(directory = artifactDir) {
+async function readReleaseManifest(directory = artifactDir, { priorCandidateRunId, allowCurrentAttemptMismatch = false } = {}) {
   const manifest = await json(join(directory, "release-manifest.json"));
   assertManifestIdentity(manifest, { requireExtension: true });
-  if (process.env.GITHUB_RUN_ID && manifest.runId !== process.env.GITHUB_RUN_ID) throw new Error(`Validated release artifacts belong to run ${manifest.runId ?? "unknown"}, not ${process.env.GITHUB_RUN_ID}.`);
-  if (process.env.GITHUB_RUN_ATTEMPT && manifest.runAttempt !== process.env.GITHUB_RUN_ATTEMPT) throw new Error(`Validated release artifacts belong to attempt ${manifest.runAttempt ?? "unknown"}, not ${process.env.GITHUB_RUN_ATTEMPT}.`);
+  if (priorCandidateRunId !== undefined) {
+    if (!/^\d+$/u.test(String(priorCandidateRunId))
+      || !/^\d+$/u.test(manifest.runId ?? "") || !/^\d+$/u.test(manifest.runAttempt ?? "")) {
+      throw new Error("Validated release artifacts do not belong to the requested prior candidate run.");
+    }
+  } else {
+    if (process.env.GITHUB_RUN_ID && manifest.runId !== process.env.GITHUB_RUN_ID) throw new Error(`Validated release artifacts belong to run ${manifest.runId ?? "unknown"}, not ${process.env.GITHUB_RUN_ID}.`);
+    if (!allowCurrentAttemptMismatch && process.env.GITHUB_RUN_ATTEMPT && manifest.runAttempt !== process.env.GITHUB_RUN_ATTEMPT) throw new Error(`Validated release artifacts belong to attempt ${manifest.runAttempt ?? "unknown"}, not ${process.env.GITHUB_RUN_ATTEMPT}.`);
+  }
   const files = new Set();
   const packageNames = new Set(manifest.packages.map(({ name }) => name));
   for (const entry of manifest.packages) {
@@ -386,7 +397,7 @@ async function createReleaseEvidence(manifest, staged, {
   stagedEvidencePath,
 } = {}) {
   assertManifestIdentity(manifest, { requireExtension: true });
-  assertStagingEvidence(manifest, staged);
+  assertStagingEvidence(manifest, staged, { expectedRunId: staged.runId, expectedRunAttempt: staged.runAttempt });
   if (!supportEvidencePath || !targetEvidenceDirectory || !stagedEvidencePath) {
     throw new Error("Durable release evidence requires support, target, and staged evidence paths.");
   }
@@ -553,7 +564,14 @@ function assertNoTagDowngrade(name, tag, found) {
   }
 }
 
-async function stageCandidates(manifest, { dryRun = false, directory = artifactDir, priorEvidence } = {}) {
+async function stageCandidates(manifest, {
+  dryRun = false,
+  directory = artifactDir,
+  priorEvidence,
+  priorRunId,
+  currentRunId = manifest.runId,
+  currentRunAttempt = manifest.runAttempt,
+} = {}) {
   assertManifestIdentity(manifest);
   await assertPnpmVersion();
   if (dryRun) {
@@ -575,24 +593,34 @@ async function stageCandidates(manifest, { dryRun = false, directory = artifactD
     evidence = existingEvidence;
     assertStagingEvidence(manifest, evidence);
   } else if (priorEvidence) {
+    if (priorRunId !== undefined && String(priorEvidence.runId) !== String(priorRunId)) {
+      throw new Error("Prior staged evidence does not belong to the requested prior candidate run.");
+    }
+    if (priorEvidence.manifestSha256 !== manifestDigest(manifest)) {
+      throw new Error("Prior staged evidence does not match the immutable prior candidate manifest.");
+    }
     assertStagingEvidence(manifest, priorEvidence, { allowPriorIdentity: true });
     evidence = {
       ...priorEvidence,
       mode: "reconcile",
-      runId: manifest.runId,
-      runAttempt: manifest.runAttempt,
+      runId: currentRunId,
+      runAttempt: currentRunAttempt,
+      candidateRunId: manifest.runId,
+      candidateRunAttempt: manifest.runAttempt,
       manifestSha256: manifestDigest(manifest),
       candidateIdentitySha256: candidateIdentityDigest(manifest),
       reconciledFrom: {
         runId: priorEvidence.runId,
         runAttempt: priorEvidence.runAttempt,
         manifestSha256: priorEvidence.manifestSha256,
+        candidateIdentitySha256: priorEvidence.candidateIdentitySha256,
       },
       packages: priorEvidence.packages.map((record) => ({ ...record })),
     };
   } else {
     evidence = { format: "sqlbraid-staged-publication", mode: "fresh", version: manifest.version, commit: manifest.commit,
-      runId: manifest.runId, runAttempt: manifest.runAttempt, manifestSha256: manifestDigest(manifest),
+      runId: currentRunId, runAttempt: currentRunAttempt, candidateRunId: manifest.runId, candidateRunAttempt: manifest.runAttempt,
+      manifestSha256: manifestDigest(manifest),
       candidateIdentitySha256: candidateIdentityDigest(manifest),
       latestBefore: await registryTagSnapshot(manifest), complete: false, packages: manifest.packages.map((entry) => ({
         name: entry.name, version: entry.version, candidateSha256: entry.sha256, candidateIntegrity: entry.integrity,
@@ -634,17 +662,22 @@ async function stageCandidates(manifest, { dryRun = false, directory = artifactD
   return evidence;
 }
 
-function assertStagingEvidence(manifest, evidence, { allowPriorIdentity = false } = {}) {
+function assertStagingEvidence(manifest, evidence, { allowPriorIdentity = false, expectedRunId, expectedRunAttempt } = {}) {
   const manifestMatches = evidence?.manifestSha256 === manifestDigest(manifest);
   const candidateMatches = evidence?.candidateIdentitySha256 === candidateIdentityDigest(manifest);
   if (evidence?.format !== "sqlbraid-staged-publication" || (!manifestMatches && !(allowPriorIdentity && candidateMatches))
     || evidence.version !== manifest.version || evidence.commit !== manifest.commit
     || !/^[a-f\d]{64}$/u.test(evidence.candidateIdentitySha256 ?? "")
     || (!allowPriorIdentity && (evidence.mode !== "fresh" && evidence.mode !== "reconcile"))
-    || (!allowPriorIdentity && (evidence.runId !== manifest.runId || evidence.runAttempt !== manifest.runAttempt))
+    || (!allowPriorIdentity && (evidence.runId !== (expectedRunId ?? manifest.runId)
+      || evidence.runAttempt !== (expectedRunAttempt ?? manifest.runAttempt)))
     || (allowPriorIdentity && (!["fresh", "reconcile"].includes(evidence.mode)
       || !/^[a-f\d]{64}$/u.test(evidence.manifestSha256 ?? "")))
     || !Array.isArray(evidence.packages) || evidence.packages.length !== manifest.packages.length) throw new Error("Staging evidence does not match the immutable release manifest.");
+  if (evidence.candidateRunId !== undefined && (evidence.candidateRunId !== manifest.runId
+    || evidence.candidateRunAttempt !== manifest.runAttempt)) {
+    throw new Error("Staging evidence does not preserve the immutable candidate run identity.");
+  }
   for (const [index, entry] of manifest.packages.entries()) {
     const record = evidence.packages[index];
     if (record.name !== entry.name || record.version !== entry.version || record.candidateSha256 !== entry.sha256
@@ -660,7 +693,7 @@ function assertStagingEvidence(manifest, evidence, { allowPriorIdentity = false 
 
 async function verifyPublished(manifest, evidence, { requireLatest = false } = {}) {
   assertManifestIdentity(manifest);
-  assertStagingEvidence(manifest, evidence);
+  assertStagingEvidence(manifest, evidence, { expectedRunId: evidence.runId, expectedRunAttempt: evidence.runAttempt });
   await assertPnpmVersion();
   for (const entry of manifest.packages) {
     await assertRegistryIntegrity(entry);
@@ -682,9 +715,11 @@ async function verifyPublished(manifest, evidence, { requireLatest = false } = {
 
 async function main() {
   const mode = option("--mode", "stage-dry-run");
-  if (!["preflight", "pack", "pack-only", "stage-dry-run", "stage", "verify-published", "durable-evidence"].includes(mode)) throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
+  if (!["preflight", "pack", "pack-only", "stage-dry-run", "stage", "verify-published", "durable-evidence", "release-prerelease-flag"].includes(mode)) throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
   const priorEvidencePath = option("--prior-staged-publication");
+  const priorCandidateRunId = option("--prior-candidate-run-id");
   if (priorEvidencePath && mode !== "stage") throw new Error("Prior staged evidence is accepted only for explicit staging reconciliation.");
+  if (priorCandidateRunId && !["stage", "stage-dry-run"].includes(mode)) throw new Error("Prior candidate identity is accepted only for staging or staging certification.");
   if (mode === "durable-evidence") {
     const manifestPath = resolve(option("--manifest", join(artifactDir, "release-manifest.json")));
     const stagedPath = resolve(option("--staged-publication", join(artifactDir, "staged-publication.json")));
@@ -697,6 +732,11 @@ async function main() {
       targetEvidenceDirectory: option("--target-evidence-dir"),
       stagedEvidencePath: stagedPath,
     });
+    return;
+  }
+  if (mode === "release-prerelease-flag") {
+    const argument = releasePrereleaseArg(option("--version", version));
+    if (argument) process.stdout.write(`${argument}\n`);
     return;
   }
   if (mode === "verify-published") {
@@ -731,12 +771,24 @@ async function main() {
   }
   await assertCleanTree();
   const sha = mode === "stage" ? await assertTaggedSha() : await currentSha();
-  const manifest = await readReleaseManifest();
+  const manifest = await readReleaseManifest(artifactDir, {
+    priorCandidateRunId,
+    allowCurrentAttemptMismatch: mode === "stage" || mode === "stage-dry-run",
+  });
   if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate commit.");
   assertManifestOrder(manifest, order);
-  if (mode === "stage") await assertReleaseWorkflows();
   const priorEvidence = priorEvidencePath ? await json(resolve(priorEvidencePath)) : undefined;
-  await stageCandidates(manifest, { dryRun: mode === "stage-dry-run", priorEvidence });
+  if (mode === "stage") {
+    await assertReleaseWorkflows();
+    await assertNoPriorStageAttempt(process.env, fetch, { allowReconciliation: Boolean(priorEvidence) });
+  }
+  await stageCandidates(manifest, {
+    dryRun: mode === "stage-dry-run",
+    priorEvidence,
+    priorRunId: priorCandidateRunId,
+    currentRunId: process.env.GITHUB_RUN_ID ?? manifest.runId,
+    currentRunAttempt: process.env.GITHUB_RUN_ATTEMPT ?? manifest.runAttempt,
+  });
 }
 
 function assertMutationAuthorization(mode, env = process.env) {
@@ -772,4 +824,4 @@ function setReleaseVersion(nextVersion) {
   if (!artifactArgument) artifactDir = resolve(join(tmpdir(), `sqlbraid-release-${nextVersion}`));
 }
 
-export { assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertTaggedSha, createReleaseEvidence, stageCandidates, verifyPublished, parseSemver, readReleaseManifest, releaseTag, setReleaseCommand, setReleaseVersion };
+export { assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertTaggedSha, createReleaseEvidence, stageCandidates, verifyPublished, parseSemver, readReleaseManifest, releasePrereleaseArg, releaseTag, setReleaseCommand, setReleaseVersion };
