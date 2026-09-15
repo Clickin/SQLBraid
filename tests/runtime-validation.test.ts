@@ -255,7 +255,7 @@ test('prepared queries use the mapper from the current factory result', async ()
     const current = useFirst ? first : second;
     useFirst = false;
     return sql.rows(current)`SELECT user`;
-  });
+  }, { input: "none" });
 
   assert.deepEqual((await prepared.execute()).rows, [{ id: 11 }]);
   assert.deepEqual((await prepared.execute()).rows, [{ id: 12 }]);
@@ -378,7 +378,7 @@ function typeOnlyCallMisuse(database: Database) {
   // @ts-expect-error Streaming retains the declared row contract.
   database.stream(sql.rows<User>`SELECT user`, { schema: incompatible });
   // @ts-expect-error Prepared row validation retains the declared contract.
-  database.prepare('typed', () => sql.rows<User>`SELECT user`).all({ schema: incompatible });
+  database.prepare('typed', () => sql.rows<User>`SELECT user`, { input: "none" }).all({ schema: incompatible });
 }
 
 void typeOnlyCallMisuse;

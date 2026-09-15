@@ -532,7 +532,7 @@ test("postgres.rc cancellation destroys an in-flight pooled connection before re
 
     const before = await db.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
     await cancel((signal) => db.one(sql.rows`SELECT pg_sleep(30) AS slept`, { signal }));
-    const prepared = db.prepare("postgres-rc-cancel-prepared", () => sql.rows`SELECT pg_sleep(30) AS slept`);
+    const prepared = db.prepare("postgres-rc-cancel-prepared", () => sql.rows`SELECT pg_sleep(30) AS slept`, { input: "none" });
     await cancel((signal) => prepared.one({ signal }));
     await cancel((signal) => db.call(sql.call`SELECT pg_sleep(30) AS slept`, { signal }));
     await cancel((signal) => db.bulk([30], (seconds) =>

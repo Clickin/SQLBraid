@@ -63,18 +63,18 @@ async function publicSpiTypeAssertions(): Promise<void> {
   // @ts-expect-error Query's second parameter is a result kind, never a dialect.
   type DialectGenericQuery = Query<User, 'postgres'>;
 
-  const zeroInput = db.prepare('zero-input', () => sql.rows<User>`SELECT 1`);
+  // @ts-expect-error Zero-input factories must opt into their options-only call form.
+  db.prepare('unmarked-zero-input', () => sql.rows<User>`SELECT 1`);
+  const zeroInput = db.prepare('zero-input', () => sql.rows<User>`SELECT 1`, { input: 'none' });
   const inputFactory = db.prepare('input-row', (id: number) => sql.rows<User>`SELECT ${id}`);
   const undefinedInput = db.prepare('undefined-input', (_input: undefined) => sql.rows<User>`SELECT 1`);
   await undefinedInput.one(undefined, { signal: new AbortController().signal });
   // @ts-expect-error A required undefined input is not the zero-input options position.
   await undefinedInput.one({ signal: new AbortController().signal });
-  // @ts-expect-error Optional/default parameters make input/options arity ambiguous.
-  db.prepare('default-input', (id = 1) => sql.rows<User>`SELECT ${id}`);
+  const defaultInput = db.prepare('default-input', (id = 1) => sql.rows<User>`SELECT ${id}`, { input: 'required' });
   // @ts-expect-error Optional input parameters are not a fixed required input.
   db.prepare('optional-input', (id?: number) => sql.rows<User>`SELECT ${id ?? 1}`);
-  // @ts-expect-error Rest parameters do not define one fixed application input.
-  db.prepare('rest-input', (...ids: number[]) => sql.rows<User>`SELECT ${ids[0]}`);
+  const restInput = db.prepare('rest-input', (...ids: number[]) => sql.rows<User>`SELECT ${ids[0]}`, { input: 'required' });
   // @ts-expect-error Put multiple application fields in one input object.
   db.prepare('multiple-inputs', (id: number, name: string) => sql.rows<User>`SELECT ${id}, ${name}`);
   const commandFactory = db.prepare('command-input', (input: { readonly id: number; readonly name: string }) =>
@@ -83,11 +83,13 @@ async function publicSpiTypeAssertions(): Promise<void> {
     output: schema<{ readonly generatedAt: Date }>(),
     resultSets: [schema<User>(), schema<Payment>()] as const,
     returnValue: schema<number>(),
-  })`CALL dashboard()`);
+  })`CALL dashboard()`, { input: 'none' });
 
   const zeroRow: User = await zeroInput.one({ signal: new AbortController().signal });
   const zeroResult = await zeroInput.execute();
   const inputRows: readonly User[] = await inputFactory.all(7, { signal: new AbortController().signal });
+  const defaultRows: readonly User[] = await defaultInput.all(7);
+  const restRows: readonly User[] = await restInput.all(7);
   const maybeInput: User | undefined = await inputFactory.maybeOne(7);
   const command = await commandFactory.execute({ id: 1, name: 'Ada' });
   const dashboard: Dashboard = await routineFactory.call();
@@ -112,6 +114,8 @@ async function publicSpiTypeAssertions(): Promise<void> {
   void zeroRow;
   void zeroResult;
   void inputRows;
+  void defaultRows;
+  void restRows;
   void maybeInput;
   void command;
   void firstUser;

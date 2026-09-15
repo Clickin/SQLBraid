@@ -109,3 +109,129 @@ test("a live transaction stream prevents transaction completion and closes befor
   assert.deepEqual(log, ["begin", "stream-close", "rollback"]);
   await db.execute(sql`SELECT healthy`);
 });
+
+test("an open session stream rejects transaction re-entry before control I/O", async () => {
+  for (const pooled of [false, true] as const) {
+    const log: string[] = [];
+    let acquires = 0;
+    let releases = 0;
+    const resource = pooled
+      ? createPooledDatabase({
+        statementBinding,
+        async acquire() {
+          acquires += 1;
+          return {
+            ...physical(log),
+            async *stream<Row>() {
+              try { yield 1 as Row; } finally { log.push("stream-close"); }
+            },
+            release() { releases += 1; },
+          };
+        },
+      })
+      : createDatabase({
+        ...physical(log),
+        async *stream<Row>() {
+          try { yield 1 as Row; } finally { log.push("stream-close"); }
+        },
+      });
+
+    if (!pooled) {
+      const rootIterator = resource.stream(sql.rows`SELECT root_stream`)[Symbol.asyncIterator]();
+      await rootIterator.next();
+      await assert.rejects(
+        () => resource.tx(async () => undefined),
+        (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_STREAM_SCOPE",
+      );
+      assert.equal(log.includes("begin"), false);
+      await rootIterator.return();
+    }
+
+    await resource.session(async (session) => {
+      const iterator = session.stream(sql.rows`SELECT stream`)[Symbol.asyncIterator]();
+      await iterator.next();
+      await assert.rejects(
+        () => session.tx(async () => undefined),
+        (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_STREAM_SCOPE",
+      );
+      assert.equal(log.includes("begin"), false);
+      await iterator.return();
+      await session.tx(async (tx) => {
+        await tx.execute(sql`SELECT after_stream`);
+      });
+    });
+    assert.equal(log.includes("begin"), true);
+    if (pooled) {
+      assert.equal(acquires, 2);
+      assert.equal(releases, 2);
+    }
+  }
+});
+
+test("transaction and session wrappers retain active savepoint scope", async () => {
+  for (const pooled of [false, true] as const) {
+    const log: string[] = [];
+    const base = physical(log);
+    const resource = pooled
+      ? createPooledDatabase({
+        statementBinding,
+        async acquire() {
+          return { ...base, release() {} };
+        },
+      })
+      : createDatabase(base);
+    let leakedTransaction: import("@sqlbraid/core").Database | undefined;
+    let leakedSession: import("@sqlbraid/core").Database | undefined;
+
+    await resource.tx(async (outer) => {
+      leakedTransaction = outer;
+      await outer.session(async (parent) => {
+        leakedSession = parent;
+        await parent.tx(async (inner) => {
+          await assert.rejects(
+            () => parent.execute(sql`SELECT parent_escape`),
+            (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_SCOPE",
+          );
+          await assert.rejects(
+            () => outer.execute(sql`SELECT outer_escape`),
+            (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_SCOPE",
+          );
+          await assert.rejects(
+            () => parent.session(async (sibling) => sibling.execute(sql`SELECT sibling_escape`)),
+            (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_SCOPE",
+          );
+          await inner.execute(sql`SELECT inner`);
+        });
+        await parent.execute(sql`SELECT parent_after`);
+      });
+    });
+    await assert.rejects(
+      () => leakedTransaction!.execute(sql`SELECT closed_transaction`),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_CLOSED",
+    );
+    await assert.rejects(
+      () => leakedSession!.execute(sql`SELECT closed_session`),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_SESSION_CLOSED",
+    );
+    assert.equal(log.some((entry) => entry === "SELECT parent_escape" || entry === "SELECT outer_escape" || entry === "SELECT sibling_escape"), false);
+
+    await resource.session(async (session) => {
+      await session.tx(async (transaction) => {
+        await transaction.session(async (transactionSession) => {
+          await transactionSession.tx(async (innermost) => {
+            await assert.rejects(
+              () => transactionSession.execute(sql`SELECT transaction_session_escape`),
+              (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_SCOPE",
+            );
+            await assert.rejects(
+              () => transaction.execute(sql`SELECT transaction_escape`),
+              (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_SCOPE",
+            );
+            await innermost.execute(sql`SELECT innermost`);
+          });
+        });
+      });
+    });
+    assert.equal(log.some((entry) => entry === "SELECT transaction_session_escape" || entry === "SELECT transaction_escape"), false);
+  }
+});

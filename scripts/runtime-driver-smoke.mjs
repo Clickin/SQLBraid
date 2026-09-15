@@ -387,7 +387,7 @@ export async function runPostgresSmoke(url) {
     const mappedQuery = postgres.rows(mapper)`SELECT ${1}::integer AS value`;
     const operation = (async () => {
       assert.deepEqual((await singleDb.execute(mappedQuery)).rows, [{ value: 2 }]);
-      const prepared = singleDb.prepare("runtime-smoke-postgres-mapped", () => mappedQuery);
+      const prepared = singleDb.prepare("runtime-smoke-postgres-mapped", () => mappedQuery, { input: "none" });
       assert.deepEqual((await prepared.execute()).rows, [{ value: 2 }]);
       const [batched] = await singleDb.batch([mappedQuery]);
       assert.deepEqual(batched.rows, [{ value: 2 }]);
@@ -663,7 +663,7 @@ export async function runMysqlSmoke(url) {
     const mappedQuery = mysql.rows(mapper)`SELECT ${1} AS value`;
     const operation = (async () => {
       assert.deepEqual((await singleDb.execute(mappedQuery)).rows, [{ value: 2 }]);
-      const prepared = singleDb.prepare("runtime-smoke-mysql-mapped", () => mappedQuery);
+      const prepared = singleDb.prepare("runtime-smoke-mysql-mapped", () => mappedQuery, { input: "none" });
       assert.deepEqual((await prepared.execute()).rows, [{ value: 2 }]);
       const [batched] = await singleDb.batch([mappedQuery]);
       assert.deepEqual(batched.rows, [{ value: 2 }]);

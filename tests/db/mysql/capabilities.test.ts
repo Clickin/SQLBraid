@@ -534,7 +534,7 @@ test("mysql.rc cancellation destroys in-flight query, call, bulk, and prepared l
 
     const before = await db.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
     await cancel((signal) => db.one(sql.rows`SELECT SLEEP(30) AS slept`, { signal }));
-    const prepared = db.prepare("mysql-rc-cancel-prepared", () => sql.rows`SELECT SLEEP(30) AS slept`);
+    const prepared = db.prepare("mysql-rc-cancel-prepared", () => sql.rows`SELECT SLEEP(30) AS slept`, { input: "none" });
     await cancel((signal) => prepared.one({ signal }));
     await cancel((signal) => db.call(sql.call`SELECT SLEEP(30) AS slept`, { signal }));
     await cancel((signal) => db.bulk([30], (seconds) =>

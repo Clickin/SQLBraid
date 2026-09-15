@@ -544,11 +544,17 @@ test('prepared queries reject shape drift and streams honor adapter capability',
     async *stream<Row>(rendered: RenderedStatement): AsyncIterable<Row> { yield { text: postgresSql(rendered) } as unknown as Row; },
     async call() { throw new Error('BRAID_CALL_UNSUPPORTED'); },
   });
-  const prepared = db.prepare('users', () => second ? postgres.rows`SELECT name` : postgres.rows`SELECT id`);
+  const prepared = db.prepare('users', () => second ? postgres.rows`SELECT name` : postgres.rows`SELECT id`, { input: "none" });
   assert.deepEqual(await prepared.all(), [{ text: 'SELECT id' }]);
   second = true;
-  await assert.rejects(() => prepared.all(), /BRAID_PREPARED_SHAPE/);
-  assert.throws(() => db.prepare('users', () => postgres.rows`SELECT id`), /BRAID_PREPARED_NAME/);
+  await assert.rejects(
+    () => prepared.all(),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_PREPARED_SHAPE",
+  );
+  assert.throws(
+    () => db.prepare('users', () => postgres.rows`SELECT id`, { input: "none" }),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_PREPARED_NAME",
+  );
   const values = [];
   for await (const value of db.stream(postgres.rows`SELECT id`)) values.push(value);
   assert.deepEqual(values, [{ text: 'SELECT id' }]);

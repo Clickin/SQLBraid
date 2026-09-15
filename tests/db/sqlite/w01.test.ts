@@ -48,7 +48,7 @@ test("SQLite materialized query mappers reenter after releasing the root resourc
     };
     const query = sql.rows(mapper)`SELECT 1`;
     assert.deepEqual((await db.execute(query)).rows, [42]);
-    assert.deepEqual((await db.prepare("reentry", () => query).execute()).rows, [42]);
+    assert.deepEqual((await db.prepare("reentry", () => query, { input: "none" }).execute()).rows, [42]);
     assert.deepEqual((await db.batch([query, query])).map((result) => result.rows), [[42], [42]]);
   } finally {
     native.close();

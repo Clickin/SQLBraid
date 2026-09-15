@@ -340,7 +340,7 @@ test("PostgreSQL pool releases before an async mapper can re-enter a max-one poo
     const operation = (async () => {
       const executed = await db.execute(mappedQuery);
       assert.deepEqual(executed.rows, [{ value: 2 }]);
-      const prepared = db.prepare("pv6-postgres-mapped", () => mappedQuery);
+      const prepared = db.prepare("pv6-postgres-mapped", () => mappedQuery, { input: "none" });
       assert.deepEqual((await prepared.execute()).rows, [{ value: 2 }]);
       const [batched] = await db.batch([mappedQuery] as const);
       assert.deepEqual(batched.rows, [{ value: 2 }]);

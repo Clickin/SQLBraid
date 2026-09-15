@@ -235,7 +235,7 @@ test("prepared names and batch correlation survive result and mapping events", a
   const events: ExecutionEvent[] = [];
   const db = createDatabase(executor(), { observers: [{ onEvent(event) { events.push(event); } }] });
   const query = sql.rows`SELECT 1`;
-  await db.prepare("named-shape", () => query).execute();
+  await db.prepare("named-shape", () => query, { input: "none" }).execute();
   for (const event of events) {
     if (event.type === "query:ready" || event.type === "query:result" || event.type === "query:mapped") {
       assert.ok("preparedName" in event);

@@ -505,9 +505,9 @@ async function runtimeSmoke() {
   await prepared.one("first");
   await prepared.one("second");
   assert.deepEqual(preparedInputs, ["first", "second"]);
-  const zeroInput = direct.prepare("runtime-zero-prepared", () => sql.rows`SELECT zero-input`);
+  const zeroInput = direct.prepare("runtime-zero-prepared", () => sql.rows`SELECT zero-input`, { input: "none" });
   await zeroInput.execute();
-  const commandPrepared = direct.prepare("runtime-command-prepared", () => sql.command`UPDATE users SET active = ${true}`);
+  const commandPrepared = direct.prepare("runtime-command-prepared", () => sql.command`UPDATE users SET active = ${true}`, { input: "none" });
   assert.equal((await commandPrepared.execute()).kind, "command");
 
   const unsupportedCancellationEnvironment = Object.freeze({

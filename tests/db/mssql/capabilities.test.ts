@@ -236,7 +236,7 @@ test("mssql.numeric.exact-bind-character", { timeout: 30_000 }, async () => {
       SELECT CONVERT(varchar(64), CAST(${sql.bind(exact, mssqlParameter.nvarchar(80))} AS decimal(38, 10))) AS value
     `;
     assert.equal((await db.one(query)).value, exact);
-    const prepared = db.prepare("mssql-exact-character", () => query);
+    const prepared = db.prepare("mssql-exact-character", () => query, { input: "none" });
     assert.equal((await prepared.execute()).rows[0]?.value, exact);
 
     await db.execute(sql`DROP TABLE IF EXISTS dbo.braid_pv17_exact_bind`);
