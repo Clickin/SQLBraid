@@ -126,11 +126,14 @@ The script writes `staged-publication.json` in the artifact directory even when
 staging stops part-way through. It records candidate manifest identity, the
 before-publication `latest` snapshots, package stage IDs and registry records
 as they become available, and explicit `approvalCommands` grouped by dependency
-layer. A partial report is evidence of partial staging, not approval.
+layer. Every report has `mode: "fresh"` or `mode: "reconcile"` and retains the
+current run ID/attempt. A partial report is evidence of partial staging, not
+approval.
 The workflow always uploads that report alongside `release-manifest.json` as
-`release-staged-publication`; successful staging also attaches both files to the
-approval-pending draft GitHub Release. Save these files together: post-approval
-verification needs neither the tarballs nor an unexpired Actions artifact.
+`release-staged-publication`; successful staging also attaches these files and
+the compact `release-evidence.json` to the approval-pending draft GitHub
+Release. Save the durable summary with them: post-approval verification needs
+neither the tarballs nor an unexpired Actions artifact.
 
 Before an upload, the script checks public integrity and the paginated staged
 package listing. An existing stage must be unique for the package/version,
@@ -149,6 +152,27 @@ reconciliation. Dispatches for the same tag serialize staging. Do not delete
 partial evidence or approve partial layers to work around an ambiguous result.
 The workflow cannot prove absence while registry reads fail, and it does not
 claim to have tested real npm OIDC permissions through a dry-run or fake registry.
+
+Fresh staging is the default: the current run's candidate manifest and
+`runId`/`runAttempt` must match, and no prior publication report is imported.
+Cross-run recovery is an explicit workflow dispatch: provide the prior Release
+run ID in `prior_run_id`. The workflow downloads only that run's
+`release-staged-publication` artifact and passes its report with
+`--prior-staged-publication`. The candidate commit, package/VSIX hashes, and
+package order must match; the new report is rewritten with the current run
+identity and retains the prior report identity. `pending` or `staged` prior
+states are uncertain and fail closed without another upload. An `absent` state
+may be staged after the normal registry checks; an exact public state is
+reconciled without upload. If the prior artifact is unavailable, corrupt, or
+from another candidate, start a new explicit maintainer reconciliation rather
+than guessing absence. Actions never performs authenticated staged-list reads,
+approval, or tag promotion on a maintainer's behalf.
+
+The validated `release-manifest.json` includes every package and the VSIX:
+filename, SHA-256, SHA-512 integrity, extension version/publisher/name, and
+the bundled `@sqlbraid/cli` and `@sqlbraid/language-server` versions. The
+pack-check stamp repeats that VSIX identity. A later Marketplace publication
+must use those exact bytes and never rebuild the extension.
 
 Prereleases stage under `next` and must leave `latest` unchanged. Stable
 releases stage first under temporary `release-<version>`; after every package
@@ -243,18 +267,20 @@ The following are maintainer actions, **not** actions performed by certification
 
 1. RC0 bootstrap is already complete. Do not create a token, rerun a bootstrap,
    or treat RC0's historical evidence as evidence for RC1.
-2. For RC1, synchronize versions, prepare and freeze the exact source SHA, and
-   create/push `v0.1.0-rc.1`. This tag-triggered run is **certification-only**.
+2. For a corrected candidate, synchronize versions, prepare and freeze the
+   exact source SHA, and create/push a **new** tag (for example
+   `v0.1.0-rc.2`). Never reuse or move `v0.1.0-rc.1` after a post-tag fix.
+   This tag-triggered run is **certification-only**.
    Wait for its Runtime, Documentation, and Release certification gates; this
    page makes no promise of a new green SHA or substitute evidence.
 3. Verify the exact SHA before mutation: tag target, checked-out commit,
-   package versions, candidate manifest identity, and the matching certification
+   candidate manifest identity, and the matching certification
    artifacts must all agree. Then explicitly dispatch the stage mode from that
-   exact tag: **Actions → Release → Run workflow → ref `v0.1.0-rc.1` →
+   exact new tag: **Actions → Release → Run workflow → ref `<new-candidate-tag>` →
    release_mode `stage`**. CLI equivalent:
 
    ```sh
-   gh workflow run release.yml --ref v0.1.0-rc.1 -f release_mode=stage
+   gh workflow run release.yml --ref <new-candidate-tag> -f release_mode=stage
    ```
 
    This runs the complete current-run certification DAG, verifies exact-tag-SHA
@@ -301,10 +327,26 @@ The following are maintainer actions, **not** actions performed by certification
 7. A draft GitHub Release created after staging is explicitly
    **approval-pending**. Review it separately; it is not a public-release
    authorization and never causes automatic stage approval or `latest`
-   promotion. Dispatch Pages with `deploy=true` only if deployment is intended.
-   After all npm approvals and public verification succeed, finalize and publish
-   the GitHub Release manually as appropriate. Do not infer Marketplace
+   promotion. Its body is the versioned release notes, and an RC version is
+   marked `prerelease`; stable versions are not. It carries the compact
+   `release-evidence.json` summary in addition to the candidate manifest,
+   VSIX, and staged report. This summary retains the source commit, artifact
+   hashes, support-evidence file hashes/target IDs, stage IDs, requested tags,
+   and current/prior run identities after 14-day Actions artifacts expire.
+   Dispatch Pages with `deploy=true` only if deployment is intended. After all
+   npm approvals and public verification succeed, finalize and publish the
+   GitHub Release manually as appropriate. Do not infer Marketplace
    authorization.
+
+Freeze the exact source commit before creating a candidate tag. A `v*` tag is
+an immutable operational identity and must be created once; do not move or
+delete it to incorporate a fix. If any fix is needed after tagging, increment
+the prerelease (`rc.2`, `rc.3`, and so on), create a new tag, and rerun all
+exact-final gates. Configure a repository tag ruleset manually for `v*` with
+both **restrict updates** and **restrict deletions** enabled, allowing only
+the minimum maintainer/emergency bypass; do not add workflow credentials to
+mutate tags. Release preflight also rejects a tag-push event whose prior SHA
+differs from the checked-out candidate.
 
 Certification commands, docs updates, historical workflows, and support-matrix
 prose do not authorize staging or approval. Only the explicitly dispatched

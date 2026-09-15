@@ -47,6 +47,19 @@ function releaseTag() {
   return semver.isPrerelease ? "next" : `release-${version}`;
 }
 
+function candidateIdentity(manifest) {
+  return {
+    version: manifest.version,
+    commit: manifest.commit,
+    extension: manifest.extension ?? null,
+    packages: manifest.packages,
+  };
+}
+
+function candidateIdentityDigest(manifest) {
+  return createHash("sha256").update(JSON.stringify(candidateIdentity(manifest))).digest("hex");
+}
+
 function commandErrorText(error) {
   return [error?.message, error?.code, error?.stdout, error?.stderr].filter((value) => typeof value === "string").join("\n");
 }
@@ -144,6 +157,10 @@ async function assertTaggedSha() {
   if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== head) throw new Error(`Workflow SHA ${process.env.GITHUB_SHA} does not equal checked out HEAD ${head}.`);
   const tagged = (await command("git", ["rev-list", "-n", "1", `refs/tags/${expectedTag}`])).trim();
   if (!tagged || tagged !== head) throw new Error(`Tag ${expectedTag} does not point at HEAD (${head}).`);
+  const previous = process.env.SQLBRAID_TAG_BEFORE;
+  if (previous && !/^0+$/u.test(previous) && previous !== head) {
+    throw new Error(`Candidate tag ${expectedTag} moved from ${previous} to ${head}; create a new release candidate version instead of reusing the tag.`);
+  }
   return head;
 }
 
@@ -230,9 +247,25 @@ async function pack(packages, order, sha) {
   return manifest;
 }
 
-function assertManifestIdentity(manifest) {
+function assertExtensionIdentity(extension) {
+  if (!extension || typeof extension !== "object"
+    || typeof extension.file !== "string" || basename(extension.file) !== extension.file
+    || !/^[a-f\d]{64}$/u.test(extension.sha256 ?? "")
+    || !/^sha512-[A-Za-z0-9+/]{86}==$/u.test(extension.integrity ?? "")
+    || typeof extension.version !== "string" || extension.version !== version
+    || typeof extension.publisher !== "string" || !extension.publisher
+    || typeof extension.name !== "string" || !extension.name
+    || !extension.bundled || typeof extension.bundled.cli !== "string"
+    || typeof extension.bundled.languageServer !== "string"
+    || extension.bundled.cli !== version || extension.bundled.languageServer !== version) {
+    throw new Error("Invalid release manifest VSIX identity, version, or hashes.");
+  }
+}
+
+function assertManifestIdentity(manifest, { requireExtension = false } = {}) {
   if (manifest.version !== version || !/^[a-f\d]{40}$/u.test(manifest.commit ?? "")
     || !Array.isArray(manifest.packages) || manifest.packages.length === 0) throw new Error("Invalid release-manifest.json.");
+  if (requireExtension || manifest.extension !== undefined) assertExtensionIdentity(manifest.extension);
   const names = new Set();
   for (const entry of manifest.packages) {
     if (!entry || typeof entry.name !== "string" || !/^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/u.test(entry.name)
@@ -247,7 +280,7 @@ function assertManifestIdentity(manifest) {
 
 async function readReleaseManifest(directory = artifactDir) {
   const manifest = await json(join(directory, "release-manifest.json"));
-  assertManifestIdentity(manifest);
+  assertManifestIdentity(manifest, { requireExtension: true });
   if (process.env.GITHUB_RUN_ID && manifest.runId !== process.env.GITHUB_RUN_ID) throw new Error(`Validated release artifacts belong to run ${manifest.runId ?? "unknown"}, not ${process.env.GITHUB_RUN_ID}.`);
   if (process.env.GITHUB_RUN_ATTEMPT && manifest.runAttempt !== process.env.GITHUB_RUN_ATTEMPT) throw new Error(`Validated release artifacts belong to attempt ${manifest.runAttempt ?? "unknown"}, not ${process.env.GITHUB_RUN_ATTEMPT}.`);
   const files = new Set();
@@ -270,6 +303,9 @@ async function readReleaseManifest(directory = artifactDir) {
       throw new Error(`Candidate dependency evidence mismatch: ${entry.file}.`);
     }
   }
+  const extensionPath = join(directory, manifest.extension.file);
+  if (await hash(extensionPath) !== manifest.extension.sha256) throw new Error(`Validated VSIX changed: ${manifest.extension.file}.`);
+  if (await integrity(extensionPath) !== manifest.extension.integrity) throw new Error(`Validated VSIX integrity changed: ${manifest.extension.file}.`);
   const stamp = await json(join(directory, "pack-check-success.json"));
   if (stamp.version !== version || stamp.commit !== manifest.commit || !Array.isArray(stamp.packages) || stamp.packages.length !== manifest.packages.length) {
     throw new Error("Release artifacts do not have a matching successful pack-check stamp.");
@@ -277,6 +313,7 @@ async function readReleaseManifest(directory = artifactDir) {
   const stampPackages = stamp.packages.map(({ name, sha256 }) => `${name}:${sha256}`).sort().join("\n");
   const manifestPackages = manifest.packages.map(({ name, sha256 }) => `${name}:${sha256}`).sort().join("\n");
   if (stampPackages !== manifestPackages) throw new Error("Pack-check stamp does not match validated release tarball hashes.");
+  if (JSON.stringify(stamp.extension) !== JSON.stringify(manifest.extension)) throw new Error("Pack-check stamp does not match validated VSIX identity.");
   return manifest;
 }
 
@@ -340,6 +377,93 @@ function assertStageId(id) {
 
 function manifestDigest(manifest) {
   return createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
+}
+
+async function createReleaseEvidence(manifest, staged, {
+  directory = artifactDir,
+  supportEvidencePath,
+  targetEvidenceDirectory,
+  stagedEvidencePath,
+} = {}) {
+  assertManifestIdentity(manifest, { requireExtension: true });
+  assertStagingEvidence(manifest, staged);
+  if (!supportEvidencePath || !targetEvidenceDirectory || !stagedEvidencePath) {
+    throw new Error("Durable release evidence requires support, target, and staged evidence paths.");
+  }
+  for (const entry of [...manifest.packages, manifest.extension]) {
+    const path = join(directory, entry.file);
+    if (await hash(path) !== entry.sha256 || await integrity(path) !== entry.integrity) {
+      throw new Error(`Durable release evidence cannot include changed artifact: ${entry.file}.`);
+    }
+  }
+  const supportPath = resolve(supportEvidencePath);
+  const support = await json(supportPath);
+  if (support.format !== "sqlbraid-support-evidence" || support.version !== 1
+    || support.commit !== manifest.commit || !Array.isArray(support.targets)) {
+    throw new Error("Support evidence does not match the release candidate.");
+  }
+  const supportTargetIds = [...new Set(support.targets.map((entry) => entry?.id).filter((id) => typeof id === "string"))].sort();
+  if (supportTargetIds.length === 0) throw new Error("Support evidence has no certified targets.");
+  const targetFiles = (await readdir(resolve(targetEvidenceDirectory), { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => entry.name)
+    .sort();
+  const targets = [];
+  for (const file of targetFiles) {
+    const targetPath = join(resolve(targetEvidenceDirectory), file);
+    const target = await json(targetPath);
+    if (target.format !== "sqlbraid-support-evidence" || target.version !== 1
+      || target.commit !== manifest.commit || !Array.isArray(target.targets)) {
+      throw new Error(`Target evidence does not match the release candidate: ${file}.`);
+    }
+    const ids = [...new Set(target.targets.map((entry) => entry?.id).filter((id) => typeof id === "string"))].sort();
+    if (ids.length === 0) throw new Error(`Target evidence has no certified targets: ${file}.`);
+    targets.push({ file, sha256: await hash(targetPath), ids, commit: target.commit });
+  }
+  if (targets.length === 0) throw new Error("No exact target evidence is available for durable release evidence.");
+  const stagedPath = resolve(stagedEvidencePath);
+  const durable = {
+    format: "sqlbraid-release-evidence",
+    version: manifest.version,
+    commit: manifest.commit,
+    candidate: {
+      manifestSha256: manifestDigest(manifest),
+      runId: manifest.runId ?? null,
+      runAttempt: manifest.runAttempt ?? null,
+      packages: manifest.packages.map(({ name, version, file, sha256, integrity }) => ({ name, version, file, sha256, integrity })),
+      extension: manifest.extension,
+    },
+    certification: {
+      support: {
+        file: basename(supportPath),
+        sha256: await hash(supportPath),
+        format: support.format,
+        version: support.version,
+        commit: support.commit,
+        run: support.run ?? null,
+        targetIds: supportTargetIds,
+      },
+      targets,
+    },
+    publication: {
+      file: basename(stagedPath),
+      sha256: await hash(stagedPath),
+      mode: staged.mode,
+      manifestSha256: staged.manifestSha256,
+      candidateIdentitySha256: staged.candidateIdentitySha256,
+      runId: staged.runId ?? null,
+      runAttempt: staged.runAttempt ?? null,
+      reconciledFrom: staged.reconciledFrom ?? null,
+      complete: staged.complete,
+      approval: "human-interactive-after-staging",
+      latestBefore: staged.latestBefore,
+      packages: staged.packages.map(({ name, version, state, stageId, candidateSha256, candidateIntegrity, tag }) => ({
+        name, version, state, stageId: stageId ?? null, candidateSha256, candidateIntegrity, tag,
+      })),
+    },
+  };
+  await writeFile(join(directory, "release-evidence.json"), `${JSON.stringify(durable, null, 2)}\n`);
+  return durable;
 }
 
 function approvalCommands(manifest, records) {
@@ -429,7 +553,7 @@ function assertNoTagDowngrade(name, tag, found) {
   }
 }
 
-async function stageCandidates(manifest, { dryRun = false, directory = artifactDir } = {}) {
+async function stageCandidates(manifest, { dryRun = false, directory = artifactDir, priorEvidence } = {}) {
   assertManifestIdentity(manifest);
   await assertPnpmVersion();
   if (dryRun) {
@@ -444,12 +568,32 @@ async function stageCandidates(manifest, { dryRun = false, directory = artifactD
   assertPublicationCredentials("stage");
   await assertOfficialRegistry();
   let evidence;
-  try { evidence = await json(join(directory, "staged-publication.json")); } catch (error) { if (error.code !== "ENOENT") throw error; }
-  if (evidence) {
+  let existingEvidence;
+  try { existingEvidence = await json(join(directory, "staged-publication.json")); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (existingEvidence && priorEvidence) throw new Error("Provide either existing staged evidence or explicit prior evidence, not both.");
+  if (existingEvidence) {
+    evidence = existingEvidence;
     assertStagingEvidence(manifest, evidence);
+  } else if (priorEvidence) {
+    assertStagingEvidence(manifest, priorEvidence, { allowPriorIdentity: true });
+    evidence = {
+      ...priorEvidence,
+      mode: "reconcile",
+      runId: manifest.runId,
+      runAttempt: manifest.runAttempt,
+      manifestSha256: manifestDigest(manifest),
+      candidateIdentitySha256: candidateIdentityDigest(manifest),
+      reconciledFrom: {
+        runId: priorEvidence.runId,
+        runAttempt: priorEvidence.runAttempt,
+        manifestSha256: priorEvidence.manifestSha256,
+      },
+      packages: priorEvidence.packages.map((record) => ({ ...record })),
+    };
   } else {
-    evidence = { format: "sqlbraid-staged-publication", version: manifest.version, commit: manifest.commit,
+    evidence = { format: "sqlbraid-staged-publication", mode: "fresh", version: manifest.version, commit: manifest.commit,
       runId: manifest.runId, runAttempt: manifest.runAttempt, manifestSha256: manifestDigest(manifest),
+      candidateIdentitySha256: candidateIdentityDigest(manifest),
       latestBefore: await registryTagSnapshot(manifest), complete: false, packages: manifest.packages.map((entry) => ({
         name: entry.name, version: entry.version, candidateSha256: entry.sha256, candidateIntegrity: entry.integrity,
         tag: releaseTag(), state: "absent",
@@ -490,10 +634,16 @@ async function stageCandidates(manifest, { dryRun = false, directory = artifactD
   return evidence;
 }
 
-function assertStagingEvidence(manifest, evidence) {
-  if (evidence.format !== "sqlbraid-staged-publication" || evidence.manifestSha256 !== manifestDigest(manifest)
+function assertStagingEvidence(manifest, evidence, { allowPriorIdentity = false } = {}) {
+  const manifestMatches = evidence?.manifestSha256 === manifestDigest(manifest);
+  const candidateMatches = evidence?.candidateIdentitySha256 === candidateIdentityDigest(manifest);
+  if (evidence?.format !== "sqlbraid-staged-publication" || (!manifestMatches && !(allowPriorIdentity && candidateMatches))
     || evidence.version !== manifest.version || evidence.commit !== manifest.commit
-    || evidence.runId !== manifest.runId || evidence.runAttempt !== manifest.runAttempt
+    || !/^[a-f\d]{64}$/u.test(evidence.candidateIdentitySha256 ?? "")
+    || (!allowPriorIdentity && (evidence.mode !== "fresh" && evidence.mode !== "reconcile"))
+    || (!allowPriorIdentity && (evidence.runId !== manifest.runId || evidence.runAttempt !== manifest.runAttempt))
+    || (allowPriorIdentity && (!["fresh", "reconcile"].includes(evidence.mode)
+      || !/^[a-f\d]{64}$/u.test(evidence.manifestSha256 ?? "")))
     || !Array.isArray(evidence.packages) || evidence.packages.length !== manifest.packages.length) throw new Error("Staging evidence does not match the immutable release manifest.");
   for (const [index, entry] of manifest.packages.entries()) {
     const record = evidence.packages[index];
@@ -501,6 +651,10 @@ function assertStagingEvidence(manifest, evidence) {
       || record.candidateIntegrity !== entry.integrity || record.tag !== releaseTag() || !evidence.latestBefore?.[entry.name]
       || !["absent", "pending", "staged", "public"].includes(record.state)) throw new Error("Invalid staging package evidence.");
     if (record.stageId) assertStageId(record.stageId);
+  }
+  if (evidence.mode === "reconcile" && (!evidence.reconciledFrom
+    || !/^[a-f\d]{64}$/u.test(evidence.reconciledFrom.manifestSha256 ?? ""))) {
+    throw new Error("Reconciled staging evidence must retain the prior manifest identity.");
   }
 }
 
@@ -528,7 +682,23 @@ async function verifyPublished(manifest, evidence, { requireLatest = false } = {
 
 async function main() {
   const mode = option("--mode", "stage-dry-run");
-  if (!["preflight", "pack", "pack-only", "stage-dry-run", "stage", "verify-published"].includes(mode)) throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
+  if (!["preflight", "pack", "pack-only", "stage-dry-run", "stage", "verify-published", "durable-evidence"].includes(mode)) throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
+  const priorEvidencePath = option("--prior-staged-publication");
+  if (priorEvidencePath && mode !== "stage") throw new Error("Prior staged evidence is accepted only for explicit staging reconciliation.");
+  if (mode === "durable-evidence") {
+    const manifestPath = resolve(option("--manifest", join(artifactDir, "release-manifest.json")));
+    const stagedPath = resolve(option("--staged-publication", join(artifactDir, "staged-publication.json")));
+    const manifest = await json(manifestPath);
+    setReleaseVersion(manifest.version);
+    const staged = await json(stagedPath);
+    await createReleaseEvidence(manifest, staged, {
+      directory: resolve(option("--artifact-dir", dirname(manifestPath))),
+      supportEvidencePath: option("--support-evidence"),
+      targetEvidenceDirectory: option("--target-evidence-dir"),
+      stagedEvidencePath: stagedPath,
+    });
+    return;
+  }
   if (mode === "verify-published") {
     const manifest = await json(resolve(option("--manifest", join(artifactDir, "release-manifest.json"))));
     const evidence = await json(resolve(option("--staged-publication", join(artifactDir, "staged-publication.json"))));
@@ -565,7 +735,8 @@ async function main() {
   if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate commit.");
   assertManifestOrder(manifest, order);
   if (mode === "stage") await assertReleaseWorkflows();
-  await stageCandidates(manifest, { dryRun: mode === "stage-dry-run" });
+  const priorEvidence = priorEvidencePath ? await json(resolve(priorEvidencePath)) : undefined;
+  await stageCandidates(manifest, { dryRun: mode === "stage-dry-run", priorEvidence });
 }
 
 function assertMutationAuthorization(mode, env = process.env) {
@@ -601,4 +772,4 @@ function setReleaseVersion(nextVersion) {
   if (!artifactArgument) artifactDir = resolve(join(tmpdir(), `sqlbraid-release-${nextVersion}`));
 }
 
-export { assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertTaggedSha, stageCandidates, verifyPublished, parseSemver, readReleaseManifest, releaseTag, setReleaseCommand, setReleaseVersion };
+export { assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertTaggedSha, createReleaseEvidence, stageCandidates, verifyPublished, parseSemver, readReleaseManifest, releaseTag, setReleaseCommand, setReleaseVersion };

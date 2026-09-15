@@ -15,21 +15,39 @@ export interface ReleaseEntry {
   readonly dependencies?: readonly string[];
 }
 
+export interface ReleaseExtension {
+  readonly file: string;
+  readonly sha256: string;
+  readonly integrity: string;
+  readonly version: string;
+  readonly publisher: string;
+  readonly name: string;
+  readonly bundled: Readonly<{ readonly cli: string; readonly languageServer: string }>;
+}
+
 export interface ReleaseManifest {
   readonly version: string;
   readonly commit: string;
   readonly runId?: string | null;
   readonly runAttempt?: string | null;
+  readonly extension?: ReleaseExtension;
   readonly packages: readonly ReleaseEntry[];
 }
 
 export interface StagedPublication {
   readonly format: "sqlbraid-staged-publication";
+  readonly mode: "fresh" | "reconcile";
   readonly version: string;
   readonly commit: string;
   readonly runId?: string | null;
   readonly runAttempt?: string | null;
   readonly manifestSha256: string;
+  readonly candidateIdentitySha256: string;
+  readonly reconciledFrom?: Readonly<{
+    readonly runId?: string | null;
+    readonly runAttempt?: string | null;
+    readonly manifestSha256: string;
+  }>;
   readonly latestBefore: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly complete: boolean;
   readonly packages: readonly {
@@ -44,11 +62,62 @@ export interface StagedPublication {
   readonly approvalCommands: readonly { readonly layer: number; readonly command: string }[];
 }
 
+export interface ReleaseEvidence {
+  readonly format: "sqlbraid-release-evidence";
+  readonly version: string;
+  readonly commit: string;
+  readonly candidate: {
+    readonly manifestSha256: string;
+    readonly runId: string | null;
+    readonly runAttempt: string | null;
+    readonly packages: readonly ReleaseEntry[];
+    readonly extension: ReleaseExtension;
+  };
+  readonly certification: {
+    readonly support: {
+      readonly file: string;
+      readonly sha256: string;
+      readonly format: string;
+      readonly version: number;
+      readonly commit: string;
+      readonly run: string | null;
+      readonly targetIds: readonly string[];
+    };
+    readonly targets: readonly { readonly file: string; readonly sha256: string; readonly ids: readonly string[]; readonly commit: string }[];
+  };
+  readonly publication: {
+    readonly packages: readonly {
+      readonly name: string;
+      readonly version: string;
+      readonly state: string;
+      readonly stageId: string | null;
+      readonly candidateSha256: string;
+      readonly candidateIntegrity: string;
+      readonly tag: string;
+    }[];
+    readonly [key: string]: unknown;
+  };
+}
+
 export declare function assertManifestOrder(manifest: { packages: readonly { name: string }[] }, order: readonly string[]): void;
 export declare function assertMutationAuthorization(mode: string, env?: Record<string, string | undefined>): void;
 export declare function assertPublicationCredentials(mode: string, env?: Record<string, string | undefined>): void;
 export declare function assertTaggedSha(): Promise<string>;
-export declare function stageCandidates(manifest: ReleaseManifest, options?: { dryRun?: boolean; directory?: string }): Promise<StagedPublication | undefined>;
+export declare function createReleaseEvidence(
+  manifest: ReleaseManifest,
+  staged: StagedPublication,
+  options?: {
+    directory?: string;
+    supportEvidencePath?: string;
+    targetEvidenceDirectory?: string;
+    stagedEvidencePath?: string;
+  },
+): Promise<ReleaseEvidence>;
+export declare function stageCandidates(manifest: ReleaseManifest, options?: {
+  dryRun?: boolean;
+  directory?: string;
+  priorEvidence?: StagedPublication;
+}): Promise<StagedPublication | undefined>;
 export declare function verifyPublished(manifest: ReleaseManifest, evidence: StagedPublication, options?: { requireLatest?: boolean }): Promise<void>;
 export declare function parseSemver(value: string): ReleaseSemver;
 export declare function readReleaseManifest(directory?: string): Promise<ReleaseManifest>;
