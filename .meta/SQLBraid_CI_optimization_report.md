@@ -10,7 +10,8 @@
   - `32bece7` — release WASM browser runtime installation
   - `39846da` — common Vitest shard report emission
   - `c871697` — parallel isolated PV17 benchmark families
-- Final validated SHA: `c871697b5588a228644eba7fcc523cd29be2b999`
+- Final validated implementation SHA: `c871697b5588a228644eba7fcc523cd29be2b999`
+- Evidence/report-only HEAD: `b0faa33b7b16c614cd2ba92ad07f002758329942`
 
 Validation runs:
 
