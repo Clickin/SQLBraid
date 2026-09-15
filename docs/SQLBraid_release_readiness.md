@@ -95,14 +95,16 @@ the missing workflows finish.
 
 ## Pack once, validate once, stage those bytes
 
-Release preparation creates one candidate set per workflow run. Its manifest
-records source SHA, package names/versions, tarball filenames, SHA-256,
-SHA-512 integrity, and current-run identity. Validation checks the candidate,
-records a matching pack-check stamp, and preserves the
-`release-candidate-validated` artifact. The `stage` mutation downloads that
-artifact, rechecks its identity and hashes, then invokes pnpm **12.3.4** stage
-publishing once for each exact `.tgz`. It never rebuilds or repacks package
-source, and it never approves a stage.
+Fresh release preparation creates one candidate set per workflow run. Its
+manifest records source SHA, package names/versions, tarball filenames, SHA-256,
+SHA-512 integrity, and candidate-producer identity. Validation checks the
+candidate, records a matching pack-check stamp, and preserves the
+`release-candidate-validated` artifact. An explicit recovery may instead
+restore that exact validated artifact from a prior run; it rechecks identity
+and hashes without repacking. The `stage` mutation downloads the resulting
+validated artifact, then invokes pnpm **12.3.4** stage publishing once for each
+exact `.tgz`. It never rebuilds or repacks package source, and it never approves
+a stage.
 
 The underlying command is pnpm's native stage publisher, with
 `--json --provenance --tag <tag> --access public --no-git-checks
