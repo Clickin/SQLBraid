@@ -95,19 +95,37 @@ Cursor output은 materialized <code dir="auto">resultSets</code>가 되고 scala
 <li>이 어댑터는 native <code dir="auto">procedure</code> metadata를 지원하지 않습니다. Oracle
 PL/SQL/SQL 호출 텍스트를 명시적으로 작성하세요.</li>
 <li>스트리밍은 드라이버의 ResultSet 프로토콜을 사용하며 완료, 중단, 조기 종료 시 ResultSet을 닫습니다.</li>
+<li>Cancellation은 guarded <code dir="auto">connection.break()</code> 경로를 사용합니다. 이는 즉시
+중단이나 timeout을 보장하지 않는 cooperative 동작입니다. 문서화된
+<code dir="auto">DBMS_SESSION.SLEEP</code> raw probe는 sleep이 끝날 때만 <code dir="auto">ORA-01013</code>으로
+거부될 수 있으며, 어댑터는 settlement까지 물리 lease를 유지합니다.
+문서화된 break primitive가 없으면 active cancellation은 I/O 전에
+<code dir="auto">BRAID_CANCEL_UNSUPPORTED</code>로 실패합니다.</li>
 <li>대상 조합은 Node 22.18.0/Linux x64의 Oracle Free 23.9 Thin입니다.
 현재 인증 상태와 정확한 gate는 <a href="/SQLBraid/dev/ko/reference/support/">런타임 및 드라이버
 지원</a>에서 확인하세요.</li>
 </ul>
 <p>드라이버가 안전한 Oracle 타입을 추론할 수 없는 <code dir="auto">null</code>에는 명시적인 힌트를 사용하세요. 타입이 지정되지 않은 null을 조용히 <code dir="auto">VARCHAR2</code>로 바꾸지 않습니다.</p>
-<p>기본 정책은 정밀도를 보존하기 위해 <code dir="auto">NUMBER</code> 결과를 문자열로 가져옵니다. 명시적인 <code dir="auto">NUMBER</code> 입력은 <code dir="auto">number</code> 또는 <code dir="auto">bigint</code>를 받으며, 소수 문자열은 손실 변환하지 않고 거부합니다. SQL에서 소수 문자열 입력이 필요하면 일반 문자열 바인드와 명시적인 SQL 변환을 사용하세요.</p>
+<p>기본 정책은 정확한 <code dir="auto">NUMBER</code> 계열(Oracle <code dir="auto">FLOAT</code>와 ANSI numeric 별칭 포함)
+결과를 정밀도 보존을 위해 string으로 가져옵니다. Oracle <code dir="auto">NUMBER(p,0)</code>도 이
+exact-decimal family에 속하며 support taxonomy는 별도의 native exact-integer
+transport category를 만들지 않습니다. <code dir="auto">NUMBER</code> decimal-string
+입력은 인증된 exact bind 경로가 아닙니다. typed <code dir="auto">number</code>/<code dir="auto">bigint</code> 입력은
+JavaScript 표현 범위에 묶이고, 힌트 없는 string은
+<code dir="auto">NLS_NUMERIC_CHARACTERS</code>에 의존할 수 있습니다. session/profile이 이를
+증명하지 않는 한 unsupported로 유지하고, 필요하면 일반 character bind와
+명시적이고 통제된 SQL 변환을 사용하세요.</p>
 <p>Thin 어댑터는 precision/scale 속성과 IN 길이 제약을 거부합니다.
 VARCHAR2/NVARCHAR2 OUT/INOUT 길이는 드라이버의 <code dir="auto">maxSize</code>를 지정하며
 다른 길이 속성은 거부합니다. DB 제약은 SQL이나 스키마에 선언하세요.
 구체화된 CLOB/NCLOB는 문자열, BLOB/RAW는 버퍼입니다. 루틴 LOB output은
 <code dir="auto">getData()</code>로 읽고 lease 반환 전에 destroy 완료를 기다립니다. 읽기 실패 시
-아직 방문하지 않은 sibling 리소스도 정리합니다. 시간 값은 <code dir="auto">Date</code>를 사용하므로
-원래 시간대 이름이나 밀리초 미만 정밀도를 보존하지 않습니다.</p>
+아직 방문하지 않은 sibling 리소스도 정리합니다. 시간 값은 <code dir="auto">Date</code>를 사용하는
+guarded 편의 프로필이며 원래 timezone 이름이나 sub-millisecond precision을
+보존하지 않습니다. lossless text 경로에는 사용자가 작성한 <code dir="auto">TO_CHAR</code>/format
+표현식을 사용하세요. Native JSON은 parsed 편의 값이며 직렬화된 text가
+필요하면 테스트한 fetch handler 또는 <code dir="auto">JSON_SERIALIZE(... RETURNING CLOB)</code>를
+사용합니다.</p>
 <p>전체 <code dir="auto">sql.out</code>/<code dir="auto">sql.inOut</code> 및 이질적 result-set 계약은
 <a href="/SQLBraid/dev/ko/concepts/routines/">루틴 호출</a>을 참고하세요.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="oracle-thin-표현-프로필">Oracle Thin 표현 프로필</h2><a class="sl-anchor-link" href="#oracle-thin-표현-프로필"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “Oracle Thin 표현 프로필”</span></a></div>
@@ -119,20 +137,20 @@ server line은 일치하는 manifest 증거가 생길 때까지 별도의 미테
 <thead>
 <tr>
 <th>Oracle 값</th>
-<th>Thin 프로필 표현</th>
+<th>Driver raw / SQLBraid canonical 표현</th>
 <th>비고</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code dir="auto">NUMBER</code></td>
-<td>string</td>
-<td>정확한 10진/정수 텍스트이며 필요에 따라 <code dir="auto">decodeExactDecimal</code> 또는 <code dir="auto">decodeExactInteger</code>를 사용합니다.</td>
+<td><code dir="auto">NUMBER</code> / <code dir="auto">FLOAT</code> / ANSI numeric 별칭</td>
+<td>text → <code dir="auto">string</code></td>
+<td><code dir="auto">NUMBER(p,0)</code>을 포함하는 하나의 exact-decimal family이며 <code dir="auto">decodeExactDecimal</code> 또는 <code dir="auto">decodeExactInteger</code>는 애플리케이션 변환입니다.</td>
 </tr>
 <tr>
 <td><code dir="auto">BINARY_FLOAT</code> / <code dir="auto">BINARY_DOUBLE</code></td>
 <td>JavaScript number</td>
-<td>정의상 근사값이며 정확한 10진수가 아닙니다.</td>
+<td>근사 binary32/binary64 값이며 특수 값 지원은 프로필 테스트에 따릅니다.</td>
 </tr>
 <tr>
 <td>CLOB / NCLOB</td>
@@ -147,7 +165,12 @@ server line은 일치하는 manifest 증거가 생길 때까지 별도의 미테
 <tr>
 <td>DATE / TIMESTAMP variant</td>
 <td><code dir="auto">Date</code></td>
-<td>원본 timezone 이름과 모든 sub-millisecond 정보는 보존되지 않습니다.</td>
+<td>Guarded 편의 프로필이며 fractional/zone 정확도에는 <code dir="auto">TO_CHAR</code> text를 작성합니다.</td>
+</tr>
+<tr>
+<td>Native JSON</td>
+<td>parsed object</td>
+<td>편의 기능일 뿐 중첩 숫자 정확도를 보장하지 않습니다.</td>
 </tr>
 </tbody>
 </table>
@@ -156,7 +179,10 @@ server line은 일치하는 manifest 증거가 생길 때까지 별도의 미테
 따릅니다. REF CURSOR output은 순서가 있는 materialized <code dir="auto">resultSets</code>가 되고
 implicit result는 추가 set이 됩니다. Native <code dir="auto">RETURNING ... INTO</code>는
 <code dir="auto">sql.out()</code>과 materialized row API를 사용합니다. Manifest가 증명한 경우
-<code dir="auto">executeMany()</code>가 native bulk 전략입니다. Native Oracle SQL은 투명하게
-전달되지만 SQLBraid가 Oracle grammar를 제공하거나 procedure metadata를
-추론하지는 않습니다.</p>
+<code dir="auto">executeMany()</code>가 native bulk 전략입니다. <code dir="auto">rowsAffected</code>는 safe-range 검사를
+하는 운영 count이고 <code dir="auto">RETURNING INTO</code> 값은 동일한 exact string 계약을
+따릅니다. 일반 <code dir="auto">undefined</code> IN 값은 acquisition 전에
+<code dir="auto">BRAID_BIND_VALUE_UNSUPPORTED</code>로 실패하며 <code dir="auto">null</code>은 SQL <code dir="auto">NULL</code>입니다. Native
+Oracle SQL은 투명하게 전달되지만 SQLBraid가 Oracle grammar를 제공하거나
+procedure metadata를 추론하지는 않습니다.</p>
 </div><footer class="sl-flex astro-j2cc5yqm"><div class="meta sl-flex astro-j2cc5yqm"></div><div class="pagination-links print:hidden astro-ttiagmsw" dir="ltr"><a href="/SQLBraid/dev/ko/getting-started/sqlite-browser/" rel="prev" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg><span class="astro-ttiagmsw">이전 페이지<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">브라우저 SQLite와 D1</span></span></a><a href="/SQLBraid/dev/ko/getting-started/mssql/" rel="next" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg><span class="astro-ttiagmsw">다음 페이지<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">SQL Server</span></span></a></div></footer></div></div></main></div></div></div></div></body></html>

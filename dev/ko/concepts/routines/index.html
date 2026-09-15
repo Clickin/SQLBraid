@@ -115,7 +115,7 @@ set을 반환합니다.</p>
 <tbody>
 <tr>
 <td>PostgreSQL / <code dir="auto">pg</code></td>
-<td>scalar OUT/INOUT은 <code dir="auto">CALL</code> output 행에서 나옵니다. <code dir="auto">refcursor</code> OUT/INOUT은 <code dir="auto">postgresParameter.refcursor()</code>로 표시하세요. SQLBraid는 같은 transaction-bound portal을 fetch/close하고 이를 <code dir="auto">output</code>에서 제거합니다. refcursor 호출은 기존 <code dir="auto">db.tx(...)</code> 범위가 필요하며 숨은 transaction을 만들지 않습니다.</td>
+<td>scalar OUT은 <code dir="auto">CALL</code> output 행에서 나옵니다. refcursor OUT은 <code dir="auto">postgresParameter.refcursor()</code>로 표시하세요. SQLBraid는 같은 transaction-bound portal을 fetch/close하고 이를 <code dir="auto">output</code>에서 제거합니다. INOUT과 refcursor INOUT은 <code dir="auto">BRAID_CALL_OUT_UNSUPPORTED</code>로 거부합니다. refcursor 호출은 기존 <code dir="auto">db.tx(...)</code> 범위가 필요하며 숨은 transaction을 만들지 않습니다.</td>
 </tr>
 <tr>
 <td>MySQL / <code dir="auto">mysql2</code></td>

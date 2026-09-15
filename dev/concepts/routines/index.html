@@ -115,7 +115,7 @@ output still closes unvisited sibling Lobs and ResultSets.</p>
 <tbody>
 <tr>
 <td>PostgreSQL / <code dir="auto">pg</code></td>
-<td>Scalar OUT/INOUT values come from the <code dir="auto">CALL</code> output row. Mark <code dir="auto">refcursor</code> OUT/INOUT with <code dir="auto">postgresParameter.refcursor()</code>; SQLBraid fetches and closes each transaction-bound portal and removes it from <code dir="auto">output</code>. A refcursor call requires an existing <code dir="auto">db.tx(...)</code> scope; SQLBraid never creates a hidden transaction.</td>
+<td>Scalar OUT values come from the <code dir="auto">CALL</code> output row. Mark refcursor OUT with <code dir="auto">postgresParameter.refcursor()</code>; SQLBraid fetches and closes each transaction-bound portal and removes it from <code dir="auto">output</code>. INOUT and refcursor INOUT are rejected with <code dir="auto">BRAID_CALL_OUT_UNSUPPORTED</code>. A refcursor call requires an existing <code dir="auto">db.tx(...)</code> scope; SQLBraid never creates a hidden transaction.</td>
 </tr>
 <tr>
 <td>MySQL / <code dir="auto">mysql2</code></td>
