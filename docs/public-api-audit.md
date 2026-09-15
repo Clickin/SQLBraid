@@ -180,10 +180,18 @@ Metadata snapshots use the `sqlbraid-metadata` discriminator and a versioned
 `formatVersion`; relation and type identities are qualified evidence, not
 display names. Generated models record the metadata hash and the selected
 TypePolicy id/hash, so changing representation policy is a new codegen input,
-not an invisible output rewrite. A future snapshot identity or format migration
-must increment its format version, describe the migration in release notes, and
-keep validation failure explicit; readers must not silently reinterpret an old
-snapshot as a new format.
+not an invisible output rewrite.
+
+RC2 adds `metadata.identityEncoding: "escaped-qualified-v1"` to new
+first-party snapshots while keeping `formatVersion: 1`. `qualifiedIdentity()`
+escapes backslash, dot, colon, and hash delimiters, so ordinary
+`schema.name` identities remain readable while qualified names remain
+unambiguous. An unmarked historical snapshot retains its legacy dot identity
+encoding for compatibility; an unknown `identityEncoding` marker is rejected.
+This is an identity-encoding migration, not a format-version migration.
+Re-inspect the database when moving to the escaped encoding: an old snapshot
+may have already lost objects whose legacy identities collided, and those
+objects cannot be recovered from the snapshot alone.
 
 Codegen input/output options remain deterministic and preserve their documented
 diagnostic behavior. CLI JSON output is machine-readable and its documented

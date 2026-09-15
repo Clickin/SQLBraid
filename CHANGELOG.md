@@ -15,8 +15,12 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   zero-input factories must declare `{ input: "none" }` and remain
   options-only at execution. Implementations must not infer the form from
   JavaScript `Function.length` or option-shaped input values.
-- Any metadata identity or format migration must be called out here with its
-  format version and migration guidance before release.
+- Metadata identity encoding for new first-party snapshots is now marked
+  `metadata.identityEncoding: "escaped-qualified-v1"` while
+  `formatVersion` remains `1`. Backward-compatible readers retain legacy dot
+  identities for unmarked historical snapshots and reject unknown markers.
+  Re-inspect the database when adopting escaped identities: objects lost to
+  collisions in a legacy snapshot cannot be recovered from that snapshot.
 
 ## 0.1.0
 
