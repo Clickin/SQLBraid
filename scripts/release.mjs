@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,10 +7,14 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { compareSemVer, isSemVer } from "./docs-history.mjs";
+import { assertReleaseWorkflows } from "./assert-release-workflows.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const packageManager = rootManifest.packageManager;
+const pnpmVersion = /^pnpm@(\d+\.\d+\.\d+)$/u.exec(packageManager ?? "")?.[1];
+if (!pnpmVersion) throw new Error("Release requires an exact pnpm version in package.json#packageManager.");
 let version = process.env.SQLBRAID_RELEASE_VERSION ?? rootManifest.version;
 let semver = parseSemver(version);
 let expectedTag = `v${version}`;
@@ -48,22 +52,10 @@ function commandErrorText(error) {
 }
 
 function registryNotFound(error) {
-  return /\bE404\b|404 Not Found|No match found/iu.test(commandErrorText(error));
+  return /\bE404\b|ERR_PNPM_FETCH_404|404 Not Found|No match found/iu.test(commandErrorText(error));
 }
 
-function interactiveCommand(file, args, cwd) {
-  return new Promise((resolveCommand, rejectCommand) => {
-    const child = spawn(file, args, { cwd, env: process.env, stdio: "inherit" });
-    child.once("error", rejectCommand);
-    child.once("exit", (code, signal) => {
-      if (code === 0 && !signal) resolveCommand("");
-      else rejectCommand(new Error(`${file} ${args.join(" ")} exited with ${signal ?? `code ${code ?? "unknown"}`}.`));
-    });
-  });
-}
-
-async function defaultCommand(file, args, cwd = root, { quiet = false, interactive = false } = {}) {
-  if (interactive) return interactiveCommand(file, args, cwd);
+async function defaultCommand(file, args, cwd = root, { quiet = false } = {}) {
   const { stdout, stderr } = await execFileAsync(file, args, {
     cwd,
     maxBuffer: 10 * 1024 * 1024,
@@ -75,6 +67,7 @@ async function defaultCommand(file, args, cwd = root, { quiet = false, interacti
 }
 
 let command = defaultCommand;
+let request = fetch;
 
 async function json(path) {
   return JSON.parse(await readFile(path, "utf8"));
@@ -140,7 +133,9 @@ async function assertCleanTree() {
 }
 
 async function currentSha() {
-  return (await command("git", ["rev-parse", "HEAD"])).trim();
+  const head = (await command("git", ["rev-parse", "HEAD"])).trim();
+  if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== head) throw new Error(`Workflow SHA ${process.env.GITHUB_SHA} does not equal checked out HEAD ${head}.`);
+  return head;
 }
 
 async function assertTaggedSha() {
@@ -197,7 +192,11 @@ async function integrity(path) {
 }
 
 async function pack(packages, order, sha) {
+  await assertPnpmVersion();
   await mkdir(artifactDir, { recursive: true });
+  if (process.env.GITHUB_ACTIONS === "true" && (!process.env.GITHUB_RUN_ID || !process.env.GITHUB_RUN_ATTEMPT)) {
+    throw new Error("GitHub release candidates require GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT.");
+  }
   const existing = await readdir(artifactDir, { withFileTypes: true });
   const conflicting = existing
     .filter((entry) => entry.isFile() && (entry.name.endsWith(".tgz") || entry.name === "release-manifest.json" || entry.name === "pack-check-success.json"))
@@ -218,7 +217,9 @@ async function pack(packages, order, sha) {
   const manifest = {
     version,
     commit: sha,
-    packages: order.map((name) => ({ name, file: basename(tarballs.get(name)), sha256: null, integrity: null })),
+    runId: process.env.GITHUB_RUN_ID ?? null,
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
+    packages: order.map((name) => ({ name, version, file: basename(tarballs.get(name)), sha256: null, integrity: null })),
   };
   for (const entry of manifest.packages) {
     const path = join(artifactDir, entry.file);
@@ -230,26 +231,29 @@ async function pack(packages, order, sha) {
   return manifest;
 }
 
-async function readReleaseManifest() {
-  const manifest = await json(join(artifactDir, "release-manifest.json"));
+async function readReleaseManifest(directory = artifactDir) {
+  const manifest = await json(join(directory, "release-manifest.json"));
   if (manifest.version !== version || !Array.isArray(manifest.packages) || manifest.packages.length === 0) throw new Error("Invalid release-manifest.json.");
+  if (process.env.GITHUB_RUN_ID && manifest.runId !== process.env.GITHUB_RUN_ID) throw new Error(`Validated release artifacts belong to run ${manifest.runId ?? "unknown"}, not ${process.env.GITHUB_RUN_ID}.`);
+  if (process.env.GITHUB_RUN_ATTEMPT && manifest.runAttempt !== process.env.GITHUB_RUN_ATTEMPT) throw new Error(`Validated release artifacts belong to attempt ${manifest.runAttempt ?? "unknown"}, not ${process.env.GITHUB_RUN_ATTEMPT}.`);
   const names = new Set();
   const files = new Set();
+  const packageNames = new Set(manifest.packages.map(({ name }) => name));
   for (const entry of manifest.packages) {
-    if (typeof entry.name !== "string" || typeof entry.file !== "string" || basename(entry.file) !== entry.file || names.has(entry.name) || files.has(entry.file)) {
+    if (typeof entry.name !== "string" || entry.version !== version || typeof entry.file !== "string" || basename(entry.file) !== entry.file || names.has(entry.name) || files.has(entry.file)) {
       throw new Error("Invalid release-manifest.json package entries.");
     }
     names.add(entry.name);
     files.add(entry.file);
-    const path = join(artifactDir, entry.file);
+    const path = join(directory, entry.file);
     const actualSha = await hash(path);
     if (actualSha !== entry.sha256) throw new Error(`Validated tarball changed: ${entry.file}.`);
     const actualIntegrity = await integrity(path);
-    if (entry.integrity && actualIntegrity !== entry.integrity) throw new Error(`Validated tarball integrity changed: ${entry.file}.`);
-    entry.integrity = actualIntegrity;
-    await validateTarball(path, names);
+    if (actualIntegrity !== entry.integrity) throw new Error(`Validated tarball integrity changed: ${entry.file}.`);
+    const packedManifest = await validateTarball(path, packageNames);
+    if (packedManifest.name !== entry.name) throw new Error(`Candidate package identity mismatch: ${entry.file}.`);
   }
-  const stamp = await json(join(artifactDir, "pack-check-success.json"));
+  const stamp = await json(join(directory, "pack-check-success.json"));
   if (stamp.version !== version || stamp.commit !== manifest.commit || !Array.isArray(stamp.packages) || stamp.packages.length !== manifest.packages.length) {
     throw new Error("Release artifacts do not have a matching successful pack-check stamp.");
   }
@@ -265,40 +269,33 @@ function assertManifestOrder(manifest, order) {
   }
 }
 
-function npmVersionAtLeast(value, minimum) {
-  const parse = (text) => text.trim().replace(/^v/u, "").split(".").map((part) => Number.parseInt(part, 10) || 0);
-  const actual = parse(value);
-  const required = parse(minimum);
-  return actual[0] > required[0] || (actual[0] === required[0] && (actual[1] > required[1] || (actual[1] === required[1] && actual[2] >= required[2])));
+function pnpmArgs(args, { registryArg = true } = {}) {
+  return [...args, ...(registryArg ? ["--registry", registry] : [])];
 }
 
-async function assertNpmVersion() {
-  const npmVersion = await command("npm", ["--version"]);
-  if (!npmVersionAtLeast(npmVersion, "11.15.0")) throw new Error(`npm ${npmVersion.trim()} is too old for trusted publishing; install npm >=11.15.0.`);
+async function pnpm(args, cwd = root, options = {}) {
+  return command("pnpm", pnpmArgs(args, options), cwd, options);
+}
+
+async function assertPnpmVersion() {
+  const actual = (await pnpm(["--version"], root, { registryArg: false, quiet: true })).trim();
+  if (actual !== pnpmVersion) throw new Error(`Release requires pnpm ${pnpmVersion}; found ${actual || "unknown"}.`);
 }
 
 async function assertOfficialRegistry() {
-  const configured = (await command("npm", ["config", "get", "registry"], root, { quiet: true })).trim().replace(/\/?$/u, "/");
-  if (configured !== registry) throw new Error(`npm registry must be ${registry}; found ${configured || "empty"}.`);
-  await command("npm", ["ping", "--registry", registry], root, { quiet: true });
+  const configured = (await pnpm(["config", "get", "registry"], root, { registryArg: false, quiet: true })).trim().replace(/\/?$/u, "/");
+  if (configured !== registry) throw new Error(`pnpm registry must be ${registry}; found ${configured || "empty"}.`);
+  await pnpm(["ping"], root, { quiet: true });
 }
 
-function hasWriteAccess(value) {
-  if (typeof value === "string") return /^(?:write|read-write|owner|admin|developer)$/iu.test(value);
-  if (Array.isArray(value)) return value.some((entry) => hasWriteAccess(entry));
-  if (value && typeof value === "object") {
-    return Object.entries(value).some(([key, entry]) => /(?:access|permission|role)/iu.test(key) && hasWriteAccess(entry)) || Object.values(value).some((entry) => hasWriteAccess(entry));
-  }
-  return false;
-}
-
-async function assertNpmIdentityAndWriteAccess(packages) {
-  const user = (await command("npm", ["whoami"], root, { quiet: true })).trim();
-  if (!user) throw new Error("npm whoami returned no authenticated user.");
+async function assertPnpmIdentityAndWriteAccess(packages) {
+  await assertPnpmVersion();
+  const user = (await pnpm(["whoami"], root, { quiet: true })).trim();
+  if (!user) throw new Error("pnpm whoami returned no authenticated user.");
   await assertOfficialRegistry();
   let accessOutput = "";
   try {
-    accessOutput = await command("npm", ["access", "ls-packages", user, "--json", "--registry", registry], root, { quiet: true });
+    accessOutput = await pnpm(["access", "list", "packages", user, "--json"], root, { quiet: true });
   } catch (error) {
     if (!registryNotFound(error)) throw error;
   }
@@ -310,22 +307,69 @@ async function assertNpmIdentityAndWriteAccess(packages) {
   }
   let organizationAccess;
   for (const { name } of packages) {
-    if (await npmView(name, "name")) {
-      if (!hasWriteAccess(access?.[name])) throw new Error(`Authenticated npm user ${user} does not have write access to ${name}.`);
+    if (await pnpmView(name, "name")) {
+      if (access?.[name] !== "read-write") throw new Error(`Authenticated registry user ${user} does not have write access to ${name}.`);
     } else if (name.startsWith("@sqlbraid/")) {
       if (organizationAccess === undefined) {
-        const organization = await command("npm", ["org", "ls", "sqlbraid", user, "--json", "--registry", registry], root, { quiet: true });
-        organizationAccess = hasWriteAccess(JSON.parse(organization));
+        if (!process.env.NODE_AUTH_TOKEN) throw new Error("Bootstrap organization verification requires NODE_AUTH_TOKEN.");
+        const response = await request(new URL("-/org/sqlbraid/user", registry), {
+          headers: { authorization: `Bearer ${process.env.NODE_AUTH_TOKEN}`, accept: "application/json" },
+          signal: AbortSignal.timeout(30_000),
+          redirect: "error",
+        });
+        if (!response.ok) throw new Error(`Bootstrap organization verification failed (HTTP ${response.status}).`);
+        const organization = await response.json();
+        organizationAccess = ["owner", "admin", "developer"].includes(organization?.[user]);
       }
-      if (!organizationAccess) throw new Error(`Authenticated npm user ${user} cannot create packages in the @sqlbraid organization.`);
+      if (!organizationAccess) throw new Error(`Authenticated registry user ${user} cannot create packages in the @sqlbraid organization.`);
+    } else if (name !== "sqlbraid") {
+      throw new Error(`Authenticated registry user ${user} cannot verify creation access for ${name}; refusing bootstrap.`);
     }
   }
+  await assertBootstrapTokenGrants();
   return user;
 }
 
-async function npmView(spec, field) {
+async function assertBootstrapTokenGrants() {
+  const token = process.env.NODE_AUTH_TOKEN;
+  if (!token) throw new Error("Bootstrap token verification requires NODE_AUTH_TOKEN.");
+  const redacted = `${token.slice(0, 8)}...${token.slice(-4)}`;
+  const matches = [];
+  let seen = 0;
+  let total;
+  for (let page = 0; page < 10; page += 1) {
+    const response = await request(new URL(`-/npm/v1/tokens?page=${page}&perPage=100`, registry), {
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+      signal: AbortSignal.timeout(30_000),
+      redirect: "error",
+    });
+    if (!response.ok) throw new Error(`Bootstrap token verification failed (HTTP ${response.status}).`);
+    const body = await response.json();
+    if (!Array.isArray(body.objects) || !Number.isSafeInteger(body.total) || body.total < 0
+      || (total !== undefined && total !== body.total)) {
+      throw new Error("Invalid or changing bootstrap token metadata; refusing publication.");
+    }
+    total = body.total;
+    seen += body.objects.length;
+    matches.push(...body.objects.filter((entry) => entry?.token === redacted));
+    if (seen === total) break;
+    if (!body.objects.length || seen > total) throw new Error("Incomplete bootstrap token metadata; refusing publication.");
+  }
+  if (seen !== total || matches.length !== 1) {
+    throw new Error("Cannot uniquely verify the current bootstrap token; refusing publication.");
+  }
+  const current = matches[0];
+  if (current.readonly !== false || current.bypass_2fa !== true || current.revoked !== null
+    || !(Date.parse(current.expiry) > Date.now())
+    || !current.permissions?.some((permission) => permission.name === "package" && permission.action === "write")
+    || !current.scopes?.some((scope) => scope.type === "package" && scope.name === "*")) {
+    throw new Error("Bootstrap requires an active automation token with package write access to All packages, including future unscoped sqlbraid.");
+  }
+}
+
+async function pnpmView(spec, field) {
   try {
-    const output = await command("npm", ["view", spec, field, "--json", "--registry", registry], root, { quiet: true });
+    const output = await pnpm(["view", spec, field, "--json"], root, { quiet: true });
     if (!output.trim() || output.trim() === "null") return undefined;
     return JSON.parse(output);
   } catch (error) {
@@ -335,12 +379,14 @@ async function npmView(spec, field) {
 }
 
 async function registryIntegrity(name, releaseVersion) {
-  const value = await npmView(`${name}@${releaseVersion}`, "dist.integrity");
+  const spec = `${name}@${releaseVersion}`;
+  const value = await pnpmView(spec, "dist.integrity");
+  if (!value && await pnpmView(spec, "version")) throw new Error(`Registry integrity is missing for existing ${spec}.`);
   return typeof value === "string" && value ? value : undefined;
 }
 
 async function registryDistTags(name) {
-  const value = await npmView(name, "dist-tags");
+  const value = await pnpmView(name, "dist-tags");
   return value && typeof value === "object" ? value : {};
 }
 
@@ -349,13 +395,55 @@ async function assertRegistryIntegrity(entry) {
   if (found !== entry.integrity) throw new Error(`Registry integrity mismatch for ${entry.name}@${version}: expected ${entry.integrity}, found ${found ?? "absent"}.`);
 }
 
-async function ensureReleaseTag(name, tag, { allowMove }) {
+async function oidcToken(name) {
+  let idToken;
+  if (process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
+    const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+    url.searchParams.set("audience", `npm:${new URL(registry).hostname}`);
+    const response = await request(url, {
+      headers: { accept: "application/json", authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+      signal: AbortSignal.timeout(30_000),
+      redirect: "error",
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || typeof body.value !== "string" || !body.value) throw new Error(`GitHub OIDC token request failed (${response.status}).`);
+    idToken = body.value;
+  }
+  if (!idToken) throw new Error("OIDC publication requires GitHub Actions id-token permissions.");
+  const escapedName = encodeURIComponent(name);
+  const response = await request(new URL(`-/npm/v1/oidc/token/exchange/package/${escapedName}`, registry), {
+    method: "POST",
+    headers: { accept: "application/json", authorization: `Bearer ${idToken}` },
+    signal: AbortSignal.timeout(30_000),
+    redirect: "error",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || typeof body.token !== "string" || !body.token) throw new Error(`npm OIDC token exchange failed for ${name} (${response.status}).`);
+  return body.token;
+}
+
+async function oidcDistTagAdd(name, tag, releaseVersion) {
+  const token = await oidcToken(name);
+  const response = await request(new URL(`-/package/${encodeURIComponent(name)}/dist-tags/${encodeURIComponent(tag)}`, registry), {
+    method: "PUT",
+    headers: { accept: "application/json", authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(releaseVersion),
+    signal: AbortSignal.timeout(30_000),
+    redirect: "error",
+  });
+  if (!response.ok) {
+    throw new Error(`Registry dist-tag update failed for ${name}:${tag} (HTTP ${response.status}).`);
+  }
+}
+
+async function ensureReleaseTag(name, tag, { allowMove, oidc = false }) {
   const tags = await registryDistTags(name);
   const found = tags[tag];
   if (found === version) return;
   assertNoTagDowngrade(name, tag, found);
   if (found && !allowMove) throw new Error(`Registry tag ${name}:${tag} points at ${found}, not ${version}.`);
-  await command("npm", ["dist-tag", "add", `${name}@${version}`, tag, "--registry", registry]);
+  if (oidc) await oidcDistTagAdd(name, tag, version);
+  else await pnpm(["dist-tag", "add", `${name}@${version}`, tag], root);
   const verified = await registryDistTags(name);
   if (verified[tag] !== version) throw new Error(`Registry tag ${name}:${tag} was not moved to ${version}.`);
 }
@@ -364,32 +452,32 @@ async function publishPackage(entry, { dryRun, provenance }) {
   const tag = releaseTag();
   const path = join(artifactDir, entry.file);
   if (dryRun) {
-    await command("npm", ["publish", path, "--access", "public", "--tag", tag, "--dry-run", "--registry", registry]);
+    await pnpm(["publish", path, "--access", "public", "--tag", tag, "--dry-run", "--no-git-checks"], root);
     return;
   }
   const existing = await registryIntegrity(entry.name, version);
   if (existing) {
     if (existing !== entry.integrity) throw new Error(`Registry integrity mismatch for ${entry.name}@${version}: expected ${entry.integrity}, found ${existing}.`);
     process.stdout.write(`Already published exact ${entry.name}@${version}; verifying ${tag}.\n`);
-    await ensureReleaseTag(entry.name, tag, { allowMove: semver.isPrerelease });
+    await ensureReleaseTag(entry.name, tag, { allowMove: semver.isPrerelease, oidc: provenance });
     return;
   }
-  const args = ["publish", path, "--access", "public", "--tag", tag, "--registry", registry];
+  const args = ["publish", path, "--access", "public", "--tag", tag, "--no-git-checks"];
   if (provenance) args.push("--provenance");
   try {
-    await command("npm", args, root, { interactive: !provenance });
+    await pnpm(args, root);
   } catch (error) {
     const afterFailure = await registryIntegrity(entry.name, version);
     if (afterFailure === entry.integrity) {
       process.stdout.write(`Publish outcome uncertain for ${entry.name}; registry contains the exact validated artifact.\n`);
-      await ensureReleaseTag(entry.name, tag, { allowMove: semver.isPrerelease });
+      await ensureReleaseTag(entry.name, tag, { allowMove: semver.isPrerelease, oidc: provenance });
       return;
     }
     if (afterFailure) throw new Error(`Registry integrity mismatch for ${entry.name}@${version}: expected ${entry.integrity}, found ${afterFailure}.`);
     throw error;
   }
   await assertRegistryIntegrity(entry);
-  await ensureReleaseTag(entry.name, tag, { allowMove: semver.isPrerelease });
+  await ensureReleaseTag(entry.name, tag, { allowMove: semver.isPrerelease, oidc: provenance });
 }
 
 async function registryTagSnapshot(manifest) {
@@ -408,18 +496,19 @@ function assertNoTagDowngrade(name, tag, found) {
   }
 }
 
-async function promoteLatest(manifest, before) {
+async function promoteLatest(manifest, before, { oidc = false } = {}) {
   for (const entry of manifest.packages) {
     assertLatestUnchanged(before.get(entry.name), await registryDistTags(entry.name), entry.name);
     assertNoTagDowngrade(entry.name, "latest", before.get(entry.name).latest);
-    await command("npm", ["dist-tag", "add", `${entry.name}@${version}`, "latest", "--registry", registry]);
+    if (oidc) await oidcDistTagAdd(entry.name, "latest", version);
+    else await pnpm(["dist-tag", "add", `${entry.name}@${version}`, "latest"], root);
     const tags = await registryDistTags(entry.name);
     if (tags.latest !== version) throw new Error(`Registry latest tag for ${entry.name} does not point at ${version}.`);
   }
 }
 
-async function npmPublish(manifest, { dryRun, provenance }) {
-  await assertNpmVersion();
+async function pnpmPublish(manifest, { dryRun, provenance }) {
+  await assertPnpmVersion();
   if (dryRun) {
     for (const entry of manifest.packages) await publishPackage(entry, { dryRun: true, provenance: false });
     return;
@@ -442,7 +531,7 @@ async function npmPublish(manifest, { dryRun, provenance }) {
   }
   if (!semver.isPrerelease) {
     for (const entry of manifest.packages) assertLatestUnchanged(before.get(entry.name), await registryDistTags(entry.name), entry.name);
-    await promoteLatest(manifest, before);
+    await promoteLatest(manifest, before, { oidc: provenance });
     for (const entry of manifest.packages) {
       const tags = await registryDistTags(entry.name);
       if (tags.latest !== version) throw new Error(`Registry latest tag for ${entry.name} does not point at ${version}.`);
@@ -451,37 +540,50 @@ async function npmPublish(manifest, { dryRun, provenance }) {
 }
 
 async function main() {
-  const mode = option("--mode", "dry-run");
-  if (!["preflight", "pack", "pack-only", "dry-run", "publish-dry-run", "publish", "bootstrap"].includes(mode)) throw new Error(`Unknown release mode ${mode}.`);
+  const mode = option("--mode", "publish-dry-run");
+  if (!["preflight", "pack", "pack-only", "publish-dry-run", "publish", "bootstrap-rc0"].includes(mode)) throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
   const packages = await packageManifests();
   await assertVersions(packages);
   const order = publishOrder(packages);
   process.stdout.write(`Dependency-derived publication order: ${order.join(" -> ")}\n`);
   if (mode === "preflight") {
+    if (["publish", "bootstrap-rc0"].includes(process.env.SQLBRAID_RELEASE_MODE)) assertMutationAuthorization(process.env.SQLBRAID_RELEASE_MODE);
     await assertCleanTree();
     if (process.env.GITHUB_REF?.startsWith("refs/tags/")) await assertTaggedSha();
+    else await currentSha();
+    return;
+  }
+  if (mode === "pack-only" || mode === "pack") {
+    await assertCleanTree();
+    const sha = process.env.GITHUB_REF?.startsWith("refs/tags/") ? await assertTaggedSha() : await currentSha();
+    await pack(packages, order, sha);
     return;
   }
   if (mode === "publish") {
-    if (process.env.GITHUB_ACTIONS !== "true") throw new Error("Publishing is allowed only from GitHub Actions trusted publishing.");
+    assertMutationAuthorization(mode);
+    assertPublicationCredentials(mode);
     await assertCleanTree();
     const sha = await assertTaggedSha();
     const manifest = await readReleaseManifest();
     if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this tagged commit.");
     assertManifestOrder(manifest, order);
-    await npmPublish(manifest, { dryRun: false, provenance: true });
+    await assertReleaseWorkflows();
+    await pnpmPublish(manifest, { dryRun: false, provenance: true });
     return;
   }
-  if (mode === "bootstrap") {
+  if (mode === "bootstrap-rc0") {
+    assertMutationAuthorization(mode);
+    assertPublicationCredentials(mode);
     if (!artifactArgument) throw new Error("RC bootstrap requires --artifact-dir pointing at validated release artifacts.");
     if (version !== "0.1.0-rc.0") throw new Error(`RC bootstrap requires version 0.1.0-rc.0; found ${version}.`);
     await assertCleanTree();
-    const sha = await currentSha();
+    const sha = await assertTaggedSha();
     const manifest = await readReleaseManifest();
-    if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match the current clean commit.");
+    if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this tagged commit.");
     assertManifestOrder(manifest, order);
-    await assertNpmIdentityAndWriteAccess(manifest.packages);
-    await npmPublish(manifest, { dryRun: false, provenance: false });
+    await assertReleaseWorkflows();
+    await assertPnpmIdentityAndWriteAccess(manifest.packages);
+    await pnpmPublish(manifest, { dryRun: false, provenance: false });
     return;
   }
   if (mode === "publish-dry-run") {
@@ -490,13 +592,30 @@ async function main() {
     const manifest = await readReleaseManifest();
     if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate.");
     assertManifestOrder(manifest, order);
-    await npmPublish(manifest, { dryRun: true, provenance: false });
+    await pnpmPublish(manifest, { dryRun: true, provenance: false });
     return;
   }
-  await assertCleanTree();
-  const sha = process.env.GITHUB_REF?.startsWith("refs/tags/") ? await assertTaggedSha() : await currentSha();
-  const manifest = await pack(packages, order, sha);
-  if (mode === "dry-run") await npmPublish(manifest, { dryRun: true, provenance: false });
+}
+
+function assertMutationAuthorization(mode, env = process.env) {
+  if (!["publish", "bootstrap-rc0"].includes(mode)) throw new Error(`Not a publication mode: ${mode}.`);
+  if (env.GITHUB_ACTIONS !== "true" || env.GITHUB_EVENT_NAME !== "workflow_dispatch") throw new Error(`${mode} is allowed only from GitHub Actions workflow_dispatch.`);
+  if (env.SQLBRAID_RELEASE_MODE !== mode) throw new Error(`${mode} requires SQLBRAID_RELEASE_MODE=${mode}.`);
+  if (mode === "bootstrap-rc0" && version !== "0.1.0-rc.0") throw new Error("Bootstrap requires exactly 0.1.0-rc.0.");
+  const expected = `refs/tags/${expectedTag}`;
+  if (env.GITHUB_REF !== expected) throw new Error(`${mode} requires GITHUB_REF=${expected}; found ${env.GITHUB_REF ?? "unset"}.`);
+  if (!/^[a-f\d]{40}$/u.test(env.GITHUB_SHA ?? "") || !/^\d+$/u.test(env.GITHUB_RUN_ID ?? "") || !/^\d+$/u.test(env.GITHUB_RUN_ATTEMPT ?? "")) throw new Error("Publication requires exact workflow SHA, run ID, and run attempt.");
+}
+
+function assertPublicationCredentials(mode, env = process.env) {
+  if (mode === "bootstrap-rc0") {
+    if (!env.NODE_AUTH_TOKEN) throw new Error("Bootstrap requires NPM_BOOTSTRAP_TOKEN via NODE_AUTH_TOKEN.");
+    return;
+  }
+  for (const name of ["NODE_AUTH_TOKEN", "NPM_TOKEN", "NPM_BOOTSTRAP_TOKEN", "NPM_ID_TOKEN"]) {
+    if (env[name]) throw new Error(`Normal OIDC publication must not receive ${name}.`);
+  }
+  if (!env.ACTIONS_ID_TOKEN_REQUEST_URL || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) throw new Error("Normal publication requires GitHub Actions id-token permissions.");
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : undefined;
@@ -511,6 +630,10 @@ function setReleaseCommand(nextCommand) {
   command = nextCommand;
 }
 
+function setReleaseRequest(nextRequest) {
+  request = nextRequest;
+}
+
 function setReleaseVersion(nextVersion) {
   version = nextVersion;
   semver = parseSemver(nextVersion);
@@ -518,4 +641,4 @@ function setReleaseVersion(nextVersion) {
   if (!artifactArgument) artifactDir = resolve(join(tmpdir(), `sqlbraid-release-${nextVersion}`));
 }
 
-export { assertManifestOrder, assertNpmIdentityAndWriteAccess, npmPublish, npmVersionAtLeast, parseSemver, releaseTag, setReleaseCommand, setReleaseVersion };
+export { assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertPnpmIdentityAndWriteAccess, assertTaggedSha, pnpmPublish, parseSemver, readReleaseManifest, releaseTag, setReleaseCommand, setReleaseRequest, setReleaseVersion };

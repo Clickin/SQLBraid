@@ -4,13 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       release_mode:
-        description: RC validation mode (never publishes)
+        description: "certify: non-mutating full validation; bootstrap-rc0: ONE-TIME TOKEN PUBLICATION; publish: OIDC PUBLICATION; pack-only: no publication rehearsal"
         required: true
-        default: dry-run
+        default: certify
         type: choice
         options:
-          - dry-run
+          - certify
           - pack-only
+          - bootstrap-rc0
+          - publish
   push:
     tags:
       - "v*"
@@ -18,13 +20,12 @@ on:
     - cron: "17 4 * * 1"
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 env:
+  SQLBRAID_RELEASE_MODE: ${{ inputs.release_mode || 'certify' }}
   NODE_VERSION: 22.18.0
   NODE_COMPAT_VERSION: 24.21.0
-  PNPM_VERSION: 12.3.4
   BUN_VERSION: 1.3.14
   DENO_VERSION: 2.9.3
   RELEASE_DEFAULT_EVIDENCE_SHARDS: postgres,mysql,mariadb,sqlite,oracle,mssql,web,bun-sql
@@ -32,6 +33,8 @@ env:
 jobs:
   release-prep:
     name: Prepare immutable release candidate
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -40,8 +43,6 @@ jobs:
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -52,7 +53,11 @@ jobs:
         shell: bash
         run: |
           manifest_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" || ( "$GITHUB_EVENT_NAME" == "workflow_dispatch" && ( "$SQLBRAID_RELEASE_MODE" == "bootstrap-rc0" || "$SQLBRAID_RELEASE_MODE" == "publish" ) ) ]]; then
+            [[ "$GITHUB_REF_TYPE" == "tag" ]] || {
+              echo "Release publication requires an exact version tag ref."
+              exit 1
+            }
             tag_version="${GITHUB_REF_NAME#v}"
             [[ "$GITHUB_REF_NAME" == v* && "$tag_version" == "$manifest_version" ]] || {
               echo "Release tag and package version must match."
@@ -96,8 +101,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -155,8 +158,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -225,8 +226,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_COMPAT_VERSION }}
@@ -249,8 +248,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -301,8 +298,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -329,8 +324,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -344,6 +337,8 @@ jobs:
       - run: |
           tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
           tar -xzf "$RUNNER_TEMP/prepared/release-candidate.tar.gz" -C "$RUNNER_TEMP"
+      - name: Run package consumer project
+        run: pnpm exec vitest run --project consumer
       - name: Validate candidate package and VSIX bytes
         env:
           SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
@@ -367,8 +362,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -392,8 +385,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -421,8 +412,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -450,8 +439,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -505,8 +492,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -625,6 +610,8 @@ jobs:
     if: github.event_name != 'schedule'
     needs: [release-prep, release-common, release-db, release-node24, release-browser, release-vscode, release-pack, release-docs, release-examples, release-benchmarks, release-runtime, release-bun-sql, release-support-evidence, release-target-evidence]
     name: Final release certification
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -633,8 +620,6 @@ jobs:
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v6.1.0
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -648,17 +633,105 @@ jobs:
       - run: tar -xzf "$RUNNER_TEMP/validated/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP"
       - name: Assert exact candidate and tag invariants
         run: node scripts/release.mjs --mode preflight
-      - name: Install npm trusted-publishing CLI
-        if: github.event_name == 'push' || inputs.release_mode == 'dry-run'
-        run: npm install --global npm@11.15.0
-      - name: npm publication dry run
-        if: github.event_name == 'workflow_dispatch' && inputs.release_mode == 'dry-run'
+      - name: pnpm publication dry run
+        if: env.SQLBRAID_RELEASE_MODE != 'pack-only'
         run: node scripts/release.mjs --mode publish-dry-run --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts"
-      - name: Publish validated tarballs with npm provenance
-        if: github.event_name == 'push'
+
+  release-bootstrap:
+    if: github.event_name == 'workflow_dispatch' && inputs.release_mode == 'bootstrap-rc0'
+    needs: release-final
+    name: Bootstrap RC.0 package publication
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact release ref
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-candidate-validated
+          path: ${{ runner.temp }}/validated
+      - run: tar -xzf "$RUNNER_TEMP/validated/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP"
+      - name: Bootstrap RC.0 with static npm token
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+        run: |
+          test -n "$NODE_AUTH_TOKEN" || { echo "NPM_BOOTSTRAP_TOKEN is required."; exit 1; }
+          cat > "$RUNNER_TEMP/sqlbraid-npmrc" <<'EOF'
+          registry=https://registry.npmjs.org/
+          always-auth=true
+          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+          EOF
+          NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/sqlbraid-npmrc" \
+            node scripts/release.mjs --mode bootstrap-rc0 \
+            --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts"
+
+  release-publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.release_mode == 'publish'
+    needs: release-final
+    name: Publish validated packages with pnpm OIDC
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact release ref
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-candidate-validated
+          path: ${{ runner.temp }}/validated
+      - run: tar -xzf "$RUNNER_TEMP/validated/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP"
+      - name: Publish validated tarballs with pnpm provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/release.mjs --mode publish --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts"
-      - name: Create a draft GitHub Release
-        if: github.event_name == 'push'
+
+  release-draft:
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' &&
+      ((inputs.release_mode == 'publish' && needs.release-publish.result == 'success') ||
+      (inputs.release_mode == 'bootstrap-rc0' && needs.release-bootstrap.result == 'success'))
+    needs: [release-final, release-bootstrap, release-publish]
+    name: Create draft GitHub Release after publication
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact release ref
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-candidate-validated
+          path: ${{ runner.temp }}/validated
+      - run: tar -xzf "$RUNNER_TEMP/validated/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP"
+      - name: Create draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
