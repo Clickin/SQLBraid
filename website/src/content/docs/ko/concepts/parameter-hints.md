@@ -13,7 +13,7 @@ const query = sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`;
 데이터베이스 타입이 중요할 때는 `sql.bind(value, hint)`로 값을 감쌉니다.
 
 ```ts
-import { sql, oracleParameter } from "@sqlbraid/oracle";
+import { sql, oracleParameter } from "sqlbraid/oracle";
 
 const query = sql.rows<UserRow>`
   SELECT id, name
@@ -35,7 +35,7 @@ SQLBraid는 TypeScript 타입에서 보편적인 데이터베이스 파라미터
 SQL Server 루트는 Tedious 어댑터가 지원하는 타입 팩토리를 내보냅니다.
 
 ```ts
-import { mssqlParameter, sql } from "@sqlbraid/mssql";
+import { mssqlParameter, sql } from "sqlbraid/mssql";
 
 const query = sql.rows<UserRow>`
   SELECT id, display_name

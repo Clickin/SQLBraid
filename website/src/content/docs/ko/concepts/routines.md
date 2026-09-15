@@ -19,7 +19,7 @@ set을 반환합니다.
 쿼리 경계에 Standard Schema 검증기를 연결하세요.
 
 ```ts
-import { mssqlParameter, sql } from "@sqlbraid/mssql";
+import { mssqlParameter, sql } from "sqlbraid/mssql";
 
 const refresh = sql.call({
   procedure: {

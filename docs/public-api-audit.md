@@ -68,6 +68,17 @@ Canonical environment capability keys are `statement.prepare`,
 
 ## Dialect and driver packages
 
+### `sqlbraid`
+
+**Application:** the canonical runtime facade. The root re-exports common
+contracts and runtime constructors without selecting a dialect. Driver-oriented
+subpaths combine the matching dialect/query surface with its adapter:
+`/pg`, `/mysql2`, `/mariadb`, `/node-sqlite`, `/sqlite-wasm`, `/d1`,
+`/oracledb`, `/tedious`, and `/bun-sql`. Dialect-only subpaths
+`/postgres`, `/mysql`, `/sqlite`, `/oracle`, and `/mssql` support custom
+adapters. The facade has no CLI, database-driver, metadata, codegen, tooling,
+compiler, editor, or Vite dependency.
+
 | Package | Application surface | SPI / advanced surface |
 | --- | --- | --- |
 | `@sqlbraid/postgres` | `sql`, `postgresParameter.refcursor()` | dialect, TypePolicy, representation profiles, `/pg`, `/inspector` |
@@ -98,8 +109,8 @@ These runtime statements are compatibility guidance, not Official support labels
 - `@sqlbraid/codegen`: pure `generateModels` and deterministic model source.
 - `@sqlbraid/tooling`: Node-first config/workspace/evidence services.
 - `@sqlbraid/operations`: fingerprints and declaration manifests.
-- `@sqlbraid/cli` and `sqlbraid`: CLI process entry points; the unscoped package
-  has no database driver or runtime umbrella export.
+- `@sqlbraid/cli`: optional CLI process entry point; install it separately for
+  codegen, inspect, diagnostics, and drift commands.
 - `@sqlbraid/language-server`: embedded service and standard stdio LSP transport.
 
 Runtime packages do not acquire metadata, compiler, codegen, tooling, editor, or

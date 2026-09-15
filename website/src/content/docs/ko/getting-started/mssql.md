@@ -6,15 +6,14 @@ description: 결정적인 SQL Server 파라미터 힌트와 Tedious로 SQLBraid�
 SQLBraid SQL Server 패키지와 Tedious를 함께 설치합니다.
 
 ```bash
-npm install @sqlbraid/mssql tedious
+npm install sqlbraid tedious
 ```
 
 이식 가능한 루트는 SQL Server dialect와 힌트 팩토리를 내보냅니다. Node 드라이버 어댑터는 `/tedious` 아래에 있습니다.
 
 ```ts
 import { Connection } from "tedious";
-import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
-import { mssqlParameter, sql } from "@sqlbraid/mssql";
+import { createTediousDatabase, mssqlParameter, sql } from "sqlbraid/tedious";
 
 interface UserRow {
   id: string;

@@ -5,6 +5,12 @@ description: 파생 파일을 직접 수정하지 않고 생성 모델을 최신
 
 생성 모델은 파생 아티팩트입니다. 메타데이터 스냅샷이나 설정을 변경하고 codegen을 실행한 다음 CI를 최신 상태의 기준으로 삼으세요.
 
+다음 명령을 실행하기 전에 선택적 CLI를 설치하세요.
+
+```bash
+npm install --save-dev @sqlbraid/cli
+```
+
 ```bash
 sqlbraid codegen
 sqlbraid codegen --check

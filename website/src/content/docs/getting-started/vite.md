@@ -6,7 +6,7 @@ description: Lower SQLBraid guarded templates in Vite 8 without taking over Type
 Install the Vite plugin beside the SQLBraid dialect package used by your application:
 
 ```bash
-npm install @sqlbraid/vite @sqlbraid/sqlite
+npm install sqlbraid @sqlbraid/vite
 ```
 
 Add the framework-neutral plugin before the normal Vite transforms:
@@ -20,7 +20,7 @@ export default defineConfig({
 });
 ```
 
-`@sqlbraid/vite` targets Vite 8 and runs as a pre-transform. It recognizes SQLBraid tags imported from `@sqlbraid/template`, `@sqlbraid/postgres`, `@sqlbraid/mysql`, `@sqlbraid/sqlite`, `@sqlbraid/oracle`, and `@sqlbraid/mssql`. Configure custom tags when an application wraps a tag:
+`@sqlbraid/vite` targets Vite 8 and runs as a pre-transform. It recognizes SQLBraid tags imported from the granular `@sqlbraid/*` dialect roots and the matching `sqlbraid/*` facade subpaths. Configure custom tags when an application wraps a tag:
 
 ```ts
 sqlbraid({

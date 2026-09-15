@@ -5,6 +5,12 @@ description: 에이전트 하네스에 LSP 클라이언트가 없을 때 제한�
 
 CLI는 LSP 서버에서 사용하는 도구 의미를 공유합니다. CLI 명령의 위치는 1부터 시작합니다.
 
+다음 명령을 실행하는 프로젝트에 선택적 CLI를 설치하세요.
+
+```bash
+npm install --save-dev @sqlbraid/cli
+```
+
 ```bash
 sqlbraid inspect query --file src/query.ts --line 8 --column 20 --json
 sqlbraid inspect symbol UsersRow --json

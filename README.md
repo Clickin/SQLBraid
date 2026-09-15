@@ -4,9 +4,12 @@
 
 SQLBraid is a SQL-first data-access toolkit for TypeScript. It keeps ordinary SQL visible while adding safe value binds, readable dynamic SQL, explicit result contracts, Standard Schema result mapping, physical connection ownership, and driver-owned transports.
 
+```sh
+pnpm add sqlbraid
+```
+
 ```ts
-import { sql } from "@sqlbraid/sqlite";
-import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
 import { DatabaseSync } from "node:sqlite";
 
 interface UserRow { id: string; name: string }
@@ -17,6 +20,12 @@ const users = await db.all(sql.rows<UserRow>`
   SELECT id, name FROM users WHERE id = ${userId}
 `);
 ```
+
+Application code installs the unscoped `sqlbraid` facade and imports a
+driver-oriented subpath such as `sqlbraid/pg`, `sqlbraid/mysql2`,
+`sqlbraid/node-sqlite`, or `sqlbraid/oracledb`. The facade has no implicit
+default dialect; its root exports only common runtime contracts. The granular
+`@sqlbraid/*` packages remain available for custom integrations and tooling.
 
 > **Release status:** pre-release. [Versioned support records](support/targets/)
 > identify each certified database/driver/profile/runtime tuple, implementation
@@ -188,6 +197,7 @@ SQLBraid is not an ORM, query-builder-first language, complete SQL parser, unive
 
 | Package | Responsibility |
 | --- | --- |
+| `sqlbraid` | Canonical runtime facade; driver-oriented subpaths combine a dialect/query API with an adapter |
 | `@sqlbraid/core` | Public contracts, rendered statements, binding SPI, observers, Standard Schema types |
 | `@sqlbraid/template` | Dialect-neutral tags, directives, fragments, `sql.bind` |
 | `@sqlbraid/runtime` | Execution, sessions, leases, transactions, prepared shapes, streams, mapping |
@@ -203,10 +213,12 @@ SQLBraid is not an ORM, query-builder-first language, complete SQL parser, unive
 | `@sqlbraid/codegen` | Pure metadata + TypePolicy → Row/Insert/Update source |
 | `@sqlbraid/tooling` | Node-first config/workspace/evidence services |
 | `@sqlbraid/operations` | Fingerprints and declaration manifests |
-| `@sqlbraid/cli` / `sqlbraid` | CLI and driver-free command wrapper |
+| `@sqlbraid/cli` | Optional CLI for codegen, inspect, diagnostics, and drift |
 | `@sqlbraid/language-server` | Standard stdio LSP |
 
-Runtime packages do not pull tooling, metadata, codegen, editor, or Vite dependencies. Install a driver package and its driver peer explicitly. See the [package map](https://clickin.github.io/SQLBraid/dev/reference/packages/) and [release readiness](./docs/SQLBraid_release_readiness.md).
+Runtime packages do not pull tooling, metadata, codegen, editor, or Vite
+dependencies. The facade also does not install database drivers; install a
+driver peer explicitly. See the [package map](https://clickin.github.io/SQLBraid/dev/reference/packages/) and [release readiness](./docs/SQLBraid_release_readiness.md).
 
 ## Development
 

@@ -14,14 +14,13 @@ Cloudflare D1을 사용합니다. 두 경로 모두 SQLBraid query contract를
 runtime을 설치하세요.
 
 ```bash
-npm install @sqlbraid/sqlite @sqlite.org/sqlite-wasm
+npm install sqlbraid @sqlite.org/sqlite-wasm
 ```
 
 현재 realm의 OO1-style object에서 직접 database를 만듭니다.
 
 ```ts
-import { sql } from "@sqlbraid/sqlite";
-import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
+import { createSqliteWasmDatabase, sql } from "sqlbraid/sqlite-wasm";
 
 const db = createSqliteWasmDatabase(wasmDatabase, { sqlite3 });
 const rows = await db.all(sql.rows<{ id: string }>`SELECT id FROM account`);
@@ -46,7 +45,7 @@ D1은 SQLite로 유지되며 structural binding interface를 사용하므로 pac
 runtime에서 Cloudflare type package를 요구하지 않습니다.
 
 ```ts
-import { createD1Database } from "@sqlbraid/sqlite/d1";
+import { createD1Database } from "sqlbraid/d1";
 
 const db = createD1Database(env.DB);
 ```

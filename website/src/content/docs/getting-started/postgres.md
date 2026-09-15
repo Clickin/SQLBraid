@@ -3,10 +3,10 @@ title: PostgreSQL quickstart
 description: Connect SQLBraid to pg with either a direct client or an explicit pool.
 ---
 
-Install the SQLBraid PostgreSQL adapter and its driver together:
+Install the SQLBraid runtime facade and the PostgreSQL driver together:
 
 ```bash
-npm install @sqlbraid/postgres pg
+npm install sqlbraid pg
 ```
 
 ## Direct physical client
@@ -15,8 +15,7 @@ A direct factory receives a connected `pg.Client` or `pg.PoolClient`, not a `pg.
 
 ```ts
 import { Client } from "pg";
-import { createPgDatabase } from "@sqlbraid/postgres/pg";
-import { sql } from "@sqlbraid/postgres";
+import { createPgDatabase, sql } from "sqlbraid/pg";
 
 interface UserRow { id: string; name: string }
 
@@ -40,8 +39,7 @@ Use the pool factory when the application owns a `pg.Pool`:
 
 ```ts
 import { Pool } from "pg";
-import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";
-import { sql } from "@sqlbraid/postgres";
+import { createPgPoolDatabase, sql } from "sqlbraid/pg";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = createPgPoolDatabase(pool);
@@ -100,7 +98,7 @@ remain text where the driver can provide them. `@sqlbraid/postgres` exports
 the same policy:
 
 ```ts
-import { typePolicyForProfile } from "@sqlbraid/postgres";
+import { typePolicyForProfile } from "sqlbraid/pg";
 import { generateModels } from "@sqlbraid/codegen";
 
 const typePolicy = typePolicyForProfile({ json: "text", temporal: "text" });

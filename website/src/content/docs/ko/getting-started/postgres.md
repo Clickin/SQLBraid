@@ -6,7 +6,7 @@ description: 직접 클라이언트 또는 명시적 풀로 SQLBraid를 pg에 �
 SQLBraid PostgreSQL 어댑터와 드라이버를 함께 설치하세요.
 
 ```bash
-npm install @sqlbraid/postgres pg
+npm install sqlbraid pg
 ```
 
 ## 직접 물리 클라이언트
@@ -15,8 +15,7 @@ npm install @sqlbraid/postgres pg
 
 ```ts
 import { Client } from "pg";
-import { createPgDatabase } from "@sqlbraid/postgres/pg";
-import { sql } from "@sqlbraid/postgres";
+import { createPgDatabase, sql } from "sqlbraid/pg";
 
 interface UserRow { id: string; name: string }
 
@@ -40,8 +39,7 @@ try {
 
 ```ts
 import { Pool } from "pg";
-import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";
-import { sql } from "@sqlbraid/postgres";
+import { createPgPoolDatabase, sql } from "sqlbraid/pg";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const db = createPgPoolDatabase(pool);
@@ -99,7 +97,7 @@ JSON과 temporal 값을 text로 유지합니다. `@sqlbraid/postgres`는
 정책을 재사용할 수 있습니다.
 
 ```ts
-import { typePolicyForProfile } from "@sqlbraid/postgres";
+import { typePolicyForProfile } from "sqlbraid/pg";
 import { generateModels } from "@sqlbraid/codegen";
 
 const typePolicy = typePolicyForProfile({ json: "text", temporal: "text" });

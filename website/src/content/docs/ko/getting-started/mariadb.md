@@ -6,7 +6,7 @@ description: MariaDB Connector/Node.js에서 MariaDB SQL 문법을 명시적으�
 별도 MariaDB dialect와 공식 Connector/Node.js 드라이버를 설치하세요.
 
 ```bash
-npm install @sqlbraid/mariadb mariadb
+npm install sqlbraid mariadb
 ```
 
 `/mariadb` 어댑터 subpath를 연결된 connection 또는 명시적 pool factory와
@@ -14,8 +14,7 @@ npm install @sqlbraid/mariadb mariadb
 
 ```ts
 import mariadb from "mariadb";
-import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
-import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
+import { createMariaDbDatabase, MARIADB_LOSSLESS_TEXT, sql } from "sqlbraid/mariadb";
 
 const connection = await mariadb.createConnection({
   host: "127.0.0.1",

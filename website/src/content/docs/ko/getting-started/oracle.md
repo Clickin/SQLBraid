@@ -6,15 +6,14 @@ description: 명시적인 Oracle 파라미터 힌트와 Thin 모드 node-oracled
 SQLBraid Oracle 패키지와 드라이버를 함께 설치합니다.
 
 ```bash
-npm install @sqlbraid/oracle oracledb
+npm install sqlbraid oracledb
 ```
 
 이식 가능한 루트 패키지는 `oracledb`를 가져오지 않습니다. Node 어댑터는 드라이버 서브패스가 소유합니다.
 
 ```ts
 import oracledb from "oracledb";
-import { createOracledbDatabase } from "@sqlbraid/oracle/oracledb";
-import { oracleParameter, sql } from "@sqlbraid/oracle";
+import { createOracledbDatabase, oracleParameter, sql } from "sqlbraid/oracledb";
 
 interface UserRow {
   id: string;

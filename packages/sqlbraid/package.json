@@ -1,7 +1,7 @@
 {
   "name": "sqlbraid",
   "version": "0.1.0-rc.0",
-  "description": "SQLBraid command-line convenience wrapper",
+  "description": "SQLBraid's canonical SQL-first runtime package",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,19 +12,82 @@
   "bugs": {
     "url": "https://github.com/Clickin/SQLBraid/issues"
   },
-  "keywords": ["sql", "typescript", "database", "cli"],
+  "keywords": ["sql", "typescript", "database", "query"],
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22.18.0" },
-  "bin": { "sqlbraid": "./dist/index.js" },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./pg": {
+      "types": "./dist/pg.d.ts",
+      "import": "./dist/pg.js"
+    },
+    "./mysql2": {
+      "types": "./dist/mysql2.d.ts",
+      "import": "./dist/mysql2.js"
+    },
+    "./mariadb": {
+      "types": "./dist/mariadb.d.ts",
+      "import": "./dist/mariadb.js"
+    },
+    "./node-sqlite": {
+      "types": "./dist/node-sqlite.d.ts",
+      "import": "./dist/node-sqlite.js"
+    },
+    "./sqlite-wasm": {
+      "types": "./dist/sqlite-wasm.d.ts",
+      "import": "./dist/sqlite-wasm.js"
+    },
+    "./d1": {
+      "types": "./dist/d1.d.ts",
+      "import": "./dist/d1.js"
+    },
+    "./oracledb": {
+      "types": "./dist/oracledb.d.ts",
+      "import": "./dist/oracledb.js"
+    },
+    "./tedious": {
+      "types": "./dist/tedious.d.ts",
+      "import": "./dist/tedious.js"
+    },
+    "./bun-sql": {
+      "types": "./dist/bun-sql.d.ts",
+      "import": "./dist/bun-sql.js"
+    },
+    "./postgres": {
+      "types": "./dist/postgres.d.ts",
+      "import": "./dist/postgres.js"
+    },
+    "./mysql": {
+      "types": "./dist/mysql.d.ts",
+      "import": "./dist/mysql.js"
+    },
+    "./sqlite": {
+      "types": "./dist/sqlite.d.ts",
+      "import": "./dist/sqlite.js"
+    },
+    "./oracle": {
+      "types": "./dist/oracle.d.ts",
+      "import": "./dist/oracle.js"
+    },
+    "./mssql": {
+      "types": "./dist/mssql.d.ts",
+      "import": "./dist/mssql.js"
     }
   },
   "dependencies": {
-    "@sqlbraid/cli": "workspace:*"
+    "@sqlbraid/bun-sql": "workspace:*",
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/mariadb": "workspace:*",
+    "@sqlbraid/mssql": "workspace:*",
+    "@sqlbraid/mysql": "workspace:*",
+    "@sqlbraid/oracle": "workspace:*",
+    "@sqlbraid/postgres": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/sqlite": "workspace:*"
   }
 }

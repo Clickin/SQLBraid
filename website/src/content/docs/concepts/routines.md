@@ -19,7 +19,7 @@ ordered routine result sets.
 Attach Standard Schema validators at the query boundary:
 
 ```ts
-import { mssqlParameter, sql } from "@sqlbraid/mssql";
+import { mssqlParameter, sql } from "sqlbraid/mssql";
 
 const refresh = sql.call({
   procedure: {

@@ -107,7 +107,6 @@
     "pg-cursor": "2.22.0",
     "playwright": "1.63.0",
     "publint": "0.3.24",
-    "sqlbraid": "workspace:*",
     "tedious": "20.0.0",
     "testcontainers": "12.1.0",
     "tsdown": "0.23.0",

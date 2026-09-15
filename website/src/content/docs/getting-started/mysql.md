@@ -3,10 +3,10 @@ title: MySQL quickstart
 description: Connect SQLBraid to mysql2 with either a direct connection or an explicit pool.
 ---
 
-Install the SQLBraid MySQL adapter and its driver together:
+Install the SQLBraid runtime facade and the MySQL driver together:
 
 ```bash
-npm install @sqlbraid/mysql mysql2
+npm install sqlbraid mysql2
 ```
 
 ## Direct physical connection
@@ -15,8 +15,7 @@ The direct factory receives a connected `Connection` or `PoolConnection` object 
 
 ```ts
 import mysql from "mysql2/promise";
-import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
-import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
+import { createMysql2Database, MYSQL2_LOSSLESS_TEXT, sql } from "sqlbraid/mysql2";
 
 const connection = await mysql.createConnection({
   uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
@@ -40,8 +39,7 @@ Use the pool factory for `mysql2/promise` pools:
 
 ```ts
 import mysql from "mysql2/promise";
-import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
-import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
+import { createMysql2PoolDatabase, MYSQL2_LOSSLESS_TEXT, sql } from "sqlbraid/mysql2";
 
 const pool = mysql.createPool({
   uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",

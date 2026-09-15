@@ -3,10 +3,10 @@ title: MariaDB quickstart
 description: Connect SQLBraid to MariaDB Connector/Node.js while keeping MariaDB syntax explicit.
 ---
 
-Install the separate MariaDB dialect and the official Connector/Node.js driver:
+Install the SQLBraid runtime facade and the official Connector/Node.js driver:
 
 ```bash
-npm install @sqlbraid/mariadb mariadb
+npm install sqlbraid mariadb
 ```
 
 Use the `/mariadb` adapter subpath with a connected connection or an explicit
@@ -14,8 +14,7 @@ pool factory:
 
 ```ts
 import mariadb from "mariadb";
-import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
-import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
+import { createMariaDbDatabase, MARIADB_LOSSLESS_TEXT, sql } from "sqlbraid/mariadb";
 
 const connection = await mariadb.createConnection({
   host: "127.0.0.1",

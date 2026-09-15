@@ -42,7 +42,7 @@ stored-procedure transport가 없으므로 등록 function과 table-valued exten
 mkdir braid-sqlite && cd braid-sqlite
 npm init -y
 npm pkg set type=module
-npm install @sqlbraid/sqlite
+npm install sqlbraid
 npm install --save-dev typescript @types/node@22
 mkdir src
 ```
@@ -53,8 +53,7 @@ mkdir src
 
 ```ts
 import { DatabaseSync } from "node:sqlite";
-import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
-import { sql } from "@sqlbraid/sqlite";
+import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
 
 interface UserRow {
   id: string;

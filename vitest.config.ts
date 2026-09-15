@@ -37,6 +37,20 @@ const sourceAliases = {
   "@sqlbraid/sqlite/node-sqlite": resolve("packages/sqlite/src/node-sqlite.ts"),
   "@sqlbraid/sqlite/inspector": resolve("packages/sqlite/src/inspector.ts"),
   "@sqlbraid/sqlite": resolve("packages/sqlite/src/index.ts"),
+  "sqlbraid/pg": resolve("packages/sqlbraid/src/pg.ts"),
+  "sqlbraid/mysql2": resolve("packages/sqlbraid/src/mysql2.ts"),
+  "sqlbraid/mariadb": resolve("packages/sqlbraid/src/mariadb.ts"),
+  "sqlbraid/node-sqlite": resolve("packages/sqlbraid/src/node-sqlite.ts"),
+  "sqlbraid/sqlite-wasm": resolve("packages/sqlbraid/src/sqlite-wasm.ts"),
+  "sqlbraid/d1": resolve("packages/sqlbraid/src/d1.ts"),
+  "sqlbraid/oracledb": resolve("packages/sqlbraid/src/oracledb.ts"),
+  "sqlbraid/tedious": resolve("packages/sqlbraid/src/tedious.ts"),
+  "sqlbraid/postgres": resolve("packages/sqlbraid/src/postgres.ts"),
+  "sqlbraid/mysql": resolve("packages/sqlbraid/src/mysql.ts"),
+  "sqlbraid/sqlite": resolve("packages/sqlbraid/src/sqlite.ts"),
+  "sqlbraid/oracle": resolve("packages/sqlbraid/src/oracle.ts"),
+  "sqlbraid/mssql": resolve("packages/sqlbraid/src/mssql.ts"),
+  sqlbraid: resolve("packages/sqlbraid/src/index.ts"),
 };
 
 export default defineConfig({

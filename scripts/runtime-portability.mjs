@@ -62,7 +62,7 @@ try {
   }
   const topLevelPackages = await readdir(join(consumer, "node_modules"));
   if (topLevelPackages.includes("sqlbraid")) {
-    throw new Error("Runtime-only installation pulled in the unscoped CLI package");
+    throw new Error("Runtime-only installation pulled in the canonical facade package");
   }
   if (["oracledb", "tedious", "mariadb"].some((name) => topLevelPackages.includes(name))) {
     throw new Error("Portable runtime installation pulled in a Node-only database driver");

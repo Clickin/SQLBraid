@@ -13,14 +13,13 @@ Install the SQLite package and official WASM runtime in the application that
 owns the browser/worker resource:
 
 ```bash
-npm install @sqlbraid/sqlite @sqlite.org/sqlite-wasm
+npm install sqlbraid @sqlite.org/sqlite-wasm
 ```
 
 Create one direct database from the OO1-style object in the current realm:
 
 ```ts
-import { sql } from "@sqlbraid/sqlite";
-import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
+import { createSqliteWasmDatabase, sql } from "sqlbraid/sqlite-wasm";
 
 const db = createSqliteWasmDatabase(wasmDatabase, { sqlite3 });
 const rows = await db.all(sql.rows<{ id: string }>`SELECT id FROM account`);
@@ -45,7 +44,7 @@ D1 remains SQLite and uses a structural binding interface, so the package does
 not require a Cloudflare type package at runtime:
 
 ```ts
-import { createD1Database } from "@sqlbraid/sqlite/d1";
+import { createD1Database } from "sqlbraid/d1";
 
 const db = createD1Database(env.DB);
 ```

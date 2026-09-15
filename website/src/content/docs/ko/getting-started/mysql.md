@@ -6,7 +6,7 @@ description: 직접 연결 또는 명시적 풀로 SQLBraid를 mysql2에 연결�
 SQLBraid MySQL 어댑터와 드라이버를 함께 설치하세요.
 
 ```bash
-npm install @sqlbraid/mysql mysql2
+npm install sqlbraid mysql2
 ```
 
 ## 직접 물리 연결
@@ -15,8 +15,7 @@ npm install @sqlbraid/mysql mysql2
 
 ```ts
 import mysql from "mysql2/promise";
-import { createMysql2Database } from "@sqlbraid/mysql/mysql2";
-import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
+import { createMysql2Database, MYSQL2_LOSSLESS_TEXT, sql } from "sqlbraid/mysql2";
 
 const connection = await mysql.createConnection({
   uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",
@@ -40,8 +39,7 @@ try {
 
 ```ts
 import mysql from "mysql2/promise";
-import { createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
-import { MYSQL2_LOSSLESS_TEXT, sql } from "@sqlbraid/mysql";
+import { createMysql2PoolDatabase, MYSQL2_LOSSLESS_TEXT, sql } from "sqlbraid/mysql2";
 
 const pool = mysql.createPool({
   uri: process.env.DATABASE_URL ?? "mysql://root:password@localhost/app",

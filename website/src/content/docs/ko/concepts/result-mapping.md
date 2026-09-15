@@ -7,7 +7,7 @@ SQLBraid는 특정 validator가 아니라 Standard Schema 프로토콜에 의존
 
 ```ts
 import * as v from "valibot";
-import { sql } from "@sqlbraid/postgres";
+import { sql } from "sqlbraid/postgres";
 
 const EventSchema = v.object({
   id: v.number(),

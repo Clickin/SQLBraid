@@ -13,6 +13,19 @@ const modules = [
   "@sqlbraid/sqlite",
   "@sqlbraid/oracle",
   "@sqlbraid/mssql",
+  "sqlbraid/pg",
+  "sqlbraid/mysql2",
+  "sqlbraid/mariadb",
+  "sqlbraid/node-sqlite",
+  "sqlbraid/sqlite-wasm",
+  "sqlbraid/d1",
+  "sqlbraid/oracledb",
+  "sqlbraid/tedious",
+  "sqlbraid/postgres",
+  "sqlbraid/mysql",
+  "sqlbraid/sqlite",
+  "sqlbraid/oracle",
+  "sqlbraid/mssql",
 ] as const;
 
 function offsetAt(source: string, line: number, character: number): number {

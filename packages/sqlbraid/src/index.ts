@@ -1,4 +1,9 @@
-#!/usr/bin/env node
-import { runCli } from "@sqlbraid/cli";
-
-runCli(process.argv.slice(2));
+export * from "@sqlbraid/core";
+export {
+  createDatabase,
+  createPooledDatabase,
+  DatabaseCardinalityError,
+  DatabaseResultKindError,
+  DatabaseResultValidationError,
+  DatabaseScopeError,
+} from "@sqlbraid/runtime";

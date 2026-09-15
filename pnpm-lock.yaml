@@ -223,9 +223,6 @@ importers:
       publint:
         specifier: 0.3.24
         version: 0.3.24
-      sqlbraid:
-        specifier: workspace:*
-        version: link:packages/sqlbraid
       tedious:
         specifier: 20.0.0
         version: 20.0.0(supports-color@7.2.0)
@@ -464,9 +461,33 @@ importers:
 
   packages/sqlbraid:
     dependencies:
-      '@sqlbraid/cli':
+      '@sqlbraid/bun-sql':
         specifier: workspace:*
-        version: link:../cli
+        version: link:../bun-sql
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sqlbraid/mariadb':
+        specifier: workspace:*
+        version: link:../mariadb
+      '@sqlbraid/mssql':
+        specifier: workspace:*
+        version: link:../mssql
+      '@sqlbraid/mysql':
+        specifier: workspace:*
+        version: link:../mysql
+      '@sqlbraid/oracle':
+        specifier: workspace:*
+        version: link:../oracle
+      '@sqlbraid/postgres':
+        specifier: workspace:*
+        version: link:../postgres
+      '@sqlbraid/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@sqlbraid/sqlite':
+        specifier: workspace:*
+        version: link:../sqlite
 
   packages/sqlite:
     dependencies:

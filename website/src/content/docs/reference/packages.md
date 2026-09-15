@@ -5,6 +5,7 @@ description: Find the SQLBraid package that owns each concern.
 
 | Package | Responsibility |
 | --- | --- |
+| `sqlbraid` | Canonical runtime facade; driver-oriented subpaths combine a dialect/query API with an adapter |
 | `@sqlbraid/core` | Public contracts, Standard Schema-facing types, and rendered parameter metadata |
 | `@sqlbraid/template` | Tagged templates, directives, rendering, structural fragments, and `sql.bind` |
 | `@sqlbraid/runtime` | Execution, mapping, result-kind checks, transactions, streaming, and prepared shapes |
@@ -21,11 +22,23 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/codegen` | Metadata + TypePolicy to Row/Insert/Update declarations |
 | `@sqlbraid/tooling` | Shared config/workspace evidence and semantic indexes |
 | `@sqlbraid/operations` | Fingerprints and declaration manifests |
-| `@sqlbraid/cli` | Codegen, inspect, diagnostics, drift, and command-line fallback |
+| `@sqlbraid/cli` | Optional codegen, inspect, diagnostics, drift, and command-line tooling |
 | `@sqlbraid/language-server` | Standard stdio LSP integration |
-| `sqlbraid` | Unscoped CLI convenience package; provides the `sqlbraid` executable without database drivers |
 
-The package set includes the scoped runtime/tooling packages plus the unscoped CLI convenience package. `@sqlbraid/bun-sql` has no static Bun import and requires an explicit `dialect`; it does not auto-detect SQL semantics. Runtime packages do not acquire metadata, codegen, compiler, editor, or Vite dependencies. Install tooling packages only in development/build environments. The Oracle, SQL Server, MariaDB, and Bun driver dependencies are kept out of portable roots. `@sqlbraid/vite` keeps Vite as a peer and does not import a framework.
+Install `sqlbraid` in application code, then use a driver-oriented subpath:
+`sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
+`sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
+`sqlbraid/tedious`, or `sqlbraid/bun-sql`. The root is database-neutral and
+does not export an implicit `sql` tag. The dialect-only subpaths
+`sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle`, and
+`sqlbraid/mssql` are for custom adapters. The granular `@sqlbraid/*` packages
+remain supported for library authors and deliberately narrower dependencies.
+`@sqlbraid/bun-sql` has no static Bun import and requires an explicit `dialect`;
+it does not auto-detect SQL semantics. Runtime packages do not acquire metadata,
+codegen, compiler, editor, or Vite dependencies. Install tooling packages only
+in development/build environments. The Oracle, SQL Server, MariaDB, and Bun
+driver dependencies are kept out of portable roots. `@sqlbraid/vite` keeps Vite
+as a peer and does not import a framework.
 
 `db.session()` pins one provider lease; `db.tx()` reuses that lease and supports
 savepoints/options only where the selected adapter advertises them. Prepared

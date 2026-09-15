@@ -3,18 +3,17 @@ title: SQL Server quickstart
 description: Connect SQLBraid to Tedious with deterministic SQL Server parameter hints.
 ---
 
-Install the SQLBraid SQL Server package and Tedious together:
+Install the SQLBraid runtime facade and Tedious together:
 
 ```bash
-npm install @sqlbraid/mssql tedious
+npm install sqlbraid tedious
 ```
 
 The portable root exposes the SQL Server dialect and hint factories. The Node driver adapter is under `/tedious`:
 
 ```ts
 import { Connection } from "tedious";
-import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
-import { mssqlParameter, sql } from "@sqlbraid/mssql";
+import { createTediousDatabase, mssqlParameter, sql } from "sqlbraid/tedious";
 
 interface UserRow {
   id: string;

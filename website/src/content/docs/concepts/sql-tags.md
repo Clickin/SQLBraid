@@ -6,7 +6,7 @@ description: Declare what a SQLBraid statement returns without hiding the SQL.
 SQLBraid's tag is ordinary TypeScript plus SQL. The dialect package exports a configured `sql` tag:
 
 ```ts
-import { sql } from "@sqlbraid/postgres";
+import { sql } from "sqlbraid/postgres";
 
 const users = sql.rows<{ id: string; name: string }>`
   SELECT id, name FROM users

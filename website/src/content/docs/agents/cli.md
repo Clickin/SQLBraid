@@ -3,7 +3,13 @@ title: CLI inspect fallback
 description: Use bounded JSON inspection when an agent harness has no LSP client.
 ---
 
-The CLI shares the tooling semantics used by the LSP server. Positions are 1-based in CLI commands:
+The CLI shares the tooling semantics used by the LSP server. Positions are 1-based in CLI commands.
+
+Install the optional CLI in the project that runs these commands:
+
+```bash
+npm install --save-dev @sqlbraid/cli
+```
 
 ```bash
 sqlbraid inspect query --file src/query.ts --line 8 --column 20 --json

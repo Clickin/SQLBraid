@@ -6,7 +6,7 @@ description: TypeScript와 TSX 변환을 가로채지 않고 Vite 8에서 SQLBra
 애플리케이션이 사용하는 SQLBraid dialect 패키지와 Vite plugin을 함께 설치하세요.
 
 ```bash
-npm install @sqlbraid/vite @sqlbraid/sqlite
+npm install sqlbraid @sqlbraid/vite
 ```
 
 일반 Vite 변환보다 먼저 실행되는 framework-neutral plugin을 추가합니다.
@@ -20,7 +20,7 @@ export default defineConfig({
 });
 ```
 
-`@sqlbraid/vite`는 Vite 8을 대상으로 하는 pre-transform입니다. `@sqlbraid/template`, `@sqlbraid/postgres`, `@sqlbraid/mysql`, `@sqlbraid/sqlite`, `@sqlbraid/oracle`, `@sqlbraid/mssql`에서 가져온 SQLBraid 태그를 인식합니다. 애플리케이션이 태그를 감싸는 경우 사용자 정의 태그를 설정할 수 있습니다.
+`@sqlbraid/vite`는 Vite 8을 대상으로 하는 pre-transform입니다. 세분화된 `@sqlbraid/*` dialect root와 이에 대응하는 `sqlbraid/*` facade subpath에서 가져온 SQLBraid 태그를 인식합니다. 애플리케이션이 태그를 감싸는 경우 사용자 정의 태그를 설정할 수 있습니다.
 
 ```ts
 sqlbraid({

@@ -3,7 +3,13 @@ title: codegen --check in CI
 description: Keep generated models synchronized without editing derived files by hand.
 ---
 
-Generated models are derived artifacts. Change the metadata snapshot or config, run codegen, then make CI the freshness authority:
+Generated models are derived artifacts. Change the metadata snapshot or config, run codegen, then make CI the freshness authority.
+
+Install the optional CLI before running these commands:
+
+```bash
+npm install --save-dev @sqlbraid/cli
+```
 
 ```bash
 sqlbraid codegen

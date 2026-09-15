@@ -5,11 +5,13 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 
 | 패키지 | 책임 |
 | --- | --- |
+| `sqlbraid` | 표준 runtime facade; driver-oriented subpath에서 dialect/query API와 adapter를 결합 |
 | `@sqlbraid/core` | 공개 계약, Standard Schema 대상 타입, 렌더링된 파라미터 메타데이터 |
 | `@sqlbraid/template` | 태그 템플릿, 지시문, 렌더링, 구조적 조각, `sql.bind` |
 | `@sqlbraid/runtime` | 실행, 매핑, 결과 종류 검사, 트랜잭션, 스트리밍, prepared shape |
 | `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg` 어댑터; `/inspector` |
 | `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2` 어댑터; `/inspector` |
+| `@sqlbraid/mariadb` | MariaDB dialect/TypePolicy; `/mariadb` 어댑터 |
 | `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite` 어댑터; `/inspector` |
 | `@sqlbraid/oracle` | Oracle dialect/TypePolicy 및 파라미터 힌트; `/oracledb` 어댑터; `/inspector` |
 | `@sqlbraid/mssql` | SQL Server dialect/TypePolicy 및 파라미터 힌트; `/tedious` 어댑터; `/inspector` |
@@ -22,9 +24,20 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/operations` | fingerprint 및 선언 manifest |
 | `@sqlbraid/cli` | codegen, inspect, diagnostics, drift, 명령줄 대체 수단 |
 | `@sqlbraid/language-server` | 표준 stdio LSP 통합 |
-| `sqlbraid` | 비스코프 CLI 편의 패키지; 데이터베이스 드라이버 없이 `sqlbraid` 실행 파일 제공 |
 
-패키지에는 스코프 런타임/도구 패키지와 비스코프 CLI 편의 패키지가 포함됩니다. `@sqlbraid/bun-sql`은 static Bun import가 없고 명시적인 `dialect`를 요구하며 SQL 의미를 자동 감지하지 않습니다. 런타임 패키지는 metadata, codegen, compiler, editor 또는 Vite 의존성을 가져오지 않습니다. Tooling은 개발/빌드 환경에만 설치하세요. Oracle, SQL Server, MariaDB, Bun driver 의존성은 portable root에서 제외됩니다. `@sqlbraid/vite`는 Vite를 peer로 유지하며 framework를 가져오지 않습니다.
+애플리케이션 코드는 `sqlbraid`를 설치한 뒤 `sqlbraid/pg`,
+`sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
+`sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
+`sqlbraid/tedious`, `sqlbraid/bun-sql` 같은 driver-oriented subpath를
+사용합니다. 루트는 database-neutral이며 암묵적인 `sql` tag를 내보내지
+않습니다. `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`,
+`sqlbraid/oracle`, `sqlbraid/mssql` dialect-only subpath는 custom adapter용이며
+세분화된 `@sqlbraid/*` 패키지도 계속 지원합니다. `@sqlbraid/bun-sql`은 static
+Bun import가 없고 명시적인 `dialect`를 요구하며 SQL 의미를 자동 감지하지
+않습니다. 런타임 패키지는 metadata, codegen, compiler, editor 또는 Vite
+의존성을 가져오지 않습니다. Tooling은 개발/빌드 환경에만 설치하세요. Oracle,
+SQL Server, MariaDB, Bun driver 의존성은 portable root에서 제외됩니다.
+`@sqlbraid/vite`는 Vite를 peer로 유지하며 framework를 가져오지 않습니다.
 
 `db.session()`은 하나의 provider lease를 고정하고 `db.tx()`는 이를
 재사용하며 선택한 adapter가 advertise하는 경우에만 savepoint/option을

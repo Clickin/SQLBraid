@@ -148,6 +148,19 @@ function configuredModules(options: OverlayOptions): readonly string[] {
     "@sqlbraid/sqlite",
     "@sqlbraid/oracle",
     "@sqlbraid/mssql",
+    "sqlbraid/pg",
+    "sqlbraid/mysql2",
+    "sqlbraid/mariadb",
+    "sqlbraid/node-sqlite",
+    "sqlbraid/sqlite-wasm",
+    "sqlbraid/d1",
+    "sqlbraid/oracledb",
+    "sqlbraid/tedious",
+    "sqlbraid/postgres",
+    "sqlbraid/mysql",
+    "sqlbraid/sqlite",
+    "sqlbraid/oracle",
+    "sqlbraid/mssql",
   ]);
 }
 
