@@ -162,7 +162,7 @@ jobs:
             --public-root /SQLBraid
 
       - name: Preserve staged Pages artifact
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy }}
         uses: actions/upload-artifact@v7.0.1
         with:
           name: docs-pages-deploy
@@ -171,11 +171,11 @@ jobs:
           retention-days: 1
 
       - name: Preserve generated docs history
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy }}
         run: tar --exclude='./.git' -czf "$RUNNER_TEMP/docs-history.tar.gz" -C "$RUNNER_TEMP/sqlbraid-docs-history" .
 
       - name: Upload generated docs history
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy }}
         uses: actions/upload-artifact@v7.0.1
         with:
           name: docs-history
@@ -184,7 +184,7 @@ jobs:
           retention-days: 1
 
   publish-history:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy }}
     needs: build
     permissions:
       contents: write
@@ -226,7 +226,7 @@ jobs:
           fi
 
   deploy:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy }}
     needs: [build, publish-history]
     permissions:
       contents: read

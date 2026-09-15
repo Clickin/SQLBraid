@@ -63,13 +63,16 @@ test("adapter-owned unsupported paths expose UnsupportedFeatureError and a code"
       && error.feature === "statement.bind-hint"
       && error.code === "BRAID_BIND_HINT_UNSUPPORTED",
   );
-  await assert.rejects(
-    () => mysql.query(createRenderedStatement({
-      segments: ["SELECT ", ""],
-      parameters: [{ value: () => undefined }],
-      dialectId: "mysql",
-      resultKind: "rows",
-    })),
+  assert.throws(
+    () => mysql.statementBinding.describeBulk!({
+      statement: createRenderedStatement({
+        segments: ["INSERT INTO example VALUES (", ")"],
+        parameters: [{ value: 1 }],
+        dialectId: "mysql",
+        resultKind: "command",
+      }),
+      parameterSets: [[() => undefined]],
+    }, { dialectId: "mysql", requestedReuse: "auto", transactionScoped: false }),
     (error: unknown) => error instanceof AdapterError && error.code === "BRAID_BIND_VALUE_UNSUPPORTED",
   );
 

@@ -1020,7 +1020,10 @@ function prefixInsertionOffset(sourceFile: ts.SourceFile): number {
   }
   const last = sourceFile.statements[index - 1];
   let offset = last.end;
-  while (offset < sourceFile.text.length && (sourceFile.text[offset] === "\r" || sourceFile.text[offset] === "\n")) offset += 1;
+  for (const comment of ts.getTrailingCommentRanges(sourceFile.text, offset) ?? []) {
+    offset = comment.end;
+  }
+  while (offset < sourceFile.text.length && /\s/u.test(sourceFile.text[offset]!)) offset += 1;
   return offset;
 }
 
@@ -1046,8 +1049,9 @@ function lowerSourcePreserving(
     });
   }
   if (edits.length && plan.prefix.length) {
-    const generatedText = `${plan.prefix.map((statement) => printer.printNode(ts.EmitHint.Unspecified, statement, sourceFile)).join("\n")}\n`;
     const offset = prefixInsertionOffset(sourceFile);
+    const separator = offset > 0 && !/[\r\n]/u.test(sourceFile.text[offset - 1]!) ? "\n" : "";
+    const generatedText = `${separator}${plan.prefix.map((statement) => printer.printNode(ts.EmitHint.Unspecified, statement, sourceFile)).join("\n")}\n`;
     edits.push({ sourceStart: offset, sourceEnd: offset, generatedText });
   }
   if (!edits.length) return { code: sourceFile.text, diagnostics: plan.diagnostics, map: null };

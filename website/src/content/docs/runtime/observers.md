@@ -35,7 +35,7 @@ const {
 
 Events also retain derived readonly values, hints, interpolation map, declared/actual result kinds, operation IDs, duration (`durationMs`), row/command metadata, mapping completion, stream status, and transaction/savepoint phases. For calls, `query:result` reports `actualKind: "call"`, `resultSetCount`, total `rowCount`, `outputKeys`, and `hasReturnValue`; it does not log output values, cursor portal names, ResultSet objects, or protocol carrier rows by default. `event.sql` is a derived parameterized view and may be absent for a native-value-template transport.
 
-Observers run sequentially in registration order. They can inspect events or throw to reject an operation; they cannot mutate SQL, binds, or results and do not implement retry, routing, or rewriting. A failure before DB execution prevents execution. A failure after execution cannot undo a root side effect; if it propagates inside `db.tx`, normal rollback applies. If an error observer also fails, an `AggregateError` preserves both failures.
+Observers run sequentially in registration order. They can inspect events or throw to reject an operation; mutating SQL, binds, or results violates the observer contract. The API does not provide retry, routing, or rewriting. A failure before DB execution prevents execution. A failure after execution cannot undo a root side effect; if it propagates inside `db.tx`, normal rollback applies. If an error observer also fails, an `AggregateError` preserves both failures.
 
 Event containers are structurally readonly. SQLBraid does not deep-copy arbitrary
 application or driver values such as `Uint8Array`; observers must not mutate a

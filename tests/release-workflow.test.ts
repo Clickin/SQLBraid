@@ -174,14 +174,14 @@ test("preparation enforces an exact version tag for staging", () => {
   assert.match(determine.run ?? "", /tag_version.*manifest_version/u);
 });
 
-test("documentation pushes publish automatically while manual dispatch remains opt-in", () => {
+test("documentation pushes certify without deployment and manual deployment remains opt-in", () => {
   assert.deepEqual(docs.permissions, { contents: "read" });
   assert.equal(docs.on.push?.paths, undefined);
   for (const ref of ["refs/heads/main", "refs/tags/v0.1.0-rc.0"]) {
     const { results } = graph(docs, "push", "certify", ref);
     assert.equal(results.build.result, "success");
-    assert.equal(results["publish-history"].result, "success");
-    assert.equal(results.deploy.result, "success");
+    assert.equal(results["publish-history"].result, "skipped");
+    assert.equal(results.deploy.result, "skipped");
   }
   const manual = graph(docs, "workflow_dispatch", "certify", "refs/heads/main").results;
   assert.equal(manual.build.result, "success");

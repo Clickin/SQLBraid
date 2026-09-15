@@ -42,7 +42,7 @@ protocol carrier 행은 기본적으로 기록하지 않습니다.
 `event.sql`은 파생된 parameterized view이며 native-value-template 전송에서는
 없을 수 있습니다.
 
-Observer는 등록 순서대로 순차 실행됩니다. 이벤트를 검사하거나 throw하여 작업을 거부할 수 있지만 SQL, 바인드, 결과를 변경하거나 retry, routing, rewriting을 구현할 수는 없습니다. DB 실행 전에 실패하면 실행이 방지됩니다. 실행 후 실패는 루트 부작용을 되돌릴 수 없지만 `db.tx` 내부로 전파되면 일반 rollback이 적용됩니다. 오류 observer도 실패하면 `AggregateError`가 두 실패를 모두 보존합니다.
+Observer는 등록 순서대로 순차 실행됩니다. 이벤트를 검사하거나 throw하여 작업을 거부할 수 있지만 SQL, 바인드, 결과를 변경하면 observer 계약을 위반합니다. API는 retry, routing, rewriting 기능을 제공하지 않습니다. DB 실행 전에 실패하면 실행이 방지됩니다. 실행 후 실패는 루트 부작용을 되돌릴 수 없지만 `db.tx` 내부로 전파되면 일반 rollback이 적용됩니다. 오류 observer도 실패하면 `AggregateError`가 두 실패를 모두 보존합니다.
 
 이벤트 컨테이너는 구조적으로만 읽기 전용입니다. SQLBraid는 `Uint8Array` 같은
 임의의 application/driver 값을 deep-copy하지 않으므로 observer는 참조된 값을

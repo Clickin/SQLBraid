@@ -49,7 +49,7 @@ async function runExample(code: string) {
     async query(statement) {
       events.push({ type: "query", value: statement.resultKind });
       return statement.resultKind === "rows"
-        ? { kind: "rows", rows: [{ id: "acct-1", active: true }] }
+        ? { kind: "rows", rows: [] }
         : { kind: "command", rows: [], command: { affectedRows: 1 } };
     },
     async *stream() {

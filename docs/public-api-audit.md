@@ -25,7 +25,12 @@ The current tree is newer and requires fresh evidence before labels change.
 `TransactionIsolation`, `RoutineCallResult`, `RoutineContract`,
 `RoutineParameterDirection`, `RoutineProcedure`, `RoutineSchema`,
 `RoutineResultFromContract`, `RoutineResultSet`, `RoutineResultSetTuple`,
-`StandardSchemaV1`, `UnsupportedFeatureError`.
+`StandardSchemaV1`, `UnsupportedFeatureError`, `AdapterError`,
+`ResultExactnessError`, `RoutineMappingError`.
+
+`PUBLIC_ERROR_DEFINITIONS` and its `PublicErrorDefinition` /
+`PublicErrorCategory` types enumerate the deliberately public error reference.
+They do not promote every internal `BRAID_` message to a stable contract.
 
 `Database` exposes `execute`, `all`, `one`, `maybeOne`, `call`, `batch`, `bulk`,
 `prepare`, `stream`, `session`, and `tx`. All execution operations take trailing

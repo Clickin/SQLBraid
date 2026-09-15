@@ -121,6 +121,12 @@ test("runtime lowering emits executable JavaScript for JS and preserves TS/JSX s
   ].join("\n");
   const unguarded = 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT 1`;';
   const directory = mkdtempSync(join(tmpdir(), "sqlbraid-compiler-output-"));
+  function assertParses(fileName: string, code: string) {
+    const path = join(directory, fileName);
+    writeFileSync(path, code);
+    const program = ts.createProgram([path], { allowJs: true, jsx: ts.JsxEmit.Preserve, noEmit: true });
+    assert.deepEqual(program.getSyntacticDiagnostics(), []);
+  }
   try {
     const javascript = transformSource(guarded, "probe.js");
     assert.deepEqual(javascript.diagnostics, []);
@@ -130,7 +136,7 @@ test("runtime lowering emits executable JavaScript for JS and preserves TS/JSX s
 
     const jsx = transformSource(`${guarded}\nexport const view = <section data-query={query} />;`, "probe.jsx");
     assert.deepEqual(jsx.diagnostics, []);
-    assert.equal(ts.createSourceFile("probe.jsx", jsx.code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX).parseDiagnostics.length, 0);
+    assertParses("probe.jsx", jsx.code);
 
     for (const extension of ["js", "jsx", "ts", "tsx"]) {
       const source = extension.endsWith("x")
@@ -144,7 +150,7 @@ test("runtime lowering emits executable JavaScript for JS and preserves TS/JSX s
     for (const [fileName, source] of [["probe.ts", guarded], ["probe.tsx", `${guarded}\nexport const view = <section data-query={query} />;`], ["plain.ts", unguarded]] as const) {
       const result = transformSource(source, fileName);
       assert.deepEqual(result.diagnostics, []);
-      assert.equal(ts.createSourceFile(fileName, result.code, ts.ScriptTarget.Latest, true).parseDiagnostics.length, 0);
+      assertParses(fileName, result.code);
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -158,6 +164,9 @@ test("runtime helper insertion keeps hashbangs and directive prologues first", a
       ["#!/usr/bin/env node"],
       ["#!/usr/bin/env node", '"use strict";'],
       ["#!/usr/bin/env node", '"use client";'],
+      ["#!/usr/bin/env node", '"use client" // directive comment'],
+      ['"use strict"   '],
+      ['"use client" /* directive comment */'],
       ['"use strict";'],
       [],
     ].entries()) {

@@ -453,15 +453,18 @@ test('MySQL and MariaDB routine dictionaries accept prototype-named identifiers'
     async rollback() {},
   }).inspect();
   const mariaResponses = [
-    [[{ version: '11.8.0-MariaDB', product: 'MariaDB', sqlMode: '', charset: 'utf8mb4', collation: 'utf8mb4_general_ci' }], []],
-    [[{ schema_name: 'app' }], []],
-    [[], []],
-    [[], []],
-    [routineRows, []],
+    [{ version: '11.8.0-MariaDB', product: 'MariaDB', sqlMode: '', charset: 'utf8mb4', collation: 'utf8mb4_general_ci' }],
+    [{ schema_name: 'app' }],
+    [],
+    [],
+    routineRows,
   ] as const;
   let mariaIndex = 0;
   const maria = await createMariaDbInspector({
     async execute() { return mariaResponses[mariaIndex++]; },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
   }).inspect();
   for (const snapshot of [mysql, maria]) {
     assert.equal(snapshot.routines.constructor?.length, 1);

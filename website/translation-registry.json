@@ -241,7 +241,7 @@
       "source": "website/src/content/docs/runtime/prepared.md",
       "translation": "website/src/content/docs/ko/runtime/prepared.md",
       "translationOf": "website/src/content/docs/runtime/prepared.md",
-      "sourceDigest": "4d43d93aae451dfca969cec064d932250af17af2314b0eb63601e0b61b23f64e"
+      "sourceDigest": "969845df9466e60bdd85646519f7e6a49d98ea5410b50d163a73651d3a0c8733"
     },
     {
       "source": "website/src/content/docs/runtime/streaming.md",
@@ -259,7 +259,7 @@
       "source": "website/src/content/docs/runtime/transactions.md",
       "translation": "website/src/content/docs/ko/runtime/transactions.md",
       "translationOf": "website/src/content/docs/runtime/transactions.md",
-      "sourceDigest": "26a780b162a2c3c88c53e13caf3e7e6853a38a72e3cd1a39a4db2a070ac2ccf0"
+      "sourceDigest": "0154c80bf8b081f282db10bc353c758affe9e0af54ea715f771ab7aa3888785c"
     }
   ]
 }
