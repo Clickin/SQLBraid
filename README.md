@@ -144,7 +144,12 @@ Transaction-control uncertainty poisons a direct resource or discards a pooled l
 
 ### Prepared queries
 
-`prepare` accepts a zero-input factory or an input factory. The factory is evaluated per execution, renders once, and is locked to the first logical shape: result kind, canonical segments, ordered hint/direction/output metadata, and dialect. Values may change; shape changes fail before driver I/O with `BRAID_PREPARED_SHAPE`.
+`prepare` accepts an input factory (required input by default, or explicitly
+`{ input: "required" }`) or a zero-input factory that explicitly declares
+`{ input: "none" }`. The factory is evaluated per execution, renders once, and
+is locked to the first logical shape: result kind, canonical segments, ordered
+hint/direction/output metadata, and dialect. Values may change; shape changes
+fail before driver I/O with `BRAID_PREPARED_SHAPE`.
 
 ```ts
 const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`
@@ -158,7 +163,13 @@ await byId.maybeOne("u_1");
 for await (const row of byId.stream("u_1", { signal })) console.log(row);
 ```
 
-A zero-input prepared query takes options as its only argument (`prepared.all({ signal })`). Row queries expose `execute`, `all`, `one`, `maybeOne`, and `stream`; command/unknown queries expose `execute`; call queries expose `call`. Prepared means a stable SQLBraid application shape, not a universal native/server prepared cache. The adapter reports effective reuse.
+A zero-input prepared query is declared with
+`db.prepare("users", () => query, { input: "none" })` and takes options as its
+only execution argument (`prepared.all({ signal })`). Row queries expose
+`execute`, `all`, `one`, `maybeOne`, and `stream`; command/unknown queries
+expose `execute`; call queries expose `call`. Prepared means a stable SQLBraid
+application shape, not a universal native/server prepared cache. The adapter
+reports effective reuse.
 
 ## Observers and diagnostics
 

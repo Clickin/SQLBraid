@@ -6,12 +6,13 @@ first-party database adapters.
 
 ## Reporting a vulnerability
 
-Please do not publish exploitable details in a public issue. Use the private
-vulnerability-reporting mechanism enabled for this repository in GitHub. If
-that mechanism is not available, do not disclose exploit details publicly;
-contact a maintainer through a non-public channel already established for this
-project. The maintainers will document the concrete private reporting path
-here when the repository configuration is confirmed.
+Please do not publish exploitable details in a public issue. GitHub's private
+vulnerability-reporting feature is not enabled for this repository at this
+revision, so this policy does not claim a private URL that does not exist.
+Maintainers must enable a private reporting path and update this section
+before release. Until then, use only a non-public maintainer channel already
+established for this project; do not disclose exploit details publicly if no
+such channel is available.
 
 There is no guaranteed response time, service-level agreement, or bounty
 program.
