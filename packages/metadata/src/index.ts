@@ -1,6 +1,28 @@
 import { createHash } from "node:crypto";
 
 export const CURRENT_FORMAT_VERSION = 1 as const;
+export const QUALIFIED_IDENTITY_ENCODING = "escaped-qualified-v1" as const;
+
+function escapeQualifiedPart(value: string): string {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll(".", "\\.")
+    .replaceAll(":", "\\:")
+    .replaceAll("#", "\\#");
+}
+
+/**
+ * Builds the canonical identity used by metadata producers for a
+ * namespace-qualified database object. Unescaped dots remain stable for
+ * ordinary names; delimiters inside either segment are escaped.
+ */
+export function qualifiedIdentity(namespace: string, name: string): string {
+  return `${escapeQualifiedPart(namespace)}.${escapeQualifiedPart(name)}`;
+}
+
+export function qualifiedIdentityWithSuffix(namespace: string, name: string, suffix: string): string {
+  return `${qualifiedIdentity(namespace, name)}:${escapeQualifiedPart(suffix)}`;
+}
 
 export interface ServerEvidence {
   readonly version?: string;
@@ -15,6 +37,8 @@ export interface SnapshotMetadata {
   readonly source?: string;
   readonly introspectionScope?: string;
   readonly completeness?: "complete" | "partial" | "unknown";
+  /** Present on snapshots emitted by current inspectors; absent means legacy dot identities. */
+  readonly identityEncoding?: typeof QUALIFIED_IDENTITY_ENCODING;
   readonly [key: string]: unknown;
 }
 
@@ -245,7 +269,9 @@ function validateRoutine(value: unknown, path: string, diagnostics: SnapshotDiag
 }
 
 function sortedRecord<T>(record: Readonly<Record<string, T>>): Record<string, T> {
-  return Object.fromEntries(Object.keys(record).sort(compareKeys).map((key) => [key, record[key]]));
+  const output: Record<string, T> = Object.create(null);
+  for (const key of Object.keys(record).sort(compareKeys)) output[key] = record[key]!;
+  return output;
 }
 
 function normalizeSnapshot(snapshot: MetadataSnapshot, includeVolatile: boolean): MetadataSnapshot {
@@ -260,7 +286,11 @@ function normalizeSnapshot(snapshot: MetadataSnapshot, includeVolatile: boolean)
   }
   const routines: Record<string, readonly RoutineSnapshot[]> = Object.create(null);
   for (const [key, values] of Object.entries(snapshot.routines).sort(([left], [right]) => compareKeys(left, right))) routines[key] = [...values].sort((left, right) => compareKeys(left.identity, right.identity));
-  const metadata = includeVolatile ? snapshot.metadata : Object.fromEntries(Object.entries(snapshot.metadata).filter(([key]) => !["generatedAt", "observedAt", "capturedAt"].includes(key)).sort(([left], [right]) => compareKeys(left, right)));
+  const metadata: Record<string, unknown> = Object.create(null);
+  for (const [key, value] of (includeVolatile
+    ? Object.entries(snapshot.metadata)
+    : Object.entries(snapshot.metadata).filter(([key]) => !["generatedAt", "observedAt", "capturedAt"].includes(key))
+  ).sort(([left], [right]) => compareKeys(left, right))) metadata[key] = value;
   return { ...snapshot, metadata, namespaces: sortedRecord(snapshot.namespaces), types: sortedRecord(snapshot.types), relations, routines };
 }
 
@@ -284,6 +314,9 @@ export function validateSnapshot(snapshot: unknown): asserts snapshot is Metadat
   if (typeof snapshot.dialect !== "string" || !snapshot.dialect) add(diagnostics, "SNAPSHOT_DIALECT", "Snapshot dialect must be a non-empty string.", "dialect");
   if (typeof snapshot.dialectVersion !== "string" || !snapshot.dialectVersion) add(diagnostics, "SNAPSHOT_DIALECT_VERSION", "Snapshot dialectVersion must be a non-empty string.", "dialectVersion");
   for (const field of ["server", "namespaces", "types", "relations", "routines", "metadata"] as const) if (!isRecord(snapshot[field])) add(diagnostics, "SNAPSHOT_FIELD", `Snapshot field ${field} must be an object.`, field);
+  if (isRecord(snapshot.metadata) && snapshot.metadata.identityEncoding !== undefined && snapshot.metadata.identityEncoding !== QUALIFIED_IDENTITY_ENCODING) {
+    add(diagnostics, "SNAPSHOT_IDENTITY_ENCODING", `Unsupported qualified identity encoding: ${String(snapshot.metadata.identityEncoding)}.`, "metadata.identityEncoding");
+  }
   if (isRecord(snapshot.namespaces)) for (const [key, value] of Object.entries(snapshot.namespaces)) if (!isRecord(value) || typeof value.name !== "string" || !value.name) add(diagnostics, "SNAPSHOT_NAMESPACE", `Invalid namespace entry: ${key}.`, `namespaces.${key}`);
   const identities = new Set<string>();
   if (isRecord(snapshot.types)) for (const [key, value] of Object.entries(snapshot.types)) {
@@ -301,6 +334,20 @@ export function validateSnapshot(snapshot: unknown): asserts snapshot is Metadat
   if (isRecord(snapshot.relations)) for (const [key, value] of Object.entries(snapshot.relations)) {
     validateRelation(value, `relations.${key}`, diagnostics);
     if (isRecord(value) && typeof value.identity === "string") {
+      if (
+        isRecord(snapshot.metadata)
+        && snapshot.metadata.identityEncoding === QUALIFIED_IDENTITY_ENCODING
+        && typeof value.namespace === "string"
+        && typeof value.name === "string"
+        && value.identity !== qualifiedIdentity(value.namespace, value.name)
+      ) {
+        add(
+          diagnostics,
+          "SNAPSHOT_RELATION_IDENTITY",
+          `Relation identity does not match its namespace and name: ${value.identity}.`,
+          `relations.${key}.identity`,
+        );
+      }
       if (relationIdentities.has(value.identity)) add(diagnostics, "SNAPSHOT_DUPLICATE_IDENTITY", `Duplicate relation identity: ${value.identity}.`, `relations.${key}.identity`);
       relationIdentities.add(value.identity);
     }

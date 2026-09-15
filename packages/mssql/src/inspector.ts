@@ -1,3 +1,4 @@
+import { qualifiedIdentity, QUALIFIED_IDENTITY_ENCODING } from "@sqlbraid/metadata";
 import type { MetadataInspector, MetadataSnapshot, RelationSnapshot, RoutineArgument, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
 import type { TediousConnectionLike } from "./tedious.js";
 import { createTediousExecutor } from "./tedious.js";
@@ -35,7 +36,7 @@ async function rows(connection: TediousConnectionLike, textQuery: string): Promi
 
 function typeSnapshot(types: Record<string, TypeSnapshot>, name: string | undefined, schema = "sys"): void {
   if (!name) return;
-  const identity = `${schema}.${name}`;
+  const identity = qualifiedIdentity(schema, name);
   if (!types[identity]) types[identity] = { identity, name, kind: "scalar" };
 }
 
@@ -43,7 +44,7 @@ function typeReference(row: CatalogRow | undefined): { readonly name: string; re
   const name = text(row, "data_type") ?? "unknown";
   const schema = text(row, "type_schema_name") ?? "sys";
   const userDefined = row?.is_user_defined === true || row?.is_user_defined === 1 || text(row, "is_user_defined") === "1";
-  return { name, identity: userDefined ? `${schema}.${name}` : name };
+  return { name, identity: userDefined ? qualifiedIdentity(schema, name) : name };
 }
 
 function nullable(row: CatalogRow): boolean {
@@ -68,10 +69,11 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
         WHERE name NOT IN (N'sys', N'INFORMATION_SCHEMA')
         ORDER BY name
       `);
-      const namespaces = Object.fromEntries(schemas.flatMap((entry) => {
+      const namespaces: Record<string, { readonly name: string; readonly kind: "schema" }> = Object.create(null);
+      for (const entry of schemas) {
         const name = text(entry, "schema_name");
-        return name ? [[name, { name, kind: "schema" as const }]] : [];
-      }));
+        if (name) namespaces[name] = { name, kind: "schema" };
+      }
       const relationRows = await rows(connection, `
         SELECT
           s.name AS schema_name,
@@ -113,13 +115,13 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
           AND s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
         ORDER BY s.name, o.name, c.column_id
       `);
-      const relations: Record<string, RelationSnapshot> = {};
-      const types: Record<string, TypeSnapshot> = {};
+      const relations: Record<string, RelationSnapshot> = Object.create(null);
+      const types: Record<string, TypeSnapshot> = Object.create(null);
       for (const relation of relationRows) {
         const schema = text(relation, "schema_name");
         const name = text(relation, "relation_name");
         if (!schema || !name) continue;
-        const identity = `${schema}.${name}`;
+        const identity = qualifiedIdentity(schema, name);
         const columns = columnRows
           .filter((column) => text(column, "schema_name") === schema && text(column, "relation_name") === name)
           .map((column) => {
@@ -136,7 +138,7 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
               type: type.identity,
               nullable: nullable(column),
               ...(column.is_nullable !== undefined ? { nullabilityEvidence: String(column.is_nullable) } : {}),
-              ...(text(column, "default_expression") ? { defaultExpression: text(column, "default_expression") } : {}),
+              ...(text(column, "default_expression") === undefined ? {} : { defaultExpression: text(column, "default_expression") }),
               ...(column.is_identity === true || text(column, "is_identity") === "1" ? { identity: true } : {}),
               ...(computed ? { generated: true, insertable: false, updatable: false } : {}),
               ...(text(column, "computed_definition") ? { generationExpression: text(column, "computed_definition") } : {}),
@@ -202,12 +204,12 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
           AND s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
         ORDER BY s.name, o.name, c.column_id
       `);
-      const routines: Record<string, readonly RoutineSnapshot[]> = {};
+      const routines: Record<string, readonly RoutineSnapshot[]> = Object.create(null);
       for (const entry of routineRows) {
         const schema = text(entry, "schema_name");
         const name = text(entry, "routine_name");
         if (!schema || !name) continue;
-        const identity = `${schema}.${name}`;
+        const identity = qualifiedIdentity(schema, name);
         const kindCode = text(entry, "routine_type");
         const kind = kindCode === "P" ? "procedure" : "function";
         const argumentRows = routineRows.filter((candidate) =>
@@ -266,7 +268,7 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
               ? { kind: "scalar", type: returnType?.identity ?? "unknown", nullable: true }
               : tableColumns.length > 0 ? { kind: "table", columns: tableColumns } : { kind: "unknown" },
         };
-        const current = routines[name] ?? [];
+        const current = Object.hasOwn(routines, name) ? routines[name] : [];
         if (!current.some((candidate) => candidate.identity === identity)) routines[name] = [...current, routine];
       }
       const major = /^\d+/u.exec(version)?.[0];
@@ -293,6 +295,7 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
           source: "SQL Server sys catalogs",
           introspectionScope: "non-system schemas",
           completeness: "partial",
+          identityEncoding: QUALIFIED_IDENTITY_ENCODING,
         },
       };
     },

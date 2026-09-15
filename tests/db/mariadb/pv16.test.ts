@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import mariadb, { type Pool } from "mariadb";
 import { inject, test } from "vitest";
+import { generateModels } from "@sqlbraid/codegen";
 import { createMariaDbDatabase, createMariaDbPoolDatabase } from "@sqlbraid/mariadb/mariadb";
-import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
+import { MARIADB_LOSSLESS_TEXT, sql, typePolicy as mariadbTypePolicy } from "@sqlbraid/mariadb";
+import { createMariaDbInspector } from "@sqlbraid/mariadb/inspector";
+import { assertGeneratedProperty } from "../codegen.js";
 import { runStreamingConformance } from "../../streaming-conformance.js";
 
 async function endPool(pool: Pick<Pool, "end">): Promise<void> {
@@ -99,6 +102,36 @@ test("MariaDB Connector returning DML preserves rows and command metadata", asyn
     assert.deepEqual(command.rows, []);
   } finally {
     await connection.query("DROP TABLE IF EXISTS braid_pv16_mariadb_returning").catch(() => undefined);
+    await connection.end();
+  }
+});
+
+test("MariaDB metadata keeps empty defaults independent of MySQL", async () => {
+  const connection = await createTestConnection();
+  try {
+    await connection.query("DROP TABLE IF EXISTS braid_pv18_mariadb_defaults");
+    await connection.query(`
+      CREATE TABLE braid_pv18_mariadb_defaults (
+        id INT NOT NULL PRIMARY KEY,
+        empty_text VARCHAR(20) NOT NULL DEFAULT '',
+        zero_text VARCHAR(20) NOT NULL DEFAULT '0',
+        required_text VARCHAR(20) NOT NULL,
+        nullable_text VARCHAR(20) NULL DEFAULT NULL
+      )
+    `);
+    const snapshot = await createMariaDbInspector(connection).inspect();
+    const relation = Object.values(snapshot.relations).find((entry) => entry.name === "braid_pv18_mariadb_defaults");
+    assert.ok(relation);
+    const columns = new Map(relation.columns.map((column) => [column.name, column]));
+    assert.equal(columns.get("empty_text")?.defaultExpression, "");
+    assert.equal(columns.get("zero_text")?.defaultExpression, "0");
+    assert.equal(columns.get("required_text")?.defaultExpression, undefined);
+    assert.equal(columns.get("nullable_text")?.defaultExpression, undefined);
+    const result = generateModels(snapshot, { typePolicy: mariadbTypePolicy });
+    assertGeneratedProperty(result.source, "BraidPv18MariadbDefaultsInsert", "empty_text", "string", true);
+    assertGeneratedProperty(result.source, "BraidPv18MariadbDefaultsInsert", "required_text", "string", false);
+  } finally {
+    await connection.query("DROP TABLE IF EXISTS braid_pv18_mariadb_defaults").catch(() => undefined);
     await connection.end();
   }
 });
