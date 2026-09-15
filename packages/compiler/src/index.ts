@@ -571,8 +571,10 @@ function chooseStatement(whens: readonly { readonly condition: number; readonly 
 
 function captureSetup(factory: ts.NodeFactory, valuesName: string, evaluatedName: string, readName: string): readonly ts.Statement[] {
   const evaluated = factory.createVariableStatement(undefined, factory.createVariableDeclarationList([factory.createVariableDeclaration(factory.createIdentifier(evaluatedName), undefined, undefined, factory.createNewExpression(factory.createPropertyAccessExpression(factory.createIdentifier("globalThis"), "Set"), undefined, []))], ts.NodeFlags.Const));
-  const index = factory.createParameterDeclaration(undefined, undefined, factory.createIdentifier("index"), undefined, factory.createKeywordTypeNode(ts.SyntaxKind.NumberKeyword), undefined);
-  const thunk = factory.createParameterDeclaration(undefined, undefined, factory.createIdentifier("thunk"), undefined, factory.createFunctionTypeNode(undefined, [], factory.createKeywordTypeNode(ts.SyntaxKind.UnknownKeyword)), undefined);
+  // Runtime lowering also feeds Vite's JavaScript loader. Keep generated helpers
+  // executable JavaScript; TypeScript checking uses the separate checker overlay.
+  const index = factory.createParameterDeclaration(undefined, undefined, factory.createIdentifier("index"), undefined, undefined, undefined);
+  const thunk = factory.createParameterDeclaration(undefined, undefined, factory.createIdentifier("thunk"), undefined, undefined, undefined);
   const seen = factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier(evaluatedName), "has"), undefined, [factory.createIdentifier("index")]);
   const store = factory.createExpressionStatement(factory.createBinaryExpression(factory.createElementAccessExpression(factory.createIdentifier(valuesName), factory.createIdentifier("index")), factory.createToken(ts.SyntaxKind.EqualsToken), factory.createCallExpression(factory.createIdentifier("thunk"), undefined, [])));
   const mark = factory.createExpressionStatement(factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier(evaluatedName), "add"), undefined, [factory.createIdentifier("index")]));
@@ -1011,7 +1013,11 @@ function sourceMapFor(
 
 function prefixInsertionOffset(sourceFile: ts.SourceFile): number {
   const index = directivePrologueEnd(sourceFile.statements);
-  if (index === 0) return 0;
+  if (index === 0) {
+    if (!sourceFile.text.startsWith("#!")) return 0;
+    const lineBreak = sourceFile.text.search(/\r\n|\r|\n/u);
+    return lineBreak < 0 ? sourceFile.text.length : lineBreak + (sourceFile.text[lineBreak] === "\r" && sourceFile.text[lineBreak + 1] === "\n" ? 2 : 1);
+  }
   const last = sourceFile.statements[index - 1];
   let offset = last.end;
   while (offset < sourceFile.text.length && (sourceFile.text[offset] === "\r" || sourceFile.text[offset] === "\n")) offset += 1;

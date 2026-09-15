@@ -264,6 +264,11 @@ async function main() {
     assert.match(transformedTsx, /재무 거래/u);
     assert.match(transformedTsx, /capture/u);
     assertUnicodeSourceMap(await sourceMapFor(transformedTsx, transformBase, "FinanceTable.tsx", dev), "FinanceTable.tsx");
+    const transformedJs = await fetchTransformed(transformBase, "/src/query-preview.js", dev);
+    assert.match(transformedJs, /재무 거래/u);
+    assert.match(transformedJs, /capture/u);
+    assert.doesNotMatch(transformedJs, /\b(?:index|thunk)\s*:\s*/u);
+    assertUnicodeSourceMap(await sourceMapFor(transformedJs, transformBase, "query-preview.js", dev), "query-preview.js");
 
     const originalTsxPath = join(app, "src", "FinanceTable.tsx");
     const originalTsx = await readFile(originalTsxPath, "utf8");
@@ -288,6 +293,7 @@ async function main() {
     assert.match(productionHtml, /김하늘/u);
     assert.match(productionHtml, /9007199254740993/u);
     assert.match(productionHtml, /정산 완료/u);
+    assert.match(productionHtml, /data-js-query-preview/u);
     console.info(JSON.stringify({
       gate: "tanstack-start-finance",
       node: process.versions.node,
