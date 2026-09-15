@@ -232,19 +232,32 @@ async function pack(packages, order, sha) {
   return manifest;
 }
 
+function assertManifestIdentity(manifest) {
+  if (manifest.version !== version || !/^[a-f\d]{40}$/u.test(manifest.commit ?? "")
+    || !Array.isArray(manifest.packages) || manifest.packages.length === 0) throw new Error("Invalid release-manifest.json.");
+  const names = new Set();
+  for (const entry of manifest.packages) {
+    if (!entry || typeof entry.name !== "string" || !/^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/u.test(entry.name)
+      || names.has(entry.name) || entry.version !== version
+      || typeof entry.sha256 !== "string" || !/^[a-f\d]{64}$/u.test(entry.sha256)
+      || typeof entry.integrity !== "string" || !/^sha512-[A-Za-z0-9+/]{86}==$/u.test(entry.integrity)) {
+      throw new Error("Invalid release manifest package identity, version, or hashes.");
+    }
+    names.add(entry.name);
+  }
+}
+
 async function readReleaseManifest(directory = artifactDir) {
   const manifest = await json(join(directory, "release-manifest.json"));
-  if (manifest.version !== version || !Array.isArray(manifest.packages) || manifest.packages.length === 0) throw new Error("Invalid release-manifest.json.");
+  assertManifestIdentity(manifest);
   if (process.env.GITHUB_RUN_ID && manifest.runId !== process.env.GITHUB_RUN_ID) throw new Error(`Validated release artifacts belong to run ${manifest.runId ?? "unknown"}, not ${process.env.GITHUB_RUN_ID}.`);
   if (process.env.GITHUB_RUN_ATTEMPT && manifest.runAttempt !== process.env.GITHUB_RUN_ATTEMPT) throw new Error(`Validated release artifacts belong to attempt ${manifest.runAttempt ?? "unknown"}, not ${process.env.GITHUB_RUN_ATTEMPT}.`);
-  const names = new Set();
   const files = new Set();
   const packageNames = new Set(manifest.packages.map(({ name }) => name));
   for (const entry of manifest.packages) {
-    if (typeof entry.name !== "string" || entry.version !== version || typeof entry.file !== "string" || basename(entry.file) !== entry.file || names.has(entry.name) || files.has(entry.file)) {
+    if (typeof entry.file !== "string" || basename(entry.file) !== entry.file || files.has(entry.file)) {
       throw new Error("Invalid release-manifest.json package entries.");
     }
-    names.add(entry.name);
     files.add(entry.file);
     const path = join(directory, entry.file);
     const actualSha = await hash(path);
@@ -517,6 +530,7 @@ function assertNoTagDowngrade(name, tag, found) {
 }
 
 async function stageCandidates(manifest, { dryRun = false, directory = artifactDir } = {}) {
+  assertManifestIdentity(manifest);
   await assertPnpmVersion();
   if (dryRun) {
     for (const entry of manifest.packages) {
@@ -590,6 +604,7 @@ function assertStagingEvidence(manifest, evidence) {
 }
 
 async function verifyPublished(manifest, evidence, { requireLatest = false } = {}) {
+  assertManifestIdentity(manifest);
   assertStagingEvidence(manifest, evidence);
   await assertPnpmVersion();
   for (const entry of manifest.packages) {

@@ -311,6 +311,24 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   assert.equal(f.calls.some(([command]) => command === "dist-tag"), false);
  });
 
+ test("offline verification rejects mixed versions, duplicate identities and malformed digests before registry reads", async () => {
+  const f = await fixture();
+  await f.run();
+  const evidence = await f.evidence();
+  const [entry] = f.manifest.packages;
+  const queries = f.calls.length;
+  for (const packages of [
+    [{ ...entry, version: "0.1.0-rc.1" }], [entry, entry],
+    [{ ...entry, name: "unsafe;command" }], [{ ...entry, sha256: "invalid" }],
+    [{ ...entry, integrity: "sha512-invalid" }], [],
+  ]) {
+    const manifest = { ...f.manifest, packages };
+    const matchingEvidence = { ...evidence, manifestSha256: createHash("sha256").update(JSON.stringify(manifest)).digest("hex") };
+    await assert.rejects(verifyPublished(manifest, matchingEvidence), /Invalid release/);
+  }
+  assert.equal(f.calls.length, queries);
+ });
+
  test("stage authorization requires explicit dispatch and exact version tag, rejecting retired modes", () => {
   const sha = "a".repeat(40);
   const authorized = { GITHUB_ACTIONS: "true", GITHUB_EVENT_NAME: "workflow_dispatch", SQLBRAID_RELEASE_MODE: "stage", GITHUB_REF: "refs/tags/v0.1.0-rc.0", GITHUB_SHA: sha, GITHUB_RUN_ID: "123", GITHUB_RUN_ATTEMPT: "1" };
