@@ -14,8 +14,18 @@ Placeholder 생성, hint 매핑, typed request 구성, 지원하지 않는 trans
 Materialization 오류의 `executionStarted`와 `executionCompleted`는 모두
 `false`입니다.
 
+내보낸 `PUBLIC_ERROR_DEFINITIONS` registry가 이 reference의 source of truth입니다.
+Runtime 소유 class에는 `DatabaseScopeError`, `DatabaseResultKindError`,
+`DatabaseResultValidationError`, `ResultExactnessError`, `RoutineMappingError`가
+있습니다. Adapter capability 실패는 `UnsupportedFeatureError`를 사용하며,
+`feature`는 capability를, `code`는 안정적인 오류 코드를 나타냅니다. Driver 오류는
+래핑하지 않고, 이미 abort된 `AbortSignal`은 원래 `reason`으로 거부합니다.
+안정적인 bind code를 노출하는 Adapter 입력/transport 실패는 `AdapterError`
+(`TypeError`) class를 사용합니다.
+
 | Code | 의미 |
 | --- | --- |
+| `BRAID_RESULT_EXACTNESS` | 결과 값을 손실 없이 표현할 수 없습니다. |
 | `BRAID_RESULT_KIND` | 선언한 result kind와 실행 후 adapter 결과가 다릅니다. |
 | `BRAID_RESULT_SETS_UNSUPPORTED` | 일반 query/stream이 추가 statement/result set을 반환했습니다. 순서 있는 routine set에는 `db.call()`을 사용하세요. |
 | `BRAID_RESULT_VALIDATION` | Query-bound 또는 execution-level Standard Schema 검증에 실패했습니다. |
@@ -39,12 +49,18 @@ Materialization 오류의 `executionStarted`와 `executionCompleted`는 모두
 | `BRAID_CALL_CURSOR_TX_REQUIRED` | PostgreSQL refcursor call에는 기존 transaction-scoped database가 필요합니다. |
 | `BRAID_CALL_CURSOR_UNSUPPORTED` | 요청한 cursor output을 application result set으로 노출할 수 없습니다. |
 | `BRAID_CALL_RETURN_UNSUPPORTED` | return/status schema를 요청했지만 driver channel이 없습니다. |
+| `BRAID_CALL_OUT_UNSUPPORTED` | 요청한 OUT 또는 INOUT parameter carrier를 노출할 수 없습니다. |
+| `BRAID_CALL_LOB_UNSUPPORTED` | Oracle output이 문서화된 LOB carrier를 제공하지 않습니다. |
 | `BRAID_RESOURCE_CLEANUP` | Driver close, drain 또는 cancel이 실패해 lease를 안전하게 재사용할 수 없습니다. |
 | `BRAID_PREPARED_NAME` | Prepared query 이름이 비어 있거나 중복됩니다. |
 | `BRAID_PREPARED_SHAPE` | Prepared query가 다른 logical shape를 렌더링했습니다. |
 | `BRAID_BIND_HINT_UNSUPPORTED` | Adapter가 명시적 bind type/facet을 적용할 수 없습니다. I/O 전에 거부합니다. |
 | `BRAID_BIND_VALUE_UNSUPPORTED` | 선택한 binding transport로 값을 표현할 수 없습니다. |
 | `BRAID_BIND_TYPE_REQUIRED` | Driver inference가 모호합니다(Oracle/SQL Server untyped null 포함). |
+| `BRAID_INTEGER_MODE_UNSUPPORTED` | Adapter가 계약에 필요한 exact integer read mode를 켤 수 없습니다. |
+| `BRAID_BULK_UNSUPPORTED` | Adapter가 필요한 native bulk capability를 제공하지 않습니다. |
+| `BRAID_DIALECT_MISMATCH` | Rendered statement가 선택한 adapter dialect와 다릅니다. |
+| `BRAID_RESULT_KIND_AMBIGUOUS` | Adapter가 빈 row result와 command result를 구분할 수 없습니다. |
 | `BRAID_EMPTY_LIST` | 명시적 empty strategy 없이 `sql.list([])`를 사용했습니다. |
 | `BRAID_EMPTY_SET` | `@braid set`에 assignment가 없습니다. |
 | `BRAID_DIALECT` | Fragment가 다른 dialect에 속합니다. |

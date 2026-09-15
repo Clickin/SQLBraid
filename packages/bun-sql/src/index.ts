@@ -3,6 +3,7 @@ import {
   createRenderedBulk,
   createRenderedStatement,
   createStatementBindingDescription,
+  AdapterError,
   normalizeExactInteger,
   ResultExactnessError,
   safeDatabaseCount,
@@ -178,16 +179,16 @@ const DML_COMMANDS = new Set(["INSERT", "UPDATE", "DELETE", "MERGE"]);
 
 function assertNativeValue(value: unknown, index: number): void {
   if (Array.isArray(value)) {
-    throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is an ambiguous Bun.SQL array value; SQLBraid parameters must be value-only.`);
+    throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is an ambiguous Bun.SQL array value; SQLBraid parameters must be value-only.`);
   }
   if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return;
   if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is an invalid Date.`);
+    if (Number.isNaN(value.getTime())) throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is an invalid Date.`);
     return;
   }
   if (value instanceof Uint8Array) return;
   if (typeof value !== "object") {
-    throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is not a Bun.SQL scalar value.`);
+    throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is not a Bun.SQL scalar value.`);
   }
   const candidate = value as {
     readonly value?: unknown;
@@ -203,17 +204,17 @@ function assertNativeValue(value: unknown, index: number): void {
     && typeof candidate.serializedValues === "string"
     && (typeof candidate.arrayType === "string" || typeof candidate.arrayType === "number");
   if (helper || arrayHelper) {
-    throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is a Bun.SQL structural helper; SQLBraid parameters must be value-only.`);
+    throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is a Bun.SQL structural helper; SQLBraid parameters must be value-only.`);
   }
   let prototype: object | null = value;
   while (prototype !== null) {
     const then = Object.getOwnPropertyDescriptor(prototype, "then");
     if (then !== undefined && typeof then.value === "function") {
-      throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is a Bun.SQL query or fragment; SQLBraid parameters must be value-only.`);
+      throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is a Bun.SQL query or fragment; SQLBraid parameters must be value-only.`);
     }
     prototype = Object.getPrototypeOf(prototype);
   }
-  throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is an ambiguous Bun.SQL object value; bind a scalar, Date, Uint8Array, or explicit text instead.`);
+  throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is an ambiguous Bun.SQL object value; bind a scalar, Date, Uint8Array, or explicit text instead.`);
 }
 
 function assertNativeValues(values: readonly unknown[]): void {
@@ -297,7 +298,9 @@ function assertStatementSupported(rendered: RenderedStatement, dialect: BunSqlDi
       : "Bun.SQL exposes no documented routine output carrier or routine result-set metadata for this dialect.");
   }
   for (const parameter of rendered.parameters) {
-    if (parameter.hint !== undefined) throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Bun.SQL does not support explicit bind type hints.");
+    if (parameter.hint !== undefined) {
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "Bun.SQL does not support explicit bind type hints.");
+    }
     if (parameter.direction !== undefined && parameter.direction !== "in") {
       unsupported(
         parameter.direction === "inout" ? "routine.inout" : "routine.out",

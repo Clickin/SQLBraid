@@ -37,6 +37,11 @@ Events also retain derived readonly values, hints, interpolation map, declared/a
 
 Observers run sequentially in registration order. They can inspect events or throw to reject an operation; they cannot mutate SQL, binds, or results and do not implement retry, routing, or rewriting. A failure before DB execution prevents execution. A failure after execution cannot undo a root side effect; if it propagates inside `db.tx`, normal rollback applies. If an error observer also fails, an `AggregateError` preserves both failures.
 
+Event containers are structurally readonly. SQLBraid does not deep-copy arbitrary
+application or driver values such as `Uint8Array`; observers must not mutate a
+referenced value. This is an API boundary, not a security sandbox or a promise
+of deep immutability.
+
 SQLBraid does not log bind values by default. Applications own redaction and retention policy.
 
 For a stream, `stream:end` is emitted only after the adapter has closed,

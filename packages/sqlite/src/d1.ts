@@ -14,6 +14,7 @@ import type {
   StatementBindingDescription,
 } from "@sqlbraid/core";
 import {
+  AdapterError,
   createBulkBindingDescription,
   createRenderedStatement,
   createStatementBindingDescription,
@@ -68,7 +69,11 @@ function assertRoutineParametersUnsupported(rendered: RenderedStatement): void {
 
 function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   if (rendered.parameters.some((parameter) => parameter.hint !== undefined)) {
-    throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Cloudflare D1 does not support explicit bind type hints.");
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      "Cloudflare D1 does not support explicit bind type hints.",
+    );
   }
 }
 
@@ -87,13 +92,13 @@ function assertD1Value(value: unknown): void {
   if (value === null || typeof value === "string") return;
   if (typeof value === "boolean") return;
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new TypeError("BRAID_BIND_VALUE_UNSUPPORTED: D1 binds require finite numbers.");
+    if (!Number.isFinite(value)) throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "D1 binds require finite numbers.");
     if (Number.isInteger(value) && !Number.isSafeInteger(value)) throw new RangeError("BRAID_INTEGER_UNSAFE: D1 cannot safely bind an integer outside JavaScript's safe range.");
     return;
   }
   if (Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isInteger(entry) && entry >= 0 && entry < 256)) return;
   if (value instanceof ArrayBuffer || isArrayBufferView(value)) return;
-  throw new TypeError("BRAID_BIND_VALUE_UNSUPPORTED: D1 binds support null, strings, booleans, finite numbers, and binary buffers.");
+  throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "D1 binds support null, strings, booleans, finite numbers, and binary buffers.");
 }
 
 function assertD1Values(values: readonly unknown[]): void {

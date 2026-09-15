@@ -364,7 +364,11 @@ function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
     parameter.hint !== undefined
     && !(rendered.resultKind === "call" && isRefcursor(parameter))
   )) {
-    throw new Error("BRAID_BIND_HINT_UNSUPPORTED: PostgreSQL adapter does not support explicit bind type hints.");
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      "PostgreSQL adapter does not support explicit bind type hints.",
+    );
   }
 }
 

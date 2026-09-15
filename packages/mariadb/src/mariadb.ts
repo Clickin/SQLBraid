@@ -304,7 +304,11 @@ function assertMariaDbNumericValue(databaseType: string | undefined, value: unkn
 
 function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
   if (rendered.parameters.some((parameter) => parameter.hint !== undefined)) {
-    throw new Error("BRAID_BIND_HINT_UNSUPPORTED: MariaDB Connector/Node.js does not expose SQLBraid parameter type descriptors.");
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      "MariaDB Connector/Node.js does not expose SQLBraid parameter type descriptors.",
+    );
   }
 }
 

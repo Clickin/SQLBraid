@@ -1,5 +1,6 @@
 import oracledb from "oracledb";
 import {
+  AdapterError,
   createBulkBindingDescription,
   createRenderedStatement,
   createStatementBindingDescription,
@@ -449,7 +450,13 @@ function typeConstant(databaseType: string, driver: OracleDriverLike): unknown {
                                   : type === "CLOB" ? (driver.DB_TYPE_CLOB ?? driver.CLOB)
                                     : type === "NCLOB" ? (driver.DB_TYPE_NCLOB ?? driver.NCLOB)
                                       : undefined;
-  if (value === undefined) throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle driver cannot bind explicit type ${databaseType}.`);
+  if (value === undefined) {
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      `Oracle driver cannot bind explicit type ${databaseType}.`,
+    );
+  }
   return value;
 }
 
@@ -466,22 +473,22 @@ function bindValues(rendered: RenderedStatement, policy: TypePolicy, driver: Ora
     const hint = parameter.hint;
     const direction = parameter.direction ?? "in";
     if (direction !== "in" && rendered.resultKind !== "call" && !(direction === "out" && rendered.resultKind === "rows")) {
-      throw new Error("BRAID_CALL_OUT_UNSUPPORTED: OUT parameters require sql.call() or sql.rows(); INOUT requires sql.call().");
+      throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "OUT parameters require sql.call() or sql.rows(); INOUT requires sql.call().");
     }
     if (direction !== "in" && hint === undefined) {
-      throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Oracle OUT and INOUT parameters require an explicit type hint.");
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "Oracle OUT and INOUT parameters require an explicit type hint.");
     }
     const databaseType = hint === undefined ? undefined : normalType(hint.databaseType);
     const isCursor = databaseType === "REF CURSOR" || databaseType === "REFCURSOR" || databaseType === "SYS_REFCURSOR" || databaseType === "CURSOR";
     if (isCursor && direction === "in") {
-      throw new Error("BRAID_CALL_CURSOR_UNSUPPORTED: Oracle REF CURSOR parameters must be OUT or INOUT.");
+      throw new UnsupportedFeatureError("routine.out-cursor", "BRAID_CALL_CURSOR_UNSUPPORTED", "Oracle REF CURSOR parameters must be OUT or INOUT.");
     }
     if (isCursor) {
       if (hint!.length !== undefined || hint!.precision !== undefined || hint!.scale !== undefined) {
-        throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Oracle REF CURSOR does not accept type facets.");
+        throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "Oracle REF CURSOR does not accept type facets.");
       }
       const cursorType = driver.CURSOR;
-      if (cursorType === undefined) throw new Error("BRAID_CALL_CURSOR_UNSUPPORTED: Oracle driver does not expose CURSOR binds.");
+      if (cursorType === undefined) throw new UnsupportedFeatureError("routine.out-cursor", "BRAID_CALL_CURSOR_UNSUPPORTED", "Oracle driver does not expose CURSOR binds.");
       values.push({
         dir: direction === "out" ? driver.BIND_OUT : driver.BIND_INOUT,
         ...(direction === "inout" ? { val: value } : {}),
@@ -490,24 +497,24 @@ function bindValues(rendered: RenderedStatement, policy: TypePolicy, driver: Ora
       continue;
     }
     if (hint === undefined) {
-      if (value === null || value === undefined) throw new Error("BRAID_BIND_TYPE_REQUIRED: Oracle null parameters require sql.bind(null, oracleParameter.*).");
+      if (value === null || value === undefined) throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "Oracle null parameters require sql.bind(null, oracleParameter.*).");
       values.push(value);
       continue;
     }
     if (hint.precision !== undefined || hint.scale !== undefined) {
-      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle bind ${databaseType} does not support precision or scale facets.`);
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Oracle bind ${databaseType} does not support precision or scale facets.`);
     }
     if (direction !== "in" && hint.length === undefined
       && (databaseType === "CHAR" || databaseType === "NCHAR" || databaseType === "VARCHAR" || databaseType === "VARCHAR2" || databaseType === "NVARCHAR2" || databaseType === "RAW")) {
-      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle ${databaseType} OUT binds require an explicit length to avoid undersized buffers.`);
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Oracle ${databaseType} OUT binds require an explicit length to avoid undersized buffers.`);
     }
     if (hint.length !== undefined && (direction === "in" || (databaseType !== "CHAR" && databaseType !== "NCHAR" && databaseType !== "VARCHAR" && databaseType !== "VARCHAR2" && databaseType !== "NVARCHAR2" && databaseType !== "RAW"))) {
-      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle bind ${databaseType} does not support length facets.`);
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Oracle bind ${databaseType} does not support length facets.`);
     }
     const encoded = direction === "out" ? undefined : policy.encode(databaseType!, value);
     const exactNumberOutput = databaseType !== undefined && isOracleExactNumericType(databaseType) && direction !== "in";
-    if (databaseType !== undefined && isOracleExactNumericType(databaseType) && typeof encoded === "string" && direction !== "out") {
-      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle ${databaseType} binds do not accept decimal strings through the exact numeric driver type; use an unhinted string with an explicit user-authored conversion and NLS clause.`);
+    if (databaseType !== undefined && isOracleExactNumericType(databaseType) && typeof encoded === "string" && direction !== "in") {
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Oracle ${databaseType} binds do not accept decimal strings through the exact numeric driver type; use an unhinted string with an explicit user-authored conversion and NLS clause.`);
     }
     values.push({
       dir: direction === "in" ? driver.BIND_IN : direction === "out" ? driver.BIND_OUT : driver.BIND_INOUT,
@@ -576,24 +583,24 @@ type OracleBulkMaterialized = {
 function inferredBulkType(value: unknown, driver: OracleDriverLike): { readonly type: unknown; readonly kind: "string" | "binary" | "number" | "date" } {
   if (typeof value === "string") {
     const type = driver.STRING ?? driver.DB_TYPE_VARCHAR;
-    if (type === undefined) throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Oracle driver does not expose STRING binds.");
+    if (type === undefined) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "Oracle driver does not expose STRING binds.");
     return { type, kind: "string" };
   }
   if (typeof value === "number" || typeof value === "bigint") {
     if (typeof value === "number" && !Number.isFinite(value)) throw new TypeError("Oracle bulk number values must be finite.");
     const type = driver.NUMBER ?? driver.DB_TYPE_NUMBER;
-    if (type === undefined) throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Oracle driver does not expose NUMBER binds.");
+    if (type === undefined) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "Oracle driver does not expose NUMBER binds.");
     return { type, kind: "number" };
   }
   if (value instanceof Date) {
     if (!Number.isFinite(Date.prototype.getTime.call(value))) throw new TypeError("Oracle bulk date values must be valid dates.");
     const type = driver.DATE ?? driver.DB_TYPE_DATE;
-    if (type === undefined) throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Oracle driver does not expose DATE binds.");
+    if (type === undefined) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "Oracle driver does not expose DATE binds.");
     return { type, kind: "date" };
   }
   if (value instanceof Uint8Array) {
     const type = driver.BUFFER ?? driver.DB_TYPE_RAW;
-    if (type === undefined) throw new Error("BRAID_BIND_HINT_UNSUPPORTED: Oracle driver does not expose BUFFER binds.");
+    if (type === undefined) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "Oracle driver does not expose BUFFER binds.");
     return { type, kind: "binary" };
   }
   throw new TypeError("BRAID_BULK_VALUE: Oracle bulk values must be strings, finite numbers, bigint, Date, Uint8Array, or null.");
@@ -628,19 +635,19 @@ function materializeBulk(
     const hint = parameter.hint;
     const typeName = hint === undefined ? undefined : normalType(hint.databaseType);
     if (hint !== undefined && (hint.precision !== undefined || hint.scale !== undefined)) {
-      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle bulk bind ${typeName} does not support precision or scale facets.`);
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Oracle bulk bind ${typeName} does not support precision or scale facets.`);
     }
     if (hint !== undefined && hint.length !== undefined && typeName !== "VARCHAR2" && typeName !== "NVARCHAR2" && typeName !== "RAW") {
-      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle bulk bind ${typeName} does not support length facets.`);
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Oracle bulk bind ${typeName} does not support length facets.`);
     }
     const rawValues = sets.map((values) => values[index]);
     const encoded = rawValues.map((value) => hint === undefined ? value : policy.encode(typeName!, value));
     if (typeName !== undefined && isOracleExactNumericType(typeName) && encoded.some((value) => typeof value === "string")) {
-      throw new Error(`BRAID_BIND_HINT_UNSUPPORTED: Oracle ${typeName} bulk binds do not accept decimal strings through the exact numeric driver type; use an unhinted string with an explicit user-authored conversion and NLS clause.`);
+      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Oracle ${typeName} bulk binds do not accept decimal strings through the exact numeric driver type; use an unhinted string with an explicit user-authored conversion and NLS clause.`);
     }
     if (hint === undefined) {
       const nonNull = encoded.find((value) => value !== null && value !== undefined);
-      if (nonNull === undefined) throw new Error("BRAID_BIND_TYPE_REQUIRED: Oracle bulk null columns require sql.bind values with an explicit type hint.");
+      if (nonNull === undefined) throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "Oracle bulk null columns require sql.bind values with an explicit type hint.");
       const inferred = inferredBulkType(nonNull, driver);
       for (const value of encoded) {
         if (value === null || value === undefined) continue;
@@ -840,7 +847,7 @@ function oracleLob(value: unknown, name: string): OracleLobLike | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value) || typeof (value as OracleLobLike).getData !== "function") return undefined;
   const lob = value as OracleLobLike;
   if (typeof lob.destroy !== "function" || typeof lob.once !== "function") {
-    throw new Error(`BRAID_CALL_LOB_UNSUPPORTED: Oracle output ${name} did not return a Lob with the documented destroy() stream API.`);
+    throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name} did not return a Lob with the documented destroy() stream API.`);
   }
   return lob;
 }
@@ -858,7 +865,7 @@ async function materializeLob(lob: OracleLobLike, type: string, name: string): P
   if ((type === "CLOB" || type === "NCLOB") && typeof data === "string") return data;
   if (type === "BLOB" && data instanceof Uint8Array) return data;
   const expected = type === "BLOB" ? "bytes" : "string";
-  throw new TypeError(`BRAID_CALL_LOB_UNSUPPORTED: Oracle output ${name} did not return ${expected} Lob data.`);
+  throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name} did not return ${expected} Lob data.`);
 }
 
 async function closeAllResources(resources: readonly OracleCleanupResource[], cause?: unknown): Promise<Error | undefined> {
@@ -937,7 +944,7 @@ async function readResultSet(
     for await (const row of resultSet as AsyncIterable<unknown>) rows.push(decodeRow(row, fields, policy, driver));
     return rows;
   }
-  throw new Error("BRAID_CALL_CURSOR_UNSUPPORTED: Oracle ResultSet does not expose getRows, getRow, or async iteration.");
+  throw new UnsupportedFeatureError("routine.out-cursor", "BRAID_CALL_CURSOR_UNSUPPORTED", "Oracle ResultSet does not expose getRows, getRow, or async iteration.");
 }
 
 function returningParameters(rendered: RenderedStatement): readonly { readonly parameter: OracleRoutineParameter; readonly index: number; readonly ordinal: number }[] {
@@ -988,12 +995,12 @@ async function normalizeDmlReturning(
       for (let outputIndex = 0; outputIndex < outputs.length; outputIndex += 1) {
         const { parameter, index } = outputs[outputIndex]!;
         const name = parameter.outputName;
-        if (!name) throw new Error(`BRAID_CALL_OUT_UNSUPPORTED: Oracle output parameter ${index + 1} is missing outputName.`);
+        if (!name) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", `Oracle output parameter ${index + 1} is missing outputName.`);
         const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
         let value = values[outputIndex]![rowIndex];
         if (hintType !== undefined && materializedLobType(hintType) && value !== null && value !== undefined && !isMaterializedLobValue(hintType, value)) {
           const lob = oracleLob(value, name);
-          if (lob === undefined) throw new Error(`BRAID_CALL_LOB_UNSUPPORTED: Oracle output ${name} did not return a Lob.`);
+          if (lob === undefined) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name} did not return a Lob.`);
           resources.push({ close: () => closeLob(lob) });
           value = await materializeLob(lob, hintType, name);
         }
@@ -1175,9 +1182,9 @@ function makeOracledbExecutor(
             const isCursor = hintType === "REF CURSOR" || hintType === "REFCURSOR" || hintType === "SYS_REFCURSOR" || hintType === "CURSOR";
             if (isCursor) {
               if (!name) {
-                explicitResourceFailure ??= new Error(`BRAID_CALL_OUT_UNSUPPORTED: Oracle output parameter ${index + 1} is missing outputName.`);
+                explicitResourceFailure ??= new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", `Oracle output parameter ${index + 1} is missing outputName.`);
               } else if (!value || typeof value !== "object" || typeof (value as OracleResultSetLike).close !== "function") {
-                explicitResourceFailure ??= new Error(`BRAID_CALL_CURSOR_UNSUPPORTED: Oracle output ${name} did not return a ResultSet.`);
+                explicitResourceFailure ??= new UnsupportedFeatureError("routine.out-cursor", "BRAID_CALL_CURSOR_UNSUPPORTED", `Oracle output ${name} did not return a ResultSet.`);
               } else {
                 const resultSet = value as OracleResultSetLike;
                 explicitCursors.push({ name, index, resultSet });
@@ -1193,7 +1200,7 @@ function makeOracledbExecutor(
             try {
               const lob = oracleLob(value, name ?? `parameter ${index + 1}`);
               if (lob === undefined) {
-                explicitResourceFailure ??= new Error(`BRAID_CALL_LOB_UNSUPPORTED: Oracle output ${name ?? `parameter ${index + 1}`} did not return a Lob.`);
+                explicitResourceFailure ??= new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name ?? `parameter ${index + 1}`} did not return a Lob.`);
               } else {
                 (explicitLobs ??= new Map()).set(index, lob);
                 resources.push({ close: () => closeLob(lob) });
@@ -1205,7 +1212,7 @@ function makeOracledbExecutor(
           if (explicitResourceFailure !== undefined) throw explicitResourceFailure;
           for (const { parameter, index, value } of explicit) {
             const name = parameter.outputName;
-            if (!name) throw new Error(`BRAID_CALL_OUT_UNSUPPORTED: Oracle output parameter ${index + 1} is missing outputName.`);
+            if (!name) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", `Oracle output parameter ${index + 1} is missing outputName.`);
             const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
             const isCursor = hintType === "REF CURSOR" || hintType === "REFCURSOR" || hintType === "SYS_REFCURSOR" || hintType === "CURSOR";
             if (isCursor) {
