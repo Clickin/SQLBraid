@@ -159,38 +159,53 @@ test("PostgreSQL inspector preserves identity and generated-column evidence", as
 test("PostgreSQL inspector preserves collision-free identities through tooling", async () => {
   const settings = inject("postgres");
   const client = new Client({ connectionString: settings.connectionUri });
-  const schemaWithDot = "braid_pv18.a";
+  const schemaWithDot = "braid_pv18.b";
   const plainSchema = "braid_pv18";
+  const escapedSchema = "braid_pv18\\:#.schema";
+  const escapedName = "value\\:#.name";
   try {
     await client.connect();
     await client.query(`DROP SCHEMA IF EXISTS "${schemaWithDot}" CASCADE`);
     await client.query(`DROP SCHEMA IF EXISTS "${plainSchema}" CASCADE`);
+    await client.query(`DROP SCHEMA IF EXISTS "${escapedSchema}" CASCADE`);
     await client.query(`CREATE SCHEMA "${schemaWithDot}"`);
     await client.query(`CREATE SCHEMA "${plainSchema}"`);
+    await client.query(`CREATE SCHEMA "${escapedSchema}"`);
     await client.query(`CREATE TABLE "${schemaWithDot}"."c" (id int4 NOT NULL)`);
     await client.query(`CREATE TABLE "${plainSchema}"."b.c" (id int4 NOT NULL)`);
+    await client.query(`CREATE TYPE "${escapedSchema}"."${escapedName}" AS ENUM ('ready')`);
+    await client.query(`CREATE TABLE "${escapedSchema}"."${escapedName}" (id int4 NOT NULL, status "${escapedSchema}"."${escapedName}")`);
+    await client.query(`CREATE FUNCTION "${escapedSchema}"."${escapedName}"() RETURNS int LANGUAGE SQL AS 'SELECT 1'`);
     const snapshot = await createPostgresInspector(client).inspect();
     const left = qualifiedIdentity(schemaWithDot, "c");
     const right = qualifiedIdentity(plainSchema, "b.c");
+    const escaped = qualifiedIdentity(escapedSchema, escapedName);
     assert.notEqual(left, right);
     assert.ok(snapshot.relations[left]);
     assert.ok(snapshot.relations[right]);
+    assert.equal(snapshot.relations[escaped]?.name, escapedName);
+    assert.equal(snapshot.types[escaped]?.name, escapedName);
+    const routine = snapshot.routines[escapedName]?.find((entry) => entry.schema === escapedSchema);
+    assert.ok(routine);
+    assert.equal(routine.name, escapedName);
     const roundTrip = parseSnapshotJson(JSON.stringify(snapshot));
     validateSnapshot(roundTrip);
     assert.equal(hashSnapshot(snapshot), hashSnapshot(roundTrip));
     assert.deepEqual(diffSnapshots(snapshot, roundTrip), []);
     const generated = generateModels(roundTrip, {
       typePolicy: postgresTypePolicy,
-      filters: { includeRelations: [left, right] },
-      naming: { relations: { [left]: "DotSchema", [right]: "DotTable" } },
+      filters: { includeRelations: [left, right, escaped] },
+      naming: { relations: { [left]: "DotSchema", [right]: "DotTable", [escaped]: "EscapedTable" } },
       typeOverrides: { columns: { [right]: { id: { outputType: "number" } } } },
     });
-    assert.equal(generated.models.length, 2);
+    assert.equal(generated.models.length, 3);
     assertGeneratedProperty(generated.source, "DotTableRow", "id", "number", false);
+    assertGeneratedProperty(generated.source, "EscapedTableRow", "id", "string", false);
   } finally {
     if (client) {
       await client.query(`DROP SCHEMA IF EXISTS "${schemaWithDot}" CASCADE`).catch(() => undefined);
       await client.query(`DROP SCHEMA IF EXISTS "${plainSchema}" CASCADE`).catch(() => undefined);
+      await client.query(`DROP SCHEMA IF EXISTS "${escapedSchema}" CASCADE`).catch(() => undefined);
       await client.end().catch(() => undefined);
     }
   }

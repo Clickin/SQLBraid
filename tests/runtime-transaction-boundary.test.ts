@@ -111,7 +111,7 @@ test("a live transaction stream prevents transaction completion and closes befor
 });
 
 test("an open session stream rejects transaction re-entry before control I/O", async () => {
-  for (const pooled of [false, true] as const) {
+  for (const [pooled, started] of [[false, false], [false, true], [true, false], [true, true]] as const) {
     const log: string[] = [];
     let acquires = 0;
     let releases = 0;
@@ -144,28 +144,71 @@ test("an open session stream rejects transaction re-entry before control I/O", a
         (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_STREAM_SCOPE",
       );
       assert.equal(log.includes("begin"), false);
-      await rootIterator.return();
+      await rootIterator.return!();
     }
 
     await resource.session(async (session) => {
       const iterator = session.stream(sql.rows`SELECT stream`)[Symbol.asyncIterator]();
-      await iterator.next();
+      const first = iterator.next();
+      if (started) await first;
       await assert.rejects(
         () => session.tx(async () => undefined),
         (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_STREAM_SCOPE",
       );
       assert.equal(log.includes("begin"), false);
-      await iterator.return();
+      if (pooled) assert.equal(acquires, 1, "rejected transaction must not acquire another lease");
+      await first;
+      await iterator.return!();
       await session.tx(async (tx) => {
         await tx.execute(sql`SELECT after_stream`);
       });
+      const nextIterator = session.stream(sql.rows`SELECT next_stream`)[Symbol.asyncIterator]();
+      const nextFirst = nextIterator.next();
+      await assert.rejects(session.execute(sql`SELECT overlapping_stream`), { code: "BRAID_STREAM_SCOPE" });
+      await nextFirst;
+      await nextIterator.return!();
+      assert.equal(log.includes("SELECT overlapping_stream"), false);
     });
     assert.equal(log.includes("begin"), true);
     if (pooled) {
-      assert.equal(acquires, 2);
-      assert.equal(releases, 2);
+      assert.equal(acquires, 1);
+      assert.equal(releases, 1);
     }
   }
+});
+
+test("queued parent work rechecks savepoint scope before physical execution", async () => {
+  const log: string[] = [];
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const db = createDatabase({
+    ...physical(log),
+    async query<Row>(statement: RenderedStatement) {
+      const text = statementText(statement);
+      log.push(text);
+      if (text === "SELECT holding") {
+        entered.resolve();
+        await release.promise;
+      }
+      return { kind: "rows", rows: [] as readonly Row[] };
+    },
+  });
+  await db.tx(async (outer) => outer.session(async (parent) => {
+    const holding = parent.execute(sql`SELECT holding`);
+    await entered.promise;
+    const queued = parent.execute(sql`SELECT escaped`);
+    const rejected = assert.rejects(queued, { code: "BRAID_TX_SCOPE" });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const nested = parent.tx(async (inner) => {
+      await inner.execute(sql`SELECT inner`);
+    });
+    release.resolve();
+    await Promise.all([holding, rejected, nested]);
+    await parent.execute(sql`SELECT restored`);
+  }));
+  assert.equal(log.includes("SELECT escaped"), false);
+  assert.equal(log.includes("SELECT inner"), true);
+  assert.equal(log.at(-1), "commit");
 });
 
 test("transaction and session wrappers retain active savepoint scope", async () => {

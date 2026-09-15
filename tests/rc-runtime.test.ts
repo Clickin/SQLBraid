@@ -156,7 +156,7 @@ test("prepared invocation modes keep input/options distinct for every query kind
       }
       return {
         kind: "rows" as const,
-        rows: [{ value: statement.parameters[0]?.value }] as readonly Row[],
+        rows: [{ value: statement.parameters[0]?.value }] as unknown as readonly Row[],
       };
     },
     async call(statement: RenderedStatement) {

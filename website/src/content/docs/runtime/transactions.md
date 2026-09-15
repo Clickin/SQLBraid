@@ -55,12 +55,17 @@ connection.
 ## Sessions and physical leases
 
 `db.session(async (session) => ...)` pins one provider lease for its entire
-callback. Nested sessions reuse that lease, and `db.tx(...)` inside a session
+callback. Nested sessions reuse that lease, and `session.tx(...)` inside a session
 uses it without reacquiring. The outer root database cannot escape the session.
 A provider is a lease source, not a physical connection; root pooled operations
 acquire, execute, release, then map materialized results. A stream holds its
 lease until cursor/request cleanup. An unavailable session primitive rejects
 with `BRAID_SESSION_UNSUPPORTED`.
+
+Close a session's stream before calling `session.tx(...)`. An overlapping
+transaction rejects with `BRAID_STREAM_SCOPE` before `BEGIN`, without waiting
+for the stream or acquiring another lease. Wrapping a transaction in
+`tx.session(...)` does not relax its innermost transaction/savepoint scope.
 
 ## Transaction options
 
@@ -99,6 +104,10 @@ combinations their transport actually honors.
 
 `batch` is not atomic. Earlier statements—and later statements when mapping
 fails—may already have executed. Wrap it in `db.tx(...)` when atomicity matters.
+
+`batch([])` returns `[]` without acquiring or releasing a lease and emits no
+query lifecycle events. Execution-option checks still apply: an already-aborted
+signal rejects with its original reason before the no-op result.
 
 `db.bulk(inputs, factory)` is command-only homogeneous DML, not a transaction.
 Root bulk uses one lease but has no portable atomicity or auto-chunking promise.

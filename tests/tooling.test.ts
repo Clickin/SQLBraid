@@ -161,11 +161,13 @@ test('quoted qualified names preserve dotted metadata segments for navigation', 
       'a.b\\.c': { ...users, identity: 'a.b\\.c', name: 'b.c', namespace: 'a' },
     },
   } as const satisfies MetadataSnapshot;
-  const service = createLanguageService({ metadata: snapshot });
+  const service = createLanguageService({ targets: [{
+    name: 'db', metadata: snapshot, metadataPath: 'quoted-metadata.json', metadataSource: JSON.stringify(snapshot, null, 2),
+  }] });
   const source = 'import { sql } from "@sqlbraid/postgres"; const q = sql`SELECT * FROM "a.b"."c"`;';
   const offset = source.indexOf('"c"');
   assert.equal(service.hover(source, 'quoted-qualified.ts', offset)?.contents.split('\n')[0], 'Relation a\\.b.c');
-  assert.ok(service.definition(source, 'quoted-qualified.ts', offset));
+  assert.equal(service.definition(source, 'quoted-qualified.ts', offset)?.uri.endsWith('/quoted-metadata.json'), true);
   const other = source.replace('"a.b"."c"', '"a"."b.c"');
   const otherOffset = other.indexOf('"b.c"');
   assert.equal(service.hover(other, 'quoted-qualified-other.ts', otherOffset)?.contents.split('\n')[0], 'Relation a.b\\.c');

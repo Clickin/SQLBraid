@@ -56,11 +56,16 @@ transaction stream을 닫아야 하며, 겹치는 pinned 작업을 다른 연결
 
 `db.session(async (session) => ...)`은 전체 callback 동안 하나의 provider
 lease를 고정합니다. 중첩 session은 같은 lease를 재사용하고 session 안의
-`db.tx(...)`도 재획득하지 않습니다. 바깥 root database로 session을 빠져나갈
+`session.tx(...)`도 재획득하지 않습니다. 바깥 root database로 session을 빠져나갈
 수 없습니다. Provider는 물리 연결이 아니라 lease source입니다. Pooled root
 작업은 lease를 얻고 실행하고 반환한 뒤 materialized 결과를 매핑합니다.
 Stream은 cursor/request 정리까지 lease를 유지합니다. Session primitive가
 없으면 `BRAID_SESSION_UNSUPPORTED`로 거부합니다.
+
+`session.tx(...)`를 호출하기 전에 session의 stream을 닫으세요. 겹치는
+transaction은 stream을 기다리거나 다른 lease를 얻지 않고 `BEGIN` 전에
+`BRAID_STREAM_SCOPE`로 거부됩니다. `tx.session(...)`으로 감싸더라도
+가장 안쪽 transaction/savepoint handle만 사용할 수 있다는 규칙은 유지됩니다.
 
 ## Transaction option
 
@@ -99,6 +104,10 @@ SQLite, D1 및 다른 driver는 실제 transport가 honor하는 조합만 노출
 `batch`는 atomic하지 않습니다. 앞선 statement와 mapping 실패 시 뒤의
 statement도 이미 실행되었을 수 있으므로 atomicity가 필요하면
 `db.tx(...)`로 감싸세요.
+
+`batch([])`는 lease를 얻거나 반환하지 않고 `[]`를 반환하며 query lifecycle
+이벤트도 발생시키지 않습니다. 실행 option 검사는 유지되므로 이미 abort된
+signal은 no-op 결과를 반환하기 전에 원래 reason으로 거부됩니다.
 
 `db.bulk(inputs, factory)`는 command-only 동종 DML이며 transaction이 아닙니다.
 Root bulk는 하나의 lease를 사용하지만 portable atomicity/auto-chunking 약속이

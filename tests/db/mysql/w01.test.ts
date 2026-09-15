@@ -165,6 +165,8 @@ test("MySQL inspector preserves empty-string defaults for generated inserts", as
         empty_text VARCHAR(20) NOT NULL DEFAULT '',
         zero_text VARCHAR(20) NOT NULL DEFAULT '0',
         zero_number INT NOT NULL DEFAULT 0,
+        ordinary_text VARCHAR(20) NOT NULL DEFAULT 'ready',
+        expression_text VARCHAR(20) NOT NULL DEFAULT (concat('a', 'b')),
         required_text VARCHAR(20) NOT NULL,
         nullable_text VARCHAR(20) NULL DEFAULT NULL
       )
@@ -176,10 +178,13 @@ test("MySQL inspector preserves empty-string defaults for generated inserts", as
     assert.equal(columns.get("empty_text")?.defaultExpression, "");
     assert.equal(columns.get("zero_text")?.defaultExpression, "0");
     assert.equal(columns.get("zero_number")?.defaultExpression, "0");
+    assert.equal(columns.get("ordinary_text")?.defaultExpression, "ready");
+    assert.match(columns.get("expression_text")?.defaultExpression ?? "", /concat/iu);
     assert.equal(columns.get("required_text")?.defaultExpression, undefined);
     assert.equal(columns.get("nullable_text")?.defaultExpression, undefined);
     const result = generateModels(snapshot, { typePolicy: MYSQL2_LOSSLESS_TEXT.typePolicy });
     assertGeneratedProperty(result.source, "BraidPv18DefaultsInsert", "empty_text", "string", true);
+    assertGeneratedProperty(result.source, "BraidPv18DefaultsInsert", "expression_text", "string", true);
     assertGeneratedProperty(result.source, "BraidPv18DefaultsInsert", "required_text", "string", false);
     assertGeneratedProperty(result.source, "BraidPv18DefaultsInsert", "nullable_text", "string | null", true);
   } finally {

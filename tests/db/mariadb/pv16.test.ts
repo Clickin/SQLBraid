@@ -115,6 +115,9 @@ test("MariaDB metadata keeps empty defaults independent of MySQL", async () => {
         id INT NOT NULL PRIMARY KEY,
         empty_text VARCHAR(20) NOT NULL DEFAULT '',
         zero_text VARCHAR(20) NOT NULL DEFAULT '0',
+        zero_number INT NOT NULL DEFAULT 0,
+        ordinary_text VARCHAR(20) NOT NULL DEFAULT 'ready',
+        expression_text VARCHAR(20) NOT NULL DEFAULT (concat('a', 'b')),
         required_text VARCHAR(20) NOT NULL,
         nullable_text VARCHAR(20) NULL DEFAULT NULL
       )
@@ -123,12 +126,16 @@ test("MariaDB metadata keeps empty defaults independent of MySQL", async () => {
     const relation = Object.values(snapshot.relations).find((entry) => entry.name === "braid_pv18_mariadb_defaults");
     assert.ok(relation);
     const columns = new Map(relation.columns.map((column) => [column.name, column]));
-    assert.equal(columns.get("empty_text")?.defaultExpression, "");
-    assert.equal(columns.get("zero_text")?.defaultExpression, "0");
+    assert.equal(columns.get("empty_text")?.defaultExpression, "''");
+    assert.equal(columns.get("zero_text")?.defaultExpression, "'0'");
+    assert.equal(columns.get("zero_number")?.defaultExpression, "0");
+    assert.equal(columns.get("ordinary_text")?.defaultExpression, "'ready'");
+    assert.match(columns.get("expression_text")?.defaultExpression ?? "", /concat/iu);
     assert.equal(columns.get("required_text")?.defaultExpression, undefined);
-    assert.equal(columns.get("nullable_text")?.defaultExpression, undefined);
+    assert.equal(columns.get("nullable_text")?.defaultExpression, "NULL");
     const result = generateModels(snapshot, { typePolicy: mariadbTypePolicy });
     assertGeneratedProperty(result.source, "BraidPv18MariadbDefaultsInsert", "empty_text", "string", true);
+    assertGeneratedProperty(result.source, "BraidPv18MariadbDefaultsInsert", "expression_text", "string", true);
     assertGeneratedProperty(result.source, "BraidPv18MariadbDefaultsInsert", "required_text", "string", false);
   } finally {
     await connection.query("DROP TABLE IF EXISTS braid_pv18_mariadb_defaults").catch(() => undefined);

@@ -132,6 +132,7 @@ interface ScopeState {
   tail: Promise<void>;
   transactionTail: Promise<void>;
   streamUsers: number;
+  pendingStreams?: number;
   directBusy?: boolean;
   activeScope?: symbol;
   activeSession?: symbol;
@@ -328,7 +329,7 @@ function assertRootAllowed(rootState: ScopeState, stream: boolean): void {
       "A direct database stream cannot re-enter its own physical execution resource.",
     );
   }
-  if (rootState.streamUsers > 0) {
+  if (rootState.streamUsers > 0 || (rootState.pendingStreams ?? 0) > (stream ? 1 : 0)) {
     throw new DatabaseScopeError(
       "BRAID_STREAM_SCOPE",
       "A direct database stream cannot re-enter its own physical execution resource.",
@@ -1228,13 +1229,16 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       const pinned = options.pinned;
       assertHealthy(pinned.physicalState);
       const active = physicalContext.getStore();
-      if (pinned.physicalState.streamUsers > 0 || (active?.rootState === options.rootState && active.direct)) {
-        if (pinned.physicalState.streamUsers > 0) {
+      const hasStream = pinned.physicalState.streamUsers > 0 || (pinned.physicalState.pendingStreams ?? 0) > (stream ? 1 : 0);
+      if (hasStream || (active?.rootState === options.rootState && active.direct)) {
+        if (hasStream) {
           throw new DatabaseScopeError("BRAID_STREAM_SCOPE", "A pinned stream cannot re-enter its physical execution resource.");
         }
         throw new DatabaseScopeError("BRAID_REENTRY", "A pinned execution resource cannot execute concurrent physical work.");
       }
       const releaseTurn = await acquireTransactionTurn(pinned.physicalState);
+      try { assertOpen(); assertHealthy(pinned.physicalState); }
+      catch (error) { releaseTurn(); throw error; }
       if (pinned.executor.statementBinding !== expectedBinding) {
         releaseTurn();
         throw bindingIdentityMismatch();
@@ -1251,8 +1255,9 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       const lease = options.lease;
       if (!lease || !options.leaseState) throw new DatabaseScopeError("BRAID_TX_CLOSED", "Transaction database is no longer usable.");
       const active = physicalContext.getStore();
-      if (options.leaseState.streamUsers > 0 || (active?.rootState === options.rootState && active.direct)) {
-        if (options.leaseState.streamUsers > 0) {
+      const hasStream = options.leaseState.streamUsers > 0 || (options.leaseState.pendingStreams ?? 0) > (stream ? 1 : 0);
+      if (hasStream || (active?.rootState === options.rootState && active.direct)) {
+        if (hasStream) {
           throw new DatabaseScopeError("BRAID_STREAM_SCOPE", "A transaction stream cannot re-enter its pinned physical execution resource.");
         }
         throw new DatabaseScopeError("BRAID_REENTRY", "A transaction connection cannot execute concurrent physical work.");
@@ -2165,7 +2170,6 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       assertOpen();
       if (!name.trim()) throw codedError("BRAID_PREPARED_NAME", "prepared query name must not be empty.");
       if (options.preparedNames.has(name)) throw codedError("BRAID_PREPARED_NAME", `duplicate prepared query name ${name}.`);
-      options.preparedNames.add(name);
       const shape: { value?: string } = {};
       if (
         prepareOptions !== undefined
@@ -2174,6 +2178,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       ) {
         throw new TypeError("Prepared input mode must be either \"none\" or \"required\".");
       }
+      options.preparedNames.add(name);
       const takesInput = prepareOptions?.input !== "none";
       const invocation = (args: readonly unknown[]): {
         readonly options?: ExecutionOptions;
@@ -2183,8 +2188,8 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       const operation = async (args: readonly unknown[]): Promise<PreparedOperation<PreparableQuery>> => {
         assertOpen();
         const invoke = takesInput
-          ? () => (factory as (input: unknown) => PreparableQuery)(args[0])
-          : () => (factory as () => PreparableQuery)();
+          ? () => factory(args[0] as never)
+          : () => factory();
         return prepareNamedFactoryObserved(invoke, name, shape);
       };
       const prepared: Record<string, unknown> = {
@@ -2324,19 +2329,26 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           openStreams.delete(stream);
           await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
         }
-        try {
-          await notify(options.observers ?? [], streamStartEvent(operation));
-        } catch (error) {
-          openStreams.delete(stream);
-          await notifyError(options.observers ?? [], errorEvent(operation, error, "observer-before", false, false), error);
-        }
+        const admissionState = options.pinned?.physicalState ?? (options.transaction || !options.pooled ? state : undefined);
+        if (admissionState) admissionState.pendingStreams = (admissionState.pendingStreams ?? 0) + 1;
         let use: Use;
         try {
-          use = await leaseForUse(true, statementBinding, streamOptions);
-        } catch (error) {
-          openStreams.delete(stream);
-          const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
-          await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
+          try {
+            await notify(options.observers ?? [], streamStartEvent(operation));
+          } catch (error) {
+            openStreams.delete(stream);
+            await notifyError(options.observers ?? [], errorEvent(operation, error, "observer-before", false, false), error);
+          }
+          try {
+            use = await leaseForUse(true, statementBinding, streamOptions);
+          } catch (error) {
+            openStreams.delete(stream);
+            const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
+            await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
+          }
+          use!.physicalState.streamUsers += 1;
+        } finally {
+          if (admissionState) admissionState.pendingStreams! -= 1;
         }
         const started = now();
         let count = 0;
@@ -2345,7 +2357,6 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         let errorAlreadyReported = false;
         let iterator: AsyncIterator<unknown> | undefined;
         const activeContext: PhysicalContext = { rootState: options.rootState, direct: use!.direct, stream: true };
-        use!.physicalState.streamUsers += 1;
         try {
           if (!use!.executor.stream) {
             throw new UnsupportedFeatureError(
@@ -2532,7 +2543,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         assertTransactionOptions(transactionOptions);
         assertTransactionCapability(executor, transactionOptions, options.capabilities);
       }
-      if (nested && state.streamUsers > 0) throw new DatabaseScopeError("BRAID_STREAM_SCOPE", "Close the transaction stream before opening a savepoint.");
+      const pinnedStreamState = options.pinned?.physicalState ?? (nested ? state : undefined);
+      if (pinnedStreamState && (pinnedStreamState.streamUsers > 0 || (pinnedStreamState.pendingStreams ?? 0) > 0)) {
+        throw new DatabaseScopeError("BRAID_STREAM_SCOPE", "Close the pinned stream before opening a transaction or savepoint.");
+      }
       assertFeatureCapability(
         executor,
         nested ? "transaction.savepoint" : "transaction",
@@ -2645,6 +2659,10 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
             if (requested) {
               try { await transactionEvent(observers, transactionId, phase, "requested", depth, undefined, savepointName); }
               catch (error) { if (!cleanup) throw error; errors.push(error); }
+            }
+            if (!cleanup && (phase === "begin" || phase === "savepoint")
+              && (physicalState.streamUsers > 0 || (physicalState.pendingStreams ?? 0) > 0)) {
+              throw new DatabaseScopeError("BRAID_STREAM_SCOPE", "Close the pinned stream before opening a transaction or savepoint.");
             }
             const release = await acquireTransactionTurn(physicalState);
             let driverFailed = false;

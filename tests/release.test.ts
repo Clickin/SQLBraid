@@ -532,6 +532,7 @@ test("durable release evidence keeps candidate, support, and staged identities c
   assert.equal(durable.format, "sqlbraid-release-evidence");
   assert.equal(durable.version, f.manifest.version);
   assert.equal(durable.commit, f.manifest.commit);
+  assert.ok(f.manifest.extension);
   assert.equal(durable.candidate.extension.sha256, f.manifest.extension.sha256);
   assert.equal(durable.candidate.packages[0].sha256, f.manifest.packages[0].sha256);
   assert.deepEqual(durable.certification.support.targetIds, ["postgres"]);

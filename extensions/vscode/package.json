@@ -58,8 +58,8 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@sqlbraid/cli": "workspace:0.1.0-rc.1",
-    "@sqlbraid/language-server": "workspace:0.1.0-rc.1",
+    "@sqlbraid/cli": "workspace:0.1.0-rc.2",
+    "@sqlbraid/language-server": "workspace:0.1.0-rc.2",
     "vscode-languageclient": "9.0.1"
   },
   "devDependencies": {
