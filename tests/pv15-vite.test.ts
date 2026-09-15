@@ -132,6 +132,15 @@ test("runtime lowering emits executable JavaScript for JS and preserves TS/JSX s
     assert.deepEqual(jsx.diagnostics, []);
     assert.equal(ts.createSourceFile("probe.jsx", jsx.code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX).parseDiagnostics.length, 0);
 
+    for (const extension of ["js", "jsx", "ts", "tsx"]) {
+      const source = extension.endsWith("x")
+        ? `${unguarded}\nexport const view = <section />;`
+        : unguarded;
+      const result = transformSource(source, `plain.${extension}`);
+      assert.equal(result.code, source, `unguarded ${extension} must not insert helpers`);
+      assert.deepEqual(result.diagnostics, []);
+    }
+
     for (const [fileName, source] of [["probe.ts", guarded], ["probe.tsx", `${guarded}\nexport const view = <section data-query={query} />;`], ["plain.ts", unguarded]] as const) {
       const result = transformSource(source, fileName);
       assert.deepEqual(result.diagnostics, []);

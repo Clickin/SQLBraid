@@ -6,13 +6,11 @@ first-party database adapters.
 
 ## Reporting a vulnerability
 
-Please do not publish exploitable details in a public issue. GitHub's private
-vulnerability-reporting feature is not enabled for this repository at this
-revision, so this policy does not claim a private URL that does not exist.
-Maintainers must enable a private reporting path and update this section
-before release. Until then, use only a non-public maintainer channel already
-established for this project; do not disclose exploit details publicly if no
-such channel is available.
+Please do not publish exploitable details in a public issue. Submit a
+[private vulnerability report through GitHub](https://github.com/Clickin/SQLBraid/security/advisories/new).
+Private vulnerability reporting is enabled for this repository. Include the
+affected version, a minimal reproduction, and the security impact; do not
+include live credentials or unrelated private data.
 
 There is no guaranteed response time, service-level agreement, or bounty
 program.

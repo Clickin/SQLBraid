@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "vitest";
+import ts from "typescript";
 import { createStatementBindingDescription } from "@sqlbraid/core";
 import type { QueryExecutor, StatementBindingAdapter } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
@@ -36,11 +37,20 @@ async function runExample(code: string) {
   });
   const executor: QueryExecutor = {
     statementBinding,
+    environment: {
+      database: { product: "docs-examples" },
+      driver: { id: "docs-examples", version: "1", profile: "test" },
+      capabilities: {
+        transaction: { status: "guaranteed" },
+        "transaction.read-only": { status: "guaranteed" },
+        "transaction.isolation.serializable": { status: "guaranteed" },
+      },
+    },
     async query(statement) {
       events.push({ type: "query", value: statement.resultKind });
       return statement.resultKind === "rows"
         ? { kind: "rows", rows: [{ id: "acct-1", active: true }] }
-        : { kind: "command", command: { affectedRows: 1 } };
+        : { kind: "command", rows: [], command: { affectedRows: 1 } };
     },
     async *stream() {
       throw new Error("stream is not used by this example");
@@ -55,10 +65,14 @@ async function runExample(code: string) {
     async rollback() {},
   };
   const db = createDatabase(executor);
-  const execute = new Function("db", "sql", "accountId", `return (async () => {${code}\n})();`) as (
+  const javascript = ts.transpileModule(code, {
+    compilerOptions: { target: ts.ScriptTarget.ES2024, module: ts.ModuleKind.ESNext },
+  }).outputText;
+  const execute = new Function("db", "sql", "accountId", "signal", `return (async () => {${javascript}\n})();`) as (
     database: typeof db,
     tags: typeof sql,
     accountId: string,
+    signal?: AbortSignal,
   ) => Promise<unknown>;
   await execute(db, sql, "acct-1");
   return events;
@@ -82,5 +96,19 @@ test("English and Korean canonical transaction examples execute and keep scopes 
       { type: "begin", value: { readOnly: true } },
       { type: "query", value: "rows" },
     ]);
+  }
+});
+
+test("English and Korean zero-input prepared examples use the executable options-only contract", async () => {
+  for (const path of [
+    "website/src/content/docs/runtime/prepared.md",
+    "website/src/content/docs/ko/runtime/prepared.md",
+  ]) {
+    const source = await readFile(path, "utf8");
+    const code = [...source.matchAll(/```ts\n([\s\S]*?)```/gu)]
+      .map((match) => match[1]!)
+      .find((example) => example.includes('{ input: "none" }'));
+    assert.ok(code, `${path} must contain the zero-input canonical example`);
+    assert.deepEqual(await runExample(code), [{ type: "query", value: "rows" }]);
   }
 });

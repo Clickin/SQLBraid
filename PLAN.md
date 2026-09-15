@@ -87,8 +87,11 @@ Result APIs are kind-safe:
 - `BRAID_RESULT_KIND` is checked after driver execution and cannot undo a root
   side effect.
 
-A prepared query accepts `prepare(name, () => query)` or
-`prepare(name, (input) => query)`. The factory runs per execution and renders
+A prepared query accepts `prepare(name, () => query, { input: "none" })` or
+`prepare(name, (input) => query)`. The explicit zero-input marker determines
+the options-only execution form; JavaScript function arity is not consulted.
+Input factories use `(input, options?)` even with rest or default parameters.
+The factory runs per execution and renders
 once. The first logical result kind, dialect, segments, hint/direction/output
 metadata, and cardinality become the shape lock; values may change. A shape
 change fails before I/O with `BRAID_PREPARED_SHAPE`. A prepared query is a
