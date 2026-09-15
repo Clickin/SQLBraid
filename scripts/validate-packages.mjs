@@ -5,7 +5,7 @@ import { builtinModules } from "node:module";
 import { execFile as execFileCallback } from "node:child_process";
 import { copyFile, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { runtimePackages } from "./audit-runtime.mjs";
@@ -48,6 +48,10 @@ async function run(command, args, cwd = root) {
 
 async function sha256(path) {
   return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
+async function integrity(path) {
+  return `sha512-${createHash("sha512").update(await readFile(path)).digest("base64")}`;
 }
 
 function collectPackagePaths(value, paths = []) {
@@ -620,6 +624,21 @@ try {
     'import * as z from "zod";',
     'import { DatabaseResultKindError, DatabaseResultValidationError } from "@sqlbraid/runtime";',
     'declare const db: Database;',
+    'import { sql as packedSql } from "@sqlbraid/postgres";',
+    'declare const packedDb: Database;',
+    'const fixed = packedDb.prepare("fixed", (input: { signal: string; schema: string }) => packedSql.rows`SELECT ${input.signal}`);',
+    'fixed.execute({ signal: "ordinary", schema: "app" });',
+    'const zero = packedDb.prepare("zero", () => packedSql.rows`SELECT 1`, { input: "none" });',
+    'zero.execute();',
+    'const rest = packedDb.prepare("rest", (...[input]: [{ value: number }]) => packedSql.rows`SELECT ${input.value}`, { input: "required" });',
+    'rest.execute({ value: 1 });',
+    'const defaulted = packedDb.prepare("default", (input = 7) => packedSql.rows`SELECT ${input}`, { input: "required" });',
+    'defaulted.execute(7);',
+    '// @ts-expect-error zero-input factories require explicit mode',
+    'packedDb.prepare("unmarked-zero", () => packedSql.rows`SELECT 1`);',
+    'const one = packedDb.prepare("one", (input: number) => packedSql.rows`SELECT ${input}`);',
+    '// @ts-expect-error one-input prepared queries require an application input',
+    'one.execute({});',
     'const rowQuery = pg.rows<{id: string}>`SELECT 1 AS id`;',
     'const schema = { "~standard": { version: 1, vendor: "consumer", validate: (_: unknown) => ({ value: { id: "1" } }) } } satisfies StandardSchemaV1<unknown, {id: string}>;',
     'const V = v.object({ id: v.string() });',
@@ -677,6 +696,12 @@ try {
   const extensionManifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
   const vsixOutput = resolve(process.env.SQLBRAID_VSIX_OUTPUT ?? join(root, "sqlbraid.vsix"));
   const extensionDependencies = Object.fromEntries(Object.entries(extensionManifest.dependencies).map(([name, version]) => [name, version.replace(/^workspace:/u, "")]));
+  const bundledVersions = {};
+  for (const [key, packageName] of [["cli", "@sqlbraid/cli"], ["languageServer", "@sqlbraid/language-server"]]) {
+    const bundledManifest = JSON.parse(await readFile(join(packageRoot, packageName.slice("@sqlbraid/".length), "package.json"), "utf8"));
+    assert.equal(extensionDependencies[packageName], bundledManifest.version, `${packageName} dependency must match the bundled source version.`);
+    bundledVersions[key] = bundledManifest.version;
+  }
   const bundledNames = new Set();
   async function includeTooling(name) {
     if (bundledNames.has(name)) return;
@@ -712,6 +737,16 @@ try {
   assert.ok(licensePath, "VSIX must include its license document.");
   const { stdout: vsixLicense } = await execFile("unzip", ["-p", packagedVsix, licensePath]);
   assert.equal(vsixLicense, await readFile(join(root, "LICENSE"), "utf8"), "VSIX must ship the same Apache-2.0 license as npm.");
+  const readVsixManifest = async (file) => JSON.parse((await execFile("unzip", ["-p", packagedVsix, file])).stdout);
+  const packagedExtensionManifest = await readVsixManifest("extension/package.json");
+  assert.equal(packagedExtensionManifest.name, extensionManifest.name, "VSIX extension name must match source.");
+  assert.equal(packagedExtensionManifest.publisher, extensionManifest.publisher, "VSIX publisher must match source.");
+  assert.equal(packagedExtensionManifest.version, extensionManifest.version, "VSIX version must match source.");
+  for (const [key, packageName] of [["cli", "@sqlbraid/cli"], ["languageServer", "@sqlbraid/language-server"]]) {
+    const bundledManifest = await readVsixManifest(`extension/node_modules/${packageName}/package.json`);
+    assert.equal(bundledManifest.name, packageName, `VSIX must bundle ${packageName}.`);
+    assert.equal(bundledManifest.version, bundledVersions[key], `VSIX must bundle the validated ${packageName} version.`);
+  }
   await mkdir(dirname(vsixOutput), { recursive: true });
   await copyFile(packagedVsix, vsixOutput);
   const previousVsix = process.env.SQLBRAID_VSIX_PATH;
@@ -724,6 +759,20 @@ try {
     else process.env.SQLBRAID_VSIX_PATH = previousVsix;
   }
   if (packInputDir) {
+    assert.equal(resolve(dirname(vsixOutput)), packInputDir, "Validated VSIX must be stored beside the release manifest.");
+    const extensionIdentity = {
+      file: basename(vsixOutput),
+      sha256: await sha256(vsixOutput),
+      integrity: await integrity(vsixOutput),
+      version: packagedExtensionManifest.version,
+      publisher: packagedExtensionManifest.publisher,
+      name: packagedExtensionManifest.name,
+      bundled: bundledVersions,
+    };
+    const releasePath = join(packInputDir, "release-manifest.json");
+    const release = JSON.parse(await readFile(releasePath, "utf8"));
+    release.extension = extensionIdentity;
+    await writeFile(releasePath, `${JSON.stringify(release, null, 2)}\n`);
     const { stdout: commit } = await execFile("git", ["rev-parse", "HEAD"], { cwd: root });
     await writeFile(join(packInputDir, "pack-check-success.json"), `${JSON.stringify({
       version: expectedVersion,
@@ -732,6 +781,7 @@ try {
         const { stdout } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
         return { name: JSON.parse(stdout).name, sha256: await sha256(tarball) };
       })),
+      extension: extensionIdentity,
     }, null, 2)}\n`);
   }
   console.info(`PASS packaged VSIX includes README/LICENSE and passed the clean-profile host gate: ${vsixOutput}`);

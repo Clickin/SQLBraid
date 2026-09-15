@@ -87,3 +87,12 @@ promote the current tree or neighboring versions. Before release, run the
 runtime, docs/translation, package/export, and immutable release gates on one
 exact final revision. User acceptance and explicit release authorization remain
 separate requirements.
+
+The immutable release manifest records every package tarball and the VSIX
+filename, SHA-256, SHA-512 integrity, extension publisher/name/version, and
+bundled CLI and language-server versions. `release-evidence.json` is the
+compact durable summary for the GitHub Release: it retains the source commit,
+candidate hashes, support-evidence identities, staged package IDs, requested
+tags, and fresh/reconciled workflow identity after Actions artifacts expire.
+An RC GitHub Release is marked prerelease and uses these notes as its body;
+stable publication remains a separate maintainer action.

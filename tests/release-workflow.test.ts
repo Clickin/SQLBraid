@@ -7,7 +7,7 @@ import { allPlan, planChanges } from "../scripts/ci-plan.mjs";
 interface Step { name?: string; if?: string; run?: string; uses?: string; env?: Record<string, string>; with?: Record<string, unknown> }
 interface Job { name?: string; if?: string; needs?: string | string[]; permissions?: Record<string, string>; env?: Record<string, string>; concurrency?: Record<string, unknown>; steps: Step[] }
 interface Workflow {
-  on: Record<string, { tags?: string[]; paths?: string[]; inputs?: Record<string, { default?: unknown; options?: string[]; description?: string }> } | null>;
+  on: Record<string, { tags?: string[]; paths?: string[]; inputs?: Record<string, { default?: unknown; options?: string[]; description?: string; type?: string }> } | null>;
   permissions: Record<string, string>;
   env?: Record<string, string>;
   jobs: Record<string, Job>;
@@ -52,6 +52,8 @@ const mutationJobs = ["release-stage", "release-draft"];
 test("dispatch defaults to certification and version tags trigger all three validation workflows", () => {
   assert.deepEqual(release.on.workflow_dispatch?.inputs?.release_mode.options, ["certify", "pack-only", "stage"]);
   assert.equal(release.on.workflow_dispatch?.inputs?.release_mode.default, "certify");
+  assert.equal(release.on.workflow_dispatch?.inputs?.prior_run_id?.default, "");
+  assert.equal(release.on.workflow_dispatch?.inputs?.prior_run_id?.type, "string");
   for (const workflow of [release, runtime, docs]) assert.ok(workflow.on.push?.tags?.includes("v*"));
   assert.equal(release.jobs["release-bootstrap"], undefined);
   assert.equal(release.jobs["release-publish"], undefined);
@@ -144,9 +146,24 @@ test("staging has no approval or direct publication path and draft release remai
   assert.ok(!stage.steps.some((step) => /(?:approve|promote)/iu.test(`${step.name ?? ""}\n${step.run ?? ""}`)));
   const draft = release.jobs["release-draft"];
   assert.match(draft.name ?? "", /draft.*approval pending/iu);
-  assert.match(draft.steps.find((step) => step.run?.includes("gh release create"))?.run ?? "", /--draft/u);
-  assert.match(draft.steps.find((step) => step.run?.includes("gh release create"))?.run ?? "", /approval pending/iu);
+  const create = draft.steps.find((step) => step.run?.includes("gh release create"))?.run ?? "";
+  assert.match(create, /--draft/u);
+  assert.match(create, /--notes-file docs\/SQLBraid_0\.1\.0_release_notes\.md/u);
+  assert.match(create, /--prerelease/u);
+  assert.match(draft.steps.find((step) => step.run?.includes("--mode durable-evidence"))?.run ?? "", /--artifact-dir/u);
+  assert.match(create, /release-evidence\.json/u);
   assert.match(draft.if ?? "", /needs\.release-stage\.result == 'success'/u);
+});
+
+test("staging distinguishes fresh and explicit cross-run reconciliation", () => {
+  const stage = release.jobs["release-stage"];
+  const prior = stage.steps.find((step) => step.name?.includes("prior staged evidence"));
+  assert.equal(prior?.if, "inputs.prior_run_id != ''");
+  assert.equal(prior?.uses, "actions/download-artifact@v8.0.1");
+  assert.equal(prior?.with?.["run-id"], "${{ inputs.prior_run_id }}");
+  const run = stage.steps.find((step) => step.name?.includes("Stage validated"));
+  assert.match(run?.run ?? "", /--prior-staged-publication/u);
+  assert.match(String(release.env?.SQLBRAID_TAG_BEFORE), /github\.event\.before/u);
 });
 
 test("preparation enforces an exact version tag for staging", () => {
