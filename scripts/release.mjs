@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -219,7 +219,8 @@ async function pack(packages, order, sha) {
     commit: sha,
     runId: process.env.GITHUB_RUN_ID ?? null,
     runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
-    packages: order.map((name) => ({ name, version, file: basename(tarballs.get(name)), sha256: null, integrity: null })),
+    packages: order.map((name) => ({ name, version, file: basename(tarballs.get(name)), sha256: null, integrity: null,
+      dependencies: [...new Set(workspaceDependencyNames(packages.find((entry) => entry.manifest.name === name).manifest))].sort() })),
   };
   for (const entry of manifest.packages) {
     const path = join(artifactDir, entry.file);
@@ -252,6 +253,11 @@ async function readReleaseManifest(directory = artifactDir) {
     if (actualIntegrity !== entry.integrity) throw new Error(`Validated tarball integrity changed: ${entry.file}.`);
     const packedManifest = await validateTarball(path, packageNames);
     if (packedManifest.name !== entry.name) throw new Error(`Candidate package identity mismatch: ${entry.file}.`);
+    const dependencies = [...new Set(packageFields.flatMap((field) => Object.keys(packedManifest[field] ?? {}))
+      .filter((name) => packageNames.has(name)))].sort();
+    if (!Array.isArray(entry.dependencies) || JSON.stringify(entry.dependencies) !== JSON.stringify(dependencies)) {
+      throw new Error(`Candidate dependency evidence mismatch: ${entry.file}.`);
+    }
   }
   const stamp = await json(join(directory, "pack-check-success.json"));
   if (stamp.version !== version || stamp.commit !== manifest.commit || !Array.isArray(stamp.packages) || stamp.packages.length !== manifest.packages.length) {
@@ -286,85 +292,6 @@ async function assertOfficialRegistry() {
   const configured = (await pnpm(["config", "get", "registry"], root, { registryArg: false, quiet: true })).trim().replace(/\/?$/u, "/");
   if (configured !== registry) throw new Error(`pnpm registry must be ${registry}; found ${configured || "empty"}.`);
   await pnpm(["ping"], root, { quiet: true });
-}
-
-async function assertPnpmIdentityAndWriteAccess(packages) {
-  await assertPnpmVersion();
-  const user = (await pnpm(["whoami"], root, { quiet: true })).trim();
-  if (!user) throw new Error("pnpm whoami returned no authenticated user.");
-  await assertOfficialRegistry();
-  let accessOutput = "";
-  try {
-    accessOutput = await pnpm(["access", "list", "packages", user, "--json"], root, { quiet: true });
-  } catch (error) {
-    if (!registryNotFound(error)) throw error;
-  }
-  let access;
-  try {
-    access = accessOutput.trim() ? JSON.parse(accessOutput) : undefined;
-  } catch {
-    access = undefined;
-  }
-  let organizationAccess;
-  for (const { name } of packages) {
-    if (await pnpmView(name, "name")) {
-      if (access?.[name] !== "read-write") throw new Error(`Authenticated registry user ${user} does not have write access to ${name}.`);
-    } else if (name.startsWith("@sqlbraid/")) {
-      if (organizationAccess === undefined) {
-        if (!process.env.NODE_AUTH_TOKEN) throw new Error("Bootstrap organization verification requires NODE_AUTH_TOKEN.");
-        const response = await request(new URL("-/org/sqlbraid/user", registry), {
-          headers: { authorization: `Bearer ${process.env.NODE_AUTH_TOKEN}`, accept: "application/json" },
-          signal: AbortSignal.timeout(30_000),
-          redirect: "error",
-        });
-        if (!response.ok) throw new Error(`Bootstrap organization verification failed (HTTP ${response.status}).`);
-        const organization = await response.json();
-        organizationAccess = ["owner", "admin", "developer"].includes(organization?.[user]);
-      }
-      if (!organizationAccess) throw new Error(`Authenticated registry user ${user} cannot create packages in the @sqlbraid organization.`);
-    } else if (name !== "sqlbraid") {
-      throw new Error(`Authenticated registry user ${user} cannot verify creation access for ${name}; refusing bootstrap.`);
-    }
-  }
-  await assertBootstrapTokenGrants();
-  return user;
-}
-
-async function assertBootstrapTokenGrants() {
-  const token = process.env.NODE_AUTH_TOKEN;
-  if (!token) throw new Error("Bootstrap token verification requires NODE_AUTH_TOKEN.");
-  const redacted = `${token.slice(0, 8)}...${token.slice(-4)}`;
-  const matches = [];
-  let seen = 0;
-  let total;
-  for (let page = 0; page < 10; page += 1) {
-    const response = await request(new URL(`-/npm/v1/tokens?page=${page}&perPage=100`, registry), {
-      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
-      signal: AbortSignal.timeout(30_000),
-      redirect: "error",
-    });
-    if (!response.ok) throw new Error(`Bootstrap token verification failed (HTTP ${response.status}).`);
-    const body = await response.json();
-    if (!Array.isArray(body.objects) || !Number.isSafeInteger(body.total) || body.total < 0
-      || (total !== undefined && total !== body.total)) {
-      throw new Error("Invalid or changing bootstrap token metadata; refusing publication.");
-    }
-    total = body.total;
-    seen += body.objects.length;
-    matches.push(...body.objects.filter((entry) => entry?.token === redacted));
-    if (seen === total) break;
-    if (!body.objects.length || seen > total) throw new Error("Incomplete bootstrap token metadata; refusing publication.");
-  }
-  if (seen !== total || matches.length !== 1) {
-    throw new Error("Cannot uniquely verify the current bootstrap token; refusing publication.");
-  }
-  const current = matches[0];
-  if (current.readonly !== false || current.bypass_2fa !== true || current.revoked !== null
-    || !(Date.parse(current.expiry) > Date.now())
-    || !current.permissions?.some((permission) => permission.name === "package" && permission.action === "write")
-    || !current.scopes?.some((scope) => scope.type === "package" && scope.name === "*")) {
-    throw new Error("Bootstrap requires an active automation token with package write access to All packages, including future unscoped sqlbraid.");
-  }
 }
 
 async function pnpmView(spec, field) {
@@ -422,66 +349,150 @@ async function oidcToken(name) {
   return body.token;
 }
 
-async function oidcDistTagAdd(name, tag, releaseVersion) {
-  const token = await oidcToken(name);
-  const response = await request(new URL(`-/package/${encodeURIComponent(name)}/dist-tags/${encodeURIComponent(tag)}`, registry), {
-    method: "PUT",
-    headers: { accept: "application/json", authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify(releaseVersion),
-    signal: AbortSignal.timeout(30_000),
-    redirect: "error",
+// pnpm 12.3.4 stage reads do not exchange OIDC themselves. Use its same
+// registry GET protocol with a fresh package-scoped OIDC token, kept in memory.
+async function stageGet(path, token) {
+  const response = await request(new URL(path, registry), {
+    headers: { authorization: `Bearer ${token}`, "npm-auth-type": "web", "npm-command": "stage" },
+    signal: AbortSignal.timeout(30_000), redirect: "error",
   });
-  if (!response.ok) {
-    throw new Error(`Registry dist-tag update failed for ${name}:${tag} (HTTP ${response.status}).`);
-  }
+  if (!response.ok) throw new Error(`npm stage read failed (HTTP ${response.status}); refusing to assume absence.`);
+  return response;
 }
 
-async function ensureReleaseTag(name, tag, { allowMove, oidc = false }) {
-  const tags = await registryDistTags(name);
-  const found = tags[tag];
-  if (found === version) return;
-  assertNoTagDowngrade(name, tag, found);
-  if (found && !allowMove) throw new Error(`Registry tag ${name}:${tag} points at ${found}, not ${version}.`);
-  if (oidc) await oidcDistTagAdd(name, tag, version);
-  else await pnpm(["dist-tag", "add", `${name}@${version}`, tag], root);
-  const verified = await registryDistTags(name);
-  if (verified[tag] !== version) throw new Error(`Registry tag ${name}:${tag} was not moved to ${version}.`);
+function assertStageId(id) {
+  if (typeof id !== "string" || !/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/iu.test(id)) throw new Error("Missing or invalid npm stage ID.");
+  return id;
 }
 
-async function publishPackage(entry, { dryRun, provenance }) {
-  const tag = releaseTag();
-  const path = join(artifactDir, entry.file);
-  if (dryRun) {
-    await pnpm(["publish", path, "--access", "public", "--tag", tag, "--dry-run", "--no-git-checks"], root);
-    return;
-  }
-  const existing = await registryIntegrity(entry.name, version);
-  if (existing) {
-    if (existing !== entry.integrity) throw new Error(`Registry integrity mismatch for ${entry.name}@${version}: expected ${entry.integrity}, found ${existing}.`);
-    process.stdout.write(`Already published exact ${entry.name}@${version}; verifying ${tag}.\n`);
-    await ensureReleaseTag(entry.name, tag, { allowMove: semver.isPrerelease, oidc: provenance });
-    return;
-  }
-  const args = ["publish", path, "--access", "public", "--tag", tag, "--no-git-checks"];
-  if (provenance) args.push("--provenance");
-  try {
-    await pnpm(args, root);
-  } catch (error) {
-    const afterFailure = await registryIntegrity(entry.name, version);
-    if (afterFailure === entry.integrity) {
-      process.stdout.write(`Publish outcome uncertain for ${entry.name}; registry contains the exact validated artifact.\n`);
-      await ensureReleaseTag(entry.name, tag, { allowMove: semver.isPrerelease, oidc: provenance });
-      return;
+async function findStage(entry, token) {
+  const items = [];
+  let total;
+  for (let page = 0; page < 1000; page += 1) {
+    const query = new URLSearchParams({ package: entry.name, page: String(page), perPage: "100" });
+    const body = await (await stageGet(`-/stage?${query}`, token)).json();
+    if (!Array.isArray(body.items) || !Number.isSafeInteger(body.total) || body.total < 0
+      || (total !== undefined && total !== body.total)) throw new Error("Invalid or changing stage list; retry after registry state settles.");
+    total = body.total;
+    for (const item of body.items) {
+      if (item.packageName !== entry.name || typeof item.version !== "string") throw new Error("Stage list returned an unexpected package identity.");
+      assertStageId(item.id);
+      if (items.some((previous) => previous.id === item.id)) throw new Error("Duplicate stage list entry; cannot prove complete registry state.");
+      items.push(item);
     }
-    if (afterFailure) throw new Error(`Registry integrity mismatch for ${entry.name}@${version}: expected ${entry.integrity}, found ${afterFailure}.`);
-    throw error;
+    if (items.length === total) {
+      const matches = items.filter((item) => item.version === entry.version);
+      if (matches.length > 1) throw new Error(`Multiple stages for ${entry.name}@${entry.version}; maintainer must resolve ambiguity.`);
+      return matches[0];
+    }
+    if (!body.items.length || items.length > total) break;
   }
-  await assertRegistryIntegrity(entry);
-  await ensureReleaseTag(entry.name, tag, { allowMove: semver.isPrerelease, oidc: provenance });
+  throw new Error("Incomplete stage list; refusing to create a potentially duplicate stage.");
+}
+
+async function verifyStage(entry, id, token) {
+  assertStageId(id);
+  const metadata = await (await stageGet(`-/stage/${id}`, token)).json();
+  if (metadata.id !== id || metadata.packageName !== entry.name || metadata.version !== entry.version || metadata.tag !== releaseTag()) {
+    throw new Error(`Staged package identity or requested tag mismatch for ${entry.name}.`);
+  }
+  // This endpoint returns the stored archive, not a repack. Require exact bytes;
+  // an unavailable endpoint or a registry re-encoding fails closed.
+  const bytes = new Uint8Array(await (await stageGet(`-/stage/${id}/tarball`, token)).arrayBuffer());
+  if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256
+    || `sha512-${createHash("sha512").update(bytes).digest("base64")}` !== entry.integrity) {
+    throw new Error(`Staged tarball integrity mismatch for ${entry.name}@${entry.version}.`);
+  }
+}
+
+function manifestDigest(manifest) {
+  return createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
+}
+
+function approvalCommands(manifest, records) {
+  const levels = new Map();
+  const layers = [];
+  for (const entry of manifest.packages) {
+    const dependencies = entry.dependencies ?? [];
+    if (dependencies.some((name) => !levels.has(name))) throw new Error("Candidate dependencies are not in publication order.");
+    const level = dependencies.reduce((max, name) => Math.max(max, levels.get(name) + 1), 0);
+    levels.set(entry.name, level);
+    const record = records.find(({ name }) => name === entry.name);
+    if (record?.state === "staged") (layers[level] ??= []).push(assertStageId(record.stageId));
+  }
+  return layers.flatMap((ids, index) => ids?.length ? [{ layer: index + 1, command: `pnpm stage approve ${ids.join(" ")}` }] : []);
+}
+
+async function persistStaging(manifest, evidence, directory) {
+  evidence.approvalCommands = approvalCommands(manifest, evidence.packages);
+  const pending = join(directory, ".staged-publication.json.tmp");
+  await writeFile(pending, `${JSON.stringify(evidence, null, 2)}\n`);
+  await rename(pending, join(directory, "staged-publication.json"));
+}
+
+async function stagingSummary(evidence) {
+  if (!process.env.GITHUB_STEP_SUMMARY) return;
+  const lines = ["## npm staging — human approval required", "", evidence.complete
+    ? "Candidates are staged or already public with matching integrity. No approval was executed."
+    : "Staging incomplete. Review partial evidence before retrying; do not approve a partial release.", "",
+    "| Package | Version | Stage ID / state | Dist-tag requested | Candidate SHA-256 |",
+    "| --- | --- | --- | --- | --- |"];
+  for (const entry of evidence.packages) lines.push(`| ${entry.name} | ${entry.version} | ${entry.stageId ?? entry.state} (${entry.state}) | ${entry.tag} | ${entry.candidateSha256} |`);
+  if (evidence.complete) {
+    lines.push("", "After reviewing metadata and current dist-tags, approve each dependency layer interactively with 2FA. Approval is sequential, not atomic; stop on failure.");
+    for (const { layer, command } of evidence.approvalCommands) lines.push("", `Layer ${layer}:`, "\n```sh", command, "```");
+  }
+  await writeFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`, { flag: "a" });
+}
+
+async function stagePackage(entry, record, token, persist, directory) {
+  const existing = await registryIntegrity(entry.name, entry.version);
+  if (existing) {
+    if (existing !== entry.integrity) throw new Error(`Registry integrity mismatch for ${entry.name}@${entry.version}.`);
+    record.state = "public";
+    await persist();
+    return;
+  }
+  let stage = await findStage(entry, token);
+  if (!stage) {
+    if (record.state === "pending" || record.stageId) throw new Error(`Uncertain prior stage for ${entry.name}; no visible stage. Refusing another upload; maintainer must reconcile registry state.`);
+    record.state = "pending";
+    await persist(); // durable intent before any upload, including network ambiguity
+    let uploadError;
+    try {
+      const output = await pnpm(["stage", "publish", join(directory, entry.file), "--access", "public", "--tag", releaseTag(),
+        "--no-git-checks", "--ignore-scripts", "--provenance", "--json", "--reporter=silent", "--npmrc-auth-file", "/dev/null"], root, { quiet: true });
+      const summary = JSON.parse(output)?.[entry.name];
+      record.stageId = assertStageId(summary?.stageId);
+      await persist(); // keep the ID even if subsequent verification fails
+      if (summary.name !== entry.name || summary.version !== entry.version || summary.integrity !== entry.integrity) throw new Error("pnpm stage summary does not match the validated candidate.");
+    } catch (error) {
+      uploadError = error;
+    }
+    // Always discover the registry state after upload; no automatic second POST.
+    stage = await findStage(entry, token);
+    if (!stage) {
+      const publicIntegrity = await registryIntegrity(entry.name, entry.version);
+      if (publicIntegrity) {
+        if (publicIntegrity !== entry.integrity) throw new Error(`Registry integrity mismatch for ${entry.name}@${entry.version}.`);
+        record.state = "public";
+        await persist();
+        return;
+      }
+      throw new Error(`Staging outcome unresolved for ${entry.name}; retained pending evidence, refusing another upload.`, { cause: uploadError });
+    }
+    if (record.stageId && record.stageId !== stage.id) throw new Error("Upload and registry stage IDs disagree; maintainer reconciliation required.");
+  }
+  record.stageId = assertStageId(stage.id);
+  record.state = "pending";
+  await persist();
+  await verifyStage(entry, stage.id, token);
+  record.state = "staged";
+  await persist();
 }
 
 async function registryTagSnapshot(manifest) {
-  return new Map(await Promise.all(manifest.packages.map(async (entry) => [entry.name, await registryDistTags(entry.name)])));
+  return Object.fromEntries(await Promise.all(manifest.packages.map(async (entry) => [entry.name, await registryDistTags(entry.name)])));
 }
 
 function assertLatestUnchanged(before, after, name) {
@@ -496,58 +507,115 @@ function assertNoTagDowngrade(name, tag, found) {
   }
 }
 
-async function promoteLatest(manifest, before, { oidc = false } = {}) {
-  for (const entry of manifest.packages) {
-    assertLatestUnchanged(before.get(entry.name), await registryDistTags(entry.name), entry.name);
-    assertNoTagDowngrade(entry.name, "latest", before.get(entry.name).latest);
-    if (oidc) await oidcDistTagAdd(entry.name, "latest", version);
-    else await pnpm(["dist-tag", "add", `${entry.name}@${version}`, "latest"], root);
-    const tags = await registryDistTags(entry.name);
-    if (tags.latest !== version) throw new Error(`Registry latest tag for ${entry.name} does not point at ${version}.`);
+async function stageCandidates(manifest, { dryRun = false, directory = artifactDir } = {}) {
+  await assertPnpmVersion();
+  if (dryRun) {
+    for (const entry of manifest.packages) {
+      const output = await pnpm(["stage", "publish", join(directory, entry.file), "--access", "public", "--tag", releaseTag(),
+        "--dry-run", "--no-git-checks", "--ignore-scripts", "--provenance", "--json", "--reporter=silent", "--npmrc-auth-file", "/dev/null"], root, { quiet: true });
+      const summary = JSON.parse(output)?.[entry.name];
+      if (summary?.name !== entry.name || summary.version !== entry.version || summary.integrity !== entry.integrity || summary.stageId) throw new Error("Staged dry-run did not report the exact candidate integrity without a stage ID.");
+    }
+    return;
+  }
+  assertPublicationCredentials("stage");
+  await assertOfficialRegistry();
+  let evidence;
+  try { evidence = await json(join(directory, "staged-publication.json")); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (evidence) {
+    assertStagingEvidence(manifest, evidence);
+  } else {
+    evidence = { format: "sqlbraid-staged-publication", version: manifest.version, commit: manifest.commit,
+      runId: manifest.runId, runAttempt: manifest.runAttempt, manifestSha256: manifestDigest(manifest),
+      latestBefore: await registryTagSnapshot(manifest), complete: false, packages: manifest.packages.map((entry) => ({
+        name: entry.name, version: entry.version, candidateSha256: entry.sha256, candidateIntegrity: entry.integrity,
+        tag: releaseTag(), state: "absent",
+      })), approvalCommands: [] };
+  }
+  evidence.complete = false;
+  const persist = () => persistStaging(manifest, evidence, directory);
+  await persist();
+  try {
+    for (const entry of manifest.packages) {
+      const tags = await registryDistTags(entry.name);
+      assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
+      assertNoTagDowngrade(entry.name, semver.isPrerelease ? "next" : "latest", tags[semver.isPrerelease ? "next" : "latest"]);
+      assertNoTagDowngrade(entry.name, releaseTag(), tags[releaseTag()]);
+      if (semver.isPrerelease && tags.latest === version) throw new Error(`Refusing prerelease ${version} under latest for ${entry.name}.`);
+    }
+    for (const [index, entry] of manifest.packages.entries()) {
+      // Reads authenticate with OIDC too, never an npm token fallback. pnpm
+      // obtains its own per-package OIDC credential for the stage upload.
+      await stagePackage(entry, evidence.packages[index], await oidcToken(entry.name), persist, directory);
+      const tags = await registryDistTags(entry.name);
+      assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
+      if (evidence.packages[index].state === "public" && tags[releaseTag()] !== version) {
+        throw new Error(`Exact public ${entry.name}@${version} has incorrect ${releaseTag()} tag; maintainer must reconcile the tag before retrying. No tag was changed.`);
+      }
+    }
+    for (const entry of manifest.packages) {
+      assertLatestUnchanged(evidence.latestBefore[entry.name], await registryDistTags(entry.name), entry.name);
+    }
+    evidence.complete = true;
+  } finally {
+    await persist();
+    await stagingSummary(evidence);
+  }
+  return evidence;
+}
+
+function assertStagingEvidence(manifest, evidence) {
+  if (evidence.format !== "sqlbraid-staged-publication" || evidence.manifestSha256 !== manifestDigest(manifest)
+    || evidence.version !== manifest.version || evidence.commit !== manifest.commit
+    || evidence.runId !== manifest.runId || evidence.runAttempt !== manifest.runAttempt
+    || !Array.isArray(evidence.packages) || evidence.packages.length !== manifest.packages.length) throw new Error("Staging evidence does not match the immutable release manifest.");
+  for (const [index, entry] of manifest.packages.entries()) {
+    const record = evidence.packages[index];
+    if (record.name !== entry.name || record.version !== entry.version || record.candidateSha256 !== entry.sha256
+      || record.candidateIntegrity !== entry.integrity || record.tag !== releaseTag() || !evidence.latestBefore?.[entry.name]
+      || !["absent", "pending", "staged", "public"].includes(record.state)) throw new Error("Invalid staging package evidence.");
+    if (record.stageId) assertStageId(record.stageId);
   }
 }
 
-async function pnpmPublish(manifest, { dryRun, provenance }) {
+async function verifyPublished(manifest, evidence, { requireLatest = false } = {}) {
+  assertStagingEvidence(manifest, evidence);
   await assertPnpmVersion();
-  if (dryRun) {
-    for (const entry of manifest.packages) await publishPackage(entry, { dryRun: true, provenance: false });
-    return;
-  }
-  await assertOfficialRegistry();
-  const before = await registryTagSnapshot(manifest);
-  for (const [name, tags] of before) {
-    const tag = semver.isPrerelease ? "next" : "latest";
-    assertNoTagDowngrade(name, tag, tags[tag]);
-  }
-  if (semver.isPrerelease) {
-    for (const [name, tags] of before) if (tags.latest === version) throw new Error(`Refusing to publish prerelease ${version} under latest for ${name}.`);
-  }
-  for (const entry of manifest.packages) await publishPackage(entry, { dryRun: false, provenance });
   for (const entry of manifest.packages) {
     await assertRegistryIntegrity(entry);
-    const after = await registryDistTags(entry.name);
-    if (semver.isPrerelease) assertLatestUnchanged(before.get(entry.name), after, entry.name);
-    else if (after[releaseTag()] !== version) throw new Error(`Staged stable tag ${entry.name}:${releaseTag()} does not point at ${version}.`);
+    const tags = await registryDistTags(entry.name);
+    if (tags[releaseTag()] !== version) throw new Error(`Registry tag ${entry.name}:${releaseTag()} does not point at ${version}.`);
+    if (!semver.isPrerelease && requireLatest) {
+      if (tags.latest !== version) throw new Error(`Registry latest for ${entry.name} does not point at ${version}.`);
+    } else assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
+    const attestations = await pnpmView(`${entry.name}@${entry.version}`, "dist.attestations");
+    if (typeof attestations?.url !== "string" || !attestations.provenance?.predicateType) throw new Error(`Public provenance metadata missing for ${entry.name}@${entry.version}.`);
   }
-  if (!semver.isPrerelease) {
-    for (const entry of manifest.packages) assertLatestUnchanged(before.get(entry.name), await registryDistTags(entry.name), entry.name);
-    await promoteLatest(manifest, before, { oidc: provenance });
-    for (const entry of manifest.packages) {
-      const tags = await registryDistTags(entry.name);
-      if (tags.latest !== version) throw new Error(`Registry latest tag for ${entry.name} does not point at ${version}.`);
-    }
+  process.stdout.write(`Verified every ${version} package publicly: candidate integrity, requested tags, provenance metadata, and latest policy.\n`);
+  if (!semver.isPrerelease && !requireLatest) {
+    process.stdout.write("All packages are public. Immediately recheck latest for concurrent releases before these manual promotions:\n");
+    for (const entry of manifest.packages) process.stdout.write(`pnpm dist-tag add ${entry.name}@${version} latest --registry ${registry}\n`);
+    process.stdout.write("Then rerun verify-published --require-latest. No dist-tag was changed by this helper.\n");
   }
 }
 
 async function main() {
-  const mode = option("--mode", "publish-dry-run");
-  if (!["preflight", "pack", "pack-only", "publish-dry-run", "publish", "bootstrap-rc0"].includes(mode)) throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
+  const mode = option("--mode", "stage-dry-run");
+  if (!["preflight", "pack", "pack-only", "stage-dry-run", "stage", "verify-published"].includes(mode)) throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
+  if (mode === "verify-published") {
+    const manifest = await json(resolve(option("--manifest", join(artifactDir, "release-manifest.json"))));
+    const evidence = await json(resolve(option("--staged-publication", join(artifactDir, "staged-publication.json"))));
+    setReleaseVersion(manifest.version);
+    await verifyPublished(manifest, evidence, { requireLatest: process.argv.includes("--require-latest") });
+    return;
+  }
   const packages = await packageManifests();
   await assertVersions(packages);
   const order = publishOrder(packages);
-  process.stdout.write(`Dependency-derived publication order: ${order.join(" -> ")}\n`);
+  process.stdout.write(`Dependency-derived staging order: ${order.join(" -> ")}\n`);
   if (mode === "preflight") {
-    if (["publish", "bootstrap-rc0"].includes(process.env.SQLBRAID_RELEASE_MODE)) assertMutationAuthorization(process.env.SQLBRAID_RELEASE_MODE);
+    if (process.env.SQLBRAID_RELEASE_MODE === "stage") assertMutationAuthorization("stage");
+    else if (![undefined, "certify", "pack-only"].includes(process.env.SQLBRAID_RELEASE_MODE)) throw new Error("Unknown workflow release mode.");
     await assertCleanTree();
     if (process.env.GITHUB_REF?.startsWith("refs/tags/")) await assertTaggedSha();
     else await currentSha();
@@ -559,63 +627,35 @@ async function main() {
     await pack(packages, order, sha);
     return;
   }
-  if (mode === "publish") {
+  if (mode === "stage") {
     assertMutationAuthorization(mode);
     assertPublicationCredentials(mode);
-    await assertCleanTree();
-    const sha = await assertTaggedSha();
-    const manifest = await readReleaseManifest();
-    if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this tagged commit.");
-    assertManifestOrder(manifest, order);
-    await assertReleaseWorkflows();
-    await pnpmPublish(manifest, { dryRun: false, provenance: true });
-    return;
+    if (!artifactArgument) throw new Error("Staging requires --artifact-dir pointing at validated release artifacts.");
   }
-  if (mode === "bootstrap-rc0") {
-    assertMutationAuthorization(mode);
-    assertPublicationCredentials(mode);
-    if (!artifactArgument) throw new Error("RC bootstrap requires --artifact-dir pointing at validated release artifacts.");
-    if (version !== "0.1.0-rc.0") throw new Error(`RC bootstrap requires version 0.1.0-rc.0; found ${version}.`);
-    await assertCleanTree();
-    const sha = await assertTaggedSha();
-    const manifest = await readReleaseManifest();
-    if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this tagged commit.");
-    assertManifestOrder(manifest, order);
-    await assertReleaseWorkflows();
-    await assertPnpmIdentityAndWriteAccess(manifest.packages);
-    await pnpmPublish(manifest, { dryRun: false, provenance: false });
-    return;
-  }
-  if (mode === "publish-dry-run") {
-    await assertCleanTree();
-    const sha = await currentSha();
-    const manifest = await readReleaseManifest();
-    if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate.");
-    assertManifestOrder(manifest, order);
-    await pnpmPublish(manifest, { dryRun: true, provenance: false });
-    return;
-  }
+  await assertCleanTree();
+  const sha = mode === "stage" ? await assertTaggedSha() : await currentSha();
+  const manifest = await readReleaseManifest();
+  if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate commit.");
+  assertManifestOrder(manifest, order);
+  if (mode === "stage") await assertReleaseWorkflows();
+  await stageCandidates(manifest, { dryRun: mode === "stage-dry-run" });
 }
 
 function assertMutationAuthorization(mode, env = process.env) {
-  if (!["publish", "bootstrap-rc0"].includes(mode)) throw new Error(`Not a publication mode: ${mode}.`);
-  if (env.GITHUB_ACTIONS !== "true" || env.GITHUB_EVENT_NAME !== "workflow_dispatch") throw new Error(`${mode} is allowed only from GitHub Actions workflow_dispatch.`);
-  if (env.SQLBRAID_RELEASE_MODE !== mode) throw new Error(`${mode} requires SQLBRAID_RELEASE_MODE=${mode}.`);
-  if (mode === "bootstrap-rc0" && version !== "0.1.0-rc.0") throw new Error("Bootstrap requires exactly 0.1.0-rc.0.");
+  if (mode !== "stage") throw new Error(`Not a staging mode: ${mode}.`);
+  if (env.GITHUB_ACTIONS !== "true" || env.GITHUB_EVENT_NAME !== "workflow_dispatch") throw new Error("stage is allowed only from GitHub Actions workflow_dispatch.");
+  if (env.SQLBRAID_RELEASE_MODE !== mode) throw new Error("stage requires SQLBRAID_RELEASE_MODE=stage.");
   const expected = `refs/tags/${expectedTag}`;
-  if (env.GITHUB_REF !== expected) throw new Error(`${mode} requires GITHUB_REF=${expected}; found ${env.GITHUB_REF ?? "unset"}.`);
-  if (!/^[a-f\d]{40}$/u.test(env.GITHUB_SHA ?? "") || !/^\d+$/u.test(env.GITHUB_RUN_ID ?? "") || !/^\d+$/u.test(env.GITHUB_RUN_ATTEMPT ?? "")) throw new Error("Publication requires exact workflow SHA, run ID, and run attempt.");
+  if (env.GITHUB_REF !== expected) throw new Error(`stage requires GITHUB_REF=${expected}; found ${env.GITHUB_REF ?? "unset"}.`);
+  if (!/^[a-f\d]{40}$/u.test(env.GITHUB_SHA ?? "") || !/^\d+$/u.test(env.GITHUB_RUN_ID ?? "") || !/^\d+$/u.test(env.GITHUB_RUN_ATTEMPT ?? "")) throw new Error("Staging requires exact workflow SHA, run ID, and run attempt.");
 }
 
 function assertPublicationCredentials(mode, env = process.env) {
-  if (mode === "bootstrap-rc0") {
-    if (!env.NODE_AUTH_TOKEN) throw new Error("Bootstrap requires NPM_BOOTSTRAP_TOKEN via NODE_AUTH_TOKEN.");
-    return;
-  }
+  if (mode !== "stage") throw new Error("Only OIDC staging credentials are supported.");
   for (const name of ["NODE_AUTH_TOKEN", "NPM_TOKEN", "NPM_BOOTSTRAP_TOKEN", "NPM_ID_TOKEN"]) {
-    if (env[name]) throw new Error(`Normal OIDC publication must not receive ${name}.`);
+    if (env[name]) throw new Error(`Normal OIDC staging must not receive ${name}.`);
   }
-  if (!env.ACTIONS_ID_TOKEN_REQUEST_URL || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) throw new Error("Normal publication requires GitHub Actions id-token permissions.");
+  if (!env.ACTIONS_ID_TOKEN_REQUEST_URL || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) throw new Error("Normal staging requires GitHub Actions id-token permissions.");
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : undefined;
@@ -626,14 +666,8 @@ if (invokedPath === fileURLToPath(import.meta.url)) {
   });
 }
 
-function setReleaseCommand(nextCommand) {
-  command = nextCommand;
-}
-
-function setReleaseRequest(nextRequest) {
-  request = nextRequest;
-}
-
+function setReleaseCommand(nextCommand) { command = nextCommand; }
+function setReleaseRequest(nextRequest) { request = nextRequest; }
 function setReleaseVersion(nextVersion) {
   version = nextVersion;
   semver = parseSemver(nextVersion);
@@ -641,4 +675,4 @@ function setReleaseVersion(nextVersion) {
   if (!artifactArgument) artifactDir = resolve(join(tmpdir(), `sqlbraid-release-${nextVersion}`));
 }
 
-export { assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertPnpmIdentityAndWriteAccess, assertTaggedSha, pnpmPublish, parseSemver, readReleaseManifest, releaseTag, setReleaseCommand, setReleaseRequest, setReleaseVersion };
+export { assertManifestOrder, assertMutationAuthorization, assertPublicationCredentials, assertTaggedSha, stageCandidates, verifyPublished, parseSemver, readReleaseManifest, releaseTag, setReleaseCommand, setReleaseRequest, setReleaseVersion };
