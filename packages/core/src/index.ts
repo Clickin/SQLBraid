@@ -50,7 +50,8 @@ export interface ExactIntegerRange {
 }
 
 export class ResultExactnessError extends Error {
-  readonly code = "BRAID_RESULT_EXACTNESS";
+  static readonly code = "BRAID_RESULT_EXACTNESS" as const;
+  readonly code = ResultExactnessError.code;
 
   constructor(message = "Result value does not have an exact representation.") {
     super(message);
@@ -1214,7 +1215,8 @@ export type DriverCapabilityErrorCode =
   | "BRAID_RESOURCE_CLEANUP";
 
 export class RoutineMappingError extends Error {
-  readonly code = "BRAID_CALL_MAP";
+  static readonly code = "BRAID_CALL_MAP" as const;
+  readonly code = RoutineMappingError.code;
   readonly location: RoutineMappingLocation;
 
   constructor(message: string, location: RoutineMappingLocation, options?: { readonly cause?: unknown }) {

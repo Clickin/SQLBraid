@@ -274,3 +274,18 @@ test("MariaDB rejects active cancellation before execution without destroy suppo
   );
   assert.equal(executions, 0);
 });
+
+test("MariaDB pre-aborted executions preserve a null AbortSignal reason", async () => {
+  let executions = 0;
+  const connection = connectionFor(undefined);
+  connection.execute = async () => {
+    executions += 1;
+    return [];
+  };
+  const executor = createMariaDbExecutor(connection);
+  await assert.rejects(
+    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: AbortSignal.abort(null) }),
+    (error: unknown) => error === null,
+  );
+  assert.equal(executions, 0);
+});

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { RenderedBulk } from "@sqlbraid/core";
 import { mssqlParameter, sql, typePolicy } from "@sqlbraid/mssql";
+import { UnsupportedFeatureError } from "@sqlbraid/core";
 import {
   createTediousExecutor,
   createTediousPoolProvider,
@@ -181,6 +182,54 @@ test("MSSQL query rejects actual output return values instead of discarding them
     () => executor.query(sql`SELECT 1`.render()),
     /BRAID_CALL_OUT_UNSUPPORTED/u,
   );
+});
+
+test("MSSQL pre-aborted executions preserve a null AbortSignal reason", async () => {
+  let executed = false;
+  const executor = createTediousExecutor(mockConnection(() => {
+    executed = true;
+  }));
+  await assert.rejects(
+    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: AbortSignal.abort(null) }),
+    (error: unknown) => error === null,
+  );
+  assert.equal(executed, false);
+});
+
+test("MSSQL stream callback failures preserve public adapter error classes and codes", async () => {
+  const cases: readonly {
+    readonly emit: (request: TediousRequestLike) => void;
+    readonly code: "BRAID_CALL_OUT_UNSUPPORTED" | "BRAID_STREAM_UNSUPPORTED" | "BRAID_RESULT_SETS_UNSUPPORTED";
+  }[] = [
+    {
+      emit: (request) => emit(request, "returnValue", "answer", 42),
+      code: "BRAID_CALL_OUT_UNSUPPORTED",
+    },
+    {
+      emit: () => {},
+      code: "BRAID_STREAM_UNSUPPORTED",
+    },
+    {
+      emit: (request) => {
+        emit(request, "columnMetadata", [{ colName: "value", type: "Int" }]);
+        emit(request, "doneInProc", 1);
+        emit(request, "doneInProc", 1);
+      },
+      code: "BRAID_RESULT_SETS_UNSUPPORTED",
+    },
+  ];
+  for (const { emit: emitEvents, code } of cases) {
+    const executor = createTediousExecutor(mockConnection((request) => {
+      emitEvents(request);
+      emit(request, "requestCompleted");
+    }));
+    await assert.rejects(
+      async () => {
+        for await (const _row of executor.stream(sql.rows`SELECT 1`.render())) void _row;
+      },
+      (error: unknown) => error instanceof UnsupportedFeatureError && error.code === code,
+    );
+  }
 });
 
 test("MSSQL row decode failures reject and cancel the request", async () => {

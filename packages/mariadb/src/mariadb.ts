@@ -26,7 +26,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
+import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import {
   typePolicyForProfile,
   type MariaDbProfileOptions,
@@ -154,7 +154,7 @@ function assertMariaDbConnection(connection: MariaDbConnectionLike): void {
 
 function assertExecutionOptions(connection: MariaDbConnectionLike, options?: ExecutionOptions): void {
   const signal = options?.signal;
-  if (signal?.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  if (signal?.aborted) throw signal.reason;
   if (signal !== undefined && typeof connection.destroy !== "function") {
     throw new UnsupportedFeatureError(
       "statement.cancel",
@@ -704,11 +704,11 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
           if (pendingError !== undefined) throw pendingError;
           if (fieldsChanged) {
             assertUniqueFields(fields);
-            if (fields.length === 0) throw new Error("BRAID_RESULT_KIND: MariaDB stream requires a row-producing statement.");
+            if (fields.length === 0) throw new DatabaseResultKindError("rows", "command");
             fieldsChanged = false;
           }
           if (next.done) {
-            if (fieldsSeen === 0) throw new Error("BRAID_RESULT_KIND: MariaDB stream requires a row-producing statement.");
+            if (fieldsSeen === 0) throw new DatabaseResultKindError("rows", "command");
             break;
           }
           signal?.throwIfAborted();

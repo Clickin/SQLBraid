@@ -26,7 +26,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
+import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import {
   representationProfiles,
   typePolicyForProfile,
@@ -929,7 +929,9 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
           const result = await readCursor(cursor, batchSize, signal);
           const fields = result.fields ?? [];
           assertUniqueFields(fields);
-          if (result.fields !== undefined && fields.length === 0) throw new Error("BRAID_RESULT_KIND: PostgreSQL stream requires a row-producing statement.");
+          if (result.fields !== undefined && fields.length === 0) {
+            throw new DatabaseResultKindError("rows", "command");
+          }
           const rows = result.rows;
           if (rows.length === 0) break;
           for (const row of rows) {

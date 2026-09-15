@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "vitest";
-import { UnsupportedFeatureError } from "@sqlbraid/core";
+import { ResultExactnessError, UnsupportedFeatureError } from "@sqlbraid/core";
 import type { Database } from "@sqlbraid/core";
-import { createPooledDatabase } from "@sqlbraid/runtime";
+import { createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { sql } from "@sqlbraid/sqlite";
 import { createD1Executor } from "@sqlbraid/sqlite/d1";
 import { createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";
@@ -157,6 +157,28 @@ test("already-aborted SQLite executions reject with the supplied reason without 
   assert.equal(prepares, 0);
 });
 
+test("SQLite adapters preserve a null AbortSignal reason before I/O", async () => {
+  const query = sql.rows`SELECT 1 AS value`.render();
+  const signal = AbortSignal.abort(null);
+  const node = createNodeSqliteExecutor({
+    prepare() { throw new Error("node I/O should not start"); },
+  });
+  const wasm = createSqliteWasmExecutor({
+    prepare() { throw new Error("WASM I/O should not start"); },
+    exec() {},
+  });
+  const d1 = createD1Executor({
+    prepare() { throw new Error("D1 I/O should not start"); },
+    batch: async () => [],
+  });
+  for (const executor of [node, wasm, d1]) {
+    await assert.rejects(
+      () => executor.query(query, undefined, { signal }),
+      (error: unknown) => error === null,
+    );
+  }
+});
+
 test("SQLite adapters reject row OUT parameters before acquisition or prepare", async () => {
   const query = sql.rows`UPDATE users SET name = ${sql.out("name")}`;
   const rendered = query.render();
@@ -211,6 +233,71 @@ test("SQLite adapters reject row OUT parameters before acquisition or prepare", 
         && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
     );
     assert.equal(d1Prepares, 0);
+  } finally {
+    native.close();
+  }
+});
+
+test("SQLite WASM exact row reads expose ResultExactnessError when OO1 pointer metadata is missing", async () => {
+  const statement = {
+    columnCount: 1,
+    bind() { return this; },
+    step() { return true; },
+    get() { return 1; },
+    getColumnName() { return "value"; },
+    reset() {},
+    finalize() {},
+  };
+  const executor = createSqliteWasmExecutor({
+    prepare() { return statement; },
+    exec() {},
+  }, {
+    sqlite3: {
+      capi: {
+        SQLITE_INTEGER: 1,
+        sqlite3_column_type() { return 1; },
+        sqlite3_column_int64() { return 1n; },
+      },
+    },
+  });
+  await assert.rejects(
+    () => executor.query(sql.rows`SELECT 1 AS value`.render()),
+    (error: unknown) => error instanceof ResultExactnessError && error.code === "BRAID_RESULT_EXACTNESS",
+  );
+});
+
+test("SQLite stream guards expose DatabaseResultKindError for non-row statements", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    const node = createNodeSqliteExecutor(native);
+    await assert.rejects(
+      async () => {
+        for await (const _row of node.stream(sql.rows`CREATE TABLE braid_stream_guard (value TEXT)`.render())) void _row;
+      },
+      (error: unknown) => error instanceof DatabaseResultKindError
+        && error.code === "BRAID_RESULT_KIND"
+        && error.declaredKind === "rows"
+        && error.actualKind === "command",
+    );
+
+    const statement = {
+      columnCount: 0,
+      bind() { return this; },
+      step() { return false; },
+      getColumnName() { return ""; },
+      reset() {},
+      finalize() {},
+    };
+    const wasm = createSqliteWasmExecutor({ prepare() { return statement; }, exec() {} });
+    await assert.rejects(
+      async () => {
+        for await (const _row of wasm.stream(sql.rows`CREATE TABLE braid_stream_guard_wasm (value TEXT)`.render())) void _row;
+      },
+      (error: unknown) => error instanceof DatabaseResultKindError
+        && error.code === "BRAID_RESULT_KIND"
+        && error.declaredKind === "rows"
+        && error.actualKind === "command",
+    );
   } finally {
     native.close();
   }

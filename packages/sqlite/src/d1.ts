@@ -108,7 +108,7 @@ function assertD1Values(values: readonly unknown[]): void {
 function assertExecutionOptions(options?: ExecutionOptions): void {
   const signal = options?.signal;
   if (signal === undefined) return;
-  if (signal.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  if (signal.aborted) throw signal.reason;
   throw new UnsupportedFeatureError(
     "statement.cancel",
     "BRAID_CANCEL_UNSUPPORTED",

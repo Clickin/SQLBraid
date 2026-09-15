@@ -273,7 +273,7 @@ function assertDirectConnection(connection: TediousConnectionLike): void {
 
 function assertExecutionOptions(options?: ExecutionOptions): void {
   const signal = options?.signal;
-  if (signal?.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  if (signal?.aborted) throw signal.reason;
 }
 
 function unsupportedTransactionOption(option: string): never {
@@ -686,18 +686,22 @@ function collect(
     let doneCount = 0;
     let doneInProcCount = 0;
     let procedureReturnValue: number | undefined;
+    let aborted = false;
     const fail = (error: unknown): void => {
       if (settled) return;
-      eventError = eventError ?? error;
+      eventError = eventError === undefined ? error : eventError;
       if (!started) {
         settled = true;
-        reject(asError(eventError) ?? new Error("SQL Server request failed."));
+        const failure = aborted
+          ? signal?.reason
+          : eventError === undefined ? new Error("SQL Server request failed.") : asError(eventError) ?? eventError;
+        reject(failure);
         return;
       }
       if (!cancellationRequested) {
         cancellationRequested = true;
         try { request?.cancel?.(); } catch (cancelError) {
-          cleanupFailure = cleanupFailure ?? cancelError;
+          cleanupFailure = cleanupFailure === undefined ? cancelError : cleanupFailure;
         }
       }
       finish();
@@ -706,9 +710,11 @@ function collect(
       if (!completed || settled) return;
       settled = true;
       signal?.removeEventListener("abort", onAbort);
-      const error = asError(eventError ?? callbackError);
-      if (error !== undefined) {
-        reject(cleanupFailure === undefined ? error : resourceCleanupError(error, [cleanupFailure]));
+      const failure = aborted
+        ? signal?.reason
+        : asError(eventError !== undefined ? eventError : callbackError);
+      if (aborted || failure !== undefined) {
+        reject(cleanupFailure === undefined ? failure : resourceCleanupError(failure, [cleanupFailure]));
         return;
       }
       if (cleanupFailure !== undefined) {
@@ -738,7 +744,8 @@ function collect(
       });
     };
     const onAbort = (): void => {
-      fail(signal?.reason ?? new Error("SQL Server request aborted."));
+      aborted = true;
+      fail(signal?.reason);
     };
     try {
       const requestParameters = routineProcedure === undefined
@@ -825,7 +832,7 @@ function collect(
       for (const parameter of requestParameters) addParameter(request, parameter);
       started = true;
       if (signal?.aborted) {
-        fail(signal.reason ?? new Error("SQL Server request aborted."));
+        fail(signal.reason);
         return;
       }
       if (routineProcedure !== undefined) {
@@ -916,35 +923,41 @@ function streamRows(
     let request: TediousRequestLike | undefined;
     let done = false;
     let failure: unknown;
+    let failureSet = false;
     let cleanupFailure: unknown;
     let paused = false;
     let cancellationRequested = false;
     let completion!: Promise<void>;
     const wake = (): void => { for (const waiter of waiters.splice(0)) waiter(); };
     const waitForData = (): Promise<void> => new Promise((resolve) => waiters.push(resolve));
+    const setFailure = (error: unknown): void => {
+      if (failureSet) return;
+      failure = error;
+      failureSet = true;
+    };
     const cancel = (): void => {
       if (done || cancellationRequested) return;
       cancellationRequested = true;
-      failure = failure ?? signal?.reason ?? new Error("SQL Server stream aborted.");
+      setFailure(signal === undefined ? new Error("SQL Server stream aborted.") : signal.reason);
       try {
         if (request?.cancel) request.cancel();
         else if (request) connection.cancel?.();
         if (paused) { request?.resume?.(); paused = false; }
       } catch (error) {
-        cleanupFailure = cleanupFailure ?? error;
-        failure = failure ?? error;
+        cleanupFailure = cleanupFailure === undefined ? error : cleanupFailure;
+        setFailure(error);
       }
       wake();
     };
     const onAbort = (): void => {
-      failure = failure ?? signal?.reason ?? new Error("SQL Server stream aborted.");
+      setFailure(signal?.reason);
       cancel();
       wake();
     };
     if (signal?.aborted) cancel();
     else signal?.addEventListener("abort", onAbort, { once: true });
     completion = new Promise<void>((resolve, reject) => {
-      if (failure) {
+      if (failureSet) {
         done = true;
         reject(failure);
         return;
@@ -952,7 +965,7 @@ function streamRows(
       try {
         request = new Request(parameterizedSql, ((error: unknown) => {
           if (error !== undefined && error !== null) {
-            failure = failure ?? asError(error);
+            setFailure(asError(error));
             cancel();
           }
         })) as unknown as TediousRequestLike;
@@ -965,7 +978,7 @@ function streamRows(
           try {
             safeDatabaseCount(rowCount);
           } catch (error) {
-            failure = failure ?? error;
+            setFailure(error);
             cancel();
           }
         };
@@ -984,36 +997,50 @@ function streamRows(
             columns = metadataColumns(metadata);
             assertUniqueColumns(columns);
           }
-          catch (error) { failure = failure ?? error; cancel(); }
+          catch (error) { setFailure(error); cancel(); }
         });
         request.on("row", (row: unknown) => {
-          if (failure) return;
+          if (failureSet) return;
           try {
             queue.push(mapRow(row, columns, policy));
             if (queue.length >= max && !paused) { request?.pause?.(); paused = true; }
             wake();
           } catch (error) {
-            failure = failure ?? error;
+            setFailure(error);
             cancel();
           }
         });
         request.on("error", (error: unknown) => {
-          failure = failure ?? asError(error);
+          setFailure(asError(error));
           cancel();
         });
         request.on("returnValue", () => {
-          failure = failure ?? new Error("BRAID_CALL_OUT_UNSUPPORTED: SQL Server output parameters are not implemented.");
+          setFailure(new UnsupportedFeatureError(
+            "routine.out",
+            "BRAID_CALL_OUT_UNSUPPORTED",
+            "SQL Server output parameters are not implemented.",
+          ));
           cancel();
         });
         request.on("requestCompleted", () => {
           done = true;
-          if (!failure && resultSetCount === 0) failure = new Error("BRAID_STREAM_UNSUPPORTED: SQL Server request did not return a result set.");
+          if (!failureSet && resultSetCount === 0) {
+            setFailure(new UnsupportedFeatureError(
+              "statement.stream",
+              "BRAID_STREAM_UNSUPPORTED",
+              "SQL Server request did not return a result set.",
+            ));
+          }
           const statementCount = doneInProcCount > 0 ? doneInProcCount : doneCount;
-          if (!failure && resultSetCount === 1 && statementCount > 1) {
-            failure = new Error("BRAID_RESULT_SETS_UNSUPPORTED: SQL Server stream returned rows and additional statement results.");
+          if (!failureSet && resultSetCount === 1 && statementCount > 1) {
+            setFailure(new UnsupportedFeatureError(
+              "routine.result-sets",
+              "BRAID_RESULT_SETS_UNSUPPORTED",
+              "SQL Server stream returned rows and additional statement results.",
+            ));
           }
           wake();
-          if (failure) reject(failure);
+          if (failureSet) reject(failure);
           else resolve();
         });
         for (const parameter of parameters) addParameter(request, parameter);
@@ -1023,7 +1050,7 @@ function streamRows(
         request.resume?.();
         paused = false;
       } catch (error) {
-        failure = error;
+        setFailure(error);
         done = true;
         wake();
         reject(error);
@@ -1034,11 +1061,11 @@ function streamRows(
     void completion.catch(() => undefined);
     try {
       while (true) {
-        while (queue.length === 0 && !done && !failure) await waitForData();
-        if (failure) throw failure;
+        while (queue.length === 0 && !done && !failureSet) await waitForData();
+        if (failureSet) throw failure;
         if (queue.length > 0) {
           const row = queue.shift()!;
-          if (paused && queue.length <= Math.floor(max / 2) && !failure && !done) { request?.resume?.(); paused = false; }
+          if (paused && queue.length <= Math.floor(max / 2) && !failureSet && !done) { request?.resume?.(); paused = false; }
           yield row;
           continue;
         }
@@ -1049,7 +1076,7 @@ function streamRows(
     } finally {
       if (!done) cancel();
       signal?.removeEventListener("abort", onAbort);
-      try { await completion; } catch (error) { if (!failure) failure = error; }
+      try { await completion; } catch (error) { setFailure(error); }
       if (cleanupFailure !== undefined) {
         throw resourceCleanupError(failure, [cleanupFailure]);
       }
@@ -1172,7 +1199,7 @@ function prepareRequest(
       if (cancellationFailure !== undefined) {
         reject(resourceCleanupError(signal?.reason, [cancellationFailure]));
       } else {
-        reject(signal?.reason ?? completionError ?? new Error("SQL Server request aborted."));
+        reject(signal !== undefined ? signal.reason : completionError ?? new Error("SQL Server request aborted."));
       }
     };
     let request!: TediousPreparedRequest["request"];
@@ -1247,7 +1274,7 @@ function prepareRequest(
       if (signal?.aborted) {
         settled = true;
         removeListeners(request);
-        reject(signal.reason ?? new Error("SQL Server request aborted."));
+        reject(signal.reason);
         return;
       }
       prepare.call(connection, request);
@@ -1314,7 +1341,7 @@ function executePrepared(
       prepared.request.removeListener?.("doneProc", markDoneProcRows);
       const error = asError(eventError ?? callbackError);
       if (error !== undefined && error !== null) reject(error);
-      else if (aborted) reject(signal?.reason ?? new Error("SQL Server request aborted."));
+      else if (aborted) reject(signal?.reason);
       else if (rowBearing) reject(new Error("BRAID_BULK_RESULT_KIND: SQL Server bulk command returned rows."));
       else {
         const counts = doneInProcRows.length > 0 ? doneInProcRows : doneRows.length > 0 ? doneRows : doneProcRows;
@@ -1366,7 +1393,7 @@ function executePrepared(
       if (signal?.aborted) {
         onAbort();
         completed = true;
-        callbackError = signal.reason ?? new Error("SQL Server request aborted.");
+        callbackError = signal.reason;
         finish();
         return;
       }

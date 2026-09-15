@@ -261,7 +261,7 @@ function assertConnection(connection: OracleConnectionLike): void {
 function assertExecutionOptions(connection: OracleConnectionLike, options?: ExecutionOptions): void {
   const signal = options?.signal;
   if (signal === undefined) return;
-  if (signal.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  if (signal.aborted) throw signal.reason;
   if (typeof connection.break !== "function") {
     throw new UnsupportedFeatureError(
       "statement.cancel",
@@ -303,7 +303,7 @@ async function executeWithCancellation<T>(
         const cleanup = cleanupError(signal.reason, [breakFailure]);
         if (cleanup !== undefined) throw cleanup;
       }
-      throw signal.reason ?? new Error("Execution aborted.");
+      throw signal.reason;
     }
     return result;
   } catch (error) {
@@ -312,7 +312,7 @@ async function executeWithCancellation<T>(
       const cleanup = cleanupError(error, [breakFailure]);
       if (cleanup !== undefined) throw cleanup;
     }
-    if (aborted) throw signal.reason ?? error;
+    if (aborted) throw signal.reason;
     throw error;
   } finally {
     signal.removeEventListener("abort", onAbort);
@@ -513,7 +513,7 @@ function bindValues(rendered: RenderedStatement, policy: TypePolicy, driver: Ora
     }
     const encoded = direction === "out" ? undefined : policy.encode(databaseType!, value);
     const exactNumberOutput = databaseType !== undefined && isOracleExactNumericType(databaseType) && direction !== "in";
-    if (databaseType !== undefined && isOracleExactNumericType(databaseType) && typeof encoded === "string" && direction !== "in") {
+    if (databaseType !== undefined && isOracleExactNumericType(databaseType) && typeof encoded === "string" && direction !== "out") {
       throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Oracle ${databaseType} binds do not accept decimal strings through the exact numeric driver type; use an unhinted string with an explicit user-authored conversion and NLS clause.`);
     }
     values.push({

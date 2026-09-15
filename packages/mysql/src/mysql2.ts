@@ -30,7 +30,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
+import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import {
   typePolicyForProfile,
   type Mysql2JsonProfile,
@@ -912,7 +912,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
           if (pendingError !== undefined) throw pendingError;
           if (fieldsChanged) {
             assertUniqueFields(fields);
-            if (fields.length === 0) throw new Error("BRAID_RESULT_KIND: MySQL stream requires a row-producing statement.");
+            if (fields.length === 0) throw new DatabaseResultKindError("rows", "command");
             fieldsChanged = false;
           }
           if (next.done) {

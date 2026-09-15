@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { UnsupportedFeatureError } from "@sqlbraid/core";
 import { oracleParameter, sql, typePolicy } from "@sqlbraid/oracle";
 import { createOracledbDatabase, createOracledbExecutor, oracledbStatementBinding } from "@sqlbraid/oracle/oracledb";
 import { createOracleInspector } from "@sqlbraid/oracle/inspector";
@@ -113,6 +114,31 @@ test("Oracle parameter hints are aligned and NUMBER policy stays exact", () => {
   ]);
   assert.equal(typePolicy.decode("NUMBER", "123456789012345678901234567890.12"), "123456789012345678901234567890.12");
   assert.throws(() => typePolicy.encode("NUMBER", Number.NaN), /finite/u);
+});
+
+test("Oracle rejects custom exact-number decimal text for IN binds before execution", async () => {
+  let executions = 0;
+  const connection = {
+    async execute() {
+      executions += 1;
+      return { rows: [] };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection, {
+    typePolicy: {
+      ...typePolicy,
+      encode: () => "1.25",
+    },
+  });
+  await assert.rejects(
+    () => executor.query(sql`SELECT ${sql.bind(1, oracleParameter.number())}`.render()),
+    (error: unknown) => error instanceof UnsupportedFeatureError
+      && error.feature === "statement.bind-hint"
+      && error.code === "BRAID_BIND_HINT_UNSUPPORTED",
+  );
+  assert.equal(executions, 0);
 });
 
 test("Oracle adapter honors hints, rejects untyped null, and closes an aborted ResultSet", async () => {
@@ -308,6 +334,24 @@ test("Oracle validates transaction options before control SQL", async () => {
   await assert.rejects(
     () => executor.begin!({ unsupported: true } as never),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+  );
+  assert.equal(executions, 0);
+});
+
+test("Oracle pre-aborted executions preserve a null AbortSignal reason", async () => {
+  let executions = 0;
+  const connection = {
+    async execute() {
+      executions += 1;
+      return { rows: [] };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection);
+  await assert.rejects(
+    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: AbortSignal.abort(null) }),
+    (error: unknown) => error === null,
   );
   assert.equal(executions, 0);
 });

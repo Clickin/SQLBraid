@@ -63,27 +63,21 @@ export class DatabaseCardinalityError extends Error {
 }
 
 export class DatabaseScopeError extends Error {
-  readonly code:
-    | "BRAID_TX_SCOPE"
-    | "BRAID_TX_CLOSED"
-    | "BRAID_SESSION_SCOPE"
-    | "BRAID_SESSION_CLOSED"
-    | "BRAID_CONNECTION_POISONED"
-    | "BRAID_STREAM_SCOPE"
-    | "BRAID_REENTRY"
-    | "BRAID_TX_OPTIONS_NESTED";
+  static readonly codes = [
+    "BRAID_TX_SCOPE",
+    "BRAID_TX_CLOSED",
+    "BRAID_SESSION_SCOPE",
+    "BRAID_SESSION_CLOSED",
+    "BRAID_CONNECTION_POISONED",
+    "BRAID_STREAM_SCOPE",
+    "BRAID_REENTRY",
+    "BRAID_TX_OPTIONS_NESTED",
+  ] as const;
+  readonly code: (typeof DatabaseScopeError.codes)[number];
   declare readonly cause?: unknown;
 
   constructor(
-    code:
-      | "BRAID_TX_SCOPE"
-      | "BRAID_TX_CLOSED"
-      | "BRAID_SESSION_SCOPE"
-      | "BRAID_SESSION_CLOSED"
-      | "BRAID_CONNECTION_POISONED"
-      | "BRAID_STREAM_SCOPE"
-      | "BRAID_REENTRY"
-      | "BRAID_TX_OPTIONS_NESTED",
+    code: (typeof DatabaseScopeError.codes)[number],
     message: string,
     cause?: unknown,
   ) {
@@ -94,7 +88,8 @@ export class DatabaseScopeError extends Error {
 }
 
 export class DatabaseResultKindError extends Error {
-  readonly code = "BRAID_RESULT_KIND";
+  static readonly code = "BRAID_RESULT_KIND" as const;
+  readonly code = DatabaseResultKindError.code;
   readonly declaredKind: QueryResultKind;
   readonly actualKind: "rows" | "command";
 
@@ -107,7 +102,8 @@ export class DatabaseResultKindError extends Error {
 }
 
 export class DatabaseResultValidationError extends Error {
-  readonly code = "BRAID_RESULT_VALIDATION";
+  static readonly code = "BRAID_RESULT_VALIDATION" as const;
+  readonly code = DatabaseResultValidationError.code;
   readonly issues: readonly StandardSchemaV1.Issue[];
   readonly rowIndex?: number;
   readonly stage: "query" | "execution";

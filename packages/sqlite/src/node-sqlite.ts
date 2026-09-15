@@ -23,7 +23,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { createDatabase } from "@sqlbraid/runtime";
+import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
 export interface SqliteColumnLike {
@@ -120,7 +120,7 @@ function assertNodeSqliteValues(values: readonly unknown[]): void {
 function assertExecutionOptions(options?: ExecutionOptions): void {
   const signal = options?.signal;
   if (signal === undefined) return;
-  if (signal.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  if (signal.aborted) throw signal.reason;
   throw new UnsupportedFeatureError(
     "statement.cancel",
     "BRAID_CANCEL_UNSUPPORTED",
@@ -354,7 +354,9 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
       if (!statement.iterate) {
         throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "SQLite statement does not expose iteration.");
       }
-      if (resultColumns(statement).length === 0) throw new Error("BRAID_RESULT_KIND: SQLite stream requires a row-producing statement.");
+      if (resultColumns(statement).length === 0) {
+        throw new DatabaseResultKindError("rows", "command");
+      }
       configureExactIntegerReads(statement);
       const iterator = statement.iterate(...prepared.values);
       let failed = false;

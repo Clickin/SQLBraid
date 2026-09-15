@@ -4,12 +4,20 @@ import { test } from "vitest";
 import {
   AdapterError,
   createRenderedStatement,
+  ResultExactnessError,
   PUBLIC_ERROR_DEFINITIONS,
+  RoutineMappingError,
+  SqlRenderError,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { createMysql2Executor } from "@sqlbraid/mysql/mysql2";
 import { createPgExecutor } from "@sqlbraid/postgres/pg";
 import { createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";
+import {
+  DatabaseResultKindError,
+  DatabaseResultValidationError,
+  DatabaseScopeError,
+} from "@sqlbraid/runtime";
 
 const docs = [
   new URL("../website/src/content/docs/reference/errors.md", import.meta.url),
@@ -21,9 +29,49 @@ function documentedCodes(url: URL): Set<string> {
   return new Set(rows.flatMap((line) => line.match(/BRAID_[A-Z0-9_]+/gu) ?? []));
 }
 
-test("the explicit public error registry is complete in both error references", () => {
+test("the public registry links to exported owner classes and both error references", () => {
   const registryCodes = PUBLIC_ERROR_DEFINITIONS.map(({ code }) => code);
   assert.equal(new Set(registryCodes).size, registryCodes.length);
+  const fixedClassCodes = new Map<string, readonly string[]>([
+    ["ResultExactnessError", [ResultExactnessError.code]],
+    ["RoutineMappingError", [RoutineMappingError.code]],
+    ["@sqlbraid/runtime:DatabaseResultKindError", [DatabaseResultKindError.code]],
+    ["@sqlbraid/runtime:DatabaseResultValidationError", [DatabaseResultValidationError.code]],
+    ["@sqlbraid/runtime:DatabaseScopeError", DatabaseScopeError.codes],
+  ]);
+  for (const [owner, codes] of fixedClassCodes) {
+    const registryCodesForOwner = PUBLIC_ERROR_DEFINITIONS
+      .filter((definition) => definition.owner === owner)
+      .map((definition) => definition.code);
+    assert.deepEqual([...registryCodesForOwner].sort(), [...codes].sort(), `${owner} registry linkage changed`);
+  }
+  assert.equal(new ResultExactnessError().code, "BRAID_RESULT_EXACTNESS");
+  assert.equal(new RoutineMappingError("map", { kind: "output" }).code, "BRAID_CALL_MAP");
+  assert.equal(new DatabaseResultKindError("rows", "command").code, "BRAID_RESULT_KIND");
+  assert.equal(new DatabaseResultValidationError([]).code, "BRAID_RESULT_VALIDATION");
+  for (const code of DatabaseScopeError.codes) {
+    assert.equal(new DatabaseScopeError(code, "scope").code, code);
+  }
+  const dynamicOwners = new Map<string, (code: string) => string>([
+    ["UnsupportedFeatureError", (code) => new UnsupportedFeatureError("test", code as `BRAID_${string}`, "test").code],
+    ["AdapterError", (code) => new AdapterError(code as `BRAID_${string}`, "test").code],
+    ["SqlRenderError", (code) => new SqlRenderError(code, "test").code],
+  ]);
+  const nonClassOwners = new Set([
+    "TypeError with code",
+    "prepared query validation",
+    "adapter cleanup error with code",
+    "compiler diagnostic",
+  ]);
+  const knownOwners = new Set([...fixedClassCodes.keys(), ...dynamicOwners.keys(), ...nonClassOwners]);
+  assert.deepEqual(
+    [...new Set(PUBLIC_ERROR_DEFINITIONS.map(({ owner }) => owner))].sort(),
+    [...knownOwners].sort(),
+  );
+  for (const definition of PUBLIC_ERROR_DEFINITIONS) {
+    const implementation = dynamicOwners.get(definition.owner);
+    if (implementation !== undefined) assert.equal(implementation(definition.code), definition.code);
+  }
   for (const url of docs) {
     assert.deepEqual([...documentedCodes(url)].sort(), [...registryCodes].sort(), String(url));
   }

@@ -19,11 +19,12 @@ import {
   createBulkBindingDescription,
   createRenderedStatement,
   createStatementBindingDescription,
+  ResultExactnessError,
   normalizeExactInteger,
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { createDatabase } from "@sqlbraid/runtime";
+import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
 /** The subset of the official @sqlite.org/sqlite-wasm OO1 DB used by SQLBraid. */
@@ -109,7 +110,7 @@ function assertWasmValues(values: readonly unknown[]): void {
 function assertExecutionOptions(options?: ExecutionOptions): void {
   const signal = options?.signal;
   if (signal === undefined) return;
-  if (signal.aborted) throw signal.reason ?? new Error("Execution aborted.");
+  if (signal.aborted) throw signal.reason;
   throw new UnsupportedFeatureError(
     "statement.cancel",
     "BRAID_CANCEL_UNSUPPORTED",
@@ -190,14 +191,14 @@ function assertExactIntegerReads(
     );
   }
   if (statement.pointer === undefined) {
-    throw new TypeError("BRAID_RESULT_EXACTNESS: SQLite WASM exact INTEGER reads require an official OO1 statement pointer.");
+    throw new ResultExactnessError("SQLite WASM exact INTEGER reads require an official OO1 statement pointer.");
   }
 }
 
 function row(statement: SqliteWasmStatementLike, names: readonly string[], capi: SqliteWasmCapi): Record<string, unknown> {
   const value: Record<string, unknown> = {};
   const pointer = statement.pointer;
-  if (pointer === undefined) throw new TypeError("BRAID_RESULT_EXACTNESS: SQLite WASM exact INTEGER reads require an official OO1 statement pointer.");
+  if (pointer === undefined) throw new ResultExactnessError("SQLite WASM exact INTEGER reads require an official OO1 statement pointer.");
   for (const [index, name] of names.entries()) {
     value[name] = capi.sqlite3_column_type(pointer, index) === capi.SQLITE_INTEGER
       ? normalizeExactInteger(capi.sqlite3_column_int64(pointer, index))
@@ -409,7 +410,7 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
       try {
         bind(statement, prepared.values);
         const names = columnNames(statement);
-        if (names.length === 0) throw new Error("BRAID_RESULT_KIND: SQLite WASM stream requires a row-producing statement.");
+        if (names.length === 0) throw new DatabaseResultKindError("rows", "command");
         assertExactIntegerReads(statement, capi);
         while (true) {
           if (!statement.step()) break;
