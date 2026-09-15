@@ -28,7 +28,7 @@ combined driver+dialect/query subpath such as `sqlbraid/pg`, `sqlbraid/mysql2`,
 default dialect; its root exports only common runtime contracts. The granular
 `@sqlbraid/*` packages remain available for custom integrations and tooling.
 
-> **Release status:** pre-release. [Versioned support records](support/targets/)
+> **Release status:** pre-release / release candidate. [Versioned support records](support/targets/)
 > identify each certified database/driver/profile/runtime tuple, implementation
 > revision, and workflow evidence. Changed revisions require fresh exact-SHA
 > Runtime, Documentation, and Release gates; neighboring versions do not inherit

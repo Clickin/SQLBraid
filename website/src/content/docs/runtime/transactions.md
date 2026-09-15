@@ -6,13 +6,27 @@ description: Pin one physical connection and make transaction scope explicit.
 `db.tx` is the connection-pinning boundary:
 
 ```ts
-await db.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
+// canonical-example: serializable-write
+await db.tx({ isolation: "serializable" }, async (tx) => {
   await tx.execute(sql.command`
     INSERT INTO audit_log (account_id) VALUES (${accountId})
   `);
   await tx.execute(sql.command`
     UPDATE accounts SET active = true WHERE id = ${accountId}
   `);
+});
+```
+
+For a read-only query, use a separate transaction with `readOnly: true` and
+only row-producing statements:
+
+```ts
+// canonical-example: read-only-query
+await db.tx({ readOnly: true }, async (tx) => {
+  const accounts = await tx.all(sql.rows`
+    SELECT id, active FROM accounts WHERE id = ${accountId}
+  `);
+  console.log(accounts);
 });
 ```
 

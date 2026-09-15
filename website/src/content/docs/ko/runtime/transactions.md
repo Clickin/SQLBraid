@@ -6,13 +6,27 @@ description: 하나의 물리적 연결을 고정하고 트랜잭션 범위를 �
 `db.tx`는 연결을 고정하는 경계입니다.
 
 ```ts
-await db.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
+// canonical-example: serializable-write
+await db.tx({ isolation: "serializable" }, async (tx) => {
   await tx.execute(sql.command`
     INSERT INTO audit_log (account_id) VALUES (${accountId})
   `);
   await tx.execute(sql.command`
     UPDATE accounts SET active = true WHERE id = ${accountId}
   `);
+});
+```
+
+읽기 전용 query에는 `readOnly: true`를 사용하고 쓰기 문 없이 별도의
+transaction을 만드세요.
+
+```ts
+// canonical-example: read-only-query
+await db.tx({ readOnly: true }, async (tx) => {
+  const accounts = await tx.all(sql.rows`
+    SELECT id, active FROM accounts WHERE id = ${accountId}
+  `);
+  console.log(accounts);
 });
 ```
 
