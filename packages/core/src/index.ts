@@ -177,6 +177,12 @@ export interface RenderedParameter {
 export interface RenderedStatement {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
+  /**
+   * Optional native tagged-template carrier. This preserves the original
+   * TemplateStringsArray when a driver can bind values through its native tag.
+   * It is metadata only; segments/parameters remain the logical statement.
+   */
+  readonly nativeTemplate?: TemplateStringsArray;
   readonly dialectId: string;
   readonly resultKind: QueryResultKind;
   readonly routineProcedure?: RoutineProcedure;
@@ -499,9 +505,36 @@ function copyRoutineProcedure(procedure: RoutineProcedure | undefined): RoutineP
   return Object.freeze({ name: procedure.name, parameterNames: Object.freeze(parameterNames) });
 }
 
+function copyNativeTemplate(value: unknown, segments: readonly string[]): TemplateStringsArray {
+  if (!Array.isArray(value) || value.length !== segments.length) {
+    throw new TypeError("RenderedStatement nativeTemplate must have one string per segment boundary.");
+  }
+  if (value.some((segment) => typeof segment !== "string")) {
+    throw new TypeError("RenderedStatement nativeTemplate must contain cooked strings.");
+  }
+  if (value.some((segment, index) => segment !== segments[index])) {
+    throw new TypeError("RenderedStatement nativeTemplate cooked strings must match logical segments.");
+  }
+  const raw = (value as { readonly raw?: unknown }).raw;
+  if (!Array.isArray(raw) || raw.length !== value.length || raw.some((segment) => typeof segment !== "string")) {
+    throw new TypeError("RenderedStatement nativeTemplate.raw must contain one raw string per segment boundary.");
+  }
+  if (Object.isFrozen(value) && Object.isFrozen(raw)) return value as unknown as TemplateStringsArray;
+  const cooked = [...value] as string[] & { raw: readonly string[] };
+  const frozenRaw = Object.freeze([...raw]);
+  Object.defineProperty(cooked, "raw", {
+    configurable: false,
+    enumerable: false,
+    value: frozenRaw,
+    writable: false,
+  });
+  return Object.freeze(cooked) as unknown as TemplateStringsArray;
+}
+
 export function createRenderedStatement(statement: {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
+  readonly nativeTemplate?: TemplateStringsArray;
   readonly resultKind: QueryResultKind;
   readonly routineProcedure?: RoutineProcedure;
   readonly dialectId: string;
@@ -523,6 +556,9 @@ export function createRenderedStatement(statement: {
   if (typeof statement.dialectId !== "string" || !statement.dialectId) throw new TypeError("RenderedStatement dialectId must be a non-empty string.");
   const segments = Object.freeze([...statement.segments]);
   if (segments.some((segment) => typeof segment !== "string")) throw new TypeError("RenderedStatement segments must be an array of strings.");
+  const nativeTemplate = statement.nativeTemplate === undefined
+    ? undefined
+    : copyNativeTemplate(statement.nativeTemplate, segments);
   const parameters = Object.freeze(Array.from(statement.parameters, copyRenderedParameter));
   if (parameters.some((parameter) => parameter.direction === "inout" && statement.resultKind !== "call")) {
     throw new TypeError("INOUT parameters are only valid for call statements.");
@@ -546,6 +582,7 @@ export function createRenderedStatement(statement: {
   const rendered = Object.freeze({
     segments,
     parameters,
+    ...(nativeTemplate === undefined ? {} : { nativeTemplate }),
     dialectId: statement.dialectId,
     resultKind: statement.resultKind,
     ...(routineProcedure === undefined ? {} : { routineProcedure }),
@@ -924,6 +961,11 @@ export interface TemplateIr {
   readonly version: 1;
   readonly nodes: readonly TemplateNode[];
   readonly sourceLength: number;
+  /**
+   * Optional parallel node tree preserving raw JavaScript template text for
+   * native tagged-template transports. The logical node tree remains cooked.
+   */
+  readonly rawNodes?: readonly TemplateNode[];
 }
 
 export interface SqlFragment {

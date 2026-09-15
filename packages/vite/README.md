@@ -1,9 +1,9 @@
 # @sqlbraid/vite
 
-Vite 8 pre-transform for SQLBraid guarded-template lowering. It lowers only SQLBraid `@braid` semantics; Vite/Oxc/Rolldown remains responsible for TypeScript, TSX/JSX, decorators, module format, and framework transforms.
+Vite 8 pre-transform plugin for SQLBraid structural-template lowering.
 
 ```sh
-npm install @sqlbraid/vite
+npm install @sqlbraid/vite vite
 ```
 
 ```ts
@@ -15,12 +15,16 @@ export default defineConfig({
 });
 ```
 
-The plugin recognizes first-party tags from the granular `@sqlbraid/*`
-dialect roots and the matching `sqlbraid/*` facade subpaths. It handles `.ts`,
-`.tsx`, `.js`, `.jsx`, `.mts`, and `.cts`, skips declarations and generated/build
-output, preserves TSX and downstream source-map composition, and reports
-compiler diagnostics with original locations.
+The plugin runs before Vite's normal transforms, recognizes SQLBraid's
+first-party dialect roots and facade subpaths, and handles `.ts`, `.tsx`, `.js`,
+`.jsx`, `.mts`, and `.cts`. It skips declarations and generated/build output,
+returns composed source maps, and reports compiler diagnostics at original
+locations. Vite/Oxc/Rolldown remains responsible for the rest of the
+TypeScript, JSX, module, and framework pipeline.
 
-`vite` is an optional peer dependency (`>=8.0.0`). For direct integrations, `transformSource(source, filename, options?)` is also re-exported. The plugin is framework-neutral and does not import React or TanStack Start.
+`vite` is a peer dependency (`>=8.0.0`). `include` and `exclude` options use
+Vite filter patterns. For custom integrations, the package also re-exports
+`transformSource` and its compiler result types.
 
-See the [Vite integration guide](https://clickin.github.io/SQLBraid/getting-started/vite/) and [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [Vite integration guide](https://clickin.github.io/SQLBraid/getting-started/vite/)
+and the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

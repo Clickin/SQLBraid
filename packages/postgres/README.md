@@ -1,73 +1,67 @@
 # @sqlbraid/postgres
 
-PostgreSQL SQL dialect, `pg` database adapters, routine support, and metadata inspector for SQLBraid.
+PostgreSQL dialect and `pg` adapters for SQLBraid.
 
 ```sh
 npm install @sqlbraid/postgres pg
-# Add pg-cursor only when db.stream() is needed:
+# Install this optional peer only when db.stream() is needed:
 npm install pg-cursor
 ```
 
+The application creates and connects the `pg` client or pool.
+
 ```ts
+import { Client } from "pg";
 import { sql } from "@sqlbraid/postgres";
 import { createPgDatabase } from "@sqlbraid/postgres/pg";
 
+const client = new Client({ connectionString: process.env.DATABASE_URL });
+await client.connect();
 const db = createPgDatabase(client);
-const rows = await db.all(sql.rows<{ id: number }>`SELECT id FROM users WHERE id = ${1}`);
+const rows = await db.all(sql.rows<{ id: string }>`
+  SELECT CAST(1 AS bigint) AS id
+`);
+// rows[0].id is the exact decimal string "1"
 ```
 
-PostgreSQL DML `RETURNING` is a row-producing statement: use
-`db.execute`, `db.all`, `db.one`, or `db.maybeOne` with `sql.rows`. PV16
-documents materialized DML-returning only; `db.stream()` cancellation and
-rollback behavior is not a portable returning contract.
+Use `createPgPoolDatabase(pool)` from `@sqlbraid/postgres/pg` for a connected
+pool. The direct and pool factories accept the same optional representation
+profile and type-policy options.
 
-`pg-cursor` is an optional peer. PostgreSQL row streaming uses its cursor protocol and fails with `BRAID_STREAM_UNSUPPORTED` when that peer/capability is unavailable; ordinary queries do not require it. Configure `streamBatchSize` or an explicit cursor factory when needed. An active signal uses the driver's physical cancellation path; a driver without that path must reject before I/O with `BRAID_CANCEL_UNSUPPORTED`.
+## Default result representations
 
-Exhaustion, break and mapper failure close the cursor before lease release.
-Abort uses the physical client's public `end()` method because closing a portal
-cannot interrupt a pending Execute. SQLBraid awaits termination and discards
-that lease; a pool supplies a replacement connection, while a direct client must
-be replaced. An abortable custom client wrapper must expose `end()`.
+The default `pg-lossless-text` policy keeps exact values usable without
+JavaScript numeric rounding:
 
-`db.tx({ isolation, readOnly }, callback)` emits PostgreSQL transaction modes
-on the pinned client. `read-uncommitted` is guarded because PostgreSQL maps it
-to `read-committed`.
-Malformed runtime values fail before acquisition as `TypeError` /
-`BRAID_TX_OPTIONS_INVALID`; valid but unsupported options use
-`BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit options use
-`BRAID_TX_OPTIONS_NESTED`.
+- `smallint`, `integer`, `bigint`, and `oid` are decimal `string` values.
+- `numeric` and `decimal` are decimal `string` values.
+- `real`/`float4` and `double precision`/`float8` are JavaScript `number`
+  values.
+- JSON and JSONB, date/time/interval values, and PostgreSQL arrays are text
+  strings. `bytea` is a `Uint8Array` (node-postgres supplies a `Buffer`), and
+  UUIDs are strings.
 
-Routine calls support scalar OUT values. INOUT and return-value carriers are
-rejected with `BRAID_CALL_OUT_UNSUPPORTED` because `pg` does not expose a
-verified portable carrier contract. Mark PostgreSQL `refcursor` OUT parameters
-with `postgresParameter.refcursor()`; they become materialized `resultSets`,
-are removed from scalar `output`, and are fetched/closed on the same physical
-connection. A refcursor call requires an existing `db.tx(...)` scope because
-the portal is transaction-bound; SQLBraid does not create a hidden
-transaction.
+Select `representationProfiles`, `typePolicyForProfile`, or
+`parserProfile: { json: "native", temporal: "native" }` when application
+code intentionally wants node-postgres native JSON and temporal values. Keep
+the selected policy consistent with generated types. PostgreSQL `money` is
+locale-formatted and is not treated as an exact decimal; cast it explicitly in
+SQL when exact text is required.
 
-Logical `outputName` values rename positional CALL outputs; they do not select
-carrier columns by database field name.
+`sql.rows` with PostgreSQL `RETURNING` uses the normal materialized row APIs.
+`db.stream()` uses the optional `pg-cursor` protocol and returns rows in
+batches; it is unavailable without that peer. A cancellation signal uses the
+client's physical cancellation path, and an aborted direct client must be
+replaced after cancellation. Pool connections are discarded and replaced by
+the pool.
 
-See the [PostgreSQL setup](https://clickin.github.io/SQLBraid/getting-started/postgres/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
+Routine calls can map scalar OUT values. Mark a PostgreSQL `refcursor` OUT
+parameter with the exported `postgresParameter.refcursor()`; SQLBraid fetches
+it into materialized `resultSets` on the same connection. A refcursor call must
+run inside an existing `db.tx()` because PostgreSQL portals are
+transaction-bound. PostgreSQL return-value carriers and INOUT mappings are not
+claimed by this adapter.
 
-Representation profiles are reusable runtime/codegen contracts. The default
-`pg-lossless-text` profile uses query-local public parser overrides,
-returning exact numerics and JSON/temporal values as text, approximate floats
-as JavaScript `number`, `bytea` as `Uint8Array` (node-postgres supplies a
-`Buffer`), and UUIDs as strings. The `pg-native` profile delegates JSON
-and temporal values to node-postgres: JSON roots are `unknown`, date and
-timestamp families are `Date`, time families are strings, and interval output
-is `unknown`.
-
-Use `typePolicyForProfile({ json: "text" | "native", temporal: "text" | "native" })`
-or select a descriptor from `representationProfiles` so runtime and codegen
-use the same policy. `parserProfile: { json: "native", temporal: "native" }`
-selects the native profile.
-Custom parsers are separate conditional profiles and need their own evidence.
-PostgreSQL `money` is unsupported by the exact output profile because its
-textual form is locale-sensitive; use an explicit native numeric cast when
-exact text is required. PostgreSQL arrays, domains, ranges/multiranges, and
-composites are not recursively normalized: lossless text exposes common
-containers as one raw PostgreSQL text value, while native containers remain
-driver-defined `unknown`. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/),
+[PostgreSQL setup](https://clickin.github.io/SQLBraid/getting-started/postgres/),
+and [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

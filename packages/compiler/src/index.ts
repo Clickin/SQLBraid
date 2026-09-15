@@ -21,6 +21,7 @@ export interface DiscoveredQuery {
   readonly range: SourceRange;
   readonly templateRange: SourceRange;
   readonly strings: readonly string[];
+  readonly rawStrings: readonly string[];
   readonly bindings: readonly BindingSite[];
   readonly ir: TemplateIr;
   readonly mappedRow: boolean;
@@ -99,10 +100,12 @@ function range(node: ts.Node, sourceFile: ts.SourceFile): SourceRange {
   return { start: node.getStart(sourceFile), end: node.getEnd() };
 }
 
-function createTemplateStrings(values: readonly string[]): TemplateStringsArray {
+function createTemplateStrings(values: readonly string[], rawValues: readonly string[] = values): TemplateStringsArray {
+  if (values.length !== rawValues.length) throw new TypeError("Template cooked/raw segments must have matching lengths.");
   const strings = [...values] as string[] & { raw?: readonly string[] };
-  strings.raw = [...values];
-  return strings as unknown as TemplateStringsArray;
+  const raw = Object.freeze([...rawValues]);
+  Object.defineProperty(strings, "raw", { value: raw });
+  return Object.freeze(strings) as unknown as TemplateStringsArray;
 }
 
 function scriptKindForFileName(fileName: string): ts.ScriptKind {
@@ -321,19 +324,29 @@ function tagIdentity(expression: ts.Expression, bindings: ImportBindings, tagExp
 
 interface ExtractedTemplate {
   readonly strings: readonly string[];
+  readonly rawStrings: readonly string[];
   readonly bindings: readonly BindingSite[];
   readonly templateRange: SourceRange;
 }
 
 function extractTemplate(node: ts.NoSubstitutionTemplateLiteral | ts.TemplateExpression, sourceFile: ts.SourceFile): ExtractedTemplate {
-  if (ts.isNoSubstitutionTemplateLiteral(node)) return { strings: [node.text], bindings: [], templateRange: range(node, sourceFile) };
+  if (ts.isNoSubstitutionTemplateLiteral(node)) {
+    return {
+      strings: [node.text],
+      rawStrings: [sourceFile.text.slice(node.getStart(sourceFile) + 1, node.end - 1)],
+      bindings: [],
+      templateRange: range(node, sourceFile),
+    };
+  }
   const strings: string[] = [node.head.text];
+  const rawStrings: string[] = [sourceFile.text.slice(node.head.getStart(sourceFile) + 1, node.head.end - 2)];
   const bindings: BindingSite[] = [];
-  for (const span of node.templateSpans) {
+  for (const [index, span] of node.templateSpans.entries()) {
     bindings.push({ interpolation: bindings.length, range: range(span.expression, sourceFile), expression: span.expression.getText(sourceFile) });
     strings.push(span.literal.text);
+    rawStrings.push(sourceFile.text.slice(span.literal.getStart(sourceFile) + 1, span.literal.end - (index === node.templateSpans.length - 1 ? 1 : 2)));
   }
-  return { strings, bindings, templateRange: range(node, sourceFile) };
+  return { strings, rawStrings, bindings, templateRange: range(node, sourceFile) };
 }
 
 function hasGuard(nodes: readonly TemplateNode[]): boolean {
@@ -361,8 +374,9 @@ export function discoverQueries(sourceText: string, fileName: string, options: O
             range: range(node, sourceFile),
             templateRange: extracted.templateRange,
             strings: extracted.strings,
+            rawStrings: extracted.rawStrings,
             bindings: extracted.bindings,
-            ir: parseTemplate(createTemplateStrings(extracted.strings), dialectForModule(identity.moduleSpecifier, options).lexicalProfile, options.limits?.maxNestingDepth),
+            ir: parseTemplate(createTemplateStrings(extracted.strings, extracted.rawStrings), dialectForModule(identity.moduleSpecifier, options).lexicalProfile, options.limits?.maxNestingDepth),
             mappedRow: identity.declaredResultKind === "rows" && resultSchema !== undefined,
             ...(resultSchema ? { resultSchemaExpression: resultSchema.getText(sourceFile), resultSchemaRange: range(resultSchema, sourceFile) } : {}),
             ...(declaredRowType ? { declaredRowType } : {}),
@@ -566,8 +580,101 @@ function captureSetup(factory: ts.NodeFactory, valuesName: string, evaluatedName
   return [evaluated, read];
 }
 
-function stringsArray(factory: ts.NodeFactory, strings: readonly string[]): ts.ArrayLiteralExpression {
-  return factory.createArrayLiteralExpression(strings.map((value) => factory.createStringLiteral(value)), false);
+function stringsArray(factory: ts.NodeFactory, strings: readonly string[], rawStrings: readonly string[]): ts.Expression {
+  const cooked = factory.createArrayLiteralExpression(strings.map((value) => factory.createStringLiteral(value)), false);
+  const raw = factory.createArrayLiteralExpression(rawStrings.map((value) => factory.createStringLiteral(value)), false);
+  const frozenRaw = factory.createCallExpression(
+    factory.createPropertyAccessExpression(factory.createIdentifier("Object"), "freeze"),
+    undefined,
+    [raw],
+  );
+  const withRaw = factory.createCallExpression(
+    factory.createPropertyAccessExpression(factory.createIdentifier("Object"), "defineProperty"),
+    undefined,
+    [
+      cooked,
+      factory.createStringLiteral("raw"),
+      factory.createObjectLiteralExpression([factory.createPropertyAssignment(factory.createIdentifier("value"), frozenRaw)], false),
+    ],
+  );
+  return factory.createCallExpression(
+    factory.createPropertyAccessExpression(factory.createIdentifier("Object"), "freeze"),
+    undefined,
+    [withRaw],
+  );
+}
+
+function sourceRangeExpression(factory: ts.NodeFactory, value: SourceRange): ts.ObjectLiteralExpression {
+  return factory.createObjectLiteralExpression([
+    factory.createPropertyAssignment(factory.createIdentifier("start"), factory.createNumericLiteral(value.start)),
+    factory.createPropertyAssignment(factory.createIdentifier("end"), factory.createNumericLiteral(value.end)),
+  ], false);
+}
+
+function templateNodeArray(factory: ts.NodeFactory, nodes: readonly TemplateNode[]): ts.ArrayLiteralExpression {
+  return factory.createArrayLiteralExpression(nodes.map((node) => templateNodeExpression(factory, node)), false);
+}
+
+function templateNodeExpression(factory: ts.NodeFactory, node: TemplateNode): ts.ObjectLiteralExpression {
+  switch (node.kind) {
+    case "text":
+      return factory.createObjectLiteralExpression([
+        factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
+        factory.createPropertyAssignment(factory.createIdentifier("text"), factory.createStringLiteral(node.text)),
+        factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)),
+      ], false);
+    case "bind":
+      return factory.createObjectLiteralExpression([
+        factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
+        factory.createPropertyAssignment(factory.createIdentifier("interpolation"), factory.createNumericLiteral(node.interpolation)),
+        factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)),
+      ], false);
+    case "if":
+      return factory.createObjectLiteralExpression([
+        factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
+        factory.createPropertyAssignment(factory.createIdentifier("condition"), factory.createNumericLiteral(node.condition)),
+        factory.createPropertyAssignment(factory.createIdentifier("children"), templateNodeArray(factory, node.children)),
+        factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)),
+      ], false);
+    case "choose": {
+      const properties = [
+        factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
+        factory.createPropertyAssignment(factory.createIdentifier("whens"), factory.createArrayLiteralExpression(node.whens.map((when) => factory.createObjectLiteralExpression([
+          factory.createPropertyAssignment(factory.createIdentifier("condition"), factory.createNumericLiteral(when.condition)),
+          factory.createPropertyAssignment(factory.createIdentifier("children"), templateNodeArray(factory, when.children)),
+          factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, when.range)),
+        ], false)), false)),
+      ];
+      if (node.otherwise !== undefined) properties.push(factory.createPropertyAssignment(factory.createIdentifier("otherwise"), templateNodeArray(factory, node.otherwise)));
+      properties.push(factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)));
+      return factory.createObjectLiteralExpression(properties, false);
+    }
+    case "trim":
+      return factory.createObjectLiteralExpression([
+        factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
+        factory.createPropertyAssignment(factory.createIdentifier("attributes"), factory.createObjectLiteralExpression([
+          factory.createPropertyAssignment(factory.createIdentifier("prefix"), factory.createStringLiteral(node.attributes.prefix)),
+          factory.createPropertyAssignment(factory.createIdentifier("prefixOverrides"), factory.createArrayLiteralExpression(node.attributes.prefixOverrides.map((value) => factory.createStringLiteral(value)), false)),
+          factory.createPropertyAssignment(factory.createIdentifier("suffix"), factory.createStringLiteral(node.attributes.suffix)),
+          factory.createPropertyAssignment(factory.createIdentifier("suffixOverrides"), factory.createArrayLiteralExpression(node.attributes.suffixOverrides.map((value) => factory.createStringLiteral(value)), false)),
+        ], false)),
+        factory.createPropertyAssignment(factory.createIdentifier("children"), templateNodeArray(factory, node.children)),
+        factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)),
+      ], false);
+    default:
+      throw new Error(`Unsupported source template node: ${node.kind}`);
+  }
+}
+
+function templateIrExpression(factory: ts.NodeFactory, ir: TemplateIr): ts.ObjectLiteralExpression {
+  return factory.createObjectLiteralExpression([
+    factory.createPropertyAssignment(factory.createIdentifier("version"), factory.createNumericLiteral(ir.version)),
+    factory.createPropertyAssignment(factory.createIdentifier("nodes"), templateNodeArray(factory, ir.nodes)),
+    factory.createPropertyAssignment(factory.createIdentifier("sourceLength"), factory.createNumericLiteral(ir.sourceLength)),
+    ...(ir.rawNodes === undefined
+      ? []
+      : [factory.createPropertyAssignment(factory.createIdentifier("rawNodes"), templateNodeArray(factory, ir.rawNodes))]),
+  ], false);
 }
 
 interface LoweredSource {
@@ -667,7 +774,12 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
         ? [typeArguments[0]!, factory.createLiteralTypeNode(factory.createStringLiteral("call"))]
         : undefined;
       const tag = typeArguments && !captureTypes ? factory.createExpressionWithTypeArguments(updated.tag, typeArguments) : updated.tag;
-      const replacement = withOriginal(factory.createCallExpression(factory.createIdentifier(captureName ?? "__sqlbraidCapture"), captureTypes, [tag, stringsArray(factory, query.strings), callback]), node);
+      const replacement = withOriginal(factory.createCallExpression(factory.createIdentifier(captureName ?? "__sqlbraidCapture"), captureTypes, [
+        tag,
+        stringsArray(factory, query.strings, query.rawStrings),
+        callback,
+        templateIrExpression(factory, query.ir),
+      ]), node);
       loweredNodes.set(originalKey, replacement);
       return replacement;
     }
@@ -697,13 +809,28 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
       const staticStart = output.indexOf(needle, searchStart);
       if (staticStart < 0) continue;
       const arrayStart = output.lastIndexOf("[", staticStart);
-      const callOpen = output.lastIndexOf("(", arrayStart);
+      const captureStart = output.lastIndexOf("sqlbraidCapture", arrayStart);
+      const callOpen = captureStart < 0 ? -1 : output.indexOf("(", captureStart);
       if (arrayStart < 0 || callOpen < 0 || callOpen < searchStart) continue;
       let generatedStart = callOpen - 1;
       while (generatedStart >= 0 && /[$\w]/u.test(output[generatedStart] ?? "")) generatedStart -= 1;
       generatedStart += 1;
-      const close = /\n[ \t]*\}\);/u.exec(output.slice(staticStart));
-      if (generatedStart >= 0 && close) return { start: generatedStart, end: staticStart + close.index + close[0].length };
+      const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, output);
+      scanner.setTextPos(callOpen);
+      let depth = 0;
+      let end: number | undefined;
+      while (scanner.scan() !== ts.SyntaxKind.EndOfFileToken) {
+        const token = scanner.getToken();
+        if (token === ts.SyntaxKind.OpenParenToken) depth += 1;
+        else if (token === ts.SyntaxKind.CloseParenToken) {
+          depth -= 1;
+          if (depth === 0) {
+            end = scanner.getTextPos();
+            break;
+          }
+        }
+      }
+      if (generatedStart >= 0 && end !== undefined) return { start: generatedStart, end };
     }
     return undefined;
   }
@@ -755,6 +882,23 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
         sourceStart: sourceToken.getStart(sourceFile),
         sourceEnd: sourceToken.getEnd(),
       });
+    }
+  }
+  for (const origin of origins) {
+    const query = discovered.queries.find((candidate) => candidate.range.start === origin.sourceStart && candidate.range.end === origin.sourceEnd);
+    if (!query) continue;
+    const generatedQuery = output.slice(origin.generatedStart, origin.generatedEnd);
+    let bindingSearchOffset = Math.max(0, generatedQuery.indexOf("=> {"));
+    for (const binding of query.bindings) {
+      const bindingOffset = generatedQuery.indexOf(binding.expression, bindingSearchOffset);
+      if (bindingOffset < 0) continue;
+      mappingOrigins.push({
+        generatedStart: origin.generatedStart + bindingOffset,
+        generatedEnd: origin.generatedStart + bindingOffset + binding.expression.length,
+        sourceStart: binding.range.start,
+        sourceEnd: binding.range.end,
+      });
+      bindingSearchOffset = bindingOffset + Math.max(1, binding.expression.length);
     }
   }
   transformed.dispose();
@@ -1003,10 +1147,11 @@ function sourceFileInProgram(program: ts.Program, fileName: string): ts.SourceFi
 
 function mapGeneratedRange(record: FileRecord, start: number, end: number): SourceRange {
   const origin = record.lowered.mappingOrigins.filter((candidate) => start >= candidate.generatedStart && start < candidate.generatedEnd).sort((left, right) => (left.generatedEnd - left.generatedStart) - (right.generatedEnd - right.generatedStart))[0];
-  if (origin) {
-    const query = record.discovered.queries.find((candidate) => candidate.range.start === origin.sourceStart && candidate.range.end === origin.sourceEnd);
+  const fallbackOrigin = origin ?? record.lowered.origins.find((candidate) => start >= candidate.generatedStart && start < candidate.generatedEnd);
+  if (fallbackOrigin) {
+    const query = record.discovered.queries.find((candidate) => candidate.range.start === fallbackOrigin.sourceStart && candidate.range.end === fallbackOrigin.sourceEnd);
     if (query) {
-      const generatedQuery = record.lowered.sourceText.slice(origin.generatedStart, origin.generatedEnd);
+      const generatedQuery = record.lowered.sourceText.slice(fallbackOrigin.generatedStart, fallbackOrigin.generatedEnd);
       const callbackStart = generatedQuery.indexOf("=> {");
       const searchStart = callbackStart >= 0 ? callbackStart : 0;
       const bindingOffsets = new Map<number, number>();
@@ -1029,10 +1174,11 @@ function mapGeneratedRange(record: FileRecord, start: number, end: number): Sour
       }
       for (const binding of query.bindings) {
         const bindingOffset = bindingOffsets.get(binding.interpolation);
-        if (bindingOffset !== undefined && start >= origin.generatedStart + bindingOffset && start <= origin.generatedStart + bindingOffset + binding.expression.length) return binding.range;
+        if (bindingOffset !== undefined && start >= fallbackOrigin.generatedStart + bindingOffset && start <= fallbackOrigin.generatedStart + bindingOffset + binding.expression.length) return binding.range;
       }
+      return { start: fallbackOrigin.sourceStart, end: fallbackOrigin.sourceEnd };
     }
-    return { start: origin.sourceStart, end: origin.sourceEnd };
+    return { start: fallbackOrigin.sourceStart, end: fallbackOrigin.sourceEnd };
   }
   const nearest = record.discovered.queries.reduce<{ readonly distance: number; readonly query?: DiscoveredQuery }>((best, query) => {
     const distance = Math.abs(query.range.start - start);

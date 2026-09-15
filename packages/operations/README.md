@@ -1,17 +1,33 @@
 # @sqlbraid/operations
 
-Shared operation and execution-result helpers for SQLBraid database queries.
+Manifest and fingerprint helpers for build, inspection, and deployment
+integrations around SQLBraid queries.
 
 ```sh
-npm install @sqlbraid/operations
+npm install @sqlbraid/operations @sqlbraid/postgres
 ```
 
 ```ts
-import type { QueryManifest } from "@sqlbraid/operations";
-declare const manifest: QueryManifest;
-void manifest;
+import { sql } from "@sqlbraid/postgres";
+import {
+  createManifest,
+  fingerprintQuery,
+  templateFamilyFingerprint,
+} from "@sqlbraid/operations";
+
+const query = sql.rows<{ id: string }>`SELECT id FROM users`;
+const manifest = createManifest(query, {
+  source: "src/queries/users.ts",
+  resultType: "User",
+});
+
+console.log(manifest, fingerprintQuery(query), templateFamilyFingerprint(query));
 ```
 
-Use this package for integrations that consume SQLBraid operation manifests and execution metadata. It does not expose raw driver cursors, requests, or routine carrier packets; applications receive normalized rows, `output`, heterogeneous `resultSets`, and optional `returnValue` through runtime contracts.
+`QueryManifest` records the value-sensitive `fingerprint`, the
+template-shape `templateFamilyFingerprint`, the result kind, and optional
+variant, source, and result-type fields. `fingerprintTemplate` and
+`templateFamilyFingerprintOf` operate directly on a `TemplateIr` and values
+when a query object is not available. The package does not execute queries.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

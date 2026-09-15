@@ -1,15 +1,31 @@
 # @sqlbraid/metadata
 
-Types, validation, JSON parsing, hashing, and positive-evidence snapshots for SQLBraid database metadata.
+Types and utilities for SQLBraid database metadata snapshots: validation,
+JSON parsing, canonicalization, hashing, identity, and drift comparison.
 
 ```sh
 npm install @sqlbraid/metadata
 ```
 
 ```ts
-import { parseSnapshotJson, validateSnapshot } from "@sqlbraid/metadata";
+import { readFile } from "node:fs/promises";
+import {
+  hashSnapshot,
+  parseSnapshotJson,
+  snapshotIdentity,
+  validateSnapshot,
+} from "@sqlbraid/metadata";
+
+const snapshot = parseSnapshotJson(await readFile("metadata.json", "utf8")); // supplied snapshot
+validateSnapshot(snapshot);
+console.log(snapshotIdentity(snapshot), hashSnapshot(snapshot));
 ```
 
-Metadata can describe routine names, directions, and return shapes, but it is open-world evidence: missing facts do not prove invalid SQL and routine argument lists may be incomplete. Persist snapshots for code generation and tooling; runtime behavior remains the adapter contract.
+`MetadataSnapshot` contains namespaces, database types, relations, routines,
+server details, and snapshot metadata. `MetadataInspector` is the small
+interface for packages that obtain a snapshot. Use `diffSnapshots(before, after)`
+to inspect changes; invalid input raises `SnapshotValidationError` with
+structured diagnostics.
 
-See the [metadata documentation](https://clickin.github.io/SQLBraid/metadata/models/) and [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [metadata model guide](https://clickin.github.io/SQLBraid/metadata/models/)
+and the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

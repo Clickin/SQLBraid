@@ -34,6 +34,7 @@ import { representationProfileFor } from "./type-policy.js";
 export type BunSqlDialect = "postgres" | "mysql" | "mariadb" | "sqlite";
 
 export interface BunSqlClient {
+  <T = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): PromiseLike<T>;
   unsafe<T = unknown>(text: string, values?: readonly unknown[]): PromiseLike<T>;
   reserve?: () => Promise<BunSqlReservedClient>;
   close?: (options?: { readonly timeout?: number }) => Promise<void>;
@@ -170,8 +171,76 @@ function literal(value: unknown): string | undefined {
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
 const describedBulks = new WeakMap<BulkBindingDescription, RenderedBulk>();
+const synthesizedTemplates = new Map<string, TemplateStringsArray>();
+const MAX_SYNTHESIZED_TEMPLATES = 64;
 const ROW_COMMANDS = new Set(["SELECT", "SHOW", "DESCRIBE", "EXPLAIN"]);
 const DML_COMMANDS = new Set(["INSERT", "UPDATE", "DELETE", "MERGE"]);
+
+function assertNativeValue(value: unknown, index: number): void {
+  if (Array.isArray(value)) {
+    throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is an ambiguous Bun.SQL array value; SQLBraid parameters must be value-only.`);
+  }
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is an invalid Date.`);
+    return;
+  }
+  if (value instanceof Uint8Array) return;
+  if (typeof value !== "object") {
+    throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is not a Bun.SQL scalar value.`);
+  }
+  const candidate = value as {
+    readonly value?: unknown;
+    readonly columns?: unknown;
+    readonly serializedValues?: unknown;
+    readonly arrayType?: unknown;
+  };
+  const helper = Object.hasOwn(candidate, "value")
+    && Object.hasOwn(candidate, "columns")
+    && Array.isArray(candidate.columns);
+  const arrayHelper = Object.hasOwn(candidate, "serializedValues")
+    && Object.hasOwn(candidate, "arrayType")
+    && typeof candidate.serializedValues === "string"
+    && (typeof candidate.arrayType === "string" || typeof candidate.arrayType === "number");
+  if (helper || arrayHelper) {
+    throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is a Bun.SQL structural helper; SQLBraid parameters must be value-only.`);
+  }
+  let prototype: object | null = value;
+  while (prototype !== null) {
+    const then = Object.getOwnPropertyDescriptor(prototype, "then");
+    if (then !== undefined && typeof then.value === "function") {
+      throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is a Bun.SQL query or fragment; SQLBraid parameters must be value-only.`);
+    }
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  throw new TypeError(`BRAID_BIND_VALUE_UNSUPPORTED: parameter ${index + 1} is an ambiguous Bun.SQL object value; bind a scalar, Date, Uint8Array, or explicit text instead.`);
+}
+
+function assertNativeValues(values: readonly unknown[]): void {
+  for (let index = 0; index < values.length; index += 1) assertNativeValue(values[index], index);
+}
+
+function nativeTemplate(rendered: RenderedStatement): TemplateStringsArray {
+  if (rendered.nativeTemplate !== undefined) return rendered.nativeTemplate;
+  const shape = `${rendered.dialectId}:${JSON.stringify(rendered.segments)}`;
+  const cached = synthesizedTemplates.get(shape);
+  if (cached !== undefined) return cached;
+  const cooked = [...rendered.segments] as string[] & { raw: readonly string[] };
+  const raw = Object.freeze([...rendered.segments]);
+  Object.defineProperty(cooked, "raw", {
+    configurable: false,
+    enumerable: false,
+    value: raw,
+    writable: false,
+  });
+  const template = Object.freeze(cooked) as unknown as TemplateStringsArray;
+  if (synthesizedTemplates.size >= MAX_SYNTHESIZED_TEMPLATES) {
+    const first = synthesizedTemplates.keys().next().value;
+    if (first !== undefined) synthesizedTemplates.delete(first);
+  }
+  synthesizedTemplates.set(shape, template);
+  return template;
+}
 
 function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): StatementBindingAdapter {
   const id = `bun-sql:${dialect}`;
@@ -179,11 +248,12 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
     const logical = createRenderedStatement(statement);
     assertDialect(logical, dialect);
     assertStatementSupported(logical, dialect);
-    assertValues(logical.parameters.map((parameter) => parameter.value));
+    const values = logical.parameters.map((parameter) => parameter.value);
+    assertValues(values);
+    assertNativeValues(values);
     const description = createStatementBindingDescription(logical, context, {
       adapterId: id,
-      transport: "text-positional",
-      placeholder: (index) => dialect === "postgres" ? `$${index}` : "?",
+      transport: "native-value-template",
       reuse: {
         effective: client.options?.prepare === false ? "simple" : "reuse",
         owner: "driver",
@@ -206,11 +276,11 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
       for (const values of logical.parameterSets) {
         if (values.length !== logical.statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: Bun.SQL bulk parameter cardinality changed.");
         assertValues(values);
+        assertNativeValues(values);
       }
       const description = createBulkBindingDescription(logical, context, {
         adapterId: id,
-        transport: "text-positional",
-        placeholder: (index) => dialect === "postgres" ? `$${index}` : "?",
+        transport: "native-value-template",
         reuse: { effective: client.options?.prepare === false ? "simple" : "reuse", owner: "driver" },
         formatLiteral: (parameter) => literal(parameter.value),
       });
@@ -252,6 +322,7 @@ function assertExecutionSignal(options: ExecutionOptions | undefined): void {
 function statementValues(rendered: RenderedStatement): readonly unknown[] {
   const values = rendered.parameters.map((parameter) => parameter.value);
   assertValues(values);
+  assertNativeValues(values);
   return values;
 }
 
@@ -281,12 +352,6 @@ function assertBulkBinding(
   ) {
     throw new TypeError("BRAID_BINDING_IDENTITY: Bun.SQL bulk binding belongs to another bulk or adapter.");
   }
-}
-
-function sqlText(binding: StatementBindingDescription, rendered: RenderedStatement): string {
-  if (typeof binding.parameterizedSql !== "string") throw new TypeError("Bun.SQL requires a positional parameterized statement.");
-  assertDialect(rendered, binding.dialectId as BunSqlDialect);
-  return binding.parameterizedSql;
 }
 
 function commandResult(value: unknown): CommandResult {
@@ -434,8 +499,7 @@ function createExecutor(
     assertStatementSupported(rendered, dialect);
     assertStatementBinding(rendered, binding, dialect);
     const values = statementValues(rendered);
-    const text = sqlText(binding, rendered);
-    return client.unsafe<T>(text, values);
+    return client<T>(nativeTemplate(rendered), ...values);
   };
   const executor: QueryExecutor = {
     ownershipKey: client as object,
@@ -445,7 +509,7 @@ function createExecutor(
       assertExecutionSignal(options);
       const effectiveBinding = binding ?? statementBinding.describe(rendered, { dialectId: dialect, requestedReuse: "auto" });
       const raw = await run<unknown>(rendered, effectiveBinding);
-      if (returnsRows(raw, effectiveBinding.parameterizedSql ?? "")) {
+      if (returnsRows(raw, rendered.segments.join(""))) {
         const rows = Object.freeze(raw.map((row) => normalizeRow(row, dialect)) as readonly Row[]);
         return Object.freeze({ kind: "rows", rows, rowCount: rows.length });
       }
@@ -477,13 +541,13 @@ function createExecutor(
       assertBulkBinding(bulk, binding, dialect);
       let affectedRows = 0;
       let hasCount = true;
-      const text = typeof binding.parameterizedSql === "string" ? binding.parameterizedSql : undefined;
-      if (text === undefined) throw new TypeError("Bun.SQL requires a positional bulk statement.");
+      const template = nativeTemplate(bulk.statement);
       for (let index = 0; index < binding.itemCount; index += 1) {
         assertExecutionSignal(options);
         const values = binding.valuesAt(index);
         assertValues(values);
-        const raw = await client.unsafe<unknown>(text, values);
+        assertNativeValues(values);
+        const raw = await client<unknown>(template, ...values);
         const command = commandResult(raw);
         if (command.affectedRows === undefined) hasCount = false;
         else affectedRows += command.affectedRows;

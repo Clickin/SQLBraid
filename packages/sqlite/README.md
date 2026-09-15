@@ -1,11 +1,16 @@
 # @sqlbraid/sqlite
 
-SQLite SQL dialect, Node `node:sqlite`, Browser WASM, Cloudflare D1 adapters,
-and metadata inspector for SQLBraid.
+SQLite dialect with Node `node:sqlite`, official SQLite WASM, and Cloudflare
+D1 adapters for SQLBraid.
 
 ```sh
 npm install @sqlbraid/sqlite
 ```
+
+## Node `node:sqlite`
+
+Node 22.18 or newer is required. The application creates and owns the native
+database.
 
 ```ts
 import { DatabaseSync } from "node:sqlite";
@@ -13,18 +18,26 @@ import { sql } from "@sqlbraid/sqlite";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 
 const native = new DatabaseSync(":memory:");
-const db = createNodeSqliteDatabase(native);
-const query = sql.rows<{ id: string }>`SELECT id FROM users`;
+try {
+  const db = createNodeSqliteDatabase(native);
+  const rows = await db.all(sql.rows<{ id: string }>`
+    SELECT CAST(1 AS INTEGER) AS id
+  `);
+  // rows[0].id is the exact decimal string "1"
+} finally {
+  native.close();
+}
 ```
 
-SQLite INTEGER results are exposed as canonical decimal strings. The Node
-adapter requires native `StatementSync.setReadBigInts()` for row reads,
-then normalizes only INTEGER storage; an integral REAL in a dynamic
-column remains a JavaScript number. Streaming uses `StatementSync.iterate()`
-and closes the iterator before the database resource is considered reusable.
+Node results use strings for INTEGER storage, numbers for REAL storage,
+strings for TEXT, and `Uint8Array` for BLOB. Integral REAL values remain
+numbers; SQLite's dynamic typing means an integer-looking value is not enough
+to infer INTEGER storage.
 
-For a direct browser/worker SQLite database, use the WASM subpath with the
-official `@sqlite.org/sqlite-wasm` OO1-style database object:
+## SQLite WASM and D1
+
+The WASM adapter accepts an initialized official `@sqlite.org/sqlite-wasm`
+OO1-style database and its initialized `sqlite3` module:
 
 ```ts
 import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
@@ -32,18 +45,9 @@ import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
 const db = createSqliteWasmDatabase(wasmDatabase, { sqlite3 });
 ```
 
-The WASM adapter owns one direct database resource and supports query, native
-row iteration, callback transactions, and prepare-once bulk execution. It does
-not create a pool or rely on an async-context polyfill. Keep conflicting root
-operations out of an active transaction or stream. Pass the initialized
-`sqlite3` module so the adapter can read INTEGER storage through
-`sqlite3_column_int64()` before normalizing it to a string; REAL storage remains
-a number. Row queries and streams reject missing native/CAPI exact-read
-capabilities with `BRAID_INTEGER_MODE_UNSUPPORTED`; command-only paths do not
-require row-reading capabilities.
-
-Cloudflare D1 uses a structural binding interface and remains the SQLite
-dialect:
+`wasmDatabase` and `sqlite3` are initialized and supplied by the application.
+WASM preserves the same INTEGER-as-string and REAL-as-number result policy.
+For D1, pass the Worker binding supplied by Cloudflare:
 
 ```ts
 import { createD1Database } from "@sqlbraid/sqlite/d1";
@@ -51,40 +55,24 @@ import { createD1Database } from "@sqlbraid/sqlite/d1";
 const db = createD1Database(env.DB);
 ```
 
-D1 materialized queries use its public result metadata, ordered `?1`, `?2`, …
-binds, and native `batch()` for `db.bulk()` (`remote-batch`). D1 has no
-incremental row cursor in the Worker Binding API, so `db.stream()` is
-`BRAID_STREAM_UNSUPPORTED`; callback `db.tx()` is also unsupported. The adapter
-does not paginate to simulate streaming, auto-chunk bulk input, or claim remote
-production support from a local Worker/D1 test.
+D1 materializes rows and supports native `batch()` for `db.bulk()`. The D1
+binding has no incremental cursor, so `db.stream()` and callback `db.tx()`
+are unavailable. D1 cannot guarantee full SQLite int64 fidelity because its
+public row values are JavaScript numbers; use an explicit `CAST(... AS TEXT)`
+when textual fidelity matters. D1 text values are strings, binary values are
+`Uint8Array`, and safe integral numbers are normalized to decimal strings;
+other numeric values remain JavaScript numbers.
 
-SQLite has no stored-procedure protocol in this adapter. `db.call()` fails with `BRAID_CALL_UNSUPPORTED`. Scalar, aggregate, and window functions registered through SQLite's function API are used inside ordinary SQL; virtual-table/table-valued extensions are ordinary `sql.rows(...)` queries, not routine calls.
+SQLite has no stored-procedure protocol; `db.call()` is unavailable. Node and
+WASM active cancellation are unavailable, while an already-aborted signal is
+rejected with its reason. Transaction isolation and read-only options depend
+on the selected adapter; unsupported options are rejected rather than
+silently ignored. `db.bulk()` is command-only and has no implicit transaction.
 
-Node `node:sqlite` and WASM reject an active `AbortSignal` before I/O with
-`UnsupportedFeatureError` / `BRAID_CANCEL_UNSUPPORTED`; an already
-aborted signal preserves its `reason`. D1 has the same cancellation boundary,
-and also rejects callback transactions and streaming with explicit
-`UnsupportedFeatureError` codes. Transaction isolation/read-only options are
-capability-driven; only options documented by the selected adapter are valid.
-Malformed runtime transaction options fail before acquisition as
-`TypeError` / `BRAID_TX_OPTIONS_INVALID`; valid but unsupported options use
-`BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit options use
-`BRAID_TX_OPTIONS_NESTED`.
+SQLite `RETURNING` is a materialized row query. The Node and WASM adapters
+support streaming ordinary row queries; DML-returning rows are accumulated
+before delivery.
 
-`db.bulk()` is command-only and has no portable atomicity promise. Use
-`db.tx(async (tx) => tx.bulk(...))` on adapters that support callback
-transactions. SQLite `RETURNING` remains a materialized row contract; its
-output is accumulated before rows are delivered, so DML-returning streaming is
-not a bounded-memory support claim.
-
-See the [SQLite setup](https://clickin.github.io/SQLBraid/getting-started/sqlite/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
-
-SQLite representation depends on the selected driver: Node and WASM INTEGER
-values are strings (with native bigint/C API reads kept internal), REAL values
-are numbers, and D1 safely narrows integral JavaScript numbers to strings but
-cannot claim full SQLite int64 fidelity. D1's public Number metadata also
-cannot distinguish an integral REAL from an INTEGER; that narrowing is
-guarded, not a lossless storage-class claim. Use an explicit
-`CAST(... AS TEXT)` in native SQL when textual/type fidelity is required.
-JSON1 is text unless the selected build proves otherwise, BLOB is bytes, and
-`RETURNING` is materialized. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/),
+[SQLite setup](https://clickin.github.io/SQLBraid/getting-started/sqlite/), and
+[data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

@@ -1,10 +1,15 @@
 # @sqlbraid/runtime
 
-Execute SQLBraid queries with connection-safe transactions, physical lease cleanup, observers, streaming, routine mapping, homogeneous bulk, and Standard Schema results.
+Runtime execution for SQLBraid queries: materialized rows, command results,
+transactions, sessions, prepared queries, streams, routine mapping, batches,
+and homogeneous bulk execution.
 
 ```sh
 npm install @sqlbraid/runtime @sqlbraid/sqlite
 ```
+
+A driver adapter supplies the executor. This example uses the Node SQLite
+adapter; the native database is created and owned by the application.
 
 ```ts
 import { DatabaseSync } from "node:sqlite";
@@ -15,44 +20,48 @@ import { sql } from "@sqlbraid/sqlite";
 const native = new DatabaseSync(":memory:");
 try {
   const db = createDatabase(createNodeSqliteExecutor(native));
-  for await (const row of db.stream(sql.rows<{ value: number }>`SELECT ${1} AS value`)) {
-    console.log(row.value);
-  }
+  const rows = await db.all(sql.rows<{ value: number }>`
+    SELECT CAST(1.5 AS REAL) AS value
+  `);
+  // rows is readonly and rows[0].value is the JavaScript number 1.5
 } finally {
   native.close();
 }
 ```
 
-`db.all()` intentionally materializes a readonly array; use `db.stream()` for bounded application memory. Stream cleanup closes/drains/cancels the driver resource before releasing or discarding the physical lease. `db.call()` consumes and closes routine resources before mapping `output`, heterogeneous `resultSets`, and optional `returnValue`; raw cursor/request objects never escape.
+`createDatabase(executor)` is for one executor. Driver packages also expose
+pool factories that use `createPooledDatabase` internally. Applications supply
+the underlying connection, pool, or worker binding; the runtime never creates
+one for them.
 
-`db.bulk(inputs, factory)` is a command-only throughput primitive: the runtime
-locks one logical DML shape, validates every parameter set before I/O, acquires
-one lease, and delegates one matrix to the driver's optional `bulk()` method.
-Empty input performs no acquire. Root bulk has no portable transaction or
-auto-chunking promise; use `db.tx(async (tx) => tx.bulk(inputs, factory))` for
-callback atomicity. Drivers report `native-bulk`, `pipeline`, `prepared-loop`,
-or `remote-batch`; an executor without this capability fails explicitly.
+`db.all()` returns a readonly materialized array. `db.one()` requires exactly
+one row, and `db.maybeOne()` returns one row or `undefined`. `db.execute()`
+returns either a row result or a command result according to the query kind.
+`db.batch()` executes a fixed list, while `db.bulk()` accepts one command shape
+and many input values. `db.session()` pins a lease for its callback and
+`db.tx()` runs callback-scoped transactions and savepoints where the adapter
+provides them.
 
-All execution methods accept trailing options. `db.session(callback)` pins one
-physical provider lease for the callback and nested sessions reuse it;
-`db.tx(callback)` uses that lease or acquires one root lease, and nested
-transactions use savepoints when available. `db.tx(options, callback)` accepts
-`TransactionOptions` only when the adapter advertises the requested isolation
-and `readOnly` combination. Malformed runtime values fail before acquisition as
-`TypeError` / `BRAID_TX_OPTIONS_INVALID`; valid but unsupported options use
-`BRAID_TX_OPTION_UNSUPPORTED`; nested explicit options, including `{}`, use
-`BRAID_TX_OPTIONS_NESTED`.
+`db.prepare(name, factory)` creates a reusable zero-input or one-input
+prepared query. A factory with several independent arguments is not accepted;
+pass one object when a query needs multiple input fields. `db.stream()` is
+available only when the selected adapter exposes a stream. `db.call()` maps
+routine output only when that adapter exposes a routine contract; the runtime
+does not add routine, cursor, or output-parameter support to a driver that lacks
+it.
 
-Prepared factories are intentionally either zero-input or one required input
-argument. Optional/default/rest or multiple factory arguments are rejected by
-TypeScript because the input and trailing options would be ambiguous; pass one
-object when several input fields are needed. A required `undefined` input is
-distinct from zero-input (`PreparedQuery<never, Q>`).
+An already-aborted signal is rethrown with its reason. Active cancellation is
+performed only when the selected adapter has a cancellation path; otherwise it
+fails before I/O. Transaction isolation and `readOnly` options are likewise
+validated against the selected adapter. Bulk execution is command-only and
+has no implicit transaction; wrap it in `db.tx(async (tx) => tx.bulk(...))`
+when the adapter supports callback transactions.
 
-An already-aborted signal rejects with its reason. An active signal requires a
-driver cancellation capability; otherwise the runtime rejects before I/O with
-`UnsupportedFeatureError` / `BRAID_CANCEL_UNSUPPORTED`. Root use
-inside a session, closed scoped handles, and sibling/parent transaction handles
-are rejected; the runtime never reacquires a lease for work inside a session.
+Result types come from the selected adapter's type policy. For example,
+SQLBraid's default SQLite adapter represents INTEGER as `string`, REAL as
+`number`, TEXT as `string`, and BLOB as `Uint8Array`; the runtime preserves
+those values while enforcing the query's declared row type.
 
-Most applications should use their dialect's direct or pool database factory instead. See the [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), [routine](https://clickin.github.io/SQLBraid/concepts/routines/), and [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/),
+[streaming guide](https://clickin.github.io/SQLBraid/runtime/streaming/), and
+[routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).

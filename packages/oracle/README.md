@@ -1,79 +1,61 @@
 # @sqlbraid/oracle
 
-Oracle SQL dialect, node-oracledb Thin-mode adapters, routine support, and metadata inspector for SQLBraid.
+Oracle SQL dialect and node-oracledb Thin-mode adapters for SQLBraid.
 
 ```sh
 npm install @sqlbraid/oracle oracledb
 ```
 
+The application creates and connects the node-oracledb connection or pool.
+
 ```ts
 import oracledb from "oracledb";
-import { oracleParameter, sql } from "@sqlbraid/oracle";
+import { sql } from "@sqlbraid/oracle";
 import { createOracledbDatabase } from "@sqlbraid/oracle/oracledb";
 
-const connection = await oracledb.getConnection({ user, password, connectString });
-const db = createOracledbDatabase(connection);
-const rows = await db.all(sql.rows<{ id: string }>`SELECT id FROM users`);
+const connection = await oracledb.getConnection({
+  user: process.env.ORACLE_USER,
+  password: process.env.ORACLE_PASSWORD,
+  connectString: process.env.ORACLE_CONNECT_STRING,
+});
+try {
+  const db = createOracledbDatabase(connection);
+  const rows = await db.all(sql.rows<{ id: string }>`
+    SELECT CAST(1 AS NUMBER) AS id FROM dual
+  `);
+  // rows[0].id is the exact decimal string "1"
+} finally {
+  await connection.close();
+}
 ```
 
-The portable root does not import `oracledb`; the driver subpath is optional. Oracle routine calls support scalar OUT/INOUT binds and `SYS_REFCURSOR`/REF CURSOR OUT values with `oracleParameter.refCursor()`. Cursor outputs are removed from `output`, materialized into ordered `resultSets`, and every live `ResultSet` is closed before lease release. Oracle implicit results are included as additional result sets. Application results never expose raw `ResultSet` objects.
+For pools, use `createOracledbPoolDatabase(pool)` from
+`@sqlbraid/oracle/oracledb`. Thin mode is the package's target; configure
+Thick mode separately in node-oracledb if your application requires it.
 
-Oracle routine calls use authored PL/SQL/SQL text. Native procedure metadata is not accepted by this adapter. Thin mode is the first-party target; Thick mode is not implied by this package.
+## Default result representations
 
-Oracle DML that returns rows uses native `RETURNING ... INTO` with
-`sql.out(name, hint?)` and the materialized row APIs. `sql.inOut()` remains
-call-only. The adapter normalizes returned OUT values only after physical
-execution; DML-returning streaming is not a portable PV16 support claim.
+The default Oracle policy represents NUMBER-family values (`NUMBER`,
+`INTEGER`, `DECIMAL`, `NUMERIC`, and aliases) as exact decimal `string`
+values. `BINARY_FLOAT` and `BINARY_DOUBLE` are JavaScript `number` values.
+Character and ROWID values are strings, DATE and TIMESTAMP values are `Date`,
+RAW values are `Uint8Array`, and CLOB/NCLOB values are strings. BLOB values
+remain driver-owned and are typed as `unknown`.
+Native JSON, objects, collections, and vectors remain driver-owned values and
+are typed as `unknown`; nested numeric values are not recursively normalized.
 
-CLOB/NCLOB OUT and INOUT values become strings; BLOB values become bytes.
-SQLBraid reads returned Lobs with `getData()` and awaits their `destroy()`/`close`
-event before lease release. Sibling Lobs and ResultSets are cleaned up even
-when another output fails; no live Lob escapes `db.call()`.
+DML `RETURNING ... INTO` uses `sql.out(name, hint?)` and materialized row APIs.
+Routine calls use authored Oracle SQL or PL/SQL and can map scalar OUT/INOUT
+binds and `SYS_REFCURSOR` values with `oracleParameter.refCursor()`; cursor
+results become materialized `resultSets`. A routine return-value carrier is
+not provided by this adapter. Streaming requires a node-oracledb ResultSet.
 
-An active signal uses the guarded node-oracledb `connection.break()` path.
-Cancellation is cooperative rather than a prompt or timeout guarantee: the
-documented `DBMS_SESSION.SLEEP` raw probe can reject with `ORA-01013` only when
-the sleep completes, and the adapter holds the physical lease through
-settlement. If the connection does not expose the documented break primitive,
-the operation rejects before I/O with `UnsupportedFeatureError` /
-`BRAID_CANCEL_UNSUPPORTED`. Transaction isolation and read-only options are
-capability-driven.
+Use `oracleParameter.number()` for numeric binds with JavaScript `number` or
+`bigint`. Decimal text is not a generic exact NUMBER bind; author an explicit
+`TO_NUMBER` format and NLS clause in SQL when exact decimal input matters.
+Active cancellation requires the connection's public `break()` method and is
+cooperative; without it, an active signal is rejected before I/O.
 
-See the [Oracle setup](https://clickin.github.io/SQLBraid/getting-started/oracle/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
-
-The Thin profile returns Oracle `NUMBER`, `FLOAT`, and ANSI `NUMBER` aliases as
-strings for exact handling, `BINARY_FLOAT`/`BINARY_DOUBLE` as approximate
-JavaScript numbers (including verified `NaN`/infinity values), LOB text as
-strings, and BLOB/RAW as bytes. The free 23.9 target is not Oracle 19c
-evidence; Thick mode is separate. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
-
-Common catalog spellings are mapped directly (`CHAR`, `NCHAR`, `VARCHAR`,
-`VARCHAR2`, `NVARCHAR2`, `RAW`, `ROWID`, and `UROWID`). Native `JSON` metadata
-is recognized through node-oracledb's stable `DB_TYPE_JSON` constant. Parsed
-JSON may have any root value (object, array, string, number, boolean, or
-null), and nested numbers remain driver-native values rather than a
-recursive SQLBraid numeric guarantee.
-
-Exact decimal strings are not a generic typed Oracle `NUMBER` bind guarantee:
-unhinted string-to-number conversion follows the session NLS settings, while
-`oracleParameter.number()` rejects decimal strings rather than silently
-rounding them. When exact input matters, author the conversion in SQL with an
-explicit format and NLS clause, for example:
-
-```sql
-TO_NUMBER(:value, 'TM9', 'NLS_NUMERIC_CHARACTERS = ''.,''')
-```
-
-SQLBraid does not rewrite that SQL. Native Oracle JSON is exposed as the
-driver's parsed object convenience value; nested JSON numbers may already be
-JavaScript `number`s. Use the user-authored
-`JSON_SERIALIZE(payload RETURNING CLOB)` expression when the application needs
-JSON text and chooses its own lossless parser. Native temporal values are
-guarded JavaScript `Date`s; use `TO_CHAR(..., 'YYYY-MM-DD"T"HH24:MI:SS.FF9')`
-(and an explicit offset format where needed) for precision/time-zone text.
-
-Oracle objects, collections, and vectors remain explicitly unsupported for
-recursive fidelity. The adapter preserves their driver-owned values but does
-not decode nested attributes or elements. Generated types are based on a
-TypePolicy/representation profile; runtime and codegen must use matching
-policies.
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/),
+[Oracle setup](https://clickin.github.io/SQLBraid/getting-started/oracle/), and
+[data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

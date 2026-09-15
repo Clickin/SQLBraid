@@ -1,61 +1,67 @@
 # @sqlbraid/bun-sql
 
-SQLBraid adapter for the pinned Bun 1.3.14 `Bun.SQL` API. One implementation
-family serves a user-selected PostgreSQL, MySQL, MariaDB, or SQLite dialect;
-the adapter never exports a Bun-specific query type or SQL tag.
+SQLBraid adapter for Bun's `Bun.SQL` client. Select the SQL dialect explicitly
+when creating a database; the client itself does not determine the dialect.
+
+```sh
+bun add @sqlbraid/bun-sql @sqlbraid/postgres
+```
 
 ```ts
 import { sql } from "@sqlbraid/postgres";
-import { createBunSqlDatabase } from "@sqlbraid/bun-sql";
+import { BUN_SQL_POSTGRES, createBunSqlDatabase } from "@sqlbraid/bun-sql";
 
-const bunSql = new Bun.SQL(process.env.DATABASE_URL!);
-const db = createBunSqlDatabase(bunSql, { dialect: "postgres" });
-const rows = await db.all(sql.rows`SELECT id FROM users`);
+const client = new Bun.SQL(process.env.DATABASE_URL!, {
+  ...BUN_SQL_POSTGRES.connectionOptions,
+});
+const db = createBunSqlDatabase(client, { dialect: "postgres" });
+const rows = await db.all(sql.rows<{ id: string }>`
+  SELECT CAST(1 AS bigint) AS id
+`);
+// rows[0].id is the exact decimal string "1"
 ```
 
-The transport uses Bun's documented `unsafe(text, values)` parameterized API
-with PostgreSQL `$1`, `$2`, ... placeholders and `?` placeholders for
-MySQL/MariaDB/SQLite. It does not construct fake tagged-template arrays.
-For the profiled exact-int transport, construct network clients with Bun's
-documented `{ bigint: true }` option (the SQLite profile uses
-`{ safeIntegers: true }`).
-PostgreSQL, MySQL, and MariaDB use Bun's documented `reserve()` pool primitive
-for sessions and transactions; SQLite uses its one direct Bun.SQL resource.
-Because Bun's reserved handle exposes `release()` but no scoped discard
-primitive, `release({ discard: true })` quarantines the reservation and throws
-`BRAID_RESOURCE_CLEANUP`; close the owning Bun.SQL client when a reservation
-must be discarded.
-Streaming and routine result carriers are explicit `UnsupportedFeatureError`
-paths: MySQL OUT parameters require user-authored session variables plus a
-second SELECT, while Bun's public result has no direction or result-set carrier
-that SQLBraid can map; the other dialects do not document a routine output
-carrier.
-On Bun 1.3.14 MySQL-family results may omit the command marker and report
-`affectedRows: 0` for both an empty `SELECT` and a zero-affected command.
-The result capabilities are therefore guarded, and those shapes are rejected
-as `BRAID_RESULT_KIND_AMBIGUOUS` after execution (the SQL may already have
-had side effects); non-empty row arrays and positive command counts remain
-supported from their native carriers.
+`Bun.SQL` and the database connection are supplied by the application. Use
+`BUN_SQL_POSTGRES`, `BUN_SQL_MYSQL`, `BUN_SQL_MARIADB`, or `BUN_SQLITE` when
+constructing the client so its native integer-width option matches the chosen
+dialect (`bigint: true` for PostgreSQL/MySQL/MariaDB and `safeIntegers: true`
+for SQLite).
 
-Bun.SQL returns rows as JavaScript values without public per-column type
-metadata. The adapter therefore rejects ambiguous integral JavaScript Number
-row values with `BRAID_RESULT_EXACTNESS`; use a user-authored `CAST(... AS
-TEXT)` when exact textual output is required. BigInt rows are normalized to
-canonical decimal strings. PostgreSQL decimal output is text. MySQL/MariaDB
-DECIMAL and binary outputs share an untyped byte carrier and are rejected;
-author `CAST(... AS CHAR)` or `HEX(...)` instead. SQLite native decimal output
-is unsupported. MariaDB/SQLite JSON remains text; PostgreSQL/MySQL native JSON
-can round nested numbers. Server temporal values remain guarded, including
-fractional precision and host-time-zone interpretation.
+## Native Bun transport
 
-Bun's SQLite SQL classifier can misclassify literals mixing single and double
-quotes, including inline JSON. Its row/command capabilities are guarded by
-`bun-sql.sqlite-result-parser`; bind JSON values rather than embedding them in
-SQL literals. SQLBraid does not rewrite SQL to repair Bun's parser.
+Ordinary SQLBraid statements use Bun's callable native value-template API. The
+adapter lowers structural SQL to final template segments plus native values;
+it does not generate `$1` or `?` placeholders and does not use
+`unsafe(text, values)` for ordinary statements. Bun structural helper-shaped
+values, query fragments, arrays, and other ambiguous objects are rejected
+because Bun's callable API accepts native values only; serialize JSON or text
+explicitly before binding. `Date` and `Uint8Array` remain supported native
+values.
+`unsafe` is reserved for SQLBraid's internal transaction-control statements.
 
-Official references for the pinned API:
+The default result representations are guarded by Bun's untyped result API:
 
-- [Bun SQL guide](https://bun.com/docs/runtime/sql)
-- [Bun 1.3.14 SQL declarations](https://github.com/oven-sh/bun/blob/bun-v1.3.14/packages/bun-types/sql.d.ts)
-- [Bun 1.3.14 SQL result conversion source](https://github.com/oven-sh/bun/blob/bun-v1.3.14/src/jsc/bindings/SQLClient.cpp)
-- [Bun 1.3.14 SQLite SQL adapter source](https://github.com/oven-sh/bun/blob/bun-v1.3.14/src/js/internal/sql/sqlite.ts)
+- PostgreSQL: exact integers and `DECIMAL` are strings; approximate floats are
+  numbers; JSON and temporal values use Bun's native representations.
+- MySQL: exact integers are strings; JSON and temporal values use Bun's native
+  representations. Decimal and binary values do not have a lossless native
+  carrier.
+- MariaDB: exact integers are strings; JSON is text; temporal values use Bun's
+  native representations. Decimal and binary values do not have a lossless
+  native carrier.
+- SQLite: INTEGER values are strings, REAL values are numbers, TEXT values are
+  strings, and BLOB values are `Uint8Array` values.
+
+Bun does not expose the metadata SQLBraid needs for routine calls or streaming,
+so this adapter rejects `db.call()` and `db.stream()`. Active cancellation is
+not available through the public Bun API; an `AbortSignal` is rejected rather
+than pretending to cancel a running statement. OUT and INOUT parameters are
+not supported. For MySQL-family routine work, author session variables and a
+follow-up `SELECT` in application SQL instead.
+
+PostgreSQL and MySQL-family clients use Bun's `reserve()` for sessions and
+transactions. SQLite uses its direct client. Transaction isolation and
+read-only options are dialect-specific; unsupported combinations are rejected.
+
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) and the
+[Bun SQL guide](https://bun.com/docs/runtime/sql).

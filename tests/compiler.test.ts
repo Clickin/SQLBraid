@@ -19,6 +19,31 @@ test('discovers aliased SQL tags by import identity', () => {
   assert.equal(result.queries[0].bindings[1].expression, 'name');
 });
 
+test('preserves source escapes separately from cooked template strings', () => {
+  const escaped = "import { sql } from '@sqlbraid/template'; const value = true; const query = sql`SELECT E'line\\n' /*@braid if ${value}*/ AND id = ${1} /*@braid end*/`;";
+  const result = discoverQueries(escaped, 'escaped.ts', { moduleSpecifier: '@sqlbraid/template' });
+  assert.equal(result.queries.length, 1);
+  assert.equal(result.queries[0].strings[0], "SELECT E'line\n' /*@braid if ");
+  assert.equal(result.queries[0].rawStrings[0], "SELECT E'line\\n' /*@braid if ");
+});
+
+test('lowered native carriers retain raw source escapes', async () => {
+  const escaped = "import { sql } from '@sqlbraid/template'; export const query = sql`SELECT E'line\\n' /*@braid if ${true}*/ AND id = ${1} /*@braid end*/`;";
+  const emitted = emitSource(escaped, 'escaped-runtime.ts', { moduleSpecifier: '@sqlbraid/template' });
+  assert.deepEqual(emitted.diagnostics, []);
+  const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-escaped-runtime-'));
+  try {
+    const file = join(directory, 'escaped-runtime.mjs');
+    writeFileSync(file, emitted.outputText.replace(/\n\/\/#[^\n]*sourceMappingURL[^\n]*/u, ''));
+    const module = await import(pathToFileURL(file).href);
+    const nativeTemplate = module.query.render().nativeTemplate;
+    assert.equal(nativeTemplate[0], "SELECT E'line\n'  AND id = ");
+    assert.equal(nativeTemplate.raw[0], "SELECT E'line\\n'  AND id = ");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('MariaDB tags preserve native hash comments while finding active directives', () => {
   const native = [
     "import { sql } from '@sqlbraid/mariadb';",

@@ -108,6 +108,81 @@ function buildUnits(strings: readonly string[]): { readonly units: readonly Unit
   return { units, sourceLength: position };
 }
 
+function hexDigit(value: string | undefined): number {
+  if (value === undefined) return -1;
+  const code = value.charCodeAt(0);
+  if (code >= 0x30 && code <= 0x39) return code - 0x30;
+  if (code >= 0x41 && code <= 0x46) return code - 0x41 + 10;
+  if (code >= 0x61 && code <= 0x66) return code - 0x61 + 10;
+  return -1;
+}
+
+function decodeTemplateRawSegment(segment: string): string {
+  let decoded = "";
+  for (let index = 0; index < segment.length; index += 1) {
+    if (segment[index] !== "\\") {
+      decoded += segment[index];
+      continue;
+    }
+    const escape = segment[index + 1];
+    if (escape === undefined) {
+      decoded += "\\";
+      continue;
+    }
+    index += 1;
+    if (escape === "x") {
+      const high = hexDigit(segment[index + 1]);
+      const low = hexDigit(segment[index + 2]);
+      if (high >= 0 && low >= 0) {
+        decoded += String.fromCharCode((high << 4) | low);
+        index += 2;
+        continue;
+      }
+      decoded += escape;
+      continue;
+    }
+    if (escape === "u") {
+      if (segment[index + 1] === "{") {
+        const close = segment.indexOf("}", index + 2);
+        if (close >= 0) {
+          const codePoint = Number.parseInt(segment.slice(index + 2, close), 16);
+          if (Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff) {
+            decoded += String.fromCodePoint(codePoint);
+            index = close;
+            continue;
+          }
+        }
+      } else {
+        const digits = segment.slice(index + 1, index + 5);
+        if (digits.length === 4) {
+          const codePoint = Number.parseInt(digits, 16);
+          if (Number.isInteger(codePoint) && /^[\da-f]{4}$/iu.test(digits)) {
+            decoded += String.fromCharCode(codePoint);
+            index += 4;
+            continue;
+          }
+        }
+      }
+      decoded += escape;
+      continue;
+    }
+    if (escape === "\r" || escape === "\n" || escape === "\u2028" || escape === "\u2029") {
+      if (escape === "\r" && segment[index + 1] === "\n") index += 1;
+      continue;
+    }
+    switch (escape) {
+      case "b": decoded += "\b"; break;
+      case "f": decoded += "\f"; break;
+      case "n": decoded += "\n"; break;
+      case "r": decoded += "\r"; break;
+      case "t": decoded += "\t"; break;
+      case "v": decoded += "\v"; break;
+      default: decoded += escape; break;
+    }
+  }
+  return decoded;
+}
+
 function charAt(units: readonly Unit[], index: number): string | undefined {
   const unit = units[index];
   return unit?.kind === "char" ? unit.value : undefined;
@@ -405,16 +480,75 @@ function freezeNode(node: TemplateNode): TemplateNode {
   return Object.freeze(node);
 }
 
+function freezeTemplateIr(ir: TemplateIr): TemplateIr {
+  return Object.freeze({
+    version: ir.version,
+    nodes: Object.freeze(ir.nodes.map(freezeNode)),
+    sourceLength: ir.sourceLength,
+    ...(ir.rawNodes === undefined ? {} : { rawNodes: Object.freeze(ir.rawNodes.map(freezeNode)) }),
+  });
+}
+
+function sameTemplateShape(left: readonly TemplateNode[], right: readonly TemplateNode[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const leftNode = left[index];
+    const rightNode = right[index];
+    if (leftNode.kind !== rightNode.kind) return false;
+    if (leftNode.kind === "bind") {
+      if (rightNode.kind !== "bind" || leftNode.interpolation !== rightNode.interpolation) return false;
+      continue;
+    }
+    if (leftNode.kind === "if") {
+      if (rightNode.kind !== "if" || leftNode.condition !== rightNode.condition || !sameTemplateShape(leftNode.children, rightNode.children)) return false;
+      continue;
+    }
+    if (leftNode.kind === "choose") {
+      if (rightNode.kind !== "choose" || leftNode.whens.length !== rightNode.whens.length) return false;
+      for (let whenIndex = 0; whenIndex < leftNode.whens.length; whenIndex += 1) {
+        const leftWhen = leftNode.whens[whenIndex];
+        const rightWhen = rightNode.whens[whenIndex];
+        if (leftWhen.condition !== rightWhen.condition || !sameTemplateShape(leftWhen.children, rightWhen.children)) return false;
+      }
+      if ((leftNode.otherwise === undefined) !== (rightNode.otherwise === undefined)) return false;
+      if (leftNode.otherwise && rightNode.otherwise && !sameTemplateShape(leftNode.otherwise, rightNode.otherwise)) return false;
+      continue;
+    }
+    if (leftNode.kind === "trim") {
+      if (rightNode.kind !== "trim" || !sameTemplateShape(leftNode.children, rightNode.children)) return false;
+      continue;
+    }
+    if (leftNode.kind === "fragment" || leftNode.kind === "identifier" || leftNode.kind === "raw" || leftNode.kind === "list") continue;
+  }
+  return true;
+}
+
 const DEFAULT_LEXICAL_PROFILE: DialectLexicalProfile = { lineCommentPrefixes: ["--"], supportsNestedBlockComments: true, supportsDollarQuotes: true, backslashEscapes: true };
 
 export function parseTemplate(strings: TemplateStringsArray, profile: DialectLexicalProfile = DEFAULT_LEXICAL_PROFILE, maxNestingDepth = DEFAULT_LIMITS.maxNestingDepth): TemplateIr {
   if (!Number.isFinite(maxNestingDepth) || maxNestingDepth < 0) throw new SqlRenderError("BRAID_LIMIT", "maxNestingDepth must be a finite non-negative number.");
   const built = buildUnits(strings);
   const parsed = parseSequence(built.units, 0, [], 0, profile, maxNestingDepth);
-  return Object.freeze({ version: 1, nodes: Object.freeze(parsed.nodes.map(freezeNode)), sourceLength: built.sourceLength });
+  const raw = Array.isArray(strings.raw) ? strings.raw : strings;
+  let rawNodes: readonly TemplateNode[] | undefined;
+  if (raw.some((value, index) => value !== strings[index])) {
+    try {
+      const parsedRaw = parseSequence(buildUnits(raw).units, 0, [], 0, profile, maxNestingDepth).nodes;
+      if (sameTemplateShape(parsed.nodes, parsedRaw)) rawNodes = parsedRaw.map(freezeNode);
+    } catch (error) {
+      if (!(error instanceof SqlRenderError) || error.code !== "BRAID_SQL_LEX") throw error;
+    }
+  }
+  return Object.freeze({
+    version: 1,
+    nodes: Object.freeze(parsed.nodes.map(freezeNode)),
+    sourceLength: built.sourceLength,
+    ...(rawNodes === undefined ? {} : { rawNodes: Object.freeze(rawNodes) }),
+  });
 }
 
 const templateCache = new WeakMap<object, Map<string, TemplateIr>>();
+const nativeLexicalCache = new WeakMap<object, Map<string, true>>();
 
 function profileKey(profile: DialectLexicalProfile, maxNestingDepth: number): string {
   return `${JSON.stringify(profile)}:${maxNestingDepth}`;
@@ -430,6 +564,33 @@ function cachedTemplate(strings: TemplateStringsArray, profile: DialectLexicalPr
   next.set(key, parsed);
   templateCache.set(strings, next);
   return parsed;
+}
+
+function validateNativeTemplateParts(strings: readonly string[], profile: DialectLexicalProfile): void {
+  const units = buildUnits(strings).units;
+  let cursor = 0;
+  while (cursor < units.length) {
+    const token = scanNext(units, cursor, profile);
+    if (token.end <= cursor) throw new SqlRenderError("BRAID_SQL_LEX", "Template lexical validation did not advance.");
+    cursor = token.end;
+  }
+}
+
+function validateNativeTemplate(strings: TemplateStringsArray, profile: DialectLexicalProfile): void {
+  const key = JSON.stringify(profile);
+  const raw = (strings as { readonly raw?: unknown }).raw;
+  const hasDistinctRaw = Array.isArray(raw) && (raw as unknown) !== strings;
+  const cacheable = Object.isFrozen(strings) && (!Array.isArray(raw) || Object.isFrozen(raw));
+  if (cacheable && nativeLexicalCache.get(strings)?.has(key)) return;
+  validateNativeTemplateParts(strings, profile);
+  // `.raw` contains JavaScript source spelling. Decode its escapes before
+  // applying SQL lexical rules so an escaped template delimiter is not
+  // mistaken for a SQL backslash escape.
+  if (hasDistinctRaw) validateNativeTemplateParts(raw.map(decodeTemplateRawSegment), profile);
+  if (!cacheable) return;
+  const entries = nativeLexicalCache.get(strings) ?? new Map<string, true>();
+  entries.set(key, true);
+  nativeLexicalCache.set(strings, entries);
 }
 
 interface TrimToken {
@@ -544,6 +705,7 @@ interface RenderState {
   readonly resultKind: QueryResultKind;
   readonly parameters: RenderedParameter[];
   readonly segments: string[];
+  readonly rawSegments: string[];
   readonly variantPath: string[];
   readonly outputNames: Set<string>;
   structuralItems: number;
@@ -558,16 +720,18 @@ function validateLimits(limits: RenderLimits): Required<RenderLimits> {
   return merged;
 }
 
-function addText(state: RenderState, text: string): void {
+function addText(state: RenderState, text: string, rawText = text): void {
   if (!text) return;
   const segment = state.segments.at(-1);
   const previousChar = segment?.at(-1);
   const nextChar = text[0];
   if ((previousChar || state.afterParameter) && nextChar && /[\p{L}\p{N}_$]/u.test(previousChar ?? "0") && /[\p{L}\p{N}_$]/u.test(nextChar)) {
     state.segments[state.segments.length - 1] += " ";
+    state.rawSegments[state.rawSegments.length - 1] += " ";
     state.sqlBytes += 1;
   }
   state.segments[state.segments.length - 1] += text;
+  state.rawSegments[state.rawSegments.length - 1] += rawText;
   state.sqlBytes += utf8ByteLength(text);
   if (state.sqlBytes > state.limits.maxSqlBytes) throw new SqlRenderError("BRAID_SQL_LIMIT", "Rendered SQL exceeds maxSqlBytes.");
   state.afterParameter = false;
@@ -603,11 +767,13 @@ function appendParameter(state: RenderState, parameter: RenderedParameter): void
   const segment = state.segments[state.segments.length - 1];
   if ((segment.at(-1) && /[\p{L}\p{N}_$]/u.test(segment.at(-1)!)) || state.afterParameter) {
     state.segments[state.segments.length - 1] += " ";
+    state.rawSegments[state.rawSegments.length - 1] += " ";
     state.sqlBytes += 1;
     if (state.sqlBytes > state.limits.maxSqlBytes) throw new SqlRenderError("BRAID_SQL_LIMIT", "Rendered SQL exceeds maxSqlBytes.");
   }
   state.parameters.push(parameter);
   state.segments.push("");
+  state.rawSegments.push("");
   state.afterParameter = true;
 }
 
@@ -628,11 +794,16 @@ function addBind(
   });
 }
 
-function appendRendered(state: RenderState, segments: readonly string[], parameters: readonly RenderedParameter[]): void {
-  addText(state, segments[0] ?? "");
+function appendRendered(
+  state: RenderState,
+  segments: readonly string[],
+  parameters: readonly RenderedParameter[],
+  rawSegments: readonly string[] = segments,
+): void {
+  addText(state, segments[0] ?? "", rawSegments[0] ?? "");
   for (let index = 0; index < parameters.length; index += 1) {
     appendParameter(state, parameters[index]);
-    addText(state, segments[index + 1] ?? "");
+    addText(state, segments[index + 1] ?? "", rawSegments[index + 1] ?? "");
   }
 }
 
@@ -672,11 +843,20 @@ function applyTrimToSegments(
   return trimmed;
 }
 
-function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[], state: RenderState): void {
+function renderNodes(
+  nodes: readonly TemplateNode[],
+  captured: readonly unknown[],
+  state: RenderState,
+  rawNodes: readonly TemplateNode[] = nodes,
+): void {
   state.depth += 1;
   if (state.depth > state.limits.maxNestingDepth) throw new SqlRenderError("BRAID_DEPTH", "Render nesting limit exceeded.");
-  for (const node of nodes) {
-    if (node.kind === "text") { addText(state, node.text); continue; }
+  for (const [index, node] of nodes.entries()) {
+    const rawNode = rawNodes[index] ?? node;
+    if (node.kind === "text") {
+      addText(state, node.text, rawNode.kind === "text" ? rawNode.text : node.text);
+      continue;
+    }
     if (node.kind === "bind") {
       const value = captured[node.interpolation];
       if (isFragment(value)) renderFragment(value, state);
@@ -688,7 +868,7 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
     if (node.kind === "if") {
       const enabled = assertDirectiveCondition(captured[node.condition]);
       state.variantPath.push(`if:${node.condition}:${enabled ? "1" : "0"}`);
-      if (enabled) renderNodes(node.children, captured, state);
+      if (enabled) renderNodes(node.children, captured, state, rawNode.kind === "if" ? rawNode.children : node.children);
       continue;
     }
     if (node.kind === "choose") {
@@ -697,13 +877,14 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
         if (assertDirectiveCondition(captured[when.condition])) {
           selected = true;
           state.variantPath.push(`when:${index}:${when.condition}`);
-          renderNodes(when.children, captured, state);
+          const rawWhen = rawNode.kind === "choose" ? rawNode.whens[index] : undefined;
+          renderNodes(when.children, captured, state, rawWhen?.children ?? when.children);
           break;
         }
       }
       if (!selected && node.otherwise) {
         state.variantPath.push("otherwise");
-        renderNodes(node.otherwise, captured, state);
+        renderNodes(node.otherwise, captured, state, rawNode.kind === "choose" ? rawNode.otherwise ?? node.otherwise : node.otherwise);
       }
       continue;
     }
@@ -713,18 +894,20 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
         resultKind: state.resultKind,
         parameters: [],
         segments: [""],
+        rawSegments: [""],
         variantPath: state.variantPath,
         outputNames: state.outputNames,
         depth: state.depth,
         sqlBytes: 0,
         afterParameter: false,
       };
-      renderNodes(node.children, captured, nested);
+      renderNodes(node.children, captured, nested, rawNode.kind === "trim" ? rawNode.children : node.children);
       state.structuralItems = nested.structuralItems;
       const trimmed = applyTrimToSegments(nested.segments, nested.parameters, node.attributes);
+      const rawTrimmed = applyTrimToSegments(nested.rawSegments, nested.parameters, node.attributes);
       const body = trimmed.join("");
       if (node.attributes.prefix === "SET " && !hasSqlToken(body) && !nested.parameters.length) throw new SqlRenderError("BRAID_EMPTY_SET", "@braid set rendered no assignments.");
-      appendRendered(state, trimmed, nested.parameters);
+      appendRendered(state, trimmed, nested.parameters, rawTrimmed);
       continue;
     }
     if (node.kind === "fragment") { renderFragment(node.fragment, state); continue; }
@@ -752,7 +935,41 @@ function renderNodes(nodes: readonly TemplateNode[], captured: readonly unknown[
 function renderFragment(fragment: SqlFragment, state: RenderState): void {
   if (fragment.dialectId !== state.dialect.id) throw new SqlRenderError("BRAID_DIALECT", `Fragment dialect ${fragment.dialectId} cannot render in ${state.dialect.id}.`);
   addStructural(state);
-  renderNodes(fragment.ir.nodes, fragment.values, state);
+  renderNodes(fragment.ir.nodes, fragment.values, state, fragment.ir.rawNodes);
+}
+
+const synthesizedTemplateCache = new WeakMap<object, Map<string, TemplateStringsArray>>();
+const MAX_SYNTHESIZED_TEMPLATES = 64;
+
+function parameterShape(parameter: RenderedParameter): unknown {
+  return {
+    interpolation: parameter.interpolation,
+    hint: parameter.hint,
+    direction: parameter.direction,
+    outputName: parameter.outputName,
+  };
+}
+
+function synthesizedTemplate(
+  owner: object,
+  segments: readonly string[],
+  rawSegments: readonly string[],
+  parameters: readonly RenderedParameter[],
+  variantFingerprint: string,
+): TemplateStringsArray {
+  const key = JSON.stringify([variantFingerprint, segments, rawSegments, parameters.map(parameterShape)]);
+  const entries = synthesizedTemplateCache.get(owner);
+  const cached = entries?.get(key);
+  if (cached) return cached;
+  const template = createTemplateStrings(segments, rawSegments);
+  const next = entries ?? new Map<string, TemplateStringsArray>();
+  if (next.size >= MAX_SYNTHESIZED_TEMPLATES) {
+    const first = next.keys().next().value;
+    if (first !== undefined) next.delete(first);
+  }
+  next.set(key, template);
+  synthesizedTemplateCache.set(owner, next);
+  return template;
 }
 
 function renderIr(
@@ -762,6 +979,7 @@ function renderIr(
   limits?: RenderLimits,
   resultKind: QueryResultKind = "unknown",
   routineProcedure?: RoutineContract["procedure"],
+  nativeTemplateOwner: object = ir,
 ): RenderedStatement {
   const state: RenderState = {
     dialect,
@@ -769,6 +987,7 @@ function renderIr(
     resultKind,
     parameters: [],
     segments: [""],
+    rawSegments: [""],
     variantPath: [],
     outputNames: new Set<string>(),
     structuralItems: 0,
@@ -776,13 +995,114 @@ function renderIr(
     sqlBytes: 0,
     afterParameter: false,
   };
-  renderNodes(ir.nodes, captured, state);
+  renderNodes(ir.nodes, captured, state, ir.rawNodes);
+  const variantFingerprint = state.variantPath.join("|");
   return createRenderedStatement({
     segments: state.segments,
     parameters: state.parameters,
     dialectId: dialect.id,
+    nativeTemplate: synthesizedTemplate(nativeTemplateOwner, state.segments, state.rawSegments, state.parameters, variantFingerprint),
     ...(routineProcedure === undefined ? {} : { routineProcedure }),
-    variantFingerprint: state.variantPath.join("|"),
+    variantFingerprint,
+    resultKind,
+  });
+}
+
+function plainParameter(
+  value: unknown,
+  interpolation: number,
+  resultKind: QueryResultKind,
+  outputNames: Set<string>,
+): RenderedParameter {
+  const parameter: RenderedParameter = isRoutineParameter(value)
+    ? {
+        value: value.value,
+        interpolation,
+        ...(value.hint === undefined ? {} : { hint: value.hint }),
+        direction: value.direction,
+        outputName: value.outputName,
+      }
+    : isBoundParameter(value)
+      ? {
+          value: value.value,
+          interpolation,
+          hint: value.hint,
+        }
+      : { value, interpolation };
+  if (parameter.direction !== undefined && parameter.direction !== "in") {
+    const allowed = resultKind === "call" || (resultKind === "rows" && parameter.direction === "out");
+    if (!allowed) {
+      throw new SqlRenderError(
+        "BRAID_CALL_ONLY",
+        parameter.direction === "inout"
+          ? "sql.inOut() is only valid in sql.call queries."
+          : "sql.out() is only valid in sql.call or sql.rows queries.",
+      );
+    }
+  }
+  if (parameter.outputName !== undefined) {
+    if (outputNames.has(parameter.outputName)) throw new SqlRenderError("BRAID_CALL_OUTPUT_NAME", `Duplicate routine outputName: ${parameter.outputName}`);
+    outputNames.add(parameter.outputName);
+  }
+  return parameter;
+}
+
+function plainSegments(
+  strings: TemplateStringsArray,
+  parameterCount: number,
+): { readonly segments: readonly string[]; readonly rawSegments: readonly string[] } {
+  const segments = [...strings];
+  const rawSegments = [...(Array.isArray(strings.raw) ? strings.raw : strings)];
+  let afterParameter = false;
+  for (let index = 0; index < parameterCount; index += 1) {
+    const current = segments[index] ?? "";
+    const rawCurrent = rawSegments[index] ?? "";
+    if ((afterParameter || isWordCharacter(current.at(-1))) && current.length === 0) {
+      segments[index] = " ";
+      rawSegments[index] = " ";
+    } else if (afterParameter || isWordCharacter(current.at(-1))) {
+      segments[index] = `${current} `;
+      rawSegments[index] = `${rawCurrent} `;
+    }
+    const next = segments[index + 1] ?? "";
+    if (isWordCharacter(next[0])) {
+      segments[index + 1] = ` ${next}`;
+      rawSegments[index + 1] = ` ${rawSegments[index + 1] ?? ""}`;
+      afterParameter = false;
+    } else {
+      afterParameter = next.length === 0;
+    }
+  }
+  return { segments, rawSegments };
+}
+
+function renderPlainTemplate(
+  strings: TemplateStringsArray,
+  captured: readonly unknown[],
+  dialect: Dialect,
+  limits: Required<RenderLimits>,
+  resultKind: QueryResultKind,
+  routineProcedure?: RoutineContract["procedure"],
+  nativeTemplateOwner: object = {},
+): RenderedStatement {
+  validateNativeTemplate(strings, dialect.lexicalProfile ?? DEFAULT_LEXICAL_PROFILE);
+  if (strings.length !== captured.length + 1) throw new TypeError("Template values must match template interpolation count.");
+  if (captured.length > limits.maxBindCount) throw new SqlRenderError("BRAID_BIND_LIMIT", "Rendered bind count exceeds maxBindCount.");
+  const parameters: RenderedParameter[] = [];
+  const outputNames = new Set<string>();
+  for (let index = 0; index < captured.length; index += 1) {
+    parameters.push(plainParameter(captured[index], index, resultKind, outputNames));
+  }
+  const { segments, rawSegments } = plainSegments(strings, parameters.length);
+  const sqlBytes = segments.reduce((total, segment) => total + utf8ByteLength(segment), 0);
+  if (sqlBytes > limits.maxSqlBytes) throw new SqlRenderError("BRAID_SQL_LIMIT", "Rendered SQL exceeds maxSqlBytes.");
+  const preservesIdentity = isTemplateStringsArray(strings) && segments.every((segment, index) => segment === strings[index]);
+  return createRenderedStatement({
+    segments,
+    parameters,
+    dialectId: dialect.id,
+    nativeTemplate: preservesIdentity ? strings : synthesizedTemplate(nativeTemplateOwner, segments, rawSegments, parameters, ""),
+    ...(routineProcedure === undefined ? {} : { routineProcedure }),
     resultKind,
   });
 }
@@ -965,41 +1285,76 @@ function isTemplateStringsArray(value: unknown): value is TemplateStringsArray {
     && Array.isArray((value as { readonly raw?: unknown }).raw);
 }
 
+type PreparedQueryFactory = (strings: TemplateStringsArray, values: readonly unknown[], preparsedIr?: TemplateIr) => Query<unknown, QueryResultKind>;
+const preparedQueryFactories = new WeakMap<object, PreparedQueryFactory>();
+
 export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
   const dialect = options.dialect ?? postgresDialect;
   const limits = validateLimits(options.limits ?? {});
+  const nativeTemplateOwner = {};
   const createQuery = <Row, Kind extends QueryResultKind>(
     strings: TemplateStringsArray,
     values: readonly unknown[],
     resultKind: Kind,
     resultSchema?: StandardSchemaV1<unknown, Row>,
     routineContract?: RoutineContract,
+    preparsedIr?: TemplateIr,
   ): Query<Row, Kind> => {
-    const ir = cachedTemplate(strings, dialect.lexicalProfile, limits.maxNestingDepth);
     const captured = Object.freeze([...values]);
-    return Object.freeze({
-      ir,
+    let ir = preparsedIr === undefined ? undefined : freezeTemplateIr(preparsedIr);
+    const getIr = (): TemplateIr => {
+      if (ir === undefined) ir = cachedTemplate(strings, dialect.lexicalProfile, limits.maxNestingDepth);
+      return ir;
+    };
+    const structural = preparsedIr !== undefined
+      || strings.some((segment) => segment.includes("/*@braid"))
+      || captured.some(isFragment);
+    if (!structural) validateNativeTemplate(strings, dialect.lexicalProfile ?? DEFAULT_LEXICAL_PROFILE);
+    const query = {
+      get ir() {
+        return getIr();
+      },
       values: captured,
       resultKind,
       ...(resultSchema === undefined ? {} : { resultSchema }),
       ...(routineContract === undefined ? {} : { routineContract }),
-      render: () => renderIr(ir, captured, dialect, limits, resultKind, routineContract?.procedure),
-    });
+      render: () => structural
+        ? renderIr(getIr(), captured, dialect, limits, resultKind, routineContract?.procedure, nativeTemplateOwner)
+        : renderPlainTemplate(strings, captured, dialect, limits, resultKind, routineContract?.procedure, nativeTemplateOwner),
+    } as Query<Row, Kind>;
+    return Object.freeze(query);
   };
-  const tag = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "unknown"> => createQuery<unknown, "unknown">(strings, values, "unknown")) as SqlTag;
+  const createUnknown = (strings: TemplateStringsArray, values: readonly unknown[], preparsedIr?: TemplateIr) =>
+    createQuery<unknown, "unknown">(strings, values, "unknown", undefined, undefined, preparsedIr);
+  const tag = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "unknown"> =>
+    createUnknown(strings, values)) as SqlTag;
+  preparedQueryFactories.set(tag, createUnknown);
+  const createRows = (strings: TemplateStringsArray, values: readonly unknown[], preparsedIr?: TemplateIr) =>
+    createQuery<unknown, "rows">(strings, values, "rows", undefined, undefined, preparsedIr);
   tag.rows = ((first: TemplateStringsArray | StandardSchemaV1, ...values: readonly unknown[]) => {
-    if (isTemplateStringsArray(first)) return createQuery<unknown, "rows">(first, values, "rows");
+    if (isTemplateStringsArray(first)) return createRows(first, values);
     assertStandardSchema(first);
     const schema = first;
-    return ((strings: TemplateStringsArray, ...tagValues: readonly unknown[]) =>
+    const rowTag = ((strings: TemplateStringsArray, ...tagValues: readonly unknown[]) =>
       createQuery(strings, tagValues, "rows", schema)) as SqlTagLike<"rows", unknown>;
+    preparedQueryFactories.set(rowTag, (strings, tagValues, preparsedIr) =>
+      createQuery(strings, tagValues, "rows", schema, undefined, preparsedIr));
+    return rowTag;
   }) as SqlTag["rows"];
-  tag.command = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "command"> => createQuery<unknown, "command">(strings, values, "command")) as SqlTag["command"];
+  preparedQueryFactories.set(tag.rows, createRows);
+  const createCommand = (strings: TemplateStringsArray, values: readonly unknown[], preparsedIr?: TemplateIr) =>
+    createQuery<unknown, "command">(strings, values, "command", undefined, undefined, preparsedIr);
+  tag.command = ((strings: TemplateStringsArray, ...values: readonly unknown[]): Query<unknown, "command"> =>
+    createCommand(strings, values)) as SqlTag["command"];
+  preparedQueryFactories.set(tag.command, createCommand);
   tag.call = ((first: TemplateStringsArray | RoutineContract, ...values: readonly unknown[]) => {
     if (isTemplateStringsArray(first)) return createQuery(first, values, "call");
     const contract = normalizeRoutineContract(first);
-    return ((strings: TemplateStringsArray, ...tagValues: readonly unknown[]) =>
+    const callTag = ((strings: TemplateStringsArray, ...tagValues: readonly unknown[]) =>
       createQuery(strings, tagValues, "call", undefined, contract)) as SqlTag["call"];
+    preparedQueryFactories.set(callTag, (strings, tagValues, preparsedIr) =>
+      createQuery(strings, tagValues, "call", undefined, contract, preparsedIr));
+    return callTag;
   }) as SqlTag["call"];
   tag.bind = ((value: unknown, hint: ParameterTypeHint) => createBoundParameter(value, hint)) as SqlTag["bind"];
   tag.out = ((name: string, hint?: ParameterTypeHint) => createRoutineOutParameter(name, hint)) as SqlTag["out"];
@@ -1028,10 +1383,17 @@ export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
   return tag;
 }
 
-function createTemplateStrings(values: readonly string[]): TemplateStringsArray {
+function createTemplateStrings(values: readonly string[], rawValues: readonly string[] = values): TemplateStringsArray {
+  if (values.length !== rawValues.length) throw new TypeError("Template cooked/raw segments must have matching lengths.");
   const strings = [...values] as string[] & { raw?: readonly string[] };
-  strings.raw = [...values];
-  return strings as unknown as TemplateStringsArray;
+  const raw = Object.freeze([...rawValues]);
+  Object.defineProperty(strings, "raw", {
+    value: raw,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return Object.freeze(strings) as unknown as TemplateStringsArray;
 }
 
 function hasGuard(nodes: readonly TemplateNode[]): boolean {
@@ -1080,10 +1442,17 @@ export function guarded<Row = unknown, Kind extends QueryResultKind = QueryResul
   return tag(templateStrings, ...values);
 }
 
-export function capture<Row = unknown, Kind extends QueryResultKind = QueryResultKind>(tag: SqlTagLike<Kind, Row>, strings: readonly string[], build: (values: unknown[]) => void): Query<Row, Kind> {
+export function capture<Row = unknown, Kind extends QueryResultKind = QueryResultKind>(
+  tag: SqlTagLike<Kind, Row>,
+  strings: readonly string[],
+  build: (values: unknown[]) => void,
+  preparsedIr?: TemplateIr,
+): Query<Row, Kind> {
   const captured = new Array<unknown>(Math.max(0, strings.length - 1));
   build(captured);
-  const templateStrings = createTemplateStrings(strings);
+  const templateStrings = isTemplateStringsArray(strings) ? strings : createTemplateStrings(strings);
+  const factory = preparedQueryFactories.get(tag as unknown as object);
+  if (preparsedIr !== undefined && factory) return factory(templateStrings, captured, preparsedIr) as Query<Row, Kind>;
   return tag(templateStrings, ...captured);
 }
 

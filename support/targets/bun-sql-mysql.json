@@ -1,6 +1,6 @@
 {
   "id": "bun-sql-mysql",
-  "status": "official",
+  "status": "compatible",
   "database": {
     "product": "mysql",
     "version": "8.4.2",
@@ -11,7 +11,7 @@
     "version": "1.3.14",
     "profile": "bun-sql-mysql-1.3.14",
     "package": "@sqlbraid/bun-sql",
-    "transport": "text-positional (?)",
+    "transport": "native-value-template",
     "stream": "unsupported",
     "routine": "unsupported",
     "bulk": "prepared-loop",
@@ -272,28 +272,8 @@
     }
   },
   "evidence": {
-    "status": "verified",
-    "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
-    "runs": [
-      {
-        "workflow": ".github/workflows/runtime-portability.yml",
-        "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
-        "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34883654865"
-      },
-      {
-        "workflow": ".github/workflows/docs-pages.yml",
-        "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
-        "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34883654892"
-      },
-      {
-        "workflow": ".github/workflows/release.yml",
-        "commit": "a636a0c031e9623dbc84af229bc839d83f5d6abf",
-        "status": "passed",
-        "run": "https://github.com/Clickin/SQLBraid/actions/runs/34883652538"
-      }
-    ]
+    "status": "pending",
+    "runs": []
   },
   "typePolicy": {
     "id": "bun-sql-mysql-1.3.14",

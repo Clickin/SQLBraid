@@ -1,89 +1,67 @@
 # @sqlbraid/mariadb
 
-MariaDB SQL dialect and official MariaDB Connector/Node.js adapter for SQLBraid.
-
-The MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0 exact profile passed a
-historical PV16 release dry-run
-([34818113561](https://github.com/Clickin/SQLBraid/actions/runs/34818113561)) at
-`2890ef65d15ac96a7e3471911b381340aa30579a`. This is provenance only: it is not
-fresh evidence for the current tree, an npm publication, or a certification of
-other driver/server profiles.
+MariaDB dialect and official MariaDB Connector/Node.js adapters for SQLBraid.
 
 ```sh
 npm install @sqlbraid/mariadb mariadb
 ```
 
-```ts
-import { sql } from "@sqlbraid/mariadb";
-import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";
-
-const db = createMariaDbDatabase(connection);
-const rows = await db.all(sql.rows<{ readonly id: string }>`SELECT id FROM users WHERE id = ${"1"}`);
-```
-
-The adapter uses the Connector/Node.js value-only `execute()` path for materialized
-queries, `queryStream()` for native row streaming, and `connection.batch()` for
-homogeneous bulk DML. Connector metadata determines row versus command results;
-multiple result sets are available through `db.call()` and are rejected by
-ordinary query methods.
-
-An active `AbortSignal` is honored only when the connector can cancel the
-physical operation. Otherwise the adapter rejects before I/O with
-`UnsupportedFeatureError` / `BRAID_CANCEL_UNSUPPORTED`; an already
-aborted signal preserves its `reason`. Transaction options and stream/call
-support remain capability-driven.
-
-`db.session()` pins one provider lease and nested `db.tx()` work reuses it
-without reacquiring. Transaction options are the fixed isolation literals plus
-`readOnly`; malformed values fail as `BRAID_TX_OPTIONS_INVALID`, unsupported
-valid values as `BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit options as
-`BRAID_TX_OPTIONS_NESTED`.
-
-## Representation profiles
-
-Configure the Connector/Node.js connection with the exported immutable
-`MARIADB_LOSSLESS_TEXT` descriptor:
+The application creates and connects the MariaDB Connector/Node.js connection
+or pool. Configure the lossless profile on that connection before creating the
+SQLBraid database.
 
 ```ts
 import mariadb from "mariadb";
-import { MARIADB_LOSSLESS_TEXT } from "@sqlbraid/mariadb";
+import { MARIADB_LOSSLESS_TEXT, sql } from "@sqlbraid/mariadb";
+import { createMariaDbPoolDatabase } from "@sqlbraid/mariadb/mariadb";
 
-const connection = await mariadb.createConnection({
-  ...connectionOptions,
+const pool = mariadb.createPool({
+  host: process.env.MARIADB_HOST,
+  user: process.env.MARIADB_USER,
+  password: process.env.MARIADB_PASSWORD,
+  database: process.env.MARIADB_DATABASE,
   ...MARIADB_LOSSLESS_TEXT.connectionOptions,
 });
-const db = createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT });
+const db = createMariaDbPoolDatabase(pool, { profile: MARIADB_LOSSLESS_TEXT });
+const rows = await db.all(sql.rows<{ id: string }>`
+  SELECT CAST(1 AS BIGINT) AS id
+`);
+// rows[0].id is the exact decimal string "1"
 ```
 
-`DECIMAL`/`NUMERIC` and all integer result columns are exposed by SQLBraid as
-decimal strings; `FLOAT`/`DOUBLE` remain JavaScript numbers. `insertId` is also
-normalized to a decimal string, while `affectedRows` is returned as a safe
-non-negative number and rejects an unsafe connector count. Native connector
-batch execution uses the same string bind values as ordinary execution.
+For a connected connection, use `createMariaDbDatabase(connection)` from
+`@sqlbraid/mariadb/mariadb`. Connections and pools are supplied by the
+application.
 
-`MARIADB_NATIVE` is available as a parsed-object/Date compatibility profile;
-nested JSON numbers may already have passed through JavaScript `JSON.parse` and
-therefore are not lossless. `dateStrings: true` preserves DATE/TIME/DATETIME
-text, including fractional seconds; `timezone` must be chosen explicitly when
-TIMESTAMP values are used. MariaDB Connector does not expose effective
-connection options publicly, so pass the matching descriptor explicitly when
-using a non-default profile. SQLBraid does not add a JSON parser or temporal
-type dependency.
+## Default result representations
 
-MariaDB-specific DML `RETURNING` is supported by the database's native syntax:
-use `sql.rows` with `INSERT ... RETURNING`, `DELETE ... RETURNING`, or
-`REPLACE ... RETURNING` on a server version that documents the form. The adapter
-does not claim `UPDATE ... RETURNING`, and `INSERT ... ON DUPLICATE KEY UPDATE ... RETURNING`
-is only a server-version-tested capability.
-`ON DUPLICATE KEY UPDATE` and `REPLACE` are classified as native UPSERT
-forms, not SQL `MERGE`.
+`MARIADB_LOSSLESS_TEXT` sets `bigIntAsNumber: false`, `decimalAsNumber: false`,
+`insertIdAsNumber: false`, `autoJsonMap: false`, `dateStrings: true`, and
+`timezone: "Z"`. With that profile:
 
-Bulk uses one Connector/Node.js `connection.batch()` call with one SQL shape and
-N value sets. Root bulk has no portable transaction or auto-chunking promise;
-use `db.tx(async (tx) => tx.bulk(...))` for callback atomicity. Native
-DML-returning streams are not a PV16 support claim.
+- MariaDB integer types and `DECIMAL`/`NEWDECIMAL` are decimal `string` values.
+- `FLOAT` and `DOUBLE` are JavaScript `number` values.
+- JSON, DATE, DATETIME, TIMESTAMP, and TIME values are strings.
+- Text values are strings, binary values are `Uint8Array` values, `insertId`
+  is a decimal string, and `affectedRows` is a number.
 
-The Connector/Node.js profile records exact server and runtime versions in the
-support manifest. Connector options are profile data, not assumptions shared with
-mysql2. See the
+The root package also exports `MARIADB_NATIVE`, `MARIADB_JSON_TEXT`,
+`MARIADB_DATE_TEXT`, `representationProfiles`, and `typePolicyForProfile` for
+intentional JSON and temporal representation changes. Pass the matching
+profile explicitly when using a wrapper that hides Connector/Node.js options.
+
+`db.stream()` uses Connector/Node.js `queryStream()`. `db.bulk()` uses one
+native `connection.batch()` call for one SQL shape and many value sets; wrap it
+in `db.tx(async (tx) => tx.bulk(...))` when callback atomicity is needed.
+Root bulk does not automatically chunk input. Active cancellation is honored
+only when the connector can cancel the physical operation; otherwise it is
+rejected before I/O.
+
+Use MariaDB's documented native `RETURNING` syntax with `sql.rows` where the
+server version supports it. SQLBraid does not rewrite MySQL-family writes.
+Routine result sets can be consumed through the normal routine API, but OUT
+and INOUT carriers are not claimed by this adapter.
+
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/),
+[MariaDB setup](https://clickin.github.io/SQLBraid/getting-started/mariadb/), and
 [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

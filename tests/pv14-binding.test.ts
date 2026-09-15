@@ -257,6 +257,68 @@ test('one native transport executes multiple dialects but rejects structural val
   assert.equal(structuralInvocations, 0);
 });
 
+test('native binding descriptions do not require placeholder materialization', () => {
+  let original: TemplateStringsArray | undefined;
+  const captureTemplate = (strings: TemplateStringsArray, ...values: readonly unknown[]) => {
+    original = strings;
+    return sql(strings, ...values);
+  };
+  const rendered = captureTemplate`SELECT ${1}, ${2}`.render();
+  const description = createStatementBindingDescription(rendered, { dialectId: 'postgres', requestedReuse: 'auto' }, {
+    adapterId: 'native-conformance',
+    transport: 'native-value-template',
+    reuse: { effective: 'reuse', owner: 'driver' },
+  });
+
+  assert.equal(rendered.nativeTemplate, original);
+  assert.equal(description.parameterizedSql, undefined);
+  assert.deepEqual(description.bindings.map(({ index, interpolation }) => ({ index, interpolation })), [
+    { index: 1, interpolation: 0 },
+    { index: 2, interpolation: 1 },
+  ]);
+  assert.equal(description.literalizedSql().text, 'SELECT [REDACTED], [REDACTED]');
+});
+
+test('rendered statement validates and preserves a native template carrier', () => {
+  let original: TemplateStringsArray | undefined;
+  const captureTemplate = (strings: TemplateStringsArray, ...values: readonly unknown[]) => {
+    original = strings;
+    return sql(strings, ...values);
+  };
+  const rendered = captureTemplate`SELECT ${1}`.render();
+  assert.equal(rendered.nativeTemplate, original);
+  assert.throws(() => createRenderedStatement({
+    dialectId: 'postgres',
+    segments: ['SELECT ', ''],
+    parameters: [{ value: 1 }],
+    resultKind: 'rows',
+    nativeTemplate: ['SELECT ', ''] as unknown as TemplateStringsArray,
+  }), /nativeTemplate\.raw/u);
+  const mismatched = ['SELECT $1', ''] as unknown as TemplateStringsArray;
+  Object.defineProperty(mismatched, 'raw', { value: ['SELECT $1', ''] });
+  assert.throws(() => createRenderedStatement({
+    dialectId: 'postgres',
+    segments: ['SELECT ', ''],
+    parameters: [{ value: 1 }],
+    resultKind: 'rows',
+    nativeTemplate: mismatched,
+  }), /cooked strings must match logical segments/u);
+  const mutable = ['SELECT ', ''] as string[] & { raw: readonly string[] };
+  Object.defineProperty(mutable, 'raw', { value: ['SELECT ', ''] });
+  const normalized = createRenderedStatement({
+    dialectId: 'postgres',
+    segments: ['SELECT ', ''],
+    parameters: [{ value: 1 }],
+    resultKind: 'rows',
+    nativeTemplate: mutable as unknown as TemplateStringsArray,
+  });
+  mutable[0] = 'DROP ';
+  assert.notEqual(normalized.nativeTemplate, mutable);
+  assert.deepEqual(normalized.nativeTemplate, ['SELECT ', '']);
+  assert.equal(Object.isFrozen(normalized.nativeTemplate), true);
+  assert.equal(Object.isFrozen(normalized.nativeTemplate?.raw), true);
+});
+
 test('createRenderedStatement rejects malformed shape and snapshots records without freezing application values', () => {
   const applicationValue = { mutable: true };
   assert.throws(() => createRenderedStatement({ dialectId: 'x', segments: Array<string>(1), parameters: [], resultKind: 'unknown' }), /array of strings/u);

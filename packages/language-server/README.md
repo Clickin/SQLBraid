@@ -4,11 +4,24 @@ SQL-aware Language Server Protocol support for TypeScript projects.
 
 ```sh
 npm install @sqlbraid/language-server
-npx sqlbraid-language-server
+npx sqlbraid-language-server --config sqlbraid.config.mjs
 ```
 
-Configure this command as a stdio server in your LSP client. It waits for LSP JSON-RPC messages on stdin; it is not an interactive shell or help command. The package exports `createLanguageService` for embedded integrations and `startStdioLanguageServer` from `@sqlbraid/language-server/stdio` for LSP clients.
+```ts
+import { startStdioLanguageServer } from "@sqlbraid/language-server/stdio";
 
-Signature help and routine metadata remain positive evidence. The language server does not invent `sql.call` result-set schemas or alter runtime capability limits such as PostgreSQL transaction-bound refcursors, MySQL OUT/INOUT rejection, Oracle ResultSet cleanup, or SQL Server cursor-output limitations.
+startStdioLanguageServer();
+```
+
+Configure `sqlbraid-language-server` as a stdio server in an LSP client. It
+reads LSP JSON-RPC messages from stdin and writes responses to stdout; it is
+not an interactive shell. The command accepts an optional `--config` path.
+
+For embedded integrations, the root export provides `createLanguageService`,
+`discoverQueries`, `sourcePosition`, and `startStdioLanguageServer`. The
+`@sqlbraid/language-server/stdio` subpath provides the stdio server entrypoint
+and its stream/options types. Language features include diagnostics, hover,
+completion, definitions, references, document and workspace symbols, and
+signature help, using metadata supplied by the project.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

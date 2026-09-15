@@ -21,6 +21,64 @@ test('renders immutable logical segments and atomic parameter records', () => {
   assert.equal(Object.isFrozen(rendered.parameters[1].hint), true);
 });
 
+test('plain queries retain the original native template carrier', () => {
+  let original: TemplateStringsArray | undefined;
+  const captureTemplate = (strings: TemplateStringsArray, ...values: readonly unknown[]) => {
+    original = strings;
+    return sql(strings, ...values);
+  };
+  const query = captureTemplate`SELECT ${1}, ${'quoted value'}`;
+  const first = query.render();
+  const second = query.render();
+
+  assert.equal(first.nativeTemplate, original);
+  assert.equal(second.nativeTemplate, original);
+  assert.deepEqual(first.nativeTemplate, ['SELECT ', ', ', '']);
+  assert.notEqual(first.nativeTemplate?.raw, first.nativeTemplate);
+  assert.equal(Object.isFrozen(first.nativeTemplate), true);
+  assert.equal(Object.isFrozen(first.nativeTemplate?.raw), true);
+});
+
+test('plain native queries validate cooked and raw SQL lexical contexts', () => {
+  const slash = String.fromCharCode(92);
+  const strings = [`SELECT 1 -- comment\n `, ''] as string[] & { raw?: readonly string[] };
+  Object.defineProperty(strings, 'raw', {
+    configurable: false,
+    enumerable: false,
+    value: Object.freeze([`SELECT 1 -- comment${slash}${slash}n `, '']),
+    writable: false,
+  });
+  Object.freeze(strings);
+  assert.throws(
+    () => sql(strings as unknown as TemplateStringsArray, 1),
+    /Interpolation inside a SQL literal or comment is unsupported/u,
+  );
+});
+
+test('preparsed direct row tags preserve the declared result kind', () => {
+  const source = sql`SELECT /*@braid if ${true}*/ id /*@braid end*/`;
+  const captured = capture(sql.rows, ['SELECT /*@braid if ', '*/ id /*@braid end*/'], (values) => {
+    values[0] = true;
+  }, source.ir);
+
+  assert.equal(captured.resultKind, 'rows');
+  assert.deepEqual(captured.render().parameters, []);
+});
+
+test('structural native templates are synthesized and reused by shape', () => {
+  const query = sql`SELECT /*@braid if ${true}*/ ${'value'} /*@braid end*/`;
+  const first = query.render();
+  const second = query.render();
+
+  assert.equal(first.nativeTemplate, second.nativeTemplate);
+  assert.deepEqual(first.nativeTemplate, ['SELECT  ', ' ']);
+  assert.deepEqual(first.nativeTemplate?.raw, ['SELECT  ', ' ']);
+  assert.notEqual(first.nativeTemplate?.raw, first.nativeTemplate);
+  assert.equal(Object.isFrozen(first.nativeTemplate), true);
+  assert.equal(Object.isFrozen(first.nativeTemplate?.raw), true);
+  assert.equal(first.nativeTemplate?.length, first.parameters.length + 1);
+});
+
 test('keeps structural helpers out of parameters and preserves trim/directive behavior', () => {
   const tag = createSqlTag();
   const query = tag`UPDATE ${tag.ident('users')} /*@braid set*/ /*@braid if ${true}*/ ${tag.ident('name')} = ${'Ada'}, /*@braid end*/ /*@braid if ${false}*/ ${tag.ident('ignored')} = ${'nope'}, /*@braid end*/ /*@braid end*/ /*@braid where*/ /*@braid if ${true}*/ AND ${tag.ident('id')} IN (${tag.list([1, 2])}) /*@braid end*/ /*@braid end*/`;

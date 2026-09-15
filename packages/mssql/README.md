@@ -1,78 +1,58 @@
 # @sqlbraid/mssql
 
-Microsoft SQL Server dialect, Tedious adapter, routine support, and conservative catalog inspector for SQLBraid.
+Microsoft SQL Server dialect and Tedious adapters for SQLBraid.
 
 ```sh
 npm install @sqlbraid/mssql tedious
 ```
 
+The application creates and connects the Tedious connection or pool.
+
 ```ts
-import { mssqlParameter, sql } from "@sqlbraid/mssql";
+import { sql } from "@sqlbraid/mssql";
 import { createTediousDatabase } from "@sqlbraid/mssql/tedious";
+import type { TediousConnectionLike } from "@sqlbraid/mssql/tedious";
 
-const query = sql.rows<{ id: string }>`SELECT id FROM dbo.users`;
-const db = createTediousDatabase(connection);
-const rows = await db.all(query);
+async function readId(connection: TediousConnectionLike): Promise<readonly { id: string }[]> {
+  // The application supplies an already-connected Tedious connection.
+  const db = createTediousDatabase(connection);
+  return db.all(sql.rows<{ id: string }>`
+    SELECT CAST(1 AS bigint) AS id
+  `);
+}
 ```
 
-SQL Server DML returning uses native `OUTPUT` syntax and the materialized
-`sql.rows` APIs. SQLBraid does not promise rollback-safe
-`db.stream(sql.rows\`... OUTPUT ...\`)` behavior because SQL Server may emit
-rows before a later statement failure.
+Use `createTediousPoolDatabase(pool)` from `@sqlbraid/mssql/tedious` for a
+pool. The optional `tedious` peer is loaded only by the adapter subpath; the
+portable root exports the SQL dialect and parameter helpers.
 
-The `./tedious` and `./inspector` entry points require the optional `tedious` peer; the portable root does not load a driver. Row streaming uses Tedious Request row events with bounded pause/resume; lease release waits for request completion or discards the physical connection on cancellation.
+## Default result representations
 
-Routine calls support emitted heterogeneous result sets and scalar OUTPUT/INOUT parameters when explicit hints are supplied. A T-SQL integer RETURN status requires explicit native procedure metadata in the query contract, including the procedure name and ordered Tedious parameter names:
+Tedious returns SQL Server `tinyint`, `smallint`, `int`, and `bigint` values as
+canonical decimal `string` values. `real` and `float` are finite JavaScript
+`number` values. `nvarchar`, `varchar`, `char`, and `uniqueidentifier` are
+strings; `varbinary` and `binary` are `Uint8Array`; and `date`, `datetime2`,
+and `datetimeoffset` are `Date` values. Native `decimal`, `numeric`, `money`,
+and `smallmoney` results arrive through JavaScript numbers and are rejected by
+the default policy rather than exposed as lossy exact values. Cast to a
+character type in authored SQL when exact decimal text is needed.
 
-```ts
-const query = sql.call({
-  procedure: { name: "dbo.refresh_accounts", parameterNames: ["accountId"] },
-  resultSets: [AccountSchema] as const,
-})`${accountId}`;
-```
+The root exports `mssqlParameter` for explicit Tedious parameter hints,
+including `bigint()`, `decimal(precision, scale)`, `numeric(precision, scale)`,
+`nvarchar(length)`, `varchar(length)`, `varbinary(length)`, and temporal hints.
+Decimal and money helpers accept only finite JavaScript numbers within their
+precision limits; bind character text and author `CAST`/`CONVERT` for larger
+exact values.
 
-Native procedure metadata requires a parameter-only template; `EXEC` text is
-rejected rather than ignored.
+SQL Server DML returning uses native `OUTPUT` syntax with `sql.rows`. Ordinary
+row streaming uses Tedious row events with bounded buffering. Active signals
+use Tedious request cancellation and discard the affected physical connection;
+without a cancellation path, the operation is rejected before I/O. A routine
+can emit result sets and scalar OUTPUT/INOUT values when its SQLBraid contract
+supplies the procedure identity and parameter metadata. `CURSOR VARYING OUTPUT`
+is not exposed as an application cursor, and a procedure RETURN status needs
+explicit procedure metadata.
 
-`CURSOR VARYING OUTPUT` is not exposed as an application cursor: ordinary database APIs do not bind it as a client result cursor, so a cursor-output hint is rejected with `BRAID_CALL_CURSOR_UNSUPPORTED`. If a batch consumes a local cursor and emits `SELECT` rows, those are ordinary emitted result sets. Tedious output/return failures remain explicit; SQLBraid never guesses a procedure identity from arbitrary `EXEC` text.
-
-An active signal uses Tedious request cancellation and discards the physical
-connection before lease release. An adapter without a cancellation path must
-reject before I/O with `UnsupportedFeatureError` /
-`BRAID_CANCEL_UNSUPPORTED`. Transaction options are capability-driven;
-unsupported isolation or read-only combinations reject explicitly.
-
-See the [SQL Server setup](https://clickin.github.io/SQLBraid/getting-started/mssql/), [streaming](https://clickin.github.io/SQLBraid/runtime/streaming/), and [routine guide](https://clickin.github.io/SQLBraid/concepts/routines/).
-
-Tedious returns SQL Server exact integer types (`tinyint`, `smallint`, `int`,
-and `bigint`) as canonical decimal strings. Native `decimal`, `numeric`,
-`money`, and `smallmoney` results arrive as JavaScript numbers and fail with
-`BRAID_RESULT_EXACTNESS`; SQLBraid does not stringify a lossy value. Use an
-explicit character expression when exact text is required:
-
-```ts
-const amount = sql.rows`
-  SELECT CONVERT(varchar(64), CAST(${sql.bind("12345678901234567890.1234", mssqlParameter.nvarchar(80))}
-    AS decimal(38, 4))) AS amount
-`;
-```
-
-The `mssqlParameter.decimal()`, `.numeric()`, `.money()`, and `.smallmoney()`
-helpers are bounded native compatibility inputs, not exact decimal binds. They
-accept only finite plain JavaScript numbers (at most 15 significant decimal
-digits, with the declared/fixed scale) because Tedious transports them through
-`Number`; string inputs are rejected. For exact text, bind
-`mssqlParameter.nvarchar(...)` and author the `CAST`/`CONVERT` yourself as
-shown above. SQLBraid never inserts that cast or rewrites authored SQL.
-
-`real` and `float` remain finite IEEE-754 JavaScript numbers. `datetime2` and
-`datetimeoffset` use `Date` for convenience, but fractional 100ns digits and
-offset text are not lossless; use an explicit ISO `CONVERT(varchar(...), ...,
-127)` expression when those values matter. `uniqueidentifier` uses strings,
-and `varbinary` uses bytes. See the [data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).
-
-`sql_variant` is intentionally unclassified: Tedious exposes a
-driver-native value whose nested type and numeric transport are not stable
-enough for recursive fidelity claims. Generated types are based on a
-TypePolicy/representation profile; runtime and codegen must use matching
-policies.
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/),
+[SQL Server setup](https://clickin.github.io/SQLBraid/getting-started/mssql/), and
+[data representation guide](https://clickin.github.io/SQLBraid/concepts/data-representation/).

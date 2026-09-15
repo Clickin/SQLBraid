@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { SQL } from "bun";
 import { createBunSqlDatabase, representationProfileFor } from "@sqlbraid/bun-sql";
+import { guarded } from "@sqlbraid/template";
 import { sql as postgres } from "@sqlbraid/postgres";
 import { sql as mysql } from "@sqlbraid/mysql";
 import { sql as mariadb } from "@sqlbraid/mariadb";
@@ -116,6 +117,42 @@ async function runDialect(dialect) {
   };
   const schemaRow = await db.one(sqlTag.rows(mappedSchema)`SELECT ${"mapped"} AS schema_value`);
   assert.equal(schemaRow, "MAPPED");
+  const nativeValues = await db.one(sqlTag.rows`
+    SELECT ${"O'Reilly"} AS quoted_value,
+           ${"DROP TABLE braid_bun_sql_matrix_bulk"} AS sql_looking_value,
+           ${null} AS null_value
+  `);
+  assert.deepEqual(nativeValues, {
+    quoted_value: "O'Reilly",
+    sql_looking_value: "DROP TABLE braid_bun_sql_matrix_bulk",
+    null_value: null,
+  });
+  const bunHelper = client({ value: "not a SQLBraid value" });
+  await assert.rejects(
+    db.one(sqlTag.rows`SELECT ${bunHelper}`),
+    /Bun\.SQL structural helper/u,
+  );
+  const bunFragment = client`AND 1 = ${1}`;
+  await assert.rejects(
+    db.one(sqlTag.rows`SELECT 1 ${bunFragment}`),
+    /Bun\.SQL query or fragment/u,
+  );
+  await assert.rejects(
+    db.one(sqlTag.rows`SELECT ${ { json: true } }`),
+    /ambiguous Bun\.SQL object value/u,
+  );
+  const inactive = guarded(
+    sqlTag.rows,
+    ["SELECT ", " AS value /*@braid if ", "*/ AND 1 = ", " /*@braid end*/"],
+    [() => "1", () => false, () => { throw new Error("inactive Bun branch evaluated"); }],
+  );
+  assert.deepEqual(await db.one(inactive), { value: "1" });
+  const where = guarded(
+    sqlTag.rows,
+    ["SELECT ", " AS value /*@braid where*/ /*@braid if ", "*/ AND ", " = ", " /*@braid end*/ /*@braid end*/"],
+    [() => "1", () => true, () => "1", () => "1"],
+  );
+  assert.deepEqual(await db.one(where), { value: "1" });
 
   const bulkTable = "braid_bun_sql_matrix_bulk";
   if (dialect === "mysql" || dialect === "mariadb") {
@@ -409,6 +446,12 @@ async function runDialect(dialect) {
     prepared: preparedRow,
     preparedCommand: preparedCommandResult,
     bulk: bulkResult,
+    nativeTransport: {
+      transport: "native-value-template",
+      ordinaryValues: "bound",
+      structuralHelpers: "rejected-as-values",
+      inactiveBranch: "lazy",
+    },
     resultCarriers,
     transaction: transactionResult,
     transactionModes,
