@@ -54,6 +54,6 @@ export function renderRawMarkdown(entry: CollectionEntry<"docs">, base = docsBas
   const description = typeof entry.data.description === "string" && entry.data.description.trim()
     ? `\n> ${entry.data.description.trim()}\n`
     : "";
-  const body = rewriteMarkdownDocLinks(entry.body, base).trimStart();
+  const body = rewriteMarkdownDocLinks(entry.body ?? "", base).trimStart();
   return `# ${entry.data.title}\n${description}\n${body}${body.endsWith("\n") ? "" : "\n"}`;
 }
