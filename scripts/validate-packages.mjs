@@ -40,6 +40,7 @@ const facadeRuntimeDependencies = [
   "@sqlbraid/oracle",
   "@sqlbraid/postgres",
   "@sqlbraid/runtime",
+  "@sqlbraid/template",
   "@sqlbraid/sqlite",
 ];
 const packedContainers = [];

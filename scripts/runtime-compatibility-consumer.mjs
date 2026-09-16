@@ -6,6 +6,14 @@ assert.deepEqual(rendered.segments, ["SELECT ", " AS value"]);
 assert.equal(rendered.parameters[0].value, 1);
 const facade = await import("sqlbraid");
 assert.equal(typeof facade.createDatabase, "function");
+const packageNames = JSON.parse(process.env.SQLBRAID_COMPAT_PACKAGES ?? "[]");
+for (const packageName of packageNames) {
+  const loaded = await import(packageName);
+  assert.ok(loaded && typeof loaded === "object", `compatibility root did not import: ${packageName}`);
+}
+const helpers = await import("sqlbraid/compiled");
+assert.equal(typeof helpers.capture, "function");
+assert.equal(typeof helpers.assertDirectiveCondition, "function");
 
 if (process.env.SQLBRAID_COMPAT_DRIVER === "better-sqlite3") await smokeBetterSqlite3();
 if (process.env.SQLBRAID_COMPAT_DRIVER === "@libsql/client") await smokeLibsql();

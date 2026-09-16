@@ -318,6 +318,22 @@ facade dependency. Stream and transaction spans, pool metrics, and OTel Logs
 remain future work until the OTel JS Logs signal reaches the stability level
 SQLBraid requires.
 
+For this release candidate, register the OTel observer last:
+
+```ts
+createDatabase(executor, {
+  observers: [auditObserver, slowQueryObserver, createOpenTelemetryObserver(options)],
+});
+```
+
+The observer isolates its own telemetry failures and must not be followed by
+an observer that can throw asynchronously. This restricted ordering is
+required for accurate logical-outcome tracing; SQLBraid does not reorder
+observers or add a completion hook. Bulk events carry no dialect identity, so
+configure the existing per-database `systemName` option for accurate bulk
+span identity. An unconfigured bulk operation uses the documented generic
+fallback and never infers identity from an earlier query.
+
 Compatibility matrices added for runtime/driver verification must report only
 executed combinations and must not invent capability certification for untested
 tuples.

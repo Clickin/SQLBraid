@@ -46,6 +46,10 @@ copyFileSync(join(root, "scripts/runtime-compatibility-consumer.mjs"), join(cons
 execFileSync(process.execPath, ["runtime-compatibility-consumer.mjs"], {
   cwd: consumer,
   stdio: "inherit",
-  env: { ...process.env, SQLBRAID_COMPAT_DRIVER: cell.driver?.package ?? "" },
+  env: {
+    ...process.env,
+    SQLBRAID_COMPAT_DRIVER: cell.driver?.package ?? "",
+    SQLBRAID_COMPAT_PACKAGES: JSON.stringify(cell.packages),
+  },
 });
 console.info(`PASS packed SQLBraid compatibility consumer: ${cell.id}`);

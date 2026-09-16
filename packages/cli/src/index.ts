@@ -12,7 +12,7 @@ import { CONFIG_NAMES, ConfigurationError, createWorkspace, loadConfig, type Cod
 import { codegenOutputCollisionKey } from "./codegen-path.js";
 
 function usage(): never {
-  console.error("Usage: sqlbraid check|manifest|build --file <path> [--out-file <path>] | sqlbraid check --project <path> | sqlbraid drift --before <path> --after <path> | sqlbraid codegen [--config <path>] [--target <name>]... [--check] [--json] | sqlbraid inspect query --file <path> --line <n> --column <n> [--config <path>] [--json] | sqlbraid inspect symbol <name> [--config <path>] [--json] | sqlbraid inspect diagnostics --file <path> [--config <path>] [--json]");
+  console.error("Usage: sqlbraid check|manifest|build --file <path> [--out-file <path>] | sqlbraid check --project <path> | sqlbraid drift --before <path> --after <path> | sqlbraid codegen [--config <path>] [--target <name>]... [--check] [--json] | sqlbraid inspect query --file <path> --line <n> --column <n> [--config <path>] [--json] | sqlbraid inspect symbol <name> [--config <path>] [--json] | sqlbraid inspect diagnostics --file <path> [--config <path>] [--json]\nOptions: --help, --version");
   process.exit(2);
 }
 
@@ -298,6 +298,14 @@ async function runInspect(argv: readonly string[], json: boolean): Promise<void>
 
 async function main(argv: readonly string[]): Promise<void> {
   const command = argv[0];
+  if (command === "--help" || command === "-h") {
+    console.log("SQLBraid SQL-first compiler and metadata tooling\n\n" + "Usage: sqlbraid <check|build|manifest|drift|codegen|inspect> [options]\n\nRun `sqlbraid <command> --help` for command options.");
+    return;
+  }
+  if (command === "--version" || command === "-v") {
+    console.log("0.1.0-rc.2");
+    return;
+  }
   const json = argv.includes("--json");
   if (command === "inspect") {
     await runInspect(argv.slice(1), json);
