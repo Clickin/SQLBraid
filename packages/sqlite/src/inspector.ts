@@ -1,88 +1,68 @@
 import { qualifiedIdentity, QUALIFIED_IDENTITY_ENCODING } from "../../metadata/src/qualified-identity.js";
 import type { ColumnSnapshot, MetadataInspector, MetadataSnapshot, RelationSnapshot } from "@sqlbraid/metadata";
-import type { SqliteDatabaseLike } from "./node-sqlite.js";
+import {
+  findSqliteRowidIdentityColumn,
+  quoteSqliteIdentifier,
+  readSqliteMetadataRows,
+  sqliteMetadataInteger,
+  sqliteMetadataText,
+} from "./internal/sqlite-metadata.js";
 
-interface SqliteRow {
-  readonly [key: string]: unknown;
+/** Minimal metadata-only surface required by the SQLite inspector. */
+export interface SqliteMetadataStatementLike {
+  all(...values: readonly unknown[]): readonly unknown[];
 }
 
-function row(value: unknown): SqliteRow {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("SQLITE_INSPECT_ROW: native metadata row is not an object.");
-  return Object.fromEntries(Object.entries(value));
+/** A structural metadata query surface shared by SQLite-compatible drivers. */
+export interface SqliteMetadataDatabaseLike {
+  prepare(sql: string): SqliteMetadataStatementLike;
 }
 
-function text(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-function integer(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isInteger(value) ? value : typeof value === "bigint" ? Number(value) : undefined;
-}
-
-function quoteIdentifier(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
-}
-
-function all(database: SqliteDatabaseLike, sql: string): readonly SqliteRow[] {
-  return database.prepare(sql).all().map(row);
-}
-
-function rowidIdentityColumn(database: SqliteDatabaseLike, table: string, info: readonly SqliteRow[], withoutRowid: boolean): string | undefined {
-  if (withoutRowid) return undefined;
-  const primary = info.filter((entry) => (integer(entry.pk) ?? 0) !== 0);
-  if (primary.length !== 1 || integer(primary[0]?.pk) !== 1 || text(primary[0]?.type)?.toUpperCase() !== "INTEGER") return undefined;
-  // A primary-key autoindex proves this is not the special rowid alias (including DESC).
-  const indexes = all(database, `PRAGMA main.index_list(${quoteIdentifier(table)})`);
-  if (indexes.some((entry) => text(entry.origin) === undefined)) return undefined;
-  if (indexes.some((entry) => text(entry.origin)?.toLowerCase() === "pk")) return undefined;
-  return text(primary[0]?.name);
-}
-
-export function createSqliteInspector(database: SqliteDatabaseLike): MetadataInspector {
+export function createSqliteInspector(database: SqliteMetadataDatabaseLike): MetadataInspector {
   return {
     dialect: "sqlite",
     async inspect(): Promise<MetadataSnapshot> {
-      const versionRow = all(database, "SELECT sqlite_version() AS version")[0];
-      const version = text(versionRow?.version) ?? "unknown";
+      const versionRow = readSqliteMetadataRows(database, "SELECT sqlite_version() AS version")[0];
+      const version = sqliteMetadataText(versionRow?.version) ?? "unknown";
       const namespaces: Record<string, { readonly name: string; readonly kind: "attached"; readonly catalog?: string }> = Object.create(null);
-      for (const entry of all(database, "PRAGMA database_list")) {
-        const name = text(entry.name) ?? "unknown";
-        namespaces[name] = { name, kind: "attached", catalog: text(entry.file) };
+      for (const entry of readSqliteMetadataRows(database, "PRAGMA database_list")) {
+        const name = sqliteMetadataText(entry.name) ?? "unknown";
+        namespaces[name] = { name, kind: "attached", catalog: sqliteMetadataText(entry.file) };
       }
       const relations: Record<string, RelationSnapshot> = Object.create(null);
       const tableFlags = new Map<string, { readonly strict: boolean; readonly withoutRowid: boolean }>();
       try {
-        for (const entry of all(database, "PRAGMA table_list")) {
-          const name = text(entry.name);
-          const schema = text(entry.schema) ?? "main";
-          if (name) tableFlags.set(`${schema}\u0000${name}`, { strict: integer(entry.strict) === 1, withoutRowid: integer(entry.wr) === 1 });
+        for (const entry of readSqliteMetadataRows(database, "PRAGMA table_list")) {
+          const name = sqliteMetadataText(entry.name);
+          const schema = sqliteMetadataText(entry.schema) ?? "main";
+          if (name) tableFlags.set(`${schema}\u0000${name}`, { strict: sqliteMetadataInteger(entry.strict) === 1, withoutRowid: sqliteMetadataInteger(entry.wr) === 1 });
         }
       } catch {
         // Older SQLite versions may not expose table_list; leave these facts unknown.
       }
-      const objects = all(database, "SELECT type, name, sql FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name");
+      const objects = readSqliteMetadataRows(database, "SELECT type, name, sql FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name");
       for (const object of objects) {
-        const name = text(object.name);
+        const name = sqliteMetadataText(object.name);
         if (!name) continue;
         const flags = tableFlags.get(`main\u0000${name}`);
         const strict = flags?.strict;
         const withoutRowid = flags?.withoutRowid;
         const columns: ColumnSnapshot[] = [];
-        const info = all(database, `PRAGMA main.table_xinfo(${quoteIdentifier(name)})`);
-        const identityColumn = object.type === "table" ? rowidIdentityColumn(database, name, info, withoutRowid === true) : undefined;
+        const info = readSqliteMetadataRows(database, `PRAGMA main.table_xinfo(${quoteSqliteIdentifier(name)})`);
+        const identityColumn = object.type === "table" ? findSqliteRowidIdentityColumn(database, name, info, withoutRowid === true) : undefined;
         for (const entry of info) {
-          const columnName = text(entry.name);
-          const ordinal = integer(entry.cid);
+          const columnName = sqliteMetadataText(entry.name);
+          const ordinal = sqliteMetadataInteger(entry.cid);
           if (!columnName || ordinal === undefined) continue;
-          const declaredType = text(entry.type) ?? "ANY";
-          const hidden = integer(entry.hidden);
+          const declaredType = sqliteMetadataText(entry.type) ?? "ANY";
+          const hidden = sqliteMetadataInteger(entry.hidden);
           const generated = hidden === undefined ? undefined : hidden === 2 || hidden === 3;
           columns.push({
             name: columnName,
             ordinal,
             type: declaredType || "ANY",
-            nullable: identityColumn === columnName ? false : integer(entry.notnull) !== 1,
-            ...(text(entry.dflt_value) === undefined ? {} : { defaultExpression: text(entry.dflt_value) }),
+            nullable: identityColumn === columnName ? false : sqliteMetadataInteger(entry.notnull) !== 1,
+            ...(sqliteMetadataText(entry.dflt_value) === undefined ? {} : { defaultExpression: sqliteMetadataText(entry.dflt_value) }),
             ...(generated === undefined ? {} : { generated }),
             ...(generated === true ? { insertable: false, updatable: false } : {}),
             ...(identityColumn === columnName ? { identity: true } : {}),
@@ -100,7 +80,7 @@ export function createSqliteInspector(database: SqliteDatabaseLike): MetadataIns
         };
       }
       let compileOptions: readonly string[] = [];
-      try { compileOptions = all(database, "PRAGMA compile_options").flatMap((entry) => { const option = text(entry.compile_options); return option ? [option] : []; }); } catch { /* optional metadata */ }
+      try { compileOptions = readSqliteMetadataRows(database, "PRAGMA compile_options").flatMap((entry) => { const option = sqliteMetadataText(entry.compile_options); return option ? [option] : []; }); } catch { /* optional metadata */ }
       return { format: "sqlbraid-metadata", formatVersion: 1, dialect: "sqlite", dialectVersion: version, server: { product: "sqlite", version, capabilities: { compileOptions } }, namespaces, types: Object.create(null), relations, routines: Object.create(null), metadata: { source: "sqlite inspector", introspectionScope: "main", completeness: "complete", identityEncoding: QUALIFIED_IDENTITY_ENCODING } };
     },
   };
