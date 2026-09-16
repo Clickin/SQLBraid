@@ -18,6 +18,21 @@ test('CLI version matches the package manifest', async () => {
   assert.equal(result.stdout.trim(), manifest.version);
 });
 
+test('CLI manifest follows a local facade re-export through the project checker', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  try {
+    const bridge = join(directory, 'bridge.ts');
+    const file = join(directory, 'query.ts');
+    await writeFile(bridge, `export { sql } from '@sqlbraid/template';\n`);
+    await writeFile(file, `import { sql } from './bridge.js';\nexport const query = sql\`SELECT 1\`;\n`);
+    const manifest = await exec(process.execPath, [cliEntry, 'manifest', '--file', file]);
+    const entries: { resultKind: string; [key: string]: unknown }[] = JSON.parse(manifest.stdout);
+    assert.deepEqual(entries.map((entry) => entry.resultKind), ['unknown']);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 function metadata(nullable = false) {
   return {
     format: 'sqlbraid-metadata',

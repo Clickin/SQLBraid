@@ -71,6 +71,13 @@ export interface TypeScriptProjectContext {
   readonly checker: ts.TypeChecker;
 }
 
+export interface TypeScriptSourceContext {
+  readonly compilerOptions: ts.CompilerOptions;
+  readonly program: ts.Program;
+  readonly sourceFile: ts.SourceFile;
+  readonly checker: ts.TypeChecker;
+}
+
 export interface SourceMapOrigin {
   readonly generatedStart: number;
   readonly generatedEnd: number;
@@ -1315,11 +1322,17 @@ function compilerOptionsFor(options: TypeScriptCheckOptions): ts.CompilerOptions
   return { ...defaultCompilerOptions(), ...options.compilerOptions };
 }
 
-export function checkSource(sourceText: string, fileName: string, options: TypeScriptCheckOptions): readonly CompileDiagnostic[] {
+export function createSourceContext(sourceText: string, fileName: string, options: TypeScriptCheckOptions): TypeScriptSourceContext {
   const compilerOptions = compilerOptionsFor(options);
-  const originalProgram = ts.createProgram([fileName], compilerOptions, sourceHost(compilerOptions, fileName, sourceText));
-  const originalSourceFile = sourceFileInProgram(originalProgram, fileName) ?? sourceFileFor(sourceText, fileName, { ...options, compilerOptions });
-  const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: originalProgram.getTypeChecker() };
+  const program = ts.createProgram([fileName], compilerOptions, sourceHost(compilerOptions, fileName, sourceText));
+  const sourceFile = sourceFileInProgram(program, fileName) ?? sourceFileFor(sourceText, fileName, { ...options, compilerOptions });
+  return { compilerOptions, program, sourceFile, checker: program.getTypeChecker() };
+}
+
+export function checkSource(sourceText: string, fileName: string, options: TypeScriptCheckOptions): readonly CompileDiagnostic[] {
+  const context = createSourceContext(sourceText, fileName, options);
+  const { compilerOptions, program: originalProgram, sourceFile: originalSourceFile } = context;
+  const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: context.checker };
   const discovered = discoverQueries(sourceText, fileName, fileOptions);
   const lowered = lowerSourceFile(originalSourceFile, discovered, "checker");
   const records: FileRecord[] = [{ fileName, sourceText, discovered, lowered }];
@@ -1330,10 +1343,9 @@ export function checkSource(sourceText: string, fileName: string, options: TypeS
 }
 
 export function checkSourceDetailed(sourceText: string, fileName: string, options: TypeScriptCheckOptions): DetailedCheckResult {
-  const compilerOptions = compilerOptionsFor(options);
-  const originalProgram = ts.createProgram([fileName], compilerOptions, sourceHost(compilerOptions, fileName, sourceText));
-  const originalSourceFile = sourceFileInProgram(originalProgram, fileName) ?? sourceFileFor(sourceText, fileName, { ...options, compilerOptions });
-  const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: originalProgram.getTypeChecker() };
+  const context = createSourceContext(sourceText, fileName, options);
+  const { compilerOptions, program: originalProgram, sourceFile: originalSourceFile } = context;
+  const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: context.checker };
   const discovered = discoverQueries(sourceText, fileName, fileOptions);
   const lowered = lowerSourceFile(originalSourceFile, discovered, "checker");
   const records: FileRecord[] = [{ fileName, sourceText, discovered, lowered }];

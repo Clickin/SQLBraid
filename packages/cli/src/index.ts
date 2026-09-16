@@ -6,7 +6,7 @@ import { basename, dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import packageJson from "../package.json" with { type: "json" };
 import { generateModels, type CodegenDiagnostic } from "@sqlbraid/codegen";
-import { checkProject, checkSource, createVirtualOverlay, discoverQueries, emitSource, type TypeScriptCheckOptions } from "@sqlbraid/compiler";
+import { checkProject, checkSource, createSourceContext, createVirtualOverlay, discoverQueries, emitSource, type TypeScriptCheckOptions } from "@sqlbraid/compiler";
 import { createManifestFromEvidence, fingerprintTemplate, templateFamilyFingerprintOf } from "@sqlbraid/operations";
 import { diffSnapshots, parseSnapshotJson, type MetadataSnapshot } from "@sqlbraid/metadata";
 import { CONFIG_NAMES, ConfigurationError, createWorkspace, loadConfig, type CodegenTargetConfig } from "@sqlbraid/tooling";
@@ -362,8 +362,10 @@ async function main(argv: readonly string[]): Promise<void> {
       ...(sourcePaths ? { paths: sourcePaths } : {}),
     },
   };
-  const discovered = targetFile ? discoverQueries(source, file, options) : { queries: [], diagnostics: [] };
-  const diagnostics = command === "check" && projectFile ? checkProject(projectFile, options) : command === "check" || command === "build" ? checkSource(source, file, options) : createVirtualOverlay(source, file, options).diagnostics;
+  const sourceContext = command === "manifest" && targetFile ? createSourceContext(source, file, options) : undefined;
+  const analysisOptions = sourceContext ? { ...options, ...sourceContext, sourceFile: sourceContext.sourceFile, typeChecker: sourceContext.checker } : options;
+  const discovered = targetFile ? discoverQueries(source, file, analysisOptions) : { queries: [], diagnostics: [] };
+  const diagnostics = command === "check" && projectFile ? checkProject(projectFile, options) : command === "check" || command === "build" ? checkSource(source, file, options) : createVirtualOverlay(source, file, analysisOptions).diagnostics;
   reportDiagnostics(diagnostics, json);
   if (command === "check") {
     if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) process.exitCode = 1;
@@ -388,7 +390,7 @@ async function main(argv: readonly string[]): Promise<void> {
     await writeFile(outputFile, outputText, "utf8");
     return;
   }
-  const overlay = createVirtualOverlay(source, file, options);
+  const overlay = createVirtualOverlay(source, file, analysisOptions);
   const manifests = discovered.queries.map((query) => {
     const captured = new Array<unknown>(Math.max(0, query.bindings.length)).fill(null);
     const contract = overlay.queryTypes.find((candidate) => candidate.range.start === query.range.start);

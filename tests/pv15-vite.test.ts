@@ -9,6 +9,7 @@ import { test } from "vitest";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import { parameterizedSql, type RenderedStatement } from "@sqlbraid/core";
 import { transformSource, type SourceMap } from "@sqlbraid/compiler";
+import * as compiled from "../packages/sqlbraid/src/compiled.js";
 import sqlbraid from "@sqlbraid/vite";
 
 const execFile = promisify(execFileCallback);
@@ -73,6 +74,7 @@ export { evaluations };`;
     new Function("require", "exports", javascript)((name: string) => {
       if (name === moduleSpecifier) return library;
       if (name === "@sqlbraid/template") return template;
+      if (name === "sqlbraid/compiled") return compiled;
       throw new Error(`Unexpected generated import ${name}`);
     }, output);
     assert.ok(output.query);
@@ -105,6 +107,7 @@ export { evaluations, schema };`;
     new Function("require", "exports", javascript)((name: string) => {
       if (name === moduleSpecifier) return library;
       if (name === "@sqlbraid/template") return template;
+      if (name === "sqlbraid/compiled") return compiled;
       throw new Error(`Unexpected generated import ${name}`);
     }, output);
     assert.ok(output.query);

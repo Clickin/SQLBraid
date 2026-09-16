@@ -52,7 +52,8 @@ const smokeScript = cell.smoke.entrypoint === "scripts/runtime-compatibility-smo
   : cell.smoke.entrypoint.slice("scripts/".length);
 if (smokeScript === "runtime-compatibility-consumer.mjs") copyFileSync(join(root, "scripts/runtime-compatibility-consumer.mjs"), join(consumer, smokeScript));
 else copyFileSync(join(root, "scripts", smokeScript), join(consumer, smokeScript));
-execFileSync(process.execPath, [smokeScript], {
+const smokeArgs = Array.isArray(cell.smoke.args) ? cell.smoke.args : [];
+execFileSync(process.execPath, [smokeScript, ...smokeArgs], {
   cwd: consumer,
   stdio: "inherit",
   env: {
