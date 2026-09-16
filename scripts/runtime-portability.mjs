@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { auditRuntime, runtimePackages } from "./audit-runtime.mjs";
+import { validateRuntimeCompatibility } from "./validate-runtime-compatibility.mjs";
 
 const execFile = promisify(execFileCallback);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -14,6 +15,7 @@ if (!targets.length || targets.some((target) => !["node", "bun", "deno"].include
 const revision = (await execFile("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
 if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== revision) throw new Error("Runtime evidence must describe the checked-out CI SHA.");
 const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+const runtimeCompatibility = await validateRuntimeCompatibility({ root });
 const postgresTarget = JSON.parse(await readFile(join(root, "support/targets/postgres.json"), "utf8"));
 const mysqlTarget = JSON.parse(await readFile(join(root, "support/targets/mysql.json"), "utf8"));
 const sqliteTarget = JSON.parse(await readFile(join(root, "support/targets/sqlite.json"), "utf8"));
@@ -49,7 +51,7 @@ try {
     if (!tarball) throw new Error(`Missing packed ${name}`);
     if (name === "bun-sql") {
       if (manifest.engines?.bun !== ">=1.3.14") throw new Error(`Bun floor changed: ${name}`);
-    } else if (manifest.engines?.node !== ">=22.18.0") {
+    } else if (manifest.engines?.node !== runtimeCompatibility.manifest.packageEngines[manifest.name]) {
       throw new Error(`Node floor changed: ${name}`);
     }
     dependencies[manifest.name] = `file:${join(temp, tarball)}`;

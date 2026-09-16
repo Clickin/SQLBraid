@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Clickin/SQLBraid/blob/main/support/runtime-compatibility.schema.json",
+  "title": "SQLBraid packed runtime compatibility manifest",
+  "description": "Exact Node runtime and dependency cells executed against packed SQLBraid artifacts. This dataset is separate from support/targets capability certification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "build", "packageEngines", "cells"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "command"],
+      "properties": {
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version"],
+          "properties": {
+            "id": { "const": "node" },
+            "version": { "$ref": "#/$defs/exactVersion" }
+          }
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "packageEngines": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/packageName" },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^>=\\d+\\.\\d+\\.\\d+$"
+      },
+      "minProperties": 1
+    },
+    "cells": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/cell" }
+    }
+  },
+  "$defs": {
+    "exactVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "packageName": {
+      "type": "string",
+      "pattern": "^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"
+    },
+    "driver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "version"],
+      "properties": {
+        "package": { "$ref": "#/$defs/packageName" },
+        "version": { "$ref": "#/$defs/exactVersion" }
+      }
+    },
+    "smoke": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint"],
+      "properties": {
+        "entrypoint": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^scripts/[A-Za-z0-9._/-]+\\.mjs$"
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "runtime", "packages", "driver", "smoke", "releaseBlocking"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "version"],
+          "properties": {
+            "id": { "const": "node" },
+            "version": { "$ref": "#/$defs/exactVersion" }
+          }
+        },
+        "packages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/packageName" }
+        },
+        "driver": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/driver" }
+          ]
+        },
+        "smoke": { "$ref": "#/$defs/smoke" },
+        "releaseBlocking": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

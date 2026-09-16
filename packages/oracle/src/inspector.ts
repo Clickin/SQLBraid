@@ -44,6 +44,18 @@ function numberValue(row: CatalogRow | undefined, ...keys: readonly string[]): n
   return undefined;
 }
 
+function groupBy<T, K>(values: readonly T[], keyOf: (value: T, index: number) => K): Map<K, T[]> {
+  const groups = new Map<K, T[]>();
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    const key = keyOf(value, index);
+    const group = groups.get(key);
+    if (group) group.push(value);
+    else groups.set(key, [value]);
+  }
+  return groups;
+}
+
 async function rows(connection: OracleInspectorConnectionLike, sql: string): Promise<readonly CatalogRow[]> {
   const value = await connection.execute(sql, []);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("ORACLE_INSPECT_RESULT: metadata query returned a malformed result.");
@@ -136,7 +148,7 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
       }
       const relationRows = await rows(connection, "SELECT owner, table_name AS relation_name, 'TABLE' AS relation_kind FROM all_tables UNION ALL SELECT owner, view_name AS relation_name, 'VIEW' AS relation_kind FROM all_views ORDER BY owner, relation_name");
       const columnRows = await rows(connection, "SELECT owner, table_name, column_name, internal_column_id AS column_id, data_type, data_type_owner, data_precision, data_scale, nullable, data_default, identity_column, virtual_column, char_used, domain_owner, domain_name FROM all_tab_cols WHERE user_generated = 'YES' ORDER BY owner, table_name, internal_column_id");
-      const columnsByRelation = Map.groupBy(columnRows, (column) => JSON.stringify([text(column, "owner"), text(column, "table_name")]));
+      const columnsByRelation = groupBy(columnRows, (column) => JSON.stringify([text(column, "owner"), text(column, "table_name")]));
       const relations: Record<string, RelationSnapshot> = Object.create(null);
       for (const relation of relationRows) {
         const schema = text(relation, "owner");
@@ -158,8 +170,8 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
       }
       const procedureRows = await rows(connection, "SELECT owner, object_name, procedure_name, object_type, object_id, overload, subprogram_id FROM all_procedures WHERE object_type IN ('FUNCTION', 'PROCEDURE') OR procedure_name IS NOT NULL ORDER BY owner, object_name, procedure_name, overload, object_id");
       const argumentRows = await rows(connection, "SELECT owner, object_name, package_name, object_id, overload, subprogram_id, argument_name, position, sequence, in_out, data_type, type_owner, type_name, defaulted FROM all_arguments WHERE data_level = 0 ORDER BY owner, object_name, package_name, overload, sequence");
-      const argumentsByRoutine = Map.groupBy(argumentRows, (argument) => routineKey(argument, true));
-      const proceduresByIdentity = Map.groupBy(procedureRows, (procedure) => routineName(procedure)?.identity);
+      const argumentsByRoutine = groupBy(argumentRows, (argument) => routineKey(argument, true));
+      const proceduresByIdentity = groupBy(procedureRows, (procedure) => routineName(procedure)?.identity);
       const routines: Record<string, RoutineSnapshot[]> = Object.create(null);
       for (const procedure of procedureRows) {
         const named = routineName(procedure);

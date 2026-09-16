@@ -1,15 +1,22 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const databases = ["postgres", "mysql", "mariadb", "oracle", "mssql", "sqlite"];
+const compatibilityManifest = JSON.parse(readFileSync(new URL("../support/runtime-compatibility.json", import.meta.url), "utf8"));
+const compatibilityMatrix = compatibilityManifest.cells.map((cell) => ({
+  id: cell.id,
+  node: cell.runtime.version,
+  driver: cell.driver?.package ?? null,
+  driver_version: cell.driver?.version ?? null,
+}));
 const allPatterns = [
   /^packages\/(?:core|template|runtime|operations)\//u,
   /^(?:shared|vitest\.config\.ts|tsconfig[^/]*|tsdown\.config\.ts|pnpm-workspace\.yaml|pnpm-lock\.yaml|package\.json)\b/u,
   /^tests\/(?!db\/(?:postgres|mysql|mariadb|oracle|mssql|sqlite|bun-sql|d1|wasm)\/)/u,
   /^(?:support|\.github\/workflows)\//u,
-  /^(?:scripts\/(?:ci-plan|merge-vitest-results)\.mjs)$/u,
+  /^(?:scripts\/(?:ci-plan|merge-vitest-results|runtime-portability|runtime-compatibility-smoke|validate-runtime-compatibility|validate-runtime-floor)\.mjs)$/u,
   /^\.meta\//u,
 ];
 const databasePatterns = Object.fromEntries(databases.map((database) => [database, [
@@ -29,6 +36,8 @@ function allPlan() {
     packages: true,
     node24: true,
     packed: true,
+    compatibility: true,
+    compatibility_matrix: compatibilityMatrix,
     bun_sql: true,
     evidence: true,
     db_matrix: databases,
@@ -46,6 +55,8 @@ function emptyPlan() {
     packages: false,
     node24: false,
     packed: false,
+    compatibility: false,
+    compatibility_matrix: [],
     bun_sql: false,
     evidence: false,
     db_matrix: [],
@@ -71,6 +82,7 @@ function planChanges(files, { eventName = "pull_request", baseKnown = true } = {
       plan.packages = true;
       plan.node24 = true;
       plan.packed = true;
+      plan.compatibility = true;
       if (sqliteChanged) plan.web = true;
       continue;
     }
@@ -79,6 +91,7 @@ function planChanges(files, { eventName = "pull_request", baseKnown = true } = {
       plan.common = true;
       plan.packages = true;
       plan.packed = true;
+      plan.compatibility = true;
       continue;
     }
     if (/^(?:scripts\/test-browser\.mjs|scripts\/test-d1\.mjs|tests\/db\/(?:d1|wasm)\/|packages\/sqlite\/)/u.test(file)) {
@@ -87,6 +100,7 @@ function planChanges(files, { eventName = "pull_request", baseKnown = true } = {
       plan.packages = true;
       plan.node24 = true;
       plan.packed = true;
+      plan.compatibility = true;
       continue;
     }
     if (/^(?:extensions\/vscode\/|scripts\/test-vscode\.mjs)/u.test(file)) {
@@ -102,7 +116,9 @@ function planChanges(files, { eventName = "pull_request", baseKnown = true } = {
     plan.packages = true;
     plan.node24 = true;
     plan.packed = true;
+    plan.compatibility = true;
   }
+  if (plan.compatibility) plan.compatibility_matrix = compatibilityMatrix;
   plan.db_matrix = databases.filter((database) => plan[database]);
   plan.db = plan.db_matrix.length > 0;
   plan.evidence = plan.db || plan.web || plan.bun_sql;
@@ -130,6 +146,7 @@ function verifyPlan(plan, results) {
     packages: plan.packages ? "success" : "skipped",
     node24: plan.node24 ? "success" : "skipped",
     packed: plan.packed ? "success" : "skipped",
+    compatibility: plan.compatibility ? "success" : "skipped",
     bun_sql: plan.bun_sql ? "success" : "skipped",
     evidence: plan.evidence ? "success" : "skipped",
   };

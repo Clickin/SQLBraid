@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "build": {
+    "runtime": {
+      "id": "node",
+      "version": "22.18.0"
+    },
+    "command": "pnpm run build:packages"
+  },
+  "packageEngines": {
+    "@sqlbraid/core": ">=16.20.2",
+    "@sqlbraid/template": ">=16.20.2",
+    "@sqlbraid/runtime": ">=16.20.2",
+    "@sqlbraid/operations": ">=16.20.2",
+    "@sqlbraid/postgres": ">=16.20.2",
+    "@sqlbraid/mysql": ">=16.20.2",
+    "@sqlbraid/mariadb": ">=16.20.2",
+    "@sqlbraid/sqlite": ">=16.20.2",
+    "@sqlbraid/oracle": ">=16.20.2",
+    "@sqlbraid/mssql": ">=16.20.2",
+    "sqlbraid": ">=16.20.2",
+    "@sqlbraid/metadata": ">=22.18.0",
+    "@sqlbraid/compiler": ">=22.18.0",
+    "@sqlbraid/codegen": ">=22.18.0",
+    "@sqlbraid/vite": ">=22.18.0",
+    "@sqlbraid/tooling": ">=22.18.0",
+    "@sqlbraid/cli": ">=22.18.0",
+    "@sqlbraid/language-server": ">=22.18.0"
+  },
+  "cells": [
+    {
+      "id": "node-16-20-2-runtime",
+      "runtime": {
+        "id": "node",
+        "version": "16.20.2"
+      },
+      "packages": [
+        "@sqlbraid/core",
+        "@sqlbraid/template",
+        "@sqlbraid/runtime",
+        "@sqlbraid/operations",
+        "@sqlbraid/postgres",
+        "@sqlbraid/mysql",
+        "@sqlbraid/mariadb",
+        "@sqlbraid/sqlite",
+        "@sqlbraid/oracle",
+        "@sqlbraid/mssql",
+        "@sqlbraid/bun-sql",
+        "sqlbraid"
+      ],
+      "driver": null,
+      "smoke": {
+        "entrypoint": "scripts/runtime-compatibility-smoke.mjs"
+      },
+      "releaseBlocking": true,
+      "reason": "Candidate portable package floor; node:sqlite is intentionally not imported by this cell."
+    },
+    {
+      "id": "node-16-20-2-better-sqlite3-9-6-0",
+      "runtime": {
+        "id": "node",
+        "version": "16.20.2"
+      },
+      "packages": [
+        "@sqlbraid/core",
+        "@sqlbraid/template",
+        "@sqlbraid/runtime",
+        "@sqlbraid/postgres",
+        "@sqlbraid/mysql",
+        "@sqlbraid/mariadb",
+        "@sqlbraid/sqlite",
+        "@sqlbraid/oracle",
+        "@sqlbraid/mssql",
+        "@sqlbraid/bun-sql",
+        "sqlbraid"
+      ],
+      "driver": {
+        "package": "better-sqlite3",
+        "version": "9.6.0"
+      },
+      "smoke": {
+        "entrypoint": "scripts/runtime-compatibility-smoke.mjs"
+      },
+      "releaseBlocking": true,
+      "reason": "Historical better-sqlite3 line selected for the candidate Node floor."
+    },
+    {
+      "id": "node-22-18-0-better-sqlite3-13-0-3",
+      "runtime": {
+        "id": "node",
+        "version": "22.18.0"
+      },
+      "packages": [
+        "@sqlbraid/core",
+        "@sqlbraid/template",
+        "@sqlbraid/runtime",
+        "@sqlbraid/postgres",
+        "@sqlbraid/mysql",
+        "@sqlbraid/mariadb",
+        "@sqlbraid/sqlite",
+        "@sqlbraid/oracle",
+        "@sqlbraid/mssql",
+        "@sqlbraid/bun-sql",
+        "sqlbraid"
+      ],
+      "driver": {
+        "package": "better-sqlite3",
+        "version": "13.0.3"
+      },
+      "smoke": {
+        "entrypoint": "scripts/runtime-compatibility-smoke.mjs"
+      },
+      "releaseBlocking": true,
+      "reason": "Current better-sqlite3 line requires modern Node."
+    },
+    {
+      "id": "node-16-20-2-libsql-0-18-0",
+      "runtime": {
+        "id": "node",
+        "version": "16.20.2"
+      },
+      "packages": [
+        "@sqlbraid/core",
+        "@sqlbraid/template",
+        "@sqlbraid/runtime",
+        "@sqlbraid/postgres",
+        "@sqlbraid/mysql",
+        "@sqlbraid/mariadb",
+        "@sqlbraid/sqlite",
+        "@sqlbraid/oracle",
+        "@sqlbraid/mssql",
+        "@sqlbraid/bun-sql",
+        "sqlbraid"
+      ],
+      "driver": {
+        "package": "@libsql/client",
+        "version": "0.18.0"
+      },
+      "smoke": {
+        "entrypoint": "scripts/runtime-compatibility-smoke.mjs"
+      },
+      "releaseBlocking": true,
+      "reason": "Local libSQL client line selected for the candidate Node floor."
+    }
+  ]
+}
