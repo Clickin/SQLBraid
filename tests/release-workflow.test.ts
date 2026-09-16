@@ -207,20 +207,21 @@ test("preparation enforces an exact version tag for staging", () => {
   assert.match(determine.run ?? "", /tag_version.*manifest_version/u);
 });
 
-test("documentation pushes certify without deployment and manual deployment remains opt-in", () => {
+test("documentation pushes publish latest and tagged docs while manual deployment remains opt-in", () => {
   assert.deepEqual(docs.permissions, { contents: "read" });
   assert.equal(docs.on.push?.paths, undefined);
   for (const ref of ["refs/heads/main", "refs/tags/v0.1.0-rc.0"]) {
     const { results } = graph(docs, "push", "certify", ref);
     assert.equal(results.build.result, "success");
-    assert.equal(results["publish-history"].result, "skipped");
-    assert.equal(results.deploy.result, "skipped");
+    assert.equal(results["publish-history"].result, "success");
+    assert.equal(results.deploy.result, "success");
   }
   const manual = graph(docs, "workflow_dispatch", "certify", "refs/heads/main").results;
   assert.equal(manual.build.result, "success");
   assert.equal(manual["publish-history"].result, "skipped");
   assert.equal(manual.deploy.result, "skipped");
   const authorized = graph(docs, "workflow_dispatch", "certify", "refs/heads/main", undefined, true).results;
+  assert.equal(authorized.build.result, "success");
   assert.equal(authorized["publish-history"].result, "success");
   assert.equal(authorized.deploy.result, "success");
   assert.equal(graph(docs, "workflow_dispatch", "certify", "refs/heads/main", "build", true).results.deploy.result, "skipped");

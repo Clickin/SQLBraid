@@ -11,11 +11,20 @@ interface PreviewRunRequest {
   readonly sql: string;
 }
 
+interface PreviewBraidRequest {
+  readonly type: "run-braid";
+  readonly projection: "full" | "compact";
+  readonly currency: "" | "KRW" | "JPY";
+  readonly minBalance: number | null;
+  readonly search: string;
+  readonly order: "account-id" | "balance-desc";
+}
+
 interface PreviewSchemaRequest {
   readonly type: "schema";
 }
 
-type PreviewRequest = PreviewRunRequest | PreviewSchemaRequest;
+type PreviewRequest = PreviewRunRequest | PreviewBraidRequest | PreviewSchemaRequest;
 
 interface PreviewRow {
   readonly [key: string]: unknown;
@@ -23,7 +32,10 @@ interface PreviewRow {
 
 interface PreviewSuccess {
   readonly type: "success";
+  readonly mode: "raw" | "braid";
   readonly sql: string;
+  readonly parameters: readonly unknown[];
+  readonly variantFingerprint?: string;
   readonly kind: "rows" | "command";
   readonly columns: readonly string[];
   readonly rows: readonly PreviewRow[];
@@ -59,7 +71,7 @@ interface PreviewDatabase {
 let databasePromise: Promise<PreviewDatabase> | undefined;
 
 function rawQuery(text: string) {
-  // The preview intentionally executes user-authored SQL as raw text in a disposable database.
+  // The scratchpad intentionally executes user-authored SQL as raw text in a disposable database.
   return sql.command`${sql.raw(text)}`;
 }
 
@@ -109,6 +121,14 @@ function statementColumns(native: SqliteWasmDatabaseLike, text: string): readonl
   }
 }
 
+function sqliteStatementText(rendered: { readonly segments: readonly string[]; readonly parameters: readonly unknown[] }): string {
+  let text = rendered.segments[0] ?? "";
+  for (let index = 0; index < rendered.parameters.length; index += 1) {
+    text += `?${index + 1}${rendered.segments[index + 1] ?? ""}`;
+  }
+  return text.trim();
+}
+
 async function runSql(request: PreviewRunRequest): Promise<PreviewResponse> {
   if (typeof request.sql !== "string" || request.sql.trim().length === 0) {
     return { type: "error", code: "PREVIEW_INPUT", message: "Enter a SQL statement to run." };
@@ -132,7 +152,9 @@ async function runSql(request: PreviewRunRequest): Promise<PreviewResponse> {
     }
     return {
       type: "success",
+      mode: "raw",
       sql: text,
+      parameters: [],
       kind: "rows",
       columns,
       rows,
@@ -143,12 +165,87 @@ async function runSql(request: PreviewRunRequest): Promise<PreviewResponse> {
   const execution = await database.db.execute(rawQuery(text));
   return {
     type: "success",
+    mode: "raw",
     sql: text,
+    parameters: [],
     kind: "command",
     columns: [],
     rows: [],
     rowCount: 0,
     affectedRows: execution.command.affectedRows,
+  };
+}
+
+async function runBraid(request: PreviewBraidRequest): Promise<PreviewResponse> {
+  if (request.projection !== "full" && request.projection !== "compact") {
+    return { type: "error", code: "PREVIEW_INPUT", message: "Choose a supported projection." };
+  }
+  if (request.currency !== "" && request.currency !== "KRW" && request.currency !== "JPY") {
+    return { type: "error", code: "PREVIEW_INPUT", message: "Choose a supported currency filter." };
+  }
+  if (request.order !== "account-id" && request.order !== "balance-desc") {
+    return { type: "error", code: "PREVIEW_INPUT", message: "Choose a supported sort order." };
+  }
+  if (request.minBalance !== null && (!Number.isFinite(request.minBalance) || request.minBalance < 0)) {
+    return { type: "error", code: "PREVIEW_INPUT", message: "Minimum balance must be a non-negative finite number or blank." };
+  }
+  if (typeof request.search !== "string" || request.search.length > 200) {
+    return { type: "error", code: "PREVIEW_INPUT", message: "Account-name search is limited to 200 characters." };
+  }
+
+  const projection = request.projection === "compact"
+    ? sql.fragment`account_id, account_name, balance`
+    : sql.fragment`account_id, account_name, balance, currency, locale`;
+  const order = request.order === "balance-desc"
+    ? sql.fragment`balance DESC, account_id ASC`
+    : sql.fragment`account_id ASC`;
+  const hasCurrency = request.currency !== "";
+  const hasMinimum = request.minBalance !== null;
+  const search = request.search.trim();
+  const hasSearch = search.length > 0;
+  const searchPattern = `%${search}%`;
+
+  const query = sql.rows`
+    SELECT ${projection}
+    FROM finance_accounts
+    /*@braid where*/
+      /*@braid if ${hasCurrency} */
+        AND currency = ${request.currency}
+      /*@braid end*/
+      /*@braid if ${hasMinimum} */
+        AND balance >= ${request.minBalance}
+      /*@braid end*/
+      /*@braid if ${hasSearch} */
+        AND account_name LIKE ${searchPattern}
+      /*@braid end*/
+    /*@braid end*/
+    ORDER BY ${order};
+  `;
+
+  const rendered = query.render();
+  const text = sqliteStatementText(rendered);
+  const database = await getDatabase();
+  const columns = statementColumns(database.native, text);
+  const rows: PreviewRow[] = [];
+  let truncated = false;
+  for await (const row of database.db.stream(query)) {
+    if (rows.length >= 1_000) {
+      truncated = true;
+      break;
+    }
+    rows.push(row as PreviewRow);
+  }
+  return {
+    type: "success",
+    mode: "braid",
+    sql: text,
+    parameters: rendered.parameters.map((parameter) => parameter.value),
+    variantFingerprint: rendered.variantFingerprint,
+    kind: "rows",
+    columns,
+    rows,
+    rowCount: rows.length,
+    truncated,
   };
 }
 
@@ -171,6 +268,7 @@ async function inspectSchema(): Promise<PreviewSchemaSuccess> {
 
 async function handle(request: PreviewRequest): Promise<PreviewResponse> {
   if (request.type === "run") return runSql(request);
+  if (request.type === "run-braid") return runBraid(request);
   if (request.type === "schema") return inspectSchema();
   return { type: "error", code: "PREVIEW_MESSAGE", message: "Unsupported preview message." };
 }

@@ -1,64 +1,84 @@
 <section class="sqlbraid-preview" data-sqlbraid-preview data-testid="interactive-preview">
   <div class="preview-heading">
     <div>
-      <p class="preview-kicker">Live browser preview</p>
-      <h2>Write SQL against real SQLite WASM</h2>
+      <p class="preview-kicker">Live SQLBraid playground</p>
+      <h2>Change a Braid query and run the rendered SQL</h2>
       <p>
-        Edit the SQL below and run it in a disposable in-memory database. Queries and
-        commands execute in a Web Worker; nothing is sent to a server or saved.
+        The controls below change a real SQLBraid tagged template. Braid conditionals are
+        rendered in a Web Worker, values stay bound, and the resulting statement executes
+        against a disposable SQLite WASM database.
       </p>
     </div>
-    <span class="preview-badge">worker · :memory:</span>
+    <span class="preview-badge">Braid · worker · :memory:</span>
   </div>
 
-  <div class="preview-editor">
-    <label for="preview-sql">SQL statement</label>
-    <textarea id="preview-sql" data-preview-sql data-testid="preview-sql" rows="10" spellcheck="false">SELECT
-  account_id,
-  account_name,
-  balance,
-  currency,
-  locale
-FROM finance_accounts
-ORDER BY account_id;</textarea>
-  </div>
+  <div class="preview-braid-layout">
+    <section class="preview-panel" aria-labelledby="preview-braid-controls-title">
+      <h3 id="preview-braid-controls-title">Change the query</h3>
+      <div class="preview-form-grid">
+        <label>
+          <span>SELECT projection</span>
+          <select data-preview-projection data-testid="preview-projection">
+            <option value="full">Full account row</option>
+            <option value="compact">Compact account row</option>
+          </select>
+        </label>
+        <label>
+          <span>Currency</span>
+          <select data-preview-currency data-testid="preview-currency">
+            <option value="">Any currency</option>
+            <option value="KRW" selected>KRW</option>
+            <option value="JPY">JPY</option>
+          </select>
+        </label>
+        <label>
+          <span>Minimum balance</span>
+          <input data-preview-min-balance data-testid="preview-min-balance" type="number" min="0" step="100000" value="1000000" />
+        </label>
+        <label>
+          <span>Account name contains</span>
+          <input data-preview-search data-testid="preview-search" type="text" maxlength="200" placeholder="Clear to remove the predicate" />
+        </label>
+        <label>
+          <span>ORDER BY</span>
+          <select data-preview-order data-testid="preview-order">
+            <option value="balance-desc" selected>balance DESC</option>
+            <option value="account-id">account_id ASC</option>
+          </select>
+        </label>
+      </div>
+      <div class="preview-controls" aria-label="Braid preview controls">
+        <button type="button" data-preview-braid-run data-testid="preview-braid-run">Render and run Braid</button>
+        <button type="button" class="preview-secondary" data-preview-braid-reset data-testid="preview-braid-reset">Reset query controls</button>
+      </div>
+      <p class="preview-hint">
+        Clear a filter to make its <code>@braid if</code> branch disappear. Projection and sort changes use structural fragments rather than value binds.
+      </p>
+    </section>
 
-  <div class="preview-controls" aria-label="SQL preview controls">
-    <button type="button" data-preview-run data-testid="preview-run">Run SQL</button>
-    <button type="button" class="preview-secondary" data-preview-reset data-testid="preview-reset">
-      Reset seeded database
-    </button>
-    <button type="button" class="preview-secondary" data-preview-schema data-testid="preview-schema">
-      Inspect schema
-    </button>
-    <button type="button" data-browser-ownership-run data-testid="browser-ownership-run" hidden>
-      Run browser ownership conformance
-    </button>
+    <section class="preview-panel preview-source-panel" aria-labelledby="preview-braid-source-title">
+      <h3 id="preview-braid-source-title">Braid source</h3>
+      <pre><code data-preview-braid-source data-testid="preview-braid-source">Loading example…</code></pre>
+    </section>
   </div>
 
   <p class="preview-status" data-preview-status data-testid="preview-status" aria-live="polite">
-    Ready. Edit the SQL and run it.
+    Ready. Change the controls and run the Braid query.
   </p>
   <p class="preview-error" data-preview-error data-testid="preview-error" role="alert" hidden></p>
   <p data-browser-ownership-status data-testid="browser-ownership-status" hidden></p>
 
   <div class="preview-grid">
     <div>
-      <h3>Executed SQL</h3>
-      <pre data-preview-rendered data-testid="preview-rendered"><code>Run SQL to show the statement sent to SQLite.</code></pre>
+      <h3>Rendered SQL</h3>
+      <pre data-preview-rendered data-testid="preview-rendered"><code>Run a query to see the statement sent to SQLite.</code></pre>
+    </div>
+    <div>
+      <h3>Bound parameters</h3>
+      <pre data-preview-parameters data-testid="preview-parameters"><code>[]</code></pre>
+      <p class="preview-variant">Variant: <code data-preview-variant data-testid="preview-variant">not rendered</code></p>
     </div>
   </div>
-
-  <details class="preview-schema" open>
-    <summary>Database schema</summary>
-    <pre data-preview-schema-output data-testid="preview-schema-output"><code>finance_accounts (
-  account_id INTEGER PRIMARY KEY,
-  account_name TEXT NOT NULL,
-  balance INTEGER NOT NULL,
-  currency TEXT NOT NULL,
-  locale TEXT NOT NULL
-)</code></pre>
-  </details>
 
   <div class="preview-results">
     <h3>Query results</h3>
@@ -70,6 +90,44 @@ ORDER BY account_id;</textarea>
       </table>
     </div>
   </div>
+
+  <details class="preview-schema" open>
+    <summary>Seeded database schema</summary>
+    <pre data-preview-schema-output data-testid="preview-schema-output"><code>finance_accounts (
+  account_id INTEGER PRIMARY KEY,
+  account_name TEXT NOT NULL,
+  balance INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  locale TEXT NOT NULL
+)</code></pre>
+  </details>
+
+  <section class="preview-raw" aria-labelledby="preview-raw-title">
+    <div>
+      <h3 id="preview-raw-title">Raw SQL scratchpad</h3>
+      <p>
+        Want to prove the database itself is live? Edit this SQL directly. This path intentionally
+        uses <code>sql.raw()</code> only inside the disposable browser database.
+      </p>
+    </div>
+    <div class="preview-editor">
+      <label for="preview-sql">SQL statement</label>
+      <textarea id="preview-sql" data-preview-sql data-testid="preview-sql" rows="9" spellcheck="false">SELECT
+  account_id,
+  account_name,
+  balance,
+  currency,
+  locale
+FROM finance_accounts
+ORDER BY account_id;</textarea>
+    </div>
+    <div class="preview-controls" aria-label="Raw SQL preview controls">
+      <button type="button" data-preview-run data-testid="preview-run">Run raw SQL</button>
+      <button type="button" class="preview-secondary" data-preview-reset data-testid="preview-reset">Reset seeded database</button>
+      <button type="button" class="preview-secondary" data-preview-schema data-testid="preview-schema">Inspect schema</button>
+      <button type="button" data-browser-ownership-run data-testid="browser-ownership-run" hidden>Run browser ownership conformance</button>
+    </div>
+  </section>
 </section>
 
 <script>
@@ -79,7 +137,10 @@ ORDER BY account_id;</textarea>
 
   interface PreviewSuccess {
     readonly type: "success";
+    readonly mode: "raw" | "braid";
     readonly sql: string;
+    readonly parameters: readonly unknown[];
+    readonly variantFingerprint?: string;
     readonly kind: "rows" | "command";
     readonly columns: readonly string[];
     readonly rows: readonly PreviewRow[];
@@ -101,6 +162,25 @@ ORDER BY account_id;</textarea>
 
   type PreviewResponse = PreviewSuccess | PreviewSchemaSuccess | PreviewFailure;
 
+  const braidSourceText = [
+    "const query = sql.rows`",
+    "  SELECT ${projection}",
+    "  FROM finance_accounts",
+    "  /*@braid where*/",
+    "    /*@braid if ${currency !== \"\"} */",
+    "      AND currency = ${currency}",
+    "    /*@braid end*/",
+    "    /*@braid if ${minBalance !== null} */",
+    "      AND balance >= ${minBalance}",
+    "    /*@braid end*/",
+    "    /*@braid if ${search.length > 0} */",
+    "      AND account_name LIKE ${`%${search}%`}",
+    "    /*@braid end*/",
+    "  /*@braid end*/",
+    "  ORDER BY ${order};",
+    "`;",
+  ].join("\n");
+
   const roots = document.querySelectorAll<HTMLElement>("[data-sqlbraid-preview]");
   for (const root of roots) {
     const createPreviewWorker = (): Worker =>
@@ -109,22 +189,35 @@ ORDER BY account_id;</textarea>
     const ownershipWorker = new Worker(new URL("../workers/runtime-ownership.worker.ts", import.meta.url), { type: "module" });
     const sqlInput = root.querySelector<HTMLTextAreaElement>("[data-preview-sql]");
     const runButton = root.querySelector<HTMLButtonElement>("[data-preview-run]");
+    const braidRunButton = root.querySelector<HTMLButtonElement>("[data-preview-braid-run]");
+    const braidResetButton = root.querySelector<HTMLButtonElement>("[data-preview-braid-reset]");
+    const projectionInput = root.querySelector<HTMLSelectElement>("[data-preview-projection]");
+    const currencyInput = root.querySelector<HTMLSelectElement>("[data-preview-currency]");
+    const minimumInput = root.querySelector<HTMLInputElement>("[data-preview-min-balance]");
+    const searchInput = root.querySelector<HTMLInputElement>("[data-preview-search]");
+    const orderInput = root.querySelector<HTMLSelectElement>("[data-preview-order]");
+    const source = root.querySelector<HTMLElement>("[data-preview-braid-source]");
     const resetButton = root.querySelector<HTMLButtonElement>("[data-preview-reset]");
     const schemaButton = root.querySelector<HTMLButtonElement>("[data-preview-schema]");
     const status = root.querySelector<HTMLElement>("[data-preview-status]");
     const error = root.querySelector<HTMLElement>("[data-preview-error]");
     const rendered = root.querySelector<HTMLElement>("[data-preview-rendered] code");
+    const parameters = root.querySelector<HTMLElement>("[data-preview-parameters] code");
+    const variant = root.querySelector<HTMLElement>("[data-preview-variant]");
     const schemaOutput = root.querySelector<HTMLElement>("[data-preview-schema-output] code");
     const command = root.querySelector<HTMLElement>("[data-preview-command]");
     const table = root.querySelector<HTMLTableElement>("[data-preview-table]");
     const ownershipRun = root.querySelector<HTMLButtonElement>("[data-browser-ownership-run]");
     const ownershipStatus = root.querySelector<HTMLElement>("[data-browser-ownership-status]");
-    if (!sqlInput || !runButton || !resetButton || !schemaButton || !status || !error || !rendered
-      || !schemaOutput || !command || !table || !ownershipRun || !ownershipStatus) {
+    if (!sqlInput || !runButton || !braidRunButton || !braidResetButton || !projectionInput || !currencyInput
+      || !minimumInput || !searchInput || !orderInput || !source || !resetButton || !schemaButton || !status
+      || !error || !rendered || !parameters || !variant || !schemaOutput || !command || !table || !ownershipRun || !ownershipStatus) {
       worker.terminate();
       ownershipWorker.terminate();
       continue;
     }
+
+    source.textContent = braidSourceText;
 
     let timeoutId: number | undefined;
     const clearTimeout = (): void => {
@@ -133,6 +226,7 @@ ORDER BY account_id;</textarea>
     };
     const setBusy = (value: boolean): void => {
       runButton.disabled = value;
+      braidRunButton.disabled = value;
       schemaButton.disabled = value;
     };
     const seededSchema = schemaOutput.textContent;
@@ -140,6 +234,8 @@ ORDER BY account_id;</textarea>
       table.tHead?.replaceChildren();
       table.tBodies[0]?.replaceChildren();
       rendered.textContent = "No completed statement.";
+      parameters.textContent = "[]";
+      variant.textContent = "not rendered";
       command.hidden = true;
     };
 
@@ -192,10 +288,13 @@ ORDER BY account_id;</textarea>
         if (details) details.open = true;
         return;
       }
-      status.textContent = response.kind === "rows"
+      const count = response.kind === "rows"
         ? `${response.rowCount} row${response.rowCount === 1 ? "" : "s"} returned${response.truncated ? " (showing the first 1,000)." : "."}`
         : `Command completed${response.affectedRows === undefined ? "." : ` (${response.affectedRows} row${response.affectedRows === 1 ? "" : "s"} affected).`}`;
+      status.textContent = response.mode === "braid" ? `Braid rendered and executed. ${count}` : count;
       rendered.textContent = response.sql;
+      parameters.textContent = JSON.stringify(response.parameters, null, 2);
+      variant.textContent = response.mode === "braid" ? response.variantFingerprint || "base variant" : "raw SQL";
       command.hidden = response.kind !== "command";
       command.textContent = response.kind === "command" ? "This statement changed the disposable database." : "";
       renderRows(response.rows, response.columns);
@@ -251,11 +350,40 @@ ORDER BY account_id;</textarea>
       }, 10_000);
     };
 
+    const runBraid = (): void => {
+      const minimumText = minimumInput.value.trim();
+      const minimum = minimumText === "" ? null : Number(minimumText);
+      setBusy(true);
+      clearResults();
+      startTimeout();
+      status.textContent = "Rendering Braid and running it in SQLite WASM…";
+      error.hidden = true;
+      error.textContent = "";
+      worker.postMessage({
+        type: "run-braid",
+        projection: projectionInput.value,
+        currency: currencyInput.value,
+        minBalance: minimum,
+        search: searchInput.value,
+        order: orderInput.value,
+      });
+    };
+
+    braidRunButton.addEventListener("click", runBraid);
+    braidResetButton.addEventListener("click", () => {
+      projectionInput.value = "full";
+      currencyInput.value = "KRW";
+      minimumInput.value = "1000000";
+      searchInput.value = "";
+      orderInput.value = "balance-desc";
+      runBraid();
+    });
+
     runButton.addEventListener("click", () => {
       setBusy(true);
       clearResults();
       startTimeout();
-      status.textContent = "Running SQL in SQLite WASM…";
+      status.textContent = "Running raw SQL in SQLite WASM…";
       error.hidden = true;
       error.textContent = "";
       worker.postMessage({ type: "run", sql: sqlInput.value });
@@ -295,33 +423,41 @@ ORDER BY account_id;</textarea>
   .preview-heading h2 { margin-top: 0.25rem; }
   .preview-kicker { color: var(--sl-color-accent); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
   .preview-badge { border: 1px solid var(--sl-color-accent); border-radius: 999px; color: var(--sl-color-accent); font-size: 0.75rem; padding: 0.25rem 0.6rem; white-space: nowrap; }
-  .preview-editor { display: grid; gap: 0.4rem; margin-top: 1.25rem; }
-  .preview-editor label { font-size: 0.9rem; font-weight: 650; }
-  .preview-editor textarea { border: 1px solid var(--sl-color-gray-5); border-radius: 0.35rem; box-sizing: border-box; font: 0.85rem/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; min-height: 12rem; padding: 0.7rem; resize: vertical; width: 100%; }
-  .preview-controls { align-items: center; display: flex; flex-wrap: wrap; gap: 0.65rem; margin: 0.75rem 0 0.5rem; }
+  .preview-braid-layout, .preview-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); margin-top: 1.25rem; }
+  .preview-panel { border: 1px solid var(--sl-color-gray-5); border-radius: 0.55rem; padding: 1rem; background: var(--sl-color-bg); }
+  .preview-panel h3, .preview-results h3, .preview-raw h3 { font-size: 0.95rem; margin: 0 0 0.65rem; }
+  .preview-form-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+  .preview-form-grid label { display: grid; gap: 0.35rem; font-size: 0.82rem; font-weight: 650; }
+  .preview-form-grid input, .preview-form-grid select, .preview-editor textarea { border: 1px solid var(--sl-color-gray-5); border-radius: 0.35rem; box-sizing: border-box; background: var(--sl-color-bg); color: var(--sl-color-text); font: inherit; padding: 0.55rem 0.6rem; width: 100%; }
+  .preview-source-panel pre, .preview-grid pre, .preview-schema pre { margin: 0; }
+  .preview-source-panel pre { max-height: 27rem; overflow: auto; }
+  .preview-source-panel pre code, .preview-grid pre code, .preview-schema pre { font-size: 0.75rem; white-space: pre-wrap; }
+  .preview-controls { align-items: center; display: flex; flex-wrap: wrap; gap: 0.65rem; margin: 0.8rem 0 0.5rem; }
   .preview-controls button { background: var(--sl-color-accent); border: 0; border-radius: 0.35rem; color: var(--sl-color-white); cursor: pointer; font: inherit; font-weight: 650; padding: 0.45rem 0.8rem; margin-top: 0; }
   .preview-controls button.preview-secondary { background: transparent; border: 1px solid var(--sl-color-accent); color: var(--sl-color-accent); }
   .preview-controls button:disabled { cursor: progress; opacity: 0.65; }
-  .preview-status { color: var(--sl-color-gray-2); font-size: 0.9rem; min-height: 1.35rem; }
+  .preview-hint, .preview-variant, .preview-raw p { color: var(--sl-color-gray-2); font-size: 0.82rem; }
+  .preview-status { color: var(--sl-color-gray-2); font-size: 0.9rem; min-height: 1.35rem; margin-top: 1rem; }
   .preview-error { background: color-mix(in srgb, var(--sl-color-red-high) 18%, transparent); border: 1px solid var(--sl-color-red-high); border-radius: 0.35rem; color: var(--sl-color-red-high); padding: 0.55rem 0.7rem; }
-  .preview-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
-  .preview-grid h3, .preview-results h3 { font-size: 0.95rem; margin-bottom: 0.45rem; }
-  .preview-grid pre, .preview-results, .preview-schema { margin: 0; }
-  .preview-grid pre { min-height: 5rem; }
-  .preview-grid pre code, .preview-schema pre { font-size: 0.75rem; white-space: pre-wrap; }
-  .preview-schema { margin-top: 1.25rem; }
-  .preview-schema summary { cursor: pointer; font-weight: 650; }
-  .preview-schema pre { margin: 0.6rem 0 0; }
-  .preview-command { color: var(--sl-color-gray-2); font-size: 0.85rem; }
   .preview-results { margin-top: 1.25rem; }
+  .preview-command { color: var(--sl-color-gray-2); font-size: 0.85rem; }
   .preview-table-wrap { overflow-x: auto; }
   .preview-table-wrap table { border-collapse: collapse; font-size: 0.82rem; width: 100%; }
   .preview-table-wrap th, .preview-table-wrap td { border: 1px solid var(--sl-color-gray-5); padding: 0.45rem 0.55rem; text-align: left; white-space: nowrap; }
   .preview-table-wrap th { background: var(--sl-color-gray-6); }
+  .preview-schema { margin-top: 1.25rem; }
+  .preview-schema summary { cursor: pointer; font-weight: 650; }
+  .preview-schema pre { margin-top: 0.6rem; }
+  .preview-raw { border-top: 1px solid var(--sl-color-gray-5); margin-top: 1.5rem; padding-top: 1.25rem; }
+  .preview-raw p { margin: 0; }
+  .preview-editor { display: grid; gap: 0.4rem; margin-top: 0.9rem; }
+  .preview-editor label { font-size: 0.9rem; font-weight: 650; }
+  .preview-editor textarea { font: 0.85rem/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; min-height: 11rem; resize: vertical; }
   @media (max-width: 36rem) {
     .sqlbraid-preview { padding: 1rem; }
     .preview-heading { display: block; }
     .preview-badge { display: inline-block; margin-top: 0.7rem; }
     .preview-controls button { flex: 1 1 100%; }
+    .preview-braid-layout, .preview-grid { grid-template-columns: 1fr; }
   }
 </style>
