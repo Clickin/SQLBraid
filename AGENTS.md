@@ -348,7 +348,12 @@ a safe descriptive marker rather than accidental `toString()` execution.
 
 ### 9.3 No built-in logger backend
 
-Do not add mandatory pino/winston/OTEL dependencies. Those integrate through the observer SPI. OpenTelemetry remains post-release unless explicitly reprioritized.
+Do not add mandatory pino/winston/OTel dependencies to core or runtime.
+The optional `@sqlbraid/opentelemetry` observer provides DB client tracing and
+the stable duration metric through the readonly observer SPI. It owns no
+logger, SDK, exporter, driver instrumentation, SQL rewriting, or context
+injection; it must isolate its own telemetry failures so they cannot change
+SQLBraid execution.
 
 ---
 

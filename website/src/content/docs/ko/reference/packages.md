@@ -18,6 +18,7 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/bun-sql` | 사용자가 PostgreSQL/MySQL/MariaDB/SQLite dialect를 선택하는 Bun.SQL adapter family |
 | `@sqlbraid/compiler` | TypeScript 검색 및 보호된 템플릿 lowering |
 | `@sqlbraid/vite` | source map을 보존하는 guarded-template용 Vite 8 pre-transform |
+| `@sqlbraid/opentelemetry` | observer를 통한 선택적 OpenTelemetry DB client span 및 duration metric |
 | `@sqlbraid/metadata` | DB 사실 스냅샷, 검증, identity, drift |
 | `@sqlbraid/codegen` | 메타데이터 + TypePolicy에서 Row/Insert/Update 선언 생성 |
 | `@sqlbraid/tooling` | 공유 설정/워크스페이스 증거 및 의미 인덱스 |
@@ -50,6 +51,9 @@ Bun import가 없고 명시적인 `dialect`를 요구하며 SQL 의미를 자동
 의존성을 가져오지 않습니다. Tooling은 개발/빌드 환경에만 설치하세요. Oracle,
 SQL Server, MariaDB, Bun driver 의존성은 portable root에서 제외됩니다.
 `@sqlbraid/vite`는 Vite를 peer로 유지하며 framework를 가져오지 않습니다.
+`@sqlbraid/opentelemetry`는 `@opentelemetry/api`를 peer로 유지하며 SDK,
+exporter, logger, driver instrumentation 또는 database driver를 설치하지
+않습니다.
 
 동기식 SQLite adapter는 public `Database` method를 async로 유지하면서
 물리 `Awaitable<T>` SPI를 사용합니다. better-sqlite3는 event loop를 계속

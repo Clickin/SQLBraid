@@ -11,7 +11,8 @@ transaction/savepoint scopes, capability-driven cancellation, prepared input and
 zero-input factories, streams, observers, metadata, deterministic codegen,
 standard LSP, CLI JSON inspection, a thin VS Code client, native DML-returning
 contracts, homogeneous command bulk, MariaDB, Browser SQLite WASM, D1, and
-representation-profile contracts.
+representation-profile contracts, plus optional OpenTelemetry DB client spans
+and duration metrics.
 
 The [runtime and driver support matrix](/SQLBraid/reference/support/) records
 support labels for the exact database/driver/profile/runtime/capability tuple
@@ -32,8 +33,7 @@ supported:
 - broader database/server-line and additional first-party driver evidence;
 - application input mapping and explicit codec contracts;
 - optional database verification and richer SQL diagnostics;
-- pipeline/COPY/LOAD DATA operations, query transformation, routing/retry, and
-  OpenTelemetry integration;
+- pipeline/COPY/LOAD DATA operations, query transformation, and routing/retry;
 - richer container/JSON/temporal representation evidence.
 
 Cancellation, sessions, transaction options, prepared input factories, and

@@ -107,6 +107,7 @@ export default defineConfig({
           { label: "Streaming", translations: { ko: "스트리밍" }, link: "/runtime/streaming/" },
           { label: "Prepared queries", translations: { ko: "준비된 쿼리" }, link: "/runtime/prepared/" },
           { label: "Execution observers", translations: { ko: "실행 옵저버" }, link: "/runtime/observers/" },
+          { label: "OpenTelemetry integration", translations: { ko: "OpenTelemetry 통합" }, link: "/runtime/opentelemetry/" },
           { label: "Future transaction profiles", translations: { ko: "향후 트랜잭션 프로필" }, link: "/runtime/transaction-profiles/" },
         ] },
         { label: "Metadata and codegen", translations: { ko: "메타데이터와 코드 생성" }, items: [

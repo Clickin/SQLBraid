@@ -193,7 +193,7 @@
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "5c798690799a949c3ff1eab678b2ca7a7fca9ffeafa8a2f574682993b2fe7dfd"
+      "sourceDigest": "8293fc51f185ac964517daf9dcdf9f5c2a2f0ba35fbc62d90f975eaa8e2a2698"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
@@ -217,13 +217,13 @@
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "c5f055c924e4f42192583e8c00650e102e1e5e7284555bc475e65062dfb32f5d"
+      "sourceDigest": "e08208911377ba377d922effa8a772586b70ca61e5d0dd8567f7e6934e8f3da2"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",
       "translation": "website/src/content/docs/ko/release/roadmap.md",
       "translationOf": "website/src/content/docs/release/roadmap.md",
-      "sourceDigest": "41d32fc351ae6b9c23c48fb34d6ce7dcca9b4d054594fdb393530f231b951d7a"
+      "sourceDigest": "57a232332fcfbca361c3a5708fc4db592a2e488a7c08ee5b685bc86bae79b722"
     },
     {
       "source": "website/src/content/docs/runtime/direct-pools.md",
@@ -235,7 +235,13 @@
       "source": "website/src/content/docs/runtime/observers.md",
       "translation": "website/src/content/docs/ko/runtime/observers.md",
       "translationOf": "website/src/content/docs/runtime/observers.md",
-      "sourceDigest": "01e0b28abc55bdd813a7ac77f3aa4335f00a5bfe4096b4d58b6422b1ad30bb31"
+      "sourceDigest": "9ec0e2c04f8b8bbffe489fbeab849c73745b5408aac210bb1448d40954670320"
+    },
+    {
+      "source": "website/src/content/docs/runtime/opentelemetry.md",
+      "translation": "website/src/content/docs/ko/runtime/opentelemetry.md",
+      "translationOf": "website/src/content/docs/runtime/opentelemetry.md",
+      "sourceDigest": "0a84b42bb127bba496d03c5225dc2665844ee3926b1df280a0beff90831c34a8"
     },
     {
       "source": "website/src/content/docs/runtime/prepared.md",
