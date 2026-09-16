@@ -400,17 +400,17 @@ const statusClass = (value: string) => value.toLowerCase().replace(/[^a-z0-9-]/g
     font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   }
 
-  .support-matrix__data-row[data-view="database"] > span:nth-child(1),
-  .support-matrix__data-row[data-view="database"] > span:nth-child(3),
-  .support-matrix__data-row[data-view="database"] > span:nth-child(4),
-  .support-matrix__data-row[data-view="driver"] > span:nth-child(1),
-  .support-matrix__data-row[data-view="driver"] > span:nth-child(2),
-  .support-matrix__data-row[data-view="driver"] > span:nth-child(3),
-  .support-matrix__data-row[data-view="driver"] > span:nth-child(4),
-  .support-matrix__data-row[data-view="driver"] > span:nth-child(5),
-  .support-matrix__data-row[data-view="driver"] > span:nth-child(11),
-  .support-matrix__data-row[data-view="capability"] > span:nth-child(2),
-  .support-matrix__data-row[data-view="capability"] > span:nth-child(5) {
+  .support-matrix__data-row[data-row-view="database"] > span:nth-child(1),
+  .support-matrix__data-row[data-row-view="database"] > span:nth-child(3),
+  .support-matrix__data-row[data-row-view="database"] > span:nth-child(4),
+  .support-matrix__data-row[data-row-view="driver"] > span:nth-child(1),
+  .support-matrix__data-row[data-row-view="driver"] > span:nth-child(2),
+  .support-matrix__data-row[data-row-view="driver"] > span:nth-child(3),
+  .support-matrix__data-row[data-row-view="driver"] > span:nth-child(4),
+  .support-matrix__data-row[data-row-view="driver"] > span:nth-child(5),
+  .support-matrix__data-row[data-row-view="driver"] > span:nth-child(11),
+  .support-matrix__data-row[data-row-view="capability"] > span:nth-child(2),
+  .support-matrix__data-row[data-row-view="capability"] > span:nth-child(5) {
     font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   }
 
@@ -446,6 +446,10 @@ const statusClass = (value: string) => value.toLowerCase().replace(/[^a-z0-9-]/g
   @media print {
     .support-matrix__interactive {
       display: none !important;
+    }
+
+    .support-matrix__fallback-scroll {
+      display: block !important;
     }
 
     .support-matrix__fallback {

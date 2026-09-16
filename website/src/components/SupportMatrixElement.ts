@@ -173,7 +173,7 @@ class SupportMatrixElement extends HTMLElement {
     this.layer.innerHTML = this.rows.slice(start, end).map((row, offset) => {
       const index = start + offset;
       const cells = projectSupportMatrixRow(this.data, this.view, row, this.locale);
-      return `<div role="row" aria-rowindex="${index + 2}" class="support-matrix__row support-matrix__data-row" data-view="${this.view}" tabindex="0" data-index="${index}" style="top:${index * ROW_HEIGHT}px">${cells.map((cell, cellIndex) => `<span role="cell" title="${escape(cell)}">${this.renderCell(cell, cellIndex, row)}</span>`).join("")}</div>`;
+      return `<div role="row" aria-rowindex="${index + 2}" class="support-matrix__row support-matrix__data-row" data-row-view="${this.view}" tabindex="0" data-index="${index}" style="top:${index * ROW_HEIGHT}px">${cells.map((cell, cellIndex) => `<span role="cell" title="${escape(cell)}">${this.renderCell(cell, cellIndex, row)}</span>`).join("")}</div>`;
     }).join("");
     if (focused !== undefined) this.layer.querySelector<HTMLElement>(`[data-index="${focused}"]`)?.focus({ preventScroll: true });
   }

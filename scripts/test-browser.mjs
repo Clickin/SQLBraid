@@ -169,10 +169,17 @@ async function supportMatrix(browser, previewUrl) {
         if (geometry.documentWidth > geometry.windowWidth) throw new Error("Support matrix overflows the document.");
         measurements.push({ locale, view, ...geometry });
       }
+      await matrix.locator('[data-view="database"]').click();
       await matrix.locator('[data-index="0"]').focus();
+      const selectedDatabaseTab = matrix.locator('[role="tab"][data-view="database"]');
+      const databaseTotalRows = measurements.findLast((measurement) => measurement.locale === locale && measurement.view === "database").totalRows;
+      if (await selectedDatabaseTab.getAttribute("aria-selected") !== "true") throw new Error("Support matrix database tab was not selected before row keyboard navigation.");
+      await page.keyboard.press("Home");
+      const firstFocused = await page.evaluate(() => Number(document.activeElement.dataset.index));
+      if (firstFocused !== 0 || await selectedDatabaseTab.getAttribute("aria-selected") !== "true") throw new Error("Support matrix row Home was interpreted as tab navigation.");
       await page.keyboard.press("End");
       const focused = await page.evaluate(() => Number(document.activeElement.dataset.index));
-      if (focused !== measurements.at(-1).totalRows - 1) throw new Error("Support matrix keyboard cannot reach the last virtual row.");
+      if (focused !== databaseTotalRows - 1 || await selectedDatabaseTab.getAttribute("aria-selected") !== "true") throw new Error("Support matrix row End was interpreted as tab navigation.");
       await matrix.locator("[data-reset]").click();
       await matrix.locator('[data-view="database"]').click();
       await matrix.locator("[data-search]").fill("mysql-mysql2-deno-2-9-3");
