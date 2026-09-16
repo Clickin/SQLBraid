@@ -17,6 +17,9 @@ items fail-fast. Every item that emitted `query:ready` eventually emits exactly
 one terminal `query:mapped` or `query:error`; abandoned siblings use the
 existing error event with `BRAID_BATCH_ABORTED` and truthful execution flags.
 No abandoned item is sent to the driver or mapper, and error observers are
-still given the remaining terminal events when another observer throws.
+still given the remaining terminal events when another observer throws. For a
+synthetic sibling error, `stage` names the logical batch phase at which that
+sibling was abandoned; it does not claim to be the native or observer failure
+stage that caused the batch to stop.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

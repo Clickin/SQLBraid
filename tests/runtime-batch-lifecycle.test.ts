@@ -8,6 +8,7 @@ import {
   type StandardSchemaV1,
   type StatementBindingAdapter,
 } from "@sqlbraid/core";
+import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { sql } from "@sqlbraid/template";
 
@@ -220,4 +221,115 @@ test("batch release failure still reports all ready siblings when error observer
   assert.equal(ready.length, 3);
   assert.equal(terminals.length, 3);
   assert.equal(terminals.every((event) => event.type === "query:error"), true);
+});
+
+test.each(
+  (["ready", "result", "mapped", "mapper", "result-kind"] as const).flatMap((phase) => (
+    [0, 1, 2].map((index) => ({ phase, index }))
+  )),
+)("batch $phase failure at item $index reports each announced terminal exactly once", async ({ phase, index }) => {
+  const events: ExecutionEvent[] = [];
+  const original = new Error(`${phase} failed at ${index}`);
+  let calls = 0;
+  let mapperCalls = 0;
+  let releases = 0;
+  const readyIds: string[] = [];
+  const schemas = [0, 1, 2].map((schemaIndex): StandardSchemaV1<unknown, unknown> => ({
+    "~standard": {
+      version: 1,
+      vendor: "runtime-batch-lifecycle",
+      validate(value) {
+        mapperCalls += 1;
+        if (schemaIndex === index) throw original;
+        return value;
+      },
+    },
+  }));
+  const pooled = {
+    statementBinding,
+    async acquire() {
+      return {
+        statementBinding,
+        async query<Row>(rendered: { readonly segments: readonly string[] }) {
+          const callIndex = calls;
+          calls += 1;
+          if (phase === "result-kind" && callIndex === index) {
+            return { kind: "command", rows: [], command: { affectedRows: 0 } } as never;
+          }
+          return { kind: "rows", rows: [{ value: callIndex }] as readonly Row[] };
+        },
+        async *stream<Row>() { yield* [] as readonly Row[]; },
+        async call() { return { output: {}, resultSets: [] }; },
+        release() {
+          releases += 1;
+        },
+      };
+    },
+  };
+  const ordinaryObserver = {
+    async onEvent(event: ExecutionEvent) {
+      await Promise.resolve();
+      if (event.type === "query:ready") {
+        readyIds.push(event.operationId);
+        if (phase === "ready" && readyIds.length - 1 === index) throw original;
+        return;
+      }
+      if (phase !== "result" && phase !== "mapped") return;
+      if (event.type !== (phase === "result" ? "query:result" : "query:mapped")) return;
+      const itemIndex = readyIds.indexOf(event.operationId);
+      if (itemIndex === index) throw original;
+    },
+  };
+  const db = createPooledDatabase(pooled, {
+    observers: [
+      ordinaryObserver,
+      { onEvent(event) { events.push(event); } },
+      createOpenTelemetryObserver({ metrics: false }),
+    ],
+  });
+  const queries = phase === "mapper"
+    ? schemas.map((schema, queryIndex) => sql.rows(schema)`SELECT ${queryIndex}`)
+    : rowQueries(3);
+
+  let callerError: unknown;
+  await assert.rejects(
+    () => db.batch(queries),
+    (error) => {
+      callerError = error;
+      return true;
+    },
+  );
+
+  const terminals = terminalEvents(events);
+  const expectedIds = [...readyIds];
+  assert.equal(readyIds.length, phase === "ready" ? index + 1 : 3);
+  assert.equal(terminals.length, expectedIds.length);
+  assert.deepEqual(
+    [...new Set(terminals.map((event) => event.operationId))].sort(),
+    [...new Set(expectedIds)].sort(),
+  );
+  for (const operationId of expectedIds) {
+    assert.equal(terminals.filter((event) => event.operationId === operationId).length, 1);
+  }
+  assert.equal(calls, phase === "ready" ? 0 : 3);
+  assert.equal(releases, phase === "ready" ? 0 : 1);
+  assert.equal(mapperCalls, phase === "mapper" ? index + 1 : 0);
+  for (const [itemIndex, operationId] of expectedIds.entries()) {
+    const terminal = terminals.find((event) => event.operationId === operationId);
+    assert.ok(terminal);
+    if (phase === "ready" || itemIndex >= index) {
+      assert.equal(terminal?.type, "query:error");
+      assert.equal(terminal?.type === "query:error" ? terminal.executionStarted : undefined, phase !== "ready");
+      assert.equal(terminal?.type === "query:error" ? terminal.executionCompleted : undefined, phase !== "ready");
+    } else {
+      assert.equal(terminal?.type, "query:mapped");
+    }
+  }
+  const originalEvent = terminals.find((event) => event.operationId === expectedIds[index]);
+  assert.ok(originalEvent?.type === "query:error");
+  const expectedCaller = phase === "ready" || phase === "result" || phase === "mapped" || phase === "mapper"
+    ? original
+    : originalEvent?.type === "query:error" ? originalEvent.error : undefined;
+  assert.equal(callerError, expectedCaller);
+  assert.equal(originalEvent?.type === "query:error" ? originalEvent.error : undefined, expectedCaller);
 });

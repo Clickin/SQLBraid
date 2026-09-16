@@ -50,7 +50,9 @@ preflight, acquisition, driver, release, or observer failure. Abandoned
 siblings use `BRAID_BATCH_ABORTED` in the existing error payload and report
 whether their own physical execution started and completed. They are not sent
 to the driver or mapper, and terminal error delivery continues if an error
-observer throws.
+observer throws. For these synthetic sibling errors, `stage` identifies the
+logical phase where that sibling was abandoned; it is not the native or
+observer failure stage of the operation that stopped the batch.
 
 For a stream, `stream:end` is emitted only after the adapter has closed,
 drained, or cancelled its driver resource and the runtime has released or

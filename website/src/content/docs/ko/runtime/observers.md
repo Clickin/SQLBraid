@@ -57,7 +57,9 @@ terminal `query:mapped` 또는 `query:error`를 받습니다. 중단된 sibling�
 기존 error payload에서 `BRAID_BATCH_ABORTED`를 사용하고 자신의 physical
 실행이 시작되고 완료되었는지를 실제 상태대로 보고합니다. driver나 mapper로
 보내지 않으며 error observer가 throw해도 나머지 terminal error 전달은
-계속됩니다.
+계속됩니다. 이 synthetic sibling error의 `stage`는 해당 sibling이
+abandon된 logical phase를 가리키며 batch를 중단시킨 native 또는 observer
+failure의 stage라고 주장하지 않습니다.
 
 stream의 `stream:end`는 어댑터가 드라이버 리소스를 close/drain/cancel하고
 runtime이 물리적 lease를 반환하거나 폐기한 뒤에만 발생합니다. Observer는
