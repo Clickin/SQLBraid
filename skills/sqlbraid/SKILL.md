@@ -10,8 +10,9 @@ Use SQL directly. Do not translate SQLBraid code into an ORM or query-builder DS
 ## Start from the project
 
 1. Inspect existing imports, `package.json`, and `sqlbraid.config.mjs`, `.js`, or `.cjs` before changing database code.
-2. Preserve the project's selected dialect, driver, runtime, and transaction behavior unless the task explicitly changes one of them.
-3. Prefer the existing SQLBraid adapter and factory. Do not invent a driver, placeholder syntax, or transaction capability from the database name alone.
+2. Check the installed SQLBraid version before relying on version-sensitive APIs. Prefer local types/source and the matching versioned documentation at `https://clickin.github.io/SQLBraid/v/<version>/llms.txt` when that release snapshot exists. Do not use newer `/latest` behavior to justify an API that is absent from the project.
+3. Preserve the project's selected dialect, driver, runtime, and transaction behavior unless the task explicitly changes one of them.
+4. Prefer the existing SQLBraid adapter and factory. Do not invent a driver, placeholder syntax, or transaction capability from the database name alone.
 
 ## Write queries with explicit result kinds
 
