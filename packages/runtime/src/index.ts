@@ -227,6 +227,18 @@ class PreparationFailure extends Error {
   }
 }
 
+class BatchAbortedError extends Error {
+  readonly code = "BRAID_BATCH_ABORTED" as const;
+  readonly batchId: string;
+  declare readonly cause?: unknown;
+
+  constructor(batchId: string, cause: unknown) {
+    super("Batch operation was abandoned after an earlier batch operation failed.", { cause });
+    this.name = "BatchAbortedError";
+    this.batchId = batchId;
+  }
+}
+
 const transactionContext = createAsyncContextStorage<TransactionContext>();
 const sessionContext = createAsyncContextStorage<SessionContext>();
 const physicalContext = createAsyncContextStorage<PhysicalContext>();
@@ -961,11 +973,11 @@ async function notify(observers: readonly ExecutionObserver[], event: ExecutionE
   for (const observer of observers) await observer.onEvent(immutable);
 }
 
-async function notifyError(
+async function notifyErrorObservers(
   observers: readonly ExecutionObserver[],
   event: ExecutionEvent,
-  original: unknown,
-): Promise<never> {
+): Promise<unknown[]> {
+  if (observers.length === 0) return [];
   const failures: unknown[] = [];
   const immutable = frozenEvent(event);
   for (const observer of observers) {
@@ -975,6 +987,15 @@ async function notifyError(
       failures.push(error);
     }
   }
+  return failures;
+}
+
+async function notifyError(
+  observers: readonly ExecutionObserver[],
+  event: ExecutionEvent,
+  original: unknown,
+): Promise<never> {
+  const failures = await notifyErrorObservers(observers, event);
   if (failures.length === 0) throw original;
   throw new AggregateError([original, ...failures], "Execution failed and error observers also failed.", { cause: original });
 }
@@ -2134,44 +2155,144 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       assertExecutionOptions(executor, executionOptions, options.capabilities);
       if (queries.length === 0) return [] as { readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> };
       const batchId = `braid_batch_${nextOperationId()}`;
-      const operations: PreparedOperation<ExecutableQuery>[] = [];
-      for (const query of queries) operations.push(await prepareObserved(query, undefined, batchId));
+      type BatchEntry = {
+        readonly operation: PreparedOperation<ExecutableQuery>;
+        raw?: RawOperation<ExecutableQuery>;
+        terminal: boolean;
+      };
+      const entries: BatchEntry[] = [];
+      const observerFailures = async (
+        entry: BatchEntry,
+        error: unknown,
+        stage: QueryErrorEventStage,
+        executionStarted: boolean,
+        executionCompleted: boolean,
+        durationMs?: number,
+      ): Promise<unknown[]> => {
+        if (entry.terminal) return [];
+        entry.terminal = true;
+        return notifyErrorObservers(
+          options.observers ?? [],
+          errorEvent(entry.operation, error, stage, executionStarted, executionCompleted, durationMs),
+        );
+      };
+      const batchFailure = (original: unknown, failures: readonly unknown[]): unknown => failures.length === 0
+        ? original
+        : new AggregateError(
+          [original, ...failures],
+          "Batch execution failed and error observers also failed.",
+          { cause: original },
+        );
+      const abortEntries = async (
+        original: unknown,
+        stage: QueryErrorEventStage,
+        skip?: BatchEntry,
+      ): Promise<readonly unknown[]> => {
+        const failures: unknown[] = [];
+        for (const entry of entries) {
+          if (entry === skip || entry.terminal) continue;
+          const error = new BatchAbortedError(batchId, original);
+          const started = entry.raw !== undefined;
+          const completed = started && !entry.raw!.driverFailed;
+          failures.push(...await observerFailures(entry, error, stage, started, completed, entry.raw?.durationMs));
+        }
+        return failures;
+      };
+
+      for (const query of queries) {
+        try {
+          entries.push({ operation: await prepareObserved(query, undefined, batchId), terminal: false });
+        } catch (error) {
+          const failures = await abortEntries(error, "prepared");
+          throw batchFailure(error, failures);
+        }
+      }
       let use: Use;
       try {
         use = await leaseForUse(false, statementBinding, executionOptions);
       } catch (error) {
-        const operation = operations[0];
-        if (operation) {
-          const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
-          await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
-        }
-        throw error;
+        const first = entries[0];
+        const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
+        const failures = first === undefined
+          ? []
+          : await observerFailures(first, error, stage, false, false);
+        failures.push(...await abortEntries(error, stage, first));
+        throw batchFailure(error, failures);
       }
-      const raw: RawOperation<ExecutableQuery>[] = [];
+      let driverFailure: { readonly entry: BatchEntry; readonly error: unknown } | undefined;
       let batchReleaseError: unknown;
       let batchReleaseFailed = false;
       try {
-        for (const operation of operations) {
-          const result = await physical(operation, use, executionOptions);
-          raw.push(result);
-          if (result.driverFailed) break;
+        for (const entry of entries) {
+          const result = await physical(entry.operation, use, executionOptions);
+          entry.raw = result;
+          if (result.driverFailed) {
+            driverFailure = { entry, error: result.driverError };
+            break;
+          }
         }
       } finally {
         try { await use.release(isPoisoned(use.physicalState)); } catch (error) { batchReleaseError = error; batchReleaseFailed = true; poison(use.physicalState, error); }
       }
-      if (batchReleaseFailed) {
-        const failed = raw.find((operation) => operation.driverFailed);
-        if (failed) {
-          const original = new AggregateError([failed.driverError, batchReleaseError], "Batch execution and lease release failed.", { cause: failed.driverError });
-          await notifyError(options.observers ?? [], errorEvent(failed, original, "release", true, false, failed.durationMs), original);
+
+      const firstFailure = driverFailure;
+      if (firstFailure !== undefined || batchReleaseFailed) {
+        const target = firstFailure?.entry
+          ?? [...entries].reverse().find((entry) => entry.raw !== undefined)
+          ?? entries[0];
+        if (target === undefined) {
+          throw batchFailure(firstFailure?.error ?? batchReleaseError, []);
         }
-        const operation = failed ?? raw.at(-1) ?? operations[0];
-        if (operation) await notifyError(options.observers ?? [], errorEvent(operation, batchReleaseError, "release", true, true), batchReleaseError);
+        const raw = target.raw;
+        const original = firstFailure === undefined
+          ? batchReleaseError
+          : batchReleaseFailed
+            ? new AggregateError(
+              [firstFailure.error, batchReleaseError],
+              "Batch execution and lease release failed.",
+              { cause: firstFailure.error },
+            )
+            : firstFailure.error;
+        const stage: QueryErrorEventStage = firstFailure === undefined
+          ? "release"
+          : batchReleaseFailed ? "release" : "driver";
+        const failures = await observerFailures(
+          target,
+          original,
+          stage,
+          raw !== undefined,
+          raw !== undefined && !raw.driverFailed,
+          raw?.durationMs,
+        );
+        failures.push(...await abortEntries(original, stage, target));
+        throw batchFailure(original, failures);
       }
+
       const output: QueryExecutionResult<unknown>[] = [];
-      for (const operation of raw) {
-        const result = await finalizePhysical(operation);
-        output.push(await processRows(operation, result));
+      for (const entry of entries) {
+        const raw = entry.raw;
+        if (raw === undefined) {
+          const original = new BatchAbortedError(batchId, new Error("Batch operation did not reach physical execution."));
+          const failures = await observerFailures(entry, original, "driver", false, false);
+          failures.push(...await abortEntries(original, "driver", entry));
+          throw batchFailure(original, failures);
+        }
+        let result: QueryExecutionResult<unknown>;
+        try {
+          result = await finalizePhysical(raw);
+        } catch (error) {
+          entry.terminal = true;
+          const failures = await abortEntries(error, "result-kind", entry);
+          throw batchFailure(error, failures);
+        }
+        try {
+          output.push(await processRows(raw, result));
+          entry.terminal = true;
+        } catch (error) {
+          entry.terminal = true;
+          const failures = await abortEntries(error, "query-map", entry);
+          throw batchFailure(error, failures);
+        }
       }
       return output as { readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> };
     },
