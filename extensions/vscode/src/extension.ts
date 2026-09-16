@@ -16,9 +16,9 @@ import {
   type ProjectEvidence,
 } from "./project.js";
 
-const EXTENSION_VERSION = "0.1.0-rc.1";
-const LANGUAGE_SERVER_VERSION = "0.1.0-rc.1";
-const CLI_VERSION = "0.1.0-rc.1";
+const EXTENSION_VERSION = "0.1.0-rc.2";
+const LANGUAGE_SERVER_VERSION = "0.1.0-rc.2";
+const CLI_VERSION = "0.1.0-rc.2";
 const SERVER_ID = "sqlbraid-language-server";
 
 function nodeEnvironment(): NodeJS.ProcessEnv {
