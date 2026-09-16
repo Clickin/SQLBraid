@@ -42,7 +42,8 @@ transaction/savepoint span을 만들지 않습니다.
 안정화된 `db.client.operation.duration` histogram은 초 단위를 사용하며
 권장 explicit boundary
 `0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10`을 사용합니다. attribute는
-안정적인 database identity 필드와 bulk의 `db.operation.batch.size`입니다.
+안정적인 database identity 필드만 사용합니다. 실패 sample에는 제한된
+`error.type`도 포함하며 bulk의 `db.operation.batch.size`는 span 전용입니다.
 operation ID, fingerprint, SQL text와 bind 값은 metric attribute가 아닙니다.
 
 SQLBraid dialect는 다음처럼 `db.system.name`으로 매핑됩니다.
@@ -57,8 +58,10 @@ SQLBraid dialect는 다음처럼 `db.system.name`으로 매핑됩니다.
 | `mssql` | `microsoft.sql_server` |
 
 알 수 없는 dialect는 `database.systemName`이 지정되지 않은 경우
-`other_sql`을 사용합니다. span name은 같은 low-cardinality fallback을
-따르며 SQL을 파싱해 operation name이나 target을 만들지 않습니다.
+`other_sql`을 사용합니다. span name은 설정된
+`database.namespace`, `database.serverAddress`, 마지막으로 system name
+순서를 사용합니다. SQL을 파싱해 operation name이나 target을 만들지
+않습니다.
 
 ## Privacy와 error
 
@@ -100,6 +103,25 @@ Existing driver tracing:
 실제 통합 테스트가 없으면 `pg`, `mysql2` 또는 다른 driver auto-instrumentation과
 parent/child 관계를 주장하지 않습니다.
 
+## Observer 순서와 batch
+
+observer는 등록 순서대로 순차 실행됩니다. 제한된 RC 구성에서는
+OpenTelemetry observer를 마지막에 등록하세요.
+
+```ts
+const db = createPgPoolDatabase(pool, {
+  observers: [auditObserver, slowQueryObserver, createOpenTelemetryObserver()],
+});
+```
+
+OpenTelemetry 뒤에 등록한 observer가 `query:mapped` 또는 `bulk:result`에서
+실패하면 telemetry가 성공으로 span을 종료한 뒤이므로 나중의 error event가
+span을 다시 열 수 없습니다. OpenTelemetry를 먼저 등록하는 순서는
+지원하지 않습니다. `db.batch()`의 각 terminal event는 자신의 operation만
+종료하며 `batchId`로 sibling 실패를 추론하지 않습니다. bulk transport가
+dialect identity를 제공하지 않으면 `database.systemName`을 설정하고, 그렇지
+않으면 이전 query에서 identity를 추론하지 않고 `other_sql`을 사용합니다.
+
 ## Slow-query 조사
 
 OTel histogram으로 latency를 감지하고 일반 SQLBraid observer로 physical
@@ -118,7 +140,7 @@ const slowQueries: ExecutionObserver = {
 };
 
 const db = createPgPoolDatabase(pool, {
-  observers: [createOpenTelemetryObserver(), slowQueries],
+  observers: [slowQueries, createOpenTelemetryObserver()],
 });
 ```
 

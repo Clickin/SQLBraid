@@ -23,10 +23,11 @@ import type {
   QueryExecutor,
   QueryReadyEvent,
   QueryResultEvent,
+  RenderedBulk,
   RenderedStatement,
   StatementBindingAdapter,
 } from "@sqlbraid/core";
-import { createStatementBindingDescription } from "@sqlbraid/core";
+import { createBulkBindingDescription, createStatementBindingDescription } from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
 import { sql } from "@sqlbraid/template";
 
@@ -38,6 +39,8 @@ interface RecordingSpan {
   readonly attributes: Record<string, unknown>;
   readonly statuses: { readonly code: SpanStatusCode }[];
   readonly exceptionCalls: unknown[];
+  startTime?: readonly [number, number];
+  endTime?: readonly [number, number];
   endCount: number;
 }
 
@@ -55,13 +58,19 @@ interface Recording {
 
 let recording: Recording;
 
-function spanFor(name: string, kind: SpanKind | undefined, attributes?: Record<string, unknown>): Span {
+function spanFor(
+  name: string,
+  kind: SpanKind | undefined,
+  attributes?: Record<string, unknown>,
+  startTime?: readonly [number, number],
+): Span {
   const state: RecordingSpan = {
     name,
     kind,
     attributes: {},
     statuses: [],
     exceptionCalls: [],
+    startTime,
     endCount: 0,
   };
   Object.assign(state.attributes, attributes);
@@ -92,8 +101,9 @@ function spanFor(name: string, kind: SpanKind | undefined, attributes?: Record<s
       return span;
     },
     updateName() { return span; },
-    end() {
+    end(endTime?: readonly [number, number]) {
       if (recording.throwOnSpanMutation) throw new Error("telemetry span mutation failed");
+      state.endTime = endTime;
       state.endCount += 1;
     },
     isRecording: () => true,
@@ -107,9 +117,16 @@ function spanFor(name: string, kind: SpanKind | undefined, attributes?: Record<s
 
 function installProviders(): void {
   const tracer: Tracer = {
-    startSpan(name: string, options?: { readonly kind?: SpanKind; readonly attributes?: Record<string, unknown> }) {
+    startSpan(
+      name: string,
+      options?: {
+        readonly kind?: SpanKind;
+        readonly attributes?: Record<string, unknown>;
+        readonly startTime?: readonly [number, number];
+      },
+    ) {
       if (recording.throwOnSpanAccess) throw new Error("telemetry tracer unavailable");
-      return spanFor(name, options?.kind, options?.attributes);
+      return spanFor(name, options?.kind, options?.attributes, options?.startTime);
     },
     startActiveSpan() {
       throw new Error("unused");
@@ -302,7 +319,7 @@ test("maps every SQLBraid dialect to a low-cardinality database identity", () =>
       execution: { ...source.execution, dialectId },
     });
     observer.onEvent(mapped(operationId));
-    assert.equal(recording.spans[index]?.name, systemName);
+    assert.equal(recording.spans[index]?.name, "billing");
     assert.equal(recording.spans[index]?.attributes["db.system.name"], systemName);
     assert.equal(recording.spans[index]?.attributes["db.namespace"], "billing");
     assert.equal(recording.spans[index]?.attributes["server.address"], "db.internal");
@@ -366,6 +383,97 @@ test("tracks real runtime rows, commands, prepared execution, and mapping failur
   assert.equal(recording.measurements.length, 5);
   assert.equal(recording.spans.filter(({ statuses }) => statuses.some(({ code }) => code === SpanStatusCode.ERROR)).length, 2);
   assert.equal(recording.spans.filter(({ endCount }) => endCount === 1).length, 5);
+});
+
+test("tracks real runtime routine calls, cardinality errors, and every batch item", async () => {
+  const observer = createOpenTelemetryObserver();
+  const executor: QueryExecutor = {
+    statementBinding: Object.freeze({
+      id: "otel-runtime-c3",
+      describe(statement, context) {
+        return createStatementBindingDescription(statement, context, {
+          adapterId: "otel-runtime-c3",
+          transport: "text-positional",
+          placeholder: (index) => `$${index}`,
+          reuse: { effective: "simple", owner: "sqlbraid" },
+        });
+      },
+    }),
+    async query<Row>(rendered: RenderedStatement) {
+      const text = rendered.segments.join("");
+      const rows = text.includes("MANY") ? [{ value: 1 }, { value: 2 }] : [{ value: 1 }];
+      return { kind: "rows", rows: rows as unknown as readonly Row[] };
+    },
+    async *stream<Row>(): AsyncGenerator<Row> {},
+    async call(): Promise<DriverRoutineResult> {
+      return { output: { refreshed: true }, resultSets: [] };
+    },
+  };
+  const db = createDatabase(executor, { observers: [observer] });
+
+  const routine = await db.call(sql.call`CALL refresh_users()`);
+  assert.deepEqual(routine.output, { refreshed: true });
+  await assert.rejects(() => db.one(sql.rows`SELECT MANY`), (error: unknown) => (
+    error instanceof Error && error.name === "DatabaseCardinalityError"
+  ));
+  const batch = await db.batch([sql.rows`SELECT 1`, sql.rows`SELECT 2`] as const);
+  assert.equal(batch.length, 2);
+
+  assert.equal(recording.spans.length, 4);
+  assert.equal(recording.measurements.length, 4);
+  assert.equal(recording.spans.filter(({ endCount }) => endCount === 1).length, 4);
+  assert.equal(recording.spans[0]?.attributes["sqlbraid.result.kind"], "call");
+  const cardinalitySpan = recording.spans.find(({ statuses }) => statuses.some(({ code }) => code === SpanStatusCode.ERROR));
+  assert.ok(cardinalitySpan);
+  assert.equal(cardinalitySpan?.attributes["error.type"], "Error");
+});
+
+test("requires OTel last so late mapped and bulk observers turn spans into failures", async () => {
+  const lateMapped = new Error("late mapped observer failed");
+  const lateBulk = new Error("late bulk observer failed");
+  const binding: StatementBindingAdapter = Object.freeze({
+    id: "otel-ordering-test",
+    describe(statement, context) {
+      return createStatementBindingDescription(statement, context, {
+        adapterId: "otel-ordering-test",
+        transport: "text-positional",
+        placeholder: (index) => `$${index}`,
+        reuse: { effective: "simple", owner: "sqlbraid" },
+      });
+    },
+    describeBulk(bulk: RenderedBulk, context) {
+      return createBulkBindingDescription(bulk, context, {
+        adapterId: "otel-ordering-test",
+        transport: "text-positional",
+        placeholder: (index) => `$${index}`,
+        reuse: { effective: "simple", owner: "sqlbraid" },
+      });
+    },
+  });
+  const executor: QueryExecutor = {
+    statementBinding: binding,
+    async query<Row>() { return { kind: "rows", rows: [{ value: 1 }] as readonly Row[] }; },
+    async bulk(): Promise<{ inputCount: number; affectedRows: number; executionMode: "native-bulk" }> {
+      return { inputCount: 1, affectedRows: 1, executionMode: "native-bulk" };
+    },
+    async *stream<Row>(): AsyncGenerator<Row> {},
+    async call(): Promise<DriverRoutineResult> { return { output: {}, resultSets: [] }; },
+  };
+  const lateObserver = {
+    async onEvent(event: ExecutionEvent) {
+      if (event.type === "query:mapped") throw lateMapped;
+      if (event.type === "bulk:result") throw lateBulk;
+    },
+  };
+  const observer = createOpenTelemetryObserver();
+  const db = createDatabase(executor, { observers: [lateObserver, observer] });
+
+  await assert.rejects(() => db.execute(sql.rows`SELECT 1`), (error) => error === lateMapped);
+  assert.equal(recording.spans[0]?.endCount, 1);
+  assert.deepEqual(recording.spans[0]?.statuses, [{ code: SpanStatusCode.ERROR }]);
+  await assert.rejects(() => db.bulk([1], (value) => sql.command`UPDATE users SET value = ${value}`), (error) => error === lateBulk);
+  assert.equal(recording.spans[1]?.endCount, 1);
+  assert.deepEqual(recording.spans[1]?.statuses, [{ code: SpanStatusCode.ERROR }]);
 });
 
 test("keeps bind values and literalized SQL out of telemetry", () => {
@@ -440,15 +548,64 @@ test("records failed status without exception messages or fabricated response co
   assert.deepEqual(recording.spans[0].exceptionCalls, []);
   assert.equal(JSON.stringify(recording.spans).includes(secret), false);
   assert.equal(recording.measurements.length, 1);
+  assert.equal(recording.measurements[0]?.attributes["error.type"], "BRAID_RESULT_KIND");
 });
 
-test("closes interleaved batch siblings and one bulk operation exactly once", () => {
+test("bounds error classification and keeps error attributes off successful metrics", () => {
+  const observer = createOpenTelemetryObserver();
+  observer.onEvent(ready("unknown"));
+  const custom = Object.assign(new Error(secret), { code: "BRAID_SECRET_INTERNAL" });
+  observer.onEvent(failure("unknown", { error: custom }));
+  assert.equal(recording.spans[0]?.attributes["error.type"], "Error");
+  assert.equal(recording.measurements[0]?.attributes["error.type"], "Error");
+
+  observer.onEvent(ready("plain"));
+  observer.onEvent(failure("plain", { error: { code: "99999", message: secret } }));
+  assert.equal(recording.spans[1]?.attributes["error.type"], "object");
+  assert.equal(recording.measurements[1]?.attributes["error.type"], "object");
+
+  observer.onEvent(ready("hostile"));
+  let codeReads = 0;
+  const hostile = {};
+  Object.defineProperty(hostile, "code", {
+    get() {
+      codeReads += 1;
+      throw new Error(secret);
+    },
+  });
+  observer.onEvent(failure("hostile", { error: hostile }));
+  assert.equal(recording.spans[2]?.attributes["error.type"], "unknown_error");
+  assert.equal(recording.measurements[2]?.attributes["error.type"], "unknown_error");
+  assert.equal(codeReads, 1);
+
+  observer.onEvent(ready("success"));
+  observer.onEvent(mapped("success"));
+  assert.equal("error.type" in (recording.measurements[3]?.attributes ?? {}), false);
+});
+
+test("uses one explicit timestamp pair for span and metric duration", async () => {
+  const observer = createOpenTelemetryObserver();
+  observer.onEvent(ready("timed"));
+  await new Promise((resolve) => setTimeout(resolve, 3));
+  observer.onEvent(mapped("timed"));
+  const span = recording.spans[0];
+  assert.ok(span?.startTime);
+  assert.ok(span?.endTime);
+  assert.ok(
+    (span?.endTime?.[0] ?? 0) > (span?.startTime?.[0] ?? 0)
+      || (span?.endTime?.[0] === span?.startTime?.[0] && (span?.endTime?.[1] ?? 0) >= (span?.startTime?.[1] ?? 0)),
+  );
+  assert.ok((recording.measurements[0]?.value ?? 0) >= 0);
+});
+
+test("closes only the batch operation named by each terminal event", () => {
   const observer = createOpenTelemetryObserver({ queryText: true });
   observer.onEvent(ready("batch-a", { batchId: "batch-1" }));
   observer.onEvent(ready("batch-b", { batchId: "batch-1" }));
   observer.onEvent(ready("other"));
   observer.onEvent(mapped("other"));
   observer.onEvent(failure("batch-a", { batchId: "batch-1" }));
+  assert.equal(recording.spans.find(({ attributes }) => attributes["sqlbraid.operation.id"] === "batch-b")?.endCount, 0);
   observer.onEvent(failure("batch-b", { batchId: "batch-1" }));
   observer.onEvent(mapped("batch-a"));
   observer.onEvent(bulkReady("bulk-1"));
@@ -459,10 +616,32 @@ test("closes interleaved batch siblings and one bulk operation exactly once", ()
   assert.equal(recording.measurements.length, 4);
   const bulkSpan = recording.spans.find(({ attributes }) => attributes["sqlbraid.operation.id"] === "bulk-1");
   assert.equal(bulkSpan?.attributes["db.operation.batch.size"], 2);
-  const bulkMeasurement = recording.measurements.find(({ attributes }) => attributes["db.operation.batch.size"] === 2);
+  const bulkMeasurement = recording.measurements.at(-1);
   assert.ok(bulkMeasurement);
-  assert.equal("sqlbraid.operation.id" in bulkMeasurement.attributes, false);
+  assert.equal("db.operation.batch.size" in (bulkMeasurement?.attributes ?? {}), false);
+  assert.equal("sqlbraid.operation.id" in (bulkMeasurement?.attributes ?? {}), false);
   assert.equal(JSON.stringify(recording).includes(secret), false);
+});
+
+test("uses explicit bulk identity and never infers it from another query", () => {
+  const configured = createOpenTelemetryObserver({ database: { systemName: "billing-db" } });
+  configured.onEvent(ready("query", { execution: { ...ready("query").execution, dialectId: "postgres" } }));
+  configured.onEvent(mapped("query"));
+  configured.onEvent(bulkReady("configured-bulk"));
+  configured.onEvent(bulkResult("configured-bulk"));
+  assert.equal(recording.spans.at(-1)?.name, "billing-db");
+
+  trace.disable();
+  metrics.disable();
+  recording.spans.length = 0;
+  recording.measurements.length = 0;
+  installProviders();
+  const generic = createOpenTelemetryObserver();
+  generic.onEvent(ready("query-2", { execution: { ...ready("query-2").execution, dialectId: "postgres" } }));
+  generic.onEvent(mapped("query-2"));
+  generic.onEvent(bulkReady("generic-bulk"));
+  generic.onEvent(bulkResult("generic-bulk"));
+  assert.equal(recording.spans.at(-1)?.name, "other_sql");
 });
 
 test("handles calls and unsupported stream or transaction events without inventing spans", () => {

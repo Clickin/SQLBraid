@@ -51,6 +51,14 @@ Observer는 등록 순서대로 순차 실행됩니다. 이벤트를 검사하�
 
 SQLBraid는 기본적으로 바인드 값을 기록하지 않습니다. 정제 및 보존 정책은 애플리케이션이 소유합니다.
 
+`db.batch()`에서는 `query:ready`를 발생시킨 모든 item이 preflight, lease
+획득, driver, release 또는 observer 실패로 중단되더라도 정확히 하나의
+terminal `query:mapped` 또는 `query:error`를 받습니다. 중단된 sibling은
+기존 error payload에서 `BRAID_BATCH_ABORTED`를 사용하고 자신의 physical
+실행이 시작되고 완료되었는지를 실제 상태대로 보고합니다. driver나 mapper로
+보내지 않으며 error observer가 throw해도 나머지 terminal error 전달은
+계속됩니다.
+
 stream의 `stream:end`는 어댑터가 드라이버 리소스를 close/drain/cancel하고
 runtime이 물리적 lease를 반환하거나 폐기한 뒤에만 발생합니다. Observer는
 정리 실패를 관찰할 수 있지만 안전하지 않은 lease를 재사용 가능하게 만들 수
