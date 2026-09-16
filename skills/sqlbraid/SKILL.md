@@ -16,7 +16,7 @@ Use SQL directly. Do not translate SQLBraid code into an ORM or query-builder DS
 
 ## Write queries with explicit result kinds
 
-Use the dialect-configured `sql` export already used by the project, for example `sqlbraid/postgres`.
+Use the dialect-configured `sql` export already used by the project, for example the combined PostgreSQL facade at `sqlbraid/pg`.
 
 - Row-producing SQL: `sql.rows<T>`.
 - DML or DDL that returns command metadata: `sql.command`.
