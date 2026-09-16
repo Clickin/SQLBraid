@@ -15,12 +15,21 @@ for (const file of files.filter((file) => file.endsWith(".html"))) {
 }
 assert.ok(pages.has("index.html"), "Documentation build must produce the homepage.");
 assert.ok(pages.has("404.html"), "Documentation build must produce a 404 page.");
+assert.ok(await stat(join(output, "llms.txt")).catch(() => undefined), "Documentation build must produce llms.txt.");
+const llms = await readFile(join(output, "llms.txt"), "utf8");
+assert.ok(llms.includes(`https://clickin.github.io${basePath}`), "llms.txt must target its own documentation snapshot.");
+
 const source = fileURLToPath(new URL("./src/content/docs/", import.meta.url));
 for (const file of await readdir(source, { recursive: true })) {
   if (!/\.mdx?$/u.test(file)) continue;
   const route = file.replace(/\.mdx?$/u, "");
   const page = route === "index" || route.endsWith("/index") ? `${route}.html` : route === "404" ? "404.html" : `${route}/index.html`;
   assert.ok(pages.has(page), `Missing built documentation page: ${file}`);
+  // docsLoader collapses nested index pages (for example ko/index.md) to the
+  // directory content ID, while the root index remains the "index" ID.
+  const rawRoute = route !== "index" && route.endsWith("/index") ? route.slice(0, -"/index".length) : route;
+  const raw = `${rawRoute}.md`;
+  assert.ok(await stat(join(output, raw)).catch(() => undefined), `Missing raw Markdown documentation page: ${raw}`);
 }
 let checked = 0;
 for (const [file, { text }] of pages) {
@@ -42,4 +51,4 @@ for (const [file, { text }] of pages) {
     checked += 1;
   }
 }
-console.info(`PASS ${pages.size} built documentation pages and ${checked} local links/anchors`);
+console.info(`PASS ${pages.size} built documentation pages, raw Markdown, llms.txt, and ${checked} local links/anchors`);
