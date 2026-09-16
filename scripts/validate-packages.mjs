@@ -258,6 +258,7 @@ try {
   ].join("\n"));
   await run(process.execPath, ["runtime.mjs"], boundaryConsumer);
   console.info("PASS packed runtime-only npm consumer without metadata, codegen, tooling, CLI, LSP or editor");
+  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", `tedious@${workspace.devDependencies.tedious}`], boundaryConsumer);
   const metadataAbsentImports = [
     'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
     'import { createMysqlInspector } from "@sqlbraid/mysql/inspector";',
@@ -269,6 +270,7 @@ try {
   await writeFile(join(boundaryConsumer, "metadata-absent.mjs"), [
     ...metadataAbsentImports,
     'import assert from "node:assert/strict";',
+    'await assert.rejects(import("@sqlbraid/metadata"), { code: "ERR_MODULE_NOT_FOUND" });',
     'for (const inspector of [createPostgresInspector, createMysqlInspector, createMariaDbInspector, createSqliteInspector, createOracleInspector, createMssqlInspector]) assert.equal(typeof inspector, "function");',
   ].join("\n"));
   await run(process.execPath, ["metadata-absent.mjs"], boundaryConsumer);
