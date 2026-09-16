@@ -37,7 +37,8 @@ writeFileSync(join(consumer, "package.json"), JSON.stringify({
   type: "module",
   dependencies,
 }, null, 2));
-execFileSync("npm", ["install", "--engine-strict", "--no-audit", "--no-fund"], {
+const npm = process.env.SQLBRAID_NPM ?? "npm";
+execFileSync(npm, ["install", "--engine-strict", "--no-audit", "--no-fund"], {
   cwd: consumer,
   stdio: "inherit",
   env: { ...process.env, npm_config_engine_strict: "true" },
