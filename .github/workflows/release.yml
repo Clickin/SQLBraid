@@ -117,7 +117,7 @@ jobs:
       - name: Export exact compatibility matrix
         id: compatibility-matrix
         run: |
-          node -e 'const fs=require("node:fs"); const manifest=JSON.parse(fs.readFileSync("support/runtime-compatibility.json","utf8")); process.stdout.write(`matrix=${JSON.stringify(manifest.cells.map(({id,runtime,driver})=>({id,node:runtime.version,driver:driver?.package??null,driver_version:driver?.version??null})))}\n`);' >> "$GITHUB_OUTPUT"
+          node -e 'const fs=require("node:fs"); const manifest=JSON.parse(fs.readFileSync("support/runtime-compatibility.json","utf8")); process.stdout.write(`matrix=${JSON.stringify(manifest.cells.filter(({releaseBlocking})=>releaseBlocking).map(({id,runtime,driver})=>({id,node:runtime.version,driver:driver?.package??null,driver_version:driver?.version??null})))}\n`);' >> "$GITHUB_OUTPUT"
       - name: Preserve release preparation
         uses: actions/upload-artifact@v7.0.1
         with:
