@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { getCollection } from "astro:content";
+import { getCollection, type CollectionEntry } from "astro:content";
 import { docsBasePath, rawMarkdownUrl } from "../lib/llm-docs";
 
 const sections = [
@@ -12,7 +12,7 @@ const sections = [
   ["Release", "release/"],
 ] as const;
 
-function item(entry: Awaited<ReturnType<typeof getCollection<"docs">>>[number], base: string) {
+function item(entry: CollectionEntry<"docs">, base: string) {
   const description = typeof entry.data.description === "string" && entry.data.description.trim()
     ? `: ${entry.data.description.trim()}`
     : "";
