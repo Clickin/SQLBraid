@@ -952,5 +952,37 @@
   "mysql.execution.rc-isolation": {
     "file": "tests/db/mysql/capabilities.test.ts",
     "title": "mysql.rc transaction isolation has native visibility and locking semantics"
+  },
+  "better-sqlite3.sql.native-transparency": {
+    "file": "tests/db/sqlite/first-party-capabilities.test.ts",
+    "title": "better-sqlite3.sql.native-transparency"
+  },
+  "better-sqlite3.numeric.exact-integer": {
+    "file": "tests/db/sqlite/first-party-capabilities.test.ts",
+    "title": "better-sqlite3.numeric.exact-integer"
+  },
+  "better-sqlite3.data.binary": {
+    "file": "tests/db/sqlite/first-party-capabilities.test.ts",
+    "title": "better-sqlite3.data.binary"
+  },
+  "better-sqlite3.execution.transaction": {
+    "file": "tests/db/sqlite/first-party-capabilities.test.ts",
+    "title": "better-sqlite3.execution.transaction"
+  },
+  "libsql.sql.native-transparency": {
+    "file": "tests/db/sqlite/first-party-capabilities.test.ts",
+    "title": "libsql.sql.native-transparency"
+  },
+  "libsql.numeric.exact-integer": {
+    "file": "tests/db/sqlite/first-party-capabilities.test.ts",
+    "title": "libsql.numeric.exact-integer"
+  },
+  "libsql.data.binary": {
+    "file": "tests/db/sqlite/first-party-capabilities.test.ts",
+    "title": "libsql.data.binary"
+  },
+  "libsql.execution.transaction": {
+    "file": "tests/db/sqlite/first-party-capabilities.test.ts",
+    "title": "libsql.execution.transaction"
   }
 }
