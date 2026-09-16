@@ -380,6 +380,10 @@ jobs:
           SQLBRAID_VSIX_OUTPUT: ${{ runner.temp }}/sqlbraid-release-artifacts/sqlbraid.vsix
           SQLBRAID_VSIX_INPUT: ${{ inputs.release_mode == 'stage' && inputs.prior_run_id != '' && format('{0}/sqlbraid-release-artifacts/sqlbraid.vsix', runner.temp) || '' }}
         run: pnpm run pack:check
+      - name: Run isolated facade and API-only consumer gates
+        env:
+          SQLBRAID_PACK_INPUT_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
+        run: pnpm run test:consumer:gates
       - name: Preserve validated candidate
         run: tar -czf "$RUNNER_TEMP/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP" sqlbraid-release-artifacts
       - uses: actions/upload-artifact@v7.0.1
