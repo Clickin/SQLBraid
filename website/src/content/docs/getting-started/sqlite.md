@@ -5,6 +5,23 @@ description: Run your first SQLBraid query with Node's built-in SQLite driver.
 
 This path uses Node `>=22.18.0` and `node:sqlite`; no database server is required. The first query is a plain tagged template and needs no SQLBraid compiler. The second adds dynamic `@braid` and uses the shipped lowering command.
 
+## Choose the SQLite adapter
+
+The SQLite dialect is shared, but the physical adapter is selected by subpath:
+
+| Subpath | Physical boundary | Important limits |
+| --- | --- | --- |
+| `sqlbraid/node-sqlite` | Node `DatabaseSync` / `StatementSync` | synchronous physical calls; exact INTEGER strings; native `iterate()` stream |
+| `sqlbraid/better-sqlite3` | better-sqlite3 statements | synchronous and event-loop blocking; statement-local `safeIntegers(true)`; native iteration |
+| `sqlbraid/libsql` | `@libsql/client` | requires `intMode: "string"`; interactive transactions; no pinned session or stream fallback |
+| `sqlbraid/sqlite-wasm` | SQLite WASM OO1 | OO1 statement ownership; async-generator adaptation for streams |
+| `sqlbraid/d1` | Cloudflare D1 | prepared binds; no streaming or callback transactions |
+
+The public `Database` API remains async for every adapter. `Awaitable<T>` is
+only the physical `QueryExecutor` SPI type that lets synchronous adapters
+return plain results without Promise wrappers; it does not make
+better-sqlite3 non-blocking.
+
 :::note Verification status
 The [runtime and driver support matrix](/SQLBraid/reference/support/) records
 labels for the exact database/driver/profile/runtime/capability tuple and its
@@ -142,3 +159,36 @@ strings and proven bigint transport are bind details, while `undefined` ordinary
 IN values fail before acquisition with `BRAID_BIND_VALUE_UNSUPPORTED` and
 `null` is SQL `NULL`. Arrays and other nested/container values remain
 unclassified unless a storage-class-specific test proves them.
+
+### better-sqlite3
+
+```ts
+import Database from "better-sqlite3";
+import { createBetterSqlite3Database, sql } from "sqlbraid/better-sqlite3";
+
+const native = new Database(":memory:");
+const db = createBetterSqlite3Database(native);
+const rows = await db.all(sql.rows`SELECT 1 AS value`);
+```
+
+SQLBraid applies `safeIntegers(true)` per statement and exposes exact INTEGER
+values as decimal strings. `iterate()` is the real stream primitive and bulk
+uses a prepared loop. Native calls block the event loop; use a worker when
+that matters. Routines and active cancellation are unsupported.
+
+### libSQL
+
+```ts
+import { createClient } from "@libsql/client";
+import { createLibsqlDatabase, sql } from "sqlbraid/libsql";
+
+const client = createClient({ url: "file:app.db", intMode: "string" });
+const db = createLibsqlDatabase(client, { intMode: "string" });
+const rows = await db.all(sql.rows`SELECT 1 AS value`);
+```
+
+The explicit `intMode: "string"` option is required because SQLBraid cannot
+infer an opaque client's integer mode. Transactions use libSQL's interactive
+transaction handle; ordinary calls do not claim one pinned session. The
+adapter uses native `batch()` for bulk and rejects `db.stream()` with
+`BRAID_STREAM_UNSUPPORTED` rather than buffering a complete result.

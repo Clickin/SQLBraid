@@ -46,6 +46,7 @@
     "test:browser": "node scripts/test-browser.mjs",
     "test:d1": "node scripts/test-d1.mjs",
     "benchmark:bulk-execution": "node scripts/bulk-execution-benchmark.mjs",
+    "benchmark:sync-boundary": "node scripts/sync-boundary-benchmark.mjs",
     "benchmark:value-fidelity": "node --expose-gc scripts/value-fidelity-benchmark.mjs --profile full",
     "benchmark:value-fidelity:smoke": "node --expose-gc scripts/value-fidelity-benchmark.mjs --profile smoke",
     "benchmark:release-smoke": "pnpm run benchmark:bulk-execution && pnpm run benchmark:value-fidelity:smoke",

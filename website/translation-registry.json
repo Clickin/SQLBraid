@@ -13,7 +13,7 @@
       "source": "website/src/content/docs/agents/driver-author.md",
       "translation": "website/src/content/docs/ko/agents/driver-author.md",
       "translationOf": "website/src/content/docs/agents/driver-author.md",
-      "sourceDigest": "099bd3593543a0c2d27bd48e9d01511861a70c5530325114e43a27f5aaa70b5e"
+      "sourceDigest": "0015850a263fbef46daf45a5396c02253c91da3aa3dfd2eaa375b9ca0504c9f3"
     },
     {
       "source": "website/src/content/docs/agents/lsp.md",
@@ -127,7 +127,7 @@
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "1a9d8027adf56d753dc20b0ed53408bd315ca54055be2c13022a2ac5a9c063c1"
+      "sourceDigest": "e2b033565bcd91b5ac33eebdcd47a2011eef9930eee42483f41b760b9a18dff9"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",
@@ -193,7 +193,7 @@
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "744f57aa8078926e3a0dd7a094ddbe7c093af5107681b3813868c0fae87d22f1"
+      "sourceDigest": "5c798690799a949c3ff1eab678b2ca7a7fca9ffeafa8a2f574682993b2fe7dfd"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
@@ -247,7 +247,7 @@
       "source": "website/src/content/docs/runtime/streaming.md",
       "translation": "website/src/content/docs/ko/runtime/streaming.md",
       "translationOf": "website/src/content/docs/runtime/streaming.md",
-      "sourceDigest": "5e8f78de74cc20eb60f33c93b4c1529e60af01cdd7dbac154218c60409b8953b"
+      "sourceDigest": "e2ff79c0f50cc21cf7c7276a5e8f7b99d7eb2b10058c86cb23c4b20afc7b04b9"
     },
     {
       "source": "website/src/content/docs/runtime/transaction-profiles.md",
@@ -259,7 +259,7 @@
       "source": "website/src/content/docs/runtime/transactions.md",
       "translation": "website/src/content/docs/ko/runtime/transactions.md",
       "translationOf": "website/src/content/docs/runtime/transactions.md",
-      "sourceDigest": "6963f913eac26752c93f6dd5409c5f9d5af90804ae0380b2991952e4ecf8c81e"
+      "sourceDigest": "4cddcd40008ae2a41deb74f79404b38580e16d62c529c7e269b2df219d0a7277"
     }
   ]
 }

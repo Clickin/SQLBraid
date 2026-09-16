@@ -2,6 +2,20 @@
 
 This guide is for a custom `QueryExecutor`, `ConnectionProvider`, or first-party-style adapter. It documents the current phase-J SPI; it is not a support or release claim. The last exact-SHA verification was revision `8da8167e027320fcc9bb2aac16b0903c64147940` (Runtime [34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046), Docs [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102), Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)). The current tree requires new evidence.
 
+`QueryExecutor` is sync-aware only at the physical boundary:
+
+```ts
+type Awaitable<T> = T | PromiseLike<T>;
+```
+
+`query`, `call`, `bulk`, and transaction-control methods may return an
+`Awaitable`. The public `Database` API remains asynchronous, and
+`ConnectionProvider.acquire()` remains a `Promise`. This lets synchronous
+drivers avoid a needless Promise wrapper without exposing a synchronous
+application API. `stream()` remains `AsyncIterable`; adapt a synchronous
+iterator with a thin async generator so cleanup and scope semantics stay
+unchanged.
+
 ## 1. Preserve the logical statement boundary
 
 Core/template rendering returns one immutable `RenderedStatement`:
@@ -85,7 +99,7 @@ interface QueryExecutor {
     statement: RenderedStatement,
     binding?: StatementBindingDescription,
     options?: ExecutionOptions,
-  ): Promise<QueryExecutionResult<Row>>;
+  ): Awaitable<QueryExecutionResult<Row>>;
   stream<Row>(
     statement: RenderedStatement,
     binding?: StatementBindingDescription,
@@ -95,18 +109,18 @@ interface QueryExecutor {
     statement: RenderedStatement,
     binding?: StatementBindingDescription,
     options?: ExecutionOptions,
-  ): Promise<DriverRoutineResult>;
+  ): Awaitable<DriverRoutineResult>;
   bulk?(
     bulk: RenderedBulk,
     binding: BulkBindingDescription,
     options?: ExecutionOptions,
-  ): Promise<BulkExecutionResult>;
-  begin?(options?: TransactionOptions): Promise<void>;
-  commit?(): Promise<void>;
-  rollback?(): Promise<void>;
-  savepoint?(name: string): Promise<void>;
-  rollbackTo?(name: string): Promise<void>;
-  releaseSavepoint?(name: string): Promise<void>;
+  ): Awaitable<BulkExecutionResult>;
+  begin?(options?: TransactionOptions): Awaitable<void>;
+  commit?(): Awaitable<void>;
+  rollback?(): Awaitable<void>;
+  savepoint?(name: string): Awaitable<void>;
+  rollbackTo?(name: string): Awaitable<void>;
+  releaseSavepoint?(name: string): Awaitable<void>;
 }
 ```
 
@@ -313,3 +327,24 @@ executable database/driver/runtime/profile evidence for support labels. A Bun
 adapter may support several user-selected dialects without auto-detecting one;
 Deno can use an existing adapter where its public driver API works. Neither
 statement creates a new dialect or promotes an unverified tuple.
+
+## 7. SQLite driver notes
+
+SQLite remains one dialect with driver-specific transports. The synchronous
+`node:sqlite` and `better-sqlite3` adapters return plain values from physical
+query, bulk, and transaction-control methods; their public databases remain
+async. `better-sqlite3` uses statement-local `safeIntegers(true)`, native
+`iterate()` for streams, and a prepared loop for bulk. Those calls still block
+the JavaScript event loop; `Awaitable` does not provide background execution.
+
+The libSQL adapter requires an explicit `{ intMode: "string" }` assertion before
+constructing the database. It classifies results with `columns`, `rows`,
+`rowsAffected`, and `lastInsertRowid`, uses `client.batch()` for bulk, and
+routes an active transaction through the documented interactive Transaction
+handle. Ordinary client calls do not prove a pinned session, so
+`session.pinned` remains unsupported. Without a documented incremental cursor,
+`statement.stream` is unsupported rather than implemented by buffering.
+
+These are implementation facts, not broad support labels. Record the exact
+driver version, runtime, profile, and transport evidence separately; local
+libSQL evidence does not certify remote HTTP/WebSocket clients.

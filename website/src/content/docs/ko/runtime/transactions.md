@@ -99,6 +99,13 @@ Transaction이 없으면 `BRAID_TX_UNSUPPORTED`를 사용합니다. 중첩 명�
 `read-uncommitted`를 문서화된 `read-committed` 동작으로 매핑할 수 있습니다.
 SQLite, D1 및 다른 driver는 실제 transport가 honor하는 조합만 노출합니다.
 
+libSQL adapter는 ordinary client call에 `BEGIN`/`COMMIT`을 보내는 대신
+interactive `Transaction` handle을 통해 transaction 연속성을 보존합니다.
+`readOnly: true`는 libSQL의 문서화된 read mode로 매핑하지만 portable
+isolation literal은 libSQL transaction mode와 자동으로 동등하지 않으므로
+거부합니다. 일반 libSQL 호출은 pinned session을 보장하지 않으므로
+`session.pinned`는 unsupported입니다.
+
 ## Batch와 bulk
 
 `batch`는 atomic하지 않습니다. 앞선 statement와 mapping 실패 시 뒤의

@@ -23,7 +23,8 @@ const users = await db.all(sql.rows<UserRow>`
 
 Application code installs the unscoped `sqlbraid` facade and imports a
 combined driver+dialect/query subpath such as `sqlbraid/pg`, `sqlbraid/mysql2`,
-`sqlbraid/mariadb`, `sqlbraid/node-sqlite`, `sqlbraid/sqlite-wasm`,
+`sqlbraid/mariadb`, `sqlbraid/node-sqlite`, `sqlbraid/better-sqlite3`,
+`sqlbraid/libsql`, `sqlbraid/sqlite-wasm`,
 `sqlbraid/d1`, `sqlbraid/oracledb`, or `sqlbraid/tedious`. The facade has no implicit
 default dialect; its root exports only common runtime contracts. The granular
 `@sqlbraid/*` packages remain available for custom integrations and tooling.
@@ -187,7 +188,18 @@ dialect  SQL surface, quoting, lexical behavior
 runtime  Node, Bun, Deno, browser, or Worker host
 ```
 
-First-party dialect roots are PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL Server. Driver subpaths include `pg`, `mysql2`, MariaDB Connector/Node.js, `node:sqlite`, SQLite WASM, D1, node-oracledb Thin, and Tedious. A new JavaScript runtime does not require a new dialect or adapter when an existing driver API works.
+First-party dialect roots are PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL Server. Driver subpaths include `pg`, `mysql2`, MariaDB Connector/Node.js, `node:sqlite`, `better-sqlite3`, libSQL, SQLite WASM, D1, node-oracledb Thin, and Tedious. A new JavaScript runtime does not require a new dialect or adapter when an existing driver API works.
+
+SQLite keeps one dialect while exposing driver-specific subpaths:
+`sqlbraid/node-sqlite`, `sqlbraid/better-sqlite3`, `sqlbraid/libsql`,
+`sqlbraid/sqlite-wasm`, and `sqlbraid/d1`. Node `node:sqlite` and
+better-sqlite3 execute synchronously at the physical boundary; the public
+`Database` remains async, and the `Awaitable<T>` SPI type avoids adding
+unnecessary Promise wrappers. Synchronous better-sqlite3 calls still block the
+JavaScript event loop. libSQL requires an explicit `{ intMode: "string" }`
+assertion for exact INTEGER strings, uses its interactive transaction handle
+for transaction continuity, does not claim pinned ordinary sessions, and
+rejects streaming rather than buffering.
 
 Bun's first-party SQL adapter is a single adapter family. The user selects `dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`; the adapter does not auto-detect SQL semantics from a connection. Bun 1.3.14 has no supported active cancellation (`BRAID_CANCEL_UNSUPPORTED`) and stream/routine carriers remain unsupported. Its `result.rows`/`result.command` metadata is guarded by `bun-sql.result-kind-metadata`; for Bun MySQL/MariaDB, an empty `SELECT` and zero-affected DML/DDL are `BRAID_RESULT_KIND_AMBIGUOUS` after execution because the driver reports `command: null` and `affectedRows: 0`, so side effects may already have occurred. Nonempty rows and positive command counts are the supported cases. Deno uses existing first-party driver adapters where their public Node-compatible API works; it does not receive a new Deno-specific dialect. Runtime labels are evidence labels, not promises: Official requires the exact runtime/driver/database/profile tuple in support evidence; otherwise use Compatible, Custom, or Unsupported.
 
@@ -217,7 +229,7 @@ SQLBraid is not an ORM, query-builder-first language, complete SQL parser, unive
 | `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg`; `/inspector` |
 | `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2`; `/inspector` |
 | `@sqlbraid/mariadb` | MariaDB dialect/TypePolicy; `/mariadb`; `/inspector` |
-| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/wasm`, `/d1`; `/inspector` |
+| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1`; `/inspector` |
 | `@sqlbraid/oracle` | Oracle portable dialect/TypePolicy; `/oracledb`; `/inspector` |
 | `@sqlbraid/mssql` | SQL Server portable dialect/TypePolicy; `/tedious`; `/inspector` |
 | `@sqlbraid/bun-sql` | Bun.SQL multi-dialect driver adapter; requires user-selected dialect |

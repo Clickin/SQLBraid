@@ -50,6 +50,8 @@ with `UnsupportedFeatureError`, feature `statement.cancel`, and
 | MySQL / `mysql2` | raw prepared `Execute.stream()` | Preserve prepared/binary execution; drain or discard before lease release. |
 | MariaDB / Connector/Node.js | native stream iterator | Independent MariaDB driver evidence; not inherited from `mysql2`. |
 | SQLite / `node:sqlite` | `StatementSync.iterate()` | Native iterator termination is the cleanup boundary. |
+| SQLite / `better-sqlite3` | `Statement#iterate()` | Synchronous and event-loop blocking; iterator return is the cleanup boundary. |
+| SQLite / libSQL | none in the supported client surface | `BRAID_STREAM_UNSUPPORTED`; do not buffer a complete ResultSet. |
 | SQLite / WASM | OO1 step/reset/finalize | Direct browser/Worker resource; one owner at a time. |
 | Cloudflare D1 | none | `BRAID_STREAM_UNSUPPORTED`; do not paginate to simulate streaming. |
 | Oracle Thin | `ResultSet` | Close every ResultSet; close failure discards the lease. |
