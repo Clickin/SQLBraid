@@ -1,8 +1,8 @@
-# 0.1.0 릴리스 노트
+# 1.0.0-rc.1 릴리스 노트
 
-> 프리릴리스 SQLBraid 표면과 증거 경계를 설명합니다.
+> SQLBraid 1.0 릴리스 후보 표면과 증거 경계를 설명합니다.
 
-이 문서는 프리릴리스 문서이며 npm, GitHub, VS Code Marketplace 또는 Pages
+이 문서는 1.0.0-rc.1 프리릴리스 문서이며 npm, GitHub, VS Code Marketplace 또는 Pages
 발행을 승인하지 않습니다.
 
 지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)가
@@ -60,7 +60,7 @@ hydrate하지 않습니다. DML `RETURNING`/`OUTPUT`은 선택한 adapter의 정
 증거가 달리 말하지 않는 한 materialized입니다. Metadata는 open-world
 positive evidence입니다.
 
-Release에는 하나의 clean exact revision, 실행 가능한 tuple/capability 범위,
+Release candidate에는 하나의 clean exact revision, 실행 가능한 tuple/capability 범위,
 영문/한국어 문서 freshness, package/export 검사, immutable release dry-run이
 필요합니다. 사용자 수락과 명시적 release 승인은 별도 gate입니다.
 
