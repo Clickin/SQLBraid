@@ -38,10 +38,38 @@ Dialect, driver, runtime, host, database version, representation profile,
 capability는 별도 축입니다. 정식 capability 식별자는 다음과 같습니다.
 
 ```text
-statement.prepare       statement.stream       statement.bulk
-transaction             transaction.savepoint
-routine.out             routine.result-sets    routine.out-cursor
-routine.return-value
+sql.native-transparency           sql.generated-structure
+result.rows                       result.command
+result.multiple-sets              result.standard-schema
+numeric.exact-integer             numeric.exact-decimal
+numeric.approximate-float         numeric.approximate-special
+numeric.bind-exact                numeric.aggregate
+numeric.command-metadata          numeric.special-values
+numeric.scale-greater-than-precision
+numeric.negative-scale
+data.json-parsed                  data.json-lossless-text
+data.binary                       data.uuid
+data.temporal-native              data.temporal-lossless
+data.timezone
+metadata.command-safe
+dml.insert-returning              dml.update-returning
+dml.delete-returning              dml.merge-returning
+dml.upsert-returning
+session.pinned
+statement.prepare                statement.cancel
+statement.stream                 statement.bulk
+execution.bulk-fidelity
+transaction                      transaction.savepoint
+transaction.read-only
+transaction.isolation.read-uncommitted
+transaction.isolation.read-committed
+transaction.isolation.repeatable-read
+transaction.isolation.serializable
+routine.call                     routine.out
+routine.inout                    routine.result-sets
+routine.out-cursor               routine.return-value
+metadata.identity                metadata.generated
+metadata.routines                metadata.types
 ```
 
 `execution.prepared`, `execution.stream`, `routine.resultsets`,

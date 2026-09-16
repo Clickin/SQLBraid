@@ -86,6 +86,8 @@ Thin 어댑터는 precision/scale 속성과 IN 길이 제약을 거부합니다.
 VARCHAR2/NVARCHAR2 OUT/INOUT 길이는 드라이버의 `maxSize`를 지정하며
 다른 길이 속성은 거부합니다. DB 제약은 SQL이나 스키마에 선언하세요.
 구체화된 CLOB/NCLOB는 문자열, BLOB/RAW는 버퍼입니다. 루틴 LOB output은
+`oracleParameter.clob()`/`blob()`을 사용한 IN 및 IN OUT bind에서 드라이버의
+LOB carrier를 받으며, OUT 및 IN OUT 결과는 정리 전에 구체화됩니다.
 `getData()`로 읽고 lease 반환 전에 destroy 완료를 기다립니다. 읽기 실패 시
 아직 방문하지 않은 sibling 리소스도 정리합니다. 시간 값은 `Date`를 사용하는
 guarded 편의 프로필이며 원래 timezone 이름이나 sub-millisecond precision을
@@ -93,6 +95,13 @@ guarded 편의 프로필이며 원래 timezone 이름이나 sub-millisecond prec
 표현식을 사용하세요. Native JSON은 parsed 편의 값이며 직렬화된 text가
 필요하면 테스트한 fetch handler 또는 `JSON_SERIALIZE(... RETURNING CLOB)`를
 사용합니다.
+
+실행 가능한 LOB 감사는 `oracle.routine.inout` support fixture에서 CLOB/BLOB
+OUT 및 IN OUT bind의 구체화와 정리를 검증합니다. target manifest에서 해당
+테스트와 정확한 Oracle Free 증거를 확인할 수 있습니다.
+이 fixture는 실제 Oracle Free 통합 테스트입니다. 별도의 mock LOB carrier
+adapter unit coverage는 cleanup/error 경로만 검증하며 다른 database나
+driver target을 승격하지 않습니다.
 
 전체 `sql.out`/`sql.inOut` 및 이질적 result-set 계약은
 [루틴 호출](/SQLBraid/concepts/routines/)을 참고하세요.

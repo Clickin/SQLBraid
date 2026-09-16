@@ -85,6 +85,8 @@ The Thin adapter rejects precision/scale facets and IN length constraints.
 VARCHAR2/NVARCHAR2 OUT/INOUT lengths select the driver's `maxSize`; other
 length facets are rejected. Put database constraints in SQL/schema.
 Materialized CLOB/NCLOB values are strings and BLOB/RAW values are buffers.
+`oracleParameter.clob()`/`blob()` accepts the driver's LOB carrier for IN and
+IN OUT binds; OUT and IN OUT results are materialized before cleanup.
 Routine LOB outputs are read with `getData()` and destroyed before lease
 release, including unvisited siblings after a read failure. Temporal values
 use `Date` as a guarded convenience profile, not a preserved source timezone
@@ -92,6 +94,13 @@ name or sub-millisecond precision. Use user-authored `TO_CHAR`/format
 expressions for a lossless text path. Native JSON is a parsed convenience value;
 use a tested fetch handler or `JSON_SERIALIZE(... RETURNING CLOB)` when
 serialized text is required.
+
+The executable LOB audit covers CLOB/BLOB OUT and IN OUT binds, materialization,
+and cleanup in the `oracle.routine.inout` support fixture; the target manifest
+links that test and its exact Oracle Free evidence.
+The fixture is a real Oracle Free integration test; the separate adapter unit
+coverage for mocked LOB carriers verifies cleanup/error paths only and does not
+promote another database or driver target.
 
 Use [routine calls](/SQLBraid/concepts/routines/) for the complete
 `sql.out`/`sql.inOut` and heterogeneous result-set contract.

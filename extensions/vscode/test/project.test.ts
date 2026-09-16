@@ -15,6 +15,8 @@ test("project evidence accepts every dependency section but rejects unrelated pa
     assert.equal(hasSqlBraidDependency({ [section]: { "@sqlbraid/template": "0.1.0" } }), true);
   }
   assert.equal(hasSqlBraidDependency({ dependencies: { "@other/sqlbraid-plugin": "0.1.0" } }), false);
+  assert.equal(hasSqlBraidDependency({ dependencies: { sqlbraid: "0.1.0" } }), true);
+  assert.equal(hasSqlBraidDependency({ dependencies: { sqlbraidish: "0.1.0" } }), false);
   assert.equal(hasSqlBraidDependency({ dependencies: ["@sqlbraid/template"] }), false);
   assert.equal(hasSqlBraidDependency(undefined), false);
 });
@@ -27,6 +29,16 @@ test("project evidence discovers config and package dependency roots", async () 
     assert.deepEqual(await findProjectEvidence(root), { kind: "dependency", path: join(root, "package.json") });
     await writeFile(join(root, "sqlbraid.config.cjs"), "module.exports = {};");
     assert.deepEqual(await findProjectEvidence(root), { kind: "config", path: join(root, "sqlbraid.config.cjs") });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("exact facade dependency activates without a SQLBraid config", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sqlbraid-vscode-"));
+  try {
+    await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: { sqlbraid: "0.1.0" } }));
+    assert.deepEqual(await findProjectEvidence(root), { kind: "dependency", path: join(root, "package.json") });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

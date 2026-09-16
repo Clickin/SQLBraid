@@ -169,9 +169,15 @@ async function loadSourceModule(packageName, root) {
   try {
     const corePath = join(root, "packages", "core", "src", "index.ts");
     const coreSource = await readFile(corePath, "utf8");
+    const authoringPath = join(root, "packages", "core", "src", "authoring-modules.ts");
+    const authoringSource = await readFile(authoringPath, "utf8");
     const compilerOptions = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, sourceMap: false };
     const coreOut = join(temp, "core.mjs");
-    await writeFile(coreOut, ts.transpileModule(coreSource, { compilerOptions, fileName: corePath }).outputText);
+    const authoringOut = join(temp, "authoring-modules.mjs");
+    await writeFile(authoringOut, ts.transpileModule(authoringSource, { compilerOptions, fileName: authoringPath }).outputText);
+    let coreJavaScript = ts.transpileModule(coreSource, { compilerOptions, fileName: corePath }).outputText;
+    coreJavaScript = coreJavaScript.replaceAll('"./authoring-modules.js"', JSON.stringify(pathToFileURL(authoringOut).href)).replaceAll("'./authoring-modules.js'", JSON.stringify(pathToFileURL(authoringOut).href));
+    await writeFile(coreOut, coreJavaScript);
     const policyOut = join(temp, `${packageName}.mjs`);
     let policyJavaScript = ts.transpileModule(source, { compilerOptions, fileName: sourcePath }).outputText;
     policyJavaScript = policyJavaScript.replaceAll('"@sqlbraid/core"', JSON.stringify(pathToFileURL(coreOut).href)).replaceAll("'@sqlbraid/core'", JSON.stringify(pathToFileURL(coreOut).href));

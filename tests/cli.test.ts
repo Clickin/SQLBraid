@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import { test } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { codegenOutputCollisionKey } from '../packages/cli/src/codegen-path.js';
+import { createSqliteInspector } from '@sqlbraid/sqlite/inspector';
 
 const exec = promisify(execFile);
 const cliEntry = resolve(process.cwd(), 'packages/cli/dist/index.js');
@@ -319,6 +321,129 @@ test('CLI inspect JSON discovers an ancestor SQLBraid config past nested project
     const diagnosticResult = JSON.parse(diagnostics.stdout) as { operation: string; diagnostics: readonly unknown[] };
     assert.equal(diagnosticResult.operation, 'diagnostics');
     assert.deepEqual(diagnosticResult.diagnostics, []);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test('CLI inspect JSON consumes a facade query with metadata-backed defaults', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const native = new DatabaseSync(':memory:');
+  try {
+    native.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);');
+    const snapshot = await createSqliteInspector(native).inspect();
+    await writeFile(join(directory, 'metadata.json'), JSON.stringify(snapshot));
+    await writeFile(join(directory, 'sqlbraid.config.mjs'), `export default ${JSON.stringify({
+      codegen: {
+        targets: [{
+          name: 'sqlite',
+          metadata: './metadata.json',
+          outFile: './generated.ts',
+          typePolicy: {
+            id: 'sqlite-cli-test',
+            hash: 'sqlite-cli-test-v1',
+            mappings: [
+              { databaseType: 'INTEGER', inputType: 'number', outputType: 'number', nullable: false },
+              { databaseType: 'TEXT', inputType: 'string', outputType: 'string', nullable: true },
+            ],
+          },
+        }],
+      },
+    })};\n`);
+    const file = join(directory, 'query.ts');
+    const source = 'import { sql } from "sqlbraid/sqlite"; export const query = sql`SELECT id FROM main.users`;';
+    await writeFile(file, source);
+    const relationColumn = source.indexOf('main.users') + 'main.'.length + 1;
+    const inspected = await exec(process.execPath, [
+      cliEntry,
+      'inspect',
+      'query',
+      '--file',
+      file,
+      '--line',
+      '1',
+      '--column',
+      String(relationColumn),
+      '--json',
+    ], { cwd: directory });
+    const queryResult = JSON.parse(inspected.stdout) as { operation: string; resolved: boolean; contents?: string };
+    assert.equal(queryResult.operation, 'query');
+    assert.equal(queryResult.resolved, true);
+    assert.match(queryResult.contents ?? '', /Relation main\.users/u);
+
+    const symbols = await exec(process.execPath, [cliEntry, 'inspect', 'symbol', 'users', '--json'], { cwd: directory });
+    const symbolResult = JSON.parse(symbols.stdout) as { operation: string; symbols: readonly { name: string; kind: string }[] };
+    assert.equal(symbolResult.operation, 'symbol');
+    assert.deepEqual(symbolResult.symbols.map((symbol) => [symbol.name, symbol.kind]), [['users', 'relation']]);
+
+    const diagnostics = await exec(process.execPath, [cliEntry, 'inspect', 'diagnostics', '--file', file, '--json'], { cwd: directory });
+    assert.deepEqual((JSON.parse(diagnostics.stdout) as { diagnostics: readonly unknown[] }).diagnostics, []);
+  } finally {
+    native.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test('programmatic inspector snapshots feed the CLI codegen recipe', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const native = new DatabaseSync(':memory:');
+  try {
+    native.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT;');
+    const snapshot = await createSqliteInspector(native).inspect();
+    const metadataPath = join(directory, 'metadata.json');
+    const configPath = join(directory, 'sqlbraid.config.mjs');
+    const outputPath = join(directory, 'generated.ts');
+    await writeFile(metadataPath, JSON.stringify(snapshot));
+    await writeFile(configPath, `export default ${JSON.stringify({
+      codegen: {
+        targets: [{
+          name: 'sqlite',
+          metadata: './metadata.json',
+          outFile: './generated.ts',
+          typePolicy: {
+            id: 'sqlite-codegen-recipe',
+            hash: 'sqlite-codegen-recipe-v1',
+            mappings: [
+              { databaseType: 'INTEGER', inputType: 'number', outputType: 'number', nullable: false },
+              { databaseType: 'TEXT', inputType: 'string', outputType: 'string', nullable: true },
+            ],
+          },
+        }],
+      },
+    })};\n`);
+    const first = await exec(process.execPath, [cliEntry, 'codegen', '--config', configPath, '--json'], { cwd: directory });
+    assert.equal(JSON.parse(first.stdout)[0].status, 'written');
+    const generated = await readFile(outputPath, 'utf8');
+    assert.match(generated, /UsersRow/u);
+    assert.match(generated, /"id": number/u);
+    const second = await exec(process.execPath, [cliEntry, 'codegen', '--config', configPath, '--check', '--json'], { cwd: directory });
+    assert.equal(JSON.parse(second.stdout)[0].status, 'unchanged');
+  } finally {
+    native.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test('CLI facade prebuild executes lazy branch interpolation from generated output', async () => {
+  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  try {
+    const file = join(directory, 'query.ts');
+    const output = join(directory, 'generated.mjs');
+    await mkdir(join(directory, 'node_modules'), { recursive: true });
+    await symlink(resolve('packages/sqlbraid'), join(directory, 'node_modules', 'sqlbraid'), 'junction');
+    await writeFile(file, `
+      import { sql } from "sqlbraid/sqlite";
+      export function run(include: boolean) {
+        let calls = 0;
+        const query = sql\`SELECT 1 /*@braid if \${include}*/ AND id = \${(() => { calls += 1; return 7; })()} /*@braid end*/\`;
+        const rendered = query.render();
+        return { calls, parameters: rendered.parameters.map(({ value }) => value) };
+      }
+    `);
+    await exec(process.execPath, [cliEntry, 'build', '--file', file, '--out-file', output], { cwd: directory });
+    const { run } = await import(pathToFileURL(output).href) as { run: (include: boolean) => { calls: number; parameters: unknown[] } };
+    assert.deepEqual(run(false), { calls: 0, parameters: [] });
+    assert.deepEqual(run(true), { calls: 1, parameters: [7] });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

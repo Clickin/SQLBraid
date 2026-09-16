@@ -6,7 +6,7 @@ not a publication or support claim. The last exact-SHA verification was revision
 [34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046), Docs
 [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
 Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)).
-The current audited remediation baseline is `06e9ce9`. Packed consumer evidence
+The current audited remediation baseline is `4ca9981`. Packed consumer evidence
 at this revision includes the isolated pnpm Vite facade gate and the
 no-SDK OpenTelemetry API gate; the final integrated SHA still requires the
 same-SHA Runtime/Documentation gates before release labels change.
@@ -34,6 +34,9 @@ same-SHA Runtime/Documentation gates before release labels change.
 `PUBLIC_ERROR_DEFINITIONS` and its `PublicErrorDefinition` /
 `PublicErrorCategory` types enumerate the deliberately public error reference.
 They do not promote every internal `BRAID_` message to a stable contract.
+The bilingual error reference links every registry code, and the machine-readable
+support catalog is the exhaustive capability vocabulary rendered by the
+[support matrix](/SQLBraid/reference/support/).
 
 `AUTHORING_MODULE_CATALOG` is a frozen data-only discovery catalog consumed by
 compiler and tooling; it records supported tag-exporting module identities and

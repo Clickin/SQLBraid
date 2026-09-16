@@ -9,6 +9,7 @@ import { generateModels } from "@sqlbraid/codegen";
 import type { MetadataSnapshot } from "@sqlbraid/metadata";
 
 type JsonRpcMessage = { readonly id?: number | string; readonly method?: string; readonly result?: unknown; readonly params?: unknown };
+type Position = { readonly line: number; readonly character: number };
 
 type MessageReader = {
   readonly next: (match: (message: JsonRpcMessage) => boolean, timeoutMs?: number) => Promise<JsonRpcMessage>;
@@ -192,6 +193,118 @@ test("built stdio server speaks standard LSP methods", async () => {
   } finally {
     reader.dispose();
     if (!server.killed) server.kill();
+  }
+}, 30000);
+
+test("built stdio server discovers facade metadata with default configuration", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sqlbraid-lsp-facade-"));
+  const metadataPath = join(root, "metadata.json");
+  const configPath = join(root, "sqlbraid.config.mjs");
+  const sourcePath = join(root, "query.ts");
+  const uri = pathToFileURL(sourcePath).href;
+  const source = [
+    'import { sql } from "sqlbraid/sqlite";',
+    'type UserRow = { id: number };',
+    'export const query = sql.rows<UserRow>`SELECT calculate_fee(1) AS id FROM main.users`;',
+  ].join("\n");
+  const snapshot = {
+    format: "sqlbraid-metadata",
+    formatVersion: 1,
+    dialect: "sqlite",
+    dialectVersion: "3",
+    server: {},
+    namespaces: { main: { name: "main", kind: "attached" } },
+    types: {},
+    relations: {
+      "main.users": {
+        identity: "main.users",
+        name: "users",
+        namespace: "main",
+        kind: "table",
+        columns: [{ name: "id", ordinal: 0, type: "INTEGER", nullable: false }],
+      },
+    },
+    routines: {
+      "main.calculate_fee": [{
+        name: "calculate_fee",
+        schema: "main",
+        identity: "main.calculate_fee",
+        kind: "function",
+        arguments: [{ name: "amount", mode: "in", type: "INTEGER" }],
+        argumentsComplete: true,
+        result: { kind: "scalar", type: "INTEGER", nullable: false },
+      }],
+    },
+    metadata: { introspectionScope: "main", completeness: "partial" },
+  };
+  const config = {
+    codegen: {
+      targets: [{
+        name: "sqlite",
+        metadata: "./metadata.json",
+        outFile: "./generated.ts",
+        typePolicy: {
+          id: "sqlite-lsp-test",
+          hash: "sqlite-lsp-test-v1",
+          mappings: [{ databaseType: "INTEGER", inputType: "number", outputType: "number", nullable: false }],
+        },
+      }],
+    },
+  };
+  const positionAt = (offset: number): Position => {
+    const before = source.slice(0, offset);
+    return { line: before.split("\n").length - 1, character: offset - before.lastIndexOf("\n") - 1 };
+  };
+  await writeFile(metadataPath, JSON.stringify(snapshot));
+  await writeFile(configPath, `export default ${JSON.stringify(config)};\n`);
+  await writeFile(sourcePath, source);
+  const server = spawn(process.execPath, [resolve("packages/language-server/dist/cli.js")], { stdio: "pipe" });
+  const reader = createMessageReader(server);
+  try {
+    send(server, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        processId: process.pid,
+        rootUri: pathToFileURL(root).href,
+        capabilities: {},
+        workspaceFolders: [{ uri: pathToFileURL(root).href, name: "facade" }],
+      },
+    });
+    await response(reader, 1);
+    send(server, { jsonrpc: "2.0", method: "initialized", params: {} });
+    send(server, { jsonrpc: "2.0", method: "textDocument/didOpen", params: { textDocument: { uri, languageId: "typescript", version: 1, text: source } } });
+    await reader.next((message) => message.method === "textDocument/publishDiagnostics");
+
+    const relationOffset = source.indexOf("main.users") + "main.".length;
+    send(server, { jsonrpc: "2.0", id: 2, method: "textDocument/diagnostic", params: { textDocument: { uri } } });
+    assert.deepEqual(resultOf<{ readonly items: readonly unknown[] }>(await response(reader, 2)).items, []);
+    send(server, { jsonrpc: "2.0", id: 3, method: "textDocument/completion", params: { textDocument: { uri }, position: positionAt(relationOffset) } });
+    assert.deepEqual(resultOf<{ readonly items: readonly { readonly label: string }[] }>(await response(reader, 3)).items.map((item) => item.label), ["users"]);
+    send(server, { jsonrpc: "2.0", id: 4, method: "textDocument/hover", params: { textDocument: { uri }, position: positionAt(relationOffset) } });
+    assert.match(JSON.stringify(resultOf<unknown>(await response(reader, 4))), /Relation main\.users/u);
+    send(server, { jsonrpc: "2.0", id: 5, method: "textDocument/definition", params: { textDocument: { uri }, position: positionAt(relationOffset) } });
+    assert.match(JSON.stringify(resultOf<unknown>(await response(reader, 5))), /metadata\.json/u);
+    send(server, { jsonrpc: "2.0", id: 6, method: "textDocument/references", params: { textDocument: { uri }, position: positionAt(relationOffset), context: { includeDeclaration: true } } });
+    assert.ok(resultOf<readonly unknown[]>(await response(reader, 6)).length >= 1);
+    send(server, { jsonrpc: "2.0", id: 7, method: "textDocument/documentSymbol", params: { textDocument: { uri } } });
+    assert.deepEqual((resultOf<readonly { readonly name: string }[]>(await response(reader, 7))).map((symbol) => symbol.name), ["sql.rows"]);
+    send(server, { jsonrpc: "2.0", id: 8, method: "workspace/symbol", params: { query: "users" } });
+    assert.deepEqual((resultOf<readonly { readonly name: string; readonly kind: number }[]>(await response(reader, 8))).map((symbol) => [symbol.name, symbol.kind]), [["users", 5]]);
+    const signatureOffset = source.indexOf("calculate_fee(") + "calculate_fee(".length;
+    send(server, { jsonrpc: "2.0", id: 9, method: "textDocument/signatureHelp", params: { textDocument: { uri }, position: positionAt(signatureOffset) } });
+    const signature = resultOf<{ readonly signatures: readonly { readonly parameters: readonly { readonly label: string }[] }[] }>(await response(reader, 9));
+    assert.deepEqual(signature.signatures[0]?.parameters.map((parameter) => parameter.label), ["amount: INTEGER"]);
+
+    send(server, { jsonrpc: "2.0", id: 10, method: "shutdown", params: null });
+    assert.equal(resultOf<unknown>(await response(reader, 10)), null);
+    send(server, { jsonrpc: "2.0", method: "exit", params: null });
+    await waitForExit(server);
+  } finally {
+    reader.dispose();
+    if (!server.killed) server.kill();
+    await rm(root, { recursive: true, force: true });
   }
 }, 30000);
 

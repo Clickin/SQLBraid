@@ -25,6 +25,7 @@ async function copyDataset(): Promise<string> {
   }
   await mkdir(join(destination, "packages/core/src"), { recursive: true });
   await cp(join(root, "packages/core/src/index.ts"), join(destination, "packages/core/src/index.ts"));
+  await cp(join(root, "packages/core/src/authoring-modules.ts"), join(destination, "packages/core/src/authoring-modules.ts"));
   const registry = JSON.parse(await readFile(join(root, "support/test-registry.json"), "utf8")) as Record<string, { file: string }>;
   for (const file of new Set(Object.values(registry).map((entry) => entry.file))) {
     await mkdir(dirname(join(destination, file)), { recursive: true });
@@ -85,5 +86,19 @@ test("support validation rejects claims without schema, locale, package, CI or r
       await mutate(directory);
       await assert.rejects(() => validateSupport({ root: directory }), { code });
     } finally { await rm(directory, { recursive: true, force: true }); }
+  }
+});
+
+test("capability references enumerate the complete machine-readable vocabulary", async () => {
+  const catalog = JSON.parse(await readFile(join(root, "support/capabilities.json"), "utf8")) as { capabilities: readonly { id: string }[] };
+  const documents = [
+    "website/src/content/docs/reference/support.mdx",
+    "website/src/content/docs/ko/reference/support.mdx",
+    "docs/SQLBraid_0.1.0_release_notes.md",
+  ];
+  for (const document of documents) {
+    const source = await readFile(join(root, document), "utf8");
+    const vocabulary = source.match(/```text\n([\s\S]*?)```/u)?.[1] ?? "";
+    for (const capability of catalog.capabilities) assert.ok(vocabulary.includes(capability.id), `${document} omits ${capability.id}`);
   }
 });
