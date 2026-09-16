@@ -100,6 +100,13 @@ cannot change an active transaction. Adapters may map PostgreSQL
 capability evidence says so. SQLite, D1, and other drivers expose only the
 combinations their transport actually honors.
 
+The libSQL adapter preserves transaction continuity through its interactive
+`Transaction` handle rather than issuing `BEGIN`/`COMMIT` on ordinary client
+calls. `readOnly: true` maps to libSQL's documented read mode; the portable
+isolation literals are rejected because libSQL transaction modes are not
+automatic equivalents. Ordinary libSQL calls do not guarantee a pinned
+session, so `session.pinned` remains unsupported.
+
 ## Batch and bulk
 
 `batch` is not atomic. Earlier statements—and later statements when mapping

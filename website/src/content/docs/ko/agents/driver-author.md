@@ -11,6 +11,18 @@ revision별 실행 workflow에만 적용됩니다. 인접한 버전·runtime·pr
 binding 또는 package 설치는 이 tuple을 인증하지 않습니다. 최종 exact-SHA
 Runtime, Docs, Release gate와 명시적인 release 승인은 별도 요구사항입니다.
 
+물리 SPI만 sync-aware이며 synchronous application API를 만들지는 않습니다.
+
+```ts
+type Awaitable<T> = T | PromiseLike<T>;
+```
+
+`QueryExecutor.query`, `call`, 선택적 `bulk`와 transaction-control method는
+`Awaitable`을 반환할 수 있고 `ConnectionProvider.acquire()`는 계속
+`Promise`입니다. `stream()`은 `AsyncIterable`로 유지되므로 동기 native
+iterator는 cleanup과 scope 동작을 보존하는 얇은 async-generator adapter가
+필요합니다.
+
 ## 논리 statement 불변식
 
 Core/template rendering은 하나의 불변 `RenderedStatement`를 반환합니다.
@@ -68,16 +80,16 @@ hint/direction/output metadata입니다. `$1`, `?`, `:1`, `@p1` 표기는 transp
 ```ts
 interface QueryExecutor {
   readonly statementBinding: StatementBindingAdapter;
-  query<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>>;
+  query<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<QueryExecutionResult<Row>>;
   stream<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row>;
-  call(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult>;
-  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult>;
-  begin?(options?: TransactionOptions): Promise<void>;
-  commit?(): Promise<void>;
-  rollback?(): Promise<void>;
-  savepoint?(name: string): Promise<void>;
-  rollbackTo?(name: string): Promise<void>;
-  releaseSavepoint?(name: string): Promise<void>;
+  call(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<DriverRoutineResult>;
+  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Awaitable<BulkExecutionResult>;
+  begin?(options?: TransactionOptions): Awaitable<void>;
+  commit?(): Awaitable<void>;
+  rollback?(): Awaitable<void>;
+  savepoint?(name: string): Awaitable<void>;
+  rollbackTo?(name: string): Awaitable<void>;
+  releaseSavepoint?(name: string): Awaitable<void>;
 }
 ```
 
@@ -191,3 +203,13 @@ Bun SQL은 사용자가 선택하는 `dialect: "postgres" | "mysql" | "mariadb" 
 Deno는 public driver API가 동작하면 기존 adapter를 재사용할 수 있습니다.
 어느 쪽도 검증되지 않은 database/runtime/profile tuple을 승격하지 않습니다.
 전체 checklist는 [repository driver-author guide](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md)를 참고하세요.
+
+SQLite의 `node:sqlite`와 `better-sqlite3`는 `Awaitable`을 통해 물리 결과를
+동기식으로 반환할 수 있지만 public database는 여전히 async이며
+better-sqlite3는 event loop를 block합니다. Exact INTEGER read에는
+statement-local `safeIntegers(true)`를 사용하고 native iteration을 직접
+노출하세요. libSQL adapter는 명시적인 `intMode: "string"` 계약과
+interactive transaction handle을 사용하며 일반 pinned session을 주장하지
+않습니다. 선택한 client에 incremental cursor가 없으면 stream을 거부해야
+하며 buffering해서는 안 됩니다. Local libSQL evidence는 remote transport를
+인증하지 않습니다.

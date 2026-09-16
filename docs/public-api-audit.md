@@ -42,6 +42,13 @@ call queries expose `call`. Input factories use
 `prepare(name, () => query, { input: "none" })` and use options as their only
 execution argument.
 
+`Awaitable<T> = T | PromiseLike<T>` is exported for physical SPI
+implementations. `QueryExecutor.query`, `call`, optional `bulk`, and
+transaction-control methods may return `Awaitable`; `stream` remains
+`AsyncIterable`, and `ConnectionProvider.acquire()` remains a `Promise`.
+Synchronous drivers therefore avoid a needless Promise wrapper at the
+physical boundary, while the public `Database` surface remains async.
+
 **SPI:** `BindingDescription`, `BulkBindingDescription`, `BulkExecutionMode`,
 `BulkExecutionResult`, `ConnectionLease`, `ConnectionProvider`, `Dialect`,
 `DialectLexicalProfile`, `DriverRoutineResult`, `DriverRoutineResultSet`,
@@ -81,7 +88,8 @@ Canonical environment capability keys are `statement.prepare`,
 **Application:** the canonical runtime facade. The root re-exports common
 contracts and runtime constructors without selecting a dialect. Combined
 driver+dialect/query subpaths use the matching adapter:
-`/pg`, `/mysql2`, `/mariadb`, `/node-sqlite`, `/sqlite-wasm`, `/d1`,
+`/pg`, `/mysql2`, `/mariadb`, `/node-sqlite`, `/better-sqlite3`, `/libsql`,
+`/sqlite-wasm`, `/d1`,
 `/oracledb`, and `/tedious`. The `/bun-sql` subpath is a multi-dialect Bun.SQL
 adapter; import `sql` from the selected dialect root and pass that dialect to
 `createBunSqlDatabase`. Dialect-only subpaths
@@ -104,7 +112,7 @@ const rows = await db.all(sql.rows`SELECT id FROM users`);
 | `@sqlbraid/mysql` | `sql` | dialect, TypePolicy, representation profiles, `/mysql2`, `/inspector` |
 | `@sqlbraid/mariadb` | `sql` | dialect, TypePolicy, representation profiles, `/mariadb`, `/inspector` |
 | `@sqlbraid/bun-sql` | `createBunSqlDatabase`, `createBunSqlProvider` | Bun.SQL multi-dialect adapter; requires a user-selected `postgres`, `mysql`, `mariadb`, or `sqlite` dialect |
-| `@sqlbraid/sqlite` | `sql` | dialect, TypePolicy, `/node-sqlite`, `/wasm`, `/d1`, `/inspector` |
+| `@sqlbraid/sqlite` | `sql` | dialect, TypePolicy, `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1`, `/inspector` |
 | `@sqlbraid/oracle` | `sql`, `oracleParameter` | portable dialect/TypePolicy, `/oracledb`, `/inspector` |
 | `@sqlbraid/mssql` | `sql`, `mssqlParameter` | portable dialect/TypePolicy, `/tedious`, `/inspector` |
 
@@ -114,6 +122,16 @@ binding adapter, and report unsupported capabilities explicitly. Bun's adapter
 family accepts a user-selected PostgreSQL/MySQL/MariaDB/SQLite dialect; it does
 not auto-detect. Deno uses existing driver subpaths where the driver API works.
 These runtime statements are compatibility guidance, not Official support labels.
+
+SQLite-specific boundaries are intentionally not interchangeable:
+`better-sqlite3` is synchronous and event-loop blocking even though its public
+database wrapper is async; its exact INTEGER profile uses statement-local
+`safeIntegers(true)`. The libSQL adapter requires an explicit
+`intMode: "string"` assertion, uses an interactive transaction handle for
+continuity, does not claim `session.pinned`, and does not fake `statement.stream`
+by buffering. A local libSQL test does not certify HTTP/WebSocket or
+browser/Worker transports; every promoted label needs exact runtime, driver
+version, profile, and workflow evidence.
 
 ## Runtime and tooling packages
 

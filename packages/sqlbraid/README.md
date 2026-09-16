@@ -24,11 +24,24 @@ await client.end();
 
 The combined driver and dialect entrypoints are `sqlbraid/pg`,
 `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
-`sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`, and
-`sqlbraid/tedious`. Dialect-only entrypoints for custom adapters are
+`sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`,
+`sqlbraid/d1`, `sqlbraid/oracledb`, and `sqlbraid/tedious`. Dialect-only entrypoints for custom adapters are
 `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle`,
 and `sqlbraid/mssql`. The package root exports shared contracts and runtime
 database constructors.
+
+SQLite's synchronous `node:sqlite` and `better-sqlite3` adapters use the
+`Awaitable<T>` physical SPI while keeping every public `Database` operation
+async. The better-sqlite3 path therefore still blocks the JavaScript event loop;
+SQLBraid does not turn synchronous native calls into background work.
+
+The libSQL path requires `createLibsqlDatabase(client, { intMode: "string" })`.
+It uses `@libsql/client`'s documented `execute`, `batch`, and interactive
+`transaction()` handle. Ordinary calls do not provide a pinned-session
+guarantee, and `db.stream()` is explicitly unsupported instead of buffering a
+full result set. Use `readOnly: true` only where the driver's documented read
+transaction mode is the desired contract; unsupported isolation options fail
+explicitly.
 
 For Bun, use `sqlbraid/bun-sql` with a separately selected SQLBraid dialect:
 

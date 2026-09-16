@@ -11,7 +11,7 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/runtime` | Execution, mapping, result-kind checks, transactions, streaming, and prepared shapes |
 | `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg` adapter; `/inspector` |
 | `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2` adapter; `/inspector` |
-| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/wasm`, and `/d1` adapters; `/inspector` |
+| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, and `/d1` adapters; `/inspector` |
 | `@sqlbraid/mariadb` | MariaDB dialect/TypePolicy; `/mariadb` adapter |
 | `@sqlbraid/bun-sql` | Bun.SQL adapter family with required user-selected PostgreSQL/MySQL/MariaDB/SQLite dialect |
 | `@sqlbraid/oracle` | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; `/inspector` |
@@ -28,7 +28,7 @@ description: Find the SQLBraid package that owns each concern.
 Install `sqlbraid` in application code, then use a combined driver+dialect/query
 subpath:
 `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
-`sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
+`sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
 or `sqlbraid/tedious`. For Bun.SQL, use the multi-dialect `sqlbraid/bun-sql`
 adapter, import `sql` from the selected dialect root, and pass that dialect
 explicitly:
@@ -52,6 +52,14 @@ codegen, compiler, editor, or Vite dependencies. Install tooling packages only
 in development/build environments. The Oracle, SQL Server, MariaDB, and Bun
 driver dependencies are kept out of portable roots. `@sqlbraid/vite` keeps Vite
 as a peer and does not import a framework.
+
+The synchronous SQLite adapters use the `Awaitable<T>` physical SPI while
+keeping public `Database` methods async. `better-sqlite3` remains event-loop
+blocking and uses statement-local exact-integer reads. libSQL requires
+`{ intMode: "string" }`, uses an interactive transaction handle, does not
+claim `session.pinned`, and reports `BRAID_STREAM_UNSUPPORTED` instead of
+buffering. These are transport and capability boundaries, not broad support
+labels.
 
 `db.session()` pins one provider lease; `db.tx()` reuses that lease and supports
 savepoints/options only where the selected adapter advertises them. Prepared

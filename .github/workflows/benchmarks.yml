@@ -72,6 +72,37 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  sync-boundary:
+    name: Sync-aware executor boundary diagnostic
+    needs: benchmark-prep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: benchmark-prepared
+          path: ${{ runner.temp }}/prepared
+      - name: Restore prepared build
+        run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Run sync-boundary diagnostic
+        run: pnpm run benchmark:sync-boundary -- --output "$RUNNER_TEMP/benchmark-results/sync-boundary.json"
+      - name: Preserve sync-boundary result
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: benchmark-sync-boundary
+          path: ${{ runner.temp }}/benchmark-results/sync-boundary.json
+          if-no-files-found: error
+          retention-days: 14
+
   value-fidelity:
     name: Value fidelity (${{ matrix.transport }})
     needs: benchmark-prep

@@ -51,6 +51,8 @@ cancellation이 아닙니다.
 | MySQL / `mysql2` | raw prepared `Execute.stream()` | prepared/binary 실행을 유지하고 lease 반환 전에 drain 또는 discard합니다. |
 | MariaDB / Connector/Node.js | native stream iterator | 별도 MariaDB driver 증거이며 `mysql2`에서 상속되지 않습니다. |
 | SQLite / `node:sqlite` | `StatementSync.iterate()` | Native iterator 종료가 cleanup 경계입니다. |
+| SQLite / `better-sqlite3` | `Statement#iterate()` | 동기식이고 event loop를 block하며 iterator return이 cleanup 경계입니다. |
+| SQLite / libSQL | 지원 client 표면에 없음 | `BRAID_STREAM_UNSUPPORTED`; 전체 ResultSet을 buffering하지 않습니다. |
 | SQLite / WASM | OO1 step/reset/finalize | Direct browser/Worker resource이며 한 번에 하나의 owner만 사용합니다. |
 | Cloudflare D1 | 없음 | `BRAID_STREAM_UNSUPPORTED`; streaming을 흉내 내려고 paginate하지 않습니다. |
 | Oracle Thin | `ResultSet` | 모든 ResultSet을 닫고 close 실패 시 lease를 폐기합니다. |

@@ -12,6 +12,17 @@ evidence. A neighboring version or package installation is not certification.
 Final exact-SHA Runtime, Docs, and Release gates and explicit release
 authorization remain separate requirements.
 
+The physical SPI is sync-aware without creating a synchronous application API:
+
+```ts
+type Awaitable<T> = T | PromiseLike<T>;
+```
+
+`QueryExecutor.query`, `call`, optional `bulk`, and transaction-control methods
+may return `Awaitable`; `ConnectionProvider.acquire()` remains a `Promise`.
+`stream()` remains `AsyncIterable`, so a synchronous native iterator needs a
+thin async-generator adapter to preserve cleanup and scope behavior.
+
 ## Logical statement invariant
 
 Core/template rendering returns one immutable `RenderedStatement`:
@@ -68,16 +79,16 @@ not shape identity. Values may change; structural shape may not.
 ```ts
 interface QueryExecutor {
   readonly statementBinding: StatementBindingAdapter;
-  query<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>>;
+  query<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<QueryExecutionResult<Row>>;
   stream<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row>;
-  call(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult>;
-  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult>;
-  begin?(options?: TransactionOptions): Promise<void>;
-  commit?(): Promise<void>;
-  rollback?(): Promise<void>;
-  savepoint?(name: string): Promise<void>;
-  rollbackTo?(name: string): Promise<void>;
-  releaseSavepoint?(name: string): Promise<void>;
+  call(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<DriverRoutineResult>;
+  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Awaitable<BulkExecutionResult>;
+  begin?(options?: TransactionOptions): Awaitable<void>;
+  commit?(): Awaitable<void>;
+  rollback?(): Awaitable<void>;
+  savepoint?(name: string): Awaitable<void>;
+  rollbackTo?(name: string): Awaitable<void>;
+  releaseSavepoint?(name: string): Awaitable<void>;
 }
 ```
 
@@ -192,3 +203,12 @@ Bun SQL uses one adapter family with required user-selected
 Deno may reuse an existing adapter where its public driver API works. Neither
 statement promotes an unverified database/runtime/profile tuple. For the full
 checklist, see the [repository driver-author guide](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md).
+
+For SQLite, `node:sqlite` and `better-sqlite3` may return synchronous physical
+results through `Awaitable`; the public database is still async and
+better-sqlite3 still blocks the event loop. Use statement-local
+`safeIntegers(true)` for exact INTEGER reads and expose native iteration
+directly. The libSQL adapter requires an explicit `intMode: "string"` contract,
+uses an interactive transaction handle, does not claim pinned ordinary
+sessions, and must reject streaming when the selected client has no incremental
+cursor. Local libSQL evidence does not certify remote transports.

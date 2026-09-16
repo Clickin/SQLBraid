@@ -12,7 +12,7 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 | `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg` 어댑터; `/inspector` |
 | `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2` 어댑터; `/inspector` |
 | `@sqlbraid/mariadb` | MariaDB dialect/TypePolicy; `/mariadb` 어댑터 |
-| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite` 어댑터; `/inspector` |
+| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1` 어댑터; `/inspector` |
 | `@sqlbraid/oracle` | Oracle dialect/TypePolicy 및 파라미터 힌트; `/oracledb` 어댑터; `/inspector` |
 | `@sqlbraid/mssql` | SQL Server dialect/TypePolicy 및 파라미터 힌트; `/tedious` 어댑터; `/inspector` |
 | `@sqlbraid/bun-sql` | 사용자가 PostgreSQL/MySQL/MariaDB/SQLite dialect를 선택하는 Bun.SQL adapter family |
@@ -28,7 +28,7 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 애플리케이션 코드는 `sqlbraid`를 설치한 뒤 결합된 driver+dialect/query
 subpath인 `sqlbraid/pg`,
 `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
-`sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
+`sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
 `sqlbraid/tedious`를 사용합니다. Bun.SQL은 multi-dialect
 `sqlbraid/bun-sql` adapter를 사용하며, 선택한 dialect root에서 `sql`을
 가져오고 같은 dialect를 명시적으로 전달합니다.
@@ -50,6 +50,14 @@ Bun import가 없고 명시적인 `dialect`를 요구하며 SQL 의미를 자동
 의존성을 가져오지 않습니다. Tooling은 개발/빌드 환경에만 설치하세요. Oracle,
 SQL Server, MariaDB, Bun driver 의존성은 portable root에서 제외됩니다.
 `@sqlbraid/vite`는 Vite를 peer로 유지하며 framework를 가져오지 않습니다.
+
+동기식 SQLite adapter는 public `Database` method를 async로 유지하면서
+물리 `Awaitable<T>` SPI를 사용합니다. better-sqlite3는 event loop를 계속
+block하며 statement-local exact integer read를 사용합니다. libSQL은
+`{ intMode: "string" }`를 요구하고 interactive transaction handle을
+사용하며 `session.pinned`를 주장하지 않습니다. Buffering하는 대신
+`BRAID_STREAM_UNSUPPORTED`를 반환합니다. 이는 transport/capability 경계이지
+광범위한 support label이 아닙니다.
 
 `db.session()`은 하나의 provider lease를 고정하고 `db.tx()`는 이를
 재사용하며 선택한 adapter가 advertise하는 경우에만 savepoint/option을

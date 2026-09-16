@@ -5,6 +5,23 @@ description: Node에 내장된 SQLite 드라이버로 첫 SQLBraid 쿼리를 실
 
 이 경로는 Node `>=22.18.0` 및 `node:sqlite`를 사용하며 데이터베이스 서버가 필요하지 않습니다. 첫 번째 쿼리는 단순한 태그 템플릿이므로 SQLBraid 컴파일러가 필요하지 않습니다. 두 번째 쿼리는 동적 `@braid`를 추가하고 함께 제공되는 lowering 명령을 사용합니다.
 
+## SQLite adapter 선택
+
+SQLite dialect는 공유하지만 물리적 adapter는 subpath로 선택합니다.
+
+| Subpath | 물리적 경계 | 중요한 제한 |
+| --- | --- | --- |
+| `sqlbraid/node-sqlite` | Node `DatabaseSync` / `StatementSync` | 물리 호출은 동기식이며 INTEGER는 exact string; stream은 native `iterate()` |
+| `sqlbraid/better-sqlite3` | better-sqlite3 statement | 동기식이고 event loop를 block함; statement-local `safeIntegers(true)`와 native iteration |
+| `sqlbraid/libsql` | `@libsql/client` | `intMode: "string"` 필요; interactive transaction; pinned session이나 stream fallback 없음 |
+| `sqlbraid/sqlite-wasm` | SQLite WASM OO1 | OO1 statement ownership; stream은 async generator로 변환 |
+| `sqlbraid/d1` | Cloudflare D1 | prepared bind; streaming과 callback transaction 없음 |
+
+모든 adapter의 public `Database` API는 async로 유지됩니다. `Awaitable<T>`는
+동기식 adapter가 Promise wrapper 없이 plain result를 반환하도록 하는
+물리 `QueryExecutor` SPI 타입일 뿐이며, better-sqlite3를 non-blocking으로
+만들지는 않습니다.
+
 :::note 검증 상태
 지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가
 기록한 정확한 database, driver, profile, runtime, capability tuple과 revision별
@@ -35,6 +52,40 @@ stream primitive이며 prepared loop가 bulk 전략입니다. SQLite에는
 stored-procedure transport가 없으므로 등록 function과 table-valued extension은
 일반 SQL row query입니다. Native SQLite SQL은 grammar rewrite 없이 전달되며,
 투명성은 grammar 지원을 뜻하지 않습니다.
+
+### better-sqlite3
+
+```ts
+import Database from "better-sqlite3";
+import { createBetterSqlite3Database, sql } from "sqlbraid/better-sqlite3";
+
+const native = new Database(":memory:");
+const db = createBetterSqlite3Database(native);
+const rows = await db.all(sql.rows`SELECT 1 AS value`);
+```
+
+SQLBraid는 statement마다 `safeIntegers(true)`를 적용하며 exact INTEGER를
+decimal string으로 노출합니다. `iterate()`가 실제 stream primitive이고
+bulk는 prepared loop를 사용합니다. Native 호출은 event loop를 block하므로
+필요하면 worker를 사용하세요. Routine과 active cancellation은 지원하지
+않습니다.
+
+### libSQL
+
+```ts
+import { createClient } from "@libsql/client";
+import { createLibsqlDatabase, sql } from "sqlbraid/libsql";
+
+const client = createClient({ url: "file:app.db", intMode: "string" });
+const db = createLibsqlDatabase(client, { intMode: "string" });
+const rows = await db.all(sql.rows`SELECT 1 AS value`);
+```
+
+opaque client의 integer mode를 SQLBraid가 추론할 수 없으므로 명시적인
+`intMode: "string"` option이 필요합니다. Transaction은 libSQL interactive
+transaction handle을 사용하며 일반 호출은 하나의 pinned session을
+주장하지 않습니다. Native `batch()`를 bulk에 사용하고, 완전한 result를
+buffering하는 대신 `db.stream()`은 `BRAID_STREAM_UNSUPPORTED`로 거부합니다.
 
 ## 1. 프로젝트 만들기
 
