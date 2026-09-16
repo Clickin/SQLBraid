@@ -22,27 +22,29 @@ const devDependencies = {
   typescript: "5.9.3",
   vite: "8.3.0",
 };
+const overrides = Object.fromEntries([...tarballs.entries()].filter(([name]) => name.startsWith("@sqlbraid/") || name === "sqlbraid"));
 writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "sqlbraid-isolated-consumer", private: true, type: "module", dependencies, devDependencies }, null, 2));
-writeFileSync(join(consumer, "pnpm-workspace.yaml"), "packages: []\n");
-writeFileSync(join(consumer, "index.html"), "<script type=module src=\"/src.ts\"></script>\n");
+writeFileSync(join(consumer, "pnpm-workspace.yaml"), `packages: []\noverrides:\n${Object.entries(overrides).map(([name, value]) => `  ${JSON.stringify(name)}: ${JSON.stringify(value)}`).join("\n")}\n`);
+writeFileSync(join(consumer, ".npmrc"), "node-linker=isolated\nshamefully-hoist=false\npublic-hoist-pattern[]=\n");
 writeFileSync(join(consumer, "src.ts"), [
-  'import { sql } from "sqlbraid/tedious";',
+  'import { sql } from "sqlbraid/sqlite";',
   'let calls = 0;',
-  'export const query = sql.rows<{ value: number }>`SELECT [Bob\'s] WHERE id = ${1} /*@braid if ${(calls += 1, false)}*/ AND active = 1 /*@braid end*/`;',
+  'export const query = sql.rows<{ value: number }>`SELECT [Bob\'s] WHERE id = ${1} /*@braid if ${(calls += 1, true)}*/ AND active = 1 /*@braid end*/`;',
+  'export const lazy = sql`SELECT 1 /*@braid if ${false}*/ AND value = ${(() => { throw new Error("inactive branch evaluated"); })()} /*@braid end*/`;',
   'export const rendered = query.render();',
   'export const callsAfterRender = calls;',
 ].join("\n"));
-writeFileSync(join(consumer, "vite.config.mjs"), `import { defineConfig } from "vite";\nimport sqlbraid from "@sqlbraid/vite";\nexport default defineConfig({ plugins: [sqlbraid()] });\n`);
-execFileSync("pnpm", ["install", "--config.node-linker=isolated", "--config.shamefully-hoist=false", "--ignore-scripts", "--no-frozen-lockfile"], { cwd: consumer, stdio: "inherit" });
-const nodeModules = readdirSync(join(consumer, "node_modules"));
-assert.deepEqual(nodeModules.includes("@sqlbraid"), true);
-assert.equal(nodeModules.includes("@sqlbraid/template"), false, "template must remain transitive in isolated app");
+writeFileSync(join(consumer, "vite.config.mjs"), `import { defineConfig } from "vite";\nimport sqlbraid from "@sqlbraid/vite";\nexport default defineConfig({ plugins: [sqlbraid()], build: { lib: { entry: "src.ts", formats: ["es"], fileName: "bundle" }, sourcemap: true } });\n`);
+execFileSync("pnpm", ["install", "--ignore-scripts", "--no-frozen-lockfile"], { cwd: consumer, stdio: "inherit" });
+const resolutionProbe = "try { await import('sqlbraid/compiled'); } catch (error) { process.exitCode = 2; } try { await import('@sqlbraid/template'); process.exitCode = 3; } catch {}";
+execFileSync(process.execPath, ["--input-type=module", "-e", resolutionProbe], { cwd: consumer, stdio: "inherit" });
 execFileSync("pnpm", ["exec", "vite", "build"], { cwd: consumer, stdio: "inherit" });
-const asset = readdirSync(join(consumer, "dist/assets")).find((file) => file.endsWith(".js"));
+execFileSync("pnpm", ["exec", "tsc", "--noEmit", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--strict", "src.ts"], { cwd: consumer, stdio: "inherit" });
+const asset = readdirSync(join(consumer, "dist")).find((file) => file.endsWith(".js"));
 if (!asset) throw new Error("Vite emitted no JavaScript asset.");
-const built = readFileSync(join(consumer, "dist/assets", asset), "utf8");
+const built = readFileSync(join(consumer, "dist", asset), "utf8");
 assert.match(built, /sourceMappingURL/u);
-const result = await import(`file://${join(consumer, "dist/assets", asset)}`);
+const result = await import(`file://${join(consumer, "dist", asset)}`);
 assert.deepEqual(result.rendered.parameters.map(({ value }) => value), [1]);
-assert.equal(result.callsAfterRender, 0, "inactive branch evaluated eagerly");
+assert.equal(result.callsAfterRender, 1, "active branch was not evaluated exactly once");
 console.info(`PASS genuine pnpm isolated Vite consumer: ${consumer}`);

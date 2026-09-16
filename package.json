@@ -55,7 +55,7 @@
     "test:db:oracle": "pnpm run build && vitest run --project db-oracle",
     "test:db:mssql": "pnpm run build && vitest run --project db-mssql",
     "test:db:sqlite": "pnpm run build && vitest run --project db-sqlite",
-    "test:consumer": "pnpm run build && vitest run --project consumer && pnpm run pack:check",
+    "test:consumer": "pnpm run build && vitest run --project consumer && pnpm run pack:check && pnpm run test:consumer:isolated && pnpm run test:consumer:otel-api",
     "test:all": "pnpm run support:validate && pnpm run docs:translations && pnpm run typecheck && pnpm run build && vitest run && pnpm run test:browser && pnpm run test:d1 && pnpm run test:vscode && pnpm run pack:check",
     "pack:check": "node scripts/validate-packages.mjs",
     "test:runtime:node": "node scripts/runtime-portability.mjs node",

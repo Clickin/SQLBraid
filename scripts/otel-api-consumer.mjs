@@ -20,16 +20,18 @@ writeFileSync(join(consumer, "package.json"), JSON.stringify({
   dependencies: { "@sqlbraid/opentelemetry": tarballs.get("@sqlbraid/opentelemetry"), "@sqlbraid/core": tarballs.get("@sqlbraid/core"), "@opentelemetry/api": "1.9.1" },
 }, null, 2));
 execFileSync("npm", ["install", "--engine-strict", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: consumer, stdio: "inherit", env: { ...process.env, npm_config_engine_strict: "true" } });
-const { trace } = await import(join(consumer, "node_modules/@opentelemetry/api/build/esm/index.js"));
-const { createOpenTelemetryObserver } = await import(join(consumer, "node_modules/@sqlbraid/opentelemetry/dist/index.js"));
+writeFileSync(join(consumer, "probe.mjs"), `import assert from "node:assert/strict";
+import { trace } from "@opentelemetry/api";
+import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
+const before = trace.getTracer("sqlbraid");
+assert.equal(typeof before.startSpan, "function");
 const observer = createOpenTelemetryObserver({});
 assert.equal(typeof observer.onEvent, "function");
 const operationId = "api-floor-operation";
-const ready = {
-  type: "query:ready", operationId, values: [], execution: { adapterId: "api-floor", dialectId: "postgres", transport: "text-positional", reuse: "simple" },
-  literalizedSql: () => ({ text: "SELECT 1", truncated: false }), declaredKind: "rows", transactionDepth: 0, transactionScoped: false,
-};
+const ready = { type: "query:ready", operationId, values: [], execution: { adapterId: "api-floor", dialectId: "postgres", transport: "text-positional", reuse: "simple" }, literalizedSql: () => ({ text: "SELECT 1", truncated: false }), declaredKind: "rows", transactionDepth: 0, transactionScoped: false };
 await observer.onEvent(ready);
 await observer.onEvent({ type: "query:result", operationId, durationMs: 0, actualKind: "rows", transactionDepth: 0, transactionScoped: false });
-assert.ok(trace.getTracer("sqlbraid"));
+console.log("PASS no-SDK OTel API lifecycle");
+`);
+execFileSync(process.execPath, ["probe.mjs"], { cwd: consumer, stdio: "inherit" });
 console.info(`PASS packed OTel API-only consumer at Node ${process.versions.node}: ${consumer}`);
