@@ -34,6 +34,35 @@ for (const locale of ["", "ko/"]) {
     assert.ok(section.includes(`- Evidence: ${target.evidence?.status ?? "—"}`), `${locale || "en"} raw support evidence mismatch for ${target.id}.`);
   }
 }
+const postgres = targets.find((target) => target.id === "postgres-pg-node-16-4");
+assert.ok(postgres, "Raw support regression target postgres-pg-node-16-4 is missing.");
+for (const locale of ["", "ko/"]) {
+  const rawSupport = await readFile(join(output, `${locale}reference/support.md`), "utf8");
+  const section = rawSupport.split(/^### /mu).find((candidate) => candidate.startsWith(`${postgres.id}\n`));
+  const exactInteger = postgres.capabilities["numeric.exact-integer"];
+  const exactIntegerRaw = exactInteger.driverRawRepresentations?.join(", ");
+  const exactIntegerLine = section?.split("\n").find((line) => line.startsWith("| `numeric.exact-integer` |"));
+  assert.ok(exactIntegerRaw && exactIntegerLine?.includes(`raw=${exactIntegerRaw}`),
+    `${locale || "en"} PostgreSQL exact integer raw evidence mismatch.`);
+  const approximateFloat = postgres.capabilities["numeric.approximate-float"];
+  const approximateFloatRaw = approximateFloat.driverRawRepresentations?.join(", ");
+  const approximateFloatLine = section?.split("\n").find((line) => line.startsWith("| `numeric.approximate-float` |"));
+  assert.ok(approximateFloatRaw && approximateFloatLine?.includes(`raw=${approximateFloatRaw}`),
+    `${locale || "en"} PostgreSQL approximate float raw evidence mismatch.`);
+}
+const interactiveRaw = await readFile(join(output, "interactive-preview.md"), "utf8");
+const interactiveRawKo = await readFile(join(output, "ko/interactive-preview.md"), "utf8");
+const renderedInteractiveUrl = new URL("interactive-preview/", base).href;
+const renderedInteractiveKoUrl = new URL("ko/interactive-preview/", base).href;
+assert.ok(!interactiveRaw.includes("InteractivePreview") && !interactiveRaw.includes("import ") &&
+  interactiveRaw.includes(renderedInteractiveUrl),
+  "English interactive preview raw Markdown must link to the rendered HTML page.");
+assert.ok(!interactiveRawKo.includes("InteractivePreview") && !interactiveRawKo.includes("import ") &&
+  interactiveRawKo.includes(renderedInteractiveKoUrl),
+  "Korean interactive preview raw Markdown must link to the localized rendered HTML page.");
+assert.ok(pages.get("interactive-preview/index.html")?.text.includes("data-sqlbraid-preview") &&
+  pages.get("ko/interactive-preview/index.html")?.text.includes("data-sqlbraid-preview"),
+  "Interactive preview rendered pages must contain the preview component marker for both locales.");
 
 const source = fileURLToPath(new URL("./src/content/docs/", import.meta.url));
 for (const file of await readdir(source, { recursive: true })) {

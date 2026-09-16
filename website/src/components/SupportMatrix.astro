@@ -1,38 +1,21 @@
 ---
 import {
   loadSupportMatrix,
+  projectSupportMatrixRow,
   serializeSupportMatrix,
-  type SupportTarget,
 } from "../lib/support-matrix";
 
 const data = loadSupportMatrix();
 const serialized = serializeSupportMatrix(data);
 const locale = Astro.url.pathname.includes("/ko/") ? "ko" : "en";
-const statusLabels: Record<string, string> = {
-  compatible: locale === "ko" ? "호환 가능" : "Compatible",
-  historical: locale === "ko" ? "과거 검증" : "Historical",
-  conditional: locale === "ko" ? "조건부" : "Conditional",
-  official: locale === "ko" ? "공식" : "Official",
-  unsupported: locale === "ko" ? "지원하지 않음" : "Unsupported",
-  guaranteed: locale === "ko" ? "보장됨" : "Guaranteed",
-  guarded: locale === "ko" ? "값 검사" : "Guarded",
-};
-const safeStatus = (value: string) => statusLabels[value.toLowerCase()] ?? value;
-const databaseLabel = (target: SupportTarget) => [target.database.product, target.database.version, target.database.edition].filter(Boolean).join(" ");
-const numericLabel = (target: SupportTarget, kind: keyof SupportTarget["numeric"]) => {
-  const contract = target.numeric[kind];
-  return `${contract.representation} · ${contract.fidelity}${contract.profile ? ` · ${contract.profile}` : ""}`;
-};
-const capabilityLabel = (target: SupportTarget, prefix: string) => Object.entries(target.capabilities)
-  .filter(([id]) => id === prefix || id.startsWith(`${prefix}.`))
-  .map(([id, claim]) => `${id === prefix ? "" : `${id}: `}${safeStatus(claim.status)}`)
-  .join("; ") || "—";
-const fallbackRows = data.targets.map((target) => ({ target }));
+const fallbackRows = data.targets.map((target) => ({ target, cells: projectSupportMatrixRow(data, "database", { target }, locale) }));
+const statusClass = (value: string) => value.toLowerCase().replace(/[^a-z0-9-]/gu, "-");
 ---
 
 <div class="support-matrix" data-support-matrix-root>
   <support-matrix aria-label={locale === "ko" ? "지원 매트릭스" : "Support matrix"}></support-matrix>
   <script type="application/json" data-support-matrix set:html={serialized}></script>
+  <div class="support-matrix__fallback-scroll">
   <table class="support-matrix__fallback">
     <caption>{locale === "ko" ? "SQLBraid 지원 대상 (정적/인쇄용 요약)" : "SQLBraid support targets (static/print summary)"}</caption>
     <thead>
@@ -40,32 +23,33 @@ const fallbackRows = data.targets.map((target) => ({ target }));
         <th scope="col">{locale === "ko" ? "대상" : "Target"}</th>
         <th scope="col">{locale === "ko" ? "데이터베이스" : "Database"}</th>
         <th scope="col">{locale === "ko" ? "드라이버" : "Driver"}</th>
-        <th scope="col">{locale === "ko" ? "프로필" : "Profile"}</th>
         <th scope="col">{locale === "ko" ? "런타임" : "Runtime"}</th>
-        <th scope="col">{locale === "ko" ? "상태" : "Status"}</th>
+        <th scope="col">{locale === "ko" ? "상태" : "Support status"}</th>
         <th scope="col">{locale === "ko" ? "정확한 숫자" : "Exact numeric"}</th>
-        <th scope="col">{locale === "ko" ? "근사 부동소수점" : "Approximate float"}</th>
-        <th scope="col">{locale === "ko" ? "JSON 충실도" : "JSON fidelity"}</th>
-        <th scope="col">{locale === "ko" ? "시간 충실도" : "Temporal fidelity"}</th>
+        <th scope="col">JSON</th>
+        <th scope="col">{locale === "ko" ? "시간" : "Temporal"}</th>
+        <th scope="col">{locale === "ko" ? "트랜잭션" : "Transaction"}</th>
+        <th scope="col">{locale === "ko" ? "스트리밍" : "Streaming"}</th>
       </tr>
     </thead>
     <tbody>
-      {fallbackRows.map(({ target }) => (
+      {fallbackRows.map(({ target, cells }) => (
         <tr id={target.id}>
-          <th scope="row"><a href={`#${encodeURIComponent(target.id)}`}>{target.id}</a></th>
-          <td>{databaseLabel(target)}</td>
-          <td>{target.driver.id}{target.driver.version ? `@${target.driver.version}` : ""}</td>
-          <td>{target.driver.profile ?? "—"}</td>
-          <td>{target.runtime.id}{target.runtime.version ? `@${target.runtime.version}` : ""}</td>
-          <td>{safeStatus(target.status)}</td>
-          <td>{numericLabel(target, "exact-integer")} / {numericLabel(target, "exact-decimal")}</td>
-          <td>{numericLabel(target, "approximate-binary")}</td>
-          <td>{[capabilityLabel(target, "data.json-parsed"), capabilityLabel(target, "data.json-lossless-text")].filter((value) => value !== "—").join(" / ") || "—"}</td>
-          <td>{[capabilityLabel(target, "data.temporal-native"), capabilityLabel(target, "data.temporal-lossless")].filter((value) => value !== "—").join(" / ") || "—"}</td>
+          <th scope="row"><a href={`#${encodeURIComponent(target.id)}`}>{cells[0]}</a></th>
+          <td>{cells[1]}</td>
+          <td>{cells[2]}</td>
+          <td>{cells[3]}</td>
+          <td><span class={`support-matrix__status support-matrix__status--${statusClass(target.status)}`}>{cells[4]}</span></td>
+          <td>{cells[5]}</td>
+          <td>{cells[6]}</td>
+          <td>{cells[7]}</td>
+          <td>{cells[8]}</td>
+          <td>{cells[9]}</td>
         </tr>
       ))}
     </tbody>
   </table>
+  </div>
 </div>
 
 <script>
@@ -74,13 +58,34 @@ const fallbackRows = data.targets.map((target) => ({ target }));
 
 <style is:global>
   .support-matrix {
+    --matrix-surface: var(--sl-color-bg, var(--sl-color-white));
+    --matrix-border: var(--sl-color-gray-5);
+    --matrix-muted: var(--sl-color-gray-2);
+    --matrix-columns: 10;
     margin-block: 1.5rem;
+    color: var(--sl-color-text);
+    font-family: var(--sl-font, var(--sl-font-system, inherit));
   }
 
   .support-matrix__fallback {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
+    display: table;
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--matrix-border);
+    border-radius: 0.5rem;
+    background: var(--matrix-surface);
+    box-shadow: var(--sl-shadow-sm, 0 0.25rem 1rem rgb(0 0 0 / 0.08));
+    font-size: var(--sl-text-sm, 0.875rem);
+    overflow: visible;
+  }
+
+  .support-matrix__fallback-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    border-radius: 0.5rem;
+    scrollbar-color: var(--sl-color-gray-4) transparent;
   }
 
   .support-matrix__fallback caption {
@@ -91,31 +96,73 @@ const fallbackRows = data.targets.map((target) => ({ target }));
 
   .support-matrix__fallback th,
   .support-matrix__fallback td {
-    border: 1px solid var(--sl-color-gray-5);
+    border-block-end: 1px solid var(--matrix-border);
     padding: 0.55rem 0.65rem;
     text-align: start;
+    vertical-align: top;
+  }
+
+  .support-matrix__fallback thead th {
+    background: var(--sl-color-gray-6);
+    color: var(--sl-color-text);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .support-matrix__fallback tbody tr:last-child th,
+  .support-matrix__fallback tbody tr:last-child td {
+    border-block-end: 0;
+  }
+
+  .support-matrix__fallback tbody tr:hover {
+    background: color-mix(in srgb, var(--sl-color-accent-low) 8%, transparent);
   }
 
   .support-matrix__interactive {
     display: none;
   }
 
-  .support-matrix.has-js .support-matrix__fallback {
+  .support-matrix.has-js .support-matrix__fallback-scroll {
     display: none;
   }
 
   .support-matrix__toolbar {
     display: grid;
-    gap: 0.75rem;
-    margin-block-end: 0.75rem;
+    gap: 0.7rem;
+    margin-block-end: 0.9rem;
   }
 
-  .support-matrix__views,
-  .support-matrix__filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: end;
+  .support-matrix__views {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    border: 1px solid var(--matrix-border);
+    border-radius: 0.45rem;
+    background: var(--sl-color-gray-6);
+    overflow: hidden;
+  }
+
+  .support-matrix__views button {
+    min-height: 2.15rem;
+    margin: 0;
+    border: 0;
+    border-inline-end: 1px solid var(--matrix-border);
+    border-radius: 0;
+    background: transparent;
+    color: var(--sl-color-text);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--sl-text-sm, 0.875rem);
+    font-weight: 600;
+    padding: 0.35rem 0.8rem;
+  }
+
+  .support-matrix__views button:last-child {
+    border-inline-end: 0;
+  }
+
+  .support-matrix__views button:hover {
+    background: color-mix(in srgb, var(--sl-color-accent-low) 10%, transparent);
   }
 
   .support-matrix__views button[aria-selected="true"] {
@@ -123,16 +170,82 @@ const fallbackRows = data.targets.map((target) => ({ target }));
     color: var(--sl-color-accent-low);
   }
 
-  .support-matrix__toolbar label {
-    display: grid;
-    gap: 0.25rem;
-    font-size: 0.85rem;
+  .support-matrix__views button:focus-visible,
+  .support-matrix__filters button:focus-visible,
+  .support-matrix__toolbar input:focus-visible,
+  .support-matrix__toolbar select:focus-visible {
+    outline: 2px solid var(--sl-color-accent-high);
+    outline-offset: 2px;
   }
 
-  .support-matrix__toolbar input,
-  .support-matrix__toolbar select,
-  .support-matrix__toolbar button {
-    min-height: 2rem;
+  .support-matrix__views button:focus-visible {
+    position: relative;
+    z-index: 1;
+    outline-offset: -3px;
+  }
+
+  .support-matrix__search,
+  .support-matrix__filters label {
+    display: grid;
+    gap: 0.3rem;
+    color: var(--matrix-muted);
+    font-size: var(--sl-text-xs, 0.75rem);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .support-matrix__search input,
+  .support-matrix__filters select,
+  .support-matrix__filters button {
+    box-sizing: border-box;
+    min-height: 2.1rem;
+    border: 1px solid var(--matrix-border);
+    border-radius: 0.35rem;
+    background: var(--sl-color-bg-nav, var(--matrix-surface));
+    color: var(--sl-color-text);
+    font: inherit;
+  }
+
+  .support-matrix__search input {
+    width: 100%;
+    padding: 0.45rem 0.65rem;
+    font-size: var(--sl-text-base, 1rem);
+  }
+
+  .support-matrix__filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.5rem;
+  }
+
+  .support-matrix__filters label {
+    flex: 1 1 8rem;
+    min-width: 7rem;
+  }
+
+  .support-matrix__filters select {
+    width: 100%;
+    padding: 0.35rem 1.8rem 0.35rem 0.5rem;
+  }
+
+  .support-matrix__filters .support-matrix__reset {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.65rem;
+    background: transparent;
+    color: var(--matrix-muted);
+    cursor: pointer;
+  }
+
+  .support-matrix__filters .support-matrix__reset:hover {
+    color: var(--sl-color-text);
+    background: var(--sl-color-gray-6);
+  }
+
+  .support-matrix__count {
+    min-height: 1.1rem;
+    color: var(--matrix-muted);
+    font-size: var(--sl-text-xs, 0.75rem);
   }
 
   .support-matrix.is-ready .support-matrix__interactive,
@@ -142,24 +255,63 @@ const fallbackRows = data.targets.map((target) => ({ target }));
 
   .support-matrix__viewport {
     position: relative;
-    overflow: auto;
-    max-height: min(70vh, 42rem);
-    border: 1px solid var(--sl-color-gray-5);
     isolation: isolate;
-    height: min(70vh, 42rem);
+    overflow: auto;
+    width: 100%;
+    height: clamp(26rem, 55vh, 36rem);
     max-width: 100%;
+    border: 1px solid var(--matrix-border);
+    border-radius: 0.5rem;
+    background: var(--matrix-surface);
+    box-shadow: var(--sl-shadow-sm, 0 0.25rem 1rem rgb(0 0 0 / 0.08));
+    scrollbar-color: var(--sl-color-gray-4) transparent;
+  }
+
+  .support-matrix__viewport::before,
+  .support-matrix__viewport::after {
+    position: sticky;
+    z-index: 4;
+    display: block;
+    width: 1.2rem;
+    height: 100%;
+    margin-block-end: -100%;
+    pointer-events: none;
+    content: "";
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+
+  .support-matrix__viewport::before {
+    float: left;
+    left: 0;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--matrix-surface) 96%, transparent), transparent);
+  }
+
+  .support-matrix__viewport::after {
+    float: right;
+    right: 0;
+    background: linear-gradient(270deg, color-mix(in srgb, var(--matrix-surface) 96%, transparent), transparent);
+  }
+
+  .support-matrix__viewport[data-scroll-left]::before,
+  .support-matrix__viewport[data-scroll-right]::after {
+    opacity: 1;
+  }
+
+  .support-matrix__header-slot,
+  .support-matrix__rows {
+    width: max(100%, calc(var(--matrix-columns) * 9.5rem));
+    min-width: calc(var(--matrix-columns) * 9.5rem);
   }
 
   .support-matrix__header-slot {
     position: sticky;
     top: 0;
-    z-index: 2;
-    width: max(100%, calc(var(--matrix-columns) * 9rem));
+    z-index: 3;
   }
 
   .support-matrix__rows {
     position: relative;
-    width: max(100%, calc(var(--matrix-columns) * 9rem));
   }
 
   .support-matrix .support-matrix__rows,
@@ -171,18 +323,21 @@ const fallbackRows = data.targets.map((target) => ({ target }));
     display: grid;
     grid-template-columns: repeat(var(--matrix-columns), minmax(0, 1fr));
     align-items: center;
-    height: 56px;
     box-sizing: border-box;
-    border-block-end: 1px solid var(--sl-color-gray-5);
-    padding-inline: 0.6rem;
-    gap: 0.5rem;
-    font-size: 0.8rem;
+    height: 56px;
+    border-block-end: 1px solid color-mix(in srgb, var(--matrix-border) 78%, transparent);
+    padding-inline: 0.7rem;
+    gap: 0.6rem;
+    font-size: var(--sl-text-xs, 0.75rem);
   }
 
   .support-matrix__data-row {
     position: absolute;
-    left: 0;
-    right: 0;
+    inset-inline: 0;
+  }
+
+  .support-matrix__data-row:hover {
+    background: color-mix(in srgb, var(--sl-color-accent-low) 8%, transparent);
   }
 
   .support-matrix__row > span {
@@ -202,41 +357,89 @@ const fallbackRows = data.targets.map((target) => ({ target }));
   }
 
   .support-matrix__header {
-    background: var(--sl-color-bg);
-    font-weight: 700;
+    border-block-end-color: var(--matrix-border);
+    background: var(--sl-color-bg, var(--matrix-surface));
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--matrix-border) 82%, transparent);
+    font-weight: 650;
   }
 
   .support-matrix__status {
-    display: inline-block;
-    border-radius: 0.25rem;
-    padding: 0.15rem 0.35rem;
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    border: 1px solid color-mix(in srgb, var(--matrix-border) 75%, transparent);
+    border-radius: 999px;
+    padding: 0.15rem 0.45rem;
     background: var(--sl-color-gray-6);
+    color: var(--sl-color-text);
+    font-size: 0.72rem;
+    font-weight: 650;
+    line-height: 1.25;
     white-space: nowrap;
   }
 
   .support-matrix__status--official,
   .support-matrix__status--guaranteed {
-    background: color-mix(in srgb, var(--sl-color-green-high) 24%, transparent);
+    border-color: color-mix(in srgb, var(--sl-color-green-high) 45%, var(--matrix-border));
+    background: color-mix(in srgb, var(--sl-color-green-high) 18%, var(--matrix-surface));
   }
 
   .support-matrix__status--pending,
-  .support-matrix__status--guarded {
-    background: color-mix(in srgb, var(--sl-color-orange-high) 24%, transparent);
+  .support-matrix__status--guarded,
+  .support-matrix__status--conditional {
+    border-color: color-mix(in srgb, var(--sl-color-orange-high) 45%, var(--matrix-border));
+    background: color-mix(in srgb, var(--sl-color-orange-high) 16%, var(--matrix-surface));
+  }
+
+  .support-matrix__status--unsupported {
+    background: color-mix(in srgb, var(--sl-color-gray-5) 35%, var(--matrix-surface));
+  }
+
+  .support-matrix__row a,
+  .support-matrix__fallback a {
+    font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  }
+
+  .support-matrix__data-row[data-view="database"] > span:nth-child(1),
+  .support-matrix__data-row[data-view="database"] > span:nth-child(3),
+  .support-matrix__data-row[data-view="database"] > span:nth-child(4),
+  .support-matrix__data-row[data-view="driver"] > span:nth-child(1),
+  .support-matrix__data-row[data-view="driver"] > span:nth-child(2),
+  .support-matrix__data-row[data-view="driver"] > span:nth-child(3),
+  .support-matrix__data-row[data-view="driver"] > span:nth-child(4),
+  .support-matrix__data-row[data-view="driver"] > span:nth-child(5),
+  .support-matrix__data-row[data-view="driver"] > span:nth-child(11),
+  .support-matrix__data-row[data-view="capability"] > span:nth-child(2),
+  .support-matrix__data-row[data-view="capability"] > span:nth-child(5) {
+    font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  }
+
+  .support-matrix__fallback tbody td:nth-child(3),
+  .support-matrix__fallback tbody td:nth-child(4) {
+    font-family: var(--sl-font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   }
 
   @media (max-width: 40rem) {
+    .support-matrix__views {
+      width: 100%;
+    }
+
+    .support-matrix__views button {
+      flex: 1 1 0;
+      padding-inline: 0.45rem;
+    }
+
     .support-matrix__filters {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .support-matrix__toolbar input,
-    .support-matrix__toolbar select {
-      width: 100%;
+    .support-matrix__filters label {
+      min-width: 0;
     }
 
-    .support-matrix__viewport {
-      max-height: 65vh;
+    .support-matrix__filters .support-matrix__reset {
+      width: 100%;
     }
   }
 
@@ -247,6 +450,8 @@ const fallbackRows = data.targets.map((target) => ({ target }));
 
     .support-matrix__fallback {
       display: table !important;
+      border: 0;
+      box-shadow: none;
       font-size: 8pt;
     }
   }

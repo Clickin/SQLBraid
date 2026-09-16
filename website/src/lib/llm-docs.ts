@@ -24,7 +24,7 @@ function supportTargetMarkdown(target: SupportTarget, conditionLabels: ReadonlyM
       claim.representation,
       claim.fidelity,
       claim.binaryPrecision === undefined ? undefined : `binaryPrecision=${claim.binaryPrecision}`,
-      claim.rawRepresentations?.length ? `raw=${claim.rawRepresentations.join(", ")}` : undefined,
+      claim.driverRawRepresentations?.length ? `raw=${claim.driverRawRepresentations.join(", ")}` : undefined,
     ].filter(Boolean).join("; ");
     return `| \`${id}\` | ${details || "—"} |`;
   }).join("\n");
@@ -109,6 +109,14 @@ export function renderRawMarkdown(entry: CollectionEntry<"docs">, base = docsBas
     ? `\n> ${entry.data.description.trim()}\n`
     : "";
   let source = entry.body ?? "";
+  if (entry.id === "interactive-preview" || entry.id === "ko/interactive-preview") {
+    const renderedPreviewUrl = `https://clickin.github.io${base}/${entry.id}/`;
+    source = source
+      .replace(/^import InteractivePreview from "[^"]+";\n*/u, "")
+      .replace("<InteractivePreview />", entry.id.startsWith("ko/")
+        ? `문서 사이트에서 렌더링된 [인터랙티브 미리보기](${renderedPreviewUrl})를 사용할 수 있습니다.`
+        : `The rendered [interactive preview](${renderedPreviewUrl}) is available on the documentation site.`);
+  }
   if (entry.id === "reference/support" || entry.id === "ko/reference/support") {
     source = source
       .replace(/^import SupportMatrix from "[^"]+";\n*/u, "")
