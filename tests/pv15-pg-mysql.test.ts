@@ -34,7 +34,7 @@ test("PostgreSQL OUT parameters are rejected outside calls before driver I/O", a
   };
   const executor = createPgExecutor(client);
   await assert.rejects(
-    () => executor.query(pgSql.rows`SELECT ${pgSql.out("value")}`.render()),
+    async () => executor.query(pgSql.rows`SELECT ${pgSql.out("value")}`.render()),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "routine.out"
       && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
@@ -127,9 +127,9 @@ test("MySQL materialized queries reject nested result sets, including empty sets
   };
   const executor = createMysql2Executor(connection);
   const query = mysqlSql.rows`SELECT driver_result`.render();
-  await assert.rejects(() => executor.query(query), /BRAID_RESULT_SETS_UNSUPPORTED/u);
+  await assert.rejects(async () => executor.query(query), /BRAID_RESULT_SETS_UNSUPPORTED/u);
   payload = [[], [], { affectedRows: 0 }];
-  await assert.rejects(() => executor.query(query), /BRAID_RESULT_SETS_UNSUPPORTED/u);
+  await assert.rejects(async () => executor.query(query), /BRAID_RESULT_SETS_UNSUPPORTED/u);
 });
 
 test("MySQL materialized queries preserve flat rows, empty SELECTs and command metadata", async () => {
@@ -169,13 +169,13 @@ test("MySQL rows fail closed for rowsAsArray and lossy numeric typeCast results"
   };
   const executor = createMysql2Executor(connection);
   await assert.rejects(
-    () => executor.query(mysqlSql.rows`SELECT id`.render()),
+    async () => executor.query(mysqlSql.rows`SELECT id`.render()),
     /BRAID_RESULT_(?:COLUMNS|SETS_UNSUPPORTED)/u,
   );
   payload = [{ id: 9_007_199_254_740_992 }];
   fields = [{ name: "id", type: 8 }];
   await assert.rejects(
-    () => executor.query(mysqlSql.rows`SELECT id`.render()),
+    async () => executor.query(mysqlSql.rows`SELECT id`.render()),
     { code: "BRAID_RESULT_EXACTNESS" },
   );
 });
@@ -264,7 +264,7 @@ test("MySQL streaming preserves exact DECIMAL text without materialization and r
   assert.deepEqual(rows, [{ amount: "1.25" }, { amount: "2.5" }]);
   assert.equal(requestedHighWaterMark, 3);
   const call = mysqlSql.call`CALL routine(${mysqlSql.out("answer")})`.render();
-  await assert.rejects(() => executor.call(call), /BRAID_CALL_OUT_UNSUPPORTED/);
+  await assert.rejects(async () => executor.call(call), /BRAID_CALL_OUT_UNSUPPORTED/);
   assert.equal(executeCalls, 0);
 });
 

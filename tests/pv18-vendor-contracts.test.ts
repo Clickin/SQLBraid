@@ -98,7 +98,7 @@ test("Oracle NUMBER remains exact-string only while object/vector mappings stay 
     async rollback() {},
   };
   await assert.rejects(
-    () => createOracledbExecutor(connection).query(oracleSql.rows`SELECT value FROM dual`.render()),
+    async () => createOracledbExecutor(connection).query(oracleSql.rows`SELECT value FROM dual`.render()),
     { code: "BRAID_RESULT_EXACTNESS" },
   );
   assert.equal(oracleTypePolicy.mappings.find((mapping) => mapping.databaseType === "OBJECT")?.outputType, "unknown");

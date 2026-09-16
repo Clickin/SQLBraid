@@ -59,10 +59,10 @@ test("Oracle DML RETURNING zips arrays, preserves zero rows, and uses driver row
   next = { outBinds: [[], []], rowsAffected: 0 };
   assert.deepEqual(await executor.query(returned.render()), { kind: "rows", rows: [], rowCount: 0 });
   next = { outBinds: [["1"], []], rowsAffected: 1 };
-  await assert.rejects(() => executor.query(returned.render()), /BRAID_RETURNING_LENGTH/u);
+  await assert.rejects(async () => executor.query(returned.render()), /BRAID_RETURNING_LENGTH/u);
   next = { outBinds: [[1], ["Ada"]], rowsAffected: 1 };
   await assert.rejects(
-    () => executor.query(returned.render()),
+    async () => executor.query(returned.render()),
     { code: "BRAID_RESULT_EXACTNESS" },
   );
 });

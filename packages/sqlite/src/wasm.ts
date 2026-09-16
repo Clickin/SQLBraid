@@ -274,9 +274,8 @@ function materialize(statement: RenderedStatement, binding: StatementBindingDesc
   return { text: description.parameterizedSql, values: statement.parameters.map((parameter) => parameter.value) };
 }
 
-function transactionControl(database: SqliteWasmDatabaseLike, sql: string): Promise<void> {
+function transactionControl(database: SqliteWasmDatabaseLike, sql: string): void {
   database.exec(sql);
-  return Promise.resolve();
 }
 
 function sqliteWasmEnvironment(rowReadsSupported: boolean): DriverEnvironment {
@@ -334,7 +333,7 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
     ownershipKey: database,
     statementBinding: sqliteWasmStatementBinding,
     environment: sqliteWasmEnvironment(capi !== undefined),
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
+    query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): QueryExecutionResult<Row> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
@@ -361,7 +360,7 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
         finishStatement(statement, failure);
       }
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult> {
+    bulk(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): BulkExecutionResult {
       assertExecutionOptions(options);
       assertRoutineParametersUnsupported(bulk.statement);
       if (!binding || describedBulks.get(binding) !== bulk) throw new TypeError("BRAID_BINDING_IDENTITY: SQLite WASM bulk description belongs to another bulk or adapter.");
@@ -393,7 +392,7 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
       }
       return { inputCount: bulk.parameterSets.length, affectedRows, executionMode: "prepared-loop" };
     },
-    async call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult> {
+    call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): DriverRoutineResult {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
