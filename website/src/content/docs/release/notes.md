@@ -32,6 +32,8 @@ gates and explicit release authorization remain separate requirements.
 - homogeneous command-only bulk with pre-I/O validation and actual execution
   mode reporting;
 - observe/fail-only execution observers and lazy diagnostic literalization;
+- optional `@sqlbraid/opentelemetry` DB client spans and stable duration metrics,
+  with SDK/exporter ownership kept in the application;
 - PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL Server dialect roots with
   driver subpaths;
 - Bun SQL's one adapter family with required user-selected PostgreSQL, MySQL,

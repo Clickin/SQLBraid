@@ -178,6 +178,11 @@ reports effective reuse.
 
 Observers run in registration order and are observe/fail-only: they may inspect or throw, but cannot rewrite SQL, replace binds/results, retry, or route. A pre-I/O failure prevents execution; a post-I/O failure cannot undo a root side effect. Timing fields are named `durationMs`.
 
+Optional `@sqlbraid/opentelemetry` adds SQLBraid-level DB client spans and the
+stable `db.client.operation.duration` metric. It keeps SDK/exporter ownership
+with the application, omits bind values and literalized SQL, and does not add
+itself to the `sqlbraid` facade.
+
 ## Dialects, drivers, and runtimes
 
 These are independent axes:
@@ -235,6 +240,7 @@ SQLBraid is not an ORM, query-builder-first language, complete SQL parser, unive
 | `@sqlbraid/bun-sql` | Bun.SQL multi-dialect driver adapter; requires user-selected dialect |
 | `@sqlbraid/compiler` | Guarded-template lowering and source maps |
 | `@sqlbraid/vite` | Vite pre-transform |
+| `@sqlbraid/opentelemetry` | Optional OpenTelemetry DB client spans and duration metrics |
 | `@sqlbraid/metadata` | Database-fact snapshots, validation, hashing, drift |
 | `@sqlbraid/codegen` | Pure metadata + TypePolicy → Row/Insert/Update source |
 | `@sqlbraid/tooling` | Node-first config/workspace/evidence services |

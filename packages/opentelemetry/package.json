@@ -1,0 +1,32 @@
+{
+  "name": "@sqlbraid/opentelemetry",
+  "version": "0.1.0-rc.2",
+  "description": "OpenTelemetry tracing and database duration metrics for SQLBraid observers",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Clickin/SQLBraid.git",
+    "directory": "packages/opentelemetry"
+  },
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
+  "keywords": ["sql", "database", "opentelemetry", "tracing", "metrics"],
+  "type": "module",
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=22.18.0" },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  }
+}

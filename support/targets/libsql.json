@@ -1,0 +1,123 @@
+{
+  "id": "libsql-local-node-22-18-0",
+  "status": "compatible",
+  "database": {
+    "product": "sqlite",
+    "edition": "libSQL local SQLite"
+  },
+  "driver": {
+    "id": "libsql",
+    "version": "0.18.0",
+    "profile": "libsql-exact-string",
+    "package": "@sqlbraid/sqlite/libsql",
+    "transport": "text-positional (local file)",
+    "stream": "unsupported; materialized results",
+    "routine": "unsupported by SQLite",
+    "bulk": "local batch",
+    "requiredOptions": {
+      "intMode": "string"
+    },
+    "driverRawRepresentations": {
+      "integer": "string",
+      "decimal": "storage-dependent number or string",
+      "json": "string",
+      "temporal": "string",
+      "binary": "ArrayBuffer or Uint8Array"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+      "json": "string",
+      "temporal": "string",
+      "binary": "Uint8Array"
+    },
+    "exclusions": [
+      "This target covers @libsql/client 0.18.0 local file URLs only; remote HTTP and WebSocket transports are not certified.",
+      "Physical session pinning and incremental streaming are unsupported."
+    ]
+  },
+  "runtime": {
+    "id": "node",
+    "version": "22.18.0"
+  },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Node 22.18.0 with @libsql/client 0.18.0, intMode string, and a temporary local database file.",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+  },
+  "ci": {
+    "command": "pnpm exec vitest run --project \"${{ matrix.project }}\"",
+    "workflow": ".github/workflows/release.yml",
+    "releaseBlocking": false
+  },
+  "numeric": {
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "libsql-exact-string"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "profile": "libsql-exact-string"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "lossless",
+      "profile": "libsql-exact-string"
+    }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unsupported"
+  },
+  "capabilities": {
+    "sql.native-transparency": {
+      "status": "guaranteed",
+      "testIds": ["libsql.sql.native-transparency"]
+    },
+    "numeric.exact-integer": {
+      "status": "guaranteed",
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "testIds": ["libsql.numeric.exact-integer"],
+      "driverRawRepresentations": ["string"]
+    },
+    "data.binary": {
+      "status": "guaranteed",
+      "testIds": ["libsql.data.binary"],
+      "driverRawRepresentations": ["Uint8Array"]
+    },
+    "transaction": {
+      "status": "guaranteed",
+      "testIds": ["libsql.execution.transaction"]
+    },
+    "transaction.savepoint": {
+      "status": "guaranteed",
+      "testIds": ["libsql.execution.transaction"]
+    },
+    "session.pinned": {
+      "status": "unsupported",
+      "conditionCode": "libsql.client-no-session-pinning",
+      "testIds": []
+    }
+  },
+  "typePolicy": {
+    "id": "sqlite-default",
+    "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  }
+}

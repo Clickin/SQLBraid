@@ -10,6 +10,7 @@ const sourceAliases = {
   "@sqlbraid/compiler": resolve("packages/compiler/src/index.ts"),
   "@sqlbraid/vite": resolve("packages/vite/src/index.ts"),
   "@sqlbraid/tooling": resolve("packages/tooling/src/index.ts"),
+  "@sqlbraid/opentelemetry": resolve("packages/opentelemetry/src/index.ts"),
   "@sqlbraid/cli": resolve("packages/cli/src/index.ts"),
   "@sqlbraid/cli/config": resolve("packages/cli/src/config.ts"),
   "@sqlbraid/bun-sql": resolve("packages/bun-sql/src/index.ts"),

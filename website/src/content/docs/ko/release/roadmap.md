@@ -10,7 +10,8 @@ Standard Schema 매핑, 물리 lease/session 소유권, transaction/savepoint �
 capability 기반 cancellation, prepared input/zero-input factory, stream,
 observer, metadata, 결정적 codegen, 표준 LSP, CLI JSON 검사, 얇은 VS Code
 client, native DML-returning contract, 동종 command bulk, MariaDB, Browser
-SQLite WASM, D1, representation-profile contract가 포함됩니다.
+SQLite WASM, D1, representation-profile contract와 선택적 OpenTelemetry DB
+client span 및 duration metric이 포함됩니다.
 
 지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가
 기록한 정확한 database, driver, profile, runtime, capability tuple과 revision별
@@ -30,7 +31,7 @@ capability별입니다.
 - 더 넓은 database/server-line 및 추가 first-party driver 증거
 - application input mapping과 명시적 codec contract
 - 선택적 database verification과 풍부한 SQL 진단
-- pipeline/COPY/LOAD DATA, query transformation, routing/retry, OpenTelemetry
+- pipeline/COPY/LOAD DATA, query transformation, routing/retry
 - 더 풍부한 container/JSON/temporal representation 증거
 
 Cancellation, session, transaction option, prepared input factory, bulk/stream

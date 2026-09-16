@@ -1,0 +1,120 @@
+{
+  "id": "better-sqlite3-node-22-18-0",
+  "status": "compatible",
+  "database": {
+    "product": "sqlite",
+    "edition": "better-sqlite3 bundled SQLite"
+  },
+  "driver": {
+    "id": "better-sqlite3",
+    "version": "13.0.3",
+    "profile": "better-sqlite3-exact-string",
+    "package": "@sqlbraid/sqlite/better-sqlite3",
+    "transport": "text-positional (?)",
+    "stream": "Statement.iterate",
+    "routine": "unsupported by SQLite",
+    "bulk": "prepared-loop",
+    "requiredOptions": {},
+    "driverRawRepresentations": {
+      "integer": "bigint",
+      "decimal": "storage-dependent number or bigint",
+      "json": "string",
+      "temporal": "string",
+      "binary": "Buffer"
+    },
+    "sqlbraidRepresentations": {
+      "integer": "string",
+      "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+      "json": "string",
+      "temporal": "string",
+      "binary": "Uint8Array"
+    },
+    "exclusions": [
+      "This local target certifies better-sqlite3 13.0.3 only on Node 22.18.0.",
+      "SQLite routine calls and active statement cancellation are unsupported."
+    ]
+  },
+  "runtime": {
+    "id": "node",
+    "version": "22.18.0"
+  },
+  "reproducibility": {
+    "zeroCost": true,
+    "description": "Node 22.18.0 with better-sqlite3 13.0.3 and an in-memory database.",
+    "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
+  },
+  "ci": {
+    "command": "pnpm exec vitest run --project \"${{ matrix.project }}\"",
+    "workflow": ".github/workflows/release.yml",
+    "releaseBlocking": false
+  },
+  "numeric": {
+    "exact-integer": {
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "profile": "better-sqlite3-exact-string"
+    },
+    "exact-decimal": {
+      "semantics": "exact-decimal",
+      "representation": "string",
+      "fidelity": "unsupported",
+      "profile": "better-sqlite3-exact-string"
+    },
+    "approximate-binary": {
+      "semantics": "approximate-binary",
+      "representation": "number",
+      "fidelity": "lossless",
+      "profile": "better-sqlite3-exact-string"
+    }
+  },
+  "containers": {
+    "postgres-arrays": "unsupported",
+    "postgres-domains": "unsupported",
+    "postgres-ranges": "unsupported",
+    "postgres-composites": "unsupported",
+    "oracle-objects": "unsupported",
+    "sql-server-variant": "unsupported",
+    "json-nested": "unclassified",
+    "vector": "unsupported"
+  },
+  "capabilities": {
+    "sql.native-transparency": {
+      "status": "guaranteed",
+      "testIds": ["better-sqlite3.sql.native-transparency"]
+    },
+    "numeric.exact-integer": {
+      "status": "guaranteed",
+      "semantics": "exact-integer",
+      "representation": "string",
+      "fidelity": "lossless",
+      "testIds": ["better-sqlite3.numeric.exact-integer"],
+      "driverRawRepresentations": ["bigint"]
+    },
+    "data.binary": {
+      "status": "guaranteed",
+      "testIds": ["better-sqlite3.data.binary"],
+      "driverRawRepresentations": ["Buffer"]
+    },
+    "transaction": {
+      "status": "guaranteed",
+      "testIds": ["better-sqlite3.execution.transaction"]
+    },
+    "transaction.savepoint": {
+      "status": "guaranteed",
+      "testIds": ["better-sqlite3.execution.transaction"]
+    },
+    "session.pinned": {
+      "status": "guaranteed",
+      "testIds": ["better-sqlite3.execution.transaction"]
+    }
+  },
+  "typePolicy": {
+    "id": "sqlite-default",
+    "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
+  },
+  "evidence": {
+    "status": "pending",
+    "runs": []
+  }
+}

@@ -26,6 +26,8 @@ gate와 명시적인 release 승인은 별도 요구사항입니다.
 - materialized routine `output`, 순서 있는 heterogeneous `resultSets`, 선택적 `returnValue`, 명시적 OUT/INOUT/cursor 경계
 - I/O 전 검증과 실제 실행 mode를 보고하는 동종 command-only bulk
 - observe/fail-only execution observer와 lazy diagnostic literalization
+- 애플리케이션이 SDK/exporter를 소유하는 선택적
+  `@sqlbraid/opentelemetry` DB client span 및 안정화된 duration metric
 - PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server dialect root와 driver subpath
 - PostgreSQL, MySQL, MariaDB, SQLite 중 사용자가 선택하는 Bun SQL adapter family; connection auto-detection 없음
 - public API가 동작하는 경우 기존 first-party driver를 재사용하는 Deno; Deno 전용 dialect 없음

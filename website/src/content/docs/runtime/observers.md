@@ -61,3 +61,23 @@ Binding or typed-request construction failures are reported at stage
 `"materialize"` with no driver I/O. Driver, server, and network failures remain
 stage `"driver"`. Observers remain observe/fail-only and cannot rewrite the
 statement, binds, results, retry policy, or routing.
+
+## OpenTelemetry
+
+Install the optional
+[`@sqlbraid/opentelemetry`](https://www.npmjs.com/package/@sqlbraid/opentelemetry)
+package to turn these lifecycle events into DB client spans and the stable
+`db.client.operation.duration` histogram. The application owns the
+OpenTelemetry SDK, provider, exporter, and retention policy:
+
+```ts
+import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
+
+const db = createPgPoolDatabase(pool, {
+  observers: [createOpenTelemetryObserver()],
+});
+```
+
+See the [OpenTelemetry integration guide](/SQLBraid/runtime/opentelemetry/) for
+query-text privacy, traces-only/metrics-only modes, slow-query investigation,
+and driver-instrumentation coexistence.

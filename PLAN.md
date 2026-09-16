@@ -307,7 +307,17 @@ classifier limitation; bind JSON values rather than rewriting SQL.
 Metadata is positive open-world evidence.
 
 Application input mapping/codecs, richer database verification, pipeline/COPY,
-query transformers, retry/routing, and OpenTelemetry remain future candidates.
+query transformers, and retry/routing remain future candidates; this plan does
+not create speculative transaction profiles or support matrices.
+
+The optional `@sqlbraid/opentelemetry` package provides observe-only DB client
+traces and the stable `db.client.operation.duration` metric through the
+execution observer SPI. It has no built-in logger or SDK/exporter dependency,
+keeps bind values and literalized SQL out of telemetry, and does not add a
+facade dependency. Stream and transaction spans, pool metrics, and OTel Logs
+remain future work until the OTel JS Logs signal reaches the stability level
+SQLBraid requires.
+
 Compatibility matrices added for runtime/driver verification must report only
 executed combinations and must not invent capability certification for untested
 tuples.

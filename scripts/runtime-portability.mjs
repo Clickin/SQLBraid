@@ -59,8 +59,8 @@ try {
   await writeFile(join(consumer, "package.json"), JSON.stringify({ name: "sqlbraid-runtime-consumer", private: true, type: "module", dependencies }));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], consumer);
   const installedPackages = await readdir(join(consumer, "node_modules/@sqlbraid"));
-  if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode"].some((name) => installedPackages.includes(name))) {
-    throw new Error("Runtime-only installation pulled in development tooling");
+  if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode", "opentelemetry"].some((name) => installedPackages.includes(name))) {
+    throw new Error("Runtime-only installation pulled in development tooling or optional integrations");
   }
   const topLevelPackages = await readdir(join(consumer, "node_modules"));
   if (topLevelPackages.includes("sqlbraid")) {

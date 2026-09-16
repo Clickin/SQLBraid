@@ -68,3 +68,23 @@ redactor를 지원합니다. 결과는 `complete`, `redactedParameters`,
 보고합니다. 드라이버·서버·네트워크 실패는 `"driver"` 단계입니다. Observer는
 계속 observe/fail 전용이며 statement, 바인드, 결과, retry, routing을 변경하지
 못합니다.
+
+## OpenTelemetry
+
+선택적
+[`@sqlbraid/opentelemetry`](https://www.npmjs.com/package/@sqlbraid/opentelemetry)
+패키지를 설치하면 이 lifecycle event에서 DB client span과 안정화된
+`db.client.operation.duration` histogram을 생성할 수 있습니다. OpenTelemetry
+SDK, provider, exporter와 보존 정책은 애플리케이션이 소유합니다.
+
+```ts
+import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
+
+const db = createPgPoolDatabase(pool, {
+  observers: [createOpenTelemetryObserver()],
+});
+```
+
+query text privacy, traces-only/metrics-only 모드, slow-query 조사, driver
+instrumentation 공존 방식은
+[OpenTelemetry 통합 가이드](/SQLBraid/runtime/opentelemetry/)를 참고하세요.

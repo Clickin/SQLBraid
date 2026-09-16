@@ -16,6 +16,7 @@
       "@sqlbraid/compiler": ["packages/compiler/src/index.ts"],
       "@sqlbraid/vite": ["packages/vite/src/index.ts"],
       "@sqlbraid/tooling": ["packages/tooling/src/index.ts"],
+      "@sqlbraid/opentelemetry": ["packages/opentelemetry/src/index.ts"],
 
       "@sqlbraid/runtime": ["packages/runtime/src/index.ts"],
       "@sqlbraid/operations": ["packages/operations/src/index.ts"],

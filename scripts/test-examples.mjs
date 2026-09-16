@@ -227,6 +227,8 @@ try {
 
   postgres = await startPostgres();
   await compileAndRun("postgres", postgresExample, { SQLBRAID_POSTGRES_URL: postgres.url });
+  const openTelemetry = await installExample("opentelemetry-slow-query", tarballs);
+  await compileAndRun("opentelemetry-slow-query", openTelemetry, { SQLBRAID_POSTGRES_URL: postgres.url });
 
   mysql = await startMysql();
   await compileAndRun("mysql", mysqlExample, { SQLBRAID_MYSQL_URL: mysql.url });

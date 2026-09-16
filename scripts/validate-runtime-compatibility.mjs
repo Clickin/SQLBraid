@@ -23,6 +23,7 @@ const expectedPackageEngines = Object.freeze({
   "@sqlbraid/codegen": ">=22.18.0",
   "@sqlbraid/vite": ">=22.18.0",
   "@sqlbraid/tooling": ">=22.18.0",
+  "@sqlbraid/opentelemetry": ">=22.18.0",
   "@sqlbraid/cli": ">=22.18.0",
   "@sqlbraid/language-server": ">=22.18.0",
 });

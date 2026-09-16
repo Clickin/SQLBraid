@@ -29,7 +29,7 @@ const consumer = join(temp, "consumer");
 const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR) : undefined;
 const requiredPackageNames = new Set([
   "cli", "codegen", "compiler", "core", "language-server", "mariadb", "metadata", "mssql", "mysql",
-  "operations", "oracle", "postgres", "runtime", "sqlbraid", "sqlite", "template", "tooling", "vite", "bun-sql",
+  "operations", "opentelemetry", "oracle", "postgres", "runtime", "sqlbraid", "sqlite", "template", "tooling", "vite", "bun-sql",
 ]);
 const facadeRuntimeDependencies = [
   "@sqlbraid/bun-sql",
@@ -192,6 +192,16 @@ try {
     if (manifest.name === "@sqlbraid/core" && !manifest.dependencies?.["@standard-schema/spec"]) {
       throw new Error("Core public Standard Schema types require a regular spec dependency.");
     }
+    if (manifest.name === "@sqlbraid/opentelemetry") {
+      const productionOtelDependencies = ["dependencies", "optionalDependencies", "peerDependencies"].flatMap((field) =>
+        Object.keys(manifest[field] ?? {}).filter((name) => name.startsWith("@opentelemetry/") && name !== "@opentelemetry/api"));
+      if (!manifest.peerDependencies?.["@opentelemetry/api"]
+        || manifest.dependencies?.["@opentelemetry/api"]
+        || manifest.optionalDependencies?.["@opentelemetry/api"]
+        || productionOtelDependencies.length > 0) {
+        throw new Error("OpenTelemetry integration must keep @opentelemetry/api as its only OTel peer and install no SDK/exporter.");
+      }
+    }
     if (manifest.name === "@sqlbraid/codegen") {
       const dependencyNames = Object.keys(manifest.dependencies ?? {}).sort();
       if (dependencyNames.length !== 2 || dependencyNames[0] !== "@sqlbraid/core" || dependencyNames[1] !== "@sqlbraid/metadata" || Object.keys(manifest.peerDependencies ?? {}).length || Object.keys(manifest.optionalDependencies ?? {}).length) {
@@ -243,7 +253,7 @@ try {
   }));
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], boundaryConsumer);
   const runtimeInstalledPackages = await readdir(join(boundaryConsumer, "node_modules/@sqlbraid"));
-  if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode"].some((name) => runtimeInstalledPackages.includes(name))) throw new Error("Runtime consumer installed development tooling transitively.");
+  if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode", "opentelemetry"].some((name) => runtimeInstalledPackages.includes(name))) throw new Error("Runtime consumer installed development tooling or optional integrations transitively.");
   const runtimeTopLevelPackages = await readdir(join(boundaryConsumer, "node_modules"));
   if (runtimeTopLevelPackages.includes("sqlbraid")) throw new Error("Runtime consumer installed the canonical facade transitively.");
   if (["oracledb", "tedious", "mariadb"].some((name) => runtimeTopLevelPackages.includes(name))) throw new Error("Runtime consumer installed a Node-only database driver.");
@@ -405,8 +415,8 @@ try {
     throw new Error("Unscoped sqlbraid is not a runtime-only facade.");
   }
   const runtimeConsumerPackages = await readdir(join(runtimeConsumer, "node_modules/@sqlbraid"));
-  if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "operations"].some((name) => runtimeConsumerPackages.includes(name))) {
-    throw new Error("Installing the unscoped sqlbraid package pulled in development tooling.");
+  if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "operations", "opentelemetry"].some((name) => runtimeConsumerPackages.includes(name))) {
+    throw new Error("Installing the unscoped sqlbraid package pulled in development tooling or optional integrations.");
   }
   const packedTopLevelPackages = await readdir(join(runtimeConsumer, "node_modules"));
   if (["oracledb", "tedious", "pg", "mysql2", "mariadb", "better-sqlite3", "@libsql"].some((name) => packedTopLevelPackages.includes(name))) {

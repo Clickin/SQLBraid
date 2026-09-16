@@ -43,6 +43,7 @@ export default defineConfig([
   packageBuild("packages/vite", { index: "src/index.ts" }),
   packageBuild("packages/tooling", { index: "src/index.ts", "config-worker": "src/config-worker.ts" }),
   packageBuild("packages/operations", { index: "src/index.ts" }),
+  packageBuild("packages/opentelemetry", { index: "src/index.ts" }),
   {
     ...packageBuild("packages/runtime", {
       index: "src/index.ts",

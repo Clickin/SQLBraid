@@ -18,6 +18,7 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/mssql` | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; `/inspector` |
 | `@sqlbraid/compiler` | TypeScript discovery and guarded-template lowering |
 | `@sqlbraid/vite` | Vite 8 pre-transform for guarded-template lowering with source maps |
+| `@sqlbraid/opentelemetry` | Optional OpenTelemetry DB client spans and duration metrics through observers |
 | `@sqlbraid/metadata` | DB-fact snapshots, validation, identity, and drift |
 | `@sqlbraid/codegen` | Metadata + TypePolicy to Row/Insert/Update declarations |
 | `@sqlbraid/tooling` | Shared config/workspace evidence and semantic indexes |
@@ -50,8 +51,18 @@ narrower dependencies.
 it does not auto-detect SQL semantics. Runtime packages do not acquire metadata,
 codegen, compiler, editor, or Vite dependencies. Install tooling packages only
 in development/build environments. The Oracle, SQL Server, MariaDB, and Bun
-driver dependencies are kept out of portable roots. `@sqlbraid/vite` keeps Vite
+dependencies are kept out of portable roots. `@sqlbraid/vite` keeps Vite
 as a peer and does not import a framework.
+`@sqlbraid/opentelemetry` keeps `@opentelemetry/api` as a peer and does not
+install an SDK, exporter, logger, driver instrumentation, or database driver.
+
+The synchronous SQLite adapters use the `Awaitable<T>` physical SPI while
+keeping public `Database` methods async. `better-sqlite3` remains event-loop
+blocking and uses statement-local exact-integer reads. libSQL requires
+`{ intMode: "string" }`, uses an interactive transaction handle, does not
+claim `session.pinned`, and reports `BRAID_STREAM_UNSUPPORTED` instead of
+buffering. These are transport and capability boundaries, not broad support
+labels.
 
 The synchronous SQLite adapters use the `Awaitable<T>` physical SPI while
 keeping public `Database` methods async. `better-sqlite3` remains event-loop
