@@ -42,14 +42,20 @@ execFileSync("npm", ["install", "--engine-strict", "--no-audit", "--no-fund"], {
   stdio: "inherit",
   env: { ...process.env, npm_config_engine_strict: "true" },
 });
-copyFileSync(join(root, "scripts/runtime-compatibility-consumer.mjs"), join(consumer, "runtime-compatibility-consumer.mjs"));
-execFileSync(process.execPath, ["runtime-compatibility-consumer.mjs"], {
+const smokeScript = cell.smoke.entrypoint === "scripts/runtime-compatibility-smoke.mjs"
+  ? "runtime-compatibility-consumer.mjs"
+  : cell.smoke.entrypoint.slice("scripts/".length);
+if (smokeScript === "runtime-compatibility-consumer.mjs") copyFileSync(join(root, "scripts/runtime-compatibility-consumer.mjs"), join(consumer, smokeScript));
+else copyFileSync(join(root, "scripts", smokeScript), join(consumer, smokeScript));
+execFileSync(process.execPath, [smokeScript], {
   cwd: consumer,
   stdio: "inherit",
   env: {
     ...process.env,
     SQLBRAID_COMPAT_DRIVER: cell.driver?.package ?? "",
     SQLBRAID_COMPAT_PACKAGES: JSON.stringify(cell.packages),
+    SQLBRAID_PACK_INPUT_DIR: packageDirectory,
+    SQLBRAID_COMPAT_CELL: cell.id,
   },
 });
 console.info(`PASS packed SQLBraid compatibility consumer: ${cell.id}`);

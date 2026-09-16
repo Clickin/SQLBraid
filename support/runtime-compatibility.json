@@ -24,7 +24,7 @@
     "@sqlbraid/codegen": ">=22.18.0",
     "@sqlbraid/vite": ">=22.18.0",
     "@sqlbraid/tooling": ">=22.18.0",
-    "@sqlbraid/opentelemetry": ">=22.18.0",
+    "@sqlbraid/opentelemetry": ">=16.20.2",
     "@sqlbraid/cli": ">=22.18.0",
     "@sqlbraid/language-server": ">=22.18.0"
   },
@@ -142,6 +142,16 @@
       },
       "releaseBlocking": true,
       "reason": "Local libSQL client line selected for the candidate Node floor."
+    }
+    ,
+    {
+      "id": "node-16-20-2-opentelemetry-api-1-9-1",
+      "runtime": { "id": "node", "version": "16.20.2" },
+      "packages": ["@sqlbraid/core", "@sqlbraid/opentelemetry"],
+      "driver": null,
+      "smoke": { "entrypoint": "scripts/otel-api-consumer.mjs" },
+      "releaseBlocking": true,
+      "reason": "Optional API-only bridge floor; SDK/exporter compatibility is tested separately on modern Node."
     }
   ]
 }

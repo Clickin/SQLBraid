@@ -23,7 +23,7 @@ const expectedPackageEngines = Object.freeze({
   "@sqlbraid/codegen": ">=22.18.0",
   "@sqlbraid/vite": ">=22.18.0",
   "@sqlbraid/tooling": ">=22.18.0",
-  "@sqlbraid/opentelemetry": ">=22.18.0",
+  "@sqlbraid/opentelemetry": ">=16.20.2",
   "@sqlbraid/cli": ">=22.18.0",
   "@sqlbraid/language-server": ">=22.18.0",
 });
@@ -32,6 +32,7 @@ const requiredCells = new Set([
   "node-16-20-2-better-sqlite3-9-6-0",
   "node-22-18-0-better-sqlite3-13-0-3",
   "node-16-20-2-libsql-0-18-0",
+  "node-16-20-2-opentelemetry-api-1-9-1",
 ]);
 
 function fail(code, detail) {

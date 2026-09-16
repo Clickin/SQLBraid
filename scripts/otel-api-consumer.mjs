@@ -19,7 +19,15 @@ writeFileSync(join(consumer, "package.json"), JSON.stringify({
   name: "sqlbraid-otel-api-consumer", private: true, type: "module",
   dependencies: { "@sqlbraid/opentelemetry": tarballs.get("@sqlbraid/opentelemetry"), "@sqlbraid/core": tarballs.get("@sqlbraid/core"), "@opentelemetry/api": "1.9.1" },
 }, null, 2));
-execFileSync("npm", ["install", "--engine-strict", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: consumer, stdio: "inherit", env: { ...process.env, npm_config_engine_strict: "true" } });
+const installer = process.env.SQLBRAID_INSTALLER ?? "npm";
+if (installer === "pnpm") {
+  const overrides = Object.fromEntries([...tarballs.entries()].filter(([name]) => name.startsWith("@sqlbraid/")));
+  writeFileSync(join(consumer, "pnpm-workspace.yaml"), `packages: []\noverrides:\n${Object.entries(overrides).map(([name, value]) => `  ${JSON.stringify(name)}: ${JSON.stringify(value)}`).join("\n")}\n`);
+  writeFileSync(join(consumer, ".npmrc"), "node-linker=isolated\nshamefully-hoist=false\npublic-hoist-pattern[]=\n");
+}
+execFileSync(installer, installer === "pnpm"
+  ? ["install", ...(process.env.SQLBRAID_IGNORE_ENGINE === "true" ? [] : ["--engine-strict"]), "--ignore-scripts", "--no-frozen-lockfile"]
+  : ["install", "--engine-strict", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: consumer, stdio: "inherit", env: { ...process.env, npm_config_engine_strict: "true" } });
 writeFileSync(join(consumer, "probe.mjs"), `import assert from "node:assert/strict";
 import { trace } from "@opentelemetry/api";
 import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
@@ -31,6 +39,7 @@ const operationId = "api-floor-operation";
 const ready = { type: "query:ready", operationId, values: [], execution: { adapterId: "api-floor", dialectId: "postgres", transport: "text-positional", reuse: "simple" }, literalizedSql: () => ({ text: "SELECT 1", truncated: false }), declaredKind: "rows", transactionDepth: 0, transactionScoped: false };
 await observer.onEvent(ready);
 await observer.onEvent({ type: "query:result", operationId, durationMs: 0, actualKind: "rows", transactionDepth: 0, transactionScoped: false });
+await observer.onEvent({ type: "query:mapped", operationId, durationMs: 0, rowCount: 0, queryMapped: false, executionMapped: false, transactionDepth: 0, transactionScoped: false });
 console.log("PASS no-SDK OTel API lifecycle");
 `);
 execFileSync(process.execPath, ["probe.mjs"], { cwd: consumer, stdio: "inherit" });
