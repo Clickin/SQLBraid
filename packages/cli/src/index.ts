@@ -340,6 +340,8 @@ async function main(argv: readonly string[]): Promise<void> {
     "@sqlbraid/mysql/mysql2": [resolve(sourcePackages, "mysql/src/mysql2.ts")],
     "@sqlbraid/mariadb/mariadb": [resolve(sourcePackages, "mariadb/src/mariadb.ts")],
     "@sqlbraid/sqlite/node-sqlite": [resolve(sourcePackages, "sqlite/src/node-sqlite.ts")],
+    "@sqlbraid/sqlite/better-sqlite3": [resolve(sourcePackages, "sqlite/src/better-sqlite3.ts")],
+    "@sqlbraid/sqlite/libsql": [resolve(sourcePackages, "sqlite/src/libsql.ts")],
     "@sqlbraid/sqlite/wasm": [resolve(sourcePackages, "sqlite/src/wasm.ts")],
     "@sqlbraid/sqlite/d1": [resolve(sourcePackages, "sqlite/src/d1.ts")],
   } : undefined;

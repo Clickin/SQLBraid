@@ -19,6 +19,26 @@ test('discovers aliased SQL tags by import identity', () => {
   assert.equal(result.queries[0].bindings[1].expression, 'name');
 });
 
+test('recognizes SQLite adapter and facade module specifiers by default', () => {
+  const result = discoverQueries([
+    'import { sql as better } from "@sqlbraid/sqlite/better-sqlite3";',
+    'import { sql as libsql } from "@sqlbraid/sqlite/libsql";',
+    'import { sql as facadeBetter } from "sqlbraid/better-sqlite3";',
+    'import { sql as facadeLibsql } from "sqlbraid/libsql";',
+    'const first = better`SELECT 1`;',
+    'const second = libsql`SELECT 2`;',
+    'const third = facadeBetter`SELECT 3`;',
+    'const fourth = facadeLibsql`SELECT 4`;',
+  ].join('\n'), 'sqlite-adapters.ts', {});
+  assert.deepEqual(result.queries.map((query) => query.tagName), ['better', 'libsql', 'facadeBetter', 'facadeLibsql']);
+  assert.deepEqual(result.queries.map((query) => query.moduleSpecifier), [
+    '@sqlbraid/sqlite/better-sqlite3',
+    '@sqlbraid/sqlite/libsql',
+    'sqlbraid/better-sqlite3',
+    'sqlbraid/libsql',
+  ]);
+});
+
 test('preserves source escapes separately from cooked template strings', () => {
   const escaped = "import { sql } from '@sqlbraid/template'; const value = true; const query = sql`SELECT E'line\\n' /*@braid if ${value}*/ AND id = ${1} /*@braid end*/`;";
   const result = discoverQueries(escaped, 'escaped.ts', { moduleSpecifier: '@sqlbraid/template' });

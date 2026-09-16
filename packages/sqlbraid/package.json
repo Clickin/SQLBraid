@@ -38,6 +38,14 @@
       "types": "./dist/node-sqlite.d.ts",
       "import": "./dist/node-sqlite.js"
     },
+    "./better-sqlite3": {
+      "types": "./dist/better-sqlite3.d.ts",
+      "import": "./dist/better-sqlite3.js"
+    },
+    "./libsql": {
+      "types": "./dist/libsql.d.ts",
+      "import": "./dist/libsql.js"
+    },
     "./sqlite-wasm": {
       "types": "./dist/sqlite-wasm.d.ts",
       "import": "./dist/sqlite-wasm.js"

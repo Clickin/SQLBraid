@@ -9,6 +9,7 @@ const nodeOnlySubpaths = new Map([
   ["oracle", new Set(["oracledb"])],
   ["mssql", new Set(["tedious", "inspector"])],
   ["mariadb", new Set(["mariadb", "inspector"])],
+  ["sqlite", new Set(["better-sqlite3"])],
 ]);
 
 export async function auditRuntime(packageRoot, directory, { excludedSubpaths = nodeOnlySubpaths } = {}) {
@@ -16,7 +17,15 @@ export async function auditRuntime(packageRoot, directory, { excludedSubpaths = 
   for (const name of runtimePackages) {
     const folder = join(packageRoot, name, directory);
     const manifest = JSON.parse(await readFile(join(packageRoot, name, "package.json"), "utf8"));
-    const nodeOnlyDriver = name === "oracle" ? "oracledb" : name === "mssql" ? "tedious" : name === "mariadb" ? "mariadb" : undefined;
+    const nodeOnlyDriver = name === "oracle"
+      ? "oracledb"
+      : name === "mssql"
+        ? "tedious"
+        : name === "mariadb"
+          ? "mariadb"
+          : name === "sqlite"
+            ? "better-sqlite3"
+            : undefined;
     if (nodeOnlyDriver && [manifest.dependencies, manifest.optionalDependencies].some((dependencies) => dependencies?.[nodeOnlyDriver])) {
       throw new Error(`${manifest.name} portable root has a production dependency on Node-only driver ${nodeOnlyDriver}.`);
     }
@@ -65,5 +74,5 @@ export async function auditRuntime(packageRoot, directory, { excludedSubpaths = 
       checked++;
     }
   }
-  console.info(`Portability audit: ${checked} ${directory} source/declaration files passed; reviewed node:buffer and node:async_hooks only; explicitly excluded Oracle oracledb and MSSQL tedious/inspector driver subpaths; Bun.SQL remains structural and runtime-neutral until a Bun client is supplied.`);
+  console.info(`Portability audit: ${checked} ${directory} source/declaration files passed; reviewed node:buffer and node:async_hooks only; explicitly excluded Node-only Oracle oracledb, MSSQL tedious/inspector, and SQLite better-sqlite3 driver subpaths; Bun.SQL remains structural and runtime-neutral until a Bun client is supplied.`);
 }

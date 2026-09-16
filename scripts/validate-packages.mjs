@@ -214,6 +214,12 @@ try {
         throw new Error("The unscoped sqlbraid package must expose only first-party runtime dependencies and no CLI/bin or driver peers.");
       }
     }
+    if (manifest.name === "@sqlbraid/sqlite"
+      && ["better-sqlite3", "@libsql/client"].some((name) => manifest.dependencies?.[name]
+        || manifest.optionalDependencies?.[name]
+        || manifest.peerDependencies?.[name])) {
+      throw new Error("@sqlbraid/sqlite must keep better-sqlite3 and @libsql/client structural and out of package dependencies.");
+    }
     for (const tooling of ["@sqlbraid/metadata", "@sqlbraid/codegen", "@sqlbraid/tooling", "@sqlbraid/compiler", "@sqlbraid/vite", "@sqlbraid/cli", "@sqlbraid/language-server", "@sqlbraid/vscode", "vite", "react", "@tanstack/react-start"]) {
       if (runtimePackages.includes(packageName) && (manifest.dependencies?.[tooling] || manifest.optionalDependencies?.[tooling])) {
         throw new Error(`${tooling} is a runtime dependency of ${manifest.name}.`);
@@ -245,11 +251,15 @@ try {
     'import assert from "node:assert/strict";',
     'import { sql } from "@sqlbraid/postgres";',
     'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
+    'import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";',
+    'import { createLibsqlDatabase } from "@sqlbraid/sqlite/libsql";',
     'import { sql as oracle } from "@sqlbraid/oracle";',
     'import { sql as mssql } from "@sqlbraid/mssql";',
     'import { createBunSqlDatabase } from "@sqlbraid/bun-sql";',
     'assert.deepEqual(sql`SELECT ${1}`.render().segments, ["SELECT ", ""]);',
     'assert.equal(typeof createPgDatabase, "function");',
+    'assert.equal(typeof createBetterSqlite3Database, "function");',
+    'assert.equal(typeof createLibsqlDatabase, "function");',
     'assert.deepEqual(oracle`SELECT ${1}`.render().segments, ["SELECT ", ""]);',
     'assert.deepEqual(mssql`SELECT ${1}`.render().segments, ["SELECT ", ""]);',
     'assert.equal(typeof createBunSqlDatabase, "function");',
@@ -347,7 +357,13 @@ try {
     'import type { Mysql2ConnectionLike } from "@sqlbraid/mysql/mysql2";',
     'import type { MariaDbConnectionLike } from "@sqlbraid/mariadb/mariadb";',
     'import type { SqliteDatabaseLike } from "@sqlbraid/sqlite/node-sqlite";',
-    'declare const pg: PgClientLike, mysql: Mysql2ConnectionLike, maria: MariaDbConnectionLike, sqlite: SqliteDatabaseLike;',
+    'import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";',
+    'import { createLibsqlDatabase } from "@sqlbraid/sqlite/libsql";',
+    'import type { BetterSqlite3DatabaseLike } from "@sqlbraid/sqlite/better-sqlite3";',
+    'import type { LibsqlClientLike } from "@sqlbraid/sqlite/libsql";',
+    'declare const pg: PgClientLike, mysql: Mysql2ConnectionLike, maria: MariaDbConnectionLike, sqlite: SqliteDatabaseLike, better: BetterSqlite3DatabaseLike, libsql: LibsqlClientLike;',
+    'createBetterSqlite3Database(better);',
+    'createLibsqlDatabase(libsql, { intMode: "string" });',
     'const inspectors: MetadataInspector[] = [createPostgresInspector(pg), createMysqlInspector(mysql), createMariaDbInspector(maria), createSqliteInspector(sqlite)];',
     'const results: Promise<MetadataSnapshot>[] = inspectors.map((inspector) => inspector.inspect());',
     'declare const metadata: MetadataSnapshot;',
@@ -393,7 +409,7 @@ try {
     throw new Error("Installing the unscoped sqlbraid package pulled in development tooling.");
   }
   const packedTopLevelPackages = await readdir(join(runtimeConsumer, "node_modules"));
-  if (["oracledb", "tedious", "pg", "mysql2", "mariadb"].some((name) => packedTopLevelPackages.includes(name))) {
+  if (["oracledb", "tedious", "pg", "mysql2", "mariadb", "better-sqlite3", "@libsql"].some((name) => packedTopLevelPackages.includes(name))) {
     throw new Error("Installing the unscoped sqlbraid package pulled in a database driver.");
   }
   await writeFile(join(runtimeConsumer, "index.mjs"), [
@@ -462,6 +478,8 @@ try {
     'import { createMariaDbDatabase } from "@sqlbraid/mariadb/mariadb";',
     'import { sql as sqlite } from "@sqlbraid/sqlite";',
     'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
+    'import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";',
+    'import { createLibsqlDatabase } from "@sqlbraid/sqlite/libsql";',
     'import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";',
     'import { createD1Database } from "@sqlbraid/sqlite/d1";',
     'import { sql as oracle } from "@sqlbraid/oracle";',
@@ -471,6 +489,8 @@ try {
     'import { createMysql2Database as facadeMysql, sql as facadeMysqlSql } from "sqlbraid/mysql2";',
     'import { createMariaDbDatabase as facadeMariaDb, sql as facadeMariaDbSql } from "sqlbraid/mariadb";',
     'import { createNodeSqliteDatabase as facadeNodeSqlite, sql as facadeSqliteSql } from "sqlbraid/node-sqlite";',
+    'import { createBetterSqlite3Database as facadeBetterSqlite3, sql as facadeBetterSqlite3Sql } from "sqlbraid/better-sqlite3";',
+    'import { createLibsqlDatabase as facadeLibsql, sql as facadeLibsqlSql } from "sqlbraid/libsql";',
     'import { createSqliteWasmDatabase as facadeWasm, sql as facadeWasmSql } from "sqlbraid/sqlite-wasm";',
     'import { createD1Database as facadeD1, sql as facadeD1Sql } from "sqlbraid/d1";',
     'import { sql as facadeMssqlSql } from "sqlbraid/mssql";',
@@ -483,9 +503,9 @@ try {
     'import { sql as facadeMssqlDialectSql } from "sqlbraid/mssql";',
     'import { createLanguageService, startStdioLanguageServer } from "@sqlbraid/language-server";',
     'for (const [name, tag] of [["postgres", pg], ["mysql", mysql], ["mariadb", mariadb], ["sqlite", sqlite], ["oracle", oracle], ["mssql", mssql]]) { const rendered = tag`SELECT ${1}`.render(); if (rendered.segments.join("") !== "SELECT " || rendered.parameters[0]?.value !== 1) throw new Error(`${name} root failed`); }',
-    'if ([createPgDatabase, createMysql2Database, createMariaDbDatabase, createNodeSqliteDatabase, createSqliteWasmDatabase, createD1Database, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("packed subpath failed");',
-    'if ([facadeCreateDatabase, facadePg, facadeMysql, facadeMariaDb, facadeNodeSqlite, facadeWasm, facadeD1, facadeBun].some((value) => typeof value !== "function")) throw new Error("packed sqlbraid facade failed");',
-    'for (const tag of [facadePgSql, facadeMysqlSql, facadeMariaDbSql, facadeWasmSql, facadePostgresSql, facadeMysqlDialectSql, facadeMariaDbDialectSql, facadeSqliteDialectSql, facadeOracleSql, facadeMssqlSql, facadeMssqlDialectSql]) { if (typeof tag !== "function") throw new Error("packed sqlbraid dialect export failed"); }',
+    'if ([createPgDatabase, createMysql2Database, createMariaDbDatabase, createNodeSqliteDatabase, createBetterSqlite3Database, createLibsqlDatabase, createSqliteWasmDatabase, createD1Database, createLanguageService, startStdioLanguageServer].some((value) => typeof value !== "function")) throw new Error("packed subpath failed");',
+    'if ([facadeCreateDatabase, facadePg, facadeMysql, facadeMariaDb, facadeNodeSqlite, facadeBetterSqlite3, facadeLibsql, facadeWasm, facadeD1, facadeBun].some((value) => typeof value !== "function")) throw new Error("packed sqlbraid facade failed");',
+    'for (const tag of [facadePgSql, facadeMysqlSql, facadeMariaDbSql, facadeBetterSqlite3Sql, facadeLibsqlSql, facadeWasmSql, facadePostgresSql, facadeMysqlDialectSql, facadeMariaDbDialectSql, facadeSqliteDialectSql, facadeOracleSql, facadeMssqlSql, facadeMssqlDialectSql]) { if (typeof tag !== "function") throw new Error("packed sqlbraid dialect export failed"); }',
     'if (defineConfig({})?.codegen !== undefined) throw new Error("packed config helper failed");',
   ].join("\n"));
   await run(process.execPath, [entry], consumer);
