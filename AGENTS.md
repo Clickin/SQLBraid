@@ -2,7 +2,12 @@
 
 This file defines repository-wide rules for AI coding agents and human contributors making architectural changes to SQLBraid.
 
-`PLAN.md` is authoritative. If implementation details or old planning artifacts conflict with `PLAN.md`, follow `PLAN.md` unless the user explicitly instructs otherwise.
+Durable authority is split by boundary: application compatibility is recorded in
+`docs/public-api-audit.md`, driver implementation rules in
+`docs/driver-author-guide.md`, release mechanics in
+`docs/SQLBraid_release_readiness.md` and the release workflows, and user-facing
+behavior in the README/website. Historical planning artifacts are context, not
+authority.
 
 ---
 
@@ -230,7 +235,7 @@ connections is not.
 
 Physical driver methods may be synchronous or asynchronous. The public
 `Database` remains async; `QueryExecutor` materialized/control methods use the
-`Awaitable<T>` contract defined in PLAN §5. Keep `stream()` as `AsyncIterable`
+`Awaitable<T>` contract defined in the driver-author guide. Keep `stream()` as `AsyncIterable`
 and bridge synchronous native iterators inside the adapter rather than widening
 the stream SPI.
 
@@ -512,8 +517,9 @@ VS Code stays a thin matching-version client, with native TypeScript authoritati
 Keep actual stdio, packed agent-consumer and editor-host gates in `test:all`.
 Runtime-only packed installs must exclude metadata/codegen/tooling/CLI/LSP/editor.
 
-Preserve PLAN §8.4's independent dialect, driver, transaction-profile and execution
-runtime concerns. Node/Bun/Deno host compatibility is separate deployment evidence.
+Preserve the independent dialect, driver, transaction-profile and execution
+runtime concerns documented in the public API audit and release-readiness
+records. Node/Bun/Deno host compatibility is separate deployment evidence.
 The frozen RC API supports standard transaction isolation and read-only options;
 omitted options preserve the actual DB/session default. Richer transaction
 profiles and vendor-specific modes remain outside this API.

@@ -87,6 +87,25 @@ This identity check prevents a lease from silently changing dialect, placeholder
 
 Prepared shape identity is logical: result kind, canonical segments, dialect, ordered hints, directions, output names, and relevant procedure metadata. `$1`, `?`, `:1`, and `@p1` are transport details. A prepared execution renders once, validates that shape, describes the binding, then executes that statement.
 
+`preparedName`, when present in `StatementBindingContext`, is a SQLBraid
+logical name scoped to the live `Database` handle that created the prepared
+query. It is not a globally reserved name and it is not a promise that the
+same string is used as a server/driver prepared-statement name. An adapter
+that maps names to native statements must derive a collision-safe native
+identity from its own scope/handle state (or use unnamed/driver-owned reuse);
+different live SQLBraid prepared handles that repeat a logical name must not
+alias one another, and different logical shapes must not reuse one native
+statement accidentally. Keep that identity private and preserve the logical
+name's application meaning.
+
+The supported SPI implementer boundary is the executor/provider/lease/binding
+and documented observer contracts above. Existing required members remain
+source-compatible across 1.x. Add new driver capability through optional
+members/capabilities or a separate extension interface, not a new required
+method for one adapter. Preserve `(statement, binding?, options?)`, trailing
+options, immutable provider/lease binding identity, explicit unsupported
+errors, and cleanup ownership.
+
 ## 3. Executor contract and options
 
 Every executor method uses the same trailing options convention:

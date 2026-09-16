@@ -32,6 +32,12 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 - Owned unsupported, exactness, and result-kind failures expose consistent
   classes and codes. Abort signals retain their original reasons, including
   `null`. Observer readonly contracts do not promise a deep clone or sandbox.
+- Prepared logical names are scoped to their live database handles, so
+  independent session/transaction scopes may reuse a name without sharing a
+  native statement identity; prepared handles still expire with their scope.
+- Malformed routine results now complete the observer lifecycle with one
+  terminal `query:error`, truthful execution flags, and exactly-once resource
+  cleanup.
 - Release candidates include validated VSIX bytes and durable evidence.
   Explicit prior-run recovery restores candidate bytes instead of repacking;
   unknown stage outcomes require reconciliation rather than another upload.

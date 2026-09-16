@@ -186,7 +186,7 @@ the support records.
 
 ### Application API
 
-Within a minor release line, documented application imports, subpaths, call
+Throughout the 1.x release line, documented application imports, subpaths, call
 shapes, query/result-kind contracts, trailing execution options, and
 SQLBraid-owned error codes are compatibility contracts. `AbortSignal` handling
 preserves an already-aborted signal's `reason`; unsupported active cancellation
@@ -200,10 +200,30 @@ declare `{ input: "none" }` and remain options-only at execution. This explicit
 arity declaration avoids JavaScript `Function.length` and options-key guesses.
 The logical shape lock is not a promise of a server-side prepared cache.
 
-### SPI
+Application-facing contracts such as `Database`, `PreparedQuery`, `SqlTag`,
+query/result types, and execution options are primarily consumed through
+SQLBraid factories, but exported structural types can still appear in user
+mocks and wrappers. Throughout 1.x, do not remove or incompatibly change their
+required members. Adding a required method to an exported interface is not
+automatically a SemVer-minor change: it can break application mocks, wrappers,
+and other structural implementers. Prefer free helpers, new subpaths, optional
+fields, or separate extension interfaces for additive functionality, and
+preserve existing call positions (especially trailing options).
+
+### Supported SPI implementers
 
 `QueryExecutor`, provider, lease, binding/materialization, and observer
-interfaces are compatibility contracts for integrations that implement them.
+interfaces are supported implementer contracts, not merely types returned by a
+factory. Third-party drivers and integrations may implement
+`QueryExecutor`, `ConnectionProvider`, `ConnectionLease`,
+`StatementBindingAdapter`, binding descriptions/contexts, and observer
+interfaces where the interface is documented as an implementation boundary.
+Existing required members remain source-compatible throughout 1.x. New driver
+capabilities should normally use optional SPI members/capabilities or a
+separate extension interface; adding a required SPI method for one adapter is
+not a compatible minor change. Unsupported capabilities remain explicit and
+capability-driven.
+
 The `(statement, binding?, options?)` argument order, immutable shared
 statement-binding adapter identity, pre-acquire binding validation, explicit
 cleanup ownership, and observe/fail-only observer behavior must not be changed
@@ -211,6 +231,37 @@ silently. Drivers retain their native error identity unless SQLBraid owns the
 error. Missing stream, call, cancellation, transaction, or hint capabilities
 must continue to use documented `UnsupportedFeatureError` codes; a fallback
 that changes physical ownership or SQL semantics is not compatible.
+
+### Closed unions
+
+Exported closed/discriminated unions are compatibility-sensitive throughout
+1.x: adding a member can break exhaustive TypeScript consumers. This includes
+`QueryResultKind`, `ParameterTransportKind`, `RequestedReuse`, `EffectiveReuse`,
+`ReuseOwner`, `RoutineParameterDirection`, `RoutineResultSource`,
+`BulkExecutionMode`, `QueryErrorStage`, `ExecutionEvent`,
+`TransactionEventPhase`, `TransactionIsolation`, and support/status unions
+exposed by the environment API. Do not widen these unions speculatively.
+Represent a new strategy inside an existing semantic category only when
+truthful; otherwise use a separate extension surface. A genuinely required
+union widening needs compatibility review rather than automatic minor-release
+status.
+
+### Safe additive patterns
+
+Generally safe additive patterns, when observable semantics remain compatible,
+are optional properties in existing options/config records, new free functions,
+new package/subpath exports, new driver adapters, new representation profiles,
+optional SPI members/capabilities, separate extension interfaces, and
+additional exact support evidence. None is automatically safe if it changes
+ownership, errors, execution order, or another documented behavior.
+
+### Product boundary
+
+The 1.x boundary does not promise JDBC-complete behavior, arbitrary
+multi-result statement iteration, universal generated-key rewriting,
+COPY/CSV/XLSX import in core, scrollable/updatable result sets, automatic
+retry/routing, hidden SQL rewriting, or a new query result kind for
+transport-specific operations.
 
 ### Serialized and tooling contracts
 
