@@ -19,6 +19,13 @@ test('discovers aliased SQL tags by import identity', () => {
   assert.equal(result.queries[0].bindings[1].expression, 'name');
 });
 
+test('facade lowering imports app-resolvable compiler helpers and selects facade dialects exactly', () => {
+  const source = `import { sql } from "sqlbraid/tedious"; export const query = sql\`SELECT [Bob's] WHERE id = \${1} /*@braid if \${true}*/ AND active = 1 /*@braid end*/\`;`;
+  const emitted = emitSource(source, "facade.ts", { moduleSpecifier: "sqlbraid/tedious" });
+  assert.equal(emitted.diagnostics.length, 0);
+  assert.match(emitted.outputText, /from "sqlbraid\/compiled"/u);
+});
+
 test('recognizes SQLite adapter and facade module specifiers by default', () => {
   const result = discoverQueries([
     'import { sql as better } from "@sqlbraid/sqlite/better-sqlite3";',

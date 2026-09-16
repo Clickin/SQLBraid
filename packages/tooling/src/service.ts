@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { checkSourceDetailed, createVirtualOverlay, discoverQueries, sourcePosition, type CompileDiagnostic, type DiscoveredQuery, type VirtualTypeScriptOverlay } from "@sqlbraid/compiler";
 import type { ColumnSnapshot, MetadataSnapshot, RelationSnapshot, RoutineSnapshot } from "@sqlbraid/metadata";
 import type { CodegenResult } from "@sqlbraid/codegen";
+import { AUTHORING_MODULE_CATALOG } from "@sqlbraid/core";
 import { SOURCE_FILE_LOADER, type InternalLanguageServiceOptions } from "./internal.js";
 import type { Cancellation, CompletionItem, LanguageServiceOptions, Location, QuerySymbol, SignatureResult, SqlBraidLanguageService, ToolingDiagnostic, ToolingTarget, WorkspaceSymbol, HoverResult, SourceDocument } from "./types.js";
 
@@ -55,7 +56,6 @@ interface MetadataIndex {
 
 const DEFAULT_MAX_ENTRIES = 100;
 const MAX_EVIDENCE_TEXT = 4096;
-const SQL_MODULES = ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/mariadb", "@sqlbraid/sqlite", "@sqlbraid/oracle", "@sqlbraid/mssql"] as const;
 const SQL_KEYWORDS = new Set([
   "all", "and", "as", "asc", "between", "by", "case", "cast", "check", "collate", "column", "create", "cross", "delete", "desc", "distinct", "do", "else", "end", "except", "exists", "false", "fetch", "filter", "for", "foreign", "from", "full", "grant", "group", "having", "if", "ilike", "in", "inner", "insert", "intersect", "into", "is", "join", "lateral", "left", "like", "limit", "natural", "not", "null", "offset", "on", "or", "order", "outer", "over", "partition", "primary", "procedure", "references", "returning", "right", "select", "set", "table", "then", "to", "true", "union", "unique", "update", "using", "values", "when", "where", "window", "with", "recursive", "return",
 ]);
@@ -273,7 +273,9 @@ function scanTokens(text: string, map: readonly number[], code: readonly boolean
   return tokens;
 }
 function queryDialect(moduleSpecifier: string, options: LanguageServiceOptions): string {
-  return options.dialect?.id ?? (moduleSpecifier === "@sqlbraid/template" ? options.metadata?.dialect ?? options.targets?.[0]?.metadata.dialect ?? "postgres" : moduleSpecifier.slice("@sqlbraid/".length));
+  return options.dialect?.id
+    ?? AUTHORING_MODULE_CATALOG.find((entry) => entry.moduleSpecifier === moduleSpecifier)?.dialectId
+    ?? (moduleSpecifier === "@sqlbraid/template" ? options.metadata?.dialect ?? options.targets?.[0]?.metadata.dialect ?? "postgres" : "postgres");
 }
 function profileFor(moduleSpecifier: string, options: LanguageServiceOptions): { readonly lineCommentPrefixes: readonly string[]; readonly supportsNestedBlockComments: boolean; readonly supportsDollarQuotes: boolean; readonly supportsBacktickIdentifiers: boolean; readonly supportsBracketIdentifiers: boolean; readonly supportsOracleQQuotes: boolean; readonly backslashEscapes: boolean; readonly requireDashDashWhitespace: boolean } {
   const configured = options.dialect?.lexicalProfile;
@@ -589,7 +591,7 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
   const diagnosticsCache = new Map<string, readonly ToolingDiagnostic[]>();
   const indexCache = new Map<string, readonly GeneratedIndex[]>();
   const metadataIndexCache = new Map<string, readonly MetadataIndex[]>();
-  const modules = unique([...SQL_MODULES, ...(options.moduleSpecifiers ?? []), ...(options.moduleSpecifier ? [options.moduleSpecifier] : [])], (value) => value);
+  const modules = unique([...AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier), ...(options.moduleSpecifiers ?? []), ...(options.moduleSpecifier ? [options.moduleSpecifier] : [])], (value) => value);
   const semanticOptions: LanguageServiceOptions = { ...options, moduleSpecifiers: modules };
   function analysis(sourceText: string, fileName: string): FileAnalysis {
     const key = contentKey(fileName, sourceText); const cached = files.get(key); if (cached) return cached;

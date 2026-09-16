@@ -2,7 +2,7 @@ import ts from "typescript";
 import { dirname } from "node:path";
 import { GenMapping, addSegment, setSourceContent, toEncodedMap } from "@jridgewell/gen-mapping";
 import { parseTemplate, postgresDialect } from "@sqlbraid/template";
-import type { Dialect, QueryResultKind, TemplateIr, TemplateNode } from "@sqlbraid/core";
+import { AUTHORING_MODULE_CATALOG, type Dialect, type QueryResultKind, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
 
 export interface SourceRange {
   readonly start: number;
@@ -144,30 +144,7 @@ function sourceFileFor(sourceText: string, fileName: string, options: OverlayOpt
 
 function configuredModules(options: OverlayOptions): readonly string[] {
   return options.moduleSpecifiers ?? (options.moduleSpecifier ? [options.moduleSpecifier] : [
-    "@sqlbraid/template",
-    "@sqlbraid/postgres",
-    "@sqlbraid/mysql",
-    "@sqlbraid/mariadb",
-    "@sqlbraid/sqlite",
-    "@sqlbraid/sqlite/better-sqlite3",
-    "@sqlbraid/sqlite/libsql",
-    "@sqlbraid/oracle",
-    "@sqlbraid/mssql",
-    "sqlbraid/pg",
-    "sqlbraid/mysql2",
-    "sqlbraid/mariadb",
-    "sqlbraid/node-sqlite",
-    "sqlbraid/better-sqlite3",
-    "sqlbraid/libsql",
-    "sqlbraid/sqlite-wasm",
-    "sqlbraid/d1",
-    "sqlbraid/oracledb",
-    "sqlbraid/tedious",
-    "sqlbraid/postgres",
-    "sqlbraid/mysql",
-    "sqlbraid/sqlite",
-    "sqlbraid/oracle",
-    "sqlbraid/mssql",
+    ...AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier),
   ]);
 }
 
@@ -177,7 +154,8 @@ function defaultCompilerOptions(): ts.CompilerOptions {
 
 function dialectForModule(moduleSpecifier: string | undefined, options: OverlayOptions): Dialect {
   if (options.dialect) return options.dialect;
-  if (moduleSpecifier?.includes("oracle")) return {
+  const dialectId = AUTHORING_MODULE_CATALOG.find((entry) => entry.moduleSpecifier === moduleSpecifier)?.dialectId;
+  if (dialectId === "oracle") return {
     id: "oracle",
     quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
     lexicalProfile: {
@@ -188,7 +166,7 @@ function dialectForModule(moduleSpecifier: string | undefined, options: OverlayO
       supportsOracleQQuotes: true,
     },
   };
-  if (moduleSpecifier?.includes("mssql")) return {
+  if (dialectId === "mssql") return {
     id: "mssql",
     quoteIdentifier: (identifier) => `[${identifier.replaceAll("]", "]]")}]`,
     lexicalProfile: {
@@ -199,8 +177,8 @@ function dialectForModule(moduleSpecifier: string | undefined, options: OverlayO
       backslashEscapes: false,
     },
   };
-  if (moduleSpecifier?.includes("mysql") || moduleSpecifier?.includes("mariadb")) return { id: moduleSpecifier.includes("mariadb") ? "mariadb" : "mysql", quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, backslashEscapes: true } };
-  if (moduleSpecifier?.includes("sqlite")) return { id: "sqlite", quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBracketIdentifiers: true, backslashEscapes: false } };
+  if (dialectId === "mysql" || dialectId === "mariadb") return { id: dialectId, quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, backslashEscapes: true } };
+  if (dialectId === "sqlite") return { id: "sqlite", quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBracketIdentifiers: true, backslashEscapes: false } };
   return postgresDialect;
 }
 
@@ -749,7 +727,11 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
       factory.createImportSpecifier(false, factory.createIdentifier("capture"), factory.createIdentifier(captureName)),
       ...(assertConditionName ? [factory.createImportSpecifier(false, factory.createIdentifier("assertDirectiveCondition"), factory.createIdentifier(assertConditionName))] : []),
     ];
-    prefix.push(factory.createImportDeclaration(undefined, factory.createImportClause(false, undefined, factory.createNamedImports(imports)), factory.createStringLiteral("@sqlbraid/template"), undefined));
+    const helperModule = discovered.queries.some((query) =>
+      AUTHORING_MODULE_CATALOG.find((entry) => entry.moduleSpecifier === query.moduleSpecifier)?.helperFamily === "facade")
+      ? "sqlbraid/compiled"
+      : "@sqlbraid/template";
+    prefix.push(factory.createImportDeclaration(undefined, factory.createImportClause(false, undefined, factory.createNamedImports(imports)), factory.createStringLiteral(helperModule), undefined));
   }
   const transformer: ts.TransformerFactory<ts.SourceFile> = (context) => {
     function visit(node: ts.Node): ts.VisitResult<ts.Node> {

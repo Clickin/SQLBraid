@@ -18,6 +18,7 @@ import {
 } from "vscode-languageserver/node.js";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import type { CompileDiagnostic } from "@sqlbraid/compiler";
+import { AUTHORING_MODULE_CATALOG } from "@sqlbraid/core";
 import {
   createWorkspace,
   type Cancellation,
@@ -54,14 +55,7 @@ type WorkspaceSlot = {
   readonly workspace: ToolingWorkspace;
 };
 
-const DEFAULT_MODULE_SPECIFIERS = [
-  "@sqlbraid/template",
-  "@sqlbraid/postgres",
-  "@sqlbraid/mysql",
-  "@sqlbraid/sqlite",
-  "@sqlbraid/oracle",
-  "@sqlbraid/mssql",
-] as const;
+const DEFAULT_MODULE_SPECIFIERS = AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier);
 const DIAGNOSTIC_DEBOUNCE_MS = 30;
 // ponytail: cap evidence, not open-document invalidations; dropping those leaves stale errors.
 const MAX_WORKSPACES = 32;

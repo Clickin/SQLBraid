@@ -18,6 +18,7 @@
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22.18.0" },
   "dependencies": {
+    "@sqlbraid/core": "workspace:*",
     "@sqlbraid/codegen": "workspace:*",
     "@sqlbraid/compiler": "workspace:*",
     "@sqlbraid/core": "workspace:*",

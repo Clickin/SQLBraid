@@ -16,7 +16,7 @@ export function hasSqlBraidDependency(value: unknown): boolean {
   for (const field of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]) {
     const dependencies = packageJson[field];
     if (!dependencies || typeof dependencies !== "object" || Array.isArray(dependencies)) continue;
-    if (Object.keys(dependencies as Record<string, unknown>).some((name) => name.startsWith(SQLBRAID_PACKAGE_PREFIX))) return true;
+    if (Object.keys(dependencies as Record<string, unknown>).some((name) => name === "sqlbraid" || name.startsWith(SQLBRAID_PACKAGE_PREFIX))) return true;
   }
   return false;
 }

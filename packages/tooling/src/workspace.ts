@@ -3,6 +3,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { createProjectContext, type TypeScriptProjectContext } from "@sqlbraid/compiler";
+import { AUTHORING_MODULE_CATALOG } from "@sqlbraid/core";
 import { generateModels, type CodegenResult } from "@sqlbraid/codegen";
 import { hashSnapshot, parseSnapshotJson, type MetadataSnapshot } from "@sqlbraid/metadata";
 import { createLanguageService } from "./service.js";
@@ -18,7 +19,6 @@ import type {
   WorkspaceOptions,
 } from "./types.js";
 
-const SQLBRAID_MODULES = ["@sqlbraid/template", "@sqlbraid/postgres", "@sqlbraid/mysql", "@sqlbraid/mariadb", "@sqlbraid/sqlite", "@sqlbraid/oracle", "@sqlbraid/mssql"] as const;
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx"]);
 const DEFAULT_MAX_ENTRIES = 256;
 const MAX_CONFIG_CACHE = 4;
@@ -125,7 +125,7 @@ function projectFile(rootPath: string): string | undefined {
 }
 
 function projectOptions(options: LanguageServiceOptions, context?: TypeScriptProjectContext): LanguageServiceOptions {
-  const modules = [...new Set([...(options.moduleSpecifiers ?? []), ...SQLBRAID_MODULES])];
+  const modules = [...new Set([...(options.moduleSpecifiers ?? []), ...AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier)])];
   return {
     ...options,
     moduleSpecifiers: modules,
