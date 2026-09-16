@@ -279,11 +279,12 @@ function queryDialect(moduleSpecifier: string, options: LanguageServiceOptions):
 }
 function profileFor(moduleSpecifier: string, options: LanguageServiceOptions): { readonly lineCommentPrefixes: readonly string[]; readonly supportsNestedBlockComments: boolean; readonly supportsDollarQuotes: boolean; readonly supportsBacktickIdentifiers: boolean; readonly supportsBracketIdentifiers: boolean; readonly supportsOracleQQuotes: boolean; readonly backslashEscapes: boolean; readonly requireDashDashWhitespace: boolean } {
   const configured = options.dialect?.lexicalProfile;
-  if (configured) return { lineCommentPrefixes: configured.lineCommentPrefixes, supportsNestedBlockComments: configured.supportsNestedBlockComments ?? false, supportsDollarQuotes: configured.supportsDollarQuotes ?? false, supportsBacktickIdentifiers: configured.supportsBacktickIdentifiers ?? false, supportsBracketIdentifiers: configured.supportsBracketIdentifiers ?? false, supportsOracleQQuotes: configured.supportsOracleQQuotes ?? false, backslashEscapes: configured.backslashEscapes ?? false, requireDashDashWhitespace: options.dialect?.id === "mysql" };
-  if (queryDialect(moduleSpecifier, options) === "mysql") return { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, supportsBracketIdentifiers: false, supportsOracleQQuotes: false, backslashEscapes: true, requireDashDashWhitespace: true };
-  if (queryDialect(moduleSpecifier, options) === "sqlite") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: true, supportsOracleQQuotes: false, backslashEscapes: false, requireDashDashWhitespace: false };
-  if (queryDialect(moduleSpecifier, options) === "oracle") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: false, supportsOracleQQuotes: true, backslashEscapes: false, requireDashDashWhitespace: false };
-  if (queryDialect(moduleSpecifier, options) === "mssql") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: true, supportsDollarQuotes: false, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: true, supportsOracleQQuotes: false, backslashEscapes: false, requireDashDashWhitespace: false };
+  if (configured) return { lineCommentPrefixes: configured.lineCommentPrefixes, supportsNestedBlockComments: configured.supportsNestedBlockComments ?? false, supportsDollarQuotes: configured.supportsDollarQuotes ?? false, supportsBacktickIdentifiers: configured.supportsBacktickIdentifiers ?? false, supportsBracketIdentifiers: configured.supportsBracketIdentifiers ?? false, supportsOracleQQuotes: configured.supportsOracleQQuotes ?? false, backslashEscapes: configured.backslashEscapes ?? false, requireDashDashWhitespace: options.dialect?.id === "mysql" || options.dialect?.id === "mariadb" };
+  const dialect = queryDialect(moduleSpecifier, options);
+  if (dialect === "mysql" || dialect === "mariadb") return { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, supportsBracketIdentifiers: false, supportsOracleQQuotes: false, backslashEscapes: true, requireDashDashWhitespace: true };
+  if (dialect === "sqlite") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: true, supportsOracleQQuotes: false, backslashEscapes: false, requireDashDashWhitespace: false };
+  if (dialect === "oracle") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: false, supportsOracleQQuotes: true, backslashEscapes: false, requireDashDashWhitespace: false };
+  if (dialect === "mssql") return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: true, supportsDollarQuotes: false, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: true, supportsOracleQQuotes: false, backslashEscapes: false, requireDashDashWhitespace: false };
   return { lineCommentPrefixes: ["--"], supportsNestedBlockComments: true, supportsDollarQuotes: true, supportsBacktickIdentifiers: false, supportsBracketIdentifiers: false, supportsOracleQQuotes: false, backslashEscapes: false, requireDashDashWhitespace: false };
 }
 function metadataEvidence(options: LanguageServiceOptions): readonly MetadataEvidence[] {
@@ -413,7 +414,7 @@ function queryColumns(tokens: readonly LexToken[], relations: readonly RelationU
 function lexicalQuery(query: DiscoveredQuery, sourceText: string, options: LanguageServiceOptions): LexicalQuery {
   const dialect = queryDialect(query.moduleSpecifier, options);
   const foldIdentifiers = dialect === "postgres";
-  const built = buildLexicalText(query, sourceText); markLexicalProtection(built.text, built.code, built.quoted, profileFor(query.moduleSpecifier, options), dialect === "mysql");
+  const built = buildLexicalText(query, sourceText); markLexicalProtection(built.text, built.code, built.quoted, profileFor(query.moduleSpecifier, options), dialect === "mysql" || dialect === "mariadb");
   const tokens = scanTokens(built.text, built.map, built.code, built.quoted); const relations = queryRelations(tokens, options, foldIdentifiers);
   return { query, text: built.text, map: built.map, code: built.code, quoted: built.quoted, mappingReliable: built.mappingReliable, foldIdentifiers, tokens, relationUses: relations, routineUses: queryRoutineUses(tokens, options, foldIdentifiers), columnUses: queryColumns(tokens, relations, options, foldIdentifiers), staticRanges: built.staticRanges };
 }
@@ -563,10 +564,7 @@ function queryHover(lexical: LexicalQuery, options: LanguageServiceOptions): Hov
   const kind = lexical.query.declaredResultKind;
   const contract = lexical.query.declaredRowType ?? (kind === "command" ? "CommandResult" : "unknown");
   const type = kind === "rows" ? `RowQuery<${contract}>` : kind === "command" ? "CommandQuery" : kind === "call" ? `CallQuery<${contract}>` : `Query<${contract}>`;
-  const dialect = options.dialect?.id ?? (["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"].find((candidate) => lexical.query.moduleSpecifier.endsWith(`/${candidate}`)) ?? (() => {
-    const candidates = unique(metadataEvidence(options).map((item) => item.snapshot.dialect), (candidate) => candidate);
-    return candidates.length === 1 ? candidates[0] : "unknown";
-  })());
+  const dialect = queryDialect(lexical.query.moduleSpecifier, options);
   const lines = [type, `dialect: ${dialect}`, `binds: ${lexical.query.bindings.length}`];
   if (lexical.query.bindings.length) lines.push(`bindings: ${lexical.query.bindings.map((binding) => binding.expression).join(", ")}`);
   const target = options.targets?.length === 1 ? options.targets[0] : undefined;
@@ -592,16 +590,25 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
   const indexCache = new Map<string, readonly GeneratedIndex[]>();
   const metadataIndexCache = new Map<string, readonly MetadataIndex[]>();
   const modules = unique([...AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier), ...(options.moduleSpecifiers ?? []), ...(options.moduleSpecifier ? [options.moduleSpecifier] : [])], (value) => value);
-  const semanticOptions: LanguageServiceOptions = { ...options, moduleSpecifiers: modules };
+  const semanticOptions: InternalLanguageServiceOptions = { ...options, moduleSpecifiers: modules };
   function analysis(sourceText: string, fileName: string): FileAnalysis {
     const key = contentKey(fileName, sourceText); const cached = files.get(key); if (cached) return cached;
-    const discovered = discoverQueries(sourceText, fileName, semanticOptions);
+    const sourceFile = semanticOptions.program?.getSourceFile(fileName);
+    const discovered = discoverQueries(sourceText, fileName, {
+      ...semanticOptions,
+      ...(sourceFile ? { sourceFile } : {}),
+    });
     const value: FileAnalysis = { sourceText, fileName, queries: discovered.queries.map((query) => lexicalQuery(query, sourceText, semanticOptions)), diagnostics: discovered.diagnostics };
     cacheSet(files, key, value, maxEntries); return value;
   }
   function overlay(sourceText: string, fileName: string): VirtualTypeScriptOverlay {
     const key = contentKey(fileName, sourceText); const cached = overlays.get(key); if (cached) return cached;
-    const value = createVirtualOverlay(sourceText, fileName, semanticOptions); cacheSet(overlays, key, value, maxEntries); return value;
+    const sourceFile = semanticOptions.program?.getSourceFile(fileName);
+    const value = createVirtualOverlay(sourceText, fileName, {
+      ...semanticOptions,
+      ...(sourceFile ? { sourceFile } : {}),
+    });
+    cacheSet(overlays, key, value, maxEntries); return value;
   }
   function generated(): readonly GeneratedIndex[] {
     const key = (options.targets ?? []).map((target) => `${target.outFile ?? ""}\0${target.generatedSource ?? ""}`).join("\u0001");

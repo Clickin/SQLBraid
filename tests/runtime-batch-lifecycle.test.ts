@@ -5,7 +5,9 @@ import {
   type ExecutableQuery,
   type ExecutionEvent,
   type QueryExecutor,
+  type RenderedStatement,
   type StandardSchemaV1,
+  type StatementBindingContext,
   type StatementBindingAdapter,
 } from "@sqlbraid/core";
 import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
@@ -14,7 +16,7 @@ import { sql } from "@sqlbraid/template";
 
 const statementBinding: StatementBindingAdapter = Object.freeze({
   id: "runtime-batch-lifecycle",
-  describe(statement, context) {
+  describe(statement: RenderedStatement, context: StatementBindingContext) {
     return createStatementBindingDescription(statement, context, {
       adapterId: "runtime-batch-lifecycle",
       transport: "text-positional",
@@ -27,7 +29,7 @@ const statementBinding: StatementBindingAdapter = Object.freeze({
 function executor(overrides: Partial<QueryExecutor> = {}): QueryExecutor {
   return {
     statementBinding,
-    async query<Row>() { return { kind: "rows", rows: [{ value: 1 }] as readonly Row[] }; },
+    async query<Row>() { return { kind: "rows" as const, rows: [{ value: 1 }] as unknown as readonly Row[] }; },
     async *stream<Row>() { yield* [] as readonly Row[]; },
     async call() { return { output: {}, resultSets: [] }; },
     ...overrides,
@@ -50,7 +52,7 @@ test("batch driver failure terminates every ready sibling without extra executio
     async query<Row>() {
       calls += 1;
       if (calls === 2) throw driverFailure;
-      return { kind: "rows", rows: [{ value: calls }] as readonly Row[] };
+      return { kind: "rows" as const, rows: [{ value: calls }] as unknown as readonly Row[] };
     },
   }), { observers: [{ onEvent(event) { events.push(event); } }] });
 
@@ -96,7 +98,7 @@ test("driver failure at each batch item preserves one terminal event per announc
         const index = calls;
         calls += 1;
         if (index === failureAt) throw driverFailure;
-        return { kind: "rows", rows: [{ value: index }] as readonly Row[] };
+        return { kind: "rows" as const, rows: [{ value: index }] as unknown as readonly Row[] };
       },
     }), { observers: [{ onEvent(event) { events.push(event); } }] });
     await assert.rejects(() => db.batch(rowQueries(3)), (error) => error === driverFailure);
@@ -128,7 +130,7 @@ test("batch mapper failure is fail-fast while remaining ready siblings still ter
   const db = createDatabase(executor({
     async query<Row>() {
       calls += 1;
-      return { kind: "rows", rows: [{ value: calls }] as readonly Row[] };
+      return { kind: "rows" as const, rows: [{ value: calls }] as unknown as readonly Row[] };
     },
   }), { observers: [{ onEvent(event) { events.push(event); } }] });
   const queries = [sql.rows(schema)`SELECT 1`, sql.rows(schema)`SELECT 2`, sql.rows(schema)`SELECT 3`] as const;
@@ -176,7 +178,7 @@ test("batch preparation failure terminates only the already announced siblings",
   const db = createDatabase(executor({
     async query<Row>() {
       calls += 1;
-      return { kind: "rows", rows: [{ value: calls }] as readonly Row[] };
+      return { kind: "rows" as const, rows: [{ value: calls }] as unknown as readonly Row[] };
     },
   }), { observers: [{ onEvent(event) { events.push(event); } }] });
 
@@ -201,7 +203,7 @@ test("batch release failure still reports all ready siblings when error observer
     async acquire() {
       return {
         statementBinding,
-        async query<Row>() { return { kind: "rows", rows: [{ value: 1 }] as readonly Row[] }; },
+        async query<Row>() { return { kind: "rows" as const, rows: [{ value: 1 }] as unknown as readonly Row[] }; },
         async *stream<Row>() { yield* [] as readonly Row[]; },
         async call() { return { output: {}, resultSets: [] }; },
         release() { releases += 1; throw releaseFailure; },
@@ -241,7 +243,7 @@ test.each(
       validate(value) {
         mapperCalls += 1;
         if (schemaIndex === index) throw original;
-        return value;
+        return { value };
       },
     },
   }));
@@ -256,7 +258,7 @@ test.each(
           if (phase === "result-kind" && callIndex === index) {
             return { kind: "command", rows: [], command: { affectedRows: 0 } } as never;
           }
-          return { kind: "rows", rows: [{ value: callIndex }] as readonly Row[] };
+          return { kind: "rows" as const, rows: [{ value: callIndex }] as unknown as readonly Row[] };
         },
         async *stream<Row>() { yield* [] as readonly Row[]; },
         async call() { return { output: {}, resultSets: [] }; },

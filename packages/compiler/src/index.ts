@@ -271,6 +271,33 @@ function resolvedModulePath(moduleSpecifier: string, sourceFile: ts.SourceFile, 
   return ts.resolveModuleName(moduleSpecifier, sourceFile.fileName, options.compilerOptions ?? defaultCompilerOptions(), ts.sys).resolvedModule?.resolvedFileName;
 }
 
+function catalogModuleFromDeclaration(declaration: ts.Declaration): string | undefined {
+  let owner: ts.Node | undefined = declaration;
+  while (owner) {
+    if ((ts.isImportDeclaration(owner) || ts.isExportDeclaration(owner)) && owner.moduleSpecifier && ts.isStringLiteral(owner.moduleSpecifier)) return owner.moduleSpecifier.text;
+    owner = owner.parent;
+  }
+  return undefined;
+}
+
+function catalogReexportFromDeclaration(declaration: ts.Declaration, sourceFile: ts.SourceFile, options: OverlayOptions, checker: ts.TypeChecker): string | undefined {
+  let owner: ts.Node | undefined = declaration;
+  while (owner && !ts.isImportDeclaration(owner)) owner = owner.parent;
+  if (!owner || !owner.moduleSpecifier || !ts.isStringLiteral(owner.moduleSpecifier)) return undefined;
+  const imported = owner.moduleSpecifier.text;
+  if (AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === imported)) return imported;
+  const resolved = resolvedModulePath(imported, sourceFile, options);
+  const importedText = resolved ? ts.sys.readFile(resolved) : undefined;
+  const importedFile = resolved && importedText !== undefined ? ts.createSourceFile(resolved, importedText, ts.ScriptTarget.Latest, true, scriptKindForFileName(resolved)) : undefined;
+  for (const statement of importedFile?.statements ?? []) {
+    if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+      const candidate = statement.moduleSpecifier.text;
+      if (AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === candidate)) return candidate;
+    }
+  }
+  return undefined;
+}
+
 function checkerTagModule(expression: ts.Expression, sourceFile: ts.SourceFile, options: OverlayOptions): string | undefined {
   const checker = options.typeChecker;
   if (!checker) return undefined;
@@ -279,6 +306,12 @@ function checkerTagModule(expression: ts.Expression, sourceFile: ts.SourceFile, 
   if (!symbol && ts.isPropertyAccessExpression(expression)) symbol = checker.getTypeAtLocation(expression.expression).getProperty(expression.name.text);
   if (!symbol) return undefined;
   while ((symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+    for (const declaration of symbol.declarations ?? []) {
+      const moduleSpecifier = catalogModuleFromDeclaration(declaration);
+      if (moduleSpecifier && AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === moduleSpecifier)) return moduleSpecifier;
+      const reexport = catalogReexportFromDeclaration(declaration, sourceFile, options, checker);
+      if (reexport) return reexport;
+    }
     const aliased = checker.getAliasedSymbol(symbol);
     if (aliased === symbol) break;
     symbol = aliased;

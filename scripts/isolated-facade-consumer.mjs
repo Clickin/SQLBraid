@@ -30,6 +30,12 @@ writeFileSync(join(consumer, "src.ts"), [
   'import { sql } from "sqlbraid/sqlite";',
   'let calls = 0;',
   'export const query = sql.rows<{ value: number }>`SELECT [Bob\'s] WHERE id = ${1} /*@braid if ${(calls += 1, true)}*/ AND active = 1 /*@braid end*/`;',
+  'export const schema = { "~standard": { version: 1 as const, vendor: "isolated-consumer", validate(value: unknown) { return { value: { value: String((value as { readonly value: number }).value) } }; } } };',
+  'export const mapped = sql.rows(schema)`SELECT 1`;',
+  'type MappedOutput = NonNullable<typeof mapped.__row>;',
+  'export const mappedOutputTypeCheck: MappedOutput = { value: "mapped" };',
+  'export const mappedSchemaIdentity = mapped.resultSchema === schema;',
+  'export const mappedContent = schema["~standard"].validate({ value: 7 });',
   'export const lazy = sql`SELECT 1 /*@braid if ${false}*/ AND value = ${(() => { throw new Error("inactive branch evaluated"); })()} /*@braid end*/`;',
   'export const rendered = query.render();',
   'export const callsAfterRender = calls;',
@@ -44,7 +50,12 @@ const asset = readdirSync(join(consumer, "dist")).find((file) => file.endsWith("
 if (!asset) throw new Error("Vite emitted no JavaScript asset.");
 const built = readFileSync(join(consumer, "dist", asset), "utf8");
 assert.match(built, /sourceMappingURL/u);
+const sourceMap = JSON.parse(readFileSync(join(consumer, "dist", `${asset}.map`), "utf8"));
+assert.ok(sourceMap.mappings, "Vite emitted no source mappings");
+assert.ok(sourceMap.sources.some((source) => source.endsWith("src.ts")), "Vite source map lost the original TypeScript source");
 const result = await import(`file://${join(consumer, "dist", asset)}`);
 assert.deepEqual(result.rendered.parameters.map(({ value }) => value), [1]);
 assert.equal(result.callsAfterRender, 1, "active branch was not evaluated exactly once");
+assert.equal(result.mappedSchemaIdentity, true, "result schema identity was not preserved");
+assert.deepEqual(result.mappedContent, { value: { value: "7" } }, "mapped output content changed");
 console.info(`PASS genuine pnpm isolated Vite consumer: ${consumer}`);

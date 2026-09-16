@@ -182,6 +182,34 @@ test('checker discovers mapped rows through a re-export', () => {
   }
 }, 15_000);
 
+test('checker preserves facade identity through re-export when emitting compiled helpers', () => {
+  const directory = mkdtempSync(join(process.cwd(), '.sqlbraid-facade-reexport-'));
+  try {
+    writeFileSync(join(directory, 'bridge.ts'), "export { sql } from 'sqlbraid/tedious';\n");
+    const source = "import { sql } from './bridge.js'; export const query = sql`SELECT 1 /*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;\n";
+    const fileName = join(directory, 'main.ts');
+    writeFileSync(fileName, source);
+    const projectFile = join(directory, 'tsconfig.json');
+    writeFileSync(projectFile, JSON.stringify({
+      compilerOptions: {
+        target: 'ES2022',
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        strict: true,
+        baseUrl: '.',
+        paths: { 'sqlbraid/*': [join(process.cwd(), 'packages/sqlbraid/src/*.ts')] },
+      },
+      include: ['*.ts'],
+    }));
+    const context = createProjectContext(projectFile);
+    const emitted = emitSource(source, fileName, { compilerOptions: context.compilerOptions });
+    assert.deepEqual(emitted.diagnostics, []);
+    assert.match(emitted.outputText, /from "sqlbraid\/compiled"/u);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('mapped rows use the Standard Schema output type for downstream checking', () => {
   const mapped = `
     import { sql } from '@sqlbraid/template';

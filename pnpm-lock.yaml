@@ -362,6 +362,9 @@ importers:
       '@sqlbraid/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@sqlbraid/core':
+        specifier: workspace:*
+        version: link:../core
       '@sqlbraid/metadata':
         specifier: workspace:*
         version: link:../metadata

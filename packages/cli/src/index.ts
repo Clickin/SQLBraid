@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import packageJson from "../package.json" with { type: "json" };
 import { generateModels, type CodegenDiagnostic } from "@sqlbraid/codegen";
 import { checkProject, checkSource, createVirtualOverlay, discoverQueries, emitSource, type TypeScriptCheckOptions } from "@sqlbraid/compiler";
 import { createManifestFromEvidence, fingerprintTemplate, templateFamilyFingerprintOf } from "@sqlbraid/operations";
@@ -303,7 +304,7 @@ async function main(argv: readonly string[]): Promise<void> {
     return;
   }
   if (command === "--version" || command === "-v") {
-    console.log("0.1.0-rc.2");
+    console.log(packageJson.version);
     return;
   }
   const json = argv.includes("--json");

@@ -66,7 +66,7 @@
     "pack:consumer": "node scripts/prepare-consumer-packages.mjs",
     "test:consumer:isolated": "pnpm run pack:consumer && node scripts/isolated-facade-consumer.mjs",
     "test:consumer:otel-api": "pnpm run pack:consumer && node scripts/otel-api-consumer.mjs",
-    "test:consumer:gates": "pnpm run pack:consumer && node scripts/isolated-facade-consumer.mjs && node scripts/otel-api-consumer.mjs",
+    "test:consumer:gates": "pnpm run pack:consumer && node scripts/isolated-facade-consumer.mjs && node scripts/isolated-lsp-consumer.mjs && node scripts/otel-api-consumer.mjs",
     "test:runtime": "node scripts/runtime-portability.mjs node bun deno",
     "test:lsp": "pnpm run build && vitest run --project unit tests/lsp-protocol.test.ts",
     "test:agent-tooling": "pnpm run build && vitest run --project unit --project cli tests/tooling.test.ts tests/tooling-workspace.test.ts tests/language-server.test.ts tests/cli.test.ts",

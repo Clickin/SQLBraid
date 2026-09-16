@@ -38,7 +38,7 @@ function ready(operationId: string): QueryReadyEvent {
       transport: "text-positional",
       reuse: { requested: "auto", effective: "simple", owner: "sqlbraid" },
     },
-    literalizedSql: () => "SELECT 1",
+    literalizedSql: () => ({ text: "SELECT 1", complete: true, redactedParameters: 0, truncatedParameters: 0 }),
     declaredKind: "rows",
     transactionDepth: 0,
     transactionScoped: false,
@@ -77,7 +77,7 @@ function bulkReady(operationId: string, itemCount: number): BulkReadyEvent {
     itemCount,
     sql: "UPDATE items SET value = ?",
     valuesAt: () => [],
-    literalizedSql: () => "UPDATE items SET value = ?",
+    literalizedSql: () => ({ text: "UPDATE items SET value = ?", complete: true, redactedParameters: 0, truncatedParameters: 0 }),
     transactionDepth: 0,
     transactionScoped: false,
   };

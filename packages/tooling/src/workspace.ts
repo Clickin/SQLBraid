@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
+import ts from "typescript";
 import { createProjectContext, type TypeScriptProjectContext } from "@sqlbraid/compiler";
 import { AUTHORING_MODULE_CATALOG } from "@sqlbraid/core";
 import { generateModels, type CodegenResult } from "@sqlbraid/codegen";
 import { hashSnapshot, parseSnapshotJson, type MetadataSnapshot } from "@sqlbraid/metadata";
 import { createLanguageService } from "./service.js";
 import { ConfigurationCancellationError, loadConfig, type CodegenTargetConfig } from "./config.js";
-import { SOURCE_FILE_LOADER, type SourceFileLoader } from "./internal.js";
+import { SOURCE_FILE_LOADER, type InternalLanguageServiceOptions, type SourceFileLoader } from "./internal.js";
 import type {
   Cancellation,
   LanguageServiceOptions,
@@ -41,7 +42,7 @@ interface FileEvidence {
 
 interface WorkspaceState {
   readonly key: string;
-  readonly options: LanguageServiceOptions;
+  readonly options: InternalLanguageServiceOptions;
   readonly metadata?: MetadataSnapshot;
   readonly targets: readonly ToolingTarget[];
   readonly sources: readonly SourceDocument[];
@@ -73,6 +74,14 @@ function canonicalPath(fileName: string, rootPath: string): string {
 
 function isSourceFile(fileName: string): boolean {
   return SOURCE_EXTENSIONS.has(extname(fileName).toLowerCase());
+}
+
+function scriptKind(fileName: string): ts.ScriptKind {
+  const extension = extname(fileName).toLowerCase();
+  if (extension === ".tsx") return ts.ScriptKind.TSX;
+  if (extension === ".jsx") return ts.ScriptKind.JSX;
+  if (extension === ".js" || extension === ".mjs" || extension === ".cjs") return ts.ScriptKind.JS;
+  return ts.ScriptKind.TS;
 }
 
 function touch<T>(cache: Map<string, T>, key: string, value: T, limit: number): void {
@@ -131,6 +140,25 @@ function projectOptions(options: LanguageServiceOptions, context?: TypeScriptPro
     moduleSpecifiers: modules,
     ...(context ? { compilerOptions: context.compilerOptions } : {}),
   };
+}
+
+function currentProgram(context: TypeScriptProjectContext, documents: ReadonlyMap<string, SourceDocument>, rootPath: string): ts.Program {
+  if (documents.size === 0) return context.program;
+  const host = ts.createCompilerHost(context.compilerOptions, true);
+  const roots = [...new Set([...context.fileNames, ...documents.keys()])];
+  const documentFor = (fileName: string): SourceDocument | undefined => documents.get(canonicalPath(fileName, rootPath));
+  const defaultGetSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    const document = documentFor(fileName);
+    return document
+      ? ts.createSourceFile(fileName, document.sourceText, languageVersion, true, scriptKind(fileName))
+      : defaultGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  };
+  const defaultReadFile = host.readFile.bind(host);
+  host.readFile = (fileName) => documentFor(fileName)?.sourceText ?? defaultReadFile(fileName);
+  const defaultFileExists = host.fileExists.bind(host);
+  host.fileExists = (fileName) => documentFor(fileName) !== undefined || defaultFileExists(fileName);
+  return ts.createProgram(roots, context.compilerOptions, host);
 }
 
 export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
@@ -312,7 +340,18 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
       sources: sources.map((source) => [source.fileName, source.version, digest(source.sourceText)]),
       sourceFiles,
     });
-    return { key, options: semanticOptions, metadata, targets, sources, sourceFiles };
+    const program = context ? currentProgram(context, documents, rootPath) : undefined;
+    return {
+      key,
+      options: {
+        ...semanticOptions,
+        ...(program ? { program, typeChecker: program.getTypeChecker() } : {}),
+      },
+      metadata,
+      targets,
+      sources,
+      sourceFiles,
+    };
   }
 
   function refresh(): Promise<WorkspaceState> {

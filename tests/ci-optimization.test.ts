@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -19,8 +19,33 @@ test("runtime compatibility manifest validates exact floors and release cells", 
     "node-16-20-2-better-sqlite3-9-6-0",
     "node-22-18-0-better-sqlite3-13-0-3",
     "node-16-20-2-libsql-0-18-0",
+    "node-16-20-2-opentelemetry-api-1-9-1",
   ]);
   assert.deepEqual(result.blockingCells, result.cells);
+});
+
+test("runtime compatibility rejects unknown cells, packages, and drivers", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sqlbraid-runtime-manifest-"));
+  try {
+    await cp(join(root, "support"), join(directory, "support"), { recursive: true });
+    await cp(join(root, "packages"), join(directory, "packages"), { recursive: true });
+    await cp(join(root, "scripts"), join(directory, "scripts"), { recursive: true });
+    const manifestPath = join(directory, "support/runtime-compatibility.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.cells[1].driver.package = "sqlite3";
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await assert.rejects(validateRuntimeCompatibility({ root: directory }), /unregistered driver sqlite3/u);
+    manifest.cells[1].driver.package = "better-sqlite3";
+    manifest.cells[1].packages.push("@sqlbraid/not-a-package");
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await assert.rejects(validateRuntimeCompatibility({ root: directory }), /references unknown package/u);
+    manifest.cells[1].packages.pop();
+    manifest.cells[0].id = "unknown-cell";
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await assert.rejects(validateRuntimeCompatibility({ root: directory }), /Missing required exact cell/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("CI planner fails open for unknown changes and selects driver-local lanes", () => {
@@ -33,7 +58,7 @@ test("CI planner fails open for unknown changes and selects driver-local lanes",
   assert.equal(postgres.node24, true);
   assert.equal(postgres.packed, true);
   assert.equal(postgres.compatibility, true);
-  assert.deepEqual(postgres.compatibility_matrix.length, 4);
+  assert.deepEqual(postgres.compatibility_matrix.length, 5);
   const sqlite = planChanges(["packages/sqlite/src/libsql.ts"], { eventName: "pull_request", baseKnown: true });
   assert.equal(sqlite.compatibility, true);
   assert.deepEqual(sqlite.compatibility_matrix.map(({ id }: { readonly id: string }) => id), [
@@ -41,6 +66,7 @@ test("CI planner fails open for unknown changes and selects driver-local lanes",
     "node-16-20-2-better-sqlite3-9-6-0",
     "node-22-18-0-better-sqlite3-13-0-3",
     "node-16-20-2-libsql-0-18-0",
+    "node-16-20-2-opentelemetry-api-1-9-1",
   ]);
   assert.equal(planChanges(["new/unknown-file.txt"], { eventName: "pull_request", baseKnown: true }).all, false);
   assert.equal(planChanges(["new/unknown-file.txt"], { eventName: "push", baseKnown: true }).all, true);

@@ -1,7 +1,7 @@
 {
   "name": "@sqlbraid/sqlite",
   "version": "0.1.0-rc.2",
-  "description": "SQLBraid SQLite dialect, node:sqlite adapter, and metadata inspector",
+  "description": "SQLBraid SQLite dialect adapters for node:sqlite, better-sqlite3, libSQL, SQLite WASM, and Cloudflare D1, plus metadata inspection",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

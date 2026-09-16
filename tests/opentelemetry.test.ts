@@ -25,6 +25,7 @@ import type {
   QueryResultEvent,
   RenderedBulk,
   RenderedStatement,
+  StatementBindingContext,
   StatementBindingAdapter,
 } from "@sqlbraid/core";
 import { createBulkBindingDescription, createStatementBindingDescription } from "@sqlbraid/core";
@@ -390,7 +391,7 @@ test("tracks real runtime routine calls, cardinality errors, and every batch ite
   const executor: QueryExecutor = {
     statementBinding: Object.freeze({
       id: "otel-runtime-c3",
-      describe(statement, context) {
+      describe(statement: RenderedStatement, context: StatementBindingContext) {
         return createStatementBindingDescription(statement, context, {
           adapterId: "otel-runtime-c3",
           transport: "text-positional",
@@ -433,7 +434,7 @@ test("requires OTel last so late mapped and bulk observers turn spans into failu
   const lateBulk = new Error("late bulk observer failed");
   const binding: StatementBindingAdapter = Object.freeze({
     id: "otel-ordering-test",
-    describe(statement, context) {
+    describe(statement: RenderedStatement, context: StatementBindingContext) {
       return createStatementBindingDescription(statement, context, {
         adapterId: "otel-ordering-test",
         transport: "text-positional",
@@ -441,7 +442,7 @@ test("requires OTel last so late mapped and bulk observers turn spans into failu
         reuse: { effective: "simple", owner: "sqlbraid" },
       });
     },
-    describeBulk(bulk: RenderedBulk, context) {
+    describeBulk(bulk: RenderedBulk, context: StatementBindingContext) {
       return createBulkBindingDescription(bulk, context, {
         adapterId: "otel-ordering-test",
         transport: "text-positional",
@@ -452,7 +453,7 @@ test("requires OTel last so late mapped and bulk observers turn spans into failu
   });
   const executor: QueryExecutor = {
     statementBinding: binding,
-    async query<Row>() { return { kind: "rows", rows: [{ value: 1 }] as readonly Row[] }; },
+    async query<Row>() { return { kind: "rows" as const, rows: [{ value: 1 }] as unknown as readonly Row[] }; },
     async bulk(): Promise<{ inputCount: number; affectedRows: number; executionMode: "native-bulk" }> {
       return { inputCount: 1, affectedRows: 1, executionMode: "native-bulk" };
     },

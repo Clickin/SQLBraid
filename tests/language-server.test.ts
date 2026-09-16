@@ -51,6 +51,68 @@ const mapped = sql.rows(UserSchema)\`SELECT id FROM users\`;`;
   assert.match(service.hover(mappedSource, 'mapped-hover.ts', mappedSource.indexOf('SELECT'))?.contents ?? '', /RowQuery<UserRow>/u);
 });
 
+test('canonical facade hover uses catalog dialects and MariaDB comment boundaries', () => {
+  const service = createLanguageService({});
+  const facades = new Map([
+    ['sqlbraid/pg', 'postgres'],
+    ['sqlbraid/mysql2', 'mysql'],
+    ['sqlbraid/mariadb', 'mariadb'],
+    ['sqlbraid/node-sqlite', 'sqlite'],
+    ['sqlbraid/better-sqlite3', 'sqlite'],
+    ['sqlbraid/libsql', 'sqlite'],
+    ['sqlbraid/sqlite-wasm', 'sqlite'],
+    ['sqlbraid/d1', 'sqlite'],
+    ['sqlbraid/oracledb', 'oracle'],
+    ['sqlbraid/tedious', 'mssql'],
+    ['sqlbraid/postgres', 'postgres'],
+    ['sqlbraid/mysql', 'mysql'],
+    ['sqlbraid/sqlite', 'sqlite'],
+  ] as const);
+  for (const [moduleSpecifier, dialect] of facades) {
+    const source = `import { sql } from '${moduleSpecifier}'; const query = sql.rows\`SELECT 1\`;`;
+    assert.match(service.hover(source, `${dialect}.ts`, source.indexOf('SELECT'))?.contents ?? '', new RegExp(`^RowQuery<unknown>\\ndialect: ${dialect}$`, 'mu'));
+  }
+  const mariadb = `import { sql } from 'sqlbraid/mariadb'; const query = sql.rows\`SELECT 1 # not SQL FROM users\nFROM users\`;`;
+  assert.equal(service.hover(mariadb, 'mariadb.ts', mariadb.indexOf('not SQL')), undefined);
+});
+
+test('workspace discovery follows aliased facade re-exports through the project checker', async () => {
+  const root = await mkdtemp(join(process.cwd(), '.sqlbraid-alias-tooling-'));
+  const sourcePath = join(root, 'query.ts');
+  try {
+    await writeFile(join(root, 'tsconfig.json'), JSON.stringify({
+      compilerOptions: {
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        target: 'ES2022',
+        strict: true,
+        baseUrl: '.',
+        paths: { 'sqlbraid/*': [join(process.cwd(), 'packages/sqlbraid/src/*.ts')] },
+      },
+      include: ['**/*.ts'],
+    }));
+    await writeFile(join(root, 'alias.ts'), 'export { sql } from "sqlbraid/sqlite";\n');
+    const source = 'import { sql } from "./alias.js";\nexport const query = sql.rows`SELECT 1`;\n';
+    await writeFile(sourcePath, source);
+    const workspace = createWorkspace({ rootPath: root });
+    try {
+      workspace.setDocument(sourcePath, source, 1);
+      const service = await workspace.service();
+      assert.deepEqual(service.documentSymbols(source, sourcePath).map((symbol) => symbol.name), ['sql.rows']);
+      assert.match(service.hover(source, sourcePath, source.indexOf('SELECT'))?.contents ?? '', /dialect: sqlite/u);
+      const edited = source.replace('SELECT 1', 'SELECT 2');
+      workspace.setDocument(sourcePath, edited, 2);
+      const editedService = await workspace.service();
+      assert.deepEqual(editedService.documentSymbols(edited, sourcePath).map((symbol) => symbol.name), ['sql.rows']);
+      assert.match(editedService.hover(edited, sourcePath, edited.indexOf('SELECT'))?.contents ?? '', /dialect: sqlite/u);
+    } finally {
+      workspace.dispose();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('facade-only metadata defaults cover every navigation surface', async () => {
   const root = await mkdtemp(join(process.cwd(), '.sqlbraid-facade-tooling-'));
   const metadataPath = join(root, 'metadata.json');

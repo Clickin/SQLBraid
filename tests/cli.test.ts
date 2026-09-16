@@ -12,6 +12,12 @@ import { createSqliteInspector } from '@sqlbraid/sqlite/inspector';
 const exec = promisify(execFile);
 const cliEntry = resolve(process.cwd(), 'packages/cli/dist/index.js');
 
+test('CLI version matches the package manifest', async () => {
+  const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'packages/cli/package.json'), 'utf8')) as { version: string };
+  const result = await exec(process.execPath, [cliEntry, '--version']);
+  assert.equal(result.stdout.trim(), manifest.version);
+});
+
 function metadata(nullable = false) {
   return {
     format: 'sqlbraid-metadata',

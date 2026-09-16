@@ -10,6 +10,10 @@ const compatibility = JSON.parse(readFileSync(join(root, "support/runtime-compat
 const cellId = process.env.SQLBRAID_COMPAT_CELL;
 const cell = compatibility.cells.find(({ id }) => id === cellId);
 if (!cell) throw new Error(`Unknown SQLBraid runtime compatibility cell: ${cellId ?? "unset"}`);
+const supportedDrivers = new Set(["better-sqlite3", "@libsql/client"]);
+if (cell.driver && !supportedDrivers.has(cell.driver.package)) {
+  throw new Error(`Unsupported SQLBraid runtime compatibility driver: ${cell.driver.package}`);
+}
 if (process.versions.node !== cell.runtime.version) {
   throw new Error(`Expected Node ${cell.runtime.version}; found ${process.versions.node}.`);
 }
