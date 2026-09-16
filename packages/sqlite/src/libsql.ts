@@ -66,6 +66,7 @@ export interface LibsqlTransactionLike {
 
 /** The structural subset shared by @libsql/client's runtime-neutral clients. */
 export interface LibsqlClientLike {
+  readonly protocol?: string;
   execute(statement: LibsqlStatementLike | string): Promise<LibsqlResultSetLike>;
   batch(
     statements: (LibsqlStatementLike | string | [string, LibsqlArgs?])[],
@@ -188,8 +189,8 @@ function unsupportedTransactionOption(option: string): never {
   );
 }
 
-function transactionMode(options?: TransactionOptions): LibsqlTransactionMode {
-  if (options === undefined) return "deferred";
+function transactionMode(options?: TransactionOptions): LibsqlTransactionMode | undefined {
+  if (options === undefined) return undefined;
   if (options === null || typeof options !== "object" || Array.isArray(options)) {
     invalidTransactionOptions("transaction options must be an object.");
   }
@@ -210,7 +211,8 @@ function transactionMode(options?: TransactionOptions): LibsqlTransactionMode {
     }
     unsupportedTransactionOption(candidate.isolation);
   }
-  return candidate.readOnly === true ? "read" : "deferred";
+  if (candidate.readOnly === undefined) return undefined;
+  return candidate.readOnly ? "read" : "write";
 }
 
 function validateColumns(columns: readonly string[]): void {
@@ -242,11 +244,9 @@ function valueAt(row: LibsqlRowLike, index: number, name: string): unknown {
 }
 
 function normalizeRow(row: LibsqlRowLike, columns: readonly string[]): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (let index = 0; index < columns.length; index += 1) {
-    result[columns[index]!] = normalizeValue(valueAt(row, index, columns[index]!));
-  }
-  return result;
+  return Object.fromEntries(
+    columns.map((name, index) => [name, normalizeValue(valueAt(row, index, name))]),
+  );
 }
 
 function resultRows<Row>(result: LibsqlResultSetLike): readonly Row[] {
@@ -411,6 +411,20 @@ const libsqlEnvironment = Object.freeze<DriverEnvironment>({
   },
 });
 
+function environmentFor(client: LibsqlClientLike): DriverEnvironment {
+  if (client.protocol !== undefined && client.protocol !== "file") return libsqlEnvironment;
+  return Object.freeze({
+    ...libsqlEnvironment,
+    capabilities: Object.freeze({
+      ...libsqlEnvironment.capabilities,
+      "transaction.read-only": {
+        status: "guarded" as const,
+        conditionCode: "libsql.file-read-only-not-enforced",
+      },
+    }),
+  });
+}
+
 function activeTransaction(active: LibsqlTransactionLike | undefined): LibsqlTransactionLike {
   if (active === undefined) throw new TypeError("BRAID_TRANSACTION_STATE: no active libSQL transaction.");
   return active;
@@ -438,7 +452,7 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
   return {
     ownershipKey: client,
     statementBinding: libsqlStatementBinding,
-    environment: libsqlEnvironment,
+    environment: environmentFor(client),
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
@@ -490,8 +504,15 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
     },
     begin: async (options?: TransactionOptions): Promise<void> => {
       if (transaction !== undefined) throw new TypeError("BRAID_TRANSACTION_STATE: a libSQL transaction is already active.");
+      if ((client.protocol === undefined || client.protocol === "file") && options?.readOnly === true) {
+        throw new UnsupportedFeatureError(
+          "transaction.read-only",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          "The local libSQL client does not enforce read-only transactions.",
+        );
+      }
       const mode = transactionMode(options);
-      const next = await client.transaction(mode);
+      const next = mode === undefined ? await client.transaction() : await client.transaction(mode);
       if (
         !next
         || typeof next.execute !== "function"

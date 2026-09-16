@@ -42,8 +42,9 @@ does not create transaction or savepoint spans.
 The stable `db.client.operation.duration` histogram uses seconds and the
 recommended explicit boundaries
 `0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10`. Its attributes are stable
-database identity fields and, for bulk, `db.operation.batch.size`. Operation
-IDs, fingerprints, SQL text, and bind values are never metric attributes.
+database identity fields only. Failed samples also include the bounded
+`error.type`; bulk `db.operation.batch.size` is span-only. Operation IDs,
+fingerprints, SQL text, and bind values are never metric attributes.
 
 SQLBraid dialects map to `db.system.name` as follows:
 
@@ -57,8 +58,9 @@ SQLBraid dialects map to `db.system.name` as follows:
 | `mssql` | `microsoft.sql_server` |
 
 An unknown dialect uses `other_sql`, unless `database.systemName` is supplied.
-The span name follows the same low-cardinality fallback and does not parse SQL
-to invent an operation name or target.
+The span name uses configured `database.namespace`, then
+`database.serverAddress`, then this system name. It does not parse SQL to
+invent an operation name or target.
 
 ## Privacy and errors
 
@@ -100,6 +102,26 @@ Existing driver tracing:
 SQLBraid does not claim a parent/child relationship with `pg`, `mysql2`, or
 another driver without an actual integration test.
 
+## Observer ordering and batches
+
+Observers run sequentially in registration order. In the restricted RC
+configuration, register OpenTelemetry last:
+
+```ts
+const db = createPgPoolDatabase(pool, {
+  observers: [auditObserver, slowQueryObserver, createOpenTelemetryObserver()],
+});
+```
+
+An observer registered after OpenTelemetry can reject `query:mapped` or
+`bulk:result` after telemetry has already ended a successful span; the later
+error event cannot reopen it. OpenTelemetry-first ordering is unsupported.
+Each `db.batch()` terminal event closes only its own operation. The observer
+does not infer sibling failures from `batchId`. For a bulk operation, configure
+`database.systemName` when the transport cannot supply a dialect identity;
+otherwise its final fallback is `other_sql`, never an identity inferred from a
+previous query.
+
 ## Slow-query investigation
 
 Use the OTel histogram to detect latency and a plain SQLBraid observer to log
@@ -119,7 +141,7 @@ const slowQueries: ExecutionObserver = {
 };
 
 const db = createPgPoolDatabase(pool, {
-  observers: [createOpenTelemetryObserver(), slowQueries],
+  observers: [slowQueries, createOpenTelemetryObserver()],
 });
 ```
 

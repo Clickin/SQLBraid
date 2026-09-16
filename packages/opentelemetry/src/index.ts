@@ -5,6 +5,7 @@ import {
   trace,
   type Attributes,
   type Histogram,
+  type HrTime,
   type Span,
   type Tracer,
 } from "@opentelemetry/api";
@@ -13,10 +14,24 @@ import type {
   ExecutionObserver,
   QueryReadyEvent,
 } from "@sqlbraid/core";
+import { PUBLIC_ERROR_DEFINITIONS } from "@sqlbraid/core";
 
 const INSTRUMENTATION_NAME = "@sqlbraid/opentelemetry";
 const METRIC_NAME = "db.client.operation.duration";
 const DURATION_BUCKETS = Object.freeze([0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10]);
+const PUBLIC_ERROR_CODES = new Set(PUBLIC_ERROR_DEFINITIONS.map(({ code }) => code));
+const STABLE_INTERNAL_ERROR_CODES = new Set(["BRAID_BATCH_ABORTED", "ERR_OPERATION_REPLACED"]);
+const STABLE_ERROR_NAMES = new Set([
+  "Error",
+  "AggregateError",
+  "EvalError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "TypeError",
+  "URIError",
+  "DOMException",
+]);
 const DIALECT_SYSTEMS: Readonly<Record<string, string>> = Object.freeze({
   postgres: "postgresql",
   mysql: "mysql",
@@ -46,18 +61,33 @@ interface DatabaseOptions {
 }
 
 interface OperationState {
-  readonly startedAt: number;
+  readonly startedAt: ClockReading;
   readonly span?: Span;
   readonly metricAttributes: Attributes;
-  readonly batchId?: string;
 }
 
-function monotonicNow(): number {
+interface ClockReading {
+  readonly monotonicMs: number;
+  readonly wallMs: number;
+  readonly source: "performance" | "wall";
+}
+
+function clockNow(): ClockReading {
+  const wallMs = Date.now();
   try {
-    return globalThis.performance?.now() ?? Date.now();
-  } catch {
-    return Date.now();
-  }
+    const monotonicMs = globalThis.performance?.now();
+    if (typeof monotonicMs === "number" && Number.isFinite(monotonicMs)) {
+      return { monotonicMs, wallMs, source: "performance" };
+    }
+  } catch {}
+  return { monotonicMs: wallMs, wallMs, source: "wall" };
+}
+
+function spanTimestamp(milliseconds: number): HrTime {
+  if (!Number.isFinite(milliseconds)) return [0, 0];
+  const seconds = Math.floor(milliseconds / 1_000);
+  const nanos = Math.max(0, Math.min(999_999_999, Math.floor((milliseconds - seconds * 1_000) * 1_000_000)));
+  return [seconds, nanos];
 }
 
 function nonEmptyString(value: unknown): string | undefined {
@@ -84,6 +114,10 @@ function databaseSystem(database: DatabaseOptions, dialectId?: string): string {
   return database.systemName ?? (dialectId === undefined ? undefined : DIALECT_SYSTEMS[dialectId]) ?? "other_sql";
 }
 
+function spanName(database: DatabaseOptions, systemName: string): string {
+  return database.namespace ?? database.serverAddress ?? systemName;
+}
+
 function databaseAttributes(database: DatabaseOptions, systemName: string): Attributes {
   return {
     "db.system.name": systemName,
@@ -91,6 +125,15 @@ function databaseAttributes(database: DatabaseOptions, systemName: string): Attr
     ...(database.serverAddress === undefined ? {} : { "server.address": database.serverAddress }),
     ...(database.serverPort === undefined ? {} : { "server.port": database.serverPort }),
   };
+}
+
+function metricAttributes(attributes: Attributes): Attributes {
+  const result: Attributes = {};
+  for (const key of ["db.system.name", "db.namespace", "server.address", "server.port"] as const) {
+    const value = attributes[key];
+    if (value !== undefined) result[key] = value;
+  }
+  return result;
 }
 
 function queryText(event: QueryReadyEvent | { readonly sql?: string }): string | undefined {
@@ -105,16 +148,17 @@ function safeErrorType(error: unknown): string {
   try {
     if (typeof error === "object" && error !== null) {
       const code = (error as { readonly code?: unknown }).code;
-      if (typeof code === "string" && /^(?:BRAID_[A-Z0-9_]+|ERR_[A-Z0-9_]+|E[A-Z0-9_]+|[0-9A-Z]{5})$/u.test(code)) {
+      if (
+        typeof code === "string"
+        && (PUBLIC_ERROR_CODES.has(code) || STABLE_INTERNAL_ERROR_CODES.has(code))
+      ) {
         return code;
       }
-      const name = (error as { readonly name?: unknown }).name;
-      if (typeof name === "string" && /^(?:Error|Exception|[A-Za-z][A-Za-z0-9]*(?:Error|Exception))$/u.test(name)) {
-        return name;
-      }
     }
-    if (error instanceof Error && /^(?:Error|Exception|[A-Za-z][A-Za-z0-9]*(?:Error|Exception))$/u.test(error.name)) {
-      return error.name;
+    if (error instanceof Error) {
+      const name = error.name;
+      if (STABLE_ERROR_NAMES.has(name)) return name;
+      return "Error";
     }
     return typeof error;
   } catch {
@@ -122,13 +166,15 @@ function safeErrorType(error: unknown): string {
   }
 }
 
-function durationSeconds(startedAt: number, endedAt: number): number {
-  const durationMs = endedAt - startedAt;
+function durationSeconds(startedAt: ClockReading, endedAt: ClockReading): number {
+  const durationMs = startedAt.source === "performance" && endedAt.source === "performance"
+    ? endedAt.monotonicMs - startedAt.monotonicMs
+    : endedAt.wallMs - startedAt.wallMs;
   return Number.isFinite(durationMs) && durationMs > 0 ? durationMs / 1_000 : 0;
 }
 
-function errorAttributes(error: unknown): Attributes {
-  return { "error.type": safeErrorType(error) };
+function errorAttributes(errorType: string): Attributes {
+  return { "error.type": errorType };
 }
 
 function noopObserver(): ExecutionObserver {
@@ -145,7 +191,6 @@ export function createOpenTelemetryObserver(
   const database = normalizeDatabaseOptions(options.database);
   const queryTextEnabled = options.queryText === true;
   const operations = new Map<string, OperationState>();
-  const batches = new Map<string, Set<string>>();
   let tracer: Tracer | undefined;
   let histogram: Histogram | undefined;
 
@@ -175,36 +220,36 @@ export function createOpenTelemetryObserver(
     }
   }
 
-  function removeBatch(operationId: string, batchId: string | undefined): void {
-    if (batchId === undefined) return;
-    const batch = batches.get(batchId);
-    if (batch === undefined) return;
-    batch.delete(operationId);
-    if (batch.size === 0) batches.delete(batchId);
-  }
-
   function finishOperation(
     operationId: string,
     outcome: "success" | "error",
     error: unknown = undefined,
-    endedAt = monotonicNow(),
+    endedAt = clockNow(),
   ): void {
     const state = operations.get(operationId);
     if (state === undefined) return;
     operations.delete(operationId);
-    removeBatch(operationId, state.batchId);
     const seconds = durationSeconds(state.startedAt, endedAt);
+    const errorType = outcome === "error" ? safeErrorType(error) : undefined;
 
     if (state.span !== undefined) {
       if (outcome === "error") {
         try { state.span.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
-        try { state.span.setAttributes(errorAttributes(error)); } catch {}
+        try { state.span.setAttributes(errorAttributes(errorType!)); } catch {}
       }
-      try { state.span.end(); } catch {}
+      try {
+        const durationMs = seconds * 1_000;
+        state.span.end(spanTimestamp(state.startedAt.wallMs + durationMs));
+      } catch {}
     }
     const currentHistogram = getHistogram();
     if (currentHistogram !== undefined) {
-      try { currentHistogram.record(seconds, state.metricAttributes); } catch {}
+      try {
+        currentHistogram.record(
+          seconds,
+          outcome === "error" ? { ...state.metricAttributes, ...errorAttributes(errorType!) } : state.metricAttributes,
+        );
+      } catch {}
     }
   }
 
@@ -213,12 +258,11 @@ export function createOpenTelemetryObserver(
     systemName: string,
     spanAttributes: Attributes,
     metricAttributes: Attributes,
-    batchId?: string,
   ): void {
     if (operations.has(operationId)) {
       finishOperation(operationId, "error", { code: "ERR_OPERATION_REPLACED" });
     }
-    const startedAt = monotonicNow();
+    const startedAt = clockNow();
     let span: Span | undefined;
     const currentTracer = getTracer();
     if (currentTracer !== undefined) {
@@ -226,6 +270,7 @@ export function createOpenTelemetryObserver(
         span = currentTracer.startSpan(systemName, {
           kind: SpanKind.CLIENT,
           attributes: spanAttributes,
+          startTime: spanTimestamp(startedAt.wallMs),
         });
       } catch {}
     }
@@ -233,16 +278,7 @@ export function createOpenTelemetryObserver(
       startedAt,
       ...(span === undefined ? {} : { span }),
       metricAttributes,
-      ...(batchId === undefined ? {} : { batchId }),
     }));
-    if (batchId !== undefined) {
-      let batch = batches.get(batchId);
-      if (batch === undefined) {
-        batch = new Set();
-        batches.set(batchId, batch);
-      }
-      batch.add(operationId);
-    }
   }
 
   function observe(event: ExecutionEvent): void {
@@ -254,7 +290,7 @@ export function createOpenTelemetryObserver(
           const text = queryTextEnabled ? queryText(event) : undefined;
           startOperation(
             event.operationId,
-            systemName,
+            spanName(database, systemName),
             {
               ...base,
               "sqlbraid.operation.id": event.operationId,
@@ -263,8 +299,7 @@ export function createOpenTelemetryObserver(
               ...(event.batchId === undefined ? {} : { "sqlbraid.batch.id": event.batchId }),
               ...(text === undefined ? {} : { "db.query.text": text }),
             },
-            base,
-            event.batchId,
+            metricAttributes(base),
           );
           return;
         }
@@ -282,12 +317,9 @@ export function createOpenTelemetryObserver(
           const systemName = databaseSystem(database);
           const base = databaseAttributes(database, systemName);
           const text = queryTextEnabled ? queryText(event) : undefined;
-          const metricAttributes = Number.isInteger(event.itemCount) && event.itemCount >= 0
-            ? { ...base, "db.operation.batch.size": event.itemCount }
-            : base;
           startOperation(
             event.operationId,
-            systemName,
+            spanName(database, systemName),
             {
               ...base,
               "sqlbraid.operation.id": event.operationId,
@@ -296,7 +328,7 @@ export function createOpenTelemetryObserver(
                 ? { "db.operation.batch.size": event.itemCount }
                 : {}),
             },
-            metricAttributes,
+            metricAttributes(base),
           );
           return;
         }
@@ -304,15 +336,7 @@ export function createOpenTelemetryObserver(
           finishOperation(event.operationId, "success");
           return;
         case "query:error": {
-          const pending = event.batchId === undefined
-            ? []
-            : [...(batches.get(event.batchId) ?? [])];
           finishOperation(event.operationId, "error", event.error);
-          if (event.batchId !== undefined) {
-            for (const operationId of pending) {
-              if (operationId !== event.operationId) finishOperation(operationId, "error", event.error);
-            }
-          }
           return;
         }
         default:

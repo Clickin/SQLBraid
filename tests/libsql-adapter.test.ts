@@ -25,8 +25,9 @@ function fakeClient(
   transaction: (mode?: "write" | "read" | "deferred") => Promise<LibsqlTransactionLike> = async () => {
     throw new Error("transaction not configured");
   },
+  protocol?: string,
 ): LibsqlClientLike {
-  return { execute, batch, transaction };
+  return { execute, batch, transaction, ...(protocol === undefined ? {} : { protocol }) };
 }
 
 test("libSQL requires an explicit exact-string integer assertion", () => {
@@ -123,6 +124,30 @@ test("libSQL rejects duplicate labels before row conversion and maps command met
   );
 });
 
+test("libSQL materializes hostile row labels as own data properties", async () => {
+  const executor = createLibsqlExecutor(
+    fakeClient(async () => rowsResult(
+      ["__proto__", "constructor", "toString", ""],
+      [{ 0: "proto-value", 1: "constructor-value", 2: "toString-value", 3: "empty-key" }],
+    )),
+    { intMode: "string" },
+  );
+  const result = await executor.query(sql.rows`SELECT 1`.render());
+  const row = result.kind === "rows" ? result.rows[0] as Record<string, unknown> : undefined;
+  assert.ok(row);
+  assert.equal(Object.getPrototypeOf(row), Object.prototype);
+  assert.deepEqual(Object.keys(row), ["__proto__", "constructor", "toString", ""]);
+  assert.equal(Object.hasOwn(row, "__proto__"), true);
+  assert.equal(row["__proto__"], "proto-value");
+  assert.equal(row.constructor, "constructor-value");
+  assert.equal(row.toString, "toString-value");
+  assert.equal(row[""], "empty-key");
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(row)),
+    JSON.parse('{ "__proto__": "proto-value", "constructor": "constructor-value", "toString": "toString-value", "": "empty-key" }'),
+  );
+});
+
 test("libSQL uses native batch for root and active transactions, never client BEGIN", async () => {
   const clientCalls: unknown[] = [];
   const txCalls: unknown[] = [];
@@ -179,6 +204,35 @@ test("libSQL uses native batch for root and active transactions, never client BE
   assert.equal(txCalls.filter((entry) => entry === "ROLLBACK TO SAVEPOINT sp_1").length, 1);
   assert.equal(txCalls.filter((entry) => entry === "RELEASE SAVEPOINT sp_1").length, 1);
   assert.equal(handleClosed, 1);
+});
+
+test("libSQL leaves default transaction mode to the client and maps explicit readOnly", async () => {
+  const calls: unknown[][] = [];
+  const tx: LibsqlTransactionLike = {
+    async execute() { return rowsResult([], []); },
+    async batch() { return []; },
+    async commit() {},
+    async rollback() {},
+  };
+  const client = fakeClient(
+    async () => rowsResult([], []),
+    async () => [],
+    async function transaction(mode?: "write" | "read" | "deferred") {
+      calls.push([...arguments]);
+      return tx;
+    },
+    "http",
+  );
+  const executor = createLibsqlExecutor(client, { intMode: "string" });
+  await executor.begin!();
+  await executor.commit!();
+  await executor.begin!({});
+  await executor.rollback!();
+  await executor.begin!({ readOnly: true });
+  await executor.rollback!();
+  await executor.begin!({ readOnly: false });
+  await executor.rollback!();
+  assert.deepEqual(calls, [[], [], ["read"], ["write"]]);
 });
 
 test("libSQL transaction cleanup clears continuity after commit or rollback failure", async () => {

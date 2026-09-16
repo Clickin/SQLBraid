@@ -138,11 +138,18 @@ function assertBetterSqlite3Value(value: unknown): void {
     }
     return;
   }
-  if (Buffer.isBuffer(value)) return;
+  if (value instanceof Uint8Array) return;
   throw new AdapterError(
     "BRAID_BIND_VALUE_UNSUPPORTED",
     "better-sqlite3 binds support null, numbers, bigint, strings, and Buffer values.",
   );
+}
+
+function toBetterSqlite3Value(value: unknown): unknown {
+  if (value instanceof Uint8Array && !Buffer.isBuffer(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return value;
 }
 
 function assertBetterSqlite3Values(values: readonly unknown[]): void {
@@ -257,7 +264,7 @@ function materialize(
   }
   const values = statement.parameters.map((parameter) => parameter.value);
   assertBetterSqlite3Values(values);
-  return { text: description.parameterizedSql, values };
+  return { text: description.parameterizedSql, values: values.map(toBetterSqlite3Value) };
 }
 
 function configureExactIntegerReads(statement: BetterSqlite3StatementLike): void {
@@ -365,7 +372,7 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
       for (let index = 0; index < bulk.parameterSets.length; index += 1) {
         const values = binding.valuesAt(index);
         assertBetterSqlite3Values(values);
-        const result = native.run(...values);
+        const result = native.run(...values.map(toBetterSqlite3Value));
         if (result.changes === undefined) {
           affectedRows = undefined;
         } else if (affectedRows !== undefined) {

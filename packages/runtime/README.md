@@ -12,4 +12,14 @@ connections. `db.tx()` pins one connection for its callback, and unsupported
 driver capabilities (such as streaming or routine calls) are rejected rather
 than simulated. Use a database-specific package for dialects and adapters.
 
+`db.batch()` preflights every item, acquires one lease, and executes homogeneous
+items fail-fast. Every item that emitted `query:ready` eventually emits exactly
+one terminal `query:mapped` or `query:error`; abandoned siblings use the
+existing error event with `BRAID_BATCH_ABORTED` and truthful execution flags.
+No abandoned item is sent to the driver or mapper, and error observers are
+still given the remaining terminal events when another observer throws. For a
+synthetic sibling error, `stage` names the logical batch phase at which that
+sibling was abandoned; it does not claim to be the native or observer failure
+stage that caused the batch to stop.
+
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

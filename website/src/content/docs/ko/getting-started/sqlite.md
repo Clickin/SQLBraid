@@ -86,6 +86,14 @@ opaque client의 integer mode를 SQLBraid가 추론할 수 없으므로 명시�
 transaction handle을 사용하며 일반 호출은 하나의 pinned session을
 주장하지 않습니다. Native `batch()`를 bulk에 사용하고, 완전한 result를
 buffering하는 대신 `db.stream()`은 `BRAID_STREAM_UNSUPPORTED`로 거부합니다.
+옵션을 생략하거나 빈 객체를 사용하면 mode 없이 `client.transaction()`을
+호출하고 `readOnly: false`는 `"write"`를 선택합니다. 로컬
+`@libsql/client@0.18.0` file transport는 `BEGIN TRANSACTION READONLY`를
+생성하지만 write를 거부하지 않으므로 SQLBraid는 read-only를 guarded로
+보고하고 `readOnly: true`를 begin 전에 거부합니다. 문서화된 `"read"` mode를
+노출하고 enforce하는 remote transport에서는 해당 option을 유지하며 transport
+protocol이 없는 opaque client는 같은 guard를 적용합니다. better-sqlite3는
+`Uint8Array` bind view를 받아 native 호출 직전에 `Buffer`로 변환합니다.
 
 SQLite inspector의 기본 `introspectionScope: "main"`은 main schema만
 검사합니다. attached schema는 검사되지 않으며, 누락된 index나 constraint를

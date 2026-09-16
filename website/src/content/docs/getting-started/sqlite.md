@@ -196,3 +196,12 @@ The SQLite inspector defaults to `introspectionScope: "main"`: metadata capture
 does not inspect attached schemas, and missing fields must not be read as proof
 that indexes or constraints are absent. better-sqlite3 and libSQL targets are
 compatible pending exact runtime/driver evidence, not certified by analogy.
+Omitted or
+empty transaction options call `client.transaction()` without a mode;
+`readOnly: false` selects `"write"`. The local `@libsql/client@0.18.0` file
+transport emits `BEGIN TRANSACTION READONLY` but does not enforce writes, so
+SQLBraid reports read-only as guarded and rejects `readOnly: true` before
+beginning. Opaque clients without a transport protocol receive the same guard;
+remote transports that expose and enforce the documented `"read"` mode retain
+that option. better-sqlite3 accepts `Uint8Array` bind views and converts them
+to `Buffer` immediately before native calls.
