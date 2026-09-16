@@ -612,6 +612,13 @@
       }
     },
     {
+      "code": "libsql.client-no-session-pinning",
+      "labels": {
+        "en": "libSQL client connections do not provide a pinned physical session guarantee",
+        "ko": "libSQL 클라이언트 연결은 고정된 물리 세션을 보장하지 않음"
+      }
+    },
+    {
       "code": "bun-sql.sqlite-result-parser",
       "labels": {
         "en": "Bun SQLite native SQL classification can misread mixed-quote literals; bind JSON values and preserve result-kind failures",

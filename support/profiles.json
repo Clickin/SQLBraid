@@ -301,6 +301,66 @@
         "deno-sqlite.data.profile"
       ]
     },
+    "better-sqlite3-exact-string": {
+      "id": "better-sqlite3-exact-string",
+      "driverId": "better-sqlite3",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {},
+      "driverRawRepresentations": {
+        "integer": "bigint",
+        "decimal": "storage-dependent number or bigint",
+        "json": "string",
+        "temporal": "string",
+        "binary": "Buffer"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+        "json": "string",
+        "temporal": "string",
+        "binary": "Uint8Array"
+      },
+      "typePolicy": {
+        "id": "sqlite-default",
+        "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
+      },
+      "fixtureTestIds": [
+        "better-sqlite3.numeric.exact-integer",
+        "better-sqlite3.data.binary"
+      ]
+    },
+    "libsql-exact-string": {
+      "id": "libsql-exact-string",
+      "driverId": "libsql",
+      "json": "text",
+      "temporal": "text",
+      "requiredOptions": {
+        "intMode": "string"
+      },
+      "driverRawRepresentations": {
+        "integer": "string",
+        "decimal": "storage-dependent number or string",
+        "json": "string",
+        "temporal": "string",
+        "binary": "ArrayBuffer or Uint8Array"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string",
+        "decimal": "unknown (storage-dependent; no exact DECIMAL guarantee)",
+        "json": "string",
+        "temporal": "string",
+        "binary": "Uint8Array"
+      },
+      "typePolicy": {
+        "id": "sqlite-default",
+        "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
+      },
+      "fixtureTestIds": [
+        "libsql.numeric.exact-integer",
+        "libsql.data.binary"
+      ]
+    },
     "sqlite-wasm-exact-string": {
       "id": "sqlite-wasm-exact-string",
       "driverId": "sqlite-wasm",
@@ -1147,6 +1207,42 @@
         "decimal": "unsupported",
         "json": "string",
         "temporal": "string"
+      }
+    },
+    "better-sqlite3.numeric.exact-integer": {
+      "profile": "better-sqlite3-exact-string",
+      "driverRawRepresentations": {
+        "integer": "bigint"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string"
+      }
+    },
+    "better-sqlite3.data.binary": {
+      "profile": "better-sqlite3-exact-string",
+      "driverRawRepresentations": {
+        "binary": "Buffer"
+      },
+      "sqlbraidRepresentations": {
+        "binary": "Uint8Array"
+      }
+    },
+    "libsql.numeric.exact-integer": {
+      "profile": "libsql-exact-string",
+      "driverRawRepresentations": {
+        "integer": "string"
+      },
+      "sqlbraidRepresentations": {
+        "integer": "string"
+      }
+    },
+    "libsql.data.binary": {
+      "profile": "libsql-exact-string",
+      "driverRawRepresentations": {
+        "binary": "ArrayBuffer or Uint8Array"
+      },
+      "sqlbraidRepresentations": {
+        "binary": "Uint8Array"
       }
     }
   }
