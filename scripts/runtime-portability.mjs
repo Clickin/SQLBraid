@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { auditRuntime, runtimePackages } from "./audit-runtime.mjs";
+import { auditRuntime, runtimeAuditPackages, runtimePackages } from "./audit-runtime.mjs";
 import { validateRuntimeCompatibility } from "./validate-runtime-compatibility.mjs";
 
 const execFile = promisify(execFileCallback);
@@ -41,7 +41,7 @@ async function run(command, args, cwd = root, env = process.env) {
 }
 try {
   if (process.env.SQLBRAID_USE_PREBUILT_DIST !== "true") await run("pnpm", ["run", "build:packages"]);
-  await auditRuntime(join(root, "packages"), "src");
+  await auditRuntime(join(root, "packages"), "src", { packages: runtimeAuditPackages });
   await mkdir(consumer);
   const dependencies = { pg: workspace.devDependencies.pg, "pg-cursor": workspace.devDependencies["pg-cursor"], mysql2: workspace.devDependencies.mysql2 };
   for (const name of runtimePackages) {
@@ -73,7 +73,7 @@ try {
   const core = JSON.parse(await readFile(join(consumer, "node_modules/@sqlbraid/core/package.json"), "utf8"));
   if (!core.dependencies?.["@standard-schema/spec"]) throw new Error("Standard Schema is not a regular packed dependency");
   await readFile(join(consumer, "node_modules/@standard-schema/spec/package.json"));
-  await auditRuntime(join(consumer, "node_modules/@sqlbraid"), "dist");
+  await auditRuntime(join(consumer, "node_modules/@sqlbraid"), "dist", { packages: runtimePackages });
   await writeFile(join(consumer, "types.ts"), [
     'import type { ExecutionEvent } from "@sqlbraid/core";',
     'import { sql } from "@sqlbraid/template";',

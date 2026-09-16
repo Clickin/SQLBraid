@@ -4,6 +4,7 @@ import { builtinModules } from "node:module";
 import ts from "typescript";
 
 export const runtimePackages = ["core", "template", "runtime", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql", "bun-sql"];
+export const runtimeAuditPackages = [...runtimePackages, "opentelemetry"];
 const allowedNodeImports = new Set(["node:async_hooks", "node:buffer"]);
 const nodeOnlySubpaths = new Map([
   ["oracle", new Set(["oracledb"])],
@@ -12,9 +13,13 @@ const nodeOnlySubpaths = new Map([
   ["sqlite", new Set(["better-sqlite3"])],
 ]);
 
-export async function auditRuntime(packageRoot, directory, { excludedSubpaths = nodeOnlySubpaths } = {}) {
+export async function auditRuntime(
+  packageRoot,
+  directory,
+  { excludedSubpaths = nodeOnlySubpaths, packages = runtimeAuditPackages } = {},
+) {
   let checked = 0;
-  for (const name of runtimePackages) {
+  for (const name of packages) {
     const folder = join(packageRoot, name, directory);
     const manifest = JSON.parse(await readFile(join(packageRoot, name, "package.json"), "utf8"));
     const nodeOnlyDriver = name === "oracle"

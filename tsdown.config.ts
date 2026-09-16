@@ -28,6 +28,7 @@ function packageBuild(cwd: string, entry: Record<string, string>): UserConfig {
     "packages/sqlite",
     "packages/oracle",
     "packages/mssql",
+    "packages/opentelemetry",
     "packages/sqlbraid",
   ]);
   return { ...shared, cwd, entry, outDir: "dist", tsconfig: floorPackages.has(cwd) ? "../../tsconfig.runtime-floor.json" : shared.tsconfig };

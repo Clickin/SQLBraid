@@ -80,6 +80,7 @@ export const PUBLIC_ERROR_DEFINITIONS: readonly PublicErrorDefinition[] = Object
   { code: "BRAID_CALL_MAP", category: "runtime", owner: "RoutineMappingError" },
   { code: "BRAID_RESULT_KIND", category: "runtime", owner: "@sqlbraid/runtime:DatabaseResultKindError" },
   { code: "BRAID_RESULT_VALIDATION", category: "runtime", owner: "@sqlbraid/runtime:DatabaseResultValidationError" },
+  { code: "BRAID_BATCH_ABORTED", category: "runtime", owner: "runtime batch lifecycle/synthetic observer error" },
   { code: "BRAID_TX_SCOPE", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
   { code: "BRAID_TX_CLOSED", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
   { code: "BRAID_SESSION_SCOPE", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },

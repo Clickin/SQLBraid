@@ -29,6 +29,7 @@ when they expose a stable bind code.
 | `BRAID_RESULT_KIND` | Declared result kind disagreed with the adapter result after execution. |
 | `BRAID_RESULT_SETS_UNSUPPORTED` | An ordinary query or stream returned an additional statement/result set; use `db.call()` for ordered routine sets. |
 | `BRAID_RESULT_VALIDATION` | Query-bound or execution-level Standard Schema validation failed. |
+| `BRAID_BATCH_ABORTED` | A batch item that had already announced `query:ready` was abandoned because another operation or shared batch phase failed. `executionStarted` and `executionCompleted` distinguish whether the item itself executed. |
 | `BRAID_CALL_UNSUPPORTED` | The adapter does not expose routine calls. |
 | `BRAID_STREAM_UNSUPPORTED` | The adapter does not expose a streaming protocol. |
 | `BRAID_CANCEL_UNSUPPORTED` | An active signal was supplied but the adapter cannot cancel the physical statement. Rejection occurs before I/O. |

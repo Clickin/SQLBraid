@@ -19,6 +19,22 @@ assert.ok(await stat(join(output, "llms.txt")).catch(() => undefined), "Document
 const llms = await readFile(join(output, "llms.txt"), "utf8");
 assert.ok(llms.includes(`https://clickin.github.io${basePath}`), "llms.txt must target its own documentation snapshot.");
 
+const targetDirectory = fileURLToPath(new URL("../support/targets/", import.meta.url));
+const targets = [];
+for (const file of (await readdir(targetDirectory)).filter((file) => file.endsWith(".json"))) {
+  targets.push(JSON.parse(await readFile(join(targetDirectory, file))));
+}
+for (const locale of ["", "ko/"]) {
+  const rawSupport = await readFile(join(output, `${locale}reference/support.md`), "utf8");
+  assert.ok(!rawSupport.includes("<SupportMatrix") && !rawSupport.includes("import SupportMatrix"), `${locale || "en"} raw support must not expose unevaluated MDX.`);
+  for (const target of targets) {
+    const section = rawSupport.split(/^### /mu).find((candidate) => candidate.startsWith(`${target.id}\n`));
+    assert.ok(section, `${locale || "en"} raw support omits target ${target.id}.`);
+    assert.ok(section.includes(`- Status: **${target.status}**`), `${locale || "en"} raw support status mismatch for ${target.id}.`);
+    assert.ok(section.includes(`- Evidence: ${target.evidence?.status ?? "—"}`), `${locale || "en"} raw support evidence mismatch for ${target.id}.`);
+  }
+}
+
 const source = fileURLToPath(new URL("./src/content/docs/", import.meta.url));
 for (const file of await readdir(source, { recursive: true })) {
   if (!/\.mdx?$/u.test(file)) continue;

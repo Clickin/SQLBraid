@@ -20,7 +20,7 @@ const INSTRUMENTATION_NAME = "@sqlbraid/opentelemetry";
 const METRIC_NAME = "db.client.operation.duration";
 const DURATION_BUCKETS = Object.freeze([0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10]);
 const PUBLIC_ERROR_CODES = new Set(PUBLIC_ERROR_DEFINITIONS.map(({ code }) => code));
-const STABLE_INTERNAL_ERROR_CODES = new Set(["BRAID_BATCH_ABORTED", "ERR_OPERATION_REPLACED"]);
+const STABLE_INTERNAL_ERROR_CODES = new Set(["ERR_OPERATION_REPLACED"]);
 const STABLE_ERROR_NAMES = new Set([
   "Error",
   "AggregateError",

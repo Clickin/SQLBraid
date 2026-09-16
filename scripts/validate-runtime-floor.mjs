@@ -8,7 +8,7 @@ const floorConfig = {
   target: "ES2021",
   lib: new Set(["ES2022"]),
 };
-const runtimePackages = ["core", "template", "runtime", "operations", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql", "sqlbraid"];
+const runtimePackages = ["core", "template", "runtime", "operations", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql", "opentelemetry", "sqlbraid"];
 const forbiddenRuntimeSyntax = [
   [/\bPromise\.withResolvers\b/u, "Promise.withResolvers (Node 22+)"],
   [/\bPromise\.try\b/u, "Promise.try (Node 23+)"],

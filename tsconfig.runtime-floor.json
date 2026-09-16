@@ -17,6 +17,7 @@
     "packages/sqlite/src/**/*.ts",
     "packages/oracle/src/**/*.ts",
     "packages/mssql/src/**/*.ts",
+    "packages/opentelemetry/src/**/*.ts",
     "packages/sqlbraid/src/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]

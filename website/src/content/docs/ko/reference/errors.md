@@ -29,6 +29,7 @@ Runtime 소유 class에는 `DatabaseScopeError`, `DatabaseResultKindError`,
 | `BRAID_RESULT_KIND` | 선언한 result kind와 실행 후 adapter 결과가 다릅니다. |
 | `BRAID_RESULT_SETS_UNSUPPORTED` | 일반 query/stream이 추가 statement/result set을 반환했습니다. 순서 있는 routine set에는 `db.call()`을 사용하세요. |
 | `BRAID_RESULT_VALIDATION` | Query-bound 또는 execution-level Standard Schema 검증에 실패했습니다. |
+| `BRAID_BATCH_ABORTED` | 이미 `query:ready`를 알린 batch item이 다른 operation 또는 공유 batch phase 실패로 중단되었습니다. `executionStarted`와 `executionCompleted`가 해당 item 자체의 실행 여부를 구분합니다. |
 | `BRAID_CALL_UNSUPPORTED` | Adapter가 routine call을 제공하지 않습니다. |
 | `BRAID_STREAM_UNSUPPORTED` | Adapter가 streaming protocol을 제공하지 않습니다. |
 | `BRAID_CANCEL_UNSUPPORTED` | 활성 signal이 전달되었지만 adapter가 물리 statement를 취소할 수 없습니다. I/O 전에 거부합니다. |

@@ -579,9 +579,15 @@ test("bounds error classification and keeps error attributes off successful metr
   assert.equal(recording.measurements[2]?.attributes["error.type"], "unknown_error");
   assert.equal(codeReads, 1);
 
+  observer.onEvent(ready("batch-aborted"));
+  const batchAborted = Object.assign(new Error("aborted"), { code: "BRAID_BATCH_ABORTED" });
+  observer.onEvent(failure("batch-aborted", { error: batchAborted }));
+  assert.equal(recording.spans[3]?.attributes["error.type"], "BRAID_BATCH_ABORTED");
+  assert.equal(recording.measurements[3]?.attributes["error.type"], "BRAID_BATCH_ABORTED");
+
   observer.onEvent(ready("success"));
   observer.onEvent(mapped("success"));
-  assert.equal("error.type" in (recording.measurements[3]?.attributes ?? {}), false);
+  assert.equal("error.type" in (recording.measurements[4]?.attributes ?? {}), false);
 });
 
 test("uses one explicit timestamp pair for span and metric duration", async () => {
@@ -675,7 +681,7 @@ test("handles calls and unsupported stream or transaction events without inventi
   assert.equal(recording.measurements.length, 1);
 });
 
-test("isolates provider and instrument failures from observer delivery", () => {
+test("isolates provider and instrument failures from observer delivery", async () => {
   const statementBinding = Object.freeze<StatementBindingAdapter>({
     id: "otel-failure-test",
     describe(statement, context) {
@@ -695,7 +701,7 @@ test("isolates provider and instrument failures from observer delivery", () => {
     observer.onEvent(ready("provider-failure"));
     observer.onEvent(mapped("provider-failure"));
   });
-  assert.doesNotReject(async () => {
+  await assert.doesNotReject(async () => {
     const result = await createDatabase({
       statementBinding,
       async query<Row>() {

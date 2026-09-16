@@ -32,6 +32,7 @@ function documentedCodes(url: URL): Set<string> {
 test("the public registry links to exported owner classes and both error references", () => {
   const registryCodes = PUBLIC_ERROR_DEFINITIONS.map(({ code }) => code);
   assert.equal(new Set(registryCodes).size, registryCodes.length);
+  assert.ok(registryCodes.includes("BRAID_BATCH_ABORTED"));
   const fixedClassCodes = new Map<string, readonly string[]>([
     ["ResultExactnessError", [ResultExactnessError.code]],
     ["RoutineMappingError", [RoutineMappingError.code]],
@@ -51,6 +52,7 @@ test("the public registry links to exported owner classes and both error referen
     "prepared query validation",
     "adapter cleanup error with code",
     "compiler diagnostic",
+    "runtime batch lifecycle/synthetic observer error",
   ]);
   const knownOwners = new Set([...fixedClassCodes.keys(), ...dynamicOwners, ...nonClassOwners]);
   assert.deepEqual(

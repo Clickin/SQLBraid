@@ -5,7 +5,7 @@ import { test } from 'vitest';
 import { validateRuntimeFloor } from '../scripts/validate-runtime-floor.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const runtimePackages = ['core', 'template', 'runtime', 'operations', 'postgres', 'mysql', 'mariadb', 'sqlite', 'oracle', 'mssql', 'sqlbraid'];
+const runtimePackages = ['core', 'template', 'runtime', 'operations', 'postgres', 'mysql', 'mariadb', 'sqlite', 'oracle', 'mssql', 'opentelemetry', 'sqlbraid'];
 
 test('runtime floor rejects emitted Node-newer APIs in an executable fixture', async () => {
   const directory = await mkdtemp(join(root, '.sqlbraid-runtime-floor-'));

@@ -49,7 +49,7 @@ const slowQueries: ExecutionObserver = {
 const pool = new Pool({ connectionString });
 try {
   const db = createPgPoolDatabase(pool, {
-    observers: [createOpenTelemetryObserver(), slowQueries],
+    observers: [slowQueries, createOpenTelemetryObserver()],
   });
   assert.deepEqual(await db.all(sql.rows<{ readonly value: string }>`SELECT 1 AS value`), [{ value: "1" }]);
   assert.equal(warnings.length, 0, "fast query must not trigger the slow-query warning");

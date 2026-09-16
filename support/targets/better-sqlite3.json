@@ -30,7 +30,7 @@
       "binary": "Uint8Array"
     },
     "exclusions": [
-      "This local target certifies better-sqlite3 13.0.3 only on Node 22.18.0.",
+      "This compatible target covers better-sqlite3 13.0.3 only on Node 22.18.0.",
       "SQLite routine calls and active statement cancellation are unsupported."
     ]
   },

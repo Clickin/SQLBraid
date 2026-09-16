@@ -141,7 +141,7 @@ function assertBetterSqlite3Value(value: unknown): void {
   if (value instanceof Uint8Array) return;
   throw new AdapterError(
     "BRAID_BIND_VALUE_UNSUPPORTED",
-    "better-sqlite3 binds support null, numbers, bigint, strings, and Buffer values.",
+    "better-sqlite3 binds support null, numbers, bigint, strings, and Uint8Array values (including Buffer).",
   );
 }
 
