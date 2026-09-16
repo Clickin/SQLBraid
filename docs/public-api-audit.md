@@ -7,9 +7,12 @@ not a publication or support claim. The last exact-SHA verification was revision
 [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
 Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)).
 The recovery audited remediation baseline is `9cdc3d8`. It carries the
-isolated pnpm Vite facade gate and no-SDK OpenTelemetry API gate; the final
-integrated SHA still requires fresh same-SHA Runtime/Documentation gates before
-release labels change.
+isolated pnpm Vite facade gate and no-SDK OpenTelemetry API gate. The final
+source-audit commit is `cead8f9f522f1790bc2db501503399d62a0918b4`; the
+documentation-only digest follow-up is `a148f52d42599e72b393b90ce0f0f2e55441df21`.
+The historical CI proof above remains retained; local integrated verification
+for the final source audit is recorded externally and is not a publication
+claim.
 
 ## Classification
 
@@ -149,8 +152,9 @@ version, profile, and workflow evidence.
   `DatabaseCardinalityError`, `DatabaseResultKindError`,
   `DatabaseResultValidationError`, and `DatabaseScopeError`.
 - `@sqlbraid/template`: configured SQL tags, fragments, directives, and `sql.bind`.
-- `@sqlbraid/compiler`: source analysis, diagnostics, lowering, source maps, and
-  `transformSource`.
+- `@sqlbraid/compiler`: source analysis, diagnostics, lowering, source maps,
+  `transformSource`, and checker contexts (`TypeScriptProjectContext`,
+  `TypeScriptSourceContext`, `createProjectContext`, `createSourceContext`).
 - `@sqlbraid/vite`: Vite pre-transform; Vite remains responsible for TS/JSX.
 - `@sqlbraid/metadata`: snapshots, validation, hashing, drift, and inspectors' model.
 - `@sqlbraid/codegen`: pure `generateModels` and deterministic model source.
