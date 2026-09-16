@@ -35,7 +35,20 @@ asserted with `{ intMode: "string" }`. It uses the client's `execute`,
 `batch`, and interactive `transaction()` handle; ordinary client calls do not
 prove one pinned session, and `db.stream()` fails with
 `BRAID_STREAM_UNSUPPORTED` rather than buffering a result set. `readOnly: true`
-maps to libSQL's documented read transaction mode; SQLBraid isolation literals
-are rejected when no exact equivalent is documented.
+maps to libSQL's documented `"read"` transaction mode for transports that
+enforce it. `@libsql/client@0.18.0`'s local `file:` transport emits
+`BEGIN TRANSACTION READONLY` but does not reject a write, so SQLBraid reports
+that capability as guarded and rejects `readOnly: true` before beginning it.
+Opaque clients that do not expose a transport protocol receive the same guard;
+known remote transports that enforce `"read"` retain the option.
+`readOnly: false` maps to the documented `"write"` mode. Omitted or empty
+transaction options call `client.transaction()` with no argument so the
+client retains its default. SQLBraid isolation literals are rejected when no
+exact equivalent is documented.
+
+The better-sqlite3 adapter accepts any `Uint8Array`, including Buffer,
+subarrays, and empty views, and converts it immediately to the driver's
+documented `Buffer` carrier before `all`, `run`, or `iterate`. Observers still
+see the original logical view; rows expose portable `Uint8Array` values.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

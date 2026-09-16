@@ -122,10 +122,12 @@ test("better-sqlite3 uses statement-local safe integers and preserves SQLite res
   );
   assert.equal(native.statements[2]?.safeIntegerModes[0], true);
   await assert.rejects(() => db.execute(sql`SELECT 1 AS duplicate, 2 AS duplicate`), /BRAID_RESULT_COLUMNS/);
-  await assert.rejects(
-    () => db.execute(sql.command`INSERT INTO values_table (value) VALUES (${new Uint8Array([1])})`),
-    /BRAID_BIND_VALUE_UNSUPPORTED/,
-  );
+  const bytes = Uint8Array.from([9, 8, 7, 6]);
+  const subarray = bytes.subarray(1, 3);
+  await db.execute(sql.command`INSERT INTO values_table (value) VALUES (${subarray})`);
+  const nativeValue = native.statements.at(-1)?.runValues[0]?.[0];
+  assert.equal(Buffer.isBuffer(nativeValue), true);
+  assert.deepEqual(nativeValue, Buffer.from([8, 7]));
 });
 
 test("better-sqlite3 async mapping, prepared bulk, and explicit transaction controls stay on one handle", async () => {
@@ -145,6 +147,11 @@ test("better-sqlite3 async mapping, prepared bulk, and explicit transaction cont
   const bulk = await db.bulk(["Ada", "Grace"], (name) => sql.command`INSERT INTO names (name) VALUES (${name})`);
   assert.deepEqual(bulk, { inputCount: 2, affectedRows: 2 });
   assert.equal(native.preparedSql.filter((text) => text.startsWith("INSERT INTO names")).length, 1);
+  const empty = new Uint8Array();
+  await db.bulk([empty], (value) => sql.command`INSERT INTO names (name) VALUES (${value})`);
+  const bulkValue = native.statements.at(-1)?.runValues[0]?.[0];
+  assert.equal(Buffer.isBuffer(bulkValue), true);
+  assert.equal((bulkValue as Buffer).byteLength, 0);
 
   await db.tx(async (tx) => {
     await tx.execute(sql.command`INSERT INTO names (name) VALUES (${"outer"})`);

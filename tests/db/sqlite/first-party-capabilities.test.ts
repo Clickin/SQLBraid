@@ -45,12 +45,30 @@ test("better-sqlite3.numeric.exact-integer", async () => {
 test("better-sqlite3.data.binary", async () => {
   const native = new BetterSqlite3(":memory:");
   try {
-    const db = createBetterSqlite3Database(native);
+    const readyValues: unknown[] = [];
+    const db = createBetterSqlite3Database(native, {
+      observers: [{
+        onEvent(event) {
+          if (event.type === "query:ready") readyValues.push(event.values[0]);
+        },
+      }],
+    });
+    const source = Uint8Array.from([9, 0, 255, 16, 8]);
+    const payload = source.subarray(1, 4);
+    await db.execute(sql.command`CREATE TABLE blobs (payload BLOB NOT NULL)`);
+    await db.execute(sql.command`INSERT INTO blobs (payload) VALUES (${payload})`);
+    assert.equal(readyValues.at(-1), payload);
     const row = await db.one(sql.rows<{ readonly payload: Uint8Array }>`
-      SELECT ${Buffer.from([0, 255, 16])} AS payload
+      SELECT payload FROM blobs
     `);
     assert.ok(row.payload instanceof Uint8Array);
     assert.deepEqual([...row.payload], [0, 255, 16]);
+    await db.bulk([Uint8Array.of(1), new Uint8Array()], (value) => sql.command`INSERT INTO blobs (payload) VALUES (${value})`);
+    const streamed: number[][] = [];
+    for await (const streamedRow of db.stream(sql.rows<{ readonly payload: Uint8Array }>`SELECT payload FROM blobs ORDER BY rowid`)) {
+      streamed.push([...streamedRow.payload]);
+    }
+    assert.deepEqual(streamed, [[0, 255, 16], [1], []]);
   } finally {
     native.close();
   }
@@ -132,8 +150,12 @@ test("libsql.data.binary", async () => {
   const client = createClient({ url: `file:${join(directory, "database.db")}`, intMode: "string" });
   try {
     const db = createLibsqlDatabase(client, { intMode: "string" });
+    const source = Uint8Array.from([9, 0, 255, 16, 8]);
+    const payload = source.subarray(1, 4);
+    await db.execute(sql.command`CREATE TABLE blobs (payload BLOB NOT NULL)`);
+    await db.execute(sql.command`INSERT INTO blobs (payload) VALUES (${payload})`);
     const row = await db.one(sql.rows<{ readonly payload: Uint8Array }>`
-      SELECT ${new Uint8Array([0, 255, 16])} AS payload
+      SELECT payload FROM blobs
     `);
     assert.ok(row.payload instanceof Uint8Array);
     assert.deepEqual([...row.payload], [0, 255, 16]);
@@ -175,9 +197,16 @@ test("libsql.execution.bulk-read-only", async () => {
       await db.bulk([1, 2, 3], (value) => sql.command`INSERT INTO items (value) VALUES (${value})`),
       { inputCount: 3, affectedRows: 3 },
     );
-    await db.tx({ readOnly: true }, async (tx) => {
-      assert.equal((await tx.one(sql.rows<{ readonly count: string }>`SELECT count(*) AS count FROM items`)).count, "3");
+    await db.tx({ readOnly: false }, async (tx) => {
+      await tx.execute(sql.command`INSERT INTO items (value) VALUES (${4})`);
     });
+    assert.equal((await db.environment()).capabilities["transaction.read-only"]?.status, "guarded");
+    await assert.rejects(
+      () => db.tx({ readOnly: true }, async () => undefined),
+      (error: unknown) => error instanceof Error
+        && "code" in error
+        && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+    );
   } finally {
     client.close();
     await rm(directory, { recursive: true, force: true });
