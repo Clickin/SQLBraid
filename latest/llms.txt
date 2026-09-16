@@ -67,7 +67,7 @@ Assume ordinary SQL knowledge. Use these documents for SQLBraid-specific APIs, g
 
 ## Release
 - [Current limitations](https://clickin.github.io/SQLBraid/latest/release/limitations.md): Know what the pre-release contract deliberately does not promise.
-- [1.0.0-rc.1 release notes](https://clickin.github.io/SQLBraid/latest/release/notes.md): The SQLBraid 1.0 release candidate surface and its evidence boundary.
+- [1.0.0-rc.2 release notes](https://clickin.github.io/SQLBraid/latest/release/notes.md): The SQLBraid 1.0 release candidate surface and its evidence boundary.
 - [Roadmap](https://clickin.github.io/SQLBraid/latest/release/roadmap.md): Separate current behavior from candidates that need their own design and evidence.
 
 ## Optional

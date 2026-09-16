@@ -1,8 +1,8 @@
-# 1.0.0-rc.1 릴리스 노트
+# 1.0.0-rc.2 릴리스 노트
 
 > SQLBraid 1.0 릴리스 후보 표면과 증거 경계를 설명합니다.
 
-이 문서는 1.0.0-rc.1 프리릴리스 문서이며 npm, GitHub, VS Code Marketplace 또는 Pages
+이 문서는 1.0.0-rc.2 프리릴리스 문서이며 npm, GitHub, VS Code Marketplace 또는 Pages
 발행을 승인하지 않습니다.
 
 지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)가

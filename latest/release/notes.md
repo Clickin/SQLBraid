@@ -1,8 +1,8 @@
-# 1.0.0-rc.1 release notes
+# 1.0.0-rc.2 release notes
 
 > The SQLBraid 1.0 release candidate surface and its evidence boundary.
 
-This is 1.0.0-rc.1 pre-release documentation. It does not authorize npm, GitHub, VS Code
+This is 1.0.0-rc.2 pre-release documentation. It does not authorize npm, GitHub, VS Code
 Marketplace, or Pages publication.
 
 The [runtime and driver support matrix](/SQLBraid/latest/reference/support.md) records
