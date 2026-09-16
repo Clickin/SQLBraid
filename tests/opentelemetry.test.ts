@@ -429,6 +429,36 @@ test("tracks real runtime routine calls, cardinality errors, and every batch ite
   assert.equal(cardinalitySpan?.attributes["error.type"], "Error");
 });
 
+test("closes the OpenTelemetry span for malformed routine results", async () => {
+  const observer = createOpenTelemetryObserver();
+  const statementBinding = Object.freeze<StatementBindingAdapter>({
+    id: "otel-malformed-routine",
+    describe(statement, context) {
+      return createStatementBindingDescription(statement, context, {
+        adapterId: "otel-malformed-routine",
+        transport: "text-positional",
+        placeholder: (index) => `$${index}`,
+        reuse: { effective: "simple", owner: "sqlbraid" },
+      });
+    },
+  });
+  const db = createDatabase({
+    statementBinding,
+    async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
+    async *stream<Row>(): AsyncGenerator<Row> {},
+    async call() { return { output: {}, resultSets: [null] } as never; },
+  }, { observers: [observer] });
+
+  await assert.rejects(
+    () => db.call(sql.call`CALL malformed_otel()`),
+    (error: unknown) => error instanceof TypeError
+      && error.message === "Executor returned a malformed routine execution result.",
+  );
+  assert.equal(recording.spans.length, 1);
+  assert.equal(recording.spans[0]?.endCount, 1);
+  assert.equal(recording.spans[0]?.statuses.some(({ code }) => code === SpanStatusCode.ERROR), true);
+});
+
 test("requires OTel last so late mapped and bulk observers turn spans into failures", async () => {
   const lateMapped = new Error("late mapped observer failed");
   const lateBulk = new Error("late bulk observer failed");

@@ -300,6 +300,73 @@ test("routine observers identify calls without guessing command kind from empty 
   assert.equal(result.actualKind, "call");
 });
 
+test("malformed routine results emit one terminal error and release once", async () => {
+  const malformedValues = [
+    { output: {}, resultSets: [null] },
+    { output: {}, resultSets: null },
+    { output: {}, resultSets: [{ rows: null, source: { kind: "emitted", index: 0 } }] },
+    { output: null, resultSets: [] },
+    { output: {}, resultSets: [{ rows: [], source: null }] },
+  ] as const;
+  for (const [index, malformed] of malformedValues.entries()) {
+    const events: ExecutionEvent[] = [];
+    let releases = 0;
+    const db = index === 0
+      ? createPooledDatabase({
+        statementBinding,
+        async acquire() {
+          return {
+            ...executor(),
+            async call() { return malformed as never; },
+            release() { releases += 1; },
+          };
+        },
+      }, { observers: [{ onEvent(event) { events.push(event); } }] })
+      : createDatabase({
+        ...executor(),
+        async call() { return malformed as never; },
+      }, { observers: [{ onEvent(event) { events.push(event); } }] });
+    let original: unknown;
+    await assert.rejects(
+      () => db.call(sql.call`CALL malformed_${index}()`),
+      (error: unknown) => {
+        original = error;
+        return error instanceof TypeError;
+      },
+    );
+    assert.deepEqual(events.map((event) => event.type), ["query:ready", "query:error"]);
+    const error = events[1];
+    assert.equal(error?.type, "query:error");
+    if (error?.type === "query:error") {
+      assert.equal(error.stage, "result-kind");
+      assert.equal(error.executionStarted, true);
+      assert.equal(error.executionCompleted, true);
+      assert.equal(error.error, original);
+    }
+    assert.equal(releases, index === 0 ? 1 : 0);
+  }
+});
+
+test("malformed routine result preserves the original error with observer failures", async () => {
+  const events: ExecutionEvent[] = [];
+  const db = createDatabase({
+    ...executor(),
+    async call() { return { output: {}, resultSets: [null] } as never; },
+  }, { observers: [{ onEvent(event) {
+    events.push(event);
+    if (event.type === "query:error") throw new Error("error observer failed");
+  } }] });
+  await assert.rejects(
+    () => db.call(sql.call`CALL malformed_observer()`),
+    (error: unknown) => error instanceof AggregateError
+      && error.cause instanceof TypeError
+      && error.errors.some((entry) => entry instanceof Error && entry.message === "error observer failed")
+      && events[1]?.type === "query:error"
+      && events[1].error === error.cause,
+  );
+  assert.deepEqual(events.map((event) => event.type), ["query:ready", "query:error"]);
+});
+
 test("generated kind mismatch errors never stringify private binds", async () => {
   const secret = "private-bind-never-render";
   const db = createDatabase(executor());

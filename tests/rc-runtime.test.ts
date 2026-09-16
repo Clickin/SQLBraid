@@ -113,6 +113,79 @@ test("session pins one pooled lease, reuses it for nesting and session transacti
   await assert.rejects(() => inert![Symbol.asyncIterator]().next(), (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_SESSION_CLOSED");
 });
 
+test("prepared names are scoped to each live database handle", async () => {
+  const root = createDatabase(rowsExecutor([]));
+  root.prepare("duplicate-root", () => sql.rows`SELECT 1`, { input: "none" });
+  assert.throws(
+    () => root.prepare("duplicate-root", () => sql.rows`SELECT 2`, { input: "none" }),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_PREPARED_NAME",
+  );
+  await root.session(async (session) => {
+    session.prepare("duplicate-session", () => sql.rows`SELECT 1`, { input: "none" });
+    assert.throws(
+      () => session.prepare("duplicate-session", () => sql.rows`SELECT 2`, { input: "none" }),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_PREPARED_NAME",
+    );
+  });
+  await root.tx(async (transaction) => {
+    transaction.prepare("duplicate-transaction", () => sql.rows`SELECT 1`, { input: "none" });
+    assert.throws(
+      () => transaction.prepare("duplicate-transaction", () => sql.rows`SELECT 2`, { input: "none" }),
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_PREPARED_NAME",
+    );
+  });
+  const secondRoot = createDatabase(rowsExecutor([]));
+  root.prepare("same-live-name", () => sql.rows`SELECT 1`, { input: "none" });
+  secondRoot.prepare("same-live-name", () => sql.rows`SELECT 2`, { input: "none" });
+  await root.session(async (session) => {
+    session.prepare("same-live-name", () => sql.rows`SELECT 3`, { input: "none" });
+  });
+  let alternateShape = false;
+  const shapeLocked = root.prepare("shape-locked", () => (
+    alternateShape ? sql.rows`SELECT 2` : sql.rows`SELECT 1`
+  ), { input: "none" });
+  await shapeLocked.execute();
+  alternateShape = true;
+  await assert.rejects(() => shapeLocked.execute(), { code: "BRAID_PREPARED_SHAPE" });
+
+  for (const pooled of [false, true] as const) {
+    const db = pooled
+      ? createPooledDatabase({
+        statementBinding,
+        environment: environment(),
+        async acquire() { return { ...rowsExecutor([]), release() {} }; },
+      })
+      : createDatabase(rowsExecutor([]));
+    for (const scope of ["session", "transaction"] as const) {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (scope === "session") {
+          await db.session(async (session) => {
+            await session.prepare("reusable", () => sql.rows`SELECT 1`, { input: "none" }).execute();
+          });
+        } else {
+          await db.tx(async (transaction) => {
+            await transaction.prepare("reusable", () => sql.rows`SELECT 1`, { input: "none" }).execute();
+          });
+        }
+      }
+    }
+  }
+});
+
+test("prepared handles cannot escape closed session or transaction scopes", async () => {
+  const db = createDatabase(rowsExecutor([]));
+  let sessionPrepared: PreparedQuery<never, RowQuery<unknown>> | undefined;
+  let transactionPrepared: PreparedQuery<never, RowQuery<unknown>> | undefined;
+  await db.session(async (session) => {
+    sessionPrepared = session.prepare("session-escape", () => sql.rows`SELECT 1`, { input: "none" });
+  });
+  await db.tx(async (transaction) => {
+    transactionPrepared = transaction.prepare("transaction-escape", () => sql.rows`SELECT 1`, { input: "none" });
+  });
+  await assert.rejects(() => sessionPrepared!.execute(), { code: "BRAID_SESSION_CLOSED" });
+  await assert.rejects(() => transactionPrepared!.execute(), { code: "BRAID_TX_CLOSED" });
+});
+
 test("outer pooled root use is rejected from a session callback", async () => {
   const db = createPooledDatabase({
     statementBinding,

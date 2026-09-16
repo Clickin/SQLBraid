@@ -55,6 +55,37 @@ test("SQLite materialized query mappers reenter after releasing the root resourc
   }
 }, 1000);
 
+test("SQLite prepared names can repeat across independent scopes without native aliasing", async () => {
+  const native = new DatabaseSync(":memory:");
+  try {
+    const db = createNodeSqliteDatabase(native);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await db.session(async (session) => {
+        const byId = session.prepare(
+          "local-query",
+          (id: string) => sql.rows<{ readonly id: string }>`SELECT ${id} AS id`,
+        );
+        assert.deepEqual(await byId.one("session"), { id: "session" });
+      });
+      await db.tx(async (transaction) => {
+        const byId = transaction.prepare(
+          "local-query",
+          (id: string) => sql.rows<{ readonly id: string }>`SELECT ${id} AS id`,
+        );
+        assert.deepEqual(await byId.one("transaction"), { id: "transaction" });
+      });
+    }
+    const rootPrepared = db.prepare("shared-query", () => sql.rows`SELECT 'root' AS value`, { input: "none" });
+    await db.session(async (session) => {
+      const childPrepared = session.prepare("shared-query", () => sql.rows`SELECT 'child' AS value`, { input: "none" });
+      assert.deepEqual(await childPrepared.one(), { value: "child" });
+    });
+    assert.deepEqual(await rootPrepared.one(), { value: "root" });
+  } finally {
+    native.close();
+  }
+}, 1000);
+
 test("SQLite stream mapper reentry rejects without retaining the resource", async () => {
   const native = new DatabaseSync(":memory:");
   try {

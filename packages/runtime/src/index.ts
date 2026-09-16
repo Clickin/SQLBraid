@@ -1862,7 +1862,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         await notifyError(options.observers ?? [], errorEvent(operation, reported, releaseError === undefined ? "driver" : "release", false, false), reported);
       }
       const started = now();
-      let value: DriverRoutineResult;
+      let value!: DriverRoutineResult;
       let released = false;
       try {
         value = await physicalContext.run(
@@ -1877,13 +1877,30 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         const original = releaseError === undefined ? error : new AggregateError([error, releaseError], "Execution and lease release failed.", { cause: error });
         await notifyError(options.observers ?? [], errorEvent(operation, original, releaseError === undefined ? "driver" : "release", true, false, now() - started), original);
       }
+      let releaseError: unknown;
       if (!released) {
         try { await use!.release(isPoisoned(use!.physicalState)); } catch (error) {
+          releaseError = error;
           poison(use!.physicalState, error);
-          await notifyError(options.observers ?? [], errorEvent(operation, error, "release", true, true, now() - started), error);
         }
       }
-      assertDriverRoutineResult(value!);
+      let resultValidationError: unknown;
+      try {
+        assertDriverRoutineResult(value!);
+      } catch (error) {
+        resultValidationError = error;
+      }
+      if (resultValidationError !== undefined || releaseError !== undefined) {
+        const original = resultValidationError ?? releaseError;
+        const reported = resultValidationError !== undefined && releaseError !== undefined
+          ? new AggregateError([resultValidationError, releaseError], "Routine execution and lease release failed.", { cause: resultValidationError })
+          : original;
+        await notifyError(
+          options.observers ?? [],
+          errorEvent(operation, reported, releaseError === undefined ? "result-kind" : "release", true, true, now() - started),
+          reported,
+        );
+      }
       let rowCount = 0;
       for (const resultSet of value!.resultSets) rowCount = addSafeCount(rowCount, resultSet.rows.length);
       try {
@@ -2614,6 +2631,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         ...options,
         transaction: options.transaction,
         scopeKind: "session",
+        preparedNames: new Set<string>(),
         pooled: false,
         lease: use.executor as ConnectionLease,
         leaseState: physicalState,
@@ -2774,6 +2792,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           ...options,
           transaction: true,
           scopeKind: "transaction",
+          preparedNames: new Set<string>(),
           lease: resource as ConnectionLease,
           leaseState: physicalState,
           pinned: use,
