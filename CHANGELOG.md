@@ -15,6 +15,12 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   dependency-ordered npm staging, provenance, and durable evidence are
   separate from human approval and publication.
 
+## 1.0.0-rc.2 (unreleased)
+
+- Prepared a new immutable 1.0 RC candidate after the release workflow and
+  VS Code publishing paths were separated. Certification and publication
+  remain separate maintainer actions.
+
 ## 0.1.0-rc.2 (unreleased)
 
 - RC2 hardening documents the compatibility discipline for the Application,

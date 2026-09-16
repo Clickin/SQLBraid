@@ -37,7 +37,7 @@ temporal, binary 값이 기록되어 있습니다.
 
 ## 문서 출시 안내
 
-이 문서는 1.0.0-rc.1 프리릴리스 문서입니다. 현재 tree에는 session/lease 소유권,
+이 문서는 1.0.0-rc.2 프리릴리스 문서입니다. 현재 tree에는 session/lease 소유권,
 고정 transaction option, prepared input factory, capability 기반
 cancellation, 명시적인 unsupported 오류가 포함됩니다. 이 API 변경의 영향을
 받은 target의 지원 label과 증거는 [런타임/드라이버 증거

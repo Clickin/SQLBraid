@@ -31,7 +31,7 @@
       "source": "website/src/content/docs/agents/vscode.md",
       "translation": "website/src/content/docs/ko/agents/vscode.md",
       "translationOf": "website/src/content/docs/agents/vscode.md",
-      "sourceDigest": "52a986fafb78085ab2ab30088f899812f73847b6bf0b0a2c78da2ce99aeb1a05"
+      "sourceDigest": "5285ece8cd49ea7e50c01a07696e2045718a53b4318c8f48fb3337556653bdb5"
     },
     {
       "source": "website/src/content/docs/concepts/bulk.md",
@@ -139,7 +139,7 @@
       "source": "website/src/content/docs/index.md",
       "translation": "website/src/content/docs/ko/index.md",
       "translationOf": "website/src/content/docs/index.md",
-      "sourceDigest": "4ac41370284851347ce90f8ea895e10ed5f30cc6549dd24836d853f8d1e7741a"
+      "sourceDigest": "763836d9af631910a3bb2cbcc379e4295a615953a194102b149dbe6aa532c9e0"
     },
     {
       "source": "website/src/content/docs/interactive-preview.mdx",
@@ -217,7 +217,7 @@
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "84ba79ae08d96538b4fef1e909bed04d1c6dd1eadda32792e932a433f10fd332"
+      "sourceDigest": "48277be519f2b6c0db547b4c4796fe676e72a06c2b438c885e8db33895c42318"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",

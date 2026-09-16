@@ -1,4 +1,4 @@
-# SQLBraid 1.0.0-rc.1 release readiness
+# SQLBraid 1.0.0-rc.2 release readiness
 
 This file separates repository evidence from maintainer actions outside the
 repository. It contains no credentials or registry tokens.
@@ -272,7 +272,7 @@ followed by human `pnpm stage approve` commands and verification. The
 `verify-published` helper reports manual stable-`latest` promotion commands; it
 does not execute them.
 
-## Maintainer sequence: 1.0.0-rc.1 and later releases
+## Maintainer sequence: 1.0.0-rc.2 and later releases
 
 The following are maintainer actions, **not** actions performed by certification:
 
@@ -280,7 +280,7 @@ The following are maintainer actions, **not** actions performed by certification
    bootstrap, or treat older RC evidence as evidence for this candidate.
 2. For a corrected candidate, synchronize versions, prepare and freeze the
    exact source SHA, and create/push a **new** tag (for example
-   `v1.0.0-rc.1`). Never reuse or move a candidate tag after a post-tag fix.
+   `v1.0.0-rc.2`). Never reuse or move a candidate tag after a post-tag fix.
    This tag-triggered run is **certification-only**.
    Wait for its Runtime, Documentation, and Release certification gates; this
    page makes no promise of a new green SHA or substitute evidence.

@@ -1,4 +1,4 @@
-# SQLBraid 1.0.0-rc.1 — release notes
+# SQLBraid 1.0.0-rc.2 — release notes
 
 Write SQL. Keep TypeScript. Skip the query-builder translation layer.
 
