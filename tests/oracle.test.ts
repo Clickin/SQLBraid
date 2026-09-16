@@ -133,7 +133,7 @@ test("Oracle rejects custom exact-number decimal text for IN binds before execut
     },
   });
   await assert.rejects(
-    () => executor.query(sql`SELECT ${sql.bind(1, oracleParameter.number())}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind(1, oracleParameter.number())}`.render()),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.bind-hint"
       && error.code === "BRAID_BIND_HINT_UNSUPPORTED",
@@ -175,10 +175,10 @@ test("Oracle adapter honors hints, rejects untyped null, and closes an aborted R
   const result = await executor.query(rendered);
   assert.deepEqual(result, { kind: "rows", rows: [{ VALUE: "7" }], rowCount: 1 });
   assert.deepEqual(calls[0]?.binds, [{ dir: 1, val: 7, type: 3 }]);
-  await assert.rejects(() => executor.query(sql`SELECT ${null}`.render()), /BRAID_BIND_TYPE_REQUIRED/u);
+  await assert.rejects(async () => executor.query(sql`SELECT ${null}`.render()), /BRAID_BIND_TYPE_REQUIRED/u);
   const callsBeforeUnsupportedFacet = calls.length;
   await assert.rejects(
-    () => executor.query(sql`SELECT ${sql.bind(7, oracleParameter.number(38, 2))}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind(7, oracleParameter.number(38, 2))}`.render()),
     /BRAID_BIND_HINT_UNSUPPORTED/u,
   );
   assert.equal(calls.length, callsBeforeUnsupportedFacet);
@@ -221,7 +221,7 @@ test("Oracle numeric result transport keeps NUMBER exact and BINARY_FLOAT approx
     },
   };
   await assert.rejects(
-    () => createOracledbExecutor(lossyConnection).query(sql.rows`SELECT value FROM t`.render()),
+    async () => createOracledbExecutor(lossyConnection).query(sql.rows`SELECT value FROM t`.render()),
     { code: "BRAID_RESULT_EXACTNESS" },
   );
 });
@@ -287,7 +287,7 @@ test("Oracle rejects narrowed command counts and exact numeric OUT values", asyn
     async rollback() {},
   };
   await assert.rejects(
-    () => createOracledbExecutor(countConnection).query(sql.command`DELETE FROM account`.render()),
+    async () => createOracledbExecutor(countConnection).query(sql.command`DELETE FROM account`.render()),
     { code: "BRAID_RESULT_EXACTNESS" },
   );
 
@@ -305,7 +305,7 @@ test("Oracle rejects narrowed command counts and exact numeric OUT values", asyn
     DB_TYPE_NUMBER: "number",
   };
   await assert.rejects(
-    () => createOracledbExecutor(outConnection, { driver }).call(
+    async () => createOracledbExecutor(outConnection, { driver }).call(
       sql.call`BEGIN answer(${sql.out("answer", oracleParameter.number())}); END;`.render(),
     ),
     { code: "BRAID_RESULT_EXACTNESS" },
@@ -324,15 +324,15 @@ test("Oracle validates transaction options before control SQL", async () => {
   };
   const executor = createOracledbExecutor(connection);
   await assert.rejects(
-    () => executor.begin!({ isolation: "invalid" as never }),
+    async () => executor.begin!({ isolation: "invalid" as never }),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   await assert.rejects(
-    () => executor.begin!({ readOnly: "yes" as never }),
+    async () => executor.begin!({ readOnly: "yes" as never }),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   await assert.rejects(
-    () => executor.begin!({ unsupported: true } as never),
+    async () => executor.begin!({ unsupported: true } as never),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   assert.equal(executions, 0);
@@ -350,7 +350,7 @@ test("Oracle pre-aborted executions preserve a null AbortSignal reason", async (
   };
   const executor = createOracledbExecutor(connection);
   await assert.rejects(
-    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: AbortSignal.abort(null) }),
+    async () => executor.query(sql`SELECT 1`.render(), undefined, { signal: AbortSignal.abort(null) }),
     (error: unknown) => error === null,
   );
   assert.equal(executions, 0);
@@ -369,7 +369,7 @@ test("Oracle rejects active cancellation before execution without break support"
   const executor = createOracledbExecutor(connection);
   const controller = new AbortController();
   await assert.rejects(
-    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: controller.signal }),
+    async () => executor.query(sql`SELECT 1`.render(), undefined, { signal: controller.signal }),
     (error: unknown) => (error as { readonly code?: string }).code === "BRAID_CANCEL_UNSUPPORTED",
   );
   assert.equal(executions, 0);
@@ -428,11 +428,11 @@ test("Oracle cancellation remains active while reading an OUT cursor", async () 
   const controller = new AbortController();
   let settled = false;
   const reason = new Error("oracle cursor cancelled");
-  const pending = executor.call(
+  const pending = Promise.resolve(executor.call(
     sql.call`BEGIN read_cursor(${sql.out("cursor", oracleParameter.refCursor())}); END;`.render(),
     undefined,
     { signal: controller.signal },
-  ).finally(() => {
+  )).finally(() => {
     settled = true;
   });
   await Promise.resolve();
@@ -479,11 +479,11 @@ test("Oracle cancellation remains active while materializing an OUT LOB", async 
   const controller = new AbortController();
   const reason = new Error("oracle lob cancelled");
   let settled = false;
-  const pending = executor.call(
+  const pending = Promise.resolve(executor.call(
     sql.call`BEGIN read_lob(${sql.out("body", oracleParameter.clob())}); END;`.render(),
     undefined,
     { signal: controller.signal },
-  ).finally(() => {
+  )).finally(() => {
     settled = true;
   });
   await Promise.resolve();

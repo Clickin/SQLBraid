@@ -66,17 +66,17 @@ test("MSSQL bind hints align with rendered values", () => {
 
 test("MSSQL adapter honors int hints and rejects ignored type facets", async () => {
   const executor = createTediousExecutor(mockConnection((request) => emit(request, "requestCompleted")));
-  await assert.doesNotReject(() => executor.query(sql`SELECT ${sql.bind(1, mssqlParameter.int())}`.render()));
+  await assert.doesNotReject(async () => executor.query(sql`SELECT ${sql.bind(1, mssqlParameter.int())}`.render()));
   await assert.rejects(
-    () => executor.query(sql`SELECT ${sql.bind(1, { databaseType: "int", length: 1 })}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind(1, { databaseType: "int", length: 1 })}`.render()),
     /does not support length/u,
   );
   await assert.rejects(
-    () => executor.query(sql`SELECT ${sql.bind("Ada", { databaseType: "varchar", length: 3, precision: 1 })}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind("Ada", { databaseType: "varchar", length: 3, precision: 1 })}`.render()),
     /does not support precision/u,
   );
   await assert.rejects(
-    () => executor.query(sql`SELECT ${sql.bind(1, { databaseType: "decimal", precision: 10, scale: 2, length: 4 })}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind(1, { databaseType: "decimal", precision: 10, scale: 2, length: 4 })}`.render()),
     /does not support length/u,
   );
 });
@@ -85,7 +85,7 @@ test("MSSQL typed materialization rejects out-of-range values before execution",
   let executions = 0;
   const executor = createTediousExecutor(mockConnection(() => { executions += 1; }));
   await assert.rejects(
-    () => executor.query(sql`SELECT ${sql.bind(2_147_483_648, mssqlParameter.int())}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind(2_147_483_648, mssqlParameter.int())}`.render()),
     /invalid SQL Server int parameter/u,
   );
   assert.equal(executions, 0);
@@ -98,19 +98,19 @@ test("MSSQL native decimal helpers accept only bounded Number compatibility inpu
     emit(request, "requestCompleted");
   }));
   await assert.doesNotReject(
-    () => executor.query(sql`SELECT ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}`.render()),
   );
   assert.equal(executions, 1);
   await assert.rejects(
-    () => executor.query(sql`SELECT ${sql.bind("12.34" as never, mssqlParameter.decimal(19, 4))}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind("12.34" as never, mssqlParameter.decimal(19, 4))}`.render()),
     /compatibility inputs require a finite plain JavaScript number/u,
   );
   await assert.rejects(
-    () => executor.query(sql`SELECT ${sql.bind(1_234_567_890_123_456 as never, mssqlParameter.money())}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind(1_234_567_890_123_456 as never, mssqlParameter.money())}`.render()),
     /limited to 15 significant decimal digits/u,
   );
   await assert.rejects(
-    () => executor.query(sql`SELECT ${sql.bind(12.34567, mssqlParameter.smallmoney())}`.render()),
+    async () => executor.query(sql`SELECT ${sql.bind(12.34567, mssqlParameter.smallmoney())}`.render()),
     /four fractional|exceeds decimal/u,
   );
   assert.equal(executions, 1);
@@ -135,7 +135,7 @@ test("MSSQL prepared bulk rejects an unsafe aggregate affected-row count", async
   const executor = createTediousExecutor(connection);
   const binding = executor.statementBinding.describeBulk!(bulk, { dialectId: "mssql", requestedReuse: "auto" });
   await assert.rejects(
-    () => executor.bulk!(bulk, binding),
+    async () => executor.bulk!(bulk, binding),
     { code: "BRAID_RESULT_EXACTNESS" },
   );
 });
@@ -179,7 +179,7 @@ test("MSSQL query rejects actual output return values instead of discarding them
     emit(request, "requestCompleted");
   }));
   await assert.rejects(
-    () => executor.query(sql`SELECT 1`.render()),
+    async () => executor.query(sql`SELECT 1`.render()),
     /BRAID_CALL_OUT_UNSUPPORTED/u,
   );
 });
@@ -190,7 +190,7 @@ test("MSSQL pre-aborted executions preserve a null AbortSignal reason", async ()
     executed = true;
   }));
   await assert.rejects(
-    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: AbortSignal.abort(null) }),
+    async () => executor.query(sql`SELECT 1`.render(), undefined, { signal: AbortSignal.abort(null) }),
     (error: unknown) => error === null,
   );
   assert.equal(executed, false);
@@ -245,7 +245,7 @@ test("MSSQL row decode failures reject and cancel the request", async () => {
   });
   let settled = false;
   const operation = executor.query(sql`SELECT 1`.render());
-  const rejected = assert.rejects(operation, /decode failed/u).then(() => { settled = true; });
+  const rejected = assert.rejects(Promise.resolve(operation), /decode failed/u).then(() => { settled = true; });
   await Promise.resolve();
   assert.equal(cancelled, true);
   assert.equal(settled, false, "The physical request must drain before the operation releases its connection.");
@@ -264,15 +264,15 @@ test("MSSQL validates transaction options before beginTransaction", async () => 
     },
   });
   await assert.rejects(
-    () => executor.begin!({ isolation: "invalid" as never }),
+    async () => executor.begin!({ isolation: "invalid" as never }),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   await assert.rejects(
-    () => executor.begin!({ readOnly: "yes" as never }),
+    async () => executor.begin!({ readOnly: "yes" as never }),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   await assert.rejects(
-    () => executor.begin!({ unsupported: true } as never),
+    async () => executor.begin!({ unsupported: true } as never),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   assert.equal(begins, 0);
@@ -308,7 +308,7 @@ test("MSSQL prepared cancellation waits for native prepare drain", async () => {
   const binding = executor.statementBinding.describeBulk!(bulk, { dialectId: "mssql", requestedReuse: "auto" });
   const controller = new AbortController();
   let settled = false;
-  const pending = executor.bulk!(bulk, binding, { signal: controller.signal }).finally(() => {
+  const pending = Promise.resolve(executor.bulk!(bulk, binding, { signal: controller.signal })).finally(() => {
     settled = true;
   });
   assert.ok(active);

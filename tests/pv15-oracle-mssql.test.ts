@@ -140,7 +140,7 @@ test("Oracle routine cursor cleanup closes unread siblings after fetch failure",
   };
   const executor = createOracledbExecutor(connection, { driver: oracleDriver() });
   const query = oracleSql.call`BEGIN braid_routine(${oracleSql.out("first", oracleParameter.refCursor())}, ${oracleSql.out("second", oracleParameter.refCursor())}); END;`;
-  await assert.rejects(() => executor.call(query.render()), /fetch failed/u);
+  await assert.rejects(async () => executor.call(query.render()), /fetch failed/u);
   assert.equal(firstClosed, 1);
   assert.equal(secondClosed, 1);
 });
@@ -205,7 +205,7 @@ test("Oracle routine LOB read failure destroys unread sibling Lobs and preserves
   const executor = createOracledbExecutor(connection, { driver: oracleDriver() });
   const query = oracleSql.call`BEGIN braid_lob(${oracleSql.out("text", oracleParameter.clob())}, ${oracleSql.out("bytes", oracleParameter.blob())}); END;`;
   await assert.rejects(
-    () => executor.call(query.render()),
+    async () => executor.call(query.render()),
     (error: unknown) => error instanceof AggregateError
       && "code" in error
       && error.code === "BRAID_RESOURCE_CLEANUP"
@@ -603,6 +603,6 @@ test("Tedious rejects direct CURSOR VARYING output parameters", async () => {
   const connection = mssqlConnection(() => { called = true; });
   const executor = createTediousExecutor(connection);
   const query = mssqlSql.call`EXEC dbo.braid_cursor ${mssqlSql.out("cursor", { databaseType: "cursor" })} OUTPUT`;
-  await assert.rejects(() => executor.call(query.render()), /BRAID_CALL_CURSOR_UNSUPPORTED/u);
+  await assert.rejects(async () => executor.call(query.render()), /BRAID_CALL_CURSOR_UNSUPPORTED/u);
   assert.equal(called, false);
 });

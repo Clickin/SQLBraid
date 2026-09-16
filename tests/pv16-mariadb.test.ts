@@ -69,15 +69,15 @@ test("MariaDB validates transaction options before beginTransaction", async () =
     beginTransaction: async () => { begins += 1; },
   });
   await assert.rejects(
-    () => executor.begin!({ isolation: "invalid" as never }),
+    async () => executor.begin!({ isolation: "invalid" as never }),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   await assert.rejects(
-    () => executor.begin!({ readOnly: "yes" as never }),
+    async () => executor.begin!({ readOnly: "yes" as never }),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   await assert.rejects(
-    () => executor.begin!({ unsupported: true } as never),
+    async () => executor.begin!({ unsupported: true } as never),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   assert.equal(begins, 0);
@@ -90,7 +90,7 @@ test("MariaDB adapter rejects ordinary multi-result queries but exposes CALL set
   ];
   const executor = createMariaDbExecutor(connectionFor(sets));
   await assert.rejects(
-    () => executor.query(sql.rows`CALL returns_sets()`.render()),
+    async () => executor.query(sql.rows`CALL returns_sets()`.render()),
     /BRAID_RESULT_SETS_UNSUPPORTED/u,
   );
   assert.deepEqual(
@@ -177,12 +177,12 @@ test("MariaDB adapter sends one parameterized SQL shape to native batch", async 
 test("MariaDB adapter rejects unsafe command counts and preserves exact IDs", async () => {
   const unsafe = createMariaDbExecutor(connectionFor({ affectedRows: 9007199254740992n }));
   await assert.rejects(
-    () => unsafe.query(sql.command`DELETE FROM t`.render()),
+    async () => unsafe.query(sql.command`DELETE FROM t`.render()),
     /safe non-negative|exact integer/u,
   );
   const unsafeId = createMariaDbExecutor(connectionFor({ affectedRows: 1, insertId: 9007199254740992 }));
   await assert.rejects(
-    () => unsafeId.query(sql.command`INSERT INTO t VALUES (1)`.render()),
+    async () => unsafeId.query(sql.command`INSERT INTO t VALUES (1)`.render()),
     /safe non-negative|exact integer/u,
   );
   const connection = connectionFor({ affectedRows: 0 });
@@ -194,7 +194,7 @@ test("MariaDB adapter rejects unsafe command counts and preserves exact IDs", as
   };
   const binding = mariaDbStatementBinding.describeBulk!(bulk, { dialectId: "mariadb", requestedReuse: "auto" });
   await assert.rejects(
-    () => executor.bulk!(bulk, binding),
+    async () => executor.bulk!(bulk, binding),
     /safe non-negative|exact integer/u,
   );
 });
@@ -249,11 +249,11 @@ test("MariaDB validates transaction options before control SQL", async () => {
   };
   const executor = createMariaDbExecutor(connection);
   await assert.rejects(
-    () => executor.begin!({ isolation: "invalid" as never }),
+    async () => executor.begin!({ isolation: "invalid" as never }),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   await assert.rejects(
-    () => executor.begin!({ readOnly: "yes" as never }),
+    async () => executor.begin!({ readOnly: "yes" as never }),
     (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   assert.equal(executions, 0);
@@ -269,7 +269,7 @@ test("MariaDB rejects active cancellation before execution without destroy suppo
   const executor = createMariaDbExecutor(connection);
   const controller = new AbortController();
   await assert.rejects(
-    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: controller.signal }),
+    async () => executor.query(sql`SELECT 1`.render(), undefined, { signal: controller.signal }),
     (error: unknown) => (error as { readonly code?: string }).code === "BRAID_CANCEL_UNSUPPORTED",
   );
   assert.equal(executions, 0);
@@ -284,7 +284,7 @@ test("MariaDB pre-aborted executions preserve a null AbortSignal reason", async 
   };
   const executor = createMariaDbExecutor(connection);
   await assert.rejects(
-    () => executor.query(sql`SELECT 1`.render(), undefined, { signal: AbortSignal.abort(null) }),
+    async () => executor.query(sql`SELECT 1`.render(), undefined, { signal: AbortSignal.abort(null) }),
     (error: unknown) => error === null,
   );
   assert.equal(executions, 0);

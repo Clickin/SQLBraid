@@ -78,7 +78,7 @@ test("adapter-owned unsupported paths expose UnsupportedFeatureError and a code"
     escapeLiteral(value: string) { return value; },
   });
   await assert.rejects(
-    () => pg.query(hinted("postgres")),
+    async () => pg.query(hinted("postgres")),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.bind-hint"
       && error.code === "BRAID_BIND_HINT_UNSUPPORTED",
@@ -91,7 +91,7 @@ test("adapter-owned unsupported paths expose UnsupportedFeatureError and a code"
     async rollback() {},
   });
   await assert.rejects(
-    () => mysql.query(hinted("mysql")),
+    async () => mysql.query(hinted("mysql")),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.bind-hint"
       && error.code === "BRAID_BIND_HINT_UNSUPPORTED",
@@ -117,7 +117,7 @@ test("adapter-owned unsupported paths expose UnsupportedFeatureError and a code"
     },
   });
   await assert.rejects(
-    () => sqlite.query(hinted("sqlite")),
+    async () => sqlite.query(hinted("sqlite")),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.bind-hint"
       && error.code === "BRAID_BIND_HINT_UNSUPPORTED",

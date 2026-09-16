@@ -66,7 +66,7 @@ test("SQL Server rejects CURSOR VARYING output before sending a request", { time
   try {
     const executor = createTediousExecutor(connection);
     const query = sql.call({ procedure: { name: "dbo.braid_pv15_cursor", parameterNames: ["cursor"] } })`${sql.out("cursor", { databaseType: "cursor" })}`;
-    await assert.rejects(() => executor.call(query.render()), /BRAID_CALL_CURSOR_UNSUPPORTED/u);
+    await assert.rejects(async () => executor.call(query.render()), /BRAID_CALL_CURSOR_UNSUPPORTED/u);
   } finally {
     await close(connection);
   }

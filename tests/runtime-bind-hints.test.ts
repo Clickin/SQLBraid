@@ -105,8 +105,8 @@ test("legacy adapters reject explicit hints before driver I/O", async () => {
     escapeIdentifier(value: string) { return value; },
     escapeLiteral(value: string) { return value; },
   });
-  await assert.rejects(() => pg.query(rendered()), /BRAID_BIND_HINT_UNSUPPORTED/);
-  await assert.rejects(() => pg.call!(rendered("call")), /BRAID_BIND_HINT_UNSUPPORTED/);
+  await assert.rejects(async () => pg.query(rendered()), /BRAID_BIND_HINT_UNSUPPORTED/);
+  await assert.rejects(async () => pg.call!(rendered("call")), /BRAID_BIND_HINT_UNSUPPORTED/);
   assert.equal(pgCalls, 0);
 
   let mysqlCalls = 0;
@@ -116,8 +116,8 @@ test("legacy adapters reject explicit hints before driver I/O", async () => {
     async commit() {},
     async rollback() {},
   });
-  await assert.rejects(() => mysql.query(rendered()), /BRAID_BIND_HINT_UNSUPPORTED/);
-  await assert.rejects(() => mysql.call!(rendered("call")), /BRAID_BIND_HINT_UNSUPPORTED/);
+  await assert.rejects(async () => mysql.query(rendered()), /BRAID_BIND_HINT_UNSUPPORTED/);
+  await assert.rejects(async () => mysql.call!(rendered("call")), /BRAID_BIND_HINT_UNSUPPORTED/);
   assert.equal(mysqlCalls, 0);
 
   let sqliteCalls = 0;
@@ -127,7 +127,7 @@ test("legacy adapters reject explicit hints before driver I/O", async () => {
       return { columns: () => [], all: () => [], run: () => ({ changes: 0 }) };
     },
   });
-  await assert.rejects(() => sqlite.query(rendered()), /BRAID_BIND_HINT_UNSUPPORTED/);
+  await assert.rejects(async () => sqlite.query(rendered()), /BRAID_BIND_HINT_UNSUPPORTED/);
 
   await assert.rejects(async () => {
     for await (const _row of sqlite.stream!(rendered())) void _row;

@@ -182,10 +182,10 @@ test("PV18 text profiles fail closed on parsed MySQL and MariaDB representations
     dateStrings: false,
     typeCast: true,
   }, [{ payload: { nested: true } }], [{ name: "payload", type: "JSON" }]), { profile: MYSQL2_LOSSLESS_TEXT });
-  await assert.rejects(() => mysql.query(mysqlSql.rows`SELECT payload`.render()), (error: unknown) => error instanceof ResultExactnessError);
+  await assert.rejects(async () => mysql.query(mysqlSql.rows`SELECT payload`.render()), (error: unknown) => error instanceof ResultExactnessError);
 
   const maria = createMariaDbExecutor(mariaConnection([{ payload: { nested: true } }], [{ name: "payload", columnType: 245 }]), { profile: MARIADB_LOSSLESS_TEXT });
-  await assert.rejects(() => maria.query(mariaSql.rows`SELECT payload`.render()), (error: unknown) => error instanceof ResultExactnessError);
+  await assert.rejects(async () => maria.query(mariaSql.rows`SELECT payload`.render()), (error: unknown) => error instanceof ResultExactnessError);
 });
 
 test("PV18 MariaDB declarative native profile keeps parsed roots and Date values open", async () => {
@@ -207,5 +207,5 @@ test("PV18 MariaDB declarative native profile keeps parsed roots and Date values
 
 test("PV18 MariaDB command metadata guards warningStatus and exact insertId", async () => {
   const warning = createMariaDbExecutor(mariaConnection({ affectedRows: 1, insertId: 9007199254740993n, warningStatus: 9007199254740992 }, []), { profile: MARIADB_LOSSLESS_TEXT });
-  await assert.rejects(() => warning.query(mariaSql.command`UPDATE profile_values SET amount = ${"1.00"}`.render()), (error: unknown) => error instanceof ResultExactnessError);
+  await assert.rejects(async () => warning.query(mariaSql.command`UPDATE profile_values SET amount = ${"1.00"}`.render()), (error: unknown) => error instanceof ResultExactnessError);
 });

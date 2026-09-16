@@ -1090,6 +1090,8 @@ export interface ExecutionOptions {
   readonly signal?: AbortSignal;
 }
 
+export type Awaitable<T> = T | PromiseLike<T>;
+
 export interface RowValidationOptions<Row> extends ExecutionOptions {
   readonly schema?: StandardSchemaV1<unknown, NoInfer<Row>>;
 }
@@ -1239,16 +1241,16 @@ export interface QueryExecutor {
   readonly ownershipKey?: object;
   readonly statementBinding: StatementBindingAdapter;
   readonly environment?: DriverEnvironment;
-  query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>>;
+  query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<QueryExecutionResult<Row>>;
   stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row>;
-  call(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult>;
-  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult>;
-  begin?(options?: TransactionOptions): Promise<void>;
-  commit?(): Promise<void>;
-  rollback?(): Promise<void>;
-  savepoint?(name: string): Promise<void>;
-  rollbackTo?(name: string): Promise<void>;
-  releaseSavepoint?(name: string): Promise<void>;
+  call(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<DriverRoutineResult>;
+  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Awaitable<BulkExecutionResult>;
+  begin?(options?: TransactionOptions): Awaitable<void>;
+  commit?(): Awaitable<void>;
+  rollback?(): Awaitable<void>;
+  savepoint?(name: string): Awaitable<void>;
+  rollbackTo?(name: string): Awaitable<void>;
+  releaseSavepoint?(name: string): Awaitable<void>;
 }
 
 export interface ConnectionLease extends QueryExecutor {

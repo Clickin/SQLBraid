@@ -12,6 +12,7 @@ import type {
   BulkBindingDescription,
   BulkExecutionResult,
   BulkResult,
+  Awaitable,
   CallQuery,
   CommandQuery,
   ConnectionLease,
@@ -135,6 +136,12 @@ interface ScopeState {
   poisoned?: unknown;
 }
 
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  readonly resolve: (value?: T | PromiseLike<T>) => void;
+  readonly reject: (reason?: unknown) => void;
+}
+
 type ScopeKind = "root" | "session" | "transaction";
 
 interface RuntimeOptions extends DatabaseOptions {
@@ -228,6 +235,16 @@ const environmentQueries = new WeakSet<object>();
 let operationSequence = 0;
 let transactionSequence = 0;
 
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>["resolve"];
+  let reject!: Deferred<T>["reject"];
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = (value) => resolvePromise(value as T | PromiseLike<T>);
+    reject = (reason) => rejectPromise(reason);
+  });
+  return { promise, resolve, reject };
+}
+
 function now(): number {
   return typeof performance === "undefined" ? Date.now() : performance.now();
 }
@@ -271,7 +288,7 @@ function scopeStateFor(executor: QueryExecutor): ScopeState {
 
 function acquireTransactionTurn(state: ScopeState): Promise<() => void> {
   assertHealthy(state);
-  const { promise: turn, resolve: release } = Promise.withResolvers<void>();
+  const { promise: turn, resolve: release } = deferred<void>();
   const previous = state.transactionTail;
   state.transactionTail = previous.then(() => turn);
   return previous.then(() => release);
@@ -357,7 +374,7 @@ function acquireDirectRoot(rootState: ScopeState, stream: boolean, reservedRootS
       rootState.directBusy = false;
     });
   }
-  const { promise: turn, resolve: release } = Promise.withResolvers<void>();
+  const { promise: turn, resolve: release } = deferred<void>();
   const previous = rootState.tail;
   rootState.tail = previous.then(() => turn);
   return previous.then(() => {
@@ -2646,7 +2663,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         await transactionContext.run({ rootState: options.rootState, activity, parent }, async () => {
           const control = async (
             phase: Extract<ExecutionEvent, { type: "transaction" }>["phase"],
-            action: () => Promise<void>,
+            action: () => Awaitable<void>,
             cleanup = false,
             requested = true,
           ): Promise<void> => {

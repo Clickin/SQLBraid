@@ -206,7 +206,7 @@ test("SQL Server native bulk propagates callback errors before executing later r
   const binding = executor.statementBinding.describeBulk!(bulk, context("mssql"));
 
   await assert.rejects(
-    () => executor.bulk!(bulk, binding),
+    async () => executor.bulk!(bulk, binding),
     (error) => error === constraintError,
   );
   assert.deepEqual(events, ["prepare", "execute:1", "execute:2", "unprepare"]);

@@ -282,12 +282,12 @@ function nodeSqliteEnvironment(transactionSupported: boolean): DriverEnvironment
 }
 
 export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
-  const control = database.exec ? async (sql: string): Promise<void> => { database.exec?.(sql); } : undefined;
+  const control = database.exec ? (sql: string): void => { database.exec?.(sql); } : undefined;
   return {
     ownershipKey: database,
     statementBinding: nodeSqliteStatementBinding,
     environment: nodeSqliteEnvironment(control !== undefined),
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
+    query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): QueryExecutionResult<Row> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
@@ -313,7 +313,7 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
         },
       };
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult> {
+    bulk(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): BulkExecutionResult {
       assertExecutionOptions(options);
       assertRoutineParametersUnsupported(bulk.statement);
       if (!binding || describedBulks.get(binding) !== bulk) {
@@ -338,7 +338,7 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
         executionMode: "prepared-loop",
       };
     },
-    async call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult> {
+    call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): DriverRoutineResult {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);

@@ -100,7 +100,7 @@ test("SQLite adapters reject active cancellation before statement I/O", async ()
     },
   });
   await assert.rejects(
-    () => node.query(query, undefined, { signal: active.signal }),
+    async () => node.query(query, undefined, { signal: active.signal }),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.cancel"
       && error.code === "BRAID_CANCEL_UNSUPPORTED",
@@ -116,7 +116,7 @@ test("SQLite adapters reject active cancellation before statement I/O", async ()
     exec() {},
   });
   await assert.rejects(
-    () => wasm.query(query, undefined, { signal: active.signal }),
+    async () => wasm.query(query, undefined, { signal: active.signal }),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.cancel"
       && error.code === "BRAID_CANCEL_UNSUPPORTED",
@@ -132,7 +132,7 @@ test("SQLite adapters reject active cancellation before statement I/O", async ()
     batch: async () => [],
   });
   await assert.rejects(
-    () => d1.query(query, undefined, { signal: active.signal }),
+    async () => d1.query(query, undefined, { signal: active.signal }),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.cancel"
       && error.code === "BRAID_CANCEL_UNSUPPORTED",
@@ -151,7 +151,7 @@ test("already-aborted SQLite executions reject with the supplied reason without 
     },
   });
   await assert.rejects(
-    () => executor.query(query, undefined, { signal: aborted(reason) }),
+    async () => executor.query(query, undefined, { signal: aborted(reason) }),
     (error: unknown) => error === reason,
   );
   assert.equal(prepares, 0);
@@ -173,7 +173,7 @@ test("SQLite adapters preserve a null AbortSignal reason before I/O", async () =
   });
   for (const executor of [node, wasm, d1]) {
     await assert.rejects(
-      () => executor.query(query, undefined, { signal }),
+      async () => executor.query(query, undefined, { signal }),
       (error: unknown) => error === null,
     );
   }
@@ -211,7 +211,7 @@ test("SQLite adapters reject row OUT parameters before acquisition or prepare", 
       exec() {},
     });
     await assert.rejects(
-      () => wasm.query(rendered),
+      async () => wasm.query(rendered),
       (error: unknown) => error instanceof UnsupportedFeatureError
         && error.feature === "routine.out"
         && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
@@ -227,7 +227,7 @@ test("SQLite adapters reject row OUT parameters before acquisition or prepare", 
       batch: async () => [],
     });
     await assert.rejects(
-      () => d1.query(rendered),
+      async () => d1.query(rendered),
       (error: unknown) => error instanceof UnsupportedFeatureError
         && error.feature === "routine.out"
         && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
@@ -261,7 +261,7 @@ test("SQLite WASM exact row reads expose ResultExactnessError when OO1 pointer m
     },
   });
   await assert.rejects(
-    () => executor.query(sql.rows`SELECT 1 AS value`.render()),
+    async () => executor.query(sql.rows`SELECT 1 AS value`.render()),
     (error: unknown) => error instanceof ResultExactnessError && error.code === "BRAID_RESULT_EXACTNESS",
   );
 });

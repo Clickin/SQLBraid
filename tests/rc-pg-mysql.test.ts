@@ -106,7 +106,7 @@ test("MySQL transaction options use same-connection control statements", async (
     "START TRANSACTION READ ONLY",
   ]);
   await assert.rejects(
-    () => executor.begin!({ readOnly: "yes" as never }),
+    async () => executor.begin!({ readOnly: "yes" as never }),
     (error: unknown) => error instanceof TypeError && errorCode(error) === "BRAID_TX_OPTIONS_INVALID",
   );
   assert.equal(calls.length, 2);
@@ -126,8 +126,8 @@ test("Already-aborted signals reject without physical I/O", async () => {
   const reason = new Error("already aborted");
   const controller = new AbortController();
   controller.abort(reason);
-  await assert.rejects(() => pg.query(postgres`SELECT 1`.render(), undefined, { signal: controller.signal }), (error: unknown) => error === reason);
-  await assert.rejects(() => mysqlExecutor.query(mysql`SELECT 1`.render(), undefined, { signal: controller.signal }), (error: unknown) => error === reason);
+  await assert.rejects(async () => pg.query(postgres`SELECT 1`.render(), undefined, { signal: controller.signal }), (error: unknown) => error === reason);
+  await assert.rejects(async () => mysqlExecutor.query(mysql`SELECT 1`.render(), undefined, { signal: controller.signal }), (error: unknown) => error === reason);
   assert.equal(pgCalls, 0);
   assert.equal(mysqlCalls, 0);
 });
@@ -146,13 +146,13 @@ test("Active cancellation without a physical destroy mechanism is unsupported be
   const pgController = new AbortController();
   const mysqlController = new AbortController();
   await assert.rejects(
-    () => pg.query(postgres`SELECT 1`.render(), undefined, { signal: pgController.signal }),
+    async () => pg.query(postgres`SELECT 1`.render(), undefined, { signal: pgController.signal }),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.cancel"
       && error.code === "BRAID_CANCEL_UNSUPPORTED",
   );
   await assert.rejects(
-    () => mysqlExecutor.query(mysql`SELECT 1`.render(), undefined, { signal: mysqlController.signal }),
+    async () => mysqlExecutor.query(mysql`SELECT 1`.render(), undefined, { signal: mysqlController.signal }),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.cancel"
       && error.code === "BRAID_CANCEL_UNSUPPORTED",
@@ -173,11 +173,11 @@ test("Routine output limitations are explicit and happen before driver I/O", asy
     return [[], []];
   }));
   await assert.rejects(
-    () => pg.call(postgres.call`CALL routine(${postgres.inOut("value", 1)})`.render()),
+    async () => pg.call(postgres.call`CALL routine(${postgres.inOut("value", 1)})`.render()),
     (error: unknown) => error instanceof UnsupportedFeatureError && error.feature === "routine.inout" && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
   );
   await assert.rejects(
-    () => mysqlExecutor.call(mysql.call`CALL routine(${mysql.out("value")})`.render()),
+    async () => mysqlExecutor.call(mysql.call`CALL routine(${mysql.out("value")})`.render()),
     (error: unknown) => error instanceof UnsupportedFeatureError && error.feature === "routine.out" && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
   );
   assert.equal(pgCalls, 0);

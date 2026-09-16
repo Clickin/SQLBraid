@@ -31,8 +31,8 @@ test("positional executors reject stale and forged descriptions before physical 
     const statement = createRenderedStatement({ dialectId, resultKind: "rows", segments: ["SELECT ", ""], parameters: [{ value: 1 }] });
     const other = createRenderedStatement({ ...statement, segments: ["DELETE FROM important_data WHERE id = ", ""] });
     const binding = executor.statementBinding.describe(other, { dialectId, requestedReuse: "auto" });
-    await assert.rejects(() => executor.query(statement, binding), /BRAID_BINDING_IDENTITY/);
-    await assert.rejects(() => executor.query(statement, { ...binding, parameterizedSql: "DROP TABLE important_data" }), /BRAID_BINDING_IDENTITY/);
+    await assert.rejects(async () => executor.query(statement, binding), /BRAID_BINDING_IDENTITY/);
+    await assert.rejects(async () => executor.query(statement, { ...binding, parameterizedSql: "DROP TABLE important_data" }), /BRAID_BINDING_IDENTITY/);
   }
   assert.equal(ioCalls, 0);
 });
