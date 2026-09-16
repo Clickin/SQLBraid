@@ -55,3 +55,7 @@ const query = sql.rows<UserRow>`
 ```
 
 Only the first true `when` renders. SQLBraid does not parse or semantically validate the database-specific SQL inside a branch.
+
+`sql.list([])` fails closed with `BRAID_EMPTY_LIST`. Choose the caller-authored
+branch (`if`, `choose`, or an explicit early return) for the empty case; SQLBraid
+does not rewrite an empty list to `IN (NULL)` or invent a strategy.

@@ -192,3 +192,7 @@ infer an opaque client's integer mode. Transactions use libSQL's interactive
 transaction handle; ordinary calls do not claim one pinned session. The
 adapter uses native `batch()` for bulk and rejects `db.stream()` with
 `BRAID_STREAM_UNSUPPORTED` rather than buffering a complete result.
+The SQLite inspector defaults to `introspectionScope: "main"`: metadata capture
+does not inspect attached schemas, and missing fields must not be read as proof
+that indexes or constraints are absent. better-sqlite3 and libSQL targets are
+compatible pending exact runtime/driver evidence, not certified by analogy.

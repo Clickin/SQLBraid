@@ -38,4 +38,11 @@ prove one pinned session, and `db.stream()` fails with
 maps to libSQL's documented read transaction mode; SQLBraid isolation literals
 are rejected when no exact equivalent is documented.
 
+The inspector's default `introspectionScope: "main"` covers only SQLite's main
+schema. Attached databases are not inspected unless a future scope explicitly
+adds them; absent indexes, constraints, or attached objects are not evidence
+that they do not exist. The better-sqlite3 and libSQL capability targets remain
+compatible pending exact runtime/driver cells and are not promoted to
+certified support by this package description.
+
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

@@ -87,6 +87,12 @@ transaction handle을 사용하며 일반 호출은 하나의 pinned session을
 주장하지 않습니다. Native `batch()`를 bulk에 사용하고, 완전한 result를
 buffering하는 대신 `db.stream()`은 `BRAID_STREAM_UNSUPPORTED`로 거부합니다.
 
+SQLite inspector의 기본 `introspectionScope: "main"`은 main schema만
+검사합니다. attached schema는 검사되지 않으며, 누락된 index나 constraint를
+존재하지 않는다는 증거로 해석하면 안 됩니다. better-sqlite3와 libSQL target은
+정확한 runtime/driver evidence가 추가되기 전까지 compatible이며 certified가
+아닙니다.
+
 ## 1. 프로젝트 만들기
 
 ```bash

@@ -1,12 +1,14 @@
 # SQLBraid public API audit
 
-This inventory records the phase-J public boundary. It is an API classification,
+This inventory records the RC authoring-remediation public boundary. It is an API classification,
 not a publication or support claim. The last exact-SHA verification was revision
 `8da8167e027320fcc9bb2aac16b0903c64147940` (Runtime
 [34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046), Docs
 [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
 Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)).
-The current tree is newer and requires fresh evidence before labels change.
+The current audited remediation baseline is `f01f1b0`; the final integrated SHA
+still requires the same-SHA Runtime/Documentation gates before release labels
+change.
 
 ## Classification
 
@@ -31,6 +33,10 @@ The current tree is newer and requires fresh evidence before labels change.
 `PUBLIC_ERROR_DEFINITIONS` and its `PublicErrorDefinition` /
 `PublicErrorCategory` types enumerate the deliberately public error reference.
 They do not promote every internal `BRAID_` message to a stable contract.
+
+`AUTHORING_MODULE_CATALOG` is a frozen data-only discovery catalog consumed by
+compiler and tooling; it records supported tag-exporting module identities and
+dialect evidence. It is not an execution or error API.
 
 `Database` exposes `execute`, `all`, `one`, `maybeOne`, `call`, `batch`, `bulk`,
 `prepare`, `stream`, `session`, and `tx`. All execution operations take trailing

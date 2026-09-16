@@ -49,7 +49,7 @@
       "source": "website/src/content/docs/concepts/dynamic-braid.md",
       "translation": "website/src/content/docs/ko/concepts/dynamic-braid.md",
       "translationOf": "website/src/content/docs/concepts/dynamic-braid.md",
-      "sourceDigest": "5edf350eb174f382453cdb41fbceebf36e9c50cbafe047a976e431f8cc670e7a"
+      "sourceDigest": "3d1982942ceaef7fb2988e285d62093484651de0dd7f11101bc7559f978bc659"
     },
     {
       "source": "website/src/content/docs/concepts/parameter-hints.md",
@@ -127,7 +127,7 @@
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "e2b033565bcd91b5ac33eebdcd47a2011eef9930eee42483f41b760b9a18dff9"
+      "sourceDigest": "f152c979a67a08efce20fdc0e449db06dc61f80b2d1bbf0028dbe58a5e8d0bb3"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",

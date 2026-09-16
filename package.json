@@ -63,6 +63,8 @@
     "test:runtime:bun-sql": "bun scripts/bun-sql-matrix.mjs",
     "test:runtime:deno": "node scripts/runtime-portability.mjs deno",
     "test:runtime:compatibility": "node scripts/runtime-compatibility-smoke.mjs",
+    "test:consumer:isolated": "node scripts/isolated-facade-consumer.mjs",
+    "test:consumer:otel-api": "node scripts/otel-api-consumer.mjs",
     "test:runtime": "node scripts/runtime-portability.mjs node bun deno",
     "test:lsp": "pnpm run build && vitest run --project unit tests/lsp-protocol.test.ts",
     "test:agent-tooling": "pnpm run build && vitest run --project unit --project cli tests/tooling.test.ts tests/tooling-workspace.test.ts tests/language-server.test.ts tests/cli.test.ts",

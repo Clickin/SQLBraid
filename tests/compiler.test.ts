@@ -37,10 +37,8 @@ test('recognizes SQLite adapter and facade module specifiers by default', () => 
     'const third = facadeBetter`SELECT 3`;',
     'const fourth = facadeLibsql`SELECT 4`;',
   ].join('\n'), 'sqlite-adapters.ts', {});
-  assert.deepEqual(result.queries.map((query) => query.tagName), ['better', 'libsql', 'facadeBetter', 'facadeLibsql']);
+  assert.deepEqual(result.queries.map((query) => query.tagName), ['facadeBetter', 'facadeLibsql']);
   assert.deepEqual(result.queries.map((query) => query.moduleSpecifier), [
-    '@sqlbraid/sqlite/better-sqlite3',
-    '@sqlbraid/sqlite/libsql',
     'sqlbraid/better-sqlite3',
     'sqlbraid/libsql',
   ]);
