@@ -228,10 +228,10 @@ function binary(value: unknown): unknown {
   return value;
 }
 
-function normalizeValue(value: unknown, columnType = ""): unknown {
+function normalizeValue(value: unknown): unknown {
   const normalized = binary(value);
+  if (normalized === null) return null;
   if (typeof normalized === "bigint") return normalizeExactInteger(normalized);
-  if (columnType.trim().toUpperCase() === "INTEGER") return normalizeExactInteger(normalized);
   return normalized;
 }
 
@@ -241,10 +241,10 @@ function valueAt(row: LibsqlRowLike, index: number, name: string): unknown {
   return row[name];
 }
 
-function normalizeRow(row: LibsqlRowLike, columns: readonly string[], columnTypes: readonly string[]): Record<string, unknown> {
+function normalizeRow(row: LibsqlRowLike, columns: readonly string[]): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (let index = 0; index < columns.length; index += 1) {
-    result[columns[index]!] = normalizeValue(valueAt(row, index, columns[index]!), columnTypes[index] ?? "");
+    result[columns[index]!] = normalizeValue(valueAt(row, index, columns[index]!));
   }
   return result;
 }
@@ -257,8 +257,7 @@ function resultRows<Row>(result: LibsqlResultSetLike): readonly Row[] {
     if (result.rows.length !== 0) throw new Error("BRAID_RESULT_KIND: libSQL returned rows without column metadata.");
     return [];
   }
-  const columnTypes = Array.isArray(result.columnTypes) ? result.columnTypes : [];
-  return result.rows.map((row) => normalizeRow(row, result.columns, columnTypes)) as readonly Row[];
+  return result.rows.map((row) => normalizeRow(row, result.columns)) as readonly Row[];
 }
 
 function commandResult(result: LibsqlResultSetLike): CommandExecutionResult {

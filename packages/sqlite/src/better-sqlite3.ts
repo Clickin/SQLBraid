@@ -14,6 +14,7 @@ import type {
   StatementBindingDescription,
   TransactionOptions,
 } from "@sqlbraid/core";
+import { Buffer } from "node:buffer";
 import {
   AdapterError,
   createBulkBindingDescription,
@@ -137,10 +138,10 @@ function assertBetterSqlite3Value(value: unknown): void {
     }
     return;
   }
-  if (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView(value)) return;
+  if (Buffer.isBuffer(value)) return;
   throw new AdapterError(
     "BRAID_BIND_VALUE_UNSUPPORTED",
-    "better-sqlite3 binds support null, numbers, bigint, strings, and ArrayBufferView values.",
+    "better-sqlite3 binds support null, numbers, bigint, strings, and Buffer values.",
   );
 }
 
@@ -446,10 +447,7 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
       control(`RELEASE SAVEPOINT ${name}`);
     },
   };
-  // Awaitable-aware QueryExecutor accepts these synchronous physical methods.
-  // The cast keeps this adapter source-compatible with the pre-Awaitable branch
-  // while the SPI change lands independently.
-  return executor as unknown as QueryExecutor;
+  return executor;
 }
 
 export function createBetterSqlite3Database(

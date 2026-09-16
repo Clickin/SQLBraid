@@ -72,6 +72,24 @@ test("libSQL classifies rows from columns metadata and normalizes integers and b
     await emptyRows.query(sql.rows`SELECT id FROM users WHERE 0`.render()),
     { kind: "rows", rowCount: 0, rows: [] },
   );
+
+  const nullableInteger = createLibsqlExecutor(
+    fakeClient(async () => rowsResult(["value"], [{ 0: null }], ["INTEGER"])),
+    { intMode: "string" },
+  );
+  assert.deepEqual(
+    await nullableInteger.query(sql.rows`SELECT NULL AS value`.render()),
+    { kind: "rows", rowCount: 1, rows: [{ value: null }] },
+  );
+
+  const dynamicIntegerAffinity = createLibsqlExecutor(
+    fakeClient(async () => rowsResult(["value"], [{ 0: 1.5 }, { 0: "text" }], ["INTEGER"])),
+    { intMode: "string" },
+  );
+  assert.deepEqual(
+    await dynamicIntegerAffinity.query(sql.rows`SELECT value FROM dynamic_values`.render()),
+    { kind: "rows", rowCount: 2, rows: [{ value: 1.5 }, { value: "text" }] },
+  );
 });
 
 test("libSQL rejects duplicate labels before row conversion and maps command metadata", async () => {
@@ -80,7 +98,7 @@ test("libSQL rejects duplicate labels before row conversion and maps command met
     { intMode: "string" },
   );
   await assert.rejects(
-    () => duplicate.query(sql.rows`SELECT 1 AS id, 2 AS id`.render()),
+    async () => duplicate.query(sql.rows`SELECT 1 AS id, 2 AS id`.render()),
     (error: unknown) => error instanceof Error
       && error.message.includes("BRAID_RESULT_COLUMNS"),
   );
@@ -191,9 +209,9 @@ test("libSQL transaction cleanup clears continuity after commit or rollback fail
   );
   const executor = createLibsqlExecutor(client, { intMode: "string" });
   await executor.begin!();
-  await assert.rejects(() => executor.commit!(), /commit failed/);
+  await assert.rejects(async () => executor.commit!(), /commit failed/);
   assert.equal(closeCalls, 1);
-  await assert.rejects(() => executor.rollback!(), /BRAID_TRANSACTION_STATE/);
+  await assert.rejects(async () => executor.rollback!(), /BRAID_TRANSACTION_STATE/);
   assert.equal(transactionCalls, 1);
 });
 
@@ -217,12 +235,12 @@ test("libSQL advertises unsupported session pinning, stream, call, and cancellat
       && error.feature === "statement.stream",
   );
   await assert.rejects(
-    () => executor.call(sql`SELECT 1`.render()),
+    async () => executor.call(sql`SELECT 1`.render()),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "routine.call",
   );
   await assert.rejects(
-    () => executor.query(sql.rows`SELECT 1`.render(), undefined, { signal: new AbortController().signal }),
+    async () => executor.query(sql.rows`SELECT 1`.render(), undefined, { signal: new AbortController().signal }),
     (error: unknown) => error instanceof UnsupportedFeatureError
       && error.feature === "statement.cancel",
   );

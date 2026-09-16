@@ -17,7 +17,7 @@ type FakeRow = Record<string, unknown>;
 class FakeStatement implements BetterSqlite3StatementLike {
   readonly safeIntegerModes: boolean[] = [];
   readonly runValues: unknown[][] = [];
-  readonly iterateReturns: { count: number } = { count: 0 };
+  readonly iterateReturns: { count: number; returns: number } = { count: 0, returns: 0 };
 
   constructor(
     private readonly labels: readonly { readonly name: string }[],
@@ -60,6 +60,7 @@ class FakeStatement implements BetterSqlite3StatementLike {
       },
       return() {
         index = rows.length;
+        stats.returns += 1;
         return { done: true, value: undefined };
       },
       [Symbol.iterator]() {
@@ -121,6 +122,10 @@ test("better-sqlite3 uses statement-local safe integers and preserves SQLite res
   );
   assert.equal(native.statements[2]?.safeIntegerModes[0], true);
   await assert.rejects(() => db.execute(sql`SELECT 1 AS duplicate, 2 AS duplicate`), /BRAID_RESULT_COLUMNS/);
+  await assert.rejects(
+    () => db.execute(sql.command`INSERT INTO values_table (value) VALUES (${new Uint8Array([1])})`),
+    /BRAID_BIND_VALUE_UNSUPPORTED/,
+  );
 });
 
 test("better-sqlite3 async mapping, prepared bulk, and explicit transaction controls stay on one handle", async () => {
@@ -151,6 +156,13 @@ test("better-sqlite3 async mapping, prepared bulk, and explicit transaction cont
   assert.match(native.executedSql[1] ?? "", /^SAVEPOINT braid_sp_/u);
   assert.equal(native.executedSql[2], `RELEASE SAVEPOINT ${native.executedSql[1]?.slice("SAVEPOINT ".length)}`);
   assert.equal(native.executedSql[3], "COMMIT");
+
+  const failed = new Error("transaction callback failed");
+  await assert.rejects(() => db.tx(async (tx) => {
+    await tx.execute(sql.command`INSERT INTO names (name) VALUES (${"rollback"})`);
+    throw failed;
+  }), (error) => error === failed);
+  assert.equal(native.executedSql.at(-1), "ROLLBACK");
 });
 
 test("better-sqlite3 streams native iteration with cleanup and rejects unsupported capabilities", async () => {
@@ -162,6 +174,7 @@ test("better-sqlite3 streams native iteration with cleanup and rejects unsupport
     break;
   }
   assert.equal(native.statements[0]?.iterateReturns.count, 1);
+  assert.equal(native.statements[0]?.iterateReturns.returns, 1);
 
   const signal = new AbortController();
   await assert.rejects(

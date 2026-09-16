@@ -36,7 +36,7 @@ test("CI planner fails open for unknown changes and selects driver-local lanes",
   assert.deepEqual(postgres.compatibility_matrix.length, 4);
   const sqlite = planChanges(["packages/sqlite/src/libsql.ts"], { eventName: "pull_request", baseKnown: true });
   assert.equal(sqlite.compatibility, true);
-  assert.deepEqual(sqlite.compatibility_matrix.map(({ id }) => id), [
+  assert.deepEqual(sqlite.compatibility_matrix.map(({ id }: { readonly id: string }) => id), [
     "node-16-20-2-runtime",
     "node-16-20-2-better-sqlite3-9-6-0",
     "node-22-18-0-better-sqlite3-13-0-3",

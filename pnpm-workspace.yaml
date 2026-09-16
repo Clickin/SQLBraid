@@ -5,6 +5,7 @@ packages:
 
 allowBuilds:
   '@vscode/vsce-sign': false
+  better-sqlite3: true
   cpu-features: true
   esbuild: true
   keytar: false
