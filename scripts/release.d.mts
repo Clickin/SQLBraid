@@ -15,22 +15,11 @@ export interface ReleaseEntry {
   readonly dependencies?: readonly string[];
 }
 
-export interface ReleaseExtension {
-  readonly file: string;
-  readonly sha256: string;
-  readonly integrity: string;
-  readonly version: string;
-  readonly publisher: string;
-  readonly name: string;
-  readonly bundled: Readonly<{ readonly cli: string; readonly languageServer: string }>;
-}
-
 export interface ReleaseManifest {
   readonly version: string;
   readonly commit: string;
   readonly runId?: string | null;
   readonly runAttempt?: string | null;
-  readonly extension?: ReleaseExtension;
   readonly packages: readonly ReleaseEntry[];
 }
 
@@ -74,7 +63,6 @@ export interface ReleaseEvidence {
     readonly runId: string | null;
     readonly runAttempt: string | null;
     readonly packages: readonly ReleaseEntry[];
-    readonly extension: ReleaseExtension;
   };
   readonly certification: {
     readonly support: {

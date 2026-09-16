@@ -55,7 +55,6 @@ function candidateIdentity(manifest) {
   return {
     version: manifest.version,
     commit: manifest.commit,
-    extension: manifest.extension ?? null,
     packages: manifest.packages,
   };
 }
@@ -174,9 +173,7 @@ async function assertVersions(packages) {
   mismatches.push(...packages
     .filter(({ manifest }) => manifest.version !== version)
     .map(({ manifest }) => `${manifest.name}@${manifest.version}`));
-  const extension = await json(join(root, "extensions", "vscode", "package.json"));
-  if (extension.version !== version) mismatches.push(`${extension.name}@${extension.version}`);
-  if (mismatches.length > 0) throw new Error(`All first-party packages must be synchronized at ${version}: ${mismatches.join(", ")}.`);
+  if (mismatches.length > 0) throw new Error(`All publishable npm packages must be synchronized at ${version}: ${mismatches.join(", ")}.`);
 }
 
 async function tarballFiles() {
@@ -251,25 +248,9 @@ async function pack(packages, order, sha) {
   return manifest;
 }
 
-function assertExtensionIdentity(extension) {
-  if (!extension || typeof extension !== "object"
-    || typeof extension.file !== "string" || basename(extension.file) !== extension.file
-    || !/^[a-f\d]{64}$/u.test(extension.sha256 ?? "")
-    || !/^sha512-[A-Za-z0-9+/]{86}==$/u.test(extension.integrity ?? "")
-    || typeof extension.version !== "string" || extension.version !== version
-    || typeof extension.publisher !== "string" || !extension.publisher
-    || typeof extension.name !== "string" || !extension.name
-    || !extension.bundled || typeof extension.bundled.cli !== "string"
-    || typeof extension.bundled.languageServer !== "string"
-    || extension.bundled.cli !== version || extension.bundled.languageServer !== version) {
-    throw new Error("Invalid release manifest VSIX identity, version, or hashes.");
-  }
-}
-
-function assertManifestIdentity(manifest, { requireExtension = false } = {}) {
+function assertManifestIdentity(manifest) {
   if (manifest.version !== version || !/^[a-f\d]{40}$/u.test(manifest.commit ?? "")
     || !Array.isArray(manifest.packages) || manifest.packages.length === 0) throw new Error("Invalid release-manifest.json.");
-  if (requireExtension || manifest.extension !== undefined) assertExtensionIdentity(manifest.extension);
   const names = new Set();
   for (const entry of manifest.packages) {
     if (!entry || typeof entry.name !== "string" || !/^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/u.test(entry.name)
@@ -284,7 +265,7 @@ function assertManifestIdentity(manifest, { requireExtension = false } = {}) {
 
 async function readReleaseManifest(directory = artifactDir, { priorCandidateRunId, allowCurrentAttemptMismatch = false } = {}) {
   const manifest = await json(join(directory, "release-manifest.json"));
-  assertManifestIdentity(manifest, { requireExtension: true });
+  assertManifestIdentity(manifest);
   if (priorCandidateRunId !== undefined) {
     if (!/^\d+$/u.test(String(priorCandidateRunId))
       || !/^\d+$/u.test(manifest.runId ?? "") || !/^\d+$/u.test(manifest.runAttempt ?? "")) {
@@ -314,9 +295,6 @@ async function readReleaseManifest(directory = artifactDir, { priorCandidateRunI
       throw new Error(`Candidate dependency evidence mismatch: ${entry.file}.`);
     }
   }
-  const extensionPath = join(directory, manifest.extension.file);
-  if (await hash(extensionPath) !== manifest.extension.sha256) throw new Error(`Validated VSIX changed: ${manifest.extension.file}.`);
-  if (await integrity(extensionPath) !== manifest.extension.integrity) throw new Error(`Validated VSIX integrity changed: ${manifest.extension.file}.`);
   const stamp = await json(join(directory, "pack-check-success.json"));
   if (stamp.version !== version || stamp.commit !== manifest.commit || !Array.isArray(stamp.packages) || stamp.packages.length !== manifest.packages.length) {
     throw new Error("Release artifacts do not have a matching successful pack-check stamp.");
@@ -324,7 +302,6 @@ async function readReleaseManifest(directory = artifactDir, { priorCandidateRunI
   const stampPackages = stamp.packages.map(({ name, sha256 }) => `${name}:${sha256}`).sort().join("\n");
   const manifestPackages = manifest.packages.map(({ name, sha256 }) => `${name}:${sha256}`).sort().join("\n");
   if (stampPackages !== manifestPackages) throw new Error("Pack-check stamp does not match validated release tarball hashes.");
-  if (JSON.stringify(stamp.extension) !== JSON.stringify(manifest.extension)) throw new Error("Pack-check stamp does not match validated VSIX identity.");
   return manifest;
 }
 
@@ -396,12 +373,12 @@ async function createReleaseEvidence(manifest, staged, {
   targetEvidenceDirectory,
   stagedEvidencePath,
 } = {}) {
-  assertManifestIdentity(manifest, { requireExtension: true });
+  assertManifestIdentity(manifest);
   assertStagingEvidence(manifest, staged, { expectedRunId: staged.runId, expectedRunAttempt: staged.runAttempt });
   if (!supportEvidencePath || !targetEvidenceDirectory || !stagedEvidencePath) {
     throw new Error("Durable release evidence requires support, target, and staged evidence paths.");
   }
-  for (const entry of [...manifest.packages, manifest.extension]) {
+  for (const entry of manifest.packages) {
     const path = join(directory, entry.file);
     if (await hash(path) !== entry.sha256 || await integrity(path) !== entry.integrity) {
       throw new Error(`Durable release evidence cannot include changed artifact: ${entry.file}.`);
@@ -442,7 +419,6 @@ async function createReleaseEvidence(manifest, staged, {
       runId: manifest.runId ?? null,
       runAttempt: manifest.runAttempt ?? null,
       packages: manifest.packages.map(({ name, version, file, sha256, integrity }) => ({ name, version, file, sha256, integrity })),
-      extension: manifest.extension,
     },
     certification: {
       support: {

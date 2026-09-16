@@ -11,10 +11,12 @@ interface Workflow {
   on: Record<string, { tags?: string[]; paths?: string[]; inputs?: Record<string, { default?: unknown; options?: string[]; description?: string; type?: string }> } | null>;
   permissions: Record<string, string>;
   env?: Record<string, string>;
+  concurrency?: Record<string, unknown>;
   jobs: Record<string, Job>;
 }
 const load = (name: string): Workflow => parse(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
 const release = load("release");
+const vscode = load("vscode-release");
 const runtime = load("runtime-portability");
 const docs = load("docs-pages");
 const dependencies = (job: Job) => typeof job.needs === "string" ? [job.needs] : job.needs ?? [];
@@ -89,15 +91,60 @@ test("explicit staging reaches only the staging job and a successful stage autho
   }
 });
 
-test("full certification and mutation prerequisites include every release lane and pnpm stage dry-run", () => {
+test("full certification and mutation prerequisites include every npm release lane and pnpm stage dry-run", () => {
   const lanes = dependencies(release.jobs["release-final"]);
-  for (const name of ["release-prep", "release-common", "release-db", "release-node24", "release-browser", "release-vscode", "release-pack", "release-docs", "release-examples", "release-benchmark-smoke", "release-runtime", "release-compatibility", "release-bun-sql", "release-support-evidence", "release-target-evidence"]) assert.ok(lanes.includes(name), `missing ${name}`);
+  for (const name of ["release-prep", "release-common", "release-db", "release-node24", "release-browser", "release-pack", "release-docs", "release-examples", "release-benchmark-smoke", "release-runtime", "release-compatibility", "release-bun-sql", "release-support-evidence", "release-target-evidence"]) assert.ok(lanes.includes(name), `missing ${name}`);
+  assert.equal(release.jobs["release-vscode"], undefined);
   const dryRun = release.jobs["release-final"].steps.find((step) => step.run?.includes("--mode stage-dry-run"));
   assert.ok(dryRun);
   for (const mode of ["certify", "stage"]) assert.equal(graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0").stepRuns(dryRun), true);
   assert.equal(graph(release, "push", "certify", "refs/tags/v0.1.0-rc.0").stepRuns(dryRun), true);
   assert.equal(graph(release, "workflow_dispatch", "pack-only").stepRuns(dryRun), false);
   assert.ok(release.jobs["release-final"].steps.some((step) => step.run?.includes("--mode preflight")));
+});
+
+test("npm release preparation and evidence exclude VS Code artifacts", () => {
+  const prep = release.jobs["release-prep"];
+  assert.equal(prep.steps.find((step) => step.name === "Typecheck packages")?.run, "pnpm run typecheck:packages");
+  assert.equal(prep.steps.find((step) => step.name === "Build packages once")?.run, "pnpm run build:packages");
+  assert.doesNotMatch(prep.steps.find((step) => step.name === "Archive candidate and prepared build")?.run ?? "", /extensions\/vscode/u);
+  const packCheck = release.jobs["release-pack"].steps.find((step) => step.name === "Validate candidate package bytes");
+  assert.equal(packCheck?.env?.SQLBRAID_SKIP_VSIX, "true");
+  assert.equal(packCheck?.env?.SQLBRAID_VSIX_INPUT, undefined);
+  assert.equal(packCheck?.env?.SQLBRAID_VSIX_OUTPUT, undefined);
+  const draft = release.jobs["release-draft"].steps.find((step) => step.run?.includes("gh release create"))?.run ?? "";
+  assert.doesNotMatch(draft, /\.vsix/u);
+});
+
+test("VS Code release packages one artifact and publishes the same VSIX to Open VSX with OIDC", () => {
+  assert.deepEqual(vscode.permissions, { contents: "read" });
+  assert.equal(vscode.on.workflow_dispatch?.inputs?.pre_release.default, true);
+  assert.equal(vscode.on.workflow_dispatch?.inputs?.pre_release.type, "boolean");
+  assert.deepEqual(vscode.concurrency, { group: "vscode-release-${{ github.ref }}", "cancel-in-progress": false });
+  const pack = vscode.jobs.package;
+  assert.ok(pack);
+  assert.equal(pack.needs, undefined);
+  const packageStep = pack.steps.find((step) => step.name === "Package and validate exact VSIX");
+  assert.match(packageStep?.run ?? "", /scripts\/package-vscode\.mjs/u);
+  assert.match(packageStep?.run ?? "", /--pre-release/u);
+  assert.equal(packageStep?.env?.PRE_RELEASE, "${{ inputs.pre_release }}");
+  const upload = pack.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
+  assert.equal(upload?.with?.name, "${{ steps.identity.outputs.artifact }}");
+  assert.equal(upload?.with?.path, "${{ runner.temp }}/${{ steps.identity.outputs.filename }}");
+  const openVsx = vscode.jobs["open-vsx"];
+  assert.equal(openVsx.needs, "package");
+  assert.deepEqual(openVsx.permissions, { contents: "read", "id-token": "write" });
+  const download = openVsx.steps.find((step) => step.uses?.startsWith("actions/download-artifact@"));
+  assert.equal(download?.with?.name, "${{ needs.package.outputs.artifact }}");
+  const publish = openVsx.steps.find((step) => step.name?.includes("trusted publishing"));
+  assert.match(publish?.run ?? "", /ovsx@\$\{OVSX_VERSION\}/u);
+  assert.match(publish?.run ?? "", /--trusted-publishing/u);
+  assert.doesNotMatch(publish?.run ?? "", /--pre-release/u);
+  assert.equal(publish?.env?.PRE_RELEASE, undefined);
+  assert.equal(publish?.env?.VSIX, "${{ runner.temp }}/vsix/${{ needs.package.outputs.filename }}");
+  const workflowText = readFileSync(new URL("../.github/workflows/vscode-release.yml", import.meta.url), "utf8");
+  assert.doesNotMatch(workflowText, /secrets\.|VSCE_PAT|ovsx\s+publish\s+.*(?:--pat|-p\s)/u);
+  assert.doesNotMatch(workflowText, /\bvsce\s+publish\b/u);
 });
 
 test("runtime workflows execute every exact packed compatibility cell", () => {
@@ -183,8 +230,9 @@ test("staging distinguishes fresh and explicit cross-run reconciliation", () => 
   assert.ok(prep.steps.some((step) => step.name?.includes("Restore prior validated candidate")));
   const pack = release.jobs["release-pack"];
   const packCheck = pack.steps.find((step) => step.name?.includes("Validate candidate package"));
-  assert.match(packCheck?.env?.SQLBRAID_VSIX_INPUT ?? "", /sqlbraid-release-artifacts\/sqlbraid\.vsix/u);
-  assert.ok(packCheck?.env?.SQLBRAID_VSIX_INPUT?.includes("prior_run_id"));
+  assert.equal(packCheck?.env?.SQLBRAID_SKIP_VSIX, "true");
+  assert.equal(packCheck?.env?.SQLBRAID_VSIX_INPUT, undefined);
+  assert.equal(packCheck?.env?.SQLBRAID_VSIX_OUTPUT, undefined);
   assert.match(prep.steps.find((step) => step.name?.includes("Pack immutable"))?.if ?? "", /prior_run_id/u);
   const stage = release.jobs["release-stage"];
   const prior = stage.steps.find((step) => step.name?.includes("prior staged evidence"));

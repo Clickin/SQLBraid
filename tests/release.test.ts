@@ -32,22 +32,11 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   const directory = await mkdtemp(join(tmpdir(), "sqlbraid-stage-test-"));
   directories.push(directory);
   const bytes = new Map(names.map((name) => [name, Buffer.from(`validated archive: ${name}`)]));
-  const extensionBytes = Buffer.from("validated extension");
-  bytes.set("sqlbraid.vsix", extensionBytes);
-  const manifest: ReleaseManifest = { version, commit: "a".repeat(40), runId: "123", runAttempt: "1", extension: {
-    file: "sqlbraid.vsix",
-    sha256: createHash("sha256").update(extensionBytes).digest("hex"),
-    integrity: `sha512-${createHash("sha512").update(extensionBytes).digest("base64")}`,
-    version,
-    publisher: "sqlbraid",
-    name: "sqlbraid-vscode",
-    bundled: { cli: version, languageServer: version },
-  }, packages: names.map((name, index) => ({
+  const manifest: ReleaseManifest = { version, commit: "a".repeat(40), runId: "123", runAttempt: "1", packages: names.map((name, index) => ({
     name, version, file: `package-${index}.tgz`, sha256: createHash("sha256").update(bytes.get(name)!).digest("hex"),
     integrity: `sha512-${createHash("sha512").update(bytes.get(name)!).digest("base64")}`, dependencies: names.slice(0, index),
   })) };
   for (const entry of manifest.packages) await writeFile(join(directory, entry.file), bytes.get(entry.name)!);
-  await writeFile(join(directory, manifest.extension!.file), extensionBytes);
   const publicIntegrity = new Map<string, string>();
   const tags = new Map(names.map((name) => [name, { latest: "0.0.9" } as Record<string, string>]));
   const calls: string[][] = [];
@@ -479,19 +468,8 @@ test("candidate validation rejects changed bytes, missing integrity, stale runs,
     const bytes = await readFile(tarball);
     const entry = { name: "@sqlbraid/core", version: "0.1.0-rc.0", file: "core.tgz", sha256: createHash("sha256").update(bytes).digest("hex"), integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`, dependencies: [] };
     const candidateVersion = "0.1.0-rc.0";
-    const extensionBytes = Buffer.from("extension");
-    await writeFile(join(directory, "sqlbraid.vsix"), extensionBytes);
-    const extension = {
-      file: "sqlbraid.vsix",
-      sha256: createHash("sha256").update(extensionBytes).digest("hex"),
-      integrity: `sha512-${createHash("sha512").update(extensionBytes).digest("base64")}`,
-      version: candidateVersion,
-      publisher: "sqlbraid",
-      name: "sqlbraid-vscode",
-      bundled: { cli: candidateVersion, languageServer: candidateVersion },
-    };
-    const candidate = { version: candidateVersion, commit: "a".repeat(40), runId: "123", runAttempt: "1", extension, packages: [entry] };
-    const stamp = { version: candidate.version, commit: candidate.commit, packages: [{ name: entry.name, sha256: entry.sha256 }], extension };
+    const candidate = { version: candidateVersion, commit: "a".repeat(40), runId: "123", runAttempt: "1", packages: [entry] };
+    const stamp = { version: candidate.version, commit: candidate.commit, packages: [{ name: entry.name, sha256: entry.sha256 }] };
     const manifestFile = join(directory, "release-manifest.json");
     const stampFile = join(directory, "pack-check-success.json");
     setReleaseCommand(async (file, args, cwd) => {
@@ -515,7 +493,6 @@ test("candidate validation rejects changed bytes, missing integrity, stale runs,
       { ...candidate, packages: [{ ...entry, dependencies: ["@sqlbraid/core"] }] },
       { ...candidate, packages: [{ ...entry, name: "@sqlbraid/template" }] },
       { ...candidate, packages: [{ ...entry, version: "0.1.0" }] },
-      { ...candidate, extension: { ...extension, sha256: "changed" } },
     ]) {
       await writeFile(manifestFile, JSON.stringify(changed));
       await assert.rejects(readReleaseManifest(directory));
@@ -526,9 +503,6 @@ test("candidate validation rejects changed bytes, missing integrity, stale runs,
     await writeFile(stampFile, JSON.stringify(stamp));
     await writeFile(tarball, Buffer.concat([bytes, Buffer.from("changed")]));
     await assert.rejects(readReleaseManifest(directory), /tarball changed/);
-    await writeFile(tarball, bytes);
-    await writeFile(join(directory, "sqlbraid.vsix"), Buffer.from("changed extension"));
-    await assert.rejects(readReleaseManifest(directory), /VSIX changed/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -562,8 +536,6 @@ test("durable release evidence keeps candidate, support, and staged identities c
   assert.equal(durable.format, "sqlbraid-release-evidence");
   assert.equal(durable.version, f.manifest.version);
   assert.equal(durable.commit, f.manifest.commit);
-  assert.ok(f.manifest.extension);
-  assert.equal(durable.candidate.extension.sha256, f.manifest.extension.sha256);
   assert.equal(durable.candidate.packages[0].sha256, f.manifest.packages[0].sha256);
   assert.deepEqual(durable.certification.support.targetIds, ["postgres"]);
   assert.deepEqual(durable.certification.targets[0].ids, ["postgres"]);

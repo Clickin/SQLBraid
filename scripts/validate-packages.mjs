@@ -27,6 +27,8 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const temp = await mkdtemp(join(tmpdir(), "sqlbraid-pack-check-"));
 const consumer = join(temp, "consumer");
 const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR) : undefined;
+const skipVsix = process.env.SQLBRAID_SKIP_VSIX === "true";
+const vsixPreRelease = process.env.SQLBRAID_VSIX_PRE_RELEASE === "true";
 const requiredPackageNames = new Set([
   "cli", "codegen", "compiler", "core", "language-server", "mariadb", "metadata", "mssql", "mysql",
   "operations", "opentelemetry", "oracle", "postgres", "runtime", "sqlbraid", "sqlite", "template", "tooling", "vite", "bun-sql",
@@ -521,7 +523,6 @@ try {
   ].join("\n"));
   await run(process.execPath, [entry], consumer);
 
-  // First prove packed runtime imports need no concrete validator, then test optional interop.
   await run("npm", [
     "install",
     "--ignore-scripts",
@@ -743,119 +744,143 @@ try {
       for (const needle of forbidden) if (text.includes(needle)) throw new Error(`Monorepo path leaked into ${packageEntry.name}/${file.name}: ${needle}`);
     }
   }
-  const extensionRoot = join(root, "extensions/vscode");
-  const extension = join(temp, "vscode");
-  const extensionManifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
-  const vsixOutput = resolve(process.env.SQLBRAID_VSIX_OUTPUT ?? join(root, "sqlbraid.vsix"));
-  const suppliedVsix = process.env.SQLBRAID_VSIX_INPUT ? resolve(process.env.SQLBRAID_VSIX_INPUT) : undefined;
-  if (suppliedVsix && !packInputDir) throw new Error("Supplied VSIX validation requires a supplied release artifact directory.");
-  if (suppliedVsix && resolve(dirname(suppliedVsix)) !== packInputDir) throw new Error("Supplied VSIX must be stored beside the supplied release manifest.");
-  const extensionDependencies = Object.fromEntries(Object.entries(extensionManifest.dependencies).map(([name, version]) => [name, version.replace(/^workspace:/u, "")]));
-  const bundledVersions = {};
-  for (const [key, packageName] of [["cli", "@sqlbraid/cli"], ["languageServer", "@sqlbraid/language-server"]]) {
-    const bundledManifest = JSON.parse(await readFile(join(packageRoot, packageName.slice("@sqlbraid/".length), "package.json"), "utf8"));
-    assert.equal(extensionDependencies[packageName], bundledManifest.version, `${packageName} dependency must match the bundled source version.`);
-    bundledVersions[key] = bundledManifest.version;
-  }
-  const bundledNames = new Set();
-  async function includeTooling(name) {
-    if (bundledNames.has(name)) return;
-    bundledNames.add(name);
-    const manifest = JSON.parse(await readFile(join(packageRoot, name.slice("@sqlbraid/".length), "package.json"), "utf8"));
-    for (const dependency of Object.keys(manifest.dependencies ?? {})) if (dependency.startsWith("@sqlbraid/")) await includeTooling(dependency);
-  }
-  for (const name of Object.keys(extensionDependencies)) if (name.startsWith("@sqlbraid/")) await includeTooling(name);
-  await mkdir(extension);
-  await cp(join(extensionRoot, "dist"), join(extension, "dist"), { recursive: true });
-  await copyFile(join(extensionRoot, "README.md"), join(extension, "README.md"));
-  await copyFile(join(root, "LICENSE"), join(extension, "LICENSE"));
-  await writeFile(join(extension, "package.json"), JSON.stringify({
-    ...extensionManifest,
-    devDependencies: {},
-    dependencies: { ...extensionDependencies, ...Object.fromEntries([...bundledNames].map((name) => [name, dependencies[name]])) },
-  }));
-  await run("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], extension);
-  await writeFile(join(extension, "package.json"), JSON.stringify({ ...extensionManifest, devDependencies: {}, dependencies: extensionDependencies }));
-  await rm(join(extension, "package-lock.json"), { force: true });
-  const packagedVsix = suppliedVsix ?? join(temp, "sqlbraid.vsix");
-  if (!suppliedVsix) await run(join(root, "node_modules/.bin/vsce"), ["package", "--no-yarn", "--out", packagedVsix], extension);
-  const { stdout: vsixFiles } = await execFile("unzip", ["-Z1", packagedVsix]);
-  for (const file of [
-    "readme.md",
-    extensionManifest.main.replace(/^\.\//u, ""),
-    "node_modules/@sqlbraid/language-server/dist/cli.js",
-    "node_modules/@sqlbraid/cli/dist/index.js",
-  ]) {
-    if (!vsixFiles.split("\n").includes(`extension/${file}`)) throw new Error(`VSIX omits ${file}.`);
-  }
-  const licensePath = vsixFiles.split("\n").find((file) => /^extension\/license(?:\.(?:txt|md))?$/iu.test(file));
-  assert.ok(licensePath, "VSIX must include its license document.");
-  const { stdout: vsixLicense } = await execFile("unzip", ["-p", packagedVsix, licensePath]);
-  assert.equal(vsixLicense, await readFile(join(root, "LICENSE"), "utf8"), "VSIX must ship the same Apache-2.0 license as npm.");
-  const readVsixManifest = async (file) => JSON.parse((await execFile("unzip", ["-p", packagedVsix, file])).stdout);
-  const packagedExtensionManifest = await readVsixManifest("extension/package.json");
-  assert.equal(packagedExtensionManifest.name, extensionManifest.name, "VSIX extension name must match source.");
-  assert.equal(packagedExtensionManifest.publisher, extensionManifest.publisher, "VSIX publisher must match source.");
-  assert.equal(packagedExtensionManifest.version, extensionManifest.version, "VSIX version must match source.");
-  for (const [key, packageName] of [["cli", "@sqlbraid/cli"], ["languageServer", "@sqlbraid/language-server"]]) {
-    const bundledManifest = await readVsixManifest(`extension/node_modules/${packageName}/package.json`);
-    assert.equal(bundledManifest.name, packageName, `VSIX must bundle ${packageName}.`);
-    assert.equal(bundledManifest.version, bundledVersions[key], `VSIX must bundle the validated ${packageName} version.`);
-  }
-  await mkdir(dirname(vsixOutput), { recursive: true });
-  if (suppliedVsix) {
-    if (vsixOutput !== suppliedVsix) throw new Error("Supplied VSIX output must be validated in place without copying or repacking.");
-  } else {
-    await copyFile(packagedVsix, vsixOutput);
-  }
-  const previousVsix = process.env.SQLBRAID_VSIX_PATH;
-  process.env.SQLBRAID_VSIX_PATH = vsixOutput;
-  try {
-    await run("pnpm", ["--dir", extensionRoot, "run", "compile-tests"]);
-    await run(process.execPath, [join(root, "scripts/test-vscode.mjs")]);
-  } finally {
-    if (previousVsix === undefined) delete process.env.SQLBRAID_VSIX_PATH;
-    else process.env.SQLBRAID_VSIX_PATH = previousVsix;
-  }
-  if (packInputDir) {
-    assert.equal(resolve(dirname(vsixOutput)), packInputDir, "Validated VSIX must be stored beside the release manifest.");
-    const extensionIdentity = {
-      file: basename(vsixOutput),
-      sha256: await sha256(vsixOutput),
-      integrity: await integrity(vsixOutput),
-      version: packagedExtensionManifest.version,
-      publisher: packagedExtensionManifest.publisher,
-      name: packagedExtensionManifest.name,
-      bundled: bundledVersions,
-    };
-    const releasePath = join(packInputDir, "release-manifest.json");
-    const release = JSON.parse(await readFile(releasePath, "utf8"));
-    if (suppliedVsix && (!release.extension
-      || release.extension.file !== extensionIdentity.file
-      || release.extension.sha256 !== extensionIdentity.sha256
-      || release.extension.integrity !== extensionIdentity.integrity
-      || release.extension.version !== extensionIdentity.version
-      || release.extension.publisher !== extensionIdentity.publisher
-      || release.extension.name !== extensionIdentity.name
-      || JSON.stringify(release.extension.bundled) !== JSON.stringify(extensionIdentity.bundled))) {
-      throw new Error("Supplied VSIX does not match the immutable release manifest identity.");
+
+  if (skipVsix) {
+    if (process.env.SQLBRAID_VSIX_INPUT || process.env.SQLBRAID_VSIX_OUTPUT || vsixPreRelease) {
+      throw new Error("VSIX input, output, and prerelease options are invalid when SQLBRAID_SKIP_VSIX=true.");
     }
-    release.extension = extensionIdentity;
-    await writeFile(releasePath, `${JSON.stringify(release, null, 2)}\n`);
-    const { stdout: commit } = await execFile("git", ["rev-parse", "HEAD"], { cwd: root });
-    await writeFile(join(packInputDir, "pack-check-success.json"), `${JSON.stringify({
-      version: expectedVersion,
-      commit: commit.trim(),
-      packages: await Promise.all(tarballs.map(async (tarball) => {
-        const { stdout } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
-        return { name: JSON.parse(stdout).name, sha256: await sha256(tarball) };
-      })),
-      extension: extensionIdentity,
-    }, null, 2)}\n`);
+    if (packInputDir) {
+      const { stdout: commit } = await execFile("git", ["rev-parse", "HEAD"], { cwd: root });
+      await writeFile(join(packInputDir, "pack-check-success.json"), `${JSON.stringify({
+        version: expectedVersion,
+        commit: commit.trim(),
+        packages: await Promise.all(tarballs.map(async (tarball) => {
+          const { stdout } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
+          return { name: JSON.parse(stdout).name, sha256: await sha256(tarball) };
+        })),
+      }, null, 2)}\n`);
+    }
+    console.info(`Validated ${tarballs.length} packed npm packages with ESM, types, subpaths, CLI, engine metadata, tooling consumers and leakage checks.`);
+  } else {
+    const extensionRoot = join(root, "extensions/vscode");
+    const extension = join(temp, "vscode");
+    const extensionManifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
+    const vsixOutput = resolve(process.env.SQLBRAID_VSIX_OUTPUT ?? join(root, "sqlbraid.vsix"));
+    const suppliedVsix = process.env.SQLBRAID_VSIX_INPUT ? resolve(process.env.SQLBRAID_VSIX_INPUT) : undefined;
+    if (suppliedVsix && !packInputDir) throw new Error("Supplied VSIX validation requires a supplied release artifact directory.");
+    if (suppliedVsix && resolve(dirname(suppliedVsix)) !== packInputDir) throw new Error("Supplied VSIX must be stored beside the supplied release manifest.");
+    const extensionDependencies = Object.fromEntries(Object.entries(extensionManifest.dependencies).map(([name, version]) => [name, version.replace(/^workspace:/u, "")]));
+    const bundledVersions = {};
+    for (const [key, packageName] of [["cli", "@sqlbraid/cli"], ["languageServer", "@sqlbraid/language-server"]]) {
+      const bundledManifest = JSON.parse(await readFile(join(packageRoot, packageName.slice("@sqlbraid/".length), "package.json"), "utf8"));
+      assert.equal(extensionDependencies[packageName], bundledManifest.version, `${packageName} dependency must match the bundled source version.`);
+      bundledVersions[key] = bundledManifest.version;
+    }
+    const bundledNames = new Set();
+    async function includeTooling(name) {
+      if (bundledNames.has(name)) return;
+      bundledNames.add(name);
+      const manifest = JSON.parse(await readFile(join(packageRoot, name.slice("@sqlbraid/".length), "package.json"), "utf8"));
+      for (const dependency of Object.keys(manifest.dependencies ?? {})) if (dependency.startsWith("@sqlbraid/")) await includeTooling(dependency);
+    }
+    for (const name of Object.keys(extensionDependencies)) if (name.startsWith("@sqlbraid/")) await includeTooling(name);
+    await mkdir(extension);
+    await cp(join(extensionRoot, "dist"), join(extension, "dist"), { recursive: true });
+    await copyFile(join(extensionRoot, "README.md"), join(extension, "README.md"));
+    await copyFile(join(root, "LICENSE"), join(extension, "LICENSE"));
+    await writeFile(join(extension, "package.json"), JSON.stringify({
+      ...extensionManifest,
+      devDependencies: {},
+      dependencies: { ...extensionDependencies, ...Object.fromEntries([...bundledNames].map((name) => [name, dependencies[name]])) },
+    }));
+    await run("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], extension);
+    await writeFile(join(extension, "package.json"), JSON.stringify({ ...extensionManifest, devDependencies: {}, dependencies: extensionDependencies }));
+    await rm(join(extension, "package-lock.json"), { force: true });
+    const packagedVsix = suppliedVsix ?? join(temp, "sqlbraid.vsix");
+    if (!suppliedVsix) {
+      const args = ["package", "--no-yarn"];
+      if (vsixPreRelease) args.push("--pre-release");
+      args.push("--out", packagedVsix);
+      await run(join(root, "node_modules/.bin/vsce"), args, extension);
+    }
+    const { stdout: vsixFiles } = await execFile("unzip", ["-Z1", packagedVsix]);
+    for (const file of [
+      "readme.md",
+      extensionManifest.main.replace(/^\.\//u, ""),
+      "node_modules/@sqlbraid/language-server/dist/cli.js",
+      "node_modules/@sqlbraid/cli/dist/index.js",
+    ]) {
+      if (!vsixFiles.split("\n").includes(`extension/${file}`)) throw new Error(`VSIX omits ${file}.`);
+    }
+    const licensePath = vsixFiles.split("\n").find((file) => /^extension\/license(?:\.(?:txt|md))?$/iu.test(file));
+    assert.ok(licensePath, "VSIX must include its license document.");
+    const { stdout: vsixLicense } = await execFile("unzip", ["-p", packagedVsix, licensePath]);
+    assert.equal(vsixLicense, await readFile(join(root, "LICENSE"), "utf8"), "VSIX must ship the same Apache-2.0 license as npm.");
+    const readVsixManifest = async (file) => JSON.parse((await execFile("unzip", ["-p", packagedVsix, file])).stdout);
+    const packagedExtensionManifest = await readVsixManifest("extension/package.json");
+    assert.equal(packagedExtensionManifest.name, extensionManifest.name, "VSIX extension name must match source.");
+    assert.equal(packagedExtensionManifest.publisher, extensionManifest.publisher, "VSIX publisher must match source.");
+    assert.equal(packagedExtensionManifest.version, extensionManifest.version, "VSIX version must match source.");
+    for (const [key, packageName] of [["cli", "@sqlbraid/cli"], ["languageServer", "@sqlbraid/language-server"]]) {
+      const bundledManifest = await readVsixManifest(`extension/node_modules/${packageName}/package.json`);
+      assert.equal(bundledManifest.name, packageName, `VSIX must bundle ${packageName}.`);
+      assert.equal(bundledManifest.version, bundledVersions[key], `VSIX must bundle the validated ${packageName} version.`);
+    }
+    await mkdir(dirname(vsixOutput), { recursive: true });
+    if (suppliedVsix) {
+      if (vsixOutput !== suppliedVsix) throw new Error("Supplied VSIX output must be validated in place without copying or repacking.");
+    } else {
+      await copyFile(packagedVsix, vsixOutput);
+    }
+    const previousVsix = process.env.SQLBRAID_VSIX_PATH;
+    process.env.SQLBRAID_VSIX_PATH = vsixOutput;
+    try {
+      await run("pnpm", ["--dir", extensionRoot, "run", "compile-tests"]);
+      await run(process.execPath, [join(root, "scripts/test-vscode.mjs")]);
+    } finally {
+      if (previousVsix === undefined) delete process.env.SQLBRAID_VSIX_PATH;
+      else process.env.SQLBRAID_VSIX_PATH = previousVsix;
+    }
+    if (packInputDir) {
+      assert.equal(resolve(dirname(vsixOutput)), packInputDir, "Validated VSIX must be stored beside the release manifest.");
+      const extensionIdentity = {
+        file: basename(vsixOutput),
+        sha256: await sha256(vsixOutput),
+        integrity: await integrity(vsixOutput),
+        version: packagedExtensionManifest.version,
+        publisher: packagedExtensionManifest.publisher,
+        name: packagedExtensionManifest.name,
+        bundled: bundledVersions,
+      };
+      const releasePath = join(packInputDir, "release-manifest.json");
+      const release = JSON.parse(await readFile(releasePath, "utf8"));
+      if (suppliedVsix && (!release.extension
+        || release.extension.file !== extensionIdentity.file
+        || release.extension.sha256 !== extensionIdentity.sha256
+        || release.extension.integrity !== extensionIdentity.integrity
+        || release.extension.version !== extensionIdentity.version
+        || release.extension.publisher !== extensionIdentity.publisher
+        || release.extension.name !== extensionIdentity.name
+        || JSON.stringify(release.extension.bundled) !== JSON.stringify(extensionIdentity.bundled))) {
+        throw new Error("Supplied VSIX does not match the immutable release manifest identity.");
+      }
+      release.extension = extensionIdentity;
+      await writeFile(releasePath, `${JSON.stringify(release, null, 2)}\n`);
+      const { stdout: commit } = await execFile("git", ["rev-parse", "HEAD"], { cwd: root });
+      await writeFile(join(packInputDir, "pack-check-success.json"), `${JSON.stringify({
+        version: expectedVersion,
+        commit: commit.trim(),
+        packages: await Promise.all(tarballs.map(async (tarball) => {
+          const { stdout } = await execFile("tar", ["-xOf", tarball, "package/package.json"]);
+          return { name: JSON.parse(stdout).name, sha256: await sha256(tarball) };
+        })),
+        extension: extensionIdentity,
+      }, null, 2)}\n`);
+    }
+    console.info(`PASS packaged VSIX includes README/LICENSE and passed the clean-profile host gate: ${vsixOutput}`);
+    console.info("PASS VSIX bundles the matching CLI and standard language server.");
+    console.info(`Validated ${tarballs.length} packed packages with ESM, types, subpaths, CLI, engine metadata, tooling/editor consumers and leakage checks.`);
   }
-  console.info(`PASS packaged VSIX includes README/LICENSE and passed the clean-profile host gate: ${vsixOutput}`);
-  console.info("PASS VSIX bundles the matching CLI and standard language server.");
-  console.info(`Validated ${tarballs.length} packed packages with ESM, types, subpaths, CLI, engine metadata, tooling/editor consumers and leakage checks.`);
 } finally {
   await Promise.all(packedContainers.map((container) => container.stop()));
   await rm(temp, { recursive: true, force: true });
