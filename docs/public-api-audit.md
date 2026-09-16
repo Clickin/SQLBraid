@@ -6,9 +6,10 @@ not a publication or support claim. The last exact-SHA verification was revision
 [34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046), Docs
 [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),
 Release [34856063326](https://github.com/Clickin/SQLBraid/actions/runs/34856063326)).
-The current audited remediation baseline is `f01f1b0`; the final integrated SHA
-still requires the same-SHA Runtime/Documentation gates before release labels
-change.
+The current audited remediation baseline is `06e9ce9`. Packed consumer evidence
+at this revision includes the isolated pnpm Vite facade gate and the
+no-SDK OpenTelemetry API gate; the final integrated SHA still requires the
+same-SHA Runtime/Documentation gates before release labels change.
 
 ## Classification
 
