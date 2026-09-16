@@ -214,9 +214,25 @@ reserved, not an implemented API.
 
 ## 8. Physical connection and transaction invariants
 
-### 8.1 QueryExecutor means one physical execution resource
+### 8.1 QueryExecutor is one serialized execution ownership domain
 
-A direct `QueryExecutor` must not secretly multiplex unrelated physical connections across `begin/query/commit`.
+For ordinary direct drivers a `QueryExecutor` owns one physical execution
+resource. A higher-level client may be a direct executor only when its advertised
+capabilities remain truthful. Do not infer `session.pinned` or transaction
+continuity merely because calls share one JavaScript object.
+
+If ordinary client operations may use unrelated logical connections,
+`session.pinned` is unsupported. If `transaction` is guaranteed, the adapter must
+preserve one continuous transaction from `begin` through every scoped query and
+savepoint to `commit`/`rollback`; switching to one dedicated transaction handle
+during `begin()` is valid, routing transaction statements across unrelated
+connections is not.
+
+Physical driver methods may be synchronous or asynchronous. The public
+`Database` remains async; `QueryExecutor` materialized/control methods use the
+`Awaitable<T>` contract defined in PLAN §5. Keep `stream()` as `AsyncIterable`
+and bridge synchronous native iterators inside the adapter rather than widening
+the stream SPI.
 
 ### 8.2 Pools use a provider/lease boundary
 
@@ -232,7 +248,7 @@ root operation
 
 Do not adapt a pool by exposing pool-level `begin/query/commit` as a `QueryExecutor` if those calls can use different physical connections.
 
-### 8.3 Transaction closure pins one connection
+### 8.3 Transaction closure pins transaction continuity
 
 The canonical transaction boundary is the `db.tx(...)` closure; `transaction(...)` has been removed:
 
@@ -245,18 +261,19 @@ await db.tx(async (tx) => {
 
 Requirements:
 
-- acquire one lease;
-- begin on that lease;
-- every `tx.*` call uses that lease;
-- commit/rollback on the same lease;
-- release only after transaction completion;
-- nested transactions use savepoints on the same lease;
+- acquire or establish one transaction resource;
+- begin on that resource, or obtain the driver's dedicated interactive transaction handle;
+- every `tx.*` call uses that same transaction continuity domain;
+- commit/rollback on the same transaction resource;
+- release/close only after transaction completion;
+- nested transactions use savepoints on the same transaction resource;
 - outer/root `db` calls from the same transaction async context must fail rather than silently escape onto another connection.
 
-Outside `db.tx`, each root operation may use any connection supplied by the provider.
+Outside `db.tx`, each root operation may use any connection supplied by the provider or higher-level client contract.
 
-`db.session(fn)` pins one lease without starting a transaction. Nested sessions,
-`session.tx()` and `tx.session()` reuse the current lease. Scoped database and
+`db.session(fn)` requires `session.pinned` and pins one lease/session without
+starting a transaction. Nested sessions, `session.tx()` and `tx.session()` reuse
+the current pinned resource where the capability exists. Scoped database and
 prepared handles expire with their callback; started streams close before lease
 release. `db.prepare()` accepts row, command or call factories with zero inputs
 or one required input. Preserve once-only rendering and logical shape checks.
@@ -358,24 +375,41 @@ A dialect is about SQL/database behavior, not the JavaScript driver or runtime.
 
 ```text
 dialect: PostgreSQL / MySQL / SQLite / Oracle / SQL Server
-driver:  pg / mysql2 / node:sqlite / node-oracledb / Tedious / future alternatives
-runtime: Node / Bun / Deno
+driver:  pg / mysql2 / node:sqlite / better-sqlite3 / libSQL / node-oracledb / Tedious / future alternatives
+runtime: Node / Bun / Deno / browser / Worker
 ```
 
-Do not duplicate PostgreSQL dialect logic merely because `pg`, postgres.js or Bun.SQL differ.
+Do not duplicate PostgreSQL dialect logic merely because `pg`, postgres.js or Bun.SQL differ. Do not duplicate SQLite dialect/type-policy logic for `node:sqlite`, better-sqlite3, libSQL, WASM or D1.
 
 Runtime support labels:
 
-- Official — SQLBraid CI covers runtime + driver;
-- Compatible — no exact certified target, even if broader host or local-binding checks pass;
+- Official — SQLBraid CI covers the exact runtime + driver tuple;
+- Compatible — no exact certified capability target, even if broader host or compatibility checks pass;
 - Custom — user integration through executor/provider SPI.
 - Unsupported — a required capability is absent or SQLBraid's checks fail.
 
-PV7's pinned CI gates establish Official support on Node 22.18.0, Bun 1.3.14
-and Deno 2.9.3 for core/template/runtime and pg/mysql2. Node/Deno node:sqlite
-passes; Bun 1.3.14 lacks that module. Node 24.21.0 remains Compatible with
-full-suite/finance CI evidence but no separate certified target. README links
-the same-revision CI evidence.
+Existing pinned certification evidence remains exact to the recorded tuple; do
+not infer a package minimum Node version from one Official target. Conversely,
+a low Node packed-consumer compatibility pass does not promote a database/driver
+capability tuple to Official. `support/targets/` remains capability certification
+evidence; runtime/driver install compatibility uses a separate machine-readable
+matrix and exact CI cells.
+
+Separate Node policy into contributor/build Node, minimum compatible Node,
+recommended supported-LTS Node and driver-specific requirements. The repository
+toolchain may remain on a modern Node release while published runtime tarballs
+are tested on older Node versions. A driver that raises its own minimum Node must
+not raise unrelated `@sqlbraid/*` package floors. The current floor investigation
+targets Node 16.20 as a candidate and must adopt only the oldest version proven by
+the packed consumer gate.
+
+Compatibility testing must build/pack on the contributor runtime, then install
+the resulting tarballs under the target Node with exact driver versions and
+small plain-JavaScript smoke/integration programs. Do not require old Node
+versions to run pnpm, tsdown, TypeScript or Vitest. Recommended runtimes are the
+currently supported LTS releases; EOL runtimes may remain compatible without
+being recommended.
+
 Keep Bun/Deno support scoped to exact tested versions, not inferred floors.
 Preserve the runtime source/packed audit. Template byte counting is browser-safe;
 runtime uses conditional internal async-context backends, not a browser ALS
@@ -491,7 +525,11 @@ TanStack Start database drivers and execution stay server-only. Browser SQLite
 uses the separate WASM adapter, not Node-driver shims. PV16 adds MariaDB as the
 eighteenth publishable package and the SQLite WASM/D1 subpaths.
 
-Use Vitest for fast tests, Testcontainers for PostgreSQL/MySQL and native `node:sqlite` for SQLite.
+Use Vitest for fast tests, Testcontainers for PostgreSQL/MySQL and real native
+SQLite drivers for their adapter suites. `node:sqlite`, better-sqlite3, libSQL,
+SQLite WASM and D1 must share behavioral conformance where their native
+capabilities overlap, without pretending unsupported streaming/session features
+exist.
 
 Retain packed-consumer validation (`publint`, Are The Types Wrong, ESM/type resolution, executables, engine metadata, no monorepo path leakage).
 
@@ -510,13 +548,25 @@ Retain the PV6 regression gates for:
 - SQL/bind visibility and no built-in logging;
 - transaction lifecycle events.
 
+Sync-aware executor regressions must prove plain-value success, synchronous
+throw, Promise success/rejection, bulk and transaction-control equivalence.
+Existing async adapters must compile unchanged. `QueryExecutor.stream()` remains
+AsyncIterable and must retain early return, iterator cleanup and cleanup-error
+aggregation semantics.
+
+Compatibility CI must exercise the actual packed package artifacts with exact
+Node and driver versions. Old-runtime lanes use plain JavaScript consumer tests,
+not the repository test runner. Installation, import, a real query where the
+driver is available, result fidelity and transaction semantics are part of the
+gate. Floating dependency versions are not evidence.
+
 PV7 must use actual Bun/Deno smoke/CI before marking combinations official.
 Run `pnpm run test:runtime` for packed runtime/driver changes (Docker, Bun and
 Deno required, or dedicated test DB URLs). Observer taxonomy uses `cardinality`
 separately from `result-kind`; public elapsed fields are `durationMs`.
 
 PV14 regressions must cover the `segments`/`parameters` invariant, one-render
-prepared execution, transport-neutral shape identity, all five adapter
+prepared execution, transport-neutral shape identity, all adapter
 materializers, pre-acquire `materialize` failures, provider/lease binding
 identity, immutable observer execution plans, direct segment-based
 `literalizedSql()` reconstruction with redaction/truncation, large SQL, and the
@@ -544,7 +594,7 @@ Report unavailable DB/runtime infrastructure as not run, never passed.
 
 ## 14. Repository discipline
 
-- current package floor is Node `>=22.18.0` until PV7 intentionally changes support metadata;
+- contributor/build tooling may keep a modern Node floor; published runtime package floors are evidence-based compatibility claims and must not be raised merely because one driver or CI tool requires a newer Node;
 - ESM is default;
 - package exports stay narrow;
 - do not bundle TypeScript or DB drivers accidentally;
