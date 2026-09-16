@@ -74,6 +74,7 @@ export default defineConfig([
     sqlite: "src/sqlite.ts",
     oracle: "src/oracle.ts",
     mssql: "src/mssql.ts",
+    compiled: "src/compiled.ts",
   }),
   packageBuild("packages/mysql", { index: "src/index.ts", mysql2: "src/mysql2.ts", inspector: "src/inspector.ts" }),
   packageBuild("packages/mariadb", { index: "src/index.ts", mariadb: "src/mariadb.ts", inspector: "src/inspector.ts" }),

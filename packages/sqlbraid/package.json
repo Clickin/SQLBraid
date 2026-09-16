@@ -85,11 +85,16 @@
     "./mssql": {
       "types": "./dist/mssql.d.ts",
       "import": "./dist/mssql.js"
+    },
+    "./compiled": {
+      "types": "./dist/compiled.d.ts",
+      "import": "./dist/compiled.js"
     }
   },
   "dependencies": {
     "@sqlbraid/bun-sql": "workspace:*",
     "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/template": "workspace:*",
     "@sqlbraid/mariadb": "workspace:*",
     "@sqlbraid/mssql": "workspace:*",
     "@sqlbraid/mysql": "workspace:*",
