@@ -1,6 +1,6 @@
 {
   "name": "sqlbraid",
-  "version": "0.1.0-rc.2",
+  "version": "1.0.0-rc.1",
   "description": "SQLBraid's canonical SQL-first runtime package",
   "license": "Apache-2.0",
   "repository": {

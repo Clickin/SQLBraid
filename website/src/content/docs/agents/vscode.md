@@ -12,7 +12,9 @@ The extension contributes:
 - **Check Generated Models**;
 - **Reload Project**.
 
-No semantic engine lives in the extension. The VSIX contains matching `0.1.0` server/CLI dependencies with version checks and does not silently select a global or workspace server.
+No semantic engine lives in the extension. The VSIX contains matching
+`1.0.0-rc.1` server/CLI dependencies with version checks and does not silently
+select a global or workspace server.
 
 For a clean test profile, install the packaged VSIX, open a project that imports one of the SQLBraid tags, and confirm TypeScript/TSX language support still comes from the built-in TypeScript extension. If the project has metadata/codegen config, run Generate Models and then Check Generated Models from the command palette.
 

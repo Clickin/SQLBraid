@@ -1,4 +1,4 @@
-# SQLBraid 0.1.0 release readiness
+# SQLBraid 1.0.0-rc.1 release readiness
 
 This file separates repository evidence from maintainer actions outside the
 repository. It contains no credentials or registry tokens.
@@ -60,8 +60,10 @@ registry digest together; do not add blanket opt-outs for ordinary changes.
 
 The docs gate must also build the bilingual site and check internal links and
 anchors. The release gate must inspect packed package contents, exports,
-dependencies, and hashes. A successful validation does not deploy Pages, publish
-npm packages, mutate tags/dist-tags, or authorize a release.
+dependencies, and hashes. A release validation job does not itself publish npm
+packages, mutate tags/dist-tags, or authorize a release. The separate
+Documentation workflow deploys Pages on `main` and `v*` pushes; its manual
+dispatch defaults to validation-only and requires `deploy=true` for deployment.
 
 ## Candidate identity is not publication authorization
 
@@ -77,10 +79,11 @@ The normal Release workflow choices are:
 The one-time RC0 bootstrap is complete and is not a normal or repeatable mode.
 The former direct `publish` mode is removed: direct live publication is
 disabled. A `v*` push runs Release certification, Runtime portability, and
-Documentation validation only. It cannot publish packages, approve staged
-packages, change registry dist-tags, create a GitHub Release, deploy Pages, or
-publish to VS Code Marketplace. Branch pushes and pull requests are not
-publication authorization either.
+Documentation validation, while the separate Documentation workflow also
+deploys Pages for that tag. It cannot publish packages, approve staged
+packages, change registry dist-tags, or create a GitHub Release. Branch pushes
+and pull requests are not npm, GitHub Release, or Marketplace publication
+authorization either.
 
 The `stage` mutation requires `workflow_dispatch` from the exact version tag,
 tag-target/checkout identity, synchronized first-party versions, a clean tree,
@@ -269,15 +272,15 @@ followed by human `pnpm stage approve` commands and verification. The
 `verify-published` helper reports manual stable-`latest` promotion commands; it
 does not execute them.
 
-## Maintainer sequence: RC1 and later releases
+## Maintainer sequence: 1.0.0-rc.1 and later releases
 
 The following are maintainer actions, **not** actions performed by certification:
 
-1. RC0 bootstrap is already complete. Do not create a token, rerun a bootstrap,
-   or treat RC0's historical evidence as evidence for RC1.
+1. RC0 bootstrap is historical and complete. Do not create a token, rerun a
+   bootstrap, or treat older RC evidence as evidence for this candidate.
 2. For a corrected candidate, synchronize versions, prepare and freeze the
    exact source SHA, and create/push a **new** tag (for example
-   `v0.1.0-rc.2`). Never reuse or move `v0.1.0-rc.1` after a post-tag fix.
+   `v1.0.0-rc.1`). Never reuse or move a candidate tag after a post-tag fix.
    This tag-triggered run is **certification-only**.
    Wait for its Runtime, Documentation, and Release certification gates; this
    page makes no promise of a new green SHA or substitute evidence.
@@ -326,7 +329,7 @@ The following are maintainer actions, **not** actions performed by certification
    integrity, tags, public provenance metadata, and `latest`. It proves current
    public state, not approval history: after human reconciliation it can verify
    all public packages using an earlier partial report as the immutable baseline.
-   It never approves anything. For RC1, `next` must point to the approved packages
+   It never approves anything. For this RC, `next` must point to the approved packages
    and `latest` must remain unchanged.
 6. For a stable version, stage under `release-<version>`. After every stage is
    approved and verification passes, execute the helper's reported manual
@@ -341,8 +344,9 @@ The following are maintainer actions, **not** actions performed by certification
    VSIX, and staged report. This summary retains the source commit, artifact
    hashes, support-evidence file hashes/target IDs, stage IDs, requested tags,
    and current/prior run identities after 14-day Actions artifacts expire.
-   Dispatch Pages with `deploy=true` only if deployment is intended. After all
-   npm approvals and public verification succeed, finalize and publish the
+   Pages deploy automatically on the documented `main`/tag push path; use
+   manual `deploy=true` only when intentionally dispatching the Documentation
+   workflow. After all npm approvals and public verification succeed, finalize and publish the
    GitHub Release manually as appropriate. Do not infer Marketplace
    authorization.
 

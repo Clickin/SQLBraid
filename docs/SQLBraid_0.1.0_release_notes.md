@@ -1,9 +1,9 @@
-# SQLBraid 0.1.0 — release notes
+# SQLBraid 1.0.0-rc.1 — release notes
 
 Write SQL. Keep TypeScript. Skip the query-builder translation layer.
 
-These notes describe the pre-release surface; they do not authorize npm,
-GitHub, VS Code Marketplace, or Pages publication. Consult the
+These notes describe the 1.0 release candidate; they do not by themselves
+authorize npm, GitHub, VS Code Marketplace, or Pages publication. Consult the
 [versioned support records](../support/targets/) for each exact tuple's
 certified implementation revision and workflow evidence. Changed revisions
 require fresh exact-final Runtime, Documentation, and Release gates.
@@ -45,11 +45,11 @@ require fresh exact-final Runtime, Documentation, and Release gates.
 
 - Scoped package READMEs provide a short introduction, installation command,
   and official documentation link; `sqlbraid` retains detailed usage examples.
-- Main-branch and version-tag pushes validate documentation without deploying.
-  Explicitly authorized manual runs can deploy `/latest/` and immutable
-  `/v/<version>/` documentation. Missing tag archives are built from their
-  tagged sources, and the version selector preserves the current locale/page
-  when that page exists.
+- Main-branch and version-tag pushes build and deploy documentation through the
+  Pages workflow. Manual dispatch can validate without deployment unless
+  `deploy=true` is selected. Missing tag archives are built from their tagged
+  sources, and the version selector preserves the current locale/page when that
+  page exists.
 - The browser playground accepts editable SQL against a seeded, disposable
   SQLite WASM database. It exposes the table schema, actual query results and
   errors, and database reset. Results are capped at 1,000 displayed rows;
@@ -107,7 +107,7 @@ automatic retry/routing, universal prepared cache, or built-in audit store.
 DML `RETURNING`/`OUTPUT` remains authored SQL and materialized unless the
 selected adapter's evidence says otherwise. Metadata absence is not invalid SQL.
 
-## Evidence and release discipline
+## 1.0 RC evidence and release discipline
 
 Support labels belong to exact executable evidence for a database, driver,
 profile, runtime, and capability tuple. Historical workflow success does not
@@ -122,5 +122,8 @@ bundled CLI and language-server versions. `release-evidence.json` is the
 compact durable summary for the GitHub Release: it retains the source commit,
 candidate hashes, support-evidence identities, staged package IDs, requested
 tags, and fresh/reconciled workflow identity after Actions artifacts expire.
-An RC GitHub Release is marked prerelease and uses these notes as its body;
-stable publication remains a separate maintainer action.
+This RC uses the `next` dist-tag and must leave `latest` unchanged. Staging is
+not publication: human dependency-ordered approval is required after OIDC
+staging, followed by exact integrity, provenance, and tag verification. An RC
+GitHub Release is marked prerelease and uses these notes as its body; stable
+publication remains a separate maintainer action.

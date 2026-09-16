@@ -1,9 +1,9 @@
 ---
-title: 0.1.0 release notes
-description: The pre-release SQLBraid surface and its evidence boundary.
+title: 1.0.0-rc.1 release notes
+description: The SQLBraid 1.0 release candidate surface and its evidence boundary.
 ---
 
-This is pre-release documentation. It does not authorize npm, GitHub, VS Code
+This is 1.0.0-rc.1 pre-release documentation. It does not authorize npm, GitHub, VS Code
 Marketplace, or Pages publication.
 
 The [runtime and driver support matrix](/SQLBraid/reference/support/) records
@@ -72,7 +72,7 @@ models or hydrate object graphs. DML `RETURNING`/`OUTPUT` is materialized unless
 the selected adapter's exact evidence says otherwise. Metadata is open-world
 positive evidence.
 
-A release requires one clean exact revision, executable tuple/capability
+A release candidate requires one clean exact revision, executable tuple/capability
 coverage, bilingual documentation freshness, package/export checks, and an
 immutable release dry-run. User acceptance and explicit release authorization
 are separate gates.

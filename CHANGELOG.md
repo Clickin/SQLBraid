@@ -6,6 +6,15 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 [release notes](docs/SQLBraid_0.1.0_release_notes.md), and
 [versioned support records](support/targets/).
 
+## 1.0.0-rc.1 (unreleased)
+
+- Finalized the 1.0 RC candidate on the exact release revision, retaining the
+  SQL-first API, explicit result contracts, capability-driven unsupported
+  behavior, and tuple-specific support evidence.
+- Release preparation remains immutable: validated package/VSIX bytes,
+  dependency-ordered npm staging, provenance, and durable evidence are
+  separate from human approval and publication.
+
 ## 0.1.0-rc.2 (unreleased)
 
 - RC2 hardening documents the compatibility discipline for the Application,
@@ -41,9 +50,10 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 - Release candidates include validated VSIX bytes and durable evidence.
   Explicit prior-run recovery restores candidate bytes instead of repacking;
   unknown stage outcomes require reconciliation rather than another upload.
-- Documentation pushes validate without publishing Pages; deployment requires
-  explicit manual opt-in. Private vulnerability reporting is available through
-  the repository's Security tab.
+- Documentation pushes on `main` and version tags build and deploy Pages;
+  manual Documentation dispatch defaults to validation-only and requires
+  `deploy=true` for deployment. Private vulnerability reporting is available
+  through the repository's Security tab.
 
 ## Earlier pre-release surface
 

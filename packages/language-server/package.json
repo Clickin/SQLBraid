@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/language-server",
-  "version": "0.1.0-rc.2",
+  "version": "1.0.0-rc.1",
   "description": "SQLBraid language server for SQL-aware TypeScript tooling",
   "license": "Apache-2.0",
   "repository": {

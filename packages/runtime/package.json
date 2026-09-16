@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/runtime",
-  "version": "0.1.0-rc.2",
+  "version": "1.0.0-rc.1",
   "description": "Execute typed SQLBraid queries with connection-safe transactions and result mapping",
   "license": "Apache-2.0",
   "repository": {
