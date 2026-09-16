@@ -25,7 +25,10 @@ for (const file of await readdir(source, { recursive: true })) {
   const route = file.replace(/\.mdx?$/u, "");
   const page = route === "index" || route.endsWith("/index") ? `${route}.html` : route === "404" ? "404.html" : `${route}/index.html`;
   assert.ok(pages.has(page), `Missing built documentation page: ${file}`);
-  const raw = `${route}.md`;
+  // docsLoader collapses nested index pages (for example ko/index.md) to the
+  // directory content ID, while the root index remains the "index" ID.
+  const rawRoute = route !== "index" && route.endsWith("/index") ? route.slice(0, -"/index".length) : route;
+  const raw = `${rawRoute}.md`;
   assert.ok(await stat(join(output, raw)).catch(() => undefined), `Missing raw Markdown documentation page: ${raw}`);
 }
 let checked = 0;
