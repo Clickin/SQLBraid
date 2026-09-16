@@ -109,7 +109,7 @@
       "source": "website/src/content/docs/getting-started/oracle.md",
       "translation": "website/src/content/docs/ko/getting-started/oracle.md",
       "translationOf": "website/src/content/docs/getting-started/oracle.md",
-      "sourceDigest": "7b8487b7681a873180df2c32b046a5481db54f6269a42fedfe5e7311f4b8c607"
+      "sourceDigest": "e6ff949e48fdb368a50509c5643115fabb29dd38a99653e8ff6ff3e817df91ce"
     },
     {
       "source": "website/src/content/docs/getting-started/postgres.md",
@@ -127,7 +127,7 @@
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "f152c979a67a08efce20fdc0e449db06dc61f80b2d1bbf0028dbe58a5e8d0bb3"
+      "sourceDigest": "d1e3bf57418c0a1d808032e5de1f1ef268a9207c77fde2a03e91289db28d4be6"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",
@@ -199,7 +199,7 @@
       "source": "website/src/content/docs/reference/support.mdx",
       "translation": "website/src/content/docs/ko/reference/support.mdx",
       "translationOf": "website/src/content/docs/reference/support.mdx",
-      "sourceDigest": "7047a5d34aa12f87b89ef0e3ab41cf5e0b7631d6421c694f3ef8f18a44bf81fd"
+      "sourceDigest": "a120f21bfa64885afd9177e5c8aa12605d682f7d57cfb69dfd7d64c72d5fd320"
     },
     {
       "source": "website/src/content/docs/reference/troubleshooting.md",
@@ -235,13 +235,13 @@
       "source": "website/src/content/docs/runtime/observers.md",
       "translation": "website/src/content/docs/ko/runtime/observers.md",
       "translationOf": "website/src/content/docs/runtime/observers.md",
-      "sourceDigest": "9ec0e2c04f8b8bbffe489fbeab849c73745b5408aac210bb1448d40954670320"
+      "sourceDigest": "959244d2f5e2661fb868984557d9e476c761065c2228a8b84297a55288245851"
     },
     {
       "source": "website/src/content/docs/runtime/opentelemetry.md",
       "translation": "website/src/content/docs/ko/runtime/opentelemetry.md",
       "translationOf": "website/src/content/docs/runtime/opentelemetry.md",
-      "sourceDigest": "0a84b42bb127bba496d03c5225dc2665844ee3926b1df280a0beff90831c34a8"
+      "sourceDigest": "95e203847086e811824c97863a9cd456cd01cf29c41ec0277f6a9d3f61e0af3a"
     },
     {
       "source": "website/src/content/docs/runtime/prepared.md",
