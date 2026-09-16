@@ -22,7 +22,7 @@ function item(entry: CollectionEntry<"docs">, base: string) {
 export const GET: APIRoute = async () => {
   const base = docsBasePath();
   const docs = (await getCollection("docs"))
-    .filter((entry) => !entry.id.startsWith("ko/"))
+    .filter((entry) => entry.id !== "ko" && !entry.id.startsWith("ko/"))
     .sort((left, right) => left.id.localeCompare(right.id));
   const byId = new Map(docs.map((entry) => [entry.id, entry]));
   const snapshot = base.includes("/v/") ? `release ${base.slice(base.lastIndexOf("/") + 1)}` : "latest documentation";
@@ -38,7 +38,7 @@ export const GET: APIRoute = async () => {
     "## Start here",
   ];
 
-  for (const id of ["index", "concepts/sql-tags", "concepts/safe-binds", "concepts/structural-fragments", "runtime/transactions", "agents/skill", "reference/support"]) {
+  for (const id of ["index", "concepts/sql-tags", "concepts/safe-binds", "concepts/structural-fragments", "runtime/transactions", "agents/skill"]) {
     const entry = byId.get(id);
     if (entry) lines.push(item(entry, base));
   }
