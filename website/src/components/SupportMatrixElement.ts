@@ -80,25 +80,29 @@ class SupportMatrixElement extends HTMLElement {
     this.search = this.querySelector<HTMLInputElement>("[data-search]")!;
     this.filters = Object.fromEntries([...this.querySelectorAll<HTMLSelectElement>("[data-filter]")].map((select) => [select.dataset.filter!, select])) as Record<FilterKey, HTMLSelectElement>;
     for (const key of filterKeys) {
+      if (key === "status") continue;
       const select = this.filters[key];
       const values = key === "capability"
         ? this.data.capabilities.map((capability) => capability.id)
-        : [...new Set(this.data.targets.map((target) => key === "status" ? target.status : key === "database" ? target.database.product : key === "driver" ? target.driver.id : key === "profile" ? target.driver.profile : target.runtime.id).filter((value): value is string => Boolean(value)))];
+        : [...new Set(this.data.targets.map((target) => key === "database" ? target.database.product : key === "driver" ? target.driver.id : key === "profile" ? target.driver.profile : target.runtime.id).filter((value): value is string => Boolean(value)))];
       for (const value of values.sort()) {
         const label = key === "capability"
           ? supportMatrixCapabilityLabel(this.data, value, this.locale)
-          : key === "status"
-            ? supportMatrixStatus(value, this.locale)
-            : value;
+          : value;
         select.add(new Option(label, value));
       }
     }
+    this.refreshStatusFilter();
     this.addEventListener("input", (event) => { if (event.target === this.search) this.rebuild(); });
     this.addEventListener("change", () => this.rebuild());
     this.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
       const selectedView = target.closest<HTMLButtonElement>("[data-view]")?.dataset.view;
-      if (views.includes(selectedView as SupportMatrixView)) { this.view = selectedView as SupportMatrixView; this.rebuild(); }
+      if (views.includes(selectedView as SupportMatrixView)) {
+        this.view = selectedView as SupportMatrixView;
+        this.refreshStatusFilter();
+        this.rebuild();
+      }
       if (target.closest("[data-reset]")) { this.search.value = ""; Object.values(this.filters).forEach((select) => { select.value = ""; }); this.rebuild(); }
       const link = target.closest<HTMLAnchorElement>("[data-target-link]");
       if (link) { event.preventDefault(); history.replaceState(null, "", link.hash); this.followHash(); }
@@ -122,6 +126,18 @@ class SupportMatrixElement extends HTMLElement {
     cancelAnimationFrame(this.frame);
   }
 
+  private refreshStatusFilter(): void {
+    const select = this.filters.status;
+    const selected = select.value;
+    const values = this.view === "capability"
+      ? [...new Set(this.data.targets.flatMap((target) => Object.values(target.capabilities).map((capability) => capability.status)))]
+      : [...new Set(this.data.targets.map((target) => target.status))];
+    const allowed = new Set(values);
+    while (select.options.length > 1) select.remove(1);
+    for (const value of values.sort()) select.add(new Option(supportMatrixStatus(value, this.locale), value));
+    select.value = allowed.has(selected) ? selected : "";
+  }
+
   private rebuild(): void {
     const f = this.filters;
     const search = this.search.value.trim().toLocaleLowerCase(this.locale);
@@ -129,11 +145,13 @@ class SupportMatrixElement extends HTMLElement {
       (!f.database.value || target.database.product === f.database.value)
       && (!f.driver.value || target.driver.id === f.driver.value)
       && (!f.runtime.value || target.runtime.id === f.runtime.value)
-      && (!f.status.value || target.status === f.status.value)
+      && (this.view === "capability" || !f.status.value || target.status === f.status.value)
       && (!f.profile.value || target.driver.profile === f.profile.value)
       && (!f.capability.value || Object.hasOwn(target.capabilities, f.capability.value)));
     this.rows = targets.flatMap((target): SupportMatrixRow[] => this.view === "capability"
-      ? Object.entries(target.capabilities).filter(([id]) => !f.capability.value || id === f.capability.value).map(([capabilityId, capability]) => ({ target, capabilityId, capability }))
+      ? Object.entries(target.capabilities)
+        .filter(([id, capability]) => (!f.capability.value || id === f.capability.value) && (!f.status.value || capability.status === f.status.value))
+        .map(([capabilityId, capability]) => ({ target, capabilityId, capability }))
       : [{ target }]).filter((row) => !search || JSON.stringify([row.target.id, row.target.database, row.target.driver, row.target.runtime, row.target.status, row.capabilityId ?? "", row.capability]).toLocaleLowerCase(this.locale).includes(search));
     const columns = supportMatrixColumns(this.view, this.locale);
     this.style.setProperty("--matrix-columns", String(columns.length));
@@ -206,6 +224,7 @@ class SupportMatrixElement extends HTMLElement {
       const index = views.indexOf(this.view);
       const next = event.key === "Home" ? 0 : event.key === "End" ? views.length - 1 : (index + (event.key === "ArrowRight" ? 1 : views.length - 1)) % views.length;
       this.view = views[next]!;
+      this.refreshStatusFilter();
       this.rebuild();
       this.querySelector<HTMLElement>(`[data-view="${this.view}"]`)?.focus();
       return;

@@ -199,6 +199,21 @@ async function supportMatrix(browser, previewUrl) {
         || profileRows.some((row) => !row.includes("mysql2-lossless-text"))) throw new Error("Support matrix profile filter lost a runtime tuple or leaked another profile.");
       measurements.push({ locale, view: "profile-filter", profile: "mysql2-lossless-text", rows: profileRows.length });
       await matrix.locator("[data-reset]").click();
+      await matrix.locator('[data-view="capability"]').click();
+      const capabilityStatusOptions = await matrix.locator('[data-filter="status"] option').evaluateAll((options) => options.map((option) => option.value));
+      if (!capabilityStatusOptions.includes("guarded") || !capabilityStatusOptions.includes("guaranteed")) throw new Error("Capability view status filter did not expose capability statuses.");
+      await matrix.locator('[data-filter="status"]').selectOption("guarded");
+      const expectedGuardedRows = await page.locator("[data-support-matrix]").evaluate((element) =>
+        JSON.parse(element.textContent).targets.reduce((count, target) => count + Object.values(target.capabilities).filter((capability) => capability.status === "guarded").length, 0));
+      const guardedResult = await matrix.evaluate((element) => ({
+        totalRows: Number(element.querySelector("[data-viewport]").getAttribute("aria-rowcount")) - 1,
+        renderedStatuses: [...element.querySelectorAll("[data-index] [data-status]")].map((status) => status.getAttribute("data-status")),
+      }));
+      if (guardedResult.totalRows !== expectedGuardedRows || guardedResult.renderedStatuses.length === 0
+        || guardedResult.renderedStatuses.some((status) => status !== "guarded")) throw new Error("Capability status filter leaked a non-guarded row or lost guarded capability rows.");
+      measurements.push({ locale, view: "capability-status-filter", status: "guarded", rows: guardedResult.totalRows });
+      await matrix.locator('[data-view="database"]').click();
+      if (await matrix.locator('[data-filter="status"]').inputValue() !== "") throw new Error("Switching from capability to database view retained an invalid capability status filter.");
       await page.setViewportSize({ width: 375, height: 812 });
       await matrix.scrollIntoViewIfNeeded();
       const mobile = await page.evaluate(() => ({ documentWidth: document.documentElement.scrollWidth, windowWidth: innerWidth }));
@@ -219,7 +234,7 @@ async function supportMatrix(browser, previewUrl) {
       await noScript.close();
     }
     await writeFile(resolve(directory, "measurements.json"), JSON.stringify(measurements, null, 2));
-    await writeFile(resolve(directory, "report.md"), "# Support matrix browser evidence\n\nEN/KO database, driver and capability views; bounded contiguous 56px rows; End navigation; search, database and profile filtering; 375px mobile layout; print and no-JavaScript fallback passed.\n");
+    await writeFile(resolve(directory, "report.md"), "# Support matrix browser evidence\n\nEN/KO database, driver and capability views; bounded contiguous 56px rows; Home/End navigation; search, database, profile and capability-status filtering; 375px mobile layout; print and no-JavaScript fallback passed.\n");
     return { directory, measurements };
   } finally {
     await page.close();
