@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2021",
+    "lib": ["ES2022"],
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "packages/core/src/**/*.ts",
+    "packages/template/src/**/*.ts",
+    "packages/runtime/src/**/*.ts",
+    "packages/operations/src/**/*.ts",
+    "packages/postgres/src/**/*.ts",
+    "packages/mysql/src/**/*.ts",
+    "packages/mariadb/src/**/*.ts",
+    "packages/sqlite/src/**/*.ts",
+    "packages/oracle/src/**/*.ts",
+    "packages/mssql/src/**/*.ts",
+    "packages/sqlbraid/src/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

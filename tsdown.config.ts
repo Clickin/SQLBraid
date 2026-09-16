@@ -17,7 +17,20 @@ const shared: UserConfig = {
 };
 
 function packageBuild(cwd: string, entry: Record<string, string>): UserConfig {
-  return { ...shared, cwd, entry, outDir: "dist" };
+  const floorPackages = new Set([
+    "packages/core",
+    "packages/template",
+    "packages/runtime",
+    "packages/operations",
+    "packages/postgres",
+    "packages/mysql",
+    "packages/mariadb",
+    "packages/sqlite",
+    "packages/oracle",
+    "packages/mssql",
+    "packages/sqlbraid",
+  ]);
+  return { ...shared, cwd, entry, outDir: "dist", tsconfig: floorPackages.has(cwd) ? "../../tsconfig.runtime-floor.json" : shared.tsconfig };
 }
 
 export default defineConfig([

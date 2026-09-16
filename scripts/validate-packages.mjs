@@ -9,6 +9,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { runtimePackages } from "./audit-runtime.mjs";
+import { validateRuntimeCompatibility } from "./validate-runtime-compatibility.mjs";
 import ts from "typescript";
 
 const execFile = promisify(execFileCallback);
@@ -20,6 +21,7 @@ const packageNames = (await readdir(packageRoot, { withFileTypes: true }))
   .sort();
 const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const expectedVersion = workspace.version;
+const runtimeCompatibility = await validateRuntimeCompatibility({ root });
 const MAX_TARBALL_BYTES = 5 * 1024 * 1024;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const temp = await mkdtemp(join(tmpdir(), "sqlbraid-pack-check-"));
@@ -179,7 +181,7 @@ try {
     }
     if (packageName === "bun-sql") {
       if (manifest.engines?.bun !== ">=1.3.14") throw new Error(`Unexpected Bun engine for ${manifest.name}: ${manifest.engines?.bun ?? "missing"}`);
-    } else if (manifest.engines?.node !== ">=22.18.0") {
+    } else if (manifest.engines?.node !== runtimeCompatibility.manifest.packageEngines[manifest.name]) {
       throw new Error(`Unexpected Node engine for ${manifest.name}: ${manifest.engines?.node ?? "missing"}`);
     }
     for (const validator of ["valibot", "zod", "arktype"]) {

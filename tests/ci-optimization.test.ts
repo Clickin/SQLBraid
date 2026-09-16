@@ -7,9 +7,21 @@ import { promisify } from "node:util";
 import { test } from "vitest";
 import { mergeReports, mergeVitestResults } from "../scripts/merge-vitest-results.mjs";
 import { planChanges, verifyPlan } from "../scripts/ci-plan.mjs";
+import { validateRuntimeCompatibility } from "../scripts/validate-runtime-compatibility.mjs";
 
 const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
+
+test("runtime compatibility manifest validates exact floors and release cells", async () => {
+  const result = await validateRuntimeCompatibility({ root });
+  assert.deepEqual(result.cells, [
+    "node-16-20-2-runtime",
+    "node-16-20-2-better-sqlite3-9-6-0",
+    "node-22-18-0-better-sqlite3-13-0-3",
+    "node-16-20-2-libsql-0-18-0",
+  ]);
+  assert.deepEqual(result.blockingCells, result.cells);
+});
 
 test("CI planner fails open for unknown changes and selects driver-local lanes", () => {
   const postgres = planChanges(["packages/postgres/src/pg.ts"], { eventName: "pull_request", baseKnown: true });
@@ -20,6 +32,16 @@ test("CI planner fails open for unknown changes and selects driver-local lanes",
   assert.equal(postgres.packages, true);
   assert.equal(postgres.node24, true);
   assert.equal(postgres.packed, true);
+  assert.equal(postgres.compatibility, true);
+  assert.deepEqual(postgres.compatibility_matrix.length, 4);
+  const sqlite = planChanges(["packages/sqlite/src/libsql.ts"], { eventName: "pull_request", baseKnown: true });
+  assert.equal(sqlite.compatibility, true);
+  assert.deepEqual(sqlite.compatibility_matrix.map(({ id }) => id), [
+    "node-16-20-2-runtime",
+    "node-16-20-2-better-sqlite3-9-6-0",
+    "node-22-18-0-better-sqlite3-13-0-3",
+    "node-16-20-2-libsql-0-18-0",
+  ]);
   assert.equal(planChanges(["new/unknown-file.txt"], { eventName: "pull_request", baseKnown: true }).all, false);
   assert.equal(planChanges(["new/unknown-file.txt"], { eventName: "push", baseKnown: true }).all, true);
   assert.equal(planChanges([], { eventName: "pull_request", baseKnown: false }).all, true);
@@ -34,6 +56,7 @@ test("CI planner fails open for unknown changes and selects driver-local lanes",
     packages: "skipped",
     node24: "skipped",
     packed: "skipped",
+    compatibility: "skipped",
     bun_sql: "skipped",
     evidence: "skipped",
   });

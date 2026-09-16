@@ -38,6 +38,8 @@ env:
 jobs:
   release-prep:
     name: Prepare immutable release candidate
+    outputs:
+      compatibility_matrix: ${{ steps.compatibility-matrix.outputs.matrix }}
     permissions:
       contents: read
       actions: read
@@ -112,6 +114,10 @@ jobs:
         run: |
           tar -czf "$RUNNER_TEMP/release-candidate.tar.gz" -C "$RUNNER_TEMP" sqlbraid-release-artifacts
           tar -czf "$RUNNER_TEMP/prepared-build.tar.gz" packages/*/dist extensions/vscode/dist
+      - name: Export exact compatibility matrix
+        id: compatibility-matrix
+        run: |
+          node -e 'const fs=require("node:fs"); const manifest=JSON.parse(fs.readFileSync("support/runtime-compatibility.json","utf8")); process.stdout.write(`matrix=${JSON.stringify(manifest.cells.map(({id,runtime,driver})=>({id,node:runtime.version,driver:driver?.package??null,driver_version:driver?.version??null})))}\n`);' >> "$GITHUB_OUTPUT"
       - name: Preserve release preparation
         uses: actions/upload-artifact@v7.0.1
         with:
@@ -514,6 +520,33 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  release-compatibility:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    name: Packed Node ${{ matrix.node }} compatibility (${{ matrix.id }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release-prep.outputs.compatibility_matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prepared
+      - name: Restore immutable candidate tarballs
+        run: tar -xzf "$RUNNER_TEMP/prepared/release-candidate.tar.gz" -C "$RUNNER_TEMP"
+      - name: Run packed consumer smoke
+        env:
+          SQLBRAID_COMPAT_CELL: ${{ matrix.id }}
+          SQLBRAID_COMPAT_PACKAGE_DIR: ${{ runner.temp }}/sqlbraid-release-artifacts
+        run: node scripts/runtime-compatibility-smoke.mjs
+
   release-bun-sql:
     needs: release-prep
     name: Bun.SQL release gate
@@ -638,7 +671,7 @@ jobs:
 
   release-final:
     if: github.event_name != 'schedule'
-    needs: [release-prep, release-common, release-db, release-node24, release-browser, release-vscode, release-pack, release-docs, release-examples, release-benchmark-smoke, release-runtime, release-bun-sql, release-support-evidence, release-target-evidence]
+    needs: [release-prep, release-common, release-db, release-node24, release-browser, release-vscode, release-pack, release-docs, release-examples, release-benchmark-smoke, release-runtime, release-compatibility, release-bun-sql, release-support-evidence, release-target-evidence]
     name: Final release certification
     permissions:
       contents: read

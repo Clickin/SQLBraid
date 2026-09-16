@@ -16,7 +16,7 @@
   "type": "module",
   "files": ["dist"],
   "publishConfig": { "access": "public" },
-  "engines": { "node": ">=22.18.0" },
+  "engines": { "node": ">=16.20.2" },
   "dependencies": {
     "@sqlbraid/core": "workspace:*"
   },

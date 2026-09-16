@@ -37,6 +37,8 @@ jobs:
       packages: ${{ steps.plan.outputs.packages }}
       node24: ${{ steps.plan.outputs.node24 }}
       packed: ${{ steps.plan.outputs.packed }}
+      compatibility: ${{ steps.plan.outputs.compatibility }}
+      compatibility_matrix: ${{ steps.plan.outputs.compatibility_matrix }}
       bun_sql: ${{ steps.plan.outputs.bun_sql }}
       evidence: ${{ steps.plan.outputs.evidence }}
       evidence_shards: ${{ steps.plan.outputs.evidence_shards }}
@@ -79,6 +81,19 @@ jobs:
         with:
           name: prepared-package-dist
           path: ${{ runner.temp }}/package-dist.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+      - name: Pack compatibility package artifacts
+        run: |
+          mkdir -p "$RUNNER_TEMP/runtime-compatibility-packages"
+          for package in packages/*; do
+            pnpm --dir "$package" pack --pack-destination "$RUNNER_TEMP/runtime-compatibility-packages"
+          done
+      - name: Preserve compatibility package artifacts
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: prepared-runtime-compatibility-packages
+          path: ${{ runner.temp }}/runtime-compatibility-packages/*.tgz
           if-no-files-found: error
           retention-days: 1
 
@@ -279,6 +294,31 @@ jobs:
       - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
       - run: pnpm run test:compat:node24
 
+  compatibility:
+    name: Packed Node ${{ matrix.node }} compatibility (${{ matrix.id }})
+    needs: [plan, prepare]
+    if: needs.plan.outputs.compatibility == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.compatibility_matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: prepared-runtime-compatibility-packages
+          path: ${{ runner.temp }}/runtime-compatibility-packages
+      - name: Run packed consumer smoke
+        env:
+          SQLBRAID_COMPAT_CELL: ${{ matrix.id }}
+          SQLBRAID_COMPAT_PACKAGE_DIR: ${{ runner.temp }}/runtime-compatibility-packages
+        run: node scripts/runtime-compatibility-smoke.mjs
+
   packed:
     name: Packed ${{ matrix.runtime }} runtime and drivers
     needs: [plan, prepare]
@@ -449,7 +489,7 @@ jobs:
 
   ci-required:
     name: CI required
-    needs: [plan, prepare, common, db, web, vscode, packages, node24, packed, bun_sql, evidence]
+    needs: [plan, prepare, common, db, web, vscode, packages, node24, packed, compatibility, bun_sql, evidence]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -458,5 +498,5 @@ jobs:
         env:
           CI_PLAN: ${{ needs.plan.outputs.plan }}
           CI_RESULTS: >-
-            {"plan":"${{ needs.plan.result }}","prepare":"${{ needs.prepare.result }}","common":"${{ needs.common.result }}","db":"${{ needs.db.result }}","web":"${{ needs.web.result }}","vscode":"${{ needs.vscode.result }}","packages":"${{ needs.packages.result }}","node24":"${{ needs.node24.result }}","packed":"${{ needs.packed.result }}","bun_sql":"${{ needs.bun_sql.result }}","evidence":"${{ needs.evidence.result }}"}
+            {"plan":"${{ needs.plan.result }}","prepare":"${{ needs.prepare.result }}","common":"${{ needs.common.result }}","db":"${{ needs.db.result }}","web":"${{ needs.web.result }}","vscode":"${{ needs.vscode.result }}","packages":"${{ needs.packages.result }}","node24":"${{ needs.node24.result }}","packed":"${{ needs.packed.result }}","compatibility":"${{ needs.compatibility.result }}","bun_sql":"${{ needs.bun_sql.result }}","evidence":"${{ needs.evidence.result }}"}
         run: node scripts/ci-plan.mjs --verify "$CI_PLAN" --results "$CI_RESULTS"

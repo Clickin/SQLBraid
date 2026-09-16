@@ -6,7 +6,7 @@ import { allPlan, planChanges } from "../scripts/ci-plan.mjs";
 import { releasePrereleaseArg } from "../scripts/release.mjs";
 
 interface Step { name?: string; if?: string; run?: string; uses?: string; env?: Record<string, string>; with?: Record<string, unknown> }
-interface Job { name?: string; if?: string; needs?: string | string[]; permissions?: Record<string, string>; env?: Record<string, string>; concurrency?: Record<string, unknown>; steps: Step[] }
+interface Job { name?: string; if?: string; needs?: string | string[]; permissions?: Record<string, string>; env?: Record<string, string>; outputs?: Record<string, unknown>; concurrency?: Record<string, unknown>; steps: Step[] }
 interface Workflow {
   on: Record<string, { tags?: string[]; paths?: string[]; inputs?: Record<string, { default?: unknown; options?: string[]; description?: string; type?: string }> } | null>;
   permissions: Record<string, string>;
@@ -91,13 +91,26 @@ test("explicit staging reaches only the staging job and a successful stage autho
 
 test("full certification and mutation prerequisites include every release lane and pnpm stage dry-run", () => {
   const lanes = dependencies(release.jobs["release-final"]);
-  for (const name of ["release-prep", "release-common", "release-db", "release-node24", "release-browser", "release-vscode", "release-pack", "release-docs", "release-examples", "release-benchmark-smoke", "release-runtime", "release-bun-sql", "release-support-evidence", "release-target-evidence"]) assert.ok(lanes.includes(name), `missing ${name}`);
+  for (const name of ["release-prep", "release-common", "release-db", "release-node24", "release-browser", "release-vscode", "release-pack", "release-docs", "release-examples", "release-benchmark-smoke", "release-runtime", "release-compatibility", "release-bun-sql", "release-support-evidence", "release-target-evidence"]) assert.ok(lanes.includes(name), `missing ${name}`);
   const dryRun = release.jobs["release-final"].steps.find((step) => step.run?.includes("--mode stage-dry-run"));
   assert.ok(dryRun);
   for (const mode of ["certify", "stage"]) assert.equal(graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0").stepRuns(dryRun), true);
   assert.equal(graph(release, "push", "certify", "refs/tags/v0.1.0-rc.0").stepRuns(dryRun), true);
   assert.equal(graph(release, "workflow_dispatch", "pack-only").stepRuns(dryRun), false);
   assert.ok(release.jobs["release-final"].steps.some((step) => step.run?.includes("--mode preflight")));
+});
+
+test("runtime workflows execute every exact packed compatibility cell", () => {
+  const runtimeCompatibility = runtime.jobs.compatibility;
+  assert.ok(runtimeCompatibility);
+  assert.deepEqual(runtimeCompatibility.needs, ["plan", "prepare"]);
+  assert.match(runtimeCompatibility.if ?? "", /needs\.plan\.outputs\.compatibility/u);
+  assert.equal(runtimeCompatibility.steps.find((step) => step.name === "Run packed consumer smoke")?.run, "node scripts/runtime-compatibility-smoke.mjs");
+  const releaseCompatibility = release.jobs["release-compatibility"];
+  assert.ok(releaseCompatibility);
+  assert.equal(releaseCompatibility.needs, "release-prep");
+  assert.match(releaseCompatibility.steps.find((step) => step.name === "Run packed consumer smoke")?.run ?? "", /runtime-compatibility-smoke\.mjs/u);
+  assert.match(String(release.jobs["release-prep"].outputs?.compatibility_matrix), /compatibility-matrix/u);
 });
 
 test("job capabilities isolate OIDC and release writes", () => {
