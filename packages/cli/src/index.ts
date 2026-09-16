@@ -344,6 +344,7 @@ async function main(argv: readonly string[]): Promise<void> {
   const sourcePackages = resolve(sqlbraidRoot, "packages");
   const sourcePaths = existsSync(resolve(sourcePackages, "cli/src/index.ts")) ? {
     "@sqlbraid/*": [resolve(sourcePackages, "*/src/index.ts")],
+    "sqlbraid/*": [resolve(sourcePackages, "sqlbraid/src/*.ts")],
     "@sqlbraid/postgres/pg": [resolve(sourcePackages, "postgres/src/pg.ts")],
     "@sqlbraid/mysql/mysql2": [resolve(sourcePackages, "mysql/src/mysql2.ts")],
     "@sqlbraid/mariadb/mariadb": [resolve(sourcePackages, "mariadb/src/mariadb.ts")],
