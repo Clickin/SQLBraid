@@ -54,7 +54,7 @@ export function isQualifiedIdentity(value: string): boolean {
       continue;
     }
     if (character === ":") {
-      if (suffix) return false;
+      if (suffix || !hasContent) return false;
       suffix = true;
       hasContent = false;
       continue;
@@ -69,5 +69,5 @@ export function isQualifiedIdentity(value: string): boolean {
     }
     hasContent = true;
   }
-  return !escaped && hasContent && segmentCount >= 2;
+  return !escaped && (hasContent || suffix) && segmentCount >= 2;
 }

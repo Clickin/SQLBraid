@@ -163,6 +163,7 @@ test("PostgreSQL inspector preserves collision-free identities through tooling",
   const plainSchema = "braid_pv18";
   const escapedSchema = "braid_pv18\\:#.schema";
   const escapedName = "value\\:#.name";
+  const escapedTypeName = "type\\:#.name";
   try {
     await client.connect();
     await client.query(`DROP SCHEMA IF EXISTS "${schemaWithDot}" CASCADE`);
@@ -173,8 +174,8 @@ test("PostgreSQL inspector preserves collision-free identities through tooling",
     await client.query(`CREATE SCHEMA "${escapedSchema}"`);
     await client.query(`CREATE TABLE "${schemaWithDot}"."c" (id int4 NOT NULL)`);
     await client.query(`CREATE TABLE "${plainSchema}"."b.c" (id int4 NOT NULL)`);
-    await client.query(`CREATE TYPE "${escapedSchema}"."${escapedName}" AS ENUM ('ready')`);
-    await client.query(`CREATE TABLE "${escapedSchema}"."${escapedName}" (id int4 NOT NULL, status "${escapedSchema}"."${escapedName}")`);
+    await client.query(`CREATE TYPE "${escapedSchema}"."${escapedTypeName}" AS ENUM ('ready')`);
+    await client.query(`CREATE TABLE "${escapedSchema}"."${escapedName}" (id int4 NOT NULL, status "${escapedSchema}"."${escapedTypeName}")`);
     await client.query(`CREATE FUNCTION "${escapedSchema}"."${escapedName}"() RETURNS int LANGUAGE SQL AS 'SELECT 1'`);
     const snapshot = await createPostgresInspector(client).inspect();
     const left = qualifiedIdentity(schemaWithDot, "c");
@@ -184,7 +185,7 @@ test("PostgreSQL inspector preserves collision-free identities through tooling",
     assert.ok(snapshot.relations[left]);
     assert.ok(snapshot.relations[right]);
     assert.equal(snapshot.relations[escaped]?.name, escapedName);
-    assert.equal(snapshot.types[escaped]?.name, escapedName);
+    assert.equal(snapshot.types[qualifiedIdentity(escapedSchema, escapedTypeName)]?.name, escapedTypeName);
     const routine = snapshot.routines[escapedName]?.find((entry) => entry.schema === escapedSchema);
     assert.ok(routine);
     assert.equal(routine.name, escapedName);

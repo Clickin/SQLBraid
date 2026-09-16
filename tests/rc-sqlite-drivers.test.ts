@@ -245,7 +245,7 @@ test("SQLite WASM exact row reads expose ResultExactnessError when OO1 pointer m
     step() { return true; },
     get() { return 1; },
     getColumnName() { return "value"; },
-    reset() {},
+    reset() { return this; },
     finalize() {},
   };
   const executor = createSqliteWasmExecutor({
@@ -284,8 +284,9 @@ test("SQLite stream guards expose DatabaseResultKindError for non-row statements
       columnCount: 0,
       bind() { return this; },
       step() { return false; },
+      get() { return undefined; },
       getColumnName() { return ""; },
-      reset() {},
+      reset() { return this; },
       finalize() {},
     };
     const wasm = createSqliteWasmExecutor({ prepare() { return statement; }, exec() {} });

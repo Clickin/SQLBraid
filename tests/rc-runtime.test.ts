@@ -242,10 +242,6 @@ test("prepared execution options preflight before I/O without guessing applicati
     },
   };
   const db = createPooledDatabase(provider);
-  const reason = new Error("prepared-aborted");
-  const controller = new AbortController();
-  controller.abort(reason);
-
   const command = db.prepare("aborted-command", (input: { readonly signal: string }) =>
     sql.command`UPDATE users SET name = ${input.signal}`,
   );
@@ -258,18 +254,22 @@ test("prepared execution options preflight before I/O without guessing applicati
     sql.call`CALL routine(${input.signal})`,
   );
 
-  await assert.rejects(
-    () => command.execute({ signal: "application" }, { signal: controller.signal }),
-    (error: unknown) => error === reason,
-  );
-  await assert.rejects(
-    () => rows.all({ signal: "application" }, { signal: controller.signal }),
-    (error: unknown) => error === reason,
-  );
-  await assert.rejects(
-    () => call.call({ signal: "application" }, { signal: controller.signal }),
-    (error: unknown) => error === reason,
-  );
+  for (const reason of [new Error("prepared-aborted"), null]) {
+    const controller = new AbortController();
+    controller.abort(reason);
+    await assert.rejects(
+      () => command.execute({ signal: "application" }, { signal: controller.signal }),
+      (error: unknown) => error === reason,
+    );
+    await assert.rejects(
+      () => rows.all({ signal: "application" }, { signal: controller.signal }),
+      (error: unknown) => error === reason,
+    );
+    await assert.rejects(
+      () => call.call({ signal: "application" }, { signal: controller.signal }),
+      (error: unknown) => error === reason,
+    );
+  }
   assert.equal(acquires, 0);
   assert.equal(queries, 0);
 });

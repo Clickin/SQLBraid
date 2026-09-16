@@ -228,25 +228,32 @@ test("transaction and session wrappers retain active savepoint scope", async () 
 
     await resource.tx(async (outer) => {
       leakedTransaction = outer;
-      await outer.session(async (parent) => {
-        leakedSession = parent;
-        await parent.tx(async (inner) => {
-          await assert.rejects(
-            () => parent.execute(sql`SELECT parent_escape`),
-            (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_SCOPE",
-          );
-          await assert.rejects(
-            () => outer.execute(sql`SELECT outer_escape`),
-            (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_SCOPE",
-          );
-          await assert.rejects(
-            () => parent.session(async (sibling) => sibling.execute(sql`SELECT sibling_escape`)),
-            (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_SCOPE",
-          );
-          await inner.execute(sql`SELECT inner`);
-        });
-        await parent.execute(sql`SELECT parent_after`);
+      await outer.tx(async (inner) => {
+        await assert.rejects(outer.execute(sql`SELECT direct_parent_escape`), { code: "BRAID_TX_SCOPE" });
+        await inner.execute(sql`SELECT direct_inner`);
       });
+      const siblingReady = Promise.withResolvers<import("@sqlbraid/core").Database>();
+      const finishSibling = Promise.withResolvers<void>();
+      const siblingSession = outer.session(async (sibling) => {
+        siblingReady.resolve(sibling);
+        await finishSibling.promise;
+      });
+      const sibling = await siblingReady.promise;
+      try {
+        await outer.session(async (parent) => {
+          leakedSession = parent;
+          await parent.tx(async (inner) => {
+            await assert.rejects(parent.execute(sql`SELECT parent_escape`), { code: "BRAID_TX_SCOPE" });
+            await assert.rejects(outer.execute(sql`SELECT outer_escape`), { code: "BRAID_TX_SCOPE" });
+            await assert.rejects(sibling.execute(sql`SELECT sibling_escape`), { code: "BRAID_TX_SCOPE" });
+            await inner.execute(sql`SELECT inner`);
+          });
+          await parent.execute(sql`SELECT parent_after`);
+        });
+      } finally {
+        finishSibling.resolve();
+        await siblingSession;
+      }
     });
     await assert.rejects(
       () => leakedTransaction!.execute(sql`SELECT closed_transaction`),

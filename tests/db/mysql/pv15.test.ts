@@ -93,7 +93,7 @@ test("MySQL transaction streaming pins its backend and keeps binds value-only", 
       for await (const _row of db.stream(sql.rows`SET @braid_pv15_stream_kind = 7`)) {
         assert.fail("a command header must not escape as a row");
       }
-    }, /BRAID_RESULT_KIND/u);
+    }, { name: "DatabaseResultKindError", code: "BRAID_RESULT_KIND", declaredKind: "rows", actualKind: "command" });
     assert.deepEqual(
       await db.one(sql.rows<{ readonly value: string }>`SELECT @braid_pv15_stream_kind AS value`),
       { value: "7" },

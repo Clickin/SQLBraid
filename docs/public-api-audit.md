@@ -199,6 +199,15 @@ Re-inspect the database when moving to the escaped encoding: an old snapshot
 may have already lost objects whose legacy identities collided, and those
 objects cannot be recovered from the snapshot alone.
 
+`qualifiedIdentity(namespace, name, ...segments)` and
+`qualifiedIdentitySegments(segments)` encode structured namespace/object
+segments. Their `WithSuffix` counterparts add a separately escaped overload
+suffix, including an empty suffix where a driver reports no return type.
+`QUALIFIED_IDENTITY_ENCODING` is the marker value. Oracle package routines
+retain optional `RoutineSnapshot.packageName` as positive catalog evidence;
+tooling matches owner, package, and routine separately rather than splitting
+an escaped identity.
+
 Codegen input/output options remain deterministic and preserve their documented
 diagnostic behavior. CLI JSON output is machine-readable and its documented
 exit status is part of the tooling contract. Compiler and LSP diagnostics keep
