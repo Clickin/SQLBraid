@@ -26,13 +26,17 @@ if (installer === "pnpm") {
   writeFileSync(join(consumer, ".npmrc"), "node-linker=isolated\nshamefully-hoist=false\npublic-hoist-pattern[]=\n");
 }
 execFileSync(installer, installer === "pnpm"
-  ? ["install", ...(process.env.SQLBRAID_IGNORE_ENGINE === "true" ? [] : ["--engine-strict"]), "--ignore-scripts", "--no-frozen-lockfile"]
+  ? ["install", "--engine-strict", "--ignore-scripts", "--no-frozen-lockfile"]
   : ["install", "--engine-strict", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: consumer, stdio: "inherit", env: { ...process.env, npm_config_engine_strict: "true" } });
 writeFileSync(join(consumer, "probe.mjs"), `import assert from "node:assert/strict";
-import { trace } from "@opentelemetry/api";
+import { metrics, SpanStatusCode, trace } from "@opentelemetry/api";
 import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
-const before = trace.getTracer("sqlbraid");
-assert.equal(typeof before.startSpan, "function");
+const spans = [], measurements = [];
+const tracer = { startSpan() { const span = { endCount: 0, statuses: [], startTime: 1, end() { this.endCount += 1; }, setStatus(value) { this.statuses.push(value); }, setAttributes() {}, setAttribute() {} }; spans.push(span); return span; } };
+const meter = { createHistogram() { return { record(value, attributes) { measurements.push({ value, attributes }); } }; } };
+trace.setGlobalTracerProvider({ getTracer() { return tracer; } });
+metrics.setGlobalMeterProvider({ getMeter() { return meter; } });
+assert.equal(typeof trace.getTracer("sqlbraid").startSpan, "function");
 const observer = createOpenTelemetryObserver({});
 assert.equal(typeof observer.onEvent, "function");
 const operationId = "api-floor-operation";
@@ -40,6 +44,13 @@ const ready = { type: "query:ready", operationId, values: [], execution: { adapt
 await observer.onEvent(ready);
 await observer.onEvent({ type: "query:result", operationId, durationMs: 0, actualKind: "rows", transactionDepth: 0, transactionScoped: false });
 await observer.onEvent({ type: "query:mapped", operationId, durationMs: 0, rowCount: 0, queryMapped: false, executionMapped: false, transactionDepth: 0, transactionScoped: false });
+const failed = { ...ready, operationId: "api-floor-error" };
+await observer.onEvent(failed);
+await observer.onEvent({ type: "query:error", operationId: failed.operationId, stage: "driver", error: new Error("expected"), executionStarted: true, executionCompleted: false, transactionDepth: 0, transactionScoped: false });
+assert.equal(spans.length, 2);
+assert.deepEqual(spans.map((span) => span.endCount), [1, 1]);
+assert.equal(spans[1].statuses[0].code, SpanStatusCode.ERROR);
+assert.equal(measurements.length, 2);
 console.log("PASS no-SDK OTel API lifecycle");
 `);
 execFileSync(process.execPath, ["probe.mjs"], { cwd: consumer, stdio: "inherit" });
