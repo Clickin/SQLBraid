@@ -1,0 +1,289 @@
+import assert from "node:assert/strict";
+import { test } from "vitest";
+import type { Database } from "@sqlbraid/core";
+import { sql as postgres } from "@sqlbraid/postgres";
+import { createPgDatabase, createPgPoolDatabase, type PgClientLike } from "@sqlbraid/postgres/pg";
+import { sql as mysql } from "@sqlbraid/mysql";
+import { createMysql2Database, createMysql2PoolDatabase, type Mysql2ConnectionLike } from "@sqlbraid/mysql/mysql2";
+import { sql as maria } from "@sqlbraid/mariadb";
+import { createMariaDbDatabase, createMariaDbPoolDatabase } from "@sqlbraid/mariadb/mariadb";
+import { sql as oracle } from "@sqlbraid/oracle";
+import { createOracledbDatabase, createOracledbPoolDatabase } from "@sqlbraid/oracle/oracledb";
+import { sql as mssql } from "@sqlbraid/mssql";
+import { createTediousDatabase, createTediousPoolDatabase, type TediousRequestLike } from "@sqlbraid/mssql/tedious";
+import { sql as sqlite } from "@sqlbraid/sqlite";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { createBetterSqlite3Database } from "@sqlbraid/sqlite/better-sqlite3";
+import { createLibsqlDatabase, type LibsqlClientLike, type LibsqlStatementLike } from "@sqlbraid/sqlite/libsql";
+import { createSqliteWasmDatabase } from "@sqlbraid/sqlite/wasm";
+import { createBunSqlDatabase, type BunSqlClient, type BunSqlReservedClient, type BunSqlDialect } from "@sqlbraid/bun-sql";
+import {
+  assertControlFailure,
+  assertUnusable,
+  transactionFaultContracts,
+  type Control,
+  type Fault,
+  type TransactionFaultHarness,
+} from "./contracts/transaction.faults.js";
+
+interface NativeState {
+  readonly calls: Control[];
+  readonly releases: boolean[];
+  readonly failure: Error;
+  readonly statementFailure: Error;
+  fail(control: Fault): void;
+  swallowFailures(): void;
+  control(control: Control): void;
+  sql(text: string): string;
+}
+
+function nativeState(): NativeState {
+  const calls: Control[] = [];
+  const releases: boolean[] = [];
+  const failure = new Error("injected native control failure");
+  const statementFailure = new Error("native transaction-aborting statement");
+  let fault: Fault | undefined;
+  let aborted = false;
+  let swallow = false;
+  return {
+    calls,
+    releases,
+    failure,
+    statementFailure,
+    fail(control: Fault) { fault = control; },
+    swallowFailures() { swallow = true; },
+    control(control: Control) {
+      calls.push(control);
+      if (fault === control && !swallow) throw failure;
+    },
+    sql(text: string) {
+      if (text.includes("BROKEN")) { aborted = true; throw statementFailure; }
+      const control: Control | undefined =
+        text.startsWith("ROLLBACK TO") || text.startsWith("ROLLBACK TRANSACTION [") ? "rollback-to" :
+        text.startsWith("RELEASE SAVEPOINT") ? "release-savepoint" :
+        text.startsWith("SAVEPOINT") ? "savepoint" :
+        text === "COMMIT" ? "commit" :
+        text === "ROLLBACK" ? "rollback" :
+        text.startsWith("BEGIN") || text.startsWith("START TRANSACTION") ? "begin" : undefined;
+      if (control !== undefined) this.control(control);
+      return text === "COMMIT" && aborted ? "ROLLBACK" : text.split(" ")[0];
+    },
+  };
+}
+
+function fixture(
+  state: NativeState,
+  db: Database,
+  pooled: boolean,
+  write: (db: Database) => Promise<unknown>,
+): TransactionFaultHarness {
+  return { ...state, db, pooled, write };
+}
+
+function pgFixture(pooled: boolean, state = nativeState()): TransactionFaultHarness {
+  const client: PgClientLike & { release(discard?: boolean): void } = {
+    async query(input) {
+      const text = typeof input === "string" ? input : input.text;
+      return { rows: [], fields: [], rowCount: 1, command: state.sql(text) };
+    },
+    escapeIdentifier: (value) => `"${value}"`,
+    escapeLiteral: (value) => `'${value}'`,
+    release(discard = false) { state.releases.push(discard); },
+  };
+  return fixture(state, pooled ? createPgPoolDatabase({ connect: async () => client }) : createPgDatabase(client), pooled,
+    (db) => db.execute(postgres.command`UPDATE contract_rows SET value = 1`));
+}
+
+function mysqlFixture(pooled: boolean): TransactionFaultHarness {
+  const state = nativeState();
+  const connection: Mysql2ConnectionLike & { release(): void; destroy(): void } = {
+    async execute(input) {
+      state.sql(typeof input === "string" ? input : input.sql);
+      return [{ affectedRows: 1 }, undefined];
+    },
+    async beginTransaction() { state.control("begin"); },
+    async commit() { state.control("commit"); },
+    async rollback() { state.control("rollback"); },
+    release() { state.releases.push(false); },
+    destroy() { state.releases.push(true); },
+  };
+  return fixture(state, pooled ? createMysql2PoolDatabase({ getConnection: async () => connection }) : createMysql2Database(connection), pooled,
+    (db) => db.execute(mysql.command`UPDATE contract_rows SET value = 1`));
+}
+
+function mariaFixture(pooled: boolean): TransactionFaultHarness {
+  const state = nativeState();
+  const connection = {
+    async execute(input: string | { readonly sql: string }) {
+      state.sql(typeof input === "string" ? input : input.sql);
+      return { affectedRows: 1 };
+    },
+    async beginTransaction() { state.control("begin"); },
+    async commit() { state.control("commit"); },
+    async rollback() { state.control("rollback"); },
+    release() { state.releases.push(false); },
+    destroy() { state.releases.push(true); },
+  };
+  return fixture(state, pooled ? createMariaDbPoolDatabase({ getConnection: async () => connection }) : createMariaDbDatabase(connection), pooled,
+    (db) => db.execute(maria.command`UPDATE contract_rows SET value = 1`));
+}
+
+function oracleFixture(pooled: boolean): TransactionFaultHarness {
+  const state = nativeState();
+  const connection = {
+    async execute(text: string) { state.sql(text); return { rowsAffected: 1 }; },
+    async commit() { state.control("commit"); },
+    async rollback() { state.control("rollback"); },
+    async close(options?: { readonly drop?: boolean }) { state.releases.push(options?.drop === true); },
+  };
+  return fixture(state, pooled ? createOracledbPoolDatabase({ getConnection: async () => connection }) : createOracledbDatabase(connection), pooled,
+    (db) => db.execute(oracle.command`UPDATE contract_rows SET value = 1`));
+}
+
+function tediousFixture(pooled: boolean): TransactionFaultHarness {
+  const state = nativeState();
+  // Schedule native callbacks: a try/catch around execSql cannot catch these errors.
+  const complete = (control: Control, callback: (error?: unknown) => void) => {
+    queueMicrotask(() => {
+      let failure: unknown;
+      try { state.control(control); } catch (error) { failure = error; }
+      callback(failure);
+    });
+  };
+  const connection = {
+    execSql(value: TediousRequestLike) {
+      const request = value as TediousRequestLike & {
+        readonly sqlTextOrProcedure: string;
+        callback(error?: unknown, rowCount?: number): void;
+      };
+      queueMicrotask(() => {
+        let failure: unknown;
+        try { state.sql(request.sqlTextOrProcedure); } catch (error) { failure = error; }
+        request.callback(failure, 1);
+      });
+    },
+    beginTransaction(callback: (error?: unknown) => void) { complete("begin", callback); },
+    commitTransaction(callback: (error?: unknown) => void) { complete("commit", callback); },
+    rollbackTransaction(callback: (error?: unknown) => void) { complete("rollback", callback); },
+    saveTransaction(callback: (error?: unknown) => void) { complete("savepoint", callback); },
+  };
+  const poolConnection = {
+    ...connection,
+    release() { state.releases.push(false); },
+    destroy() { state.releases.push(true); },
+  };
+  return fixture(state, pooled ? createTediousPoolDatabase({ acquire: async () => poolConnection }) : createTediousDatabase(connection), pooled,
+    (db) => db.execute(mssql.command`UPDATE contract_rows SET value = 1`));
+}
+
+function sqliteFixture(kind: "node-sqlite" | "better-sqlite3" | "sqlite-wasm"): TransactionFaultHarness {
+  const state = nativeState();
+  const native = {
+    exec(text: string) { state.sql(text); },
+    prepare(text: string) {
+      const statement = {
+        reader: false,
+        columnCount: 0,
+        all() { return []; },
+        *iterate() {},
+        columns() { return []; },
+        setReadBigInts() {},
+        safeIntegers() {},
+        run() { state.sql(text); return { changes: 1n, lastInsertRowid: 0n }; },
+        bind() { return statement; },
+        step() { state.sql(text); return false; },
+        reset() { return statement; },
+        get() { throw new Error("command has no columns"); },
+        getColumnName() { throw new Error("command has no columns"); },
+        finalize() {},
+      };
+      return statement;
+    },
+    changes() { return 1n; },
+  };
+  const db = kind === "node-sqlite" ? createNodeSqliteDatabase(native) :
+    kind === "better-sqlite3" ? createBetterSqlite3Database(native) : createSqliteWasmDatabase(native);
+  return fixture(state, db, false, (db) => db.execute(sqlite.command`UPDATE contract_rows SET value = 1`));
+}
+
+function libsqlFixture(): TransactionFaultHarness {
+  const state = nativeState();
+  const execute = async (statement: string | LibsqlStatementLike) => {
+    state.sql(typeof statement === "string" ? statement : statement.sql);
+    return { columns: [], rows: [], rowsAffected: 1 };
+  };
+  const client: LibsqlClientLike = {
+    execute,
+    async batch(statements) {
+      return Promise.all(statements.map((statement) => execute(Array.isArray(statement) ? statement[0] : statement)));
+    },
+    async transaction() {
+      state.control("begin");
+      return {
+        execute,
+        batch: client.batch,
+        async commit() { state.control("commit"); },
+        async rollback() { state.control("rollback"); },
+        close() {},
+      };
+    },
+  };
+  return fixture(state, createLibsqlDatabase(client, { intMode: "string" }), false,
+    (db) => db.execute(sqlite.command`UPDATE contract_rows SET value = 1`));
+}
+
+function bunFixture(dialect: BunSqlDialect, state = nativeState()): TransactionFaultHarness {
+  const query = (text: string) => Object.assign([], {
+    command: state.sql(text), count: 1, affectedRows: 1, lastInsertRowid: null,
+  });
+  const client = (<T>(strings: TemplateStringsArray): Promise<T> => Promise.resolve(query(strings.join("")) as T)) as BunSqlReservedClient;
+  client.unsafe = async <T>(text: string): Promise<T> => query(text) as T;
+  client.release = () => { state.releases.push(false); };
+  client.close = async () => { state.releases.push(true); };
+  const pool = Object.assign((<T>(): Promise<T> => { throw new Error("unreserved pool execution"); }) as BunSqlClient, {
+    unsafe: client.unsafe,
+    reserve: async () => client,
+  });
+  const tag = dialect === "postgres" ? postgres : dialect === "mysql" ? mysql : dialect === "mariadb" ? maria : sqlite;
+  return fixture(state, createBunSqlDatabase(dialect === "sqlite" ? client : pool, { dialect }), dialect !== "sqlite",
+    (db) => db.execute(tag.command`UPDATE contract_rows SET value = 1`));
+}
+
+for (const pooled of [false, true]) {
+  const ownership = pooled ? "pooled" : "direct";
+  transactionFaultContracts("pg", ownership, () => pgFixture(pooled));
+  transactionFaultContracts("mysql2", ownership, () => mysqlFixture(pooled));
+  transactionFaultContracts("mariadb", ownership, () => mariaFixture(pooled));
+  transactionFaultContracts("node-oracledb", ownership, () => oracleFixture(pooled), false);
+  transactionFaultContracts("tedious", ownership, () => tediousFixture(pooled), false);
+}
+for (const kind of ["node-sqlite", "better-sqlite3", "sqlite-wasm"] as const) {
+  transactionFaultContracts(kind, "direct", () => sqliteFixture(kind));
+}
+transactionFaultContracts("libsql", "direct", libsqlFixture);
+for (const dialect of ["postgres", "mysql", "mariadb", "sqlite"] as const) {
+  transactionFaultContracts(`bun-sql-${dialect}`, dialect === "sqlite" ? "direct" : "pooled", () => bunFixture(dialect));
+}
+
+for (const [transport, pooled] of [["pg", false], ["pg", true], ["bun-sql-postgres", true]] as const) {
+  test(`[contract:${transport}:transaction.commit-terminal-outcome:boundary] [ownership:${pooled ? "pooled" : "direct"}] caught statement error cannot turn native ROLLBACK into commit success`, async () => {
+    const state = nativeState();
+    const harness = transport === "pg" ? pgFixture(pooled, state) : bunFixture("postgres", state);
+    await assert.rejects(() => harness.db.tx(async (tx) => {
+      await harness.write(tx);
+      await assert.rejects(() => tx.execute(postgres.command`BROKEN`), (error: unknown) =>
+        error === state.statementFailure || (error instanceof Error && error.cause === state.statementFailure));
+      return "must not escape";
+    }), (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_NOT_COMMITTED");
+    assert.equal(state.calls.filter((control) => control === "commit").length, 1);
+    await assertUnusable(harness);
+  });
+}
+
+for (const fault of ["commit", "rollback", "savepoint", "rollback-to", "release-savepoint"] as const) {
+  test(`fault harness rejects a native fixture that swallows ${fault} failure`, async () => {
+    const state = nativeState();
+    state.swallowFailures();
+    await assert.rejects(() => assertControlFailure(pgFixture(false, state), fault), assert.AssertionError);
+  });
+}

@@ -979,7 +979,7 @@ function collect(
           : parameters.map((parameter, index) => ({ ...parameter, name: routineProcedure.parameterNames[index]! }));
       request = new Request(routineProcedure?.name ?? parameterizedSql, (error: unknown, rowCount?: number) => {
         callbackError = error;
-        if (typeof rowCount === "number") {
+        if (rowCount !== undefined && rowCount !== null) {
           try {
             callbackRowCount = safeDatabaseCount(rowCount);
           } catch (countError) {
@@ -1012,7 +1012,7 @@ function collect(
       });
       const done = (rowCount?: number): void => {
         doneCount += 1;
-        if (typeof rowCount === "number") {
+        if (rowCount !== undefined && rowCount !== null) {
           try {
             doneRowCounts.push(safeDatabaseCount(rowCount));
           } catch (error) {
@@ -1023,7 +1023,7 @@ function collect(
       request.on("done", done);
       request.on("doneInProc", (rowCount?: number) => {
         doneInProcCount += 1;
-        if (typeof rowCount === "number") {
+        if (rowCount !== undefined && rowCount !== null) {
           try {
             doneInProcRowCounts.push(safeDatabaseCount(rowCount));
           } catch (error) {
@@ -1050,7 +1050,7 @@ function collect(
       });
       request.on("doneProc", (rowCount: unknown, _more: unknown, status: unknown) => {
         try {
-          if (typeof rowCount === "number") safeDatabaseCount(rowCount);
+          if (rowCount !== undefined && rowCount !== null) safeDatabaseCount(rowCount);
           if (routineProcedure !== undefined && status !== undefined)
             procedureReturnValue = safeProcedureStatus(status);
         } catch (error) {
@@ -1115,9 +1115,11 @@ function control(
 function rollbackTo(connection: TediousConnectionLike, name: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     try {
-      const request = new Request(`ROLLBACK TRANSACTION [${name.replaceAll("]", "]]")}]`, () =>
-        resolve(),
-      ) as unknown as TediousRequestLike;
+      const request = new Request(`ROLLBACK TRANSACTION [${name.replaceAll("]", "]]")}]`, (error) => {
+        const normalized = asError(error);
+        if (normalized === undefined) resolve();
+        else reject(normalized);
+      }) as unknown as TediousRequestLike;
       connection.execSql(request);
     } catch (error) {
       reject(error);
@@ -1238,7 +1240,7 @@ function streamRows(
         let doneInProcCount = 0;
         let columns: readonly TediousColumnMetadataLike[] = [];
         const observeCount = (rowCount: unknown): void => {
-          if (typeof rowCount !== "number") return;
+          if (rowCount === undefined || rowCount === null) return;
           try {
             safeDatabaseCount(rowCount);
           } catch (error) {

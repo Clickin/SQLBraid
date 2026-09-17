@@ -715,7 +715,14 @@ function createExecutor(
       }
     },
     commit: async (): Promise<void> => {
-      await client.unsafe("COMMIT", []);
+      const result = await client.unsafe("COMMIT", []);
+      if (dialect === "postgres" && result !== null && typeof result === "object" && "command" in result &&
+          result.command !== undefined && result.command !== "COMMIT") {
+        throw new AdapterError(
+          "BRAID_TX_NOT_COMMITTED",
+          `Bun.SQL PostgreSQL COMMIT completed with ${String(result.command)}, not COMMIT.`,
+        );
+      }
     },
     rollback: async (): Promise<void> => {
       await client.unsafe("ROLLBACK", []);
