@@ -28,6 +28,7 @@ import {
   type TransactionIsolation,
   type TransactionOptions,
 } from "@sqlbraid/core";
+import { assertSavepointName } from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { representationProfileFor } from "./type-policy.js";
 
@@ -564,9 +565,9 @@ function createExecutor(
     },
     commit: async (): Promise<void> => { await client.unsafe("COMMIT", []); },
     rollback: async (): Promise<void> => { await client.unsafe("ROLLBACK", []); },
-    savepoint: async (name: string): Promise<void> => { await client.unsafe(`SAVEPOINT ${safeSavepoint(name)}`, []); },
-    rollbackTo: async (name: string): Promise<void> => { await client.unsafe(`ROLLBACK TO SAVEPOINT ${safeSavepoint(name)}`, []); },
-    releaseSavepoint: async (name: string): Promise<void> => { await client.unsafe(`RELEASE SAVEPOINT ${safeSavepoint(name)}`, []); },
+    savepoint: async (name: string): Promise<void> => { await client.unsafe(`SAVEPOINT ${assertSavepointName(name)}`, []); },
+    rollbackTo: async (name: string): Promise<void> => { await client.unsafe(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`, []); },
+    releaseSavepoint: async (name: string): Promise<void> => { await client.unsafe(`RELEASE SAVEPOINT ${assertSavepointName(name)}`, []); },
   };
   return executor;
 }
@@ -628,11 +629,6 @@ function validateTransactionOptions(options: TransactionOptions | undefined): vo
     Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
     throw error;
   }
-}
-
-function safeSavepoint(name: string): string {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) throw new TypeError("Invalid savepoint name.");
-  return name;
 }
 
 function createProvider(client: BunSqlClient, dialect: BunSqlDialect): ConnectionProvider {

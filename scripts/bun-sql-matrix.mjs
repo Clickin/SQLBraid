@@ -17,10 +17,10 @@ const envNames = {
   sqlite: ["SQLBRAID_BUN_SQL_SQLITE_URL", "SQLBRAID_SQLITE_URL"],
 };
 const targetFiles = {
-  postgres: "support/targets/postgres.json",
-  mysql: "support/targets/mysql.json",
-  mariadb: "support/targets/mariadb.json",
-  sqlite: "support/targets/sqlite.json",
+  postgres: "support/targets/bun-sql-postgres.json",
+  mysql: "support/targets/bun-sql-mysql.json",
+  mariadb: "support/targets/bun-sql-mariadb.json",
+  sqlite: "support/targets/bun-sql-sqlite.json",
 };
 
 function configuredUrl(dialect) {
