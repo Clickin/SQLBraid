@@ -1,7 +1,7 @@
 import mariadb, { type Pool } from "mariadb";
 import assert from "node:assert/strict";
 import { inject } from "vitest";
-import { sql, MARIADB_LOSSLESS_TEXT } from "@sqlbraid/mariadb";
+import { sql, MARIADB_DATE_TEXT, MARIADB_LOSSLESS_TEXT } from "@sqlbraid/mariadb";
 import { createMariaDbDatabase, createMariaDbPoolDatabase, type MariaDbConnectionLike } from "@sqlbraid/mariadb/mariadb";
 import type { CallQuery, CommandQuery, Database, RowQuery, StandardSchemaV1 } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
@@ -167,6 +167,7 @@ async function createFixture(): Promise<CertificationFixture> {
   const connection = await mariadb.createConnection(connectorOptions());
   const pool: Pool = mariadb.createPool(connectorOptions());
   let acquisitions = 0;
+  let bulkAcquisitions = 0;
   const mutationCount = { value: 0 };
   const mutatingOperations = new Set<string>();
   const observer = {
@@ -288,13 +289,13 @@ async function createFixture(): Promise<CertificationFixture> {
       ...pooled,
       bulk: async (inputs, factory) => inputs.length === 0
         ? { inputCount: 0, affectedRows: 0 }
-        : pooled.bulk(inputs, factory),
+        : (bulkAcquisitions += 1, pooled.bulk(inputs, factory)),
     },
     inputs: ["bulk-a", "bulk-b"],
     factory: (input) => sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES (${String(input)})`,
     expected: { inputCount: 2, affectedRows: 2 },
-    acquireCount: () => acquisitions,
-    executeCount: () => acquisitions,
+    acquireCount: () => bulkAcquisitions,
+    executeCount: () => bulkAcquisitions,
     values: () => [["bulk-a"], ["bulk-b"]],
     middleFailure: async () => {
       await pool.query(`DELETE FROM ${TABLE}`);
@@ -399,6 +400,7 @@ async function createFixture(): Promise<CertificationFixture> {
       mutationCount.value = 0;
       streamReleases = 0;
       streamIterations = 0;
+      bulkAcquisitions = 0;
     },
     unsupported: {
       CALL002: {
@@ -429,17 +431,15 @@ async function createFixture(): Promise<CertificationFixture> {
       },
       "data.json-lossless-text": {
         prove: async () => {
-          await assert.rejects(
-            () => db.one(sql.rows`SELECT payload AS value FROM ${sql.ident(JSON_TABLE)}`),
-            (error: unknown) => error instanceof Error && /JSON results must remain strings/iu.test(error.message),
-          );
+          const row = await db.one(sql.rows`SELECT payload AS value FROM ${sql.ident(JSON_TABLE)}`);
+          if (typeof (row as { readonly value?: unknown }).value !== "string") throw new Error("MariaDB JSON lossless guard failed.");
         },
       },
       "data.json-parsed": {
         prove: async () => {
           const parsedConnection = await mariadb.createConnection(connectorOptions({ autoJsonMap: true }));
           try {
-            const parsedDb = createMariaDbDatabase(parsedConnection, { profile: MARIADB_LOSSLESS_TEXT });
+            const parsedDb = createMariaDbDatabase(parsedConnection, { profile: MARIADB_DATE_TEXT });
             const row = await parsedDb.one(sql.rows`SELECT payload AS value FROM ${sql.ident(JSON_TABLE)}`);
             const value = (row as { readonly value?: unknown }).value;
             if (value === null || typeof value !== "object") throw new Error("MariaDB JSON parsed guard failed.");

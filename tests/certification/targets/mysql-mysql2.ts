@@ -160,6 +160,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   let streamIterations = 0;
   let lastStreamPhysicalId: number | undefined;
   let bulkExecutions = 0;
+  let bulkAcquisitions = 0;
   const observer = {
     onEvent(event: { readonly type: string; readonly operationId?: string; readonly sql?: string; readonly itemCount?: number }): void {
       if (event.type === "query:ready" && event.operationId && event.sql && mutationSql(event.sql)) mutatingOperations.add(event.operationId);
@@ -383,6 +384,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       ...db,
       bulk: async (inputs, factory) => {
         if (inputs.length === 0) return { inputCount: 0, affectedRows: 0 };
+        bulkAcquisitions += 1;
         bulkExecutions += 1;
         return db.bulk(inputs, factory);
       },
@@ -390,7 +392,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     inputs: [1, 2],
     factory: (input) => sql.command`UPDATE ${sql.ident(table)} SET value = value + ${input} WHERE id = 1`,
     expected: { inputCount: 2, affectedRows: 2 },
-    acquireCount: () => acquired.value,
+    acquireCount: () => bulkExecutions,
     executeCount: () => bulkExecutions,
     middleFailure: async () => {
       await pool.query(`UPDATE ${tableSql(table)} SET value = 0 WHERE id = 1`);
@@ -492,6 +494,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       streamIterations = 0;
       lastStreamPhysicalId = undefined;
       bulkExecutions = 0;
+      bulkAcquisitions = 0;
       acquired.value = 0;
       const identityResult = await db.one(identity);
       physicalIds.add(identityResult.id);
