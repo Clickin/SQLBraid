@@ -548,7 +548,7 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       const expectedRows = [{ id: "bulk-middle", value: "first" }];
       if (JSON.stringify(observedRows) !== JSON.stringify(expectedRows)) throw new Error(`BULK003 expected one durable prefix row, got ${JSON.stringify(observedRows)}.`);
       await direct.one(sql.rows`SELECT 1 AS usable`);
-      return { error, observed: true, observedRows, expectedRows, durability: "prefix" as const };
+      return { error, observedRows, expectedRows, durability: "prefix" as const };
     },
   };
   const mappingFailure = new Error("cert-mapper-failure");
