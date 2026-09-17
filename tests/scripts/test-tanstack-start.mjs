@@ -200,7 +200,7 @@ async function fetchTransformed(base, path, child, expected = "", timeoutMs = 30
   throw new Error(`Timed out waiting for Vite transform ${path}: ${lastError}\n${child.output()}`);
 }
 
-async function sourceMapFor(code, base, sourcePath, child) {
+async function sourceMapFor(code, base, sourcePath, _child) {
   const marker = code.match(/sourceMappingURL=([^\s]+)/u)?.[1];
   if (!marker) throw new Error(`Vite transform for ${sourcePath} did not return a source map.`);
   if (marker.startsWith("data:")) {

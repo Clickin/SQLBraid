@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { PUBLIC_ERROR_DEFINITIONS, type EnvironmentCapability } from "@sqlbraid/core";
-import { isSourceSha, REQUIRED_CASE_IDS, type CertificationAggregate, type CertificationAggregateOptions, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationTarget, type CertificationTuple, type ExpectedCapability, type ExpectedCapabilityContract, type ExpectedGuardedCaseContract } from "./types.js";
+import { isSourceSha, REQUIRED_CASE_IDS, type CertificationAggregate, type CertificationAggregateOptions, type CertificationArtifact, type CertificationCaseResult, type CertificationTuple, type ExpectedCapability, type ExpectedCapabilityContract, type ExpectedGuardedCaseContract } from "./types.js";
 export { certifyTarget } from "./execute.js";
 
 function normalize(value: unknown): unknown {

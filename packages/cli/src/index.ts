@@ -392,7 +392,7 @@ async function main(argv: readonly string[]): Promise<void> {
   }
   const overlay = createVirtualOverlay(source, file, analysisOptions);
   const manifests = discovered.queries.map((query) => {
-    const captured = new Array<unknown>(Math.max(0, query.bindings.length)).fill(null);
+    const captured = Array.from({ length: Math.max(0, query.bindings.length) }, () => null);
     const contract = overlay.queryTypes.find((candidate) => candidate.range.start === query.range.start);
     return createManifestFromEvidence({ fingerprint: fingerprintTemplate(query.ir, captured), templateFamilyFingerprint: templateFamilyFingerprintOf(query.ir), resultKind: query.declaredResultKind, source: relative(process.cwd(), file), ...(contract?.rowType && contract.rowType !== "unknown" ? { resultType: contract.rowType } : {}) });
   });

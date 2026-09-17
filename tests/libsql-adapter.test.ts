@@ -217,7 +217,7 @@ test("libSQL leaves default transaction mode to the client and maps explicit rea
   const client = fakeClient(
     async () => rowsResult([], []),
     async () => [],
-    async function transaction(mode?: "write" | "read" | "deferred") {
+    async function transaction(_mode?: "write" | "read" | "deferred") {
       calls.push([...arguments]);
       return tx;
     },

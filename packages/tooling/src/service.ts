@@ -364,7 +364,7 @@ function queryRelations(tokens: readonly LexToken[], options: LanguageServiceOpt
   }
   return uses;
 }
-function relationForQualifier(value: string, relations: readonly RelationUse[], options: LanguageServiceOptions): RelationSnapshot | undefined {
+function relationForQualifier(value: string, relations: readonly RelationUse[], _options: LanguageServiceOptions): RelationSnapshot | undefined {
   const direct = relations.filter((relation) => relation.relation !== undefined && identifierKey(relation.text) === identifierKey(value)).map((relation) => relation.relation as RelationSnapshot);
   if (unique(direct, (relation) => relation.identity).length === 1) return direct[0];
   const matches = relations.filter((relation) => relation.alias !== undefined && identifierKey(relation.alias) === identifierKey(value) && relation.relation !== undefined).map((relation) => relation.relation as RelationSnapshot);

@@ -49,13 +49,13 @@ function rowsExecutor(rows: readonly unknown[], calls: string[] = []): QueryExec
   };
 }
 
-function schema<Output>(validate: (value: unknown) => StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>>): StandardSchemaV1<unknown, Output> {
+function schema<Output>(validate: (_value: unknown) => StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>>): StandardSchemaV1<unknown, Output> {
   return { "~standard": { version: 1, vendor: "runtime-boundary-test", validate } };
 }
 
 test("materialized mappers run after the direct physical turn is released", async () => {
   let db!: Database;
-  const mapper = schema(async (value) => {
+  const mapper = schema(async (_value) => {
     const nested = await db.one(sql.rows<{ readonly id: number }>`SELECT nested`);
     return { value: { id: nested.id } };
   });

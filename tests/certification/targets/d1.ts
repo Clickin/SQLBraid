@@ -26,7 +26,7 @@ export interface D1CertificationTargetOptions {
   readonly measuredRuntimeVersion: string;
 }
 
-function buildQueries(stats: D1Stats): CertificationFixture["queries"] {
+function buildQueries(_stats: D1Stats): CertificationFixture["queries"] {
   let preparedCalls = 0;
   const special = {
     RES001: sql.rows`SELECT 'safe' AS "__proto__"`, RES002: sql.rows`SELECT 'safe' AS "constructor"`, RES003: sql.rows`SELECT 'safe' AS "prototype"`,

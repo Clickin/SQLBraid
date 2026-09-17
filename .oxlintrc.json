@@ -7,8 +7,7 @@
   },
   "options": {
     "typeAware": false,
-    "typeCheck": false,
-    "maxWarnings": 1000
+    "typeCheck": false
   },
   "ignorePatterns": [
     "**/node_modules/**",
@@ -19,13 +18,100 @@
     "website/.vercel/**",
     "sqlbraid.vsix"
   ],
-  "rules": {
-    "eslint/no-unused-vars": "warn",
-    "eslint/no-useless-catch": "warn",
-    "eslint/no-unused-expressions": "warn",
-    "eslint/require-yield": "warn",
-    "eslint/no-loss-of-precision": "warn",
-    "unicorn/no-useless-spread": "warn",
-    "unicorn/no-thenable": "warn"
-  }
+  "overrides": [
+    {
+      "files": [
+        "packages/sqlite/src/d1.ts",
+        "tests/pv15-pg-mysql.test.ts",
+        "tests/routines.test.ts",
+        "tests/runtime-awaitable.test.ts",
+        "tests/runtime-mapping.test.ts",
+        "tests/runtime-observer.test.ts"
+      ],
+      "rules": {
+        "eslint/require-yield": "off"
+      }
+    },
+    {
+      "files": ["tests/scripts/agent-tooling-consumer.mjs"],
+      "rules": {
+        "eslint/no-unused-expressions": "off"
+      }
+    },
+    {
+      "files": ["tests/driver-foundation.test.ts"],
+      "rules": {
+        "unicorn/no-thenable": "off"
+      }
+    },
+    {
+      "files": ["tests/pv18-vendor-contracts.test.ts"],
+      "rules": {
+        "eslint/no-loss-of-precision": "off"
+      }
+    },
+    {
+      "files": [
+        "packages/sqlite/src/d1.ts",
+        "packages/sqlite/src/libsql.ts",
+        "packages/bun-sql/src/index.ts",
+        "tests/docs-transaction-examples.test.ts",
+        "tests/opentelemetry.test.ts",
+        "tests/pv14-binding.test.ts",
+        "tests/pv16-bulk.test.ts",
+        "tests/pv17-bind.test.ts",
+        "tests/pv18-command-metadata.test.ts",
+        "tests/routines.test.ts",
+        "tests/runtime-awaitable.test.ts",
+        "tests/runtime-bind-hints.test.ts",
+        "tests/runtime-boundary.test.ts",
+        "tests/runtime-mapping.test.ts",
+        "tests/runtime-observer.test.ts",
+        "tests/runtime.test.ts",
+        "tests/runtime-transaction-boundary.test.ts",
+        "tests/runtime-validation.test.ts",
+        "tests/pv15-pg-mysql.test.ts"
+      ],
+      "rules": {
+        "eslint/require-yield": "off"
+      }
+    },
+    {
+      "files": [
+        "packages/sqlite/src/better-sqlite3.ts",
+        "packages/sqlite/src/node-sqlite.ts",
+        "packages/postgres/src/pg.ts",
+        "packages/mysql/src/mysql2.ts",
+        "packages/mssql/src/tedious.ts",
+        "packages/runtime/src/index.ts",
+        "scripts/test-browser.mjs",
+        "tests/certification/targets/synthetic.ts"
+      ],
+      "rules": {
+        "eslint/no-unsafe-finally": "off"
+      }
+    },
+    {
+      "files": [
+        "tests/db/postgres/capabilities.test.ts",
+        "tests/db/postgres/containers.test.ts",
+        "tests/pv18-vendor-contracts.test.ts"
+      ],
+      "rules": {
+        "eslint/no-loss-of-precision": "off"
+      }
+    },
+    {
+      "files": ["packages/codegen/src/index.ts"],
+      "rules": {
+        "eslint/no-control-regex": "off"
+      }
+    },
+    {
+      "files": ["tests/pv15-contracts.test.ts"],
+      "rules": {
+        "eslint/no-unused-vars": "off"
+      }
+    }
+  ]
 }

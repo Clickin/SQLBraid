@@ -42,7 +42,7 @@ function parseVersions(value) {
   return [...new Set(parsed)];
 }
 
-const versions = parseVersions(process.env.SQLBRAID_DOCS_VERSIONS);
+parseVersions(process.env.SQLBRAID_DOCS_VERSIONS);
 const stable = process.env.SQLBRAID_DOCS_STABLE?.trim() || "";
 if (stable && !semver.test(stable)) throw new Error(`SQLBRAID_DOCS_STABLE must be SemVer, received ${JSON.stringify(stable)}.`);
 

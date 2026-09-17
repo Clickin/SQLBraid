@@ -150,7 +150,7 @@ try {
       if (name !== "package.json" && name !== "README.md" && name !== "LICENSE" && !name.startsWith("dist/")) {
         throw new Error(`Unexpected file in ${manifest.name} tarball: ${name}`);
       }
-      if (/(^|\/)(?:test|tests|fixture|fixtures|__tests__)(?:[-_.\/]|$)/iu.test(name) || /(^|\/)(?:\.env(?:\..*)?|[^/]+\.(?:pem|key|p12|secret))$/iu.test(name)) {
+      if (/(^|[/])(?:test|tests|fixture|fixtures|__tests__)(?:[-_./]|$)/iu.test(name) || /(^|[/])(?:\.env(?:\..*)?|[^/]+\.(?:pem|key|p12|secret))$/iu.test(name)) {
         throw new Error(`Test, fixture, or secret file in ${manifest.name} tarball: ${name}`);
       }
       if ((await stat(join(packageDir, name))).size > MAX_FILE_BYTES) throw new Error(`File ${manifest.name}/${name} exceeds ${MAX_FILE_BYTES} bytes.`);

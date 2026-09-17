@@ -212,6 +212,7 @@ test('statement binding preserves routine metadata and enforces dialect identity
     placeholder: (index) => `$${index}`,
     reuse: { effective: 'simple', owner: 'driver' },
   });
+  void binding;
   assert.throws(
     () => createStatementBindingDescription(rendered, {
       dialectId: 'mysql',

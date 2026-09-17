@@ -1,4 +1,4 @@
-import mariadb, { type ConnectionConfig, type Pool } from "mariadb";
+import mariadb, { type Pool } from "mariadb";
 import assert from "node:assert/strict";
 import { inject } from "vitest";
 import { sql, MARIADB_LOSSLESS_TEXT } from "@sqlbraid/mariadb";

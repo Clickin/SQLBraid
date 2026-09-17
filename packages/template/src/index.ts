@@ -6,12 +6,8 @@ import {
   createRenderedStatement,
   isBoundParameter,
   isRoutineParameter,
-  type BindNode,
-  type ChooseNode,
   type Dialect,
   type DialectLexicalProfile,
-  type IfNode,
-  type ListNode,
   type Query,
   type QueryResultKind,
   type RoutineContract,
@@ -28,7 +24,6 @@ import {
   type TemplateIr,
   type TemplateNode,
   type TrimAttributes,
-  type TrimNode,
 } from "@sqlbraid/core";
 
 /**
@@ -1437,7 +1432,7 @@ export function guarded<Row = unknown, Kind extends QueryResultKind = QueryResul
   const templateStrings = createTemplateStrings(strings);
   const ir = cachedTemplate(templateStrings);
   if (!hasGuard(ir.nodes)) return tag(templateStrings, ...thunks.map((thunk) => thunk()));
-  const values = new Array<unknown>(Math.max(0, strings.length - 1));
+  const values = Array.from({ length: Math.max(0, strings.length - 1) }, () => undefined);
   captureActive(ir.nodes, thunks, values);
   return tag(templateStrings, ...values);
 }
@@ -1448,7 +1443,7 @@ export function capture<Row = unknown, Kind extends QueryResultKind = QueryResul
   build: (values: unknown[]) => void,
   preparsedIr?: TemplateIr,
 ): Query<Row, Kind> {
-  const captured = new Array<unknown>(Math.max(0, strings.length - 1));
+  const captured = Array.from({ length: Math.max(0, strings.length - 1) }, () => undefined);
   build(captured);
   const templateStrings = isTemplateStringsArray(strings) ? strings : createTemplateStrings(strings);
   const factory = preparedQueryFactories.get(tag as unknown as object);

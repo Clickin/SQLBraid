@@ -274,7 +274,7 @@ test('nested async functions and otherwise-only choose emit valid JavaScript', a
 
 test('adapters preserve command and returning result kinds', async () => {
   const pg = createPgDatabase({
-    async query(configOrText: PgQueryConfig | string, values: readonly unknown[] = []) {
+    async query(_configOrText: PgQueryConfig | string, _values: readonly unknown[] = []) {
       return { rows: [{ id: '7' }], fields: [{ name: 'id', dataTypeID: 20 }], rowCount: 1 };
     },
     escapeIdentifier(value: string) { return value; },

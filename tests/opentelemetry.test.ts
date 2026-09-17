@@ -137,7 +137,7 @@ function installProviders(): void {
   const histogram: Histogram = {
     record(value: number, attributes?: Attributes) {
       if (recording.throwOnMetricRecord) throw new Error("telemetry metric failed");
-      recording.measurements.push({ value, attributes: { ...(attributes ?? {}) } });
+      recording.measurements.push({ value, attributes: { ...attributes } });
     },
   } as unknown as Histogram;
   const meter: Meter = {
@@ -490,7 +490,7 @@ test("closes runtime prepared-stream telemetry exactly once on every terminal pa
       db = createDatabase({
         ...baseExecutor(),
         ...(path === "driver" ? {
-          async *stream<Row>() { throw new Error("prepared stream driver failure"); },
+          async *stream<_Row>() { throw new Error("prepared stream driver failure"); },
         } : {}),
       }, { observers: [observer] });
       if (path === "mapper") {

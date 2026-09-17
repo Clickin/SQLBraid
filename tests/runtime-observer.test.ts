@@ -515,7 +515,7 @@ test("prepared stream terminal paths release once and preserve consumer failures
   const driverError = new Error("prepared stream driver failed");
   const driverDb = createDatabase({
     ...executor(),
-    async *stream<Row>() { throw driverError; },
+    async *stream<_Row>() { throw driverError; },
   });
   const driverPrepared = driverDb.prepare("driver-stream", () => sql.rows`SELECT 1`, { input: "none" });
   await assert.rejects(

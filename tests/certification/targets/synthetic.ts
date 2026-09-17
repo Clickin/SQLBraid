@@ -9,7 +9,7 @@ import {
   type ExecutionOptions,
   type QueryExecutor,
   type QueryExecutionResult,
-  type QueryResultKind,
+
   type RenderedBulk,
   type RenderedStatement,
   type RowQuery,

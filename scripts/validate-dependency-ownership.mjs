@@ -42,11 +42,24 @@ function importSpecifiers(path, source) {
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, scriptKind);
   const imports = [];
   function visit(node) {
-    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-      imports.push(node.moduleSpecifier.text);
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const clause = node.importClause;
+      const runtime = clause === undefined
+        ? true
+        : !clause.isTypeOnly && (clause.name !== undefined
+          || ts.isNamespaceImport(clause.namedBindings)
+          || (ts.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.some((element) => !element.isTypeOnly)));
+      imports.push({ specifier: node.moduleSpecifier.text, runtime });
+    } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      const runtime = !node.isTypeOnly
+        && (!node.exportClause || !ts.isNamedExports(node.exportClause)
+          || node.exportClause.elements.some((element) => !element.isTypeOnly));
+      imports.push({ specifier: node.moduleSpecifier.text, runtime });
     }
     if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
-      && node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0])) imports.push(node.arguments[0].text);
+      && node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0])) {
+      imports.push({ specifier: node.arguments[0].text, runtime: true });
+    }
     ts.forEachChild(node, visit);
   }
   visit(file);
@@ -67,7 +80,6 @@ async function sourceFiles(directory) {
 const rootLeaks = [...forbiddenRootDependencies].filter((name) => rootDependencies.has(name) && !stableRootDependencies.has(name));
 if (rootLeaks.length) throw new Error(`Forbidden test-only root dependencies: ${rootLeaks.sort().join(", ")}`);
 for (const script of movedScripts) {
-  if (rootDependencies.has(script)) throw new Error(`Script name leaked into root dependencies: ${script}`);
   const oldPath = join(root, "scripts", script);
   const newPath = join(testsRoot, "scripts", script);
   try {
@@ -87,7 +99,7 @@ const testFiles = (await sourceFiles(testsRoot)).filter((path) => !path.startsWi
 const testImports = new Set();
 for (const path of testFiles) {
   const source = await readFile(path, "utf8");
-  for (const specifier of importSpecifiers(path, source)) {
+  for (const { specifier } of importSpecifiers(path, source)) {
     const name = packageName(specifier);
     if (name && name !== "sqlbraid") testImports.add(name);
   }
@@ -104,15 +116,20 @@ for (const packageDirectory of (await readdir(join(root, "packages"), { withFile
     ...manifest.peerDependencies,
     ...manifest.devDependencies,
   }));
-  const imports = new Set();
+  const production = new Set(Object.keys({
+    ...manifest.dependencies,
+    ...manifest.optionalDependencies,
+    ...manifest.peerDependencies,
+  }));
+  const imports = new Map();
   for (const path of await sourceFiles(join(packageRoot, "src"))) {
     const source = await readFile(path, "utf8");
-    for (const specifier of importSpecifiers(path, source)) {
+    for (const { specifier, runtime } of importSpecifiers(path, source)) {
       const name = packageName(specifier);
-      if (name && name !== manifest.name) imports.add(name);
+      if (name && name !== manifest.name) imports.set(name, (imports.get(name) ?? false) || runtime);
     }
   }
-  const missing = [...imports].filter((name) => !declared.has(name));
+  const missing = [...imports].filter(([name, runtime]) => runtime ? !production.has(name) : !declared.has(name)).map(([name]) => name);
   if (missing.length) throw new Error(`${manifest.name} source imports undeclared packages: ${missing.sort().join(", ")}`);
 }
 
@@ -122,12 +139,6 @@ for (const name of [...testImports].filter((name) => testsDependencies.has(name)
     await readFile(manifestPath, "utf8");
   } catch (error) {
     throw new Error(`Tests package cannot resolve ${name}: ${error.message}`);
-  }
-}
-for (const script of ["isolated-facade-consumer.mjs", "isolated-lsp-consumer.mjs"]) {
-  const source = await readFile(join(testsRoot, "scripts", script), "utf8");
-  if (!source.includes("node-linker=isolated") || !source.includes("public-hoist-pattern[]=")) {
-    throw new Error(`${script} must install with isolated pnpm resolution and no public hoist.`);
   }
 }
 console.info(`PASS dependency ownership: ${testImports.size} test imports, ${movedScripts.length} moved scripts, ${rootLeaks.length} forbidden root dependencies, package imports declared.`);

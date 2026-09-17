@@ -6,7 +6,7 @@ import { createTediousDatabase, createTediousPoolDatabase, type TediousConnectio
 import { mssqlParameter, sql } from "@sqlbraid/mssql";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
-import type { CertificationFixture, CertificationTarget, ExpectedCapabilityContract, ResourceSnapshot, TransactionOptionKey } from "../types.js";
+import type { CertificationFixture, CertificationTarget, ExpectedCapabilityContract, ResourceSnapshot } from "../types.js";
 
 interface MssqlSettings {
   readonly server: string;

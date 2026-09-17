@@ -44,7 +44,7 @@ import type {
   RoutineCallResult,
   RowQuery,
   RowValidationOptions,
-  RowsExecutionResult,
+
   StandardSchemaV1,
   StreamOptions,
   StreamStartEvent,
@@ -1340,12 +1340,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       const release = await acquireDirectRoot(state, stream, reservedRootScope);
       return { executor: executor as QueryExecutor, physicalState: state, direct: true, ownsLease: false, release: async () => { release(); } };
     }
-    let lease: ConnectionLease;
-    try {
-      lease = await (executor as ConnectionProvider).acquire();
-    } catch (error) {
-      throw error;
-    }
+    const lease = await (executor as ConnectionProvider).acquire();
     if (!lease || typeof lease !== "object" || typeof lease.release !== "function" || typeof lease.query !== "function") {
       throw new TypeError("Connection provider returned an invalid lease.");
     }
@@ -1390,12 +1385,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         release: async () => { release(); },
       };
     }
-    let lease: ConnectionLease;
-    try {
-      lease = await (executor as ConnectionProvider).acquire();
-    } catch (error) {
-      throw error;
-    }
+    const lease = await (executor as ConnectionProvider).acquire();
     if (!lease || typeof lease !== "object" || typeof lease.release !== "function" || typeof lease.query !== "function") {
       throw new TypeError("Connection provider returned an invalid lease.");
     }

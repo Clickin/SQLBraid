@@ -86,7 +86,7 @@ function planChanges(files, { eventName = "pull_request", baseKnown = true } = {
       if (sqliteChanged) plan.web = true;
       continue;
     }
-    if (/^packages\/bun-sql\//u.test(file) || /^tests\/db\/bun-sql\//u.test(file) || /bun-sql-matrix/u.test(file)) {
+    if (file.startsWith("packages/bun-sql/") || file.startsWith("tests/db/bun-sql/") || /bun-sql-matrix/u.test(file)) {
       plan.bun_sql = true;
       plan.common = true;
       plan.packages = true;

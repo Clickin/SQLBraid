@@ -292,7 +292,7 @@ function policyTypeCandidates(
   // SQLite's STRICT tables accept INT as an alias for INTEGER. This is the
   // only declaration alias needed by the first-party policy.
   if (metadata.dialect.toLowerCase() === "sqlite" && relation.strict === true) {
-    for (const candidate of [...candidates]) {
+    for (const candidate of candidates.slice()) {
       if (normalizeDatabaseType(candidate) === "int") candidates.push("INTEGER");
     }
   }

@@ -150,9 +150,9 @@ function sourceFileFor(sourceText: string, fileName: string, options: OverlayOpt
 }
 
 function configuredModules(options: OverlayOptions): readonly string[] {
-  return options.moduleSpecifiers ?? (options.moduleSpecifier ? [options.moduleSpecifier] : [
-    ...AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier),
-  ]);
+  return options.moduleSpecifiers ?? (options.moduleSpecifier
+    ? [options.moduleSpecifier]
+    : AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier));
 }
 
 function defaultCompilerOptions(): ts.CompilerOptions {
@@ -287,7 +287,7 @@ function catalogModuleFromDeclaration(declaration: ts.Declaration): string | und
   return undefined;
 }
 
-function catalogReexportFromDeclaration(declaration: ts.Declaration, sourceFile: ts.SourceFile, options: OverlayOptions, checker: ts.TypeChecker): string | undefined {
+function catalogReexportFromDeclaration(declaration: ts.Declaration, sourceFile: ts.SourceFile, options: OverlayOptions, _checker: ts.TypeChecker): string | undefined {
   let owner: ts.Node | undefined = declaration;
   while (owner && !ts.isImportDeclaration(owner)) owner = owner.parent;
   if (!owner || !owner.moduleSpecifier || !ts.isStringLiteral(owner.moduleSpecifier)) return undefined;
@@ -877,7 +877,7 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
   }
   const mappingOrigins = [...origins];
   let statementSearchStart = 0;
-  function tokens(node: ts.Node, source: ts.SourceFile): readonly ts.Node[] {
+  function tokens(node: ts.Node, _source: ts.SourceFile): readonly ts.Node[] {
     const outputTokens: ts.Node[] = [];
     function visit(current: ts.Node): void {
       if (ts.isToken(current)) {
@@ -1181,7 +1181,7 @@ function sourceFileInProgram(program: ts.Program, fileName: string): ts.SourceFi
   return program.getSourceFiles().find((sourceFile) => ts.sys.resolvePath(sourceFile.fileName) === canonical);
 }
 
-function mapGeneratedRange(record: FileRecord, start: number, end: number): SourceRange {
+function mapGeneratedRange(record: FileRecord, start: number, _end: number): SourceRange {
   const origin = record.lowered.mappingOrigins.filter((candidate) => start >= candidate.generatedStart && start < candidate.generatedEnd).sort((left, right) => (left.generatedEnd - left.generatedStart) - (right.generatedEnd - right.generatedStart))[0];
   const fallbackOrigin = origin ?? record.lowered.origins.find((candidate) => start >= candidate.generatedStart && start < candidate.generatedEnd);
   if (fallbackOrigin) {
@@ -1191,7 +1191,7 @@ function mapGeneratedRange(record: FileRecord, start: number, end: number): Sour
       const callbackStart = generatedQuery.indexOf("=> {");
       const searchStart = callbackStart >= 0 ? callbackStart : 0;
       const bindingOffsets = new Map<number, number>();
-      for (const expression of [...new Set(query.bindings.map((binding) => binding.expression))]) {
+      for (const expression of new Set(query.bindings.map((binding) => binding.expression))) {
         const bindings = query.bindings.filter((binding) => binding.expression === expression).sort((left, right) => left.interpolation - right.interpolation);
         let offset = searchStart;
         for (const binding of bindings) {
@@ -1331,7 +1331,7 @@ export function createSourceContext(sourceText: string, fileName: string, option
 
 export function checkSource(sourceText: string, fileName: string, options: TypeScriptCheckOptions): readonly CompileDiagnostic[] {
   const context = createSourceContext(sourceText, fileName, options);
-  const { compilerOptions, program: originalProgram, sourceFile: originalSourceFile } = context;
+  const { compilerOptions, sourceFile: originalSourceFile } = context;
   const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: context.checker };
   const discovered = discoverQueries(sourceText, fileName, fileOptions);
   const lowered = lowerSourceFile(originalSourceFile, discovered, "checker");
@@ -1344,7 +1344,7 @@ export function checkSource(sourceText: string, fileName: string, options: TypeS
 
 export function checkSourceDetailed(sourceText: string, fileName: string, options: TypeScriptCheckOptions): DetailedCheckResult {
   const context = createSourceContext(sourceText, fileName, options);
-  const { compilerOptions, program: originalProgram, sourceFile: originalSourceFile } = context;
+  const { compilerOptions, sourceFile: originalSourceFile } = context;
   const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: context.checker };
   const discovered = discoverQueries(sourceText, fileName, fileOptions);
   const lowered = lowerSourceFile(originalSourceFile, discovered, "checker");
@@ -1446,9 +1446,7 @@ export function emitSource(sourceText: string, fileName: string, options: Overla
       const sourceMap = JSON.parse(sourceMapText) as Record<string, unknown>;
       sourceMap.x_sqlbraid_origins = transformed.origins;
       sourceMapText = JSON.stringify(sourceMap);
-    } catch {
-      sourceMapText = sourceMapText;
-    }
+    } catch {}
   }
   return { outputText, ...(sourceMapText ? { sourceMapText } : {}), diagnostics };
 }

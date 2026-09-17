@@ -252,7 +252,7 @@ test.each(
     async acquire() {
       return {
         statementBinding,
-        async query<Row>(rendered: { readonly segments: readonly string[] }) {
+        async query<Row>(_rendered: { readonly segments: readonly string[] }) {
           const callIndex = calls;
           calls += 1;
           if (phase === "result-kind" && callIndex === index) {

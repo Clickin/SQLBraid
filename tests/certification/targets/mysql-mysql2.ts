@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import assert from "node:assert/strict";
 import { createConnection, createPool, type Connection } from "mysql2/promise";
-import type { Database, RowQuery, StreamOptions } from "@sqlbraid/core";
+import type { RowQuery, StreamOptions } from "@sqlbraid/core";
 import { createMysql2Database, createMysql2PoolProvider, MYSQL2_LOSSLESS_TEXT, type Mysql2ConnectionLike, type Mysql2ExecuteOptionsLike, type Mysql2PoolLike, type Mysql2RawCommandLike, type Mysql2RawConnectionLike, type Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
 import { sql } from "@sqlbraid/mysql";
 import { createPooledDatabase } from "@sqlbraid/runtime";

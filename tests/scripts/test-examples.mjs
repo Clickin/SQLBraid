@@ -111,7 +111,7 @@ async function installExample(name, tarballs) {
   const manifest = JSON.parse(await readFile(packageJsonPath, "utf8"));
   const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies"];
   const dependencies = Object.fromEntries(
-    dependencyFields.map((field) => [field, { ...(manifest[field] ?? {}) }]),
+    dependencyFields.map((field) => [field, { ...manifest[field] }]),
   );
   const included = new Set();
   function include(packageName) {

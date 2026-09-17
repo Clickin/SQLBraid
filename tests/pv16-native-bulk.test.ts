@@ -50,7 +50,7 @@ test("PostgreSQL bulk bounds prepared names and evicts only its own statement", 
     connection: registry,
     escapeIdentifier: (value: string) => value,
     escapeLiteral: (value: string) => value,
-    async query(configOrText: unknown, values?: readonly unknown[]): Promise<PgResultLike> {
+    async query(configOrText: unknown, _values?: readonly unknown[]): Promise<PgResultLike> {
       if (typeof configOrText === "object" && configOrText !== null) {
         const config = configOrText as { readonly name?: string; readonly text: string; readonly values: readonly unknown[] };
         if (config.text.startsWith("DEALLOCATE ")) {

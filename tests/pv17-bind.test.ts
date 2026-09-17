@@ -7,7 +7,7 @@ import {
   type ConnectionProvider,
   type DriverRoutineResult,
   type QueryExecutor,
-  type RenderedStatement,
+
   type StatementBindingAdapter,
 } from "@sqlbraid/core";
 import { sql } from "@sqlbraid/template";
