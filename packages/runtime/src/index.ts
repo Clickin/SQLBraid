@@ -516,8 +516,11 @@ function validateTransactionOptionSupport(
     const result = validate.call(owner, transactionOptions) as unknown;
     if (result !== null && (typeof result === "object" || typeof result === "function")
       && typeof (result as { readonly then?: unknown }).then === "function") {
-      if (result instanceof Promise) {
+      try {
+        // Only genuine Promises pass this intrinsic brand check, so custom thenables are never invoked.
         Promise.prototype.then.call(result, undefined, () => undefined);
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
       }
       throw new TypeError("validateTransactionOptions() must be synchronous.");
     }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runInNewContext } from "node:vm";
 import { test } from "vitest";
 import {
   createStatementBindingDescription,
@@ -157,6 +158,19 @@ test("transaction option validators reject lazy thenables without invoking them"
       },
     });
     await assert.rejects(() => rejectedDb.tx({ readOnly: false }, async () => {}), (error) =>
+      error instanceof TypeError && /must be synchronous/u.test(error.message));
+    const crossRealmRejected = runInNewContext("Promise.reject(new Error('cross-realm validator rejection'))") as PromiseLike<never>;
+    const crossRealmDb = createPooledDatabase({
+      statementBinding,
+      validateTransactionOptions() {
+        return crossRealmRejected as unknown as void;
+      },
+      async acquire() {
+        acquired += 1;
+        return transactionLease();
+      },
+    });
+    await assert.rejects(() => crossRealmDb.tx({ readOnly: false }, async () => {}), (error) =>
       error instanceof TypeError && /must be synchronous/u.test(error.message));
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.deepEqual(unhandled, []);
