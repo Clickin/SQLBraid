@@ -694,6 +694,78 @@ export async function createOracleOracledbTarget(
           assert.equal(Number((rejected as { readonly VALUE: number | string }).VALUE), 0);
           await direct.execute(command(`DELETE FROM ${TABLE} WHERE id IN (999998, 999997)`));
         },
+        transactionOption: async (
+          db: Database,
+          options: import("@sqlbraid/core").TransactionOptions,
+        ): Promise<void> => {
+          const proofId = 999997;
+          const insert = command(`INSERT INTO ${TABLE} (id, value) VALUES (${proofId}, 'transaction-option')`);
+          const remove = command(`DELETE FROM ${TABLE} WHERE id = ${proofId}`);
+          const count = row<{ readonly VALUE: number | string }>(
+            `SELECT COUNT(*) AS VALUE FROM ${TABLE} WHERE id = ${proofId}`,
+          );
+          const hasNativeReadOnlyError = (error: unknown): boolean => {
+            if (error instanceof AggregateError) return error.errors.some(hasNativeReadOnlyError);
+            if (error === null || typeof error !== "object") return false;
+            const candidate = error as {
+              readonly code?: unknown;
+              readonly errorNum?: unknown;
+              readonly cause?: unknown;
+            };
+            return (
+              candidate.code === "ORA-01456" ||
+              candidate.errorNum === 1456 ||
+              (candidate.cause !== undefined && hasNativeReadOnlyError(candidate.cause))
+            );
+          };
+          let failed = false;
+          let primary: unknown;
+          try {
+            await db.execute(remove);
+            let transactionError: unknown;
+            let transactionFailed = false;
+            try {
+              await db.tx(options, async (tx) => {
+                if (options.readOnly === true) {
+                  await tx.execute(insert);
+                  throw new Error("Oracle read-only transaction accepted a write.");
+                }
+                if (options.readOnly === false) await tx.execute(insert);
+              });
+            } catch (error) {
+              transactionFailed = true;
+              transactionError = error;
+            }
+            if (options.readOnly === true) {
+              if (!transactionFailed || !hasNativeReadOnlyError(transactionError)) {
+                throw transactionError ?? new Error("Oracle read-only transaction did not reject a write.");
+              }
+              const durable = await db.one(count);
+              if (Number(durable.VALUE) !== 0) throw new Error("Oracle read-only transaction changed durable state.");
+            } else {
+              if (transactionFailed) throw transactionError;
+              if (options.readOnly === false) {
+                const durable = await db.one(count);
+                if (Number(durable.VALUE) !== 1)
+                  throw new Error("Oracle read-write transaction did not commit its write.");
+              }
+            }
+          } catch (error) {
+            failed = true;
+            primary = error;
+          }
+          let cleanupError: unknown;
+          try {
+            await db.execute(remove);
+          } catch (error) {
+            cleanupError = error;
+          }
+          if (failed) {
+            if (cleanupError !== undefined) throw new AggregateError([primary, cleanupError]);
+            throw primary;
+          }
+          if (cleanupError !== undefined) throw cleanupError;
+        },
         pooledScope: async (): Promise<void> => {
           await pooled.session(async (session) => {
             await session.one(makeQueries().identity);

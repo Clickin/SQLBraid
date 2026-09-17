@@ -692,6 +692,96 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
           sql.rows<{ readonly marker: number }>`SELECT marker FROM ${sql.ident(state.table)} WHERE id = 'baseline'`,
         )
       ).marker,
+    transactionOption: async (
+      db: Database,
+      options: import("@sqlbraid/core").TransactionOptions,
+    ): Promise<void> => {
+      const proofId = "transaction-option-proof";
+      const insert = sql.command`INSERT INTO ${sql.ident(state.table)} (id, value, marker) VALUES (${proofId}, 'transaction-option', 0)`;
+      const remove = sql.command`DELETE FROM ${sql.ident(state.table)} WHERE id = ${proofId}`;
+      const count = sql.rows<{ readonly count: string }>`
+        SELECT count(*)::text AS count FROM ${sql.ident(state.table)} WHERE id = ${proofId}
+      `;
+      const hasNativeCode = (error: unknown, code: string): boolean => {
+        if (error instanceof AggregateError) return error.errors.some((item) => hasNativeCode(item, code));
+        if (error === null || typeof error !== "object") return false;
+        const candidate = error as { readonly code?: unknown; readonly cause?: unknown };
+        return (
+          candidate.code === code ||
+          (candidate.cause !== undefined && hasNativeCode(candidate.cause, code))
+        );
+      };
+      let failed = false;
+      let primary: unknown;
+      try {
+        await db.execute(remove);
+        let transactionError: unknown;
+        let transactionFailed = false;
+        try {
+          await db.tx(options, async (tx) => {
+            const observed = await tx.one(sql.rows<{
+              readonly transaction_isolation: string;
+              readonly transaction_read_only: string;
+            }>`
+              SELECT current_setting('transaction_isolation') AS transaction_isolation,
+                     current_setting('transaction_read_only') AS transaction_read_only
+            `);
+            const expectedIsolation = options.isolation?.replaceAll("-", " ");
+            const isolationMatches =
+              expectedIsolation === undefined ||
+              observed.transaction_isolation === expectedIsolation ||
+              (options.isolation === "read-uncommitted" && observed.transaction_isolation === "read committed");
+            if (!isolationMatches) {
+              throw new Error(
+                `PostgreSQL transaction option observed isolation=${observed.transaction_isolation} instead of ${expectedIsolation}.`,
+              );
+            }
+            const expectedReadOnly =
+              options.readOnly === undefined ? undefined : options.readOnly ? "on" : "off";
+            if (expectedReadOnly !== undefined && observed.transaction_read_only !== expectedReadOnly) {
+              throw new Error(
+                `PostgreSQL transaction option observed read_only=${observed.transaction_read_only} instead of ${expectedReadOnly}.`,
+              );
+            }
+            if (options.readOnly === true) {
+              await tx.execute(insert);
+              throw new Error("PostgreSQL read-only transaction accepted a write.");
+            }
+            if (options.readOnly === false) await tx.execute(insert);
+          });
+        } catch (error) {
+          transactionFailed = true;
+          transactionError = error;
+        }
+        if (options.readOnly === true) {
+          if (!transactionFailed || !hasNativeCode(transactionError, "25006")) {
+            throw transactionError ?? new Error("PostgreSQL read-only transaction did not reject a write.");
+          }
+          const durable = await db.one(count);
+          if (durable.count !== "0") throw new Error("PostgreSQL read-only transaction changed durable state.");
+        } else {
+          if (transactionFailed) throw transactionError;
+          if (options.readOnly === false) {
+            const durable = await db.one(count);
+            if (durable.count !== "1") throw new Error("PostgreSQL read-write transaction did not commit its write.");
+          }
+        }
+      } catch (error) {
+        failed = true;
+        primary = error;
+      }
+      let cleanupError: unknown;
+      try {
+        await db.execute(remove);
+      } catch (error) {
+        cleanupError = error;
+      }
+      if (failed) {
+        if (cleanupError !== undefined) throw new AggregateError([primary, cleanupError]);
+        throw primary;
+      }
+      if (cleanupError !== undefined) throw cleanupError;
+    },
     pooledScope: async (): Promise<void> => {
       await pooled.session(async (session) => {
         await session.one(queries.identity);

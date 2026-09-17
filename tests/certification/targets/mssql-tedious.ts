@@ -547,6 +547,41 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
         sideEffects: () => stats.requests,
         mutationSentinel: async (): Promise<unknown> =>
           database.one(sql.rows`SELECT value FROM ${sql.raw(TABLE)} WHERE id = 1`),
+        transactionOption: async (
+          db: Database,
+          options: import("@sqlbraid/core").TransactionOptions,
+        ): Promise<void> => {
+          if (options.readOnly !== undefined)
+            throw new Error("MSSQL transactionOption proof received an unsupported readOnly option.");
+          if (options.isolation === undefined) {
+            await db.tx(options, async (tx) => {
+              await tx.one(fixtureQueries.identity);
+            });
+            return;
+          }
+          const expected = {
+            "read-uncommitted": 1,
+            "read-committed": 2,
+            "repeatable-read": 3,
+            serializable: 4,
+          }[options.isolation];
+          const observed = await db.tx(options, (tx) =>
+            tx.one(sql.rows<{
+              readonly isolation_level: number | string;
+              readonly open_transaction_count: number | string;
+            }>`
+              SELECT CAST(transaction_isolation_level AS int) AS isolation_level,
+                     CAST(open_transaction_count AS int) AS open_transaction_count
+              FROM sys.dm_exec_requests
+              WHERE session_id = @@SPID
+            `),
+          );
+          if (Number(observed.isolation_level) !== expected || Number(observed.open_transaction_count) < 1) {
+            throw new Error(
+              `MSSQL transaction option observed isolation=${String(observed.isolation_level)} with open_transaction_count=${String(observed.open_transaction_count)} instead of ${expected}.`,
+            );
+          }
+        },
         readOnlyWrite: async (): Promise<void> => {
           await database.tx((tx) => tx.execute(sql`INSERT INTO ${sql.raw(TABLE)} (id, value) VALUES (999998, N'rw')`));
           await assert.rejects(
