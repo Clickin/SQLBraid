@@ -41,7 +41,12 @@ export const expectedCapabilities = BUN_EXPECTED_CAPABILITIES;
 export const expectedTransactionOptions = BUN_EXPECTED_TRANSACTION_OPTIONS;
 export const expectedGuardedCases = BUN_EXPECTED_GUARDED_CASES;
 
-function instrument(client: BunSqlClient, counters: Counters, leased = false): BunSqlClient {
+function instrument(
+  client: BunSqlClient,
+  counters: Counters,
+  leased = false,
+  configureReserved?: (reserved: BunSqlClient) => Promise<void>,
+): BunSqlClient {
   const wrapped = ((strings: TemplateStringsArray, ...values: readonly unknown[]) => {
     counters.sideEffects += 1;
     return client(strings, ...values);
@@ -82,6 +87,7 @@ function instrument(client: BunSqlClient, counters: Counters, leased = false): B
       counters.cleanupBalance += 1;
       try {
         const reserved = await client.reserve!();
+        await configureReserved?.(reserved);
         const wrappedReserved = instrument(reserved, counters, true) as BunSqlReservedClient;
         const release = reserved.release.bind(reserved);
         wrappedReserved.release = async () => {
@@ -274,7 +280,6 @@ async function proveTransactionOption(
         await writer.execute(queries.transaction!.insert);
         try {
           await db.tx(options, async (reader) => {
-            await reader.execute(tag.command`SET SESSION innodb_lock_wait_timeout = 1`);
             await reader.one(visibleCount);
           });
         } catch (error) {
@@ -344,7 +349,12 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     failRollbackNative: false,
     nativeRollbackClosed: false,
   };
-  const client = instrument(options.createClient(), counters);
+  const configureReserved = dialect === "mysql" || dialect === "mariadb"
+    ? async (reserved: BunSqlClient): Promise<void> => {
+      await reserved.unsafe("SET SESSION innodb_lock_wait_timeout = 1", []);
+    }
+    : undefined;
+  const client = instrument(options.createClient(), counters, false, configureReserved);
   const table = `braid_cert_${dialect}_${process.pid}_${Math.random().toString(36).slice(2, 10)}`;
   const sentinelTable = `${table}_sentinel`;
   const sentinelValue = `sentinel-${table}`;
