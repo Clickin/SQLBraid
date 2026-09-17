@@ -323,7 +323,7 @@ function nodeSqliteEnvironment(transactionSupported: boolean, streamSupported: b
 export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
   // Deno's node:sqlite iterator turns SQLite step errors into normal EOF.
   // Enable only after a native error-propagation certification proves it fixed.
-  const streamSupported = typeof process === "undefined" || process.versions.deno === undefined;
+  const streamSupported = !("Deno" in globalThis);
   const control = database.exec
     ? (sql: string): void => {
         database.exec?.(sql);
