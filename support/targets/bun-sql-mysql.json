@@ -34,6 +34,7 @@
     },
     "exclusions": [
       "Only the exact pinned Bun.SQL backend and configured representation profile are covered.",
+      "Explicit transaction readOnly true/false is unsupported: Bun 1.3.14 retains a rejected READ ONLY statement shape on the same physical connection. Native A-G controls are retained in tests/scripts/bun-sql-readonly-repro.mjs; fresh connections recover, prepare:false is unsupported, and native begin does not repair reuse.",
       "Integral Number results without database type metadata reject rather than risk exact-numeric loss.",
       "Streaming, routine channels and active statement cancellation are unsupported.",
       "Empty SELECT and zero-affected commands are indistinguishable in Bun metadata and reject after execution; side effects may already have occurred.",
@@ -176,9 +177,8 @@
       "testIds": ["bun-sql-mysql.data.profile"]
     },
     "transaction.read-only": {
-      "status": "guarded",
-      "testIds": ["bun-sql-mysql.data.profile"],
-      "conditionCode": "bun-sql.transaction-options"
+      "status": "unsupported",
+      "testIds": []
     },
     "transaction.isolation.read-uncommitted": {
       "status": "guarded",

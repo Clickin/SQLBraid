@@ -1853,7 +1853,10 @@
           }
         },
         "transaction.access-mode": {
-          "evidence": ["integration", "boundary"]
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "transaction.read-only is unsupported by canonical support target bun-sql-mysql."
+          }
         },
         "pool.checkout-init-failure": {
           "evidence": ["boundary"]
@@ -2002,7 +2005,10 @@
           }
         },
         "transaction.access-mode": {
-          "evidence": ["integration", "boundary"]
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "transaction.read-only is unsupported by canonical support target bun-sql-mariadb."
+          }
         },
         "pool.checkout-init-failure": {
           "evidence": ["boundary"]
