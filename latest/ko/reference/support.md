@@ -70,7 +70,7 @@ Exclusions: This compatible target covers better-sqlite3 13.0.3 only on Node 22.
 - Database: mariadb 11.8.9 community
 - Driver: bun-sql @1.3.14 bun-sql-mariadb-1.3.14
 - Runtime: bun @1.3.14
-- Evidence: verified (5cfe3058959e8c6b458f81aa02a969b1f020cca9)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: native-value-template; stream: unsupported; routine: unsupported; bulk: prepared-loop
 Exclusions: Only the exact pinned Bun.SQL backend and configured representation profile are covered. Explicit transaction readOnly true/false is unsupported: Bun 1.3.14 retains a rejected READ ONLY statement shape on the same physical connection. Native A-G controls are retained in tests/scripts/bun-sql-readonly-repro.mjs; fresh connections recover, prepare:false is unsupported, and native begin does not repair reuse. Integral Number results without database type metadata reject rather than risk exact-numeric loss. Streaming, routine channels and active statement cancellation are unsupported. Empty SELECT and zero-affected commands are indistinguishable in Bun metadata and reject after execution; side effects may already have occurred. Use string input for wide integer binds where the pinned MySQL transport rejects BigInt. DECIMAL and binary outputs are indistinguishable Uint8Array carriers and reject; author explicit CAST AS CHAR or HEX SQL.
 
@@ -129,7 +129,7 @@ Exclusions: Only the exact pinned Bun.SQL backend and configured representation 
 - Database: mysql 8.4.2 community
 - Driver: bun-sql @1.3.14 bun-sql-mysql-1.3.14
 - Runtime: bun @1.3.14
-- Evidence: verified (5cfe3058959e8c6b458f81aa02a969b1f020cca9)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: native-value-template; stream: unsupported; routine: unsupported; bulk: prepared-loop
 Exclusions: Only the exact pinned Bun.SQL backend and configured representation profile are covered. Explicit transaction readOnly true/false is unsupported: Bun 1.3.14 retains a rejected READ ONLY statement shape on the same physical connection. Native A-G controls are retained in tests/scripts/bun-sql-readonly-repro.mjs; fresh connections recover, prepare:false is unsupported, and native begin does not repair reuse. Integral Number results without database type metadata reject rather than risk exact-numeric loss. Streaming, routine channels and active statement cancellation are unsupported. Empty SELECT and zero-affected commands are indistinguishable in Bun metadata and reject after execution; side effects may already have occurred. Use string input for wide integer binds where the pinned MySQL transport rejects BigInt. DECIMAL and binary outputs are indistinguishable Uint8Array carriers and reject; author explicit CAST AS CHAR or HEX SQL.
 
@@ -188,7 +188,7 @@ Exclusions: Only the exact pinned Bun.SQL backend and configured representation 
 - Database: postgres 16.4 alpine
 - Driver: bun-sql @1.3.14 bun-sql-postgres-1.3.14
 - Runtime: bun @1.3.14
-- Evidence: verified (5cfe3058959e8c6b458f81aa02a969b1f020cca9)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: native-value-template; stream: unsupported; routine: unsupported; bulk: prepared-loop
 Exclusions: Only the exact pinned Bun.SQL backend and configured representation profile are covered. Integral Number results without database type metadata reject rather than risk exact-numeric loss. Streaming, routine channels and active statement cancellation are unsupported.
 
@@ -247,7 +247,7 @@ Exclusions: Only the exact pinned Bun.SQL backend and configured representation 
 - Database: sqlite 3.53.0 bun-embedded
 - Driver: bun-sql @1.3.14 bun-sql-sqlite-1.3.14
 - Runtime: bun @1.3.14
-- Evidence: verified (5cfe3058959e8c6b458f81aa02a969b1f020cca9)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: native-value-template; stream: unsupported; routine: unsupported; bulk: prepared-loop
 Exclusions: Only the exact pinned Bun.SQL backend and configured representation profile are covered. Integral Number results without database type metadata reject rather than risk exact-numeric loss. Streaming, routine channels and active statement cancellation are unsupported. Bun native SQL classification can misread mixed single/double-quote literals; inline JSON fails the row contract, while bound JSON text is verified.
 
@@ -409,7 +409,7 @@ Exclusions: This target covers @libsql/client 0.18.0 local file URLs only; remot
 - Database: mariadb 11.8.9 community
 - Driver: mariadb @3.5.4 mariadb-lossless-text
 - Runtime: node @22.18.0
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: text-positional (?); stream: MariaDB Connector stream; routine: prepared CALL emitted result sets; no OUT/INOUT carrier; bulk: connector-native-batch
 Exclusions: MariaDB evidence is separate from mysql2 compatibility Bun and Deno MariaDB subpaths are not certified by this target
 
@@ -480,7 +480,7 @@ Exclusions: MariaDB evidence is separate from mysql2 compatibility Bun and Deno 
 - Database: mssql 2022-CU18 Developer
 - Driver: tedious @20.0.0 mssql-tedious
 - Runtime: node @22.18.0
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: typed request (@p1..@pN); stream: bounded row events; routine: Tedious callProcedure; OUTPUT, RETURN and emitted row events; bulk: prepared-loop
 Exclusions: CURSOR VARYING OUTPUT is unsupported Decimal and Numeric input is restricted to values safely representable by Tedious Number conversion Bun and Deno Tedious subpaths are not certified by this target
 
@@ -552,7 +552,7 @@ Exclusions: CURSOR VARYING OUTPUT is unsupported Decimal and Numeric input is re
 - Database: mysql 8.4.2 community
 - Driver: mysql2 @3.24.4 mysql2-lossless-text
 - Runtime: deno @2.9.3
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: text-positional (?); stream: mysql2 prepared Execute.stream; routine: prepared CALL emitted result sets; no OUT/INOUT carrier; bulk: prepared-loop
 Exclusions: Only this exact Deno runtime, driver, database and representation profile tuple is covered. Capabilities omitted from this target are not certified by its packed fixture.
 
@@ -606,7 +606,7 @@ Exclusions: Only this exact Deno runtime, driver, database and representation pr
 - Database: mysql 8.4.2 community
 - Driver: mysql2 @3.24.4 mysql2-lossless-text
 - Runtime: node @22.18.0
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: text-positional (?); stream: mysql2 prepared Execute.stream; routine: prepared CALL emitted result sets; no OUT/INOUT carrier; bulk: prepared-loop
 Exclusions: MySQL has no generic DML RETURNING capability OUT and INOUT carriers are unsupported for ordinary mysql2 execution Bun and Deno mysql2 subpaths are not certified by this target
 
@@ -675,7 +675,7 @@ Exclusions: MySQL has no generic DML RETURNING capability OUT and INOUT carriers
 - Database: oracle 23.9 Free
 - Driver: node-oracledb @7.0.1 oracle-thin
 - Runtime: node @22.18.0
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: text-positional (:1..:N); stream: node-oracledb ResultSet; routine: PL/SQL OUT/INOUT binds; REF CURSOR and implicit ResultSet; bulk: executeMany
 Exclusions: This is Oracle Free 23.9 evidence, not Oracle Database 19c evidence Oracle Thick mode is not covered Bun and Deno node-oracledb subpaths are not certified by this target
 
@@ -749,7 +749,7 @@ Exclusions: This is Oracle Free 23.9 evidence, not Oracle Database 19c evidence 
 - Database: postgres 18.6 alpine
 - Driver: pg @8.23.0 pg-lossless-text
 - Runtime: node @22.18.0
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: text-positional ($1..$N); stream: pg-cursor; routine: SQL CALL; OUT row and transaction-owned refcursor FETCH; bulk: prepared-loop
 Exclusions: Only the PostgreSQL capability fixture is covered by this current target's gate
 
@@ -794,7 +794,7 @@ Exclusions: Only the PostgreSQL capability fixture is covered by this current ta
 - Database: postgres 16.4 alpine
 - Driver: pg @8.23.0 pg-lossless-text
 - Runtime: deno @2.9.3
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: text-positional ($1..$N); stream: pg-cursor; routine: SQL CALL; OUT row and transaction-owned refcursor FETCH; bulk: prepared-loop
 Exclusions: Only this exact Deno runtime, driver, database and representation profile tuple is covered. Capabilities omitted from this target are not certified by its packed fixture.
 
@@ -847,7 +847,7 @@ Exclusions: Only this exact Deno runtime, driver, database and representation pr
 - Database: postgres 16.4 alpine
 - Driver: pg @8.23.0 pg-lossless-text
 - Runtime: node @22.18.0
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: text-positional ($1..$N); stream: pg-cursor; routine: SQL CALL; OUT row and transaction-owned refcursor FETCH; bulk: prepared-loop
 Exclusions: PostgreSQL 18-only syntax is not covered by this 16.4 target Bun and Deno pg subpaths are not certified by this target
 
@@ -920,7 +920,7 @@ Exclusions: PostgreSQL 18-only syntax is not covered by this 16.4 target Bun and
 - Database: sqlite 3.53.2 Deno bundled SQLite
 - Driver: node-sqlite @2.9.3 sqlite-exact-string
 - Runtime: deno @2.9.3
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: text-positional (?NNN); stream: StatementSync iterate; routine: unsupported by SQLite; bulk: prepared-loop
 Exclusions: Only this exact Deno runtime, driver, database and representation profile tuple is covered. Capabilities omitted from this target are not certified by its packed fixture.
 
@@ -973,7 +973,7 @@ Exclusions: Only this exact Deno runtime, driver, database and representation pr
 - Database: sqlite 3.53.4 official SQLite WASM OO1
 - Driver: sqlite-wasm @3.53.4-build1 sqlite-wasm-exact-string
 - Runtime: browser @153.0.8010.12
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: OO1 prepare/bind/step; stream: OO1 step; routine: unsupported by SQLite; bulk: prepared-loop with stepReset
 Exclusions: This browser target does not certify Node database drivers
 
@@ -1040,7 +1040,7 @@ Exclusions: This browser target does not certify Node database drivers
 - Database: sqlite 3.50.2 Node bundled SQLite
 - Driver: node-sqlite @22.18.0 sqlite-exact-string
 - Runtime: node @22.18.0
-- Evidence: verified (a636a0c031e9623dbc84af229bc839d83f5d6abf)
+- Evidence: verified (8a360e3147458d26704971b344c765dda7c98fec)
 - Transport: text-positional (?NNN); stream: StatementSync iterate; routine: unsupported by SQLite; bulk: prepared-loop
 Exclusions: SQLite call and routine APIs are unsupported Bun uses its earlier bun:sqlite API; this Node node:sqlite target does not apply to Bun
 
