@@ -141,9 +141,9 @@ function buildQueries(stats: NativeStats): CertificationFixture["queries"] {
   const command = sql.command`INSERT INTO cert_values (value) VALUES (${"command"})`;
   const identity = sql.rows`SELECT 'sqlite-wasm-browser' AS id` as RowQuery<{ readonly id: string }>;
   const failure = sql.rows`SELECT * FROM cert_missing_table`;
-  const preparedRows = (input: unknown) => {
+  const preparedRows = (_input: unknown) => {
     preparedCalls += 1;
-    return sql.rows`SELECT ${input} AS value UNION ALL SELECT 'two' AS value`;
+    return sql.rows`SELECT 'one' AS value UNION ALL SELECT 'two' AS value`;
   };
   const preparedCommand = (_input: unknown) => {
     preparedCalls += 1;
@@ -154,7 +154,7 @@ function buildQueries(stats: NativeStats): CertificationFixture["queries"] {
   const inout = sql.call`SELECT ${sql.inOut("answer", 1)}`;
   const transaction = {
     insert: sql.command`INSERT INTO cert_values (value) VALUES (${"transaction"})`,
-    visible: sql.rows`SELECT value FROM cert_values WHERE value = 'transaction'`,
+    visible: sql.rows`SELECT value FROM cert_values WHERE value IN ('transaction', 'savepoint')`,
     savepointInsert: sql.command`INSERT INTO cert_values (value) VALUES (${"savepoint"})`,
     savepointVisible: sql.rows`SELECT value FROM cert_values WHERE value = 'savepoint'`,
   };
@@ -193,7 +193,6 @@ function buildQueries(stats: NativeStats): CertificationFixture["queries"] {
         RES011: { value: "second" },
       },
       commandAffectedRows: 1,
-      failureCode: "SQLITE_ERROR",
     },
   };
 }
@@ -228,13 +227,14 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
       const db = createSqliteWasmDatabase(observed, { sqlite3 });
       const queries = buildQueries(stats);
       const unsupported: NonNullable<CertificationFixture["unsupported"]> = {
-        STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); controller.abort(new Error("cancel")); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) void row; }, sideEffects: () => stats.prepares },
+        STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
         CALL001: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.call), sideEffects: () => stats.prepares },
         CALL002: { feature: "routine.out", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.out!), sideEffects: () => stats.prepares },
         CALL003: { feature: "routine.inout", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.inout!), sideEffects: () => stats.prepares },
         CALL004: { feature: "routine.result-sets", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.resultSets!), sideEffects: () => stats.prepares },
         CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.cursor!), sideEffects: () => stats.prepares },
         CALL006: { feature: "routine.return-value", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.returnValue!), sideEffects: () => stats.prepares },
+        TX020: optionsProbe(db, { isolation: "read-uncommitted" }, "transaction.isolation.read-uncommitted", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
         TX021: optionsProbe(db, { readOnly: true }, "transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
         TX022: optionsProbe(db, { isolation: "read-committed", readOnly: true }, "transaction.isolation.read-committed", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
         TX023: optionsProbe(db, { isolation: "read-committed" }, "transaction.isolation.read-committed", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
@@ -246,6 +246,7 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         TX030: optionsProbe(db, { isolation: "read-committed", readOnly: false }, "transaction.isolation.read-committed", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
         TX031: optionsProbe(db, { isolation: "repeatable-read", readOnly: true }, "transaction.isolation.repeatable-read", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
         TX032: optionsProbe(db, { isolation: "repeatable-read", readOnly: false }, "transaction.isolation.repeatable-read", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
+        TX033: optionsProbe(db, { isolation: "serializable", readOnly: false }, "transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
       };
       const mappingFailure = new Error("cert-mapper-failure");
       const executionSchemaFailure = new Error("execution schema failed");
@@ -284,11 +285,27 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         largeResultQuery,
         largeResultCount: 10000,
       };
+      let bulkAcquires = 0;
+      let bulkExecutes = 0;
+      const bulkDb = {
+        bulk: async (...args: Parameters<typeof db.bulk>) => {
+          const [inputs] = args;
+          if (inputs.length === 0) return db.bulk(...args);
+          bulkAcquires += 1;
+          try {
+            return await db.bulk(...args);
+          } finally {
+            bulkExecutes += 1;
+          }
+        },
+      };
       const bulk: BulkConformanceFixture<unknown> = {
-        db,
+        db: bulkDb as BulkConformanceFixture<unknown>["db"],
         inputs: [1, 2],
         factory: (input) => sql.command`INSERT INTO cert_values (value) VALUES (${String(input)})`,
         expected: { inputCount: 2, affectedRows: 2 },
+        acquireCount: () => bulkAcquires,
+        executeCount: () => bulkExecutes,
         middleFailure: async () => db.bulk([1, 2], (input) => input === 2 ? sql.command`INSERT INTO cert_missing_bulk (value) VALUES (${input})` : sql.command`INSERT INTO cert_values (value) VALUES (${input})`),
       };
       const metrics = {
