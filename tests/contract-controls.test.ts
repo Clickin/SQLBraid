@@ -28,6 +28,7 @@ import {
 
 interface NativeState {
   readonly calls: Control[];
+  readonly statements: string[];
   readonly releases: boolean[];
   readonly failure: Error;
   readonly statementFailure: Error;
@@ -39,6 +40,7 @@ interface NativeState {
 
 function nativeState(): NativeState {
   const calls: Control[] = [];
+  const statements: string[] = [];
   const releases: boolean[] = [];
   const failure = new Error("injected native control failure");
   const statementFailure = new Error("native transaction-aborting statement");
@@ -47,6 +49,7 @@ function nativeState(): NativeState {
   let swallow = false;
   return {
     calls,
+    statements,
     releases,
     failure,
     statementFailure,
@@ -57,6 +60,7 @@ function nativeState(): NativeState {
       if (fault === control && !swallow) throw failure;
     },
     sql(text: string) {
+      statements.push(text);
       if (text.includes("BROKEN")) { aborted = true; throw statementFailure; }
       const control: Control | undefined =
         text.startsWith("ROLLBACK TO") || text.startsWith("ROLLBACK TRANSACTION [") ? "rollback-to" :
@@ -94,8 +98,7 @@ function pgFixture(pooled: boolean, state = nativeState()): TransactionFaultHarn
     (db) => db.execute(postgres.command`UPDATE contract_rows SET value = 1`));
 }
 
-function mysqlFixture(pooled: boolean): TransactionFaultHarness {
-  const state = nativeState();
+function mysqlFixture(pooled: boolean, state = nativeState()): TransactionFaultHarness {
   const connection: Mysql2ConnectionLike & { release(): void; destroy(): void } = {
     async execute(input) {
       state.sql(typeof input === "string" ? input : input.sql);
@@ -111,8 +114,7 @@ function mysqlFixture(pooled: boolean): TransactionFaultHarness {
     (db) => db.execute(mysql.command`UPDATE contract_rows SET value = 1`));
 }
 
-function mariaFixture(pooled: boolean): TransactionFaultHarness {
-  const state = nativeState();
+function mariaFixture(pooled: boolean, state = nativeState()): TransactionFaultHarness {
   const connection = {
     async execute(input: string | { readonly sql: string }) {
       state.sql(typeof input === "string" ? input : input.sql);
@@ -257,6 +259,28 @@ for (const pooled of [false, true]) {
   transactionFaultContracts("node-oracledb", ownership, () => oracleFixture(pooled), false);
   transactionFaultContracts("tedious", ownership, () => tediousFixture(pooled), false);
 }
+
+for (const transport of ["pg", "mysql2", "mariadb"] as const) {
+  for (const pooled of [false, true]) {
+    test(`[contract:${transport}:transaction.access-mode:boundary] [ownership:${pooled ? "pooled" : "direct"}] native transaction access mode distinguishes omitted true and false`, async () => {
+      for (const readOnly of [undefined, true, false]) {
+        const state = nativeState();
+        const harness = transport === "pg" ? pgFixture(pooled, state) :
+          transport === "mysql2" ? mysqlFixture(pooled, state) : mariaFixture(pooled, state);
+        const options = readOnly === undefined ? {} : { readOnly };
+        assert.equal(await harness.db.tx(options, async () => "committed"), "committed");
+        const mode = readOnly === true ? "READ ONLY" : readOnly === false ? "READ WRITE" : undefined;
+        assert.deepEqual(state.statements, transport === "pg"
+          ? [mode === undefined ? "BEGIN" : `BEGIN ${mode}`, "COMMIT"]
+          : mode === undefined ? []
+          : [transport === "mysql2" ? `START TRANSACTION ${mode}` : `SET TRANSACTION ${mode}`]);
+        assert.deepEqual(state.calls, ["begin", "commit"]);
+        if (pooled) assert.deepEqual(state.releases, [false]);
+      }
+    });
+  }
+}
+
 for (const kind of ["node-sqlite", "better-sqlite3", "sqlite-wasm"] as const) {
   transactionFaultContracts(kind, "direct", () => sqliteFixture(kind));
 }
