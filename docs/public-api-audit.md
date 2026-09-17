@@ -37,9 +37,14 @@ claim.
 `PUBLIC_ERROR_DEFINITIONS` and its `PublicErrorDefinition` /
 `PublicErrorCategory` types enumerate the deliberately public error reference.
 They do not promote every internal `BRAID_` message to a stable contract.
-The bilingual error reference links every registry code, and the machine-readable
-support catalog is the exhaustive capability vocabulary rendered by the
-[support matrix](/SQLBraid/reference/support/).
+The bilingual error reference links every registry code. `WELL_KNOWN_CAPABILITIES`
+and `WELL_KNOWN_CAPABILITY_IDS` are the core machine-readable capability
+vocabulary; `support/capabilities.json` mirrors that vocabulary for target
+claims and the [support matrix](/SQLBraid/reference/support/). Capability
+status is support evidence, while `canonical` and `rawRepresentations` are
+representation evidence attached to a claim, not additional capability IDs.
+`isPublicUnsupportedFeatureError` is the conformance predicate for a public
+`UnsupportedFeatureError` feature/code pair.
 
 `AUTHORING_MODULE_CATALOG` is a frozen data-only discovery catalog consumed by
 compiler and tooling; it records supported tag-exporting module identities and
@@ -88,11 +93,70 @@ uses `(feature, code, message, options?)` with a `BRAID_${string}` code.
 `SourceRange`, `SqlFragment`, `SqlRenderError`, `SqlTag`, `SqlTagLike`,
 `TemplateIr`, `TemplateNode`, `TextNode`, `TrimAttributes`, `TrimNode`.
 
-Canonical environment capability keys are `statement.prepare`,
-`statement.stream`, `statement.bulk`, `transaction`, `transaction.savepoint`,
-`routine.out`, `routine.result-sets`, `routine.out-cursor`, and
-`routine.return-value`. Do not add old `execution.*` or `routine.resultsets`/
-`routine.return-status` aliases.
+The exhaustive vocabulary is grouped by evidence family below. Runtime
+environment declarations use these IDs; do not add aliases such as
+`routine.resultsets` or `routine.return-status`.
+
+<!-- sqlbraid-capability-vocabulary -->
+```text
+# support
+sql.native-transparency
+sql.generated-structure
+result.rows
+result.command
+result.multiple-sets
+result.standard-schema
+dml.insert-returning
+dml.update-returning
+dml.delete-returning
+dml.merge-returning
+dml.upsert-returning
+session.pinned
+statement.prepare
+statement.cancel
+statement.stream
+statement.bulk
+execution.bulk-fidelity
+transaction
+transaction.savepoint
+transaction.read-only
+transaction.isolation.read-uncommitted
+transaction.isolation.read-committed
+transaction.isolation.repeatable-read
+transaction.isolation.serializable
+routine.call
+routine.out
+routine.inout
+routine.result-sets
+routine.out-cursor
+routine.return-value
+
+# representation
+numeric.exact-integer
+numeric.exact-decimal
+numeric.approximate-float
+numeric.approximate-special
+numeric.bind-exact
+numeric.aggregate
+numeric.command-metadata
+numeric.special-values
+numeric.scale-greater-than-precision
+numeric.negative-scale
+data.json-parsed
+data.json-lossless-text
+data.binary
+data.uuid
+data.temporal-native
+data.temporal-lossless
+data.timezone
+
+# metadata
+metadata.command-safe
+metadata.identity
+metadata.generated
+metadata.routines
+metadata.types
+```
 
 ## Dialect and driver packages
 

@@ -91,8 +91,10 @@ const READABLE_RELATION_KINDS = new Set<RelationSnapshot["kind"]>([
   "virtual",
 ]);
 
-const IDENTIFIER_PART = /^\p{ID_Continue}$/u;
-const IDENTIFIER_START = /^\p{ID_Start}$/u;
+// ECMAScript IdentifierStart/IdentifierPart include ASCII `$`/`_`, the
+// Unicode Other_ID_* exceptions, and ZWNJ/ZWJ (IdentifierPart-only).
+const IDENTIFIER_PART = /^(?:[$_\u00b7\u0387\u1369-\u1371\u19da\u200c\u200d]|\p{ID_Continue})$/u;
+const IDENTIFIER_START = /^(?:[$_\u2118\u212e\u309b\u309c]|\p{ID_Start})$/u;
 const RESERVED_EXPORT_NAMES = new Set([
   "any", "as", "asserts", "bigint", "boolean", "break", "case", "catch", "class", "const", "continue",
   "debugger", "declare", "default", "delete", "do", "else", "enum", "export", "extends", "false", "finally",
@@ -100,7 +102,7 @@ const RESERVED_EXPORT_NAMES = new Set([
   "keyof", "let", "module", "namespace", "never", "new", "null", "number", "object", "of", "package",
   "private", "protected", "public", "readonly", "require", "return", "set", "static", "string", "super",
   "switch", "symbol", "this", "throw", "true", "try", "type", "typeof", "undefined", "unique", "unknown",
-  "var", "void", "while", "with", "yield",
+  "using", "var", "void", "while", "with", "yield", "await",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -412,7 +414,16 @@ function relationStem(value: string): string {
   let result = "";
   let wordStart = true;
   for (const character of value) {
-    if (character === "_" || !IDENTIFIER_PART.test(character)) {
+    if (character === "_" && result.length > 0) {
+      wordStart = true;
+      continue;
+    }
+    if (!IDENTIFIER_PART.test(character)) {
+      wordStart = true;
+      continue;
+    }
+    if (result.length === 0 && (character === "_" || character === "$")) {
+      result += character;
       wordStart = true;
       continue;
     }

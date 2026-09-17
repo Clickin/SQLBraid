@@ -24,6 +24,13 @@ export interface RenderLimits {
 
 export type QueryResultKind = "rows" | "command" | "call" | "unknown";
 export { AUTHORING_MODULE_CATALOG, type AuthoringModuleCatalogEntry } from "./authoring-modules.js";
+export {
+  WELL_KNOWN_CAPABILITIES,
+  WELL_KNOWN_CAPABILITY_IDS,
+  type CapabilityFamily,
+  type WellKnownCapability,
+  type WellKnownCapabilityId,
+} from "./capabilities.js";
 
 export type NumericSemantics =
   | "exact-integer"
@@ -66,6 +73,11 @@ export interface PublicErrorDefinition {
   readonly code: string;
   readonly category: PublicErrorCategory;
   readonly owner: string;
+  /**
+   * UnsupportedFeatureError only: features for which this code is a public
+   * contract. Other public errors intentionally omit this metadata.
+   */
+  readonly features?: readonly string[];
 }
 
 /**
@@ -89,27 +101,27 @@ export const PUBLIC_ERROR_DEFINITIONS: readonly PublicErrorDefinition[] = Object
   { code: "BRAID_STREAM_SCOPE", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
   { code: "BRAID_REENTRY", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
   { code: "BRAID_TX_OPTIONS_NESTED", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
-  { code: "BRAID_CALL_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_RESULT_SETS_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_STREAM_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_CANCEL_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_SESSION_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_TX_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_CALL_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.call"] },
+  { code: "BRAID_RESULT_SETS_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.result-sets"] },
+  { code: "BRAID_STREAM_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.stream"] },
+  { code: "BRAID_CANCEL_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.cancel"] },
+  { code: "BRAID_SESSION_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["session.pinned"] },
+  { code: "BRAID_TX_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["transaction", "transaction.savepoint"] },
   { code: "BRAID_TX_OPTIONS_INVALID", category: "runtime", owner: "TypeError with code" },
-  { code: "BRAID_TX_OPTION_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_CALL_RESULT_SETS", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_CALL_CURSOR_TX_REQUIRED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_CALL_OUT_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_CALL_RETURN_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_CALL_CURSOR_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_RESOURCE_CLEANUP", category: "adapter", owner: "adapter cleanup error with code" },
-  { code: "BRAID_BIND_HINT_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_TX_OPTION_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["transaction.read-only", "transaction.isolation.read-uncommitted", "transaction.isolation.read-committed", "transaction.isolation.repeatable-read", "transaction.isolation.serializable"] },
+  { code: "BRAID_CALL_RESULT_SETS", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.result-sets"] },
+  { code: "BRAID_CALL_CURSOR_TX_REQUIRED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.out-cursor"] },
+  { code: "BRAID_CALL_OUT_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.out", "routine.inout"] },
+  { code: "BRAID_CALL_RETURN_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.call", "routine.return-value"] },
+  { code: "BRAID_CALL_CURSOR_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.out-cursor"] },
+  { code: "BRAID_RESOURCE_CLEANUP", category: "adapter", owner: "adapter cleanup error with code", features: ["resource.cleanup", "resource.discard"] },
+  { code: "BRAID_BIND_HINT_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.bind-hint"] },
   { code: "BRAID_BIND_VALUE_UNSUPPORTED", category: "adapter", owner: "AdapterError" },
-  { code: "BRAID_INTEGER_MODE_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_CALL_LOB_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_BULK_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_DIALECT_MISMATCH", category: "adapter", owner: "UnsupportedFeatureError" },
-  { code: "BRAID_RESULT_KIND_AMBIGUOUS", category: "adapter", owner: "UnsupportedFeatureError" },
+  { code: "BRAID_INTEGER_MODE_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["result.exact-integer"] },
+  { code: "BRAID_CALL_LOB_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.out"] },
+  { code: "BRAID_BULK_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.bulk"] },
+  { code: "BRAID_DIALECT_MISMATCH", category: "adapter", owner: "UnsupportedFeatureError", features: ["dialect"] },
+  { code: "BRAID_RESULT_KIND_AMBIGUOUS", category: "adapter", owner: "UnsupportedFeatureError", features: ["result.rows", "result.command"] },
   { code: "BRAID_PREPARED_NAME", category: "runtime", owner: "prepared query validation" },
   { code: "BRAID_PREPARED_SHAPE", category: "runtime", owner: "prepared query validation" },
   { code: "BRAID_BIND_TYPE_REQUIRED", category: "adapter", owner: "AdapterError" },
@@ -1121,6 +1133,15 @@ export class UnsupportedFeatureError extends Error {
     super(`${code}: ${message}`, options);
     this.name = "UnsupportedFeatureError";
   }
+}
+
+/** Return true only for a registered, semantically valid feature/code pair. */
+export function isPublicUnsupportedFeatureError(error: unknown): error is UnsupportedFeatureError {
+  if (!(error instanceof UnsupportedFeatureError)) return false;
+  const definition = PUBLIC_ERROR_DEFINITIONS.find(
+    (candidate) => candidate.owner === "UnsupportedFeatureError" && candidate.code === error.code,
+  );
+  return definition?.features?.includes(error.feature) === true;
 }
 
 /** An adapter-owned input/transport failure that retains TypeError semantics. */

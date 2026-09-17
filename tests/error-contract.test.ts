@@ -4,11 +4,14 @@ import { test } from "vitest";
 import {
   AdapterError,
   createRenderedStatement,
+  isPublicUnsupportedFeatureError,
   ResultExactnessError,
   PUBLIC_ERROR_DEFINITIONS,
   RoutineMappingError,
   SqlRenderError,
   UnsupportedFeatureError,
+  WELL_KNOWN_CAPABILITIES,
+  WELL_KNOWN_CAPABILITY_IDS,
 } from "@sqlbraid/core";
 import { createMysql2Executor } from "@sqlbraid/mysql/mysql2";
 import { createPgExecutor } from "@sqlbraid/postgres/pg";
@@ -62,6 +65,42 @@ test("the public registry links to exported owner classes and both error referen
   for (const url of docs) {
     assert.deepEqual([...documentedCodes(url)].sort(), [...registryCodes].sort(), String(url));
   }
+});
+
+test("the machine-readable capability vocabulary matches support data and classifies evidence", () => {
+  const catalog = JSON.parse(readFileSync(new URL("../support/capabilities.json", import.meta.url), "utf8")) as {
+    capabilities: readonly { readonly id: string }[];
+  };
+  const catalogIds = catalog.capabilities.map(({ id }) => id);
+  assert.deepEqual([...WELL_KNOWN_CAPABILITY_IDS], catalogIds);
+  assert.deepEqual(
+    WELL_KNOWN_CAPABILITIES.map(({ id }) => id),
+    catalogIds,
+  );
+  assert.equal(new Set(WELL_KNOWN_CAPABILITY_IDS).size, WELL_KNOWN_CAPABILITY_IDS.length);
+  assert.deepEqual(
+    new Set(WELL_KNOWN_CAPABILITIES.map(({ family }) => family)),
+    new Set(["support", "representation", "metadata"]),
+  );
+});
+
+test("public unsupported-feature conformance rejects semantically mismatched pairs", () => {
+  assert.equal(
+    isPublicUnsupportedFeatureError(new UnsupportedFeatureError(
+      "statement.stream",
+      "BRAID_STREAM_UNSUPPORTED",
+      "streaming is unavailable",
+    )),
+    true,
+  );
+  assert.equal(
+    isPublicUnsupportedFeatureError(new UnsupportedFeatureError(
+      "statement.stream",
+      "BRAID_BULK_UNSUPPORTED",
+      "wrong feature/code pair",
+    )),
+    false,
+  );
 });
 
 function hinted(dialectId: string) {

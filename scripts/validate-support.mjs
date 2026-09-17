@@ -91,6 +91,18 @@ export async function validateSupport({ root = scriptRoot } = {}) {
   }
   const capabilities = new Set(catalog.capabilities.map((c) => c.id));
   const conditions = new Set(catalog.conditions.map((c) => c.code));
+  for (const relativePath of ["docs/public-api-audit.md", "docs/driver-author-guide.md"]) {
+    const source = await readFile(join(root, relativePath), "utf8");
+    const block = /<!-- sqlbraid-capability-vocabulary -->\s*```text\s*\n([\s\S]*?)```/u.exec(source)?.[1];
+    if (block === undefined) fail("SUPPORT_CAPABILITY_DOCS", `${relativePath}: missing machine-readable capability vocabulary block.`);
+    const documented = [...new Set(
+      block.split(/\r?\n/gu).map((line) => line.trim()).filter((line) => /^[a-z][a-z0-9-]*(?:\.[a-z0-9-]+)*$/u.test(line)),
+    )].sort();
+    const catalogIds = [...capabilities].sort();
+    if (!same(documented, catalogIds)) {
+      fail("SUPPORT_CAPABILITY_DOCS", `${relativePath}: capability IDs disagree with support/capabilities.json.`);
+    }
+  }
   const sourceCache = new Map();
   for (const [id, entry] of Object.entries(registry)) {
     let titles = sourceCache.get(entry.file);

@@ -459,6 +459,35 @@ test("handles reserved, Unicode, punctuation-only, and namespace/hash collisions
   await assertCompilesGeneratedSource(result.source, "codegen-identifiers");
 });
 
+test("accepts ECMAScript underscore, dollar, Unicode, and numeric export identifiers", async () => {
+  const result = generateModels({
+    ...snapshot({
+      "public.numeric": relation("public.numeric", "2026Orders", "table", [{ name: "value", type: "text", nullable: false }]),
+      "public.other-id-start": relation("public.other-id-start", "℘orders", "table", [{ name: "value", type: "text", nullable: false }]),
+      "public.underscore": relation("public.underscore", "_orders", "table", [{ name: "value", type: "text", nullable: false }]),
+      "public.dollar": relation("public.dollar", "$orders", "table", [{ name: "value", type: "text", nullable: false }]),
+      "public.unicode": relation("public.unicode", "π‍orders", "table", [{ name: "value", type: "text", nullable: false }]),
+    }),
+  }, { typePolicy: policy });
+  assert.deepEqual(
+    result.models.map((model) => model.modelName),
+    ["$Orders", "_2026Orders", "℘orders", "_Orders", "Π‍orders"],
+  );
+  assert.equal(result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_INVALID_MODEL_NAME"), false);
+  await assertCompilesGeneratedSource(result.source, "codegen-ecmascript-identifiers");
+
+  const explicit = generateModels({
+    ...snapshot({
+      "public.explicit": relation("public.explicit", "explicit", "table", [{ name: "value", type: "text", nullable: false }]),
+    }),
+  }, {
+    typePolicy: policy,
+    naming: { relations: { "public.explicit": "$2026Orders" } },
+  });
+  assert.equal(explicit.models[0]?.modelName, "$2026Orders");
+  assert.equal(explicit.diagnostics.length, 0);
+});
+
 test("reordered metadata maps and capture timestamps preserve bytes without mutating inputs", () => {
   const types: Record<string, TypeSnapshot> = {
     "pg_catalog.text": { identity: "pg_catalog.text", name: "text", kind: "scalar" },

@@ -332,16 +332,74 @@ options must throw `UnsupportedFeatureError` with a `BRAID_*` code (the runtime
 uses `BRAID_TX_OPTION_UNSUPPORTED`). Nested explicit transaction options are
 rejected; do not reacquire for `tx` inside a session.
 
-Environment capability keys are canonical and capability-driven:
+Environment capability IDs are canonical and capability-driven. The exhaustive
+machine-readable vocabulary is exported from `@sqlbraid/core` as
+`WELL_KNOWN_CAPABILITIES` and mirrored by `support/capabilities.json`; its
+families keep execution support separate from representation and metadata
+evidence:
 
+<!-- sqlbraid-capability-vocabulary -->
 ```text
-statement.prepare       statement.stream       statement.bulk
-transaction             transaction.savepoint
-routine.out             routine.result-sets    routine.out-cursor
+# support
+sql.native-transparency
+sql.generated-structure
+result.rows
+result.command
+result.multiple-sets
+result.standard-schema
+dml.insert-returning
+dml.update-returning
+dml.delete-returning
+dml.merge-returning
+dml.upsert-returning
+session.pinned
+statement.prepare
+statement.cancel
+statement.stream
+statement.bulk
+execution.bulk-fidelity
+transaction
+transaction.savepoint
+transaction.read-only
+transaction.isolation.read-uncommitted
+transaction.isolation.read-committed
+transaction.isolation.repeatable-read
+transaction.isolation.serializable
+routine.call
+routine.out
+routine.inout
+routine.result-sets
+routine.out-cursor
 routine.return-value
+
+# representation
+numeric.exact-integer
+numeric.exact-decimal
+numeric.approximate-float
+numeric.approximate-special
+numeric.bind-exact
+numeric.aggregate
+numeric.command-metadata
+numeric.special-values
+numeric.scale-greater-than-precision
+numeric.negative-scale
+data.json-parsed
+data.json-lossless-text
+data.binary
+data.uuid
+data.temporal-native
+data.temporal-lossless
+data.timezone
+
+# metadata
+metadata.command-safe
+metadata.identity
+metadata.generated
+metadata.routines
+metadata.types
 ```
 
-Do not publish obsolete aliases or infer a capability from a dialect name. Use
+Do not publish aliases or infer a capability from a dialect name. Use
 executable database/driver/runtime/profile evidence for support labels. A Bun
 adapter may support several user-selected dialects without auto-detecting one;
 Deno can use an existing adapter where its public driver API works. Neither

@@ -171,12 +171,20 @@ async function loadSourceModule(packageName, root) {
     const coreSource = await readFile(corePath, "utf8");
     const authoringPath = join(root, "packages", "core", "src", "authoring-modules.ts");
     const authoringSource = await readFile(authoringPath, "utf8");
+    const capabilitiesPath = join(root, "packages", "core", "src", "capabilities.ts");
+    const capabilitiesSource = await readFile(capabilitiesPath, "utf8");
     const compilerOptions = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, sourceMap: false };
     const coreOut = join(temp, "core.mjs");
     const authoringOut = join(temp, "authoring-modules.mjs");
+    const capabilitiesOut = join(temp, "capabilities.mjs");
     await writeFile(authoringOut, ts.transpileModule(authoringSource, { compilerOptions, fileName: authoringPath }).outputText);
+    await writeFile(capabilitiesOut, ts.transpileModule(capabilitiesSource, { compilerOptions, fileName: capabilitiesPath }).outputText);
     let coreJavaScript = ts.transpileModule(coreSource, { compilerOptions, fileName: corePath }).outputText;
-    coreJavaScript = coreJavaScript.replaceAll('"./authoring-modules.js"', JSON.stringify(pathToFileURL(authoringOut).href)).replaceAll("'./authoring-modules.js'", JSON.stringify(pathToFileURL(authoringOut).href));
+    coreJavaScript = coreJavaScript
+      .replaceAll('"./authoring-modules.js"', JSON.stringify(pathToFileURL(authoringOut).href))
+      .replaceAll("'./authoring-modules.js'", JSON.stringify(pathToFileURL(authoringOut).href))
+      .replaceAll('"./capabilities.js"', JSON.stringify(pathToFileURL(capabilitiesOut).href))
+      .replaceAll("'./capabilities.js'", JSON.stringify(pathToFileURL(capabilitiesOut).href));
     await writeFile(coreOut, coreJavaScript);
     const policyOut = join(temp, `${packageName}.mjs`);
     let policyJavaScript = ts.transpileModule(source, { compilerOptions, fileName: sourcePath }).outputText;
