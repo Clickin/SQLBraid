@@ -23,6 +23,7 @@ import {
   createBulkBindingDescription,
   createRenderedStatement,
   createStatementBindingDescription,
+  AdapterError,
   ResultExactnessError,
   safeDatabaseCount,
   UnsupportedFeatureError,
@@ -853,7 +854,13 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
   const types = queryTypeOverrides(client, profile);
   const batchSize = streamBatchSize(options.streamBatchSize);
   const runControl = async (text: string): Promise<void> => {
-    await client.query({ text, values: [] });
+    const result = await client.query({ text, values: [] });
+    if (text === "COMMIT" && result.command !== undefined && result.command !== "COMMIT") {
+      throw new AdapterError(
+        "BRAID_TX_NOT_COMMITTED",
+        `PostgreSQL COMMIT completed with ${result.command}, not COMMIT.`,
+      );
+    }
   };
   return {
     ownershipKey: client,
