@@ -272,7 +272,7 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
           caught = error;
         }
         const nativeRollbackErrors = caught instanceof AggregateError
-          ? caught.errors.filter((error) => error !== primary && typeof (error as { code?: unknown }).code === "string")
+          ? caught.errors.filter((error) => error !== primary && typeof (error as { resultCode?: unknown }).resultCode === "number")
           : [];
         if (!(caught instanceof AggregateError) || !caught.errors.includes(primary) || nativeRollbackErrors.length === 0) {
           throw new Error("SQLite WASM transaction cleanup did not aggregate the native rollback failure.", { cause: caught });
