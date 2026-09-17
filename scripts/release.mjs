@@ -728,6 +728,19 @@ async function registryTagSnapshot(entries) {
   );
 }
 
+async function assertStageablePackages(manifest) {
+  const releaseEntries = manifest.packages.filter(({ name }) => manifest.releasePackages.includes(name));
+  for (const entry of releaseEntries) {
+    if (await registryIntegrity(entry.name, entry.version)) continue;
+    const versions = await pnpmView(entry.name, "versions");
+    if (!Array.isArray(versions) || versions.length === 0) {
+      throw new Error(
+        `${entry.name} does not exist on npm. npm staged publishing cannot create a new package; publish one lower bootstrap version manually, configure trusted publishing, then retry this exact candidate.`,
+      );
+    }
+  }
+}
+
 async function assertPublishedInternalDependencies(manifest) {
   const releaseNames = new Set(manifest.releasePackages);
   const byName = new Map(manifest.packages.map((entry) => [entry.name, entry]));
@@ -810,6 +823,7 @@ async function stageCandidates(
   }
   assertPublicationCredentials("stage");
   await assertOfficialRegistry();
+  await assertStageablePackages(manifest);
   await assertPublishedInternalDependencies(manifest);
   let evidence;
   let existingEvidence;
