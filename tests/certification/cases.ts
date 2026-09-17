@@ -693,7 +693,8 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     return { status: "pass", name: "CAP001" };
   },
   CAP002: async (context) => {
-    const representationFeature = (feature: string): boolean => feature.startsWith("data.") || feature.startsWith("numeric.") || feature.startsWith("sql.");
+    const representationFeature = (feature: string): boolean => ["data.", "numeric.", "sql.", "dml.", "metadata.", "execution."]
+      .some((prefix) => feature.startsWith(prefix));
     const probes = Object.values(context.fixture.unsupported ?? {});
     const apiUnsupported = Object.entries(context.target.expectedCapabilities).filter(([, value]) => value.status === "unsupported");
     const representedApiFeatures = new Set(probes.map((probe) => probe?.feature));
