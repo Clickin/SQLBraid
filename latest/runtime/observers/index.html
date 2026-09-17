@@ -93,14 +93,24 @@ observer failure stage of the operation that stopped the batch.</p>
 <p>For a stream, <code dir="auto">stream:end</code> is emitted only after the adapter has closed,
 drained, or cancelled its driver resource and the runtime has released or
 discarded the physical lease. An observer may observe cleanup failures, but it
-cannot make an unsafe lease reusable.</p>
+cannot make an unsafe lease reusable.
+Every registered observer receives <code dir="auto">stream:end</code> once in registration order,
+even when an earlier observer throws. After fanout, a single observer failure
+is rethrown unchanged; multiple failures are aggregated in order. If the stream
+or cleanup already failed, that original error remains the cause and first
+aggregate entry, followed by observer failures. Pre-I/O notification remains
+fail-fast.</p>
 <p><code dir="auto">event.literalizedSql(options?)</code> is lazy and cached. It reconstructs diagnostic
 text directly from logical segments and parameters; it never replaces
 placeholders in materialized SQL and must never be used as execution input. The
 default is redacted. Options support inline/redacted values, a maximum value
 length, binary summary/full output, and a custom redactor. The result reports
 <code dir="auto">complete</code>, <code dir="auto">redactedParameters</code>, and <code dir="auto">truncatedParameters</code>. Unsupported custom
-objects receive a safe marker instead of accidental <code dir="auto">toString()</code> execution.</p>
+objects receive a safe marker instead of accidental <code dir="auto">toString()</code> execution.
+For MySQL/MariaDB, inline strings use non-executable <code dir="auto">[string &lt;JSON&gt;]</code>
+diagnostic markers rather than SQL literals: backslash interpretation depends
+on session SQL mode. This includes the Bun.SQL adapters and does not change
+bound execution. Diagnostic output is never an executable SQL contract.</p>
 <p>Binding or typed-request construction failures are reported at stage
 <code dir="auto">"materialize"</code> with no driver I/O. Driver, server, and network failures remain
 stage <code dir="auto">"driver"</code>. Observers remain observe/fail-only and cannot rewrite the

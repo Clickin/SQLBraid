@@ -172,7 +172,11 @@ subpath인 <code dir="auto">sqlbraid/pg</code>,
 <p>루트는 database-neutral이며 암묵적인 <code dir="auto">sql</code> tag를 내보내지 않습니다.
 <code dir="auto">sqlbraid/postgres</code>, <code dir="auto">sqlbraid/mysql</code>, <code dir="auto">sqlbraid/sqlite</code>,
 <code dir="auto">sqlbraid/oracle</code>, <code dir="auto">sqlbraid/mssql</code> dialect-only subpath는 custom adapter용이며
-세분화된 <code dir="auto">@sqlbraid/*</code> 패키지도 계속 지원합니다. <code dir="auto">@sqlbraid/bun-sql</code>은 static
+세분화된 <code dir="auto">@sqlbraid/*</code> 패키지도 계속 지원합니다.
+<code dir="auto">sqlbraid/compiled</code>는 compiler가 생성한 <code dir="auto">capture</code>와
+<code dir="auto">assertDirectiveCondition</code> helper를 위한 고급 진입점이며, 애플리케이션의
+query 작성 API가 아닙니다. Compiler를 import하지 않으며 compiler와 runtime은
+일치하는 버전을 사용하세요. <code dir="auto">@sqlbraid/bun-sql</code>은 static
 Bun import가 없고 명시적인 <code dir="auto">dialect</code>를 요구하며 SQL 의미를 자동 감지하지
 않습니다. 런타임 패키지는 metadata, codegen, compiler, editor 또는 Vite
 의존성을 가져오지 않습니다. Tooling은 개발/빌드 환경에만 설치하세요. Oracle,
@@ -181,13 +185,6 @@ SQL Server, MariaDB, Bun driver 의존성은 portable root에서 제외됩니다
 <code dir="auto">@sqlbraid/opentelemetry</code>는 <code dir="auto">@opentelemetry/api</code>를 peer로 유지하며 SDK,
 exporter, logger, driver instrumentation 또는 database driver를 설치하지
 않습니다.</p>
-<p>동기식 SQLite adapter는 public <code dir="auto">Database</code> method를 async로 유지하면서
-물리 <code dir="auto">Awaitable&lt;T&gt;</code> SPI를 사용합니다. better-sqlite3는 event loop를 계속
-block하며 statement-local exact integer read를 사용합니다. libSQL은
-<code dir="auto">{ intMode: "string" }</code>를 요구하고 interactive transaction handle을
-사용하며 <code dir="auto">session.pinned</code>를 주장하지 않습니다. Buffering하는 대신
-<code dir="auto">BRAID_STREAM_UNSUPPORTED</code>를 반환합니다. 이는 transport/capability 경계이지
-광범위한 support label이 아닙니다.</p>
 <p>동기식 SQLite adapter는 public <code dir="auto">Database</code> method를 async로 유지하면서
 물리 <code dir="auto">Awaitable&lt;T&gt;</code> SPI를 사용합니다. better-sqlite3는 event loop를 계속
 block하며 statement-local exact integer read를 사용합니다. libSQL은
@@ -208,6 +205,11 @@ text/hex 변환 없이 거부됩니다. SQLite native decimal은 unsupported입�
 Bun MySQL/MariaDB의 빈 <code dir="auto">SELECT</code>와
 영향 행 0인 DML/DDL은 <code dir="auto">bun-sql.result-kind-metadata</code> 조건에서 guarded되며
 실행 후 <code dir="auto">BRAID_RESULT_KIND_AMBIGUOUS</code>로 실패할 수 있습니다.</p>
+<p>Bun.SQL MySQL/MariaDB는 명시적인 <code dir="auto">readOnly: true</code>와 <code dir="auto">readOnly: false</code>도
+I/O 전에 거부합니다(<code dir="auto">BRAID_TX_OPTION_UNSUPPORTED</code>, <code dir="auto">transaction.read-only</code>).
+생략하면 native session 기본값을 보존하며 Bun.SQL PostgreSQL의 access mode는
+변경하지 않습니다. <a href="/SQLBraid/latest/ko/runtime/transaction-profiles/">Transaction option 경계</a>를
+참고하세요.</p>
 <p>의존성 방향은 다음과 같습니다.</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">core / compiler / metadata / codegen</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">                 </span></span><span style="--0:#d6deeb;--1:#403f53">↓</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">          </span></span><span style="--0:#d6deeb;--1:#403f53">tooling / vite</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">             </span></span><span style="--0:#d6deeb;--1:#403f53">↙     ↘</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">           </span></span><span style="--0:#d6deeb;--1:#403f53">CLI      LSP</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">                      </span></span><span style="--0:#d6deeb;--1:#403f53">↑</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">                </span></span><span style="--0:#d6deeb;--1:#403f53">VS Code client</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="클립보드로 복사" data-copied="복사 완료!" data-code="core / compiler / metadata / codegen                 ↓          tooling / vite             ↙     ↘           CLI      LSP                      ↑                VS Code client"><div></div></button></div></figure></div>
 </div><footer class="sl-flex astro-j2cc5yqm"><div class="meta sl-flex astro-j2cc5yqm"></div><div class="pagination-links print:hidden astro-ttiagmsw" dir="ltr"><a href="/SQLBraid/latest/ko/agents/driver-author/" rel="prev" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg><span class="astro-ttiagmsw">이전 페이지<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">드라이버 작성 가이드</span></span></a><a href="/SQLBraid/latest/ko/reference/support/" rel="next" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg><span class="astro-ttiagmsw">다음 페이지<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">런타임과 드라이버 지원</span></span></a></div></footer></div></div></main></div></div></div></div></body></html>

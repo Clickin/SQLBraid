@@ -243,6 +243,12 @@ runtime 값은 `TypeError` / `BRAID_TX_OPTIONS_INVALID`, 유효하지만 지원�
 
 Bun SQL은 사용자가 선택하는 `dialect: "postgres" | "mysql" | "mariadb" |
 "sqlite"`가 필요한 하나의 adapter family이며 auto-detect하지 않습니다.
+Bun.SQL MySQL/MariaDB는 명시적인 `readOnly`의 두 boolean 값을 모두 I/O 전에
+`BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`로 거부하고,
+생략하면 native session 기본값을 보존합니다. Bun 1.3.14의 read-only 실패는
+rollback 뒤에도 connection을 오염시킬 수 있으므로 해당 reservation을
+폐기해야 합니다. Bun.SQL PostgreSQL access mode와 representation profile
+option은 변경하지 않습니다.
 Deno는 public driver API가 동작하면 기존 adapter를 재사용할 수 있습니다.
 어느 쪽도 검증되지 않은 database/runtime/profile tuple을 승격하지 않습니다.
 전체 checklist는 [repository driver-author guide](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md)를 참고하세요.

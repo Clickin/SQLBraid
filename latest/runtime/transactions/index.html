@@ -115,6 +115,11 @@ cannot change an active transaction. Adapters may map PostgreSQL
 <code dir="auto">read-uncommitted</code> to its documented <code dir="auto">read-committed</code> behavior only when their
 capability evidence says so. SQLite, D1, and other drivers expose only the
 combinations their transport actually honors.</p>
+<p>Bun.SQL MySQL/MariaDB reject both explicit <code dir="auto">readOnly</code> values before I/O with
+<code dir="auto">BRAID_TX_OPTION_UNSUPPORTED</code> / <code dir="auto">transaction.read-only</code>; omission preserves
+the native session default. This does not restrict Bun.SQL PostgreSQL.
+See <a href="/SQLBraid/latest/runtime/transaction-profiles/">transaction option capabilities</a>
+for the native Bun 1.3.14 connection-contamination boundary.</p>
 <p>The libSQL adapter preserves transaction continuity through its interactive
 <code dir="auto">Transaction</code> handle rather than issuing <code dir="auto">BEGIN</code>/<code dir="auto">COMMIT</code> on ordinary client
 calls. <code dir="auto">readOnly: true</code> maps to libSQL’s documented read mode; the portable

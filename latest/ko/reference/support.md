@@ -72,7 +72,7 @@ Exclusions: This compatible target covers better-sqlite3 13.0.3 only on Node 22.
 - Runtime: bun @1.3.14
 - Evidence: verified (5cfe3058959e8c6b458f81aa02a969b1f020cca9)
 - Transport: native-value-template; stream: unsupported; routine: unsupported; bulk: prepared-loop
-Exclusions: Only the exact pinned Bun.SQL backend and configured representation profile are covered. Integral Number results without database type metadata reject rather than risk exact-numeric loss. Streaming, routine channels and active statement cancellation are unsupported. Empty SELECT and zero-affected commands are indistinguishable in Bun metadata and reject after execution; side effects may already have occurred. Use string input for wide integer binds where the pinned MySQL transport rejects BigInt. DECIMAL and binary outputs are indistinguishable Uint8Array carriers and reject; author explicit CAST AS CHAR or HEX SQL.
+Exclusions: Only the exact pinned Bun.SQL backend and configured representation profile are covered. Explicit transaction readOnly true/false is unsupported: Bun 1.3.14 retains a rejected READ ONLY statement shape on the same physical connection. Native A-G controls are retained in tests/scripts/bun-sql-readonly-repro.mjs; fresh connections recover, prepare:false is unsupported, and native begin does not repair reuse. Integral Number results without database type metadata reject rather than risk exact-numeric loss. Streaming, routine channels and active statement cancellation are unsupported. Empty SELECT and zero-affected commands are indistinguishable in Bun metadata and reject after execution; side effects may already have occurred. Use string input for wide integer binds where the pinned MySQL transport rejects BigInt. DECIMAL and binary outputs are indistinguishable Uint8Array carriers and reject; author explicit CAST AS CHAR or HEX SQL.
 
 | Numeric contract | Representation | Fidelity | Profile |
 | --- | --- | --- | --- |
@@ -110,7 +110,7 @@ Exclusions: Only the exact pinned Bun.SQL backend and configured representation 
 | `statement.cancel` | unsupported |
 | `transaction` | guaranteed |
 | `transaction.savepoint` | guaranteed |
-| `transaction.read-only` | guarded; bun-sql.transaction-options: 이 백엔드에서 검증된 네이티브 격리 수준과 읽기 전용 매핑만 지원 |
+| `transaction.read-only` | unsupported |
 | `transaction.isolation.read-uncommitted` | guarded; bun-sql.transaction-options: 이 백엔드에서 검증된 네이티브 격리 수준과 읽기 전용 매핑만 지원 |
 | `transaction.isolation.read-committed` | guarded; bun-sql.transaction-options: 이 백엔드에서 검증된 네이티브 격리 수준과 읽기 전용 매핑만 지원 |
 | `transaction.isolation.repeatable-read` | guarded; bun-sql.transaction-options: 이 백엔드에서 검증된 네이티브 격리 수준과 읽기 전용 매핑만 지원 |
@@ -131,7 +131,7 @@ Exclusions: Only the exact pinned Bun.SQL backend and configured representation 
 - Runtime: bun @1.3.14
 - Evidence: verified (5cfe3058959e8c6b458f81aa02a969b1f020cca9)
 - Transport: native-value-template; stream: unsupported; routine: unsupported; bulk: prepared-loop
-Exclusions: Only the exact pinned Bun.SQL backend and configured representation profile are covered. Integral Number results without database type metadata reject rather than risk exact-numeric loss. Streaming, routine channels and active statement cancellation are unsupported. Empty SELECT and zero-affected commands are indistinguishable in Bun metadata and reject after execution; side effects may already have occurred. Use string input for wide integer binds where the pinned MySQL transport rejects BigInt. DECIMAL and binary outputs are indistinguishable Uint8Array carriers and reject; author explicit CAST AS CHAR or HEX SQL.
+Exclusions: Only the exact pinned Bun.SQL backend and configured representation profile are covered. Explicit transaction readOnly true/false is unsupported: Bun 1.3.14 retains a rejected READ ONLY statement shape on the same physical connection. Native A-G controls are retained in tests/scripts/bun-sql-readonly-repro.mjs; fresh connections recover, prepare:false is unsupported, and native begin does not repair reuse. Integral Number results without database type metadata reject rather than risk exact-numeric loss. Streaming, routine channels and active statement cancellation are unsupported. Empty SELECT and zero-affected commands are indistinguishable in Bun metadata and reject after execution; side effects may already have occurred. Use string input for wide integer binds where the pinned MySQL transport rejects BigInt. DECIMAL and binary outputs are indistinguishable Uint8Array carriers and reject; author explicit CAST AS CHAR or HEX SQL.
 
 | Numeric contract | Representation | Fidelity | Profile |
 | --- | --- | --- | --- |
@@ -169,7 +169,7 @@ Exclusions: Only the exact pinned Bun.SQL backend and configured representation 
 | `statement.cancel` | unsupported |
 | `transaction` | guaranteed |
 | `transaction.savepoint` | guaranteed |
-| `transaction.read-only` | guarded; bun-sql.transaction-options: 이 백엔드에서 검증된 네이티브 격리 수준과 읽기 전용 매핑만 지원 |
+| `transaction.read-only` | unsupported |
 | `transaction.isolation.read-uncommitted` | guarded; bun-sql.transaction-options: 이 백엔드에서 검증된 네이티브 격리 수준과 읽기 전용 매핑만 지원 |
 | `transaction.isolation.read-committed` | guarded; bun-sql.transaction-options: 이 백엔드에서 검증된 네이티브 격리 수준과 읽기 전용 매핑만 지원 |
 | `transaction.isolation.repeatable-read` | guarded; bun-sql.transaction-options: 이 백엔드에서 검증된 네이티브 격리 수준과 읽기 전용 매핑만 지원 |

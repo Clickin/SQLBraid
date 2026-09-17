@@ -174,6 +174,9 @@ dialect-only subpaths <code dir="auto">sqlbraid/postgres</code>, <code dir="auto
 <code dir="auto">sqlbraid/oracle</code>, and <code dir="auto">sqlbraid/mssql</code> are for custom adapters. The granular
 <code dir="auto">@sqlbraid/*</code> packages remain supported for library authors and deliberately
 narrower dependencies.
+<code dir="auto">sqlbraid/compiled</code> is an advanced entrypoint for compiler-generated <code dir="auto">capture</code>
+and <code dir="auto">assertDirectiveCondition</code> helpers, not an application query-authoring API.
+It does not import the compiler; use matching compiler and runtime versions.
 <code dir="auto">@sqlbraid/bun-sql</code> has no static Bun import and requires an explicit <code dir="auto">dialect</code>;
 it does not auto-detect SQL semantics. Runtime packages do not acquire metadata,
 codegen, compiler, editor, or Vite dependencies. Install tooling packages only
@@ -182,13 +185,6 @@ dependencies are kept out of portable roots. <code dir="auto">@sqlbraid/vite</co
 as a peer and does not import a framework.
 <code dir="auto">@sqlbraid/opentelemetry</code> keeps <code dir="auto">@opentelemetry/api</code> as a peer and does not
 install an SDK, exporter, logger, driver instrumentation, or database driver.</p>
-<p>The synchronous SQLite adapters use the <code dir="auto">Awaitable&lt;T&gt;</code> physical SPI while
-keeping public <code dir="auto">Database</code> methods async. <code dir="auto">better-sqlite3</code> remains event-loop
-blocking and uses statement-local exact-integer reads. libSQL requires
-<code dir="auto">{ intMode: "string" }</code>, uses an interactive transaction handle, does not
-claim <code dir="auto">session.pinned</code>, and reports <code dir="auto">BRAID_STREAM_UNSUPPORTED</code> instead of
-buffering. These are transport and capability boundaries, not broad support
-labels.</p>
 <p>The synchronous SQLite adapters use the <code dir="auto">Awaitable&lt;T&gt;</code> physical SPI while
 keeping public <code dir="auto">Database</code> methods async. <code dir="auto">better-sqlite3</code> remains event-loop
 blocking and uses statement-local exact-integer reads. libSQL requires
@@ -207,6 +203,11 @@ DECIMAL and binary byte carriers reject without authored SQL text/hex conversion
 SQLite native decimal is unsupported. Bun MySQL/MariaDB empty <code dir="auto">SELECT</code> and zero-affected DML/DDL use
 guarded <code dir="auto">bun-sql.result-kind-metadata</code> and may fail after execution with
 <code dir="auto">BRAID_RESULT_KIND_AMBIGUOUS</code>.</p>
+<p>Bun.SQL MySQL/MariaDB also reject explicit <code dir="auto">readOnly: true</code> and
+<code dir="auto">readOnly: false</code> before I/O (<code dir="auto">BRAID_TX_OPTION_UNSUPPORTED</code>,
+<code dir="auto">transaction.read-only</code>). Omission preserves the native session default;
+Bun.SQL PostgreSQL access modes are unchanged. See the
+<a href="/SQLBraid/latest/runtime/transaction-profiles/">transaction option boundary</a>.</p>
 <p>The dependency direction is:</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">core / compiler / metadata / codegen</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">                 </span></span><span style="--0:#d6deeb;--1:#403f53">↓</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">          </span></span><span style="--0:#d6deeb;--1:#403f53">tooling / vite</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">             </span></span><span style="--0:#d6deeb;--1:#403f53">↙     ↘</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">           </span></span><span style="--0:#d6deeb;--1:#403f53">CLI      LSP</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">                      </span></span><span style="--0:#d6deeb;--1:#403f53">↑</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">                </span></span><span style="--0:#d6deeb;--1:#403f53">VS Code client</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="core / compiler / metadata / codegen                 ↓          tooling / vite             ↙     ↘           CLI      LSP                      ↑                VS Code client"><div></div></button></div></figure></div>
 </div><footer class="sl-flex astro-j2cc5yqm"><div class="meta sl-flex astro-j2cc5yqm"></div><div class="pagination-links print:hidden astro-ttiagmsw" dir="ltr"><a href="/SQLBraid/latest/agents/driver-author/" rel="prev" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg><span class="astro-ttiagmsw">Previous<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">Driver authoring</span></span></a><a href="/SQLBraid/latest/reference/support/" rel="next" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg><span class="astro-ttiagmsw">Next<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">Runtime and driver support</span></span></a></div></footer></div></div></main></div></div></div></div></body></html>

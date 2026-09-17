@@ -46,6 +46,9 @@ dialect-only subpaths `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`,
 `sqlbraid/oracle`, and `sqlbraid/mssql` are for custom adapters. The granular
 `@sqlbraid/*` packages remain supported for library authors and deliberately
 narrower dependencies.
+`sqlbraid/compiled` is an advanced entrypoint for compiler-generated `capture`
+and `assertDirectiveCondition` helpers, not an application query-authoring API.
+It does not import the compiler; use matching compiler and runtime versions.
 `@sqlbraid/bun-sql` has no static Bun import and requires an explicit `dialect`;
 it does not auto-detect SQL semantics. Runtime packages do not acquire metadata,
 codegen, compiler, editor, or Vite dependencies. Install tooling packages only
@@ -54,14 +57,6 @@ dependencies are kept out of portable roots. `@sqlbraid/vite` keeps Vite
 as a peer and does not import a framework.
 `@sqlbraid/opentelemetry` keeps `@opentelemetry/api` as a peer and does not
 install an SDK, exporter, logger, driver instrumentation, or database driver.
-
-The synchronous SQLite adapters use the `Awaitable<T>` physical SPI while
-keeping public `Database` methods async. `better-sqlite3` remains event-loop
-blocking and uses statement-local exact-integer reads. libSQL requires
-`{ intMode: "string" }`, uses an interactive transaction handle, does not
-claim `session.pinned`, and reports `BRAID_STREAM_UNSUPPORTED` instead of
-buffering. These are transport and capability boundaries, not broad support
-labels.
 
 The synchronous SQLite adapters use the `Awaitable<T>` physical SPI while
 keeping public `Database` methods async. `better-sqlite3` remains event-loop
@@ -82,6 +77,12 @@ DECIMAL and binary byte carriers reject without authored SQL text/hex conversion
 SQLite native decimal is unsupported. Bun MySQL/MariaDB empty `SELECT` and zero-affected DML/DDL use
 guarded `bun-sql.result-kind-metadata` and may fail after execution with
 `BRAID_RESULT_KIND_AMBIGUOUS`.
+
+Bun.SQL MySQL/MariaDB also reject explicit `readOnly: true` and
+`readOnly: false` before I/O (`BRAID_TX_OPTION_UNSUPPORTED`,
+`transaction.read-only`). Omission preserves the native session default;
+Bun.SQL PostgreSQL access modes are unchanged. See the
+[transaction option boundary](/SQLBraid/latest/runtime/transaction-profiles.md).
 
 The dependency direction is:
 

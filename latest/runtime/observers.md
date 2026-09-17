@@ -59,6 +59,12 @@ For a stream, `stream:end` is emitted only after the adapter has closed,
 drained, or cancelled its driver resource and the runtime has released or
 discarded the physical lease. An observer may observe cleanup failures, but it
 cannot make an unsafe lease reusable.
+Every registered observer receives `stream:end` once in registration order,
+even when an earlier observer throws. After fanout, a single observer failure
+is rethrown unchanged; multiple failures are aggregated in order. If the stream
+or cleanup already failed, that original error remains the cause and first
+aggregate entry, followed by observer failures. Pre-I/O notification remains
+fail-fast.
 
 `event.literalizedSql(options?)` is lazy and cached. It reconstructs diagnostic
 text directly from logical segments and parameters; it never replaces
@@ -67,6 +73,10 @@ default is redacted. Options support inline/redacted values, a maximum value
 length, binary summary/full output, and a custom redactor. The result reports
 `complete`, `redactedParameters`, and `truncatedParameters`. Unsupported custom
 objects receive a safe marker instead of accidental `toString()` execution.
+For MySQL/MariaDB, inline strings use non-executable `[string <JSON>]`
+diagnostic markers rather than SQL literals: backslash interpretation depends
+on session SQL mode. This includes the Bun.SQL adapters and does not change
+bound execution. Diagnostic output is never an executable SQL contract.
 
 Binding or typed-request construction failures are reported at stage
 `"materialize"` with no driver I/O. Driver, server, and network failures remain
