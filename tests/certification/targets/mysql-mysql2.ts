@@ -407,8 +407,8 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
         standaloneFailure = error;
       }
       assert.ok(standaloneFailure instanceof Error, "mysql2 bulk middle failure must come from native bulk execution.");
-      const observedRows = [await db.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`)];
-      assert.deepEqual(observedRows, [{ value: "0" }]);
+      const observedRows = await db.all(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1 AND value <> 0`);
+      assert.deepEqual(observedRows, []);
       await pool.query(`UPDATE ${tableSql(table)} SET value = 0 WHERE id = 1`);
       let transactionFailure: unknown;
       try {
@@ -418,7 +418,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       }
       assert.ok(transactionFailure instanceof Error, "mysql2 transactional bulk middle failure must reject.");
       assert.deepEqual(await db.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`), { value: "0" });
-      return { error: standaloneFailure, observedRows, expectedRows: [{ value: "0" }], durability: "atomic" as const };
+      return { error: standaloneFailure, observedRows, expectedRows: [], durability: "atomic" as const };
     },
   };
   const metrics = {

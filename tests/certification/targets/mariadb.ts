@@ -1,7 +1,7 @@
 import mariadb, { type Pool } from "mariadb";
 import assert from "node:assert/strict";
 import { inject } from "vitest";
-import { sql, MARIADB_DATE_TEXT, MARIADB_LOSSLESS_TEXT } from "@sqlbraid/mariadb";
+import { sql, MARIADB_LOSSLESS_TEXT, MARIADB_NATIVE } from "@sqlbraid/mariadb";
 import { createMariaDbDatabase, createMariaDbPoolDatabase, type MariaDbConnectionLike } from "@sqlbraid/mariadb/mariadb";
 import type { CallQuery, CommandQuery, Database, RowQuery, StandardSchemaV1 } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
@@ -437,9 +437,9 @@ async function createFixture(): Promise<CertificationFixture> {
       },
       "data.json-parsed": {
         prove: async () => {
-          const parsedConnection = await mariadb.createConnection(connectorOptions({ autoJsonMap: true }));
+          const parsedConnection = await mariadb.createConnection(connectorOptions({ autoJsonMap: true, dateStrings: false }));
           try {
-            const parsedDb = createMariaDbDatabase(parsedConnection, { profile: MARIADB_DATE_TEXT });
+            const parsedDb = createMariaDbDatabase(parsedConnection, { profile: MARIADB_NATIVE });
             const row = await parsedDb.one(sql.rows`SELECT payload AS value FROM ${sql.ident(JSON_TABLE)}`);
             const value = (row as { readonly value?: unknown }).value;
             if (value === null || typeof value !== "object") throw new Error("MariaDB JSON parsed guard failed.");
