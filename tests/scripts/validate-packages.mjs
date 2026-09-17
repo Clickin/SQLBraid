@@ -163,7 +163,9 @@ try {
       throw new Error(`Workspace dependency protocol leaked into ${manifest.name} metadata.`);
 
     if (manifest.version !== sourceManifest.version)
-      throw new Error(`Packed ${manifest.name} version ${manifest.version} does not match source ${sourceManifest.version}.`);
+      throw new Error(
+        `Packed ${manifest.name} version ${manifest.version} does not match source ${sourceManifest.version}.`,
+      );
     if (manifest.license !== "Apache-2.0")
       throw new Error(`Packed ${manifest.name} is missing the Apache-2.0 license.`);
     if (
