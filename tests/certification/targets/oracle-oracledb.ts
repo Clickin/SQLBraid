@@ -105,15 +105,15 @@ function makeQueries(): CertificationFixture["queries"] {
     prepared,
     routines,
     fidelity: {
-      largeExactInteger: sql.rows`SELECT ${9007199254740991n} AS "value" FROM dual`,
+      largeExactInteger: sql.rows`SELECT CAST(${sql.bind("9007199254740993", oracleParameter.varchar2())} AS NUMBER(19,0)) AS "value" FROM dual`,
       exactDecimal: sql.rows`SELECT CAST(${12345.6789} AS NUMBER(20,4)) AS "value" FROM dual`,
       temporal: sql.rows`SELECT CAST(${new Date("2026-09-14T12:34:56.789Z")} AS TIMESTAMP) AS "value" FROM dual`,
-      injection: sql.rows`SELECT ${"'; SELECT 1; --"} AS "value" FROM dual`,
+      injection: sql.rows`SELECT ${"'; UPDATE BRAID_RC3_CERT_ROWS SET value='hacked' WHERE id=999999; --"} AS "value" FROM dual`,
       expected: {
-        largeExactInteger: { value: "9007199254740991" },
+        largeExactInteger: { value: "9007199254740993" },
         exactDecimal: { value: "12345.6789" },
         temporal: { value: new Date("2026-09-14T12:34:56.789Z") },
-        injection: { value: "'; SELECT 1; --" },
+        injection: { value: "'; UPDATE BRAID_RC3_CERT_ROWS SET value='hacked' WHERE id=999999; --" },
       },
     },
     expected,
@@ -146,28 +146,11 @@ function streamFixture(
     stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row> {
       const source = db.stream(query, options);
       const iterator = source[Symbol.asyncIterator]();
-      const abortedBeforeStart = options?.signal?.aborted === true;
-      let returned = false;
-      const markReturned = (): void => {
-        if (!returned) {
-          returned = true;
-          counters.iteratorReturns += 1;
-        }
-      };
       const wrapped: AsyncIterator<Row> & AsyncIterable<Row> = {
         [Symbol.asyncIterator]() { return this; },
-        async next(value?: unknown) {
-          try {
-            const result = await iterator.next(value);
-            if (result.done) markReturned();
-            return result;
-          } catch (error) {
-            if (!abortedBeforeStart && query !== initFailureQuery) markReturned();
-            throw error;
-          }
-        },
+        next(value?: unknown) { return iterator.next(value); },
         return(value?: unknown) {
-          markReturned();
+          counters.iteratorReturns += 1;
           return iterator.return ? iterator.return(value) : Promise.resolve({ done: true, value });
         },
         throw(error?: unknown) {
@@ -275,6 +258,7 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       const streamCounters: StreamCounters = { iteratorReturns: 0, released: 0 };
       let sideEffects = 0;
       let executeStarts = 0;
+      let routineLobCloses = 0;
       const execute = connection.execute.bind(connection);
       connection.execute = async (text: string, binds?: unknown, executeOptions?: unknown): Promise<unknown> => {
         if (text.includes("CERT_INIT_FAILURE")) throw faults.initFailure;
@@ -364,6 +348,21 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       executeStarts = 0;
       const unsupportedTransaction = async (transactionOptions: Parameters<NonNullable<Database["tx"]>>[0]): Promise<void> => {
         const probeConnection = await oracledb.getConnection({ user: options.user, password: options.password, connectString: options.connectionUri }) as unknown as OracleConnectionLike;
+        const probeExecute = probeConnection.execute.bind(probeConnection);
+        const probeCommit = probeConnection.commit.bind(probeConnection);
+        const probeRollback = probeConnection.rollback.bind(probeConnection);
+        probeConnection.execute = async (...args: Parameters<OracleConnectionLike["execute"]>) => {
+          sideEffects += 1;
+          return probeExecute(...args);
+        };
+        probeConnection.commit = async () => {
+          sideEffects += 1;
+          await probeCommit();
+        };
+        probeConnection.rollback = async () => {
+          sideEffects += 1;
+          await probeRollback();
+        };
         try {
           await createOracledbDatabase(probeConnection).tx(transactionOptions, async () => undefined);
         } finally {
@@ -401,8 +400,10 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
           } finally {
             rollbackFailure = undefined;
             releaseFailure = undefined;
+            const observedLeases = pooledConnections();
             await forceFaultConnectionCleanup?.();
             forceFaultConnectionCleanup = undefined;
+            assert.equal(observedLeases, 0);
           }
           assert.ok(error instanceof AggregateError);
           const nested = (value: unknown): readonly unknown[] => value instanceof AggregateError
@@ -410,7 +411,8 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
             : [];
           const errors = [error, ...nested(error)];
           assert.ok(errors.includes(primary));
-          assert.ok(errors.includes(rollbackError) || errors.includes(releaseError));
+          assert.ok(errors.includes(rollbackError));
+          assert.ok(errors.includes(releaseError));
           await direct.one(makeQueries().identity);
         },
         readOnlyWrite: async (): Promise<void> => {
@@ -438,6 +440,16 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
           const payload = result.output.payload;
           assert.equal(typeof payload, "string");
           assert.equal((payload as string).length, 4096);
+          const nativeResult = await execute(
+            "BEGIN BRAID_RC3_CERT_LOB(:payload); END;",
+            { payload: { dir: oracledb.BIND_OUT, type: oracledb.CLOB } },
+          ) as { readonly outBinds?: { readonly payload?: unknown } };
+          const lob = nativeResult.outBinds?.payload as { close?: () => Promise<void> } | undefined;
+          if (lob === undefined || typeof lob.close !== "function") throw new Error("Oracle native LOB resource missing.");
+          const close = lob.close.bind(lob);
+          await close();
+          routineLobCloses += 1;
+          assert.equal(routineLobCloses, 1);
           await direct.one(makeQueries().identity);
         },
       };

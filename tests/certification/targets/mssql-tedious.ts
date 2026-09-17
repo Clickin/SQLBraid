@@ -180,12 +180,12 @@ function queries(): CertificationFixture["queries"] {
       largeExactInteger: sql.rows`SELECT CAST(${9007199254740991n} AS bigint) AS value`,
       exactDecimal: sql.rows`SELECT ${12345.6789} AS value`,
       temporal: sql.rows`SELECT CAST(${new Date("2026-09-14T12:34:56.789Z")} AS datetime2) AS value`,
-      injection: sql.rows`SELECT ${"'; SELECT 1; --"} AS value`,
+      injection: sql.rows`SELECT ${"'; UPDATE dbo.braid_cert_mssql SET value=N'hacked' WHERE id=1; --"} AS value`,
       expected: {
         largeExactInteger: { value: "9007199254740991" },
         exactDecimal: { value: 12345.6789 },
         temporal: { value: new Date("2026-09-14T12:34:56.789Z") },
-        injection: { value: "'; SELECT 1; --" },
+        injection: { value: "'; UPDATE dbo.braid_cert_mssql SET value=N'hacked' WHERE id=1; --" },
       },
     },
     expected: {
@@ -246,34 +246,18 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
     const database = createTediousPoolDatabase(pool);
     let iteratorReturns = 0;
     let streamCleanupFailureQuery: RowQuery<unknown> | undefined;
-    let streamInitFailureQuery: RowQuery<unknown> | undefined;
     const streamDatabase: Pick<Database, "stream"> = {
       stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row> {
         if (query === streamCleanupFailureQuery) stats.streamCleanupFailure = Object.assign(new Error("mssql-cert-stream-cleanup-failure"), { code: "EREQUEST" });
         const source = database.stream(query, options);
         const iterator = source[Symbol.asyncIterator]();
-        const abortedBeforeStart = options?.signal?.aborted === true;
-        let returned = false;
-        const markReturned = (): void => {
-          if (!returned) {
-            returned = true;
-            iteratorReturns += 1;
-          }
-        };
         const wrapped: AsyncIterator<Row> & AsyncIterable<Row> = {
           [Symbol.asyncIterator]() { return this; },
           async next(value?: unknown) {
-            try {
-              const result = await iterator.next();
-            if (result.done) markReturned();
-            return result;
-            } catch (error) {
-              if (!abortedBeforeStart && query !== streamInitFailureQuery) markReturned();
-              throw error;
-            }
+            return iterator.next(value);
           },
           return(value?: unknown) {
-            markReturned();
+            iteratorReturns += 1;
             return iterator.return ? iterator.return(value) : Promise.resolve({ done: true, value });
           },
           throw(error?: unknown) {
@@ -350,7 +334,6 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
       largeResultCount: 3,
     } as StreamingConformanceFixture<unknown> & Record<string, unknown>;
     streamCleanupFailureQuery = stream.cleanupFailureQuery;
-    streamInitFailureQuery = stream.initFailureQuery;
     const bulk: BulkConformanceFixture<unknown> = {
       db: bulkDatabase,
       inputs: [{ id: 10, value: "bulk-a" }, { id: 11, value: "bulk-b" }],
