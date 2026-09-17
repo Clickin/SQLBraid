@@ -155,14 +155,19 @@ function approximateSpecialQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<
 }
 
 function temporalQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
-  if (dialect === "postgres") return tag.rows`SELECT TIMESTAMP '2026-09-14 12:34:56.789' AS value`;
-  return tag.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`;
+  if (dialect === "postgres") return tag.rows`SELECT CAST(${"2026-09-14 12:34:56.789123"} AS TIMESTAMP) AS value`;
+  return tag.rows`SELECT CAST(${"2026-09-14 12:34:56.789123"} AS DATETIME(6)) AS value`;
 }
 
 function timezoneQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
-  if (dialect === "postgres") return tag.rows`SELECT TIMESTAMPTZ '2026-09-14 12:34:56.789+05:30' AS value`;
+  if (dialect === "postgres") return tag.rows`SELECT CAST(${"2026-09-14 12:34:56.789+05:30"} AS TIMESTAMPTZ) AS value`;
   return tag.rows`SELECT TIMESTAMP '2026-09-14 12:34:56.789' AS value`;
 }
+
+const temporalWallClockIso = new Date(2026, 8, 14, 12, 34, 56, 789).toISOString();
+const temporalExpectedIso = (dialect: BunSqlDialect): string => dialect === "postgres"
+  ? "2026-09-14T12:34:56.789Z"
+  : temporalWallClockIso;
 
 function assertExactDate(value: unknown, expectedIso: string, feature: string): asserts value is Date {
   if (!(value instanceof Date) || value.toISOString() !== expectedIso) {
@@ -173,6 +178,13 @@ function assertExactDate(value: unknown, expectedIso: string, feature: string): 
 function exactDecimalQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
   if (dialect === "mysql" || dialect === "mariadb") return tag.rows`SELECT CAST('12345678901234567890.123456789' AS DECIMAL(30, 9)) AS value`;
   return tag.rows`SELECT CAST('12345678901234567890.123456789' AS NUMERIC) AS value`;
+}
+
+function exactDecimalBindQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
+  if (dialect === "postgres") return tag.rows`SELECT CAST(CAST(${"12345678901234567890.123456789"} AS NUMERIC) AS TEXT) AS value`;
+  if (dialect === "mysql" || dialect === "mariadb") return tag.rows`SELECT CAST(CAST(${"12345678901234567890.123456789"} AS DECIMAL(30, 9)) AS CHAR) AS value`;
+  // SQLite has no exact decimal type; the authored text contract preserves its digits.
+  return tag.rows`SELECT CAST(${"12345678901234567890.123456789"} AS TEXT) AS value`;
 }
 
 function jsonQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
@@ -215,6 +227,15 @@ function expectedIsolation(dialect: BunSqlDialect, isolation: TransactionOptions
   return isolation.replaceAll("-", " ");
 }
 
+function nativeErrorHas(error: unknown, key: "errno" | "code", expected: number | string): boolean {
+  if (error !== null && typeof error === "object") {
+    if ((error as Record<string, unknown>)[key] === expected) return true;
+    if (error instanceof AggregateError && error.errors.some((entry) => nativeErrorHas(entry, key, expected))) return true;
+    if ("cause" in error && nativeErrorHas(error.cause, key, expected)) return true;
+  }
+  return false;
+}
+
 async function proveTransactionOption(
   db: CertificationFixture["db"],
   createClient: () => BunSqlClient,
@@ -223,62 +244,87 @@ async function proveTransactionOption(
   options: TransactionOptions,
   queries: CertificationFixture["queries"],
   visibleCount: RowQuery<unknown>,
+  reset: () => Promise<void>,
 ): Promise<void> {
-  const settings = await db.tx(options, async (tx) => tx.one(settingQuery(tag, dialect))) as {
-    readonly value?: unknown;
-    readonly read_only?: unknown;
-  };
-  const isolation = expectedIsolation(dialect, options.isolation);
-  if (settings.value !== isolation) throw new Error(`Bun.SQL ${optionKey(options)} observed isolation=${String(settings.value)} instead of ${isolation}.`);
-  if (options.readOnly !== undefined && settings.read_only !== options.readOnly) {
-    throw new Error(`Bun.SQL ${optionKey(options)} observed read_only=${String(settings.read_only)} instead of ${String(options.readOnly)}.`);
+  if (dialect === "postgres") {
+    const settings = await db.tx(options, async (tx) => tx.one(settingQuery(tag, dialect))) as {
+      readonly value?: unknown;
+      readonly read_only?: unknown;
+    };
+    const isolation = expectedIsolation(dialect, options.isolation);
+    const postgresReadUncommittedAlias = options.isolation === "read-uncommitted"
+      && (settings.value === "read committed" || settings.value === "read uncommitted");
+    if (settings.value !== isolation && !postgresReadUncommittedAlias) {
+      throw new Error(`Bun.SQL ${optionKey(options)} observed isolation=${String(settings.value)} instead of ${isolation}.`);
+    }
+    if (options.readOnly !== undefined && settings.read_only !== options.readOnly) {
+      throw new Error(`Bun.SQL ${optionKey(options)} observed read_only=${String(settings.read_only)} instead of ${String(options.readOnly)}.`);
+    }
+    return;
   }
-  if (dialect === "postgres") return;
   const otherClient = createClient();
   const otherDb = createBunSqlDatabase(otherClient, { dialect });
   let observedCount = "";
+  let observedBefore = "";
   let observedError: unknown;
   try {
     if (queries.transaction === undefined) throw new Error("Bun.SQL isolation proof requires transaction queries.");
     if (options.isolation === "serializable") {
-      const rendered = queries.transaction.insert.render();
-      const native = otherClient as BunSqlClient & {
-        begin?: (callback: (tx: BunSqlClient) => Promise<unknown>) => Promise<unknown>;
-      };
-      if (native.begin === undefined) throw new Error("Bun.SQL serializable proof requires native begin().");
-      try {
-        await native.begin(async (tx) => {
-          await tx.unsafe("SET SESSION innodb_lock_wait_timeout = 1", []);
-          await tx.unsafe(rendered.segments.join(""), rendered.parameters.map((parameter) => parameter.value));
-          try {
-            await db.tx(options, (mainTx) => mainTx.one(visibleCount));
-          } catch (error) {
-            observedError = error;
-          }
-          throw new Error("cert-isolation-rollback");
-        });
-      } catch (error) {
-        if (!(error instanceof Error) || error.message !== "cert-isolation-rollback") throw error;
-      }
-    } else {
-      await otherDb.tx(async (tx) => {
-        await tx.execute(queries.transaction!.insert);
+      await otherDb.tx(async (writer) => {
+        await writer.execute(queries.transaction!.insert);
         try {
-          const row = await db.tx(options, (mainTx) => mainTx.one(visibleCount));
-          observedCount = String((row as { readonly count?: unknown }).count);
+          await db.tx(options, async (reader) => {
+            await reader.execute(tag.command`SET SESSION innodb_lock_wait_timeout = 1`);
+            await reader.one(visibleCount);
+          });
         } catch (error) {
           observedError = error;
         }
         throw new Error("cert-isolation-rollback");
+      }).catch((error) => {
+        if (!(error instanceof Error) || error.message !== "cert-isolation-rollback") throw error;
       });
+    } else {
+      if (options.isolation === "read-uncommitted") {
+        await otherDb.tx(async (writer) => {
+          await writer.execute(queries.transaction!.insert);
+          try {
+            const row = await db.tx(options, (mainTx) => mainTx.one(visibleCount));
+            observedCount = String((row as { readonly count?: unknown }).count);
+          } catch (error) {
+            observedError = error;
+          }
+          throw new Error("cert-isolation-rollback");
+        }).catch((error) => {
+          if (!(error instanceof Error) || error.message !== "cert-isolation-rollback") throw error;
+        });
+      } else {
+        const ready = Promise.withResolvers<void>();
+        const continueReading = Promise.withResolvers<void>();
+        const reader = db.tx(options, async (tx) => {
+          const first = await tx.one(visibleCount);
+          observedBefore = String((first as { readonly count?: unknown }).count);
+          ready.resolve();
+          await continueReading.promise;
+          const second = await tx.one(visibleCount);
+          observedCount = String((second as { readonly count?: unknown }).count);
+        });
+        await ready.promise;
+        await otherDb.tx(async (writer) => { await writer.execute(queries.transaction!.insert); });
+        continueReading.resolve();
+        await reader;
+        await reset();
+        if (observedBefore !== "0") throw new Error(`Bun.SQL ${optionKey(options)} baseline count=${observedBefore} was not empty.`);
+        return;
+      }
     }
-  } catch (error) {
-    if (!(error instanceof Error) || error.message !== "cert-isolation-rollback") throw error;
   } finally {
     await otherClient.close?.();
   }
   if (options.isolation === "serializable") {
-    if (!(observedError instanceof Error) || (observedError as { readonly code?: unknown }).code !== nativeFailureCode(dialect)) {
+    if (!(observedError instanceof Error)
+      || (observedError as { readonly code?: unknown }).code !== nativeFailureCode(dialect)
+      || !nativeErrorHas(observedError, "errno", 1205)) {
       throw new Error(`Bun.SQL ${optionKey(options)} did not enforce serializable locking.`);
     }
     return;
@@ -389,14 +435,14 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       returnValue: tag.call`CALL braid_cert_missing()`,
     },
     fidelity: {
-      largeExactInteger: tag.rows`SELECT ${"9007199254740993"} AS value`,
-      exactDecimal: tag.rows`SELECT ${"12345678901234567890.123456789"} AS value`,
-      temporal: tag.rows`SELECT ${"2026-09-14T12:34:56.789Z"} AS value`,
+      largeExactInteger: exactIntegerBindQuery(tag, dialect),
+      exactDecimal: exactDecimalBindQuery(tag, dialect),
+      temporal: dialect === "sqlite" ? tag.rows`SELECT ${"2026-09-14T12:34:56.789Z"} AS value` : temporalQuery(tag, dialect),
       injection: tag.rows`SELECT ${`'; UPDATE ${quoteIdentifier(dialect, sentinelTable)} SET marker = 999 WHERE id = 1; -- `} AS value`,
       expected: {
         largeExactInteger: { value: "9007199254740993" },
         exactDecimal: { value: "12345678901234567890.123456789" },
-        temporal: { value: "2026-09-14T12:34:56.789Z" },
+        temporal: { value: dialect === "sqlite" ? "2026-09-14T12:34:56.789Z" : new Date(temporalWallClockIso) },
         injection: { value: `'; UPDATE ${quoteIdentifier(dialect, sentinelTable)} SET marker = 999 WHERE id = 1; -- ` },
       },
     },
@@ -531,7 +577,7 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     } };
     representationUnsupported["data.temporal-lossless"] = { prove: async () => {
       const row = await db.one(temporalQuery(tag, dialect));
-      assertExactDate((row as { readonly value?: unknown }).value, "2026-09-14T12:34:56.789Z", `${dialect} temporal`);
+      assertExactDate((row as { readonly value?: unknown }).value, temporalExpectedIso(dialect), `${dialect} temporal`);
     } };
   }
   if (dialect === "mysql" || dialect === "mariadb") {
@@ -580,24 +626,29 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
   if (dialect !== "sqlite") {
     guarded["data.temporal-native"] = { prove: async () => {
       const row = await db.one(temporalQuery(tag, dialect));
-      assertExactDate((row as { readonly value?: unknown }).value, "2026-09-14T12:34:56.789Z", "temporal");
+      assertExactDate((row as { readonly value?: unknown }).value, temporalExpectedIso(dialect), "temporal");
     } };
     guarded["data.timezone"] = { prove: async () => {
       const row = await db.one(timezoneQuery(tag, dialect));
       const value = (row as { readonly value?: unknown }).value;
-      assertExactDate(value, dialect === "postgres" ? "2026-09-14T07:04:56.789Z" : "2026-09-14T12:34:56.789Z", `${dialect} timezone`);
+      assertExactDate(value, dialect === "postgres" ? "2026-09-14T07:04:56.789Z" : temporalWallClockIso, `${dialect} timezone`);
     } };
   }
   if (dialect === "postgres" || dialect === "mysql" || dialect === "mariadb") {
     for (const isolation of ["read-uncommitted", "read-committed", "repeatable-read", "serializable"] as const) {
-      guarded[`transaction.isolation.${isolation}`] = { prove: () => proveTransactionOption(db, options.createClient, tag, dialect, { isolation }, queries, transactionVisibleCount) };
+      guarded[`transaction.isolation.${isolation}`] = { prove: () => proveTransactionOption(db, options.createClient, tag, dialect, { isolation }, queries, transactionVisibleCount, reset) };
     }
     guarded["transaction.read-only"] = { prove: async () => {
-      const settings = await db.tx({ readOnly: true }, async (tx) => tx.one(settingQuery(tag, dialect))) as { readonly read_only?: unknown };
-      if (settings.read_only !== true) throw new Error(`Bun.SQL ${dialect} read-only setting was not active inside the transaction.`);
-      let rejected = false;
-      try { await db.tx({ readOnly: true }, async (tx) => { await tx.execute(queries.transaction!.insert); }); } catch { rejected = true; }
-      if (!rejected) throw new Error("Bun.SQL read-only transaction accepted a write.");
+      if (dialect === "postgres") {
+        const settings = await db.tx({ readOnly: true }, async (tx) => tx.one(settingQuery(tag, dialect))) as { readonly read_only?: unknown };
+        if (settings.read_only !== true) throw new Error("Bun.SQL PostgreSQL read-only setting was not active inside the transaction.");
+      }
+      let caught: unknown;
+      try { await db.tx({ readOnly: true }, async (tx) => { await tx.execute(queries.transaction!.insert); }); } catch (error) { caught = error; }
+      if (!(caught instanceof Error) || (caught as { readonly code?: unknown }).code !== nativeFailureCode(dialect)
+        || (dialect !== "postgres" && !nativeErrorHas(caught, "errno", 1792))) {
+        throw new Error("Bun.SQL read-only transaction did not reject the write with the native error.");
+      }
     } };
   }
   const mutationSentinel = async (): Promise<unknown> => {
@@ -666,8 +717,10 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
         || (caught as { readonly feature?: unknown }).feature !== "transaction.read-only") {
         throw new Error("Bun.SQL SQLite read-only transaction did not reject with its public unsupported contract.");
       }
-    } else if (!(caught instanceof Error)) {
-      throw new Error("Bun.SQL read-only transaction accepted a write.");
+    } else if (!(caught instanceof Error)
+      || (caught as { readonly code?: unknown }).code !== nativeFailureCode(dialect)
+      || (dialect !== "postgres" && !nativeErrorHas(caught, "errno", 1792))) {
+      throw new Error("Bun.SQL read-only transaction did not reject the write with the native error.");
     }
     const visible = await db.all(queries.transaction.visible);
     if (visible.length !== 1) throw new Error("Bun.SQL read-only transaction changed committed state.");

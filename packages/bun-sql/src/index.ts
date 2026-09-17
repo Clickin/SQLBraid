@@ -449,6 +449,7 @@ function returnsRows(value: unknown, text: string): value is readonly unknown[] 
     const count = (value as { readonly count?: unknown }).count;
     if ((typeof count === "number" && Number.isSafeInteger(count) && count > 0)
       || (typeof count === "bigint" && count > 0n && count <= BigInt(Number.MAX_SAFE_INTEGER))) return true;
+    if (hasSqlKeyword(text, "SET")) return false;
     unsupported("result.rows", "BRAID_RESULT_KIND_AMBIGUOUS", "Bun.SQL returned an array without command metadata or a public row/command result carrier.");
   }
   if (ROW_COMMANDS.has(command)) return true;
