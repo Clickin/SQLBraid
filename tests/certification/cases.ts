@@ -347,7 +347,12 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   SES006: async (context) => supported(context, "SES006", "session.pinned", async ({ fixture }) => {
     for (const db of databases(fixture)) {
       const before = await fixtureMetrics(fixture).snapshot();
-      await assert.rejects(() => db.session(async (session) => { await session.one(fixture.queries.failure); }));
+      await assert.rejects(() => db.session(async (session) => { await session.one(fixture.queries.failure); }), (error: unknown) => {
+        const expectedCode = fixture.queries.expected?.failureCode;
+        if (expectedCode !== undefined) assert.equal((error as { readonly code?: unknown }).code, expectedCode);
+        else assert.ok(error instanceof Error);
+        return true;
+      });
       await cleanResources(fixture, before);
     }
   }),
@@ -411,7 +416,12 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     if (!fixture.queries.transaction) throw new Error("TX003 transaction fixture missing.");
     for (const db of databases(fixture)) {
       await fixture.reset();
-      await assert.rejects(() => db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); await tx.execute(fixture.queries.failure); }));
+      await assert.rejects(() => db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); await tx.execute(fixture.queries.failure); }), (error: unknown) => {
+        const expectedCode = fixture.queries.expected?.failureCode;
+        if (expectedCode !== undefined) assert.equal((error as { readonly code?: unknown }).code, expectedCode);
+        else assert.ok(error instanceof Error);
+        return true;
+      });
       if (emptyResultError(context) === undefined) assert.equal((await db.all(fixture.queries.transaction!.visible)).length, 0);
       else await assertEmptyResult(context, () => db.all(fixture.queries.transaction!.visible));
     }

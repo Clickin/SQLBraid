@@ -96,13 +96,21 @@ export async function runStreamingConformanceCase(
         return;
       }
       case "STR003": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
+        const beforeReturns = iteratorReturns();
+        const beforeReleased = released();
         const error = new Error("cert-consumer-failure");
         await assert.rejects(async () => {
           for await (const row of fixture.db.stream(fixture.query)) { void row; throw error; }
         }, (caught: unknown) => caught === error);
+        assert.equal(iteratorReturns() - beforeReturns, 1);
+        assert.equal(released() - beforeReleased, 1);
         return;
       }
       case "STR004": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
         const mapping = requireField(fixture.mappingQuery, "mappingQuery");
         if (mapping === undefined) return;
         if (!strict) {
@@ -111,13 +119,21 @@ export async function runStreamingConformanceCase(
         }
         if (mapping.resultSchema === undefined) throw new Error("STR004 requires mappingQuery.resultSchema fixture evidence.");
         const mappingFailure = requireField(fixture.mappingFailure, "mappingFailure");
+        const mappingReturns = iteratorReturns();
+        const mappingReleased = released();
         await assert.rejects(async () => {
           for await (const row of fixture.db.stream(mapping)) void row;
         }, (caught: unknown) => containsExpectedError(caught, mappingFailure));
+        assert.equal(iteratorReturns() - mappingReturns, 1);
+        assert.equal(released() - mappingReleased, 1);
         const executionSchemaFailure = requireField(fixture.executionSchemaFailure, "executionSchemaFailure");
+        const schemaReturns = iteratorReturns();
+        const schemaReleased = released();
         await assert.rejects(async () => {
           for await (const row of fixture.db.stream(fixture.query, { schema: throwingSchema(executionSchemaFailure) })) void row;
         }, (caught: unknown) => containsExpectedError(caught, executionSchemaFailure));
+        assert.equal(iteratorReturns() - schemaReturns, 1);
+        assert.equal(released() - schemaReleased, 1);
         return;
       }
       case "STR004_SCHEMA": {
@@ -131,6 +147,7 @@ export async function runStreamingConformanceCase(
       }
       case "STR005": {
         const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
         const controller = new AbortController();
         const abortError = options.abortError ?? new Error("cert-abort-before");
         controller.abort(abortError);
@@ -138,9 +155,14 @@ export async function runStreamingConformanceCase(
           for await (const row of fixture.db.stream(fixture.query, { signal: controller.signal })) void row;
         }, (caught: unknown) => containsExpectedError(caught, abortError));
         assert.equal(iteratorReturns(), 0);
+        assert.equal(released(), 0);
         return;
       }
       case "STR006": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
+        const beforeReturns = iteratorReturns();
+        const beforeReleased = released();
         const controller = new AbortController();
         const abortError = options.abortError ?? new Error("cert-abort-during");
         await assert.rejects(async () => {
@@ -151,21 +173,35 @@ export async function runStreamingConformanceCase(
         }, (caught: unknown) => options.cancellation === "unsupported"
           ? caught instanceof UnsupportedFeatureError && caught.feature === "statement.cancel"
           : containsExpectedError(caught, abortError));
+        const expectedCleanup = options.cancellation === "unsupported" ? 0 : 1;
+        assert.equal(iteratorReturns() - beforeReturns, expectedCleanup);
+        assert.equal(released() - beforeReleased, expectedCleanup);
         return;
       }
       case "STR007": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
         const init = requireField(fixture.initFailureQuery, "initFailureQuery");
         const initFailure = requireField(fixture.initFailure, "initFailure");
         if (init === undefined) return;
+        const initReturns = iteratorReturns();
+        const initReleased = released();
         await assert.rejects(async () => { for await (const row of fixture.db.stream(init)) void row; }, (caught: unknown) => containsExpectedError(caught, initFailure));
+        assert.equal(iteratorReturns() - initReturns, released() - initReleased);
         const first = requireField(fixture.firstNextFailureQuery, "firstNextFailureQuery");
         const firstFailure = requireField(fixture.firstNextFailure, "firstNextFailure");
         if (first === undefined) return;
+        const firstReturns = iteratorReturns();
+        const firstReleased = released();
         await assert.rejects(async () => { for await (const row of fixture.db.stream(first)) void row; }, (caught: unknown) => containsExpectedError(caught, firstFailure));
+        assert.equal(iteratorReturns() - firstReturns, released() - firstReleased);
         const mid = requireField(fixture.midStreamFailureQuery, "midStreamFailureQuery");
         const midFailure = requireField(fixture.midStreamFailure, "midStreamFailure");
         if (mid === undefined) return;
+        const midReturns = iteratorReturns();
+        const midReleased = released();
         await assert.rejects(async () => { for await (const row of fixture.db.stream(mid)) void row; }, (caught: unknown) => containsExpectedError(caught, midFailure));
+        assert.equal(iteratorReturns() - midReturns, released() - midReleased);
         return;
       }
       case "STR008": {
