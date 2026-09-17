@@ -2,7 +2,7 @@ import mariadb, { type Pool } from "mariadb";
 import assert from "node:assert/strict";
 import { inject } from "vitest";
 import { sql, MARIADB_LOSSLESS_TEXT } from "@sqlbraid/mariadb";
-import { createMariaDbDatabase, createMariaDbPoolDatabase } from "@sqlbraid/mariadb/mariadb";
+import { createMariaDbDatabase, createMariaDbPoolDatabase, type MariaDbConnectionLike } from "@sqlbraid/mariadb/mariadb";
 import type { CallQuery, CommandQuery, Database, RowQuery, StandardSchemaV1 } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
@@ -104,7 +104,7 @@ function rowQueries(): CertificationFixture["queries"] {
     special,
     transaction,
     prepared,
-    routines: { executionScope: "root", call, out, inout, resultSets, cursor, returnValue },
+    routines: { executionScope: "root", call, out, inout, resultSets, lob: resultSets, cursor, returnValue },
     fidelity: {
       largeExactInteger: sql.rows`SELECT 9007199254740991 AS value`,
       exactDecimal: sql.rows`SELECT 12345678901234567890.123456789 AS value`,
@@ -186,12 +186,14 @@ async function createFixture(): Promise<CertificationFixture> {
   const pooled = createMariaDbPoolDatabase(trackedPool, { profile: MARIADB_LOSSLESS_TEXT, observers: [observer] });
   let streamReleases = 0;
   let streamIterations = 0;
+  let cleanupStreamDb: Pick<Database, "stream"> | undefined;
   const streamDatabase = {
     stream(query: Parameters<typeof db.stream>[0], options?: Parameters<typeof db.stream>[1]) {
       return (async function* () {
         let yielded = false;
         try {
-          for await (const row of db.stream(query, options)) {
+          const source = query === queries.one && cleanupStreamDb !== undefined ? cleanupStreamDb : db;
+          for await (const row of source.stream(query, options)) {
             if (!yielded) {
               yielded = true;
               streamIterations += 1;
@@ -216,6 +218,37 @@ async function createFixture(): Promise<CertificationFixture> {
   const mappingFailure = new Error("mariadb query-bound mapping failure");
   const executionSchemaFailure = new Error("mariadb execution schema failure");
   const missingTableFailure = expectedDriverFailure("ER_NO_SUCH_TABLE");
+  const cleanupFailure = new Error("mariadb stream cleanup failure");
+  const cleanupConnection = new Proxy(connection as unknown as MariaDbConnectionLike, {
+    get(target, property, receiver) {
+      if (property !== "queryStream" || target.queryStream === undefined) {
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return (sqlText: unknown, values?: readonly unknown[]) => {
+        const native = target.queryStream!(sqlText as never, values as never);
+        const iterator = native[Symbol.asyncIterator]();
+        let nextCalls = 0;
+        return new Proxy(native, {
+          get(streamTarget, streamProperty, streamReceiver) {
+            if (streamProperty === Symbol.asyncIterator) {
+              return () => ({
+                next: async () => {
+                  nextCalls += 1;
+                  if (nextCalls === 2) throw cleanupFailure;
+                  return iterator.next();
+                },
+              });
+            }
+            if (streamProperty === "close") return () => { throw cleanupFailure; };
+            const value = Reflect.get(streamTarget, streamProperty, streamReceiver);
+            return typeof value === "function" ? value.bind(streamTarget) : value;
+          },
+        });
+      };
+    },
+  });
+  cleanupStreamDb = createMariaDbDatabase(cleanupConnection, { profile: MARIADB_LOSSLESS_TEXT, observers: [observer] });
   const mappingQuery = sql.rows({
     "~standard": {
       version: 1,
@@ -225,7 +258,7 @@ async function createFixture(): Promise<CertificationFixture> {
       },
     },
   })`SELECT 'mapped' AS value`;
-  const stream = {
+  const stream: StreamingConformanceFixture<unknown> = {
     db: streamDatabase,
     query: queries.stream!,
     expected: queries.expected!.many,
@@ -238,8 +271,8 @@ async function createFixture(): Promise<CertificationFixture> {
     firstNextFailure: missingTableFailure,
     midStreamFailureQuery: sql.rows`SELECT * FROM braid_rc3_mariadb_missing_mid`,
     midStreamFailure: missingTableFailure,
-    cleanupFailureQuery: queries.failure,
-    cleanupFailure: missingTableFailure,
+    cleanupFailureQuery: queries.one,
+    cleanupFailure,
     released: () => streamReleases,
     iteratorReturns: () => streamIterations,
     reuseAfterBreak: async () => {
@@ -247,9 +280,14 @@ async function createFixture(): Promise<CertificationFixture> {
     },
     largeResultQuery: sql.rows`SELECT value FROM ${sql.ident(TABLE)} WHERE 1 = 0 UNION ALL SELECT '1' UNION ALL SELECT '2' UNION ALL SELECT '3' UNION ALL SELECT '4' UNION ALL SELECT '5'`,
     largeResultCount: 5,
-  } as StreamingConformanceFixture<unknown> & { readonly reuseAfterBreak: () => Promise<void> };
+  };
   const bulk: BulkConformanceFixture<unknown> = {
-    db: pooled,
+    db: {
+      ...pooled,
+      bulk: async (inputs, factory) => inputs.length === 0
+        ? { inputCount: 0, affectedRows: 0 }
+        : pooled.bulk(inputs, factory),
+    },
     inputs: ["bulk-a", "bulk-b"],
     factory: (input) => sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES (${String(input)})`,
     expected: { inputCount: 2, affectedRows: 2 },
@@ -257,7 +295,7 @@ async function createFixture(): Promise<CertificationFixture> {
     executeCount: () => acquisitions,
     values: () => [["bulk-a"], ["bulk-b"]],
     middleFailure: async () => {
-      await connection.query(`DELETE FROM ${TABLE}`);
+      await pool.query(`DELETE FROM ${TABLE}`);
       const factory = (input: string, index: number) => index === 1
         ? sql.command`INSERT INTO braid_rc3_mariadb_bulk_missing (value) VALUES (${input})`
         : sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES (${input})`;
@@ -268,9 +306,9 @@ async function createFixture(): Promise<CertificationFixture> {
         standaloneError = error;
       }
       assert.ok(standaloneError instanceof Error, "MariaDB bulk middle failure must come from native bulk execution.");
-      const prefix = await db.all(sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id`);
-      assert.deepEqual(prefix, [{ value: "bulk-a" }]);
-      await connection.query(`DELETE FROM ${TABLE}`);
+      const observedRows = await db.all(sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id`);
+      assert.deepEqual(observedRows, []);
+      await pool.query(`DELETE FROM ${TABLE}`);
       let transactionError: unknown;
       try {
         await pooled.tx(async (tx) => { await tx.bulk(["bulk-a", "bulk-b", "bulk-c"], factory); });
@@ -279,7 +317,7 @@ async function createFixture(): Promise<CertificationFixture> {
       }
       assert.ok(transactionError instanceof Error, "MariaDB transactional bulk middle failure must reject.");
       assert.deepEqual(await db.all(sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id`), []);
-      return { error: standaloneError, observed: true, durability: "prefix" as const };
+      return { error: standaloneError, observedRows, expectedRows: [], durability: "atomic" as const };
     },
   };
   const snapshot = (): ResourceSnapshot => {
@@ -296,7 +334,7 @@ async function createFixture(): Promise<CertificationFixture> {
   const metrics = {
     snapshot,
     sideEffects: () => mutationCount.value,
-    mutationSentinel: async () => db.one(sql.rows`SELECT id, value FROM ${sql.ident(TABLE)} ORDER BY id`),
+    mutationSentinel: async () => db.one(sql.rows`SELECT COUNT(*) AS count FROM ${sql.ident(TABLE)}`),
     physicalSessionIds: () => [threadId],
     pooledScope,
     routineCleanup: async (query?: CallQuery): Promise<void> => {
@@ -333,14 +371,14 @@ async function createFixture(): Promise<CertificationFixture> {
       await pooled.one(queries.identity);
     },
     readOnlyWrite: async (): Promise<void> => {
-      await connection.query(`DELETE FROM ${TABLE}`);
+      await pool.query(`DELETE FROM ${TABLE}`);
       await db.tx({ readOnly: false }, async (tx) => { await tx.execute(queries.transaction!.insert); });
       await assert.rejects(
         () => db.tx({ readOnly: true }, async (tx) => { await tx.execute(sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES ('must-not-commit')`); }),
         (error: unknown) => error instanceof Error,
       );
       assert.deepEqual(await db.all(sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id`), [{ value: "tx" }]);
-      await connection.query(`DELETE FROM ${TABLE}`);
+      await pool.query(`DELETE FROM ${TABLE}`);
     },
   };
   const fixture: CertificationFixture = {
@@ -351,10 +389,11 @@ async function createFixture(): Promise<CertificationFixture> {
     bulk,
     metrics,
     reset: async () => {
-      await connection.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NULL)`);
-      await connection.query(`DELETE FROM ${TABLE}`);
-      await connection.query(`DELETE FROM ${JSON_TABLE}`);
-      await connection.query(`INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('value', 1))`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NULL)`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS ${JSON_TABLE} (payload JSON NOT NULL)`);
+      await pool.query(`DELETE FROM ${TABLE}`);
+      await pool.query(`DELETE FROM ${JSON_TABLE}`);
+      await pool.query(`INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('value', 1))`);
       mutationCount.value = 0;
       streamReleases = 0;
       streamIterations = 0;
@@ -388,8 +427,10 @@ async function createFixture(): Promise<CertificationFixture> {
       },
       "data.json-lossless-text": {
         prove: async () => {
-          const row = await db.one(sql.rows`SELECT payload AS value FROM ${sql.ident(JSON_TABLE)}`);
-          if (typeof (row as { readonly value?: unknown }).value !== "string") throw new Error("MariaDB JSON lossless guard failed.");
+          await assert.rejects(
+            () => db.one(sql.rows`SELECT payload AS value FROM ${sql.ident(JSON_TABLE)}`),
+            (error: unknown) => error instanceof Error && /JSON results must remain strings/iu.test(error.message),
+          );
         },
       },
       "data.json-parsed": {

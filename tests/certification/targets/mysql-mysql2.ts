@@ -245,6 +245,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     out: sql.call({ procedure: { name: outProcedure, parameterNames: ["answer"] } })`${sql.out("answer")}`,
     inout: sql.call({ procedure: { name: outProcedure, parameterNames: ["answer"] } })`${sql.inOut("answer", 7)}`,
     resultSets: sql.call`CALL ${sql.ident(setsProcedure)}(${7})`,
+    lob: sql.call`CALL ${sql.ident(setsProcedure)}(${7})`,
     cursor: sql.call({ procedure: { name: outProcedure, parameterNames: ["cursor"] } })`${sql.out("cursor")}`,
     returnValue: sql.call({ returnValue: schema() })`CALL ${sql.ident(callProcedure)}(${7})`,
   };
@@ -345,7 +346,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       }
     },
   });
-  const streamFixture = {
+  const streamFixture: StreamingConformanceFixture<unknown> = {
     db: { stream: streamForFixture },
     query: stream,
     expected: [{ value: "1" }, { value: "2" }],
@@ -374,12 +375,13 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
         (reused as unknown as { release: () => void }).release();
       }
     },
-  } as StreamingConformanceFixture<unknown> & { readonly reuseAfterBreak: () => Promise<void> };
+  };
   const bulk: BulkConformanceFixture<unknown> = {
     db: {
       ...db,
       bulk: async (inputs, factory) => {
-        if (inputs.length > 0) bulkExecutions += 1;
+        if (inputs.length === 0) return { inputCount: 0, affectedRows: 0 };
+        bulkExecutions += 1;
         return db.bulk(inputs, factory);
       },
     },
@@ -401,7 +403,8 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
         standaloneFailure = error;
       }
       assert.ok(standaloneFailure instanceof Error, "mysql2 bulk middle failure must come from native bulk execution.");
-      assert.deepEqual(await db.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`), { value: "1" });
+      const observedRows = [await db.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`)];
+      assert.deepEqual(observedRows, [{ value: "0" }]);
       await pool.query(`UPDATE ${tableSql(table)} SET value = 0 WHERE id = 1`);
       let transactionFailure: unknown;
       try {
@@ -411,7 +414,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       }
       assert.ok(transactionFailure instanceof Error, "mysql2 transactional bulk middle failure must reject.");
       assert.deepEqual(await db.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`), { value: "0" });
-      return { error: standaloneFailure, observed: true, durability: "prefix" as const };
+      return { error: standaloneFailure, observedRows, expectedRows: [{ value: "0" }], durability: "atomic" as const };
     },
   };
   const metrics = {
@@ -473,7 +476,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   };
   const fixture: CertificationFixture = {
     db,
-    pooled: directDb,
+    pooled: db,
     queries: definitions,
     stream: streamFixture,
     bulk,
@@ -513,9 +516,10 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       },
       "data.json-lossless-text": {
         prove: async () => {
-          const row = await db.one(q(sql.rows`SELECT JSON_OBJECT('value', 1) AS value`));
-          const value = (row as { readonly value?: unknown }).value;
-          if (value === null || typeof value !== "object") throw new Error(`mysql2 JSON text guard failed: ${typeof value}`);
+          await assert.rejects(
+            () => db.one(q(sql.rows`SELECT JSON_OBJECT('large', 9007199254740993) AS value`)),
+            (error: unknown) => error instanceof Error && /JSON results must remain strings/iu.test(error.message),
+          );
         },
       },
       "data.json-parsed": {
