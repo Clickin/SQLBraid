@@ -8,7 +8,6 @@ import {
   type CertificationAggregateOptions,
   type CertificationArtifact,
   type CertificationCaseResult,
-  type CertificationTuple,
   type ExpectedCapability,
   type ExpectedCapabilityContract,
   type ExpectedGuardedCaseContract,
