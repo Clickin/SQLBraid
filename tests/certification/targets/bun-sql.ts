@@ -31,7 +31,6 @@ interface Counters {
   sideEffects: number;
   failRollbackNative: boolean;
   nativeRollbackClosed: boolean;
-  nativeClosedLease: boolean;
   rollbackError?: unknown;
 }
 
@@ -42,17 +41,13 @@ export const expectedCapabilities = BUN_EXPECTED_CAPABILITIES;
 export const expectedTransactionOptions = BUN_EXPECTED_TRANSACTION_OPTIONS;
 export const expectedGuardedCases = BUN_EXPECTED_GUARDED_CASES;
 
-function mutates(sql: string): boolean {
-  return /^(?:INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|REPLACE|TRUNCATE)\b/iu.test(sql.trim());
-}
-
-function instrument(client: BunSqlClient, counters: Counters): BunSqlClient {
+function instrument(client: BunSqlClient, counters: Counters, leased = false): BunSqlClient {
   const wrapped = ((strings: TemplateStringsArray, ...values: readonly unknown[]) => {
-    if (mutates(strings.join(""))) counters.sideEffects += 1;
+    counters.sideEffects += 1;
     return client(strings, ...values);
   }) as BunSqlClient;
   wrapped.unsafe = async <T = unknown>(text: string, values: readonly unknown[] = []) => {
-    if (mutates(text)) counters.sideEffects += 1;
+    counters.sideEffects += 1;
     if (counters.failRollbackNative && /^\s*ROLLBACK\b/iu.test(text)) {
       counters.failRollbackNative = false;
       counters.nativeRollbackClosed = true;
@@ -60,11 +55,6 @@ function instrument(client: BunSqlClient, counters: Counters): BunSqlClient {
         await client.close?.();
       } catch {
         // Continue to the native rollback call so the driver supplies the fault.
-      }
-      if (counters.borrowed > 0) {
-        counters.nativeClosedLease = true;
-        counters.borrowed -= 1;
-        counters.cleanupBalance -= 1;
       }
       try {
         return await client.unsafe<T>(text, values);
@@ -76,27 +66,33 @@ function instrument(client: BunSqlClient, counters: Counters): BunSqlClient {
     return client.unsafe<T>(text, values);
   };
   Object.defineProperty(wrapped, "options", { value: client.options });
-  wrapped.close = client.close?.bind(client);
+  if (client.close) {
+    wrapped.close = async () => {
+      try {
+        await client.close!();
+      } finally {
+        if (leased) {
+          counters.borrowed -= 1;
+          counters.cleanupBalance -= 1;
+        }
+      }
+    };
+  }
   if (client.reserve !== undefined) {
     wrapped.reserve = async () => {
+      counters.sideEffects += 1;
       counters.borrowed += 1;
       counters.cleanupBalance += 1;
       try {
         const reserved = await client.reserve!();
-        const wrappedReserved = instrument(reserved, counters) as BunSqlReservedClient;
+        const wrappedReserved = instrument(reserved, counters, true) as BunSqlReservedClient;
         const release = reserved.release.bind(reserved);
-        let released = false;
         wrappedReserved.release = async () => {
-          if (released) return;
-          released = true;
           try {
             await release();
           } finally {
-            if (counters.nativeClosedLease) counters.nativeClosedLease = false;
-            else {
-              counters.borrowed -= 1;
-              counters.cleanupBalance -= 1;
-            }
+            counters.borrowed -= 1;
+            counters.cleanupBalance -= 1;
           }
         };
         return wrappedReserved;
@@ -307,7 +303,6 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     sideEffects: 0,
     failRollbackNative: false,
     nativeRollbackClosed: false,
-    nativeClosedLease: false,
   };
   const client = instrument(options.createClient(), counters);
   const table = `braid_cert_${dialect}_${process.pid}_${Math.random().toString(36).slice(2, 10)}`;
