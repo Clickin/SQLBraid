@@ -235,17 +235,39 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         TX031: optionsProbe(db, { isolation: "repeatable-read", readOnly: true }, "transaction.isolation.repeatable-read", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
         TX032: optionsProbe(db, { isolation: "repeatable-read", readOnly: false }, "transaction.isolation.repeatable-read", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
       };
-      const streamFixture: StreamingConformanceFixture<unknown> = {
+      const mappingFailure = new Error("cert-mapper-failure");
+      const executionSchemaFailure = new Error("execution schema failed");
+      const mappingSchema = {
+        "~standard": {
+          version: 1,
+          vendor: "sqlbraid-wasm-certification",
+          validate() {
+            throw mappingFailure;
+          },
+        },
+      } as const;
+      const mappingQuery = sql.rows(mappingSchema)`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 3) SELECT value FROM n ORDER BY value`;
+      const initFailure = sql.rows`SELECT * FROM cert_missing_stream_table`;
+      const firstNextFailure = sql.rows`SELECT * FROM cert_missing_first_table`;
+      const midStreamFailure = sql.rows`SELECT * FROM cert_missing_mid_table`;
+      const largeResultQuery = sql.rows`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 20) SELECT value FROM n`;
+      const streamFixture: StreamingConformanceFixture<unknown> & Record<string, unknown> = {
         db,
         query: queries.stream!,
         expected: [{ value: "1" }, { value: "2" }, { value: "3" }],
-        mappingQuery: queries.stream,
-        initFailureQuery: sql.rows`SELECT * FROM cert_missing_stream_table`,
-        firstNextFailureQuery: sql.rows`SELECT * FROM cert_missing_first_table`,
-        midStreamFailureQuery: sql.rows`SELECT * FROM cert_missing_mid_table`,
+        mappingQuery,
+        mappingFailure,
+        executionSchemaFailure,
+        initFailure,
+        firstNextFailure,
+        midStreamFailure,
+        initFailureQuery: initFailure,
+        firstNextFailureQuery: firstNextFailure,
+        midStreamFailureQuery: midStreamFailure,
         cleanupFailureQuery: sql.rows`SELECT 1 AS value /* __cert_cleanup_failure__ */`,
         cleanupFailure: new Error("certification cleanup failure"),
-        largeResultQuery: sql.rows`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 20) SELECT value FROM n`,
+        largeResultQuery,
+        largeResultCount: 20,
       };
       const bulk: BulkConformanceFixture<unknown> = {
         db,
