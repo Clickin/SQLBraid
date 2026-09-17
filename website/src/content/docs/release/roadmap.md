@@ -3,7 +3,7 @@ title: Roadmap
 description: Separate current behavior from candidates that need their own design and evidence.
 ---
 
-## Current pre-release surface
+## Current 1.0.0 GA surface
 
 The current API includes SQL-first templates, safe binds, dynamic `@braid`,
 result contracts, Standard Schema mapping, physical lease/session ownership,

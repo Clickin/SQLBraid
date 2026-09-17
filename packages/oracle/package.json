@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/oracle",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0",
   "description": "SQLBraid Oracle dialect, node-oracledb adapter, and metadata inspector",
   "keywords": [
     "database",

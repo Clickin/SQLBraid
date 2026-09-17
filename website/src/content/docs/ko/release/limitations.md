@@ -1,15 +1,15 @@
 ---
 title: 현재 제한 사항
-description: 프리릴리스 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
+description: 1.0.0 GA 계약이 의도적으로 약속하지 않는 내용을 확인합니다.
 ---
 
 - **인증은 정확한 tuple과 revision별입니다.** [지원 매트릭스](/SQLBraid/reference/support/)가 기록한 정확한 database, driver, profile, runtime, capability tuple과 revision별 실행 workflow에만 지원 label과 증거가 적용됩니다. 인접한 버전·runtime·profile·로컬 binding 또는 package 설치로 인증을 추론하지 마세요. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인 release 승인은 별도 요구사항이며, CI 통과도 발행 승인이 아닙니다.
 - **`db.all()`은 materialized입니다.** readonly array와 O(row-count) application memory를 사용합니다. 메모리가 중요하면 `db.stream()`을 사용하세요.
-- **Routine streaming은 없습니다.** materialized `db.call()`은 매핑 전에 routine resource를 소비하고 닫으며 raw cursor, portal, request, carrier row는 노출되지 않습니다.
-- **MySQL 및 MariaDB prepared CALL OUT/INOUT은 지원하지 않습니다.** mysql2 3.x와 MariaDB Connector/Node.js 모두 prepared call용 OUT 파라미터 carrier를 구분하는 공개 API가 없으므로 추측하지 않습니다.
+- **Routine streaming은 없습니다.** `callStream()`은 예약된 미구현 이름이며 호출 가능한 1.0.0 API가 아닙니다. materialized `db.call()`은 매핑 전에 routine resource를 소비하고 닫으며 raw cursor, portal, request, carrier row는 노출되지 않습니다.
+- **MySQL 및 MariaDB prepared CALL OUT/INOUT descriptor는 지원하지 않습니다.** Emitted 이질적 `CALL` result set은 지원합니다. mysql2 3.x와 MariaDB Connector/Node.js 모두 prepared call용 OUT 파라미터 carrier를 구분하는 검증된 공개 API가 없으므로 추측하지 않습니다.
 - **PostgreSQL refcursor call은 기존 transaction이 필요합니다.** refcursor는 transaction-bound portal이며 독립 ResultSet이 아닙니다. 숨은 transaction을 만들지 않습니다.
 - **SQL Server cursor output은 application cursor가 아닙니다.** `CURSOR VARYING OUTPUT`은 bind 가능한 client ResultSet으로 노출되지 않으며 emitted `SELECT` 행은 일반 result set입니다.
-- **SQLite routine call은 지원하지 않습니다.** scalar/aggregate/window function과 virtual-table extension은 일반 SQL입니다. D1에는 callback transaction과 incremental cursor도 없습니다.
+- **SQLite의 `db.call()` / `routine.call`은 지원하지 않습니다.** 이는 adapter API 경계이며 SQLite SQL의 제한이 아닙니다. scalar/aggregate/window function과 virtual-table extension은 일반 SQL입니다. D1에는 callback transaction과 incremental cursor도 없습니다.
 - **DML-returning은 materialized입니다.** `sql.rows`와 `db.execute`, `db.all`, `db.one`, `db.maybeOne`을 사용하고 `RETURNING`/`OUTPUT`의 cross-driver stream을 추론하지 마세요.
 - **`db.bulk()`는 command-only입니다.** 하나의 DML shape를 lock하고 I/O 전에 모든 입력을 검증하며 하나의 lease를 사용하고 실제 mode를 보고합니다. Root bulk에는 portable atomicity/auto-chunking 약속이 없으므로 atomicity에는 `db.tx()`를 사용하세요.
 - **Session과 transaction은 물리 scope API입니다.** `db.session()`은 하나의 provider lease를 고정하고 중첩 session/transaction 작업은 재사용합니다. Root escape 및 closed/sibling handle은 거부됩니다. Primitive가 없으면 `BRAID_SESSION_UNSUPPORTED` 또는 `BRAID_TX_UNSUPPORTED`를 사용합니다.

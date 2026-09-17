@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@sqlbraid/cli": "0.1.0-rc.1",
-    "@sqlbraid/codegen": "0.1.0-rc.1",
-    "@sqlbraid/sqlite": "0.1.0-rc.1"
+    "@sqlbraid/cli": "1.0.0",
+    "@sqlbraid/codegen": "1.0.0",
+    "@sqlbraid/sqlite": "1.0.0"
   },
   "devDependencies": {
     "@types/node": "22.20.1",

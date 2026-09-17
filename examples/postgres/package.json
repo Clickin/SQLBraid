@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@sqlbraid/cli": "0.1.0-rc.1",
-    "@sqlbraid/postgres": "0.1.0-rc.1",
+    "@sqlbraid/cli": "1.0.0",
+    "@sqlbraid/postgres": "1.0.0",
     "pg": "8.23.0"
   },
   "devDependencies": {

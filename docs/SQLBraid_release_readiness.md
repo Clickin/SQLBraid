@@ -1,7 +1,12 @@
-# SQLBraid 1.0.0-rc.2 release readiness
+# SQLBraid 1.0.0 release readiness
 
 This file separates repository evidence from maintainer actions outside the
 repository. It contains no credentials or registry tokens.
+
+The GA target is stable public contracts, not universal driver capabilities.
+This preparation neither claims fresh final certification nor authorizes
+tagging, staging, approval, or publication. Stable `release-1.0.0` staging and
+later `latest` promotion remain separately authorized maintainer actions.
 
 ## Current evidence boundary
 
@@ -19,7 +24,7 @@ Unsupported as appropriate. D1's managed SQLite version remains unreported;
 that fact must not be upgraded by prose. Free-only reproducible environments
 remain the release policy.
 
-## Phase-J contract to release
+## 1.0.0 stable contracts
 
 Before a release decision, review the following public contracts against the
 implementation and executable evidence:
@@ -41,6 +46,10 @@ implementation and executable evidence:
   leases expose the same immutable binding adapter identity.
 - Missing stream, call, routine-channel, hint, or transaction capabilities use
   `UnsupportedFeatureError` and stable `BRAID_*` codes rather than fake fallback.
+- mysql2 emitted `CALL` sets are supported, but OUT/INOUT descriptor carriers
+  are not. SQLite `db.call` / `routine.call` is unsupported, not a restriction
+  on authored SQLite SQL. `callStream` remains reserved and unimplemented,
+  not an available API.
 - Environment capability keys are canonical: `statement.prepare`,
   `statement.stream`, `statement.bulk`, `transaction`,
   `transaction.savepoint`, `routine.out`, `routine.result-sets`,
@@ -287,15 +296,15 @@ followed by human `pnpm stage approve` commands and verification. The
 `verify-published` helper reports manual stable-`latest` promotion commands; it
 does not execute them.
 
-## Maintainer sequence: 1.0.0-rc.2 and later releases
+## Maintainer sequence: 1.0.0 and later releases
 
 The following are maintainer actions, **not** actions performed by certification:
 
 1. RC0 bootstrap is historical and complete. Do not create a token, rerun a
    bootstrap, or treat older RC evidence as evidence for this candidate.
-2. For a corrected candidate, synchronize versions, prepare and freeze the
+2. For the GA candidate, synchronize versions, prepare and freeze the
    exact source SHA, and create/push a **new** tag (for example
-   `v1.0.0-rc.2`). Never reuse or move a candidate tag after a post-tag fix.
+   `v1.0.0`). Never reuse or move a candidate tag after a post-tag fix.
    This tag-triggered run is **certification-only**.
    Wait for its Runtime, Documentation, and Release certification gates; this
    page makes no promise of a new green SHA or substitute evidence.
@@ -318,8 +327,9 @@ The following are maintainer actions, **not** actions performed by certification
    boundary.
 
 4. Review `staged-publication.json` and each registry stage record. Confirm
-   candidate identity, exact tarball hashes, stage IDs, provenance, `next`, and
-   the unchanged `latest` snapshots. Run each generated `approvalCommands`
+   candidate identity, exact tarball hashes, stage IDs, provenance, the
+   temporary `release-1.0.0` tag, and unchanged `latest` snapshots.
+   Prereleases instead use `next`. Run each generated `approvalCommands`
    dependency layer in order from a human interactive terminal, for example:
 
    ```sh
@@ -329,7 +339,8 @@ The following are maintainer actions, **not** actions performed by certification
    Do not collapse dependency layers, and never run approval in Actions. A
    partial/non-atomic approval must be stopped and reconciled from the report
    and stage records before continuing. Immediately before approval, recheck
-   current dist-tags and stop if `next` has advanced past this prerelease.
+   current dist-tags and stop on unexpected movement; for a prerelease, stop
+   if `next` has advanced past that candidate.
    Approval applies the tag selected at staging time; certification cannot lock
    registry channels during a later human approval session.
 
@@ -345,8 +356,9 @@ The following are maintainer actions, **not** actions performed by certification
    integrity, tags, public provenance metadata, and `latest`. It proves current
    public state, not approval history: after human reconciliation it can verify
    all public packages using an earlier partial report as the immutable baseline.
-   It never approves anything. For this RC, `next` must point to the approved packages
-   and `latest` must remain unchanged.
+   It never approves anything. For 1.0.0, `release-1.0.0` must point to the
+   approved packages and `latest` must remain unchanged until the separate
+   stable promotion. Prereleases require `next` instead and never move `latest`.
 
 6. For a stable version, stage under `release-<version>`. After every stage is
    approved and verification passes, execute the helper's reported manual
@@ -369,9 +381,10 @@ The following are maintainer actions, **not** actions performed by certification
 
 Freeze the exact source commit before creating a candidate tag. A `v*` tag is
 an immutable operational identity and must be created once; do not move or
-delete it to incorporate a fix. If any fix is needed after tagging, increment
-the prerelease (`rc.2`, `rc.3`, and so on), create a new tag, and rerun all
-exact-final gates. Configure a repository tag ruleset manually for `v*` with
+delete it to incorporate a fix. If any fix is needed after tagging, select a
+new version (the next prerelease before GA, or a new patch version after GA),
+create a new tag, and rerun all exact-final gates. Configure a repository tag
+ruleset manually for `v*` with
 both **restrict updates** and **restrict deletions** enabled, allowing only
 the minimum maintainer/emergency bypass; do not add workflow credentials to
 mutate tags. Release preflight also rejects a tag-push event whose prior SHA
@@ -384,9 +397,9 @@ publish a tuple or package that fresh exact-final evidence did not exercise.
 Use workflow run records and immutable artifacts, not moving “latest successful
 SHA” constants in this document.
 
-## RC3 immutable-candidate certification gate
+## Immutable-candidate certification gate
 
-RC3 certification is a required, non-mutating gate on the exact checked-out
+Driver certification is a required, non-mutating gate on the exact checked-out
 commit. `driver-certification.yml` builds package `dist` once, preserves the
 prepared archive and its SHA-256 identity, then runs the complete catalog from
 `tests/certification/contracts.ts` across Node 22.18.0, Deno 2.9.3, Bun 1.3.14,

@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/opentelemetry",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0",
   "description": "OpenTelemetry tracing and database duration metrics for SQLBraid observers",
   "keywords": [
     "database",

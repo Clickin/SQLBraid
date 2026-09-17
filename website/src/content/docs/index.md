@@ -37,7 +37,8 @@ runtime can actually receive.
 
 ## Launch documentation
 
-This is the 1.0.0-rc.2 pre-release documentation. The current tree includes
+This is the SQLBraid 1.0.0 GA documentation. GA stabilizes the public contracts;
+it does not promise every capability on every driver. The current tree includes
 session/lease ownership, fixed transaction options, prepared input factories,
 capability-driven cancellation, and explicit unsupported errors. Targets
 are documented by the [runtime and driver support matrix](/SQLBraid/reference/support/),

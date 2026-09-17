@@ -43,7 +43,8 @@ combined driver+dialect/query subpath such as `sqlbraid/pg`, `sqlbraid/mysql2`,
 default dialect; its root exports only common runtime contracts. The granular
 `@sqlbraid/*` packages remain available for custom integrations and tooling.
 
-> **Release status:** pre-release / release candidate. [Versioned support records](support/targets/)
+> **Release status:** 1.0.0 — stable public API. GA means stable public contracts,
+> not universal driver capabilities. [Versioned support records](support/targets/)
 > identify each certified database/driver/profile/runtime tuple, implementation
 > revision, and workflow evidence. Changed revisions require fresh exact-SHA
 > Runtime, Documentation, and Release gates; neighboring versions do not inherit
@@ -86,6 +87,14 @@ sql`driver-specific SQL`; // unknown result kind
 `db.all`, `db.one`, `db.maybeOne`, and `db.stream` require `sql.rows`. `db.execute` accepts row, command, or unknown queries and checks the actual result kind after execution. `db.call` accepts `sql.call` and returns `output`, ordered heterogeneous `resultSets`, and an optional `returnValue`.
 
 `sql.out(name, hint?)` is valid for `sql.call` and Oracle row-returning DML. `sql.inOut(name, value, hint?)` is call-only. Cursor and emitted result sets are materialized and closed before asynchronous mapping; raw cursors, portals, requests, and carrier rows do not escape. A result-kind mismatch is `BRAID_RESULT_KIND` after execution and cannot undo a root side effect.
+
+Routine channels depend on the adapter: mysql2 supports emitted `CALL` result
+sets, but not OUT/INOUT descriptor carriers; SQLite adapters do not support
+`db.call` (`routine.call`), which is an API capability limit, not a restriction
+on authored SQLite SQL. PostgreSQL refcursors require an existing `db.tx`;
+direct SQL Server cursor OUT is unsupported. Unsupported routine channels fail
+explicitly rather than being emulated; see the [support records](support/targets/).
+`callStream` is reserved and unimplemented, not a callable API.
 
 Attach a Standard Schema to a row query or pass one per execution:
 

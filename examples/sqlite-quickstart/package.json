@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "sqlbraid": "0.1.0-rc.1"
+    "sqlbraid": "1.0.0"
   },
   "devDependencies": {
-    "@sqlbraid/cli": "0.1.0-rc.1",
+    "@sqlbraid/cli": "1.0.0",
     "@types/node": "22.20.1",
     "typescript": "5.9.3"
   },

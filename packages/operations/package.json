@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/operations",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0",
   "description": "SQLBraid operation and execution result helpers for database queries",
   "keywords": [
     "database",

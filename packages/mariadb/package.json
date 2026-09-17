@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/mariadb",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0",
   "description": "SQLBraid MariaDB dialect and official Connector/Node.js adapter",
   "keywords": [
     "database",

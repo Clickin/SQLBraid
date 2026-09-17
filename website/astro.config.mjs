@@ -221,7 +221,7 @@ export default defineConfig({
           label: "Release",
           translations: { ko: "릴리스" },
           items: [
-            { label: "1.0.0-rc.2 notes", translations: { ko: "1.0.0-rc.2 릴리스 노트" }, link: "/release/notes/" },
+            { label: "1.0.0 notes", translations: { ko: "1.0.0 릴리스 노트" }, link: "/release/notes/" },
             { label: "Current limitations", translations: { ko: "현재 제한 사항" }, link: "/release/limitations/" },
             { label: "Roadmap", translations: { ko: "로드맵" }, link: "/release/roadmap/" },
           ],

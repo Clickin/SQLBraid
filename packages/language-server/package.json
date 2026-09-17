@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/language-server",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0",
   "description": "SQLBraid language server for SQL-aware TypeScript tooling",
   "keywords": [
     "database",

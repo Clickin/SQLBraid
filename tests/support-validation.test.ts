@@ -326,7 +326,7 @@ test("capability references enumerate the complete machine-readable vocabulary",
   const documents = [
     "website/src/content/docs/reference/support.mdx",
     "website/src/content/docs/ko/reference/support.mdx",
-    "docs/SQLBraid_0.1.0_release_notes.md",
+    "docs/SQLBraid_1.0.0_release_notes.md",
   ];
   for (const document of documents) {
     const source = await readFile(join(root, document), "utf8");

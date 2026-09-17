@@ -388,7 +388,7 @@ export function startStdioLanguageServer(
         diagnosticProvider: { interFileDependencies: false, workspaceDiagnostics: false },
         workspace: { workspaceFolders: { supported: true, changeNotifications: true } },
       },
-      serverInfo: { name: "SQLBraid Language Server", version: "1.0.0-rc.2" },
+      serverInfo: { name: "SQLBraid Language Server", version: "1.0.0" },
     };
   });
 

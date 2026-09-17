@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/template",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0",
   "description": "SQLBraid SQL tagged-template primitives for dialect-aware queries",
   "keywords": [
     "database",

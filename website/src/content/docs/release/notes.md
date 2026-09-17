@@ -1,9 +1,10 @@
 ---
-title: 1.0.0-rc.2 release notes
-description: The SQLBraid 1.0 release candidate surface and its evidence boundary.
+title: 1.0.0 release notes
+description: The SQLBraid 1.0.0 GA contract and its capability and evidence boundaries.
 ---
 
-This is 1.0.0-rc.2 pre-release documentation. It does not authorize npm, GitHub, VS Code
+This is SQLBraid 1.0.0 GA documentation. GA stabilizes the public contracts, not
+every capability on every driver. It does not authorize npm, GitHub, VS Code
 Marketplace, or Pages publication.
 
 The [runtime and driver support matrix](/SQLBraid/reference/support/) records
@@ -54,6 +55,15 @@ Missing stream, routine, output, hint, transaction, or bulk support fails
 explicitly instead of buffering, guessing carriers, ignoring hints, or creating
 hidden transactions.
 
+MySQL/mysql2 supports emitted heterogeneous `CALL` result sets, but OUT/INOUT
+descriptors remain unsupported because their carrier cannot be identified
+reliably. SQLite `db.call()` / `routine.call` is unsupported; this does not
+restrict ordinary SQLite SQL functions or extensions. `callStream()` is
+reserved and unimplemented, not a callable 1.0.0 API. See the
+[capability limitations](/SQLBraid/release/limitations/), including Bun 1.3.14
+MySQL/MariaDB rejecting both explicit `readOnly` boolean values while omission
+preserves the native session default; Bun.SQL PostgreSQL differs.
+
 Canonical capability keys are:
 
 ```text
@@ -72,7 +82,7 @@ models or hydrate object graphs. DML `RETURNING`/`OUTPUT` is materialized unless
 the selected adapter's exact evidence says otherwise. Metadata is open-world
 positive evidence.
 
-A release candidate requires one clean exact revision, executable tuple/capability
+A release requires one clean exact revision, executable tuple/capability
 coverage, bilingual documentation freshness, package/export checks, and an
 immutable release dry-run. User acceptance and explicit release authorization
 are separate gates.

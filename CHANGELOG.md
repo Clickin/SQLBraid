@@ -3,19 +3,39 @@
 This changelog covers the lockstep SQLBraid workspace release train. It
 summarizes durable compatibility and release information; detailed behavior
 and support evidence live in the [public API audit](docs/public-api-audit.md),
-[release notes](docs/SQLBraid_0.1.0_release_notes.md), and
+[release notes](docs/SQLBraid_1.0.0_release_notes.md), and
 [versioned support records](support/targets/).
 
-## 1.0.0-rc.1 (unreleased)
+## 1.0.0
 
-- Finalized the 1.0 RC candidate on the exact release revision, retaining the
-  SQL-first API, explicit result contracts, capability-driven unsupported
-  behavior, and tuple-specific support evidence.
-- Release preparation remains immutable: validated package/VSIX bytes,
-  dependency-ordered npm staging, provenance, and durable evidence are
-  separate from human approval and publication.
+- Establish the GA contract: SQL-first authoring, safe value binds, explicit
+  row/command/call result kinds, and Standard Schema result mapping. Stable
+  contracts do not imply universal capabilities across drivers.
+- Preserve physical session and transaction ownership, nested savepoints,
+  expiring scoped handles, and once-only prepared rendering with logical
+  shape checks before I/O.
+- Preserve exact integer/decimal strings and approximate IEEE numbers;
+  JSON, temporal, and container fidelity remain separate evidence boundaries.
+- Require semantic integration and native-fault contract evidence alongside
+  exact database/driver/profile/runtime/capability tuples. Historical
+  certification does not cover a changed final revision, including
+  documentation-only or evidence-only commits.
+- Keep routine limits explicit: mysql2 emitted `CALL` sets are supported,
+  OUT/INOUT descriptor carriers are not; SQLite `db.call` / `routine.call`
+  is unsupported, and `callStream` remains reserved and unimplemented.
+- Bun 1.3.14 MySQL/MariaDB reject both explicit `readOnly` booleans before
+  I/O; omission preserves the native default. Bun PostgreSQL access modes
+  remain separate. PostgreSQL and Bun PostgreSQL reject `COMMIT` outcomes
+  that report rollback with `BRAID_TX_NOT_COMMITTED`.
+- Retain Oracle auto-commit outside managed transactions and propagate
+  Tedious savepoint rollback failures without returning uncertain resources
+  as healthy.
+- Keep immutable npm tarball validation/staging separate from VSIX validation
+  and publication. Stable staging uses temporary `release-1.0.0`; human
+  approval, integrity/provenance verification, and `latest` promotion require
+  later authorization. This preparation does not publish or certify a release.
 
-## 1.0.0-rc.2 (unreleased)
+## 1.0.0-rc.2 (historical candidate)
 
 - Prepared a new immutable 1.0 RC candidate after the release workflow and
   VS Code publishing paths were separated. Certification and publication
@@ -52,6 +72,17 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   the exact extension artifact used by Open VSX and the manual Marketplace handoff.
   Make the root SQLite quickstart runnable, default SQL Server TLS to certificate
   verification, and synchronize the Korean documentation.
+
+## 1.0.0-rc.1 (historical candidate)
+
+- Finalized the 1.0 RC candidate on the exact release revision, retaining the
+  SQL-first API, explicit result contracts, capability-driven unsupported
+  behavior, and tuple-specific support evidence.
+- Release preparation remains immutable: validated package/VSIX bytes,
+  dependency-ordered npm staging, provenance, and durable evidence are
+  separate from human approval and publication.
+
+The 1.0 RC tags are historical candidate identities, not claims of publication.
 
 ## 0.1.0-rc.2 (unreleased)
 
@@ -107,6 +138,6 @@ Initial pre-release SQL-first surface:
   browser playground;
 - exact-value representation policies and tuple-specific support evidence.
 
-See [SQLBraid 0.1.0 release notes](docs/SQLBraid_0.1.0_release_notes.md) for
-the complete surface and deliberate nonfeatures. This pre-release does not
-authorize package, GitHub, Marketplace, or Pages publication.
+See the current [SQLBraid 1.0.0 release notes](docs/SQLBraid_1.0.0_release_notes.md)
+for the stable surface and deliberate nonfeatures. Historical preparation does
+not authorize package, GitHub, Marketplace, or Pages publication.

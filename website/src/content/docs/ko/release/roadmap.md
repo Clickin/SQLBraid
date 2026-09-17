@@ -3,7 +3,7 @@ title: 로드맵
 description: 현재 동작과 별도 설계 및 증거가 필요한 후보를 구분합니다.
 ---
 
-## 현재 프리릴리스 표면
+## 현재 1.0.0 GA 표면
 
 현재 API에는 SQL 우선 template, 안전한 bind, 동적 `@braid`, result contract,
 Standard Schema 매핑, 물리 lease/session 소유권, transaction/savepoint 범위,

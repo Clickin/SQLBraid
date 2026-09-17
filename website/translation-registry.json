@@ -31,7 +31,7 @@
       "source": "website/src/content/docs/agents/vscode.md",
       "translation": "website/src/content/docs/ko/agents/vscode.md",
       "translationOf": "website/src/content/docs/agents/vscode.md",
-      "sourceDigest": "5285ece8cd49ea7e50c01a07696e2045718a53b4318c8f48fb3337556653bdb5"
+      "sourceDigest": "2cc12ee642cc5da6805b58b6555a67c6b788f9e2dc61f798b8437fb09614ae9d"
     },
     {
       "source": "website/src/content/docs/concepts/bulk.md",
@@ -61,13 +61,13 @@
       "source": "website/src/content/docs/concepts/result-mapping.md",
       "translation": "website/src/content/docs/ko/concepts/result-mapping.md",
       "translationOf": "website/src/content/docs/concepts/result-mapping.md",
-      "sourceDigest": "aa0af5194b6058e1c95c044fd9d6ef31c0b18331983c5008a65444341c353b1e"
+      "sourceDigest": "f171e780a4d6204792b27bd2e37602b8a0097e23be118568a14cabc9cc505ccf"
     },
     {
       "source": "website/src/content/docs/concepts/routines.md",
       "translation": "website/src/content/docs/ko/concepts/routines.md",
       "translationOf": "website/src/content/docs/concepts/routines.md",
-      "sourceDigest": "3c2e78563f032c7e994bf4fb10d2460a94662888a90fbcbad58cbd3f2ceda665"
+      "sourceDigest": "b62063da598afd04dc0c88a35277cb1fa5cbf17ee4069952f80d4cc0ee497e80"
     },
     {
       "source": "website/src/content/docs/concepts/safe-binds.md",
@@ -139,7 +139,7 @@
       "source": "website/src/content/docs/index.md",
       "translation": "website/src/content/docs/ko/index.md",
       "translationOf": "website/src/content/docs/index.md",
-      "sourceDigest": "763836d9af631910a3bb2cbcc379e4295a615953a194102b149dbe6aa532c9e0"
+      "sourceDigest": "a7d293347c1f3c59407dd9e98d1a479c9581e3c2f0b53fb7309df3d87af97228"
     },
     {
       "source": "website/src/content/docs/interactive-preview.mdx",
@@ -211,19 +211,19 @@
       "source": "website/src/content/docs/release/limitations.md",
       "translation": "website/src/content/docs/ko/release/limitations.md",
       "translationOf": "website/src/content/docs/release/limitations.md",
-      "sourceDigest": "81156ab8b585f4950fd448042dd287894761666b3866603ccb52318bf482d40c"
+      "sourceDigest": "b1342488bfedd6298a4689c228e7df7aeca2623144d5c6ace1da818ad5b39cb4"
     },
     {
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "6b392e9b1941de7ed14731a0b0dea07d2da891dd9cc591e8efb27fd223360971"
+      "sourceDigest": "d3f550b53983a7bbb9eaf5fe9cb3635b6533422e5747d3b84d01df1176f6d816"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",
       "translation": "website/src/content/docs/ko/release/roadmap.md",
       "translationOf": "website/src/content/docs/release/roadmap.md",
-      "sourceDigest": "57a232332fcfbca361c3a5708fc4db592a2e488a7c08ee5b685bc86bae79b722"
+      "sourceDigest": "2faeb1ca85a58acc8adbe0a133d630a0666fd80ed9a3645a483b42f787769a58"
     },
     {
       "source": "website/src/content/docs/runtime/direct-pools.md",
@@ -241,7 +241,7 @@
       "source": "website/src/content/docs/runtime/opentelemetry.md",
       "translation": "website/src/content/docs/ko/runtime/opentelemetry.md",
       "translationOf": "website/src/content/docs/runtime/opentelemetry.md",
-      "sourceDigest": "eee9ae0cdea03b1aad6ed824aa09748c0f1c7a8e03cd44325258ec5e5e8cde10"
+      "sourceDigest": "3cde8d447727d9621e8818a986d2233457916e54f41cdae38808529dcb8914bc"
     },
     {
       "source": "website/src/content/docs/runtime/prepared.md",

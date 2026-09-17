@@ -931,7 +931,7 @@ jobs:
         run: |
           args=(gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft
             --title "SQLBraid $GITHUB_REF_NAME"
-            --notes-file docs/SQLBraid_0.1.0_release_notes.md)
+            --notes-file docs/SQLBraid_1.0.0_release_notes.md)
           if [[ "$(node scripts/release.mjs --mode release-prerelease-flag --version "${GITHUB_REF_NAME#v}")" == "--prerelease" ]]; then
             args+=(--prerelease)
           fi

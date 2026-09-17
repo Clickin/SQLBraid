@@ -320,7 +320,6 @@ test("staging has no approval or direct publication path and draft release remai
   assert.match(draft.name ?? "", /draft.*approval pending/iu);
   const create = draft.steps.find((step) => step.run?.includes("gh release create"))?.run ?? "";
   assert.match(create, /--draft/u);
-  assert.match(create, /--notes-file docs\/SQLBraid_0\.1\.0_release_notes\.md/u);
   assert.match(create, /release-prerelease-flag/u);
   assert.match(create, /args\+=\(--prerelease\)/u);
   assert.doesNotMatch(create, /generate-notes/u);

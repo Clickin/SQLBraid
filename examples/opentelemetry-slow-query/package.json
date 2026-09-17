@@ -4,9 +4,9 @@
   "type": "module",
   "dependencies": {
     "@opentelemetry/api": "1.9.1",
-    "@sqlbraid/cli": "0.1.0-rc.2",
-    "@sqlbraid/opentelemetry": "0.1.0-rc.2",
-    "@sqlbraid/postgres": "0.1.0-rc.2",
+    "@sqlbraid/cli": "1.0.0",
+    "@sqlbraid/opentelemetry": "1.0.0",
+    "@sqlbraid/postgres": "1.0.0",
     "pg": "8.23.0"
   },
   "devDependencies": {

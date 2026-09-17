@@ -67,7 +67,7 @@ driver row -> dialect TypePolicy normalization -> plain row -> query schema -> e
 
 `DatabaseResultValidationError` uses code `BRAID_RESULT_VALIDATION`, reports the query or execution stage and row index, and does not dump raw rows or binds. Mapping is one row to one row: SQLBraid does not hydrate relations, maintain identity maps, or assemble object graphs.
 
-The input side is deliberately smaller in 0.1.0. Ordinary value interpolation
+The input side is deliberately smaller in 1.0.0. Ordinary value interpolation
 remains a driver-bound value; there is no universal application input codec
 framework yet. Exact numeric bind fidelity is a separate driver capability, and
 `undefined` ordinary IN values fail before acquisition while `null` means SQL
