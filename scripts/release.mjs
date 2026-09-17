@@ -728,6 +728,24 @@ async function registryTagSnapshot(entries) {
   );
 }
 
+async function assertPublishedInternalDependencies(manifest) {
+  const releaseNames = new Set(manifest.releasePackages);
+  const byName = new Map(manifest.packages.map((entry) => [entry.name, entry]));
+  for (const entry of manifest.packages.filter(({ name }) => releaseNames.has(name))) {
+    for (const dependency of entry.dependencies ?? []) {
+      if (releaseNames.has(dependency)) continue;
+      const dependencyEntry = byName.get(dependency);
+      if (!dependencyEntry) continue;
+      const found = await registryIntegrity(dependencyEntry.name, dependencyEntry.version);
+      if (!found) {
+        throw new Error(
+          `Release dependency ${dependencyEntry.name}@${dependencyEntry.version} required by ${entry.name}@${entry.version} is not public; release the dependency first or include it in a coordinated release.`,
+        );
+      }
+    }
+  }
+}
+
 function assertLatestUnchanged(before, after, name) {
   if ((before.latest ?? undefined) !== (after.latest ?? undefined)) {
     throw new Error(
@@ -792,6 +810,7 @@ async function stageCandidates(
   }
   assertPublicationCredentials("stage");
   await assertOfficialRegistry();
+  await assertPublishedInternalDependencies(manifest);
   let evidence;
   let existingEvidence;
   try {
