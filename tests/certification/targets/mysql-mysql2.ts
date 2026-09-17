@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import assert from "node:assert/strict";
 import { createConnection, createPool, type Connection } from "mysql2/promise";
 import type { Database, RowQuery, StreamOptions } from "@sqlbraid/core";
-import { createMysql2Database, createMysql2PoolProvider, MYSQL2_LOSSLESS_TEXT, type Mysql2ConnectionLike, type Mysql2PoolLike, type Mysql2RawCommandLike, type Mysql2RawConnectionLike, type Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
+import { createMysql2Database, createMysql2PoolProvider, MYSQL2_LOSSLESS_TEXT, type Mysql2ConnectionLike, type Mysql2ExecuteOptionsLike, type Mysql2PoolLike, type Mysql2RawCommandLike, type Mysql2RawConnectionLike, type Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
 import { sql } from "@sqlbraid/mysql";
 import { createPooledDatabase } from "@sqlbraid/runtime";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
@@ -143,9 +143,12 @@ function faultConnection(
   const api = connection as unknown as MysqlConnection;
   const physical = api;
   const raw: Mysql2RawConnectionLike = {
-    execute(text, values) {
+    execute(sqlOrOptions, values) {
       if (mode === "execute") throw error;
-      const command = physical.connection.execute(text, values);
+      const options: Mysql2ExecuteOptionsLike = typeof sqlOrOptions === "string"
+        ? { sql: sqlOrOptions, ...(values === undefined ? {} : { values }) }
+        : sqlOrOptions;
+      const command = physical.connection.execute(options);
       if (mode !== "stream" && mode !== "iterator" && mode !== "first" && mode !== "mid" && mode !== "cleanup") return command;
       return {
         stream(options?: { readonly highWaterMark?: number }) {
@@ -176,7 +179,8 @@ async function end(connection: Pick<MysqlConnection, "end">): Promise<void> {
 async function createFixture(connectionUri: string): Promise<CertificationFixture> {
   const options = connectionOptions(connectionUri);
   const pool = createPool({ ...options, connectionLimit: 4, idleTimeout: 0 }) as unknown as MysqlPool;
-  const direct = await createConnection(options) as unknown as MysqlConnection;
+  const actualClient: Mysql2ConnectionLike = await createConnection(options);
+  const direct = actualClient as MysqlConnection;
   const suffix = ++fixtureSerial;
   const table = `braid_rc3_mysql_cert_${suffix}`;
   const setsProcedure = `braid_rc3_mysql_cert_sets_${suffix}`;

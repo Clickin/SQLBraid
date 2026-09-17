@@ -75,12 +75,12 @@ export type Mysql2ResultHeader = Omit<CommandResult, "affectedRows" | "insertId"
 type Mysql2TypedParameter = { readonly type: number; readonly value: unknown; readonly unsigned: boolean };
 export type Mysql2Parameter = string | number | bigint | boolean | Date | null | Blob | Uint8Array | Mysql2TypedParameter | Mysql2Parameter[] | { [key: string]: Mysql2Parameter };
 
-type Mysql2PreparedExecuteOptions = {
+export interface Mysql2ExecuteOptionsLike {
   readonly sql: string;
-  readonly values: readonly Mysql2Parameter[];
-  readonly rowsAsArray: true;
-  readonly disableEval: true;
-};
+  readonly values?: Mysql2Parameter[];
+  readonly rowsAsArray?: boolean;
+  readonly disableEval?: boolean;
+}
 
 export interface Mysql2RawStreamLike extends AsyncIterable<unknown> {
   readonly readableEnded?: boolean;
@@ -96,7 +96,7 @@ export interface Mysql2RawCommandLike {
 }
 
 export interface Mysql2RawConnectionLike {
-  execute(sql: string, values?: Mysql2Parameter[]): Mysql2RawCommandLike;
+  execute(sqlOrOptions: string | Mysql2ExecuteOptionsLike, values?: Mysql2Parameter[]): Mysql2RawCommandLike;
   destroy(): void;
   readonly stream?: {
     readonly destroyed?: boolean;
@@ -110,7 +110,7 @@ export interface Mysql2PreparedStatementLike {
 }
 
 export interface Mysql2ConnectionLike {
-  execute(sql: string, values?: Mysql2Parameter[]): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
+  execute(sqlOrOptions: string | Mysql2ExecuteOptionsLike, values?: Mysql2Parameter[]): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
   prepare?(sql: string): Promise<Mysql2PreparedStatementLike>;
   unprepare?(sql: string): void | Promise<void>;
   query?(sql: string): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
@@ -211,30 +211,24 @@ function rawConnection(connection: Mysql2ConnectionLike): Mysql2RawConnectionLik
   return raw as Mysql2RawConnectionLike;
 }
 
-function preparedExecuteOptions(text: string, values: readonly Mysql2Parameter[]): Mysql2PreparedExecuteOptions {
+function preparedExecuteOptions(text: string, values: Mysql2Parameter[]): Mysql2ExecuteOptionsLike {
   return { sql: text, values, rowsAsArray: true, disableEval: true };
 }
 
 function executePrepared(
   connection: Mysql2ConnectionLike,
   text: string,
-  values: readonly Mysql2Parameter[],
+  values: Mysql2Parameter[],
 ): Promise<readonly [unknown, Mysql2FieldPayload | undefined]> {
-  const execute = connection.execute as unknown as (
-    options: Mysql2PreparedExecuteOptions,
-  ) => Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
-  return execute.call(connection, preparedExecuteOptions(text, values));
+  return connection.execute(preparedExecuteOptions(text, values));
 }
 
 function streamPrepared(
   connection: Mysql2RawConnectionLike,
   text: string,
-  values: readonly Mysql2Parameter[],
+  values: Mysql2Parameter[],
 ): Mysql2RawCommandLike {
-  const execute = connection.execute as unknown as (
-    options: Mysql2PreparedExecuteOptions,
-  ) => Mysql2RawCommandLike;
-  return execute.call(connection, preparedExecuteOptions(text, values));
+  return connection.execute(preparedExecuteOptions(text, values));
 }
 
 function destroyMysqlConnection(raw: Mysql2RawConnectionLike, error?: Error): void {

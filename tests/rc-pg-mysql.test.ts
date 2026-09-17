@@ -40,7 +40,11 @@ function pgMock(query: (value: unknown) => Promise<PgResultLike>): PgClientLike 
 
 function mysqlMock(execute: (sql: string, values?: readonly unknown[]) => Promise<readonly [unknown, Mysql2FieldPayload | undefined]>): Mysql2ConnectionLike {
   return {
-    execute,
+    async execute(sqlOrOptions, values) {
+      const sql = typeof sqlOrOptions === "string" ? sqlOrOptions : sqlOrOptions.sql;
+      const binds = typeof sqlOrOptions === "string" ? values : sqlOrOptions.values ?? values;
+      return execute(sql, binds);
+    },
     beginTransaction: async () => undefined,
     commit: async () => undefined,
     rollback: async () => undefined,
