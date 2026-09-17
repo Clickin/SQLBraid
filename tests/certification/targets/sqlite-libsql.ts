@@ -7,7 +7,6 @@ import {
   libsqlCapabilities,
   libsqlTransactionOptions,
   makeLibsqlDirectory,
-  RC3_SOURCE_SHA,
   type SqliteFixtureOptions,
 } from "./sqlite-fixture.js";
 
@@ -50,14 +49,9 @@ async function createFixture(): Promise<CertificationFixture> {
   }
 }
 
-export const libsqlCertificationTarget: CertificationTarget = {
+export const libsqlCertificationTarget = {
   id: "libsql-local-node-22-18-0",
-  sourceSha: RC3_SOURCE_SHA,
   expectedCapabilities: libsqlCapabilities(),
   expectedTransactionOptions: libsqlTransactionOptions(),
   createFixture,
-};
-
-export function createLibsqlCertificationTarget(sourceSha = RC3_SOURCE_SHA): CertificationTarget {
-  return { ...libsqlCertificationTarget, sourceSha };
-}
+} satisfies Omit<CertificationTarget, "sourceSha">;

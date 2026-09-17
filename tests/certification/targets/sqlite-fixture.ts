@@ -7,8 +7,6 @@ import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
 import type { CertificationCaseId, CertificationFixture, CertificationQueries, ExpectedCapabilityContract, ResourceSnapshot, TransactionOptionKey, UnsupportedProbe } from "../types.js";
 
-export const RC3_SOURCE_SHA = "c7f7d4b1ec193b4da637514eabee06d9ebc47d27";
-
 type BulkStats = { ready: number; result: number };
 type AnyRowQuery = RowQuery<unknown>;
 

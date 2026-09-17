@@ -3,7 +3,6 @@ import type { CertificationFixture, CertificationTarget } from "../types.js";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import {
   createSqliteFixture,
-  RC3_SOURCE_SHA,
   sqliteCapabilities,
   sqliteTransactionOptions,
   type SqliteFixtureOptions,
@@ -37,14 +36,9 @@ function createFixture(): Promise<CertificationFixture> {
   return Promise.resolve(createSqliteFixture(options));
 }
 
-export const nodeSqliteCertificationTarget: CertificationTarget = {
+export const nodeSqliteCertificationTarget = {
   id: "sqlite-node-sqlite-node-22-18-0",
-  sourceSha: RC3_SOURCE_SHA,
   expectedCapabilities: sqliteCapabilities(),
   expectedTransactionOptions: sqliteTransactionOptions(),
   createFixture,
-};
-
-export function createNodeSqliteCertificationTarget(sourceSha = RC3_SOURCE_SHA): CertificationTarget {
-  return { ...nodeSqliteCertificationTarget, sourceSha };
-}
+} satisfies Omit<CertificationTarget, "sourceSha">;
