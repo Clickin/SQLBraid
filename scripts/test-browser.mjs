@@ -113,12 +113,33 @@ async function startFixtureServer() {
   return { server, url: `http://127.0.0.1:${address.port}/fixtures/sqlite-browser/` };
 }
 
-async function runWasmConformance(browser, fixtureUrl) {
+async function buildBrowserCertificationBundle() {
+  const { build } = await import("vite");
+  const directory = await mkdtemp(resolve(tmpdir(), "sqlbraid-browser-certification-"));
+  await build({
+    configFile: false,
+    resolve: { conditions: ["browser", "import"] },
+    build: {
+      outDir: directory,
+      emptyOutDir: true,
+      lib: {
+        entry: resolve(repositoryRoot, "fixtures/sqlite-browser/certification-entry.ts"),
+        formats: ["iife"],
+        name: "SQLBraidBrowserCertification",
+        fileName: "certification.js",
+      },
+      minify: false,
+    },
+  });
+  return resolve(directory, "certification.js.iife.js");
+}
+
+async function runWasmConformance(browser, fixtureUrl, certificationBundle, sourceSha) {
   const page = await browser.newPage();
   let pageError;
   page.on("pageerror", (error) => { pageError = error; });
   try {
-    await page.goto(fixtureUrl, { waitUntil: "networkidle" });
+    await page.goto(`${fixtureUrl}?sourceSha=${encodeURIComponent(sourceSha)}`, { waitUntil: "networkidle" });
     try {
       await page.waitForFunction(
         () => window.__sqlbraidWasmConformance !== undefined || window.__sqlbraidWasmConformanceError !== undefined,
@@ -128,13 +149,27 @@ async function runWasmConformance(browser, fixtureUrl) {
     } catch (error) {
       throw new Error(`Browser WASM fixture did not become ready: ${pageError?.message ?? String(error)}`);
     }
+    await page.waitForFunction(() => window.__sqlbraidSqlite3 !== undefined, undefined, { timeout: 30_000 });
+    await page.addScriptTag({ path: certificationBundle });
+    await page.waitForFunction(
+      () => window.__sqlbraidCertificationStressArtifact !== undefined || window.__sqlbraidCertificationError !== undefined,
+      undefined,
+      { timeout: 120_000 },
+    );
     const result = await page.evaluate(() => ({
       report: window.__sqlbraidWasmConformance,
       error: window.__sqlbraidWasmConformanceError,
+      certification: window.__sqlbraidCertificationArtifact,
+      certificationStress: window.__sqlbraidCertificationStressArtifact,
+      certificationError: window.__sqlbraidCertificationError,
+      certificationEvidence: window.__sqlbraidWasmCertificationEvidence,
     }));
     if (result.error !== undefined) throw new Error(`Browser WASM conformance failed: ${result.error}`);
     if (result.report === undefined) throw new Error("Browser WASM conformance did not produce a report.");
-    return result.report;
+    if (result.certificationError !== undefined) throw new Error(`Browser WASM certification failed: ${result.certificationError}`);
+    if (result.certification === undefined) throw new Error("Browser WASM certification did not produce an artifact.");
+    if (result.certificationStress === undefined) throw new Error("Browser WASM stress certification did not produce an artifact.");
+    return { ...result.report, certification: result.certification, certificationStress: result.certificationStress, certificationEvidence: result.certificationEvidence };
   } finally {
     await page.close();
   }
@@ -268,6 +303,7 @@ async function main() {
     }
 
     fixtureServer = await startFixtureServer();
+    const certificationBundle = await buildBrowserCertificationBundle();
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage();
@@ -341,7 +377,16 @@ async function main() {
       const expectedChecks = ["nested-tx", "root-escape", "stream-ownership", "mapper-reentry", "break-cleanup", "error-cleanup", "concurrent-branches", "bulk-conformance:prepared-loop"];
       if (checks.join(",") !== expectedChecks.join(",")) throw new Error(`Unexpected browser ownership checks: ${checks.join(",")}.`);
       console.log(`Browser preview passed: ${url}`);
-      const report = await runWasmConformance(browser, fixtureServer.url);
+      const report = await runWasmConformance(browser, fixtureServer.url, certificationBundle, process.env.SQLBRAID_SOURCE_SHA ?? "working-tree");
+      if (report.certification.sourceSha !== (process.env.SQLBRAID_SOURCE_SHA ?? "working-tree")) {
+        throw new Error("Browser certification source SHA did not survive the fixture boundary.");
+      }
+      if (Object.keys(report.certification.cases ?? {}).length !== 84) {
+        throw new Error(`Browser certification executed ${Object.keys(report.certification.cases ?? {}).length} cases instead of 84.`);
+      }
+      if (Object.keys(report.certificationStress.cases ?? {}).length !== 84) {
+        throw new Error(`Browser stress certification executed ${Object.keys(report.certificationStress.cases ?? {}).length} cases instead of 84.`);
+      }
       const integerEvidence = report.cases?.["wasm.numeric.exact-integer"];
       if (!integerEvidence || Object.values(integerEvidence.values ?? {}).some((value) => value?.type !== "string")) {
         throw new Error("Browser WASM exact INTEGER evidence must use canonical strings.");

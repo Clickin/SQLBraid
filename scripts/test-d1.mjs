@@ -44,6 +44,23 @@ try {
   assert.deepEqual(payload.rows[0].payload, [1, 2, 3]);
   assert.equal(payload.streamCode, "BRAID_STREAM_UNSUPPORTED");
   assert.equal(payload.transactionCode, "BRAID_TX_UNSUPPORTED");
+  const sourceSha = process.env.SQLBRAID_SOURCE_SHA ?? "working-tree";
+  const certificationResponse = await worker.dispatchFetch(`http://sqlbraid.test/certification?sourceSha=${encodeURIComponent(sourceSha)}`);
+  const certificationBody = await certificationResponse.text();
+  assert.equal(certificationResponse.status, 200, certificationBody);
+  const certification = JSON.parse(certificationBody);
+  assert.equal(certification.artifact.sourceSha, sourceSha);
+  assert.equal(Object.keys(certification.artifact.cases).length, 84);
+  assert.deepEqual(
+    Object.values(certification.artifact.cases).filter((result) => result.status === "fail"),
+    [],
+  );
+  assert.equal(certification.stress.sourceSha, sourceSha);
+  assert.equal(Object.keys(certification.stress.cases).length, 84);
+  assert.deepEqual(
+    Object.values(certification.stress.cases).filter((result) => result.status === "fail"),
+    [],
+  );
   console.info(JSON.stringify({ check: "local D1 SQLBraid adapter", runtime: "workerd via Miniflare", rows: payload.rows.length }));
 } finally {
   if (worker !== undefined) await worker.dispose();

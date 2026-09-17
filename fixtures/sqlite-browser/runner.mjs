@@ -396,6 +396,7 @@ async function conservativeScopeAdmission() {
 async function run() {
   expect(typeof WebAssembly === "object", "SQLite WASM conformance did not run with WebAssembly.");
   const sqlite3 = await sqlite3InitModule();
+  window.__sqlbraidSqlite3 = sqlite3;
   const environmentDatabase = database(sqlite3);
   const environment = await environmentDatabase.db.environment();
   environmentDatabase.native.close();

@@ -22,6 +22,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
+import { defineResultProperty } from "@sqlbraid/core/driver";
 import { createDatabase } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -136,7 +137,7 @@ function normalizeValue(value: unknown): unknown {
 
 function normalizeRow(row: readonly unknown[], names: readonly string[]): Record<string, unknown> {
   const result: Record<string, unknown> = {};
-  for (const [index, name] of names.entries()) result[name] = normalizeValue(row[index]);
+  for (const [index, name] of names.entries()) defineResultProperty(result, name, normalizeValue(row[index]));
   return result;
 }
 

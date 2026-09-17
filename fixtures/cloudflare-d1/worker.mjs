@@ -1,11 +1,21 @@
 import { createD1Database } from "@sqlbraid/sqlite/d1";
 import { sql } from "@sqlbraid/sqlite";
 import { verifyBulkConformance } from "../bulk-conformance.mjs";
+import { certifyTarget } from "../../tests/certification/execute.js";
+import { createD1Target } from "../../tests/certification/targets/d1.js";
 
 const jsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
 
 export default {
-  async fetch(_request, env) {
+  async fetch(request, env) {
+    const requestUrl = new URL(request.url);
+    if (requestUrl.pathname === "/certification") {
+      const sourceSha = requestUrl.searchParams.get("sourceSha") ?? "working-tree";
+      const target = createD1Target(env.DB, sourceSha);
+      const artifact = await certifyTarget(target);
+      const stress = await certifyTarget(target, { stress: true });
+      return Response.json({ artifact, stress });
+    }
     let nativeBatchCalls = 0;
     let prepareCalls = 0;
     const binding = {

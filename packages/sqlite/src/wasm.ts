@@ -24,6 +24,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
+import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -200,27 +201,22 @@ function row(statement: SqliteWasmStatementLike, names: readonly string[], capi:
   const pointer = statement.pointer;
   if (pointer === undefined) throw new ResultExactnessError("SQLite WASM exact INTEGER reads require an official OO1 statement pointer.");
   for (const [index, name] of names.entries()) {
-    value[name] = capi.sqlite3_column_type(pointer, index) === capi.SQLITE_INTEGER
+    defineResultProperty(value, name, capi.sqlite3_column_type(pointer, index) === capi.SQLITE_INTEGER
       ? normalizeExactInteger(capi.sqlite3_column_int64(pointer, index))
-      : statement.get(index);
+      : statement.get(index));
   }
   return value;
 }
 
-function cleanupError(cause: unknown): Error & { readonly code: string } {
-  const error = new Error("SQLite WASM statement finalization failed.", { cause }) as Error & { readonly code: string };
-  Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
-  return error;
-}
-
-function finishStatement(statement: SqliteWasmStatementLike, failure: unknown): void {
-  try {
+function statementFinalizer(statement: SqliteWasmStatementLike): (failed: boolean, failure: unknown) => void {
+  const cleanup = createCleanupScope();
+  cleanup.add(() => {
     statement.finalize();
-  } catch (cause) {
-    const cleanup = cleanupError(cause);
-    if (failure !== undefined) throw new AggregateError([failure, cleanup], "SQLite WASM operation and cleanup failed.", { cause: failure });
-    throw cleanup;
-  }
+  });
+  return (failed, failure): void => {
+    if (failed) cleanup.run(failure);
+    else cleanup.run();
+  };
 }
 
 const describedStatements = new WeakMap<StatementBindingDescription, RenderedStatement>();
@@ -340,6 +336,8 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
       const statement = database.prepare(prepared.text);
+      const finishStatement = statementFinalizer(statement);
+      let failed = false;
       let failure: unknown;
       try {
         bind(statement, prepared.values);
@@ -354,10 +352,11 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
         const changes = database.changes === undefined ? undefined : safeDatabaseCount(database.changes());
         return { rows: [], rowCount: changes, kind: "command", command: { affectedRows: changes } };
       } catch (error) {
+        failed = true;
         failure = error;
         throw error;
       } finally {
-        finishStatement(statement, failure);
+        finishStatement(failed, failure);
       }
     },
     bulk(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): BulkExecutionResult {
@@ -367,8 +366,10 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
       const statement = createRenderedStatement(bulk.statement);
       assertCommand(statement);
       const text = binding.parameterizedSql;
-      if (text === undefined) throw new Error("BRAID_BIND_TRANSPORT: SQLite WASM bulk binding description did not provide parameterized SQL.");
+      if (text === undefined) throw new Error("BRAID_BIND_TRANSPORT: SQLite WASM binding description did not provide parameterized SQL.");
       const native = database.prepare(text);
+      const finishStatement = statementFinalizer(native);
+      let failed = false;
       let failure: unknown;
       let affectedRows = 0;
       try {
@@ -385,10 +386,11 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
           }
         }
       } catch (error) {
+        failed = true;
         failure = error;
         throw error;
       } finally {
-        finishStatement(native, failure);
+        finishStatement(failed, failure);
       }
       return { inputCount: bulk.parameterSets.length, affectedRows, executionMode: "prepared-loop" };
     },
@@ -405,6 +407,8 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
       const statement = database.prepare(prepared.text);
+      const finishStatement = statementFinalizer(statement);
+      let failed = false;
       let failure: unknown;
       try {
         bind(statement, prepared.values);
@@ -416,10 +420,11 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
           yield row(statement, names, capi) as Row;
         }
       } catch (error) {
+        failed = true;
         failure = error;
         throw error;
       } finally {
-        finishStatement(statement, failure);
+        finishStatement(failed, failure);
       }
     },
     begin: (options?: TransactionOptions) => {
@@ -432,9 +437,9 @@ export function createSqliteWasmExecutor(database: SqliteWasmDatabaseLike, optio
     },
     commit: () => transactionControl(database, "COMMIT"),
     rollback: () => transactionControl(database, "ROLLBACK"),
-    savepoint: (name) => transactionControl(database, `SAVEPOINT ${name}`),
-    rollbackTo: (name) => transactionControl(database, `ROLLBACK TO SAVEPOINT ${name}`),
-    releaseSavepoint: (name) => transactionControl(database, `RELEASE SAVEPOINT ${name}`),
+    savepoint: (name) => transactionControl(database, `SAVEPOINT ${assertSavepointName(name)}`),
+    rollbackTo: (name) => transactionControl(database, `ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`),
+    releaseSavepoint: (name) => transactionControl(database, `RELEASE SAVEPOINT ${assertSavepointName(name)}`),
   };
 }
 
