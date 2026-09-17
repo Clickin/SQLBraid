@@ -524,7 +524,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
           const row = await db.one(q(sql.rows`SELECT JSON_OBJECT('large', 9007199254740993) AS value`));
           const value = (row as { readonly value?: unknown }).value;
           assert.equal(typeof value, "string", "mysql2 exact text profile must preserve JSON as transport text.");
-          assert.match(value, /9007199254740993/u);
+          assert.match(value as string, /9007199254740993/u);
         },
       },
       "data.json-parsed": {
