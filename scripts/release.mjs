@@ -755,9 +755,10 @@ async function stageCandidates(
   } = {},
 ) {
   assertManifestIdentity(manifest);
+  const releaseEntries = manifest.packages.filter(({ name }) => manifest.releasePackages.includes(name));
   await assertPnpmVersion();
   if (dryRun) {
-    for (const entry of manifest.packages) {
+    for (const entry of releaseEntries) {
       const output = await pnpm(
         [
           "stage",
@@ -766,7 +767,7 @@ async function stageCandidates(
           "--access",
           "public",
           "--tag",
-          releaseTag(),
+          releaseTag(entry.version),
           "--dry-run",
           "--no-git-checks",
           "--ignore-scripts",
@@ -841,14 +842,14 @@ async function stageCandidates(
       candidateRunAttempt: manifest.runAttempt,
       manifestSha256: manifestDigest(manifest),
       candidateIdentitySha256: candidateIdentityDigest(manifest),
-      latestBefore: await registryTagSnapshot(manifest),
+      latestBefore: await registryTagSnapshot(releaseEntries),
       complete: false,
-      packages: manifest.packages.map((entry) => ({
+      packages: releaseEntries.map((entry) => ({
         name: entry.name,
         version: entry.version,
         candidateSha256: entry.sha256,
         candidateIntegrity: entry.integrity,
-        tag: releaseTag(),
+        tag: releaseTag(entry.version),
         state: "absent",
       })),
       approvalCommands: [],
@@ -858,35 +859,40 @@ async function stageCandidates(
   const persist = () => persistStaging(manifest, evidence, directory);
   await persist();
   try {
-    for (const entry of manifest.packages) {
+    for (const entry of releaseEntries) {
+      const entrySemver = parseSemver(entry.version);
       const tags = await registryDistTags(entry.name);
       assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
       assertNoTagDowngrade(
         entry.name,
-        semver.isPrerelease ? "next" : "latest",
-        tags[semver.isPrerelease ? "next" : "latest"],
+        entrySemver.isPrerelease ? "next" : "latest",
+        tags[entrySemver.isPrerelease ? "next" : "latest"],
+        entry.version,
       );
-      assertNoTagDowngrade(entry.name, releaseTag(), tags[releaseTag()]);
-      if (semver.isPrerelease && tags.latest === version)
-        throw new Error(`Refusing prerelease ${version} under latest for ${entry.name}.`);
+      const requestedTag = releaseTag(entry.version);
+      assertNoTagDowngrade(entry.name, requestedTag, tags[requestedTag], entry.version);
+      if (entrySemver.isPrerelease && tags.latest === entry.version)
+        throw new Error(`Refusing prerelease ${entry.version} under latest for ${entry.name}.`);
     }
-    for (const [index, entry] of manifest.packages.entries()) {
+    for (const [index, entry] of releaseEntries.entries()) {
       // pnpm obtains its own short-lived OIDC credential for stage publish.
       // Staged-package list/view/download endpoints require maintainer auth and
       // are intentionally left to the post-CI review boundary.
       await stagePackage(entry, evidence.packages[index], persist, directory);
       const tags = await registryDistTags(entry.name);
       assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
-      if (evidence.packages[index].state === "public" && tags[releaseTag()] !== version) {
+      const requestedTag = releaseTag(entry.version);
+      if (evidence.packages[index].state === "public" && tags[requestedTag] !== entry.version) {
         throw new Error(
-          `Exact public ${entry.name}@${version} has incorrect ${releaseTag()} tag; maintainer must reconcile the tag before retrying. No tag was changed.`,
+          `Exact public ${entry.name}@${entry.version} has incorrect ${requestedTag} tag; maintainer must reconcile the tag before retrying. No tag was changed.`,
         );
       }
     }
-    for (const entry of manifest.packages) {
+    for (const entry of releaseEntries) {
       const tags = await registryDistTags(entry.name);
+      const requestedTag = releaseTag(entry.version);
       assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
-      assertNoTagDowngrade(entry.name, releaseTag(), tags[releaseTag()]);
+      assertNoTagDowngrade(entry.name, requestedTag, tags[requestedTag], entry.version);
     }
     evidence.complete = true;
   } finally {
@@ -916,7 +922,7 @@ function assertStagingEvidence(
     (allowPriorIdentity &&
       (!["fresh", "reconcile"].includes(evidence.mode) || !/^[a-f\d]{64}$/u.test(evidence.manifestSha256 ?? ""))) ||
     !Array.isArray(evidence.packages) ||
-    evidence.packages.length !== manifest.packages.length
+    evidence.packages.length !== manifest.releasePackages.length
   )
     throw new Error("Staging evidence does not match the immutable release manifest.");
   if (
@@ -925,14 +931,15 @@ function assertStagingEvidence(
   ) {
     throw new Error("Staging evidence does not preserve the immutable candidate run identity.");
   }
-  for (const [index, entry] of manifest.packages.entries()) {
+  const releaseEntries = manifest.packages.filter(({ name }) => manifest.releasePackages.includes(name));
+  for (const [index, entry] of releaseEntries.entries()) {
     const record = evidence.packages[index];
     if (
       record.name !== entry.name ||
       record.version !== entry.version ||
       record.candidateSha256 !== entry.sha256 ||
       record.candidateIntegrity !== entry.integrity ||
-      record.tag !== releaseTag() ||
+      record.tag !== releaseTag(entry.version) ||
       !evidence.latestBefore?.[entry.name] ||
       !["absent", "pending", "staged", "public"].includes(record.state)
     )
@@ -951,27 +958,32 @@ async function verifyPublished(manifest, evidence, { requireLatest = false } = {
   assertManifestIdentity(manifest);
   assertStagingEvidence(manifest, evidence, { expectedRunId: evidence.runId, expectedRunAttempt: evidence.runAttempt });
   await assertPnpmVersion();
-  for (const entry of manifest.packages) {
+  const releaseEntries = manifest.packages.filter(({ name }) => manifest.releasePackages.includes(name));
+  for (const entry of releaseEntries) {
     await assertRegistryIntegrity(entry);
     const tags = await registryDistTags(entry.name);
-    if (tags[releaseTag()] !== version)
-      throw new Error(`Registry tag ${entry.name}:${releaseTag()} does not point at ${version}.`);
-    if (!semver.isPrerelease && requireLatest) {
-      if (tags.latest !== version) throw new Error(`Registry latest for ${entry.name} does not point at ${version}.`);
+    const requestedTag = releaseTag(entry.version);
+    const entrySemver = parseSemver(entry.version);
+    if (tags[requestedTag] !== entry.version)
+      throw new Error(`Registry tag ${entry.name}:${requestedTag} does not point at ${entry.version}.`);
+    if (!entrySemver.isPrerelease && requireLatest) {
+      if (tags.latest !== entry.version)
+        throw new Error(`Registry latest for ${entry.name} does not point at ${entry.version}.`);
     } else assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
     const attestations = await pnpmView(`${entry.name}@${entry.version}`, "dist.attestations");
     if (typeof attestations?.url !== "string" || !attestations.provenance?.predicateType)
       throw new Error(`Public provenance metadata missing for ${entry.name}@${entry.version}.`);
   }
   process.stdout.write(
-    `Verified every ${version} package publicly: candidate integrity, requested tags, provenance metadata, and latest policy.\n`,
+    `Verified ${releaseEntries.length} release package(s) publicly: candidate integrity, requested tags, provenance metadata, and latest policy.\n`,
   );
-  if (!semver.isPrerelease && !requireLatest) {
+  const stableEntries = releaseEntries.filter((entry) => !parseSemver(entry.version).isPrerelease);
+  if (stableEntries.length > 0 && !requireLatest) {
     process.stdout.write(
-      "All packages are public. Immediately recheck latest for concurrent releases before these manual promotions:\n",
+      "Stable release packages are public. Immediately recheck latest for concurrent releases before these manual promotions:\n",
     );
-    for (const entry of manifest.packages)
-      process.stdout.write(`pnpm dist-tag add ${entry.name}@${version} latest --registry ${registry}\n`);
+    for (const entry of stableEntries)
+      process.stdout.write(`pnpm dist-tag add ${entry.name}@${entry.version} latest --registry ${registry}\n`);
     process.stdout.write("Then rerun verify-published --require-latest. No dist-tag was changed by this helper.\n");
   }
 }
@@ -1024,9 +1036,11 @@ async function main() {
     return;
   }
   const packages = await packageManifests();
-  await assertVersions(packages);
+  const selected = assertReleaseVersions(packages);
+  const releaseNames = selected.map(({ manifest }) => manifest.name);
   const order = publishOrder(packages);
-  process.stdout.write(`Dependency-derived staging order: ${order.join(" -> ")}\n`);
+  process.stdout.write(`Release target: ${releaseNames.join(", ")} @ ${version}\n`);
+  process.stdout.write(`Dependency-derived package order: ${order.join(" -> ")}\n`);
   if (mode === "preflight") {
     if (process.env.SQLBRAID_RELEASE_MODE === "stage") assertMutationAuthorization("stage");
     else if (![undefined, "certify", "pack-only"].includes(process.env.SQLBRAID_RELEASE_MODE))
@@ -1039,7 +1053,7 @@ async function main() {
   if (mode === "pack-only" || mode === "pack") {
     await assertCleanTree();
     const sha = process.env.GITHUB_REF?.startsWith("refs/tags/") ? await assertTaggedSha() : await currentSha();
-    await pack(packages, order, sha);
+    await pack(packages, order, sha, releaseNames);
     return;
   }
   if (mode === "stage") {
@@ -1055,6 +1069,8 @@ async function main() {
   });
   if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate commit.");
   assertManifestOrder(manifest, order);
+  if (JSON.stringify(manifest.releasePackages) !== JSON.stringify(releaseNames))
+    throw new Error("Validated release artifacts do not match the selected release package.");
   const priorEvidence = priorEvidencePath ? await json(resolve(priorEvidencePath)) : undefined;
   if (mode === "stage") {
     await assertReleaseWorkflows();
@@ -1108,8 +1124,13 @@ function setReleaseCommand(nextCommand) {
 function setReleaseVersion(nextVersion) {
   version = nextVersion;
   semver = parseSemver(nextVersion);
-  expectedTag = `v${nextVersion}`;
+  expectedTag = releaseCandidateTag(releasePackage, nextVersion);
   if (!artifactArgument) artifactDir = resolve(join(tmpdir(), `sqlbraid-release-${nextVersion}`));
+}
+
+function setReleasePackage(nextPackage) {
+  releasePackage = nextPackage;
+  expectedTag = releaseCandidateTag(nextPackage, version);
 }
 
 export {
@@ -1122,8 +1143,10 @@ export {
   verifyPublished,
   parseSemver,
   readReleaseManifest,
+  releaseCandidateTag,
   releasePrereleaseArg,
   releaseTag,
   setReleaseCommand,
+  setReleasePackage,
   setReleaseVersion,
 };
