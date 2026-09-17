@@ -247,10 +247,10 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         },
       } as const;
       const mappingQuery = sql.rows(mappingSchema)`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 3) SELECT value FROM n ORDER BY value`;
-      const initFailure = sql.rows`SELECT * FROM cert_missing_stream_table`;
-      const firstNextFailure = sql.rows`SELECT * FROM cert_missing_first_table`;
-      const midStreamFailure = sql.rows`SELECT * FROM cert_missing_mid_table`;
-      const largeResultQuery = sql.rows`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 20) SELECT value FROM n`;
+      const initFailure = sql.rows`SELECT FROM`;
+      const firstNextFailure = sql.rows`SELECT json('not-json') AS value`;
+      const midStreamFailure = sql.rows`SELECT value FROM (SELECT 1 AS value UNION ALL SELECT json('not-json') AS value)`;
+      const largeResultQuery = sql.rows`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 10000) SELECT value FROM n`;
       const streamFixture: StreamingConformanceFixture<unknown> & Record<string, unknown> = {
         db,
         query: queries.stream!,
@@ -267,7 +267,7 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         cleanupFailureQuery: sql.rows`SELECT 1 AS value /* __cert_cleanup_failure__ */`,
         cleanupFailure: new Error("certification cleanup failure"),
         largeResultQuery,
-        largeResultCount: 20,
+        largeResultCount: 10000,
       };
       const bulk: BulkConformanceFixture<unknown> = {
         db,
