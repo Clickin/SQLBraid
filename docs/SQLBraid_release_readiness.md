@@ -388,3 +388,32 @@ verifies the candidate manifest and archive hashes, restores only its prepared
 `dist`, runs the same full matrix, and is a direct dependency of
 `release-final`; it does not rebuild or publish. Release staging and registry
 approval remain separate human-authorized operations.
+
+## Semantic contract coverage
+
+The database/version matrix remains mandatory. It is complemented by
+`tests/contracts/catalog.json` and `tests/contracts/matrix.json`: named behavioral
+contracts, canonical transport/profile targets, and capability-checked exclusions.
+New transports and missing classifications fail `pnpm run contracts:validate`,
+which also runs through `support:validate`.
+
+Release has three complementary checks:
+
+- existing DB, browser and Bun jobs run semantic integration scenarios;
+- the common job runs deterministic native-driver fault scenarios;
+- `release-semantic-contracts` requires passed evidence for every applicable
+  cell before `release-final` can run, even when all DB jobs are green.
+
+Evidence comes from individual passed assertions, not a test-count threshold or
+the mere presence of a test file. Titles identify transport, scenario and
+`integration`/`boundary` layer; ownership markers distinguish direct and pooled
+transactions. Report sidecars bind the report digest and source SHA to expected
+support targets. Expected bindings are not measured database/runtime evidence;
+the existing exact-tuple support and driver-certification gates remain required.
+Skipped tests, stale reports and unsupported exclusions cannot fill a required
+cell.
+
+For a fast local fault loop use `pnpm run test:contracts:boundary`. Real database
+scenarios remain in the existing `test:db:*` projects. Neither local execution
+nor a static matrix validation substitutes for Release `certify` on the exact
+final revision.

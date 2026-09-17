@@ -166,7 +166,7 @@ jobs:
 
   release-common:
     needs: release-prep
-    name: Node 22 common and CLI gate
+    name: Node 22 common, CLI and native-boundary contracts
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -185,7 +185,19 @@ jobs:
       - name: Restore prepared build
         run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
       - name: Run Node 22 common tests
-        run: pnpm exec vitest run --project unit --project cli --maxWorkers=2
+        run: |
+          mkdir -p "$RUNNER_TEMP/semantic-boundary"
+          pnpm exec vitest run --project unit --project cli --maxWorkers=2 \
+            --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/semantic-boundary/results.json"
+          node scripts/validate-contract-matrix.mjs --record-report "$RUNNER_TEMP/semantic-boundary/results.json" \
+            --source-sha "$GITHUB_SHA" --layer boundary --targets all
+      - name: Preserve native-boundary contract evidence
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-semantic-boundary
+          path: ${{ runner.temp }}/semantic-boundary
+          if-no-files-found: error
+          retention-days: 14
 
   release-db:
     needs: release-prep
@@ -198,32 +210,39 @@ jobs:
         include:
           - id: postgres
             project: db-postgres
+            semantic_targets: postgres-pg-node-16-4
             postgres_target: postgres
             evidence_target: ""
             evidence_env: "{}"
           - id: postgres-current
             project: db-postgres
+            semantic_targets: postgres-current
             postgres_target: postgres-current
             evidence_target: postgres-current
             evidence_env: '{"SQLBRAID_POSTGRES_TARGET":"postgres-current"}'
           - id: mysql
             project: db-mysql
+            semantic_targets: mysql-mysql2-node-8-4-2
             evidence_target: ""
             evidence_env: "{}"
           - id: mariadb
             project: db-mariadb
+            semantic_targets: mariadb-connector-node-11-8-9
             evidence_target: ""
             evidence_env: "{}"
           - id: sqlite
             project: db-sqlite
+            semantic_targets: sqlite-node-sqlite-node-22-18-0,better-sqlite3-node-22-18-0,libsql-local-node-22-18-0
             evidence_target: ""
             evidence_env: "{}"
           - id: oracle
             project: db-oracle
+            semantic_targets: oracle-oracledb-thin-node-23-9
             evidence_target: ""
             evidence_env: "{}"
           - id: mssql
             project: db-mssql
+            semantic_targets: mssql-tedious-developer-node-2022-cu18
             evidence_target: ""
             evidence_env: "{}"
     steps:
@@ -258,6 +277,11 @@ jobs:
           fi
           printf '{"success":%s}\n' "$([ "$status" -eq 0 ] && echo true || echo false)" > "$RUNNER_TEMP/ci-evidence/ci-evidence-${{ matrix.id }}/status.json"
           exit "$status"
+      - name: Bind semantic integration evidence to this revision
+        run: >-
+          node scripts/validate-contract-matrix.mjs
+          --record-report "$RUNNER_TEMP/ci-evidence/ci-evidence-${{ matrix.id }}/results.json"
+          --source-sha "$GITHUB_SHA" --layer integration --targets "${{ matrix.semantic_targets }}"
       - name: Record additional exact-target evidence
         if: ${{ success() && matrix.evidence_target != '' }}
         env:
@@ -351,6 +375,12 @@ jobs:
           fi
           printf '{"success":%s}\n' "$([ "$status" -eq 0 ] && echo true || echo false)" > "$RUNNER_TEMP/ci-evidence/ci-evidence-web/status.json"
           exit "$status"
+      - name: Bind web semantic evidence to this revision
+        run: >-
+          node scripts/validate-contract-matrix.mjs
+          --record-report "$RUNNER_TEMP/ci-evidence/ci-evidence-web/results.json"
+          --source-sha "$GITHUB_SHA" --layer integration
+          --targets sqlite-wasm-browser-3-53-4,d1-cloudflare-workerd-2026-07-30
       - name: Preserve web evidence shard
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -598,6 +628,12 @@ jobs:
           fi
           printf '{"success":%s}\n' "$([ "$status" -eq 0 ] && echo true || echo false)" > "$RUNNER_TEMP/ci-evidence/ci-evidence-bun-sql/status.json"
           exit "$status"
+      - name: Bind Bun.SQL semantic evidence to this revision
+        run: >-
+          node scripts/validate-contract-matrix.mjs
+          --record-report "$RUNNER_TEMP/ci-evidence/ci-evidence-bun-sql/results.json"
+          --source-sha "$GITHUB_SHA" --layer integration
+          --targets bun-sql-postgres,bun-sql-mysql,bun-sql-mariadb,bun-sql-sqlite
       - name: Preserve Bun.SQL evidence shard
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -606,6 +642,39 @@ jobs:
           path: ${{ runner.temp }}/ci-evidence
           if-no-files-found: error
           retention-days: 14
+
+  release-semantic-contracts:
+    needs: [release-prep, release-common, release-db, release-browser, release-bun-sql]
+    if: always()
+    name: Require complete semantic contract matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require successful integration and boundary lanes
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: node -e 'for (const [id, job] of Object.entries(JSON.parse(process.env.RESULTS))) if (job.result !== "success") throw new Error(`Required semantic lane ${id} did not pass`)'
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: release-evidence-*
+          path: ${{ runner.temp }}/semantic-evidence/integration
+          merge-multiple: true
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-semantic-boundary
+          path: ${{ runner.temp }}/semantic-evidence/boundary
+      - name: Reject missing, excluded, failed or stale semantic coverage
+        run: node scripts/validate-contract-matrix.mjs --reports "$RUNNER_TEMP/semantic-evidence" --source-sha "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-semantic-contracts
+          path: ${{ runner.temp }}/semantic-evidence
+          if-no-files-found: error
+          retention-days: 90
 
   release-support-evidence:
     needs: [release-prep, release-common, release-db, release-browser, release-bun-sql]
@@ -714,6 +783,7 @@ jobs:
         release-support-evidence,
         release-target-evidence,
         release-certification,
+        release-semantic-contracts,
       ]
     name: Final release certification
     permissions:
