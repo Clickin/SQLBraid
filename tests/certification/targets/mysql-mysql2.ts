@@ -590,8 +590,6 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       acquired.value = 0;
       nativeExecutes.value = 0;
       nativePreparedExecutes.value = 0;
-      const directIdentityResult = await directDb.one(identity);
-      physicalIds.add(directIdentityResult.id);
       const identityResult = await db.one(identity);
       physicalIds.add(identityResult.id);
     },
