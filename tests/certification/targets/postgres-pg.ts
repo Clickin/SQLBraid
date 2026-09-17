@@ -1,7 +1,7 @@
 import { Client, Pool } from "pg";
 import { createPgDatabase, createPgPoolDatabase, type PgClientLike, type PgCursorFactory, type PgPoolClientLike, type PgPoolLike, type PgResultLike } from "@sqlbraid/postgres/pg";
 import { postgresParameter, sql } from "@sqlbraid/postgres";
-import type { CommandQuery, Database, ExecutionEvent, RowQuery } from "@sqlbraid/core";
+import type { CallQuery, CommandQuery, Database, ExecutionEvent, RowQuery } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
 import type {
@@ -174,6 +174,43 @@ function makeCancelPoolLike(rawPool: Pool): PgPoolLike {
       const raw = await rawPool.connect() as unknown as PgPoolClientLike;
       await raw.query({ text: "SET extra_float_digits = 0", values: [] });
       return raw;
+    },
+  };
+}
+
+function makeRollbackFaultPoolLike(rawPool: Pool, state: Metrics): PgPoolLike {
+  return {
+    async connect() {
+      const raw = await rawPool.connect() as unknown as PgPoolClientLike;
+      state.acquireCount.value += 1;
+      state.activeLeases.value += 1;
+      const tracked = trackedClient(raw, state, true) as PgPoolClientLike;
+      let failed = false;
+      return {
+        ...tracked,
+        async query(value: unknown, values?: readonly unknown[]) {
+          if (!failed && /^\s*ROLLBACK(?:\s|$)/iu.test(queryText(value))) {
+            failed = true;
+            throw new Error("cert-rollback-cleanup");
+          }
+          return (tracked.query as unknown as (query: unknown, values?: readonly unknown[]) => Promise<PgResultLike>)(value, values);
+        },
+      };
+    },
+  };
+}
+
+function makeRoutineCleanupFaultClient(raw: PgClientLike, state: Metrics): PgClientLike {
+  const tracked = trackedClient(raw, state, false) as PgClientLike;
+  let failed = false;
+  return {
+    ...tracked,
+    async query(value: unknown, values?: readonly unknown[]) {
+      if (!failed && /^\s*CLOSE\s/iu.test(queryText(value))) {
+        failed = true;
+        throw new Error("cert-routine-cleanup");
+      }
+      return (tracked.query as unknown as (query: unknown, values?: readonly unknown[]) => Promise<PgResultLike>)(value, values);
     },
   };
 }
@@ -431,11 +468,11 @@ function rowQueries(state: Shared): CertificationFixture["queries"] {
       savepointVisible: transactionVisible,
     },
     prepared: preparedFactory,
-    routines,
+    routines: { ...routines, lob: routines.cursor },
     fidelity: {
-      largeExactInteger: sql.rows`SELECT 9007199254740991::numeric(38,0)::text AS value`,
-      exactDecimal: sql.rows`SELECT 12345678901234567890.123456789::numeric(38,9)::text AS value`,
-      temporal: sql.rows`SELECT to_char(TIMESTAMP '2026-09-14 12:34:56.789', 'YYYY-MM-DD HH24:MI:SS.MS') AS value`,
+      largeExactInteger: sql.rows`SELECT 9007199254740991::numeric(38,0) AS value`,
+      exactDecimal: sql.rows`SELECT 12345678901234567890.123456789::numeric(38,9) AS value`,
+      temporal: sql.rows`SELECT TIMESTAMP '2026-09-14 12:34:56.789' AS value`,
       injection: sql.rows`SELECT ${"'; SELECT 1; --"} AS value`,
       expected: {
         largeExactInteger: { value: "9007199254740991" },
@@ -507,10 +544,11 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
         error = caught;
       }
       if (error === undefined) throw new Error("BULK003 did not reject its middle item.");
-      const row = await direct.one(sql.rows<{ readonly count: string }>`SELECT count(*)::text AS count FROM ${sql.ident(state.table)} WHERE id = 'bulk-middle'`);
-      if (row.count !== "1") throw new Error(`BULK003 expected one durable prefix row, got ${row.count}.`);
+      const observedRows = await direct.all(sql.rows<{ readonly id: string; readonly value: string }>`SELECT id, value FROM ${sql.ident(state.table)} WHERE id = 'bulk-middle' ORDER BY id`);
+      const expectedRows = [{ id: "bulk-middle", value: "first" }];
+      if (JSON.stringify(observedRows) !== JSON.stringify(expectedRows)) throw new Error(`BULK003 expected one durable prefix row, got ${JSON.stringify(observedRows)}.`);
       await direct.one(sql.rows`SELECT 1 AS usable`);
-      throw error;
+      return { error, observed: true, observedRows, expectedRows, durability: "prefix" as const };
     },
   };
   const mappingFailure = new Error("cert-mapper-failure");
@@ -535,6 +573,10 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     cleanupFailure: state.streamErrors.cleanup,
     released: () => state.releaseCount.value - state.releaseBefore,
     iteratorReturns: () => state.cursorCloses.value - state.cursorCloseBefore,
+    reuseAfterBreak: async () => {
+      await pooled.one(queries.identity);
+      if (state.activeLeases.value !== 0) throw new Error("STR011 did not release the pooled resource after reuse.");
+    },
   }, {
     mappingFailure,
     executionSchemaFailure,
@@ -550,6 +592,7 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       openCursors: state.openCursors.value,
     }),
     sideEffects: () => state.sideEffects.value,
+    mutationSentinel: async () => (await pooled.one(sql.rows<{ readonly marker: number }>`SELECT marker FROM ${sql.ident(state.table)} WHERE id = 'baseline'`)).marker,
     pooledScope: async (): Promise<void> => {
       await pooled.session(async (session) => {
         await session.one(queries.identity);
@@ -557,8 +600,51 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       });
       if (state.activeLeases.value !== 0) throw new Error("pg pooled session leaked its native client.");
     },
-    routineCleanup: async (): Promise<void> => {
-      await direct.call(queries.routines!.call);
+    transactionCleanup: async (): Promise<void> => {
+      const faultDb = createPgPoolDatabase(makeRollbackFaultPoolLike(state.pool, state), { cursor: state.cursor });
+      const primary = new Error("cert-transaction-primary");
+      let error: unknown;
+      try {
+        await faultDb.tx(async () => { throw primary; });
+      } catch (caught) {
+        error = caught;
+      }
+      if (!(error instanceof AggregateError) || !error.errors.includes(primary) || !error.errors.some((item) => item instanceof Error && item.message === "cert-rollback-cleanup")) {
+        throw new Error("TX007 did not preserve both the transaction primary and rollback cleanup failures.");
+      }
+      if (state.activeLeases.value !== 0) throw new Error("TX007 leaked the faulted pooled lease.");
+      await pooled.one(queries.identity);
+    },
+    readOnlyWrite: async (): Promise<void> => {
+      await state.client.query(`DELETE FROM ${identifier(state.table)}`);
+      await state.client.query(`INSERT INTO ${identifier(state.table)} (id, value, marker) VALUES ('one', 'one', 0), ('two', 'two', 0), ('baseline', 'baseline', 0)`);
+      await pooled.tx(async (tx) => { await tx.execute(queries.transaction!.insert); });
+      const committed = await direct.one(sql.rows<{ readonly count: string }>`SELECT count(*)::text AS count FROM ${sql.ident(state.table)} WHERE id = 'tx-row'`);
+      if (committed.count !== "1") throw new Error("TX009 did not establish a valid read-write baseline.");
+      await state.client.query(`DELETE FROM ${identifier(state.table)} WHERE id = 'tx-row'`);
+      let error: unknown;
+      try {
+        await pooled.tx({ readOnly: true }, async (tx) => { await tx.execute(queries.transaction!.insert); });
+      } catch (caught) {
+        error = caught;
+      }
+      if ((error as { readonly code?: unknown } | undefined)?.code !== "25006") throw new Error(`TX009 read-only write returned an unexpected native code: ${String((error as { readonly code?: unknown } | undefined)?.code)}`);
+      const durable = await direct.one(sql.rows<{ readonly count: string }>`SELECT count(*)::text AS count FROM ${sql.ident(state.table)} WHERE id = 'tx-row'`);
+      if (durable.count !== "0") throw new Error("TX009 read-only write changed durable state.");
+    },
+    routineCleanup: async (query?: CallQuery): Promise<void> => {
+      if (query === undefined) throw new Error("CALL007 routine cleanup query missing.");
+      const faultDb = createPgDatabase(makeRoutineCleanupFaultClient(state.client as unknown as PgClientLike, state), { cursor: state.cursor });
+      let error: unknown;
+      try {
+        await faultDb.tx(async (tx) => { await tx.call(query); });
+      } catch (caught) {
+        error = caught;
+      }
+      const cleanupPreserved = error instanceof AggregateError
+        ? error.errors.some((item) => item instanceof Error && item.message === "cert-routine-cleanup")
+        : error instanceof Error && error.message === "cert-routine-cleanup";
+      if (!cleanupPreserved) throw new Error("CALL007 did not preserve the native routine cursor cleanup failure.");
       await direct.one(queries.identity);
     },
   };
@@ -615,7 +701,7 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     },
   };
   return {
-    db: direct,
+    db: pooled,
     pooled,
     queries,
     stream,
