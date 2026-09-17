@@ -1,12 +1,5 @@
 import { Buffer } from "node:buffer";
-import type {
-  CommandQuery,
-  CallQuery,
-  EnvironmentCapability,
-  RowQuery,
-  SqlTag,
-  TransactionOptions,
-} from "@sqlbraid/core";
+import type { CommandQuery, CallQuery, RowQuery, SqlTag, TransactionOptions } from "@sqlbraid/core";
 import { assertSavepointName } from "@sqlbraid/core/driver";
 import {
   createBunSqlDatabase,

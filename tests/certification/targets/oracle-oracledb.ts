@@ -14,12 +14,7 @@ import { createPooledDatabase } from "@sqlbraid/runtime";
 import type { CallQuery, CommandQuery, Database, RowQuery } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
-import type {
-  CertificationFixture,
-  CertificationTarget,
-  ExpectedCapabilityContract,
-  ResourceSnapshot,
-} from "../types.js";
+import type { CertificationFixture, CertificationTarget, ResourceSnapshot } from "../types.js";
 
 const TABLE = "BRAID_RC3_CERT_ROWS";
 const BULK_TABLE = "BRAID_RC3_CERT_BULK";

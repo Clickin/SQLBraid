@@ -14,12 +14,7 @@ import { createPooledDatabase } from "@sqlbraid/runtime";
 import { mssqlParameter, sql } from "@sqlbraid/mssql";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
-import type {
-  CertificationFixture,
-  CertificationTarget,
-  ExpectedCapabilityContract,
-  ResourceSnapshot,
-} from "../types.js";
+import type { CertificationFixture, CertificationTarget, ResourceSnapshot } from "../types.js";
 
 interface MssqlSettings {
   readonly server: string;

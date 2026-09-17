@@ -149,6 +149,7 @@ test("transaction option validators reject lazy thenables without invoking them"
   let thenCalls = 0;
   let acquired = 0;
   const lazyThenable = {
+    // oxlint-disable-next-line unicorn/no-thenable -- Prove rejection without invoking a hostile thenable.
     then() {
       thenCalls += 1;
       throw new Error("lazy thenable invoked");

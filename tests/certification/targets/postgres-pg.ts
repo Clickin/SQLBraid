@@ -14,12 +14,7 @@ import type { CallQuery, CommandQuery, Database, ExecutionEvent, RowQuery } from
 import { createPooledDatabase } from "@sqlbraid/runtime";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
-import type {
-  CertificationFixture,
-  CertificationTarget,
-  ExpectedCapabilityContract,
-  ResourceSnapshot,
-} from "../types.js";
+import type { CertificationFixture, CertificationTarget, ResourceSnapshot } from "../types.js";
 
 import { POSTGRES_EXPECTED_CAPABILITIES, POSTGRES_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
 

@@ -8,14 +8,7 @@ import {
 } from "@sqlbraid/sqlite/wasm";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
-import type {
-  CertificationFixture,
-  CertificationTarget,
-  ExpectedCapabilityContract,
-  ResourceSnapshot,
-  TransactionOptionKey,
-  UnsupportedProbe,
-} from "../types.js";
+import type { CertificationFixture, CertificationTarget, ResourceSnapshot, UnsupportedProbe } from "../types.js";
 
 interface Sqlite3Like {
   readonly version: { readonly libVersion: string };

@@ -13,13 +13,7 @@ import { createPooledDatabase } from "@sqlbraid/runtime";
 import type { CallQuery, CommandQuery, ConnectionProvider, Database, RowQuery, StandardSchemaV1 } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
-import type {
-  CertificationFixture,
-  CertificationTarget,
-  ExpectedCapabilityContract,
-  ResourceSnapshot,
-  TransactionOptionKey,
-} from "../types.js";
+import type { CertificationFixture, CertificationTarget, ResourceSnapshot } from "../types.js";
 
 const TABLE = "braid_rc3_mariadb_cert";
 const JSON_TABLE = "braid_rc3_mariadb_json";
@@ -183,7 +177,7 @@ function instrumentMariaDbConnection(
   onBatch: (values: readonly (readonly unknown[])[]) => void,
 ): MariaDbConnectionLike {
   return new Proxy(connection as object, {
-    get(target, property, receiver) {
+    get(target, property) {
       const value = Reflect.get(target, property, target);
       if (property === "execute" && typeof value === "function") {
         return (sqlOrOptions: unknown, values?: readonly unknown[]) => {
@@ -255,7 +249,7 @@ function faultMariaStream(
   const sourceIterator = source[Symbol.asyncIterator]();
   let nextCalls = 0;
   return new Proxy(source as object, {
-    get(target, property, receiver) {
+    get(target, property) {
       if (property === Symbol.asyncIterator) {
         return () => ({
           next: async () => {
@@ -286,7 +280,7 @@ function faultMariaConnection(
   error: Error,
 ): MariaDbPoolConnectionLike {
   return new Proxy(connection as object, {
-    get(target, property, receiver) {
+    get(target, property) {
       if (property === "release")
         return async () => {
           await Promise.resolve(connection.end?.());

@@ -7,9 +7,7 @@ import type {
   CertificationCaseId,
   CertificationFixture,
   CertificationTarget,
-  ExpectedCapabilityContract,
   ResourceSnapshot,
-  TransactionOptionKey,
   UnsupportedProbe,
 } from "../types.js";
 
