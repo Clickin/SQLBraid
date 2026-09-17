@@ -322,6 +322,64 @@ async function runDialect(dialect) {
       await writer.release();
     }
   }
+  if (dialect !== "sqlite") {
+    let accessConnection;
+    const accessClient = new Proxy(client, {
+      get(target, property) {
+        if (property === "reserve") {
+          return async () => {
+            accessConnection = await target.reserve();
+            return accessConnection;
+          };
+        }
+        return Reflect.get(target, property, target);
+      },
+    });
+    const accessDb = createBunSqlDatabase(accessClient, { dialect });
+    await accessDb.session(async (session) => {
+      const setting =
+        dialect === "postgres"
+          ? sqlTag.rows`SELECT current_setting('default_transaction_read_only') AS read_only`
+          : dialect === "mysql"
+            ? sqlTag.rows`SELECT CAST(@@SESSION.transaction_read_only AS CHAR) AS read_only`
+            : sqlTag.rows`SELECT CAST(@@SESSION.tx_read_only + 0 AS CHAR) AS read_only`;
+      const original = await session.one(setting);
+      const setAccess =
+        dialect === "postgres" ? "SET SESSION CHARACTERISTICS AS TRANSACTION" : "SET SESSION TRANSACTION";
+      try {
+        await accessConnection.unsafe(`${setAccess} READ ONLY`, []);
+        for (const readOnly of [undefined, true]) {
+          await assert.rejects(
+            session.tx({ readOnly }, async (tx) => {
+              await tx.execute(
+                sqlTag.command`INSERT INTO ${sqlTag.raw(bulkTable)} (value) VALUES (${"read-only-default"})`,
+              );
+            }),
+            (error) => error.errno === (dialect === "postgres" ? "25006" : 1792),
+          );
+        }
+        await session.tx({ readOnly: false }, async (tx) => {
+          const result = await tx.execute(
+            sqlTag.command`INSERT INTO ${sqlTag.raw(bulkTable)} (value) VALUES (${"read-write-override"})`,
+          );
+          assert.equal(result.command.affectedRows, 1);
+        });
+        assert.equal((await session.one(setting)).read_only, dialect === "postgres" ? "on" : "1");
+      } finally {
+        const originalAccess = original.read_only === "on" || original.read_only === "1" ? "READ ONLY" : "READ WRITE";
+        await accessConnection.unsafe(`${setAccess} ${originalAccess}`, []);
+      }
+    });
+    assert.deepEqual(
+      await db.all(sqlTag.rows`SELECT value FROM ${sqlTag.raw(bulkTable)} WHERE value = ${"read-write-override"}`),
+      [{ value: "read-write-override" }],
+    );
+    transactionModes.readOnlyDefault = {
+      inheritedWriteRejected: true,
+      readOnlyWriteRejected: true,
+      readWriteAccepted: true,
+    };
+  }
   if (dialect === "mysql" || dialect === "mariadb") {
     await client.unsafe(`DROP TABLE ${bulkTable}`, []);
   } else {

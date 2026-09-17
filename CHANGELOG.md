@@ -20,6 +20,9 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 - Prepared a new immutable 1.0 RC candidate after the release workflow and
   VS Code publishing paths were separated. Certification and publication
   remain separate maintainer actions.
+- Preserve exact node:sqlite command ROWIDs, keep Oracle auto-commit outside
+  managed transactions, release pooled connections when adapter initialization
+  fails, and honor explicit Bun.SQL read-write transaction options.
 
 ## 0.1.0-rc.2 (unreleased)
 

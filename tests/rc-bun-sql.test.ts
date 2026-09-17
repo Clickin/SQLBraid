@@ -179,6 +179,31 @@ test("Bun.SQL reserved connections pin sessions and transactions", async () => {
   );
 });
 
+test.each([
+  { dialect: "postgres", readOnly: undefined, begin: "BEGIN" },
+  { dialect: "postgres", readOnly: true, begin: "BEGIN READ ONLY" },
+  { dialect: "postgres", readOnly: false, begin: "BEGIN READ WRITE" },
+  { dialect: "mysql", readOnly: undefined, begin: "START TRANSACTION" },
+  { dialect: "mysql", readOnly: true, begin: "START TRANSACTION READ ONLY" },
+  { dialect: "mysql", readOnly: false, begin: "START TRANSACTION READ WRITE" },
+  { dialect: "mariadb", readOnly: undefined, begin: "START TRANSACTION" },
+  { dialect: "mariadb", readOnly: true, begin: "START TRANSACTION READ ONLY" },
+  { dialect: "mariadb", readOnly: false, begin: "START TRANSACTION READ WRITE" },
+] as const)(
+  "Bun.SQL $dialect preserves readOnly=$readOnly transaction access mode",
+  async ({ dialect, readOnly, begin }) => {
+    const logs: Log[] = [];
+    const db = createBunSqlDatabase(fakeClient(logs, { count: 0 }), { dialect });
+
+    await db.tx({ readOnly }, async () => undefined);
+
+    assert.deepEqual(
+      logs.filter((entry) => entry.kind === "unsafe").map((entry) => entry.text),
+      [begin, "COMMIT"],
+    );
+  },
+);
+
 test("Bun.SQL uses stable native templates for bulk and rejects Bun structural helpers", async () => {
   const logs: Log[] = [];
   const client = fakeClient(logs, { count: 0 });

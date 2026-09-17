@@ -761,12 +761,15 @@ function transactionBegin(dialect: BunSqlDialect, options?: TransactionOptions):
     const clauses = ["BEGIN"];
     if (options?.isolation !== undefined) clauses.push(`ISOLATION LEVEL ${isolation[options.isolation]}`);
     if (options?.readOnly === true) clauses.push("READ ONLY");
+    else if (options?.readOnly === false) clauses.push("READ WRITE");
     return [clauses.join(" ")];
   }
   const statements: string[] = [];
   if (options?.isolation !== undefined)
     statements.push(`SET TRANSACTION ISOLATION LEVEL ${isolation[options.isolation]}`);
-  statements.push(`START TRANSACTION${options?.readOnly === true ? " READ ONLY" : ""}`);
+  if (options?.readOnly === true) statements.push("START TRANSACTION READ ONLY");
+  else if (options?.readOnly === false) statements.push("START TRANSACTION READ WRITE");
+  else statements.push("START TRANSACTION");
   return statements;
 }
 
