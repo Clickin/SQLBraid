@@ -42,6 +42,25 @@ test("PostgreSQL OUT parameters are rejected outside calls before driver I/O", a
   assert.equal(queryCalls, 0);
 });
 
+test("Pooled MySQL OUT and INOUT parameters are rejected before lease acquisition", async () => {
+  let acquisitions = 0;
+  const db = createMysql2PoolDatabase({
+    getConnection: async () => {
+      acquisitions += 1;
+      throw new Error("MySQL pool acquisition must not run for unsupported routine parameters.");
+    },
+  });
+  for (const parameter of [mysqlSql.out("value"), mysqlSql.inOut("value", 1)]) {
+    await assert.rejects(
+      () => db.call(mysqlSql.call`CALL routine(${parameter})`),
+      (error: unknown) => error instanceof UnsupportedFeatureError
+        && error.feature === (parameter.direction === "out" ? "routine.out" : "routine.inout")
+        && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
+    );
+  }
+  assert.equal(acquisitions, 0);
+});
+
 test("PostgreSQL abort interrupts a pending read and waits for physical termination before discard", async () => {
   const reading = Promise.withResolvers<void>();
   const ending = Promise.withResolvers<void>();
