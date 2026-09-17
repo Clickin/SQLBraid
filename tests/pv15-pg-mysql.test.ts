@@ -158,7 +158,7 @@ test("MySQL materialized queries preserve flat rows, empty SELECTs and command m
   });
 });
 
-test("MySQL rows fail closed for rowsAsArray and lossy numeric typeCast results", async () => {
+test("MySQL rows map rowsAsArray payloads and fail closed for lossy numeric typeCast results", async () => {
   let payload: unknown = [[1]];
   let fields: readonly Mysql2FieldLike[] = [{ name: "id", type: 3 }];
   const connection: Mysql2ConnectionLike = {
@@ -168,10 +168,11 @@ test("MySQL rows fail closed for rowsAsArray and lossy numeric typeCast results"
     rollback: async () => undefined,
   };
   const executor = createMysql2Executor(connection);
-  await assert.rejects(
-    async () => executor.query(mysqlSql.rows`SELECT id`.render()),
-    /BRAID_RESULT_(?:COLUMNS|SETS_UNSUPPORTED)/u,
-  );
+  assert.deepEqual(await executor.query(mysqlSql.rows`SELECT id`.render()), {
+    kind: "rows",
+    rows: [{ id: "1" }],
+    rowCount: 1,
+  });
   payload = [{ id: 9_007_199_254_740_992 }];
   fields = [{ name: "id", type: 8 }];
   await assert.rejects(

@@ -72,7 +72,7 @@ function connectionOptions(connectionUri: string): Record<string, unknown> {
   const uri = new URL(connectionUri);
   return {
     ...MYSQL2_LOSSLESS_TEXT.connectionOptions,
-    rowsAsArray: true,
+    disableEval: false,
     host: uri.hostname,
     port: uri.port ? Number(uri.port) : 3306,
     user: decodeURIComponent(uri.username),

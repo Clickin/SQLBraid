@@ -75,6 +75,13 @@ export type Mysql2ResultHeader = Omit<CommandResult, "affectedRows" | "insertId"
 type Mysql2TypedParameter = { readonly type: number; readonly value: unknown; readonly unsigned: boolean };
 export type Mysql2Parameter = string | number | bigint | boolean | Date | null | Blob | Uint8Array | Mysql2TypedParameter | Mysql2Parameter[] | { [key: string]: Mysql2Parameter };
 
+type Mysql2PreparedExecuteOptions = {
+  readonly sql: string;
+  readonly values: readonly Mysql2Parameter[];
+  readonly rowsAsArray: true;
+  readonly disableEval: true;
+};
+
 export interface Mysql2RawStreamLike extends AsyncIterable<unknown> {
   readonly readableEnded?: boolean;
   readonly destroyed?: boolean;
@@ -202,6 +209,32 @@ function rawConnection(connection: Mysql2ConnectionLike): Mysql2RawConnectionLik
     return undefined;
   }
   return raw as Mysql2RawConnectionLike;
+}
+
+function preparedExecuteOptions(text: string, values: readonly Mysql2Parameter[]): Mysql2PreparedExecuteOptions {
+  return { sql: text, values, rowsAsArray: true, disableEval: true };
+}
+
+function executePrepared(
+  connection: Mysql2ConnectionLike,
+  text: string,
+  values: readonly Mysql2Parameter[],
+): Promise<readonly [unknown, Mysql2FieldPayload | undefined]> {
+  const execute = connection.execute as unknown as (
+    options: Mysql2PreparedExecuteOptions,
+  ) => Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
+  return execute.call(connection, preparedExecuteOptions(text, values));
+}
+
+function streamPrepared(
+  connection: Mysql2RawConnectionLike,
+  text: string,
+  values: readonly Mysql2Parameter[],
+): Mysql2RawCommandLike {
+  const execute = connection.execute as unknown as (
+    options: Mysql2PreparedExecuteOptions,
+  ) => Mysql2RawCommandLike;
+  return execute.call(connection, preparedExecuteOptions(text, values));
 }
 
 function destroyMysqlConnection(raw: Mysql2RawConnectionLike, error?: Error): void {
@@ -773,7 +806,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       const [payload, rawFields] = await withMysqlCancellation(
         connection,
         executionOptions?.signal,
-        () => connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]),
+        () => executePrepared(connection, prepared.text, prepared.values as unknown as Mysql2Parameter[]),
       );
       if (isMultipleResultPayload(payload, rawFields)) {
         throw unsupported(
@@ -897,7 +930,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       let fieldsSeen = 0;
       let pendingError: Error | undefined;
       try {
-        command = raw.execute(prepared.text, prepared.values as Mysql2Parameter[]);
+        command = streamPrepared(raw, prepared.text, prepared.values as Mysql2Parameter[]);
         nativeOwned = true;
         initializationCleanup.add(() => destroyRaw(setupError));
         source = command.stream({ highWaterMark });
@@ -1005,7 +1038,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       const [payload, rawFields] = await withMysqlCancellation(
         connection,
         executionOptions?.signal,
-        () => connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]),
+        () => executePrepared(connection, prepared.text, prepared.values as unknown as Mysql2Parameter[]),
       );
       if (!Array.isArray(payload)) return { output: payload && typeof payload === "object" ? Object.fromEntries(Object.entries(payload)) : {}, resultSets: [] };
       const sets = isMultipleResultPayload(payload, rawFields) ? payload.filter((entry): entry is readonly unknown[] => Array.isArray(entry)) : [payload];

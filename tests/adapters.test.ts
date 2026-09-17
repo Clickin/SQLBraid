@@ -17,7 +17,7 @@ test('mysql2 adapter uses positional placeholders', async () => {
     async rollback() {},
   });
   assert.deepEqual(await db.all(mysqlSql.rows`SELECT ${1}`), [{ ok: 1 }]);
-  assert.deepEqual(request, { text: 'SELECT ?', values: [1] });
+  assert.deepEqual(request, { text: { sql: 'SELECT ?', values: [1], rowsAsArray: true, disableEval: true }, values: undefined });
 });
 
 test('mysql2 keeps materialized queries on native execute with hostile bound text', async () => {
@@ -27,8 +27,8 @@ test('mysql2 keeps materialized queries on native execute with hostile bound tex
   const db = createMysql2Database({
     async execute(text, values) {
       executeCalls += 1;
-      assert.equal(text, 'SELECT ? AS marker');
-      assert.deepEqual(values, [hostile]);
+      assert.deepEqual(text, { sql: 'SELECT ? AS marker', values: [hostile], rowsAsArray: true, disableEval: true });
+      assert.equal(values, undefined);
       return [[{ marker: hostile }], [{ name: 'marker', type: 'VAR_STRING' }]];
     },
     async query() {
@@ -114,7 +114,8 @@ test('postgres reports actual result kinds independently of declarations', async
 test('mysql2 reports actual result kinds independently of declarations', async () => {
   const db = createMysql2Database({
     async execute(text) {
-      if (text.startsWith('SELECT')) return [[{ id: 1 }], [{ name: 'id', type: 3 }]];
+      const sqlText = (text as unknown as { readonly sql: string }).sql;
+      if (sqlText.startsWith('SELECT')) return [[{ id: 1 }], [{ name: 'id', type: 3 }]];
       return [{ affectedRows: 1, insertId: 2 }, []];
     },
     async beginTransaction() {},
