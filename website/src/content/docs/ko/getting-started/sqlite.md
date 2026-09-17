@@ -91,6 +91,14 @@ opaque client의 integer mode를 SQLBraid가 추론할 수 없으므로 명시�
 transaction handle을 사용하며 일반 호출은 하나의 pinned session을
 주장하지 않습니다. Native `batch()`를 bulk에 사용하고, 완전한 result를
 buffering하는 대신 `db.stream()`은 `BRAID_STREAM_UNSUPPORTED`로 거부합니다.
+
+로컬 `file:` 및 protocol을 확인할 수 없는 libSQL client에서는 선택적
+`command.insertId`를 제공하지 않습니다. Native binding이 ROWID를 Number로
+변환한 뒤 bigint로 반환하므로 `intMode`와 별개로 정밀도를 잃을 수 있습니다.
+조회 행, transaction, bulk 실행, `affectedRows`는 계속 지원합니다. 정확한 ID가
+필요하면 `sql.rows`와 직접 작성한 `INSERT ... RETURNING id`를 사용하세요.
+SQLBraid는 SQL을 재작성하거나 보정용 query를 추가하지 않습니다.
+
 옵션을 생략하거나 빈 객체를 사용하면 mode 없이 `client.transaction()`을
 호출하고 `readOnly: false`는 `"write"`를 선택합니다. 로컬
 `@libsql/client@0.18.0` file transport는 `BEGIN TRANSACTION READONLY`를

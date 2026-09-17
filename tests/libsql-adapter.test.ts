@@ -116,15 +116,23 @@ for (const protocol of ["http", "ws", "file", undefined, "unknown"]) {
       lastInsertRowid: exact ? 9007199254740993n : 9007199254740992n,
     };
     const executor = createLibsqlExecutor(
-      fakeClient(async () => result, async () => [result], undefined, protocol),
+      fakeClient(
+        async () => result,
+        async () => [result],
+        undefined,
+        protocol,
+      ),
       { intMode: "string" },
     );
-    assert.deepEqual(await executor.query(sql.command`INSERT INTO users (id) VALUES (${"9007199254740993"})`.render()), {
-      kind: "command",
-      rowCount: 1,
-      rows: [],
-      command: exact ? { affectedRows: 1, insertId: "9007199254740993" } : { affectedRows: 1 },
-    });
+    assert.deepEqual(
+      await executor.query(sql.command`INSERT INTO users (id) VALUES (${"9007199254740993"})`.render()),
+      {
+        kind: "command",
+        rowCount: 1,
+        rows: [],
+        command: exact ? { affectedRows: 1, insertId: "9007199254740993" } : { affectedRows: 1 },
+      },
+    );
     const bulk: RenderedBulk = {
       statement: sql.command`UPDATE users SET name = ${"after"}`.render(),
       parameterSets: [["after"]],

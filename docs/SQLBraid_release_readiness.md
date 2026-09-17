@@ -417,3 +417,31 @@ For a fast local fault loop use `pnpm run test:contracts:boundary`. Real databas
 scenarios remain in the existing `test:db:*` projects. Neither local execution
 nor a static matrix validation substitutes for Release `certify` on the exact
 final revision.
+
+### Native failures exposed by the semantic gate
+
+The Bun SQL contracts intentionally remain release-blocking, not skipped or
+reclassified as unsupported to manufacture a green release:
+
+- Bun 1.3.14 PostgreSQL closes a discarded reserved connection, but its pool's
+  graceful `close()` can remain pending after an aborted transaction returns
+  `ROLLBACK` from `COMMIT`. A native-only reproduction passes on Bun 1.4.2;
+  that comparison does not change the pinned certification tuple.
+- Bun 1.3.14 and 1.4.2 MySQL cache the failure from a first INSERT prepare in a
+  read-only transaction. Reusing that same statement after explicit
+  `START TRANSACTION READ WRITE` still rejects with error 1792. The pinned
+  MariaDB transport exposes the same failure. Prewarming the statement,
+  changing its SQL text, or reordering the access-mode contract would hide the
+  defect rather than establish support.
+
+These are reproducible through `tests/scripts/bun-sql-matrix.mjs` and the
+`db-bun-sql` integration project. A passing historical capability artifact
+cannot replace these missing semantic proofs. Restore a green gate only after
+the native behavior is corrected and the complete pinned matrix passes.
+
+Local libSQL has a different, explicit contract limitation: its native ROWID
+metadata is rounded before the client returns a bigint. The adapter therefore
+omits optional `command.insertId` for file and protocol-unknown clients, rather
+than inventing precision or failing after a successful mutation. Its checked
+metadata exclusions apply only to that unavailable channel; native tests still
+require exact `RETURNING` rows and successful large-ID mutations and bulk counts.

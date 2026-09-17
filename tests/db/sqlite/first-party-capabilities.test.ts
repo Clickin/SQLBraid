@@ -64,9 +64,7 @@ test(commandMetadataTitle("better-sqlite3"), async () => {
     await db.execute(sql.command`CREATE TABLE braid_contract_metadata (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`);
     const observerDb = createBetterSqlite3Database(observer);
     await commandMetadataContract(db, sql, () =>
-      observerDb.all(
-        sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`,
-      ),
+      observerDb.all(sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`),
     );
   } finally {
     observer.close();
@@ -85,9 +83,7 @@ test("[contract:libsql:metadata.affected-rows:integration] local commands omit u
     await db.execute(sql.command`CREATE TABLE braid_contract_metadata (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`);
     const observerDb = createBetterSqlite3Database(observer);
     const committedRows = () =>
-      observerDb.all(
-        sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`,
-      );
+      observerDb.all(sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`);
     const id = "9007199254740993";
     const maximum = "9223372036854775807";
     const insert = (value: string) =>
@@ -96,7 +92,9 @@ test("[contract:libsql:metadata.affected-rows:integration] local commands omit u
     assert.deepEqual(inserted.command, { affectedRows: 1 });
     assert.deepEqual(await committedRows(), [{ id, name: "before" }]);
 
-    const updated = await db.execute(sql.command`UPDATE braid_contract_metadata SET name = ${"after"} WHERE id = ${id}`);
+    const updated = await db.execute(
+      sql.command`UPDATE braid_contract_metadata SET name = ${"after"} WHERE id = ${id}`,
+    );
     assert.deepEqual(updated.command, { affectedRows: 1 });
     assert.deepEqual(await committedRows(), [{ id, name: "after" }]);
     const deleted = await db.execute(sql.command`DELETE FROM braid_contract_metadata WHERE id = ${id}`);
@@ -127,7 +125,9 @@ test("[contract:libsql:metadata.affected-rows:integration] local commands omit u
 
     const returnedId = "9007199254740995";
     const returned = await db.one(
-      sql.rows<{ id: string }>`INSERT INTO braid_contract_metadata (id, name) VALUES (${returnedId}, ${"returning"}) RETURNING id`,
+      sql.rows<{
+        id: string;
+      }>`INSERT INTO braid_contract_metadata (id, name) VALUES (${returnedId}, ${"returning"}) RETURNING id`,
     );
     assert.deepEqual(returned, { id: returnedId });
     assert.deepEqual(await committedRows(), [

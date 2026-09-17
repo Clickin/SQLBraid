@@ -454,7 +454,7 @@ the JavaScript event loop; `Awaitable` does not provide background execution.
 
 The libSQL adapter requires an explicit `{ intMode: "string" }` assertion before
 constructing the database. It classifies results with `columns`, `rows`,
-`rowsAffected`, and `lastInsertRowid`, uses `client.batch()` for bulk, and
+`rowsAffected`, and trustworthy remote `lastInsertRowid`, uses `client.batch()` for bulk, and
 routes an active transaction through the documented interactive Transaction
 handle. Ordinary client calls do not prove a pinned session, so
 `session.pinned` remains unsupported. Without a documented incremental cursor,
@@ -463,3 +463,9 @@ handle. Ordinary client calls do not prove a pinned session, so
 These are implementation facts, not broad support labels. Record the exact
 driver version, runtime, profile, and transport evidence separately; local
 libSQL evidence does not certify remote HTTP/WebSocket clients.
+Local `file:` and protocol-unknown clients omit optional command `insertId`.
+The pinned native binding rounds ROWID through Number before producing its
+bigint; `intMode: "string"` only establishes row representation, not command
+metadata fidelity. Keep successful mutations and affected-row counts usable
+instead of throwing after committed I/O because of unavailable ID metadata.
+Exact IDs can be requested in user-authored `RETURNING` row results.

@@ -229,7 +229,11 @@ database wrapper is async; its exact INTEGER profile uses statement-local
 `safeIntegers(true)`. The libSQL adapter requires an explicit
 `intMode: "string"` assertion, uses an interactive transaction handle for
 continuity, does not claim `session.pinned`, and does not fake `statement.stream`
-by buffering. A local libSQL test does not certify HTTP/WebSocket or
+by buffering. Local `file:` and protocol-unknown libSQL clients omit optional
+`command.insertId`: their native ROWID metadata cannot establish exactness.
+Use explicit `INSERT ... RETURNING` row contracts when that value is needed;
+affected-row counts and transaction support remain unchanged.
+A local libSQL test does not certify HTTP/WebSocket or
 browser/Worker transports; every promoted label needs exact runtime, driver
 version, profile, and workflow evidence.
 

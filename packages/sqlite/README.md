@@ -51,6 +51,15 @@ transaction options call `client.transaction()` with no argument so the
 client retains its default. SQLBraid isolation literals are rejected when no
 exact equivalent is documented.
 
+For local `file:` and protocol-unknown libSQL clients, `command.insertId` is
+omitted: the native binding converts ROWID to a potentially rounded Number
+before returning a bigint, independently of `intMode`. Query rows,
+transactions, bulk execution and `affectedRows` remain supported. Request an
+exact generated ID with user-authored `INSERT ... RETURNING id` and `sql.rows`;
+SQLBraid does not rewrite the statement or issue a compensating query.
+Known HTTP/WebSocket clients retain their separate exact metadata path; local
+tests do not certify those remote transports.
+
 The better-sqlite3 adapter accepts any `Uint8Array`, including Buffer,
 subarrays, and empty views, and converts it immediately to the driver's
 documented `Buffer` carrier before `all`, `run`, or `iterate`. Observers still

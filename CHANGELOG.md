@@ -29,6 +29,10 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 - Require capability-driven semantic contract evidence alongside the existing
   database/version matrix; missing integration or native-boundary coverage
   blocks release certification.
+- Omit unreliable optional `command.insertId` for local and protocol-unknown
+  libSQL clients. Exact `RETURNING` rows, affected-row counts, transactions and
+  bulk execution remain supported; rounded native ROWIDs are never advertised
+  as exact IDs.
 
 ## 0.1.0-rc.2 (unreleased)
 

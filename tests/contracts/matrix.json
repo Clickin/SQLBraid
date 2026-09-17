@@ -1085,8 +1085,8 @@
           "source": "packages/sqlite/src/libsql.ts"
         },
         "insert-id": {
-          "supported": true,
-          "reason": "Native command results expose an exact insert-ID channel.",
+          "supported": false,
+          "reason": "The local libSQL native binding rounds ROWID through f64 before converting it to bigint; this adapter omits untrustworthy insertId metadata for file and unknown protocols.",
           "source": "packages/sqlite/src/libsql.ts"
         },
         "resource-init": {
@@ -1230,10 +1230,16 @@
           }
         },
         "metadata.exact-id": {
-          "evidence": ["integration", "boundary"]
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The local libSQL native binding rounds ROWID through f64 before converting it to bigint; this adapter omits untrustworthy insertId metadata for file and unknown protocols."
+          }
         },
         "metadata.stale-id": {
-          "evidence": ["integration"]
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The local libSQL native binding rounds ROWID through f64 before converting it to bigint; this adapter omits untrustworthy insertId metadata for file and unknown protocols."
+          }
         },
         "metadata.affected-rows": {
           "evidence": ["integration", "boundary"]
