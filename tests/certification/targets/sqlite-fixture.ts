@@ -140,7 +140,7 @@ function queryFixtures(failureCode: string): CertificationQueries {
   const command: CommandQuery = sql.command`INSERT INTO cert_items (value) VALUES ('command')`;
   const insert: CommandQuery = sql.command`INSERT INTO cert_items (value) VALUES ('transaction')`;
   const savepointInsert: CommandQuery = sql.command`INSERT INTO cert_items (value) VALUES ('savepoint')`;
-  const failure: RowQuery<unknown> = sql.rows`SELECT * FROM cert_missing_table`;
+  const failure: RowQuery<unknown> = sql.rows`INSERT INTO cert_items (value) VALUES (NULL) RETURNING value`;
   const identity = sql.rows<{ readonly id: string }>`SELECT 'sqlite-certification-session' AS id`;
   const many = sql.rows`SELECT '1' AS value UNION ALL SELECT '2' AS value`;
   const one = sql.rows`SELECT 'one' AS value`;
@@ -295,7 +295,7 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     }
     : undefined;
   const bulkFactory = (input: unknown): CommandQuery => sql.command`INSERT INTO cert_items (value) VALUES (${input})`;
-  const bulkFailure: CommandQuery = sql.command`INSERT INTO cert_missing_table (value) VALUES ('bulk-failure')`;
+  const bulkFailure: CommandQuery = sql.command`INSERT INTO cert_items (value) VALUES (NULL)`;
   const bulk: BulkConformanceFixture<unknown> = {
     db: options.db,
     inputs: [1, 2],
