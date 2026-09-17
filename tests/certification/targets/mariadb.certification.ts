@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { certifyTarget } from "../../certification/runner.js";
-import { createMariaDbCertificationTarget } from "../../certification/targets/mariadb.js";
-import { REQUIRED_CASE_IDS } from "../../certification/types.js";
+import { certifyTarget } from "../runner.js";
+import { createMariaDbCertificationTarget } from "./mariadb.js";
+import { REQUIRED_CASE_IDS } from "../types.js";
 
 test("rc3.mariadb.certification", async () => {
   const artifact = await certifyTarget(createMariaDbCertificationTarget());
