@@ -16,6 +16,7 @@ import type {
   CertificationTarget,
   ExpectedCapability,
   ExpectedCapabilityContract,
+  ExpectedGuardedCaseContract,
   TransactionOptionKey,
   UnsupportedProbe,
 } from "../types.js";
@@ -107,6 +108,12 @@ export function expectedCapabilities(dialect: BunSqlDialect): ExpectedCapability
 
 export function expectedTransactionOptions(dialect: BunSqlDialect): Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">> {
   return Object.freeze(Object.fromEntries(OPTION_KEYS.map((key) => [key, dialect === "sqlite" && key !== "isolation:serializable" ? "unsupported" : "guaranteed"]))) as Record<TransactionOptionKey, "guaranteed" | "unsupported">;
+}
+
+export function expectedGuardedCases(dialect: BunSqlDialect): ExpectedGuardedCaseContract | undefined {
+  return dialect === "mysql" || dialect === "mariadb"
+    ? { emptyResultError: { feature: "result.rows", code: "BRAID_RESULT_KIND_AMBIGUOUS" } }
+    : undefined;
 }
 
 function mutates(sql: string): boolean {
@@ -376,9 +383,7 @@ export function createBunSqlCertificationTarget(options: BunCertificationTargetO
     sourceSha: options.sourceSha,
     expectedCapabilities: expectedCapabilities(options.dialect),
     expectedTransactionOptions: expectedTransactionOptions(options.dialect),
-    expectedGuardedCases: options.dialect === "mysql" || options.dialect === "mariadb"
-      ? { emptyResultError: { feature: "result.rows", code: "BRAID_RESULT_KIND_AMBIGUOUS" } as const }
-      : undefined,
+    expectedGuardedCases: expectedGuardedCases(options.dialect),
     createFixture: () => createFixture(options),
   };
 }
