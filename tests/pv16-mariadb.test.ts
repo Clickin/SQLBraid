@@ -47,6 +47,34 @@ test("MariaDB adapter uses metadata to distinguish row and command results", asy
   });
 });
 
+test("MariaDB array rows preserve hostile labels and reject duplicate metadata", async () => {
+  const fields = [
+    { name: "__proto__" },
+    { name: "constructor" },
+    { name: "prototype" },
+  ] as const;
+  const rows = rowSet(
+    [["proto", "ctor", "prototype"] as unknown as Record<string, unknown>],
+    fields,
+  );
+  const result = await createMariaDbExecutor(connectionFor(rows)).query(sql.rows`SELECT 1`.render());
+  const row = result.rows[0] as Record<string, unknown>;
+  assert.equal(Object.hasOwn(row, "__proto__"), true);
+  assert.equal(Object.hasOwn(row, "constructor"), true);
+  assert.equal(row["__proto__"], "proto");
+  assert.equal(row.constructor, "ctor");
+  assert.equal(row.prototype, "prototype");
+
+  const duplicate = rowSet(
+    [["first", "second"] as unknown as Record<string, unknown>],
+    [{ name: "__proto__" }, { name: "__proto__" }],
+  );
+  await assert.rejects(
+    () => createMariaDbExecutor(connectionFor(duplicate)).query(sql.rows`SELECT 1`.render()),
+    /duplicate MariaDB result label __proto__/u,
+  );
+});
+
 test("MariaDB pool discard never releases a poisoned connection", async () => {
   let releases = 0;
   const connection = {
@@ -145,6 +173,77 @@ test("MariaDB adapter closes queryStream on consumer break", async () => {
     break;
   }
   assert.equal(source?.closeCount, 1);
+});
+
+test("MariaDB stream cleanup closes exactly once after iterator initialization failure", async () => {
+  const iteratorError = new Error("iterator initialization failed");
+  const closeError = new Error("stream close failed");
+  let closeCount = 0;
+  const source: MariaDbStreamLike = {
+    on(event, listener) {
+      if (event === "fields") listener([{ name: "id", type: "LONG" }]);
+      return this;
+    },
+    close() {
+      closeCount += 1;
+      throw closeError;
+    },
+    [Symbol.asyncIterator]() {
+      throw iteratorError;
+    },
+  };
+  const connection = connectionFor(undefined);
+  connection.queryStream = () => source;
+  const executor = createMariaDbExecutor(connection);
+  await assert.rejects(
+    async () => {
+      for await (const _row of executor.stream(sql.rows`SELECT id FROM t`.render())) {
+        void _row;
+      }
+    },
+    (error: unknown) => {
+      const candidate = error as { readonly code?: string; readonly errors?: readonly unknown[] };
+      return candidate.code === "BRAID_RESOURCE_CLEANUP"
+        && candidate.errors?.[0] === iteratorError
+        && candidate.errors?.[1] === closeError;
+    },
+  );
+  assert.equal(closeCount, 1);
+});
+
+test("MariaDB stream abort destroys the connection exactly once", async () => {
+  const abortError = new Error("stream abort");
+  let destroys = 0;
+  const source: MariaDbStreamLike = {
+    on(event, listener) {
+      if (event === "fields") listener([{ name: "id", type: "LONG" }]);
+      return this;
+    },
+    close() {},
+    async *[Symbol.asyncIterator]() {
+      yield [1];
+      await Promise.resolve();
+      yield [2];
+    },
+  };
+  const connection = {
+    ...connectionFor(undefined),
+    destroy() { destroys += 1; },
+    queryStream() { return source; },
+  };
+  const controller = new AbortController();
+  const executor = createMariaDbExecutor(connection);
+  await assert.rejects(
+    async () => {
+      for await (const _row of executor.stream(sql.rows`SELECT id FROM t`.render(), undefined, { signal: controller.signal })) {
+        controller.abort(abortError);
+        void _row;
+      }
+    },
+    (error: unknown) => (error as { readonly code?: string; readonly cause?: unknown }).code === "BRAID_RESOURCE_CLEANUP"
+      && (error as { readonly cause?: unknown }).cause === abortError,
+  );
+  assert.equal(destroys, 1);
 });
 
 test("MariaDB adapter sends one parameterized SQL shape to native batch", async () => {
