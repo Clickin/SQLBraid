@@ -67,7 +67,7 @@ export function validateMatrix({ catalog, matrix, targets, profiles, registry, c
     requireThat(["transaction-outcome", "transaction-savepoint", "transaction-options", "pool-ownership",
       "resource-lifecycle", "cancellation", "command-metadata"].includes(scenario.family), `${scenario.id}: unknown family`);
     requireThat(typeof scenario.description === "string" && scenario.description.length > 0, `${scenario.id}: missing description`);
-    requireThat(["transaction", "pooled", "any"].includes(scenario.ownership), `${scenario.id}: invalid ownership`);
+    requireThat(["each", "pooled", "any"].includes(scenario.ownership), `${scenario.id}: invalid ownership`);
     requireThat(Array.isArray(scenario.evidence) && scenario.evidence.length > 0 &&
       new Set(scenario.evidence).size === scenario.evidence.length && scenario.evidence.every((layer) => layers.includes(layer)),
     `${scenario.id}: invalid evidence layer`);
@@ -146,7 +146,7 @@ export function validateMatrix({ catalog, matrix, targets, profiles, registry, c
       }
       requireThat(Object.keys(mapping).length === 1 && equal(mapping.evidence, scenario.evidence),
         `${transport}:${scenario.id}: required evidence omitted, wrong layer or contradictory N/A`);
-      const owners = scenario.ownership === "transaction" ? entry.ownership : scenario.ownership === "pooled" ? ["pooled"] : ["any"];
+      const owners = scenario.ownership === "each" ? entry.ownership : scenario.ownership === "pooled" ? ["pooled"] : ["any"];
       for (const layer of scenario.evidence) {
         for (const ownership of owners) {
           cells.push({ transport, scenario: scenario.id, layer, ownership, target: target.id,

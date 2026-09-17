@@ -176,6 +176,14 @@ test("a green report missing one required assertion or ownership path cannot pas
   await withReport(anotherOwner, async (directory) => {
     await assert.rejects(validateReports(directory, sourceSha, model), /missing passed execution evidence/u);
   });
+  const missingPoolCleanup = executionFixture();
+  const pooledStream = missingPoolCleanup.assertions.find((assertion) =>
+    assertion.title.includes("[contract:pg:resource.stream-return:integration]") &&
+    assertion.title.includes("[ownership:pooled]"))!;
+  pooledStream.title = pooledStream.title.replace("[ownership:pooled]", "[ownership:direct]");
+  await withReport(missingPoolCleanup, async (directory) => {
+    await assert.rejects(validateReports(directory, sourceSha, model), /missing passed execution evidence/u);
+  });
 });
 
 test("suite/fullName labels and hand-authored scenario summaries are not execution evidence", async () => {
