@@ -16,7 +16,6 @@ const packageManager = rootManifest.packageManager;
 const pnpmVersion = /^pnpm@(\d+\.\d+\.\d+)$/u.exec(packageManager ?? "")?.[1];
 if (!pnpmVersion) throw new Error("Release requires an exact pnpm version in package.json#packageManager.");
 let version = process.env.SQLBRAID_RELEASE_VERSION ?? rootManifest.version;
-let semver = parseSemver(version);
 let releasePackage = process.env.SQLBRAID_RELEASE_PACKAGE ?? "*";
 let expectedTag = releaseCandidateTag(releasePackage, version);
 const packageFields = ["dependencies", "optionalDependencies", "peerDependencies"];
@@ -1123,7 +1122,6 @@ function setReleaseCommand(nextCommand) {
 }
 function setReleaseVersion(nextVersion) {
   version = nextVersion;
-  semver = parseSemver(nextVersion);
   expectedTag = releaseCandidateTag(releasePackage, nextVersion);
   if (!artifactArgument) artifactDir = resolve(join(tmpdir(), `sqlbraid-release-${nextVersion}`));
 }
