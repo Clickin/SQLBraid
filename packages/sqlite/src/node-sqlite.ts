@@ -350,6 +350,7 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
         const rows = statement.all(...prepared.values).map(plainRow);
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
+      statement.setReadBigInts?.(true);
       const result = statement.run(...prepared.values);
       const changes = result.changes === undefined ? undefined : safeDatabaseCount(result.changes);
       const insertId = result.lastInsertRowid === undefined ? undefined : normalizeExactInteger(result.lastInsertRowid);

@@ -167,6 +167,53 @@ test("SQLite exact INTEGER reads are strings while REAL remains number", async (
   }
 });
 
+test("SQLite preserves large ROWID command metadata across INSERT, UPDATE, and DELETE on one connection", async () => {
+  const native = new DatabaseSync(":memory:");
+  const db = createNodeSqliteDatabase(native);
+  const id = 9007199254740993n;
+  try {
+    native.exec("CREATE TABLE command_rowid (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
+    assert.deepEqual(await db.execute(sql.command`INSERT INTO command_rowid (id, name) VALUES (${id}, ${"before"})`), {
+      rows: [],
+      rowCount: 1,
+      kind: "command",
+      command: { affectedRows: 1, insertId: "9007199254740993" },
+    });
+    assert.deepEqual(await db.one(sql.rows`SELECT id, name FROM command_rowid`), {
+      id: "9007199254740993",
+      name: "before",
+    });
+
+    const updated = await db.execute(sql.command`UPDATE command_rowid SET name = ${"after"} WHERE id = ${id}`);
+    assert.equal(updated.command?.affectedRows, 1);
+    assert.deepEqual(await db.one(sql.rows`SELECT id, name FROM command_rowid`), {
+      id: "9007199254740993",
+      name: "after",
+    });
+
+    const deleted = await db.execute(sql.command`DELETE FROM command_rowid WHERE id = ${id}`);
+    assert.equal(deleted.command?.affectedRows, 1);
+    assert.deepEqual(await db.all(sql.rows`SELECT id, name FROM command_rowid`), []);
+  } finally {
+    native.close();
+  }
+});
+
+test("SQLite rejects unsafe Number command metadata from custom statements", async () => {
+  const db = createNodeSqliteDatabase({
+    prepare() {
+      return {
+        columns: () => [],
+        all: () => [],
+        run: () => ({ changes: 1, lastInsertRowid: 9007199254740992 }),
+      };
+    },
+  });
+  await assert.rejects(() => db.execute(sql.command`INSERT INTO values_table DEFAULT VALUES`), {
+    code: "BRAID_RESULT_EXACTNESS",
+  });
+});
+
 test("SQLite rejects row reads without native integer transport but keeps command-only usage", async () => {
   let allCalls = 0;
   let iterateCalls = 0;
