@@ -694,6 +694,7 @@ test("candidate validation rejects changed bytes, missing integrity, stale runs,
     const candidateVersion = "0.1.0-rc.0";
     const candidate = {
       version: candidateVersion,
+      releasePackages: [entry.name],
       commit: "a".repeat(40),
       runId: "123",
       runAttempt: "1",
