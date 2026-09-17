@@ -62,7 +62,6 @@ export const exactIdTransports = [
   "mariadb",
   "node-sqlite",
   "better-sqlite3",
-  "libsql",
   "bun-sql-mysql",
   "bun-sql-mariadb",
   "bun-sql-sqlite",

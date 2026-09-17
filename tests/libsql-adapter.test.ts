@@ -94,7 +94,7 @@ test("libSQL classifies rows from columns metadata and normalizes integers and b
   });
 });
 
-test("libSQL rejects duplicate labels before row conversion and maps command metadata", async () => {
+test("libSQL rejects duplicate labels before row conversion", async () => {
   const duplicate = createLibsqlExecutor(
     fakeClient(async () => rowsResult(["id", "id"], [{ 0: 1, 1: 2 }])),
     { intMode: "string" },
@@ -103,23 +103,60 @@ test("libSQL rejects duplicate labels before row conversion and maps command met
     async () => duplicate.query(sql.rows`SELECT 1 AS id, 2 AS id`.render()),
     (error: unknown) => error instanceof Error && error.message.includes("BRAID_RESULT_COLUMNS"),
   );
+});
 
-  const command = createLibsqlExecutor(
-    fakeClient(async () => ({
+for (const protocol of ["http", "ws", "file", undefined, "unknown"]) {
+  test(`libSQL command IDs require known exact transport provenance (${protocol ?? "absent"})`, async () => {
+    const exact = protocol === "http" || protocol === "ws";
+    const result: LibsqlResultSetLike = {
       columns: [],
       rows: [],
-      rowsAffected: 2,
-      lastInsertRowid: 17n,
-    })),
-    { intMode: "string" },
-  );
-  assert.deepEqual(await command.query(sql.command`INSERT INTO users (id) VALUES (1)`.render()), {
-    kind: "command",
-    rowCount: 2,
-    rows: [],
-    command: { affectedRows: 2, insertId: "17" },
+      rowsAffected: 1,
+      // The native file path has already rounded before wrapping its ID in bigint.
+      lastInsertRowid: exact ? 9007199254740993n : 9007199254740992n,
+    };
+    const executor = createLibsqlExecutor(
+      fakeClient(async () => result, async () => [result], undefined, protocol),
+      { intMode: "string" },
+    );
+    assert.deepEqual(await executor.query(sql.command`INSERT INTO users (id) VALUES (${"9007199254740993"})`.render()), {
+      kind: "command",
+      rowCount: 1,
+      rows: [],
+      command: exact ? { affectedRows: 1, insertId: "9007199254740993" } : { affectedRows: 1 },
+    });
+    const bulk: RenderedBulk = {
+      statement: sql.command`UPDATE users SET name = ${"after"}`.render(),
+      parameterSets: [["after"]],
+    };
+    const binding = executor.statementBinding.describeBulk!(bulk, { dialectId: "sqlite", requestedReuse: "auto" });
+    assert.deepEqual(await executor.bulk!(bulk, binding), {
+      inputCount: 1,
+      affectedRows: 1,
+      executionMode: "remote-batch",
+    });
+    const unsafeExecutor = createLibsqlExecutor(
+      fakeClient(
+        async () => ({ ...result, lastInsertRowid: Number.MAX_SAFE_INTEGER + 1 }),
+        undefined,
+        undefined,
+        protocol,
+      ),
+      { intMode: "string" },
+    );
+    const unsafeResult = unsafeExecutor.query(sql.command`INSERT INTO users (id) VALUES (1)`.render());
+    if (exact) {
+      await assert.rejects(unsafeResult, { code: "BRAID_RESULT_EXACTNESS" });
+    } else {
+      assert.deepEqual(await unsafeResult, {
+        kind: "command",
+        rowCount: 1,
+        rows: [],
+        command: { affectedRows: 1 },
+      });
+    }
   });
-});
+}
 
 test("libSQL materializes hostile row labels as own data properties", async () => {
   const executor = createLibsqlExecutor(

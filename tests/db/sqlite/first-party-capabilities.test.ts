@@ -52,30 +52,96 @@ for (const transport of ["better-sqlite3", "libsql"] as const) {
     { stream: transport === "better-sqlite3" },
   ))
     test(contract.title, contract.run);
-
-  test(commandMetadataTitle(transport), async () => {
-    const directory = await mkdtemp(join(tmpdir(), `sqlbraid-metadata-${transport}-`));
-    const filename = join(directory, "database.db");
-    const native = transport === "better-sqlite3" ? new BetterSqlite3(filename) : undefined;
-    const client = transport === "libsql" ? createClient({ url: `file:${filename}`, intMode: "string" }) : undefined;
-    const db = native ? createBetterSqlite3Database(native) : createLibsqlDatabase(client!, { intMode: "string" });
-    const observer = new BetterSqlite3(filename);
-    try {
-      await db.execute(sql.command`CREATE TABLE braid_contract_metadata (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`);
-      const observerDb = createBetterSqlite3Database(observer);
-      await commandMetadataContract(db, sql, () =>
-        observerDb.all(
-          sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`,
-        ),
-      );
-    } finally {
-      observer.close();
-      native?.close();
-      client?.close();
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
 }
+
+test(commandMetadataTitle("better-sqlite3"), async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sqlbraid-metadata-better-sqlite3-"));
+  const filename = join(directory, "database.db");
+  const native = new BetterSqlite3(filename);
+  const db = createBetterSqlite3Database(native);
+  const observer = new BetterSqlite3(filename);
+  try {
+    await db.execute(sql.command`CREATE TABLE braid_contract_metadata (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`);
+    const observerDb = createBetterSqlite3Database(observer);
+    await commandMetadataContract(db, sql, () =>
+      observerDb.all(
+        sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`,
+      ),
+    );
+  } finally {
+    observer.close();
+    native.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("[contract:libsql:metadata.affected-rows:integration] local commands omit unreliable IDs while explicit RETURNING stays exact", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sqlbraid-metadata-libsql-"));
+  const filename = join(directory, "database.db");
+  const client = createClient({ url: `file:${filename}`, intMode: "string" });
+  const db = createLibsqlDatabase(client, { intMode: "string" });
+  const observer = new BetterSqlite3(filename);
+  try {
+    await db.execute(sql.command`CREATE TABLE braid_contract_metadata (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`);
+    const observerDb = createBetterSqlite3Database(observer);
+    const committedRows = () =>
+      observerDb.all(
+        sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`,
+      );
+    const id = "9007199254740993";
+    const maximum = "9223372036854775807";
+    const insert = (value: string) =>
+      sql.command`INSERT INTO braid_contract_metadata (id, name) VALUES (${value}, ${"before"})`;
+    const inserted = await db.execute(insert(id));
+    assert.deepEqual(inserted.command, { affectedRows: 1 });
+    assert.deepEqual(await committedRows(), [{ id, name: "before" }]);
+
+    const updated = await db.execute(sql.command`UPDATE braid_contract_metadata SET name = ${"after"} WHERE id = ${id}`);
+    assert.deepEqual(updated.command, { affectedRows: 1 });
+    assert.deepEqual(await committedRows(), [{ id, name: "after" }]);
+    const deleted = await db.execute(sql.command`DELETE FROM braid_contract_metadata WHERE id = ${id}`);
+    assert.deepEqual(deleted.command, { affectedRows: 1 });
+    assert.deepEqual(await committedRows(), []);
+
+    const small = await db.execute(insert("7"));
+    assert.deepEqual(small.command, { affectedRows: 1 });
+    assert.deepEqual(await committedRows(), [{ id: "7", name: "before" }]);
+    assert.deepEqual(await db.bulk([id, maximum], insert), { inputCount: 2, affectedRows: 2 });
+    assert.deepEqual(await committedRows(), [
+      { id: "7", name: "before" },
+      { id, name: "before" },
+      { id: maximum, name: "before" },
+    ]);
+    assert.deepEqual(
+      await db.bulk(
+        ["7", id],
+        (value) => sql.command`UPDATE braid_contract_metadata SET name = ${"bulk"} WHERE id = ${value}`,
+      ),
+      { inputCount: 2, affectedRows: 2 },
+    );
+    assert.deepEqual(await committedRows(), [
+      { id: "7", name: "bulk" },
+      { id, name: "bulk" },
+      { id: maximum, name: "before" },
+    ]);
+
+    const returnedId = "9007199254740995";
+    const returned = await db.one(
+      sql.rows<{ id: string }>`INSERT INTO braid_contract_metadata (id, name) VALUES (${returnedId}, ${"returning"}) RETURNING id`,
+    );
+    assert.deepEqual(returned, { id: returnedId });
+    assert.deepEqual(await committedRows(), [
+      { id: "7", name: "bulk" },
+      { id, name: "bulk" },
+      { id: returnedId, name: "returning" },
+      { id: maximum, name: "before" },
+    ]);
+  } finally {
+    observer.close();
+    client.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("better-sqlite3.sql.native-transparency", async () => {
   const native = new BetterSqlite3(":memory:");

@@ -287,7 +287,7 @@ function resultRows<Row>(result: LibsqlResultSetLike): readonly Row[] {
   return result.rows.map((row) => normalizeRow(row, result.columns)) as readonly Row[];
 }
 
-function commandResult(result: LibsqlResultSetLike): CommandExecutionResult {
+function commandResult(result: LibsqlResultSetLike, exactInsertId: boolean): CommandExecutionResult {
   if (!Array.isArray(result.columns))
     throw new TypeError("BRAID_RESULT_COLUMNS: libSQL result metadata must include columns.");
   validateColumns(result.columns);
@@ -302,7 +302,7 @@ function commandResult(result: LibsqlResultSetLike): CommandExecutionResult {
       ? undefined
       : safeDatabaseCount(result.rowsAffected);
   const insertId =
-    result.lastInsertRowid === undefined || result.lastInsertRowid === null
+    !exactInsertId || result.lastInsertRowid === undefined || result.lastInsertRowid === null
       ? undefined
       : normalizeExactInteger(result.lastInsertRowid);
   return {
@@ -316,11 +316,11 @@ function commandResult(result: LibsqlResultSetLike): CommandExecutionResult {
   };
 }
 
-function materializeResult<Row>(result: LibsqlResultSetLike): QueryExecutionResult<Row> {
+function materializeResult<Row>(result: LibsqlResultSetLike, exactInsertId: boolean): QueryExecutionResult<Row> {
   if (!Array.isArray(result.columns))
     throw new TypeError("BRAID_RESULT_COLUMNS: libSQL result metadata must include columns.");
   validateColumns(result.columns);
-  if (result.columns.length === 0) return commandResult(result) as QueryExecutionResult<Row>;
+  if (result.columns.length === 0) return commandResult(result, exactInsertId) as QueryExecutionResult<Row>;
   return { rows: resultRows<Row>(result), rowCount: result.rows.length, kind: "rows" };
 }
 
@@ -490,6 +490,10 @@ function transactionStatement(
 export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlExecutorOptions): QueryExecutor {
   assertClient(client);
   assertExactStringMode(options);
+  // Native file clients round rowids through f64 even with safeIntegers enabled.
+  // Only known Hrana transports preserve command IDs; caller-written RETURNING
+  // remains exact on local clients because it uses the row-value path.
+  const exactInsertId = client.protocol === "http" || client.protocol === "ws";
   let transaction: LibsqlTransactionLike | undefined;
 
   const executor = {
@@ -510,7 +514,7 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
       const result = await (transaction ?? client).execute(statementInput(prepared.text, prepared.values));
-      return materializeResult<Row>(result);
+      return materializeResult<Row>(result, exactInsertId);
     },
     async bulk(
       bulk: RenderedBulk,
@@ -533,7 +537,7 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
       let affectedRows = 0;
       let hasAffectedRows = false;
       for (const result of results) {
-        const command = commandResult(result);
+        const command = commandResult(result, exactInsertId);
         if (command.command.affectedRows !== undefined) {
           hasAffectedRows = true;
           affectedRows = safeDatabaseCount(affectedRows + command.command.affectedRows);
