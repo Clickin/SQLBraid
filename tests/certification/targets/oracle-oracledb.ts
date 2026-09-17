@@ -448,9 +448,15 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
             rollbackFailure = undefined;
             releaseFailure = undefined;
             const observedLeases = pooledConnections();
-            assert.equal(observedLeases, 0);
-            await forceFaultConnectionCleanup?.();
-            forceFaultConnectionCleanup = undefined;
+            try {
+              assert.equal(observedLeases, 0);
+            } finally {
+              try {
+                await forceFaultConnectionCleanup?.();
+              } finally {
+                forceFaultConnectionCleanup = undefined;
+              }
+            }
           }
           assert.ok(error instanceof AggregateError);
           const nested = (value: unknown): readonly unknown[] => value instanceof AggregateError
