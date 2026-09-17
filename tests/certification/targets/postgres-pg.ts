@@ -290,12 +290,11 @@ function faultCursorFactory(base: PgCursorFactory, state: Metrics): PgCursorFact
     }
 
     override close(callback: (error?: unknown) => void): void {
+      state.cursorCloses.value += 1;
+      if (!this.counted) throw new Error("PostgreSQL native cursor closed more than once.");
+      this.counted = false;
       super.close((error?: unknown) => {
-        if (this.counted) {
-          this.counted = false;
-          state.openCursors.value -= 1;
-          state.cursorCloses.value += 1;
-        }
+        state.openCursors.value -= 1;
         if (this.mode === "cleanup") callback(state.streamErrors.cleanup);
         else callback(error);
       });
@@ -451,6 +450,7 @@ export async function disposePostgresTarget(targetId: string): Promise<void> {
 
 function rowQueries(state: Shared): CertificationFixture["queries"] {
   const table = sql.ident(state.table);
+  const injection = `'; UPDATE ${identifier(state.table)} SET marker = 999 WHERE id = 'baseline'; --`;
   const one = sql.rows`SELECT id, value FROM ${table} WHERE id = 'one'`;
   const many = sql.rows`SELECT id, value FROM ${table} WHERE id IN ('one', 'two') ORDER BY id`;
   const transactionVisible = sql.rows`SELECT id, value FROM ${table} WHERE id IN ('tx-row', 'savepoint-row') ORDER BY id`;
@@ -515,15 +515,15 @@ function rowQueries(state: Shared): CertificationFixture["queries"] {
     prepared: preparedFactory,
     routines: { ...routines, lob: routines.cursor },
     fidelity: {
-      largeExactInteger: sql.rows`SELECT 9007199254740991::numeric(38,0) AS value`,
-      exactDecimal: sql.rows`SELECT 12345678901234567890.123456789::numeric(38,9) AS value`,
-      temporal: sql.rows`SELECT TIMESTAMP '2026-09-14 12:34:56.789' AS value`,
-      injection: sql.rows`SELECT ${"'; SELECT 1; --"} AS value`,
+      largeExactInteger: sql.rows`SELECT ${"9007199254740993"}::numeric(38,0) AS value`,
+      exactDecimal: sql.rows`SELECT ${"12345678901234567890.123456789"}::numeric(38,9) AS value`,
+      temporal: sql.rows`SELECT ${"2026-09-14 12:34:56.789"}::timestamp AS value`,
+      injection: sql.rows`SELECT ${injection} AS value`,
       expected: {
-        largeExactInteger: { value: "9007199254740991" },
+        largeExactInteger: { value: "9007199254740993" },
         exactDecimal: { value: "12345678901234567890.123456789" },
         temporal: { value: "2026-09-14 12:34:56.789" },
-        injection: { value: "'; SELECT 1; --" },
+        injection: { value: injection },
       },
     },
     expected: {
@@ -585,15 +585,15 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     executeCount: () => bulkExec,
     values: () => bulkValues,
     middleFailure: async () => {
-      const failureInputs = [{ id: "bulk-middle", value: "first" }, { id: "bulk-middle", value: "duplicate" }];
+      const failureInputs = [{ id: "bulk-middle", value: "first" }, { id: "bulk-middle", value: "duplicate" }, { id: "bulk-later", value: "later" }];
       let error: unknown;
       try {
         await bulkDb.bulk(failureInputs, (input) => sql.command`INSERT INTO ${sql.ident(state.table)} (id, value, marker) VALUES (${input.id}, ${input.value}, ${1})`);
       } catch (caught) {
         error = caught;
       }
-      if (error === undefined) throw new Error("BULK003 did not reject its middle item.");
-      const observedRows = await direct.all(sql.rows<{ readonly id: string; readonly value: string }>`SELECT id, value FROM ${sql.ident(state.table)} WHERE id = 'bulk-middle' ORDER BY id`);
+      if ((error as { readonly code?: unknown } | undefined)?.code !== "23505") throw new Error("BULK003 did not report its native unique constraint violation.");
+      const observedRows = await direct.all(sql.rows<{ readonly id: string; readonly value: string }>`SELECT id, value FROM ${sql.ident(state.table)} WHERE id IN ('bulk-middle', 'bulk-later') ORDER BY id`);
       const expectedRows = [{ id: "bulk-middle", value: "first" }];
       if (JSON.stringify(observedRows) !== JSON.stringify(expectedRows)) throw new Error(`BULK003 expected one durable prefix row, got ${JSON.stringify(observedRows)}.`);
       await direct.one(sql.rows`SELECT 1 AS usable`);
