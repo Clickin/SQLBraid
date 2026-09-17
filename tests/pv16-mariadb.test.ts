@@ -3,6 +3,7 @@ import { test } from "vitest";
 import type {
   MariaDbConnectionLike,
   MariaDbFieldLike,
+  MariaDbQueryOptions,
   MariaDbStreamLike,
 } from "@sqlbraid/mariadb/mariadb";
 import type { RenderedBulk } from "@sqlbraid/core";
@@ -24,6 +25,10 @@ function connectionFor(result: unknown): MariaDbConnectionLike {
     commit: async () => undefined,
     rollback: async () => undefined,
   };
+}
+
+function queryText(request: string | MariaDbQueryOptions): string {
+  return typeof request === "string" ? request : request.sql;
 }
 
 test("MariaDB adapter uses metadata to distinguish row and command results", async () => {
@@ -70,7 +75,7 @@ test("MariaDB array rows preserve hostile labels and reject duplicate metadata",
     [{ name: "__proto__" }, { name: "__proto__" }],
   );
   await assert.rejects(
-    () => createMariaDbExecutor(connectionFor(duplicate)).query(sql.rows`SELECT 1`.render()),
+    async () => await createMariaDbExecutor(connectionFor(duplicate)).query(sql.rows`SELECT 1`.render()),
     /duplicate MariaDB result label __proto__/u,
   );
 });
@@ -118,7 +123,7 @@ test("MariaDB adapter rejects ordinary multi-result queries but exposes CALL set
   ];
   const executor = createMariaDbExecutor(connectionFor(sets));
   await assert.rejects(
-    async () => executor.query(sql.rows`CALL returns_sets()`.render()),
+    async () => await executor.query(sql.rows`CALL returns_sets()`.render()),
     /BRAID_RESULT_SETS_UNSUPPORTED/u,
   );
   assert.deepEqual(
@@ -300,7 +305,8 @@ test("MariaDB adapter rejects unsafe command counts and preserves exact IDs", as
 
 test("MariaDB inspector emits first-party metadata identities and rejects non-MariaDB servers", async () => {
   const connection: MariaDbConnectionLike = {
-    execute: async (text) => {
+    execute: async (request) => {
+      const text = queryText(request);
       if (text.includes("@@version AS version")) return [{ version: "11.4.2-MariaDB", product: "MariaDB Server", sqlMode: "", charset: "utf8mb4", collation: "utf8mb4_general_ci" }];
       if (text.includes("information_schema.schemata")) return [{ schema_name: "app" }];
       if (text.includes("information_schema.tables")) return [{ table_schema: "app", table_name: "users", table_type: "BASE TABLE" }];
@@ -332,7 +338,7 @@ test("MariaDB inspector emits first-party metadata identities and rejects non-Ma
   assert.equal(snapshot.routines.find_user?.[0]?.argumentsComplete, false);
   const wrongProduct = {
     ...connection,
-    execute: async (text: string) => text.includes("@@version AS version")
+    execute: async (request: string | MariaDbQueryOptions) => queryText(request).includes("@@version AS version")
       ? [{ version: "8.4.0", product: "MySQL Community" }]
       : [],
   };

@@ -66,7 +66,9 @@ const expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guarant
   "combination:serializable+readWrite": "guaranteed",
 };
 
-function connectorOptions(overrides: Partial<ConnectionConfig> = {}): ConnectionConfig {
+type MariaDbPoolConfig = Exclude<Parameters<typeof mariadb.createPool>[0], string>;
+
+function connectorOptions(overrides: Partial<MariaDbPoolConfig> = {}): MariaDbPoolConfig {
   const uri = new URL(process.env.SQLBRAID_MARIADB_URL ?? inject("mariadb").connectionUri);
   return {
     ...MARIADB_LOSSLESS_TEXT.connectionOptions,
@@ -91,7 +93,7 @@ function rowQueries(): CertificationFixture["queries"] {
   const many = sql.rows`SELECT '1' AS value UNION ALL SELECT '2' AS value`;
   const command = sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES ('command')`;
   const failure = sql.rows`SELECT * FROM braid_rc3_mariadb_missing`;
-  const identity = sql.rows`SELECT CONNECTION_ID() AS id`;
+  const identity = sql.rows<{ readonly id: string }>`SELECT CONNECTION_ID() AS id`;
   const transaction = {
     insert: sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES ('tx')`,
     visible: sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id`,
