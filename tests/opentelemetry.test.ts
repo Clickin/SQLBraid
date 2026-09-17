@@ -639,6 +639,96 @@ test("closes runtime prepared-stream telemetry exactly once on every terminal pa
   }
 });
 
+test("throwing stream end observers cannot leave prepared OTel spans open", async () => {
+  const binding = Object.freeze<StatementBindingAdapter>({
+    id: "otel-terminal-fanout",
+    describe(statement, context) {
+      return createStatementBindingDescription(statement, context, {
+        adapterId: "otel-terminal-fanout",
+        transport: "text-positional",
+        placeholder: (index) => `$${index}`,
+        reuse: { effective: "simple", owner: "sqlbraid" },
+      });
+    },
+  });
+  for (const path of ["completed", "driver", "iterator"] as const) {
+    const spanStart = recording.spans.length;
+    const measurementStart = recording.measurements.length;
+    const original = new Error(path);
+    const observerFailure = new Error("terminal observer failed");
+    const terminal: ExecutionEvent[] = [];
+    const db = createDatabase(
+      {
+        statementBinding: binding,
+        async query<Row>() {
+          return { kind: "rows", rows: [] as readonly Row[] };
+        },
+        stream<Row>(): AsyncIterable<Row> {
+          let yielded = false;
+          return {
+            [Symbol.asyncIterator]() {
+              return {
+                async next(): Promise<IteratorResult<Row>> {
+                  if (path === "driver") throw original;
+                  if (yielded) return { done: true, value: undefined };
+                  yielded = true;
+                  return { done: false, value: 1 as Row };
+                },
+                async return(): Promise<IteratorResult<Row>> {
+                  if (path === "iterator") throw original;
+                  return { done: true, value: undefined };
+                },
+              };
+            },
+          };
+        },
+        async call(): Promise<DriverRoutineResult> {
+          return { output: {}, resultSets: [] };
+        },
+      },
+      {
+        observers: [
+          {
+            onEvent(event) {
+              if (event.type === "stream:end") throw observerFailure;
+            },
+          },
+          {
+            onEvent(event) {
+              if (event.type === "stream:end") terminal.push(event);
+            },
+          },
+          createOpenTelemetryObserver(),
+        ],
+      },
+    );
+    const prepared = db.prepare("otel-terminal-fanout", () => sql.rows`SELECT 1`, { input: "none" });
+    await assert.rejects(
+      async () => {
+        for await (const row of prepared.stream()) {
+          void row;
+          if (path === "iterator") break;
+        }
+      },
+      (error) => {
+        if (path === "completed") return error === observerFailure;
+        assert.ok(error instanceof AggregateError);
+        assert.equal(error.cause, original);
+        assert.deepEqual(error.errors, [original, observerFailure]);
+        return true;
+      },
+    );
+    assert.equal(terminal.length, 1);
+    assert.equal(recording.spans.length, spanStart + 1);
+    assert.equal(recording.spans[spanStart]?.endCount, 1);
+    assert.deepEqual(
+      recording.spans[spanStart]?.statuses,
+      path === "completed" ? [] : [{ code: SpanStatusCode.ERROR }],
+    );
+    assert.equal(recording.measurements.length, measurementStart + 1);
+  }
+});
+
 test("tracks real runtime routine calls, cardinality errors, and every batch item", async () => {
   const observer = createOpenTelemetryObserver();
   const executor: QueryExecutor = {

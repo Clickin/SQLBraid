@@ -679,6 +679,156 @@ test("early stream return propagates lease cleanup and end observer failures", a
   }
 });
 
+test("stream start observers remain fail-fast before acquisition", async () => {
+  for (const prepared of [false, true]) {
+    const failure = new Error("stream audit unavailable");
+    const events: ExecutionEvent[] = [];
+    let acquisitions = 0;
+    const db = createPooledDatabase(
+      {
+        statementBinding,
+        async acquire() {
+          acquisitions += 1;
+          return { ...executor(), release() {} };
+        },
+      },
+      {
+        observers: [
+          {
+            onEvent(event) {
+              if (event.type === "stream:start") throw failure;
+            },
+          },
+          {
+            onEvent(event) {
+              events.push(event);
+            },
+          },
+        ],
+      },
+    );
+    const stream = prepared
+      ? db.prepare("stream-audit", () => sql.rows`SELECT 1`, { input: "none" }).stream()
+      : db.stream(sql.rows`SELECT 1`);
+    await assert.rejects(
+      async () => {
+        for await (const row of stream) void row;
+      },
+      (error) => error === failure,
+    );
+    assert.equal(acquisitions, 0);
+    assert.equal(events.some((event) => event.type === "stream:start"), false);
+    const error = events.find((event) => event.type === "query:error");
+    assert.ok(error?.type === "query:error");
+    assert.equal(error.stage, "observer-before");
+    assert.equal(error.error, failure);
+  }
+});
+
+test("stream end reaches every observer once and preserves ordered failures", async () => {
+  for (const prepared of [false, true]) {
+    for (const path of ["completed", "driver", "iterator", "release"] as const) {
+      const original = new Error(path);
+      const first = new Error("first terminal observer");
+      const last = new Error("last terminal observer");
+      const order: string[] = [];
+      const terminal: ExecutionEvent[] = [];
+      const active = new Set<string>();
+      let released = 0;
+      const db = createPooledDatabase(
+        {
+          statementBinding,
+          async acquire() {
+            return {
+              ...executor(),
+              stream<Row>(): AsyncIterable<Row> {
+                let yielded = false;
+                return {
+                  [Symbol.asyncIterator]() {
+                    return {
+                      async next(): Promise<IteratorResult<Row>> {
+                        if (path === "driver") throw original;
+                        if (yielded) return { done: true, value: undefined };
+                        yielded = true;
+                        return { done: false, value: 1 as Row };
+                      },
+                      async return(): Promise<IteratorResult<Row>> {
+                        if (path === "iterator") throw original;
+                        return { done: true, value: undefined };
+                      },
+                    };
+                  },
+                };
+              },
+              release() {
+                released += 1;
+                if (path === "release") throw original;
+              },
+            };
+          },
+        },
+        {
+          observers: [
+            {
+              async onEvent(event) {
+                if (event.type !== "stream:end") return;
+                order.push("first");
+                await Promise.resolve();
+                throw first;
+              },
+            },
+            {
+              onEvent(event) {
+                if (event.type !== "stream:end") return;
+                order.push("recording");
+                terminal.push(event);
+              },
+            },
+            {
+              onEvent(event) {
+                if (event.type === "stream:start") active.add(event.operationId);
+                if (event.type !== "stream:end") return;
+                order.push("stateful");
+                assert.equal(active.delete(event.operationId), true);
+              },
+            },
+            {
+              onEvent(event) {
+                if (event.type !== "stream:end") return;
+                order.push("last");
+                throw last;
+              },
+            },
+          ],
+        },
+      );
+      const stream = prepared
+        ? db.prepare("terminal-fanout", () => sql.rows`SELECT 1`, { input: "none" }).stream()
+        : db.stream(sql.rows`SELECT 1`);
+      await assert.rejects(
+        async () => {
+          for await (const row of stream) void row;
+        },
+        (error) => {
+          assert.ok(error instanceof AggregateError);
+          assert.deepEqual(error.errors, path === "completed" ? [first, last] : [original, first, last]);
+          assert.equal(error.cause, path === "completed" ? first : original);
+          return true;
+        },
+      );
+      assert.deepEqual(order, ["first", "recording", "stateful", "last"]);
+      assert.equal(active.size, 0);
+      assert.equal(released, 1);
+      assert.equal(terminal.length, 1);
+      const end = terminal[0];
+      assert.ok(end?.type === "stream:end");
+      assert.equal(Object.isFrozen(end), true);
+      assert.equal(end.status, path === "completed" ? "completed" : "error");
+      assert.equal(end.error, path === "completed" ? undefined : original);
+    }
+  }
+});
+
 test("prepared streams defer the factory and preparation until consumption", async () => {
   let factoryCalls = 0;
   let streamCalls = 0;

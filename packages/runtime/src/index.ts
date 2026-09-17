@@ -1089,7 +1089,7 @@ async function notify(observers: readonly ExecutionObserver[], event: ExecutionE
   for (const observer of observers) await observer.onEvent(immutable);
 }
 
-async function notifyErrorObservers(
+async function notifyTerminalObservers(
   observers: readonly ExecutionObserver[],
   event: ExecutionEvent,
 ): Promise<unknown[]> {
@@ -1111,7 +1111,7 @@ async function notifyError(
   event: ExecutionEvent,
   original: unknown,
 ): Promise<never> {
-  const failures = await notifyErrorObservers(observers, event);
+  const failures = await notifyTerminalObservers(observers, event);
   if (failures.length === 0) throw original;
   throw new AggregateError([original, ...failures], "Execution failed and error observers also failed.", {
     cause: original,
@@ -2761,7 +2761,7 @@ function createScopedDatabase(
       ): Promise<unknown[]> => {
         if (entry.terminal) return [];
         entry.terminal = true;
-        return notifyErrorObservers(
+        return notifyTerminalObservers(
           options.observers ?? [],
           errorEvent(entry.operation, error, stage, executionStarted, executionCompleted, durationMs),
         );
@@ -3264,12 +3264,16 @@ function createScopedDatabase(
             transactionDepth: options.depth,
             transactionScoped: options.transaction,
           };
-          try {
-            await notify(options.observers ?? [], endEvent);
-          } catch (error) {
+          // Terminal delivery must close every observer's state, even when an earlier observer fails.
+          const observerFailures = await notifyTerminalObservers(options.observers ?? [], endEvent);
+          if (observerFailures.length > 0) {
             streamError = streamFailed
-              ? new AggregateError([streamError, error], "Stream and observer failed.", { cause: streamError })
-              : error;
+              ? new AggregateError([streamError, ...observerFailures], "Stream and observers failed.", {
+                  cause: streamError,
+                })
+              : observerFailures.length === 1
+                ? observerFailures[0]
+                : new AggregateError(observerFailures, "Stream end observers failed.", { cause: observerFailures[0] });
             streamFailed = true;
           }
           if (streamFailed) throw streamError;
