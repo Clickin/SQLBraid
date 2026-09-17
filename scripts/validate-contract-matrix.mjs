@@ -67,7 +67,7 @@ export function validateMatrix({ catalog, matrix, targets, profiles, registry, c
     requireThat(["transaction-outcome", "transaction-savepoint", "transaction-options", "pool-ownership",
       "resource-lifecycle", "cancellation", "command-metadata"].includes(scenario.family), `${scenario.id}: unknown family`);
     requireThat(typeof scenario.description === "string" && scenario.description.length > 0, `${scenario.id}: missing description`);
-    requireThat(["transaction", "pooled", "any"].includes(scenario.ownership), `${scenario.id}: invalid ownership`);
+    requireThat(["each", "pooled", "any"].includes(scenario.ownership), `${scenario.id}: invalid ownership`);
     requireThat(Array.isArray(scenario.evidence) && scenario.evidence.length > 0 &&
       new Set(scenario.evidence).size === scenario.evidence.length && scenario.evidence.every((layer) => layers.includes(layer)),
     `${scenario.id}: invalid evidence layer`);
@@ -146,7 +146,7 @@ export function validateMatrix({ catalog, matrix, targets, profiles, registry, c
       }
       requireThat(Object.keys(mapping).length === 1 && equal(mapping.evidence, scenario.evidence),
         `${transport}:${scenario.id}: required evidence omitted, wrong layer or contradictory N/A`);
-      const owners = scenario.ownership === "transaction" ? entry.ownership : scenario.ownership === "pooled" ? ["pooled"] : ["any"];
+      const owners = scenario.ownership === "each" ? entry.ownership : scenario.ownership === "pooled" ? ["pooled"] : ["any"];
       for (const layer of scenario.evidence) {
         for (const ownership of owners) {
           cells.push({ transport, scenario: scenario.id, layer, ownership, target: target.id,
@@ -214,6 +214,12 @@ export function reportEvidence(report, manifest, model, sourceSha) {
       const matches = [...assertion.title.matchAll(markerPattern)];
       requireThat(matches.length > 0 && assertion.title.startsWith(matches[0][0]) &&
         matches.length === assertion.title.split("[contract:").length - 1, `malformed contract prefix: ${assertion.title}`);
+      let prefixEnd = 0;
+      for (const match of matches) {
+        requireThat(assertion.title.slice(prefixEnd, match.index).trim() === "",
+          `contract tags must be leading prefixes: ${assertion.title}`);
+        prefixEnd = match.index + match[0].length;
+      }
       requireThat(assertion.status === "passed" && (assertion.failureMessages?.length ?? 0) === 0,
         `contract assertion did not pass: ${assertion.title}`);
       const owners = [...assertion.title.matchAll(ownershipPattern)].map((match) => match[1]);
