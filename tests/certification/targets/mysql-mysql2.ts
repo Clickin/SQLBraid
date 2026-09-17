@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import assert from "node:assert/strict";
 import { createConnection, createPool, type Connection } from "mysql2/promise";
-import type { CallQuery, ConnectionProvider, Database, RowQuery, StreamOptions } from "@sqlbraid/core";
+import type { CallQuery, ConnectionProvider, Database, RowQuery, StreamOptions, TransactionOptions } from "@sqlbraid/core";
 import {
   createMysql2Database,
   createMysql2PoolProvider,
@@ -94,6 +94,24 @@ function containsError(error: unknown, expected: unknown): boolean {
   if (error instanceof AggregateError && error.errors.some((nested) => containsError(nested, expected))) return true;
   if (error instanceof Error && "cause" in error) return containsError(error.cause, expected);
   return false;
+}
+
+function nativeErrorHas(error: unknown, key: "code" | "errno", expected: string | number): boolean {
+  if (error !== null && typeof error === "object") {
+    if ((error as Record<string, unknown>)[key] === expected) return true;
+    if (error instanceof AggregateError && error.errors.some((nested) => nativeErrorHas(nested, key, expected)))
+      return true;
+    if ("cause" in error && nativeErrorHas(error.cause, key, expected)) return true;
+  }
+  return false;
+}
+
+function nativeLockTimeout(error: unknown): boolean {
+  return nativeErrorHas(error, "errno", 1205);
+}
+
+function nativeReadOnlyRejection(error: unknown): boolean {
+  return nativeErrorHas(error, "errno", 1792) || nativeErrorHas(error, "errno", 1223);
 }
 
 function instrumentMysqlConnection(
@@ -285,6 +303,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     },
   ) as MysqlConnection;
   const measuredDatabase = await measureMysqlDatabase(direct);
+  await direct.query("SET SESSION innodb_lock_wait_timeout = 1");
   const physicalIds = new Set<string>();
   let streamReleases = 0;
   const streamReturns = { value: 0 };
@@ -296,6 +315,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     ...pool,
     async getConnection(): Promise<Mysql2PoolConnectionLike> {
       const connection = await pool.getConnection();
+      await connection.query?.("SET SESSION innodb_lock_wait_timeout = 1");
       if (streamAcquirePending) {
         streamAcquirePending = false;
         lastStreamPhysicalId = Number((connection as unknown as { readonly threadId?: number }).threadId);
@@ -596,6 +616,221 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       return { error: transactionFailure, observedRows, expectedRows, durability: "atomic" as const };
     },
   };
+  const transactionOption = async (optionDb: Database, transactionOptions: TransactionOptions): Promise<void> => {
+    const resetOptionState = async (): Promise<void> => {
+      await pool.query(`UPDATE ${tableSql(table)} SET value = 0 WHERE id = 1`);
+    };
+    const readOptionState = async (tx: Database): Promise<string> => {
+      const row = (await tx.one(
+        sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`,
+      )) as { readonly value?: unknown };
+      return String(row.value);
+    };
+    const writeOptionState = sql.command`UPDATE ${sql.ident(table)} SET value = 7 WHERE id = 1`;
+    const dirtyOptionState = sql.command`UPDATE ${sql.ident(table)} SET value = 1 WHERE id = 1`;
+    const openWitness = async (): Promise<{ readonly connection: Connection; readonly db: Database }> => {
+      const connection = await createConnection(connectionOptions(connectionUri));
+      try {
+        await connection.query("SET SESSION innodb_lock_wait_timeout = 1");
+      } catch (error) {
+        await connection.end();
+        throw error;
+      }
+      return {
+        connection,
+        db: createMysql2Database(connection as unknown as Mysql2ConnectionLike, { profile: MYSQL2_LOSSLESS_TEXT }),
+      };
+    };
+    const runProof = async (proof: () => Promise<void>): Promise<void> => {
+      await resetOptionState();
+      let primaryError: unknown;
+      try {
+        await proof();
+      } catch (error) {
+        primaryError = error;
+      }
+      let cleanupError: unknown;
+      try {
+        await resetOptionState();
+      } catch (error) {
+        cleanupError = error;
+      }
+      if (primaryError !== undefined && cleanupError !== undefined) throw new AggregateError([primaryError, cleanupError]);
+      if (primaryError !== undefined) throw primaryError;
+      if (cleanupError !== undefined) throw cleanupError;
+    };
+    if (transactionOptions.readOnly !== undefined) {
+      await runProof(async () => {
+        if (transactionOptions.readOnly === false) {
+          await optionDb.tx(transactionOptions, async (tx) => {
+            await tx.execute(writeOptionState);
+          });
+          assert.equal(await readOptionState(directDb), "7");
+          return;
+        }
+        let caught: unknown;
+        try {
+          await optionDb.tx(transactionOptions, async (tx) => {
+            await tx.execute(writeOptionState);
+          });
+        } catch (error) {
+          caught = error;
+        }
+        if (!nativeReadOnlyRejection(caught))
+          throw new Error("mysql2 read-only transaction did not reject the write with the native error.", {
+            cause: caught,
+          });
+        assert.equal(await readOptionState(directDb), "0");
+      });
+    }
+    if (transactionOptions.isolation === "read-uncommitted") {
+      await runProof(async () => {
+        const witness = await openWitness();
+        const ready = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let observed: string | undefined;
+        let primaryError: unknown;
+        let writerError: unknown;
+        const writer = witness.db.tx(async (tx) => {
+          try {
+            await tx.execute(dirtyOptionState);
+            ready.resolve();
+          } catch (error) {
+            ready.reject(error);
+            throw error;
+          }
+          await release.promise;
+        });
+        try {
+          await ready.promise;
+          observed = await optionDb.tx(transactionOptions, (tx) => readOptionState(tx));
+        } catch (error) {
+          primaryError = error;
+        } finally {
+          release.resolve();
+        }
+        try {
+          await writer;
+        } catch (error) {
+          writerError = error;
+        }
+        try {
+          await witness.connection.end();
+        } catch (error) {
+          if (primaryError === undefined && writerError === undefined) primaryError = error;
+          else writerError ??= error;
+        }
+        if (primaryError !== undefined) throw primaryError;
+        if (writerError !== undefined) throw writerError;
+        assert.equal(observed, "1", "mysql2 read-uncommitted did not observe the dirty write.");
+      });
+    } else if (transactionOptions.isolation === "read-committed" || transactionOptions.isolation === "repeatable-read") {
+      await runProof(async () => {
+        const witness = await openWitness();
+        const ready = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let before: string | undefined;
+        let after: string | undefined;
+        let primaryError: unknown;
+        let readerError: unknown;
+        let writerError: unknown;
+        const reader = optionDb.tx(transactionOptions, async (tx) => {
+          try {
+            before = await readOptionState(tx);
+            ready.resolve();
+            await release.promise;
+            after = await readOptionState(tx);
+          } catch (error) {
+            ready.reject(error);
+            throw error;
+          }
+        });
+        reader.catch((error) => ready.reject(error));
+        try {
+          await ready.promise;
+          await witness.db.tx(async (tx) => {
+            await tx.execute(dirtyOptionState);
+          });
+        } catch (error) {
+          primaryError = error;
+          release.resolve();
+        } finally {
+          release.resolve();
+        }
+        try {
+          await reader;
+        } catch (error) {
+          readerError = error;
+        }
+        try {
+          await witness.connection.end();
+        } catch (error) {
+          if (primaryError === undefined && readerError === undefined) primaryError = error;
+          else writerError ??= error;
+        }
+        if (primaryError !== undefined) throw primaryError;
+        if (readerError !== undefined) throw readerError;
+        if (writerError !== undefined) throw writerError;
+        assert.equal(before, "0", "mysql2 isolation proof did not start from the reset state.");
+        assert.equal(
+          after,
+          transactionOptions.isolation === "read-committed" ? "1" : "0",
+          `mysql2 ${transactionOptions.isolation} did not enforce its snapshot semantics.`,
+        );
+      });
+    } else if (transactionOptions.isolation === "serializable") {
+      await runProof(async () => {
+        const witness = await openWitness();
+        const ready = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let primaryError: unknown;
+        let readerError: unknown;
+        let writerError: unknown;
+        const reader = optionDb.tx(transactionOptions, async (tx) => {
+          try {
+            await readOptionState(tx);
+            ready.resolve();
+            await release.promise;
+          } catch (error) {
+            ready.reject(error);
+            throw error;
+          }
+        });
+        reader.catch((error) => ready.reject(error));
+        try {
+          await ready.promise;
+          try {
+            await witness.db.tx(async (tx) => {
+              await tx.execute(dirtyOptionState);
+            });
+          } catch (error) {
+            writerError = error;
+          }
+        } catch (error) {
+          primaryError = error;
+        } finally {
+          release.resolve();
+        }
+        try {
+          await reader;
+        } catch (error) {
+          readerError = error;
+        }
+        try {
+          await witness.connection.end();
+        } catch (error) {
+          if (primaryError === undefined && readerError === undefined && writerError === undefined) primaryError = error;
+          else writerError ??= error;
+        }
+        if (primaryError !== undefined) throw primaryError;
+        if (readerError !== undefined) throw readerError;
+        if (!nativeLockTimeout(writerError))
+          throw new Error("mysql2 serializable transaction did not enforce a native lock conflict.", {
+            cause: writerError,
+          });
+      });
+    }
+  };
   const metrics = {
     snapshot: (): ResourceSnapshot => ({ borrowedLeases: borrowed.value, cleanupBalance: borrowed.value }),
     sideEffects: () => acquired.value + nativeExecutes.value,
@@ -650,6 +885,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       assert.equal(borrowed.value, 0);
       await db.one(identity);
     },
+    transactionOption,
     readOnlyWrite: async (): Promise<void> => {
       await pool.query(`UPDATE ${tableSql(table)} SET value = 0 WHERE id = 1`);
       await db.tx({ readOnly: false }, async (tx) => {

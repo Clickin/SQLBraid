@@ -10,7 +10,15 @@ import {
   type MariaDbPoolConnectionLike,
 } from "@sqlbraid/mariadb/mariadb";
 import { createPooledDatabase } from "@sqlbraid/runtime";
-import type { CallQuery, CommandQuery, ConnectionProvider, Database, RowQuery, StandardSchemaV1 } from "@sqlbraid/core";
+import type {
+  CallQuery,
+  CommandQuery,
+  ConnectionProvider,
+  Database,
+  RowQuery,
+  StandardSchemaV1,
+  TransactionOptions,
+} from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
 import type { CertificationFixture, CertificationTarget, ResourceSnapshot } from "../types.js";
@@ -188,6 +196,24 @@ function containsError(error: unknown, expected: unknown): boolean {
   return false;
 }
 
+function nativeErrorHas(error: unknown, key: "code" | "errno", expected: string | number): boolean {
+  if (error !== null && typeof error === "object") {
+    if ((error as Record<string, unknown>)[key] === expected) return true;
+    if (error instanceof AggregateError && error.errors.some((nested) => nativeErrorHas(nested, key, expected)))
+      return true;
+    if ("cause" in error && nativeErrorHas(error.cause, key, expected)) return true;
+  }
+  return false;
+}
+
+function nativeLockTimeout(error: unknown): boolean {
+  return nativeErrorHas(error, "errno", 1205);
+}
+
+function nativeReadOnlyRejection(error: unknown): boolean {
+  return nativeErrorHas(error, "errno", 1792) || nativeErrorHas(error, "errno", 1223);
+}
+
 function instrumentMariaDbConnection(
   connection: MariaDbConnectionLike,
   onExecute: () => void,
@@ -319,6 +345,10 @@ function faultMariaConnection(
 }
 async function createFixture(): Promise<CertificationFixture> {
   const nativeConnection = (await mariadb.createConnection(connectorOptions())) as unknown as MariaDbConnectionLike;
+  await (nativeConnection.query ?? nativeConnection.execute).call(
+    nativeConnection,
+    "SET SESSION innodb_lock_wait_timeout = 1",
+  );
   const pool: Pool = mariadb.createPool(connectorOptions());
   let acquisitions = 0;
   let bulkExecutions = 0;
@@ -341,6 +371,10 @@ async function createFixture(): Promise<CertificationFixture> {
     getConnection: async () => {
       acquisitions += 1;
       const pooledConnection = (await pool.getConnection()) as unknown as MariaDbPoolConnectionLike;
+      await (pooledConnection.query ?? pooledConnection.execute).call(
+        pooledConnection,
+        "SET SESSION innodb_lock_wait_timeout = 1",
+      );
       const physicalId = (pooledConnection as unknown as { readonly threadId?: number }).threadId;
       if (physicalId !== undefined) physicalIds.add(String(physicalId));
       return instrumentMariaDbConnection(
@@ -501,6 +535,222 @@ async function createFixture(): Promise<CertificationFixture> {
       return { error: transactionError, observedRows, expectedRows, durability: "atomic" as const };
     },
   };
+  const transactionOption = async (optionDb: Database, transactionOptions: TransactionOptions): Promise<void> => {
+    const resetOptionState = async (): Promise<void> => {
+      await pool.query(`DELETE FROM ${TABLE}`);
+      await pool.query(`INSERT INTO ${TABLE} (value) VALUES ('baseline')`);
+    };
+    const readOptionState = async (tx: Database): Promise<string> => {
+      const row = (await tx.one(
+        sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id LIMIT 1`,
+      )) as { readonly value?: unknown };
+      return String(row.value);
+    };
+    const writeOptionState = sql.command`UPDATE ${sql.ident(TABLE)} SET value = 'written' ORDER BY id LIMIT 1`;
+    const dirtyOptionState = sql.command`UPDATE ${sql.ident(TABLE)} SET value = 'dirty' ORDER BY id LIMIT 1`;
+    const openWitness = async (): Promise<{ readonly connection: MariaDbConnectionLike; readonly db: Database }> => {
+      const connection = (await mariadb.createConnection(connectorOptions())) as unknown as MariaDbConnectionLike;
+      try {
+        await (connection.query ?? connection.execute).call(connection, "SET SESSION innodb_lock_wait_timeout = 1");
+      } catch (error) {
+        await connection.end?.();
+        throw error;
+      }
+      return {
+        connection,
+        db: createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT }),
+      };
+    };
+    const runProof = async (proof: () => Promise<void>): Promise<void> => {
+      await resetOptionState();
+      let primaryError: unknown;
+      try {
+        await proof();
+      } catch (error) {
+        primaryError = error;
+      }
+      let cleanupError: unknown;
+      try {
+        await resetOptionState();
+      } catch (error) {
+        cleanupError = error;
+      }
+      if (primaryError !== undefined && cleanupError !== undefined) throw new AggregateError([primaryError, cleanupError]);
+      if (primaryError !== undefined) throw primaryError;
+      if (cleanupError !== undefined) throw cleanupError;
+    };
+    if (transactionOptions.readOnly !== undefined) {
+      await runProof(async () => {
+        if (transactionOptions.readOnly === false) {
+          await optionDb.tx(transactionOptions, async (tx) => {
+            await tx.execute(writeOptionState);
+          });
+          assert.equal(await readOptionState(db), "written");
+          return;
+        }
+        let caught: unknown;
+        try {
+          await optionDb.tx(transactionOptions, async (tx) => {
+            await tx.execute(writeOptionState);
+          });
+        } catch (error) {
+          caught = error;
+        }
+        if (!nativeReadOnlyRejection(caught))
+          throw new Error("MariaDB read-only transaction did not reject the write with the native error.", {
+            cause: caught,
+          });
+        assert.equal(await readOptionState(db), "baseline");
+      });
+    }
+    if (transactionOptions.isolation === "read-uncommitted") {
+      await runProof(async () => {
+        const witness = await openWitness();
+        const ready = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let observed: string | undefined;
+        let primaryError: unknown;
+        let writerError: unknown;
+        const writer = witness.db.tx(async (tx) => {
+          try {
+            await tx.execute(dirtyOptionState);
+            ready.resolve();
+          } catch (error) {
+            ready.reject(error);
+            throw error;
+          }
+          await release.promise;
+        });
+        try {
+          await ready.promise;
+          observed = await optionDb.tx(transactionOptions, (tx) => readOptionState(tx));
+        } catch (error) {
+          primaryError = error;
+        } finally {
+          release.resolve();
+        }
+        try {
+          await writer;
+        } catch (error) {
+          writerError = error;
+        }
+        try {
+          await witness.connection.end?.();
+        } catch (error) {
+          if (primaryError === undefined && writerError === undefined) primaryError = error;
+          else writerError ??= error;
+        }
+        if (primaryError !== undefined) throw primaryError;
+        if (writerError !== undefined) throw writerError;
+        assert.equal(observed, "dirty", "MariaDB read-uncommitted did not observe the dirty write.");
+      });
+    } else if (transactionOptions.isolation === "read-committed" || transactionOptions.isolation === "repeatable-read") {
+      await runProof(async () => {
+        const witness = await openWitness();
+        const ready = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let before: string | undefined;
+        let after: string | undefined;
+        let primaryError: unknown;
+        let readerError: unknown;
+        let writerError: unknown;
+        const reader = optionDb.tx(transactionOptions, async (tx) => {
+          try {
+            before = await readOptionState(tx);
+            ready.resolve();
+            await release.promise;
+            after = await readOptionState(tx);
+          } catch (error) {
+            ready.reject(error);
+            throw error;
+          }
+        });
+        reader.catch((error) => ready.reject(error));
+        try {
+          await ready.promise;
+          await witness.db.tx(async (tx) => {
+            await tx.execute(dirtyOptionState);
+          });
+        } catch (error) {
+          primaryError = error;
+          release.resolve();
+        } finally {
+          release.resolve();
+        }
+        try {
+          await reader;
+        } catch (error) {
+          readerError = error;
+        }
+        try {
+          await witness.connection.end?.();
+        } catch (error) {
+          if (primaryError === undefined && readerError === undefined) primaryError = error;
+          else writerError ??= error;
+        }
+        if (primaryError !== undefined) throw primaryError;
+        if (readerError !== undefined) throw readerError;
+        if (writerError !== undefined) throw writerError;
+        assert.equal(before, "baseline", "MariaDB isolation proof did not start from the reset state.");
+        assert.equal(
+          after,
+          transactionOptions.isolation === "read-committed" ? "dirty" : "baseline",
+          `MariaDB ${transactionOptions.isolation} did not enforce its snapshot semantics.`,
+        );
+      });
+    } else if (transactionOptions.isolation === "serializable") {
+      await runProof(async () => {
+        const witness = await openWitness();
+        const ready = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        let primaryError: unknown;
+        let readerError: unknown;
+        let writerError: unknown;
+        const reader = optionDb.tx(transactionOptions, async (tx) => {
+          try {
+            await readOptionState(tx);
+            ready.resolve();
+            await release.promise;
+          } catch (error) {
+            ready.reject(error);
+            throw error;
+          }
+        });
+        reader.catch((error) => ready.reject(error));
+        try {
+          await ready.promise;
+          try {
+            await witness.db.tx(async (tx) => {
+              await tx.execute(dirtyOptionState);
+            });
+          } catch (error) {
+            writerError = error;
+          }
+        } catch (error) {
+          primaryError = error;
+        } finally {
+          release.resolve();
+        }
+        try {
+          await reader;
+        } catch (error) {
+          readerError = error;
+        }
+        try {
+          await witness.connection.end?.();
+        } catch (error) {
+          if (primaryError === undefined && readerError === undefined && writerError === undefined) primaryError = error;
+          else writerError ??= error;
+        }
+        if (primaryError !== undefined) throw primaryError;
+        if (readerError !== undefined) throw readerError;
+        if (!nativeLockTimeout(writerError))
+          throw new Error("MariaDB serializable transaction did not enforce a native lock conflict.", {
+            cause: writerError,
+          });
+      });
+    }
+  };
   const snapshot = (): ResourceSnapshot => {
     const active = pool.activeConnections();
     return { borrowedLeases: active, cleanupBalance: active };
@@ -561,6 +811,7 @@ async function createFixture(): Promise<CertificationFixture> {
       assert.equal(pool.activeConnections(), 0);
       await pooled.one(queries.identity);
     },
+    transactionOption,
     readOnlyWrite: async (): Promise<void> => {
       await pool.query(`DELETE FROM ${TABLE}`);
       await db.tx({ readOnly: false }, async (tx) => {
