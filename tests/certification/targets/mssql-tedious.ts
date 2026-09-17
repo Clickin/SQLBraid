@@ -411,10 +411,14 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
         } catch (caught) {
           error = caught;
         } finally {
-          assert.equal(stats.leased, false);
+          const observedLeased = stats.leased;
           stats.rollbackFailure = undefined;
           stats.releaseFailure = undefined;
-          await close(faultRaw);
+          try {
+            assert.equal(observedLeased, false);
+          } finally {
+            await close(faultRaw);
+          }
         }
         assert.ok(error instanceof AggregateError);
         const nested = (value: unknown): readonly unknown[] => value instanceof AggregateError

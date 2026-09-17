@@ -1,6 +1,6 @@
 import oracledb from "oracledb";
 import assert from "node:assert/strict";
-import { createOracledbDatabase, createOracledbPoolProvider, type OracleConnectionLike, type OracleExecuteResultLike, type OraclePoolLike, type OracleResultSetLike } from "@sqlbraid/oracle/oracledb";
+import { createOracledbDatabase, createOracledbPoolProvider, type OracleConnectionLike, type OracleExecuteResultLike, type OraclePoolConnectionLike, type OraclePoolLike, type OracleResultSetLike } from "@sqlbraid/oracle/oracledb";
 import { oracleParameter, sql } from "@sqlbraid/oracle";
 import { createPooledDatabase } from "@sqlbraid/runtime";
 import type { CallQuery, CommandQuery, Database, RowQuery } from "@sqlbraid/core";
@@ -239,16 +239,10 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       let sideEffects = 0;
       let executeStarts = 0;
       let routineLobCloses = 0;
-      const instrumentedConnections = new WeakSet<object>();
-      const nativePoolMethods = new WeakMap<object, {
-        readonly rollback: () => Promise<void>;
-        readonly close?: (options?: { readonly drop?: boolean }) => Promise<void>;
-      }>();
-      const instrumentStreamConnection = (candidate: OracleConnectionLike, countSideEffects: boolean): void => {
-        if (instrumentedConnections.has(candidate)) return;
-        instrumentedConnections.add(candidate);
+      const instrumentStreamConnection = (candidate: OracleConnectionLike, countSideEffects: boolean): OracleConnectionLike => {
         const execute = candidate.execute.bind(candidate);
-        candidate.execute = async (text: string, binds?: unknown, executeOptions?: unknown): Promise<unknown> => {
+        const instrumented: OracleConnectionLike = {
+          execute: async (text: string, binds?: unknown, executeOptions?: unknown): Promise<unknown> => {
           if (text.includes("CERT_INIT_FAILURE")) throw faults.initFailure;
           if (countSideEffects) sideEffects += 1;
           if (countSideEffects) executeStarts += 1;
@@ -299,65 +293,69 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
             if (text.includes("CERT_CLEANUP_FAILURE")) throw faults.cleanupFailure;
           };
           return { ...result, resultSet: wrapped };
+          },
+          ...(candidate.executeMany === undefined ? {} : { executeMany: candidate.executeMany.bind(candidate) }),
+          commit: candidate.commit.bind(candidate),
+          rollback: candidate.rollback.bind(candidate),
+          ...(candidate.stmtCacheSize === undefined ? {} : { stmtCacheSize: candidate.stmtCacheSize }),
+          ...(candidate.break === undefined ? {} : { break: candidate.break.bind(candidate) }),
+          ...(candidate.close === undefined ? {} : { close: candidate.close.bind(candidate) }),
         };
+        return instrumented;
       };
-      instrumentStreamConnection(connection, true);
+      const directConnection = instrumentStreamConnection(connection, true);
       let nativeBulkCalls = 0;
-      const nativeExecuteMany = connection.executeMany?.bind(connection);
+      const nativeExecuteMany = directConnection.executeMany?.bind(directConnection);
       if (nativeExecuteMany) {
-        connection.executeMany = async (statement: string, binds: unknown, executeOptions?: unknown): Promise<unknown> => {
+        directConnection.executeMany = async (statement: string, binds: unknown, executeOptions?: unknown): Promise<unknown> => {
           nativeBulkCalls += 1;
           return nativeExecuteMany(statement, binds, executeOptions);
         };
       }
-      const direct = createOracledbDatabase(connection, { streamFetchSize: 2 });
+      const direct = createOracledbDatabase(directConnection, { streamFetchSize: 2 });
       const nativePool = pool as unknown as { readonly connectionsInUse?: number; readonly connectionsOpen?: number };
       const pooledConnections = (): number => nativePool.connectionsInUse ?? 0;
       let rollbackFailure: Error | undefined;
       let releaseFailure: Error | undefined;
       let forceFaultConnectionCleanup: (() => Promise<void>) | undefined;
-      const poolWithFaults = pool as unknown as {
-        getConnection(): Promise<OracleConnectionLike>;
-      };
-      const nativeGetConnection = poolWithFaults.getConnection.bind(poolWithFaults);
-      poolWithFaults.getConnection = async (): Promise<OracleConnectionLike> => {
-        const leased = await nativeGetConnection();
-        instrumentStreamConnection(leased, false);
-        let nativeMethods = nativePoolMethods.get(leased);
-        if (nativeMethods === undefined) {
-          nativeMethods = {
-            rollback: leased.rollback.bind(leased),
-            close: leased.close?.bind(leased),
+      const nativePoolGetConnection = pool.getConnection.bind(pool);
+      const poolWithFaults: OraclePoolLike = {
+        ...(pool.stmtCacheSize === undefined ? {} : { stmtCacheSize: pool.stmtCacheSize }),
+        async getConnection(): Promise<OraclePoolConnectionLike> {
+          const nativeConnection = await nativePoolGetConnection();
+          const instrumentedConnection = instrumentStreamConnection(nativeConnection, false);
+          const nativeRollback = nativeConnection.rollback.bind(nativeConnection);
+          const nativeClose = nativeConnection.close.bind(nativeConnection);
+          forceFaultConnectionCleanup = async () => {
+            try {
+              await nativeRollback();
+            } catch {
+              // The fault path intentionally rejects rollback; close still releases the lease.
+            }
+            try {
+              await nativeClose();
+            } catch {
+              // The fault path may reject release after native close has completed.
+            }
           };
-          nativePoolMethods.set(leased, nativeMethods);
-        }
-        forceFaultConnectionCleanup = async () => {
-          try {
-            await nativeMethods!.rollback();
-          } catch {
-            // The fault path intentionally rejects rollback; close still releases the lease.
-          }
-          try {
-            await nativeMethods!.close?.();
-          } catch {
-            // The fault path may reject release after native close has completed.
-          }
-        };
-        leased.rollback = async () => {
-          if (rollbackFailure) throw rollbackFailure;
-          await nativeMethods!.rollback();
-        };
-        leased.close = async (closeOptions) => {
-          streamCounters.released += 1;
-          if (releaseFailure) {
-            await nativeMethods!.close?.(closeOptions);
-            throw releaseFailure;
-          }
-          await nativeMethods!.close?.(closeOptions);
-        };
-        return leased;
+          return {
+            ...instrumentedConnection,
+            rollback: async () => {
+              if (rollbackFailure) throw rollbackFailure;
+              await nativeRollback();
+            },
+            close: async (closeOptions) => {
+              streamCounters.released += 1;
+              if (releaseFailure) {
+                await nativeClose(closeOptions);
+                throw releaseFailure;
+              }
+              await nativeClose(closeOptions);
+            },
+          };
+        },
       };
-      const baseProvider = createOracledbPoolProvider(pool, { streamFetchSize: 2 });
+      const baseProvider = createOracledbPoolProvider(poolWithFaults, { streamFetchSize: 2 });
       const pooled = createPooledDatabase({
         ...baseProvider,
         async acquire() {
