@@ -239,16 +239,24 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       let sideEffects = 0;
       let executeStarts = 0;
       let routineLobCloses = 0;
-      const instrumentStreamConnection = (candidate: OracleConnectionLike, countSideEffects: boolean): OracleConnectionLike => {
+      const instrumentStreamConnection = (candidate: OracleConnectionLike, countSideEffects: boolean, onBreak?: () => void): OracleConnectionLike => {
         const execute = candidate.execute.bind(candidate);
+        const breakNative = candidate.break?.bind(candidate);
+        let activeOperations = 0;
         const instrumented: OracleConnectionLike = {
           execute: async (text: string, binds?: unknown, executeOptions?: unknown): Promise<unknown> => {
           if (text.includes("CERT_INIT_FAILURE")) throw faults.initFailure;
           if (countSideEffects) sideEffects += 1;
           if (countSideEffects) executeStarts += 1;
-          let result = (executeOptions === undefined
-            ? await execute(text, binds)
-            : await execute(text, binds, executeOptions)) as OracleExecuteResultLike;
+          activeOperations += 1;
+          let result: OracleExecuteResultLike;
+          try {
+            result = (executeOptions === undefined
+              ? await execute(text, binds)
+              : await execute(text, binds, executeOptions)) as OracleExecuteResultLike;
+          } finally {
+            activeOperations -= 1;
+          }
           const wrapLob = (value: unknown): unknown => {
             if (value === null || typeof value !== "object" || typeof (value as { readonly destroy?: unknown }).destroy !== "function") return value;
             const lob = value as { destroy(error?: Error): unknown };
@@ -276,7 +284,12 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
               reads += 1;
               if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
               if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
-              return native.getRow!();
+              activeOperations += 1;
+              try {
+                return await native.getRow!();
+              } finally {
+                activeOperations -= 1;
+              }
             };
           }
           if (native.getRows) {
@@ -284,7 +297,12 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
               reads += 1;
               if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
               if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
-              return native.getRows!(size);
+              activeOperations += 1;
+              try {
+                return await native.getRows!(size);
+              } finally {
+                activeOperations -= 1;
+              }
             };
           }
           wrapped.close = async (): Promise<void> => {
@@ -298,7 +316,12 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
           commit: candidate.commit.bind(candidate),
           rollback: candidate.rollback.bind(candidate),
           ...(candidate.stmtCacheSize === undefined ? {} : { stmtCacheSize: candidate.stmtCacheSize }),
-          ...(candidate.break === undefined ? {} : { break: candidate.break.bind(candidate) }),
+          ...(breakNative === undefined ? {} : {
+            break: async (): Promise<void> => {
+              onBreak?.();
+              if (activeOperations > 0) await breakNative();
+            },
+          }),
           ...(candidate.close === undefined ? {} : { close: candidate.close.bind(candidate) }),
         };
         return instrumented;
@@ -323,7 +346,10 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         ...(pool.stmtCacheSize === undefined ? {} : { stmtCacheSize: pool.stmtCacheSize }),
         async getConnection(): Promise<OraclePoolConnectionLike> {
           const nativeConnection = await nativePoolGetConnection();
-          const instrumentedConnection = instrumentStreamConnection(nativeConnection, false);
+          let cancellationRequested = false;
+          const instrumentedConnection = instrumentStreamConnection(nativeConnection, false, () => {
+            cancellationRequested = true;
+          });
           const nativeRollback = nativeConnection.rollback.bind(nativeConnection);
           const nativeClose = nativeConnection.close.bind(nativeConnection);
           forceFaultConnectionCleanup = async () => {
@@ -346,11 +372,15 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
             },
             close: async (closeOptions) => {
               streamCounters.released += 1;
+              const effectiveCloseOptions = closeOptions ?? (cancellationRequested ? { drop: true } : undefined);
+              const closeNative = effectiveCloseOptions === undefined
+                ? (): Promise<void> => Promise.resolve(nativeClose())
+                : (): Promise<void> => Promise.resolve(nativeClose(effectiveCloseOptions));
               if (releaseFailure) {
-                await nativeClose(closeOptions);
+                await closeNative();
                 throw releaseFailure;
               }
-              await nativeClose(closeOptions);
+              await closeNative();
             },
           };
         },
@@ -495,7 +525,7 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
           assert.equal(typeof payload, "string");
           assert.equal((payload as string).length, 4096);
           assert.equal(routineLobCloses, beforeLobCloses + 1);
-          const nativeResult = await connection.execute(
+          const nativeResult = await directConnection.execute(
             "BEGIN BRAID_RC3_CERT_LOB(:payload); END;",
             { payload: { dir: oracledb.BIND_OUT, type: oracledb.CLOB } },
           ) as OracleExecuteResultLike;
