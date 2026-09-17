@@ -29,6 +29,18 @@ function expectedObject(key: string, value: unknown): Record<string, unknown> {
   return result;
 }
 
+function expectedSqliteFailure(message: string): Error & { readonly code: string } {
+  const error = new Error(message) as Error & { readonly code: string };
+  Object.defineProperty(error, "code", { value: "SQLITE_ERROR", enumerable: true });
+  return error;
+}
+
+function cleanupFailureError(): Error & { readonly code: string } {
+  const error = new Error("certification cleanup failure") as Error & { readonly code: string };
+  Object.defineProperty(error, "code", { value: "SQLITE_CERT_CLEANUP", enumerable: true });
+  return error;
+}
+
 function targetCapabilities(): ExpectedCapabilityContract {
   return {
     "sql.native-transparency": { status: "guaranteed" },
@@ -98,7 +110,7 @@ function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats): SqliteW
           stats.finalizeCalls += 1;
           stats.active -= 1;
           statement.finalize();
-          if (sqlText.includes("__cert_cleanup_failure__")) throw new Error("certification cleanup failure");
+          if (sqlText.includes("__cert_cleanup_failure__")) throw cleanupFailureError();
         },
       };
       return exposed;
@@ -247,9 +259,12 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         },
       } as const;
       const mappingQuery = sql.rows(mappingSchema)`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 3) SELECT value FROM n ORDER BY value`;
-      const initFailure = sql.rows`SELECT FROM`;
-      const firstNextFailure = sql.rows`SELECT json('not-json') AS value`;
-      const midStreamFailure = sql.rows`SELECT value FROM (SELECT 1 AS value UNION ALL SELECT json('not-json') AS value)`;
+      const initFailureQuery = sql.rows`SELECT FROM`;
+      const firstNextFailureQuery = sql.rows`SELECT json('not-json') AS value`;
+      const midStreamFailureQuery = sql.rows`SELECT value FROM (SELECT 1 AS value UNION ALL SELECT json('not-json') AS value)`;
+      const initFailure = expectedSqliteFailure('near "FROM": syntax error');
+      const firstNextFailure = expectedSqliteFailure("malformed JSON");
+      const midStreamFailure = expectedSqliteFailure("malformed JSON");
       const largeResultQuery = sql.rows`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 10000) SELECT value FROM n`;
       const streamFixture: StreamingConformanceFixture<unknown> & Record<string, unknown> = {
         db,
@@ -261,11 +276,11 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         initFailure,
         firstNextFailure,
         midStreamFailure,
-        initFailureQuery: initFailure,
-        firstNextFailureQuery: firstNextFailure,
-        midStreamFailureQuery: midStreamFailure,
+        initFailureQuery,
+        firstNextFailureQuery,
+        midStreamFailureQuery,
         cleanupFailureQuery: sql.rows`SELECT 1 AS value /* __cert_cleanup_failure__ */`,
-        cleanupFailure: new Error("certification cleanup failure"),
+        cleanupFailure: cleanupFailureError(),
         largeResultQuery,
         largeResultCount: 10000,
       };
