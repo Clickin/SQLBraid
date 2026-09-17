@@ -1,0 +1,2855 @@
+{
+  "version": 1,
+  "scenarioIds": [
+    "transaction.commit-confirmed",
+    "transaction.callback-rollback",
+    "transaction.statement-rollback",
+    "transaction.caught-error-terminal-outcome",
+    "transaction.savepoint-recovery",
+    "transaction.savepoint-rollback-failure",
+    "transaction.savepoint-create-failure",
+    "transaction.savepoint-release-failure",
+    "transaction.commit-failure",
+    "transaction.commit-terminal-outcome",
+    "transaction.rollback-failure",
+    "transaction.autocommit-ownership",
+    "transaction.access-mode",
+    "pool.checkout-init-failure",
+    "resource.root-lease",
+    "resource.session-lease",
+    "resource.transaction-lease",
+    "resource.init-failure",
+    "resource.stream-return",
+    "resource.stream-read-failure",
+    "resource.cleanup-failure",
+    "cancellation.pre-io",
+    "cancellation.in-flight",
+    "cancellation.before-handoff",
+    "cancellation.iteration",
+    "metadata.exact-id",
+    "metadata.stale-id",
+    "metadata.affected-rows"
+  ],
+  "transports": {
+    "pg": {
+      "target": "postgres-pg-node-16-4",
+      "ownership": [
+        "direct",
+        "pooled"
+      ],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The adapter owns a native pool/reservation lease.",
+          "source": "packages/postgres/src/pg.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/postgres/src/pg.ts"
+        },
+        "commit-status": {
+          "supported": true,
+          "reason": "PostgreSQL command status can report ROLLBACK for a fulfilled COMMIT.",
+          "source": "packages/postgres/src/pg.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/postgres/src/pg.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/postgres/src/pg.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/postgres/src/pg.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/postgres/src/pg.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "pool.checkout-init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.root-lease": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.session-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.transaction-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.stream-read-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.before-handoff": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.iteration": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "mysql2": {
+      "target": "mysql-mysql2-node-8-4-2",
+      "ownership": [
+        "direct",
+        "pooled"
+      ],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The adapter owns a native pool/reservation lease.",
+          "source": "packages/mysql/src/mysql2.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/mysql/src/mysql2.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/mysql/src/mysql2.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/mysql/src/mysql2.ts"
+        },
+        "insert-id": {
+          "supported": true,
+          "reason": "Native command results expose an exact insert-ID channel.",
+          "source": "packages/mysql/src/mysql2.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/mysql/src/mysql2.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/mysql/src/mysql2.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "pool.checkout-init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.root-lease": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.session-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.transaction-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.stream-read-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.before-handoff": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.iteration": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "metadata.exact-id": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "metadata.stale-id": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "mariadb": {
+      "target": "mariadb-connector-node-11-8-9",
+      "ownership": [
+        "direct",
+        "pooled"
+      ],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The adapter owns a native pool/reservation lease.",
+          "source": "packages/mariadb/src/mariadb.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/mariadb/src/mariadb.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/mariadb/src/mariadb.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/mariadb/src/mariadb.ts"
+        },
+        "insert-id": {
+          "supported": true,
+          "reason": "Native command results expose an exact insert-ID channel.",
+          "source": "packages/mariadb/src/mariadb.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/mariadb/src/mariadb.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/mariadb/src/mariadb.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "pool.checkout-init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.root-lease": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.session-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.transaction-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.stream-read-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.before-handoff": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.iteration": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "metadata.exact-id": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "metadata.stale-id": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "node-oracledb": {
+      "target": "oracle-oracledb-thin-node-23-9",
+      "ownership": [
+        "direct",
+        "pooled"
+      ],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The adapter owns a native pool/reservation lease.",
+          "source": "packages/oracle/src/oracledb.ts"
+        },
+        "savepoint-release": {
+          "supported": false,
+          "reason": "The database has no native RELEASE SAVEPOINT operation; the adapter release is a no-op.",
+          "source": "packages/oracle/src/oracledb.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/oracle/src/oracledb.ts"
+        },
+        "statement-autocommit": {
+          "supported": true,
+          "reason": "Oracle supports both global and per-execute autoCommit settings.",
+          "source": "packages/oracle/src/oracledb.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/oracle/src/oracledb.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/oracle/src/oracledb.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/oracle/src/oracledb.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "notApplicable": {
+            "requirement": "native:savepoint-release",
+            "reason": "The database has no native RELEASE SAVEPOINT operation; the adapter release is a no-op."
+          }
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "transaction.access-mode": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "pool.checkout-init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.root-lease": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.session-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.transaction-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.stream-read-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.before-handoff": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.iteration": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "tedious": {
+      "target": "mssql-tedious-developer-node-2022-cu18",
+      "ownership": [
+        "direct",
+        "pooled"
+      ],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The adapter owns a native pool/reservation lease.",
+          "source": "packages/mssql/src/tedious.ts"
+        },
+        "savepoint-release": {
+          "supported": false,
+          "reason": "The database has no native RELEASE SAVEPOINT operation; the adapter release is a no-op.",
+          "source": "packages/mssql/src/tedious.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/mssql/src/tedious.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/mssql/src/tedious.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/mssql/src/tedious.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/mssql/src/tedious.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/mssql/src/tedious.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "notApplicable": {
+            "requirement": "native:savepoint-release",
+            "reason": "The database has no native RELEASE SAVEPOINT operation; the adapter release is a no-op."
+          }
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "transaction.read-only is unsupported by canonical support target mssql-tedious-developer-node-2022-cu18."
+          }
+        },
+        "pool.checkout-init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.root-lease": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.session-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.transaction-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.stream-read-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.before-handoff": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.iteration": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "node-sqlite": {
+      "target": "sqlite-node-sqlite-node-22-18-0",
+      "ownership": [
+        "direct"
+      ],
+      "native": {
+        "pool": {
+          "supported": false,
+          "reason": "The supported adapter exposes no native pooled ownership path.",
+          "source": "packages/sqlite/src/node-sqlite.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/sqlite/src/node-sqlite.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/sqlite/src/node-sqlite.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/sqlite/src/node-sqlite.ts"
+        },
+        "insert-id": {
+          "supported": true,
+          "reason": "Native command results expose an exact insert-ID channel.",
+          "source": "packages/sqlite/src/node-sqlite.ts"
+        },
+        "resource-init": {
+          "supported": false,
+          "reason": "Prepared statements are GC-owned; the closable iterator enters its cleanup scope immediately after creation.",
+          "source": "packages/sqlite/src/node-sqlite.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/sqlite/src/node-sqlite.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "transaction.read-only is unsupported by canonical support target sqlite-node-sqlite-node-22-18-0."
+          }
+        },
+        "pool.checkout-init-failure": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.root-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.session-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.transaction-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.init-failure": {
+          "notApplicable": {
+            "requirement": "native:resource-init",
+            "reason": "Prepared statements are GC-owned; the closable iterator enters its cleanup scope immediately after creation."
+          }
+        },
+        "resource.stream-return": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.stream-read-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target sqlite-node-sqlite-node-22-18-0."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target sqlite-node-sqlite-node-22-18-0."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target sqlite-node-sqlite-node-22-18-0."
+          }
+        },
+        "metadata.exact-id": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "metadata.stale-id": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "better-sqlite3": {
+      "target": "better-sqlite3-node-22-18-0",
+      "ownership": [
+        "direct"
+      ],
+      "native": {
+        "pool": {
+          "supported": false,
+          "reason": "The supported adapter exposes no native pooled ownership path.",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        },
+        "insert-id": {
+          "supported": true,
+          "reason": "Native command results expose an exact insert-ID channel.",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        },
+        "resource-init": {
+          "supported": false,
+          "reason": "Prepared statements are GC-owned; the closable iterator enters its cleanup scope immediately after creation.",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        }
+      },
+      "capabilityEvidence": {
+        "statement.stream": {
+          "status": "guaranteed",
+          "reason": "Statement.iterate",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        },
+        "statement.cancel": {
+          "status": "unsupported",
+          "reason": "The native API has no safe active statement cancellation primitive.",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        },
+        "transaction.read-only": {
+          "status": "unsupported",
+          "reason": "This local SQLite adapter cannot enforce read-only transaction options.",
+          "source": "packages/sqlite/src/better-sqlite3.ts"
+        }
+      },
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "This local SQLite adapter cannot enforce read-only transaction options."
+          }
+        },
+        "pool.checkout-init-failure": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.root-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.session-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.transaction-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.init-failure": {
+          "notApplicable": {
+            "requirement": "native:resource-init",
+            "reason": "Prepared statements are GC-owned; the closable iterator enters its cleanup scope immediately after creation."
+          }
+        },
+        "resource.stream-return": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.stream-read-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "The native API has no safe active statement cancellation primitive."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "The native API has no safe active statement cancellation primitive."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "The native API has no safe active statement cancellation primitive."
+          }
+        },
+        "metadata.exact-id": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "metadata.stale-id": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "libsql": {
+      "target": "libsql-local-node-22-18-0",
+      "ownership": [
+        "direct"
+      ],
+      "native": {
+        "pool": {
+          "supported": false,
+          "reason": "The supported adapter exposes no native pooled ownership path.",
+          "source": "packages/sqlite/src/libsql.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/sqlite/src/libsql.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/sqlite/src/libsql.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/sqlite/src/libsql.ts"
+        },
+        "insert-id": {
+          "supported": true,
+          "reason": "Native command results expose an exact insert-ID channel.",
+          "source": "packages/sqlite/src/libsql.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/sqlite/src/libsql.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/sqlite/src/libsql.ts"
+        }
+      },
+      "capabilityEvidence": {
+        "statement.stream": {
+          "status": "unsupported",
+          "reason": "unsupported; materialized results",
+          "source": "packages/sqlite/src/libsql.ts"
+        },
+        "statement.cancel": {
+          "status": "unsupported",
+          "reason": "The native API has no safe active statement cancellation primitive.",
+          "source": "packages/sqlite/src/libsql.ts"
+        },
+        "transaction.read-only": {
+          "status": "unsupported",
+          "reason": "This local SQLite adapter cannot enforce read-only transaction options.",
+          "source": "packages/sqlite/src/libsql.ts"
+        }
+      },
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "This local SQLite adapter cannot enforce read-only transaction options."
+          }
+        },
+        "pool.checkout-init-failure": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.root-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.session-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.transaction-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "unsupported; materialized results"
+          }
+        },
+        "resource.stream-read-failure": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "unsupported; materialized results"
+          }
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "The native API has no safe active statement cancellation primitive."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "The native API has no safe active statement cancellation primitive."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "The native API has no safe active statement cancellation primitive."
+          }
+        },
+        "metadata.exact-id": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "metadata.stale-id": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "sqlite-wasm": {
+      "target": "sqlite-wasm-browser-3-53-4",
+      "ownership": [
+        "direct"
+      ],
+      "native": {
+        "pool": {
+          "supported": false,
+          "reason": "The supported adapter exposes no native pooled ownership path.",
+          "source": "packages/sqlite/src/wasm.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/sqlite/src/wasm.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/sqlite/src/wasm.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/sqlite/src/wasm.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/sqlite/src/wasm.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/sqlite/src/wasm.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/sqlite/src/wasm.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "transaction.read-only is unsupported by canonical support target sqlite-wasm-browser-3-53-4."
+          }
+        },
+        "pool.checkout-init-failure": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.root-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.session-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.transaction-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.stream-read-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target sqlite-wasm-browser-3-53-4."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target sqlite-wasm-browser-3-53-4."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target sqlite-wasm-browser-3-53-4."
+          }
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "cloudflare-d1": {
+      "target": "d1-cloudflare-workerd-2026-07-30",
+      "ownership": [
+        "direct"
+      ],
+      "native": {
+        "pool": {
+          "supported": false,
+          "reason": "The supported adapter exposes no native pooled ownership path.",
+          "source": "packages/sqlite/src/d1.ts"
+        },
+        "savepoint-release": {
+          "supported": false,
+          "reason": "Interactive transactions and savepoints are unsupported.",
+          "source": "packages/sqlite/src/d1.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/sqlite/src/d1.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/sqlite/src/d1.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/sqlite/src/d1.ts"
+        },
+        "resource-init": {
+          "supported": false,
+          "reason": "The transport returns materialized values and exposes no separately closable native initialization resource.",
+          "source": "packages/sqlite/src/d1.ts"
+        },
+        "cleanup": {
+          "supported": false,
+          "reason": "The transport exposes no fallible explicit native cleanup operation.",
+          "source": "packages/sqlite/src/d1.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.callback-rollback": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.statement-rollback": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.savepoint-recovery": {
+          "notApplicable": {
+            "requirement": "capability:transaction.savepoint",
+            "reason": "transaction.savepoint is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.savepoint-rollback-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction.savepoint",
+            "reason": "transaction.savepoint is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.savepoint-create-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction.savepoint",
+            "reason": "transaction.savepoint is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.savepoint-release-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction.savepoint",
+            "reason": "transaction.savepoint is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.commit-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.rollback-failure": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "capability:transaction",
+            "reason": "transaction is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "transaction.access-mode": {
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "transaction.read-only is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "pool.checkout-init-failure": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.root-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.session-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.transaction-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.init-failure": {
+          "notApplicable": {
+            "requirement": "native:resource-init",
+            "reason": "The transport returns materialized values and exposes no separately closable native initialization resource."
+          }
+        },
+        "resource.stream-return": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "resource.stream-read-failure": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "resource.cleanup-failure": {
+          "notApplicable": {
+            "requirement": "native:cleanup",
+            "reason": "The transport exposes no fallible explicit native cleanup operation."
+          }
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target d1-cloudflare-workerd-2026-07-30."
+          }
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "bun-sql-postgres": {
+      "target": "bun-sql-postgres",
+      "ownership": [
+        "pooled"
+      ],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The adapter owns a native pool/reservation lease.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "commit-status": {
+          "supported": true,
+          "reason": "PostgreSQL command status can report ROLLBACK for a fulfilled COMMIT.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "insert-id": {
+          "supported": false,
+          "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/bun-sql/src/index.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "pool.checkout-init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.root-lease": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.session-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.transaction-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target bun-sql-postgres."
+          }
+        },
+        "resource.stream-read-failure": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target bun-sql-postgres."
+          }
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-postgres."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-postgres."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-postgres."
+          }
+        },
+        "metadata.exact-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.stale-id": {
+          "notApplicable": {
+            "requirement": "native:insert-id",
+            "reason": "The adapter has no exact integer command insert-ID channel; row results are a separate contract."
+          }
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "bun-sql-mysql": {
+      "target": "bun-sql-mysql",
+      "ownership": [
+        "pooled"
+      ],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The adapter owns a native pool/reservation lease.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "insert-id": {
+          "supported": true,
+          "reason": "Native command results expose an exact insert-ID channel.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/bun-sql/src/index.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "pool.checkout-init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.root-lease": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.session-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.transaction-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target bun-sql-mysql."
+          }
+        },
+        "resource.stream-read-failure": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target bun-sql-mysql."
+          }
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-mysql."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-mysql."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-mysql."
+          }
+        },
+        "metadata.exact-id": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "metadata.stale-id": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "bun-sql-mariadb": {
+      "target": "bun-sql-mariadb",
+      "ownership": [
+        "pooled"
+      ],
+      "native": {
+        "pool": {
+          "supported": true,
+          "reason": "The adapter owns a native pool/reservation lease.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "insert-id": {
+          "supported": true,
+          "reason": "Native command results expose an exact insert-ID channel.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "resource-init": {
+          "supported": true,
+          "reason": "Native cursor, request, statement, transaction handle or reservation has fallible work after acquisition.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "cleanup": {
+          "supported": true,
+          "reason": "A native cursor, iterator, statement, transaction handle or reserved connection requires explicit cleanup.",
+          "source": "packages/bun-sql/src/index.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "pool.checkout-init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.root-lease": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.session-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.transaction-lease": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "resource.init-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "resource.stream-return": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target bun-sql-mariadb."
+          }
+        },
+        "resource.stream-read-failure": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target bun-sql-mariadb."
+          }
+        },
+        "resource.cleanup-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-mariadb."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-mariadb."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-mariadb."
+          }
+        },
+        "metadata.exact-id": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "metadata.stale-id": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    },
+    "bun-sql-sqlite": {
+      "target": "bun-sql-sqlite",
+      "ownership": [
+        "direct"
+      ],
+      "native": {
+        "pool": {
+          "supported": false,
+          "reason": "The supported adapter exposes no native pooled ownership path.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "savepoint-release": {
+          "supported": true,
+          "reason": "RELEASE SAVEPOINT uses a fallible native control operation.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "commit-status": {
+          "supported": false,
+          "reason": "The native transaction completion API exposes no non-commit command status.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "statement-autocommit": {
+          "supported": false,
+          "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "insert-id": {
+          "supported": true,
+          "reason": "Native command results expose an exact insert-ID channel.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "resource-init": {
+          "supported": false,
+          "reason": "The transport returns materialized values and exposes no separately closable native initialization resource.",
+          "source": "packages/bun-sql/src/index.ts"
+        },
+        "cleanup": {
+          "supported": false,
+          "reason": "The transport exposes no fallible explicit native cleanup operation.",
+          "source": "packages/bun-sql/src/index.ts"
+        }
+      },
+      "capabilityEvidence": {},
+      "scenarios": {
+        "transaction.commit-confirmed": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.callback-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.statement-rollback": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.caught-error-terminal-outcome": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-recovery": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "transaction.savepoint-rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-create-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.savepoint-release-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.commit-terminal-outcome": {
+          "notApplicable": {
+            "requirement": "native:commit-status",
+            "reason": "The native transaction completion API exposes no non-commit command status."
+          }
+        },
+        "transaction.rollback-failure": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "transaction.autocommit-ownership": {
+          "notApplicable": {
+            "requirement": "native:statement-autocommit",
+            "reason": "The native execution API has no per-statement/global autoCommit option that can override an explicit transaction."
+          }
+        },
+        "transaction.access-mode": {
+          "notApplicable": {
+            "requirement": "capability:transaction.read-only",
+            "reason": "transaction.read-only is unsupported by canonical support target bun-sql-sqlite."
+          }
+        },
+        "pool.checkout-init-failure": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.root-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.session-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.transaction-lease": {
+          "notApplicable": {
+            "requirement": "native:pool",
+            "reason": "The supported adapter exposes no native pooled ownership path."
+          }
+        },
+        "resource.init-failure": {
+          "notApplicable": {
+            "requirement": "native:resource-init",
+            "reason": "The transport returns materialized values and exposes no separately closable native initialization resource."
+          }
+        },
+        "resource.stream-return": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target bun-sql-sqlite."
+          }
+        },
+        "resource.stream-read-failure": {
+          "notApplicable": {
+            "requirement": "capability:statement.stream",
+            "reason": "statement.stream is unsupported by canonical support target bun-sql-sqlite."
+          }
+        },
+        "resource.cleanup-failure": {
+          "notApplicable": {
+            "requirement": "native:cleanup",
+            "reason": "The transport exposes no fallible explicit native cleanup operation."
+          }
+        },
+        "cancellation.pre-io": {
+          "evidence": [
+            "boundary"
+          ]
+        },
+        "cancellation.in-flight": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-sqlite."
+          }
+        },
+        "cancellation.before-handoff": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-sqlite."
+          }
+        },
+        "cancellation.iteration": {
+          "notApplicable": {
+            "requirement": "capability:statement.cancel",
+            "reason": "statement.cancel is unsupported by canonical support target bun-sql-sqlite."
+          }
+        },
+        "metadata.exact-id": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        },
+        "metadata.stale-id": {
+          "evidence": [
+            "integration"
+          ]
+        },
+        "metadata.affected-rows": {
+          "evidence": [
+            "integration",
+            "boundary"
+          ]
+        }
+      }
+    }
+  }
+}
