@@ -159,8 +159,10 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
   page.on("pageerror", (error) => { pageError = error; });
   try {
     const certificationUrl = new URL(fixtureUrl);
-    certificationUrl.searchParams.set("sourceSha", sourceSha);
-    certificationUrl.searchParams.set("stress", stress ? "1" : "0");
+    if (sourceSha !== undefined) {
+      certificationUrl.searchParams.set("sourceSha", sourceSha);
+      certificationUrl.searchParams.set("stress", stress ? "1" : "0");
+    }
     await page.goto(certificationUrl.href, { waitUntil: "networkidle" });
     try {
       await page.waitForFunction(
@@ -172,12 +174,6 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
       throw new Error(`Browser WASM fixture did not become ready: ${pageError?.message ?? String(error)}`);
     }
     await page.waitForFunction(() => window.__sqlbraidSqlite3 !== undefined, undefined, { timeout: 30_000 });
-    await page.addScriptTag({ path: certificationBundle });
-    await page.waitForFunction(
-      () => window.__sqlbraidCertificationArtifact !== undefined || window.__sqlbraidCertificationError !== undefined,
-      undefined,
-      { timeout: 120_000 },
-    );
     const result = await page.evaluate(() => ({
       report: window.__sqlbraidWasmConformance,
       error: window.__sqlbraidWasmConformanceError,
@@ -187,9 +183,24 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
     }));
     if (result.error !== undefined) throw new Error(`Browser WASM conformance failed: ${result.error}`);
     if (result.report === undefined) throw new Error("Browser WASM conformance did not produce a report.");
-    if (result.certificationError !== undefined) throw new Error(`Browser WASM certification failed: ${result.certificationError}`);
-    if (result.certification === undefined) throw new Error("Browser WASM certification did not produce an artifact.");
-    return { ...result.report, certification: result.certification, certificationEvidence: result.certificationEvidence };
+    if (certificationBundle !== undefined) {
+      if (sourceSha === undefined || stress === undefined) throw new Error("Browser WASM certification inputs are incomplete.");
+      await page.addScriptTag({ path: certificationBundle });
+      await page.waitForFunction(
+        () => window.__sqlbraidCertificationArtifact !== undefined || window.__sqlbraidCertificationError !== undefined,
+        undefined,
+        { timeout: 120_000 },
+      );
+      const certification = await page.evaluate(() => ({
+        artifact: window.__sqlbraidCertificationArtifact,
+        error: window.__sqlbraidCertificationError,
+        evidence: window.__sqlbraidWasmCertificationEvidence,
+      }));
+      if (certification.error !== undefined) throw new Error(`Browser WASM certification failed: ${certification.error}`);
+      if (certification.artifact === undefined) throw new Error("Browser WASM certification did not produce an artifact.");
+      return { ...result.report, certification: certification.artifact, certificationEvidence: certification.evidence };
+    }
+    return result.report;
   } finally {
     await page.close();
   }
@@ -323,7 +334,7 @@ async function main() {
       await waitForServer(url);
     }
 
-    if (certification !== undefined) fixtureServer = await startFixtureServer();
+    fixtureServer = await startFixtureServer();
     const certificationBundle = certification === undefined ? undefined : await buildBrowserCertificationBundle();
     const browser = await chromium.launch({ headless: true });
     try {
@@ -398,9 +409,14 @@ async function main() {
       const expectedChecks = ["nested-tx", "root-escape", "stream-ownership", "mapper-reentry", "break-cleanup", "error-cleanup", "concurrent-branches", "bulk-conformance:prepared-loop"];
       if (checks.join(",") !== expectedChecks.join(",")) throw new Error(`Unexpected browser ownership checks: ${checks.join(",")}.`);
       console.log(`Browser preview passed: ${url}`);
-      let report = await page.evaluate(() => window.__sqlbraidWasmConformance ?? {});
+      const report = await runWasmConformance(
+        browser,
+        fixtureServer.url,
+        certificationBundle,
+        certification?.sourceSha,
+        certification?.stress,
+      );
       if (certification !== undefined) {
-        report = await runWasmConformance(browser, fixtureServer.url, certificationBundle, certification.sourceSha, certification.stress);
         if (report.certification.sourceSha !== certification.sourceSha) {
           throw new Error("Browser certification source SHA did not survive the fixture boundary.");
         }
