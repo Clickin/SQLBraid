@@ -99,6 +99,15 @@ export async function runStreamingConformanceCase(
         }, (caught: unknown) => containsError(caught, error));
         return;
       }
+      case "STR004_SCHEMA": {
+        const error = new Error("execution schema failed");
+        await assert.rejects(async () => {
+          for await (const row of fixture.db.stream(fixture.query, {
+            schema: { "~standard": { version: 1, vendor: "conformance", validate() { throw error; } } },
+          })) void row;
+        }, (caught: unknown) => containsError(caught, error));
+        return;
+      }
       case "STR005": {
         const controller = new AbortController();
         const abortError = options.abortError ?? new Error("cert-abort-before");
@@ -156,7 +165,7 @@ export async function runStreamingConformance<Row>(
   create: () => StreamingConformanceFixture<Row> | Promise<StreamingConformanceFixture<Row>>,
   options: StreamingConformanceOptions = {},
 ): Promise<void> {
-  const ids = ["STR001", "STR003", "STR004", "STR005", "STR006", "STR002", "STR008"] as const;
+  const ids = ["STR001", "STR003", "STR004", "STR004_SCHEMA", "STR005", "STR006", "STR002", "STR008"] as const;
   for (const id of ids) {
     await runStreamingConformanceCase(id, create as () => StreamingConformanceFixture<unknown> | Promise<StreamingConformanceFixture<unknown>>, { ...options, strict: false });
   }
