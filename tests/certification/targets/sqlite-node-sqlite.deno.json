@@ -1,0 +1,12 @@
+{
+  "imports": {
+    "@sqlbraid/core": "../../../packages/core/dist/index.js",
+    "@sqlbraid/core/driver": "../../../packages/core/dist/driver.js",
+    "@sqlbraid/runtime": "../../../packages/runtime/dist/index.js",
+    "@sqlbraid/template": "../../../packages/template/dist/index.js",
+    "@sqlbraid/sqlite": "../../../packages/sqlite/dist/index.js",
+    "@sqlbraid/sqlite/node-sqlite": "../../../packages/sqlite/dist/node-sqlite.js",
+    "#async-context": "../../../packages/runtime/dist/async-context.node.js",
+    "@standard-schema/spec": "npm:@standard-schema/spec@1.1.0"
+  }
+}

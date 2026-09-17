@@ -190,7 +190,7 @@ function unsupportedTransactionOption(option: string): never {
   );
 }
 
-function transactionMode(options?: TransactionOptions): LibsqlTransactionMode | undefined {
+function transactionModeFor(client: LibsqlClientLike, options?: TransactionOptions): LibsqlTransactionMode | undefined {
   if (options === undefined) return undefined;
   if (options === null || typeof options !== "object" || Array.isArray(options)) {
     invalidTransactionOptions("transaction options must be an object.");
@@ -211,6 +211,13 @@ function transactionMode(options?: TransactionOptions): LibsqlTransactionMode | 
       invalidTransactionOptions("transaction isolation is not a supported standard literal.");
     }
     unsupportedTransactionOption(candidate.isolation);
+  }
+  if ((client.protocol === undefined || client.protocol === "file") && candidate.readOnly === true) {
+    throw new UnsupportedFeatureError(
+      "transaction.read-only",
+      "BRAID_TX_OPTION_UNSUPPORTED",
+      "The local libSQL client does not enforce read-only transactions.",
+    );
   }
   if (candidate.readOnly === undefined) return undefined;
   return candidate.readOnly ? "read" : "write";
@@ -450,10 +457,13 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
   assertExactStringMode(options);
   let transaction: LibsqlTransactionLike | undefined;
 
-  return {
+  const executor = {
     ownershipKey: client,
     statementBinding: libsqlStatementBinding,
     environment: environmentFor(client),
+    validateTransactionOptions: (options?: TransactionOptions): void => {
+      transactionModeFor(client, options);
+    },
     async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
@@ -505,14 +515,7 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
     },
     begin: async (options?: TransactionOptions): Promise<void> => {
       if (transaction !== undefined) throw new TypeError("BRAID_TRANSACTION_STATE: a libSQL transaction is already active.");
-      if ((client.protocol === undefined || client.protocol === "file") && options?.readOnly === true) {
-        throw new UnsupportedFeatureError(
-          "transaction.read-only",
-          "BRAID_TX_OPTION_UNSUPPORTED",
-          "The local libSQL client does not enforce read-only transactions.",
-        );
-      }
-      const mode = transactionMode(options);
+      const mode = transactionModeFor(client, options);
       const next = mode === undefined ? await client.transaction() : await client.transaction(mode);
       if (
         !next
@@ -569,6 +572,7 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
       await activeTransaction(transaction).execute(transactionStatement(name, "RELEASE SAVEPOINT"));
     },
   };
+  return executor;
 }
 
 export function createLibsqlDatabase(client: LibsqlClientLike, options: LibsqlDatabaseOptions): Database {

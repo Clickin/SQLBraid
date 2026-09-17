@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import type { RenderedBulk } from "@sqlbraid/core";
+import type { QueryExecutor, RenderedBulk, TransactionOptions } from "@sqlbraid/core";
 import { UnsupportedFeatureError } from "@sqlbraid/core";
 import { sql } from "@sqlbraid/sqlite";
 import {
@@ -233,6 +233,43 @@ test("libSQL leaves default transaction mode to the client and maps explicit rea
   await executor.begin!({ readOnly: false });
   await executor.rollback!();
   assert.deepEqual(calls, [[], [], ["read"], ["write"]]);
+});
+
+test("libSQL validates transaction options without acquiring and preserves isolation precedence", () => {
+  let transactionCalls = 0;
+  const executor = createLibsqlExecutor(
+    fakeClient(
+      async () => rowsResult([], []),
+      async () => [],
+      async () => {
+        transactionCalls += 1;
+        return {
+          async execute() { return rowsResult([], []); },
+          async batch() { return []; },
+          async commit() {},
+          async rollback() {},
+        };
+      },
+    ),
+    { intMode: "string" },
+  );
+  const validate = (executor as QueryExecutor & {
+    readonly validateTransactionOptions: (options?: TransactionOptions) => void;
+  }).validateTransactionOptions;
+  assert.doesNotThrow(() => validate({ readOnly: false }));
+  assert.throws(
+    () => validate({ readOnly: true }),
+    (error: unknown) => error instanceof UnsupportedFeatureError
+      && error.feature === "transaction.read-only"
+      && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+  );
+  assert.throws(
+    () => validate({ isolation: "serializable", readOnly: true }),
+    (error: unknown) => error instanceof UnsupportedFeatureError
+      && error.feature === "transaction.isolation.serializable"
+      && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+  );
+  assert.equal(transactionCalls, 0);
 });
 
 test("libSQL transaction cleanup clears continuity after commit or rollback failure", async () => {
