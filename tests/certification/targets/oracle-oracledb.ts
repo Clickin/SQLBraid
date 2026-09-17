@@ -1,8 +1,9 @@
 import oracledb from "oracledb";
 import assert from "node:assert/strict";
-import { createOracledbDatabase, createOracledbPoolDatabase, type OracleConnectionLike, type OracleExecuteResultLike, type OraclePoolLike, type OracleResultSetLike } from "@sqlbraid/oracle/oracledb";
+import { createOracledbDatabase, createOracledbPoolProvider, type OracleConnectionLike, type OracleExecuteResultLike, type OraclePoolLike, type OracleResultSetLike } from "@sqlbraid/oracle/oracledb";
 import { oracleParameter, sql } from "@sqlbraid/oracle";
-import type { CallQuery, CommandQuery, Database, RowQuery, StreamOptions } from "@sqlbraid/core";
+import { createPooledDatabase } from "@sqlbraid/runtime";
+import type { CallQuery, CommandQuery, Database, RowQuery } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
 import type { CertificationFixture, CertificationTarget, ExpectedCapabilityContract, ResourceSnapshot } from "../types.js";
@@ -105,7 +106,7 @@ function makeQueries(): CertificationFixture["queries"] {
     prepared,
     routines,
     fidelity: {
-      largeExactInteger: sql.rows`SELECT CAST(${sql.bind("9007199254740993", oracleParameter.varchar2())} AS NUMBER(19,0)) AS "value" FROM dual`,
+      largeExactInteger: sql.rows`SELECT ${sql.bind(9007199254740993n, oracleParameter.number())} AS "value" FROM dual`,
       exactDecimal: sql.rows`SELECT CAST(${12345.6789} AS NUMBER(20,4)) AS "value" FROM dual`,
       temporal: sql.rows`SELECT CAST(${new Date("2026-09-14T12:34:56.789Z")} AS TIMESTAMP) AS "value" FROM dual`,
       injection: sql.rows`SELECT ${"'; UPDATE BRAID_RC3_CERT_ROWS SET value='hacked' WHERE id=999999; --"} AS "value" FROM dual`,
@@ -130,6 +131,7 @@ interface StreamFaults {
 interface StreamCounters {
   iteratorReturns: number;
   released: number;
+  resultSetCloses: number;
 }
 
 function streamFixture(
@@ -142,26 +144,8 @@ function streamFixture(
   const initFailureQuery = row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_INIT_FAILURE */");
   const mappingFailure = new Error("oracle-cert-mapping-failure");
   const executionSchemaFailure = new Error("oracle-cert-execution-schema-failure");
-  const streamDb: Pick<Database, "stream"> = {
-    stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row> {
-      const source = db.stream(query, options);
-      const iterator = source[Symbol.asyncIterator]();
-      const wrapped: AsyncIterator<Row> & AsyncIterable<Row> = {
-        [Symbol.asyncIterator]() { return this; },
-        next(value?: unknown) { return iterator.next(value); },
-        return(value?: unknown) {
-          counters.iteratorReturns += 1;
-          return iterator.return ? iterator.return(value) : Promise.resolve({ done: true, value });
-        },
-        throw(error?: unknown) {
-          return iterator.throw ? iterator.throw(error) : Promise.reject(error);
-        },
-      };
-      return wrapped;
-    },
-  };
   return {
-    db: streamDb,
+    db,
     query,
     expected: [{ VALUE: "1" }, { VALUE: "2" }, { VALUE: "3" }],
     mappingQuery: sql.rows({
@@ -175,7 +159,7 @@ function streamFixture(
     executionSchemaFailure,
     initFailureQuery,
     initFailure: faults.initFailure,
-    initFailureCleanup: { iteratorReturns: 0, released: 0 },
+    initFailureCleanup: { iteratorReturns: 1, released: 1 },
     firstNextFailureQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_FIRST_NEXT_FAILURE */"),
     firstNextFailure: faults.firstNextFailure,
     midStreamFailureQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_MID_STREAM_FAILURE */"),
@@ -190,34 +174,30 @@ function streamFixture(
   };
 }
 
-function bulkFixture(db: Pick<Database, "bulk" | "all" | "execute">): BulkConformanceFixture<unknown> {
+function bulkFixture(db: Pick<Database, "bulk" | "all" | "execute">, nativeBulkCalls: () => number): BulkConformanceFixture<unknown> {
   const factory = (input: unknown) => {
     if (typeof input !== "number") throw new TypeError("Oracle bulk certification input must be numeric.");
     return sql.command`INSERT INTO ${sql.ident(BULK_TABLE)} (id, value) VALUES (${sql.bind(input, oracleParameter.number())}, ${sql.bind("bulk", oracleParameter.varchar2())})`;
   };
-  let executions = 0;
   const wrappedDb: Pick<Database, "bulk"> = {
-    bulk: async (inputs, inputFactory) => {
-      if (inputs.length > 0) executions += 1;
-      return db.bulk(inputs, inputFactory);
-    },
+    bulk: (inputs, inputFactory) => db.bulk(inputs, inputFactory),
   };
   return {
     db: wrappedDb,
     inputs: [1, 2],
     factory,
     expected: { inputCount: 2, affectedRows: 2 },
-    acquireCount: () => executions,
-    executeCount: () => executions,
+    acquireCount: nativeBulkCalls,
+    executeCount: nativeBulkCalls,
     middleFailure: async () => {
       let error: unknown;
       try {
-        await wrappedDb.bulk([3, 1], factory);
+        await wrappedDb.bulk([3, 1, 4], factory);
       } catch (caught) {
         error = caught;
       }
       if (error === undefined) throw new Error("Oracle bulk middle failure did not reject.");
-      const rows = await db.all<{ readonly id: unknown; readonly value: unknown }>(sql.rows`SELECT id AS "id", value AS "value" FROM ${sql.ident(BULK_TABLE)} WHERE id = ${sql.bind(3, oracleParameter.number())} ORDER BY id`);
+      const rows = await db.all<{ readonly id: unknown; readonly value: unknown }>(sql.rows`SELECT id AS "id", value AS "value" FROM ${sql.ident(BULK_TABLE)} WHERE id IN (${sql.bind(3, oracleParameter.number())}, ${sql.bind(4, oracleParameter.number())}) ORDER BY id`);
       await db.execute(sql`DELETE FROM ${sql.ident(BULK_TABLE)} WHERE id = ${sql.bind(3, oracleParameter.number())}`);
       const observedRows = rows.map((row) => ({ id: Number(row.id), value: row.value }));
       return {
@@ -255,48 +235,78 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         midStreamFailure: new Error("oracle-cert-mid-stream-failure"),
         cleanupFailure: new Error("oracle-cert-cleanup-failure"),
       };
-      const streamCounters: StreamCounters = { iteratorReturns: 0, released: 0 };
+      const streamCounters: StreamCounters = { iteratorReturns: 0, released: 0, resultSetCloses: 0 };
       let sideEffects = 0;
       let executeStarts = 0;
       let routineLobCloses = 0;
-      const execute = connection.execute.bind(connection);
-      connection.execute = async (text: string, binds?: unknown, executeOptions?: unknown): Promise<unknown> => {
-        if (text.includes("CERT_INIT_FAILURE")) throw faults.initFailure;
-        sideEffects += 1;
-        executeStarts += 1;
-        const result = (executeOptions === undefined
-          ? await execute(text, binds)
-          : await execute(text, binds, executeOptions)) as OracleExecuteResultLike;
-        const native = result.resultSet;
-        if (!native || typeof native.getRows !== "function") return result;
-        const wrapped = Object.create(native) as OracleResultSetLike;
-        const closeNative = native.close.bind(native);
-        let reads = 0;
-        if (native.getRow) {
-          wrapped.getRow = async (): Promise<unknown | null | undefined> => {
-            reads += 1;
-            if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
-            if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
-            return native.getRow!();
+      const instrumentedConnections = new WeakSet<object>();
+      const instrumentStreamConnection = (candidate: OracleConnectionLike, countSideEffects: boolean): void => {
+        if (instrumentedConnections.has(candidate)) return;
+        instrumentedConnections.add(candidate);
+        const execute = candidate.execute.bind(candidate);
+        candidate.execute = async (text: string, binds?: unknown, executeOptions?: unknown): Promise<unknown> => {
+          if (text.includes("CERT_INIT_FAILURE")) throw faults.initFailure;
+          if (countSideEffects) sideEffects += 1;
+          if (countSideEffects) executeStarts += 1;
+          let result = (executeOptions === undefined
+            ? await execute(text, binds)
+            : await execute(text, binds, executeOptions)) as OracleExecuteResultLike;
+          const wrapLob = (value: unknown): unknown => {
+            if (value === null || typeof value !== "object" || typeof (value as { readonly destroy?: unknown }).destroy !== "function") return value;
+            const lob = value as { destroy(error?: Error): unknown };
+            const destroyNative = lob.destroy.bind(value);
+            lob.destroy = (error?: Error): unknown => {
+              routineLobCloses += 1;
+              return destroyNative(error);
+            };
+            return value;
           };
-        }
-        if (native.getRows) {
-          wrapped.getRows = async (size?: number): Promise<readonly unknown[]> => {
-            reads += 1;
-            if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
-            if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
-            return native.getRows!(size);
+          if (result.outBinds !== undefined && result.outBinds !== null && typeof result.outBinds === "object") {
+            const outBinds = result.outBinds as Record<string, unknown> | readonly unknown[];
+            const wrappedOutBinds = Array.isArray(outBinds)
+              ? outBinds.map(wrapLob)
+              : Object.fromEntries(Object.entries(outBinds).map(([name, value]) => [name, wrapLob(value)]));
+            result = { ...result, outBinds: wrappedOutBinds };
+          }
+          const native = result.resultSet;
+          if (!native) return result;
+          const wrapped = Object.create(native) as OracleResultSetLike;
+          const closeNative = native.close.bind(native);
+          let reads = 0;
+          if (native.getRow) {
+            wrapped.getRow = async (): Promise<unknown | null | undefined> => {
+              reads += 1;
+              if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
+              if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
+              return native.getRow!();
+            };
+          }
+          if (native.getRows) {
+            wrapped.getRows = async (size?: number): Promise<readonly unknown[]> => {
+              reads += 1;
+              if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
+              if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
+              return native.getRows!(size);
+            };
+          }
+          wrapped.close = async (): Promise<void> => {
+            streamCounters.resultSetCloses += 1;
+            await closeNative();
+            if (text.includes("CERT_CLEANUP_FAILURE")) throw faults.cleanupFailure;
           };
-        }
-        wrapped.close = async (): Promise<void> => {
-          streamCounters.released += 1;
-          await closeNative();
-          if (text.includes("CERT_CLEANUP_FAILURE")) throw faults.cleanupFailure;
+          return { ...result, resultSet: wrapped };
         };
-        return { ...result, resultSet: wrapped };
       };
+      instrumentStreamConnection(connection, true);
+      let nativeBulkCalls = 0;
+      const nativeExecuteMany = connection.executeMany?.bind(connection);
+      if (nativeExecuteMany) {
+        connection.executeMany = async (statement: string, binds: unknown, executeOptions?: unknown): Promise<unknown> => {
+          nativeBulkCalls += 1;
+          return nativeExecuteMany(statement, binds, executeOptions);
+        };
+      }
       const direct = createOracledbDatabase(connection, { streamFetchSize: 2 });
-      const pooled = createOracledbPoolDatabase(pool, { streamFetchSize: 2 });
       const nativePool = pool as unknown as { readonly connectionsInUse?: number; readonly connectionsOpen?: number };
       const pooledConnections = (): number => nativePool.connectionsInUse ?? 0;
       let rollbackFailure: Error | undefined;
@@ -308,6 +318,7 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       const nativeGetConnection = poolWithFaults.getConnection.bind(poolWithFaults);
       poolWithFaults.getConnection = async (): Promise<OracleConnectionLike> => {
         const leased = await nativeGetConnection();
+        instrumentStreamConnection(leased, false);
         const rollback = leased.rollback?.bind(leased);
         const close = leased.close?.bind(leased);
         forceFaultConnectionCleanup = async () => {
@@ -326,15 +337,42 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
           if (rollbackFailure) throw rollbackFailure;
           await rollback?.();
         };
-        leased.close = async () => {
+        leased.close = async (closeOptions) => {
+          streamCounters.released += 1;
           if (releaseFailure) {
-            await close?.();
+            await close?.(closeOptions);
             throw releaseFailure;
           }
-          await close?.();
+          await close?.(closeOptions);
         };
         return leased;
       };
+      const baseProvider = createOracledbPoolProvider(pool, { streamFetchSize: 2 });
+      const pooled = createPooledDatabase({
+        ...baseProvider,
+        async acquire() {
+          const lease = await baseProvider.acquire();
+          const stream = lease.stream?.bind(lease);
+          if (!stream) return lease;
+          return {
+            ...lease,
+            stream<Row>(rendered: Parameters<NonNullable<typeof lease.stream>>[0], binding: Parameters<NonNullable<typeof lease.stream>>[1], options: Parameters<NonNullable<typeof lease.stream>>[2]) {
+              const source = stream(rendered, binding, options);
+              const iterator = source[Symbol.asyncIterator]() as AsyncIterator<Row>;
+              const wrapped: AsyncIterator<Row> & AsyncIterable<Row> = {
+                [Symbol.asyncIterator]() { return this; },
+                next(value?: unknown) { return iterator.next(value); },
+                return(value?: unknown) {
+                  streamCounters.iteratorReturns += 1;
+                  return iterator.return ? iterator.return(value) : Promise.resolve({ done: true, value });
+                },
+                throw(error?: unknown) { return iterator.throw ? iterator.throw(error) : Promise.reject(error); },
+              };
+              return wrapped;
+            },
+          };
+        },
+      });
       const reset = async (): Promise<void> => {
         await exec(connection, `TRUNCATE TABLE ${TABLE}`);
         await exec(connection, `TRUNCATE TABLE ${BULK_TABLE}`);
@@ -342,6 +380,7 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         await (connection as OracleConnectionLike & { commit?: () => Promise<void> }).commit?.();
         streamCounters.released = 0;
         streamCounters.iteratorReturns = 0;
+        streamCounters.resultSetCloses = 0;
       };
       await reset();
       sideEffects = 0;
@@ -401,9 +440,9 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
             rollbackFailure = undefined;
             releaseFailure = undefined;
             const observedLeases = pooledConnections();
+            assert.equal(observedLeases, 0);
             await forceFaultConnectionCleanup?.();
             forceFaultConnectionCleanup = undefined;
-            assert.equal(observedLeases, 0);
           }
           assert.ok(error instanceof AggregateError);
           const nested = (value: unknown): readonly unknown[] => value instanceof AggregateError
@@ -436,20 +475,45 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         },
         routineCleanup: async (query = makeQueries().routines!.lob): Promise<void> => {
           if (!query) throw new Error("Oracle routine LOB query missing.");
+          const beforeLobCloses = routineLobCloses;
           const result = await direct.call(query);
           const payload = result.output.payload;
           assert.equal(typeof payload, "string");
           assert.equal((payload as string).length, 4096);
-          const nativeResult = await execute(
+          assert.equal(routineLobCloses, beforeLobCloses + 1);
+          const nativeResult = await connection.execute(
             "BEGIN BRAID_RC3_CERT_LOB(:payload); END;",
             { payload: { dir: oracledb.BIND_OUT, type: oracledb.CLOB } },
-          ) as { readonly outBinds?: { readonly payload?: unknown } };
-          const lob = nativeResult.outBinds?.payload as { close?: () => Promise<void> } | undefined;
-          if (lob === undefined || typeof lob.close !== "function") throw new Error("Oracle native LOB resource missing.");
-          const close = lob.close.bind(lob);
-          await close();
-          routineLobCloses += 1;
-          assert.equal(routineLobCloses, 1);
+          ) as OracleExecuteResultLike;
+          const lob = (nativeResult.outBinds as { readonly payload?: unknown } | undefined)?.payload as {
+            destroy?: () => unknown;
+            once?: (event: string, listener: (...args: readonly unknown[]) => void) => unknown;
+            removeListener?: (event: string, listener: (...args: readonly unknown[]) => void) => unknown;
+          } | undefined;
+          if (lob === undefined || typeof lob.destroy !== "function" || typeof lob.once !== "function") throw new Error("Oracle native LOB resource missing.");
+          await new Promise<void>((resolve, reject) => {
+            let settled = false;
+            const onError = (error: unknown): void => {
+              if (settled) return;
+              settled = true;
+              lob.removeListener?.("close", onClose);
+              reject(error);
+            };
+            const onClose = (): void => {
+              if (settled) return;
+              settled = true;
+              lob.removeListener?.("error", onError);
+              resolve();
+            };
+            lob.once!("error", onError);
+            lob.once!("close", onClose);
+            try {
+              lob.destroy!();
+            } catch (error) {
+              onError(error);
+            }
+          });
+          assert.equal(routineLobCloses, beforeLobCloses + 2);
           await direct.one(makeQueries().identity);
         },
       };
@@ -457,8 +521,8 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         db: direct,
         pooled,
         queries: makeQueries(),
-        stream: streamFixture(direct, faults, streamCounters, async () => { await direct.one(makeQueries().identity); }),
-        bulk: bulkFixture(direct),
+        stream: streamFixture(pooled, faults, streamCounters, async () => { await pooled.one(makeQueries().identity); }),
+        bulk: bulkFixture(direct, () => nativeBulkCalls),
         metrics,
         reset,
         unsupported,

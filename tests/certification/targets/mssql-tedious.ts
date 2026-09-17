@@ -2,8 +2,9 @@ import { Buffer } from "node:buffer";
 import assert from "node:assert/strict";
 import { Connection, ISOLATION_LEVEL } from "tedious";
 import { inject } from "vitest";
-import type { CommandQuery, Database, ExecutionOptions, RowQuery, StreamOptions } from "@sqlbraid/core";
-import { createTediousDatabase, createTediousPoolDatabase, type TediousConnectionLike, type TediousPoolConnectionLike, type TediousPoolLike } from "@sqlbraid/mssql/tedious";
+import type { CommandQuery, Database, ExecutionOptions, RowQuery } from "@sqlbraid/core";
+import { createTediousDatabase, createTediousPoolProvider, type TediousConnectionLike, type TediousPoolConnectionLike, type TediousPoolLike } from "@sqlbraid/mssql/tedious";
+import { createPooledDatabase } from "@sqlbraid/runtime";
 import { mssqlParameter, sql } from "@sqlbraid/mssql";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
@@ -177,12 +178,12 @@ function queries(): CertificationFixture["queries"] {
     prepared,
     routines,
     fidelity: {
-      largeExactInteger: sql.rows`SELECT CAST(${9007199254740991n} AS bigint) AS value`,
+      largeExactInteger: sql.rows`SELECT CAST(${9007199254740993n} AS bigint) AS value`,
       exactDecimal: sql.rows`SELECT ${12345.6789} AS value`,
       temporal: sql.rows`SELECT CAST(${new Date("2026-09-14T12:34:56.789Z")} AS datetime2) AS value`,
       injection: sql.rows`SELECT ${"'; UPDATE dbo.braid_cert_mssql SET value=N'hacked' WHERE id=1; --"} AS value`,
       expected: {
-        largeExactInteger: { value: "9007199254740991" },
+        largeExactInteger: { value: "9007199254740993" },
         exactDecimal: { value: 12345.6789 },
         temporal: { value: new Date("2026-09-14T12:34:56.789Z") },
         injection: { value: "'; UPDATE dbo.braid_cert_mssql SET value=N'hacked' WHERE id=1; --" },
@@ -243,30 +244,37 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
         return tracked;
       },
     };
-    const database = createTediousPoolDatabase(pool);
+    const baseProvider = createTediousPoolProvider(pool);
     let iteratorReturns = 0;
-    let streamCleanupFailureQuery: RowQuery<unknown> | undefined;
-    const streamDatabase: Pick<Database, "stream"> = {
-      stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row> {
-        if (query === streamCleanupFailureQuery) stats.streamCleanupFailure = Object.assign(new Error("mssql-cert-stream-cleanup-failure"), { code: "EREQUEST" });
-        const source = database.stream(query, options);
-        const iterator = source[Symbol.asyncIterator]();
-        const wrapped: AsyncIterator<Row> & AsyncIterable<Row> = {
-          [Symbol.asyncIterator]() { return this; },
-          async next(value?: unknown) {
-            return iterator.next(value);
-          },
-          return(value?: unknown) {
-            iteratorReturns += 1;
-            return iterator.return ? iterator.return(value) : Promise.resolve({ done: true, value });
-          },
-          throw(error?: unknown) {
-            return iterator.throw ? iterator.throw(error) : Promise.reject(error);
+    const database = createPooledDatabase({
+      ...baseProvider,
+      async acquire() {
+        const lease = await baseProvider.acquire();
+        const stream = lease.stream?.bind(lease);
+        if (!stream) return lease;
+        return {
+          ...lease,
+          stream<Row>(rendered: Parameters<NonNullable<typeof lease.stream>>[0], binding: Parameters<NonNullable<typeof lease.stream>>[1], options: Parameters<NonNullable<typeof lease.stream>>[2]) {
+            const sourceSql = (rendered as { readonly segments?: readonly string[] }).segments?.join("");
+            if (sourceSql?.includes("CERT_STREAM_CLEANUP_FAILURE")) {
+              stats.streamCleanupFailure = Object.assign(new Error("mssql-cert-stream-cleanup-failure"), { code: "EREQUEST" });
+            }
+            const source = stream(rendered, binding, options);
+            const iterator = source[Symbol.asyncIterator]() as AsyncIterator<Row>;
+            const wrapped: AsyncIterator<Row> & AsyncIterable<Row> = {
+              [Symbol.asyncIterator]() { return this; },
+              next(value?: unknown) { return iterator.next(value); },
+              return(value?: unknown) {
+                iteratorReturns += 1;
+                return iterator.return ? iterator.return(value) : Promise.resolve({ done: true, value });
+              },
+              throw(error?: unknown) { return iterator.throw ? iterator.throw(error) : Promise.reject(error); },
+            };
+            return wrapped;
           },
         };
-        return wrapped;
       },
-    };
+    });
     const bulkDatabase = {
       bulk: (async <Input>(
         inputs: readonly Input[],
@@ -323,33 +331,35 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
       executionSchemaFailure,
       initFailureQuery: streamInitFailure,
       initFailure: { code: "EREQUEST" },
-      initFailureCleanup: { iteratorReturns: 0, released: 1 },
+      initFailureCleanup: { iteratorReturns: 1, released: 1 },
       firstNextFailureQuery: streamFirstNextFailure,
       firstNextFailure: { code: "EREQUEST" },
       midStreamFailureQuery: streamMidFailure,
       midStreamFailure: { code: "EREQUEST" },
-      cleanupFailureQuery: sql.rows`SELECT value FROM ${sql.raw(TABLE)} WHERE id = 1`,
+      cleanupFailureQuery: sql.rows`SELECT value FROM ${sql.raw(TABLE)} WHERE id = 1 /* CERT_STREAM_CLEANUP_FAILURE */`,
       cleanupFailure: { code: "EREQUEST" },
       largeResultQuery: streamLarge,
       largeResultCount: 3,
     } as StreamingConformanceFixture<unknown> & Record<string, unknown>;
-    streamCleanupFailureQuery = stream.cleanupFailureQuery;
     const bulk: BulkConformanceFixture<unknown> = {
       db: bulkDatabase,
       inputs: [{ id: 10, value: "bulk-a" }, { id: 11, value: "bulk-b" }],
-      factory: (input) => sql.command`INSERT INTO ${sql.raw(TABLE)} (id, value) VALUES (${(input as { id: number }).id}, ${(input as { value: string }).value})`,
+      factory: (input) => sql.command`INSERT INTO ${sql.raw(TABLE)} (id, value) VALUES (${sql.bind((input as { id: number }).id, mssqlParameter.int())}, ${sql.bind((input as { value: string }).value, mssqlParameter.nvarchar(80))})`,
       expected: { inputCount: 2, affectedRows: 2 },
       acquireCount: () => stats.acquires,
       executeCount: () => stats.bulkExecutions,
       middleFailure: async () => {
         let error: unknown;
         try {
-          await database.bulk([{ id: 12, value: "first" }, { id: 10, value: "duplicate" }], (input) => sql.command`INSERT INTO ${sql.raw(TABLE)} (id, value) VALUES (${(input as { id: number }).id}, ${(input as { value: string }).value})`);
+          await database.bulk(
+            [{ id: 12, value: "first" }, { id: 10, value: "duplicate" }, { id: 13, value: "later" }],
+            bulk.factory,
+          );
         } catch (caught) {
           error = caught;
         }
         if (error === undefined) throw new Error("MSSQL bulk middle failure did not reject.");
-        const rows = await database.all<{ readonly id: unknown; readonly value: unknown }>(sql.rows`SELECT id, value FROM ${sql.raw(TABLE)} WHERE id = 12 ORDER BY id`);
+        const rows = await database.all<{ readonly id: unknown; readonly value: unknown }>(sql.rows`SELECT id, value FROM ${sql.raw(TABLE)} WHERE id IN (12, 13) ORDER BY id`);
         await database.execute(sql`DELETE FROM ${sql.raw(TABLE)} WHERE id = 12`);
         const observedRows = rows.map((row) => ({ id: Number(row.id), value: row.value }));
         return {
@@ -383,17 +393,19 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
         let error: unknown;
         const faultRaw = await connect(settings);
         const faultTracked = trackedConnection(faultRaw, stats);
-        const faultDatabase = createTediousPoolDatabase({
+        const faultPool: TediousPoolLike = {
           async acquire() {
             stats.leased = true;
             return faultTracked;
           },
-        });
+        };
+        const faultDatabase = createPooledDatabase(createTediousPoolProvider(faultPool));
         try {
           await faultDatabase.tx(async () => { throw primary; });
         } catch (caught) {
           error = caught;
         } finally {
+          assert.equal(stats.leased, false);
           stats.rollbackFailure = undefined;
           stats.releaseFailure = undefined;
           await close(faultRaw);
@@ -404,7 +416,8 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
           : [];
         const errors = [error, ...nested(error)];
         assert.ok(errors.includes(primary));
-        assert.ok(errors.includes(rollbackFailure) || errors.includes(releaseFailure));
+        assert.ok(errors.includes(rollbackFailure));
+        assert.ok(errors.includes(releaseFailure));
         await database.execute(fixtureQueries.identity);
       },
       routineCleanup: async (query = fixtureQueries.routines!.lob): Promise<void> => {
@@ -421,7 +434,7 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
       queries: fixtureQueries,
       stream: {
         ...stream,
-        db: streamDatabase,
+        db: database,
         released: () => stats.releaseCount,
         iteratorReturns: () => iteratorReturns,
         reuseAfterBreak: async () => { await database.one(fixtureQueries.identity); },
