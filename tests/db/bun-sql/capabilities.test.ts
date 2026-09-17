@@ -63,9 +63,8 @@ for (const dialect of ["postgres", "mysql", "mariadb", "sqlite"]) {
       "transaction.statement-rollback",
       "transaction.caught-error-terminal-outcome",
       "transaction.savepoint-recovery",
-      ...(dialect === "sqlite"
-        ? []
-        : ["transaction.access-mode", "resource.session-lease", "resource.transaction-lease"]),
+      ...(dialect === "postgres" ? ["transaction.access-mode"] : []),
+      ...(dialect === "sqlite" ? [] : ["resource.session-lease", "resource.transaction-lease"]),
     ];
     for (const scenario of scenarios) {
       const title = `[contract:bun-sql-${dialect}:${scenario}:integration] [ownership:${dialect === "sqlite" ? "direct" : "pooled"}]`;

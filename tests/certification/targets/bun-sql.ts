@@ -668,7 +668,7 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     "BRAID_CALL_UNSUPPORTED",
     "routine.call",
   );
-  if (dialect === "sqlite") {
+  if (dialect !== "postgres") {
     const optionCases: readonly CertificationCaseId[] = [
       "TX020",
       "TX021",
@@ -686,8 +686,10 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     ];
     for (const id of optionCases) {
       const transactionOptions = optionFor(id);
+      if (expectedTransactionOptions(dialect)[optionKey(transactionOptions)] !== "unsupported") continue;
       const rejectionFeature =
-        transactionOptions.readOnly !== undefined && transactionOptions.isolation === "serializable"
+        dialect !== "sqlite" ||
+        (transactionOptions.readOnly !== undefined && transactionOptions.isolation === "serializable")
           ? "transaction.read-only"
           : transactionOptions.isolation === undefined
             ? "transaction.read-only"
@@ -970,6 +972,8 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
           ),
       };
     }
+  }
+  if (dialect === "postgres") {
     guarded["transaction.read-only"] = {
       prove: async () => {
         if (dialect === "postgres") {
@@ -1076,12 +1080,14 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     } catch (error) {
       caught = error;
     }
-    if (dialect === "sqlite") {
+    if (dialect !== "postgres") {
       if (
         (caught as { readonly code?: unknown }).code !== "BRAID_TX_OPTION_UNSUPPORTED" ||
         (caught as { readonly feature?: unknown }).feature !== "transaction.read-only"
       ) {
-        throw new Error("Bun.SQL SQLite read-only transaction did not reject with its public unsupported contract.");
+        throw new Error(
+          `Bun.SQL ${dialect} read-only transaction did not reject with its public unsupported contract.`,
+        );
       }
     } else if (
       !(caught instanceof Error) ||

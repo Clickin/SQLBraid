@@ -687,9 +687,10 @@ export function BUN_EXPECTED_CAPABILITIES(dialect: BunSqlDialect): ExpectedCapab
     }),
     transaction: capability("guaranteed"),
     "transaction.savepoint": capability("guaranteed"),
-    "transaction.read-only": server
-      ? capability("guarded", { conditionCode: "bun-sql.transaction-options" })
-      : capability("unsupported"),
+    "transaction.read-only":
+      dialect === "postgres"
+        ? capability("guarded", { conditionCode: "bun-sql.transaction-options" })
+        : capability("unsupported", mysqlFamily ? { conditionCode: "bun-sql.mysql-read-only-cache" } : {}),
     "transaction.isolation.read-uncommitted": server
       ? capability("guarded", { conditionCode: "bun-sql.transaction-options" })
       : capability("unsupported"),
@@ -718,7 +719,10 @@ export function BUN_EXPECTED_TRANSACTION_OPTIONS(
     Object.fromEntries(
       OPTION_KEYS.map((key) => [
         key,
-        dialect === "sqlite" && key !== "isolation:serializable" ? "unsupported" : "guaranteed",
+        (dialect === "sqlite" && key !== "isolation:serializable") ||
+        ((dialect === "mysql" || dialect === "mariadb") && !key.startsWith("isolation:"))
+          ? "unsupported"
+          : "guaranteed",
       ]),
     ),
   ) as Record<TransactionOptionKey, "guaranteed" | "unsupported">;
