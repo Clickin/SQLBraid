@@ -35,11 +35,7 @@ afterEach(async () => {
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-async function fixture(
-  version = "0.1.0-rc.0",
-  names = ["@sqlbraid/core"],
-  releaseNames = names,
-) {
+async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"], releaseNames = names) {
   setReleaseVersion(version);
   vi.stubEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://oidc.actions.example/token");
   vi.stubEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "actions-fixture");
@@ -191,26 +187,21 @@ test("certification exercises exact tarball staged dry-run with no registry read
 });
 
 test("package-specific staging validates the full candidate but uploads only the selected package", async () => {
-  const f = await fixture(
-    "1.0.1",
-    ["@sqlbraid/core", "@sqlbraid/postgres"],
-    ["@sqlbraid/postgres"],
-  );
+  const f = await fixture("1.0.1", ["@sqlbraid/core", "@sqlbraid/postgres"], ["@sqlbraid/postgres"]);
   f.publicIntegrity.set("@sqlbraid/core", f.manifest.packages[0].integrity);
   const result = await f.run();
   assert.ok(result?.complete);
-  assert.deepEqual(result?.packages.map(({ name }) => name), ["@sqlbraid/postgres"]);
+  assert.deepEqual(
+    result?.packages.map(({ name }) => name),
+    ["@sqlbraid/postgres"],
+  );
   assert.equal(f.uploads().length, 1);
   assert.match(f.uploads()[0][2], /package-1\.tgz$/u);
   assert.equal(result?.packages[0].tag, "release-1.0.1");
 });
 
 test("package-specific staging refuses an unpublished internal dependency", async () => {
-  const f = await fixture(
-    "1.0.1",
-    ["@sqlbraid/core", "@sqlbraid/postgres"],
-    ["@sqlbraid/postgres"],
-  );
+  const f = await fixture("1.0.1", ["@sqlbraid/core", "@sqlbraid/postgres"], ["@sqlbraid/postgres"]);
   await assert.rejects(f.run(), /Release dependency @sqlbraid\/core@1\.0\.1 .* is not public/u);
   assert.equal(f.uploads().length, 0);
 });
