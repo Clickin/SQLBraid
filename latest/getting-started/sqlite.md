@@ -8,13 +8,18 @@ This path uses Node `>=22.18.0` and `node:sqlite`; no database server is require
 
 The SQLite dialect is shared, but the physical adapter is selected by subpath:
 
-| Subpath | Physical boundary | Important limits |
-| --- | --- | --- |
-| `sqlbraid/node-sqlite` | Node `DatabaseSync` / `StatementSync` | synchronous physical calls; exact INTEGER strings; native `iterate()` stream |
-| `sqlbraid/better-sqlite3` | better-sqlite3 statements | synchronous and event-loop blocking; statement-local `safeIntegers(true)`; native iteration |
-| `sqlbraid/libsql` | `@libsql/client` | requires `intMode: "string"`; interactive transactions; no pinned session or stream fallback |
-| `sqlbraid/sqlite-wasm` | SQLite WASM OO1 | OO1 statement ownership; async-generator adaptation for streams |
-| `sqlbraid/d1` | Cloudflare D1 | prepared binds; no streaming or callback transactions |
+| Subpath                   | Physical boundary                     | Important limits                                                                             |
+| ------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `sqlbraid/node-sqlite`    | Node `DatabaseSync` / `StatementSync` | synchronous physical calls; exact INTEGER strings; native `iterate()` stream                 |
+| `sqlbraid/better-sqlite3` | better-sqlite3 statements             | synchronous and event-loop blocking; statement-local `safeIntegers(true)`; native iteration  |
+| `sqlbraid/libsql`         | `@libsql/client`                      | requires `intMode: "string"`; interactive transactions; no pinned session or stream fallback |
+| `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                       | OO1 statement ownership; async-generator adaptation for streams                              |
+| `sqlbraid/d1`             | Cloudflare D1                         | prepared binds; no streaming or callback transactions                                        |
+
+Deno 2.9.3's `node:sqlite` iterator turns SQLite step errors into normal EOF.
+SQLBraid therefore rejects streaming on Deno with `BRAID_STREAM_UNSUPPORTED`
+instead of returning silently truncated rows. Materialized queries and
+transactions remain available; Node's native iterator is unaffected.
 
 The public `Database` API remains async for every adapter. `Awaitable<T>` is
 only the physical `QueryExecutor` SPI type that lets synchronous adapters
@@ -29,7 +34,6 @@ is not certification. Final exact-SHA Runtime, Docs, and Release gates and
 explicit release authorization remain separate requirements; this page does not
 authorize npm publication.
 :::
-
 
 ## 1. Create a project
 
@@ -139,15 +143,15 @@ procedures.
 `node:sqlite` is a Node runtime API, not a server version. The profile records
 Node and the SQLite library bundled by Node.
 
-| SQLite surface | Profile representation | Status/caveat |
-| --- | --- | --- |
-| INTEGER storage | string | Canonical exact decimal text; native bigint is internal transport only. |
-| REAL storage | JavaScript `number` | SQLite binary64 approximate value. |
-| `STRICT` tables | SQLite-native affinity enforcement | A schema feature, not a SQLBraid parser guarantee. |
-| non-STRICT tables / `ANY` | SQLite dynamic values | The returned representation follows the stored value and driver. |
-| JSON1 | text | Parse/validate JSON text with Standard Schema. |
-| BLOB | `Buffer`/bytes | Keep binary or explicitly encode it. |
-| `RETURNING` | materialized rowset | Output is accumulated before delivery; DML-returning streaming is not claimed. |
+| SQLite surface            | Profile representation             | Status/caveat                                                                  |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------ |
+| INTEGER storage           | string                             | Canonical exact decimal text; native bigint is internal transport only.        |
+| REAL storage              | JavaScript `number`                | SQLite binary64 approximate value.                                             |
+| `STRICT` tables           | SQLite-native affinity enforcement | A schema feature, not a SQLBraid parser guarantee.                             |
+| non-STRICT tables / `ANY` | SQLite dynamic values              | The returned representation follows the stored value and driver.               |
+| JSON1                     | text                               | Parse/validate JSON text with Standard Schema.                                 |
+| BLOB                      | `Buffer`/bytes                     | Keep binary or explicitly encode it.                                           |
+| `RETURNING`               | materialized rowset                | Output is accumulated before delivery; DML-returning streaming is not claimed. |
 
 The native binding uses `?` placeholders and `StatementSync`; `iterate()` is
 the stream primitive and a prepared loop is the bulk strategy. SQLite has no

@@ -959,7 +959,7 @@ Exclusions: Only this exact Deno runtime, driver, database and representation pr
 | `result.command` | guaranteed |
 | `result.standard-schema` | guaranteed |
 | `statement.prepare` | guaranteed |
-| `statement.stream` | guaranteed |
+| `statement.stream` | unsupported |
 | `statement.bulk` | guaranteed |
 | `transaction` | guaranteed |
 | `transaction.savepoint` | guaranteed |
@@ -1123,6 +1123,8 @@ numeric.command-metadata          numeric.special-values
 numeric.scale-greater-than-precision
 numeric.negative-scale
 data.json-parsed                  data.json-lossless-text
+data.sql-variant                  data.oracle-object
+data.oracle-collection            data.vector
 data.binary                       data.uuid
 data.temporal-native              data.temporal-lossless
 data.timezone

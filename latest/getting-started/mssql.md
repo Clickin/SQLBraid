@@ -31,7 +31,7 @@ const connection = new Connection({
   options: { database: process.env.SQLSERVER_DATABASE ?? "app", trustServerCertificate: true },
 });
 await new Promise<void>((resolve, reject) => {
-  connection.once("connect", (error) => error ? reject(error) : resolve());
+  connection.once("connect", (error) => (error ? reject(error) : resolve()));
   connection.connect();
 });
 const db = createTediousDatabase(connection);
@@ -96,15 +96,15 @@ Tedious 20.0.0 on Node 22.18.0/Linux x64. The support manifest, not this
 page, assigns the evidence label; another SQL Server edition or runtime is a
 separate profile.
 
-| SQL Server value | Driver raw / SQLBraid canonical representation | Status/caveat |
-| --- | --- | --- |
-| `tinyint` / `smallint` / `int` / `bigint` | string | Exact integer transport is canonical text; `decodeExactInteger` is an application opt-in. |
-| `decimal` / `numeric` / `money` / `smallmoney` | number → unsupported for exact output | Use a character bind plus authored text `CAST`/`CONVERT`; do not stringify a lossy Number. |
-| `real` / `float` | JavaScript `number` | Approximate binary32/binary64 values; SQL Server does not claim NaN/Infinity support. |
-| `datetime2` / `datetimeoffset` | `Date` | Native convenience profile; use authored ISO/text conversion for 100ns or offset fidelity. |
-| `uniqueidentifier` | string | Validate with the application schema if required. |
-| `varbinary` | `Buffer` | Keep bytes or explicitly encode. |
-| JSON | text | SQL Server JSON is character data; SQLBraid does not parse it, so text can preserve nested numeric lexemes. |
+| SQL Server value                               | Driver raw / SQLBraid canonical representation | Status/caveat                                                                                               |
+| ---------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `tinyint` / `smallint` / `int` / `bigint`      | string                                         | Exact integer transport is canonical text; `decodeExactInteger` is an application opt-in.                   |
+| `decimal` / `numeric` / `money` / `smallmoney` | number → unsupported for exact output          | Use a character bind plus authored text `CAST`/`CONVERT`; do not stringify a lossy Number.                  |
+| `real` / `float`                               | JavaScript `number`                            | Approximate binary32/binary64 values; SQL Server does not claim NaN/Infinity support.                       |
+| `datetime2` / `datetimeoffset`                 | `Date`                                         | Native convenience profile; use authored ISO/text conversion for 100ns or offset fidelity.                  |
+| `uniqueidentifier`                             | string                                         | Validate with the application schema if required.                                                           |
+| `varbinary`                                    | `Buffer`                                       | Keep bytes or explicitly encode.                                                                            |
+| JSON                                           | text                                           | SQL Server JSON is character data; SQLBraid does not parse it, so text can preserve nested numeric lexemes. |
 
 The binding transport is a typed Tedious request with deterministic `@p1`,
 `@p2`, … names and `TYPES.*` metadata. Native `OUTPUT` rows are materialized

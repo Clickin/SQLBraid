@@ -71,11 +71,7 @@ transaction은 stream을 기다리거나 다른 lease를 얻지 않고 `BEGIN` �
 Portable option은 의도적으로 고정되어 있습니다.
 
 ```ts
-type TransactionIsolation =
-  | "read-uncommitted"
-  | "read-committed"
-  | "repeatable-read"
-  | "serializable";
+type TransactionIsolation = "read-uncommitted" | "read-committed" | "repeatable-read" | "serializable";
 
 interface TransactionOptions {
   isolation?: TransactionIsolation;

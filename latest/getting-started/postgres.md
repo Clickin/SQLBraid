@@ -16,7 +16,10 @@ A direct factory receives a connected `pg.Client` or `pg.PoolClient`, not a `pg.
 import { Client } from "pg";
 import { createPgDatabase, sql } from "sqlbraid/pg";
 
-interface UserRow { id: string; name: string }
+interface UserRow {
+  id: string;
+  name: string;
+}
 
 const client = new Client({ connectionString: process.env.DATABASE_URL });
 await client.connect();
@@ -109,16 +112,16 @@ const generated = generateModels(snapshot, { typePolicy });
 per-OID parser behavior, not that every temporal type becomes `Date`. A custom
 `pg-types` parser is another profile and needs its own raw-value evidence.
 
-| Value | Driver raw / SQLBraid canonical output | Fidelity boundary |
-| --- | --- | --- |
-| `int2` / `int4` / `int8` / `oid` | driver-dependent → `string` | Exact output is canonical text, never `number` or `bigint`. |
-| `numeric` / `decimal` | text → `string` | A JavaScript `number` is not accepted as exact. |
-| `float4` / `float8` | number → `number` | Approximate binary value; `SHOW extra_float_digits` must be positive for the lossless text read profile. |
-| `money` | unsupported | PostgreSQL's locale-formatted text is not a canonical numeric value; use an authored conversion with an explicit format. |
-| `json` / `jsonb` | text → `string`; native → `unknown` | Parsed roots may be string, number, boolean, `null`, array, or object; native nested numeric fidelity is not guaranteed. |
-| `date` / `timestamp` / `timestamptz` | text → `string`; native → `Date` | `time`/`timetz` remain text in native mode; `interval` is `unknown`. |
-| `bytea` | `Buffer` | Keep bytes or explicitly encode them. |
-| `uuid` | string | Validate format in the application schema when needed. |
+| Value                                | Driver raw / SQLBraid canonical output | Fidelity boundary                                                                                                        |
+| ------------------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `int2` / `int4` / `int8` / `oid`     | driver-dependent → `string`            | Exact output is canonical text, never `number` or `bigint`.                                                              |
+| `numeric` / `decimal`                | text → `string`                        | A JavaScript `number` is not accepted as exact.                                                                          |
+| `float4` / `float8`                  | number → `number`                      | Approximate binary value; `SHOW extra_float_digits` must be positive for the lossless text read profile.                 |
+| `money`                              | unsupported                            | PostgreSQL's locale-formatted text is not a canonical numeric value; use an authored conversion with an explicit format. |
+| `json` / `jsonb`                     | text → `string`; native → `unknown`    | Parsed roots may be string, number, boolean, `null`, array, or object; native nested numeric fidelity is not guaranteed. |
+| `date` / `timestamp` / `timestamptz` | text → `string`; native → `Date`       | `time`/`timetz` remain text in native mode; `interval` is `unknown`.                                                     |
+| `bytea`                              | `Buffer`                               | Keep bytes or explicitly encode them.                                                                                    |
+| `uuid`                               | string                                 | Validate format in the application schema when needed.                                                                   |
 
 Exact string inputs are supported through the text-positional bind path when
 the documented profile proves an end-to-end round trip. Ordinary `undefined`

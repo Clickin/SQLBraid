@@ -78,10 +78,26 @@ not shape identity. Values may change; structural shape may not.
 ```ts
 interface QueryExecutor {
   readonly statementBinding: StatementBindingAdapter;
-  query<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<QueryExecutionResult<Row>>;
-  stream<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row>;
-  call(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<DriverRoutineResult>;
-  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Awaitable<BulkExecutionResult>;
+  query<Row>(
+    statement: RenderedStatement,
+    binding?: StatementBindingDescription,
+    options?: ExecutionOptions,
+  ): Awaitable<QueryExecutionResult<Row>>;
+  stream<Row>(
+    statement: RenderedStatement,
+    binding?: StatementBindingDescription,
+    options?: ExecutionOptions,
+  ): AsyncIterable<Row>;
+  call(
+    statement: RenderedStatement,
+    binding?: StatementBindingDescription,
+    options?: ExecutionOptions,
+  ): Awaitable<DriverRoutineResult>;
+  bulk?(
+    bulk: RenderedBulk,
+    binding: BulkBindingDescription,
+    options?: ExecutionOptions,
+  ): Awaitable<BulkExecutionResult>;
   begin?(options?: TransactionOptions): Awaitable<void>;
   commit?(): Awaitable<void>;
   rollback?(): Awaitable<void>;
@@ -122,12 +138,19 @@ interface WireClient {
   release(options?: { discard?: boolean }): void | Promise<void>;
 }
 
-const requests = new WeakMap<StatementBindingDescription, { statement: RenderedStatement; text: string; values: readonly unknown[] }>();
+const requests = new WeakMap<
+  StatementBindingDescription,
+  { statement: RenderedStatement; text: string; values: readonly unknown[] }
+>();
 
 function assertSignal(options?: ExecutionOptions): void {
   if (options?.signal?.aborted) throw options.signal.reason;
   if (options?.signal) {
-    throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "acme-wire cannot cancel an active statement");
+    throw new UnsupportedFeatureError(
+      "statement.cancel",
+      "BRAID_CANCEL_UNSUPPORTED",
+      "acme-wire cannot cancel an active statement",
+    );
   }
 }
 
@@ -158,14 +181,19 @@ export function createAcmeExecutor(client: WireClient): QueryExecutor {
     async query<Row>(statement, binding, options) {
       assertSignal(options);
       statement = createRenderedStatement(statement);
-      const description = binding ?? acmeBinding.describe(statement, { dialectId: statement.dialectId, requestedReuse: "auto" });
+      const description =
+        binding ?? acmeBinding.describe(statement, { dialectId: statement.dialectId, requestedReuse: "auto" });
       const request = requests.get(description);
       if (request?.statement !== statement) throw new TypeError("BRAID_BINDING_IDENTITY");
       return client.execute<Row>(request.text, request.values);
     },
     stream(_statement, _binding, options): AsyncIterable<never> {
       assertSignal(options);
-      throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "acme-wire has no stream protocol");
+      throw new UnsupportedFeatureError(
+        "statement.stream",
+        "BRAID_STREAM_UNSUPPORTED",
+        "acme-wire has no stream protocol",
+      );
     },
     async call(_statement, _binding, options): Promise<never> {
       assertSignal(options);
@@ -181,7 +209,14 @@ export function createAcmeProvider(acquireClient: () => Promise<WireClient>): Co
       const client = await acquireClient();
       const executor = createAcmeExecutor(client);
       let released = false;
-      return { ...executor, async release(options) { if (released) return; released = true; await client.release(options); } };
+      return {
+        ...executor,
+        async release(options) {
+          if (released) return;
+          released = true;
+          await client.release(options);
+        },
+      };
     },
   };
 }

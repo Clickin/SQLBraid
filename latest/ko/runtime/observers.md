@@ -6,18 +6,20 @@
 
 ```ts
 const db = createPgPoolDatabase(pool, {
-  observers: [{
-    onEvent(event) {
-      if (event.type === "query:ready") {
-        logger.debug({
-          execution: event.execution,
-          sql: event.sql,
-          sqlWithLiterals: event.literalizedSql({ values: "redacted" }).text,
-          binds: event.values.map(() => "[REDACTED]"),
-        });
-      }
+  observers: [
+    {
+      onEvent(event) {
+        if (event.type === "query:ready") {
+          logger.debug({
+            execution: event.execution,
+            sql: event.sql,
+            sqlWithLiterals: event.literalizedSql({ values: "redacted" }).text,
+            binds: event.values.map(() => "[REDACTED]"),
+          });
+        }
+      },
     },
-  }],
+  ],
 });
 ```
 

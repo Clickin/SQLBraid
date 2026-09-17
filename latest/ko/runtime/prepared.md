@@ -5,9 +5,12 @@
 이름이 있는 input factory를 등록합니다(기본값은 required input입니다).
 
 ```ts
-const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`
+const byId = db.prepare(
+  "user-by-id",
+  (id: string) => sql.rows<UserRow>`
   SELECT id, name FROM users WHERE id = ${id}
-`);
+`,
+);
 
 const user = await byId.maybeOne("u_1");
 const all = await byId.all("u_1", { schema: UserSchema });
@@ -17,21 +20,15 @@ for await (const row of byId.stream("u_1", { signal })) consume(row);
 required-input contract를 명시하려면 다음과 같이 작성할 수 있습니다.
 
 ```ts
-const byId = db.prepare(
-  "user-by-id",
-  (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`,
-  { input: "required" },
-);
+const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`, {
+  input: "required",
+});
 ```
 
 zero-input factory는 `{ input: "none" }`을 명시해야 합니다.
 
 ```ts
-const users = db.prepare(
-  "users",
-  () => sql.rows<UserRow>`SELECT id, name FROM users`,
-  { input: "none" },
-);
+const users = db.prepare("users", () => sql.rows<UserRow>`SELECT id, name FROM users`, { input: "none" });
 await users.all({ signal });
 ```
 

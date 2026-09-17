@@ -80,10 +80,10 @@ SharedArrayBuffer, remote production support 또는 npm 발행을 주장하지 �
 SQLite는 같은 dialect이지만 WASM과 D1은 서로 다른 driver이므로 하나의
 증거 label을 공유하면 안 됩니다.
 
-| Driver | Driver raw / SQLBraid canonical 경계 | Stream/bulk/transaction |
-| --- | --- | --- |
-| SQLite WASM OO1 | SQLite dynamic value이며 INTEGER storage는 canonical string | pull iteration, prepared-loop bulk, callback transaction |
-| Cloudflare D1 binding | materialized 행과 순서가 있는 `?1`, `?2`, … bind | native `batch()` bulk; streaming과 callback transaction은 지원하지 않음 |
+| Driver                | Driver raw / SQLBraid canonical 경계                        | Stream/bulk/transaction                                                 |
+| --------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| SQLite WASM OO1       | SQLite dynamic value이며 INTEGER storage는 canonical string | pull iteration, prepared-loop bulk, callback transaction                |
+| Cloudflare D1 binding | materialized 행과 순서가 있는 `?1`, `?2`, … bind            | native `batch()` bulk; streaming과 callback transaction은 지원하지 않음 |
 
 선택한 WASM build/parser가 다른 표현을 증명하지 않는 한 JSON1은 text입니다.
 BLOB는 byte로 유지합니다. Native `RETURNING`은 전달 전에 materialize됩니다.

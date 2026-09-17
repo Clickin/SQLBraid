@@ -12,13 +12,15 @@ const typePolicy = typePolicyForProfile({ json: "text", temporal: "text" });
 
 export default defineConfig({
   codegen: {
-    targets: [{
-      name: "main",
-      metadata: "./db/main.metadata.json",
-      outFile: "./src/generated/database.ts",
-      typePolicy,
-      filters: { includeNamespaces: ["public"] },
-    }],
+    targets: [
+      {
+        name: "main",
+        metadata: "./db/main.metadata.json",
+        outFile: "./src/generated/database.ts",
+        typePolicy,
+        filters: { includeNamespaces: ["public"] },
+      },
+    ],
   },
 });
 ```

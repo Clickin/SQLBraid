@@ -80,10 +80,10 @@ publication.
 SQLite remains the dialect, but WASM and D1 are different drivers and must not
 share an evidence label.
 
-| Driver | Driver raw / SQLBraid canonical boundary | Stream/bulk/transaction |
-| --- | --- | --- |
-| SQLite WASM OO1 | SQLite dynamic values; INTEGER storage is canonical string | pull iteration, prepared-loop bulk, callback transaction |
-| Cloudflare D1 binding | materialized rows and ordered `?1`, `?2`, … binds | native `batch()` bulk; streaming and callback transaction are unsupported |
+| Driver                | Driver raw / SQLBraid canonical boundary                   | Stream/bulk/transaction                                                   |
+| --------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| SQLite WASM OO1       | SQLite dynamic values; INTEGER storage is canonical string | pull iteration, prepared-loop bulk, callback transaction                  |
+| Cloudflare D1 binding | materialized rows and ordered `?1`, `?2`, … binds          | native `batch()` bulk; streaming and callback transaction are unsupported |
 
 JSON1 is text unless the selected WASM build/parser proves another
 representation. BLOB values remain bytes. Native `RETURNING` is materialized

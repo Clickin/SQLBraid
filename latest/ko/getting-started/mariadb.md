@@ -62,14 +62,14 @@ Connector/Node.js는 유효 option을 노출하지 않습니다. descriptor를 �
 일부 option만 선언하면 인증 프로필이 아닌 `mariadb-custom-profile`로 표시합니다.
 명시한 descriptor도 관측이 아니라 조건부 선언입니다.
 
-| MariaDB 값 | Driver raw / SQLBraid canonical 표현 | 주의 |
-| --- | --- | --- |
-| TINYINT/SMALLINT/INT/BIGINT | driver 의존 → `string` | 정확한 정수 결과는 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다. |
-| DECIMAL/NUMERIC | text → `string` | 정확한 precision과 scale을 text로 유지하며 필요하면 애플리케이션 decimal transform을 사용합니다. |
-| FLOAT/DOUBLE | number → `number` | 근사 이진 값은 JavaScript number로 유지합니다. |
-| JSON 별칭 | `autoJsonMap:false` text → `string` | `autoJsonMap:true` parsed는 별도 편의 프로필이며 중첩 숫자 정확도를 보장하지 않습니다. |
-| DATE/TIME/DATETIME | `dateStrings:true` text → `string` | native `Date`는 별도 편의 프로필이며 fractional/zone 정보를 잃을 수 있습니다. |
-| BLOB | bytes/Buffer | byte로 유지하거나 명시적으로 encode합니다. |
+| MariaDB 값                  | Driver raw / SQLBraid canonical 표현 | 주의                                                                                             |
+| --------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| TINYINT/SMALLINT/INT/BIGINT | driver 의존 → `string`               | 정확한 정수 결과는 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다.       |
+| DECIMAL/NUMERIC             | text → `string`                      | 정확한 precision과 scale을 text로 유지하며 필요하면 애플리케이션 decimal transform을 사용합니다. |
+| FLOAT/DOUBLE                | number → `number`                    | 근사 이진 값은 JavaScript number로 유지합니다.                                                   |
+| JSON 별칭                   | `autoJsonMap:false` text → `string`  | `autoJsonMap:true` parsed는 별도 편의 프로필이며 중첩 숫자 정확도를 보장하지 않습니다.           |
+| DATE/TIME/DATETIME          | `dateStrings:true` text → `string`   | native `Date`는 별도 편의 프로필이며 fractional/zone 정보를 잃을 수 있습니다.                    |
+| BLOB                        | bytes/Buffer                         | byte로 유지하거나 명시적으로 encode합니다.                                                       |
 
 어댑터는 value-only 실행, native `queryStream()`, 동종 bulk를 위한
 `connection.batch()` 1회를 사용합니다. Native `RETURNING`은 정확한 서버

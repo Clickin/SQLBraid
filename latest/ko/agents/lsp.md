@@ -10,15 +10,15 @@ sqlbraid-language-server --config ./sqlbraid.config.mjs
 
 에이전트 하네스가 LSP를 지원한다면 진단, hover, completion, definition, references, 문서/워크스페이스 symbols, signature help에 LSP를 먼저 사용하세요.
 
-| LSP 작업 | SQLBraid 증거 |
-| --- | --- |
-| Diagnostics | Braid 오류와 매핑된 overlay 전용 TypeScript 오류 |
-| Completion | 정적 SQL의 메타데이터 후보 |
-| Hover | 쿼리 계약, 바인드, dialect, 알려진 메타데이터 사실 |
-| Definition | 현재 생성된 선언/속성 또는 메타데이터 JSON 위치 |
-| References | 긍정적 어휘 식별자; 모호한 CTE/alias 출현은 제외 |
-| Symbols | 쿼리 단위와 필터링된 메타데이터/생성 선언 |
-| Signature help | `argumentsComplete: true`인 경우에만 루틴 |
+| LSP 작업       | SQLBraid 증거                                      |
+| -------------- | -------------------------------------------------- |
+| Diagnostics    | Braid 오류와 매핑된 overlay 전용 TypeScript 오류   |
+| Completion     | 정적 SQL의 메타데이터 후보                         |
+| Hover          | 쿼리 계약, 바인드, dialect, 알려진 메타데이터 사실 |
+| Definition     | 현재 생성된 선언/속성 또는 메타데이터 JSON 위치    |
+| References     | 긍정적 어휘 식별자; 모호한 CTE/alias 출현은 제외   |
+| Symbols        | 쿼리 단위와 필터링된 메타데이터/생성 선언          |
+| Signature help | `argumentsComplete: true`인 경우에만 루틴          |
 
 메타데이터는 개방 세계의 긍정적 증거입니다. 누락된 테이블, 열, 루틴, 타입, 확장, 임시 객체, 런타임 UDF, CTE는 유효하지 않다고 선언되지 않습니다. 불확실한 어휘 컨텍스트에서는 SQL 오류 대신 제공하는 지능이 줄어듭니다. 서버는 임의 SQL AST를 재구성하거나 임의 SELECT 결과 타입을 추론하지 않습니다.
 

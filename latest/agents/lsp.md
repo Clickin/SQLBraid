@@ -10,15 +10,15 @@ sqlbraid-language-server --config ./sqlbraid.config.mjs
 
 When an agent harness supports LSP, use LSP first for diagnostics, hover, completion, definition, references, document/workspace symbols, and signature help.
 
-| LSP operation | SQLBraid evidence |
-| --- | --- |
-| Diagnostics | Braid errors and mapped overlay-only TypeScript errors |
-| Completion | Metadata candidates in static SQL only |
-| Hover | Query contract, binds, dialect, and known metadata facts |
-| Definition | Current generated declaration/property or metadata JSON location |
-| References | Positive lexical identity; ambiguous CTE/alias occurrences are omitted |
-| Symbols | Query units and filtered metadata/generated declarations |
-| Signature help | Routines only when `argumentsComplete: true` |
+| LSP operation  | SQLBraid evidence                                                      |
+| -------------- | ---------------------------------------------------------------------- |
+| Diagnostics    | Braid errors and mapped overlay-only TypeScript errors                 |
+| Completion     | Metadata candidates in static SQL only                                 |
+| Hover          | Query contract, binds, dialect, and known metadata facts               |
+| Definition     | Current generated declaration/property or metadata JSON location       |
+| References     | Positive lexical identity; ambiguous CTE/alias occurrences are omitted |
+| Symbols        | Query units and filtered metadata/generated declarations               |
+| Signature help | Routines only when `argumentsComplete: true`                           |
 
 Metadata is open-world positive evidence. Missing tables, columns, routines, types, extensions, temporary objects, runtime UDFs, and CTEs are not declared invalid. Uncertain lexical contexts return less intelligence, not SQL errors. The server does not reconstruct an arbitrary SQL AST or infer arbitrary SELECT result types.
 

@@ -112,14 +112,14 @@ driver target을 승격하지 않습니다.
 server line은 일치하는 manifest 증거가 생길 때까지 별도의 미테스트
 프로필입니다.
 
-| Oracle 값 | Driver raw / SQLBraid canonical 표현 | 비고 |
-| --- | --- | --- |
-| `NUMBER` / `FLOAT` / ANSI numeric 별칭 | text → `string` | `NUMBER(p,0)`을 포함하는 하나의 exact-decimal family이며 `decodeExactDecimal` 또는 `decodeExactInteger`는 애플리케이션 변환입니다. |
-| `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | 근사 binary32/binary64 값이며 특수 값 지원은 프로필 테스트에 따릅니다. |
-| CLOB / NCLOB | string | Routine LOB는 lease 반환 전에 읽고 destroy합니다. |
-| BLOB / RAW | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
-| DATE / TIMESTAMP variant | `Date` | Guarded 편의 프로필이며 fractional/zone 정확도에는 `TO_CHAR` text를 작성합니다. |
-| Native JSON | parsed object | 편의 기능일 뿐 중첩 숫자 정확도를 보장하지 않습니다. |
+| Oracle 값                              | Driver raw / SQLBraid canonical 표현 | 비고                                                                                                                               |
+| -------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `NUMBER` / `FLOAT` / ANSI numeric 별칭 | text → `string`                      | `NUMBER(p,0)`을 포함하는 하나의 exact-decimal family이며 `decodeExactDecimal` 또는 `decodeExactInteger`는 애플리케이션 변환입니다. |
+| `BINARY_FLOAT` / `BINARY_DOUBLE`       | JavaScript number                    | 근사 binary32/binary64 값이며 특수 값 지원은 프로필 테스트에 따릅니다.                                                             |
+| CLOB / NCLOB                           | string                               | Routine LOB는 lease 반환 전에 읽고 destroy합니다.                                                                                  |
+| BLOB / RAW                             | `Buffer`                             | byte로 유지하거나 명시적으로 encode합니다.                                                                                         |
+| DATE / TIMESTAMP variant               | `Date`                               | Guarded 편의 프로필이며 fractional/zone 정확도에는 `TO_CHAR` text를 작성합니다.                                                    |
+| Native JSON                            | parsed object                        | 편의 기능일 뿐 중첩 숫자 정확도를 보장하지 않습니다.                                                                               |
 
 바인드 전송은 node-oracledb bind descriptor와 text-positional
 `:1`, `:2`, …입니다. OUT ordinal은 중간 IN 값과 무관하게 SQL bind 순서를

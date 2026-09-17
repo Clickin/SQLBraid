@@ -81,7 +81,10 @@ const Id = v.pipe(v.string(), v.transform(BigInt));
 
 ```ts
 import Decimal from "decimal.js";
-const Amount = v.pipe(v.string(), v.transform(value => new Decimal(value)));
+const Amount = v.pipe(
+  v.string(),
+  v.transform((value) => new Decimal(value)),
+);
 ```
 
 드라이버가 이미 반올림한 숫자를 schema가 복구할 수는 없습니다.
@@ -129,15 +132,15 @@ native/호환 프로필은 기본 정책의 다른 이름이 아니라 별도 de
 text를 사용합니다. `affectedRows`, `rowCount`, bulk input count는 운영
 count이므로 safe-integer 검사를 하는 number로 남습니다.
 
-| 대상 | 정확도 우선 canonical 출력 | 호환 프로필 경계 |
-| --- | --- | --- |
-| PostgreSQL / `pg` | exact numeric → `string`; JSON/temporal text → `string`; float → `number` | native JSON → `unknown`; native `date`/`timestamp`/`timestamptz` → `Date`; `time`/`timetz`는 `string`; `interval`은 `unknown` |
-| MySQL / `mysql2` | exact integer/`DECIMAL` → `string`; `jsonStrings`/`dateStrings` → `string` | native JSON/temporal은 별도 편의 프로필이며 exact 증거를 상속하지 않음 |
-| MariaDB Connector | exact integer/`DECIMAL` → `string`; `autoJsonMap:false`/`dateStrings:true` → `string` | native JSON/temporal은 별도 편의 프로필이며 exact 증거를 상속하지 않음 |
-| Node SQLite / WASM | INTEGER storage → `string`; REAL storage → `number` | native bigint는 transport 전용이며 D1은 safe-integer 범위 guarded |
-| Bun SQL 1.3.14 | PostgreSQL/MySQL/MariaDB `{ bigint: true }`; PostgreSQL decimal → `string`; SQLite `{ safeIntegers: true }`; MariaDB/SQLite JSON → text | integral `Number` row 거부; MySQL/MariaDB DECIMAL과 binary는 같은 모호한 byte carrier라 거부하며 `CAST(... AS CHAR)`/`HEX(...)`를 직접 작성; SQLite native decimal은 unsupported |
-| Oracle Thin | `NUMBER` 계열 → `string`; 근사 이진 → `number` | native JSON/temporal은 프로필별 편의 표현 |
-| SQL Server / Tedious | 보존되는 exact integer → `string`; 근사 이진 → `number` | native DECIMAL/NUMERIC/MONEY exact 출력은 unsupported; SQL text cast 작성 |
+| 대상                 | 정확도 우선 canonical 출력                                                                                                              | 호환 프로필 경계                                                                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL / `pg`    | exact numeric → `string`; JSON/temporal text → `string`; float → `number`                                                               | native JSON → `unknown`; native `date`/`timestamp`/`timestamptz` → `Date`; `time`/`timetz`는 `string`; `interval`은 `unknown`                                                    |
+| MySQL / `mysql2`     | exact integer/`DECIMAL` → `string`; `jsonStrings`/`dateStrings` → `string`                                                              | native JSON/temporal은 별도 편의 프로필이며 exact 증거를 상속하지 않음                                                                                                           |
+| MariaDB Connector    | exact integer/`DECIMAL` → `string`; `autoJsonMap:false`/`dateStrings:true` → `string`                                                   | native JSON/temporal은 별도 편의 프로필이며 exact 증거를 상속하지 않음                                                                                                           |
+| Node SQLite / WASM   | INTEGER storage → `string`; REAL storage → `number`                                                                                     | native bigint는 transport 전용이며 D1은 safe-integer 범위 guarded                                                                                                                |
+| Bun SQL 1.3.14       | PostgreSQL/MySQL/MariaDB `{ bigint: true }`; PostgreSQL decimal → `string`; SQLite `{ safeIntegers: true }`; MariaDB/SQLite JSON → text | integral `Number` row 거부; MySQL/MariaDB DECIMAL과 binary는 같은 모호한 byte carrier라 거부하며 `CAST(... AS CHAR)`/`HEX(...)`를 직접 작성; SQLite native decimal은 unsupported |
+| Oracle Thin          | `NUMBER` 계열 → `string`; 근사 이진 → `number`                                                                                          | native JSON/temporal은 프로필별 편의 표현                                                                                                                                        |
+| SQL Server / Tedious | 보존되는 exact integer → `string`; 근사 이진 → `number`                                                                                 | native DECIMAL/NUMERIC/MONEY exact 출력은 unsupported; SQL text cast 작성                                                                                                        |
 
 SQLite 동적 타입 열은 선언된 INTEGER affinity가 아니라 runtime storage class를
 따릅니다. 배열, domain, range/multirange, composite, Oracle object/collection,

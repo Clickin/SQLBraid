@@ -47,14 +47,14 @@ fingerprints, SQL text, and bind values are never metric attributes.
 
 SQLBraid dialects map to `db.system.name` as follows:
 
-| SQLBraid dialect | `db.system.name` |
-| --- | --- |
-| `postgres` | `postgresql` |
-| `mysql` | `mysql` |
-| `mariadb` | `mariadb` |
-| `sqlite` | `sqlite` |
-| `oracle` | `oracle.db` |
-| `mssql` | `microsoft.sql_server` |
+| SQLBraid dialect | `db.system.name`       |
+| ---------------- | ---------------------- |
+| `postgres`       | `postgresql`           |
+| `mysql`          | `mysql`                |
+| `mariadb`        | `mariadb`              |
+| `sqlite`         | `sqlite`               |
+| `oracle`         | `oracle.db`            |
+| `mssql`          | `microsoft.sql_server` |
 
 An unknown dialect uses `other_sql`, unless `database.systemName` is supplied.
 The span name uses configured `database.namespace`, then
