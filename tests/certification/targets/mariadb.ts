@@ -190,18 +190,19 @@ async function createFixture(): Promise<CertificationFixture> {
   const streamDatabase = {
     stream(query: Parameters<typeof db.stream>[0], options?: Parameters<typeof db.stream>[1]) {
       return (async function* () {
-        let yielded = false;
+        const abortedBeforeStart = options?.signal?.aborted === true;
         try {
           const source = query === queries.one && cleanupStreamDb !== undefined ? cleanupStreamDb : db;
           for await (const row of source.stream(query, options)) {
-            if (!yielded) {
-              yielded = true;
-              streamIterations += 1;
-            }
             yield row;
           }
         } finally {
-          streamReleases += 1;
+          if (!abortedBeforeStart && query !== queries.failure) {
+            streamIterations += 1;
+          }
+          if (!abortedBeforeStart) {
+            streamReleases += 1;
+          }
         }
       })();
     },
@@ -275,6 +276,7 @@ async function createFixture(): Promise<CertificationFixture> {
     cleanupFailure,
     released: () => streamReleases,
     iteratorReturns: () => streamIterations,
+    initFailureCleanup: { iteratorReturns: 0, released: 1 },
     reuseAfterBreak: async () => {
       await db.one(queries.identity);
     },

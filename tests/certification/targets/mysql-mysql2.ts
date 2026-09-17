@@ -325,24 +325,25 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
             : mode === "cleanup"
               ? cleanupFailure
               : new Error(`mysql certification stream ${mode} failure`);
+      const abortedBeforeStart = options?.signal?.aborted === true;
       try {
         const physical = mode === "normal"
           ? connection as unknown as Mysql2ConnectionLike
           : faultConnection(connection as unknown as Connection, mode, error);
         const streamDb = createMysql2Database(physical, { profile: MYSQL2_LOSSLESS_TEXT });
         if (mode === "normal") lastStreamPhysicalId = Number((connection as unknown as { readonly threadId?: number }).threadId);
-        let yielded = false;
         for await (const row of streamDb.stream(query, options)) {
-          if (!yielded) {
-            yielded = true;
-            streamIterations += 1;
-          }
           yield row as Row;
         }
       } finally {
         if (pooledConnection) pooledConnection.release();
         else await end(connection as unknown as Connection).catch(() => undefined);
-        streamReleases += 1;
+        if (!abortedBeforeStart && mode !== "execute") {
+          streamIterations += 1;
+        }
+        if (!abortedBeforeStart) {
+          streamReleases += 1;
+        }
       }
     },
   });
@@ -365,6 +366,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     cleanupFailure,
     released: () => streamReleases,
     iteratorReturns: () => streamIterations,
+    initFailureCleanup: { iteratorReturns: 0, released: 1 },
     reuseAfterBreak: async () => {
       const reused = await pool.getConnection();
       try {
