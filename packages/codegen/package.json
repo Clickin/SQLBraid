@@ -32,8 +32,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/metadata": "workspace:*"
+    "@sqlbraid/core": "workspace:^1.0.0",
+    "@sqlbraid/metadata": "workspace:^1.0.0"
   },
   "engines": {
     "node": ">=22.18.0"

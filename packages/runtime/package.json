@@ -42,7 +42,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:*"
+    "@sqlbraid/core": "workspace:^1.0.0"
   },
   "engines": {
     "node": ">=16.20.2"

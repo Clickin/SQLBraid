@@ -100,16 +100,16 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/bun-sql": "workspace:^",
-    "@sqlbraid/core": "workspace:^",
-    "@sqlbraid/mariadb": "workspace:^",
-    "@sqlbraid/mssql": "workspace:^",
-    "@sqlbraid/mysql": "workspace:^",
-    "@sqlbraid/oracle": "workspace:^",
-    "@sqlbraid/postgres": "workspace:^",
-    "@sqlbraid/runtime": "workspace:^",
-    "@sqlbraid/sqlite": "workspace:^",
-    "@sqlbraid/template": "workspace:^"
+    "@sqlbraid/bun-sql": "workspace:^1.0.0",
+    "@sqlbraid/core": "workspace:^1.0.0",
+    "@sqlbraid/mariadb": "workspace:^1.0.0",
+    "@sqlbraid/mssql": "workspace:^1.0.0",
+    "@sqlbraid/mysql": "workspace:^1.0.0",
+    "@sqlbraid/oracle": "workspace:^1.0.0",
+    "@sqlbraid/postgres": "workspace:^1.0.0",
+    "@sqlbraid/runtime": "workspace:^1.0.0",
+    "@sqlbraid/sqlite": "workspace:^1.0.0",
+    "@sqlbraid/template": "workspace:^1.0.0"
   },
   "engines": {
     "node": ">=16.20.2"

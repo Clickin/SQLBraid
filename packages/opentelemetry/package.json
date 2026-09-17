@@ -33,7 +33,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:*"
+    "@sqlbraid/core": "workspace:^1.0.0"
   },
   "devDependencies": {
     "@opentelemetry/api": "^1.9.0"

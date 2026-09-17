@@ -41,17 +41,17 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/template": "workspace:*"
+    "@sqlbraid/core": "workspace:^1.0.0",
+    "@sqlbraid/runtime": "workspace:^1.0.0",
+    "@sqlbraid/template": "workspace:^1.0.0"
   },
   "devDependencies": {
-    "@sqlbraid/metadata": "workspace:*",
+    "@sqlbraid/metadata": "workspace:^1.0.0",
     "@types/oracledb": "7.0.3",
     "oracledb": "7.0.1"
   },
   "peerDependencies": {
-    "@sqlbraid/metadata": "workspace:*",
+    "@sqlbraid/metadata": "workspace:^1.0.0",
     "oracledb": ">=7.0.1 <8"
   },
   "peerDependenciesMeta": {
