@@ -75,6 +75,8 @@ numeric.command-metadata          numeric.special-values
 numeric.scale-greater-than-precision
 numeric.negative-scale
 data.json-parsed                  data.json-lossless-text
+data.sql-variant                  data.oracle-object
+data.oracle-collection            data.vector
 data.binary                       data.uuid
 data.temporal-native              data.temporal-lossless
 data.timezone

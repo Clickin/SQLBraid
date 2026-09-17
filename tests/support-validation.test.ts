@@ -26,6 +26,10 @@ async function copyDataset(): Promise<string> {
   await mkdir(join(destination, "packages/core/src"), { recursive: true });
   await cp(join(root, "packages/core/src/index.ts"), join(destination, "packages/core/src/index.ts"));
   await cp(join(root, "packages/core/src/authoring-modules.ts"), join(destination, "packages/core/src/authoring-modules.ts"));
+  await cp(join(root, "packages/core/src/capabilities.ts"), join(destination, "packages/core/src/capabilities.ts"));
+  await mkdir(join(destination, "docs"), { recursive: true });
+  await cp(join(root, "docs/public-api-audit.md"), join(destination, "docs/public-api-audit.md"));
+  await cp(join(root, "docs/driver-author-guide.md"), join(destination, "docs/driver-author-guide.md"));
   const registry = JSON.parse(await readFile(join(root, "support/test-registry.json"), "utf8")) as Record<string, { file: string }>;
   for (const file of new Set(Object.values(registry).map((entry) => entry.file))) {
     await mkdir(dirname(join(destination, file)), { recursive: true });

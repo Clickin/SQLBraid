@@ -187,7 +187,7 @@
       "source": "website/src/content/docs/reference/errors.md",
       "translation": "website/src/content/docs/ko/reference/errors.md",
       "translationOf": "website/src/content/docs/reference/errors.md",
-      "sourceDigest": "e4ee67f6c108dead6d8b922850812f10dce0abfc90a5fd769003f2e89408a61a"
+      "sourceDigest": "5a2a2cb0491ced7439fa4fef65fbb8a0735cfed67655d6759a4b13aef8d2c5ae"
     },
     {
       "source": "website/src/content/docs/reference/packages.md",
@@ -199,7 +199,7 @@
       "source": "website/src/content/docs/reference/support.mdx",
       "translation": "website/src/content/docs/ko/reference/support.mdx",
       "translationOf": "website/src/content/docs/reference/support.mdx",
-      "sourceDigest": "a120f21bfa64885afd9177e5c8aa12605d682f7d57cfb69dfd7d64c72d5fd320"
+      "sourceDigest": "19616beb471b526e3ac3940d96453db923f2fb39cc51ecdd92dfa68f48712672"
     },
     {
       "source": "website/src/content/docs/reference/troubleshooting.md",
