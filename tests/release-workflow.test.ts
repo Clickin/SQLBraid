@@ -337,7 +337,8 @@ test("staging has no approval or direct publication path and draft release remai
   assert.match(create, /--draft/u);
   assert.match(create, /release-prerelease-flag/u);
   assert.match(create, /args\+=\(--prerelease\)/u);
-  assert.doesNotMatch(create, /generate-notes/u);
+  assert.match(create, /generate-notes/u);
+  assert.match(create, /notes-file docs\/SQLBraid_1\.0\.0_release_notes\.md/u);
   assert.equal(releasePrereleaseArg("0.1.0-rc.2"), "--prerelease");
   assert.equal(releasePrereleaseArg("0.1.0"), undefined);
   assert.match(draft.steps.find((step) => step.run?.includes("--mode durable-evidence"))?.run ?? "", /--artifact-dir/u);
