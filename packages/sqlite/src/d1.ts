@@ -326,7 +326,7 @@ export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
           throw new Error("BRAID_BULK_RESULT_KIND: D1 native batch returned rows; bulk requires command statements.");
         }
         const changes = result.meta?.changes ?? result.changes;
-        if (typeof changes === "number") {
+        if (changes !== undefined) {
           hasAffectedRows = true;
           affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount(changes));
         }

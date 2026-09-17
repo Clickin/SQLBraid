@@ -63,7 +63,7 @@ function fakeClient(logs: Log[], releaseCounts: { count: number }): BunSqlClient
           ? [{ value: lease }]
           : [];
       const result = Object.assign(rows, {
-        command: text.startsWith("SELECT") || text.startsWith("SHOW") ? "SELECT" : "UPDATE",
+        command: text.startsWith("SELECT") || text.startsWith("SHOW") ? "SELECT" : text.split(" ")[0],
         count: rows.length,
         lastInsertRowid: null,
         affectedRows: rows.length,
@@ -92,7 +92,7 @@ function fakeClient(logs: Log[], releaseCounts: { count: number }): BunSqlClient
       : [];
     return immediateQuery(
       Object.assign(rows, {
-        command: text.startsWith("SELECT") ? "SELECT" : "UPDATE",
+        command: text.startsWith("SELECT") ? "SELECT" : text.split(" ")[0],
         count: rows.length,
         lastInsertRowid: null,
         affectedRows: rows.length,
@@ -190,7 +190,7 @@ test.each([
   { dialect: "mariadb", readOnly: true, begin: "START TRANSACTION READ ONLY" },
   { dialect: "mariadb", readOnly: false, begin: "START TRANSACTION READ WRITE" },
 ] as const)(
-  "Bun.SQL $dialect preserves readOnly=$readOnly transaction access mode",
+  "[contract:bun-sql-$dialect:transaction.access-mode:boundary] [ownership:pooled] Bun.SQL $dialect preserves readOnly=$readOnly transaction access mode",
   async ({ dialect, readOnly, begin }) => {
     const logs: Log[] = [];
     const db = createBunSqlDatabase(fakeClient(logs, { count: 0 }), { dialect });

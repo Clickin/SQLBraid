@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import oracledb from "oracledb";
 import { test } from "vitest";
 import { UnsupportedFeatureError } from "@sqlbraid/core";
 import { oracleParameter, sql, typePolicy } from "@sqlbraid/oracle";
@@ -11,6 +13,7 @@ import {
   type OracleExecuteOptionsLike,
 } from "@sqlbraid/oracle/oracledb";
 import { createOracleInspector } from "@sqlbraid/oracle/inspector";
+import { containsError } from "./contracts/resources.faults.js";
 
 test("Oracle renders positional binds and doubled quoted identifiers", () => {
   const rendered = sql`SELECT ${1}, ${2}`.render();
@@ -537,7 +540,7 @@ test("Oracle validates transaction options before control SQL", async () => {
   assert.equal(executions, 0);
 });
 
-test("Oracle explicit transactions suppress autoCommit for execute and executeMany and restore root options", async () => {
+test("[contract:node-oracledb:transaction.autocommit-ownership:boundary] [ownership:direct] Oracle explicit transactions suppress autoCommit for execute and executeMany and restore root options", async () => {
   const executions: { method: string; autoCommit: unknown; keepInStmtCache: unknown }[] = [];
   let commits = 0;
   let rollbacks = 0;
@@ -598,7 +601,7 @@ test("Oracle explicit transactions suppress autoCommit for execute and executeMa
   assert.equal(executeOptions.autoCommit, true);
 });
 
-test("Oracle session transactions retain commit ownership through nested savepoints", async () => {
+test("[contract:node-oracledb:transaction.autocommit-ownership:boundary] [ownership:pooled] Oracle session transactions retain commit ownership through nested savepoints", async () => {
   const executions: { text: string; autoCommit: unknown }[] = [];
   let acquired = 0;
   let closed = 0;
@@ -699,7 +702,7 @@ test("Oracle pool validates streamFetchSize before checkout", async () => {
 });
 
 for (const cleanupFails of [false, true]) {
-  test(`Oracle pool closes failed post-checkout wrappers once${cleanupFails ? " and preserves cleanup errors" : ""}`, async () => {
+  test(`[contract:node-oracledb:pool.checkout-init-failure:boundary] [ownership:pooled] Oracle pool closes failed post-checkout wrappers once${cleanupFails ? " and preserves cleanup errors" : ""}`, async () => {
     const initError = new Error("native cancellation accessor failed");
     const cleanupError = new Error("native close failed");
     const failures: unknown[] = [];
@@ -980,3 +983,134 @@ test("Oracle cancellation remains active while materializing an OUT LOB", async 
   await assert.rejects(pending, (error: unknown) => error === reason);
   assert.equal(closed, 1);
 });
+
+for (const ownership of ["direct", "pooled"] as const) {
+  test(`[contract:node-oracledb:transaction.access-mode:boundary] [ownership:${ownership}] omitted and explicit access modes retain distinct native boundaries`, async () => {
+    const statements: string[] = [];
+    let commits = 0;
+    let released = 0;
+    const connection = {
+      async execute(text: string) { statements.push(text); return {}; },
+      async commit() { commits++; },
+      async rollback() {},
+      async close() { released++; },
+    };
+    const db = ownership === "direct" ? createOracledbDatabase(connection)
+      : createOracledbPoolDatabase({ async getConnection() { return connection; } });
+    for (const readOnly of [undefined, true, false]) await db.tx({ readOnly }, async () => undefined);
+    assert.deepEqual(statements, ["SET TRANSACTION READ ONLY", "SET TRANSACTION READ WRITE"]);
+    assert.equal(commits, 3);
+    assert.equal(released, ownership === "pooled" ? 3 : 0);
+  });
+
+  test(`[contract:node-oracledb:transaction.autocommit-ownership:boundary] [ownership:${ownership}] global autoCommit cannot persist callback-failed command, bulk or routine writes`, async () => {
+    const previous = oracledb.autoCommit;
+    oracledb.autoCommit = true;
+    try {
+      for (const sessionScoped of [false, true]) {
+        const durable: number[] = [];
+        const staged: number[] = [];
+        const insertNative = (value: number, options: OracleExecuteOptionsLike) => {
+          (options.autoCommit ?? oracledb.autoCommit ? durable : staged).push(value);
+        };
+        const connection = {
+          async execute(text: string, binds: readonly number[], options: OracleExecuteOptionsLike) {
+            if (text.startsWith("INSERT") || text.startsWith("BEGIN write_contract")) insertNative(binds[0]!, options);
+            else assert.equal(options.autoCommit, false, "native transaction-control SQL must never auto-commit");
+            return { rowsAffected: 1 };
+          },
+          async executeMany(_text: string, binds: readonly (readonly number[])[], options: OracleExecuteOptionsLike) {
+            for (const row of binds) insertNative(row[0]!, options);
+            return { rowsAffected: binds.length };
+          },
+          async commit() { durable.push(...staged.splice(0)); },
+          async rollback() { staged.length = 0; },
+          async close() {},
+        };
+        const db = ownership === "direct" ? createOracledbDatabase(connection)
+          : createOracledbPoolDatabase({ async getConnection() { return connection; } });
+        const insert = (id: number) => sql.command`INSERT INTO contract_auto (id) VALUES (${id})`;
+        const failure = new Error("callback rollback");
+        for (const fail of [true, false]) {
+          const callback = async (tx: typeof db) => {
+            await tx.execute(insert(1));
+            await tx.bulk([2, 3], insert);
+            await tx.call(sql.call`BEGIN write_contract(${4}); END;`);
+            await tx.tx(async nested => { await nested.execute(insert(5)); });
+            if (fail) throw failure;
+          };
+          const pending = sessionScoped
+            ? db.session(session => session.tx(callback))
+            : db.tx(callback);
+          if (fail) await assert.rejects(pending, error => error === failure);
+          else await pending;
+          assert.deepEqual(durable, fail ? [] : [1, 2, 3, 4, 5]);
+          assert.deepEqual(staged, []);
+        }
+        await db.execute(insert(6));
+        assert.deepEqual(durable, [1, 2, 3, 4, 5, 6], "root execution must retain the native global policy");
+      }
+    } finally {
+      oracledb.autoCommit = previous;
+    }
+  });
+
+  for (const kind of ["stream", "routine", "returning"] as const) for (const cleanupFails of [false, true]) {
+    test(`[contract:node-oracledb:cancellation.before-handoff:boundary] [contract:node-oracledb:resource.init-failure:boundary] [ownership:${ownership}] ${kind} registers all created resources before cancellation${cleanupFails ? " and preserves close failure" : ""}`, async () => {
+      const controller = new AbortController();
+      const reason = new Error("cancel after native resources exist");
+      const cleanup = new Error("native cleanup failed");
+      let created = 0;
+      let closed = 0;
+      let reads = 0;
+      let released = 0;
+      let discarded = 0;
+      class Lob extends EventEmitter {
+        constructor() { super(); created++; }
+        async getData() { reads++; return "body"; }
+        destroy() { closed++; if (cleanupFails) this.emit("error", cleanup); this.emit("close"); }
+      }
+      const cursor = () => {
+        created++;
+        return {
+          async getRow() { reads++; return null; },
+          async close() { closed++; if (cleanupFails) throw cleanup; },
+        };
+      };
+      const connection = {
+        async execute() {
+          const result = kind === "stream" ? { resultSet: cursor() }
+            : kind === "routine" ? { outBinds: [cursor(), new Lob()] }
+            : { outBinds: [[new Lob()]], rowsAffected: 1 };
+          controller.abort(reason);
+          return result;
+        },
+        async break() {},
+        async commit() {},
+        async rollback() {},
+        async close(options?: { readonly drop?: boolean }) { if (options?.drop) discarded++; else released++; },
+      };
+      const db = ownership === "direct" ? createOracledbDatabase(connection)
+        : createOracledbPoolDatabase({ async getConnection() { return connection; } });
+      const run = async () => {
+        if (kind === "stream") {
+          for await (const row of db.stream(sql.rows`SELECT body FROM contract_data`, { signal: controller.signal })) void row;
+        } else if (kind === "routine") {
+          await db.call(sql.call`BEGIN read_contract(${sql.out("cursor", oracleParameter.refCursor())}, ${sql.out("body", oracleParameter.clob())}); END;`, { signal: controller.signal });
+        } else {
+          await db.execute(sql.rows`INSERT INTO contract_data (body) VALUES ('body') RETURNING body INTO ${sql.out("body", oracleParameter.clob())}`, { signal: controller.signal });
+        }
+      };
+      await assert.rejects(run(), error => containsError(error, reason) && (!cleanupFails || containsError(error, cleanup)));
+      assert.equal(created, kind === "routine" ? 2 : 1);
+      assert.equal(closed, created);
+      assert.equal(reads, 0);
+      assert.equal(released, 0);
+      assert.equal(discarded, ownership === "pooled" ? 1 : 0);
+      if (cleanupFails && ownership === "direct") {
+        await assert.rejects(db.execute(sql.command`UPDATE contract_data SET body = 'x'`), { code: "BRAID_CONNECTION_POISONED" });
+        assert.equal(closed, created);
+      }
+    });
+  }
+}

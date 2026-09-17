@@ -266,7 +266,7 @@ test("MariaDB adapter sends one parameterized SQL shape to native batch", async 
   let batchValues: readonly (readonly unknown[])[] = [];
   const connection = connectionFor({ affectedRows: 0 });
   connection.batch = async (text, values) => {
-    batchSql = text;
+    batchSql = typeof text === "string" ? text : text.sql;
     batchValues = values;
     return { affectedRows: values.length };
   };

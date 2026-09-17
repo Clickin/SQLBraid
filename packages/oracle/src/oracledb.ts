@@ -334,7 +334,19 @@ async function executeWithCancellation<T>(
   };
   signal.addEventListener("abort", onAbort, { once: true });
   try {
-    const result = await operation();
+    let result: T;
+    try {
+      result = await operation();
+    } catch (error) {
+      if (breakPromise !== undefined) await breakPromise;
+      if (!aborted) throw error;
+      const failures: unknown[] = hasBreakFailure ? [breakFailure] : [];
+      if (error instanceof Error && "code" in error && error.code === "BRAID_RESOURCE_CLEANUP") {
+        failures.push(error);
+      }
+      if (failures.length > 0) await throwWithCleanup(signal.reason, failures);
+      throw signal.reason;
+    }
     if (breakPromise !== undefined) await breakPromise;
     if (aborted) {
       if (hasBreakFailure) {
@@ -343,13 +355,6 @@ async function executeWithCancellation<T>(
       throw signal.reason;
     }
     return result;
-  } catch (error) {
-    if (breakPromise !== undefined) await breakPromise;
-    if (hasBreakFailure) {
-      await throwWithCleanup(error, [breakFailure]);
-    }
-    if (aborted) throw signal.reason;
-    throw error;
   } finally {
     signal.removeEventListener("abort", onAbort);
   }
@@ -1224,6 +1229,7 @@ async function normalizeDmlReturning(
   rendered: RenderedStatement,
   result: OracleExecuteResultLike,
   policy: TypePolicy,
+  signal?: AbortSignal,
 ): Promise<QueryExecutionResult<Record<string, unknown>> | undefined> {
   const outputs = returningParameters(rendered);
   if (rendered.resultKind !== "rows" || outputs.length === 0) return undefined;
@@ -1314,6 +1320,7 @@ async function normalizeDmlReturning(
   let rows: readonly Record<string, unknown>[] | undefined;
   if (!hasFailure)
     try {
+      signal?.throwIfAborted();
       const materialized: Record<string, unknown>[] = [];
       for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
         const row: Record<string, unknown> = {};
@@ -1509,7 +1516,7 @@ function makeOracledbExecutor(
               executeOptions(options, driver, false, transactionActive),
             ),
           );
-          const returning = await normalizeDmlReturning(rendered, result, policy);
+          const returning = await normalizeDmlReturning(rendered, result, policy, executionOptions?.signal);
           if (returning !== undefined) return returning as QueryExecutionResult<Row>;
           const fields = Array.isArray(result.metaData) ? result.metaData : [];
           assertUniqueFields(fields);
@@ -1659,6 +1666,7 @@ function makeOracledbExecutor(
               }
             }
             if (hasExplicitResourceFailure) throw explicitResourceFailure;
+            executionOptions?.signal?.throwIfAborted();
             for (const { parameter, index, value } of explicit) {
               const name = parameter.outputName;
               if (!name)
@@ -1729,23 +1737,32 @@ function makeOracledbExecutor(
       const execution = executionBinding(bindingAdapter, rendered, binding);
       assertExecutionOptions(connection, executionOptions);
       const signal = executionOptions?.signal;
-      const result = executionResult(
-        await executeWithCancellation(
+      const cleanupScope = createCleanupScope();
+      let result: OracleExecuteResultLike;
+      try {
+        result = await executeWithCancellation(
           connection,
-          () =>
-            connection.execute(
-              execution.description.parameterizedSql!,
-              execution.binds,
-              executeOptions(options, driver, true, transactionActive),
-            ),
+          async () => {
+            const created = executionResult(
+              await connection.execute(
+                execution.description.parameterizedSql!,
+                execution.binds,
+                executeOptions(options, driver, true, transactionActive),
+              ),
+            );
+            if (created.resultSet) cleanupScope.add(() => created.resultSet!.close());
+            for (const resource of Array.isArray(created.implicitResults) ? created.implicitResults : [])
+              cleanupScope.add(() => resource.close());
+            return created;
+          },
           executionOptions,
-        ),
-      );
+        );
+      } catch (error) {
+        await cleanupScope.run(error);
+        throw error;
+      }
       const resultSet = result.resultSet;
       if (!resultSet) {
-        const implicit = Array.isArray(result.implicitResults) ? result.implicitResults : [];
-        const cleanupScope = createCleanupScope();
-        for (const resource of implicit) cleanupScope.add(() => resource.close());
         await cleanupScope.run(
           new UnsupportedFeatureError(
             "statement.stream",
@@ -1755,10 +1772,6 @@ function makeOracledbExecutor(
         );
         return;
       }
-      const cleanupScope = createCleanupScope();
-      cleanupScope.add(() => resultSet!.close());
-      for (const resource of Array.isArray(result.implicitResults) ? result.implicitResults : [])
-        cleanupScope.add(() => resource.close());
       let resultIterator: AsyncIterator<unknown> | undefined;
       let breakFailure: unknown;
       let hasBreakFailure = false;

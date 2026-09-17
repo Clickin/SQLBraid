@@ -578,14 +578,17 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
         throw new TypeError("BRAID_TRANSACTION_STATE: a libSQL transaction is already active.");
       const mode = transactionModeFor(client, options);
       const next = mode === undefined ? await client.transaction() : await client.transaction(mode);
-      if (
-        !next ||
-        typeof next.execute !== "function" ||
-        typeof next.batch !== "function" ||
-        typeof next.commit !== "function" ||
-        typeof next.rollback !== "function"
-      ) {
-        const primary = new TypeError("BRAID_TRANSACTION_STATE: libSQL client returned an invalid transaction handle.");
+      try {
+        if (
+          !next ||
+          typeof next.execute !== "function" ||
+          typeof next.batch !== "function" ||
+          typeof next.commit !== "function" ||
+          typeof next.rollback !== "function"
+        ) {
+          throw new TypeError("BRAID_TRANSACTION_STATE: libSQL client returned an invalid transaction handle.");
+        }
+      } catch (primary) {
         if (next && typeof next === "object" && typeof (next as { readonly close?: unknown }).close === "function") {
           const cleanup = createCleanupScope();
           cleanup.add(() => (next as { close(): void | PromiseLike<void> }).close());

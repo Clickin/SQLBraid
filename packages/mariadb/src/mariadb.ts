@@ -75,13 +75,14 @@ export interface MariaDbQueryOptions {
   readonly sql: string;
   readonly rowsAsArray?: boolean;
   readonly metaAsArray?: boolean;
+  readonly insertIdAsNumber?: boolean;
 }
 
 export interface MariaDbConnectionLike {
   execute(sql: string | MariaDbQueryOptions, values?: readonly MariaDbParameter[]): Promise<unknown>;
   query?(sql: string | MariaDbQueryOptions, values?: readonly MariaDbParameter[]): Promise<unknown>;
   queryStream?(sql: string | MariaDbQueryOptions, values?: readonly MariaDbParameter[]): MariaDbStreamLike;
-  batch?(sql: string, values: readonly (readonly MariaDbParameter[])[]): Promise<unknown>;
+  batch?(sql: string | MariaDbQueryOptions, values: readonly (readonly MariaDbParameter[])[]): Promise<unknown>;
   beginTransaction(): Promise<void>;
   commit(): Promise<void>;
   rollback(): Promise<void>;
@@ -780,7 +781,7 @@ export function createMariaDbExecutor(
       const prepared = materialize(rendered, binding);
       const result = await executeWithCancellation(
         connection,
-        () => connection.execute({ sql: prepared.text, rowsAsArray: true, metaAsArray: true }, prepared.values),
+        () => connection.execute({ sql: prepared.text, rowsAsArray: true, metaAsArray: true, insertIdAsNumber: false }, prepared.values),
         executionOptions,
       );
       return resultRows(normalizeMetadataResult(result), policy) as QueryExecutionResult<Row>;
@@ -931,7 +932,7 @@ export function createMariaDbExecutor(
       const prepared = materialize(rendered, binding);
       const value = await executeWithCancellation(
         connection,
-        () => connection.execute({ sql: prepared.text, rowsAsArray: true, metaAsArray: true }, prepared.values),
+        () => connection.execute({ sql: prepared.text, rowsAsArray: true, metaAsArray: true, insertIdAsNumber: false }, prepared.values),
         executionOptions,
       );
       const normalized = normalizeMetadataResult(value);
@@ -960,7 +961,7 @@ export function createMariaDbExecutor(
       }
       const result = await executeWithCancellation(
         connection,
-        () => connection.batch!(prepared.text, prepared.values),
+        () => connection.batch!({ sql: prepared.text, insertIdAsNumber: false }, prepared.values),
         executionOptions,
       );
       return {

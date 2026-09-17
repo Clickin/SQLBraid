@@ -319,7 +319,7 @@ test("libSQL transaction cleanup clears continuity after commit or rollback fail
   assert.equal(transactionCalls, 1);
 });
 
-test("libSQL closes invalid acquired transaction handles and preserves validation failures", async () => {
+test("[contract:libsql:resource.init-failure:boundary] [ownership:direct] libSQL closes invalid acquired transaction handles and preserves validation failures", async () => {
   let closeCalls = 0;
   let rootQueries = 0;
   const invalid = {
@@ -352,7 +352,7 @@ test("libSQL closes invalid acquired transaction handles and preserves validatio
   assert.equal(rootQueries, 1);
 });
 
-test("libSQL aggregates invalid-handle validation and close failures", async () => {
+test("[contract:libsql:resource.cleanup-failure:boundary] [ownership:direct] libSQL aggregates invalid-handle validation and close failures", async () => {
   const primaryMessage = "invalid transaction handle";
   const closeFailure = new Error("transaction close failed");
   const invalid = {
@@ -425,6 +425,36 @@ test("libSQL rejects hostile savepoint names before transaction I/O", async () =
   assert.deepEqual(calls, ["SAVEPOINT braid_sp_1"]);
   await executor.rollback!();
 });
+
+for (const cleanupFails of [false, true]) {
+  test(`[contract:libsql:resource.init-failure:boundary] [ownership:direct] throwing native transaction accessors close the acquired handle${cleanupFails ? " and retain cleanup failure" : ""}`, async () => {
+    const primary = new Error("native handle validation failed");
+    const cleanup = new Error("native handle close failed");
+    let acquired = 0;
+    let closed = 0;
+    let callbackRan = false;
+    const db = createLibsqlDatabase(fakeClient(
+      async () => rowsResult([], []),
+      async () => [],
+      async () => {
+        acquired++;
+        return {
+          get execute() { throw primary; },
+          async batch() { return []; },
+          async commit() {},
+          async rollback() {},
+          async close() { closed++; if (cleanupFails) throw cleanup; },
+        };
+      },
+    ), { intMode: "string" });
+    await assert.rejects(db.tx(async () => { callbackRan = true; }), error => cleanupFails
+      ? error instanceof AggregateError && error.cause === primary && error.errors.includes(primary) && error.errors.includes(cleanup)
+      : error === primary);
+    assert.equal(callbackRan, false);
+    assert.equal(acquired, 1);
+    assert.equal(closed, 1);
+  });
+}
 
 test("libSQL advertises unsupported session pinning, stream, call, and cancellation", async () => {
   const executor = createLibsqlExecutor(
