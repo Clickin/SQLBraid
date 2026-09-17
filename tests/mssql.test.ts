@@ -5,6 +5,7 @@ import { mssqlParameter, sql, typePolicy } from "@sqlbraid/mssql";
 import { UnsupportedFeatureError } from "@sqlbraid/core";
 import {
   createTediousExecutor,
+  createTediousPoolDatabase,
   createTediousPoolProvider,
   tediousStatementBinding,
   type TediousConnectionLike,
@@ -159,6 +160,49 @@ test("MSSQL direct adapters reject pool connections while pool leases release on
     (error: unknown) => (error as { readonly code?: string }).code === "BRAID_RESOURCE_CLEANUP",
   );
   assert.equal(releases, 1);
+});
+
+test("MSSQL pooled readOnly options preflight before acquire and leave the pool usable", async () => {
+  let acquires = 0;
+  let begins = 0;
+  const connection: TediousConnectionLike & { release(): void } = {
+    execSql(request) {
+      emit(request, "columnMetadata", [{ colName: "value", type: "Int" }]);
+      emit(request, "row", [{ value: 1 }]);
+      emit(request, "doneInProc", 1);
+      emit(request, "requestCompleted");
+    },
+    beginTransaction(callback: (error?: unknown) => void) {
+      begins += 1;
+      callback();
+    },
+    commitTransaction(callback: (error?: unknown) => void) { callback(); },
+    rollbackTransaction(callback: (error?: unknown) => void) { callback(); },
+    saveTransaction(callback: (error?: unknown) => void) { callback(); },
+    release() {},
+  };
+  const db = createTediousPoolDatabase({
+    acquire: async () => {
+      acquires += 1;
+      return connection;
+    },
+  });
+  for (const readOnly of [false, true]) {
+    await assert.rejects(
+      () => db.tx({ readOnly }, async () => undefined),
+      (error: unknown) => error instanceof UnsupportedFeatureError
+        && error.code === "BRAID_TX_OPTION_UNSUPPORTED"
+        && error.feature === "transaction.read-only",
+    );
+  }
+  assert.equal(acquires, 0);
+  assert.equal(begins, 0);
+  await db.tx({ isolation: "serializable" }, async (tx) => {
+    assert.deepEqual(await tx.one(sql.rows`SELECT 1 AS value`), { value: "1" });
+  });
+  assert.equal(acquires, 1);
+  assert.equal(begins, 1);
+  assert.deepEqual(await db.one(sql.rows`SELECT 1 AS value`), { value: "1" });
 });
 
 test("MSSQL calls accept OUTPUT text in literals and comments", async () => {

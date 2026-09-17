@@ -294,6 +294,31 @@ function invalidTransactionOptions(message: string): never {
   throw error;
 }
 
+function validateTediousTransactionOptions(transactionOptions: unknown): void {
+  if (
+    transactionOptions !== undefined
+    && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
+  ) {
+    invalidTransactionOptions("Tedious transaction options must be an object.");
+  }
+  if (transactionOptions !== undefined) {
+    const unexpected = Object.keys(transactionOptions).find((key) => key !== "isolation" && key !== "readOnly");
+    if (unexpected !== undefined) invalidTransactionOptions(`Unknown Tedious transaction option: ${unexpected}.`);
+  }
+  const options = transactionOptions as Partial<TransactionOptions> | undefined;
+  if (options?.isolation !== undefined
+    && options.isolation !== "read-uncommitted"
+    && options.isolation !== "read-committed"
+    && options.isolation !== "repeatable-read"
+    && options.isolation !== "serializable") {
+    invalidTransactionOptions(`Tedious does not recognize transaction isolation ${String(options.isolation)}.`);
+  }
+  if (options?.readOnly !== undefined && typeof options.readOnly !== "boolean") {
+    invalidTransactionOptions("Tedious readOnly must be a boolean.");
+  }
+  if (options?.readOnly !== undefined) unsupportedTransactionOption("readOnly");
+}
+
 function asError(error: unknown): unknown {
   return error === undefined || error === null ? undefined : error instanceof Error ? error : new Error(String(error));
 }
@@ -1463,27 +1488,7 @@ function makeTediousExecutor(
   const policy = options.typePolicy ?? defaultTypePolicy;
   const maxBufferedRows = options.maxBufferedRows ?? DEFAULT_MAX_BUFFERED_ROWS;
   const begin = async (transactionOptions?: TransactionOptions): Promise<void> => {
-    if (
-      transactionOptions !== undefined
-      && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
-    ) {
-      invalidTransactionOptions("Tedious transaction options must be an object.");
-    }
-    if (transactionOptions !== undefined) {
-      const unexpected = Object.keys(transactionOptions).find((key) => key !== "isolation" && key !== "readOnly");
-      if (unexpected !== undefined) invalidTransactionOptions(`Unknown Tedious transaction option: ${unexpected}.`);
-    }
-    if (transactionOptions?.isolation !== undefined
-      && transactionOptions.isolation !== "read-uncommitted"
-      && transactionOptions.isolation !== "read-committed"
-      && transactionOptions.isolation !== "repeatable-read"
-      && transactionOptions.isolation !== "serializable") {
-      invalidTransactionOptions(`Tedious does not recognize transaction isolation ${String(transactionOptions.isolation)}.`);
-    }
-    if (transactionOptions?.readOnly !== undefined && typeof transactionOptions.readOnly !== "boolean") {
-      invalidTransactionOptions("Tedious readOnly must be a boolean.");
-    }
-    if (transactionOptions?.readOnly !== undefined) unsupportedTransactionOption("readOnly");
+    validateTediousTransactionOptions(transactionOptions);
     const isolation = transactionOptions?.isolation;
     const isolationLevel = isolation === undefined ? ISOLATION_LEVEL.NO_CHANGE
       : isolation === "read-uncommitted" ? ISOLATION_LEVEL.READ_UNCOMMITTED
@@ -1495,6 +1500,7 @@ function makeTediousExecutor(
   return {
     ownershipKey: connection,
     statementBinding: bindingAdapter,
+    validateTransactionOptions: validateTediousTransactionOptions,
     environment: policy === defaultTypePolicy
       ? tediousEnvironment
       : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, typePolicy: { id: policy.id, hash: policy.hash }, capabilities: {} },
@@ -1585,6 +1591,7 @@ export function createTediousPoolProvider(pool: TediousPoolLike, options: Tediou
   const bindingAdapter = createBinding(options);
   return {
     statementBinding: bindingAdapter,
+    validateTransactionOptions: validateTediousTransactionOptions,
     environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy
       ? tediousEnvironment
       : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, typePolicy: { id: (options.typePolicy ?? defaultTypePolicy).id, hash: (options.typePolicy ?? defaultTypePolicy).hash }, capabilities: {} },
