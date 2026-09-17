@@ -2,7 +2,7 @@ import mariadb, { type Pool } from "mariadb";
 import assert from "node:assert/strict";
 import { inject } from "vitest";
 import { sql, MARIADB_LOSSLESS_TEXT, MARIADB_NATIVE } from "@sqlbraid/mariadb";
-import { createMariaDbDatabase, createMariaDbPoolDatabase, type MariaDbConnectionLike } from "@sqlbraid/mariadb/mariadb";
+import { createMariaDbDatabase, createMariaDbPoolDatabase, type MariaDbConnectionLike, type MariaDbPoolConnectionLike } from "@sqlbraid/mariadb/mariadb";
 import type { CallQuery, CommandQuery, Database, RowQuery, StandardSchemaV1 } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
@@ -152,10 +152,6 @@ function expectedLabelRow(label: string): Record<string, unknown> {
   return row;
 }
 
-function mutationSql(sqlText: string): boolean {
-  return /^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/iu.test(sqlText);
-}
-
 function containsError(error: unknown, expected: unknown): boolean {
   if (error === expected) return true;
   if (error instanceof AggregateError && error.errors.some((nested) => containsError(nested, expected))) return true;
@@ -167,48 +163,49 @@ async function createFixture(): Promise<CertificationFixture> {
   const connection = await mariadb.createConnection(connectorOptions());
   const pool: Pool = mariadb.createPool(connectorOptions());
   let acquisitions = 0;
-  let bulkAcquisitions = 0;
+  let bulkExecutions = 0;
   const mutationCount = { value: 0 };
-  const mutatingOperations = new Set<string>();
+  let streamReleases = 0;
+  const streamReturns = { value: 0 };
   const observer = {
     onEvent(event: { readonly type: string; readonly operationId?: string; readonly sql?: string; readonly itemCount?: number }): void {
-      if (event.type === "query:ready" && event.operationId && event.sql && mutationSql(event.sql)) mutatingOperations.add(event.operationId);
-      if (event.type === "query:result" && event.operationId && mutatingOperations.delete(event.operationId)) mutationCount.value += 1;
-      if (event.type === "bulk:result") mutationCount.value += event.itemCount ?? 0;
+      if ((event.type === "query:ready" || event.type === "bulk:ready") && event.operationId) mutationCount.value += 1;
+      if (event.type === "bulk:ready" && event.operationId) bulkExecutions += 1;
     },
   };
   const trackedPool = {
     getConnection: async () => {
       acquisitions += 1;
-      return pool.getConnection();
+      const connection = await pool.getConnection() as unknown as MariaDbPoolConnectionLike;
+      const release = connection.release.bind(connection);
+      connection.release = async () => {
+        streamReleases += 1;
+        return release();
+      };
+      const queryStream = connection.queryStream?.bind(connection);
+      if (queryStream !== undefined) {
+        connection.queryStream = (sqlText, values) => {
+          const stream = queryStream(sqlText, values);
+          let marked = false;
+          const mark = (): void => {
+            if (marked) return;
+            marked = true;
+            streamReturns.value += 1;
+          };
+          stream.once?.("end", mark);
+          const close = stream.close?.bind(stream);
+          if (close !== undefined) stream.close = async () => { mark(); return close(); };
+          return stream;
+        };
+      }
+      return connection;
     },
   };
   const db = createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT, observers: [observer] });
   const pooled = createMariaDbPoolDatabase(trackedPool, { profile: MARIADB_LOSSLESS_TEXT, observers: [observer] });
-  let streamReleases = 0;
-  let streamIterations = 0;
   let cleanupStreamDb: Pick<Database, "stream"> | undefined;
-  const streamDatabase = {
-    stream(query: Parameters<typeof db.stream>[0], options?: Parameters<typeof db.stream>[1]) {
-      return (async function* () {
-        const abortedBeforeStart = options?.signal?.aborted === true;
-        try {
-          const source = query === queries.one && cleanupStreamDb !== undefined ? cleanupStreamDb : db;
-          for await (const row of source.stream(query, options)) {
-            yield row;
-          }
-        } finally {
-          if (!abortedBeforeStart && query !== queries.failure) {
-            streamIterations += 1;
-          }
-          if (!abortedBeforeStart) {
-            streamReleases += 1;
-          }
-        }
-      })();
-    },
-  } as Pick<Database, "stream">;
-  await connection.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NULL)`);
+  await connection.query(`DROP TABLE IF EXISTS ${TABLE}`);
+  await connection.query(`CREATE TABLE ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NOT NULL CHECK (value <> ''))`);
   await connection.query(`CREATE TABLE IF NOT EXISTS ${JSON_TABLE} (payload JSON NOT NULL)`);
   await connection.query(`DELETE FROM ${JSON_TABLE}`);
   await connection.query(`INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('value', 1))`);
@@ -237,12 +234,16 @@ async function createFixture(): Promise<CertificationFixture> {
               return () => ({
                 next: async () => {
                   nextCalls += 1;
-                  if (nextCalls === 2) throw cleanupFailure;
+                  if (nextCalls === 1) throw cleanupFailure;
                   return iterator.next();
                 },
               });
             }
-            if (streamProperty === "close") return () => { throw cleanupFailure; };
+            if (streamProperty === "close") return () => {
+              streamReturns.value += 1;
+              streamReleases += 1;
+              throw cleanupFailure;
+            };
             const value = Reflect.get(streamTarget, streamProperty, streamReceiver);
             return typeof value === "function" ? value.bind(streamTarget) : value;
           },
@@ -251,6 +252,12 @@ async function createFixture(): Promise<CertificationFixture> {
     },
   });
   cleanupStreamDb = createMariaDbDatabase(cleanupConnection, { profile: MARIADB_LOSSLESS_TEXT, observers: [observer] });
+  const streamDatabase = {
+    stream(query: Parameters<typeof db.stream>[0], options?: Parameters<typeof db.stream>[1]) {
+      const source = query === queries.one && cleanupStreamDb !== undefined ? cleanupStreamDb : pooled;
+      return source.stream(query, options);
+    },
+  } as Pick<Database, "stream">;
   const mappingQuery = sql.rows({
     "~standard": {
       version: 1,
@@ -276,7 +283,7 @@ async function createFixture(): Promise<CertificationFixture> {
     cleanupFailureQuery: queries.one,
     cleanupFailure,
     released: () => streamReleases,
-    iteratorReturns: () => streamIterations,
+    iteratorReturns: () => streamReturns.value,
     initFailureCleanup: { iteratorReturns: 0, released: 1 },
     reuseAfterBreak: async () => {
       await db.one(queries.identity);
@@ -289,38 +296,34 @@ async function createFixture(): Promise<CertificationFixture> {
       ...pooled,
       bulk: async (inputs, factory) => inputs.length === 0
         ? { inputCount: 0, affectedRows: 0 }
-        : (bulkAcquisitions += 1, pooled.bulk(inputs, factory)),
+        : pooled.bulk(inputs, factory),
     },
     inputs: ["bulk-a", "bulk-b"],
     factory: (input) => sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES (${String(input)})`,
     expected: { inputCount: 2, affectedRows: 2 },
-    acquireCount: () => bulkAcquisitions,
-    executeCount: () => bulkAcquisitions,
+    acquireCount: () => acquisitions,
+    executeCount: () => bulkExecutions,
     values: () => [["bulk-a"], ["bulk-b"]],
     middleFailure: async () => {
       await pool.query(`DELETE FROM ${TABLE}`);
-      const factory = (input: string, index: number) => index === 1
-        ? sql.command`INSERT INTO braid_rc3_mariadb_bulk_missing (value) VALUES (${input})`
-        : sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES (${input})`;
-      let standaloneError: unknown;
-      try {
-        await pooled.bulk(["bulk-a", "bulk-b", "bulk-c"], factory);
-      } catch (error) {
-        standaloneError = error;
-      }
-      assert.ok(standaloneError instanceof Error, "MariaDB bulk middle failure must come from native bulk execution.");
-      const observedRows = await db.all(sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id`);
-      assert.deepEqual(observedRows, []);
-      await pool.query(`DELETE FROM ${TABLE}`);
+      const factory = (input: string | null) => sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES (${input})`;
       let transactionError: unknown;
       try {
-        await pooled.tx(async (tx) => { await tx.bulk(["bulk-a", "bulk-b", "bulk-c"], factory); });
+        await pooled.tx(async (tx) => {
+          try {
+            await tx.bulk(["bulk-a", null, "bulk-c"], factory);
+          } catch (error) {
+            assert.equal((error as { readonly code?: unknown }).code, "ER_BAD_NULL_ERROR");
+            assert.deepEqual(await tx.all(sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id`), [{ value: "bulk-a" }]);
+            throw error;
+          }
+        });
       } catch (error) {
         transactionError = error;
       }
       assert.ok(transactionError instanceof Error, "MariaDB transactional bulk middle failure must reject.");
       assert.deepEqual(await db.all(sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id`), []);
-      return { error: standaloneError, observedRows, expectedRows: [], durability: "atomic" as const };
+      throw transactionError;
     },
   };
   const snapshot = (): ResourceSnapshot => {
@@ -398,9 +401,10 @@ async function createFixture(): Promise<CertificationFixture> {
       await pool.query(`DELETE FROM ${JSON_TABLE}`);
       await pool.query(`INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('value', 1))`);
       mutationCount.value = 0;
+      acquisitions = 0;
       streamReleases = 0;
-      streamIterations = 0;
-      bulkAcquisitions = 0;
+      streamReturns.value = 0;
+      bulkExecutions = 0;
     },
     unsupported: {
       CALL002: {
