@@ -41,6 +41,13 @@ function cleanupFailureError(): Error & { readonly code: string } {
   return error;
 }
 
+function annotateSqliteError(error: unknown): unknown {
+  if (error && typeof error === "object" && !("code" in error)) {
+    Object.defineProperty(error, "code", { value: "SQLITE_ERROR", enumerable: true });
+  }
+  return error;
+}
+
 function targetCapabilities(): ExpectedCapabilityContract {
   return {
     "sql.native-transparency": { status: "guaranteed" },
@@ -81,7 +88,7 @@ const expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guarant
   "combination:repeatable-read+readOnly": "unsupported",
   "combination:repeatable-read+readWrite": "unsupported",
   "combination:serializable+readOnly": "unsupported",
-  "combination:serializable+readWrite": "guaranteed",
+  "combination:serializable+readWrite": "unsupported",
 };
 
 function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats): SqliteWasmDatabaseLike & { close(): void } {
@@ -90,7 +97,12 @@ function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats): SqliteW
     prepare(sqlText: string) {
       stats.prepares += 1;
       stats.active += 1;
-      const statement = database.prepare(sqlText);
+      let statement: SqliteWasmStatementLike;
+      try {
+        statement = database.prepare(sqlText);
+      } catch (error) {
+        throw annotateSqliteError(error);
+      }
       let finalized = false;
       stats.finalizeByStatement.push(0);
       const statementIndex = stats.finalizeByStatement.length - 1;
@@ -98,7 +110,10 @@ function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats): SqliteW
         get columnCount() { return statement.columnCount; },
         get pointer() { return statement.pointer; },
         bind(...values) { statement.bind(...values); return exposed; },
-        step() { return statement.step(); },
+        step() {
+          try { return statement.step(); }
+          catch (error) { throw annotateSqliteError(error); }
+        },
         stepReset() { return statement.stepReset?.() === undefined ? exposed : exposed; },
         reset(alsoClearBinds) { statement.reset(alsoClearBinds); return exposed; },
         get(index) { return statement.get(index); },
@@ -193,6 +208,7 @@ function buildQueries(stats: NativeStats): CertificationFixture["queries"] {
         RES011: { value: "second" },
       },
       commandAffectedRows: 1,
+      failureCode: "SQLITE_ERROR",
     },
   };
 }
