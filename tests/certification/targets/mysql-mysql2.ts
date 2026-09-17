@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createConnection, createPool, type Connection } from "mysql2/promise";
 import type { CallQuery, Database, RowQuery, StreamOptions } from "@sqlbraid/core";
 import { createMysql2Database, createMysql2PoolProvider, MYSQL2_LOSSLESS_TEXT, type Mysql2ConnectionLike, type Mysql2ExecuteOptionsLike, type Mysql2PoolLike, type Mysql2RawCommandLike, type Mysql2RawConnectionLike, type Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
-import { sql } from "@sqlbraid/mysql";
+import { sql, MYSQL2_NATIVE } from "@sqlbraid/mysql";
 import { createPooledDatabase } from "@sqlbraid/runtime";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
@@ -531,7 +531,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
         prove: async () => {
           const jsonConnection = await createConnection({ ...connectionOptions(connectionUri), jsonStrings: false });
           try {
-            const jsonDb = createMysql2Database(jsonConnection as unknown as Mysql2ConnectionLike, { profile: MYSQL2_LOSSLESS_TEXT });
+            const jsonDb = createMysql2Database(jsonConnection as unknown as Mysql2ConnectionLike, { profile: MYSQL2_NATIVE });
             const row = await jsonDb.one(q(sql.rows`SELECT JSON_OBJECT('value', 1) AS value`));
             const value = (row as { readonly value?: unknown }).value;
             if (value === null || typeof value !== "object") throw new Error("mysql2 JSON parsed guard failed.");
@@ -550,7 +550,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
         prove: async () => {
           const nativeConnection = await createConnection({ ...connectionOptions(connectionUri), dateStrings: false });
           try {
-            const nativeDb = createMysql2Database(nativeConnection as unknown as Mysql2ConnectionLike, { profile: MYSQL2_LOSSLESS_TEXT });
+            const nativeDb = createMysql2Database(nativeConnection as unknown as Mysql2ConnectionLike, { profile: MYSQL2_NATIVE });
             const row = await nativeDb.one(q(sql.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`));
             if (!((row as { readonly value?: unknown }).value instanceof Date)) throw new Error("mysql2 temporal native guard failed.");
           } finally {
