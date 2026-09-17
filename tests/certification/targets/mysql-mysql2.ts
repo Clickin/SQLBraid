@@ -493,20 +493,22 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   return fixture;
 }
 
-export function createMysql2NodeTarget(connectionUri: string, sourceSha: string): CertificationTarget {
+export function createMysql2NodeTarget(connectionUri: string, sourceSha: string, measuredDriverVersion?: string): CertificationTarget {
   return {
     id: "mysql-mysql2-node-8-4-2",
     sourceSha,
+    ...(measuredDriverVersion === undefined ? {} : { measuredDriverVersion }),
     expectedCapabilities: MYSQL2_EXPECTED_CAPABILITIES,
     expectedTransactionOptions: MYSQL2_EXPECTED_TRANSACTION_OPTIONS,
     createFixture: () => createFixture(connectionUri),
   };
 }
 
-export function createMysql2DenoTarget(connectionUri: string, sourceSha: string): CertificationTarget {
+export function createMysql2DenoTarget(connectionUri: string, sourceSha: string, measuredDriverVersion?: string): CertificationTarget {
   return {
     id: "mysql-mysql2-deno-2-9-3",
     sourceSha,
+    ...(measuredDriverVersion === undefined ? {} : { measuredDriverVersion }),
     expectedCapabilities: MYSQL2_EXPECTED_CAPABILITIES,
     expectedTransactionOptions: MYSQL2_EXPECTED_TRANSACTION_OPTIONS,
     createFixture: () => createFixture(connectionUri),

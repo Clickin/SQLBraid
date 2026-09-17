@@ -6,6 +6,7 @@ import { inject, test } from "vitest";
 import { certifyTarget, validateCertificationArtifact } from "../runner.js";
 import { createOracleOracledbTarget } from "./oracle-oracledb.js";
 import { isSourceSha, type CertificationArtifact } from "../types.js";
+import { installedPackageVersion } from "../node-version.js";
 
 const SOURCE_SHA = process.env.SQLBRAID_CERT_SOURCE_SHA;
 
@@ -19,6 +20,7 @@ test("Oracle node-oracledb passes the complete independent certification matrix"
     user: process.env.SQLBRAID_ORACLE_USER ?? "sqlbraid",
     password: process.env.SQLBRAID_ORACLE_PASSWORD ?? "SqlbraidTest13",
     sourceSha: SOURCE_SHA,
+    measuredDriverVersion: installedPackageVersion("oracledb"),
   });
   let artifact: CertificationArtifact | undefined;
   try {

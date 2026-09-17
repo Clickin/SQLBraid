@@ -208,6 +208,8 @@ export type TransactionOptionKey =
 export interface CertificationTarget {
   readonly id: string;
   readonly sourceSha: string;
+  readonly measuredDriverVersion?: string;
+  readonly measuredRuntimeVersion?: string;
   readonly allowCustomCapabilities?: boolean;
   readonly expectedCapabilities: ExpectedCapabilityContract;
   readonly expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">>;

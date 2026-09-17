@@ -110,6 +110,8 @@ describe("A4 certification harness", () => {
 
     const skipped = { ...artifact, cases: { ...artifact.cases, QRY001: { status: "skip", name: "QRY001" } } } as unknown as typeof artifact;
     assert.throws(() => validateCertificationArtifact(skipped, { sourceSha: A4_SHA }), /may not be skipped/u);
+    const failed = { ...artifact, cases: { ...artifact.cases, QRY001: { status: "fail", name: "QRY001", error: "native failure" } } } as unknown as typeof artifact;
+    assert.throws(() => validateCertificationArtifact(failed, { sourceSha: A4_SHA }), /did not pass/u);
     const missing = { ...artifact, cases: Object.fromEntries(Object.entries(artifact.cases).filter(([id]) => id !== "QRY001")) } as unknown as typeof artifact;
     assert.throws(() => validateCertificationArtifact(missing, { sourceSha: A4_SHA }), /incomplete/u);
     const mismatched = { ...artifact, declaredCapabilities: { ...artifact.declaredCapabilities, "statement.stream": { status: "unsupported" } } } as typeof artifact;
@@ -163,6 +165,16 @@ describe("A4 certification harness", () => {
       provenance: { ...artifact.provenance, measured: { ...artifact.provenance.measured, runtime: { ...artifact.provenance.measured.runtime, version: "0.0.0" } } },
     } as typeof artifact;
     assert.throws(() => aggregateCertificationArtifacts([wrongMeasuredVersion], options), /measured tuple/u);
+    const missingMeasuredDriverVersion = {
+      ...artifact,
+      provenance: { ...artifact.provenance, measured: { ...artifact.provenance.measured, driver: { ...artifact.provenance.measured.driver, version: undefined } } },
+    } as typeof artifact;
+    assert.throws(() => aggregateCertificationArtifacts([missingMeasuredDriverVersion], options), /measured driver version/u);
+    const wrongMeasuredDriverVersion = {
+      ...artifact,
+      provenance: { ...artifact.provenance, measured: { ...artifact.provenance.measured, driver: { ...artifact.provenance.measured.driver, version: "0.0.0" } } },
+    } as typeof artifact;
+    assert.throws(() => aggregateCertificationArtifacts([wrongMeasuredDriverVersion], options), /measured tuple/u);
     const forgedCandidate = { ...artifact, provenance: { ...artifact.provenance, candidate: { ...candidate, preparedBuildSha256: "f".repeat(64) } } } as typeof artifact;
     assert.throws(() => aggregateCertificationArtifacts([forgedCandidate], options), /candidate provenance/u);
   });

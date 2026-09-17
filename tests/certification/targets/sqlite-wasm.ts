@@ -194,11 +194,22 @@ function optionsProbe(
   };
 }
 
-export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string): CertificationTarget {
+export interface SqliteWasmCertificationTargetOptions {
+  readonly measuredDriverVersion: string;
+  readonly measuredRuntimeVersion: string;
+}
+
+export function createSqliteWasmTarget(
+  sqlite3: Sqlite3Like,
+  sourceSha: string,
+  options: SqliteWasmCertificationTargetOptions,
+): CertificationTarget {
   const expectedCapabilities = WASM_EXPECTED_CAPABILITIES();
   return {
     id: `sqlite-wasm-browser-${sqlite3.version.libVersion.replaceAll(".", "-")}`,
     sourceSha,
+    measuredDriverVersion: options.measuredDriverVersion,
+    measuredRuntimeVersion: options.measuredRuntimeVersion,
     expectedCapabilities,
     expectedTransactionOptions: WASM_EXPECTED_TRANSACTION_OPTIONS,
     createFixture: async (): Promise<CertificationFixture> => {

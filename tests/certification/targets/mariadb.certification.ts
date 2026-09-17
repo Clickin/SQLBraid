@@ -5,13 +5,14 @@ import { test } from "vitest";
 import { certifyTarget, validateCertificationArtifact, writeCertificationArtifact } from "../runner.js";
 import { createMariaDbCertificationTarget } from "./mariadb.js";
 import { isSourceSha, REQUIRED_CASE_IDS } from "../types.js";
+import { installedPackageVersion } from "../node-version.js";
 
 test("rc3.mariadb.certification", async () => {
   const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
   assert.ok(sourceSha && isSourceSha(sourceSha), "SQLBRAID_CERT_SOURCE_SHA must be a full 40-character SHA.");
   const output = process.env.SQLBRAID_CERT_ARTIFACT;
   assert.ok(output, "SQLBRAID_CERT_ARTIFACT is required for certification artifacts.");
-  const target = createMariaDbCertificationTarget(sourceSha);
+  const target = createMariaDbCertificationTarget(sourceSha, installedPackageVersion("mariadb"));
   const artifact = await certifyTarget(target, {
     stress: process.env.SQLBRAID_CERT_STRESS === "1" || process.env.SQLBRAID_CERT_STRESS === "true",
   });

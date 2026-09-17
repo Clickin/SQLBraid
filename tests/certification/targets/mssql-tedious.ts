@@ -192,11 +192,12 @@ const expectedCapabilities = MSSQL_EXPECTED_CAPABILITIES;
 
 const expectedTransactionOptions = MSSQL_EXPECTED_TRANSACTION_OPTIONS;
 
-export function createMssqlTediousTarget(sourceSha: string): CertificationTarget {
+export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersion?: string): CertificationTarget {
   if (!sourceSha.trim()) throw new Error("MSSQL certification requires the tested candidate source SHA.");
   return {
   id: "mssql-tedious-developer-node-2022-cu18",
   sourceSha,
+  ...(measuredDriverVersion === undefined ? {} : { measuredDriverVersion }),
   expectedCapabilities,
   expectedTransactionOptions,
   async createFixture(): Promise<CertificationFixture> {

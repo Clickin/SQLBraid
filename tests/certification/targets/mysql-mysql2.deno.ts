@@ -8,10 +8,13 @@ declare const Deno: {
 
 const connectionUri = Deno.env.get("SQLBRAID_MYSQL_URL");
 if (!connectionUri) throw new Error("SQLBRAID_MYSQL_URL is required for MySQL Deno certification.");
+const mysqlMetadata = await import("npm:mysql2/package.json", { with: { type: "json" } });
+const measuredDriverVersion = mysqlMetadata.default.version;
+if (typeof measuredDriverVersion !== "string" || measuredDriverVersion.length === 0) throw new Error("Deno mysql2 package metadata did not expose a version.");
 
 await runDenoCertification({
   "mysql-mysql2-deno-2-9-3": async (sourceSha) => {
-    const target = createMysql2DenoTarget(connectionUri, sourceSha);
+    const target = createMysql2DenoTarget(connectionUri, sourceSha, measuredDriverVersion);
     let active: CertificationFixture | undefined;
     const createFixture = target.createFixture;
     return {

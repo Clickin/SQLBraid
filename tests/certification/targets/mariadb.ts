@@ -334,13 +334,14 @@ function assertCommandAffectedRows(result: unknown): void {
   if (command?.affectedRows !== 1) throw new Error("MariaDB command-safe proof did not observe one affected row.");
 }
 
-export function createMariaDbCertificationTarget(sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA): CertificationTarget {
+export function createMariaDbCertificationTarget(sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA, measuredDriverVersion?: string): CertificationTarget {
   if (sourceSha === undefined || sourceSha.trim().length === 0) {
     throw new Error("SQLBRAID_CERT_SOURCE_SHA is required for MariaDB certification.");
   }
   return {
     id: "mariadb-connector-node-11-8-9",
     sourceSha,
+    ...(measuredDriverVersion === undefined ? {} : { measuredDriverVersion }),
     expectedCapabilities: mariadbExpectedCapabilities,
     expectedTransactionOptions,
     createFixture,

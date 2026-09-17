@@ -757,11 +757,13 @@ export function createPostgresTarget(
   id: PostgresTargetId,
   connectionUri: string,
   sourceSha: string,
+  measuredDriverVersion?: string,
 ): CertificationTarget {
   if (!sourceSha.trim()) throw new Error("PostgreSQL certification sourceSha must be non-empty.");
   return {
     id,
     sourceSha,
+    ...(measuredDriverVersion === undefined ? {} : { measuredDriverVersion }),
     expectedCapabilities,
     expectedTransactionOptions,
     createFixture: async () => createFixture(await sharedFor(id, connectionUri)),

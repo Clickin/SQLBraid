@@ -4,6 +4,7 @@ import { inject, test } from "vitest";
 import { certifyTarget, validateCertificationArtifact, writeCertificationArtifact } from "../runner.js";
 import { createPostgresTarget, disposePostgresTarget } from "./postgres-pg.js";
 import { isSourceSha } from "../types.js";
+import { installedPackageVersion } from "../node-version.js";
 
 
 test("PostgreSQL certification target executes all required cases", { timeout: 1_800_000 }, async () => {
@@ -12,7 +13,7 @@ test("PostgreSQL certification target executes all required cases", { timeout: 1
   if (!sourceSha || !isSourceSha(sourceSha)) throw new Error("SQLBRAID_CERT_SOURCE_SHA must be a full 40-character SHA.");
   const artifactPath = process.env.SQLBRAID_CERT_ARTIFACT;
   if (!artifactPath) throw new Error("SQLBRAID_CERT_ARTIFACT is required for certification artifacts.");
-  const target = createPostgresTarget(targetId, inject("postgres").connectionUri, sourceSha);
+  const target = createPostgresTarget(targetId, inject("postgres").connectionUri, sourceSha, installedPackageVersion("pg"));
   try {
     const artifact = await certifyTarget(target, { stress: process.env.SQLBRAID_CERT_STRESS === "1" || process.env.SQLBRAID_CERT_STRESS === "true" });
     validateCertificationArtifact(artifact, { sourceSha });

@@ -4,6 +4,10 @@ import { dirname } from "node:path";
 
 declare const Deno: {
   readonly env: { get(name: string): string | undefined };
+  readonly version: { readonly deno: string };
+  readonly Command: new (command: string, options: { readonly args: readonly string[] }) => {
+    output(): Promise<{ readonly success: boolean; readonly stdout: Uint8Array }>;
+  };
   readonly mkdir: (path: string, options?: { readonly recursive?: boolean }) => Promise<void>;
 };
 
@@ -14,19 +18,30 @@ export interface DenoCertificationDescriptor {
 
 export type DenoCertificationFactory = (sourceSha: string) => DenoCertificationDescriptor | Promise<DenoCertificationDescriptor>;
 
+export async function assertDenoSourceSha(sourceSha: string): Promise<void> {
+  const result = await new Deno.Command("git", { args: ["rev-parse", "HEAD"] }).output();
+  if (!result.success) throw new Error("Deno certification source SHA cannot be verified because the checkout has no readable git HEAD.");
+  const head = new TextDecoder().decode(result.stdout).trim();
+  if (head.toLowerCase() !== sourceSha.toLowerCase()) {
+    throw new Error(`Deno certification source SHA ${sourceSha} does not match checked-out HEAD ${head}.`);
+  }
+}
+
 export async function runDenoCertification(
   factories: Readonly<Record<string, DenoCertificationFactory>>,
   defaultTarget: string,
 ): Promise<void> {
   const sourceSha = Deno.env.get("SQLBRAID_CERT_SOURCE_SHA");
   if (!sourceSha || !isSourceSha(sourceSha)) throw new Error("SQLBRAID_CERT_SOURCE_SHA must be a full 40-character SHA.");
+  await assertDenoSourceSha(sourceSha);
   const targetId = Deno.env.get("SQLBRAID_CERT_TARGET") ?? defaultTarget;
   const factory = factories[targetId];
   if (!factory) throw new Error(`Unknown Deno certification target: ${targetId}`);
   const descriptor = await factory(sourceSha);
   try {
     const stress = Deno.env.get("SQLBRAID_CERT_STRESS");
-    const artifact = await certifyTarget(descriptor.target, { stress: stress === "1" || stress === "true" });
+    const target = { ...descriptor.target, measuredRuntimeVersion: Deno.version.deno };
+    const artifact = await certifyTarget(target, { stress: stress === "1" || stress === "true" });
     const artifactPath = Deno.env.get("SQLBRAID_CERT_ARTIFACT") ?? `/tmp/sqlbraid-cert-${targetId}.json`;
     validateCertificationArtifact(artifact, { sourceSha });
     await Deno.mkdir(dirname(artifactPath), { recursive: true });

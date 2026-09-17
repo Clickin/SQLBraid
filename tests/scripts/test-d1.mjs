@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { build as viteBuild } from "vite";
 import { Miniflare } from "miniflare";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
+const require = createRequire(import.meta.url);
 const workerPath = resolve(root, "fixtures/cloudflare-d1/worker.mjs");
 const outputDirectory = await mkdtemp(join(tmpdir(), "sqlbraid-d1-"));
 const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
@@ -15,6 +17,17 @@ const stressValue = process.env.SQLBRAID_CERT_STRESS;
 const certificationRequested = sourceSha !== undefined || artifactPath !== undefined || stressValue !== undefined;
 if (certificationRequested && (sourceSha === undefined || artifactPath === undefined || !/^[0-9a-f]{40}$/iu.test(sourceSha))) {
   throw new Error("Certification mode requires a full 40-character SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.");
+}
+if (certificationRequested) {
+  let head;
+  try {
+    head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  } catch (error) {
+    throw new Error("D1 certification source SHA cannot be verified because the checkout has no readable git HEAD.", { cause: error });
+  }
+  if (head.toLowerCase() !== sourceSha.toLowerCase()) {
+    throw new Error(`D1 certification source SHA ${sourceSha} does not match checked-out HEAD ${head}.`);
+  }
 }
 if (stressValue !== undefined && !["0", "1", "false", "true"].includes(stressValue)) {
   throw new Error("SQLBRAID_CERT_STRESS must be 0, 1, false, or true.");
@@ -64,24 +77,21 @@ try {
   assert.equal(payload.streamCode, "BRAID_STREAM_UNSUPPORTED");
   assert.equal(payload.transactionCode, "BRAID_TX_UNSUPPORTED");
   if (certificationRequested) {
-    const certificationResponse = await worker.dispatchFetch(`http://sqlbraid.test/certification?sourceSha=${encodeURIComponent(sourceSha)}&stress=${certificationStress ? "1" : "0"}`);
+    const miniflareEntry = require.resolve("miniflare");
+    const workerdPackage = require.resolve("workerd/package.json", { paths: [miniflareEntry] });
+    const workerdVersion = JSON.parse(await readFile(workerdPackage, "utf8")).version;
+    const certificationUrl = new URL("http://sqlbraid.test/certification");
+    certificationUrl.searchParams.set("sourceSha", sourceSha);
+    certificationUrl.searchParams.set("stress", certificationStress ? "1" : "0");
+    certificationUrl.searchParams.set("driverVersion", workerdVersion);
+    certificationUrl.searchParams.set("runtimeVersion", workerdVersion);
+    const certificationResponse = await worker.dispatchFetch(certificationUrl);
     const certificationBody = await certificationResponse.text();
     assert.equal(certificationResponse.status, 200, certificationBody);
     const certification = JSON.parse(certificationBody);
     assert.equal(certification.artifact.target, "d1-cloudflare-workerd-2026-07-30");
     assert.equal(certification.artifact.sourceSha, sourceSha);
-    const miniflarePackage = JSON.parse(await readFile(resolve(root, "node_modules/miniflare/package.json"), "utf8"));
-    const artifact = {
-      ...certification.artifact,
-      provenance: {
-        ...certification.artifact.provenance,
-        measured: {
-          ...certification.artifact.provenance.measured,
-          driver: { ...certification.artifact.provenance.measured.driver, version: miniflarePackage.version },
-          runtime: { id: "workerd", version: miniflarePackage.version },
-        },
-      },
-    };
+    const artifact = certification.artifact;
     const output = resolve(root, artifactPath);
     await mkdir(dirname(output), { recursive: true });
     const pending = `${output}.pending`;

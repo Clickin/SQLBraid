@@ -183,6 +183,7 @@ export interface OracleCertificationConnectionOptions {
   readonly user: string;
   readonly password: string;
   readonly sourceSha: string;
+  readonly measuredDriverVersion?: string;
 }
 
 export async function createOracleOracledbTarget(options: OracleCertificationConnectionOptions): Promise<CertificationTarget & { close(): Promise<void> }> {
@@ -190,6 +191,7 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
   const target: CertificationTarget & { close(): Promise<void> } = {
     id: "oracle-oracledb-thin-node-23-9",
     sourceSha: options.sourceSha,
+    ...(options.measuredDriverVersion === undefined ? {} : { measuredDriverVersion: options.measuredDriverVersion }),
     expectedCapabilities: ORACLE_EXPECTED_CAPABILITIES,
     expectedTransactionOptions: ORACLE_EXPECTED_TRANSACTION_OPTIONS,
     async createFixture(): Promise<CertificationFixture> {

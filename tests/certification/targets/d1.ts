@@ -21,6 +21,11 @@ const expectedCapabilities = D1_EXPECTED_CAPABILITIES;
 
 const expectedTransactionOptions = D1_EXPECTED_TRANSACTION_OPTIONS;
 
+export interface D1CertificationTargetOptions {
+  readonly measuredDriverVersion: string;
+  readonly measuredRuntimeVersion: string;
+}
+
 function buildQueries(stats: D1Stats): CertificationFixture["queries"] {
   let preparedCalls = 0;
   const special = {
@@ -72,10 +77,12 @@ function probe(run: () => Promise<unknown>, feature: string, expectedCode: `BRAI
   return { feature, expectedErrorFeature: expectedErrorFeature === feature ? undefined : expectedErrorFeature, expectedCode, run, sideEffects };
 }
 
-export function createD1Target(database: D1DatabaseLike, sourceSha: string): CertificationTarget {
+export function createD1Target(database: D1DatabaseLike, sourceSha: string, options: D1CertificationTargetOptions): CertificationTarget {
   return {
     id: "d1-cloudflare-workerd-2026-07-30",
     sourceSha,
+    measuredDriverVersion: options.measuredDriverVersion,
+    measuredRuntimeVersion: options.measuredRuntimeVersion,
     expectedCapabilities,
     expectedTransactionOptions,
     createFixture: async (): Promise<CertificationFixture> => {

@@ -1,7 +1,7 @@
 import { createD1Database } from "@sqlbraid/sqlite/d1";
 import { sql } from "@sqlbraid/sqlite";
 import { verifyBulkConformance } from "../bulk-conformance.mjs";
-import { certifyTarget } from "../../tests/certification/execute.js";
+import { assertCertificationCasesPass, certifyTarget } from "../../tests/certification/execute.js";
 import { createD1Target } from "../../tests/certification/targets/d1.js";
 
 const jsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
@@ -12,8 +12,12 @@ export default {
     if (requestUrl.pathname === "/certification") {
       const sourceSha = requestUrl.searchParams.get("sourceSha") ?? "working-tree";
       const stress = requestUrl.searchParams.get("stress") === "1";
-      const target = createD1Target(env.DB, sourceSha);
+      const measuredDriverVersion = requestUrl.searchParams.get("driverVersion");
+      const measuredRuntimeVersion = requestUrl.searchParams.get("runtimeVersion");
+      if (measuredDriverVersion === null || measuredRuntimeVersion === null) throw new Error("D1 certification requires measured driver and workerd versions.");
+      const target = createD1Target(env.DB, sourceSha, { measuredDriverVersion, measuredRuntimeVersion });
       const artifact = await certifyTarget(target, { stress });
+      assertCertificationCasesPass(artifact.cases);
       return Response.json({ artifact });
     }
     let nativeBatchCalls = 0;

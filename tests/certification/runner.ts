@@ -37,7 +37,7 @@ function measuredTupleMatchesExpected(
     && databaseVersionMatches
     && measured.driver.id === expected.driver.id
     && measured.driver.profile === expected.driver.profile
-    && (expected.driver.version === undefined || measured.driver.version === undefined || measured.driver.version === expected.driver.version)
+    && measured.driver.version === expected.driver.version
     && measured.runtime.id === expected.runtime.id
     && measured.runtime.version === expected.runtime.version;
 }
@@ -79,6 +79,11 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
   assert.ok(isRecord(value.provenance.measured.driver), "Certification artifact measured driver tuple is required.");
   assert.ok(isRecord(value.provenance.measured.runtime), "Certification artifact measured runtime tuple is required.");
   assert.ok(value.provenance.measured.database.versionStatus === "measured" || value.provenance.measured.database.versionStatus === "unknown", "Certification artifact database version status is invalid.");
+  assert.equal(typeof value.provenance.measured.driver.id, "string", "Certification artifact measured driver id is required.");
+  assert.equal(typeof value.provenance.measured.driver.version, "string", "Certification artifact measured driver version is required.");
+  assert.equal(typeof value.provenance.measured.driver.profile, "string", "Certification artifact measured driver profile is required.");
+  assert.equal(typeof value.provenance.measured.runtime.id, "string", "Certification artifact measured runtime id is required.");
+  assert.equal(typeof value.provenance.measured.runtime.version, "string", "Certification artifact measured runtime version is required.");
   assert.ok(isRecord(value.provenance.pinned), "Certification artifact pinned tuple is required.");
   for (const part of ["database", "driver", "runtime"]) assert.ok(isRecord(value.provenance.pinned[part]), `Certification artifact pinned ${part} tuple is required.`);
   if (value.expectedGuardedCases !== undefined) {

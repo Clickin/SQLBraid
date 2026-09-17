@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import process from "node:process";
 
@@ -35,9 +35,40 @@ function normalize(value) {
 function equalNormalized(left, right) {
   return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
 }
+function candidateWithoutSourceCheck() {
+  const text = process.env.SQLBRAID_CERT_CANDIDATE_JSON;
+  if (text === undefined) return undefined;
+  const value = JSON.parse(text);
+  if (value === null || typeof value !== "object" || !["source", "prepared", "release-prepared"].includes(value.kind)
+    || !/^[0-9a-f]{40}$/iu.test(value.sourceSha ?? "")) {
+    throw new Error("Candidate provenance must include a valid kind and exact source SHA.");
+  }
+  return value;
+}
+function checkedOutHead() {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch {
+    return undefined;
+  }
+}
 function sourceSha() {
   const value = option("--source-sha", process.env.SQLBRAID_CERT_SOURCE_SHA);
   if (!/^[0-9a-f]{40}$/iu.test(value ?? "")) throw new Error("Certification requires an exact 40-character --source-sha or SQLBRAID_CERT_SOURCE_SHA.");
+  const head = checkedOutHead();
+  const prepared = candidateWithoutSourceCheck();
+  const preparedMode = process.env.SQLBRAID_CERT_PREPARED_DIR !== undefined
+    && (prepared?.kind === "prepared" || prepared?.kind === "release-prepared");
+  if (head === undefined && !has("--verify-prepared") && !preparedMode) {
+    throw new Error("Certification source SHA cannot be verified because the checkout has no readable git HEAD.");
+  }
+  if (head !== undefined && head.toLowerCase() !== value.toLowerCase()) {
+    throw new Error(`Certification source SHA ${value} does not match checked-out HEAD ${head}.`);
+  }
   return value;
 }
 function stress() {
@@ -46,13 +77,8 @@ function stress() {
   return has("--stress") || value === "1" || value === "true";
 }
 function candidate() {
-  const text = process.env.SQLBRAID_CERT_CANDIDATE_JSON;
-  if (text === undefined) return undefined;
-  const value = JSON.parse(text);
-  if (value === null || typeof value !== "object" || !["source", "prepared", "release-prepared"].includes(value.kind)
-    || !/^[0-9a-f]{40}$/iu.test(value.sourceSha ?? "")) {
-    throw new Error("Candidate provenance must include a valid kind and exact source SHA.");
-  }
+  const value = candidateWithoutSourceCheck();
+  if (value === undefined) return undefined;
   if (value.sourceSha !== sourceSha()) throw new Error("Candidate provenance source SHA does not match certification source SHA.");
   return value;
 }

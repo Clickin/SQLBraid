@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { SQL } from "bun";
 import { certifyTarget } from "../tests/certification/execute.ts";
 import { REQUIRED_CASE_IDS } from "../tests/certification/types.ts";
@@ -15,6 +16,7 @@ const envNames = {
   mariadb: ["SQLBRAID_BUN_SQL_MARIADB_URL", "SQLBRAID_MARIADB_URL", "MARIADB_URL"],
   sqlite: ["SQLBRAID_BUN_SQL_SQLITE_URL", "SQLBRAID_SQLITE_URL"],
 };
+const repositoryRoot = resolve(new URL("..", import.meta.url).pathname);
 
 function configuredUrl(dialect) {
   for (const name of envNames[dialect]) {
@@ -35,7 +37,22 @@ async function createTarget(dialect, sourceSha) {
   const createClientForTarget = () => createClient(dialect, url);
   const factory = module[`createBunSql${dialect[0].toUpperCase()}${dialect.slice(1)}Target`];
   assert.equal(typeof factory, "function", `Missing Bun certification target factory for ${dialect}.`);
-  return factory(sourceSha, createClientForTarget);
+  return {
+    ...factory(sourceSha, createClientForTarget),
+    measuredDriverVersion: Bun.version,
+    measuredRuntimeVersion: Bun.version,
+  };
+}
+
+function assertCheckedOutSourceSha(value) {
+  assert.match(value ?? "", /^[0-9a-f]{40}$/iu, "Pass a full 40-character source SHA with --source-sha or SQLBRAID_CERT_SOURCE_SHA.");
+  let head;
+  try {
+    head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  } catch (error) {
+    throw new Error("Certification source SHA cannot be verified because the checkout has no readable git HEAD.", { cause: error });
+  }
+  assert.equal(value.toLowerCase(), head.toLowerCase(), `Certification source SHA ${value} does not match checked-out HEAD ${head}.`);
 }
 
 function errorRecord(error) {
@@ -62,7 +79,7 @@ const selected = args.filter((value, index) =>
   && (sourceShaIndex < 0 || index !== sourceShaIndex + 1)
   && (artifactIndex < 0 || index !== artifactIndex + 1),
 );
-assert.match(sourceSha ?? "", /^[0-9a-f]{40}$/iu, "Pass a full 40-character source SHA with --source-sha or SQLBRAID_CERT_SOURCE_SHA.");
+assertCheckedOutSourceSha(sourceSha);
 const selectedDialects = selected.length === 0 ? dialects : selected;
 for (const dialect of selectedDialects) assert.ok(dialects.includes(dialect), `Unknown Bun.SQL dialect: ${dialect}`);
 

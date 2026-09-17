@@ -1,6 +1,7 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdir, mkdtemp, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, extname, resolve } from "node:path";
 import process from "node:process";
@@ -14,6 +15,7 @@ const route = `${basePath}/interactive-preview/`;
 const externalUrl = process.env.SQLBRAID_BROWSER_URL;
 const children = [];
 const repositoryRoot = resolve(process.cwd());
+const require = createRequire(import.meta.url);
 
 function certificationOptions() {
   const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
@@ -23,6 +25,15 @@ function certificationOptions() {
   if (!requested) return undefined;
   if (sourceSha === undefined || artifactPath === undefined || !/^[0-9a-f]{40}$/iu.test(sourceSha)) {
     throw new Error("Certification mode requires a full 40-character SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.");
+  }
+  let head;
+  try {
+    head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  } catch (error) {
+    throw new Error("Browser certification source SHA cannot be verified because the checkout has no readable git HEAD.", { cause: error });
+  }
+  if (head.toLowerCase() !== sourceSha.toLowerCase()) {
+    throw new Error(`Browser certification source SHA ${sourceSha} does not match checked-out HEAD ${head}.`);
   }
   if (stressValue !== undefined && !["0", "1", "false", "true"].includes(stressValue)) {
     throw new Error("SQLBRAID_CERT_STRESS must be 0, 1, false, or true.");
@@ -153,7 +164,7 @@ async function buildBrowserCertificationBundle() {
   return resolve(directory, "certification.js.iife.js");
 }
 
-async function runWasmConformance(browser, fixtureUrl, certificationBundle, sourceSha, stress) {
+async function runWasmConformance(browser, fixtureUrl, certificationBundle, sourceSha, stress, measuredDriverVersion, measuredRuntimeVersion) {
   const page = await browser.newPage();
   let pageError;
   page.on("pageerror", (error) => { pageError = error; });
@@ -162,6 +173,8 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
     if (sourceSha !== undefined) {
       certificationUrl.searchParams.set("sourceSha", sourceSha);
       certificationUrl.searchParams.set("stress", stress ? "1" : "0");
+      certificationUrl.searchParams.set("driverVersion", measuredDriverVersion);
+      certificationUrl.searchParams.set("runtimeVersion", measuredRuntimeVersion);
     }
     await page.goto(certificationUrl.href, { waitUntil: "networkidle" });
     try {
@@ -338,6 +351,7 @@ async function main() {
     const certificationBundle = certification === undefined ? undefined : await buildBrowserCertificationBundle();
     const browser = await chromium.launch({ headless: true });
     try {
+      const sqliteWasmVersion = JSON.parse(await readFile(require.resolve("@sqlite.org/sqlite-wasm/package.json"), "utf8")).version;
       const page = await browser.newPage();
       await page.goto(url, { waitUntil: "networkidle" });
       const preview = page.getByTestId("interactive-preview");
@@ -415,6 +429,8 @@ async function main() {
         certificationBundle,
         certification?.sourceSha,
         certification?.stress,
+        sqliteWasmVersion,
+        browser.version(),
       );
       if (certification !== undefined) {
         if (report.certification.sourceSha !== certification.sourceSha) {
