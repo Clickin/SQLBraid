@@ -164,14 +164,16 @@ async function runTransactionOption(context: CaseContext, id: CertificationCaseI
     assert.equal(probe.sideEffects(), before);
     return { status: "pass-unsupported", name: id, feature: key, rejectionFeature: (probe.expectedErrorFeature ?? probe.feature) === key ? undefined : (probe.expectedErrorFeature ?? probe.feature), code: error.code };
   }
-  await context.fixture.db.tx(options, async (tx) => {
-    await tx.one(context.fixture.queries.identity);
-    if (options.readOnly === true) {
-      const transaction = context.fixture.queries.transaction;
-      if (!transaction) throw new Error(`${id} requires transaction fixture evidence.`);
-      await assert.rejects(() => tx.execute(transaction.insert));
-    }
-  });
+  for (const db of databases(context.fixture)) {
+    await db.tx(options, async (tx) => {
+      await tx.one(context.fixture.queries.identity);
+      if (options.readOnly === true) {
+        const transaction = context.fixture.queries.transaction;
+        if (!transaction) throw new Error(`${id} requires transaction fixture evidence.`);
+        await assert.rejects(() => tx.execute(transaction.insert));
+      }
+    });
+  }
   return { status: "pass", name: id, feature: key };
 }
 
@@ -384,23 +386,29 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
 
   TX001: async (context) => supported(context, "TX001", "transaction", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX001 transaction fixture missing.");
-    await fixture.reset();
-    await fixture.db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); });
-    assert.equal((await fixture.db.all(fixture.queries.transaction.visible)).length, 1);
+    for (const db of databases(fixture)) {
+      await fixture.reset();
+      await db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); });
+      assert.equal((await db.all(fixture.queries.transaction.visible)).length, 1);
+    }
   }),
   TX002: async (context) => supported(context, "TX002", "transaction", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX002 transaction fixture missing.");
-    await fixture.reset();
-    await assert.rejects(() => fixture.db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); throw new Error("cert-rollback"); }));
-    if (emptyResultError(context) === undefined) assert.equal((await fixture.db.all(fixture.queries.transaction!.visible)).length, 0);
-    else await assertEmptyResult(context, () => fixture.db.all(fixture.queries.transaction!.visible));
+    for (const db of databases(fixture)) {
+      await fixture.reset();
+      await assert.rejects(() => db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); throw new Error("cert-rollback"); }));
+      if (emptyResultError(context) === undefined) assert.equal((await db.all(fixture.queries.transaction!.visible)).length, 0);
+      else await assertEmptyResult(context, () => db.all(fixture.queries.transaction!.visible));
+    }
   }),
   TX003: async (context) => supported(context, "TX003", "transaction", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX003 transaction fixture missing.");
-    await fixture.reset();
-    await assert.rejects(() => fixture.db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); await tx.execute(fixture.queries.failure); }));
-    if (emptyResultError(context) === undefined) assert.equal((await fixture.db.all(fixture.queries.transaction!.visible)).length, 0);
-    else await assertEmptyResult(context, () => fixture.db.all(fixture.queries.transaction!.visible));
+    for (const db of databases(fixture)) {
+      await fixture.reset();
+      await assert.rejects(() => db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); await tx.execute(fixture.queries.failure); }));
+      if (emptyResultError(context) === undefined) assert.equal((await db.all(fixture.queries.transaction!.visible)).length, 0);
+      else await assertEmptyResult(context, () => db.all(fixture.queries.transaction!.visible));
+    }
   }),
   TX004: async (context) => supported(context, "TX004", "transaction", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX004 transaction fixture missing.");
@@ -417,12 +425,16 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     }
   }),
   TX005: async (context) => supported(context, "TX005", "transaction", async ({ fixture }) => {
-    await assert.rejects(() => fixture.db.tx(async () => { await fixture.db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_SCOPE");
+    for (const db of databases(fixture)) {
+      await assert.rejects(() => db.tx(async () => { await db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_SCOPE");
+    }
   }),
   TX006: async (context) => supported(context, "TX006", "transaction", async ({ fixture }) => {
-    let scoped: Database | undefined;
-    await fixture.db.tx(async (tx) => { scoped = tx; });
-    await assert.rejects(() => scoped!.one(fixture.queries.identity), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_CLOSED");
+    for (const db of databases(fixture)) {
+      let scoped: Database | undefined;
+      await db.tx(async (tx) => { scoped = tx; });
+      await assert.rejects(() => scoped!.one(fixture.queries.identity), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_CLOSED");
+    }
   }),
   TX007: async (context) => supported(context, "TX007", "transaction", async ({ fixture }) => {
     const proof = fixtureMetrics(fixture).transactionCleanup;
@@ -443,40 +455,48 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   }),
   TX010: async (context) => supported(context, "TX010", "transaction.savepoint", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX010 transaction fixture missing.");
-    await fixture.reset();
-    await fixture.db.tx(async (outer) => {
-      await outer.tx(async (inner) => { await inner.execute(fixture.queries.transaction!.savepointInsert); });
-    });
-    assert.equal((await fixture.db.all(fixture.queries.transaction.visible)).length, 1);
+    for (const db of databases(fixture)) {
+      await fixture.reset();
+      await db.tx(async (outer) => {
+        await outer.tx(async (inner) => { await inner.execute(fixture.queries.transaction!.savepointInsert); });
+      });
+      assert.equal((await db.all(fixture.queries.transaction.visible)).length, 1);
+    }
   }),
   TX011: async (context) => supported(context, "TX011", "transaction.savepoint", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX011 transaction fixture missing.");
-    await fixture.reset();
-    await fixture.db.tx(async (outer) => {
-      await assert.rejects(() => outer.tx(async (inner) => { await inner.execute(fixture.queries.transaction!.savepointInsert); throw new Error("cert-savepoint-rollback"); }));
-    });
-    if (emptyResultError(context) === undefined) assert.equal((await fixture.db.all(fixture.queries.transaction!.visible)).length, 0);
-    else await assertEmptyResult(context, () => fixture.db.all(fixture.queries.transaction!.visible));
+    for (const db of databases(fixture)) {
+      await fixture.reset();
+      await db.tx(async (outer) => {
+        await assert.rejects(() => outer.tx(async (inner) => { await inner.execute(fixture.queries.transaction!.savepointInsert); throw new Error("cert-savepoint-rollback"); }));
+      });
+      if (emptyResultError(context) === undefined) assert.equal((await db.all(fixture.queries.transaction!.visible)).length, 0);
+      else await assertEmptyResult(context, () => db.all(fixture.queries.transaction!.visible));
+    }
   }),
   TX012: async (context) => supported(context, "TX012", "transaction", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX012 transaction fixture missing.");
-    await fixture.reset();
-    await assert.rejects(() => fixture.db.tx(async (outer) => {
-      await outer.tx(async (inner) => { await inner.execute(fixture.queries.transaction!.savepointInsert); });
-      throw new Error("cert-outer-rollback");
-    }));
-    if (emptyResultError(context) === undefined) assert.equal((await fixture.db.all(fixture.queries.transaction!.visible)).length, 0);
-    else await assertEmptyResult(context, () => fixture.db.all(fixture.queries.transaction!.visible));
+    for (const db of databases(fixture)) {
+      await fixture.reset();
+      await assert.rejects(() => db.tx(async (outer) => {
+        await outer.tx(async (inner) => { await inner.execute(fixture.queries.transaction!.savepointInsert); });
+        throw new Error("cert-outer-rollback");
+      }));
+      if (emptyResultError(context) === undefined) assert.equal((await db.all(fixture.queries.transaction!.visible)).length, 0);
+      else await assertEmptyResult(context, () => db.all(fixture.queries.transaction!.visible));
+    }
   }),
   TX013: async (context) => supported(context, "TX013", "transaction.savepoint", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX013 transaction fixture missing.");
-    await fixture.reset();
-    await fixture.db.tx(async (outer) => {
-      await outer.tx(async (inner) => {
-        await inner.tx(async (deep) => { await deep.execute(fixture.queries.transaction!.savepointInsert); });
+    for (const db of databases(fixture)) {
+      await fixture.reset();
+      await db.tx(async (outer) => {
+        await outer.tx(async (inner) => {
+          await inner.tx(async (deep) => { await deep.execute(fixture.queries.transaction!.savepointInsert); });
+        });
       });
-    });
-    assert.equal((await fixture.db.all(fixture.queries.transaction.visible)).length, 1);
+      assert.equal((await db.all(fixture.queries.transaction.visible)).length, 1);
+    }
   }),
   TX020: async (context) => runTransactionOption(context, "TX020", "isolation:read-uncommitted", { isolation: "read-uncommitted" }),
   TX021: async (context) => runTransactionOption(context, "TX021", "readOnly:true", { readOnly: true }),
