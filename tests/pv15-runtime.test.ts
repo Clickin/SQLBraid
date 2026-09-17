@@ -117,6 +117,54 @@ test("transaction option validators reject before provider acquisition and overr
   assert.equal(thenableAcquired, 0);
 });
 
+test("transaction option validators reject lazy thenables without invoking them", async () => {
+  let thenCalls = 0;
+  let acquired = 0;
+  const lazyThenable = {
+    then() {
+      thenCalls += 1;
+      throw new Error("lazy thenable invoked");
+    },
+  };
+  const db = createPooledDatabase({
+    statementBinding,
+    validateTransactionOptions() {
+      return lazyThenable as unknown as void;
+    },
+    async acquire() {
+      acquired += 1;
+      return transactionLease();
+    },
+  });
+  await assert.rejects(() => db.tx({ readOnly: false }, async () => {}), (error) =>
+    error instanceof TypeError && /must be synchronous/u.test(error.message));
+  assert.equal(thenCalls, 0);
+  assert.equal(acquired, 0);
+
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    const rejection = new Error("native validator rejection");
+    const rejectedDb = createPooledDatabase({
+      statementBinding,
+      validateTransactionOptions() {
+        return Promise.reject(rejection) as unknown as void;
+      },
+      async acquire() {
+        acquired += 1;
+        return transactionLease();
+      },
+    });
+    await assert.rejects(() => rejectedDb.tx({ readOnly: false }, async () => {}), (error) =>
+      error instanceof TypeError && /must be synchronous/u.test(error.message));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.removeListener("unhandledRejection", onUnhandled);
+  }
+});
+
 test("provider transaction option validator is inherited when a lease omits it", async () => {
   let began = 0;
   const db = createPooledDatabase({

@@ -516,7 +516,9 @@ function validateTransactionOptionSupport(
     const result = validate.call(owner, transactionOptions) as unknown;
     if (result !== null && (typeof result === "object" || typeof result === "function")
       && typeof (result as { readonly then?: unknown }).then === "function") {
-      void (result as PromiseLike<unknown>).then(undefined, () => undefined);
+      if (result instanceof Promise) {
+        Promise.prototype.then.call(result, undefined, () => undefined);
+      }
       throw new TypeError("validateTransactionOptions() must be synchronous.");
     }
     return;
