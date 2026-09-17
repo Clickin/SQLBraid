@@ -1,6 +1,7 @@
 import { executeCertificationCase } from "./cases.js";
 import { isWellKnownCapabilityId, type EnvironmentCapability } from "@sqlbraid/core";
-import { REQUIRED_API_CAPABILITY_IDS, REQUIRED_CASE_IDS, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationRunOptions, type CertificationTarget, type ExpectedCapabilityContract } from "./types.js";
+import { CERTIFICATION_TARGET_TUPLES } from "./contracts.js";
+import { isSourceSha, REQUIRED_API_CAPABILITY_IDS, REQUIRED_CASE_IDS, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationMeasuredTuple, type CertificationRunOptions, type CertificationTarget, type ExpectedCapabilityContract } from "./types.js";
 
 function normalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalize);
@@ -26,7 +27,8 @@ function errorResult(id: CertificationCaseId, message: string): CertificationCas
 /** Runs all common cases in the target's own realm; it performs no artifact I/O. */
 export async function certifyTarget(target: CertificationTarget, options: CertificationRunOptions = {}): Promise<CertificationArtifact> {
   if (!target.id.trim()) throw new Error("Certification target id must be non-empty.");
-  if (!target.sourceSha.trim()) throw new Error("Certification sourceSha must be non-empty.");
+  if (!isSourceSha(target.sourceSha)) throw new Error("Certification sourceSha must be a full 40-character SHA.");
+  if (options.candidate !== undefined && options.candidate.sourceSha !== target.sourceSha) throw new Error(`Certification candidate source SHA does not match ${target.id}.`);
   if (!target.allowCustomCapabilities) {
     for (const feature of REQUIRED_API_CAPABILITY_IDS) {
       if (!Object.hasOwn(target.expectedCapabilities, feature)) throw new Error(`Certification target ${target.id} is missing required capability ${feature}.`);
@@ -40,6 +42,16 @@ export async function certifyTarget(target: CertificationTarget, options: Certif
   try {
     const environment = await fixture.db.environment();
     const expected = declaredContract(target.expectedCapabilities);
+    const measured: CertificationMeasuredTuple = {
+      database: { ...environment.database, versionStatus: environment.database.version === undefined ? "unknown" : "measured" },
+      driver: environment.driver,
+      runtime: environment.runtime,
+    };
+    const pinned = CERTIFICATION_TARGET_TUPLES[target.id] ?? {
+      database: { product: environment.database.product, ...(environment.database.version === undefined ? {} : { version: environment.database.version }), edition: environment.database.edition ?? "unknown", versionStatus: measured.database.versionStatus },
+      driver: { id: environment.driver.id, package: "unknown", version: environment.driver.version ?? "unknown", profile: environment.driver.profile ?? "unknown" },
+      runtime: { id: environment.runtime.id, version: environment.runtime.version ?? "unknown" },
+    };
     const declarationError = equalContract(environment.capabilities, expected)
       ? undefined
       : `CAP001 declaration mismatch for ${target.id}.`;
@@ -60,6 +72,7 @@ export async function certifyTarget(target: CertificationTarget, options: Certif
       schemaVersion: 1,
       target: target.id,
       sourceSha: target.sourceSha,
+      provenance: { schemaVersion: 1, target: target.id, sourceSha: target.sourceSha, measured, pinned, ...(options.candidate === undefined ? {} : { candidate: options.candidate }) },
       cases,
       expectedCapabilities: target.expectedCapabilities,
       expectedTransactionOptions: target.expectedTransactionOptions,

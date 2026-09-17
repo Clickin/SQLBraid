@@ -1,0 +1,619 @@
+name: Driver certification
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      stress:
+        description: Run the stress certification cases
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_call:
+    inputs:
+      stress:
+        required: false
+        default: false
+        type: boolean
+      prepared_artifact_name:
+        required: false
+        default: certification-prepared
+        type: string
+      candidate_artifact_name:
+        required: false
+        default: ""
+        type: string
+      prepared_run_id:
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22.18.0
+  BUN_VERSION: 1.3.14
+  DENO_VERSION: 2.9.3
+  SQLBRAID_CERT_STRESS: ${{ github.event_name == 'schedule' || inputs.stress }}
+
+jobs:
+  prepare:
+    name: Prepare one immutable build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install frozen dependencies
+        if: ${{ inputs.prepared_run_id == '' }}
+        run: pnpm install --frozen-lockfile
+      - name: Check formatting
+        if: ${{ inputs.prepared_run_id == '' }}
+        run: pnpm run fmt:check
+      - name: Run lint
+        if: ${{ inputs.prepared_run_id == '' }}
+        run: pnpm run lint
+      - name: Build packages once
+        if: ${{ inputs.prepared_run_id == '' }}
+        run: pnpm run build:packages
+      - name: Archive prepared build and identity
+        if: ${{ inputs.prepared_run_id == '' }}
+        run: |
+          tar -czf "$RUNNER_TEMP/prepared-build.tar.gz" packages/*/dist
+          prepared_sha=$(sha256sum "$RUNNER_TEMP/prepared-build.tar.gz" | cut -d' ' -f1)
+          node -e 'const fs=require("node:fs"); const [sha,out]=process.argv.slice(1); fs.writeFileSync(out, `${JSON.stringify({kind:"prepared",sourceSha:process.env.GITHUB_SHA,producerRunId:process.env.GITHUB_RUN_ID,producerRunAttempt:process.env.GITHUB_RUN_ATTEMPT,artifactName:"prepared-build",preparedBuildSha256:sha})}\n`);' "$prepared_sha" "$RUNNER_TEMP/candidate.json"
+      - name: Download supplied prepared build
+        if: ${{ inputs.prepared_run_id != '' }}
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: ${{ inputs.prepared_artifact_name }}
+          path: ${{ runner.temp }}/supplied
+          run-id: ${{ inputs.prepared_run_id }}
+          github-token: ${{ github.token }}
+      - name: Download supplied candidate identity
+        if: ${{ inputs.prepared_run_id != '' && inputs.candidate_artifact_name != '' }}
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: ${{ inputs.candidate_artifact_name }}
+          path: ${{ runner.temp }}/supplied-candidate
+          run-id: ${{ inputs.prepared_run_id }}
+          github-token: ${{ github.token }}
+      - name: Normalize supplied candidate
+        if: ${{ inputs.prepared_run_id != '' }}
+        run: |
+          cp "$RUNNER_TEMP/supplied/prepared-build.tar.gz" "$RUNNER_TEMP/prepared-build.tar.gz"
+          if [ -n "${{ inputs.candidate_artifact_name }}" ]; then
+            cp "$RUNNER_TEMP/supplied-candidate/candidate.json" "$RUNNER_TEMP/candidate.json"
+            cp "$RUNNER_TEMP/supplied-candidate/candidate.json" "$RUNNER_TEMP/expected-candidate.json"
+          else
+            cp "$RUNNER_TEMP/supplied/candidate.json" "$RUNNER_TEMP/candidate.json"
+            cp "$RUNNER_TEMP/supplied/candidate.json" "$RUNNER_TEMP/expected-candidate.json"
+          fi
+      - name: Verify supplied candidate and prepared archive
+        if: ${{ inputs.prepared_run_id != '' }}
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_EXPECTED_RUN_ID: ${{ inputs.prepared_run_id }}
+          SQLBRAID_CERT_EXPECTED_CANDIDATE: ${{ runner.temp }}/expected-candidate.json
+        run: node scripts/certification.mjs --verify-candidate --source-sha "$GITHUB_SHA" --candidate-dir "$RUNNER_TEMP/supplied" --expected-candidate "$SQLBRAID_CERT_EXPECTED_CANDIDATE" --output "$RUNNER_TEMP/candidate.json"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: certification-prepared
+          path: |
+            ${{ runner.temp }}/prepared-build.tar.gz
+            ${{ runner.temp }}/candidate.json
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-postgres:
+    name: Certify PostgreSQL drivers
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Run PostgreSQL 16.4 certification
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target postgres-pg-node-16-4 --artifact-dir "$RUNNER_TEMP/certification"
+      - name: Run PostgreSQL current certification
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target postgres-current --artifact-dir "$RUNNER_TEMP/certification"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: certification-target-postgres
+          path: ${{ runner.temp }}/certification
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-mysql:
+    name: Certify MySQL drivers
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Run MySQL certification
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target mysql-mysql2-node-8-4-2 --artifact-dir "$RUNNER_TEMP/certification"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: certification-target-mysql
+          path: ${{ runner.temp }}/certification
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-mariadb:
+    name: Certify MariaDB drivers
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Run MariaDB certification
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target mariadb-connector-node-11-8-9 --artifact-dir "$RUNNER_TEMP/certification"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: certification-target-mariadb
+          path: ${{ runner.temp }}/certification
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-oracle:
+    name: Certify Oracle thin drivers
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Run Oracle certification
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target oracle-oracledb-thin-node-23-9 --artifact-dir "$RUNNER_TEMP/certification"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: certification-target-oracle
+          path: ${{ runner.temp }}/certification
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-mssql:
+    name: Certify SQL Server drivers
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Run SQL Server certification
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target mssql-tedious-developer-node-2022-cu18 --artifact-dir "$RUNNER_TEMP/certification"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: certification-target-mssql
+          path: ${{ runner.temp }}/certification
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-sqlite:
+    name: Certify Node SQLite drivers
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Run SQLite certification group
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target sqlite-node-sqlite-node-22-18-0 --artifact-dir "$RUNNER_TEMP/certification"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: certification-target-sqlite
+          path: ${{ runner.temp }}/certification
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-deno:
+    name: Certify Deno 2.9.3 drivers
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_DB: sqlbraid
+          POSTGRES_USER: sqlbraid
+          POSTGRES_PASSWORD: sqlbraid
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sqlbraid -d sqlbraid"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      mysql:
+        image: mysql:8.4.2
+        env:
+          MYSQL_DATABASE: sqlbraid
+          MYSQL_USER: sqlbraid
+          MYSQL_PASSWORD: sqlbraid
+          MYSQL_ROOT_PASSWORD: root-sqlbraid
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot-sqlbraid"
+          --health-interval 10s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: denoland/setup-deno@v2.0.5
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Run Deno certification targets
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_POSTGRES_URL: postgres://sqlbraid:sqlbraid@127.0.0.1:5432/sqlbraid
+          SQLBRAID_MYSQL_URL: mysql://sqlbraid:sqlbraid@127.0.0.1:3306/sqlbraid
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: |
+          node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target postgres-pg-deno-2-9-3 --artifact-dir "$RUNNER_TEMP/certification"
+          node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target mysql-mysql2-deno-2-9-3 --artifact-dir "$RUNNER_TEMP/certification"
+          node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target sqlite-node-sqlite-deno-2-9-3 --artifact-dir "$RUNNER_TEMP/certification"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: certification-target-deno
+          path: ${{ runner.temp }}/certification
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-bun-sql:
+    name: Certify native Bun.SQL 1.3.14
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_DB: sqlbraid
+          POSTGRES_USER: sqlbraid
+          POSTGRES_PASSWORD: sqlbraid
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sqlbraid -d sqlbraid"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+      mysql:
+        image: mysql:8.4.2
+        env:
+          MYSQL_DATABASE: sqlbraid
+          MYSQL_ROOT_PASSWORD: root-sqlbraid
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot-sqlbraid"
+          --health-interval 10s --health-timeout 5s --health-retries 20
+      mariadb:
+        image: mariadb:11.8.9
+        env:
+          MARIADB_DATABASE: sqlbraid
+          MARIADB_ROOT_PASSWORD: root-sqlbraid
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 10s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Run Bun.SQL certification targets
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_POSTGRES_URL: postgres://sqlbraid:sqlbraid@127.0.0.1:5432/sqlbraid
+          SQLBRAID_MYSQL_URL: mysql://root:root-sqlbraid@127.0.0.1:3306/sqlbraid
+          SQLBRAID_MARIADB_URL: mysql://root:root-sqlbraid@127.0.0.1:3307/sqlbraid
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: |
+          node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target bun-sql-postgres --artifact-dir "$RUNNER_TEMP/certification"
+          node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target bun-sql-mysql --artifact-dir "$RUNNER_TEMP/certification"
+          node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target bun-sql-mariadb --artifact-dir "$RUNNER_TEMP/certification"
+          node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target bun-sql-sqlite --artifact-dir "$RUNNER_TEMP/certification"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: certification-target-bun-sql
+          path: ${{ runner.temp }}/certification
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-web:
+    name: Certify D1 and SQLite WASM
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - run: pnpm --dir tests exec playwright install --with-deps chromium
+      - name: Run web certification targets
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_ARTIFACT_DIR: ${{ runner.temp }}/certification
+        run: |
+          node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target d1-cloudflare-workerd-2026-07-30 --artifact-dir "$RUNNER_TEMP/certification"
+          node scripts/certification.mjs --source-sha "$GITHUB_SHA" --target sqlite-wasm-browser-3-53-4 --artifact-dir "$RUNNER_TEMP/certification"
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: certification-target-web
+          path: ${{ runner.temp }}/certification
+          if-no-files-found: error
+          retention-days: 90
+
+  certify-global:
+    name: Certify runtime, DB driver, and OTel fault paths
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Run authoritative runtime, DB driver, and OTel suites
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/global-evidence"
+          pnpm exec vitest run \
+            --project unit tests/runtime-batch-lifecycle.test.ts tests/runtime-transaction-boundary.test.ts tests/opentelemetry.test.ts tests/opentelemetry-sdk.test.ts \
+            --project db-postgres tests/db/postgres/pv15.test.ts tests/db/postgres/capabilities.test.ts \
+            --project db-mysql tests/db/mysql/pv15.test.ts tests/db/mysql/capabilities.test.ts \
+            --project db-mariadb tests/db/mariadb/pv16.test.ts tests/db/mariadb/capabilities.test.ts \
+            --project db-oracle tests/db/oracle/pv15-routines.test.ts tests/db/oracle/w01.test.ts tests/db/oracle/capabilities.test.ts \
+            --project db-mssql tests/db/mssql/pv15-routines.test.ts tests/db/mssql/w01.test.ts \
+            --project db-sqlite tests/db/sqlite/w01.test.ts tests/db/sqlite/better-sqlite3.test.ts \
+            --maxWorkers=1 --reporter=json --outputFile="$RUNNER_TEMP/global-evidence/vitest.json"
+      - name: Write same-SHA global evidence
+        run: |
+          node scripts/verify-global-evidence.mjs --source-sha "$GITHUB_SHA" --report "$RUNNER_TEMP/global-evidence/vitest.json" --output "$RUNNER_TEMP/global-evidence/global.json"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: certification-global
+          path: ${{ runner.temp }}/global-evidence/global.json
+          if-no-files-found: error
+          retention-days: 90
+
+  certification-final:
+    name: Aggregate complete certification matrix
+    needs: [certify-postgres, certify-mysql, certify-mariadb, certify-oracle, certify-mssql, certify-sqlite, certify-deno, certify-bun-sql, certify-web, certify-global]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: certification-target-*
+          path: ${{ runner.temp }}/certification
+          merge-multiple: true
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-prepared
+          path: ${{ runner.temp }}/prepared
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: certification-global
+          path: ${{ runner.temp }}/global
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Verify same-SHA global evidence
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node scripts/verify-global-evidence.mjs --source-sha "$GITHUB_SHA" --evidence "$RUNNER_TEMP/global/global.json"
+      - name: Aggregate all target artifacts
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+        run: node scripts/certification.mjs --aggregate --source-sha "$GITHUB_SHA" --input-dir "$RUNNER_TEMP/certification" --output "$RUNNER_TEMP/certification/aggregate.json"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: certification-final
+          path: ${{ runner.temp }}/certification/aggregate.json
+          if-no-files-found: error
+          retention-days: 90

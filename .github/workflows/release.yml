@@ -57,6 +57,8 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: Check formatting and lint
+        run: pnpm run fmt:check && pnpm run lint
       - name: Validate prior candidate run ID
         if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
         env:
@@ -73,6 +75,15 @@ jobs:
         with:
           name: release-candidate-validated
           path: ${{ runner.temp }}/prior-validated
+          run-id: ${{ inputs.prior_run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+      - name: Download prior prepared candidate
+        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: release-prepared
+          path: ${{ runner.temp }}/prior-prepared
           run-id: ${{ inputs.prior_run_id }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -101,6 +112,7 @@ jobs:
       - name: Typecheck packages
         run: pnpm run typecheck:packages
       - name: Build packages once
+        if: inputs.release_mode != 'stage' || inputs.prior_run_id == ''
         run: pnpm run build:packages
       - name: Pack immutable release candidate
         if: inputs.release_mode != 'stage' || inputs.prior_run_id == ''
@@ -110,10 +122,27 @@ jobs:
       - name: Restore prior validated candidate
         if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
         run: tar -xzf "$RUNNER_TEMP/prior-validated/release-candidate-validated.tar.gz" -C "$RUNNER_TEMP"
+      - name: Restore prior prepared build and candidate archive
+        if: inputs.release_mode == 'stage' && inputs.prior_run_id != ''
+        run: |
+          cp "$RUNNER_TEMP/prior-prepared/release-candidate.tar.gz" "$RUNNER_TEMP/release-candidate.tar.gz"
+          cp "$RUNNER_TEMP/prior-prepared/prepared-build.tar.gz" "$RUNNER_TEMP/prepared-build.tar.gz"
       - name: Archive candidate and prepared build
+        if: inputs.release_mode != 'stage' || inputs.prior_run_id == ''
         run: |
           tar -czf "$RUNNER_TEMP/release-candidate.tar.gz" -C "$RUNNER_TEMP" sqlbraid-release-artifacts
-          tar -czf "$RUNNER_TEMP/prepared-build.tar.gz" packages/*/dist
+          tar -czf "$RUNNER_TEMP/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE" packages/*/dist
+      - name: Verify and export certification candidate identity
+        env:
+          SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
+          SQLBRAID_CERT_EXPECTED_RUN_ID: ${{ inputs.release_mode == 'stage' && inputs.prior_run_id != '' && inputs.prior_run_id || github.run_id }}
+          SQLBRAID_CERT_EXPECTED_CANDIDATE: ${{ inputs.release_mode == 'stage' && inputs.prior_run_id != '' && format('{0}/prior-prepared/candidate.json', runner.temp) || '' }}
+        run: |
+          args=(node scripts/certification.mjs --verify-candidate --source-sha "$GITHUB_SHA" --candidate-dir "$RUNNER_TEMP" --output "$RUNNER_TEMP/candidate.json")
+          if [[ -n "$SQLBRAID_CERT_EXPECTED_CANDIDATE" ]]; then
+            args+=(--expected-candidate "$SQLBRAID_CERT_EXPECTED_CANDIDATE")
+          fi
+          "${args[@]}"
       - name: Export exact compatibility matrix
         id: compatibility-matrix
         run: |
@@ -125,8 +154,15 @@ jobs:
           path: |
             ${{ runner.temp }}/release-candidate.tar.gz
             ${{ runner.temp }}/prepared-build.tar.gz
+            ${{ runner.temp }}/candidate.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: release-certification-candidate
+          path: ${{ runner.temp }}/candidate.json
+          if-no-files-found: error
+          retention-days: 90
 
   release-common:
     needs: release-prep
@@ -646,9 +682,22 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  release-certification:
+    if: github.event_name != 'schedule'
+    needs: release-prep
+    uses: ./.github/workflows/driver-certification.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      stress: true
+      prepared_artifact_name: release-prepared
+      candidate_artifact_name: release-certification-candidate
+      prepared_run_id: ${{ github.run_id }}
+
   release-final:
     if: github.event_name != 'schedule'
-    needs: [release-prep, release-common, release-db, release-node24, release-browser, release-pack, release-docs, release-examples, release-benchmark-smoke, release-runtime, release-compatibility, release-bun-sql, release-support-evidence, release-target-evidence]
+    needs: [release-prep, release-common, release-db, release-node24, release-browser, release-pack, release-docs, release-examples, release-benchmark-smoke, release-runtime, release-compatibility, release-bun-sql, release-support-evidence, release-target-evidence, release-certification]
     name: Final release certification
     permissions:
       contents: read

@@ -366,3 +366,23 @@ prose do not authorize staging or approval. Only the explicitly dispatched
 publish a tuple or package that fresh exact-final evidence did not exercise.
 Use workflow run records and immutable artifacts, not moving “latest successful
 SHA” constants in this document.
+
+## RC3 immutable-candidate certification gate
+
+RC3 certification is a required, non-mutating gate on the exact checked-out
+commit. `driver-certification.yml` builds package `dist` once, preserves the
+prepared archive and its SHA-256 identity, then runs the complete catalog from
+`tests/certification/contracts.ts` across Node 22.18.0, Deno 2.9.3, Bun 1.3.14,
+D1/workerd, and browser WASM. Every target artifact records the measured
+environment tuple separately from the pinned expected tuple; aggregation rejects
+missing, duplicate, skipped, wrong-SHA, wrong-tuple, forged-contract, or
+forged-candidate artifacts. The required target and case counts are derived
+from the registries, not a fixed maximum.
+
+The shared runtime, native-fault, and OpenTelemetry suites produce a same-SHA
+global evidence shard. The final aggregate requires that shard in addition to
+all target artifacts. Release certification downloads `release-prepared`,
+verifies the candidate manifest and archive hashes, restores only its prepared
+`dist`, runs the same full matrix, and is a direct dependency of
+`release-final`; it does not rebuild or publish. Release staging and registry
+approval remain separate human-authorized operations.

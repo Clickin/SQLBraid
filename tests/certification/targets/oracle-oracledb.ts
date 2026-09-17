@@ -12,59 +12,7 @@ const BULK_TABLE = "BRAID_RC3_CERT_BULK";
 const SEQUENCE = "BRAID_RC3_CERT_SEQ";
 const HOSTILE = ["__proto__", "constructor", "prototype", "toString", "hasOwnProperty"] as const;
 
-export const ORACLE_EXPECTED_CAPABILITIES: ExpectedCapabilityContract = {
-  "sql.native-transparency": { status: "guaranteed" },
-  "numeric.exact-integer": { status: "unsupported", canonical: "string", rawRepresentations: ["string"] },
-  "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-  "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-  "numeric.approximate-special": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-  "numeric.bind-exact": { status: "unsupported", conditionCode: "oracle.bind-nls-sensitive" },
-  "data.json-parsed": { status: "guaranteed", rawRepresentations: ["object", "array", "string", "number", "boolean", "null"] },
-  "data.json-lossless-text": { status: "unsupported", canonical: "string", rawRepresentations: ["string"], conditionCode: "oracle.json-serialize-required" },
-  "data.oracle-object": { status: "unsupported", rawRepresentations: ["object"], conditionCode: "oracle.object-nested-numeric-unclassified" },
-  "data.oracle-collection": { status: "unsupported", rawRepresentations: ["object", "array"], conditionCode: "oracle.collection-nested-numeric-unclassified" },
-  "data.vector": { status: "unsupported", rawRepresentations: ["object", "array"], conditionCode: "oracle.vector-unclassified" },
-  "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Buffer"] },
-  "data.uuid": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-  "data.temporal-native": { status: "guarded", rawRepresentations: ["Date"], conditionCode: "oracle.date-millisecond-precision" },
-  "data.temporal-lossless": { status: "unsupported", canonical: "string", rawRepresentations: ["string"], conditionCode: "oracle.temporal-text-cast-required" },
-  "metadata.command-safe": { status: "guarded", rawRepresentations: ["number"], conditionCode: "oracle.count-safe-integer" },
-  "session.pinned": { status: "guaranteed" },
-  "transaction": { status: "guaranteed" },
-  "transaction.savepoint": { status: "guaranteed" },
-  "transaction.read-only": { status: "guaranteed" },
-  "transaction.isolation.read-uncommitted": { status: "unsupported" },
-  "transaction.isolation.read-committed": { status: "guaranteed" },
-  "transaction.isolation.repeatable-read": { status: "unsupported" },
-  "transaction.isolation.serializable": { status: "guaranteed" },
-  "statement.prepare": { status: "guaranteed" },
-  "statement.cancel": { status: "guarded", conditionCode: "oracle.connection-break" },
-  "statement.stream": { status: "guaranteed" },
-  "statement.bulk": { status: "guaranteed" },
-  "routine.call": { status: "guaranteed" },
-  "routine.out": { status: "guaranteed" },
-  "routine.inout": { status: "guaranteed" },
-  "routine.return-value": { status: "unsupported", unsupportedCode: "BRAID_CALL_RETURN_UNSUPPORTED" },
-  "routine.result-sets": { status: "guaranteed" },
-  "routine.out-cursor": { status: "guaranteed" },
-};
-
-export const ORACLE_EXPECTED_TRANSACTION_OPTIONS = {
-  "isolation:read-uncommitted": "unsupported",
-  "isolation:read-committed": "guaranteed",
-  "isolation:repeatable-read": "unsupported",
-  "isolation:serializable": "guaranteed",
-  "readOnly:true": "guaranteed",
-  "readOnly:false": "guaranteed",
-  "combination:read-uncommitted+readOnly": "unsupported",
-  "combination:read-uncommitted+readWrite": "unsupported",
-  "combination:read-committed+readOnly": "unsupported",
-  "combination:read-committed+readWrite": "unsupported",
-  "combination:repeatable-read+readOnly": "unsupported",
-  "combination:repeatable-read+readWrite": "unsupported",
-  "combination:serializable+readOnly": "unsupported",
-  "combination:serializable+readWrite": "unsupported",
-} as const;
+import { ORACLE_EXPECTED_CAPABILITIES, ORACLE_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
 
 async function exec(connection: OracleConnectionLike, statement: string): Promise<void> {
   await connection.execute(statement, []);

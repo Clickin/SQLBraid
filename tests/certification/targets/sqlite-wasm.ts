@@ -37,48 +37,7 @@ function expectedObject(key: string, value: unknown): Record<string, unknown> {
   return result;
 }
 
-function targetCapabilities(): ExpectedCapabilityContract {
-  return {
-    "sql.native-transparency": { status: "guaranteed" },
-    "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] },
-    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-    "session.pinned": { status: "guaranteed" },
-    transaction: { status: "guaranteed" },
-    "transaction.savepoint": { status: "guaranteed" },
-    "transaction.read-only": { status: "unsupported", unsupportedCode: "BRAID_TX_OPTION_UNSUPPORTED" },
-    "transaction.isolation.read-uncommitted": { status: "unsupported", unsupportedCode: "BRAID_TX_OPTION_UNSUPPORTED" },
-    "transaction.isolation.read-committed": { status: "unsupported", unsupportedCode: "BRAID_TX_OPTION_UNSUPPORTED" },
-    "transaction.isolation.repeatable-read": { status: "unsupported", unsupportedCode: "BRAID_TX_OPTION_UNSUPPORTED" },
-    "transaction.isolation.serializable": { status: "guaranteed" },
-    "statement.prepare": { status: "guaranteed" },
-    "statement.stream": { status: "guaranteed" },
-    "statement.cancel": { status: "unsupported", unsupportedCode: "BRAID_CANCEL_UNSUPPORTED" },
-    "statement.bulk": { status: "guaranteed" },
-    "routine.call": { status: "unsupported", unsupportedCode: "BRAID_CALL_UNSUPPORTED" },
-    "routine.out": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
-    "routine.inout": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
-    "routine.result-sets": { status: "unsupported", unsupportedCode: "BRAID_CALL_RESULT_SETS" },
-    "routine.out-cursor": { status: "unsupported", unsupportedCode: "BRAID_CALL_CURSOR_UNSUPPORTED" },
-    "routine.return-value": { status: "unsupported", unsupportedCode: "BRAID_CALL_UNSUPPORTED" },
-  };
-}
-
-const expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">> = {
-  "isolation:read-uncommitted": "unsupported",
-  "isolation:read-committed": "unsupported",
-  "isolation:repeatable-read": "unsupported",
-  "isolation:serializable": "guaranteed",
-  "readOnly:true": "unsupported",
-  "readOnly:false": "unsupported",
-  "combination:read-uncommitted+readOnly": "unsupported",
-  "combination:read-uncommitted+readWrite": "unsupported",
-  "combination:read-committed+readOnly": "unsupported",
-  "combination:read-committed+readWrite": "unsupported",
-  "combination:repeatable-read+readOnly": "unsupported",
-  "combination:repeatable-read+readWrite": "unsupported",
-  "combination:serializable+readOnly": "unsupported",
-  "combination:serializable+readWrite": "unsupported",
-};
+import { WASM_EXPECTED_CAPABILITIES, WASM_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
 
 function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats, faults: NativeFaults): SqliteWasmDatabaseLike & { close(): void } {
   const database = native as SqliteWasmDatabaseLike & { close(): void };
@@ -236,12 +195,12 @@ function optionsProbe(
 }
 
 export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string): CertificationTarget {
-  const expectedCapabilities = targetCapabilities();
+  const expectedCapabilities = WASM_EXPECTED_CAPABILITIES();
   return {
     id: `sqlite-wasm-browser-${sqlite3.version.libVersion.replaceAll(".", "-")}`,
     sourceSha,
     expectedCapabilities,
-    expectedTransactionOptions,
+    expectedTransactionOptions: WASM_EXPECTED_TRANSACTION_OPTIONS,
     createFixture: async (): Promise<CertificationFixture> => {
       const native = new sqlite3.oo1.DB(":memory:");
       const stats: NativeStats = { prepares: 0, active: 0, finalizeCalls: 0, releaseCalls: 0, finalizeByStatement: [] };

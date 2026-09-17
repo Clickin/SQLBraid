@@ -186,57 +186,11 @@ function queries(): CertificationFixture["queries"] {
   };
 }
 
-const expectedCapabilities: ExpectedCapabilityContract = {
-  "sql.native-transparency": { status: "guaranteed" },
-  "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["number", "string"] },
-  "numeric.exact-decimal": { status: "unsupported", canonical: "string", rawRepresentations: ["number"] },
-  "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-  "numeric.bind-exact": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "mssql.character-cast-required" },
-  "numeric.aggregate": { status: "unsupported", canonical: "string", rawRepresentations: ["number"], conditionCode: "mssql.exact-decimal-text-cast-required" },
-  "metadata.command-safe": { status: "guarded", rawRepresentations: ["number"], conditionCode: "mssql.safe-count" },
-  "data.json-lossless-text": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-  "data.json-parsed": { status: "unsupported" },
-  "data.sql-variant": { status: "unsupported", rawRepresentations: ["driver-native"], conditionCode: "mssql.sql-variant-unclassified" },
-  "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Buffer"] },
-  "data.uuid": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-  "data.temporal-lossless": { status: "unsupported", conditionCode: "mssql.temporal-text-cast-required" },
-  "data.temporal-native": { status: "guarded", rawRepresentations: ["Date", "string"], conditionCode: "mssql.temporal-text-cast-required" },
-  "session.pinned": { status: "guaranteed" },
-  "transaction": { status: "guaranteed" },
-  "transaction.savepoint": { status: "guaranteed" },
-  "transaction.read-only": { status: "unsupported", unsupportedCode: "BRAID_TX_OPTION_UNSUPPORTED" },
-  "transaction.isolation.read-uncommitted": { status: "guaranteed" },
-  "transaction.isolation.read-committed": { status: "guaranteed" },
-  "transaction.isolation.repeatable-read": { status: "guaranteed" },
-  "transaction.isolation.serializable": { status: "guaranteed" },
-  "statement.prepare": { status: "guaranteed" },
-  "statement.cancel": { status: "guaranteed" },
-  "statement.stream": { status: "guaranteed" },
-  "statement.bulk": { status: "guaranteed" },
-  "routine.call": { status: "guaranteed" },
-  "routine.out": { status: "guaranteed" },
-  "routine.inout": { status: "guaranteed" },
-  "routine.return-value": { status: "guaranteed" },
-  "routine.result-sets": { status: "guaranteed" },
-  "routine.out-cursor": { status: "unsupported", unsupportedCode: "BRAID_CALL_CURSOR_UNSUPPORTED" },
-};
+import { MSSQL_EXPECTED_CAPABILITIES, MSSQL_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
 
-const expectedTransactionOptions: CertificationTarget["expectedTransactionOptions"] = {
-  "isolation:read-uncommitted": "guaranteed",
-  "isolation:read-committed": "guaranteed",
-  "isolation:repeatable-read": "guaranteed",
-  "isolation:serializable": "guaranteed",
-  "readOnly:true": "unsupported",
-  "readOnly:false": "unsupported",
-  "combination:read-uncommitted+readOnly": "unsupported",
-  "combination:read-uncommitted+readWrite": "unsupported",
-  "combination:read-committed+readOnly": "unsupported",
-  "combination:read-committed+readWrite": "unsupported",
-  "combination:repeatable-read+readOnly": "unsupported",
-  "combination:repeatable-read+readWrite": "unsupported",
-  "combination:serializable+readOnly": "unsupported",
-  "combination:serializable+readWrite": "unsupported",
-};
+const expectedCapabilities = MSSQL_EXPECTED_CAPABILITIES;
+
+const expectedTransactionOptions = MSSQL_EXPECTED_TRANSACTION_OPTIONS;
 
 export function createMssqlTediousTarget(sourceSha: string): CertificationTarget {
   if (!sourceSha.trim()) throw new Error("MSSQL certification requires the tested candidate source SHA.");

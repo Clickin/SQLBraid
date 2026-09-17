@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { SQL } from "bun";
 import { certifyTarget } from "../tests/certification/execute.ts";
 import { REQUIRED_CASE_IDS } from "../tests/certification/types.ts";
@@ -53,7 +54,9 @@ const sourceShaIndex = args.indexOf("--source-sha");
 const sourceSha = sourceShaIndex >= 0 ? args[sourceShaIndex + 1] : process.env.SQLBRAID_CERT_SOURCE_SHA;
 const artifactIndex = args.indexOf("--artifact");
 const artifactPath = artifactIndex >= 0 ? args[artifactIndex + 1] : process.env.SQLBRAID_CERT_ARTIFACT;
-const stress = args.includes("--stress") || process.env.SQLBRAID_CERT_STRESS === "1";
+const stressValue = process.env.SQLBRAID_CERT_STRESS;
+if (stressValue !== undefined && !["0", "1", "false", "true"].includes(stressValue)) throw new Error("SQLBRAID_CERT_STRESS must be 0, 1, false, or true.");
+const stress = args.includes("--stress") || stressValue === "1" || stressValue === "true";
 const selected = args.filter((value, index) =>
   !value.startsWith("--")
   && (sourceShaIndex < 0 || index !== sourceShaIndex + 1)
@@ -78,13 +81,19 @@ for (const dialect of selectedDialects) {
     });
     const failures = Object.values(artifact.cases).filter((result) => result.status === "fail");
     if (failures.length > 0) failed = true;
-    results.push({ target: `bun-sql-${dialect}`, artifact, failures: failures.map((result) => ({ name: result.name, error: result.error })) });
+    results.push(artifact);
+    if (artifactPath) {
+      const output = selectedDialects.length === 1 && artifactPath.endsWith(".json")
+        ? artifactPath
+        : `${artifactPath.replace(/[\\/]$/u, "")}/${artifact.target}.json`;
+      await mkdir(dirname(output), { recursive: true });
+      await writeFile(output, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+    }
   } catch (error) {
     failed = true;
     results.push({ target: `bun-sql-${dialect}`, error: errorRecord(error) });
   }
 }
 const report = { runtime: { id: "bun", version: Bun.version }, sourceSha, results };
-if (artifactPath) await writeFile(artifactPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 console.log(JSON.stringify(report, null, 2));
 if (failed) process.exitCode = 1;

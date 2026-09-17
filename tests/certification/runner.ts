@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { PUBLIC_ERROR_DEFINITIONS, type EnvironmentCapability } from "@sqlbraid/core";
-import { REQUIRED_CASE_IDS, type CertificationAggregate, type CertificationAggregateOptions, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationTarget, type ExpectedCapability, type ExpectedCapabilityContract, type ExpectedGuardedCaseContract } from "./types.js";
+import { isSourceSha, REQUIRED_CASE_IDS, type CertificationAggregate, type CertificationAggregateOptions, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationTarget, type CertificationTuple, type ExpectedCapability, type ExpectedCapabilityContract, type ExpectedGuardedCaseContract } from "./types.js";
 export { certifyTarget } from "./execute.js";
 
 function normalize(value: unknown): unknown {
@@ -22,6 +22,24 @@ function isRegisteredUnsupportedPair(feature: string, code: string): boolean {
 
 function equalContract(left: Readonly<Record<string, unknown>>, right: Readonly<Record<string, unknown>>): boolean {
   return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+}
+
+function measuredTupleMatchesExpected(
+  measured: CertificationArtifact["provenance"]["measured"],
+  expected: CertificationTuple | undefined,
+): boolean {
+  if (expected === undefined) return true;
+  const databaseVersionMatches = expected.database.versionStatus === "unknown"
+    ? measured.database.versionStatus === "unknown" && measured.database.version === undefined
+    : measured.database.versionStatus === "measured" && measured.database.version === expected.database.version;
+  return measured.database.product === expected.database.product
+    && (measured.database.edition ?? "unknown") === expected.database.edition
+    && databaseVersionMatches
+    && measured.driver.id === expected.driver.id
+    && measured.driver.profile === expected.driver.profile
+    && (expected.driver.version === undefined || measured.driver.version === undefined || measured.driver.version === expected.driver.version)
+    && measured.runtime.id === expected.runtime.id
+    && measured.runtime.version === expected.runtime.version;
 }
 
 function declaredContract(expected: ExpectedCapabilityContract): Readonly<Record<string, EnvironmentCapability>> {
@@ -52,6 +70,17 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
   assert.ok(isRecord(value.expectedCapabilities), "Certification artifact expectedCapabilities must be an object.");
   assert.ok(isRecord(value.expectedTransactionOptions), "Certification artifact expectedTransactionOptions must be an object.");
   assert.ok(isRecord(value.declaredCapabilities), "Certification artifact declaredCapabilities must be an object.");
+  assert.ok(isRecord(value.provenance), "Certification artifact provenance must be an object.");
+  assert.equal(value.provenance.schemaVersion, 1, "Unsupported certification provenance schema.");
+  assert.equal(value.provenance.target, value.target, "Certification artifact provenance target mismatch.");
+  assert.equal(value.provenance.sourceSha, value.sourceSha, "Certification artifact provenance source SHA mismatch.");
+  assert.ok(isRecord(value.provenance.measured), "Certification artifact measured tuple is required.");
+  assert.ok(isRecord(value.provenance.measured.database), "Certification artifact measured database tuple is required.");
+  assert.ok(isRecord(value.provenance.measured.driver), "Certification artifact measured driver tuple is required.");
+  assert.ok(isRecord(value.provenance.measured.runtime), "Certification artifact measured runtime tuple is required.");
+  assert.ok(value.provenance.measured.database.versionStatus === "measured" || value.provenance.measured.database.versionStatus === "unknown", "Certification artifact database version status is invalid.");
+  assert.ok(isRecord(value.provenance.pinned), "Certification artifact pinned tuple is required.");
+  for (const part of ["database", "driver", "runtime"]) assert.ok(isRecord(value.provenance.pinned[part]), `Certification artifact pinned ${part} tuple is required.`);
   if (value.expectedGuardedCases !== undefined) {
     assert.ok(isRecord(value.expectedGuardedCases), "Certification artifact expected guarded-case contract must be an object.");
     if (value.expectedGuardedCases.emptyResultError !== undefined) {
@@ -82,10 +111,20 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
 
 export function validateCertificationArtifact(
   artifact: unknown,
-  options: Pick<CertificationAggregateOptions, "sourceSha" | "requiredCaseIds"> & { readonly expectedCapabilities?: ExpectedCapabilityContract; readonly expectedTransactionOptions?: CertificationAggregateOptions["requiredTargetOptionContracts"][string]; readonly expectedGuardedCases?: ExpectedGuardedCaseContract },
+  options: Pick<CertificationAggregateOptions, "sourceSha" | "requiredCaseIds" | "requiredTargetTuples" | "requiredCandidate"> & { readonly expectedCapabilities?: ExpectedCapabilityContract; readonly expectedTransactionOptions?: CertificationAggregateOptions["requiredTargetOptionContracts"][string]; readonly expectedGuardedCases?: ExpectedGuardedCaseContract },
 ): void {
   assertArtifactShape(artifact);
+  assert.ok(isSourceSha(options.sourceSha), "Certification aggregate sourceSha must be a full 40-character SHA.");
   assert.equal(artifact.sourceSha, options.sourceSha, `Certification artifact ${artifact.target} has the wrong source SHA.`);
+  assert.ok(isSourceSha(artifact.sourceSha), `Certification artifact ${artifact.target} sourceSha must be a full 40-character SHA.`);
+  if (options.requiredTargetTuples?.[artifact.target] !== undefined) {
+    const expectedTuple = options.requiredTargetTuples[artifact.target]!;
+    assert.ok(equalContract(artifact.provenance.pinned as unknown as Readonly<Record<string, unknown>>, expectedTuple as unknown as Readonly<Record<string, unknown>>), `Certification artifact ${artifact.target} pinned tuple differs from the independent target tuple.`);
+    assert.ok(measuredTupleMatchesExpected(artifact.provenance.measured, expectedTuple), `Certification artifact ${artifact.target} measured tuple differs from the independent target tuple.`);
+  }
+  if (options.requiredCandidate !== undefined) {
+    assert.ok(equalContract((artifact.provenance.candidate ?? {}) as unknown as Readonly<Record<string, unknown>>, options.requiredCandidate as unknown as Readonly<Record<string, unknown>>), `Certification artifact ${artifact.target} candidate provenance differs from the required candidate.`);
+  }
   if (options.expectedCapabilities !== undefined) {
     assert.ok(equalContract(artifact.expectedCapabilities, options.expectedCapabilities), `Certification artifact ${artifact.target} expected capability contract differs from the independent target contract.`);
   }
@@ -125,10 +164,14 @@ export function aggregateCertificationArtifacts(
 ): CertificationAggregate {
   const required = options.requiredCaseIds ?? REQUIRED_CASE_IDS;
   const expectedTargets = [...options.requiredTargets].sort();
+  assert.equal(new Set(expectedTargets).size, expectedTargets.length, "Certification target registry contains duplicate IDs.");
   const actualTargets = artifacts.map((artifact) => artifact.target).sort();
   assert.deepEqual(actualTargets, expectedTargets, "Certification target set is incomplete or contains an unexpected target.");
   for (const target of expectedTargets) assert.ok(options.requiredTargetContracts[target], `Missing independent expected contract for ${target}.`);
   for (const target of expectedTargets) assert.ok(options.requiredTargetOptionContracts[target], `Missing independent transaction option contract for ${target}.`);
+  if (options.requiredTargetTuples !== undefined) {
+    for (const target of expectedTargets) assert.ok(options.requiredTargetTuples[target], `Missing independent target tuple for ${target}.`);
+  }
   if (options.requiredTargetGuardedCaseContracts !== undefined) {
     for (const target of expectedTargets) assert.ok(Object.hasOwn(options.requiredTargetGuardedCaseContracts, target), `Missing independent guarded-case contract for ${target}.`);
   }
@@ -141,11 +184,17 @@ export function aggregateCertificationArtifacts(
       expectedCapabilities: options.requiredTargetContracts[artifact.target],
       expectedTransactionOptions: options.requiredTargetOptionContracts[artifact.target],
       expectedGuardedCases: options.requiredTargetGuardedCaseContracts?.[artifact.target],
+      requiredTargetTuples: options.requiredTargetTuples,
+      requiredCandidate: options.requiredCandidate,
     });
     assert.ok(equalContract(artifact.expectedCapabilities, options.requiredTargetContracts[artifact.target]!), `Certification artifact ${artifact.target} expected contract is not independently approved.`);
     targets[artifact.target] = artifact;
   }
-  return { schemaVersion: 1, sourceSha: options.sourceSha, targets };
+  const candidate = options.requiredCandidate ?? artifacts[0]?.provenance.candidate;
+  if (candidate !== undefined) {
+    for (const artifact of artifacts) assert.ok(equalContract((artifact.provenance.candidate ?? {}) as unknown as Readonly<Record<string, unknown>>, candidate as unknown as Readonly<Record<string, unknown>>), `Certification artifact ${artifact.target} candidate provenance differs from aggregate candidate.`);
+  }
+  return { schemaVersion: 1, sourceSha: options.sourceSha, targets, ...(candidate === undefined ? {} : { candidate }) };
 }
 
 export async function writeCertificationArtifact(path: string, artifact: CertificationArtifact): Promise<void> {

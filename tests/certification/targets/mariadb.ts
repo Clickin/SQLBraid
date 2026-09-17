@@ -20,52 +20,11 @@ function returnSchema(): StandardSchemaV1<unknown, number> {
   return { "~standard": { version: 1, vendor: "sqlbraid-rc3-mariadb", validate: (value) => ({ value: Number(value) }) } };
 }
 
-export const mariadbExpectedCapabilities: ExpectedCapabilityContract = {
-  "sql.native-transparency": { status: "guaranteed" },
-  "numeric.exact-integer": { status: "guarded", canonical: "string", rawRepresentations: ["number", "string", "bigint"], conditionCode: "mariadb.exact-numeric-profile" },
-  "numeric.exact-decimal": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "mariadb.exact-numeric-profile" },
-  "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-  "data.json-lossless-text": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "mariadb.auto-json-map-false" },
-  "data.json-parsed": { status: "guarded", rawRepresentations: ["object", "array", "string", "number", "boolean", "null"], conditionCode: "mariadb.auto-json-map-true" },
-  "data.temporal-lossless": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "mariadb.date-strings-true" },
-  "data.temporal-native": { status: "guarded", rawRepresentations: ["Date"], conditionCode: "mariadb.date-strings-false" },
-  "metadata.command-safe": { status: "guarded", canonical: "number", rawRepresentations: ["number", "bigint", "string"], conditionCode: "mariadb.safe-command-count" },
-  "session.pinned": { status: "guaranteed" },
-  "transaction": { status: "guaranteed" },
-  "transaction.savepoint": { status: "guaranteed" },
-  "transaction.read-only": { status: "guaranteed" },
-  "transaction.isolation.read-uncommitted": { status: "guaranteed" },
-  "transaction.isolation.read-committed": { status: "guaranteed" },
-  "transaction.isolation.repeatable-read": { status: "guaranteed" },
-  "transaction.isolation.serializable": { status: "guaranteed" },
-  "statement.prepare": { status: "guaranteed" },
-  "statement.cancel": { status: "guarded", conditionCode: "mariadb.connection-destroy" },
-  "statement.stream": { status: "guaranteed" },
-  "statement.bulk": { status: "guaranteed" },
-  "routine.call": { status: "guaranteed" },
-  "routine.out": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
-  "routine.inout": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
-  "routine.result-sets": { status: "guaranteed" },
-  "routine.out-cursor": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
-  "routine.return-value": { status: "unsupported", unsupportedCode: "BRAID_CALL_RETURN_UNSUPPORTED" },
-};
+import { MARIADB_EXPECTED_CAPABILITIES, MARIADB_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
 
-const expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">> = {
-  "isolation:read-uncommitted": "guaranteed",
-  "isolation:read-committed": "guaranteed",
-  "isolation:repeatable-read": "guaranteed",
-  "isolation:serializable": "guaranteed",
-  "readOnly:true": "guaranteed",
-  "readOnly:false": "guaranteed",
-  "combination:read-uncommitted+readOnly": "guaranteed",
-  "combination:read-uncommitted+readWrite": "guaranteed",
-  "combination:read-committed+readOnly": "guaranteed",
-  "combination:read-committed+readWrite": "guaranteed",
-  "combination:repeatable-read+readOnly": "guaranteed",
-  "combination:repeatable-read+readWrite": "guaranteed",
-  "combination:serializable+readOnly": "guaranteed",
-  "combination:serializable+readWrite": "guaranteed",
-};
+export const mariadbExpectedCapabilities = MARIADB_EXPECTED_CAPABILITIES;
+
+const expectedTransactionOptions = MARIADB_EXPECTED_TRANSACTION_OPTIONS;
 
 type MariaDbPoolConfig = Exclude<Parameters<typeof mariadb.createPool>[0], string>;
 

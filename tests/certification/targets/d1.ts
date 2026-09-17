@@ -15,39 +15,11 @@ function expectedObject(key: string, value: unknown): Record<string, unknown> {
   return result;
 }
 
-const expectedCapabilities: ExpectedCapabilityContract = {
-  "sql.native-transparency": { status: "guaranteed" },
-  "numeric.exact-integer": { status: "guarded", canonical: "string", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.safe-integer" },
-  "numeric.approximate-float": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.numeric-profile" },
-  "numeric.bind-exact": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "cloudflare-d1.safe-integer" },
-  "session.pinned": { status: "unsupported", conditionCode: "cloudflare-d1.no-physical-session-pinning" },
-  transaction: { status: "unsupported" },
-  "transaction.savepoint": { status: "unsupported" },
-  "transaction.read-only": { status: "unsupported" },
-  "transaction.isolation.read-uncommitted": { status: "unsupported" },
-  "transaction.isolation.read-committed": { status: "unsupported" },
-  "transaction.isolation.repeatable-read": { status: "unsupported" },
-  "transaction.isolation.serializable": { status: "unsupported" },
-  "statement.prepare": { status: "guaranteed" },
-  "statement.cancel": { status: "unsupported" },
-  "statement.stream": { status: "unsupported" },
-  "statement.bulk": { status: "guaranteed" },
-  "routine.call": { status: "unsupported" },
-  "routine.out": { status: "unsupported" },
-  "routine.inout": { status: "unsupported" },
-  "routine.return-value": { status: "unsupported" },
-  "routine.result-sets": { status: "unsupported" },
-  "routine.out-cursor": { status: "unsupported" },
-};
+import { D1_EXPECTED_CAPABILITIES, D1_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
 
-const expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">> = {
-  "isolation:read-uncommitted": "unsupported", "isolation:read-committed": "unsupported", "isolation:repeatable-read": "unsupported", "isolation:serializable": "unsupported",
-  "readOnly:true": "unsupported", "readOnly:false": "unsupported",
-  "combination:read-uncommitted+readOnly": "unsupported", "combination:read-uncommitted+readWrite": "unsupported",
-  "combination:read-committed+readOnly": "unsupported", "combination:read-committed+readWrite": "unsupported",
-  "combination:repeatable-read+readOnly": "unsupported", "combination:repeatable-read+readWrite": "unsupported",
-  "combination:serializable+readOnly": "unsupported", "combination:serializable+readWrite": "unsupported",
-};
+const expectedCapabilities = D1_EXPECTED_CAPABILITIES;
+
+const expectedTransactionOptions = D1_EXPECTED_TRANSACTION_OPTIONS;
 
 function buildQueries(stats: D1Stats): CertificationFixture["queries"] {
   let preparedCalls = 0;

@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { extname, resolve } from "node:path";
+import { dirname, extname, resolve } from "node:path";
 import process from "node:process";
 import { chromium } from "playwright";
 
@@ -21,8 +21,8 @@ function certificationOptions() {
   const stressValue = process.env.SQLBRAID_CERT_STRESS;
   const requested = sourceSha !== undefined || artifactPath !== undefined || stressValue !== undefined;
   if (!requested) return undefined;
-  if (sourceSha === undefined || artifactPath === undefined) {
-    throw new Error("Certification mode requires SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.");
+  if (sourceSha === undefined || artifactPath === undefined || !/^[0-9a-f]{40}$/iu.test(sourceSha)) {
+    throw new Error("Certification mode requires a full 40-character SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.");
   }
   if (stressValue !== undefined && !["0", "1", "false", "true"].includes(stressValue)) {
     throw new Error("SQLBRAID_CERT_STRESS must be 0, 1, false, or true.");
@@ -420,10 +420,10 @@ async function main() {
         if (report.certification.sourceSha !== certification.sourceSha) {
           throw new Error("Browser certification source SHA did not survive the fixture boundary.");
         }
-        if (Object.keys(report.certification.cases ?? {}).length !== 84) {
-          throw new Error(`Browser certification executed ${Object.keys(report.certification.cases ?? {}).length} cases instead of 84.`);
-        }
-        await writeFile(certification.artifactPath, JSON.stringify(report.certification, null, 2));
+        await mkdir(dirname(certification.artifactPath), { recursive: true });
+        const pending = `${certification.artifactPath}.pending`;
+        await writeFile(pending, `${JSON.stringify(report.certification, null, 2)}\n`);
+        await run(process.execPath, ["scripts/certification.mjs", "--validate", "--source-sha", certification.sourceSha, "--artifact", pending], { cwd: repositoryRoot });
         const integerEvidence = report.cases?.["wasm.numeric.exact-integer"];
         if (!integerEvidence || Object.values(integerEvidence.values ?? {}).some((value) => value?.type !== "string")) {
           throw new Error("Browser WASM exact INTEGER evidence must use canonical strings.");
@@ -435,6 +435,7 @@ async function main() {
         if (typeof jsonEvidence !== "string" || !jsonEvidence.includes("9007199254740993")) {
           throw new Error("Browser WASM nested JSON must remain exact text.");
         }
+        await rename(pending, certification.artifactPath);
       }
       console.log(`SQLBRAID_BROWSER_REPORT=${JSON.stringify({ ...report, browserVersion: browser.version(), matrix: await supportMatrix(browser, url) })}`);
     } finally {

@@ -43,6 +43,42 @@ export interface ExpectedCapability extends EnvironmentCapability {
 
 export type ExpectedCapabilityContract = Readonly<Record<string, ExpectedCapability>>;
 
+export interface CertificationTuple {
+  readonly database: { readonly product: string; readonly version?: string; readonly edition: string; readonly versionStatus: "measured" | "unknown" };
+  readonly driver: { readonly id: string; readonly package: string; readonly version: string; readonly profile: string };
+  readonly runtime: { readonly id: string; readonly version: string };
+}
+
+export interface CertificationMeasuredTuple {
+  readonly database: DatabaseEnvironment["database"] & { readonly versionStatus: "measured" | "unknown" };
+  readonly driver: DatabaseEnvironment["driver"];
+  readonly runtime: DatabaseEnvironment["runtime"];
+}
+
+export interface CertificationCandidateIdentity {
+  readonly kind: "source" | "prepared" | "release-prepared";
+  readonly sourceSha: string;
+  readonly producerRunId?: string;
+  readonly producerRunAttempt?: string;
+  readonly artifactName?: string;
+  readonly artifactDigest?: string;
+  readonly preparedBuildSha256?: string;
+  readonly releaseCandidateSha256?: string;
+}
+
+export interface CertificationProvenance {
+  readonly schemaVersion: 1;
+  readonly target: string;
+  readonly sourceSha: string;
+  readonly measured: CertificationMeasuredTuple;
+  readonly pinned: CertificationTuple;
+  readonly candidate?: CertificationCandidateIdentity;
+}
+
+export function isSourceSha(value: string): boolean {
+  return /^[0-9a-f]{40}$/iu.test(value);
+}
+
 export interface CertificationQueries {
   readonly zero: RowQuery<unknown>;
   readonly one: RowQuery<unknown>;
@@ -192,6 +228,7 @@ export interface CertificationArtifact {
   readonly schemaVersion: 1;
   readonly target: string;
   readonly sourceSha: string;
+  readonly provenance: CertificationProvenance;
   readonly cases: Readonly<Record<CertificationCaseId, CertificationCaseResult>>;
   readonly expectedCapabilities: ExpectedCapabilityContract;
   readonly expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">>;
@@ -201,6 +238,7 @@ export interface CertificationArtifact {
 
 export interface CertificationRunOptions {
   readonly stress?: boolean;
+  readonly candidate?: CertificationCandidateIdentity;
 }
 
 export interface CertificationAggregateOptions {
@@ -209,6 +247,8 @@ export interface CertificationAggregateOptions {
   readonly requiredTargetContracts: Readonly<Record<string, ExpectedCapabilityContract>>;
   readonly requiredTargetOptionContracts: Readonly<Record<string, Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">>>>;
   readonly requiredTargetGuardedCaseContracts?: Readonly<Record<string, ExpectedGuardedCaseContract | undefined>>;
+  readonly requiredTargetTuples?: Readonly<Record<string, CertificationTuple>>;
+  readonly requiredCandidate?: CertificationCandidateIdentity;
   readonly requiredCaseIds?: readonly CertificationCaseId[];
 }
 
@@ -216,6 +256,7 @@ export interface CertificationAggregate {
   readonly schemaVersion: 1;
   readonly sourceSha: string;
   readonly targets: Readonly<Record<string, CertificationArtifact>>;
+  readonly candidate?: CertificationCandidateIdentity;
 }
 
 export type CertificationIsolation = TransactionIsolation;

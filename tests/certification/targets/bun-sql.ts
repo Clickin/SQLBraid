@@ -2,7 +2,6 @@ import { Buffer } from "node:buffer";
 import type {
   CommandQuery,
   CallQuery,
-  EnvironmentCapability,
   RowQuery,
   SqlTag,
   TransactionOptions,
@@ -14,9 +13,6 @@ import type {
   CertificationCaseId,
   CertificationFixture,
   CertificationTarget,
-  ExpectedCapability,
-  ExpectedCapabilityContract,
-  ExpectedGuardedCaseContract,
   TransactionOptionKey,
   UnsupportedProbe,
 } from "../types.js";
@@ -35,86 +31,12 @@ interface Counters {
   sideEffects: number;
 }
 
-const OPTION_KEYS: readonly TransactionOptionKey[] = [
-  "isolation:read-uncommitted",
-  "isolation:read-committed",
-  "isolation:repeatable-read",
-  "isolation:serializable",
-  "readOnly:true",
-  "readOnly:false",
-  "combination:read-uncommitted+readOnly",
-  "combination:read-uncommitted+readWrite",
-  "combination:read-committed+readOnly",
-  "combination:read-committed+readWrite",
-  "combination:repeatable-read+readOnly",
-  "combination:repeatable-read+readWrite",
-  "combination:serializable+readOnly",
-  "combination:serializable+readWrite",
-];
-
-function capability(status: EnvironmentCapability["status"], fields: Partial<ExpectedCapability> = {}): ExpectedCapability {
-  return Object.freeze({ status, ...fields });
-}
-
 /** Independent contract: this is intentionally not read from environment(). */
-export function expectedCapabilities(dialect: BunSqlDialect): ExpectedCapabilityContract {
-  const server = dialect !== "sqlite";
-  const mysqlFamily = dialect === "mysql" || dialect === "mariadb";
-  const jsonNative = dialect === "postgres" || dialect === "mysql";
-  return Object.freeze({
-    "sql.native-transparency": capability("guaranteed"),
-    "sql.generated-structure": capability("guaranteed"),
-    "result.rows": capability(dialect === "postgres" ? "guaranteed" : "guarded", dialect === "postgres" ? {} : { conditionCode: dialect === "sqlite" ? "bun-sql.sqlite-result-parser" : "bun-sql.result-kind-metadata" }),
-    "result.command": capability(dialect === "postgres" ? "guaranteed" : "guarded", dialect === "postgres" ? {} : { conditionCode: dialect === "sqlite" ? "bun-sql.sqlite-result-parser" : "bun-sql.result-kind-metadata" }),
-    "result.multiple-sets": capability("unsupported"),
-    "result.standard-schema": capability("guaranteed"),
-    "numeric.exact-integer": capability("guarded", { canonical: "string", rawRepresentations: ["number", "string", "bigint"], conditionCode: "bun-sql.integer-width-profile" }),
-    "numeric.exact-decimal": dialect === "postgres" ? capability("guaranteed", { canonical: "string", rawRepresentations: ["string"] }) : capability("unsupported", { canonical: "string", rawRepresentations: [mysqlFamily ? "Uint8Array" : "number"] }),
-    "numeric.approximate-float": capability("guarded", { canonical: "number", rawRepresentations: ["number"], conditionCode: "bun-sql.float-profile" }),
-    "numeric.approximate-special": capability("guarded", { canonical: "number", rawRepresentations: ["number"], conditionCode: "bun-sql.float-profile" }),
-    "numeric.bind-exact": capability("guarded", { canonical: "string", rawRepresentations: ["string", "number", "bigint"], conditionCode: "bun-sql.numeric-bind-profile" }),
-    "numeric.command-metadata": capability("guarded", { canonical: "number", rawRepresentations: ["number", "bigint"], conditionCode: "bun-sql.command-count-profile" }),
-    "data.json-parsed": jsonNative ? capability("guarded", { rawRepresentations: ["object", "array"], conditionCode: "bun-sql.json-parser-profile" }) : capability("unsupported", { rawRepresentations: ["string"] }),
-    "data.json-lossless-text": jsonNative ? capability("unsupported") : capability("guaranteed", { canonical: "string", rawRepresentations: ["string"] }),
-    "data.binary": mysqlFamily ? capability("unsupported", { canonical: "Uint8Array", rawRepresentations: ["Uint8Array"] }) : capability("guaranteed", { canonical: "Uint8Array", rawRepresentations: ["Uint8Array"] }),
-    "data.temporal-native": dialect === "sqlite" ? capability("unsupported", { rawRepresentations: ["string"] }) : capability("guarded", { rawRepresentations: ["Date", "string"], conditionCode: "bun-sql.temporal-profile" }),
-    "data.temporal-lossless": dialect === "sqlite" ? capability("guaranteed", { canonical: "string", rawRepresentations: ["string"] }) : capability("unsupported"),
-    "data.timezone": dialect === "sqlite" ? capability("unsupported", { rawRepresentations: ["string"] }) : capability("guarded", { rawRepresentations: ["Date"], conditionCode: "bun-sql.timezone-profile" }),
-    "metadata.command-safe": capability("guarded", { canonical: "number", rawRepresentations: ["number", "bigint"], conditionCode: "bun-sql.command-count-profile" }),
-    "dml.insert-returning": server && dialect !== "postgres" ? capability("unsupported") : capability("guaranteed"),
-    "dml.update-returning": server && dialect !== "postgres" ? capability("unsupported") : capability("guaranteed"),
-    "dml.delete-returning": server && dialect !== "postgres" ? capability("unsupported") : capability("guaranteed"),
-    "session.pinned": capability("guaranteed"),
-    "statement.prepare": capability("guaranteed"),
-    "statement.cancel": capability("unsupported", { rawRepresentations: ["Query.cancel"] }),
-    "statement.stream": capability("unsupported"),
-    "statement.bulk": capability("guaranteed", { rawRepresentations: ["prepared-loop"] }),
-    "execution.bulk-fidelity": capability("guarded", { rawRepresentations: ["prepared-loop"], conditionCode: "bun-sql.bulk-profile" }),
-    "transaction": capability("guaranteed"),
-    "transaction.savepoint": capability("guaranteed"),
-    "transaction.read-only": server ? capability("guarded", { conditionCode: "bun-sql.transaction-options" }) : capability("unsupported"),
-    "transaction.isolation.read-uncommitted": server ? capability("guarded", { conditionCode: "bun-sql.transaction-options" }) : capability("unsupported"),
-    "transaction.isolation.read-committed": server ? capability("guarded", { conditionCode: "bun-sql.transaction-options" }) : capability("unsupported"),
-    "transaction.isolation.repeatable-read": server ? capability("guarded", { conditionCode: "bun-sql.transaction-options" }) : capability("unsupported"),
-    "transaction.isolation.serializable": server ? capability("guarded", { conditionCode: "bun-sql.transaction-options" }) : capability("guaranteed"),
-    "routine.call": capability("unsupported"),
-    "routine.out": capability("unsupported"),
-    "routine.inout": capability("unsupported"),
-    "routine.result-sets": capability("unsupported"),
-    "routine.out-cursor": capability("unsupported"),
-    "routine.return-value": capability("unsupported"),
-  });
-}
+import { BUN_EXPECTED_CAPABILITIES, BUN_EXPECTED_GUARDED_CASES, BUN_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
 
-export function expectedTransactionOptions(dialect: BunSqlDialect): Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">> {
-  return Object.freeze(Object.fromEntries(OPTION_KEYS.map((key) => [key, dialect === "sqlite" && key !== "isolation:serializable" ? "unsupported" : "guaranteed"]))) as Record<TransactionOptionKey, "guaranteed" | "unsupported">;
-}
-
-export function expectedGuardedCases(dialect: BunSqlDialect): ExpectedGuardedCaseContract | undefined {
-  return dialect === "mysql" || dialect === "mariadb"
-    ? { emptyResultError: { feature: "result.rows", code: "BRAID_RESULT_KIND_AMBIGUOUS" } }
-    : undefined;
-}
+export const expectedCapabilities = BUN_EXPECTED_CAPABILITIES;
+export const expectedTransactionOptions = BUN_EXPECTED_TRANSACTION_OPTIONS;
+export const expectedGuardedCases = BUN_EXPECTED_GUARDED_CASES;
 
 function mutates(sql: string): boolean {
   return /^(?:INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|REPLACE|TRUNCATE)\b/iu.test(sql.trim());

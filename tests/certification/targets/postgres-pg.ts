@@ -12,51 +12,11 @@ import type {
   ResourceSnapshot,
 } from "../types.js";
 
-const expectedCapabilities: ExpectedCapabilityContract = Object.freeze({
-  "session.pinned": { status: "guaranteed" },
-  "transaction": { status: "guaranteed" },
-  "transaction.savepoint": { status: "guaranteed" },
-  "transaction.read-only": { status: "guaranteed" },
-  "transaction.isolation.read-uncommitted": { status: "guarded", conditionCode: "pg.read-uncommitted-maps-to-read-committed" },
-  "transaction.isolation.read-committed": { status: "guaranteed" },
-  "transaction.isolation.repeatable-read": { status: "guaranteed" },
-  "transaction.isolation.serializable": { status: "guaranteed" },
-  "statement.prepare": { status: "guaranteed" },
-  "statement.cancel": { status: "guarded", conditionCode: "pg.physical-connection-destroy" },
-  "statement.stream": { status: "guaranteed" },
-  "statement.bulk": { status: "guaranteed" },
-  "routine.call": { status: "guaranteed" },
-  "routine.out": { status: "guaranteed" },
-  "routine.inout": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
-  "routine.result-sets": { status: "guaranteed" },
-  "routine.out-cursor": { status: "guaranteed" },
-  "routine.return-value": { status: "unsupported", unsupportedCode: "BRAID_CALL_RETURN_UNSUPPORTED" },
-  "sql.native-transparency": { status: "guaranteed" },
-  "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-  "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-  "numeric.approximate-float": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "pg.extra-float-digits" },
-  "data.json-lossless-text": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-  "data.json-parsed": { status: "unsupported", rawRepresentations: ["unknown"], conditionCode: "pg.json-parser-profile" },
-  "data.temporal-lossless": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-  "data.temporal-native": { status: "unsupported", rawRepresentations: ["Date", "string", "unknown"], conditionCode: "pg.temporal-parser-profile" },
-});
+import { POSTGRES_EXPECTED_CAPABILITIES, POSTGRES_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
 
-const expectedTransactionOptions = Object.freeze({
-  "isolation:read-uncommitted": "guaranteed",
-  "isolation:read-committed": "guaranteed",
-  "isolation:repeatable-read": "guaranteed",
-  "isolation:serializable": "guaranteed",
-  "readOnly:true": "guaranteed",
-  "readOnly:false": "guaranteed",
-  "combination:read-uncommitted+readOnly": "guaranteed",
-  "combination:read-uncommitted+readWrite": "guaranteed",
-  "combination:read-committed+readOnly": "guaranteed",
-  "combination:read-committed+readWrite": "guaranteed",
-  "combination:repeatable-read+readOnly": "guaranteed",
-  "combination:repeatable-read+readWrite": "guaranteed",
-  "combination:serializable+readOnly": "guaranteed",
-  "combination:serializable+readWrite": "guaranteed",
-} as const);
+const expectedCapabilities = POSTGRES_EXPECTED_CAPABILITIES;
+
+const expectedTransactionOptions = POSTGRES_EXPECTED_TRANSACTION_OPTIONS;
 
 interface Shared {
   readonly targetId: string;
