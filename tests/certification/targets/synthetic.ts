@@ -323,6 +323,7 @@ export function createSyntheticTarget(sourceSha = "synthetic-source-sha", cancel
         largeResultCount: 3,
         iteratorReturns: () => state.streamReturns,
         released: () => state.streamReturns,
+        reuseAfterBreak: async () => { await db.one(queries.identity); },
       } as StreamingConformanceFixture<unknown>;
       const bulk: BulkConformanceFixture<unknown> = { db, inputs: [1, 2], factory: () => commandQuery("command", definitions), expected: { inputCount: 2, affectedRows: 2 }, acquireCount: () => state.bulkCalls, executeCount: () => state.bulkExec, values: () => [[1], [2]], middleFailure: async () => {
         state.bulkFailure = true;

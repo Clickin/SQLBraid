@@ -20,6 +20,7 @@ export interface StreamingConformanceFixture<Row> {
   readonly cleanupFailure?: unknown;
   readonly released?: () => number;
   readonly iteratorReturns?: () => number;
+  readonly reuseAfterBreak?: () => Promise<void>;
   readonly close?: () => void | Promise<void>;
 }
 
@@ -190,6 +191,16 @@ export async function runStreamingConformanceCase(
         assert.equal(actualCount, expectedCount);
         assert.equal(iteratorReturns(), 1);
         assert.equal(released(), 1);
+        return;
+      }
+      case "STR011": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
+        const reuseAfterBreak = requireField(fixture.reuseAfterBreak, "reuseAfterBreak");
+        for await (const row of fixture.db.stream(fixture.query)) { void row; break; }
+        assert.equal(iteratorReturns(), 1);
+        assert.equal(released(), 1);
+        await reuseAfterBreak();
         return;
       }
       default:

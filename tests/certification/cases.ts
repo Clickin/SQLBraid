@@ -287,9 +287,11 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
       await db.session(async (session) => {
         ids.push((await session.one(fixture.queries.identity)).id);
         ids.push((await session.one(fixture.queries.identity)).id);
-        assert.deepEqual(await session.all(fixture.queries.zero), []);
+        if (emptyResultError(context) === undefined) assert.deepEqual(await session.all(fixture.queries.zero), []);
+        else await assertEmptyResult(context, () => session.all(fixture.queries.zero));
         assert.deepEqual(await session.all(fixture.queries.many), fixture.queries.expected?.many);
-        assert.deepEqual(await session.maybeOne(fixture.queries.zero), undefined);
+        if (emptyResultError(context) === undefined) assert.deepEqual(await session.maybeOne(fixture.queries.zero), undefined);
+        else await assertEmptyResult(context, () => session.maybeOne(fixture.queries.zero));
         assert.deepEqual(await session.maybeOne(fixture.queries.one), fixture.queries.expected?.one);
         await assert.rejects(
           () => session.maybeOne(fixture.queries.many),
@@ -349,10 +351,19 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   }),
   SES007: async (context) => supportedAll(context, "SES007", ["session.pinned", "statement.stream"], async ({ fixture }) => {
     const query = fixture.queries.stream ?? fixture.queries.many;
+    const expected = fixture.stream?.expected ?? fixture.queries.expected?.many;
+    if (expected === undefined) throw new Error("SES007 requires expected stream rows.");
+    const metrics = fixtureMetrics(fixture);
     for (const db of databases(fixture)) {
-      const rows: unknown[] = [];
-      await db.session(async (session) => { for await (const row of session.stream(query)) rows.push(row); });
-      assert.ok(rows.length > 0);
+      const before = await metrics.snapshot();
+      await db.session(async (session) => {
+        const rows: unknown[] = [];
+        for await (const row of session.stream(query)) rows.push(row);
+        assert.deepEqual(rows, expected);
+        const inside = await metrics.snapshot();
+        if (fixture.pooled !== undefined && db === fixture.pooled) assert.ok(inside.borrowedLeases > before.borrowedLeases);
+      });
+      await cleanResources(fixture, before);
     }
   }),
   SES008: async (context) => supportedAll(context, "SES008", ["session.pinned", "transaction"], async ({ fixture }) => {
@@ -393,9 +404,17 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   }),
   TX004: async (context) => supported(context, "TX004", "transaction", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX004 transaction fixture missing.");
-    const ids: string[] = [];
-    await fixture.db.tx(async (tx) => { ids.push((await tx.one(fixture.queries.identity)).id); ids.push((await tx.one(fixture.queries.identity)).id); });
-    assert.equal(ids[0], ids[1]);
+    for (const db of databases(fixture)) {
+      const ids: string[] = [];
+      await db.tx(async (tx) => {
+        ids.push((await tx.one(fixture.queries.identity)).id);
+        ids.push((await tx.one(fixture.queries.identity)).id);
+        assert.deepEqual(await tx.all(fixture.queries.many), fixture.queries.expected?.many);
+        if (emptyResultError(context) === undefined) assert.deepEqual(await tx.maybeOne(fixture.queries.zero), undefined);
+        else await assertEmptyResult(context, () => tx.maybeOne(fixture.queries.zero));
+      });
+      assert.equal(ids[0], ids[1]);
+    }
   }),
   TX005: async (context) => supported(context, "TX005", "transaction", async ({ fixture }) => {
     await assert.rejects(() => fixture.db.tx(async () => { await fixture.db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_SCOPE");
@@ -577,8 +596,7 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   }),
   STR011: async (context) => supported(context, "STR011", "statement.stream", async ({ fixture }) => {
     const stream = streamFixture(fixture);
-    for await (const row of fixture.db.stream(stream.query)) { void row; break; }
-    await fixture.db.one(fixture.queries.identity);
+    await runStreamingConformanceCase("STR011", () => ({ ...stream, close: undefined }));
   }),
 
   CALL001: async (context) => supported(context, "CALL001", "routine.call", async ({ fixture }) => { if (!fixture.queries.routines) throw new Error("CALL001 routine fixture missing."); const result = await callRoutine(fixture, fixture.queries.routines.call); assert.deepEqual(result, fixture.queries.expected?.special.CALL001); }),
