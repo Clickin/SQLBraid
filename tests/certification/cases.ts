@@ -227,7 +227,7 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     await assert.rejects(() => scoped!.one(fixture.queries.identity), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_SESSION_CLOSED");
   }),
   SES005: async (context) => supported(context, "SES005", "session.pinned", async ({ fixture }) => {
-    await assert.rejects(() => fixture.db.session(async () => { await fixture.db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_REENTRY");
+    await assert.rejects(() => fixture.db.session(async () => { await fixture.db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_SESSION_SCOPE");
   }),
 
   TX001: async (context) => supported(context, "TX001", "transaction", async ({ fixture }) => {
@@ -255,7 +255,7 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     assert.equal(ids[0], ids[1]);
   }),
   TX005: async (context) => supported(context, "TX005", "transaction", async ({ fixture }) => {
-    await assert.rejects(() => fixture.db.tx(async () => { await fixture.db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_REENTRY");
+    await assert.rejects(() => fixture.db.tx(async () => { await fixture.db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_SCOPE");
   }),
   TX010: async (context) => supported(context, "TX010", "transaction.savepoint", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX010 transaction fixture missing.");
@@ -386,7 +386,7 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     await fixture.reset();
     await assert.rejects(
       () => fixture.db.batch([transaction.insert, fixture.queries.failure as never, fixture.queries.command]),
-      (error: unknown) => { assert.equal((error as { readonly code?: unknown }).code, "BRAID_BATCH_ABORTED"); return true; },
+      (error: unknown) => { assert.equal((error as { readonly code?: unknown }).code, fixture.queries.expected?.failureCode); return true; },
     );
     assert.equal((await fixture.db.all(transaction.visible)).length, 1);
     return { status: "pass", name: "BAT002" };

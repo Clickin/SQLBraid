@@ -7,6 +7,7 @@ import { REQUIRED_CERTIFICATION_TARGETS } from "./targets/inventory.js";
 describe("A4 certification harness", () => {
   test("runs every required public API case against a deterministic synthetic target", async () => {
     const artifact = await certifyTarget(createSyntheticTarget("candidate-a4"));
+
     validateCertificationArtifact(artifact, { sourceSha: "candidate-a4" });
     assert.equal(Object.keys(artifact.cases).length, 84);
     assert.equal(artifact.cases.CAP002.status, "pass");
