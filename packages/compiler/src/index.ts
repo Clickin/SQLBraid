@@ -340,7 +340,7 @@ interface ImportBindings {
   readonly named: ReadonlyMap<string, ImportedBinding>;
   readonly namespaces: ReadonlyMap<string, ImportedBinding>;
   readonly defaults: ReadonlyMap<string, ImportedBinding>;
-  readonly owns: (identifier: ts.Identifier, binding: ImportedBinding) => boolean;
+  readonly owner: (identifier: ts.Identifier) => ts.Identifier | undefined;
 }
 
 function importBindings(sourceFile: ts.SourceFile, options: OverlayOptions): ImportBindings {
@@ -373,17 +373,11 @@ function importBindings(sourceFile: ts.SourceFile, options: OverlayOptions): Imp
       if (imported === tagExport) named.set(element.name.text, { name: element.name, moduleSpecifier });
     }
   }
-  const checker = options.typeChecker;
-  const owner = checker ? undefined : lexicalBindingOwner(sourceFile);
   return {
     named,
     namespaces,
     defaults,
-    owns: (identifier, binding) => {
-      if (!checker) return owner?.(identifier) === binding.name;
-      const symbol = checker.getSymbolAtLocation(identifier);
-      return symbol !== undefined && symbol === checker.getSymbolAtLocation(binding.name);
-    },
+    owner: lexicalBindingOwner(sourceFile),
   };
 }
 
@@ -415,14 +409,14 @@ function tagExpression(expression: ts.Expression): ts.Expression {
 function importedTagModule(expression: ts.Expression, bindings: ImportBindings, tagExport: string): string | undefined {
   if (ts.isIdentifier(expression)) {
     const binding = bindings.named.get(expression.text) ?? bindings.defaults.get(expression.text);
-    return binding && bindings.owns(expression, binding) ? binding.moduleSpecifier : undefined;
+    return binding && bindings.owner(expression) === binding.name ? binding.moduleSpecifier : undefined;
   }
   if (ts.isCallExpression(expression) && explicitResultKind(expression) === "call")
     return importedTagModule(expression.expression, bindings, tagExport);
   if (!ts.isPropertyAccessExpression(expression)) return undefined;
   if (expression.name.text === tagExport && ts.isIdentifier(expression.expression)) {
     const binding = bindings.namespaces.get(expression.expression.text);
-    return binding && bindings.owns(expression.expression, binding) ? binding.moduleSpecifier : undefined;
+    return binding && bindings.owner(expression.expression) === binding.name ? binding.moduleSpecifier : undefined;
   }
   if (explicitResultKind(expression)) return importedTagModule(expression.expression, bindings, tagExport);
   return undefined;
@@ -455,6 +449,7 @@ function checkerTagModule(
   sourceFile: ts.SourceFile,
   options: OverlayOptions,
   checker: ts.TypeChecker,
+  bindings: ImportBindings,
 ): string | undefined {
   const modules = configuredModules(options);
   const tagExport = options.tagExport ?? "sql";
@@ -509,11 +504,19 @@ function checkerTagModule(
   }
   const owner = tagOwner(expression);
   if (ts.isIdentifier(owner)) {
-    const symbol = checker.getSymbolAtLocation(owner);
+    const declaration = bindings.owner(owner);
+    if (
+      !declaration ||
+      (!ts.isImportSpecifier(declaration.parent) && !ts.isImportClause(declaration.parent))
+    )
+      return undefined;
+    const symbol = declaration && checker.getSymbolAtLocation(declaration);
     return symbol && symbolTag(symbol);
   }
   if (ts.isPropertyAccessExpression(owner) && ts.isIdentifier(owner.expression)) {
-    const namespace = checker.getSymbolAtLocation(owner.expression);
+    const binding = bindings.owner(owner.expression);
+    if (!binding || !ts.isNamespaceImport(binding.parent)) return undefined;
+    const namespace = binding && checker.getSymbolAtLocation(binding);
     for (const declaration of namespace?.declarations ?? []) {
       if (!ts.isNamespaceImport(declaration) || declaration.parent.isTypeOnly) continue;
       return exportedTag(declaration.parent.parent.moduleSpecifier, owner.name.text);
@@ -533,7 +536,7 @@ function tagIdentity(
   const kind = explicitResultKind(tag);
   const checkedModule =
     importedTagModule(tag, bindings, tagExport) ??
-    (options.typeChecker ? checkerTagModule(expression, sourceFile, options, options.typeChecker) : undefined);
+    (options.typeChecker ? checkerTagModule(expression, sourceFile, options, options.typeChecker, bindings) : undefined);
   return {
     ...(checkedModule ? { name: expression.getText(sourceFile), moduleSpecifier: checkedModule } : {}),
     declaredResultKind: kind ?? "unknown",
