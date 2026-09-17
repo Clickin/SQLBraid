@@ -47,6 +47,8 @@ jobs:
     name: Prepare immutable npm release candidate
     outputs:
       compatibility_matrix: ${{ steps.compatibility-matrix.outputs.matrix }}
+      release_package: ${{ steps.release-target.outputs.package }}
+      release_version: ${{ steps.release-target.outputs.version }}
     permissions:
       contents: read
       actions: read
@@ -95,6 +97,7 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
       - name: Determine release target
+        id: release-target
         env:
           INPUT_RELEASE_PACKAGE: ${{ inputs.release_package || 'all' }}
         shell: bash
@@ -131,6 +134,8 @@ jobs:
           fi
           echo "SQLBRAID_RELEASE_PACKAGE=$package" >> "$GITHUB_ENV"
           echo "SQLBRAID_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "version=$release_version" >> "$GITHUB_OUTPUT"
           echo "Release target: $package@$release_version"
       - name: Assert clean tree and exact ref
         run: node scripts/release.mjs --mode preflight
@@ -813,6 +818,9 @@ jobs:
         release-semantic-contracts,
       ]
     name: Final release certification
+    env:
+      SQLBRAID_RELEASE_PACKAGE: ${{ needs.release-prep.outputs.release_package }}
+      SQLBRAID_RELEASE_VERSION: ${{ needs.release-prep.outputs.release_version }}
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -850,8 +858,11 @@ jobs:
 
   release-stage:
     if: github.event_name == 'workflow_dispatch' && inputs.release_mode == 'stage'
-    needs: release-final
+    needs: [release-final, release-prep]
     name: Stage validated packages with pnpm OIDC
+    env:
+      SQLBRAID_RELEASE_PACKAGE: ${{ needs.release-prep.outputs.release_package }}
+      SQLBRAID_RELEASE_VERSION: ${{ needs.release-prep.outputs.release_version }}
     permissions:
       contents: read
       actions: read
@@ -915,8 +926,11 @@ jobs:
     if: >-
       always() && github.event_name == 'workflow_dispatch' &&
       inputs.release_mode == 'stage' && needs.release-stage.result == 'success'
-    needs: [release-final, release-stage]
+    needs: [release-final, release-stage, release-prep]
     name: Create draft GitHub Release after staging (approval pending)
+    env:
+      SQLBRAID_RELEASE_PACKAGE: ${{ needs.release-prep.outputs.release_package }}
+      SQLBRAID_RELEASE_VERSION: ${{ needs.release-prep.outputs.release_version }}
     permissions:
       contents: write
     runs-on: ubuntu-latest
