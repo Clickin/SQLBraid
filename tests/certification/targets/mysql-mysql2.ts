@@ -566,9 +566,9 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     },
   };
   const unsupported = {
-    CALL002: { feature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await directDb.call(routines.out); }, sideEffects: () => nativeExecutes.value },
-    CALL003: { feature: "routine.inout", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await directDb.call(routines.inout); }, sideEffects: () => nativeExecutes.value },
-    CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await directDb.call(routines.cursor); }, sideEffects: () => nativeExecutes.value },
+    CALL002: { feature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await db.call(routines.out); }, sideEffects: () => acquired.value + nativeExecutes.value },
+    CALL003: { feature: "routine.inout", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await db.call(routines.inout); }, sideEffects: () => acquired.value + nativeExecutes.value },
+    CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await db.call(routines.cursor); }, sideEffects: () => acquired.value + nativeExecutes.value },
     CALL006: { feature: "routine.return-value", expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED" as const, run: async () => { await db.call(routines.returnValue); }, sideEffects: () => acquired.value + nativeExecutes.value },
   };
   const fixture: CertificationFixture = {

@@ -1864,6 +1864,25 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
             options.capabilities,
           );
         }
+        for (const parameter of operation.rendered.parameters) {
+          if (parameter.direction === "out") {
+            assertFeatureCapability(
+              executor,
+              "routine.out",
+              "BRAID_CALL_OUT_UNSUPPORTED",
+              "The selected execution resource does not expose a routine OUT parameter channel.",
+              options.capabilities,
+            );
+          } else if (parameter.direction === "inout") {
+            assertFeatureCapability(
+              executor,
+              "routine.inout",
+              "BRAID_CALL_OUT_UNSUPPORTED",
+              "The selected execution resource does not expose a routine INOUT parameter channel.",
+              options.capabilities,
+            );
+          }
+        }
       } catch (error) {
         await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
       }
