@@ -21,7 +21,15 @@ const packageNames = (await readdir(packageRoot, { withFileTypes: true }))
   .sort();
 const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const testsWorkspace = JSON.parse(await readFile(join(root, "tests/package.json"), "utf8"));
-const expectedVersion = workspace.version;
+const packageVersionByName = new Map(
+  await Promise.all(
+    packageNames.map(async (packageName) => {
+      const manifest = JSON.parse(await readFile(join(packageRoot, packageName, "package.json"), "utf8"));
+      return [manifest.name, manifest.version];
+    }),
+  ),
+);
+let releaseVersion = workspace.version;
 const runtimeCompatibility = await validateRuntimeCompatibility({ root });
 const MAX_TARBALL_BYTES = 5 * 1024 * 1024;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
@@ -99,7 +107,8 @@ try {
     const release = JSON.parse(await readFile(join(packInputDir, "release-manifest.json"), "utf8"));
     const { stdout: head } = await execFile("git", ["rev-parse", "HEAD"], { cwd: root });
     assert.equal(release.commit, head.trim(), "Supplied release must belong to the checked-out commit.");
-    assert.equal(release.version, expectedVersion);
+    assert.ok(Array.isArray(release.releasePackages) && release.releasePackages.length > 0);
+    releaseVersion = release.version;
     assert.equal(release.packages.length, packageNames.length);
     const inputFiles = (await readdir(packInputDir, { withFileTypes: true }))
       .filter((entry) => entry.isFile() && entry.name.endsWith(".tgz"))
@@ -122,8 +131,6 @@ try {
   for (const packageName of packageNames) {
     const sourceManifest = JSON.parse(await readFile(join(packageRoot, packageName, "package.json"), "utf8"));
     const expectedPackageName = packageName === "sqlbraid" ? "sqlbraid" : `@sqlbraid/${packageName}`;
-    if (sourceManifest.version !== expectedVersion)
-      throw new Error(`Package ${sourceManifest.name} is not synchronized to workspace version ${expectedVersion}.`);
     let tarball;
     if (packInputDir) {
       tarball = inputTarballs.get(sourceManifest.name);
@@ -145,16 +152,18 @@ try {
       for (const [name, version] of Object.entries(expectedManifest[field] ?? {})) {
         if (!version.startsWith("workspace:")) continue;
         const range = version.slice("workspace:".length);
+        const dependencyVersion = packageVersionByName.get(name);
+        if (!dependencyVersion) throw new Error(`Unknown workspace dependency ${name} in ${sourceManifest.name}.`);
         expectedManifest[field][name] =
-          range === "*" ? expectedVersion : range === "^" || range === "~" ? `${range}${expectedVersion}` : range;
+          range === "*" ? dependencyVersion : range === "^" || range === "~" ? `${range}${dependencyVersion}` : range;
       }
     }
     assert.deepEqual(manifest, expectedManifest, `${manifest.name} packed manifest must match current source.`);
     if (JSON.stringify(manifest).includes("workspace:"))
       throw new Error(`Workspace dependency protocol leaked into ${manifest.name} metadata.`);
 
-    if (manifest.version !== expectedVersion)
-      throw new Error(`Packed ${manifest.name} is not synchronized to workspace version ${expectedVersion}.`);
+    if (manifest.version !== sourceManifest.version)
+      throw new Error(`Packed ${manifest.name} version ${manifest.version} does not match source ${sourceManifest.version}.`);
     if (manifest.license !== "Apache-2.0")
       throw new Error(`Packed ${manifest.name} is missing the Apache-2.0 license.`);
     if (
@@ -1063,7 +1072,7 @@ try {
         join(packInputDir, "pack-check-success.json"),
         `${JSON.stringify(
           {
-            version: expectedVersion,
+            version: releaseVersion,
             commit: commit.trim(),
             packages: await Promise.all(
               tarballs.map(async (tarball) => {
@@ -1238,7 +1247,7 @@ try {
         join(packInputDir, "pack-check-success.json"),
         `${JSON.stringify(
           {
-            version: expectedVersion,
+            version: releaseVersion,
             commit: commit.trim(),
             packages: await Promise.all(
               tarballs.map(async (tarball) => {
