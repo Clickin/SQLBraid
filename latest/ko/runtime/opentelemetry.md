@@ -35,7 +35,7 @@ observer는 materialized row query, command, routine call, prepared 실행,
 `db.batch()`의 각 구성 operation, 하나의 논리적 `db.bulk()` operation에
 OpenTelemetry DB client span을 생성합니다. span은 `query:ready` 또는
 `bulk:ready`에서 시작해 대응하는 mapped/result 또는 error event에서
-종료합니다. transaction 내부 query도 일반 query span을 유지하지만 이 RC는
+종료합니다. transaction 내부 query도 일반 query span을 유지하지만 1.0.0은
 transaction/savepoint span을 만들지 않습니다.
 
 안정화된 `db.client.operation.duration` histogram은 초 단위를 사용하며
@@ -104,7 +104,7 @@ parent/child 관계를 주장하지 않습니다.
 
 ## Observer 순서와 batch
 
-observer는 등록 순서대로 순차 실행됩니다. 제한된 RC 구성에서는
+observer는 등록 순서대로 순차 실행됩니다. 1.0.0에서 지원하는 구성에서는
 OpenTelemetry observer를 마지막에 등록하세요.
 
 ```ts
@@ -148,9 +148,9 @@ packed
 example은 빠른 query와 결정적인 PostgreSQL `pg_sleep(...)`를 실행한 뒤
 warning과 SDK가 소유한 trace/metric exporter를 함께 확인합니다.
 
-## RC의 명시적 한계
+## 1.0.0의 명시적 한계
 
 이 통합은 stream span, transaction/savepoint span, pool metric 또는 OTel
 Logs를 emit하지 않습니다. stream에는 consumer iteration과 cleanup이
 포함되므로 올바른 span 경계는 별도 설계가 필요합니다. pool-level metric과
-Logs도 이 release candidate 범위 밖입니다.
+Logs도 1.0.0 범위 밖입니다.

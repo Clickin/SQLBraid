@@ -62,7 +62,7 @@ driver row -> dialect TypePolicy normalization -> plain row -> query schema -> e
 
 `DatabaseResultValidationError`는 `BRAID_RESULT_VALIDATION` 코드를 사용하고 쿼리 또는 실행 단계를 행 인덱스와 함께 보고하며 원시 행이나 바인드를 덤프하지 않습니다. 매핑은 한 행을 한 행으로 변환합니다. SQLBraid는 관계를 hydrate하거나 identity map을 유지하거나 객체 그래프를 조립하지 않습니다.
 
-입력 측은 0.1.0에서 의도적으로 더 작습니다. 일반 값 보간은 계속 드라이버
+입력 측은 1.0.0에서 의도적으로 더 작습니다. 일반 값 보간은 계속 드라이버
 바인드 값이며, 아직 범용 애플리케이션 입력 codec 프레임워크는 없습니다.
 정확한 numeric bind fidelity는 별도 driver capability이고, 일반 `undefined`
 IN 값은 acquisition 전에 실패하며 `null`은 SQL `NULL`입니다. 드라이버별

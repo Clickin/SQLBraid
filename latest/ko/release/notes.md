@@ -1,9 +1,10 @@
-# 1.0.0-rc.2 릴리스 노트
+# 1.0.0 릴리스 노트
 
-> SQLBraid 1.0 릴리스 후보 표면과 증거 경계를 설명합니다.
+> SQLBraid 1.0.0 GA contract와 capability 및 증거 경계를 설명합니다.
 
-이 문서는 1.0.0-rc.2 프리릴리스 문서이며 npm, GitHub, VS Code Marketplace 또는 Pages
-발행을 승인하지 않습니다.
+이 문서는 SQLBraid 1.0.0 GA 문서입니다. GA는 공개 contract의 안정화를 뜻하며
+모든 driver에서 모든 capability를 보장하지 않습니다. npm, GitHub, VS Code
+Marketplace 또는 Pages 발행을 승인하지 않습니다.
 
 지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/latest/reference/support.md)가
 기록한 정확한 database, driver, profile, runtime, capability tuple과 revision별
@@ -42,6 +43,15 @@ gate와 명시적인 release 승인은 별도 요구사항입니다.
 지원이 없으면 buffering, carrier 추측, hint 무시, 숨은 transaction 대신
 명시적으로 실패합니다.
 
+MySQL/mysql2는 emitted 이질적 `CALL` result set을 지원하지만, carrier를
+신뢰할 수 있게 식별할 수 없으므로 OUT/INOUT descriptor는 지원하지 않습니다.
+SQLite의 `db.call()` / `routine.call`은 unsupported이며 일반 SQLite SQL
+function이나 extension을 제한한다는 뜻은 아닙니다. `callStream()`은 예약된
+미구현 이름이며 호출 가능한 1.0.0 API가 아닙니다.
+[Capability 제한 사항](/SQLBraid/latest/release/limitations.md)도 참고하세요.
+Bun 1.3.14 MySQL/MariaDB는 명시적 `readOnly`의 두 boolean 값을 모두 거부하고
+생략하면 native session 기본값을 보존하며, Bun.SQL PostgreSQL의 동작은 다릅니다.
+
 Canonical capability key는 다음과 같습니다.
 
 ```text
@@ -60,7 +70,7 @@ hydrate하지 않습니다. DML `RETURNING`/`OUTPUT`은 선택한 adapter의 정
 증거가 달리 말하지 않는 한 materialized입니다. Metadata는 open-world
 positive evidence입니다.
 
-Release candidate에는 하나의 clean exact revision, 실행 가능한 tuple/capability 범위,
+Release에는 하나의 clean exact revision, 실행 가능한 tuple/capability 범위,
 영문/한국어 문서 freshness, package/export 검사, immutable release dry-run이
 필요합니다. 사용자 수락과 명시적 release 승인은 별도 gate입니다.
 

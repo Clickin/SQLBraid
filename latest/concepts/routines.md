@@ -89,7 +89,7 @@ output still closes unvisited sibling Lobs and ResultSets.
 | MariaDB / Connector/Node.js   | Emitted heterogeneous SELECT result sets are supported. Prepared CALL OUT/INOUT is rejected with `BRAID_CALL_OUT_UNSUPPORTED`: Connector/Node.js does not expose a proven public OUT carrier for prepared calls. Stored functions cannot emit result sets.                                                                                                                                            |
 | Oracle / `node-oracledb` Thin | Scalar OUT/IN OUT binds, explicit `SYS_REFCURSOR`/REF CURSOR outputs, and implicit results are normalized into `output` and `resultSets`. Every live `ResultSet` is closed before lease release. Use `oracleParameter.refCursor()` for cursor outputs.                                                                                                                                                |
 | SQL Server / Tedious          | Ordinary SELECTs become emitted result sets and scalar OUTPUT values become `output`. To receive a T-SQL integer RETURN status, supply explicit `procedure: { name, parameterNames }` metadata in the `sql.call` contract; SQLBraid does not parse arbitrary `EXEC` text to guess procedure identity. `CURSOR VARYING OUTPUT` is rejected as an application cursor (`BRAID_CALL_CURSOR_UNSUPPORTED`). |
-| SQLite / `node:sqlite`        | `db.call()` is unsupported. Scalar/aggregate/window functions registered with SQLite are used inside ordinary SQL; virtual-table/table-valued extensions are ordinary `sql.rows(...)` queries.                                                                                                                                                                                                        |
+| SQLite adapters               | `db.call()` / `routine.call` is unsupported. This is an adapter API boundary, not a restriction on SQLite SQL. Scalar/aggregate/window functions registered with SQLite are used inside ordinary SQL; virtual-table/table-valued extensions are ordinary `sql.rows(...)` queries.                                                                                                                     |
 
 SQL Server example with explicit native procedure metadata:
 
@@ -107,6 +107,6 @@ The procedure metadata is an explicit native-driver seam, not a general stored-p
 
 ## Routine streaming
 
-SQLBraid exposes materialized `db.call()` only. Use `db.stream(sql.rows(...))` for ordinary row-producing queries and set-returning functions. A future routine stream must solve multi-cursor ownership and transaction lifetime; SQLBraid does not pretend that a routine's cursor result sets are ordinary independent streams today.
+SQLBraid exposes materialized `db.call()` only. `callStream()` is reserved and unimplemented, not a callable 1.0.0 API. Use `db.stream(sql.rows(...))` for ordinary row-producing queries and set-returning functions. Routine cursor result sets are not independent row streams.
 
 See [SQL tags and result kinds](/SQLBraid/latest/concepts/sql-tags.md), [streaming](/SQLBraid/latest/runtime/streaming.md), and [diagnostics](/SQLBraid/latest/reference/errors.md).

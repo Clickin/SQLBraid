@@ -35,7 +35,7 @@ The observer emits OpenTelemetry DB client spans for materialized row queries,
 commands, routine calls, prepared executions, each constituent `db.batch()`
 operation, and the single logical `db.bulk()` operation. A span starts at
 `query:ready` or `bulk:ready` and ends at the matching mapped/result or error
-event. Queries inside a transaction retain their ordinary query spans; this RC
+event. Queries inside a transaction retain their ordinary query spans; 1.0.0
 does not create transaction or savepoint spans.
 
 The stable `db.client.operation.duration` histogram uses seconds and the
@@ -103,7 +103,7 @@ another driver without an actual integration test.
 
 ## Observer ordering and batches
 
-Observers run sequentially in registration order. In the restricted RC
+Observers run sequentially in registration order. In the supported 1.0.0
 configuration, register OpenTelemetry last:
 
 ```ts
@@ -149,9 +149,9 @@ The packed
 example runs a fast query and deterministic PostgreSQL `pg_sleep(...)`, then
 checks both the warning and SDK-owned trace/metric exporters.
 
-## Explicit RC limits
+## Explicit 1.0.0 limits
 
 This integration does not emit stream spans, transaction/savepoint spans, pool
 metrics, or OTel Logs. Streams include consumer iteration and cleanup, so their
 correct span boundary needs a separate design. Pool-level metrics and Logs
-remain outside this release candidate.
+remain outside 1.0.0.

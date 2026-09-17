@@ -1,14 +1,14 @@
 # Current limitations
 
-> Know what the pre-release contract deliberately does not promise.
+> Know what the 1.0.0 GA contract deliberately does not promise.
 
 - **Certification is tuple-, revision-, and evidence-specific.** The [runtime and driver support matrix](/SQLBraid/latest/reference/support.md) is the canonical evidence source and records the exact database/driver/profile/runtime/capability tuple with its revision and workflow evidence. A neighboring version or package installation is not certification. Final exact-SHA Runtime, Docs, and Release gates and explicit release authorization remain separate requirements. Passing CI does not authorize publication.
 - **`db.all()` is materialized.** It returns a readonly array and uses O(row-count) application memory. Use `db.stream()` when bounded application memory matters.
-- **Routine streaming is not included.** Materialized `db.call()` consumes and closes routine resources before mapping; raw cursors, portals, requests, and carrier rows never escape.
-- **MySQL and MariaDB prepared CALL OUT/INOUT is unsupported.** Neither mysql2 3.x nor MariaDB Connector/Node.js exposes a proven public discriminator for prepared call OUT carriers, so SQLBraid does not guess a carrier row.
+- **Routine streaming is not included.** `callStream()` is reserved and unimplemented, not a callable 1.0.0 API. Materialized `db.call()` consumes and closes routine resources before mapping; raw cursors, portals, requests, and carrier rows never escape.
+- **MySQL and MariaDB prepared CALL OUT/INOUT descriptors are unsupported.** Emitted heterogeneous `CALL` result sets are supported. Neither mysql2 3.x nor MariaDB Connector/Node.js exposes a proven public discriminator for prepared call OUT carriers, so SQLBraid does not guess a carrier row.
 - **PostgreSQL refcursor calls require an existing transaction.** A refcursor is a transaction-bound portal, not an independent ResultSet; SQLBraid does not create a hidden transaction.
 - **SQL Server cursor output is not an application cursor.** `CURSOR VARYING OUTPUT` is not exposed as a bindable client ResultSet; emitted `SELECT` rows remain ordinary result sets.
-- **SQLite routine calls are unsupported.** Scalar/aggregate/window functions and virtual-table extensions remain ordinary SQL. D1 additionally has no callback transaction or incremental cursor.
+- **SQLite `db.call()` / `routine.call` is unsupported.** This is an adapter API boundary, not a restriction on SQLite SQL. Scalar/aggregate/window functions and virtual-table extensions remain ordinary SQL. D1 additionally has no callback transaction or incremental cursor.
 - **DML-returning is materialized.** Use `sql.rows` with `db.execute`, `db.all`, `db.one`, or `db.maybeOne`. Do not infer that `RETURNING`/`OUTPUT` is streamable across drivers.
 - **`db.bulk()` is command-only.** It locks one DML shape, validates all inputs before I/O, uses one lease, and reports the actual mode. Root bulk has no portable atomicity or auto-chunking promise; use `db.tx()` for atomicity.
 - **Sessions and transactions are physical-scope APIs.** `db.session()` pins one provider lease; nested session/transaction work reuses it. Root escape and closed/sibling handles reject. Missing primitives use `BRAID_SESSION_UNSUPPORTED` or `BRAID_TX_UNSUPPORTED`.
