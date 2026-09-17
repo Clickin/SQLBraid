@@ -1039,6 +1039,7 @@ function executeOptions(
   options: OracleDatabaseOptions,
   driver: OracleDriverLike,
   resultSet = false,
+  transactionActive = false,
 ): OracleExecuteOptionsLike {
   const {
     fetchAsString: _fetchAsString,
@@ -1051,6 +1052,7 @@ function executeOptions(
   } = options.executeOptions ?? {};
   return {
     ...customOptions,
+    ...(transactionActive ? { autoCommit: false } : {}),
     outFormat: oracleOutFormatArray,
     fetchTypeHandler: fetchTypeHandler(driver),
     ...(resultSet ? { resultSet: true } : {}),
@@ -1412,12 +1414,13 @@ function makeOracledbExecutor(
   connection: OracleConnectionLike,
   options: Omit<OracleDatabaseOptions, "observers">,
   bindingAdapter: OracleStatementBindingAdapter,
+  fetchSize: number,
 ): QueryExecutor {
   const policy = options.typePolicy ?? defaultTypePolicy;
   const driver = options.driver ?? defaultDriver;
-  const fetchSize = streamFetchSize(options);
+  let transactionActive = false;
   const control = async (text: string): Promise<void> => {
-    await connection.execute(text, [], executeOptions(options, driver));
+    await connection.execute(text, [], executeOptions(options, driver, false, true));
   };
   const begin = async (transactionOptions?: TransactionOptions): Promise<void> => {
     validateOracleTransactionOptions(transactionOptions);
@@ -1426,6 +1429,7 @@ function makeOracledbExecutor(
     else if (isolation === "serializable") await control("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
     else if (transactionOptions?.readOnly === true) await control("SET TRANSACTION READ ONLY");
     else if (transactionOptions?.readOnly === false) await control("SET TRANSACTION READ WRITE");
+    transactionActive = true;
   };
   return {
     ownershipKey: connection,
@@ -1475,6 +1479,7 @@ function makeOracledbExecutor(
           () =>
             connection.executeMany!(binding.parameterizedSql!, materialized.binds, {
               ...customOptions,
+              ...(transactionActive ? { autoCommit: false } : {}),
               bindDefs: materialized.bindDefs,
               batchErrors: false,
               dmlRowCounts: false,
@@ -1501,7 +1506,7 @@ function makeOracledbExecutor(
             await connection.execute(
               execution.description.parameterizedSql!,
               execution.binds,
-              executeOptions(options, driver),
+              executeOptions(options, driver, false, transactionActive),
             ),
           );
           const returning = await normalizeDmlReturning(rendered, result, policy);
@@ -1551,7 +1556,7 @@ function makeOracledbExecutor(
               await connection.execute(
                 execution.description.parameterizedSql!,
                 execution.binds,
-                executeOptions(options, driver, true),
+                executeOptions(options, driver, true, transactionActive),
               ),
             );
             const implicit = Array.isArray(result.implicitResults) ? result.implicitResults : [];
@@ -1731,7 +1736,7 @@ function makeOracledbExecutor(
             connection.execute(
               execution.description.parameterizedSql!,
               execution.binds,
-              executeOptions(options, driver, true),
+              executeOptions(options, driver, true, transactionActive),
             ),
           executionOptions,
         ),
@@ -1856,8 +1861,14 @@ function makeOracledbExecutor(
       }
     },
     begin,
-    commit: connection.commit.bind(connection),
-    rollback: connection.rollback.bind(connection),
+    async commit() {
+      await connection.commit();
+      transactionActive = false;
+    },
+    async rollback() {
+      await connection.rollback();
+      transactionActive = false;
+    },
     savepoint: async (name) => {
       await control(`SAVEPOINT ${assertSavepointName(name)}`);
     },
@@ -1881,6 +1892,7 @@ export function createOracledbExecutor(
       ...options,
       stmtCacheSize: connection.stmtCacheSize,
     }),
+    streamFetchSize(options),
   );
 }
 
@@ -1896,6 +1908,7 @@ export function createOracledbPoolProvider(
   pool: OraclePoolLike,
   options: Omit<OracleDatabaseOptions, "observers"> = {},
 ): ConnectionProvider {
+  const fetchSize = streamFetchSize(options);
   const bindingAdapter = createBinding({
     ...options,
     stmtCacheSize: pool.stmtCacheSize,
@@ -1911,38 +1924,47 @@ export function createOracledbPoolProvider(
     validateTransactionOptions: validateOracleTransactionOptions,
     async acquire(): Promise<ConnectionLease> {
       const nativeConnection = await pool.getConnection();
-      assertPoolConnection(nativeConnection);
-      let cancellationRequested = false;
-      const nativeBreak = nativeConnection.break?.bind(nativeConnection);
-      const connection: OraclePoolConnectionLike = {
-        execute: nativeConnection.execute.bind(nativeConnection),
-        ...(nativeConnection.executeMany === undefined
-          ? {}
-          : { executeMany: nativeConnection.executeMany.bind(nativeConnection) }),
-        commit: nativeConnection.commit.bind(nativeConnection),
-        rollback: nativeConnection.rollback.bind(nativeConnection),
-        ...(nativeConnection.stmtCacheSize === undefined ? {} : { stmtCacheSize: nativeConnection.stmtCacheSize }),
-        ...(nativeBreak === undefined
-          ? {}
-          : {
-              break: async (): Promise<void> => {
-                cancellationRequested = true;
-                await nativeBreak();
-              },
-            }),
-        close: nativeConnection.close.bind(nativeConnection),
-      };
-      const executor = makeOracledbExecutor(connection, options, bindingAdapter);
-      let released = false;
-      return {
-        ...executor,
-        async release(releaseOptions = {}): Promise<void> {
-          if (released) return;
-          released = true;
-          if (releaseOptions.discard === true || cancellationRequested) await nativeConnection.close({ drop: true });
-          else await nativeConnection.close();
-        },
-      };
+      try {
+        assertPoolConnection(nativeConnection);
+        let cancellationRequested = false;
+        const nativeBreak = nativeConnection.break?.bind(nativeConnection);
+        const connection: OraclePoolConnectionLike = {
+          execute: nativeConnection.execute.bind(nativeConnection),
+          ...(nativeConnection.executeMany === undefined
+            ? {}
+            : { executeMany: nativeConnection.executeMany.bind(nativeConnection) }),
+          commit: nativeConnection.commit.bind(nativeConnection),
+          rollback: nativeConnection.rollback.bind(nativeConnection),
+          ...(nativeConnection.stmtCacheSize === undefined ? {} : { stmtCacheSize: nativeConnection.stmtCacheSize }),
+          ...(nativeBreak === undefined
+            ? {}
+            : {
+                break: async (): Promise<void> => {
+                  cancellationRequested = true;
+                  await nativeBreak();
+                },
+              }),
+          close: nativeConnection.close.bind(nativeConnection),
+        };
+        const executor = makeOracledbExecutor(connection, options, bindingAdapter, fetchSize);
+        let released = false;
+        return {
+          ...executor,
+          async release(releaseOptions = {}): Promise<void> {
+            if (released) return;
+            released = true;
+            if (releaseOptions.discard === true || cancellationRequested) await nativeConnection.close({ drop: true });
+            else await nativeConnection.close();
+          },
+        };
+      } catch (error) {
+        try {
+          await nativeConnection.close();
+        } catch (cleanupError) {
+          await throwWithCleanup(error, [cleanupError]);
+        }
+        throw error;
+      }
     },
   };
 }

@@ -43,6 +43,78 @@ test("Oracle binding diagnostics preserve literal marker text through real execu
   }
 });
 
+for (const mode of ["execute", "executeMany"] as const) {
+  test(`Oracle autoCommit true preserves ${mode} rollback across separate sessions and nested savepoints`, async () => {
+    const { connection } = await connect();
+    const table = mode === "execute" ? "BRAID_AUTOCOMMIT_ONE" : "BRAID_AUTOCOMMIT_MANY";
+    try {
+      const { connection: observer } = await connect();
+      try {
+        await drop(connection, `TABLE ${table} PURGE`);
+        await connection.execute(`CREATE TABLE ${table} (id NUMBER PRIMARY KEY)`);
+        const db = createOracledbDatabase(connection, { executeOptions: { autoCommit: true } });
+        const otherSession = createOracledbDatabase(observer);
+        const insert = (id: number) => sql.command`INSERT INTO ${sql.ident(table)} (id) VALUES (${id})`;
+        const storedIds = async () =>
+          (
+            await otherSession.all(sql.rows<{ readonly ID: string }>`SELECT id FROM ${sql.ident(table)} ORDER BY id`)
+          ).map(({ ID }) => ID);
+        const failure = new Error("rollback requested");
+
+        await db.execute(insert(1));
+        assert.deepEqual(await storedIds(), ["1"]);
+        await assert.rejects(
+          () =>
+            db.tx(async (tx) => {
+              if (mode === "execute") await tx.execute(insert(2));
+              else await tx.bulk([2, 3], insert);
+              throw failure;
+            }),
+          (error: unknown) => error === failure,
+        );
+        assert.deepEqual(await storedIds(), ["1"]);
+
+        await db.tx(async (tx) => {
+          await tx.execute(insert(4));
+          await assert.rejects(
+            () =>
+              tx.tx(async (nested) => {
+                if (mode === "execute") await nested.execute(insert(5));
+                else await nested.bulk([5, 6], insert);
+                throw failure;
+              }),
+            (error: unknown) => error === failure,
+          );
+          if (mode === "execute") await tx.execute(insert(7));
+          else await tx.bulk([7, 8], insert);
+        });
+        const committed = mode === "execute" ? ["1", "4", "7"] : ["1", "4", "7", "8"];
+        assert.deepEqual(await storedIds(), committed);
+
+        await db.session(async (session) => {
+          await session.execute(insert(9));
+          await assert.rejects(
+            () =>
+              session.tx(async (tx) => {
+                if (mode === "execute") await tx.execute(insert(10));
+                else await tx.bulk([10, 11], insert);
+                throw failure;
+              }),
+            (error: unknown) => error === failure,
+          );
+          await session.execute(insert(12));
+        });
+        assert.deepEqual(await storedIds(), [...committed, "9", "12"]);
+      } finally {
+        await observer.close();
+      }
+    } finally {
+      await drop(connection, `TABLE ${table} PURGE`).catch(() => undefined);
+      await connection.close();
+    }
+  });
+}
+
 test("Oracle direct Thin adapter handles typed values, observers, mapping lifetime, stream cleanup, and nested transactions", async () => {
   const { connection, settings } = await connect();
   const events: string[] = [];

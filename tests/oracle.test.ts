@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { UnsupportedFeatureError } from "@sqlbraid/core";
 import { oracleParameter, sql, typePolicy } from "@sqlbraid/oracle";
-import { createOracledbDatabase, createOracledbExecutor, oracledbStatementBinding } from "@sqlbraid/oracle/oracledb";
+import {
+  createOracledbDatabase,
+  createOracledbExecutor,
+  createOracledbPoolDatabase,
+  createOracledbPoolProvider,
+  oracledbStatementBinding,
+  type OracleExecuteOptionsLike,
+} from "@sqlbraid/oracle/oracledb";
 import { createOracleInspector } from "@sqlbraid/oracle/inspector";
 
 test("Oracle renders positional binds and doubled quoted identifiers", () => {
@@ -529,6 +536,220 @@ test("Oracle validates transaction options before control SQL", async () => {
   );
   assert.equal(executions, 0);
 });
+
+test("Oracle explicit transactions suppress autoCommit for execute and executeMany and restore root options", async () => {
+  const executions: { method: string; autoCommit: unknown; keepInStmtCache: unknown }[] = [];
+  let commits = 0;
+  let rollbacks = 0;
+  const connection = {
+    async execute(_text: string, _binds: readonly unknown[], options: OracleExecuteOptionsLike) {
+      executions.push({ method: "execute", autoCommit: options.autoCommit, keepInStmtCache: options.keepInStmtCache });
+      return { rowsAffected: 1 };
+    },
+    async executeMany(_text: string, binds: readonly unknown[], options: OracleExecuteOptionsLike) {
+      executions.push({
+        method: "executeMany",
+        autoCommit: options.autoCommit,
+        keepInStmtCache: options.keepInStmtCache,
+      });
+      return { rowsAffected: binds.length };
+    },
+    async commit() {
+      commits += 1;
+    },
+    async rollback() {
+      rollbacks += 1;
+    },
+  };
+  const executeOptions = Object.freeze({ autoCommit: true, keepInStmtCache: false });
+  const db = createOracledbDatabase(connection, { executeOptions });
+  const insert = (id: number) => sql.command`INSERT INTO audit_test (id) VALUES (${id})`;
+  const rollback = new Error("rollback requested");
+
+  await db.execute(insert(1));
+  await db.bulk([2, 3], insert);
+  await assert.rejects(
+    () =>
+      db.tx(async (tx) => {
+        await tx.execute(insert(4));
+        await tx.bulk([5, 6], insert);
+        throw rollback;
+      }),
+    (error: unknown) => error === rollback,
+  );
+  await db.execute(insert(7));
+  await db.bulk([8, 9], insert);
+  await db.tx(async (tx) => {
+    await tx.execute(insert(10));
+    await tx.bulk([11, 12], insert);
+  });
+  await db.execute(insert(13));
+  await db.bulk([14, 15], insert);
+
+  assert.equal(commits, 1);
+  assert.equal(rollbacks, 1);
+  assert.deepEqual(
+    executions,
+    [true, false, true, false, true].flatMap((autoCommit) => [
+      { method: "execute", autoCommit, keepInStmtCache: false },
+      { method: "executeMany", autoCommit, keepInStmtCache: false },
+    ]),
+  );
+  assert.equal(executeOptions.autoCommit, true);
+});
+
+test("Oracle session transactions retain commit ownership through nested savepoints", async () => {
+  const executions: { text: string; autoCommit: unknown }[] = [];
+  let acquired = 0;
+  let closed = 0;
+  let commits = 0;
+  let rollbacks = 0;
+  const db = createOracledbPoolDatabase(
+    {
+      async getConnection() {
+        acquired += 1;
+        return {
+          async execute(text: string, _binds: readonly unknown[], options: OracleExecuteOptionsLike) {
+            executions.push({ text, autoCommit: options.autoCommit });
+            return { rowsAffected: 1 };
+          },
+          async executeMany(text: string, binds: readonly unknown[], options: OracleExecuteOptionsLike) {
+            executions.push({ text, autoCommit: options.autoCommit });
+            return { rowsAffected: binds.length };
+          },
+          async commit() {
+            commits += 1;
+          },
+          async rollback() {
+            rollbacks += 1;
+          },
+          async close() {
+            closed += 1;
+          },
+        };
+      },
+    },
+    { executeOptions: { autoCommit: true } },
+  );
+  const insert = (id: number) => sql.command`INSERT INTO audit_test (id) VALUES (${id})`;
+  const nestedFailure = new Error("rollback nested");
+  await db.session(async (session) => {
+    await session.execute(insert(1));
+    await session.tx({ readOnly: false }, async (tx) => {
+      await tx.execute(insert(2));
+      await assert.rejects(
+        () =>
+          tx.tx(async (nested) => {
+            await nested.bulk([3, 4], insert);
+            throw nestedFailure;
+          }),
+        (error: unknown) => error === nestedFailure,
+      );
+      await tx.execute(insert(5));
+    });
+    await session.execute(insert(6));
+    await assert.rejects(
+      () =>
+        session.tx(async (tx) => {
+          await tx.execute(insert(7));
+          await tx.bulk([8, 9], insert);
+          throw nestedFailure;
+        }),
+      (error: unknown) => error === nestedFailure,
+    );
+    await session.execute(insert(10));
+  });
+  assert.equal(acquired, 1);
+  assert.equal(closed, 1);
+  assert.equal(commits, 1);
+  assert.equal(rollbacks, 1);
+  assert.deepEqual(
+    executions.map(({ autoCommit }) => autoCommit),
+    [true, false, false, false, false, false, false, true, false, false, true],
+  );
+  assert.equal(executions[1]?.text, "SET TRANSACTION READ WRITE");
+  const savepoint = executions[3]?.text;
+  assert.match(savepoint ?? "", /^SAVEPOINT [A-Za-z_][A-Za-z0-9_]*$/u);
+  assert.equal(executions[5]?.text, `ROLLBACK TO ${savepoint}`);
+});
+
+test("Oracle pool validates streamFetchSize before checkout", async () => {
+  let acquired = 0;
+  let closed = 0;
+  const pool = {
+    async getConnection() {
+      acquired += 1;
+      return {
+        async execute() {
+          return { rowsAffected: 0 };
+        },
+        async commit() {},
+        async rollback() {},
+        async close() {
+          closed += 1;
+        },
+      };
+    },
+  };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await assert.rejects(async () => createOracledbPoolProvider(pool, { streamFetchSize: 0 }).acquire(), RangeError);
+  }
+  assert.equal(acquired, 0);
+  assert.equal(closed, 0);
+});
+
+for (const cleanupFails of [false, true]) {
+  test(`Oracle pool closes failed post-checkout wrappers once${cleanupFails ? " and preserves cleanup errors" : ""}`, async () => {
+    const initError = new Error("native cancellation accessor failed");
+    const cleanupError = new Error("native close failed");
+    const failures: unknown[] = [];
+    let acquired = 0;
+    let closeAttempts = 0;
+    let closed = 0;
+    const provider = createOracledbPoolProvider({
+      async getConnection() {
+        acquired += 1;
+        return {
+          async execute() {
+            return { rowsAffected: 0 };
+          },
+          async commit() {},
+          async rollback() {},
+          get break(): () => Promise<void> {
+            throw initError;
+          },
+          async close() {
+            closeAttempts += 1;
+            if (cleanupFails) throw cleanupError;
+            closed += 1;
+          },
+        };
+      },
+    });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await assert.rejects(
+        () => provider.acquire(),
+        (error: unknown) => {
+          failures.push(error);
+          return true;
+        },
+      );
+    }
+    assert.equal(acquired, 3);
+    assert.equal(closeAttempts, acquired);
+    assert.equal(closed, cleanupFails ? 0 : acquired);
+    for (const error of failures) {
+      if (!cleanupFails) {
+        assert.equal(error, initError);
+      } else {
+        assert.ok(error instanceof AggregateError);
+        assert.equal(error.cause, initError);
+        assert.deepEqual(error.errors, [initError, cleanupError]);
+        assert.equal("code" in error && error.code, "BRAID_RESOURCE_CLEANUP");
+      }
+    }
+  });
+}
 
 test("Oracle rejects isolation/readOnly combinations before control SQL", async () => {
   let executions = 0;
