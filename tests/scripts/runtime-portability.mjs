@@ -16,7 +16,7 @@ if (!targets.length || targets.some((target) => !["node", "bun", "deno"].include
 const revision = (await execFile("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
 if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== revision)
   throw new Error("Runtime evidence must describe the checked-out CI SHA.");
-const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+const workspace = JSON.parse(await readFile(join(root, "tests", "package.json"), "utf8"));
 const runtimeCompatibility = await validateRuntimeCompatibility({ root });
 const postgresTarget = JSON.parse(await readFile(join(root, "support/targets/postgres.json"), "utf8"));
 const mysqlTarget = JSON.parse(await readFile(join(root, "support/targets/mysql.json"), "utf8"));

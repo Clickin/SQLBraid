@@ -385,8 +385,8 @@ try {
       type: "module",
       dependencies: {
         ...runtimeDependencies,
-        pg: workspace.devDependencies.pg,
-        mysql2: workspace.devDependencies.mysql2,
+        pg: testsWorkspace.devDependencies.pg,
+        mysql2: testsWorkspace.devDependencies.mysql2,
       },
     }),
   );
