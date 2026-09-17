@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  type StandardSchemaV1,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
 import { createMysql2Executor, type Mysql2ConnectionLike, type Mysql2FieldPayload } from "@sqlbraid/mysql/mysql2";
 import { sql as mysql } from "@sqlbraid/mysql";
-import { createPgExecutor, type PgClientLike, type PgResultLike } from "@sqlbraid/postgres/pg";
+import { createPgDatabase, createPgExecutor, createPgPoolDatabase, type PgClientLike, type PgResultLike } from "@sqlbraid/postgres/pg";
 import { sql as postgres } from "@sqlbraid/postgres";
 
 const canonicalCapabilities = [
@@ -55,6 +56,10 @@ function mysqlQueryMock(
 
 function result(): { readonly rows: readonly unknown[]; readonly fields: readonly [] } {
   return { rows: [], fields: [] };
+}
+
+function returnSchema(): StandardSchemaV1<unknown, unknown> {
+  return { "~standard": { version: 1, vendor: "rc-pg-mysql", validate: (value) => ({ value }) } };
 }
 
 function errorCode(error: unknown): unknown {
@@ -182,4 +187,40 @@ test("Routine output limitations are explicit and happen before driver I/O", asy
   );
   assert.equal(pgCalls, 0);
   assert.equal(mysqlCalls, 0);
+});
+
+test("Routine return schemas reject before direct execution", async () => {
+  let calls = 0;
+  const db = createPgDatabase(pgMock(async () => {
+    calls += 1;
+    return result();
+  }));
+  await assert.rejects(
+    () => db.call(postgres.call({ returnValue: returnSchema() })`CALL routine()`),
+    (error: unknown) => error instanceof UnsupportedFeatureError
+      && error.feature === "routine.return-value"
+      && error.code === "BRAID_CALL_RETURN_UNSUPPORTED",
+  );
+  assert.equal(calls, 0);
+});
+
+test("Routine return schemas reject before pooled acquisition, including prepared calls", async () => {
+  let acquisitions = 0;
+  const db = createPgPoolDatabase({
+    async connect() {
+      acquisitions += 1;
+      return {
+        ...pgMock(async () => result()),
+        release() {},
+      };
+    },
+  });
+  const query = postgres.call({ returnValue: returnSchema() })`CALL routine()`;
+  const prepared = db.prepare("return-value", () => query, { input: "none" });
+  const matches = (error: unknown) => error instanceof UnsupportedFeatureError
+    && error.feature === "routine.return-value"
+    && error.code === "BRAID_CALL_RETURN_UNSUPPORTED";
+  await assert.rejects(() => db.call(query), matches);
+  await assert.rejects(() => prepared.call(), matches);
+  assert.equal(acquisitions, 0);
 });

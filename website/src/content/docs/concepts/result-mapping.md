@@ -50,8 +50,10 @@ output schema to the scalar object, each tuple schema to rows in its matching
 result set, and the return schema to the actual return/status value. When a
 `returnValue` schema is declared, successful `db.call()` results have a required
 `returnValue` property with that schema's output type; a missing driver channel
-fails with `BRAID_CALL_RETURN_UNSUPPORTED`. Bare and no-return-schema contracts
-keep the property optional. Cursor
+fails with `BRAID_CALL_RETURN_UNSUPPORTED`. When the selected target explicitly
+marks `routine.return-value` unsupported, the same error is rejected before
+lease acquisition. Bare and no-return-schema contracts keep the property
+optional. Cursor
 outputs are removed from scalar `output`; adapters consume and close their
 resources before asynchronous mapping begins. A result-set count mismatch is
 `BRAID_CALL_RESULT_SETS`, and a failed routine location is reported by

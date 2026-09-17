@@ -1842,6 +1842,19 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       } catch (error) {
         await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
       }
+      try {
+        if (query.routineContract?.returnValue !== undefined) {
+          assertFeatureCapability(
+            executor,
+            "routine.return-value",
+            "BRAID_CALL_RETURN_UNSUPPORTED",
+            "The selected execution resource does not expose a routine return/status channel.",
+            options.capabilities,
+          );
+        }
+      } catch (error) {
+        await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
+      }
       let use: Use;
       try {
         use = await leaseForUse(false, statementBinding, executionOptions);
