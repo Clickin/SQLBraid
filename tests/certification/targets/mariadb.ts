@@ -45,7 +45,7 @@ export const mariadbExpectedCapabilities: ExpectedCapabilityContract = {
   "routine.out": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
   "routine.inout": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
   "routine.result-sets": { status: "guaranteed" },
-  "routine.out-cursor": { status: "unsupported", unsupportedCode: "BRAID_CALL_CURSOR_UNSUPPORTED" },
+  "routine.out-cursor": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
   "routine.return-value": { status: "unsupported", unsupportedCode: "BRAID_CALL_RETURN_UNSUPPORTED" },
 };
 
@@ -256,7 +256,7 @@ async function createFixture(): Promise<CertificationFixture> {
         feature: "routine.inout", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => db.call(queries.routines!.inout!), sideEffects: () => 0,
       },
       CALL005: {
-        feature: "routine.out-cursor", expectedErrorFeature: "routine.out-cursor", expectedCode: "BRAID_CALL_CURSOR_UNSUPPORTED", run: () => db.tx((tx) => tx.call(queries.routines!.cursor!)), sideEffects: () => 0,
+        feature: "routine.out-cursor", expectedErrorFeature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => db.tx((tx) => tx.call(queries.routines!.cursor!)), sideEffects: () => 0,
       },
       CALL006: {
         feature: "routine.return-value", expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED", run: () => db.call(queries.routines!.returnValue!), sideEffects: () => 0,

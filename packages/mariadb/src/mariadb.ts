@@ -326,13 +326,19 @@ function plainRow(value: unknown, fields: readonly MariaDbFieldLike[], policy: T
     throw new Error("BRAID_RESULT_COLUMNS: MariaDB Connector must return result rows.");
   }
   const row: Record<string, unknown> = {};
-  const entries: readonly (readonly [string | undefined, unknown])[] = Array.isArray(value)
-    ? fields.map((field, index) => [
-      typeof field.name === "function" ? field.name() : field.name,
-      value[index],
-    ] as const)
-    : Object.entries(value);
-  for (const [key, entry] of entries) {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < fields.length; index += 1) {
+      const field = fields[index];
+      const key = typeof field.name === "function" ? field.name() : field.name;
+      if (key === undefined) continue;
+      const entry = value[index];
+      const type = databaseType(field);
+      assertMariaDbNumericValue(type, entry);
+      defineResultProperty(row, key, type === undefined ? entry : policy.decode(type, entry));
+    }
+    return row;
+  }
+  for (const [key, entry] of Object.entries(value)) {
     if (key === undefined) continue;
     const field = fields.find((candidate) => (typeof candidate.name === "function" ? candidate.name() : candidate.name) === key);
     const type = databaseType(field);
@@ -390,21 +396,6 @@ function assertRoutineOutputsUnsupported(rendered: RenderedStatement): void {
   const output = rendered.parameters.find((parameter) => parameter.direction !== undefined && parameter.direction !== "in");
   const direction = output?.direction;
   if (direction === undefined) return;
-  const hint = output?.hint?.databaseType.trim().toLowerCase();
-  if (hint === "refcursor") {
-    throw new UnsupportedFeatureError(
-      "routine.out-cursor",
-      "BRAID_CALL_CURSOR_UNSUPPORTED",
-      "MariaDB Connector/Node.js does not expose a public OUT cursor carrier.",
-    );
-  }
-  if (hint === "return-value") {
-    throw new UnsupportedFeatureError(
-      "routine.return-value",
-      "BRAID_CALL_RETURN_UNSUPPORTED",
-      "MariaDB Connector/Node.js does not expose a public routine return-value carrier.",
-    );
-  }
   throw new UnsupportedFeatureError(
     direction === "inout" ? "routine.inout" : "routine.out",
     "BRAID_CALL_OUT_UNSUPPORTED",
