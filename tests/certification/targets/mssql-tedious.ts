@@ -98,7 +98,13 @@ function trackedConnection(raw: Connection, stats: Stats): TediousPoolConnection
       stats.streamCleanupFailure = undefined;
       if (failure) throw failure;
     },
-    destroy() { stats.leased = false; stats.closed = true; if (stats.releaseCount === 0) stats.releaseCount += 1; return physical.close?.(); },
+    async destroy() {
+      stats.leased = false;
+      stats.closed = true;
+      if (stats.releaseCount === 0) stats.releaseCount += 1;
+      await physical.close?.();
+      if (stats.releaseFailure) throw stats.releaseFailure;
+    },
   };
 }
 

@@ -240,6 +240,10 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       let executeStarts = 0;
       let routineLobCloses = 0;
       const instrumentedConnections = new WeakSet<object>();
+      const nativePoolMethods = new WeakMap<object, {
+        readonly rollback: () => Promise<void>;
+        readonly close?: (options?: { readonly drop?: boolean }) => Promise<void>;
+      }>();
       const instrumentStreamConnection = (candidate: OracleConnectionLike, countSideEffects: boolean): void => {
         if (instrumentedConnections.has(candidate)) return;
         instrumentedConnections.add(candidate);
@@ -319,31 +323,37 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       poolWithFaults.getConnection = async (): Promise<OracleConnectionLike> => {
         const leased = await nativeGetConnection();
         instrumentStreamConnection(leased, false);
-        const rollback = leased.rollback?.bind(leased);
-        const close = leased.close?.bind(leased);
+        let nativeMethods = nativePoolMethods.get(leased);
+        if (nativeMethods === undefined) {
+          nativeMethods = {
+            rollback: leased.rollback.bind(leased),
+            close: leased.close?.bind(leased),
+          };
+          nativePoolMethods.set(leased, nativeMethods);
+        }
         forceFaultConnectionCleanup = async () => {
           try {
-            await rollback?.();
+            await nativeMethods!.rollback();
           } catch {
             // The fault path intentionally rejects rollback; close still releases the lease.
           }
           try {
-            await close?.();
+            await nativeMethods!.close?.();
           } catch {
             // The fault path may reject release after native close has completed.
           }
         };
         leased.rollback = async () => {
           if (rollbackFailure) throw rollbackFailure;
-          await rollback?.();
+          await nativeMethods!.rollback();
         };
         leased.close = async (closeOptions) => {
           streamCounters.released += 1;
           if (releaseFailure) {
-            await close?.(closeOptions);
+            await nativeMethods!.close?.(closeOptions);
             throw releaseFailure;
           }
-          await close?.(closeOptions);
+          await nativeMethods!.close?.(closeOptions);
         };
         return leased;
       };
