@@ -5,6 +5,7 @@ import { createPgPoolProvider } from "@sqlbraid/postgres/pg";
 import { createMysql2PoolProvider } from "@sqlbraid/mysql/mysql2";
 import { createMariaDbPoolProvider } from "@sqlbraid/mariadb/mariadb";
 import { createTediousPoolProvider } from "@sqlbraid/mssql/tedious";
+import { createBunSqlProvider, type BunSqlClient, type BunSqlReservedClient } from "@sqlbraid/bun-sql";
 
 const providers: readonly {
   name: string;
@@ -98,10 +99,32 @@ const providers: readonly {
       );
     },
   },
+  ...(["postgres", "mysql", "mariadb"] as const).map((dialect) => ({
+    name: `bun-sql-${dialect}`,
+    create(checkout: () => void, release: () => Promise<void>, setup: () => void) {
+      const client = (() => Promise.resolve([])) as unknown as BunSqlClient;
+      client.unsafe = async <T>() => [] as T;
+      client.reserve = async () => {
+        checkout();
+        const reserved = (() => Promise.resolve([])) as unknown as BunSqlReservedClient;
+        Object.defineProperty(reserved, "unsafe", {
+          get() {
+            setup();
+            return async () => [];
+          },
+        });
+        reserved.release = release;
+        return reserved;
+      };
+      return createBunSqlProvider(client, { dialect });
+    },
+  })),
 ];
 
 for (const fixture of providers) {
-  test(`${fixture.name} releases every failed initialization and preserves its original error`, async () => {
+  const id = ({ PostgreSQL: "pg", Tedious: "tedious", MariaDB: "mariadb" } as Record<string, string>)[fixture.name] ?? fixture.name;
+  const nativeInit = id.startsWith("bun-sql-") ? ` [contract:${id}:resource.init-failure:boundary]` : "";
+  test(`[contract:${id}:pool.checkout-init-failure:boundary]${nativeInit} [ownership:pooled] ${fixture.name} releases every failed initialization and preserves its original error`, async () => {
     const primary = new Error("executor setup failed");
     let acquired = 0;
     let released = 0;
@@ -123,7 +146,7 @@ for (const fixture of providers) {
     assert.equal(released, acquired);
   });
 
-  test(`${fixture.name} preserves initialization and cleanup errors without retrying cleanup`, async () => {
+  test(`[contract:${id}:pool.checkout-init-failure:boundary] [ownership:pooled] ${fixture.name} preserves initialization and cleanup errors without retrying cleanup`, async () => {
     const primary = new Error("executor setup failed");
     const cleanup = new Error("physical release failed");
     let acquired = 0;

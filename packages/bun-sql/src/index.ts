@@ -27,7 +27,7 @@ import {
   type TransactionIsolation,
   type TransactionOptions,
 } from "@sqlbraid/core";
-import { assertSavepointName } from "@sqlbraid/core/driver";
+import { assertSavepointName, createCleanupScope } from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { representationProfileFor } from "./type-policy.js";
 
@@ -823,7 +823,22 @@ function createProvider(client: BunSqlClient, dialect: BunSqlDialect): Connectio
     environment,
     acquire: async (): Promise<ConnectionLease> => {
       const reserved = await client.reserve!();
-      const executor = createExecutor(reserved, dialect, statementBinding);
+      let executor: QueryExecutor;
+      try {
+        if (
+          typeof reserved !== "function" ||
+          typeof reserved.unsafe !== "function" ||
+          typeof reserved.release !== "function"
+        ) {
+          throw new TypeError("Bun.SQL reserve() must return a callable client with unsafe() and release().");
+        }
+        executor = createExecutor(reserved, dialect, statementBinding);
+      } catch (error) {
+        const cleanup = createCleanupScope();
+        cleanup.add(() => reserved.release());
+        await cleanup.run(error);
+        throw error;
+      }
       let released = false;
       let terminalFailure: UnsupportedFeatureError | undefined;
       return Object.freeze({
