@@ -166,6 +166,9 @@ export function createD1Target(
         },
       };
       const db = createD1Database(binding);
+      // D1 intentionally denies sqlite_version(); edition comes from the explicit
+      // Cloudflare D1 driver identity while the database version remains unknown.
+      const measuredDatabase = { product: "sqlite", edition: "Cloudflare D1 managed SQLite" } as const;
       await db.execute(sql.command`CREATE TABLE IF NOT EXISTS cert_values (value TEXT NOT NULL)`);
       await db.execute(
         sql.command`CREATE TABLE IF NOT EXISTS cert_sentinel (id INTEGER PRIMARY KEY, marker TEXT NOT NULL)`,
@@ -409,6 +412,7 @@ export function createD1Target(
       };
       return {
         db,
+        measuredDatabase,
         queries,
         bulk,
         metrics,

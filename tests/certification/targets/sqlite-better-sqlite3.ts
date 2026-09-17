@@ -24,6 +24,11 @@ function createFixture(): Promise<CertificationFixture> {
   native.exec("INSERT INTO cert_sentinel (id, marker) VALUES (1, 'untouched')");
   native.exec("CREATE TEMP TABLE cert_identity (id TEXT NOT NULL)");
   native.exec("INSERT INTO temp.cert_identity (id) VALUES ('better-sqlite3-native-memory')");
+  const versionRow = native.prepare("SELECT sqlite_version() AS version").all()[0] as {
+    readonly version?: unknown;
+  };
+  const version = String(versionRow?.version ?? "");
+  if (!/^\d+(?:\.\d+)+$/u.test(version)) throw new Error(`Unable to parse better-sqlite3 SQLite version: ${version}`);
   const stats: SqliteStats = {
     ready: 0,
     result: 0,
@@ -146,7 +151,10 @@ function createFixture(): Promise<CertificationFixture> {
     stats,
     transactionCleanup,
   };
-  return Promise.resolve(createSqliteFixture(options));
+  return Promise.resolve({
+    ...createSqliteFixture(options),
+    measuredDatabase: { product: "sqlite", version, edition: "better-sqlite3 bundled SQLite" },
+  });
 }
 
 export const betterSqlite3CertificationTarget = {

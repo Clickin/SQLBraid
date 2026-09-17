@@ -48,6 +48,23 @@ function connectionOptions(connectionUri: string): Record<string, unknown> {
   };
 }
 
+async function measureMysqlDatabase(
+  connection: MysqlConnection,
+): Promise<NonNullable<CertificationFixture["measuredDatabase"]>> {
+  const response = await connection.query("SELECT VERSION() AS version, @@version_comment AS comment");
+  const rows = Array.isArray(response) ? response[0] : undefined;
+  const row = Array.isArray(rows) ? rows[0] : undefined;
+  if (row === undefined || typeof row !== "object" || row === null)
+    throw new Error("MySQL version probe did not return a row.");
+  const versionText = String((row as { readonly version?: unknown }).version ?? "");
+  const comment = String((row as { readonly comment?: unknown }).comment ?? "");
+  const version = /^(\d+(?:\.\d+)+)(?:-|$)/u.exec(versionText)?.[1];
+  if (version === undefined) throw new Error(`Unable to parse MySQL version: ${versionText}`);
+  if (!/\bMySQL\b/iu.test(comment) || !/\bCommunity\b/iu.test(comment))
+    throw new Error(`MySQL version comment does not identify the community server: ${comment}`);
+  return { product: "mysql", version, edition: "community" };
+}
+
 function q<Row = unknown>(query: RowQuery<Row>): RowQuery<Row> {
   return query;
 }
@@ -267,6 +284,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       nativePreparedExecutes.value += 1;
     },
   ) as MysqlConnection;
+  const measuredDatabase = await measureMysqlDatabase(direct);
   const physicalIds = new Set<string>();
   let streamReleases = 0;
   const streamReturns = { value: 0 };
@@ -706,6 +724,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   };
   const fixture: CertificationFixture = {
     db: directDb,
+    measuredDatabase,
     pooled: db,
     queries: definitions,
     stream: streamFixture,

@@ -166,6 +166,34 @@ async function executeSetup(connection: TediousConnectionLike): Promise<void> {
   );
 }
 
+async function measureMssqlDatabase(
+  connection: TediousConnectionLike,
+): Promise<NonNullable<CertificationFixture["measuredDatabase"]>> {
+  const probe = createTediousDatabase(connection);
+  const row = await probe.one<{
+    readonly ProductVersion?: unknown;
+    readonly ProductUpdateLevel?: unknown;
+    readonly Edition?: unknown;
+  }>(
+    sql.rows`SELECT
+      CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS ProductVersion,
+      CAST(SERVERPROPERTY('ProductUpdateLevel') AS nvarchar(128)) AS ProductUpdateLevel,
+      CAST(SERVERPROPERTY('Edition') AS nvarchar(128)) AS Edition`,
+  );
+  const productVersion = String(row.ProductVersion ?? "");
+  const updateLevel = String(row.ProductUpdateLevel ?? "");
+  const editionText = String(row.Edition ?? "");
+  const major = /^(\d+)\./u.exec(productVersion)?.[1];
+  const year = major === "16" ? "2022" : undefined;
+  const update = /^CU\d+$/iu.exec(updateLevel)?.[0]?.toUpperCase();
+  const edition = /\bDeveloper\b/iu.test(editionText) ? "Developer" : undefined;
+  if (year === undefined || update === undefined || edition === undefined)
+    throw new Error(
+      `Unable to normalize MSSQL server metadata: ProductVersion=${productVersion}, ProductUpdateLevel=${updateLevel}, Edition=${editionText}`,
+    );
+  return { product: "mssql", version: `${year}-${update}`, edition };
+}
+
 function queries(): CertificationFixture["queries"] {
   const specialValues: Record<string, unknown> = {
     RES001: expectedRow("__proto__", "proto"),
@@ -315,6 +343,7 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
         closed: false,
       };
       const tracked = trackedConnection(raw, stats);
+      const measuredDatabase = await measureMssqlDatabase(raw as unknown as TediousConnectionLike);
       await executeSetup(raw as unknown as TediousConnectionLike);
       stats.requests = 0;
       const pool: TediousPoolLike = {
@@ -585,6 +614,7 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
       };
       return {
         db: database,
+        measuredDatabase,
         queries: fixtureQueries,
         stream: {
           ...stream,

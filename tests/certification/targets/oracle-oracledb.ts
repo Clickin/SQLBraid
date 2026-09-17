@@ -27,6 +27,29 @@ async function exec(connection: OracleConnectionLike, statement: string): Promis
   await connection.execute(statement, []);
 }
 
+async function measureOracleDatabase(
+  connection: OracleConnectionLike,
+): Promise<NonNullable<CertificationFixture["measuredDatabase"]>> {
+  const result = (await connection.execute(
+    "SELECT banner_full AS BANNER_FULL FROM v$version WHERE banner LIKE 'Oracle Database%'",
+    [],
+    { outFormat: oracledb.OUT_FORMAT_OBJECT },
+  )) as OracleExecuteResultLike;
+  const row = result.rows?.[0];
+  if (row === undefined || typeof row !== "object" || row === null)
+    throw new Error("Oracle version probe did not return a row.");
+  const banner = String(
+    (row as { readonly BANNER_FULL?: unknown; readonly banner_full?: unknown }).BANNER_FULL ??
+      (row as { readonly banner_full?: unknown }).banner_full ??
+      "",
+  );
+  const release = /\bRelease\s+(\d+)\.(\d+)\.\d+(?:\.\d+){0,2}\b/u.exec(banner);
+  const edition = /^Oracle Database\s+\d+\w*\s+(.+?)\s+Release\s+/u.exec(banner)?.[1]?.trim();
+  if (release === null || edition === undefined)
+    throw new Error(`Unable to parse Oracle version/edition banner: ${banner}`);
+  return { product: "oracle", version: `${release[1]}.${release[2]}`, edition };
+}
+
 async function ensureSchema(connection: OracleConnectionLike): Promise<void> {
   await exec(
     connection,
@@ -311,6 +334,7 @@ export async function createOracleOracledbTarget(
         password: options.password,
         connectString: options.connectionUri,
       })) as unknown as OracleConnectionLike;
+      const measuredDatabase = await measureOracleDatabase(connection);
       await ensureSchema(connection);
       const faults: StreamFaults = {
         initFailure: new Error("oracle-cert-init-failure"),
@@ -725,6 +749,7 @@ export async function createOracleOracledbTarget(
       };
       return {
         db: direct,
+        measuredDatabase,
         pooled,
         queries: makeQueries(),
         stream: streamFixture(pooled, faults, streamCounters, async () => {

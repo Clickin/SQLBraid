@@ -792,7 +792,12 @@ export const CERTIFICATION_TARGET_TUPLES: Readonly<Record<string, CertificationT
     runtime: { id: "deno", version: "2.9.3" },
   },
   "better-sqlite3-node-22-18-0": {
-    database: { product: "sqlite", edition: "better-sqlite3 bundled SQLite", versionStatus: "unknown" },
+    database: {
+      product: "sqlite",
+      version: "3.53.4",
+      edition: "better-sqlite3 bundled SQLite",
+      versionStatus: "measured",
+    },
     driver: {
       id: "better-sqlite3",
       package: "@sqlbraid/sqlite/better-sqlite3",
@@ -802,7 +807,7 @@ export const CERTIFICATION_TARGET_TUPLES: Readonly<Record<string, CertificationT
     runtime: { id: "node", version: "22.18.0" },
   },
   "libsql-local-node-22-18-0": {
-    database: { product: "sqlite", edition: "libSQL local SQLite", versionStatus: "unknown" },
+    database: { product: "sqlite", version: "3.45.1", edition: "libSQL local SQLite", versionStatus: "measured" },
     driver: { id: "libsql", package: "@sqlbraid/sqlite/libsql", version: "0.18.0", profile: "libsql-exact-string" },
     runtime: { id: "node", version: "22.18.0" },
   },

@@ -52,6 +52,23 @@ function connectorOptions(overrides: Partial<MariaDbPoolConfig> = {}): MariaDbPo
   };
 }
 
+async function measureMariaDbDatabase(
+  connection: MariaDbConnectionLike,
+): Promise<NonNullable<CertificationFixture["measuredDatabase"]>> {
+  if (!connection.query) throw new Error("MariaDB version probe requires native query support.");
+  const response = await connection.query("SELECT VERSION() AS version, @@version_comment AS comment");
+  const row = Array.isArray(response) ? response[0] : undefined;
+  if (row === undefined || typeof row !== "object" || row === null)
+    throw new Error("MariaDB version probe did not return a row.");
+  const versionText = String((row as { readonly version?: unknown }).version ?? "");
+  const comment = String((row as { readonly comment?: unknown }).comment ?? "");
+  const version = /^(\d+(?:\.\d+)+)-MariaDB(?:-|$)/iu.exec(versionText)?.[1];
+  if (version === undefined) throw new Error(`Unable to parse MariaDB version: ${versionText}`);
+  if (!/\b(?:mariadb\.org binary distribution|community)\b/iu.test(comment))
+    throw new Error(`MariaDB version comment does not identify the community distribution: ${comment}`);
+  return { product: "mariadb", version, edition: "community" };
+}
+
 function rowQueries(): CertificationFixture["queries"] {
   const largeInteger = "9007199254740993";
   const exactDecimal = "12345678901234567890.123456789";
@@ -317,6 +334,7 @@ async function createFixture(): Promise<CertificationFixture> {
     () => undefined,
   );
   assert.ok(connection.query, "MariaDB certification requires native query support.");
+  const measuredDatabase = await measureMariaDbDatabase(connection);
   const nativeQuery = connection.query.bind(connection);
   const physicalIds = new Set<string>();
   const trackedPool = {
@@ -561,6 +579,7 @@ async function createFixture(): Promise<CertificationFixture> {
   };
   const fixture: CertificationFixture = {
     db,
+    measuredDatabase,
     pooled,
     queries,
     stream,

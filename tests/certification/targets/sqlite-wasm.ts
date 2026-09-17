@@ -252,6 +252,8 @@ export function createSqliteWasmTarget(
       observed.exec("INSERT INTO cert_sentinel (id, marker) VALUES (1, 'untouched')");
       observed.exec("CREATE TEMP TABLE cert_identity (id TEXT NOT NULL)");
       observed.exec("INSERT INTO temp.cert_identity (id) VALUES ('sqlite-wasm-browser')");
+      const version = sqlite3.version.libVersion;
+      if (!/^\d+(?:\.\d+)+$/u.test(version)) throw new Error(`Unable to parse SQLite WASM version: ${version}`);
       const db = createSqliteWasmDatabase(observed, { sqlite3 });
       const queries = buildQueries(stats);
       const transactionCleanup = async (): Promise<void> => {
@@ -604,6 +606,7 @@ export function createSqliteWasmTarget(
       };
       return {
         db,
+        measuredDatabase: { product: "sqlite", version, edition: "official SQLite WASM OO1" },
         queries,
         stream: streamFixture,
         bulk,

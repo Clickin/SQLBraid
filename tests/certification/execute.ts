@@ -3,6 +3,7 @@ import { isWellKnownCapabilityId, type EnvironmentCapability } from "@sqlbraid/c
 import { CERTIFICATION_TARGET_TUPLES } from "./contracts.js";
 import {
   isSourceSha,
+  measuredTupleMatchesExpected,
   REQUIRED_API_CAPABILITY_IDS,
   REQUIRED_CASE_IDS,
   type CertificationArtifact,
@@ -83,10 +84,11 @@ export async function certifyTarget(
   try {
     const environment = await fixture.db.environment();
     const expected = declaredContract(target.expectedCapabilities);
+    const measuredDatabase = fixture.measuredDatabase ?? environment.database;
     const measured: CertificationMeasuredTuple = {
       database: {
-        ...environment.database,
-        versionStatus: environment.database.version === undefined ? "unknown" : "measured",
+        ...measuredDatabase,
+        versionStatus: measuredDatabase.version === undefined ? "unknown" : "measured",
       },
       driver:
         target.measuredDriverVersion === undefined
@@ -99,9 +101,9 @@ export async function certifyTarget(
     };
     const pinned = pinnedTuple ?? {
       database: {
-        product: environment.database.product,
-        ...(environment.database.version === undefined ? {} : { version: environment.database.version }),
-        edition: environment.database.edition ?? "unknown",
+        product: measured.database.product,
+        ...(measured.database.version === undefined ? {} : { version: measured.database.version }),
+        edition: measured.database.edition ?? "unknown",
         versionStatus: measured.database.versionStatus,
       },
       driver: {
@@ -112,6 +114,8 @@ export async function certifyTarget(
       },
       runtime: { id: environment.runtime.id, version: environment.runtime.version ?? "unknown" },
     };
+    if (!measuredTupleMatchesExpected(measured, pinnedTuple))
+      throw new Error(`Certification target ${target.id} measured tuple differs from its independent target tuple.`);
     const declarationError = equalContract(environment.capabilities, expected)
       ? undefined
       : `CAP001 declaration mismatch for ${target.id}.`;

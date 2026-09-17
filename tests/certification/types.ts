@@ -170,6 +170,27 @@ export interface CertificationMeasuredTuple {
   readonly runtime: DatabaseEnvironment["runtime"];
 }
 
+export function measuredTupleMatchesExpected(
+  measured: CertificationMeasuredTuple,
+  expected: CertificationTuple | undefined,
+): boolean {
+  if (expected === undefined) return true;
+  const databaseVersionMatches =
+    expected.database.versionStatus === "unknown"
+      ? measured.database.versionStatus === "unknown" && measured.database.version === undefined
+      : measured.database.versionStatus === "measured" && measured.database.version === expected.database.version;
+  return (
+    measured.database.product === expected.database.product &&
+    (measured.database.edition ?? "unknown") === expected.database.edition &&
+    databaseVersionMatches &&
+    measured.driver.id === expected.driver.id &&
+    measured.driver.profile === expected.driver.profile &&
+    measured.driver.version === expected.driver.version &&
+    measured.runtime.id === expected.runtime.id &&
+    measured.runtime.version === expected.runtime.version
+  );
+}
+
 export interface CertificationCandidateIdentity {
   readonly kind: "source" | "prepared" | "release-prepared";
   readonly sourceSha: string;
@@ -310,6 +331,8 @@ export interface RepresentationUnsupportedProof {
 
 export interface CertificationFixture {
   readonly db: Database;
+  /** Database identity measured by the fixture's native connection during setup. */
+  readonly measuredDatabase?: DatabaseEnvironment["database"];
   readonly pooled?: Database;
   readonly queries: CertificationQueries;
   readonly stream?: import("../streaming-conformance.js").StreamingConformanceFixture<unknown>;

@@ -36,6 +36,20 @@ describe("A4 certification harness", () => {
     assert.equal(artifact.cases.CALL004.code, "BRAID_RESULT_SETS_UNSUPPORTED");
   });
 
+  test("rejects a measured tuple mismatch before individual cases can appear green", async () => {
+    const synthetic = createSyntheticTarget(A4_SHA);
+    const registeredTarget = {
+      ...synthetic,
+      id: "postgres-current",
+      measuredDriverVersion: "8.23.0",
+      measuredRuntimeVersion: "22.18.0",
+    };
+    await assert.rejects(
+      () => certifyTarget(registeredTarget),
+      /measured tuple differs from its independent target tuple/u,
+    );
+  });
+
   test("rejects incomplete or mismatched strict streaming evidence", async () => {
     const fixture = await createSyntheticTarget(NEGATIVE_SHA).createFixture();
     const stream = fixture.stream!;

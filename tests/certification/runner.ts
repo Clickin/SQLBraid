@@ -12,6 +12,7 @@ import {
   type ExpectedCapability,
   type ExpectedCapabilityContract,
   type ExpectedGuardedCaseContract,
+  measuredTupleMatchesExpected,
 } from "./types.js";
 export { certifyTarget } from "./execute.js";
 
@@ -38,27 +39,6 @@ function isRegisteredUnsupportedPair(feature: string, code: string): boolean {
 
 function equalContract(left: Readonly<Record<string, unknown>>, right: Readonly<Record<string, unknown>>): boolean {
   return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
-}
-
-function measuredTupleMatchesExpected(
-  measured: CertificationArtifact["provenance"]["measured"],
-  expected: CertificationTuple | undefined,
-): boolean {
-  if (expected === undefined) return true;
-  const databaseVersionMatches =
-    expected.database.versionStatus === "unknown"
-      ? measured.database.versionStatus === "unknown" && measured.database.version === undefined
-      : measured.database.versionStatus === "measured" && measured.database.version === expected.database.version;
-  return (
-    measured.database.product === expected.database.product &&
-    (measured.database.edition ?? "unknown") === expected.database.edition &&
-    databaseVersionMatches &&
-    measured.driver.id === expected.driver.id &&
-    measured.driver.profile === expected.driver.profile &&
-    measured.driver.version === expected.driver.version &&
-    measured.runtime.id === expected.runtime.id &&
-    measured.runtime.version === expected.runtime.version
-  );
 }
 
 function declaredContract(expected: ExpectedCapabilityContract): Readonly<Record<string, EnvironmentCapability>> {
@@ -115,6 +95,19 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
       value.provenance.measured.database.versionStatus === "unknown",
     "Certification artifact database version status is invalid.",
   );
+  assert.equal(typeof value.provenance.measured.database.product, "string");
+  if (value.provenance.measured.database.versionStatus === "measured") {
+    assert.equal(typeof value.provenance.measured.database.version, "string");
+    assert.ok(value.provenance.measured.database.version.trim().length > 0);
+  } else {
+    assert.equal(
+      value.provenance.measured.database.version,
+      undefined,
+      "Unknown database version status may not carry a version.",
+    );
+  }
+  if (value.provenance.measured.database.edition !== undefined)
+    assert.equal(typeof value.provenance.measured.database.edition, "string");
   assert.equal(
     typeof value.provenance.measured.driver.id,
     "string",

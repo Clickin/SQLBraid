@@ -58,6 +58,10 @@ async function createFixture(): Promise<CertificationFixture> {
     await db.execute(sql.command`INSERT INTO cert_sentinel (id, marker) VALUES (1, 'untouched')`);
     await db.execute(sql.command`CREATE TEMP TABLE cert_identity (id TEXT NOT NULL)`);
     await db.execute(sql.command`INSERT INTO temp.cert_identity (id) VALUES ('libsql-local-file')`);
+    const versionRow = await db.one(sql.rows<{ readonly version: string }>`SELECT sqlite_version() AS version`);
+    if (!/^\d+(?:\.\d+)+$/u.test(versionRow.version))
+      throw new Error(`Unable to parse libSQL SQLite version: ${versionRow.version}`);
+    const measuredDatabase = { product: "sqlite", version: versionRow.version, edition: "libSQL local SQLite" } as const;
     const transactionCleanup = async (): Promise<void> => {
       const probe = await makeLibsqlDirectory();
       const probeClient = createClient({ url: `file:${probe.directory}/database.db`, intMode: "string" });
@@ -124,7 +128,7 @@ async function createFixture(): Promise<CertificationFixture> {
       stats,
       transactionCleanup,
     };
-    return createSqliteFixture(options);
+    return { ...createSqliteFixture(options), measuredDatabase };
   } catch (error) {
     client.close();
     await cleanup();

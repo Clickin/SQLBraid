@@ -39,6 +39,7 @@ interface Shared {
   readonly cancelPoolLike: PgPoolLike;
   readonly cancelCursor: PgCursorFactory;
   readonly cancelReady: () => Promise<void>;
+  readonly measuredDatabase: NonNullable<CertificationFixture["measuredDatabase"]>;
   readonly activeLeases: { value: number };
   readonly acquireCount: { value: number };
   readonly releaseCount: { value: number };
@@ -57,6 +58,15 @@ interface Shared {
   iteratorReturnBefore: number;
   setup: () => Promise<void>;
   dispose: () => Promise<void>;
+}
+
+function measurePostgresDatabase(banner: unknown): NonNullable<CertificationFixture["measuredDatabase"]> {
+  if (typeof banner !== "string") throw new Error("PostgreSQL version probe did not return a banner.");
+  const version = /^PostgreSQL\s+(\d+(?:\.\d+)+)\b/u.exec(banner)?.[1];
+  if (version === undefined) throw new Error(`Unable to parse PostgreSQL version banner: ${banner}`);
+  if (!/\bcompiled by\b/iu.test(banner) || !/\b(?:Alpine|linux-musl)\b/iu.test(banner))
+    throw new Error(`PostgreSQL version banner lacks Alpine compiler/platform evidence: ${banner}`);
+  return { product: "postgres", version, edition: "alpine" };
 }
 
 interface Metrics {
@@ -303,6 +313,8 @@ async function createShared(targetId: string, connectionUri: string): Promise<Sh
   const client = new Client({ connectionString: connectionUri });
   await client.connect();
   await client.query("SET extra_float_digits = 0");
+  const versionResult = await client.query<{ readonly version: string }>("SELECT version() AS version");
+  const measuredDatabase = measurePostgresDatabase(versionResult.rows[0]?.version);
   const pool = new Pool({ connectionString: connectionUri, max: 2, idleTimeoutMillis: 0 });
   const cancelPool = new Pool({ connectionString: connectionUri, max: 1, idleTimeoutMillis: 0 });
   const activeLeases = { value: 0 };
@@ -403,6 +415,7 @@ async function createShared(targetId: string, connectionUri: string): Promise<Sh
     cancelPoolLike: makeCancelPoolLike(cancelPool),
     cancelCursor,
     cancelReady: () => cancelReadyState.promise,
+    measuredDatabase,
     activeLeases,
     acquireCount,
     releaseCount,
@@ -824,6 +837,7 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
   };
   return {
     db: pooled,
+    measuredDatabase: state.measuredDatabase,
     pooled,
     queries,
     stream,
