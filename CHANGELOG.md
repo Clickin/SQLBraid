@@ -22,7 +22,12 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   remain separate maintainer actions.
 - Preserve exact node:sqlite command ROWIDs, keep Oracle auto-commit outside
   managed transactions, release pooled connections when adapter initialization
-  fails, and honor explicit Bun.SQL read-write transaction options.
+  fails, and preserve explicit transaction access-mode semantics where supported.
+- Bun.SQL MySQL/MariaDB now reject both explicit `readOnly` values before I/O
+  (`BRAID_TX_OPTION_UNSUPPORTED`, `transaction.read-only`): native Bun 1.3.14
+  can retain read-only statement failures beyond rollback. Omitted options
+  preserve session defaults; contaminated reservations are discarded after
+  scope cleanup. PostgreSQL access modes and representation profiles are unchanged.
 - Reject PostgreSQL and Bun PostgreSQL transactions when COMMIT reports
   ROLLBACK, and propagate Tedious savepoint rollback failures without returning
   uncertain connections as healthy.
@@ -33,6 +38,20 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   libSQL clients. Exact `RETURNING` rows, affected-row counts, transactions and
   bulk execution remain supported; rounded native ROWIDs are never advertised
   as exact IDs.
+- Deliver `stream:end` to every registered observer despite earlier observer
+  failures, preserving the original stream/cleanup failure and ordered observer
+  failures. Pre-I/O notifications remain fail-fast.
+- MySQL/MariaDB inline string diagnostics use non-executable JSON markers
+  instead of SQL literals whose backslash meaning depends on session SQL mode.
+  Bound execution is unchanged.
+- Remove external MariaDB and Oracle connection URLs from setup diagnostics.
+  Classify `sqlbraid/compiled` as an Advanced generated-code entrypoint and
+  require facade export changes to update the marked API audit inventory.
+- Clarify that npm manifests, pack-check stamps and prior-run recovery do not
+  attest or restore a VSIX. The separate VS Code Release workflow validates
+  the exact extension artifact used by Open VSX and the manual Marketplace handoff.
+  Make the root SQLite quickstart runnable, default SQL Server TLS to certificate
+  verification, and synchronize the Korean documentation.
 
 ## 0.1.0-rc.2 (unreleased)
 

@@ -13,7 +13,7 @@
       "source": "website/src/content/docs/agents/driver-author.md",
       "translation": "website/src/content/docs/ko/agents/driver-author.md",
       "translationOf": "website/src/content/docs/agents/driver-author.md",
-      "sourceDigest": "b5a228479e5e7b8822454d6e6e2633c1ba21395a0de47c2abbce18ea79134d8e"
+      "sourceDigest": "6bbcf89fd964bf979662638bcc8e4a4582a6f6b30dc9c22084c7958ff942aac6"
     },
     {
       "source": "website/src/content/docs/agents/lsp.md",
@@ -97,7 +97,7 @@
       "source": "website/src/content/docs/getting-started/mssql.md",
       "translation": "website/src/content/docs/ko/getting-started/mssql.md",
       "translationOf": "website/src/content/docs/getting-started/mssql.md",
-      "sourceDigest": "9775bc02cde7fecedf3a957265f2719ef4376b363687602583ac3aba24f8a6b8"
+      "sourceDigest": "cf22f81f02144f669edc6230fe0923f3d2cbafc3d8ff4c79e83c21fa1633e6fb"
     },
     {
       "source": "website/src/content/docs/getting-started/mysql.md",
@@ -193,7 +193,7 @@
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "f69f25b8b16aeb582cc59f6e6da3ec86d5964fb0dd475183ab9a6ded8d3847ec"
+      "sourceDigest": "1783867d1cbd65667aa71259dae38cb5c9adaba7cb959700e1792b27c3c77066"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
@@ -211,13 +211,13 @@
       "source": "website/src/content/docs/release/limitations.md",
       "translation": "website/src/content/docs/ko/release/limitations.md",
       "translationOf": "website/src/content/docs/release/limitations.md",
-      "sourceDigest": "7767d0931f757b32cb8805fd49c894b5d1fe33607fa53ee1834a13d625344edb"
+      "sourceDigest": "81156ab8b585f4950fd448042dd287894761666b3866603ccb52318bf482d40c"
     },
     {
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "48277be519f2b6c0db547b4c4796fe676e72a06c2b438c885e8db33895c42318"
+      "sourceDigest": "6b392e9b1941de7ed14731a0b0dea07d2da891dd9cc591e8efb27fd223360971"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",
@@ -235,7 +235,7 @@
       "source": "website/src/content/docs/runtime/observers.md",
       "translation": "website/src/content/docs/ko/runtime/observers.md",
       "translationOf": "website/src/content/docs/runtime/observers.md",
-      "sourceDigest": "5b3bf5d0e3fdb5c2c87e44fb27a4823e5f2f23b13ea229072a9f1905b175787b"
+      "sourceDigest": "72493ea3216c4d8110bd929a0f6b55d79d59af2c2746d8631f547c2597cb002f"
     },
     {
       "source": "website/src/content/docs/runtime/opentelemetry.md",
@@ -259,13 +259,13 @@
       "source": "website/src/content/docs/runtime/transaction-profiles.md",
       "translation": "website/src/content/docs/ko/runtime/transaction-profiles.md",
       "translationOf": "website/src/content/docs/runtime/transaction-profiles.md",
-      "sourceDigest": "bc9874dcf74a5b5627400e64a4bdc59edd3ca08cf982da42751e0fed29e20383"
+      "sourceDigest": "c77de59ee6762f8ccdba27b8f772f78ec7df56bca97b6525753f584fa6c7e691"
     },
     {
       "source": "website/src/content/docs/runtime/transactions.md",
       "translation": "website/src/content/docs/ko/runtime/transactions.md",
       "translationOf": "website/src/content/docs/runtime/transactions.md",
-      "sourceDigest": "9ef6dd786b796700225d93f1f631da80a585db40d5fa48c832c684cf1d668b34"
+      "sourceDigest": "798bb70a52e3bbb47aa93089a59c4e9d26cae64053f4fdc4c271038c7e16c13b"
     }
   ]
 }

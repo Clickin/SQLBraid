@@ -365,6 +365,15 @@ read-only, and `false` explicitly selects read-write where supported. During a
 SQLBraid-owned transaction, driver/global statement auto-commit cannot take over
 the transaction boundary.
 
+Bun.SQL MySQL/MariaDB explicitly reject both boolean `readOnly` values before
+I/O with `BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`. Native Bun
+1.3.14 can retain a failed read-only statement shape after rollback and a later
+explicit read-write begin; a successful rollback alone does not prove that
+resource safe to reuse. Contaminated reservations must be discarded, not
+returned healthy or replaced underneath an active session. Omitted access mode
+still inherits the native session default. This restriction does not apply to
+Bun.SQL PostgreSQL and does not change representation-profile options.
+
 Environment capability IDs are canonical and capability-driven. The exhaustive
 machine-readable vocabulary is exported from `@sqlbraid/core` as
 `WELL_KNOWN_CAPABILITIES` and mirrored by `support/capabilities.json`; its

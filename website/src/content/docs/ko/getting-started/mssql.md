@@ -29,7 +29,11 @@ const connection = new Connection({
       password: process.env.SQLSERVER_PASSWORD ?? "Password!123",
     },
   },
-  options: { database: process.env.SQLSERVER_DATABASE ?? "app", trustServerCertificate: true },
+  options: {
+    database: process.env.SQLSERVER_DATABASE ?? "app",
+    encrypt: true,
+    trustServerCertificate: process.env.SQLSERVER_TRUST_SERVER_CERTIFICATE === "true",
+  },
 });
 await new Promise<void>((resolve, reject) => {
   connection.once("connect", (error) => (error ? reject(error) : resolve()));
@@ -49,6 +53,11 @@ try {
   connection.close();
 }
 ```
+
+기본값은 TLS 암호화와 인증서 검증을 모두 사용합니다. 자체 서명 인증서를 쓰는
+격리된 로컬 개발 서버에서만 `SQLSERVER_TRUST_SERVER_CERTIFICATE=true`를
+명시적으로 설정하세요. 원격 또는 운영 서버에서는 이 우회 옵션을 사용하지 말고
+신뢰할 수 있는 인증서를 구성하세요.
 
 Tedious는 `@p1`, `@p2` 같은 결정적인 파라미터 이름을 받습니다. `sql.bind`는 데이터베이스 타입을 선택할 뿐 값을 SQL 텍스트로 바꾸지 않습니다. scalar OUTPUT/INOUT 루틴 파라미터에는 명시적인 hint가 필요합니다. T-SQL integer RETURN status에는 `sql.call` 계약의 `procedure: { name, parameterNames }` metadata가 필요하며 SQLBraid는 임의 `EXEC` 텍스트에서 identity를 추측하지 않습니다.
 

@@ -166,9 +166,11 @@ evidence is supplied. This prevents a blank new artifact directory from
 turning an earlier uncertain or failed attempt into a second upload.
 Cross-run recovery is an explicit workflow dispatch: provide the prior Release
 run ID in `prior_run_id`. The workflow downloads that run's staged report and
-validated candidate archive (including the original tarballs, VSIX, manifest,
+validated npm candidate archive (including the original tarballs, manifest,
 and pack-check stamp), validates all hashes and identities, and passes the
-report with `--prior-staged-publication`. No candidate or VSIX is repacked.
+report with `--prior-staged-publication`. It also restores the prior prepared
+npm build and candidate archive. No npm candidate is repacked; no VSIX is
+included or recovered by this workflow.
 The original candidate run identity remains in the manifest; the new staged
 report records the current run and retains a digest/link to the prior report.
 `pending` or `staged` prior states are uncertain and fail closed without
@@ -179,11 +181,24 @@ maintainer reconciliation rather than guessing absence. Actions never performs
 authenticated staged-list reads, approval, or tag promotion on a maintainer's
 behalf.
 
-The validated `release-manifest.json` includes every package and the VSIX:
-filename, SHA-256, SHA-512 integrity, extension version/publisher/name, and
-the bundled `@sqlbraid/cli` and `@sqlbraid/language-server` versions. The
-pack-check stamp repeats that VSIX identity. A later Marketplace publication
-must use those exact bytes and never rebuild the extension.
+The npm `release-manifest.json` records each package tarball's filename,
+SHA-256 and SHA-512 integrity. Its `pack-check-success.json` stamp records the
+package names and SHA-256 values alongside the version and source commit.
+The Release workflow sets `SQLBRAID_SKIP_VSIX=true`; neither record establishes
+a VSIX identity.
+
+The independently dispatched **VS Code Release** workflow builds its own VSIX
+with `scripts/package-vscode.mjs`. That script validates extension
+name/publisher/version, bundled `@sqlbraid/cli` and
+`@sqlbraid/language-server` versions, required files and license, and the exact
+VSIX in a clean editor profile; it prints the VSIX SHA-256 and identity.
+The workflow preserves `sqlbraid-vscode-<version>.vsix` as the
+`sqlbraid-vscode-<version>` artifact for 14 days. Open VSX publication downloads
+that same artifact and uses trusted publishing; Microsoft Marketplace upload
+is a separate manual handoff of those bytes. Neither path rebuilds the VSIX
+after validation. Preserve that artifact and its workflow identity separately:
+npm prior-run recovery, the npm manifest and npm pack-check stamp do not
+recover or attest the extension.
 
 Prereleases stage under `next` and must leave `latest` unchanged. Stable
 releases stage first under temporary `release-<version>`; after every package
@@ -342,8 +357,8 @@ The following are maintainer actions, **not** actions performed by certification
    authorization and never causes automatic stage approval or `latest`
    promotion. Its body is the versioned release notes, and an RC version is
    marked `prerelease`; stable versions are not. It carries the compact
-   `release-evidence.json` summary in addition to the candidate manifest,
-   VSIX, and staged report. This summary retains the source commit, artifact
+   `release-evidence.json` summary in addition to the npm candidate manifest
+   and staged report, not a VSIX. This summary retains the source commit, npm artifact
    hashes, support-evidence file hashes/target IDs, stage IDs, requested tags,
    and current/prior run identities after 14-day Actions artifacts expire.
    Pages deploy automatically on the documented `main`/tag push path; use
@@ -420,13 +435,17 @@ final revision.
 
 ### Native failures exposed by the semantic gate
 
-The Bun SQL contracts intentionally remain release-blocking, not skipped or
-reclassified as unsupported to manufacture a green release:
+The Bun SQL lanes remain required. Native diagnostics distinguish adapter
+ownership fixes from capabilities the pinned transport cannot safely provide:
 
 - Bun 1.3.14 PostgreSQL closes a discarded reserved connection, but its pool's
   graceful `close()` can remain pending after an aborted transaction returns
-  `ROLLBACK` from `COMMIT`. A native-only reproduction passes on Bun 1.4.2;
-  that comparison does not change the pinned certification tuple.
+  `ROLLBACK` from `COMMIT`. Preserve that failed terminal outcome and discard
+  the reservation, not the owning pool. The caller-owned pool must remain
+  usable for fresh work; its final shutdown uses an explicit positive native
+  timeout (`client.close({ timeout: 1 })`) after those assertions. An unbounded
+  native pool close is not evidence that SQLBraid still owns a lease. A
+  Bun 1.4.2 comparison does not change the pinned certification tuple.
 - Bun 1.3.14 and 1.4.2 MySQL cache the failure from a first INSERT prepare in a
   read-only transaction. Reusing that same statement after explicit
   `START TRANSACTION READ WRITE` still rejects with error 1792. The pinned
@@ -434,10 +453,30 @@ reclassified as unsupported to manufacture a green release:
   changing its SQL text, or reordering the access-mode contract would hide the
   defect rather than establish support.
 
-These are reproducible through `tests/scripts/bun-sql-matrix.mjs` and the
-`db-bun-sql` integration project. A passing historical capability artifact
-cannot replace these missing semantic proofs. Restore a green gate only after
-the native behavior is corrected and the complete pinned matrix passes.
+The expanded native `tests/scripts/bun-sql-readonly-repro.mjs` diagnostics found
+no safe same-session recovery through public Bun 1.3.14 APIs; `prepare: false`
+is rejected by the native constructor. Bun.SQL MySQL/MariaDB therefore declare
+`transaction.read-only` unsupported under condition
+`bun-sql.mysql-read-only-cache`. Both explicit `readOnly: true` and
+`readOnly: false` reject before acquisition/I/O with
+`BRAID_TX_OPTION_UNSUPPORTED`. Omission preserves the actual session default,
+not a forced read-write mode. Ordinary transactions and isolation remain
+supported; Bun.SQL PostgreSQL access modes and representation-profile options
+are unchanged.
+
+A native read-only rejection (errno 1792 / SQLSTATE 25006) can still occur under
+an inherited session default. Mark that reservation for disposal after the
+owning scope's normal terminal cleanup; do not release it healthy or switch
+physical connections during the session. This is a containment rule, not a
+claim to repair Bun's statement cache.
+
+Keep the access-mode scenario ID and capability-checked applicability; test
+unsupported options before I/O and preserve all remaining real semantic cells.
+Source and packed checks in `tests/scripts/bun-sql-matrix.mjs` and `db-bun-sql`
+must exercise the resulting contract. A passing historical capability artifact
+cannot certify the changed revision. No new support label or passing final
+gate is claimed here; exact-final Runtime, Documentation and Release evidence
+is still required.
 
 Local libSQL has a different, explicit contract limitation: its native ROWID
 metadata is rounded before the client returns a bigint. The adapter therefore

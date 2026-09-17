@@ -95,6 +95,12 @@ Transaction이 없으면 `BRAID_TX_UNSUPPORTED`를 사용합니다. 중첩 명�
 `read-uncommitted`를 문서화된 `read-committed` 동작으로 매핑할 수 있습니다.
 SQLite, D1 및 다른 driver는 실제 transport가 honor하는 조합만 노출합니다.
 
+Bun.SQL MySQL/MariaDB는 명시적인 `readOnly`의 두 boolean 값 모두를 I/O
+전에 `BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`로 거부합니다.
+생략하면 native session 기본값을 보존하며 Bun.SQL PostgreSQL에는 이
+제한을 적용하지 않습니다. Native Bun 1.3.14의 connection 오염 경계는
+[transaction option capability](/SQLBraid/runtime/transaction-profiles/)를 참고하세요.
+
 libSQL adapter는 ordinary client call에 `BEGIN`/`COMMIT`을 보내는 대신
 interactive `Transaction` handle을 통해 transaction 연속성을 보존합니다.
 `readOnly: true`는 libSQL의 문서화된 read mode로 매핑하지만 portable

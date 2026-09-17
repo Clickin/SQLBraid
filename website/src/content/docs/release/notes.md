@@ -77,6 +77,25 @@ coverage, bilingual documentation freshness, package/export checks, and an
 immutable release dry-run. User acceptance and explicit release authorization
 are separate gates.
 
+## npm and VS Code artifact guarantees
+
+The **Release** workflow packs and validates npm tarballs. Its
+`release-manifest.json` records package filenames, SHA-256 and SHA-512
+integrity; `pack-check-success.json` binds package names and SHA-256 values to
+the version and source commit. It sets `SQLBRAID_SKIP_VSIX=true`.
+Prior-run recovery restores the original npm candidate, manifest, stamp and
+prepared build, not a VSIX. The npm draft GitHub Release attaches the manifest,
+staged-publication report and durable release-evidence summary, not an extension.
+
+The separately dispatched **VS Code Release** workflow builds and validates
+an exact VSIX, including extension identity, matching bundled CLI/language-server
+versions and a clean editor-profile check. Packaging prints its SHA-256.
+The `sqlbraid-vscode-<version>` artifact is retained for 14 days. Open VSX
+trusted publishing consumes that artifact without rebuilding; Microsoft
+Marketplace upload is a manual handoff of the same VSIX. Keep the VSIX and
+its workflow identity separately: npm manifests, pack-check stamps and prior-run
+recovery do not attest or recover it.
+
 ## Translation freshness
 
 English pages are the source content and every tracked page has a Korean pair.

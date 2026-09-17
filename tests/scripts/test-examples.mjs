@@ -209,26 +209,28 @@ try {
   const postgresExample = await installExample("postgres", tarballs);
   const mysqlExample = await installExample("mysql", tarballs);
 
-  const quickstart = await readFile(join(root, "website/src/content/docs/getting-started/sqlite.md"), "utf8");
-  const source = /```ts\n([\s\S]*?)```/.exec(quickstart)?.[1];
-  assert.ok(source, "the public SQLite quickstart must contain runnable TypeScript");
-  await writeFile(join(sqlite, "src/docs-quickstart.ts"), source);
-  await run(
-    process.execPath,
-    [
-      "--input-type=module",
-      "--eval",
-      `
+  for (const path of ["website/src/content/docs/getting-started/sqlite.md", "README.md"]) {
+    const quickstart = await readFile(join(root, path), "utf8");
+    const source = /```ts\n([\s\S]*?)```/.exec(quickstart)?.[1];
+    assert.ok(source, `${path} must contain a runnable SQLite quickstart`);
+    await writeFile(join(sqlite, "src/docs-quickstart.ts"), source);
+    await run(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `
     import assert from "node:assert/strict";
     let rows;
     console.log = (value) => { rows = value; };
     await import("./src/docs-quickstart.ts");
     assert.deepEqual(rows.map((row) => ({ ...row })), [{ id: "1", name: "Ada" }]);
   `,
-    ],
-    sqlite,
-  );
-  console.info("PASS exact published SQLite quickstart without compiler lowering");
+      ],
+      sqlite,
+    );
+    console.info(`PASS exact ${path} SQLite quickstart without compiler lowering`);
+  }
   await compileAndRun("sqlite", sqlite);
   await runCodegen(codegen);
 

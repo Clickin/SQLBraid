@@ -20,7 +20,7 @@ export default async function setup(project: TestProject) {
       image: "external",
       version: process.env.SQLBRAID_MARIADB_VERSION ?? "external",
     });
-    console.info(`[db-mariadb] external connection=${connectionUri}`);
+    console.info("[db-mariadb] external connection enabled");
     return async () => undefined;
   }
 

@@ -22,7 +22,7 @@ export default async function setup(project: TestProject) {
       image: "external",
       version: process.env.SQLBRAID_ORACLE_VERSION ?? "external",
     });
-    console.info(`[db-oracle] external connection=${connectionUri}`);
+    console.info("[db-oracle] external connection enabled");
     return async () => undefined;
   }
   const container = await new GenericContainer(ORACLE_IMAGE)

@@ -197,6 +197,41 @@ adapter; import `sql` from the selected dialect root and pass that dialect to
 adapters. The facade has no CLI, database-driver, metadata, codegen, tooling,
 compiler, editor, or Vite dependency.
 
+**Advanced:** `sqlbraid/compiled` exposes `capture` and
+`assertDirectiveCondition` from `@sqlbraid/template` for compiler-generated
+lowering. It is a public generated-code entrypoint, not an application query
+authoring API, and does not load the compiler. Use matching compiler and runtime
+versions.
+
+The marked inventory below classifies every key in `sqlbraid`'s package export
+map. `tests/public-api-audit.test.ts` requires export additions or removals to
+update this inventory in the same change.
+
+<!-- sqlbraid-facade-exports -->
+```json
+{
+  ".": "Application",
+  "./pg": "Application",
+  "./mysql2": "Application",
+  "./mariadb": "Application",
+  "./node-sqlite": "Application",
+  "./better-sqlite3": "Application",
+  "./libsql": "Application",
+  "./sqlite-wasm": "Application",
+  "./d1": "Application",
+  "./oracledb": "Application",
+  "./tedious": "Application",
+  "./bun-sql": "Application",
+  "./postgres": "Application",
+  "./mysql": "Application",
+  "./sqlite": "Application",
+  "./oracle": "Application",
+  "./mssql": "Application",
+  "./compiled": "Advanced"
+}
+```
+<!-- /sqlbraid-facade-exports -->
+
 ```ts
 import { createBunSqlDatabase } from "sqlbraid/bun-sql";
 import { sql } from "sqlbraid/postgres";
@@ -222,6 +257,13 @@ binding adapter, and report unsupported capabilities explicitly. Bun's adapter
 family accepts a user-selected PostgreSQL/MySQL/MariaDB/SQLite dialect; it does
 not auto-detect. Deno uses existing driver subpaths where the driver API works.
 These runtime statements are compatibility guidance, not Official support labels.
+
+Bun.SQL MySQL/MariaDB reject explicit `readOnly: true` and `readOnly: false`
+before I/O with `BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`.
+Bun 1.3.14 retains failed read-only statement state across rollback on the same
+connection. Omitting the option preserves the native session default, not a
+forced read-write mode; contaminated reservations are discarded. Bun.SQL
+PostgreSQL access modes and all representation-profile options are unchanged.
 
 SQLite-specific boundaries are intentionally not interchangeable:
 `better-sqlite3` is synchronous and event-loop blocking even though its public

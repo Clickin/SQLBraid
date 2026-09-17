@@ -29,7 +29,11 @@ const connection = new Connection({
       password: process.env.SQLSERVER_PASSWORD ?? "Password!123",
     },
   },
-  options: { database: process.env.SQLSERVER_DATABASE ?? "app", trustServerCertificate: true },
+  options: {
+    database: process.env.SQLSERVER_DATABASE ?? "app",
+    encrypt: true,
+    trustServerCertificate: process.env.SQLSERVER_TRUST_SERVER_CERTIFICATE === "true",
+  },
 });
 await new Promise<void>((resolve, reject) => {
   connection.once("connect", (error) => (error ? reject(error) : resolve()));
@@ -49,6 +53,11 @@ try {
   connection.close();
 }
 ```
+
+TLS encryption and certificate verification are enabled by default. Only for
+an isolated local development server with a self-signed certificate, explicitly
+set `SQLSERVER_TRUST_SERVER_CERTIFICATE=true`. Do not use that bypass for remote
+or production servers; configure a trusted certificate instead.
 
 Tedious receives deterministic `@p1`, `@p2`, ... parameter names. `sql.bind` selects the database type; it does not turn the value into SQL text. Scalar OUTPUT/INOUT routine parameters require explicit hints. A T-SQL integer RETURN status requires explicit `procedure: { name, parameterNames }` metadata in the `sql.call` contract; SQLBraid does not parse arbitrary `EXEC` text to guess identity.
 

@@ -235,6 +235,11 @@ options use `BRAID_TX_OPTIONS_NESTED`. Canonical capability keys are
 
 Bun SQL uses one adapter family with required user-selected
 `dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`; it does not auto-detect.
+Bun.SQL MySQL/MariaDB reject both explicit `readOnly` values before I/O with
+`BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`; omission preserves
+the native session default. Bun 1.3.14 read-only failures can contaminate a
+connection beyond rollback, so contaminated reservations must be discarded.
+Bun.SQL PostgreSQL access modes and representation-profile options are unchanged.
 Deno may reuse an existing adapter where its public driver API works. Neither
 statement promotes an unverified database/runtime/profile tuple. For the full
 checklist, see the [repository driver-author guide](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md).

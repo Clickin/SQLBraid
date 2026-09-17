@@ -65,6 +65,26 @@ Release candidate에는 하나의 clean exact revision, 실행 가능한 tuple/c
 영문/한국어 문서 freshness, package/export 검사, immutable release dry-run이
 필요합니다. 사용자 수락과 명시적 release 승인은 별도 gate입니다.
 
+## npm과 VS Code artifact 보장 범위
+
+**Release** workflow는 npm tarball을 패키징하고 검증합니다.
+`release-manifest.json`은 패키지 파일명, SHA-256, SHA-512 integrity를
+기록하고, `pack-check-success.json`은 패키지 이름과 SHA-256을 버전 및
+source commit에 연결합니다. 이 workflow는 `SQLBRAID_SKIP_VSIX=true`를
+설정합니다. 이전 실행 복구는 원본 npm candidate, manifest, stamp,
+prepared build를 복구하며 VSIX는 포함하지 않습니다. npm의 draft GitHub
+Release에는 manifest, staged-publication report, durable release-evidence
+summary가 첨부되며 확장 파일은 첨부되지 않습니다.
+
+별도로 dispatch하는 **VS Code Release** workflow는 정확한 VSIX를 빌드하고
+extension identity, 번들 CLI/language-server 버전 일치, 깨끗한 editor
+profile 실행을 검증합니다. 패키징 과정은 SHA-256을 출력합니다.
+`sqlbraid-vscode-<version>` artifact는 14일간 보존됩니다. Open VSX의
+trusted publishing은 재빌드 없이 이 artifact를 사용하고, Microsoft
+Marketplace에는 같은 VSIX를 수동으로 전달합니다. VSIX와 해당 workflow
+identity는 따로 보관하세요. npm manifest, pack-check stamp, 이전 실행
+복구는 VSIX를 증명하거나 복구하지 않습니다.
+
 ## Translation freshness
 
 영문 페이지가 source content이며 추적하는 모든 페이지에는 한국어 pair가

@@ -8,6 +8,9 @@ SQLBraid is a SQL-first data-access toolkit for TypeScript. It keeps ordinary SQ
 pnpm add sqlbraid
 ```
 
+On Node.js 22.18 or newer, save this as `quickstart.mts` and run
+`node quickstart.mts`. It creates and closes its own in-memory database:
+
 ```ts
 import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
 import { DatabaseSync } from "node:sqlite";
@@ -18,10 +21,18 @@ interface UserRow {
 }
 
 const native = new DatabaseSync(":memory:");
-const db = createNodeSqliteDatabase(native);
-const users = await db.all(sql.rows<UserRow>`
-  SELECT id, name FROM users WHERE id = ${userId}
-`);
+try {
+  native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
+  native.prepare("INSERT INTO users (name) VALUES (?)").run("Ada");
+  const db = createNodeSqliteDatabase(native);
+  const userId = 1;
+  const users = await db.all(sql.rows<UserRow>`
+    SELECT id, name FROM users WHERE id = ${userId}
+  `);
+  console.log(users); // [{ id: "1", name: "Ada" }]
+} finally {
+  native.close();
+}
 ```
 
 Application code installs the unscoped `sqlbraid` facade and imports a
@@ -215,6 +226,13 @@ for transaction continuity, does not claim pinned ordinary sessions, and
 rejects streaming rather than buffering.
 
 Bun's first-party SQL adapter is a single adapter family. The user selects `dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`; the adapter does not auto-detect SQL semantics from a connection. Bun 1.3.14 has no supported active cancellation (`BRAID_CANCEL_UNSUPPORTED`) and stream/routine carriers remain unsupported. Its `result.rows`/`result.command` metadata is guarded by `bun-sql.result-kind-metadata`; for Bun MySQL/MariaDB, an empty `SELECT` and zero-affected DML/DDL are `BRAID_RESULT_KIND_AMBIGUOUS` after execution because the driver reports `command: null` and `affectedRows: 0`, so side effects may already have occurred. Nonempty rows and positive command counts are the supported cases. Deno uses existing first-party driver adapters where their public Node-compatible API works; it does not receive a new Deno-specific dialect. Runtime labels are evidence labels, not promises: Official requires the exact runtime/driver/database/profile tuple in support evidence; otherwise use Compatible, Custom, or Unsupported.
+
+Bun.SQL MySQL/MariaDB do not support explicit transaction access modes:
+both `readOnly: true` and `readOnly: false` reject before I/O with
+`BRAID_TX_OPTION_UNSUPPORTED` (`transaction.read-only`). Bun 1.3.14 can retain a
+read-only statement failure after rollback on the same connection. Omitting
+`readOnly` preserves the native session default; it does not force read-write.
+This restriction does not apply to Bun.SQL PostgreSQL.
 
 Do not promote an unverified server version, runtime, profile option, or capability from a neighboring tuple. `db.environment({ targets?, refresh? })` is observational and returns `compatible` when no single verified exact target matches. Capability keys use the canonical names:
 

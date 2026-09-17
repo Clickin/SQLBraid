@@ -67,6 +67,11 @@ stream의 `stream:end`는 어댑터가 드라이버 리소스를 close/drain/can
 runtime이 물리적 lease를 반환하거나 폐기한 뒤에만 발생합니다. Observer는
 정리 실패를 관찰할 수 있지만 안전하지 않은 lease를 재사용 가능하게 만들 수
 없습니다.
+앞선 observer가 throw해도 등록된 모든 observer는 등록 순서대로
+`stream:end`를 한 번씩 받습니다. 전달을 마친 뒤 observer 실패가 하나면
+그 오류를 그대로 다시 throw하고, 여러 개면 순서대로 집계합니다. Stream이나
+cleanup이 먼저 실패했다면 원래 오류가 cause이자 aggregate의 첫 항목으로
+유지되고 observer 실패가 뒤따릅니다. I/O 전 알림은 계속 fail-fast입니다.
 
 `event.literalizedSql(options?)`는 필요할 때 계산하고 캐시합니다. 논리
 segments와 parameters에서 진단용 텍스트를 직접 재구성하며, 구체화된 SQL의
@@ -75,6 +80,11 @@ redacted이며 inline/redacted 값, 최대 길이, binary summary/full, 사용�
 redactor를 지원합니다. 결과는 `complete`, `redactedParameters`,
 `truncatedParameters`를 보고합니다. 지원하지 않는 객체는 실수로
 `toString()`을 호출하지 않고 안전한 marker로 표시합니다.
+MySQL/MariaDB의 inline string은 SQL literal 대신 실행 불가능한
+`[string <JSON>]` 진단 marker를 사용합니다. Backslash 해석이 session의
+SQL mode에 따라 달라지기 때문입니다. Bun.SQL adapter에도 같은 규칙을 적용하며
+bound execution은 변경하지 않습니다. 진단 출력은 실행 가능한 SQL 계약이
+아닙니다.
 
 바인딩 또는 typed-request 구성 실패는 DB I/O 없이 `"materialize"` 단계로
 보고합니다. 드라이버·서버·네트워크 실패는 `"driver"` 단계입니다. Observer는
