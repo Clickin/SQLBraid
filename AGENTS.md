@@ -612,12 +612,12 @@ Report unavailable DB/runtime infrastructure as not run, never passed.
 - preserve CLI/LSP shebangs and packed executable tests;
 - use tsdown for builds and `tsc --noEmit` for semantic checking;
 - inspect current HEAD before broad changes;
-- keep the root private test package's workspace dependencies explicit: Vite aliases do not cover native generated ESM or internal TypeScript Programs;
+- keep dependency ownership explicit: test-only drivers, fixtures, integration scripts and native consumers belong to the private `tests` package; root and package manifests declare dependencies where their importing code runs, not merely where orchestration is invoked;
 - remove obsolete paths rather than keeping parallel implementations;
 - do not publish/tag/release/force-push unless explicitly requested;
 - never mutate non-test databases.
 - root `package.json` owns build, release, lint, format and test orchestration; private `tests/package.json` owns test-only drivers, fixtures, integration scripts and native consumers explicitly; package manifests own their declared runtime and peer dependencies;
-- the C1 stable browser, D1 and Bun SQL entrypoints remain root orchestration because their existing callers are the repository's public CI commands: `test-browser.mjs` owns Playwright/Vite and bundles the browser SQLite-WASM fixture, `test-d1.mjs` owns Vite/Miniflare for the Worker fixture, and `bun-sql-certification.mjs` delegates to the tests-owned certification implementation. Keep those direct tools/workspace links at root rather than duplicating wrappers or breaking C1 callers; all other integration scripts live under `tests/scripts`;
+- browser, D1 and Bun SQL integration implementations live under `tests/scripts`; root package commands may retain stable names while invoking those test-owned paths, and CI/workflow references must use the moved paths. Do not restore root copies or add wrappers;
 - Node ESM resolves bare imports from the importing module location, not the process cwd: when an integration script moves, update every caller and import path to the moved file rather than relying on cwd changes, wrappers or compatibility shims;
 - Oxlint runs correctness, suspicious and performance categories without type-aware or TypeScript 7 analysis; correctness remains an error globally. Any exception must be a path-scoped override for a deliberate contract (for example intentional no-yield unsupported async generators, cleanup-error aggregation that must throw from a stream finalizer, a control-character sanitizer, precision-loss evidence literals, or compile-time-only contract assertions), never a global demotion or warning budget. Runtime package imports must be declared in production/peer/optional dependencies; type-only imports may use devDependencies. Oxfmt checks are separate from formatting changes, and do not mass-format unrelated legacy files;
 

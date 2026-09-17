@@ -142,9 +142,6 @@ importers:
       '@sqlbraid/template':
         specifier: workspace:*
         version: link:packages/template
-      '@sqlite.org/sqlite-wasm':
-        specifier: 3.53.4-build1
-        version: 3.53.4-build1
       '@types/node':
         specifier: 22.20.1
         version: 22.20.1
@@ -154,18 +151,12 @@ importers:
       ajv:
         specifier: 8.20.0
         version: 8.20.0
-      miniflare:
-        specifier: 4.20260730.0
-        version: 4.20260730.0
       oxfmt:
         specifier: ^0.68.0
         version: 0.68.0
       oxlint:
         specifier: 1.83.0
         version: 1.83.0
-      playwright:
-        specifier: 1.63.0
-        version: 1.63.0
       publint:
         specifier: 0.3.24
         version: 0.3.24

@@ -38,7 +38,7 @@
   },
   "reproducibility": {
     "zeroCost": true,
-    "description": "Chromium installed by the pinned Playwright 1.63.0 dependency and exercised by scripts/test-browser.mjs.",
+    "description": "Chromium installed by the pinned Playwright 1.63.0 dependency and exercised by tests/scripts/test-browser.mjs.",
     "url": "https://github.com/Clickin/SQLBraid/actions/workflows/release.yml"
   },
   "ci": {

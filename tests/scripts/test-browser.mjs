@@ -119,7 +119,9 @@ async function startFixtureServer() {
     try {
       const requestPath = decodeURIComponent(new URL(request.url ?? "/", "http://127.0.0.1").pathname);
       const relativePath = requestPath === "/" ? "fixtures/sqlite-browser/index.html" : requestPath.slice(1);
-      const requested = resolve(repositoryRoot, relativePath);
+      const requested = requestPath.startsWith("/node_modules/")
+        ? resolve(repositoryRoot, "tests", relativePath)
+        : resolve(repositoryRoot, relativePath);
       if (requested !== repositoryRoot && !requested.startsWith(`${repositoryRoot}/`)) {
         response.writeHead(403).end();
         return;

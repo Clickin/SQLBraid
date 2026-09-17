@@ -107,7 +107,7 @@ function parseReport(value: unknown): WasmReport {
 
 function runBrowserSmoke(): Promise<WasmReport> {
   const { promise, resolve: resolveReport, reject } = Promise.withResolvers<WasmReport>();
-  const child = spawn(process.execPath, [resolve(root, "scripts/test-browser.mjs")], {
+  const child = spawn(process.execPath, [resolve(root, "tests/scripts/test-browser.mjs")], {
     cwd: root,
     env: process.env,
     stdio: ["ignore", "pipe", "pipe"],

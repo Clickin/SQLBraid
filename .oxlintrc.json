@@ -20,19 +20,6 @@
   ],
   "overrides": [
     {
-      "files": [
-        "packages/sqlite/src/d1.ts",
-        "tests/pv15-pg-mysql.test.ts",
-        "tests/routines.test.ts",
-        "tests/runtime-awaitable.test.ts",
-        "tests/runtime-mapping.test.ts",
-        "tests/runtime-observer.test.ts"
-      ],
-      "rules": {
-        "eslint/require-yield": "off"
-      }
-    },
-    {
       "files": ["tests/scripts/agent-tooling-consumer.mjs"],
       "rules": {
         "eslint/no-unused-expressions": "off"
@@ -42,12 +29,6 @@
       "files": ["tests/driver-foundation.test.ts"],
       "rules": {
         "unicorn/no-thenable": "off"
-      }
-    },
-    {
-      "files": ["tests/pv18-vendor-contracts.test.ts"],
-      "rules": {
-        "eslint/no-loss-of-precision": "off"
       }
     },
     {
@@ -84,7 +65,7 @@
         "packages/mysql/src/mysql2.ts",
         "packages/mssql/src/tedious.ts",
         "packages/runtime/src/index.ts",
-        "scripts/test-browser.mjs",
+        "tests/scripts/test-browser.mjs",
         "tests/certification/targets/synthetic.ts"
       ],
       "rules": {

@@ -1353,7 +1353,7 @@ export function checkSourceDetailed(sourceText: string, fileName: string, option
   const originalFiles = new Map([[ts.sys.resolvePath(fileName), originalSourceFile]]);
   const virtualProgram = ts.createProgram([fileName], compilerOptions, virtualHost(compilerOptions, virtualFiles, originalFiles));
   const braid = braidDiagnostics(records);
-  const native = programDiagnostics(records, originalProgram, (record, start, end) => {
+  const native = programDiagnostics(records, context.program, (record, start, end) => {
     const boundedStart = Math.max(0, Math.min(record.sourceText.length, start));
     const boundedEnd = Math.max(boundedStart, Math.min(record.sourceText.length, end));
     return { start: boundedStart, end: boundedEnd };

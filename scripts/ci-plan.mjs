@@ -94,7 +94,7 @@ function planChanges(files, { eventName = "pull_request", baseKnown = true } = {
       plan.compatibility = true;
       continue;
     }
-    if (/^(?:scripts\/test-browser\.mjs|scripts\/test-d1\.mjs|tests\/db\/(?:d1|wasm)\/|packages\/sqlite\/)/u.test(file)) {
+    if (/^(?:tests\/scripts\/test-browser\.mjs|tests\/scripts\/test-d1\.mjs|tests\/db\/(?:d1|wasm)\/|packages\/sqlite\/)/u.test(file)) {
       plan.web = true;
       plan.common = true;
       plan.packages = true;

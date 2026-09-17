@@ -18,8 +18,7 @@ const testsDependencies = new Set(Object.keys({
 const stableRootDependencies = new Set([
   "@sqlbraid/bun-sql", "@sqlbraid/core", "@sqlbraid/mariadb", "@sqlbraid/mssql", "@sqlbraid/mysql",
   "@sqlbraid/oracle", "@sqlbraid/postgres", "@sqlbraid/runtime", "@sqlbraid/sqlite", "@sqlbraid/template",
-  "@sqlite.org/sqlite-wasm",
-  "miniflare", "playwright", "vite",
+  "vite",
 ]);
 const forbiddenRootDependencies = new Set([
   "@jridgewell/trace-mapping", "@libsql/client", "@opentelemetry/api", "@opentelemetry/context-async-hooks",
@@ -33,7 +32,7 @@ const movedScripts = [
   "agent-tooling-consumer.mjs", "audit-runtime.mjs", "bulk-execution-benchmark.mjs", "bun-sql-matrix.mjs",
   "isolated-facade-consumer.mjs", "isolated-lsp-consumer.mjs", "otel-api-consumer.mjs", "runtime-compatibility-consumer.mjs",
   "runtime-driver-smoke.mjs", "runtime-packed-five-db.mjs", "runtime-portability.mjs", "runtime-smoke.mjs",
-  "sync-boundary-benchmark.mjs", "test-examples.mjs", "test-tanstack-start.mjs", "validate-packages.mjs",
+  "sync-boundary-benchmark.mjs", "test-browser.mjs", "test-d1.mjs", "test-examples.mjs", "test-tanstack-start.mjs", "validate-packages.mjs",
   "value-fidelity-benchmark.mjs",
 ];
 const builtin = new Set(["bun", ...builtinModules, ...builtinModules.map((name) => `node:${name}`)]);
