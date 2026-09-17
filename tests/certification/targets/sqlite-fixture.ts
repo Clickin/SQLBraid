@@ -7,7 +7,12 @@ import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
 import type { CertificationCaseId, CertificationFixture, CertificationQueries, ExpectedCapabilityContract, ResourceSnapshot, TransactionOptionKey, UnsupportedProbe } from "../types.js";
 
-type BulkStats = { ready: number; result: number };
+export interface SqliteStats {
+  ready: number;
+  result: number;
+  streamStarts: number;
+  streamEnds: number;
+}
 type AnyRowQuery = RowQuery<unknown>;
 
 type StandardSchema = {
@@ -141,7 +146,7 @@ function queryFixtures(failureCode: string): CertificationQueries {
   const insert: CommandQuery = sql.command`INSERT INTO cert_items (value) VALUES ('transaction')`;
   const savepointInsert: CommandQuery = sql.command`INSERT INTO cert_items (value) VALUES ('savepoint')`;
   const failure: RowQuery<unknown> = sql.rows`INSERT INTO cert_items (value) VALUES (NULL) RETURNING value`;
-  const identity = sql.rows<{ readonly id: string }>`SELECT 'sqlite-certification-session' AS id`;
+  const identity = sql.rows<{ readonly id: string }>`SELECT id FROM temp.cert_identity`;
   const many = sql.rows`SELECT '1' AS value UNION ALL SELECT '2' AS value`;
   const one = sql.rows`SELECT 'one' AS value`;
   return {
@@ -151,7 +156,7 @@ function queryFixtures(failureCode: string): CertificationQueries {
     command,
     identity,
     failure,
-    stream: one,
+    stream: many,
     special,
     transaction: {
       insert,
@@ -160,15 +165,15 @@ function queryFixtures(failureCode: string): CertificationQueries {
       savepointVisible: sql.rows`SELECT value FROM cert_items ORDER BY rowid`,
     },
     fidelity: {
-      largeExactInteger: sql.rows`SELECT '9007199254740991' AS value`,
-      exactDecimal: sql.rows`SELECT '12345678901234567890.123456789' AS value`,
-      temporal: sql.rows`SELECT '2026-09-14T12:34:56.789Z' AS value`,
-      injection: sql.rows`SELECT "'; SELECT 1; --" AS value`,
+      largeExactInteger: sql.rows`SELECT ${9223372036854775807n} AS value`,
+      exactDecimal: sql.rows`SELECT ${"12345678901234567890.123456789"} AS value`,
+      temporal: sql.rows`SELECT ${"2026-09-14T12:34:56.789Z"} AS value`,
+      injection: sql.rows`SELECT ${"'); UPDATE cert_sentinel SET marker = 'mutated' WHERE id = 1; --"} AS value, (SELECT marker FROM cert_sentinel WHERE id = 1) AS sentinel`,
       expected: {
-        largeExactInteger: { value: "9007199254740991" },
+        largeExactInteger: { value: "9223372036854775807" },
         exactDecimal: { value: "12345678901234567890.123456789" },
         temporal: { value: "2026-09-14T12:34:56.789Z" },
-        injection: { value: "'; SELECT 1; --" },
+        injection: { value: "'); UPDATE cert_sentinel SET marker = 'mutated' WHERE id = 1; --", sentinel: "untouched" },
       },
     },
     expected: {
@@ -231,6 +236,7 @@ function makeUnsupported(db: Database, queries: CertificationQueries, targetKind
       STR011: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
       STRESS004: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
     } : {}),
+    PRE008: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(call), sideEffects: noSideEffects },
     STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects: noSideEffects },
     STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects: noSideEffects },
     ...(targetKind === "sqlite" ? { PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects: noSideEffects } } : {}),
@@ -260,6 +266,7 @@ function makeUnsupported(db: Database, queries: CertificationQueries, targetKind
     CALL004: { feature: "routine.result-sets", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(resultSets), sideEffects: noSideEffects },
     CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => runRows(cursor), sideEffects: noSideEffects },
     CALL006: { feature: "routine.return-value", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(returnValue), sideEffects: noSideEffects },
+    CALL007: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(call), sideEffects: noSideEffects },
   };
   return Object.fromEntries(Object.entries(probes).filter(([, probe]) => probe !== undefined)) as Partial<Record<CertificationCaseId, UnsupportedProbe>>;
 }
@@ -275,7 +282,8 @@ export interface SqliteFixtureOptions {
   readonly localReadOnly: boolean;
   readonly failureCode: string;
   readonly streamFailureCode: string;
-  readonly stats: BulkStats;
+  readonly stats: SqliteStats;
+  readonly transactionCleanup?: () => Promise<void>;
 }
 
 export function createSqliteFixture(options: SqliteFixtureOptions): CertificationFixture {
@@ -310,6 +318,12 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
       midStreamFailure: { code: options.streamFailureCode },
       cleanupFailureQuery: sql.rows`SELECT json_extract('{', '$') AS value`,
       cleanupFailure: { code: options.streamFailureCode },
+      iteratorReturns: () => options.stats.streamEnds,
+      released: () => options.stats.streamEnds,
+      reuseAfterBreak: async () => {
+        const row = await options.db.one(queries.identity);
+        if (row.id !== options.physicalSessionId) throw new Error("SQLite stream reuse changed physical session identity.");
+      },
       largeResultQuery: sql.rows`WITH RECURSIVE cert_numbers(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM cert_numbers WHERE value < 20) SELECT CAST(value AS TEXT) AS value FROM cert_numbers`,
       largeResultCount: 20,
     }
@@ -323,7 +337,20 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     expected: { inputCount: 2, affectedRows: 2 },
     acquireCount: () => options.stats.ready,
     executeCount: () => options.stats.result,
-    middleFailure: async () => options.db.bulk([1, 2], (input) => input === 2 ? bulkFailure : bulkFactory(input)),
+    middleFailure: async () => {
+      await options.db.execute(sql.command`DELETE FROM cert_items`);
+      let error: unknown;
+      try {
+        await options.db.bulk([1, 2], (input) => input === 2 ? bulkFailure : bulkFactory(input));
+      } catch (caught) {
+        error = caught;
+      }
+      if (error === undefined) throw new Error("SQLite bulk middle-item failure was not observed.");
+      const rows = await options.db.all(sql.rows<{ readonly value: string }>`SELECT value FROM cert_items ORDER BY rowid`);
+      if (rows.length !== 0 && rows.length !== 1) throw new Error(`SQLite bulk middle-item durability was not prefix or atomic: ${rows.length} rows.`);
+      const expectedRows = rows.length === 0 ? [] : rows;
+      return { error, observedRows: rows, expectedRows, durability: rows.length === 0 ? "atomic" as const : "prefix" as const };
+    },
   };
   const preparedCalls = { count: 0 };
   queries.prepared = {
@@ -331,10 +358,36 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     rows: () => { preparedCalls.count += 1; return queries.many; },
     input: "input",
     factoryCalls: () => preparedCalls.count,
+    resources: () => options.stats.streamStarts - options.stats.streamEnds,
   };
   const metrics = {
-    snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0 }),
+    snapshot: (): ResourceSnapshot => {
+      const openCursors = options.stats.streamStarts - options.stats.streamEnds;
+      return { borrowedLeases: 0, cleanupBalance: openCursors, openCursors, openPrepared: 0 };
+    },
     sideEffects: () => options.stats.result,
+    mutationSentinel: async () => {
+      const row = await options.db.one(sql.rows<{ readonly marker: string }>`SELECT marker FROM cert_sentinel WHERE id = 1`);
+      return row.marker;
+    },
+    readOnlyWrite: async () => {
+      await options.db.execute(sql.command`DELETE FROM cert_items`);
+      await options.db.tx(async (tx) => { await tx.execute(queries.transaction!.insert); });
+      const before = await options.db.all(queries.transaction!.visible);
+      if (before.length !== 1) throw new Error(`SQLite read-write transaction proof expected one row, got ${before.length}.`);
+      let error: unknown;
+      try {
+        await options.db.tx({ readOnly: true }, async (tx) => { await tx.execute(queries.transaction!.savepointInsert); });
+      } catch (caught) {
+        error = caught;
+      }
+      if ((error as { readonly code?: unknown } | undefined)?.code !== "BRAID_TX_OPTION_UNSUPPORTED") {
+        throw new Error("SQLite read-only transaction did not reject with BRAID_TX_OPTION_UNSUPPORTED.", { cause: error });
+      }
+      const after = await options.db.all(queries.transaction!.visible);
+      if (after.length !== 1) throw new Error(`SQLite read-only rejection changed state: ${after.length} rows.`);
+    },
+    ...(options.transactionCleanup === undefined ? {} : { transactionCleanup: options.transactionCleanup }),
     ...(options.sessionSupported ? { physicalSessionIds: () => [options.physicalSessionId] } : {}),
   };
   const unsupported = makeUnsupported(options.db, queries, options.localReadOnly ? "libsql" : "sqlite");
@@ -344,7 +397,12 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     stream,
     bulk,
     metrics,
-    reset: async () => { await options.db.execute(sql.command`DELETE FROM cert_items`); },
+    reset: async () => {
+      options.stats.streamStarts = 0;
+      options.stats.streamEnds = 0;
+      await options.db.execute(sql.command`DELETE FROM cert_items`);
+      await options.db.execute(sql.command`UPDATE cert_sentinel SET marker = 'untouched' WHERE id = 1`);
+    },
     unsupported,
     close: options.close,
   };

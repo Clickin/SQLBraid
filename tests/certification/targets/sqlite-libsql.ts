@@ -14,17 +14,58 @@ async function createFixture(): Promise<CertificationFixture> {
   const { directory, cleanup } = await makeLibsqlDirectory();
   const client = createClient({ url: `file:${directory}/database.db`, intMode: "string" });
   try {
-    const stats = { ready: 0, result: 0 };
+    const stats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0 };
     const db = createLibsqlDatabase(client, {
       intMode: "string",
       observers: [{
         onEvent(event) {
           if (event.type === "bulk:ready") stats.ready += 1;
           if (event.type === "bulk:result") stats.result += 1;
+          if (event.type === "stream:start") stats.streamStarts += 1;
+          if (event.type === "stream:end") stats.streamEnds += 1;
         },
       }],
     });
     await db.execute(sql.command`CREATE TABLE cert_items (value TEXT NOT NULL)`);
+    await db.execute(sql.command`CREATE TABLE cert_sentinel (id INTEGER PRIMARY KEY, marker TEXT NOT NULL)`);
+    await db.execute(sql.command`INSERT INTO cert_sentinel (id, marker) VALUES (1, 'untouched')`);
+    await db.execute(sql.command`CREATE TEMP TABLE cert_identity (id TEXT NOT NULL)`);
+    await db.execute(sql.command`INSERT INTO temp.cert_identity (id) VALUES ('libsql-local-file')`);
+    const transactionCleanup = async (): Promise<void> => {
+      const probe = await makeLibsqlDirectory();
+      const probeClient = createClient({ url: `file:${probe.directory}/database.db`, intMode: "string" });
+      let nativeTransaction: Awaited<ReturnType<typeof probeClient.transaction>> | undefined;
+      const observedClient = {
+        protocol: probeClient.protocol,
+        execute: (statement: Parameters<typeof probeClient.execute>[0]) => probeClient.execute(statement),
+        batch: (statements: Parameters<typeof probeClient.batch>[0], mode?: "write" | "read" | "deferred") => probeClient.batch(statements, mode),
+        transaction: async (mode?: "write" | "read" | "deferred") => {
+          nativeTransaction = await probeClient.transaction(mode);
+          return nativeTransaction;
+        },
+      };
+      const probeDb = createLibsqlDatabase(observedClient, { intMode: "string" });
+      const primary = new Error("cert-transaction-cleanup");
+      try {
+        await probeDb.execute(sql.command`CREATE TABLE cert_probe (value TEXT NOT NULL)`);
+        let caught: unknown;
+        try {
+          await probeDb.tx(async (tx) => {
+            await tx.execute(sql.command`INSERT INTO cert_probe (value) VALUES (${"native"})`);
+            await nativeTransaction?.execute("COMMIT");
+            throw primary;
+          });
+        } catch (error) {
+          caught = error;
+        }
+        if (!(caught instanceof AggregateError) || !caught.errors.includes(primary)) {
+          throw new Error("libSQL transaction cleanup did not aggregate the native rollback failure.", { cause: caught });
+        }
+      } finally {
+        probeClient.close();
+        await probe.cleanup();
+      }
+    };
     const options: SqliteFixtureOptions = {
       db,
       close: async () => {
@@ -40,6 +81,7 @@ async function createFixture(): Promise<CertificationFixture> {
       failureCode: "SQLITE_CONSTRAINT",
       streamFailureCode: "SQLITE_ERROR",
       stats,
+      transactionCleanup,
     };
     return createSqliteFixture(options);
   } catch (error) {

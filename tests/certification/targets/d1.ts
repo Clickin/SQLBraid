@@ -6,6 +6,8 @@ import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { CertificationCaseId, CertificationFixture, CertificationTarget, ExpectedCapabilityContract, ResourceSnapshot, TransactionOptionKey, UnsupportedProbe } from "../types.js";
 
 interface D1Stats { prepares: number; batches: number; }
+const D1_EXACT_INTEGER = "9007199254740991";
+const D1_INJECTION = "'); UPDATE cert_sentinel SET marker = 'mutated' WHERE id = 1; --";
 
 function expectedObject(key: string, value: unknown): Record<string, unknown> {
   const result: Record<string, unknown> = {};
@@ -72,18 +74,18 @@ function buildQueries(stats: D1Stats): CertificationFixture["queries"] {
       savepointInsert: sql.command`INSERT INTO cert_values (value) VALUES (${"savepoint"})`,
       savepointVisible: sql.rows`SELECT value FROM cert_values WHERE value = 'savepoint'`,
     },
-    prepared: { command: preparedCommand, rows: preparedRows, input: "prepared-input", factoryCalls: () => preparedCalls, resources: () => 0 },
+    prepared: { command: preparedCommand, rows: preparedRows, input: "prepared-input", factoryCalls: () => preparedCalls },
     routines: { call, out: sql.call`SELECT ${sql.out("answer")}`, inout: sql.call`SELECT ${sql.inOut("answer", 1)}`, resultSets: call, cursor: call, returnValue: call },
     fidelity: {
-      largeExactInteger: sql.rows`SELECT '9007199254740991' AS value`,
-      exactDecimal: sql.rows`SELECT '12345678901234567890.123456789' AS value`,
-      temporal: sql.rows`SELECT '2026-09-14T12:34:56.789Z' AS value`,
-      injection: sql.rows`SELECT "'; SELECT 1; --" AS value`,
+      largeExactInteger: sql.rows`SELECT CAST(${D1_EXACT_INTEGER} AS INTEGER) AS value`,
+      exactDecimal: sql.rows`SELECT ${"12345678901234567890.123456789"} AS value`,
+      temporal: sql.rows`SELECT ${"2026-09-14T12:34:56.789Z"} AS value`,
+      injection: sql.rows`SELECT ${D1_INJECTION} AS value, (SELECT marker FROM cert_sentinel WHERE id = 1) AS sentinel`,
       expected: {
-        largeExactInteger: { value: "9007199254740991" },
+        largeExactInteger: { value: D1_EXACT_INTEGER },
         exactDecimal: { value: "12345678901234567890.123456789" },
         temporal: { value: "2026-09-14T12:34:56.789Z" },
-        injection: { value: "'; SELECT 1; --" },
+        injection: { value: D1_INJECTION, sentinel: "untouched" },
       },
     },
     expected: {
@@ -112,12 +114,14 @@ export function createD1Target(database: D1DatabaseLike, sourceSha: string): Cer
       };
       const db = createD1Database(binding);
       await db.execute(sql.command`CREATE TABLE IF NOT EXISTS cert_values (value TEXT NOT NULL)`);
+      await db.execute(sql.command`CREATE TABLE IF NOT EXISTS cert_sentinel (id INTEGER PRIMARY KEY, marker TEXT NOT NULL)`);
+      await db.execute(sql.command`INSERT OR IGNORE INTO cert_sentinel (id, marker) VALUES (1, 'untouched')`);
       const queries = buildQueries(stats);
       const unsupported: NonNullable<CertificationFixture["unsupported"]> = {};
       const streamQuery = sql.rows`SELECT value FROM cert_values`;
       for (const id of ["SES001", "SES002", "SES003", "SES004", "SES005", "SES006", "SES008", "STRESS006"] as const) unsupported[id] = probe(() => db.session(async () => undefined), "session.pinned", "BRAID_SESSION_UNSUPPORTED", () => stats.prepares);
       unsupported.SES007 = probe(async () => { for await (const row of db.stream(streamQuery)) void row; }, "statement.stream", "BRAID_STREAM_UNSUPPORTED", () => stats.prepares);
-      for (const id of ["TX001", "TX002", "TX003", "TX004", "TX005", "TX008", "TX009", "TX012", "STRESS002", "STRESS005"] as const) unsupported[id] = probe(() => db.tx(async () => undefined), "transaction", "BRAID_TX_UNSUPPORTED", () => stats.prepares);
+      for (const id of ["TX001", "TX002", "TX003", "TX004", "TX005", "TX006", "TX007", "TX008", "TX009", "TX012", "STRESS002", "STRESS005"] as const) unsupported[id] = probe(() => db.tx(async () => undefined), "transaction", "BRAID_TX_UNSUPPORTED", () => stats.prepares);
       unsupported.BULK004 = probe(() => db.tx(async () => undefined), "transaction", "BRAID_TX_UNSUPPORTED", () => stats.prepares);
       for (const id of ["TX010", "TX011", "TX013"] as const) unsupported[id] = { ...probe(() => db.tx(async () => undefined), "transaction.savepoint", "BRAID_TX_UNSUPPORTED", () => stats.prepares, "transaction"), expectedErrorFeature: "transaction" };
       for (const id of ["STR001", "STR002", "STR003", "STR004", "STR005", "STR007", "STR008", "STR009", "STR011", "STRESS004"] as const) unsupported[id] = probe(async () => { for await (const row of db.stream(streamQuery)) void row; }, "statement.stream", "BRAID_STREAM_UNSUPPORTED", () => stats.prepares);
@@ -130,18 +134,72 @@ export function createD1Target(database: D1DatabaseLike, sourceSha: string): Cer
       unsupported.CALL004 = probe(() => db.call(queries.routines!.resultSets!), "routine.result-sets", "BRAID_CALL_UNSUPPORTED", () => stats.prepares, "routine.call");
       unsupported.CALL005 = probe(() => db.call(queries.routines!.cursor!), "routine.out-cursor", "BRAID_CALL_UNSUPPORTED", () => stats.prepares, "routine.call");
       unsupported.CALL006 = probe(() => db.call(queries.routines!.returnValue!), "routine.return-value", "BRAID_CALL_UNSUPPORTED", () => stats.prepares, "routine.call");
+      unsupported.CALL007 = probe(() => db.call(queries.routines!.call), "routine.call", "BRAID_CALL_UNSUPPORTED", () => stats.prepares);
+      unsupported.PRE008 = probe(() => db.call(queries.routines!.call), "routine.call", "BRAID_CALL_UNSUPPORTED", () => stats.prepares);
       const options: Readonly<Record<string, { readonly value: Parameters<NonNullable<CertificationFixture["db"]["tx"]>>[0]; readonly feature: string }>> = {
         TX020: { value: { isolation: "read-uncommitted" }, feature: "transaction.isolation.read-uncommitted" }, TX021: { value: { readOnly: true }, feature: "transaction.read-only" }, TX022: { value: { isolation: "read-committed", readOnly: true }, feature: "transaction.isolation.read-committed" }, TX023: { value: { isolation: "read-committed" }, feature: "transaction.isolation.read-committed" }, TX024: { value: { isolation: "repeatable-read" }, feature: "transaction.isolation.repeatable-read" }, TX025: { value: { isolation: "serializable" }, feature: "transaction.isolation.serializable" }, TX026: { value: { readOnly: false }, feature: "transaction.read-only" }, TX027: { value: { isolation: "read-uncommitted", readOnly: true }, feature: "transaction.isolation.read-uncommitted" }, TX028: { value: { isolation: "serializable", readOnly: true }, feature: "transaction.isolation.serializable" }, TX029: { value: { isolation: "read-uncommitted", readOnly: false }, feature: "transaction.isolation.read-uncommitted" }, TX030: { value: { isolation: "read-committed", readOnly: false }, feature: "transaction.isolation.read-committed" }, TX031: { value: { isolation: "repeatable-read", readOnly: true }, feature: "transaction.isolation.repeatable-read" }, TX032: { value: { isolation: "repeatable-read", readOnly: false }, feature: "transaction.isolation.repeatable-read" }, TX033: { value: { isolation: "serializable", readOnly: false }, feature: "transaction.isolation.serializable" },
       };
       for (const [id, option] of Object.entries(options)) unsupported[id as CertificationCaseId] = probe(() => db.tx(option.value, async () => undefined), option.feature, "BRAID_TX_OPTION_UNSUPPORTED", () => stats.prepares);
-      const bulk: BulkConformanceFixture<unknown> = { db, inputs: [1, 2], factory: (input) => sql.command`INSERT INTO cert_values (value) VALUES (${String(input)})`, expected: { inputCount: 2, affectedRows: 2 }, acquireCount: () => stats.batches, executeCount: () => stats.batches, middleFailure: async () => db.bulk([1, 2], (input) => input === 2 ? sql.command`INSERT INTO cert_missing_bulk (value) VALUES (${input})` : sql.command`INSERT INTO cert_values (value) VALUES (${input})`) };
-      const metrics = { snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0 }), sideEffects: () => stats.prepares, physicalSessionIds: () => ["cloudflare-d1"] };
+      const bulk: BulkConformanceFixture<unknown> = {
+        db,
+        inputs: [1, 2],
+        factory: (input) => sql.command`INSERT INTO cert_values (value) VALUES (${String(input)})`,
+        expected: { inputCount: 2, affectedRows: 2 },
+        acquireCount: () => stats.batches,
+        executeCount: () => stats.batches,
+        middleFailure: async () => {
+          await db.execute(sql.command`DELETE FROM cert_values`);
+          let error: unknown;
+          try {
+            await db.bulk([1, 2], (input) => input === 2
+              ? sql.command`INSERT INTO cert_missing_bulk (value) VALUES (${input})`
+              : sql.command`INSERT INTO cert_values (value) VALUES (${input})`);
+          } catch (caught) {
+            error = caught;
+          }
+          if (error === undefined) throw new Error("D1 bulk middle-item failure was not observed.");
+          const rows = await db.all(sql.rows<{ readonly value: number }>`SELECT value FROM cert_values`);
+          if (rows.length !== 0 && rows.length !== 1) throw new Error(`D1 bulk middle-item durability was not prefix or atomic: ${rows.length} rows.`);
+          const expectedRows = rows.length === 0 ? [] : rows;
+          return { error, observedRows: rows, expectedRows, durability: rows.length === 0 ? "atomic" as const : "prefix" as const };
+        },
+      };
+      const metrics = {
+        snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0 }),
+        sideEffects: () => stats.prepares,
+        mutationSentinel: async () => {
+          const row = await db.one(sql.rows<{ readonly marker: string }>`SELECT marker FROM cert_sentinel WHERE id = 1`);
+          return row.marker;
+        },
+        physicalSessionIds: () => ["cloudflare-d1"],
+      };
       return {
-        db, queries, bulk, metrics, reset: async () => { await db.execute(sql.command`DELETE FROM cert_values`); }, unsupported,
+        db, queries, bulk, metrics, reset: async () => {
+          await db.execute(sql.command`DELETE FROM cert_values`);
+          await db.execute(sql.command`UPDATE cert_sentinel SET marker = 'untouched' WHERE id = 1`);
+        }, unsupported,
         guarded: {
-          "numeric.exact-integer": { prove: async () => { const row = await db.one(sql.rows`SELECT CAST('9007199254740991' AS INTEGER) AS value`) as { readonly value: unknown }; if (row.value !== "9007199254740991") throw new Error("D1 exact-integer guarded proof failed."); } },
-          "numeric.approximate-float": { prove: async () => { const row = await db.one(sql.rows`SELECT CAST(1.5 AS REAL) AS value`) as { readonly value: unknown }; if (row.value !== 1.5) throw new Error("D1 approximate-float guarded proof failed."); } },
-          "numeric.bind-exact": { prove: async () => { const row = await db.one(sql.rows`SELECT ${"9007199254740991"} AS value`) as { readonly value: unknown }; if (row.value !== "9007199254740991") throw new Error("D1 bind-exact guarded proof failed."); } },
+          "numeric.exact-integer": { prove: async () => {
+            const row = await db.one(sql.rows`SELECT CAST(${D1_EXACT_INTEGER} AS INTEGER) AS value`) as { readonly value: unknown };
+            if (row.value !== D1_EXACT_INTEGER) throw new Error("D1 exact-integer guarded proof failed.");
+            let error: unknown;
+            try {
+              await db.one(sql.rows`SELECT CAST(${9007199254740992} AS INTEGER) AS value`);
+            } catch (caught) {
+              error = caught;
+            }
+            if (!(error instanceof RangeError) || !error.message.includes("BRAID_INTEGER_UNSAFE")) {
+              throw new Error("D1 exact-integer guard did not reject an unsafe integer.", { cause: error });
+            }
+          } },
+          "numeric.approximate-float": { prove: async () => {
+            const row = await db.one(sql.rows`SELECT CAST(${1.5} AS REAL) AS value`) as { readonly value: unknown };
+            if (row.value !== 1.5) throw new Error("D1 approximate-float guarded proof failed.");
+          } },
+          "numeric.bind-exact": { prove: async () => {
+            const row = await db.one(sql.rows`SELECT ${D1_EXACT_INTEGER} AS value`) as { readonly value: unknown };
+            if (row.value !== D1_EXACT_INTEGER) throw new Error("D1 bind-exact guarded proof failed.");
+          } },
         },
       };
     },

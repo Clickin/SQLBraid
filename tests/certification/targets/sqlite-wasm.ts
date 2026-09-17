@@ -182,15 +182,15 @@ function buildQueries(stats: NativeStats): CertificationFixture["queries"] {
     },
     routines: { call, out, inout, resultSets: call, cursor: call, returnValue: call },
     fidelity: {
-      largeExactInteger: sql.rows`SELECT '9007199254740991' AS value`,
-      exactDecimal: sql.rows`SELECT '12345678901234567890.123456789' AS value`,
-      temporal: sql.rows`SELECT '2026-09-14T12:34:56.789Z' AS value`,
-      injection: sql.rows`SELECT "'; SELECT 1; --" AS value`,
+      largeExactInteger: sql.rows`SELECT ${9223372036854775807n} AS value`,
+      exactDecimal: sql.rows`SELECT ${"12345678901234567890.123456789"} AS value`,
+      temporal: sql.rows`SELECT ${"2026-09-14T12:34:56.789Z"} AS value`,
+      injection: sql.rows`SELECT ${"'); UPDATE cert_sentinel SET marker = 'mutated' WHERE id = 1; --"} AS value, (SELECT marker FROM cert_sentinel WHERE id = 1) AS sentinel`,
       expected: {
-        largeExactInteger: { value: "9007199254740991" },
+        largeExactInteger: { value: "9223372036854775807" },
         exactDecimal: { value: "12345678901234567890.123456789" },
         temporal: { value: "2026-09-14T12:34:56.789Z" },
-        injection: { value: "'; SELECT 1; --" },
+        injection: { value: "'); UPDATE cert_sentinel SET marker = 'mutated' WHERE id = 1; --", sentinel: "untouched" },
       },
     },
     expected: {
@@ -248,19 +248,40 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
       };
       const observed = wrapNative(native, stats, faults);
       observed.exec("CREATE TABLE cert_values (value TEXT NOT NULL)");
-      observed.exec("CREATE TEMP TABLE cert_identity (id TEXT NOT NULL); INSERT INTO temp.cert_identity (id) VALUES ('sqlite-wasm-browser')");
+      observed.exec("CREATE TABLE cert_sentinel (id INTEGER PRIMARY KEY, marker TEXT NOT NULL)");
+      observed.exec("INSERT INTO cert_sentinel (id, marker) VALUES (1, 'untouched')");
+      observed.exec("CREATE TEMP TABLE cert_identity (id TEXT NOT NULL)");
+      observed.exec("INSERT INTO temp.cert_identity (id) VALUES ('sqlite-wasm-browser')");
       const db = createSqliteWasmDatabase(observed, { sqlite3 });
       const queries = buildQueries(stats);
+      const transactionCleanup = async (): Promise<void> => {
+        const primary = new Error("cert-transaction-cleanup");
+        let caught: unknown;
+        try {
+          await db.tx(async (tx) => {
+            await tx.execute(queries.transaction!.insert);
+            observed.exec("COMMIT");
+            throw primary;
+          });
+        } catch (error) {
+          caught = error;
+        }
+        if (!(caught instanceof AggregateError) || !caught.errors.includes(primary)) {
+          throw new Error("SQLite WASM transaction cleanup did not aggregate the native rollback failure.", { cause: caught });
+        }
+      };
       const unsupported: NonNullable<CertificationFixture["unsupported"]> = {
         STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
         STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
         PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
+        PRE008: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.call), sideEffects: () => stats.prepares },
         CALL001: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.call), sideEffects: () => stats.prepares },
         CALL002: { feature: "routine.out", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.out!), sideEffects: () => stats.prepares },
         CALL003: { feature: "routine.inout", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.inout!), sideEffects: () => stats.prepares },
         CALL004: { feature: "routine.result-sets", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.resultSets!), sideEffects: () => stats.prepares },
         CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.cursor!), sideEffects: () => stats.prepares },
         CALL006: { feature: "routine.return-value", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.returnValue!), sideEffects: () => stats.prepares },
+        CALL007: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.call), sideEffects: () => stats.prepares },
         TX020: optionsProbe(db, { isolation: "read-uncommitted" }, "transaction.isolation.read-uncommitted", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
         TX021: optionsProbe(db, { readOnly: true }, "transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
         TX022: optionsProbe(db, { isolation: "read-committed", readOnly: true }, "transaction.isolation.read-committed", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
@@ -306,6 +327,12 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         midStreamFailureQuery,
         cleanupFailureQuery: sql.rows`SELECT 1 AS value /* __cert_cleanup_failure__ */`,
         cleanupFailure: faults.cleanupFailure,
+        iteratorReturns: () => stats.finalizeCalls,
+        released: () => stats.finalizeCalls,
+        reuseAfterBreak: async () => {
+          const row = await db.one(queries.identity);
+          if (row.id !== "sqlite-wasm-browser") throw new Error("SQLite WASM stream reuse changed physical session identity.");
+        },
         largeResultQuery,
         largeResultCount: 10000,
       };
@@ -330,11 +357,48 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         expected: { inputCount: 2, affectedRows: 2 },
         acquireCount: () => bulkAcquires,
         executeCount: () => bulkExecutes,
-        middleFailure: async () => db.bulk([1, 2], (input) => input === 2 ? sql.command`INSERT INTO cert_missing_bulk (value) VALUES (${input})` : sql.command`INSERT INTO cert_values (value) VALUES (${input})`),
+        middleFailure: async () => {
+          observed.exec("DELETE FROM cert_values");
+          let error: unknown;
+          try {
+            await db.bulk([1, 2], (input) => input === 2
+              ? sql.command`INSERT INTO cert_missing_bulk (value) VALUES (${input})`
+              : sql.command`INSERT INTO cert_values (value) VALUES (${input})`);
+          } catch (caught) {
+            error = caught;
+          }
+          if (error === undefined) throw new Error("SQLite WASM bulk middle-item failure was not observed.");
+          const rows = await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM cert_values`);
+          if (rows.length !== 0 && rows.length !== 1) throw new Error(`SQLite WASM bulk middle-item durability was not prefix or atomic: ${rows.length} rows.`);
+          const expectedRows = rows.length === 0 ? [] : rows;
+          return { error, observedRows: rows, expectedRows, durability: rows.length === 0 ? "atomic" as const : "prefix" as const };
+        },
       };
       const metrics = {
-        snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0, openCursors: stats.active, openPrepared: 0 }),
+        snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: stats.active, openCursors: stats.active, openPrepared: 0 }),
         sideEffects: () => stats.prepares,
+        mutationSentinel: async () => {
+          const row = await db.one(sql.rows<{ readonly marker: string }>`SELECT marker FROM cert_sentinel WHERE id = 1`);
+          return row.marker;
+        },
+        readOnlyWrite: async () => {
+          observed.exec("DELETE FROM cert_values");
+          await db.tx(async (tx) => { await tx.execute(queries.transaction!.insert); });
+          const before = await db.all(queries.transaction!.visible);
+          if (before.length !== 1) throw new Error(`SQLite WASM read-write transaction proof expected one row, got ${before.length}.`);
+          let error: unknown;
+          try {
+            await db.tx({ readOnly: true }, async (tx) => { await tx.execute(queries.transaction!.savepointInsert); });
+          } catch (caught) {
+            error = caught;
+          }
+          if ((error as { readonly code?: unknown } | undefined)?.code !== "BRAID_TX_OPTION_UNSUPPORTED") {
+            throw new Error("SQLite WASM read-only transaction did not reject with BRAID_TX_OPTION_UNSUPPORTED.", { cause: error });
+          }
+          const after = await db.all(queries.transaction!.visible);
+          if (after.length !== 1) throw new Error(`SQLite WASM read-only rejection changed state: ${after.length} rows.`);
+        },
+        transactionCleanup,
         physicalSessionIds: () => ["sqlite-wasm-browser"],
       };
       return {
@@ -343,7 +407,12 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         stream: streamFixture,
         bulk,
         metrics,
-        reset: async () => { observed.exec("DELETE FROM cert_values"); },
+        reset: async () => {
+          stats.finalizeCalls = 0;
+          stats.finalizeByStatement.length = 0;
+          observed.exec("DELETE FROM cert_values");
+          observed.exec("UPDATE cert_sentinel SET marker = 'untouched' WHERE id = 1");
+        },
         unsupported,
         close: async () => { observed.close(); },
       };
