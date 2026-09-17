@@ -184,6 +184,7 @@ test("package-specific staging validates the full candidate but uploads only the
     ["@sqlbraid/core", "@sqlbraid/postgres"],
     ["@sqlbraid/postgres"],
   );
+  f.publicIntegrity.set("@sqlbraid/core", f.manifest.packages[0].integrity);
   const result = await f.run();
   assert.ok(result?.complete);
   assert.deepEqual(result?.packages.map(({ name }) => name), ["@sqlbraid/postgres"]);
