@@ -465,7 +465,7 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     const statements = {
       insert: `INSERT INTO ${quoteIdentifier(dialect, table)} (value) VALUES (?) RETURNING id`,
       update: `UPDATE ${quoteIdentifier(dialect, table)} SET value = ? WHERE id = 1 RETURNING id`,
-      delete: `DELETE FROM ${quoteIdentifier(dialect, table)} WHERE id = 1 RETURNING id`,
+      delete: `DELETE FROM ${quoteIdentifier(dialect, table)} WHERE id = ? RETURNING id`,
     };
     try {
       await client.unsafe(statements[operation], [`native-${operation}`]);
