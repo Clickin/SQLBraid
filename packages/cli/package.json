@@ -40,12 +40,12 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/codegen": "workspace:*",
-    "@sqlbraid/compiler": "workspace:*",
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/metadata": "workspace:*",
-    "@sqlbraid/operations": "workspace:*",
-    "@sqlbraid/tooling": "workspace:*"
+    "@sqlbraid/codegen": "workspace:^1.0.0",
+    "@sqlbraid/compiler": "workspace:^1.0.0",
+    "@sqlbraid/core": "workspace:^1.0.0",
+    "@sqlbraid/metadata": "workspace:^1.0.0",
+    "@sqlbraid/operations": "workspace:^1.0.0",
+    "@sqlbraid/tooling": "workspace:^1.0.0"
   },
   "engines": {
     "node": ">=22.18.0"

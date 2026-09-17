@@ -1,6 +1,6 @@
 # Changelog
 
-This changelog covers the lockstep SQLBraid workspace release train. It
+This changelog covers SQLBraid package releases. The initial 1.0.0 release is coordinated; subsequent workspace packages may version and release independently. It
 summarizes durable compatibility and release information; detailed behavior
 and support evidence live in the [public API audit](docs/public-api-audit.md),
 [release notes](docs/SQLBraid_1.0.0_release_notes.md), and

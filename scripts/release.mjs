@@ -16,8 +16,8 @@ const packageManager = rootManifest.packageManager;
 const pnpmVersion = /^pnpm@(\d+\.\d+\.\d+)$/u.exec(packageManager ?? "")?.[1];
 if (!pnpmVersion) throw new Error("Release requires an exact pnpm version in package.json#packageManager.");
 let version = process.env.SQLBRAID_RELEASE_VERSION ?? rootManifest.version;
-let semver = parseSemver(version);
-let expectedTag = `v${version}`;
+let releasePackage = process.env.SQLBRAID_RELEASE_PACKAGE ?? "*";
+let expectedTag = releaseCandidateTag(releasePackage, version);
 const packageFields = ["dependencies", "optionalDependencies", "peerDependencies"];
 const artifactArgument = option("--artifact-dir", process.env.SQLBRAID_RELEASE_ARTIFACT_DIR);
 let artifactDir = resolve(artifactArgument ?? join(tmpdir(), `sqlbraid-release-${version}`));
@@ -51,13 +51,36 @@ function releasePrereleaseArg(value) {
   return parseSemver(value).isPrerelease ? "--prerelease" : undefined;
 }
 
-function releaseTag() {
-  return semver.isPrerelease ? "next" : `release-${version}`;
+function releasePackageSlug(value) {
+  if (value === "*" || value === "all") return "*";
+  if (value === "sqlbraid") return "sqlbraid";
+  if (typeof value === "string" && value.startsWith("@sqlbraid/")) value = value.slice("@sqlbraid/".length);
+  if (typeof value !== "string" || !/^[a-z0-9][a-z0-9._-]*$/u.test(value))
+    throw new Error(`Invalid release package selector ${String(value)}.`);
+  return value;
+}
+
+function releaseCandidateTag(packageName = releasePackage, releaseVersion = version) {
+  const slug = releasePackageSlug(packageName);
+  return slug === "*" ? `v${releaseVersion}` : `${slug}-v${releaseVersion}`;
+}
+
+function releaseTag(releaseVersion = version) {
+  return parseSemver(releaseVersion).isPrerelease ? "next" : `release-${releaseVersion}`;
+}
+
+function selectReleasePackages(packages, selector = releasePackage) {
+  const slug = releasePackageSlug(selector);
+  if (slug === "*") return packages;
+  const selected = packages.filter(({ manifest }) => releasePackageSlug(manifest.name) === slug);
+  if (selected.length !== 1) throw new Error(`Unknown or ambiguous release package ${selector}.`);
+  return selected;
 }
 
 function candidateIdentity(manifest) {
   return {
     version: manifest.version,
+    releasePackages: manifest.releasePackages,
     commit: manifest.commit,
     packages: manifest.packages,
   };
@@ -192,16 +215,14 @@ async function assertTaggedSha() {
   return head;
 }
 
-async function assertVersions(packages) {
-  const mismatches = [];
-  if (rootManifest.version !== version) mismatches.push(`workspace@${rootManifest.version}`);
-  mismatches.push(
-    ...packages
-      .filter(({ manifest }) => manifest.version !== version)
-      .map(({ manifest }) => `${manifest.name}@${manifest.version}`),
-  );
+function assertReleaseVersions(packages) {
+  const selected = selectReleasePackages(packages);
+  const mismatches = selected
+    .filter(({ manifest }) => manifest.version !== version)
+    .map(({ manifest }) => `${manifest.name}@${manifest.version}`);
   if (mismatches.length > 0)
-    throw new Error(`All publishable npm packages must be synchronized at ${version}: ${mismatches.join(", ")}.`);
+    throw new Error(`Release target ${releasePackage} must be at ${version}: ${mismatches.join(", ")}.`);
+  return selected;
 }
 
 async function tarballFiles() {
@@ -215,11 +236,12 @@ async function tarballManifest(path) {
   return JSON.parse(content);
 }
 
-async function validateTarball(path, packageNames) {
+async function validateTarball(path, packageVersions) {
   const manifest = await tarballManifest(path);
-  if (!packageNames.has(manifest.name)) throw new Error(`Unexpected package in ${path}: ${manifest.name}.`);
-  if (manifest.version !== version)
-    throw new Error(`${manifest.name} in ${path} is ${manifest.version}, expected ${version}.`);
+  const expectedVersion = packageVersions.get(manifest.name);
+  if (!expectedVersion) throw new Error(`Unexpected package in ${path}: ${manifest.name}.`);
+  if (manifest.version !== expectedVersion)
+    throw new Error(`${manifest.name} in ${path} is ${manifest.version}, expected ${expectedVersion}.`);
   if (JSON.stringify(manifest).includes("workspace:")) throw new Error(`${path} leaks a workspace: dependency.`);
   const listing = await command("tar", ["-tf", path], root, { quiet: true });
   for (const required of ["package/package.json", "package/README.md", "package/LICENSE"]) {
@@ -240,7 +262,7 @@ async function integrity(path) {
     .digest("base64")}`;
 }
 
-async function pack(packages, order, sha) {
+async function pack(packages, order, sha, releaseNames) {
   await assertPnpmVersion();
   await mkdir(artifactDir, { recursive: true });
   if (process.env.GITHUB_ACTIONS === "true" && (!process.env.GITHUB_RUN_ID || !process.env.GITHUB_RUN_ATTEMPT)) {
@@ -261,24 +283,25 @@ async function pack(packages, order, sha) {
       `Release artifact directory already contains validated outputs: ${conflicting.join(", ")}. Use a new directory.`,
     );
   }
-  const packageNames = new Set(packages.map(({ manifest }) => manifest.name));
+  const packageVersions = new Map(packages.map(({ manifest }) => [manifest.name, manifest.version]));
   const tarballs = new Map();
   for (const entry of packages) {
     const before = new Set(await tarballFiles());
     await command("pnpm", ["pack", "--pack-destination", artifactDir], entry.directory);
     const added = (await tarballFiles()).filter((path) => !before.has(path));
     if (added.length !== 1) throw new Error(`Expected one tarball for ${entry.manifest.name}; found ${added.length}.`);
-    await validateTarball(added[0], packageNames);
+    await validateTarball(added[0], packageVersions);
     tarballs.set(entry.manifest.name, added[0]);
   }
   const manifest = {
     version,
+    releasePackages: [...releaseNames],
     commit: sha,
     runId: process.env.GITHUB_RUN_ID ?? null,
     runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
     packages: order.map((name) => ({
       name,
-      version,
+      version: packages.find((entry) => entry.manifest.name === name).manifest.version,
       file: basename(tarballs.get(name)),
       sha256: null,
       integrity: null,
@@ -300,6 +323,8 @@ async function pack(packages, order, sha) {
 function assertManifestIdentity(manifest) {
   if (
     manifest.version !== version ||
+    !Array.isArray(manifest.releasePackages) ||
+    manifest.releasePackages.length === 0 ||
     !/^[a-f\d]{40}$/u.test(manifest.commit ?? "") ||
     !Array.isArray(manifest.packages) ||
     manifest.packages.length === 0
@@ -312,7 +337,7 @@ function assertManifestIdentity(manifest) {
       typeof entry.name !== "string" ||
       !/^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/u.test(entry.name) ||
       names.has(entry.name) ||
-      entry.version !== version ||
+      !isSemVer(entry.version) ||
       typeof entry.sha256 !== "string" ||
       !/^[a-f\d]{64}$/u.test(entry.sha256) ||
       typeof entry.integrity !== "string" ||
@@ -321,6 +346,13 @@ function assertManifestIdentity(manifest) {
       throw new Error("Invalid release manifest package identity, version, or hashes.");
     }
     names.add(entry.name);
+  }
+  const releaseNames = new Set();
+  for (const name of manifest.releasePackages) {
+    const entry = manifest.packages.find((candidate) => candidate.name === name);
+    if (typeof name !== "string" || releaseNames.has(name) || !entry || entry.version !== manifest.version)
+      throw new Error("Invalid release package selection.");
+    releaseNames.add(name);
   }
 }
 
@@ -354,6 +386,7 @@ async function readReleaseManifest(
   }
   const files = new Set();
   const packageNames = new Set(manifest.packages.map(({ name }) => name));
+  const packageVersions = new Map(manifest.packages.map(({ name, version }) => [name, version]));
   for (const entry of manifest.packages) {
     if (typeof entry.file !== "string" || basename(entry.file) !== entry.file || files.has(entry.file)) {
       throw new Error("Invalid release-manifest.json package entries.");
@@ -364,7 +397,7 @@ async function readReleaseManifest(
     if (actualSha !== entry.sha256) throw new Error(`Validated tarball changed: ${entry.file}.`);
     const actualIntegrity = await integrity(path);
     if (actualIntegrity !== entry.integrity) throw new Error(`Validated tarball integrity changed: ${entry.file}.`);
-    const packedManifest = await validateTarball(path, packageNames);
+    const packedManifest = await validateTarball(path, packageVersions);
     if (packedManifest.name !== entry.name) throw new Error(`Candidate package identity mismatch: ${entry.file}.`);
     const dependencies = [
       ...new Set(
@@ -451,10 +484,10 @@ async function registryDistTags(name) {
 }
 
 async function assertRegistryIntegrity(entry) {
-  const found = await registryIntegrity(entry.name, version);
+  const found = await registryIntegrity(entry.name, entry.version);
   if (found !== entry.integrity)
     throw new Error(
-      `Registry integrity mismatch for ${entry.name}@${version}: expected ${entry.integrity}, found ${found ?? "absent"}.`,
+      `Registry integrity mismatch for ${entry.name}@${entry.version}: expected ${entry.integrity}, found ${found ?? "absent"}.`,
     );
 }
 
@@ -578,8 +611,9 @@ async function createReleaseEvidence(
 function approvalCommands(manifest, records) {
   const levels = new Map();
   const layers = [];
-  for (const entry of manifest.packages) {
-    const dependencies = entry.dependencies ?? [];
+  const releaseNames = new Set(records.map(({ name }) => name));
+  for (const entry of manifest.packages.filter(({ name }) => releaseNames.has(name))) {
+    const dependencies = (entry.dependencies ?? []).filter((name) => releaseNames.has(name));
     if (dependencies.some((name) => !levels.has(name)))
       throw new Error("Candidate dependencies are not in publication order.");
     const level = dependencies.reduce((max, name) => Math.max(max, levels.get(name) + 1), 0);
@@ -652,7 +686,7 @@ async function stagePackage(entry, record, persist, directory) {
         "--access",
         "public",
         "--tag",
-        releaseTag(),
+        releaseTag(entry.version),
         "--no-git-checks",
         "--ignore-scripts",
         "--provenance",
@@ -688,10 +722,41 @@ async function stagePackage(entry, record, persist, directory) {
   await persist();
 }
 
-async function registryTagSnapshot(manifest) {
+async function registryTagSnapshot(entries) {
   return Object.fromEntries(
-    await Promise.all(manifest.packages.map(async (entry) => [entry.name, await registryDistTags(entry.name)])),
+    await Promise.all(entries.map(async (entry) => [entry.name, await registryDistTags(entry.name)])),
   );
+}
+
+async function assertStageablePackages(manifest) {
+  const releaseEntries = manifest.packages.filter(({ name }) => manifest.releasePackages.includes(name));
+  for (const entry of releaseEntries) {
+    if (await registryIntegrity(entry.name, entry.version)) continue;
+    const versions = await pnpmView(entry.name, "versions");
+    if (!Array.isArray(versions) || versions.length === 0) {
+      throw new Error(
+        `${entry.name} does not exist on npm. npm staged publishing cannot create a new package; publish one lower bootstrap version manually, configure trusted publishing, then retry this exact candidate.`,
+      );
+    }
+  }
+}
+
+async function assertPublishedInternalDependencies(manifest) {
+  const releaseNames = new Set(manifest.releasePackages);
+  const byName = new Map(manifest.packages.map((entry) => [entry.name, entry]));
+  for (const entry of manifest.packages.filter(({ name }) => releaseNames.has(name))) {
+    for (const dependency of entry.dependencies ?? []) {
+      if (releaseNames.has(dependency)) continue;
+      const dependencyEntry = byName.get(dependency);
+      if (!dependencyEntry) continue;
+      const found = await registryIntegrity(dependencyEntry.name, dependencyEntry.version);
+      if (!found) {
+        throw new Error(
+          `Release dependency ${dependencyEntry.name}@${dependencyEntry.version} required by ${entry.name}@${entry.version} is not public; release the dependency first or include it in a coordinated release.`,
+        );
+      }
+    }
+  }
 }
 
 function assertLatestUnchanged(before, after, name) {
@@ -702,9 +767,9 @@ function assertLatestUnchanged(before, after, name) {
   }
 }
 
-function assertNoTagDowngrade(name, tag, found) {
-  if (found && (!isSemVer(found) || compareSemVer(found, version) > 0)) {
-    throw new Error(`Refusing to move ${name}:${tag} backward from ${found} to ${version}.`);
+function assertNoTagDowngrade(name, tag, found, targetVersion) {
+  if (found && (!isSemVer(found) || compareSemVer(found, targetVersion) > 0)) {
+    throw new Error(`Refusing to move ${name}:${tag} backward from ${found} to ${targetVersion}.`);
   }
 }
 
@@ -720,9 +785,10 @@ async function stageCandidates(
   } = {},
 ) {
   assertManifestIdentity(manifest);
+  const releaseEntries = manifest.packages.filter(({ name }) => manifest.releasePackages.includes(name));
   await assertPnpmVersion();
   if (dryRun) {
-    for (const entry of manifest.packages) {
+    for (const entry of releaseEntries) {
       const output = await pnpm(
         [
           "stage",
@@ -731,7 +797,7 @@ async function stageCandidates(
           "--access",
           "public",
           "--tag",
-          releaseTag(),
+          releaseTag(entry.version),
           "--dry-run",
           "--no-git-checks",
           "--ignore-scripts",
@@ -757,6 +823,8 @@ async function stageCandidates(
   }
   assertPublicationCredentials("stage");
   await assertOfficialRegistry();
+  await assertStageablePackages(manifest);
+  await assertPublishedInternalDependencies(manifest);
   let evidence;
   let existingEvidence;
   try {
@@ -806,14 +874,14 @@ async function stageCandidates(
       candidateRunAttempt: manifest.runAttempt,
       manifestSha256: manifestDigest(manifest),
       candidateIdentitySha256: candidateIdentityDigest(manifest),
-      latestBefore: await registryTagSnapshot(manifest),
+      latestBefore: await registryTagSnapshot(releaseEntries),
       complete: false,
-      packages: manifest.packages.map((entry) => ({
+      packages: releaseEntries.map((entry) => ({
         name: entry.name,
         version: entry.version,
         candidateSha256: entry.sha256,
         candidateIntegrity: entry.integrity,
-        tag: releaseTag(),
+        tag: releaseTag(entry.version),
         state: "absent",
       })),
       approvalCommands: [],
@@ -823,35 +891,40 @@ async function stageCandidates(
   const persist = () => persistStaging(manifest, evidence, directory);
   await persist();
   try {
-    for (const entry of manifest.packages) {
+    for (const entry of releaseEntries) {
+      const entrySemver = parseSemver(entry.version);
       const tags = await registryDistTags(entry.name);
       assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
       assertNoTagDowngrade(
         entry.name,
-        semver.isPrerelease ? "next" : "latest",
-        tags[semver.isPrerelease ? "next" : "latest"],
+        entrySemver.isPrerelease ? "next" : "latest",
+        tags[entrySemver.isPrerelease ? "next" : "latest"],
+        entry.version,
       );
-      assertNoTagDowngrade(entry.name, releaseTag(), tags[releaseTag()]);
-      if (semver.isPrerelease && tags.latest === version)
-        throw new Error(`Refusing prerelease ${version} under latest for ${entry.name}.`);
+      const requestedTag = releaseTag(entry.version);
+      assertNoTagDowngrade(entry.name, requestedTag, tags[requestedTag], entry.version);
+      if (entrySemver.isPrerelease && tags.latest === entry.version)
+        throw new Error(`Refusing prerelease ${entry.version} under latest for ${entry.name}.`);
     }
-    for (const [index, entry] of manifest.packages.entries()) {
+    for (const [index, entry] of releaseEntries.entries()) {
       // pnpm obtains its own short-lived OIDC credential for stage publish.
       // Staged-package list/view/download endpoints require maintainer auth and
       // are intentionally left to the post-CI review boundary.
       await stagePackage(entry, evidence.packages[index], persist, directory);
       const tags = await registryDistTags(entry.name);
       assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
-      if (evidence.packages[index].state === "public" && tags[releaseTag()] !== version) {
+      const requestedTag = releaseTag(entry.version);
+      if (evidence.packages[index].state === "public" && tags[requestedTag] !== entry.version) {
         throw new Error(
-          `Exact public ${entry.name}@${version} has incorrect ${releaseTag()} tag; maintainer must reconcile the tag before retrying. No tag was changed.`,
+          `Exact public ${entry.name}@${entry.version} has incorrect ${requestedTag} tag; maintainer must reconcile the tag before retrying. No tag was changed.`,
         );
       }
     }
-    for (const entry of manifest.packages) {
+    for (const entry of releaseEntries) {
       const tags = await registryDistTags(entry.name);
+      const requestedTag = releaseTag(entry.version);
       assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
-      assertNoTagDowngrade(entry.name, releaseTag(), tags[releaseTag()]);
+      assertNoTagDowngrade(entry.name, requestedTag, tags[requestedTag], entry.version);
     }
     evidence.complete = true;
   } finally {
@@ -881,7 +954,7 @@ function assertStagingEvidence(
     (allowPriorIdentity &&
       (!["fresh", "reconcile"].includes(evidence.mode) || !/^[a-f\d]{64}$/u.test(evidence.manifestSha256 ?? ""))) ||
     !Array.isArray(evidence.packages) ||
-    evidence.packages.length !== manifest.packages.length
+    evidence.packages.length !== manifest.releasePackages.length
   )
     throw new Error("Staging evidence does not match the immutable release manifest.");
   if (
@@ -890,14 +963,15 @@ function assertStagingEvidence(
   ) {
     throw new Error("Staging evidence does not preserve the immutable candidate run identity.");
   }
-  for (const [index, entry] of manifest.packages.entries()) {
+  const releaseEntries = manifest.packages.filter(({ name }) => manifest.releasePackages.includes(name));
+  for (const [index, entry] of releaseEntries.entries()) {
     const record = evidence.packages[index];
     if (
       record.name !== entry.name ||
       record.version !== entry.version ||
       record.candidateSha256 !== entry.sha256 ||
       record.candidateIntegrity !== entry.integrity ||
-      record.tag !== releaseTag() ||
+      record.tag !== releaseTag(entry.version) ||
       !evidence.latestBefore?.[entry.name] ||
       !["absent", "pending", "staged", "public"].includes(record.state)
     )
@@ -916,27 +990,32 @@ async function verifyPublished(manifest, evidence, { requireLatest = false } = {
   assertManifestIdentity(manifest);
   assertStagingEvidence(manifest, evidence, { expectedRunId: evidence.runId, expectedRunAttempt: evidence.runAttempt });
   await assertPnpmVersion();
-  for (const entry of manifest.packages) {
+  const releaseEntries = manifest.packages.filter(({ name }) => manifest.releasePackages.includes(name));
+  for (const entry of releaseEntries) {
     await assertRegistryIntegrity(entry);
     const tags = await registryDistTags(entry.name);
-    if (tags[releaseTag()] !== version)
-      throw new Error(`Registry tag ${entry.name}:${releaseTag()} does not point at ${version}.`);
-    if (!semver.isPrerelease && requireLatest) {
-      if (tags.latest !== version) throw new Error(`Registry latest for ${entry.name} does not point at ${version}.`);
+    const requestedTag = releaseTag(entry.version);
+    const entrySemver = parseSemver(entry.version);
+    if (tags[requestedTag] !== entry.version)
+      throw new Error(`Registry tag ${entry.name}:${requestedTag} does not point at ${entry.version}.`);
+    if (!entrySemver.isPrerelease && requireLatest) {
+      if (tags.latest !== entry.version)
+        throw new Error(`Registry latest for ${entry.name} does not point at ${entry.version}.`);
     } else assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
     const attestations = await pnpmView(`${entry.name}@${entry.version}`, "dist.attestations");
     if (typeof attestations?.url !== "string" || !attestations.provenance?.predicateType)
       throw new Error(`Public provenance metadata missing for ${entry.name}@${entry.version}.`);
   }
   process.stdout.write(
-    `Verified every ${version} package publicly: candidate integrity, requested tags, provenance metadata, and latest policy.\n`,
+    `Verified ${releaseEntries.length} release package(s) publicly: candidate integrity, requested tags, provenance metadata, and latest policy.\n`,
   );
-  if (!semver.isPrerelease && !requireLatest) {
+  const stableEntries = releaseEntries.filter((entry) => !parseSemver(entry.version).isPrerelease);
+  if (stableEntries.length > 0 && !requireLatest) {
     process.stdout.write(
-      "All packages are public. Immediately recheck latest for concurrent releases before these manual promotions:\n",
+      "Stable release packages are public. Immediately recheck latest for concurrent releases before these manual promotions:\n",
     );
-    for (const entry of manifest.packages)
-      process.stdout.write(`pnpm dist-tag add ${entry.name}@${version} latest --registry ${registry}\n`);
+    for (const entry of stableEntries)
+      process.stdout.write(`pnpm dist-tag add ${entry.name}@${entry.version} latest --registry ${registry}\n`);
     process.stdout.write("Then rerun verify-published --require-latest. No dist-tag was changed by this helper.\n");
   }
 }
@@ -989,9 +1068,11 @@ async function main() {
     return;
   }
   const packages = await packageManifests();
-  await assertVersions(packages);
+  const selected = assertReleaseVersions(packages);
+  const releaseNames = selected.map(({ manifest }) => manifest.name);
   const order = publishOrder(packages);
-  process.stdout.write(`Dependency-derived staging order: ${order.join(" -> ")}\n`);
+  process.stdout.write(`Release target: ${releaseNames.join(", ")} @ ${version}\n`);
+  process.stdout.write(`Dependency-derived package order: ${order.join(" -> ")}\n`);
   if (mode === "preflight") {
     if (process.env.SQLBRAID_RELEASE_MODE === "stage") assertMutationAuthorization("stage");
     else if (![undefined, "certify", "pack-only"].includes(process.env.SQLBRAID_RELEASE_MODE))
@@ -1004,7 +1085,7 @@ async function main() {
   if (mode === "pack-only" || mode === "pack") {
     await assertCleanTree();
     const sha = process.env.GITHUB_REF?.startsWith("refs/tags/") ? await assertTaggedSha() : await currentSha();
-    await pack(packages, order, sha);
+    await pack(packages, order, sha, releaseNames);
     return;
   }
   if (mode === "stage") {
@@ -1020,6 +1101,8 @@ async function main() {
   });
   if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate commit.");
   assertManifestOrder(manifest, order);
+  if (JSON.stringify(manifest.releasePackages) !== JSON.stringify(releaseNames))
+    throw new Error("Validated release artifacts do not match the selected release package.");
   const priorEvidence = priorEvidencePath ? await json(resolve(priorEvidencePath)) : undefined;
   if (mode === "stage") {
     await assertReleaseWorkflows();
@@ -1072,9 +1155,13 @@ function setReleaseCommand(nextCommand) {
 }
 function setReleaseVersion(nextVersion) {
   version = nextVersion;
-  semver = parseSemver(nextVersion);
-  expectedTag = `v${nextVersion}`;
+  expectedTag = releaseCandidateTag(releasePackage, nextVersion);
   if (!artifactArgument) artifactDir = resolve(join(tmpdir(), `sqlbraid-release-${nextVersion}`));
+}
+
+function setReleasePackage(nextPackage) {
+  releasePackage = nextPackage;
+  expectedTag = releaseCandidateTag(nextPackage, version);
 }
 
 export {
@@ -1087,8 +1174,10 @@ export {
   verifyPublished,
   parseSemver,
   readReleaseManifest,
+  releaseCandidateTag,
   releasePrereleaseArg,
   releaseTag,
   setReleaseCommand,
+  setReleasePackage,
   setReleaseVersion,
 };

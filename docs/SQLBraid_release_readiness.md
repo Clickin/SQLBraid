@@ -87,28 +87,43 @@ The normal Release workflow choices are:
 
 The one-time RC0 bootstrap is complete and is not a normal or repeatable mode.
 The former direct `publish` mode is removed: direct live publication is
-disabled. A `v*` push runs Release certification, Runtime portability, and
-Documentation validation, while the separate Documentation workflow also
-deploys Pages for that tag. It cannot publish packages, approve staged
-packages, change registry dist-tags, or create a GitHub Release. Branch pushes
-and pull requests are not npm, GitHub Release, or Marketplace publication
-authorization either.
+disabled.
 
-The `stage` mutation requires `workflow_dispatch` from the exact version tag,
-tag-target/checkout identity, synchronized first-party versions, a clean tree,
-and all current-run certification jobs. Before mutation,
+SQLBraid no longer requires lockstep npm package versions. A coordinated
+workspace tag such as `v1.0.0` selects every publishable package at that
+version. After GA, a package tag such as `postgres-v1.0.1`,
+`opentelemetry-v1.1.0`, or `sqlbraid-v1.1.0` selects only that package.
+The unscoped `sqlbraid` facade therefore needs a new version only when its own
+public facade surface or dependency contract changes; ordinary compatible
+driver releases are resolved through its semver dependency ranges.
+
+A `v*` push runs Release certification, Runtime portability, and Documentation
+validation, while the separate Documentation workflow also deploys Pages for
+that coordinated tag. A package-specific `*-v*` tag runs Release certification
+and Runtime portability; the Release DAG still contains its own documentation
+gate, but package tags do not create documentation version archives. None of
+these tag pushes publish packages, approve staged packages, change registry
+dist-tags, or create a public GitHub Release.
+
+The `stage` mutation requires `workflow_dispatch` from the exact coordinated
+or package/version tag, tag-target/checkout identity, a clean tree, and all
+current-run certification jobs. The selected package version must match the
+version encoded in the tag. Unselected internal workspace dependencies must
+already exist publicly at the exact workspace version used to build the
+candidate, or they must be included in a coordinated release. Before mutation,
 `scripts/assert-release-workflows.mjs` requires completed successful Runtime
-portability and Documentation runs for the exact SHA **and the same tag**.
-Only push-triggered runs qualify; rerun a failed tag run rather than substituting
-a manual branch dispatch with a colliding ref name. Other branches/tags,
-earlier/later revisions, queued/in-progress, cancelled, failed, and skipped runs
-do not qualify. The check is bounded, not a polling loop; dispatch again after
-the missing workflows finish.
+portability evidence for the exact SHA and same tag; coordinated `v*` releases
+also require the Documentation tag run. Only push-triggered runs qualify.
 
 ## Pack once, validate once, stage those bytes
 
-Fresh release preparation creates one candidate set per workflow run. Its
-manifest records source SHA, package names/versions, tarball filenames, SHA-256,
+Fresh release preparation creates one candidate set per workflow run. The
+candidate still packs and validates every first-party npm package so export,
+dependency, facade, runtime, and isolated-consumer checks remain cross-package.
+Its manifest additionally records `releasePackages`, the subset authorized
+for staging. Package-specific releases therefore do not weaken the package
+validation boundary; they only narrow the mutation boundary. The manifest
+records source SHA, package names/versions, tarball filenames, SHA-256,
 SHA-512 integrity, and candidate-producer identity. Validation checks the
 candidate, records a matching pack-check stamp, and preserves the
 `release-candidate-validated` artifact. An explicit recovery may instead
@@ -302,9 +317,12 @@ The following are maintainer actions, **not** actions performed by certification
 
 1. RC0 bootstrap is historical and complete. Do not create a token, rerun a
    bootstrap, or treat older RC evidence as evidence for this candidate.
-2. For the GA candidate, synchronize versions, prepare and freeze the
-   exact source SHA, and create/push a **new** tag (for example
-   `v1.0.0`). Never reuse or move a candidate tag after a post-tag fix.
+2. For the initial GA candidate, prepare and freeze the exact source SHA and
+   create/push the coordinated **new** tag `v1.0.0`; every package selected by
+   that coordinated release must be at 1.0.0. After GA, release one package with
+   a tag such as `postgres-v1.0.1` after changing only that package's version
+   and any dependency ranges that actually need to change. Never reuse or move
+   a candidate tag after a post-tag fix.
    This tag-triggered run is **certification-only**.
    Wait for its Runtime, Documentation, and Release certification gates; this
    page makes no promise of a new green SHA or substitute evidence.
@@ -318,9 +336,11 @@ The following are maintainer actions, **not** actions performed by certification
    gh workflow run release.yml --ref <new-candidate-tag> -f release_mode=stage
    ```
 
-   This runs the complete current-run certification DAG, verifies exact-tag-SHA
-   Runtime and Documentation evidence, verifies candidate hashes, then stages
-   validated tarballs in dependency order using OIDC. It records the stage IDs
+   This runs the complete current-run certification DAG, verifies the required
+   exact-tag-SHA evidence, verifies the complete candidate hashes, then stages
+   only the manifest's selected `releasePackages` using OIDC. A coordinated
+   release may contain multiple packages and preserves dependency ordering; a
+   package-specific release uploads only that package. It records the stage IDs
    returned by `stage publish` but does **not** list, view, or download staged
    packages with the OIDC credential, and does **not** approve them. Those
    read/approval operations remain in the maintainer's authenticated review

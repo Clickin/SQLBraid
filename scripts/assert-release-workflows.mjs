@@ -7,6 +7,10 @@ export const requiredReleaseWorkflows = [
 ];
 const releaseWorkflow = ".github/workflows/release.yml";
 
+function isReleaseTagRef(ref) {
+  return /^refs\/tags\/(?:v.+|[a-z0-9][a-z0-9._-]*-v.+)$/u.test(ref ?? "");
+}
+
 export function successfulExactRun(runs, { sha, ref, workflow }) {
   const branch = ref.replace(/^refs\/(?:heads|tags)\//u, "");
   return runs.find(
@@ -24,14 +28,17 @@ export async function assertReleaseWorkflows(env = process.env, request = fetch)
   const { GITHUB_SHA: sha, GITHUB_REF: ref, GITHUB_REPOSITORY: repository, GITHUB_TOKEN: token } = env;
   if (
     !/^[a-f\d]{40}$/u.test(sha ?? "") ||
-    !ref?.startsWith("refs/tags/v") ||
+    !isReleaseTagRef(ref) ||
     !/^[\w.-]+\/[\w.-]+$/u.test(repository ?? "") ||
     !token
   ) {
     throw new Error("Release workflow verification requires an exact tag SHA, repository, and GITHUB_TOKEN.");
   }
   const evidence = [];
-  for (const workflow of requiredReleaseWorkflows) {
+  const workflows = ref.startsWith("refs/tags/v")
+    ? requiredReleaseWorkflows
+    : [".github/workflows/runtime-portability.yml"];
+  for (const workflow of workflows) {
     let match;
     // GitHub caps filtered workflow-run searches at 1,000 results. Never wait for a run to finish.
     for (let page = 1; page <= 10; page += 1) {
@@ -88,7 +95,7 @@ export async function assertNoPriorStageAttempt(
   }
   if (
     !/^[a-f\d]{40}$/u.test(sha ?? "") ||
-    !ref?.startsWith("refs/tags/v") ||
+    !isReleaseTagRef(ref) ||
     !/^[\w.-]+\/[\w.-]+$/u.test(repository ?? "") ||
     !/^\d+$/u.test(runId ?? "") ||
     !token

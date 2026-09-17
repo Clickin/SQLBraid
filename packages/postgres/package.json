@@ -41,17 +41,17 @@
     "access": "public"
   },
   "dependencies": {
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/template": "workspace:*"
+    "@sqlbraid/core": "workspace:^1.0.0",
+    "@sqlbraid/runtime": "workspace:^1.0.0",
+    "@sqlbraid/template": "workspace:^1.0.0"
   },
   "devDependencies": {
-    "@sqlbraid/metadata": "workspace:*",
+    "@sqlbraid/metadata": "workspace:^1.0.0",
     "@types/pg-cursor": "2.7.2",
     "pg-cursor": "^2.22.0"
   },
   "peerDependencies": {
-    "@sqlbraid/metadata": "workspace:*",
+    "@sqlbraid/metadata": "workspace:^1.0.0",
     "pg-cursor": "^2.22.0"
   },
   "peerDependenciesMeta": {

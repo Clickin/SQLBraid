@@ -19,6 +19,7 @@ import {
   parseSemver,
   readReleaseManifest,
   setReleaseCommand,
+  setReleasePackage,
   setReleaseVersion,
   type ReleaseManifest,
   type StagedPublication,
@@ -29,11 +30,12 @@ const directories: string[] = [];
 const uuid = (index: number) => `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`;
 afterEach(async () => {
   vi.unstubAllEnvs();
+  setReleasePackage("*");
   setReleaseVersion("0.1.0-rc.0");
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
+async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"], releaseNames = names) {
   setReleaseVersion(version);
   vi.stubEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://oidc.actions.example/token");
   vi.stubEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "actions-fixture");
@@ -43,6 +45,7 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   const bytes = new Map(names.map((name) => [name, Buffer.from(`validated archive: ${name}`)]));
   const manifest: ReleaseManifest = {
     version,
+    releasePackages: releaseNames,
     commit: "a".repeat(40),
     runId: "123",
     runAttempt: "1",
@@ -68,6 +71,7 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
     advanceNext: false,
     failPackage: "",
     packageNotFound: false,
+    exactVersionNotFound: false,
   };
   let stagedCount = 0;
   setReleaseCommand(async (file, args) => {
@@ -77,13 +81,17 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
     if (args[0] === "config") return "https://registry.npmjs.org/";
     if (args[0] === "ping") return "";
     if (args[0] === "view") {
-      if (behavior.packageNotFound && (args[2] === "dist.integrity" || args[2] === "version")) {
+      if (
+        behavior.packageNotFound ||
+        (behavior.exactVersionNotFound && (args[2] === "dist.integrity" || args[2] === "version"))
+      ) {
         throw Object.assign(new Error(`No matching version found for ${args[1]}`), {
           code: "ERR_PNPM_PACKAGE_NOT_FOUND",
         });
       }
-      const name = names.find((name) => args[1] === name || args[1] === `${name}@${version}`)!;
+      const name = names.find((name) => args[1] === name || args[1].startsWith(`${name}@`))!;
       if (args[2] === "dist-tags") return JSON.stringify(tags.get(name));
+      if (args[2] === "versions") return JSON.stringify(["0.0.0-bootstrap.0"]);
       if (args[2] === "dist.integrity") return JSON.stringify(publicIntegrity.get(name) ?? null);
       if (args[2] === "version") return JSON.stringify(publicIntegrity.has(name) ? version : null);
       if (args[2] === "dist.attestations")
@@ -121,12 +129,19 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   return { manifest, directory, publicIntegrity, tags, calls, behavior, run, evidence, uploads };
 }
 
-test("pnpm missing-version errors are treated as absent registry versions", async () => {
+test("pnpm missing exact-version errors are treated as a new version of an existing package", async () => {
   const f = await fixture();
-  f.behavior.packageNotFound = true;
+  f.behavior.exactVersionNotFound = true;
   const result = await f.run();
   assert.ok(result?.complete);
   assert.equal(f.uploads().length, 1);
+});
+
+test("staging fails before upload when the npm package itself has never been bootstrapped", async () => {
+  const f = await fixture();
+  f.behavior.packageNotFound = true;
+  await assert.rejects(f.run(), /does not exist on npm.*bootstrap version/iu);
+  assert.equal(f.uploads().length, 0);
 });
 
 test("staging records exact candidate IDs, requests provenance and next, and never changes latest", async () => {
@@ -169,6 +184,40 @@ test("certification exercises exact tarball staged dry-run with no registry read
   assert.equal(f.calls.filter(([cmd]) => cmd === "stage").length, 1);
   setReleaseCommand(async () => "12.3.3");
   await assert.rejects(f.run(true), /requires pnpm/);
+});
+
+test("package-specific staging validates the full candidate but uploads only the selected package", async () => {
+  const f = await fixture("1.0.1", ["@sqlbraid/core", "@sqlbraid/postgres"], ["@sqlbraid/postgres"]);
+  f.publicIntegrity.set("@sqlbraid/core", f.manifest.packages[0].integrity);
+  const result = await f.run();
+  assert.ok(result?.complete);
+  assert.deepEqual(
+    result?.packages.map(({ name }) => name),
+    ["@sqlbraid/postgres"],
+  );
+  assert.equal(f.uploads().length, 1);
+  assert.match(f.uploads()[0][2], /package-1\.tgz$/u);
+  assert.equal(result?.packages[0].tag, "release-1.0.1");
+});
+
+test("package-specific staging permits unrelated workspace packages at different versions", async () => {
+  const f = await fixture("1.0.1", ["@sqlbraid/core", "@sqlbraid/postgres"], ["@sqlbraid/postgres"]);
+  const manifest: ReleaseManifest = {
+    ...f.manifest,
+    packages: f.manifest.packages.map((entry, index) => (index === 0 ? { ...entry, version: "1.0.0" } : entry)),
+  };
+  f.publicIntegrity.set("@sqlbraid/core", manifest.packages[0].integrity);
+  const result = await stageCandidates(manifest, { directory: f.directory });
+  assert.ok(result?.complete);
+  assert.equal(result?.packages[0].name, "@sqlbraid/postgres");
+  assert.equal(result?.packages[0].version, "1.0.1");
+  assert.equal(f.uploads().length, 1);
+});
+
+test("package-specific staging refuses an unpublished internal dependency", async () => {
+  const f = await fixture("1.0.1", ["@sqlbraid/core", "@sqlbraid/postgres"], ["@sqlbraid/postgres"]);
+  await assert.rejects(f.run(), /Release dependency @sqlbraid\/core@1\.0\.1 .* is not public/u);
+  assert.equal(f.uploads().length, 0);
 });
 
 test("uncertain uploads retain pending evidence and never retry blindly", async () => {
@@ -448,6 +497,21 @@ test("stage authorization requires explicit dispatch and exact version tag, reje
     assert.throws(() => assertMutationAuthorization(mode, authorized));
 });
 
+test("package-specific tag authorization uses the package slug", () => {
+  const sha = "a".repeat(40);
+  setReleasePackage("postgres");
+  setReleaseVersion("1.2.3");
+  assertMutationAuthorization("stage", {
+    GITHUB_ACTIONS: "true",
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    SQLBRAID_RELEASE_MODE: "stage",
+    GITHUB_REF: "refs/tags/postgres-v1.2.3",
+    GITHUB_SHA: sha,
+    GITHUB_RUN_ID: "123",
+    GITHUB_RUN_ATTEMPT: "1",
+  });
+});
+
 test("normal staging cannot fall back to static credentials or a supplied OIDC token", () => {
   const oidc = {
     ACTIONS_ID_TOKEN_REQUEST_URL: "https://oidc.actions.example/token",
@@ -630,6 +694,7 @@ test("candidate validation rejects changed bytes, missing integrity, stale runs,
     const candidateVersion = "0.1.0-rc.0";
     const candidate = {
       version: candidateVersion,
+      releasePackages: [entry.name],
       commit: "a".repeat(40),
       runId: "123",
       runAttempt: "1",

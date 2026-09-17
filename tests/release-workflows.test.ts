@@ -66,6 +66,23 @@ test("publication requires both exact workflow successes, not one or incomplete 
   );
 });
 
+test("package-specific tags require exact runtime portability evidence without a docs tag deployment", async () => {
+  const packageRef = "refs/tags/postgres-v1.2.3";
+  const packageEnv = { ...env, GITHUB_REF: packageRef };
+  const packageExact = { ...exact, head_branch: "postgres-v1.2.3", path: requiredReleaseWorkflows[0] };
+  let calls = 0;
+  const evidence = await assertReleaseWorkflows(packageEnv, async (url) => {
+    calls += 1;
+    assert.ok(url.pathname.includes("runtime-portability.yml"));
+    return Response.json({ workflow_runs: [packageExact] });
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(
+    evidence.map((entry) => entry.workflow),
+    [requiredReleaseWorkflows[0]],
+  );
+});
+
 test("workflow verification fails closed on API errors and malformed responses", async () => {
   await assert.rejects(
     assertReleaseWorkflows(env, async () => new Response(null, { status: 403 })),

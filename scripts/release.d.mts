@@ -17,6 +17,7 @@ export interface ReleaseEntry {
 
 export interface ReleaseManifest {
   readonly version: string;
+  readonly releasePackages: readonly string[];
   readonly commit: string;
   readonly runId?: string | null;
   readonly runAttempt?: string | null;
@@ -129,6 +130,7 @@ export declare function verifyPublished(
   options?: { requireLatest?: boolean },
 ): Promise<void>;
 export declare function parseSemver(value: string): ReleaseSemver;
+export declare function releaseCandidateTag(packageName?: string, version?: string): string;
 export declare function releasePrereleaseArg(value: string): "--prerelease" | undefined;
 export declare function readReleaseManifest(
   directory?: string,
@@ -137,8 +139,9 @@ export declare function readReleaseManifest(
     allowCurrentAttemptMismatch?: boolean;
   },
 ): Promise<ReleaseManifest>;
-export declare function releaseTag(): string;
+export declare function releaseTag(version?: string): string;
 export declare function setReleaseCommand(
   command: (file: string, args: readonly string[], cwd?: string, options?: { quiet?: boolean }) => Promise<string>,
 ): void;
+export declare function setReleasePackage(packageName: string): void;
 export declare function setReleaseVersion(version: string): void;
