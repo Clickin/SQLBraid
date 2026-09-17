@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { certifyTarget, validateCertificationArtifact, writeCertificationArtifact } from "../../certification/runner.js";
-import { createMssqlTediousTarget } from "../../certification/targets/mssql-tedious.js";
-import { REQUIRED_CASE_IDS } from "../../certification/types.js";
+import { certifyTarget, validateCertificationArtifact, writeCertificationArtifact } from "../runner.js";
+import { createMssqlTediousTarget } from "./mssql-tedious.js";
+import { REQUIRED_CASE_IDS } from "../types.js";
 
 test("mssql-tedious certifies the independent real-database contract", { timeout: 30 * 60_000 }, async () => {
   const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
