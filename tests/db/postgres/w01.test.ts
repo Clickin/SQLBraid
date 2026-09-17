@@ -16,6 +16,7 @@ import { createPgDatabase, createPgPoolDatabase } from "@sqlbraid/postgres/pg";
 import { createPostgresInspector } from "@sqlbraid/postgres/inspector";
 import { sql, typePolicy as postgresTypePolicy } from "@sqlbraid/postgres";
 import { runW01 } from "../w01.js";
+import { transactionIntegrationTests } from "../../contracts/transaction.integration.js";
 import { bindingObserver } from "../binding.js";
 import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGeneratedPropertyAbsent } from "../codegen.js";
 
@@ -25,6 +26,38 @@ async function endPool(pool: Pick<Pool, "end">): Promise<void> {
   const timer = setTimeout(timeout.resolve, 500);
   await Promise.race([ending, timeout.promise]);
   clearTimeout(timer);
+}
+
+for (const mode of ["direct", "pooled"] as const) {
+  for (const contract of transactionIntegrationTests("pg", mode, async () => {
+    const connectionString = inject("postgres").connectionUri;
+    const observer = new Client({ connectionString });
+    await observer.connect();
+    const client = mode === "direct" ? new Client({ connectionString }) : undefined;
+    await client?.connect();
+    const pool = mode === "pooled" ? new Pool({ connectionString, max: 1 }) : undefined;
+    const db = client ? createPgDatabase(client, { streamBatchSize: 1 }) : createPgPoolDatabase(pool!, { streamBatchSize: 1 });
+    await observer.query("DROP TABLE IF EXISTS braid_contract_tx");
+    await observer.query("CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY)");
+    return {
+      db,
+      caughtStatementOutcome: "rollback",
+      streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
+      physicalId: async (scope) => (await scope.one(sql.rows<{ id: string }>`SELECT pg_backend_pid() AS id`)).id,
+      write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+      committedRows: async () =>
+        (await observer.query<{ id: string }>("SELECT id FROM braid_contract_tx ORDER BY id")).rows.map((row) => row.id),
+      accessMode: {
+        inheritedReadOnly: true,
+        setDefault: async () => { await db.execute(sql`SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`); },
+        restoreDefault: async () => { await db.execute(sql`SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE`); },
+      },
+      close: async () => {
+        try { await observer.query("DROP TABLE braid_contract_tx"); }
+        finally { await client?.end(); await pool?.end(); await observer.end(); }
+      },
+    };
+  }, { accessMode: true, pooledLease: mode === "pooled", stream: true })) test(contract.title, contract.run);
 }
 
 test("PostgreSQL binding diagnostics preserve literal marker text through real execution", async () => {

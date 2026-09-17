@@ -384,7 +384,7 @@ test("mssql.data.uuid", { timeout: 30_000 }, async () => {
   }
 });
 
-test("mssql.dml.insert-returning", { timeout: 30_000 }, async () => {
+test("[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning", { timeout: 30_000 }, async () => {
   const connection = await connect(inject("mssql") as MssqlSettings);
   const events: ExecutionEvent[] = [];
   const db = createTediousDatabase(connection, {

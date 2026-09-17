@@ -208,7 +208,7 @@ test("postgres.pv18.parser-profiles", { timeout: 30_000 }, async () => {
   }
 });
 
-test("postgres.pv17.numeric-transport", { timeout: 30_000 }, async () => {
+test("[contract:pg:metadata.affected-rows:integration] postgres.pv17.numeric-transport", { timeout: 30_000 }, async () => {
   const settings = inject("postgres") as Settings;
   const client = new Client({ connectionString: settings.connectionUri });
   await client.connect();

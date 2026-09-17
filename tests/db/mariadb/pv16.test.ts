@@ -7,6 +7,8 @@ import { MARIADB_LOSSLESS_TEXT, sql, typePolicy as mariadbTypePolicy } from "@sq
 import { createMariaDbInspector } from "@sqlbraid/mariadb/inspector";
 import { assertGeneratedProperty } from "../codegen.js";
 import { runStreamingConformance } from "../../streaming-conformance.js";
+import { transactionIntegrationTests } from "../../contracts/transaction.integration.js";
+import { commandMetadataContract, commandMetadataTitle } from "../command-metadata.js";
 
 async function endPool(pool: Pick<Pool, "end">): Promise<void> {
   await pool.end();
@@ -47,6 +49,51 @@ function createTestConnection() {
     timezone: "Z",
   });
 }
+
+for (const mode of ["direct", "pooled"] as const) {
+  for (const contract of transactionIntegrationTests("mariadb", mode, async () => {
+    const observer = await createTestConnection();
+    const client = mode === "direct" ? await createTestConnection() : undefined;
+    const pool = mode === "pooled" ? createTestPool() : undefined;
+    const db = client ? createMariaDbDatabase(client) : createMariaDbPoolDatabase(pool!);
+    await observer.query("DROP TABLE IF EXISTS braid_contract_tx");
+    await observer.query("CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY) ENGINE=InnoDB");
+    return {
+      db,
+      caughtStatementOutcome: "commit",
+      streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
+      physicalId: async (scope) => (await scope.one(sql.rows<{ id: string }>`SELECT CONNECTION_ID() AS id`)).id,
+      write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+      committedRows: async () =>
+        ((await observer.query("SELECT id FROM braid_contract_tx ORDER BY id")) as { id: string }[]).map((row) => row.id),
+      accessMode: {
+        inheritedReadOnly: true,
+        setDefault: async () => { await db.execute(sql`SET SESSION TRANSACTION READ ONLY`); },
+        restoreDefault: async () => { await db.execute(sql`SET SESSION TRANSACTION READ WRITE`); },
+      },
+      close: async () => {
+        try { await observer.query("DROP TABLE braid_contract_tx"); }
+        finally { await client?.end(); await pool?.end(); await observer.end(); }
+      },
+    };
+  }, { accessMode: true, pooledLease: mode === "pooled", stream: true })) test(contract.title, contract.run);
+}
+
+test(commandMetadataTitle("mariadb"), async () => {
+  const client = await createTestConnection();
+  const observer = await createTestConnection();
+  try {
+    await observer.query("DROP TABLE IF EXISTS braid_contract_metadata");
+    await observer.query("CREATE TABLE braid_contract_metadata (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL)");
+    const observerDb = createMariaDbDatabase(observer);
+    await commandMetadataContract(createMariaDbDatabase(client), sql, () =>
+      observerDb.all(sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`));
+  } finally {
+    await observer.query("DROP TABLE IF EXISTS braid_contract_metadata");
+    await client.end();
+    await observer.end();
+  }
+});
 
 test("MariaDB Connector returning DML preserves rows and command metadata", async () => {
   const connection = await createTestConnection();
@@ -184,7 +231,7 @@ test("MariaDB Connector pool supports native bulk and transaction savepoints", a
   }
 });
 
-test("MariaDB Connector queryStream satisfies shared stream lifecycle", async () => {
+test("[contract:mariadb:resource.stream-return:integration] [ownership:pooled] MariaDB Connector queryStream satisfies shared stream lifecycle", async () => {
   await runStreamingConformance(async () => {
     const pool = createTestPool();
     await pool.query("DROP TABLE IF EXISTS braid_pv16_mariadb_stream");
@@ -201,6 +248,7 @@ test("MariaDB Connector queryStream satisfies shared stream lifecycle", async ()
         { id: "2", label: "two" },
       ],
       close: async () => {
+        assert.equal(pool.activeConnections(), 0, "returning a stream must not retain a pool connection");
         await pool.query("DROP TABLE IF EXISTS braid_pv16_mariadb_stream").catch(() => undefined);
         await endPool(pool);
       },

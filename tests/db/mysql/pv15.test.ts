@@ -23,7 +23,7 @@ function rowSchema<Output>(
   };
 }
 
-test("MySQL mysql2 reuses streaming conformance with row schemas and lease counters", async () => {
+test("[contract:mysql2:resource.stream-return:integration] [ownership:pooled] MySQL mysql2 reuses streaming conformance with row schemas and lease counters", async () => {
   const pool = createPool({
     uri: inject("mysql").connectionUri,
     ...MYSQL2_LOSSLESS_TEXT.connectionOptions,
@@ -31,11 +31,13 @@ test("MySQL mysql2 reuses streaming conformance with row schemas and lease count
     idleTimeout: 0,
   });
   let releases = 0;
+  let acquires = 0;
   const provider = createMysql2PoolProvider(pool, { streamHighWaterMark: 2 });
   const countedProvider = {
     ...provider,
     async acquire() {
       const lease = await provider.acquire();
+      acquires += 1;
       return {
         ...lease,
         async release(options?: Parameters<typeof lease.release>[0]) {
@@ -66,6 +68,7 @@ test("MySQL mysql2 reuses streaming conformance with row schemas and lease count
     const mapping = rowSchema<never>(() => ({ issues: [{ message: "query-bound mapper failed" }] }));
     await runStreamingConformance(() => {
       const releaseStart = releases;
+      const acquireStart = acquires;
       const db = createPooledDatabase(countedProvider);
       return {
         db,
@@ -76,6 +79,11 @@ test("MySQL mysql2 reuses streaming conformance with row schemas and lease count
         ],
         mappingQuery: sql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance ORDER BY id`,
         released: () => releases - releaseStart,
+        close: async () => {
+          // Every started root stream releases exactly once; pre-aborted/no-op cases acquire nothing.
+          assert.equal(releases - releaseStart, acquires - acquireStart);
+          assert.deepEqual(await db.one(sql.rows`SELECT 7 AS value`), { value: "7" });
+        },
       };
     });
   } finally {

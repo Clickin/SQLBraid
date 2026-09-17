@@ -52,12 +52,14 @@ interface StreamEvidence {
   readonly blockedCode: string;
   readonly rows: readonly string[];
   readonly after: readonly { readonly value: string }[];
+  readonly afterReturn: readonly { readonly value: string }[];
 }
 
 interface WasmReport {
   readonly runtime: "browser-wasm";
   readonly sqliteVersion: string;
   readonly browserVersion: string;
+  readonly contractAssertions: readonly { readonly fullName: string; readonly status: string }[];
   readonly environment: {
     readonly capabilities: Readonly<Record<string, { readonly status: string }>>;
   };
@@ -175,6 +177,22 @@ beforeAll(async () => {
   });
 }, 180_000);
 
+for (const scenario of [
+  "transaction.commit-confirmed",
+  "transaction.callback-rollback",
+  "transaction.statement-rollback",
+  "transaction.caught-error-terminal-outcome",
+  "transaction.savepoint-recovery",
+]) {
+  const title = `[contract:sqlite-wasm:${scenario}:integration] [ownership:direct]`;
+  test(title, () => {
+    assert.deepEqual(report.contractAssertions.find((entry) => entry.fullName === title), {
+      fullName: title,
+      status: "passed",
+    });
+  });
+}
+
 test("wasm.sql.native-transparency", () => {
   const evidence = report.cases["wasm.sql.native-transparency"];
   assert.deepEqual(evidence.logicalSegments, [
@@ -228,7 +246,7 @@ test("wasm.data.json-text", () => {
   assert.deepEqual(evidence.rows, [{ payload: exactJsonText, enabled: "1" }]);
 });
 
-test("wasm.execution.bulk", () => {
+test("[contract:sqlite-wasm:metadata.affected-rows:integration] wasm.execution.bulk", () => {
   const evidence = report.cases["wasm.execution.bulk"];
   assert.deepEqual(evidence.result, { inputCount: 3, affectedRows: 3 });
   assert.equal(evidence.parameterizedSql, "INSERT INTO bulk_values (value) VALUES (?1)");
@@ -237,12 +255,13 @@ test("wasm.execution.bulk", () => {
   assert.deepEqual(evidence.rows, [{ value: "1" }, { value: "2" }, { value: "3" }]);
 });
 
-test("wasm.execution.stream", () => {
+test("[contract:sqlite-wasm:resource.stream-return:integration] [ownership:direct] wasm.execution.stream", () => {
   const evidence = report.cases["wasm.execution.stream"];
   assert.deepEqual(evidence.first, { value: "1" });
   assert.equal(evidence.blockedCode, "BRAID_STREAM_SCOPE");
   assert.deepEqual(evidence.rows, ["1", "2", "3"]);
   assert.deepEqual(evidence.after, [{ value: "4" }]);
+  assert.deepEqual(evidence.afterReturn, [{ value: "5" }]);
 });
 
 test("wasm.execution.mapped-transaction", () => {

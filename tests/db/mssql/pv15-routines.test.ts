@@ -129,7 +129,7 @@ test("SQL Server real streaming satisfies the shared streaming lifecycle contrac
   assert.equal(runs, 8);
 });
 
-test("SQL Server transaction streams retain their pinned session until cleanup", { timeout: 30_000 }, async () => {
+test("[contract:tedious:resource.stream-return:integration] [ownership:direct] SQL Server transaction streams retain their pinned session until cleanup", { timeout: 30_000 }, async () => {
   const settings = inject("mssql") as MssqlSettings;
   const connection = await connect(settings);
   try {
