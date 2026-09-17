@@ -331,7 +331,7 @@ jobs:
           path: ${{ runner.temp }}/prepared
       - name: Restore prepared build
         run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --dir tests exec playwright install --with-deps chromium
       - name: Run web-runtime tests
         env:
           SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence/ci-evidence-web/observations

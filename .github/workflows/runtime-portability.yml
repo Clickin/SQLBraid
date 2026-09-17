@@ -200,7 +200,7 @@ jobs:
           path: ${{ runner.temp }}/prepared
       - run: tar -xzf "$RUNNER_TEMP/prepared/package-dist.tar.gz" -C "$GITHUB_WORKSPACE"
       - name: Install browser conformance runtime
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm --dir tests exec playwright install --with-deps chromium
       - name: Run web-runtime tests
         env:
           SQLBRAID_SUPPORT_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence/ci-evidence-web/observations

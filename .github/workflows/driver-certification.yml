@@ -618,6 +618,7 @@ jobs:
         with:
           name: certification-global
           path: ${{ runner.temp }}/global
+      - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
       - name: Load candidate identity
         run: |
           { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
