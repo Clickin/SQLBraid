@@ -75,6 +75,7 @@ async function fixture(
     advanceNext: false,
     failPackage: "",
     packageNotFound: false,
+    exactVersionNotFound: false,
   };
   let stagedCount = 0;
   setReleaseCommand(async (file, args) => {
@@ -84,13 +85,17 @@ async function fixture(
     if (args[0] === "config") return "https://registry.npmjs.org/";
     if (args[0] === "ping") return "";
     if (args[0] === "view") {
-      if (behavior.packageNotFound && (args[2] === "dist.integrity" || args[2] === "version")) {
+      if (
+        behavior.packageNotFound ||
+        (behavior.exactVersionNotFound && (args[2] === "dist.integrity" || args[2] === "version"))
+      ) {
         throw Object.assign(new Error(`No matching version found for ${args[1]}`), {
           code: "ERR_PNPM_PACKAGE_NOT_FOUND",
         });
       }
       const name = names.find((name) => args[1] === name || args[1] === `${name}@${version}`)!;
       if (args[2] === "dist-tags") return JSON.stringify(tags.get(name));
+      if (args[2] === "versions") return JSON.stringify(["0.0.0-bootstrap.0"]);
       if (args[2] === "dist.integrity") return JSON.stringify(publicIntegrity.get(name) ?? null);
       if (args[2] === "version") return JSON.stringify(publicIntegrity.has(name) ? version : null);
       if (args[2] === "dist.attestations")
@@ -128,12 +133,19 @@ async function fixture(
   return { manifest, directory, publicIntegrity, tags, calls, behavior, run, evidence, uploads };
 }
 
-test("pnpm missing-version errors are treated as absent registry versions", async () => {
+test("pnpm missing exact-version errors are treated as a new version of an existing package", async () => {
   const f = await fixture();
-  f.behavior.packageNotFound = true;
+  f.behavior.exactVersionNotFound = true;
   const result = await f.run();
   assert.ok(result?.complete);
   assert.equal(f.uploads().length, 1);
+});
+
+test("staging fails before upload when the npm package itself has never been bootstrapped", async () => {
+  const f = await fixture();
+  f.behavior.packageNotFound = true;
+  await assert.rejects(f.run(), /does not exist on npm.*bootstrap version/iu);
+  assert.equal(f.uploads().length, 0);
 });
 
 test("staging records exact candidate IDs, requests provenance and next, and never changes latest", async () => {
