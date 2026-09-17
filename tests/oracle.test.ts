@@ -338,6 +338,52 @@ test("Oracle validates transaction options before control SQL", async () => {
   assert.equal(executions, 0);
 });
 
+test("Oracle rejects isolation/readOnly combinations before control SQL", async () => {
+  let executions = 0;
+  const connection = {
+    async execute() {
+      executions += 1;
+      return { rows: [] };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection);
+  for (const isolation of ["read-uncommitted", "read-committed", "repeatable-read", "serializable"] as const) {
+    await assert.rejects(
+      async () => { await executor.begin!({ isolation, readOnly: true }); },
+      (error: unknown) => error instanceof Error
+        && (error as { readonly code?: string }).code === "BRAID_TX_OPTION_UNSUPPORTED"
+        && (error as { readonly feature?: string }).feature === `transaction.isolation.${isolation}`,
+    );
+    await assert.rejects(
+      async () => { await executor.begin!({ isolation, readOnly: false }); },
+      (error: unknown) => error instanceof Error
+        && (error as { readonly code?: string }).code === "BRAID_TX_OPTION_UNSUPPORTED"
+        && (error as { readonly feature?: string }).feature === `transaction.isolation.${isolation}`,
+    );
+  }
+  assert.equal(executions, 0);
+});
+
+test("Oracle query rows preserve hostile labels as own data properties", async () => {
+  const labels = ["__proto__", "constructor", "prototype", "toString", "hasOwnProperty"] as const;
+  const connection = {
+    async execute() {
+      const row = Object.fromEntries(labels.map((label, index) => [label, index + 1]));
+      return { rows: [row], metaData: labels.map((name) => ({ name })) };
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const row = (await createOracledbExecutor(connection).query(sql.rows`SELECT 1 FROM dual`.render())).rows[0] as Record<string, unknown>;
+  assert.equal(Object.getPrototypeOf(row), Object.prototype);
+  for (const [index, label] of labels.entries()) {
+    assert.equal(Object.hasOwn(row, label), true);
+    assert.equal(row[label], index + 1);
+  }
+});
+
 test("Oracle pre-aborted executions preserve a null AbortSignal reason", async () => {
   let executions = 0;
   const connection = {

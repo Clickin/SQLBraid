@@ -1,4 +1,5 @@
 import { qualifiedIdentity, qualifiedIdentitySegments, qualifiedIdentitySegmentsWithSuffix, QUALIFIED_IDENTITY_ENCODING } from "../../metadata/src/qualified-identity.js";
+import { defineResultProperty } from "@sqlbraid/core/driver";
 import type { MetadataInspector, MetadataSnapshot, NamespaceSnapshot, RelationSnapshot, RoutineArgument, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
 
 interface CatalogRow {
@@ -19,7 +20,7 @@ function objectRow(value: unknown, fields: readonly { readonly name?: string }[]
     const row: Record<string, unknown> = {};
     for (const [index, entry] of value.entries()) {
       const name = fields[index]?.name;
-      if (name) row[name] = entry;
+      if (name) defineResultProperty(row, name, entry);
     }
     return row;
   }

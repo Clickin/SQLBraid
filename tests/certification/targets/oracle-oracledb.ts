@@ -1,0 +1,322 @@
+import oracledb from "oracledb";
+import { createOracledbDatabase, createOracledbPoolDatabase, type OracleConnectionLike, type OracleExecuteResultLike, type OraclePoolLike, type OracleResultSetLike } from "@sqlbraid/oracle/oracledb";
+import { oracleParameter, sql } from "@sqlbraid/oracle";
+import type { CallQuery, CommandQuery, Database, RowQuery } from "@sqlbraid/core";
+import type { BulkConformanceFixture } from "../../bulk-conformance.js";
+import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
+import type { CertificationFixture, CertificationTarget, ExpectedCapabilityContract, ResourceSnapshot } from "../types.js";
+
+const TABLE = "BRAID_RC3_CERT_ROWS";
+const BULK_TABLE = "BRAID_RC3_CERT_BULK";
+const SEQUENCE = "BRAID_RC3_CERT_SEQ";
+const HOSTILE = ["__proto__", "constructor", "prototype", "toString", "hasOwnProperty"] as const;
+
+export const ORACLE_EXPECTED_CAPABILITIES: ExpectedCapabilityContract = {
+  "sql.native-transparency": { status: "guaranteed" },
+  "numeric.exact-integer": { status: "unsupported", canonical: "string", rawRepresentations: ["string"] },
+  "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
+  "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+  "numeric.approximate-special": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+  "numeric.bind-exact": { status: "unsupported", conditionCode: "oracle.bind-nls-sensitive" },
+  "data.json-parsed": { status: "guaranteed", rawRepresentations: ["object", "array", "string", "number", "boolean", "null"] },
+  "data.json-lossless-text": { status: "unsupported", canonical: "string", rawRepresentations: ["string"], conditionCode: "oracle.json-serialize-required" },
+  "data.oracle-object": { status: "unsupported", rawRepresentations: ["object"], conditionCode: "oracle.object-nested-numeric-unclassified" },
+  "data.oracle-collection": { status: "unsupported", rawRepresentations: ["object", "array"], conditionCode: "oracle.collection-nested-numeric-unclassified" },
+  "data.vector": { status: "unsupported", rawRepresentations: ["object", "array"], conditionCode: "oracle.vector-unclassified" },
+  "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Buffer"] },
+  "data.uuid": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
+  "data.temporal-native": { status: "guarded", rawRepresentations: ["Date"], conditionCode: "oracle.date-millisecond-precision" },
+  "data.temporal-lossless": { status: "unsupported", canonical: "string", rawRepresentations: ["string"], conditionCode: "oracle.temporal-text-cast-required" },
+  "metadata.command-safe": { status: "guarded", rawRepresentations: ["number"], conditionCode: "oracle.count-safe-integer" },
+  "session.pinned": { status: "guaranteed" },
+  "transaction": { status: "guaranteed" },
+  "transaction.savepoint": { status: "guaranteed" },
+  "transaction.read-only": { status: "guaranteed" },
+  "transaction.isolation.read-uncommitted": { status: "unsupported" },
+  "transaction.isolation.read-committed": { status: "guaranteed" },
+  "transaction.isolation.repeatable-read": { status: "unsupported" },
+  "transaction.isolation.serializable": { status: "guaranteed" },
+  "statement.prepare": { status: "guaranteed" },
+  "statement.cancel": { status: "guarded", conditionCode: "oracle.connection-break" },
+  "statement.stream": { status: "guaranteed" },
+  "statement.bulk": { status: "guaranteed" },
+  "routine.call": { status: "guaranteed" },
+  "routine.out": { status: "guaranteed" },
+  "routine.inout": { status: "guaranteed" },
+  "routine.return-value": { status: "unsupported", unsupportedCode: "BRAID_CALL_RETURN_UNSUPPORTED" },
+  "routine.result-sets": { status: "guaranteed" },
+  "routine.out-cursor": { status: "guaranteed" },
+};
+
+export const ORACLE_EXPECTED_TRANSACTION_OPTIONS = {
+  "isolation:read-uncommitted": "unsupported",
+  "isolation:read-committed": "guaranteed",
+  "isolation:repeatable-read": "unsupported",
+  "isolation:serializable": "guaranteed",
+  "readOnly:true": "guaranteed",
+  "readOnly:false": "guaranteed",
+  "combination:read-uncommitted+readOnly": "unsupported",
+  "combination:read-uncommitted+readWrite": "unsupported",
+  "combination:read-committed+readOnly": "unsupported",
+  "combination:read-committed+readWrite": "unsupported",
+  "combination:repeatable-read+readOnly": "unsupported",
+  "combination:repeatable-read+readWrite": "unsupported",
+  "combination:serializable+readOnly": "unsupported",
+  "combination:serializable+readWrite": "unsupported",
+} as const;
+
+async function exec(connection: OracleConnectionLike, statement: string): Promise<void> {
+  await connection.execute(statement, []);
+}
+
+async function ensureSchema(connection: OracleConnectionLike): Promise<void> {
+  await exec(connection, `BEGIN EXECUTE IMMEDIATE 'CREATE TABLE ${TABLE} (id NUMBER PRIMARY KEY, value VARCHAR2(80))'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;`);
+  await exec(connection, `BEGIN EXECUTE IMMEDIATE 'CREATE TABLE ${BULK_TABLE} (id NUMBER PRIMARY KEY, value VARCHAR2(80))'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;`);
+  await exec(connection, `BEGIN EXECUTE IMMEDIATE 'CREATE SEQUENCE ${SEQUENCE} START WITH 1'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -955 THEN RAISE; END IF; END;`);
+  await exec(connection, `CREATE OR REPLACE PROCEDURE BRAID_RC3_CERT_SCALAR (p_answer OUT NUMBER) IS BEGIN p_answer := 42; END;`);
+  await exec(connection, `CREATE OR REPLACE PROCEDURE BRAID_RC3_CERT_NOOP IS BEGIN NULL; END;`);
+  await exec(connection, `CREATE OR REPLACE PROCEDURE BRAID_RC3_CERT_INOUT (p_value IN OUT NUMBER) IS BEGIN p_value := p_value + 1; END;`);
+  await exec(connection, `CREATE OR REPLACE PROCEDURE BRAID_RC3_CERT_SETS (p_users OUT SYS_REFCURSOR, p_payments OUT SYS_REFCURSOR) IS l_implicit SYS_REFCURSOR; BEGIN OPEN p_users FOR SELECT 'user-1' AS USER_ID FROM dual; OPEN p_payments FOR SELECT 'payment-1' AS PAYMENT_ID FROM dual; OPEN l_implicit FOR SELECT 'summary-1' AS SUMMARY FROM dual; DBMS_SQL.RETURN_RESULT(l_implicit); END;`);
+  await exec(connection, `CREATE OR REPLACE PROCEDURE BRAID_RC3_CERT_CURSOR (p_cursor OUT SYS_REFCURSOR) IS BEGIN OPEN p_cursor FOR SELECT 'cursor-1' AS CURSOR_ID FROM dual; END;`);
+}
+
+function row<Row>(text: string): RowQuery<Row> {
+  return sql.rows<Row>`${sql.raw(text)}`;
+}
+function command(text: string): CommandQuery {
+  return sql.command`${sql.raw(text)}`;
+}
+function call(text: string): CallQuery {
+  return sql.call`${sql.raw(text)}`;
+}
+function expectedHostile(label: string, value: unknown): Record<string, unknown> {
+  return Object.fromEntries([[label, value]]);
+}
+
+function makeQueries(): CertificationFixture["queries"] {
+  const special: Record<string, RowQuery<unknown>> = {};
+  const expectedSpecial: Record<string, unknown> = {};
+  for (const [index, label] of HOSTILE.entries()) {
+    const id = `RES00${index + 1}`;
+    special[id] = row(`SELECT ${index + 1} AS "${label}" FROM dual`);
+    expectedSpecial[id] = expectedHostile(label, String(index + 1));
+  }
+  for (let index = 6; index <= 11; index += 1) {
+    const id = `RES${String(index).padStart(3, "0")}`;
+    special[id] = row(`SELECT ${index} AS VALUE FROM dual`);
+    expectedSpecial[id] = { VALUE: String(index) };
+  }
+  const transaction = {
+    insert: command(`INSERT INTO ${TABLE} (id, value) VALUES (${SEQUENCE}.NEXTVAL, 'transaction')`),
+    visible: row(`SELECT value AS VALUE FROM ${TABLE} ORDER BY id`),
+    savepointInsert: command(`INSERT INTO ${TABLE} (id, value) VALUES (${SEQUENCE}.NEXTVAL, 'savepoint')`),
+    savepointVisible: row(`SELECT value AS VALUE FROM ${TABLE} ORDER BY id`),
+  };
+  let factoryCalls = 0;
+  const prepared = {
+    command: (_input: unknown) => { factoryCalls += 1; return command(`INSERT INTO ${TABLE} (id, value) VALUES (${SEQUENCE}.NEXTVAL, 'prepared')`); },
+    rows: (_input: unknown) => { factoryCalls += 1; return row("SELECT VALUE FROM (SELECT 'one' AS VALUE FROM dual UNION ALL SELECT 'two' FROM dual) ORDER BY VALUE"); },
+    input: "prepared",
+    factoryCalls: () => factoryCalls,
+  };
+  const routines = {
+    call: call("BEGIN BRAID_RC3_CERT_NOOP; END;"),
+    out: sql.call`BEGIN BRAID_RC3_CERT_SCALAR(${sql.out("answer", oracleParameter.number())}); END;`,
+    inout: sql.call`BEGIN BRAID_RC3_CERT_INOUT(${sql.inOut("value", 7, oracleParameter.number())}); END;`,
+    resultSets: sql.call`BEGIN BRAID_RC3_CERT_SETS(${sql.out("users", oracleParameter.refCursor())}, ${sql.out("payments", oracleParameter.refCursor())}); END;`,
+    cursor: sql.call`BEGIN BRAID_RC3_CERT_CURSOR(${sql.out("cursor", oracleParameter.refCursor())}); END;`,
+    returnValue: sql.call({ returnValue: { "~standard": { version: 1, vendor: "sqlbraid-oracle-cert", validate(value: unknown) { return { value }; } } } })`BEGIN BRAID_RC3_CERT_NOOP; END;`,
+  };
+  const expected: NonNullable<CertificationFixture["queries"]["expected"]> = {
+    one: { VALUE: "one" },
+    many: [{ VALUE: "one" }, { VALUE: "two" }],
+    special: {
+      ...expectedSpecial,
+      CALL001: { output: {}, resultSets: [] },
+      CALL002: { output: { answer: "42" }, resultSets: [] },
+      CALL003: { output: { value: "8" }, resultSets: [] },
+      CALL004: { output: {}, resultSets: [{ rows: [{ USER_ID: "user-1" }] }, { rows: [{ PAYMENT_ID: "payment-1" }] }, { rows: [{ SUMMARY: "summary-1" }] }] },
+      CALL005: { output: {}, resultSets: [{ rows: [{ CURSOR_ID: "cursor-1" }] }] },
+    },
+    commandAffectedRows: 1,
+    failureCode: "ORA-00942",
+  };
+  return {
+    zero: row("SELECT 'zero' AS VALUE FROM dual WHERE 1 = 0"),
+    one: row("SELECT 'one' AS VALUE FROM dual"),
+    many: row("SELECT VALUE FROM (SELECT 'one' AS VALUE FROM dual UNION ALL SELECT 'two' FROM dual) ORDER BY VALUE"),
+    command: command(`INSERT INTO ${TABLE} (id, value) VALUES (${SEQUENCE}.NEXTVAL, 'command')`),
+    identity: row("SELECT SYS_CONTEXT('USERENV', 'SID') AS ID FROM dual"),
+    failure: row(`SELECT value FROM ${TABLE}_MISSING`),
+    stream: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3"),
+    special,
+    transaction,
+    prepared,
+    routines,
+    expected,
+  };
+}
+
+interface StreamFaults {
+  readonly initFailure: Error;
+  readonly firstNextFailure: Error;
+  readonly midStreamFailure: Error;
+  readonly cleanupFailure: Error;
+}
+
+function streamFixture(db: Pick<Database, "stream">, faults: StreamFaults): StreamingConformanceFixture<unknown> {
+  const query = row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3");
+  const mappingFailure = new Error("oracle-cert-mapping-failure");
+  const executionSchemaFailure = new Error("oracle-cert-execution-schema-failure");
+  return {
+    db,
+    query,
+    expected: [{ VALUE: "1" }, { VALUE: "2" }, { VALUE: "3" }],
+    mappingQuery: sql.rows({
+      "~standard": {
+        version: 1,
+        vendor: "sqlbraid-oracle-cert",
+        validate() { throw mappingFailure; },
+      },
+    })`SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3`,
+    mappingFailure,
+    executionSchemaFailure,
+    initFailureQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_INIT_FAILURE */"),
+    initFailure: faults.initFailure,
+    firstNextFailureQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_FIRST_NEXT_FAILURE */"),
+    firstNextFailure: faults.firstNextFailure,
+    midStreamFailureQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_MID_STREAM_FAILURE */"),
+    midStreamFailure: faults.midStreamFailure,
+    cleanupFailureQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_CLEANUP_FAILURE */"),
+    cleanupFailure: faults.cleanupFailure,
+    largeResultQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 10000"),
+    largeResultCount: 10000,
+  };
+}
+
+function bulkFixture(db: Pick<Database, "bulk">): BulkConformanceFixture<unknown> {
+  const factory = (input: unknown) => {
+    if (typeof input !== "number") throw new TypeError("Oracle bulk certification input must be numeric.");
+    return sql.command`INSERT INTO ${sql.ident(BULK_TABLE)} (id, value) VALUES (${sql.bind(input, oracleParameter.number())}, ${sql.bind("bulk", oracleParameter.varchar2())})`;
+  };
+  let executions = 0;
+  const wrappedDb: Pick<Database, "bulk"> = {
+    bulk: async (inputs, inputFactory) => {
+      if (inputs.length > 0) executions += 1;
+      return db.bulk(inputs, inputFactory);
+    },
+  };
+  return {
+    db: wrappedDb,
+    inputs: [1, 2],
+    factory,
+    expected: { inputCount: 2, affectedRows: 2 },
+    acquireCount: () => executions,
+    executeCount: () => executions,
+    middleFailure: () => wrappedDb.bulk([3, "bad"], factory),
+  };
+}
+
+export interface OracleCertificationConnectionOptions {
+  readonly connectionUri: string;
+  readonly user: string;
+  readonly password: string;
+  readonly sourceSha: string;
+}
+
+export async function createOracleOracledbTarget(options: OracleCertificationConnectionOptions): Promise<CertificationTarget & { close(): Promise<void> }> {
+  const pool = await oracledb.createPool({ user: options.user, password: options.password, connectString: options.connectionUri, poolMin: 0, poolMax: 4, poolIncrement: 1 }) as unknown as OraclePoolLike & { close(): Promise<void> };
+  const target: CertificationTarget & { close(): Promise<void> } = {
+    id: "oracle-oracledb-thin-node-23-9",
+    sourceSha: options.sourceSha,
+    expectedCapabilities: ORACLE_EXPECTED_CAPABILITIES,
+    expectedTransactionOptions: ORACLE_EXPECTED_TRANSACTION_OPTIONS,
+    async createFixture(): Promise<CertificationFixture> {
+      const connection = await oracledb.getConnection({ user: options.user, password: options.password, connectString: options.connectionUri }) as unknown as OracleConnectionLike;
+      await ensureSchema(connection);
+      const faults: StreamFaults = {
+        initFailure: new Error("oracle-cert-init-failure"),
+        firstNextFailure: new Error("oracle-cert-first-next-failure"),
+        midStreamFailure: new Error("oracle-cert-mid-stream-failure"),
+        cleanupFailure: new Error("oracle-cert-cleanup-failure"),
+      };
+      const execute = connection.execute.bind(connection);
+      connection.execute = async (text: string, binds?: unknown, executeOptions?: unknown): Promise<unknown> => {
+        if (text.includes("CERT_INIT_FAILURE")) throw faults.initFailure;
+        const result = (executeOptions === undefined
+          ? await execute(text, binds)
+          : await execute(text, binds, executeOptions)) as OracleExecuteResultLike;
+        const native = result.resultSet;
+        if (!native || typeof native.getRows !== "function") return result;
+        const wrapped = Object.create(native) as OracleResultSetLike;
+        let reads = 0;
+        if (native.getRow) {
+          wrapped.getRow = async (): Promise<unknown | null | undefined> => {
+            reads += 1;
+            if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
+            if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
+            return native.getRow!();
+          };
+        }
+        if (native.getRows) {
+          wrapped.getRows = async (size?: number): Promise<readonly unknown[]> => {
+            reads += 1;
+            if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
+            if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
+            return native.getRows!(size);
+          };
+        }
+        if (text.includes("CERT_CLEANUP_FAILURE")) {
+          wrapped.close = async (): Promise<void> => {
+            await native.close();
+            throw faults.cleanupFailure;
+          };
+        }
+        return { ...result, resultSet: wrapped };
+      };
+      const direct = createOracledbDatabase(connection, { streamFetchSize: 2 });
+      const pooled = createOracledbPoolDatabase(pool, { streamFetchSize: 2 });
+      const reset = async (): Promise<void> => {
+        await exec(connection, `TRUNCATE TABLE ${TABLE}`);
+        await exec(connection, `TRUNCATE TABLE ${BULK_TABLE}`);
+      };
+      await reset();
+      const unsupportedTransaction = async (transactionOptions: Parameters<NonNullable<Database["tx"]>>[0]): Promise<void> => {
+        const probeConnection = await oracledb.getConnection({ user: options.user, password: options.password, connectString: options.connectionUri }) as unknown as OracleConnectionLike;
+        try {
+          await createOracledbDatabase(probeConnection).tx(transactionOptions, async () => undefined);
+        } finally {
+          await probeConnection.close?.();
+        }
+      };
+      const unsupported = {
+        CALL006: { feature: "routine.return-value", expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED" as const, run: () => direct.call(makeQueries().routines!.returnValue!), sideEffects: () => 0 },
+        TX020: { feature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-uncommitted" }), sideEffects: () => 0 },
+        TX024: { feature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "repeatable-read" }), sideEffects: () => 0 },
+        TX022: { feature: "combination:read-committed+readOnly", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-committed", readOnly: true }), sideEffects: () => 0 },
+        TX027: { feature: "combination:read-uncommitted+readOnly", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-uncommitted", readOnly: true }), sideEffects: () => 0 },
+        TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "serializable", readOnly: true }), sideEffects: () => 0 },
+        TX031: { feature: "combination:repeatable-read+readOnly", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "repeatable-read", readOnly: true }), sideEffects: () => 0 },
+        TX029: { feature: "combination:read-uncommitted+readWrite", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-uncommitted", readOnly: false }), sideEffects: () => 0 },
+        TX032: { feature: "combination:repeatable-read+readWrite", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "repeatable-read", readOnly: false }), sideEffects: () => 0 },
+        TX030: { feature: "combination:read-committed+readWrite", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-committed", readOnly: false }), sideEffects: () => 0 },
+        TX033: { feature: "combination:serializable+readWrite", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "serializable", readOnly: false }), sideEffects: () => 0 },
+      };
+      const metrics = { snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0, openCursors: 0, openPrepared: 0 }) };
+      return {
+        db: direct,
+        pooled,
+        queries: makeQueries(),
+        stream: streamFixture(direct, faults),
+        bulk: bulkFixture(direct),
+        metrics,
+        reset,
+        unsupported,
+        guarded: { "statement.cancel": { prove: async () => undefined }, "data.temporal-native": { prove: async () => undefined }, "metadata.command-safe": { prove: async () => undefined } },
+        close: async () => { await connection.close?.(); },
+      };
+    },
+    close: async () => { await pool.close(); },
+  };
+  return target;
+}

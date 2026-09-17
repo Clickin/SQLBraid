@@ -26,6 +26,7 @@ import {
   type TypePolicy,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
+import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { utf8ByteLength } from "@sqlbraid/template";
 import {
@@ -56,10 +57,6 @@ interface OracleLobLike {
   removeListener?(event: string, listener: (...args: readonly unknown[]) => void): unknown;
   readonly destroyed?: boolean;
   readonly closed?: boolean;
-}
-
-interface OracleCleanupResource {
-  close(): Promise<void> | void;
 }
 
 export interface OracleExecuteResultLike {
@@ -109,6 +106,7 @@ export interface OracleDriverLike {
   readonly BIND_OUT?: unknown;
   readonly BIND_INOUT?: unknown;
   readonly OUT_FORMAT_OBJECT?: unknown;
+  readonly OUT_FORMAT_ARRAY?: unknown;
   readonly STRING?: unknown;
   readonly NUMBER?: unknown;
   readonly DATE?: unknown;
@@ -149,6 +147,8 @@ export interface OracleDatabaseOptions extends DatabaseOptions {
 }
 
 const defaultDriver = oracledb as unknown as OracleDriverLike;
+// node-oracledb's stable OUT_FORMAT_ARRAY constant; arrays preserve __proto__ labels.
+const oracleOutFormatArray = 4001;
 
 const oracleEnvironment = Object.freeze<DriverEnvironment>({
   database: { product: "oracle" },
@@ -300,8 +300,7 @@ async function executeWithCancellation<T>(
     if (breakPromise !== undefined) await breakPromise;
     if (aborted) {
       if (breakFailure !== undefined) {
-        const cleanup = cleanupError(signal.reason, [breakFailure]);
-        if (cleanup !== undefined) throw cleanup;
+        await throwWithCleanup(signal.reason, [breakFailure]);
       }
       throw signal.reason;
     }
@@ -309,14 +308,23 @@ async function executeWithCancellation<T>(
   } catch (error) {
     if (breakPromise !== undefined) await breakPromise;
     if (breakFailure !== undefined) {
-      const cleanup = cleanupError(error, [breakFailure]);
-      if (cleanup !== undefined) throw cleanup;
+      await throwWithCleanup(error, [breakFailure]);
     }
     if (aborted) throw signal.reason;
     throw error;
   } finally {
     signal.removeEventListener("abort", onAbort);
   }
+}
+
+async function throwWithCleanup(primary: unknown, failures: readonly unknown[]): Promise<never> {
+  const scope = createCleanupScope();
+  for (let index = failures.length - 1; index >= 0; index -= 1) {
+    const failure = failures[index];
+    scope.add(() => { throw failure; });
+  }
+  await scope.run(primary);
+  throw primary;
 }
 
 function assertPoolConnection(connection: OraclePoolConnectionLike): void {
@@ -366,13 +374,24 @@ function metadataType(field: OracleMetaDataLike | undefined, driver: OracleDrive
 }
 
 function decodeRow(value: unknown, fields: readonly OracleMetaDataLike[], policy: TypePolicy, driver: OracleDriverLike): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { value };
+  if (Array.isArray(value)) {
+    const row: Record<string, unknown> = {};
+    for (const [index, entry] of value.entries()) {
+      const key = fields[index]?.name;
+      if (key === undefined) continue;
+      const type = metadataType(fields[index], driver);
+      assertOracleNumericValue(type, entry);
+      defineResultProperty(row, key, type === undefined ? entry : policy.decode(type, entry));
+    }
+    return row;
+  }
+  if (!value || typeof value !== "object") return { value };
   const row: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
     const field = fields.find((candidate) => candidate.name === key);
     const type = metadataType(field, driver);
     assertOracleNumericValue(type, entry);
-    row[key] = type === undefined ? entry : policy.decode(type, entry);
+    defineResultProperty(row, key, type === undefined ? entry : policy.decode(type, entry));
   }
   return row;
 }
@@ -458,11 +477,6 @@ function typeConstant(databaseType: string, driver: OracleDriverLike): unknown {
     );
   }
   return value;
-}
-
-function identifier(name: string): string {
-  if (!/^[A-Za-z][A-Za-z0-9_$#]*$/u.test(name)) throw new Error("BRAID_SAVEPOINT_NAME: Oracle savepoint names must be simple identifiers.");
-  return name;
 }
 
 function bindValues(rendered: RenderedStatement, policy: TypePolicy, driver: OracleDriverLike): readonly unknown[] {
@@ -795,7 +809,7 @@ function executeOptions(options: OracleDatabaseOptions, driver: OracleDriverLike
   } = options.executeOptions ?? {};
   return {
     ...customOptions,
-    ...(driver.OUT_FORMAT_OBJECT === undefined ? {} : { outFormat: driver.OUT_FORMAT_OBJECT }),
+    outFormat: oracleOutFormatArray,
     fetchTypeHandler: fetchTypeHandler(driver),
     ...(resultSet ? { resultSet: true } : {}),
   };
@@ -808,14 +822,6 @@ function streamFetchSize(options: OracleDatabaseOptions): number {
     throw new RangeError("Oracle streamFetchSize must be a positive safe integer.");
   }
   return value;
-}
-
-function cleanupError(cause: unknown, failures: readonly unknown[]): Error | undefined {
-  if (failures.length === 0) return cause instanceof Error ? cause : cause === undefined ? undefined : new Error(String(cause), { cause });
-  const values = cause === undefined ? [...failures] : [cause, ...failures];
-  const error = new AggregateError(values, "BRAID_RESOURCE_CLEANUP: Oracle ResultSet cleanup failed.", { cause: cause ?? failures[0] });
-  Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
-  return error;
 }
 
 function closeLob(lob: OracleLobLike): Promise<void> {
@@ -843,6 +849,28 @@ function closeLob(lob: OracleLobLike): Promise<void> {
   });
 }
 
+async function runOracleCleanup(
+  scope: ReturnType<typeof createCleanupScope>,
+  primary: unknown,
+  hasPrimary: boolean,
+): Promise<void> {
+  try {
+    if (hasPrimary) await scope.run(primary);
+    else await scope.run();
+  } catch (error) {
+    if (hasPrimary || error instanceof AggregateError) throw error;
+    const cause = error instanceof Error && "cause" in error ? error.cause : error;
+    const aggregate = new AggregateError([cause], "BRAID_RESOURCE_CLEANUP: resource cleanup failed.", { cause });
+    Object.defineProperty(aggregate, "code", {
+      configurable: false,
+      enumerable: true,
+      value: "BRAID_RESOURCE_CLEANUP",
+      writable: false,
+    });
+    throw aggregate;
+  }
+}
+
 function oracleLob(value: unknown, name: string): OracleLobLike | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value) || typeof (value as OracleLobLike).getData !== "function") return undefined;
   const lob = value as OracleLobLike;
@@ -866,18 +894,6 @@ async function materializeLob(lob: OracleLobLike, type: string, name: string): P
   if (type === "BLOB" && data instanceof Uint8Array) return data;
   const expected = type === "BLOB" ? "bytes" : "string";
   throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name} did not return ${expected} Lob data.`);
-}
-
-async function closeAllResources(resources: readonly OracleCleanupResource[], cause?: unknown): Promise<Error | undefined> {
-  const failures: unknown[] = [];
-  for (const resource of resources) {
-    try {
-      await resource.close();
-    } catch (error) {
-      failures.push(error);
-    }
-  }
-  return cleanupError(cause, failures);
 }
 
 function routineParameter(parameter: unknown): OracleRoutineParameter {
@@ -985,7 +1001,12 @@ async function normalizeDmlReturning(
     }
   }
 
-  const resources: OracleCleanupResource[] = [];
+  const cleanupScope = createCleanupScope();
+  let cleanupRegistered = false;
+  const registerCleanup = (action: () => void | PromiseLike<void>): void => {
+    cleanupRegistered = true;
+    cleanupScope.add(action);
+  };
   let failure: unknown;
   let rows: readonly Record<string, unknown>[] | undefined;
   try {
@@ -1001,7 +1022,7 @@ async function normalizeDmlReturning(
         if (hintType !== undefined && materializedLobType(hintType) && value !== null && value !== undefined && !isMaterializedLobValue(hintType, value)) {
           const lob = oracleLob(value, name);
           if (lob === undefined) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name} did not return a Lob.`);
-          resources.push({ close: () => closeLob(lob) });
+          registerCleanup(() => closeLob(lob));
           value = await materializeLob(lob, hintType, name);
         }
         assertOracleNumericValue(hintType, value);
@@ -1013,9 +1034,8 @@ async function normalizeDmlReturning(
   } catch (error) {
     failure = error;
   }
-  const cleanup = await closeAllResources(resources, failure);
-  if (cleanup !== undefined) throw cleanup;
-  if (failure !== undefined) throw failure;
+  if (failure === undefined && !cleanupRegistered) await cleanupScope.run();
+  else await runOracleCleanup(cleanupScope, failure, failure !== undefined);
   return { rows: rows!, rowCount, kind: "rows" };
 }
 
@@ -1060,6 +1080,13 @@ function makeOracledbExecutor(
       Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
       throw error;
     }
+    if (isolation !== undefined && transactionOptions?.readOnly !== undefined) {
+      throw new UnsupportedFeatureError(
+        `transaction.isolation.${isolation}`,
+        "BRAID_TX_OPTION_UNSUPPORTED",
+        "Oracle does not support combining isolation and readOnly transaction options.",
+      );
+    }
     if (isolation === "read-uncommitted" || isolation === "repeatable-read") {
       throw new UnsupportedFeatureError(
         `transaction.isolation.${isolation}`,
@@ -1067,12 +1094,10 @@ function makeOracledbExecutor(
         `Oracle does not support transaction isolation ${isolation}.`,
       );
     }
-    const clauses: string[] = [];
-    if (isolation === "read-committed") clauses.push("ISOLATION LEVEL READ COMMITTED");
-    if (isolation === "serializable") clauses.push("ISOLATION LEVEL SERIALIZABLE");
-    if (transactionOptions?.readOnly === true) clauses.push("READ ONLY");
-    else if (transactionOptions?.readOnly === false) clauses.push("READ WRITE");
-    if (clauses.length > 0) await control(`SET TRANSACTION ${clauses.join(" ")}`);
+    if (isolation === "read-committed") await control("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
+    else if (isolation === "serializable") await control("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+    else if (transactionOptions?.readOnly === true) await control("SET TRANSACTION READ ONLY");
+    else if (transactionOptions?.readOnly === false) await control("SET TRANSACTION READ WRITE");
   };
   return {
     ownershipKey: connection,
@@ -1156,7 +1181,12 @@ function makeOracledbExecutor(
       const parameters = rendered.parameters.map(routineParameter);
       const ordinals = oracleOutputOrdinals(rendered);
       const resultSets: DriverRoutineResult["resultSets"][number][] = [];
-      const resources: OracleCleanupResource[] = [];
+      const cleanupScope = createCleanupScope();
+      let cleanupRegistered = false;
+      const registerCleanup = (action: () => void | PromiseLike<void>): void => {
+        cleanupRegistered = true;
+        cleanupScope.add(action);
+      };
       let failure: unknown;
       let value: DriverRoutineResult | undefined;
       try {
@@ -1167,8 +1197,8 @@ function makeOracledbExecutor(
             executeOptions(options, driver, true),
           ));
           const implicit = Array.isArray(result.implicitResults) ? result.implicitResults : [];
-          resources.push(...implicit);
-          if (result.resultSet) resources.push(result.resultSet);
+          for (const resource of implicit) registerCleanup(() => resource.close());
+          if (result.resultSet) registerCleanup(() => result.resultSet!.close());
           const explicit = parameters
             .map((parameter, index) => ({ parameter, index, ordinal: ordinals[index], value: ordinals[index] === undefined ? undefined : outBindValue(result.outBinds, ordinals[index]!, parameter.outputName) }))
             .filter(({ ordinal }) => ordinal !== undefined);
@@ -1176,22 +1206,30 @@ function makeOracledbExecutor(
           const explicitCursors: Array<{ readonly name: string; readonly index: number; readonly resultSet: OracleResultSetLike }> = [];
           let explicitLobs: Map<number, OracleLobLike> | undefined;
           let explicitResourceFailure: unknown;
-          for (const { parameter, index, value } of explicit) {
+          let explicitResourceFailureIndex = Number.POSITIVE_INFINITY;
+          const recordExplicitResourceFailure = (error: unknown, index: number): void => {
+            if (index < explicitResourceFailureIndex) {
+              explicitResourceFailure = error;
+              explicitResourceFailureIndex = index;
+            }
+          };
+          for (let explicitIndex = explicit.length - 1; explicitIndex >= 0; explicitIndex -= 1) {
+            const { parameter, index, value } = explicit[explicitIndex]!;
             const name = parameter.outputName;
             const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
             const isCursor = hintType === "REF CURSOR" || hintType === "REFCURSOR" || hintType === "SYS_REFCURSOR" || hintType === "CURSOR";
             if (isCursor) {
               if (!name) {
-                explicitResourceFailure ??= new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", `Oracle output parameter ${index + 1} is missing outputName.`);
+                recordExplicitResourceFailure(new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", `Oracle output parameter ${index + 1} is missing outputName.`), index);
               } else if (!value || typeof value !== "object" || typeof (value as OracleResultSetLike).close !== "function") {
-                explicitResourceFailure ??= new UnsupportedFeatureError("routine.out-cursor", "BRAID_CALL_CURSOR_UNSUPPORTED", `Oracle output ${name} did not return a ResultSet.`);
+                recordExplicitResourceFailure(new UnsupportedFeatureError("routine.out-cursor", "BRAID_CALL_CURSOR_UNSUPPORTED", `Oracle output ${name} did not return a ResultSet.`), index);
               } else {
                 const resultSet = value as OracleResultSetLike;
                 explicitCursors.push({ name, index, resultSet });
-                resources.push(resultSet);
+                registerCleanup(() => resultSet.close());
               }
               if (!name && value && typeof value === "object" && typeof (value as OracleResultSetLike).close === "function") {
-                resources.push(value as OracleResultSetLike);
+                registerCleanup(() => (value as OracleResultSetLike).close());
               }
               continue;
             }
@@ -1200,13 +1238,13 @@ function makeOracledbExecutor(
             try {
               const lob = oracleLob(value, name ?? `parameter ${index + 1}`);
               if (lob === undefined) {
-                explicitResourceFailure ??= new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name ?? `parameter ${index + 1}`} did not return a Lob.`);
+                recordExplicitResourceFailure(new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name ?? `parameter ${index + 1}`} did not return a Lob.`), index);
               } else {
                 (explicitLobs ??= new Map()).set(index, lob);
-                resources.push({ close: () => closeLob(lob) });
+                registerCleanup(() => closeLob(lob));
               }
             } catch (error) {
-              explicitResourceFailure ??= error;
+              recordExplicitResourceFailure(error, index);
             }
           }
           if (explicitResourceFailure !== undefined) throw explicitResourceFailure;
@@ -1252,9 +1290,8 @@ function makeOracledbExecutor(
       } catch (error) {
         failure = error;
       }
-      const cleanup = await closeAllResources(resources, failure);
-      if (cleanup !== undefined) throw cleanup;
-      if (failure !== undefined) throw failure;
+      if (failure === undefined && !cleanupRegistered) await cleanupScope.run();
+      else await runOracleCleanup(cleanupScope, failure, failure !== undefined);
       return value!;
     },
     async *stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): AsyncGenerator<Row> {
@@ -1269,20 +1306,17 @@ function makeOracledbExecutor(
       const resultSet = result.resultSet;
       if (!resultSet) {
         const implicit = Array.isArray(result.implicitResults) ? result.implicitResults : [];
-        const cleanup = await closeAllResources(implicit);
-        if (cleanup !== undefined) throw cleanup;
-        throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "Oracle execute did not return a ResultSet.");
+        const cleanupScope = createCleanupScope();
+        for (const resource of implicit) cleanupScope.add(() => resource.close());
+        await cleanupScope.run(new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "Oracle execute did not return a ResultSet."));
+        return;
       }
-      const resources = [resultSet, ...(Array.isArray(result.implicitResults) ? result.implicitResults : [])];
-      let closePromise: Promise<Error | undefined> | undefined;
-      const close = (): Promise<Error | undefined> => {
-        if (closePromise === undefined) closePromise = closeAllResources(resources);
-        return closePromise;
-      };
+      const cleanupScope = createCleanupScope();
+      cleanupScope.add(() => resultSet!.close());
+      for (const resource of Array.isArray(result.implicitResults) ? result.implicitResults : []) cleanupScope.add(() => resource.close());
       let breakFailure: unknown;
       let breakPromise: Promise<void> | undefined;
       const abort = (): void => {
-        void close();
         if (breakPromise !== undefined) return;
         try {
           breakPromise = Promise.resolve(connection.break!()).catch((error) => {
@@ -1332,31 +1366,17 @@ function makeOracledbExecutor(
         throw error;
       } finally {
         signal?.removeEventListener("abort", abort);
-        const earlyCleanup = await close();
         if (breakPromise !== undefined) await breakPromise;
-        if (breakFailure !== undefined) {
-          const cleanup = cleanupError(failure, [breakFailure]);
-          if (cleanup !== undefined) throw cleanup;
-        }
-        if (signal?.aborted && failure !== undefined) {
-          if (earlyCleanup !== undefined) {
-            const failures = earlyCleanup instanceof AggregateError ? earlyCleanup.errors : [earlyCleanup];
-            throw cleanupError(signal.reason, failures);
-          }
-          throw signal.reason ?? failure;
-        }
-        if (failure !== undefined && earlyCleanup !== undefined) {
-          const failures = earlyCleanup instanceof AggregateError ? earlyCleanup.errors : [earlyCleanup];
-          throw cleanupError(failure, failures);
-        }
-        if (earlyCleanup !== undefined) throw earlyCleanup;
+        if (breakFailure !== undefined) cleanupScope.add(() => { throw breakFailure; });
+        const primary = signal?.aborted ? signal.reason : failure;
+        await runOracleCleanup(cleanupScope, primary, primary !== undefined);
       }
     },
     begin,
     commit: connection.commit.bind(connection),
     rollback: connection.rollback.bind(connection),
-    savepoint: async (name) => { await control(`SAVEPOINT ${identifier(name)}`); },
-    rollbackTo: async (name) => { await control(`ROLLBACK TO SAVEPOINT ${identifier(name)}`); },
+    savepoint: async (name) => { await control(`SAVEPOINT ${assertSavepointName(name)}`); },
+    rollbackTo: async (name) => { await control(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`); },
     // Oracle releases savepoints implicitly; this is a logical runtime boundary.
     releaseSavepoint: async (_name) => undefined,
   };
