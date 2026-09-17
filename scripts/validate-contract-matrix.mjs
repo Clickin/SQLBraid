@@ -214,6 +214,12 @@ export function reportEvidence(report, manifest, model, sourceSha) {
       const matches = [...assertion.title.matchAll(markerPattern)];
       requireThat(matches.length > 0 && assertion.title.startsWith(matches[0][0]) &&
         matches.length === assertion.title.split("[contract:").length - 1, `malformed contract prefix: ${assertion.title}`);
+      let prefixEnd = 0;
+      for (const match of matches) {
+        requireThat(assertion.title.slice(prefixEnd, match.index).trim() === "",
+          `contract tags must be leading prefixes: ${assertion.title}`);
+        prefixEnd = match.index + match[0].length;
+      }
       requireThat(assertion.status === "passed" && (assertion.failureMessages?.length ?? 0) === 0,
         `contract assertion did not pass: ${assertion.title}`);
       const owners = [...assertion.title.matchAll(ownershipPattern)].map((match) => match[1]);

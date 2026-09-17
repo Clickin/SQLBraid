@@ -143,6 +143,25 @@ test("complete individual passed assertions satisfy the mandatory execution gate
   });
 });
 
+test("one passed assertion can supply every leading contract prefix it actually carries", async () => {
+  const fixture = executionFixture();
+  const commit = fixture.assertions.find((assertion) =>
+    assertion.title.includes("[contract:pg:transaction.commit-confirmed:integration]") &&
+    assertion.title.includes("[ownership:direct]"))!;
+  const callback = fixture.assertions.findIndex((assertion) =>
+    assertion.title.includes("[contract:pg:transaction.callback-rollback:integration]") &&
+    assertion.title.includes("[ownership:direct]"));
+  commit.title = "[contract:pg:transaction.commit-confirmed:integration] " +
+    "[contract:pg:transaction.callback-rollback:integration] [ownership:direct] exercises both outcomes";
+  fixture.assertions.splice(callback, 1);
+  fixture.report.numTotalTests -= 1;
+  fixture.report.numPassedTests -= 1;
+  await withReport(fixture, async (directory) => {
+    const result = await validateReports(directory, sourceSha, model);
+    assert.equal(result.passed, result.required);
+  });
+});
+
 test("a green report missing one required assertion or ownership path cannot pass", async () => {
   const fixture = executionFixture();
   fixture.assertions.shift();
