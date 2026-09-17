@@ -127,7 +127,7 @@
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "9646393511e8b86e985db6a17f09932bf5e94f5020b341bf5d6dc5b61bc0032b"
+      "sourceDigest": "3f62d020d8c191ab83a45c8bed5deff83811b2354af333b17a75bcbad76d50c1"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",

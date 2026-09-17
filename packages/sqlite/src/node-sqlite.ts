@@ -265,7 +265,7 @@ function configureExactIntegerReads(statement: SqliteStatementLike): void {
   statement.setReadBigInts(true);
 }
 
-function nodeSqliteEnvironment(transactionSupported: boolean): DriverEnvironment {
+function nodeSqliteEnvironment(transactionSupported: boolean, streamSupported: boolean): DriverEnvironment {
   return Object.freeze<DriverEnvironment>({
     database: { product: "sqlite" },
     driver: { id: "node-sqlite", profile: "sqlite-exact-string" },
@@ -294,7 +294,7 @@ function nodeSqliteEnvironment(transactionSupported: boolean): DriverEnvironment
       "transaction.isolation.serializable": { status: transactionSupported ? "guaranteed" : "unsupported" },
       "statement.prepare": { status: "guaranteed" },
       "statement.cancel": { status: "unsupported" },
-      "statement.stream": { status: "guaranteed" },
+      "statement.stream": { status: streamSupported ? "guaranteed" : "unsupported" },
       "statement.bulk": { status: "guaranteed" },
       "routine.call": { status: "unsupported" },
       "routine.out": { status: "unsupported" },
@@ -321,6 +321,9 @@ function nodeSqliteEnvironment(transactionSupported: boolean): DriverEnvironment
 }
 
 export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
+  // Deno's node:sqlite iterator turns SQLite step errors into normal EOF.
+  // Enable only after a native error-propagation certification proves it fixed.
+  const streamSupported = typeof process === "undefined" || process.versions.deno === undefined;
   const control = database.exec
     ? (sql: string): void => {
         database.exec?.(sql);
@@ -329,7 +332,7 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
   return {
     ownershipKey: database,
     statementBinding: nodeSqliteStatementBinding,
-    environment: nodeSqliteEnvironment(control !== undefined),
+    environment: nodeSqliteEnvironment(control !== undefined, streamSupported),
     query<Row>(
       rendered: RenderedStatement,
       binding?: StatementBindingDescription,
@@ -402,6 +405,13 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
       binding?: StatementBindingDescription,
       options?: ExecutionOptions,
     ): AsyncGenerator<Row> {
+      if (!streamSupported) {
+        throw new UnsupportedFeatureError(
+          "statement.stream",
+          "BRAID_STREAM_UNSUPPORTED",
+          "Deno node:sqlite iteration does not preserve SQLite errors.",
+        );
+      }
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);

@@ -520,6 +520,10 @@ export function LIBSQL_EXPECTED_CAPABILITIES(): ExpectedCapabilityContract {
   };
 }
 
+export function DENO_SQLITE_EXPECTED_CAPABILITIES(): ExpectedCapabilityContract {
+  return sqliteUnsupportedCapabilities(false, true, false);
+}
+
 export function WASM_EXPECTED_CAPABILITIES(): ExpectedCapabilityContract {
   return {
     "sql.native-transparency": { status: "guaranteed" },
@@ -898,7 +902,7 @@ export const CERTIFICATION_CONTRACTS: Readonly<Record<string, CertificationTarge
     tuple: CERTIFICATION_TARGET_TUPLES["sqlite-node-sqlite-node-22-18-0"],
   },
   "sqlite-node-sqlite-deno-2-9-3": {
-    expectedCapabilities: SQLITE_EXPECTED_CAPABILITIES(),
+    expectedCapabilities: DENO_SQLITE_EXPECTED_CAPABILITIES(),
     expectedTransactionOptions: SQLITE_TRANSACTION_OPTIONS(),
     tuple: CERTIFICATION_TARGET_TUPLES["sqlite-node-sqlite-deno-2-9-3"],
   },

@@ -152,7 +152,7 @@
       "testIds": ["deno-sqlite.data.profile"]
     },
     "statement.stream": {
-      "status": "guaranteed",
+      "status": "unsupported",
       "testIds": ["deno-sqlite.data.profile"]
     },
     "statement.bulk": {

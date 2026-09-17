@@ -17,6 +17,11 @@ The SQLite dialect is shared, but the physical adapter is selected by subpath:
 | `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                       | OO1 statement ownership; async-generator adaptation for streams                              |
 | `sqlbraid/d1`             | Cloudflare D1                         | prepared binds; no streaming or callback transactions                                        |
 
+Deno 2.9.3's `node:sqlite` iterator turns SQLite step errors into normal EOF.
+SQLBraid therefore rejects streaming on Deno with `BRAID_STREAM_UNSUPPORTED`
+instead of returning silently truncated rows. Materialized queries and
+transactions remain available; Node's native iterator is unaffected.
+
 The public `Database` API remains async for every adapter. `Awaitable<T>` is
 only the physical `QueryExecutor` SPI type that lets synchronous adapters
 return plain results without Promise wrappers; it does not make

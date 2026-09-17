@@ -1053,13 +1053,26 @@ export async function runSqliteSmoke() {
       ["1", "2", "3"],
     );
 
-    const streamed = [];
-    for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`))
-      streamed.push(row.id);
-    assert.deepEqual(streamed, ["1", "2", "3"]);
-    for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`)) {
-      assert.equal(row.id, "1");
-      break;
+    if (runtimeName() === "deno") {
+      assert.equal(capabilityStatus(sqliteEnvironment, "statement.stream"), "unsupported");
+      await assert.rejects(
+        async () => {
+          for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`)) void row;
+        },
+        (error) =>
+          error instanceof UnsupportedFeatureError &&
+          error.feature === "statement.stream" &&
+          error.code === "BRAID_STREAM_UNSUPPORTED",
+      );
+    } else {
+      const streamed = [];
+      for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`))
+        streamed.push(row.id);
+      assert.deepEqual(streamed, ["1", "2", "3"]);
+      for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`)) {
+        assert.equal(row.id, "1");
+        break;
+      }
     }
     assert.deepEqual(await db.one(sqlite.rows`SELECT COUNT(*) AS count FROM ${tableIdentifier}`), { count: "3" });
 

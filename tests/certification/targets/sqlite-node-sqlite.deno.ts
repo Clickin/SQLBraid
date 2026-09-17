@@ -1,6 +1,7 @@
 import { certifyTarget, validateCertificationArtifact, writeCertificationArtifact } from "../runner.ts";
 import { assertDenoSourceSha } from "../run-deno.ts";
 import { nodeSqliteCertificationTarget } from "./sqlite-node-sqlite.ts";
+import { DENO_SQLITE_EXPECTED_CAPABILITIES } from "../contracts.ts";
 import { isSourceSha } from "../types.ts";
 import { dirname } from "node:path";
 
@@ -22,6 +23,8 @@ const target = {
   sourceSha,
   measuredDriverVersion: Deno.version.deno,
   measuredRuntimeVersion: Deno.version.deno,
+  expectedCapabilities: DENO_SQLITE_EXPECTED_CAPABILITIES(),
+  createFixture: () => nodeSqliteCertificationTarget.createFixture(false),
 };
 const stress = Deno.env.get("SQLBRAID_CERT_STRESS") === "1" || Deno.env.get("SQLBRAID_CERT_STRESS") === "true";
 const artifact = await certifyTarget(target, { stress });

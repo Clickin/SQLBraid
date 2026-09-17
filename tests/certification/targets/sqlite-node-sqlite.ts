@@ -13,7 +13,7 @@ import {
   type SqliteFixtureOptions,
 } from "./sqlite-fixture.js";
 
-function createFixture(): Promise<CertificationFixture> {
+function createFixture(streamSupported = true): Promise<CertificationFixture> {
   const native = new DatabaseSync(":memory:");
   native.exec("CREATE TABLE cert_items (value TEXT NOT NULL)");
   native.exec("CREATE TABLE cert_sentinel (id INTEGER PRIMARY KEY, marker TEXT NOT NULL)");
@@ -134,7 +134,7 @@ function createFixture(): Promise<CertificationFixture> {
     physicalSessionId: "node-sqlite-native-memory",
     capabilities: sqliteCapabilities(),
     expectedTransactionOptions: sqliteTransactionOptions(),
-    streamSupported: true,
+    streamSupported,
     sessionSupported: true,
     localReadOnly: false,
     failureCode: "ERR_SQLITE_ERROR",

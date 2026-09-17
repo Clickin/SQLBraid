@@ -145,6 +145,7 @@ function makeUnsupported(
   db: Database,
   queries: CertificationQueries,
   targetKind: "sqlite" | "libsql",
+  streamSupported: boolean,
   sideEffects: () => number,
 ): Partial<Record<CertificationCaseId, UnsupportedProbe>> {
   const call = sql.call`SELECT 1`;
@@ -219,7 +220,23 @@ function makeUnsupported(
             run: () => db.session(async () => undefined),
             sideEffects,
           },
-
+        }
+      : {}),
+    ...(!streamSupported
+      ? {
+          ...(targetKind === "sqlite"
+            ? {
+                SES007: {
+                  feature: "statement.stream",
+                  expectedCode: "BRAID_STREAM_UNSUPPORTED",
+                  run: () =>
+                    db.session(async (session) => {
+                      for await (const row of session.stream(queries.one)) void row;
+                    }),
+                  sideEffects,
+                },
+              }
+            : {}),
           PRE003: {
             feature: "statement.stream",
             expectedCode: "BRAID_STREAM_UNSUPPORTED",
@@ -319,7 +336,7 @@ function makeUnsupported(
       run: () => db.execute(queries.one, { signal: new AbortController().signal }),
       sideEffects,
     },
-    ...(targetKind === "sqlite"
+    ...(targetKind === "sqlite" && streamSupported
       ? {
           PRE011: {
             feature: "statement.cancel",
@@ -636,6 +653,7 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     options.db,
     queries,
     options.localReadOnly ? "libsql" : "sqlite",
+    options.streamSupported,
     () => options.stats.nativeOperations,
   );
   return {

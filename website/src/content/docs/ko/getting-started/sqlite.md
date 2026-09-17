@@ -17,6 +17,11 @@ SQLite dialect는 공유하지만 물리적 adapter는 subpath로 선택합니�
 | `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                       | OO1 statement ownership; stream은 async generator로 변환                                   |
 | `sqlbraid/d1`             | Cloudflare D1                         | prepared bind; streaming과 callback transaction 없음                                       |
 
+Deno 2.9.3의 `node:sqlite` iterator는 SQLite 실행 오류를 정상 EOF로
+처리합니다. SQLBraid는 일부 행만 반환하고 성공한 것처럼 보이는 대신 Deno의
+streaming을 `BRAID_STREAM_UNSUPPORTED`로 거부합니다. Materialized query와
+transaction은 계속 사용할 수 있으며 Node의 native iterator에는 영향이 없습니다.
+
 모든 adapter의 public `Database` API는 async로 유지됩니다. `Awaitable<T>`는
 동기식 adapter가 Promise wrapper 없이 plain result를 반환하도록 하는
 물리 `QueryExecutor` SPI 타입일 뿐이며, better-sqlite3를 non-blocking으로

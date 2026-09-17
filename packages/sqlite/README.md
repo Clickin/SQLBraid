@@ -24,6 +24,11 @@ as decimal strings, REAL as numbers, TEXT as strings, and binary values as
 portable bytes. D1 cannot guarantee full SQLite int64 fidelity and does not
 provide streaming or callback transactions.
 
+Deno 2.9.3's `node:sqlite` iterator hides SQLite step errors as normal EOF.
+Streaming through this adapter is therefore unsupported on Deno and rejects
+with `BRAID_STREAM_UNSUPPORTED`; materialized queries and transactions remain
+available. Node's native iterator is unaffected.
+
 All adapters retain SQLBraid's async `Database` API. `Awaitable<T>` is only an
 SPI affordance for synchronous physical query, bulk, and transaction-control
 methods; it does not make `better-sqlite3` non-blocking. Native SQLite SQL is
