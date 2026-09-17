@@ -44,7 +44,7 @@ env:
   NODE_VERSION: 22.18.0
   BUN_VERSION: 1.3.14
   DENO_VERSION: 2.9.3
-  SQLBRAID_CERT_STRESS: ${{ github.event_name == 'schedule' || inputs.stress }}
+  SQLBRAID_CERT_STRESS: ${{ github.event_name == 'schedule' || inputs.stress == true }}
 
 jobs:
   prepare:
