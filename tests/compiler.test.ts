@@ -59,14 +59,26 @@ const tagOwnershipCases: readonly [form: string, body: string, owned: boolean][]
   ["object catch", `try {} catch ({ sql }) { ${ownershipProbe}; }`, false],
   ["nested catch", `try {} catch ({ nested: [sql] }) { ${ownershipProbe}; }`, false],
   ["catch binding does not escape", `try {} catch ({ sql }) {} ${ownershipProbe};`, true],
-  ["hoisted var before declaration", `function f() { ${ownershipProbe}; if (condition) { var sql = foreignTag; } }`, false],
-  ["hoisted var after declaration", `function f() { if (condition) { var sql = foreignTag; } ${ownershipProbe}; }`, false],
+  [
+    "hoisted var before declaration",
+    `function f() { ${ownershipProbe}; if (condition) { var sql = foreignTag; } }`,
+    false,
+  ],
+  [
+    "hoisted var after declaration",
+    `function f() { if (condition) { var sql = foreignTag; } ${ownershipProbe}; }`,
+    false,
+  ],
   ["hoisted destructured var", `function f() { ${ownershipProbe}; if (condition) { var { sql } = object; } }`, false],
   ["hoisted for var", `function f() { for (var sql of values) {} ${ownershipProbe}; }`, false],
   ["nested function var does not escape", `function f() { function nested() { var sql; } ${ownershipProbe}; }`, true],
   ["block let does not escape", `function f() { if (condition) { let sql = foreignTag; } ${ownershipProbe}; }`, true],
   ["body var does not shadow parameter default", `function f(query = ${ownershipProbe}) { var sql; }`, true],
-  ["body function does not shadow parameter default", `function f(query = ${ownershipProbe}) { function sql() {} }`, true],
+  [
+    "body function does not shadow parameter default",
+    `function f(query = ${ownershipProbe}) { function sql() {} }`,
+    true,
+  ],
   ["parameter default binding", `function f(sql = ${ownershipProbe}) {}`, false],
   ["function declaration", `{ ${ownershipProbe}; function sql() {} }`, false],
   ["function expression name", `const f = function sql() { ${ownershipProbe}; };`, false],
@@ -88,13 +100,38 @@ const tagImportCases: readonly [form: string, source: string, tagExport: string,
   ["foreign import", `import { sql } from 'foreign-tags'; ${ownershipProbe};`, "sql", false],
   ["unrelated catalog export", `import { capture as sql } from '@sqlbraid/template'; ${ownershipProbe};`, "sql", false],
   ["type-only import", `import type { sql } from '@sqlbraid/template'; ${ownershipProbe};`, "sql", false],
-  ["named alias", `import { sql as tag } from '@sqlbraid/template'; ${ownershipProbe.replace(/^sql/u, "tag.rows")};`, "sql", true],
-  ["shadowed alias", `import { sql as tag } from '@sqlbraid/template'; function f({ tag }) { ${ownershipProbe.replace(/^sql/u, "tag.rows")}; }`, "sql", false],
-  ["namespace import", `import * as braid from '@sqlbraid/template'; ${ownershipProbe.replace(/^sql/u, "braid.sql.rows(schema)")};`, "sql", true],
-  ["shadowed namespace", `import * as braid from '@sqlbraid/template'; for (const { braid } of values) { ${ownershipProbe.replace(/^sql/u, "braid.sql.command")}; }`, "sql", false],
+  [
+    "named alias",
+    `import { sql as tag } from '@sqlbraid/template'; ${ownershipProbe.replace(/^sql/u, "tag.rows")};`,
+    "sql",
+    true,
+  ],
+  [
+    "shadowed alias",
+    `import { sql as tag } from '@sqlbraid/template'; function f({ tag }) { ${ownershipProbe.replace(/^sql/u, "tag.rows")}; }`,
+    "sql",
+    false,
+  ],
+  [
+    "namespace import",
+    `import * as braid from '@sqlbraid/template'; ${ownershipProbe.replace(/^sql/u, "braid.sql.rows(schema)")};`,
+    "sql",
+    true,
+  ],
+  [
+    "shadowed namespace",
+    `import * as braid from '@sqlbraid/template'; for (const { braid } of values) { ${ownershipProbe.replace(/^sql/u, "braid.sql.command")}; }`,
+    "sql",
+    false,
+  ],
   ["custom export", `import { query as sql } from '@sqlbraid/template'; ${ownershipProbe};`, "query", true],
   ["default import", `import sql from '@sqlbraid/template'; ${ownershipProbe};`, "default", true],
-  ["shadowed default import", `import sql from '@sqlbraid/template'; function f({ sql }) { ${ownershipProbe}; }`, "default", false],
+  [
+    "shadowed default import",
+    `import sql from '@sqlbraid/template'; function f({ sql }) { ${ownershipProbe}; }`,
+    "default",
+    false,
+  ],
 ];
 
 test("tag ownership matrix preserves lexical bindings with and without a checker", () => {
@@ -115,7 +152,10 @@ test("tag ownership matrix preserves lexical bindings with and without a checker
       writeFileSync(fileName, source);
       return { form, owned, fileName, source, tagExport };
     });
-    const program = ts.createProgram(fixtures.map(({ fileName }) => fileName), { noLib: true, noResolve: true });
+    const program = ts.createProgram(
+      fixtures.map(({ fileName }) => fileName),
+      { noLib: true, noResolve: true },
+    );
     const typeChecker = program.getTypeChecker();
     for (const fixture of fixtures) {
       for (const checked of [false, true]) {
@@ -146,7 +186,8 @@ test("tag ownership matrix preserves lexical bindings with and without a checker
 
 test("foreign tags retain eager interpolation, tag invocation, and template identity after transformSource", async () => {
   const template = await import("@sqlbraid/template");
-  const probe = "sql`SELECT 1 /*@braid if ${observe('guard', false)}*/ WHERE id = ${observe('value', 7)} /*@braid end*/`";
+  const probe =
+    "sql`SELECT 1 /*@braid if ${observe('guard', false)}*/ WHERE id = ${observe('value', 7)} /*@braid end*/`";
   const cases = [
     `for (const sql of [foreignTag]) { result = ${probe}; }`,
     `{ const { nested: [sql] } = { nested: [foreignTag] }; result = ${probe}; }`,
@@ -195,7 +236,10 @@ export function braid(observe) { return sql\`SELECT 1 /*@braid if \${false}*/ WH
     assert.equal(events.includes("inactive"), false);
     const failure = new Error("foreign interpolation failed");
     assert.throws(
-      () => output.run?.(foreignTag, () => { throw failure; }),
+      () =>
+        output.run?.(foreignTag, () => {
+          throw failure;
+        }),
       (error) => error === failure,
     );
     assert.equal(templates.length, 2);
@@ -205,20 +249,17 @@ export function braid(observe) { return sql\`SELECT 1 /*@braid if \${false}*/ WH
 test("checker tag ownership follows the actual export, not sibling reexports or matching types", () => {
   const directory = mkdtempSync(join(tmpdir(), "sqlbraid-tag-symbols-"));
   try {
-    writeFileSync(
-      join(directory, "author.ts"),
-      "export declare const sql: any; export declare const foreign: any;",
-    );
-    writeFileSync(
-      join(directory, "bridge.ts"),
-      "export { sql as braid, foreign as sql } from './author';",
-    );
+    writeFileSync(join(directory, "author.ts"), "export declare const sql: any; export declare const foreign: any;");
+    writeFileSync(join(directory, "bridge.ts"), "export { sql as braid, foreign as sql } from './author';");
     writeFileSync(
       join(directory, "unrelated.ts"),
       "export { sql as other } from './author'; export declare const innocent: any;",
     );
     writeFileSync(join(directory, "star.ts"), "export * from './author';");
-    writeFileSync(join(directory, "local.ts"), "import { sql as imported } from './author'; export { imported as sql };");
+    writeFileSync(
+      join(directory, "local.ts"),
+      "import { sql as imported } from './author'; export { imported as sql };",
+    );
     const fileName = join(directory, "main.ts");
     const probe = (tag: string) => ownershipProbe.replace(/^sql/u, tag);
     const source = [
@@ -231,7 +272,19 @@ test("checker tag ownership follows the actual export, not sibling reexports or 
       "import type { sql as typeOnly } from './author';",
       "import type * as typeNamespace from './author';",
       "declare const effect: () => number;",
-      ...["sql", "importedForeign", "disguised", "reexported", "bridge.sql", "bridge.braid", "innocent", "star", "local", "typeOnly", "typeNamespace.sql"].map((tag) => `${probe(tag)};`),
+      ...[
+        "sql",
+        "importedForeign",
+        "disguised",
+        "reexported",
+        "bridge.sql",
+        "bridge.braid",
+        "innocent",
+        "star",
+        "local",
+        "typeOnly",
+        "typeNamespace.sql",
+      ].map((tag) => `${probe(tag)};`),
       `function typed(sql: typeof import('./author').sql) { ${probe("sql")}; }`,
       `function shadowed({ reexported }: any) { ${probe("reexported")}; }`,
       `function namespaceShadow({ bridge }: any) { ${probe("bridge.braid")}; }`,
@@ -245,7 +298,10 @@ test("checker tag ownership follows the actual export, not sibling reexports or 
     };
     const discovered = discoverQueries(source, fileName, options);
     assert.deepEqual(discovered.diagnostics, []);
-    assert.deepEqual(discovered.queries.map(({ tagName }) => tagName), ["sql", "reexported", "bridge.braid", "star", "local"]);
+    assert.deepEqual(
+      discovered.queries.map(({ tagName }) => tagName),
+      ["sql", "reexported", "bridge.braid", "star", "local"],
+    );
     const transformed = transformSource(source, fileName, options);
     assert.deepEqual(transformed.diagnostics, []);
     for (const tag of ["importedForeign", "disguised", "bridge.sql", "innocent", "typeOnly", "typeNamespace.sql"])

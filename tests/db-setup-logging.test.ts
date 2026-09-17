@@ -14,10 +14,14 @@ test("external database setup diagnostics do not disclose connection secrets", a
   );
   vi.stubEnv("SQLBRAID_MARIADB_URL", `mariadb://${secrets[0]}:${secrets[1]}@localhost/test?token=${secrets[2]}`);
   vi.stubEnv("SQLBRAID_ORACLE_URL", `oracle://${secrets[0]}:${secrets[1]}@localhost/test?token=${secrets[2]}`);
-  const project = { provide() {} } as TestProject;
+  const project = { provide() {} } as unknown as TestProject;
   try {
-    await (await setupMariaDb(project))();
-    await (await setupOracle(project))();
+    await (
+      await setupMariaDb(project)
+    )();
+    await (
+      await setupOracle(project)
+    )();
     const logged = JSON.stringify(output);
     for (const secret of secrets) assert.ok(!logged.includes(secret), "Connection secrets must not be logged.");
   } finally {

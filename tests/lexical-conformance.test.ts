@@ -39,7 +39,12 @@ const fixtures: readonly {
   { name: "double dash control", before: "--\u0001", after: "\n", codeIn: [] },
   { name: "hash", before: "# ", after: "\n", codeIn: standardComments },
   { name: "line feed recovery", before: "-- comment\n", after: "", codeIn: all },
-  { name: "carriage return recovery", before: "-- comment\r", after: "\n", codeIn: ["postgres", "mysql", "mariadb", "oracle", "mssql"] },
+  {
+    name: "carriage return recovery",
+    before: "-- comment\r",
+    after: "\n",
+    codeIn: ["postgres", "mysql", "mariadb", "oracle", "mssql"],
+  },
   { name: "CRLF recovery", before: "-- comment\r\n", after: "", codeIn: all },
   { name: "comment at end of input", before: "-- ", after: "", codeIn: [] },
   { name: "single quote", before: "'-- # ", after: "'", codeIn: [] },
@@ -51,7 +56,12 @@ const fixtures: readonly {
   { name: "bracket identifier", before: "[ ", after: " ]", codeIn: ["postgres", "mysql", "mariadb", "oracle"] },
   { name: "dollar quote", before: "$$ ", after: " $$", codeIn: nonPostgres },
   { name: "tagged dollar quote", before: "$tag$ ", after: " $tag$", codeIn: nonPostgres },
-  { name: "Oracle q quote with apostrophe", before: "q'[ ' ", after: " ]'", codeIn: ["postgres", "mysql", "mariadb", "sqlite", "mssql"] },
+  {
+    name: "Oracle q quote with apostrophe",
+    before: "q'[ ' ",
+    after: " ]'",
+    codeIn: ["postgres", "mysql", "mariadb", "sqlite", "mssql"],
+  },
   { name: "block comment", before: "/* -- # ", after: " */", codeIn: [] },
   { name: "block comment recovery", before: "/* -- # */ ", after: "", codeIn: all },
   { name: "nested block comment", before: "/* outer /* inner */ ", after: " */", codeIn: nonNested },
@@ -73,7 +83,7 @@ function commandClient(seenValues: unknown[][] = []): BunSqlReservedClient {
   const client = ((_strings: TemplateStringsArray, ...values: readonly unknown[]) => {
     seenValues.push([...values]);
     return Promise.resolve(Object.assign([], { command: "UPDATE", affectedRows: 0, count: 0 }));
-  }) as BunSqlReservedClient;
+  }) as unknown as BunSqlReservedClient;
   client.unsafe = async () => {
     throw new Error("Lexical fixtures must use native value templates.");
   };
@@ -92,15 +102,28 @@ for (const { id, sql } of dialects) {
       const render = () => sql.command(strings(parts), "sentinel").render();
       if (inCode) {
         const statement = render();
-        assert.deepEqual(statement.parameters.map(({ value }) => value), ["sentinel"], fixture.name);
-        assert.equal(parameterizedSql(statement, () => "?"), parts.join("?"), fixture.name);
+        assert.deepEqual(
+          statement.parameters.map(({ value }) => value),
+          ["sentinel"],
+          fixture.name,
+        );
+        assert.equal(
+          parameterizedSql(statement, () => "?"),
+          parts.join("?"),
+          fixture.name,
+        );
       } else {
         assert.throws(render, hasCode("BRAID_HOLE_CONTEXT"), fixture.name);
       }
       const directiveText = `${parts[0]}/*@braid end*/${parts[1]}`;
       const directive = () => sql.command(strings([directiveText])).render();
       if (inCode) assert.throws(directive, hasCode("BRAID_STRUCTURE"), fixture.name);
-      else assert.equal(parameterizedSql(directive(), () => "?"), directiveText, fixture.name);
+      else
+        assert.equal(
+          parameterizedSql(directive(), () => "?"),
+          directiveText,
+          fixture.name,
+        );
     }
   });
 
@@ -119,7 +142,11 @@ for (const { id, sql } of dialects) {
           `lexical-${id}.ts`,
           {},
         );
-        assert.deepEqual(result.diagnostics.map(({ code }) => code), expectedCode ? [expectedCode] : [], fixture.name);
+        assert.deepEqual(
+          result.diagnostics.map(({ code }) => code),
+          expectedCode ? [expectedCode] : [],
+          fixture.name,
+        );
         if (expectedCode === undefined) assert.equal(result.queries.length, 1, fixture.name);
       }
     }
@@ -131,7 +158,8 @@ for (const { id, sql } of dialects) {
     for (const fixture of fixtures) {
       if (fixture.name.startsWith("Oracle")) continue;
       const text = `UPDATE t SET value = 0 ${fixture.before}RETURNING${fixture.after}`;
-      const execute = () => db.execute(sql.command(strings([text])));
+      const execute = (): Promise<import("@sqlbraid/core").CommandExecutionResult> =>
+        db.execute(sql.command(strings([text])));
       if (fixture.codeIn.includes(id)) {
         await assert.rejects(execute, hasCode("BRAID_RESULT_KIND_AMBIGUOUS"), fixture.name);
       } else {
@@ -141,7 +169,10 @@ for (const { id, sql } of dialects) {
     for (const name of ["_RETURNING", "returning_value", "éRETURNING"]) {
       assert.equal((await db.execute(sql.command(strings([`UPDATE t SET ${name} = 0`])))).command.affectedRows, 0);
     }
-    assert.equal((await db.execute(sql.command(strings(["UPDATE t SET RET", "URNING = 0"]), "bound"))).command.affectedRows, 0);
+    assert.equal(
+      (await db.execute(sql.command(strings(["UPDATE t SET RET", "URNING = 0"]), "bound"))).command.affectedRows,
+      0,
+    );
     if (id === "mysql" || id === "mariadb") {
       await assert.rejects(
         () => db.execute(sql.command(strings(["UPDATE t SET value = 0 --", " RETURNING"]), 1)),
@@ -154,28 +185,43 @@ for (const { id, sql } of dialects) {
 for (const { id, sql } of dialects.filter(({ id }) => id === "mysql" || id === "mariadb")) {
   test(`dialect lexical trim ${id}: WHERE and SET preserve arithmetic and native comments`, () => {
     assert.equal(
-      parameterizedSql(sql`SELECT 1 /*@braid where*/ --1 = 1
-/*@braid end*/`.render(), () => "?"),
+      parameterizedSql(
+        sql`SELECT 1 /*@braid where*/ --1 = 1
+/*@braid end*/`.render(),
+        () => "?",
+      ),
       "SELECT 1 WHERE --1 = 1",
     );
     assert.equal(
-      parameterizedSql(sql`UPDATE t /*@braid set*/ value = --1,
-/*@braid end*/`.render(), () => "?"),
+      parameterizedSql(
+        sql`UPDATE t /*@braid set*/ value = --1,
+/*@braid end*/`.render(),
+        () => "?",
+      ),
       "UPDATE t SET value = --1",
     );
     assert.equal(
-      parameterizedSql(sql`UPDATE t /*@braid set*/ value = ${2}, other = --1,
-/*@braid end*/`.render(), () => "?"),
+      parameterizedSql(
+        sql`UPDATE t /*@braid set*/ value = ${2}, other = --1,
+/*@braid end*/`.render(),
+        () => "?",
+      ),
       "UPDATE t SET value = ?, other = --1",
     );
     assert.equal(
-      parameterizedSql(sql`SELECT 1 /*@braid where*/ # only a comment
-/*@braid end*/`.render(), () => "?"),
+      parameterizedSql(
+        sql`SELECT 1 /*@braid where*/ # only a comment
+/*@braid end*/`.render(),
+        () => "?",
+      ),
       "SELECT 1 # only a comment\n",
     );
     assert.equal(
-      parameterizedSql(sql`SELECT 1 /*@braid where*/ AND value = ${2} # keep the newline
-/*@braid end*/ ORDER BY value`.render(), () => "?"),
+      parameterizedSql(
+        sql`SELECT 1 /*@braid where*/ AND value = ${2} # keep the newline
+/*@braid end*/ ORDER BY value`.render(),
+        () => "?",
+      ),
       "SELECT 1 WHERE value = ? # keep the newline\n ORDER BY value",
     );
   });
@@ -219,6 +265,9 @@ for (const id of ["mysql", "mariadb"] as const) {
       }
       await db.execute(query);
     }
-    assert.deepEqual(values, diagnosticStrings.map((value) => [value]));
+    assert.deepEqual(
+      values,
+      diagnosticStrings.map((value) => [value]),
+    );
   });
 }

@@ -562,10 +562,7 @@ function queryDialect(moduleSpecifier: string, options: LanguageServiceOptions):
       : "postgres")
   );
 }
-function profileFor(
-  moduleSpecifier: string,
-  options: LanguageServiceOptions,
-): DialectLexicalProfile {
+function profileFor(moduleSpecifier: string, options: LanguageServiceOptions): DialectLexicalProfile {
   const configured = options.dialect?.lexicalProfile;
   if (configured)
     return {

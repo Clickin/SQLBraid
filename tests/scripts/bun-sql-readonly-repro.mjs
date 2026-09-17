@@ -6,8 +6,11 @@ assert.ok(dialect === "mysql" || dialect === "mariadb");
 const prefix = dialect.toUpperCase();
 const url = process.env[`SQLBRAID_BUN_SQL_${prefix}_URL`] ?? process.env[`SQLBRAID_${prefix}_URL`];
 assert.ok(url, `Missing SQLBRAID_${prefix}_URL`);
-assert.equal(Bun.version, process.env.BUN_SQL_DIAGNOSTIC_VERSION ?? "1.3.14",
-  "Use the certified Bun version or explicitly identify a comparative diagnostic version");
+assert.equal(
+  Bun.version,
+  process.env.BUN_SQL_DIAGNOSTIC_VERSION ?? "1.3.14",
+  "Use the certified Bun version or explicitly identify a comparative diagnostic version",
+);
 const observer = new SQL(url, { bigint: true, max: 1 });
 const version = (await observer.unsafe("SELECT VERSION() AS version", []))[0].version;
 const errorInfo = (error) => ({ code: error.code, errno: error.errno, sqlState: error.sqlState });
@@ -34,7 +37,13 @@ try {
     const result = { variant: variant.id, description: variant.description };
     let phase = "setup";
     const watchdog = setTimeout(() => {
-      console.log(JSON.stringify({ runtime: Bun.version, dialect, version, results: [...results, { ...result, hungAt: phase }] }, null, 2));
+      console.log(
+        JSON.stringify(
+          { runtime: Bun.version, dialect, version, results: [...results, { ...result, hungAt: phase }] },
+          null,
+          2,
+        ),
+      );
       process.exit(1);
     }, 10000);
     try {
@@ -45,10 +54,13 @@ try {
       if (variant.begin) {
         result.before = await physicalId(client);
         await client.unsafe("SET SESSION TRANSACTION READ ONLY", []);
-        await assert.rejects(client.begin("read only", async (tx) => write(tx, "rejected")), (error) => {
-          result.rejected = errorInfo(error);
-          return error.errno === 1792;
-        });
+        await assert.rejects(
+          client.begin("read only", async (tx) => write(tx, "rejected")),
+          (error) => {
+            result.rejected = errorInfo(error);
+            return error.errno === 1792;
+          },
+        );
         phase = "read-write";
         await client.begin("read write", async (tx) => {
           result.after = await physicalId(tx);
@@ -98,12 +110,17 @@ try {
         await reserved.unsafe("ROLLBACK", []).catch(() => undefined);
         await reserved.release();
       }
-      result.durableRows = (await observer.unsafe("SELECT value FROM braid_bun_sql_readonly_repro ORDER BY value", [])).map((row) => row.value);
+      result.durableRows = (
+        await observer.unsafe("SELECT value FROM braid_bun_sql_readonly_repro ORDER BY value", [])
+      ).map((row) => row.value);
       assert.deepEqual(result.durableRows, result.outcome === "write-committed" ? ["accepted"] : []);
       result.observer = await physicalId(observer);
       if (variant.discard) {
         assert.notEqual(result.before, result.after);
-        assert.equal((await observer.unsafe("SELECT ID FROM information_schema.PROCESSLIST WHERE ID = ?", [result.before])).length, 0);
+        assert.equal(
+          (await observer.unsafe("SELECT ID FROM information_schema.PROCESSLIST WHERE ID = ?", [result.before])).length,
+          0,
+        );
       }
       phase = "client-close";
       const closeStart = performance.now();

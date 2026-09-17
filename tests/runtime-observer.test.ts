@@ -717,7 +717,10 @@ test("stream start observers remain fail-fast before acquisition", async () => {
       (error) => error === failure,
     );
     assert.equal(acquisitions, 0);
-    assert.equal(events.some((event) => event.type === "stream:start"), false);
+    assert.equal(
+      events.some((event) => event.type === "stream:start"),
+      false,
+    );
     const error = events.find((event) => event.type === "query:error");
     assert.ok(error?.type === "query:error");
     assert.equal(error.stage, "observer-before");

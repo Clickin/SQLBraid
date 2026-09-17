@@ -156,7 +156,11 @@ function capabilitiesFor(dialect: BunSqlDialect): Readonly<Record<string, Enviro
       dialect === "postgres" ? "guarded" : "unsupported",
       undefined,
       undefined,
-      mysqlTransport ? "bun-sql.mysql-read-only-cache" : dialect === "postgres" ? "bun-sql.transaction-options" : undefined,
+      mysqlTransport
+        ? "bun-sql.mysql-read-only-cache"
+        : dialect === "postgres"
+          ? "bun-sql.transaction-options"
+          : undefined,
     ),
     "transaction.isolation.read-uncommitted": capability(
       dialect === "sqlite" ? "unsupported" : "guarded",
@@ -572,8 +576,7 @@ function hasSqlKeyword(text: string, target: string, profile: DialectLexicalProf
           index += 1;
           break;
         }
-        if (text[index] === "\\" && profile.backslashEscapes && quote !== "]" && index + 1 < text.length)
-          index += 2;
+        if (text[index] === "\\" && profile.backslashEscapes && quote !== "]" && index + 1 < text.length) index += 2;
         else index += 1;
       }
       continue;

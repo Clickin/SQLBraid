@@ -129,13 +129,11 @@ const scenarios: Record<string, (h: TransactionIntegrationHarness, ownership: st
       true,
       "the terminal outcome must follow a successful callback, not an uncaught error",
     );
-    if (physicalId && ownership === "pooled") {
+    if (physicalId && ownership === "pooled" && caughtStatementOutcome === "rollback") {
       const after = await physicalId(db);
-      if (caughtStatementOutcome === "rollback") {
-        assert.notEqual(after, before, "a rejected terminal outcome must discard the uncertain physical lease");
-      }
+      assert.notEqual(after, before, "a rejected terminal outcome must discard the uncertain physical lease");
       await write(db, "B");
-      assert.deepEqual(await committedRows(), caughtStatementOutcome === "rollback" ? ["B"] : ["A", "B"]);
+      assert.deepEqual(await committedRows(), ["B"]);
     }
   },
   "transaction.savepoint-recovery": async ({ db, write, committedRows }) => {

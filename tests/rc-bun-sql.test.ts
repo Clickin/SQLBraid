@@ -183,7 +183,6 @@ test.each([
   { dialect: "postgres", readOnly: undefined, begin: "BEGIN" },
   { dialect: "postgres", readOnly: true, begin: "BEGIN READ ONLY" },
   { dialect: "postgres", readOnly: false, begin: "BEGIN READ WRITE" },
-
 ] as const)(
   "[contract:bun-sql-$dialect:transaction.access-mode:boundary] [ownership:pooled] Bun.SQL $dialect preserves readOnly=$readOnly transaction access mode",
   async ({ dialect, readOnly, begin }) => {
@@ -255,11 +254,11 @@ test.each(["query", "caught-query", "bulk", "control"] as const)(
     const db = createBunSqlDatabase(client, { dialect: "mysql" });
     await db.session(async (session) => {
       const transaction = session.tx(async (tx) => {
-          const write = (value: string) => mysql.command`INSERT INTO values_table VALUES (${value})`;
-          if (path === "bulk") await tx.bulk(["A"], write);
-          else if (path === "caught-query") await assert.rejects(tx.execute(write("A")), (error) => error === failure);
-          else await tx.execute(write("A"));
-        });
+        const write = (value: string) => mysql.command`INSERT INTO values_table VALUES (${value})`;
+        if (path === "bulk") await tx.bulk(["A"], write);
+        else if (path === "caught-query") await assert.rejects(tx.execute(write("A")), (error) => error === failure);
+        else await tx.execute(write("A"));
+      });
       if (path === "caught-query") await transaction;
       else await assert.rejects(transaction, (error: unknown) => error === failure);
       assert.ok(!events.includes("discard"), "a statement failure must not close its still-owned session");
@@ -290,7 +289,10 @@ test("Bun.SQL ordinary MySQL statement errors do not discard a healthy lease", a
       },
     });
   const db = createBunSqlDatabase(client, { dialect: "mysql" });
-  await assert.rejects(db.execute(mysql.command`INSERT INTO values_table VALUES (${"A"})`), (error) => error === failure);
+  await assert.rejects(
+    db.execute(mysql.command`INSERT INTO values_table VALUES (${"A"})`),
+    (error) => error === failure,
+  );
   assert.equal(discarded, false);
   assert.equal(released, true);
 });

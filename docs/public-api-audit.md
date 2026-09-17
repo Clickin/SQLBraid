@@ -208,6 +208,7 @@ map. `tests/public-api-audit.test.ts` requires export additions or removals to
 update this inventory in the same change.
 
 <!-- sqlbraid-facade-exports -->
+
 ```json
 {
   ".": "Application",
@@ -230,6 +231,7 @@ update this inventory in the same change.
   "./compiled": "Advanced"
 }
 ```
+
 <!-- /sqlbraid-facade-exports -->
 
 ```ts

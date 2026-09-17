@@ -352,7 +352,10 @@ function scanNext(units: readonly Unit[], start: number, profile: DialectLexical
     if (state === "single" || state === "double" || state === "backtick") {
       if (current === "\\" && profile.backslashEscapes !== false) {
         if (units[cursor + 1]?.kind === "hole")
-          throw new SqlRenderError("BRAID_HOLE_CONTEXT", "Interpolation inside a SQL literal or comment is unsupported.");
+          throw new SqlRenderError(
+            "BRAID_HOLE_CONTEXT",
+            "Interpolation inside a SQL literal or comment is unsupported.",
+          );
         cursor += 2;
         continue;
       }
@@ -1062,7 +1065,11 @@ function applyTrimToSegments(
   trimmed[0] = trimSegmentStart(trimmed[0] ?? "");
   trimmed[trimmed.length - 1] = trimSegmentEnd(trimmed[trimmed.length - 1] ?? "", profile);
   trimmed[0] = removeLeadingOverride(trimmed[0], attributes.prefixOverrides, profile);
-  trimmed[trimmed.length - 1] = removeTrailingOverride(trimmed[trimmed.length - 1], attributes.suffixOverrides, profile);
+  trimmed[trimmed.length - 1] = removeTrailingOverride(
+    trimmed[trimmed.length - 1],
+    attributes.suffixOverrides,
+    profile,
+  );
   trimmed[0] = trimSegmentStart(trimmed[0]);
   trimmed[trimmed.length - 1] = trimSegmentEnd(trimmed[trimmed.length - 1], profile);
   trimmed[0] = `${attributes.prefix}${trimmed[0]}`;

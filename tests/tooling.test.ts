@@ -119,7 +119,9 @@ test("dialect lexical tooling: comment masking follows built-in and configured p
     ] as const) {
       const source = `import { sql } from '@sqlbraid/${dialect}'; const q = sql\`SELECT 1 ${prefix}FROM us\n\`;`;
       assert.deepEqual(
-        service.complete(source, `${dialect}-comment.ts`, source.indexOf("FROM us") + "FROM us".length).map((item) => item.label),
+        service
+          .complete(source, `${dialect}-comment.ts`, source.indexOf("FROM us") + "FROM us".length)
+          .map((item) => item.label),
         visible ? ["users"] : [],
         `${dialect} ${JSON.stringify(prefix)}`,
       );
@@ -134,7 +136,10 @@ test("dialect lexical tooling: comment masking follows built-in and configured p
       lexicalProfile: { lineCommentPrefixes: ["--"], doubleDashRequiresWhitespace: false },
     },
   });
-  assert.deepEqual(configured.complete(source, "configured-comments.ts", source.indexOf("FROM us") + "FROM us".length), []);
+  assert.deepEqual(
+    configured.complete(source, "configured-comments.ts", source.indexOf("FROM us") + "FROM us".length),
+    [],
+  );
 });
 
 test("open-world SQL remains legal and incomplete routine evidence is explicit", () => {

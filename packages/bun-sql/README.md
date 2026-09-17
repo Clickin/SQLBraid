@@ -15,6 +15,11 @@ IEEE-754 NaN and infinity values are guarded on PostgreSQL and SQLite; the
 MySQL and MariaDB transports reject or coerce them and therefore declare the
 special-value capability unsupported.
 
+MySQL/MariaDB command insert IDs use Bun's Number metadata even with
+`bigint: true`. Unsafe IDs reject with `BRAID_RESULT_EXACTNESS` after execution;
+the write may already be committed. SQLBraid never converts a rounded ID into
+an apparently exact string. Safe IDs and affected-row counts remain available.
+
 On MySQL/MariaDB, explicit `readOnly: true` and `readOnly: false` both fail
 before I/O with `BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`.
 Bun 1.3.14 can retain a failed read-only statement shape on the same connection

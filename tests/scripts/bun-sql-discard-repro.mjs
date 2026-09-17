@@ -20,7 +20,10 @@ try {
   result.before = String((await reserved.unsafe("SELECT pg_backend_pid() AS id", []))[0].id);
   await reserved.unsafe("BEGIN", []);
   await reserved`INSERT INTO braid_bun_discard_repro VALUES (${"A"})`;
-  await assert.rejects(reserved`INSERT INTO braid_bun_discard_repro VALUES (${"A"})`, (error) => error.errno === "23505");
+  await assert.rejects(
+    reserved`INSERT INTO braid_bun_discard_repro VALUES (${"A"})`,
+    (error) => error.errno === "23505",
+  );
   result.terminalCommand = (await reserved.unsafe("COMMIT", [])).command;
   assert.equal(result.terminalCommand, "ROLLBACK");
   phase = "reserved-close";

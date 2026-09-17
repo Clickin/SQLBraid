@@ -268,10 +268,7 @@ function lexicalBindingOwner(sourceFile: ts.SourceFile): (identifier: ts.Identif
     else for (const element of name.elements) if (ts.isBindingElement(element)) bind(element.name, scope);
   }
   function visit(node: ts.Node, scope: LexicalScope): void {
-    if (
-      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) &&
-      node.name
-    )
+    if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) && node.name)
       bind(node.name, scope);
     if (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name)) bind(node.name, scope);
     if (ts.isFunctionLike(node)) {
@@ -359,8 +356,7 @@ function importBindings(sourceFile: ts.SourceFile, options: OverlayOptions): Imp
     const clause = statement.importClause;
     if (!clause || clause.isTypeOnly) continue;
     const moduleSpecifier = statement.moduleSpecifier.text;
-    if (clause.name && tagExport === "default")
-      defaults.set(clause.name.text, { name: clause.name, moduleSpecifier });
+    if (clause.name && tagExport === "default") defaults.set(clause.name.text, { name: clause.name, moduleSpecifier });
     const bindings = clause.namedBindings;
     if (!bindings) continue;
     if (ts.isNamespaceImport(bindings)) {
@@ -505,10 +501,7 @@ function checkerTagModule(
   const owner = tagOwner(expression);
   if (ts.isIdentifier(owner)) {
     const declaration = bindings.owner(owner);
-    if (
-      !declaration ||
-      (!ts.isImportSpecifier(declaration.parent) && !ts.isImportClause(declaration.parent))
-    )
+    if (!declaration || (!ts.isImportSpecifier(declaration.parent) && !ts.isImportClause(declaration.parent)))
       return undefined;
     const symbol = declaration && checker.getSymbolAtLocation(declaration);
     return symbol && symbolTag(symbol);
@@ -536,7 +529,9 @@ function tagIdentity(
   const kind = explicitResultKind(tag);
   const checkedModule =
     importedTagModule(tag, bindings, tagExport) ??
-    (options.typeChecker ? checkerTagModule(expression, sourceFile, options, options.typeChecker, bindings) : undefined);
+    (options.typeChecker
+      ? checkerTagModule(expression, sourceFile, options, options.typeChecker, bindings)
+      : undefined);
   return {
     ...(checkedModule ? { name: expression.getText(sourceFile), moduleSpecifier: checkedModule } : {}),
     declaredResultKind: kind ?? "unknown",
