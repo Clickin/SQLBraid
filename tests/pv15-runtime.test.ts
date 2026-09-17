@@ -27,6 +27,12 @@ const statementBinding = Object.freeze<StatementBindingAdapter>({
   },
 });
 
+const unsupportedTransactionEnvironment = {
+  database: { product: "pv15-runtime" },
+  driver: { id: "pv15-runtime" },
+  capabilities: { "transaction.read-only": { status: "unsupported" as const } },
+};
+
 function schema<Output>(validate: (value: unknown) => StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>>): StandardSchemaV1<unknown, Output> {
   return { "~standard": { version: 1, vendor: "pv15-runtime", validate } };
 }
@@ -65,10 +71,9 @@ function alternateDialect(id: string): Dialect {
 test("transaction option validators reject before provider acquisition and override conservative capability status", async () => {
   let acquired = 0;
   let began = 0;
-  const environment = { capabilities: { "transaction.read-only": { status: "unsupported" as const } } };
   const provider = {
     statementBinding,
-    environment,
+    environment: unsupportedTransactionEnvironment,
     validateTransactionOptions(options: TransactionOptions) {
       if (options.readOnly === true) throw new UnsupportedFeatureError("transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", "read-only is unavailable");
     },
@@ -88,7 +93,7 @@ test("transaction option validators reject before provider acquisition and overr
   let noHookAcquired = 0;
   const noHookDb = createPooledDatabase({
     statementBinding,
-    environment,
+    environment: unsupportedTransactionEnvironment,
     async acquire() {
       noHookAcquired += 1;
       return transactionLease();
@@ -116,7 +121,7 @@ test("provider transaction option validator is inherited when a lease omits it",
   let began = 0;
   const db = createPooledDatabase({
     statementBinding,
-    environment: { capabilities: { "transaction.read-only": { status: "unsupported" as const } } },
+    environment: unsupportedTransactionEnvironment,
     validateTransactionOptions(options: TransactionOptions) {
       if (options.readOnly !== false) throw new UnsupportedFeatureError("transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", "only explicit writable mode is supported");
     },
