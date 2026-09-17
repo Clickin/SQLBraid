@@ -6,12 +6,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { auditRuntime, runtimeAuditPackages, runtimePackages } from "./audit-runtime.mjs";
-import { validateRuntimeCompatibility } from "./validate-runtime-compatibility.mjs";
+import { validateRuntimeCompatibility } from "../../scripts/validate-runtime-compatibility.mjs";
 
 const execFile = promisify(execFileCallback);
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const targets = process.argv.slice(2);
-if (!targets.length || targets.some((target) => !["node", "bun", "deno"].includes(target))) throw new Error("Usage: node scripts/runtime-portability.mjs node|bun|deno [...]");
+if (!targets.length || targets.some((target) => !["node", "bun", "deno"].includes(target))) throw new Error("Usage: node tests/scripts/runtime-portability.mjs node|bun|deno [...]");
 const revision = (await execFile("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
 if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== revision) throw new Error("Runtime evidence must describe the checked-out CI SHA.");
 const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -92,9 +92,9 @@ try {
   ].join("\n"));
   await writeFile(join(consumer, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, types: [], target: "ES2024", module: "NodeNext", moduleResolution: "NodeNext" }, files: ["types.ts"] }));
   await run(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "-p", join(consumer, "tsconfig.json")], consumer);
-  for (const script of ["runtime-smoke.mjs", "runtime-driver-smoke.mjs"]) await copyFile(join(root, "scripts", script), join(consumer, script));
+  for (const script of ["runtime-smoke.mjs", "runtime-driver-smoke.mjs"]) await copyFile(join(root, "tests", "scripts", script), join(consumer, script));
   await copyFile(join(root, "tests", "db", "deno", "packed-runtime.test.mjs"), join(consumer, "deno-runtime.test.mjs"));
-  await copyFile(join(root, "scripts", "bun-sql-matrix.mjs"), join(consumer, "bun-sql-matrix.mjs"));
+  await copyFile(join(root, "tests", "scripts", "bun-sql-matrix.mjs"), join(consumer, "bun-sql-matrix.mjs"));
   await mkdir(join(consumer, "support", "targets"), { recursive: true });
   for (const dialect of ["postgres", "mysql", "mariadb", "sqlite"]) {
     await copyFile(join(root, "support", "targets", `${dialect}.json`), join(consumer, "support", "targets", `${dialect}.json`));

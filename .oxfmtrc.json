@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 120,
+  "singleQuote": false,
+  "semi": true,
+  "trailingComma": "all",
+  "tabWidth": 2,
+  "useTabs": false,
+  "endOfLine": "lf",
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.astro/**",
+    "**/.compatibility-packages/**",
+    "tests/fixtures/**",
+    "website/.vercel/**",
+    "sqlbraid.vsix"
+  ]
+}

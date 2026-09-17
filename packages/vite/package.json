@@ -23,6 +23,9 @@
   "peerDependencies": {
     "vite": ">=8.0.0"
   },
+  "devDependencies": {
+    "vite": ">=8.0.0"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

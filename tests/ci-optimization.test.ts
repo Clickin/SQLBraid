@@ -30,6 +30,8 @@ test("runtime compatibility rejects unknown cells, packages, and drivers", async
     await cp(join(root, "support"), join(directory, "support"), { recursive: true });
     await cp(join(root, "packages"), join(directory, "packages"), { recursive: true });
     await cp(join(root, "scripts"), join(directory, "scripts"), { recursive: true });
+    await mkdir(join(directory, "tests/scripts"), { recursive: true });
+    await cp(join(root, "tests/scripts/otel-api-consumer.mjs"), join(directory, "tests/scripts/otel-api-consumer.mjs"));
     const manifestPath = join(directory, "support/runtime-compatibility.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     manifest.cells[1].driver.package = "sqlite3";

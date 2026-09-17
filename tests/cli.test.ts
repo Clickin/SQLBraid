@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'vitest';
 import { execFile } from 'node:child_process';
@@ -11,6 +11,7 @@ import { createSqliteInspector } from '@sqlbraid/sqlite/inspector';
 
 const exec = promisify(execFile);
 const cliEntry = resolve(process.cwd(), 'packages/cli/dist/index.js');
+const testRoot = fileURLToPath(new URL('.', import.meta.url));
 
 test('CLI version matches the package manifest', async () => {
   const manifest = JSON.parse(await readFile(resolve(process.cwd(), 'packages/cli/package.json'), 'utf8')) as { version: string };
@@ -19,7 +20,7 @@ test('CLI version matches the package manifest', async () => {
 });
 
 test('CLI manifest follows a local facade re-export through the project checker', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   try {
     const bridge = join(directory, 'bridge.ts');
     const file = join(directory, 'query.ts');
@@ -58,7 +59,7 @@ function metadata(nullable = false) {
 
 // Several CLI processes create cold TypeScript programs; keep their integration budget separate.
 test('CLI checks, manifests, and builds opaque declared queries without a snapshot', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   try {
     const file = join(directory, 'query.ts');
     await writeFile(file, `import { sql } from '@sqlbraid/template';
@@ -100,7 +101,7 @@ test('CLI checks, manifests, and builds opaque declared queries without a snapsh
 }, 15_000);
 
 test('CLI drift validates metadata snapshots and reports changed database facts', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   try {
     const before = {
       format: 'sqlbraid-metadata',
@@ -157,7 +158,7 @@ test('CLI drift validates metadata snapshots and reports changed database facts'
 });
 
 test('CLI codegen resolves config-relative paths, preserves unchanged mtimes, and checks freshness', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   try {
     const configDirectory = join(directory, 'config');
     const outputDirectory = join(directory, 'generated');
@@ -193,7 +194,7 @@ test('CLI codegen resolves config-relative paths, preserves unchanged mtimes, an
 }, 15_000);
 
 test('CLI codegen retains unavailable exact numeric evidence across the config worker', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   try {
     await writeFile(join(directory, 'metadata.json'), JSON.stringify(metadata()));
     await writeFile(join(directory, 'sqlbraid.config.mjs'), `export default { codegen: { targets: [{
@@ -212,7 +213,7 @@ test('CLI codegen retains unavailable exact numeric evidence across the config w
 }, 15_000);
 
 test('CLI codegen discovers configs, selects repeated targets, and blocks error writes', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   try {
     await mkdir(join(directory, 'data'), { recursive: true });
     await writeFile(join(directory, 'data', 'metadata.json'), JSON.stringify(metadata()));
@@ -259,7 +260,7 @@ test('CLI codegen discovers configs, selects repeated targets, and blocks error 
 }, 15_000);
 
 test('CLI codegen rejects case-folded output collisions on simulated Windows', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   try {
     await mkdir(join(directory, 'data'), { recursive: true });
     await writeFile(join(directory, 'data', 'metadata.json'), JSON.stringify(metadata()));
@@ -296,7 +297,7 @@ test('CLI codegen rejects case-folded output collisions on simulated Windows', a
 }, 15_000);
 
 test('CLI inspect JSON discovers an ancestor SQLBraid config past nested projects', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   try {
     const file = join(directory, 'src', 'nested', 'query.ts');
     await mkdir(join(directory, 'src', 'nested'), { recursive: true });
@@ -348,7 +349,7 @@ test('CLI inspect JSON discovers an ancestor SQLBraid config past nested project
 }, 15_000);
 
 test('CLI inspect JSON consumes a facade query with metadata-backed defaults', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   const native = new DatabaseSync(':memory:');
   try {
     native.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);');
@@ -406,7 +407,7 @@ test('CLI inspect JSON consumes a facade query with metadata-backed defaults', a
 }, 15_000);
 
 test('programmatic inspector snapshots feed the CLI codegen recipe', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   const native = new DatabaseSync(':memory:');
   try {
     native.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL) STRICT;');
@@ -446,7 +447,7 @@ test('programmatic inspector snapshots feed the CLI codegen recipe', async () =>
 }, 15_000);
 
 test('CLI facade prebuild executes lazy branch interpolation from generated output', async () => {
-  const directory = await mkdtemp(join(process.cwd(), '.sqlbraid-cli-'));
+  const directory = await mkdtemp(join(testRoot, '.sqlbraid-cli-'));
   try {
     const file = join(directory, 'query.ts');
     const output = join(directory, 'generated.mjs');

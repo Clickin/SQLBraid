@@ -616,6 +616,10 @@ Report unavailable DB/runtime infrastructure as not run, never passed.
 - remove obsolete paths rather than keeping parallel implementations;
 - do not publish/tag/release/force-push unless explicitly requested;
 - never mutate non-test databases.
+- root `package.json` owns build, release, lint, format and test orchestration; private `tests/package.json` owns test-only drivers, fixtures, integration scripts and native consumers explicitly; package manifests own their declared runtime and peer dependencies;
+- the C1 stable `test:d1` and Bun SQL certification entrypoints are root orchestration and may retain only the workspace runtime package links plus their browser/Worker tools that they directly execute; all other integration scripts live under `tests/scripts`;
+- Node ESM resolves bare imports from the importing module location, not the process cwd: when an integration script moves, update every caller and import path to the moved file rather than relying on cwd changes, wrappers or compatibility shims;
+- Oxlint runs correctness, suspicious and performance categories without type-aware or TypeScript 7 analysis; Oxfmt checks are separate from formatting changes, and do not mass-format unrelated legacy files;
 
 ---
 

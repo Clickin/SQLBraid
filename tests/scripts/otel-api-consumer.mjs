@@ -5,7 +5,7 @@ import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const root = resolve(new URL("..", import.meta.url).pathname);
+const root = resolve(new URL("../..", import.meta.url).pathname);
 const packageDir = resolve(process.env.SQLBRAID_PACK_INPUT_DIR ?? join(root, ".compatibility-packages"));
 const consumer = mkdtempSync(join(tmpdir(), "sqlbraid-otel-api-") );
 const tarballs = new Map();

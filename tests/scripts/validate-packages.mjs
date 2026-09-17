@@ -9,17 +9,18 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { runtimePackages } from "./audit-runtime.mjs";
-import { validateRuntimeCompatibility } from "./validate-runtime-compatibility.mjs";
+import { validateRuntimeCompatibility } from "../../scripts/validate-runtime-compatibility.mjs";
 import ts from "typescript";
 
 const execFile = promisify(execFileCallback);
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const packageRoot = join(root, "packages");
 const packageNames = (await readdir(packageRoot, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
   .sort();
 const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+const testsWorkspace = JSON.parse(await readFile(join(root, "tests/package.json"), "utf8"));
 const expectedVersion = workspace.version;
 const runtimeCompatibility = await validateRuntimeCompatibility({ root });
 const MAX_TARBALL_BYTES = 5 * 1024 * 1024;
@@ -283,7 +284,8 @@ try {
   ].join("\n"));
   await run(process.execPath, ["runtime.mjs"], boundaryConsumer);
   console.info("PASS packed runtime-only npm consumer without metadata, codegen, tooling, CLI, LSP or editor");
-  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", `tedious@${workspace.devDependencies.tedious}`], boundaryConsumer);
+  const mssqlDevDependencies = JSON.parse(await readFile(join(packageRoot, "mssql", "package.json"), "utf8")).devDependencies;
+  await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund", `tedious@${mssqlDevDependencies.tedious}`], boundaryConsumer);
   const metadataAbsentImports = [
     'import { createPostgresInspector } from "@sqlbraid/postgres/inspector";',
     'import { createMysqlInspector } from "@sqlbraid/mysql/inspector";',
@@ -526,12 +528,12 @@ try {
   await run("npm", [
     "install",
     "--ignore-scripts",
-    `valibot@${workspace.devDependencies.valibot}`,
-    `zod@${workspace.devDependencies.zod}`,
-    `pg@${workspace.devDependencies.pg}`,
-    `@types/pg@${workspace.devDependencies["@types/pg"]}`,
-    `mysql2@${workspace.devDependencies.mysql2}`,
-    `mariadb@${workspace.devDependencies.mariadb}`,
+    `valibot@${testsWorkspace.devDependencies.valibot}`,
+    `zod@${testsWorkspace.devDependencies.zod}`,
+    `pg@${testsWorkspace.devDependencies.pg}`,
+    `@types/pg@${testsWorkspace.devDependencies["@types/pg"]}`,
+    `mysql2@${testsWorkspace.devDependencies.mysql2}`,
+    `mariadb@${testsWorkspace.devDependencies.mariadb}`,
     `oracledb@${JSON.parse(await readFile(join(packageRoot, "oracle", "package.json"), "utf8")).devDependencies.oracledb}`,
     `tedious@${JSON.parse(await readFile(join(packageRoot, "mssql", "package.json"), "utf8")).devDependencies.tedious}`,
   ], consumer);
@@ -585,7 +587,7 @@ try {
       packedDatabaseEnv.SQLBRAID_MSSQL_PASSWORD = "Sqlbraid_Test13!";
     }
   }
-  await copyFile(join(root, "scripts/runtime-packed-five-db.mjs"), join(consumer, "runtime-packed-five-db.mjs"));
+  await copyFile(join(root, "tests/scripts/runtime-packed-five-db.mjs"), join(consumer, "runtime-packed-five-db.mjs"));
   await execFile(process.execPath, ["runtime-packed-five-db.mjs"], {
     cwd: consumer,
     env: packedDatabaseEnv,
@@ -728,7 +730,7 @@ try {
   await writeFile(cliFile, 'import { sql as templateSql } from "@sqlbraid/template"; import { sql as postgresSql } from "@sqlbraid/postgres"; const queries = [templateSql`SELECT 1`, postgresSql`SELECT 1`]; void queries;\n');
   await run(join(consumer, "node_modules/.bin/sqlbraid"), ["check", "--file", cliFile], consumer);
 
-  await copyFile(join(root, "scripts/agent-tooling-consumer.mjs"), join(consumer, "agent-tooling-consumer.mjs"));
+  await copyFile(join(root, "tests/scripts/agent-tooling-consumer.mjs"), join(consumer, "agent-tooling-consumer.mjs"));
   const agentConsumer = await execFile(process.execPath, ["agent-tooling-consumer.mjs"], { cwd: consumer, maxBuffer: 1024 * 1024 });
   process.stdout.write(agentConsumer.stdout);
 

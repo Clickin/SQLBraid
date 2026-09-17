@@ -10,7 +10,7 @@ import { MySqlContainer } from "@testcontainers/mysql";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 
 const execFile = promisify(execFileCallback);
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const packageRoot = join(root, "packages");
 const examplesRoot = join(root, "examples");
 const temp = await mkdtemp(join(tmpdir(), "sqlbraid-examples-"));

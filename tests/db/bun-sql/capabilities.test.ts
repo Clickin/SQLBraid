@@ -9,7 +9,7 @@ async function verifyBackend(dialect: string): Promise<void> {
   const postgres = inject("postgres") as { readonly connectionUri: string };
   const mysql = inject("mysql") as { readonly connectionUri: string };
   const mariadb = inject("mariadb") as { readonly connectionUri: string };
-  const { stdout } = await execute("bun", ["scripts/bun-sql-matrix.mjs", dialect], {
+  const { stdout } = await execute("bun", ["tests/scripts/bun-sql-matrix.mjs", dialect], {
     timeout: 60_000,
     maxBuffer: 1024 * 1024,
     env: {

@@ -49,9 +49,9 @@ execFileSync(npm, ["install", "--engine-strict", "--no-audit", "--no-fund"], {
 });
 const smokeScript = cell.smoke.entrypoint === "scripts/runtime-compatibility-smoke.mjs"
   ? "runtime-compatibility-consumer.mjs"
-  : cell.smoke.entrypoint.slice("scripts/".length);
-if (smokeScript === "runtime-compatibility-consumer.mjs") copyFileSync(join(root, "scripts/runtime-compatibility-consumer.mjs"), join(consumer, smokeScript));
-else copyFileSync(join(root, "scripts", smokeScript), join(consumer, smokeScript));
+  : cell.smoke.entrypoint.slice("tests/scripts/".length);
+if (smokeScript === "runtime-compatibility-consumer.mjs") copyFileSync(join(root, "tests/scripts/runtime-compatibility-consumer.mjs"), join(consumer, smokeScript));
+else copyFileSync(join(root, "tests/scripts", smokeScript), join(consumer, smokeScript));
 const smokeArgs = Array.isArray(cell.smoke.args) ? cell.smoke.args : [];
 execFileSync(process.execPath, [smokeScript, ...smokeArgs], {
   cwd: consumer,

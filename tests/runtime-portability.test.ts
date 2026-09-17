@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "vitest";
-import { auditRuntime } from "../scripts/audit-runtime.mjs";
+import { auditRuntime } from "./scripts/audit-runtime.mjs";
 
 test("runtime portability audit rejects a Node builtin in the OTel bridge", async () => {
   const root = await mkdtemp(join(import.meta.dirname, ".sqlbraid-runtime-audit-"));

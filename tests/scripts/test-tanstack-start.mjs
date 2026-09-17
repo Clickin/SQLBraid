@@ -9,7 +9,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFile = promisify(execFileCallback);
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const fixture = join(root, "tests", "fixtures", "tanstack-start-finance");
 const script = fileURLToPath(import.meta.url);
 

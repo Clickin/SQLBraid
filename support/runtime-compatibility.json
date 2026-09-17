@@ -149,7 +149,7 @@
       "runtime": { "id": "node", "version": "16.20.2" },
       "packages": ["@sqlbraid/core", "@sqlbraid/opentelemetry"],
       "driver": null,
-      "smoke": { "entrypoint": "scripts/otel-api-consumer.mjs" },
+      "smoke": { "entrypoint": "tests/scripts/otel-api-consumer.mjs" },
       "releaseBlocking": true,
       "reason": "Optional API-only bridge floor; SDK/exporter compatibility is tested separately on modern Node."
     }

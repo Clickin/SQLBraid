@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "options": {
+    "typeAware": false,
+    "typeCheck": false,
+    "maxWarnings": 1000
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.astro/**",
+    "**/.compatibility-packages/**",
+    "tests/fixtures/**",
+    "website/.vercel/**",
+    "sqlbraid.vsix"
+  ],
+  "rules": {
+    "eslint/no-unused-vars": "warn",
+    "eslint/no-useless-catch": "warn",
+    "eslint/no-unused-expressions": "warn",
+    "eslint/require-yield": "warn",
+    "eslint/no-loss-of-precision": "warn",
+    "unicorn/no-useless-spread": "warn",
+    "unicorn/no-thenable": "warn"
+  }
+}
