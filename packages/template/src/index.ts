@@ -298,12 +298,15 @@ function scanDirective(units: readonly Unit[], start: number): DirectiveToken {
 function lineCommentStart(units: readonly Unit[], index: number, profile: DialectLexicalProfile): string | undefined {
   for (const prefix of profile.lineCommentPrefixes) {
     if (!startsWith(units, index, prefix)) continue;
-    if (
-      prefix === "--" &&
-      charAt(units, index + prefix.length) !== undefined &&
-      !/\s/u.test(charAt(units, index + prefix.length) ?? "")
-    )
-      continue;
+    if (prefix === "--" && profile.doubleDashRequiresWhitespace) {
+      const next = charAt(units, index + prefix.length);
+      if (
+        next === undefined
+          ? index + prefix.length < units.length
+          : next.charCodeAt(0) > 0x20 && next.charCodeAt(0) !== 0x7f && !/\s/u.test(next)
+      )
+        continue;
+    }
     return prefix;
   }
   return undefined;
@@ -327,7 +330,7 @@ function scanNext(units: readonly Unit[], start: number, profile: DialectLexical
     const current = unit.value;
     const next = charAt(units, cursor + 1);
     if (state === "line") {
-      if (current === "\n" || current === "\r") state = "code";
+      if ((profile.lineCommentTerminators ?? "\r\n").includes(current)) state = "code";
       cursor += 1;
       continue;
     }
@@ -348,10 +351,13 @@ function scanNext(units: readonly Unit[], start: number, profile: DialectLexical
     }
     if (state === "single" || state === "double" || state === "backtick") {
       if (current === "\\" && profile.backslashEscapes !== false) {
+        if (units[cursor + 1]?.kind === "hole")
+          throw new SqlRenderError("BRAID_HOLE_CONTEXT", "Interpolation inside a SQL literal or comment is unsupported.");
         cursor += 2;
         continue;
       }
-      if (current === state[0] && next === state[0]) {
+      const quote = state === "single" ? "'" : state === "double" ? '"' : "`";
+      if (current === quote && next === quote) {
         cursor += 2;
         continue;
       }
@@ -439,7 +445,8 @@ function scanNext(units: readonly Unit[], start: number, profile: DialectLexical
     }
     cursor += 1;
   }
-  if (state !== "code") throw new SqlRenderError("BRAID_SQL_LEX", "Unterminated SQL literal or comment in template.");
+  if (state !== "code" && state !== "line")
+    throw new SqlRenderError("BRAID_SQL_LEX", "Unterminated SQL literal or comment in template.");
   return { kind: "text", start: textStart, end: units.length };
 }
 

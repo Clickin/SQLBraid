@@ -6,7 +6,9 @@ export const dialect: Dialect = {
   quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``,
   lexicalProfile: {
     lineCommentPrefixes: ["--", "#"],
+    doubleDashRequiresWhitespace: true,
     supportsNestedBlockComments: false,
+    supportsDollarQuotes: false,
     supportsBacktickIdentifiers: true,
     backslashEscapes: true,
   },

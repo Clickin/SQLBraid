@@ -229,6 +229,7 @@ function dialectForModule(moduleSpecifier: string | undefined, options: OverlayO
       quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``,
       lexicalProfile: {
         lineCommentPrefixes: ["--", "#"],
+        doubleDashRequiresWhitespace: true,
         supportsNestedBlockComments: false,
         supportsDollarQuotes: false,
         supportsBacktickIdentifiers: true,
@@ -240,9 +241,11 @@ function dialectForModule(moduleSpecifier: string | undefined, options: OverlayO
       id: "sqlite",
       quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
       lexicalProfile: {
-        lineCommentPrefixes: ["--", "#"],
+        lineCommentPrefixes: ["--"],
+        lineCommentTerminators: "\n",
         supportsNestedBlockComments: false,
         supportsDollarQuotes: false,
+        supportsBacktickIdentifiers: true,
         supportsBracketIdentifiers: true,
         backslashEscapes: false,
       },

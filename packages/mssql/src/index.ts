@@ -7,6 +7,7 @@ export const dialect: Dialect = {
   lexicalProfile: {
     lineCommentPrefixes: ["--"],
     supportsNestedBlockComments: true,
+    supportsDollarQuotes: false,
     supportsBracketIdentifiers: true,
     backslashEscapes: false,
   },

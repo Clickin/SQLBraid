@@ -12,7 +12,7 @@ import {
 } from "@sqlbraid/compiler";
 import type { ColumnSnapshot, MetadataSnapshot, RelationSnapshot, RoutineSnapshot } from "@sqlbraid/metadata";
 import type { CodegenResult } from "@sqlbraid/codegen";
-import { AUTHORING_MODULE_CATALOG } from "@sqlbraid/core";
+import { AUTHORING_MODULE_CATALOG, type DialectLexicalProfile } from "@sqlbraid/core";
 import { SOURCE_FILE_LOADER, type InternalLanguageServiceOptions } from "./internal.js";
 import type {
   Cancellation,
@@ -320,16 +320,7 @@ function markLexicalProtection(
   text: string,
   code: boolean[],
   quoted: boolean[],
-  profile: {
-    readonly lineCommentPrefixes: readonly string[];
-    readonly supportsNestedBlockComments?: boolean;
-    readonly supportsDollarQuotes?: boolean;
-    readonly supportsBacktickIdentifiers?: boolean;
-    readonly supportsBracketIdentifiers?: boolean;
-    readonly supportsOracleQQuotes?: boolean;
-    readonly backslashEscapes?: boolean;
-    readonly requireDashDashWhitespace?: boolean;
-  },
+  profile: DialectLexicalProfile,
   mysql: boolean,
 ): void {
   let index = 0;
@@ -344,7 +335,7 @@ function markLexicalProtection(
     const next = text[index + 1];
     if (state === "line") {
       setProtected(index, index + 1);
-      if (current === "\n" || current === "\r") state = "code";
+      if ((profile.lineCommentTerminators ?? "\r\n").includes(current)) state = "code";
       index += 1;
       continue;
     }
@@ -391,13 +382,18 @@ function markLexicalProtection(
       } else index += 1;
       continue;
     }
-    const line = profile.lineCommentPrefixes.find(
-      (prefix) =>
+    const line = profile.lineCommentPrefixes.find((prefix) => {
+      const following = text[index + prefix.length];
+      return (
         text.startsWith(prefix, index) &&
         (prefix !== "--" ||
-          profile.requireDashDashWhitespace !== true ||
-          /\s|$/u.test(text[index + prefix.length] ?? "")),
-    );
+          !profile.doubleDashRequiresWhitespace ||
+          following === undefined ||
+          following.charCodeAt(0) <= 0x20 ||
+          following.charCodeAt(0) === 0x7f ||
+          /\s/u.test(following))
+      );
+    });
     if (line) {
       setProtected(index, index + line.length);
       state = "line";
@@ -569,27 +565,19 @@ function queryDialect(moduleSpecifier: string, options: LanguageServiceOptions):
 function profileFor(
   moduleSpecifier: string,
   options: LanguageServiceOptions,
-): {
-  readonly lineCommentPrefixes: readonly string[];
-  readonly supportsNestedBlockComments: boolean;
-  readonly supportsDollarQuotes: boolean;
-  readonly supportsBacktickIdentifiers: boolean;
-  readonly supportsBracketIdentifiers: boolean;
-  readonly supportsOracleQQuotes: boolean;
-  readonly backslashEscapes: boolean;
-  readonly requireDashDashWhitespace: boolean;
-} {
+): DialectLexicalProfile {
   const configured = options.dialect?.lexicalProfile;
   if (configured)
     return {
       lineCommentPrefixes: configured.lineCommentPrefixes,
+      doubleDashRequiresWhitespace: configured.doubleDashRequiresWhitespace,
+      lineCommentTerminators: configured.lineCommentTerminators,
       supportsNestedBlockComments: configured.supportsNestedBlockComments ?? false,
       supportsDollarQuotes: configured.supportsDollarQuotes ?? false,
       supportsBacktickIdentifiers: configured.supportsBacktickIdentifiers ?? false,
       supportsBracketIdentifiers: configured.supportsBracketIdentifiers ?? false,
       supportsOracleQQuotes: configured.supportsOracleQQuotes ?? false,
       backslashEscapes: configured.backslashEscapes ?? false,
-      requireDashDashWhitespace: options.dialect?.id === "mysql" || options.dialect?.id === "mariadb",
     };
   const dialect = queryDialect(moduleSpecifier, options);
   if (dialect === "mysql" || dialect === "mariadb")
@@ -601,18 +589,18 @@ function profileFor(
       supportsBracketIdentifiers: false,
       supportsOracleQQuotes: false,
       backslashEscapes: true,
-      requireDashDashWhitespace: true,
+      doubleDashRequiresWhitespace: true,
     };
   if (dialect === "sqlite")
     return {
       lineCommentPrefixes: ["--"],
+      lineCommentTerminators: "\n",
       supportsNestedBlockComments: false,
       supportsDollarQuotes: false,
-      supportsBacktickIdentifiers: false,
+      supportsBacktickIdentifiers: true,
       supportsBracketIdentifiers: true,
       supportsOracleQQuotes: false,
       backslashEscapes: false,
-      requireDashDashWhitespace: false,
     };
   if (dialect === "oracle")
     return {
@@ -623,7 +611,6 @@ function profileFor(
       supportsBracketIdentifiers: false,
       supportsOracleQQuotes: true,
       backslashEscapes: false,
-      requireDashDashWhitespace: false,
     };
   if (dialect === "mssql")
     return {
@@ -634,7 +621,6 @@ function profileFor(
       supportsBracketIdentifiers: true,
       supportsOracleQQuotes: false,
       backslashEscapes: false,
-      requireDashDashWhitespace: false,
     };
   return {
     lineCommentPrefixes: ["--"],
@@ -644,7 +630,6 @@ function profileFor(
     supportsBracketIdentifiers: false,
     supportsOracleQQuotes: false,
     backslashEscapes: false,
-    requireDashDashWhitespace: false,
   };
 }
 function metadataEvidence(options: LanguageServiceOptions): readonly MetadataEvidence[] {

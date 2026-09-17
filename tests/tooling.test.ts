@@ -107,6 +107,36 @@ test("completion is scoped to static SQL and does not pollute TypeScript", () =>
   assert.deepEqual(service.complete(commented, "comment.ts", commented.indexOf("`;")), []);
 });
 
+test("dialect lexical tooling: comment masking follows built-in and configured profiles", () => {
+  for (const dialect of ["postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql"]) {
+    const service = createLanguageService({ metadata: { ...metadata, dialect } });
+    for (const [prefix, visible] of [
+      ["--comment ", dialect === "mysql" || dialect === "mariadb"],
+      ["-- ", false],
+      ["--\t", false],
+      ["--\u0001", false],
+      ["# ", dialect !== "mysql" && dialect !== "mariadb"],
+    ] as const) {
+      const source = `import { sql } from '@sqlbraid/${dialect}'; const q = sql\`SELECT 1 ${prefix}FROM us\n\`;`;
+      assert.deepEqual(
+        service.complete(source, `${dialect}-comment.ts`, source.indexOf("FROM us") + "FROM us".length).map((item) => item.label),
+        visible ? ["users"] : [],
+        `${dialect} ${JSON.stringify(prefix)}`,
+      );
+    }
+  }
+  const source = "import { sql } from '@sqlbraid/mysql'; const q = sql`SELECT 1 --comment FROM us\n`;";
+  const configured = createLanguageService({
+    metadata: { ...metadata, dialect: "mysql" },
+    dialect: {
+      id: "mysql",
+      quoteIdentifier: (identifier) => `\`${identifier}\``,
+      lexicalProfile: { lineCommentPrefixes: ["--"], doubleDashRequiresWhitespace: false },
+    },
+  });
+  assert.deepEqual(configured.complete(source, "configured-comments.ts", source.indexOf("FROM us") + "FROM us".length), []);
+});
+
 test("open-world SQL remains legal and incomplete routine evidence is explicit", () => {
   const source =
     "import { sql } from '@sqlbraid/postgres';\nconst query = sql.rows<{}>`WITH users AS (SELECT 1 AS id) SELECT custom_company_function(id), jsonb_path_query(payload, '$.x') FROM vendor_table`;";

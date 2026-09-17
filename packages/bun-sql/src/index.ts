@@ -15,6 +15,7 @@ import {
   type ConnectionProvider,
   type Database,
   type DatabaseOptions,
+  type DialectLexicalProfile,
   type DriverEnvironment,
   type EnvironmentCapability,
   type ExecutionOptions,
@@ -210,9 +211,10 @@ function assertValues(values: readonly unknown[]): void {
   }
 }
 
-function literal(value: unknown): string | undefined {
+function literal(value: unknown, dialect: BunSqlDialect): string | undefined {
   if (value === null) return "NULL";
-  if (typeof value === "string") return `'${value.replaceAll("'", "''")}'`;
+  if (typeof value === "string")
+    return dialect === "mysql" || dialect === "mariadb" ? undefined : `'${value.replaceAll("'", "''")}'`;
   if (typeof value === "number" || typeof value === "bigint") return String(value);
   if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
   if (value instanceof Date) {
@@ -346,7 +348,7 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
         effective: client.options?.prepare === false ? "simple" : "reuse",
         owner: "driver",
       },
-      formatLiteral: (parameter) => literal(parameter.value),
+      formatLiteral: (parameter) => literal(parameter.value, dialect),
     });
     describedStatements.set(description, logical);
     return description;
@@ -379,7 +381,7 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
         adapterId: id,
         transport: "native-value-template",
         reuse: { effective: client.options?.prepare === false ? "simple" : "reuse", owner: "driver" },
-        formatLiteral: (parameter) => literal(parameter.value),
+        formatLiteral: (parameter) => literal(parameter.value, dialect),
       });
       describedBulks.set(description, bulk);
       return description;
@@ -477,26 +479,75 @@ function commandResult(value: unknown): CommandResult {
   return Object.freeze(result) as CommandResult;
 }
 
-function hasSqlKeyword(text: string, target: string): boolean {
+const MYSQL_LEXICAL_PROFILE: DialectLexicalProfile = {
+  lineCommentPrefixes: ["--", "#"],
+  doubleDashRequiresWhitespace: true,
+  supportsNestedBlockComments: false,
+  supportsDollarQuotes: false,
+  supportsBacktickIdentifiers: true,
+  backslashEscapes: true,
+};
+
+const LEXICAL_PROFILES: Record<BunSqlDialect, DialectLexicalProfile> = {
+  postgres: {
+    lineCommentPrefixes: ["--"],
+    supportsNestedBlockComments: true,
+    supportsDollarQuotes: true,
+    backslashEscapes: false,
+  },
+  mysql: MYSQL_LEXICAL_PROFILE,
+  mariadb: MYSQL_LEXICAL_PROFILE,
+  sqlite: {
+    lineCommentPrefixes: ["--"],
+    lineCommentTerminators: "\n",
+    supportsNestedBlockComments: false,
+    supportsDollarQuotes: false,
+    supportsBacktickIdentifiers: true,
+    supportsBracketIdentifiers: true,
+    backslashEscapes: false,
+  },
+};
+
+function hasSqlKeyword(text: string, target: string, profile: DialectLexicalProfile): boolean {
   let index = 0;
   while (index < text.length) {
     const character = text[index]!;
-    if (text.startsWith("--", index)) {
-      const end = text.indexOf("\n", index + 2);
-      index = end < 0 ? text.length : end + 1;
+    let lineComment: string | undefined;
+    for (const prefix of profile.lineCommentPrefixes) {
+      if (!text.startsWith(prefix, index)) continue;
+      const next = text[index + prefix.length];
+      if (
+        prefix === "--" &&
+        profile.doubleDashRequiresWhitespace &&
+        next !== undefined &&
+        next.charCodeAt(0) > 0x20 &&
+        next.charCodeAt(0) !== 0x7f &&
+        !/\s/u.test(next)
+      )
+        continue;
+      lineComment = prefix;
+      break;
+    }
+    if (lineComment !== undefined) {
+      index += lineComment.length;
+      while (index < text.length && !(profile.lineCommentTerminators ?? "\r\n").includes(text[index]!)) index += 1;
       continue;
     }
     if (text.startsWith("/*", index)) {
-      const end = text.indexOf("*/", index + 2);
-      index = end < 0 ? text.length : end + 2;
+      let depth = 1;
+      index += 2;
+      while (index < text.length && depth > 0) {
+        if (profile.supportsNestedBlockComments && text.startsWith("/*", index)) {
+          depth += 1;
+          index += 2;
+        } else if (text.startsWith("*/", index)) {
+          depth -= 1;
+          index += 2;
+        } else index += 1;
+      }
       continue;
     }
-    if (character === "#") {
-      const end = text.indexOf("\n", index + 1);
-      index = end < 0 ? text.length : end + 1;
-      continue;
-    }
-    if (character === "$") {
+    if (character === "$" && profile.supportsDollarQuotes) {
       const match = text.slice(index).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/u)?.[0];
       if (match !== undefined) {
         const end = text.indexOf(match, index + match.length);
@@ -504,8 +555,13 @@ function hasSqlKeyword(text: string, target: string): boolean {
         continue;
       }
     }
-    if (character === "'" || character === '"' || character === "`") {
-      const quote = character;
+    if (
+      character === "'" ||
+      character === '"' ||
+      (character === "`" && profile.supportsBacktickIdentifiers) ||
+      (character === "[" && profile.supportsBracketIdentifiers)
+    ) {
+      const quote = character === "[" ? "]" : character;
       index += 1;
       while (index < text.length) {
         if (text[index] === quote) {
@@ -516,20 +572,16 @@ function hasSqlKeyword(text: string, target: string): boolean {
           index += 1;
           break;
         }
-        if (text[index] === "\\" && quote === "'" && index + 1 < text.length) index += 2;
+        if (text[index] === "\\" && profile.backslashEscapes && quote !== "]" && index + 1 < text.length)
+          index += 2;
         else index += 1;
       }
       continue;
     }
-    if (character === "[") {
-      const end = text.indexOf("]", index + 1);
-      index = end < 0 ? text.length : end + 1;
-      continue;
-    }
-    if (/[A-Za-z]/u.test(character)) {
+    if (/[A-Za-z0-9_$\u0080-\uffff]/u.test(character)) {
       const start = index;
       index += 1;
-      while (index < text.length && /[A-Za-z0-9_$]/u.test(text[index]!)) index += 1;
+      while (index < text.length && /[A-Za-z0-9_$\u0080-\uffff]/u.test(text[index]!)) index += 1;
       if (text.slice(start, index).toUpperCase() === target) return true;
       continue;
     }
@@ -538,7 +590,7 @@ function hasSqlKeyword(text: string, target: string): boolean {
   return false;
 }
 
-function returnsRows(value: unknown, text: string): value is readonly unknown[] {
+function returnsRows(value: unknown, text: string, dialect: BunSqlDialect): value is readonly unknown[] {
   if (!Array.isArray(value)) return false;
   const command =
     typeof (value as { readonly command?: unknown }).command === "string"
@@ -570,7 +622,7 @@ function returnsRows(value: unknown, text: string): value is readonly unknown[] 
   if (ROW_COMMANDS.has(command)) return true;
   if (DML_COMMANDS.has(command)) {
     if (value.length > 0) return true;
-    if (hasSqlKeyword(text, "RETURNING")) {
+    if (hasSqlKeyword(text, "RETURNING", LEXICAL_PROFILES[dialect])) {
       unsupported(
         "result.rows",
         "BRAID_RESULT_KIND_AMBIGUOUS",
@@ -648,7 +700,7 @@ function createExecutor(
       const effectiveBinding =
         binding ?? statementBinding.describe(rendered, { dialectId: dialect, requestedReuse: "auto" });
       const raw = await run<unknown>(rendered, effectiveBinding);
-      if (returnsRows(raw, rendered.segments.join(""))) {
+      if (returnsRows(raw, rendered.segments.join("?"), dialect)) {
         const rows = Object.freeze(raw.map((row) => normalizeRow(row, dialect)) as readonly Row[]);
         return Object.freeze({ kind: "rows", rows, rowCount: rows.length });
       }

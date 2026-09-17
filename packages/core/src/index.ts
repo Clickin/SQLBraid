@@ -821,7 +821,11 @@ function genericLiteral(parameter: RenderedParameter, dialectId: string, binary:
   const value = parameter.value;
   if (value === null) return "NULL";
   if (value === undefined) return "[undefined]";
-  if (typeof value === "string") return `'${value.replaceAll("'", "''")}'`;
+  if (typeof value === "string") {
+    // Session SQL modes and character sets are unknown; this is not executable SQL.
+    if (/^(?:mysql|mariadb)/i.test(dialectId)) return `[string ${JSON.stringify(value)}]`;
+    return `'${value.replaceAll("'", "''")}'`;
+  }
   if (typeof value === "boolean") {
     if (/^(?:mysql|sqlite)/i.test(dialectId) || /^(?:oracle|mssql|sqlserver)/i.test(dialectId))
       return value ? "1" : "0";
@@ -1075,6 +1079,10 @@ export function createBulkBindingDescription(
 
 export interface DialectLexicalProfile {
   readonly lineCommentPrefixes: readonly string[];
+  /** Require whitespace/control after -- (MySQL/MariaDB). Defaults to false. */
+  readonly doubleDashRequiresWhitespace?: boolean;
+  /** Characters that terminate a line comment. Defaults to CR and LF. */
+  readonly lineCommentTerminators?: string;
   readonly supportsNestedBlockComments?: boolean;
   readonly supportsDollarQuotes?: boolean;
   readonly supportsBacktickIdentifiers?: boolean;
