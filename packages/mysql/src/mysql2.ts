@@ -30,6 +30,11 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
+import {
+  assertSavepointName,
+  createCleanupScope,
+  defineResultProperty,
+} from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import {
   typePolicyForProfile,
@@ -277,20 +282,18 @@ async function withMysqlCancellation<T>(
 }
 
 function plainRow(value: unknown, fields: readonly Mysql2FieldLike[], policy: TypePolicy): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("BRAID_RESULT_COLUMNS: mysql2 must return object rows; rowsAsArray=true is unsupported.");
+  if (!value || typeof value !== "object") {
+    throw new Error("BRAID_RESULT_COLUMNS: mysql2 must return object or array rows.");
   }
   const row: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
+  const entries = Array.isArray(value)
+    ? fields.flatMap((field, index) => field.name === undefined ? [] : [[field.name, value[index]] as const])
+    : Object.entries(value);
+  for (const [key, entry] of entries) {
     const field = fields.find((candidate) => candidate.name === key);
     const databaseType = mysqlDatabaseType(field);
     assertMysqlNumericValue(databaseType, entry);
-    Object.defineProperty(row, key, {
-      value: databaseType ? policy.decode(databaseType, entry) : entry,
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
+    defineResultProperty(row, key, databaseType ? policy.decode(databaseType, entry) : entry);
   }
   return row;
 }
@@ -529,9 +532,9 @@ function mysql2Environment(
   const exactNumeric = profile.supportBigNumbers === true
     && profile.bigNumberStrings === true
     && profile.decimalNumbers === false
-    && profile.rowsAsArray === false
+    && (profile.rowsAsArray === false || profile.rowsAsArray === true)
     && profile.typeCast === "default";
-  const rowObjects = profile.rowsAsArray === false && profile.typeCast === "default";
+  const rowObjects = (profile.rowsAsArray === false || profile.rowsAsArray === true) && profile.typeCast === "default";
   const jsonText = profile.jsonStrings === true && rowObjects;
   const jsonNative = profile.jsonStrings === false && rowObjects;
   const temporalText = profile.dateStrings === true && rowObjects;
@@ -673,8 +676,10 @@ function resultSetFields(
   return Array.isArray(candidate) ? candidate : fields as readonly Mysql2FieldLike[];
 }
 
-function isMultipleResultPayload(payload: unknown): boolean {
-  return Array.isArray(payload) && payload.some(Array.isArray);
+function isMultipleResultPayload(payload: unknown, fields?: Mysql2FieldPayload): boolean {
+  return Array.isArray(payload)
+    && payload.some(Array.isArray)
+    && (fields === undefined || Array.isArray(fields[0]));
 }
 
 async function closePrepared(
@@ -759,9 +764,9 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       const [payload, rawFields] = await withMysqlCancellation(
         connection,
         executionOptions?.signal,
-        () => connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]),
+        () => (connection.query ?? connection.execute).call(connection, prepared.text, prepared.values as unknown as Mysql2Parameter[]),
       );
-      if (isMultipleResultPayload(payload)) {
+      if (isMultipleResultPayload(payload, rawFields)) {
         throw unsupported(
           "routine.result-sets",
           "BRAID_RESULT_SETS_UNSUPPORTED",
@@ -860,44 +865,71 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
         );
       }
       const prepared = materialize(rendered, binding);
-      const command = raw.execute(prepared.text, prepared.values as Mysql2Parameter[]);
-      const source = command.stream({ highWaterMark });
+      let source: Mysql2RawStreamLike | undefined;
+      let sourceDestroyed = false;
+      let rawDestroyed = false;
+      let setupError: Error | undefined;
+      const destroySource = (error?: Error): void => {
+        if (sourceDestroyed) return;
+        sourceDestroyed = true;
+        if (source?.destroyed !== true) source?.destroy?.(error);
+      };
+      const destroyRaw = (error?: Error): void => {
+        if (rawDestroyed) return;
+        rawDestroyed = true;
+        destroyMysqlConnection(raw, error);
+      };
+      const initializationCleanup = createCleanupScope();
+      let nativeOwned = false;
+      let command: Mysql2RawCommandLike;
+      let iterator: AsyncIterator<unknown>;
       let fields: readonly Mysql2FieldLike[] = [];
       let fieldsChanged = false;
       let fieldsSeen = 0;
       let pendingError: Error | undefined;
-      (source.on ?? source.once).call(source, "fields", (value: unknown) => {
-        fieldsSeen += 1;
-        if (fieldsSeen === 1) {
-          fields = Array.isArray(value) ? value : [];
-          fieldsChanged = true;
-        } else {
-          pendingError ??= unsupported(
-            "routine.result-sets",
-            "BRAID_RESULT_SETS_UNSUPPORTED",
-            "MySQL stream returned multiple result sets; use database.call().",
-          );
-        }
-      });
-      const iterator = source[Symbol.asyncIterator]();
+      try {
+        command = raw.execute(prepared.text, prepared.values as Mysql2Parameter[]);
+        nativeOwned = true;
+        initializationCleanup.add(() => destroyRaw(setupError));
+        source = command.stream({ highWaterMark });
+        initializationCleanup.add(() => destroySource(setupError));
+        (source.on ?? source.once).call(source, "fields", (value: unknown) => {
+          fieldsSeen += 1;
+          if (fieldsSeen === 1) {
+            fields = Array.isArray(value) ? value : [];
+            fieldsChanged = true;
+          } else {
+            pendingError ??= unsupported(
+              "routine.result-sets",
+              "BRAID_RESULT_SETS_UNSUPPORTED",
+              "MySQL stream returned multiple result sets; use database.call().",
+            );
+          }
+        });
+        iterator = source[Symbol.asyncIterator]();
+        initializationCleanup.disarm();
+      } catch (error) {
+        if (!nativeOwned) throw error;
+        setupError = error instanceof Error ? error : new Error("MySQL stream initialization failed.", { cause: error });
+        const initializationFailure = cleanupError("MySQL stream initialization discarded its native resource.", setupError);
+        await initializationCleanup.run(initializationFailure);
+        throw initializationFailure;
+      }
       let exhausted = false;
       let aborted = false;
       let destroyError: unknown;
       let streamError: unknown;
       const abort = (): void => {
         aborted = true;
+        const reason = signal?.reason;
+        const abortError = reason instanceof Error ? reason : new Error("MySQL stream aborted.", { cause: reason });
         try {
-          const reason = signal?.reason;
-          destroyMysqlConnection(
-            raw,
-            reason instanceof Error ? reason : new Error("MySQL stream aborted.", { cause: reason }),
-          );
+          destroyRaw(abortError);
         } catch (error) {
           destroyError = error;
         }
-        const reason: unknown = signal?.reason;
         try {
-          source.destroy?.(reason instanceof Error ? reason : new Error("MySQL stream aborted.", { cause: reason }));
+          destroySource(abortError);
         } catch (error) {
           destroyError ??= error;
         }
@@ -967,7 +999,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
         () => connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]),
       );
       if (!Array.isArray(payload)) return { output: payload && typeof payload === "object" ? Object.fromEntries(Object.entries(payload)) : {}, resultSets: [] };
-      const sets = isMultipleResultPayload(payload) ? payload.filter((entry): entry is readonly unknown[] => Array.isArray(entry)) : [payload];
+      const sets = isMultipleResultPayload(payload, rawFields) ? payload.filter((entry): entry is readonly unknown[] => Array.isArray(entry)) : [payload];
       const resultSets = sets.map((rows, index) => {
         const fields = resultSetFields(rawFields, index);
         assertUniqueFields(fields);
@@ -981,9 +1013,9 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
     begin: (transactionOptions) => beginMysqlTransaction(connection, control, transactionOptions),
     commit: connection.commit.bind(connection),
     rollback: connection.rollback.bind(connection),
-    savepoint: (name) => control(`SAVEPOINT ${name}`),
-    rollbackTo: (name) => control(`ROLLBACK TO SAVEPOINT ${name}`),
-    releaseSavepoint: (name) => control(`RELEASE SAVEPOINT ${name}`),
+    savepoint: (name) => control(`SAVEPOINT ${assertSavepointName(name)}`),
+    rollbackTo: (name) => control(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`),
+    releaseSavepoint: (name) => control(`RELEASE SAVEPOINT ${assertSavepointName(name)}`),
   };
 }
 
