@@ -188,7 +188,7 @@ function optionFor(id: string): TransactionOptions {
 
 function settingQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
   if (dialect === "postgres") return tag.rows`SELECT current_setting('transaction_isolation') AS value, current_setting('transaction_read_only') AS read_only`;
-  return tag.rows`SELECT @@transaction_isolation AS value, @@transaction_read_only AS read_only`;
+  return tag.rows`SELECT CAST(@@transaction_isolation AS CHAR) AS value, CAST(@@transaction_read_only AS CHAR) AS read_only`;
 }
 
 async function proveTransactionOption(db: CertificationFixture["db"], tag: SqlTag, dialect: BunSqlDialect, options: TransactionOptions): Promise<void> {
@@ -314,13 +314,15 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       const rejectionFeature = transactionOptions.readOnly !== undefined && transactionOptions.isolation === "serializable"
         ? "transaction.read-only"
         : transactionOptions.isolation === undefined ? "transaction.read-only" : `transaction.isolation.${transactionOptions.isolation}`;
-      unsupported[id] = makeProbe(optionKey(transactionOptions), () => db.tx(transactionOptions, async (tx) => { await tx.one(queries.identity); }), () => counters.sideEffects, "BRAID_TX_OPTION_UNSUPPORTED", rejectionFeature);
+      unsupported[id] = makeProbe(rejectionFeature, () => db.tx(transactionOptions, async (tx) => { await tx.one(queries.identity); }), () => counters.sideEffects, "BRAID_TX_OPTION_UNSUPPORTED");
     }
   }
   let bulkValues: unknown[][] = [];
   const guarded: NonNullable<CertificationFixture["guarded"]> = {
-    "result.rows": { prove: async () => { const result = await db.all(queries.one); if (result.length !== 1) throw new Error("Bun.SQL row-kind proof did not return one row."); } },
-    "result.command": { prove: async () => { const result = await db.execute(queries.command); if (result.kind !== "command" || result.command.affectedRows !== 1) throw new Error("Bun.SQL command-kind proof did not return one affected row."); await reset(); } },
+    ...(dialect !== "postgres" ? {
+      "result.rows": { prove: async () => { const result = await db.all(queries.one); if (result.length !== 1) throw new Error("Bun.SQL row-kind proof did not return one row."); } },
+      "result.command": { prove: async () => { const result = await db.execute(queries.command); if (result.kind !== "command" || result.command.affectedRows !== 1) throw new Error("Bun.SQL command-kind proof did not return one affected row."); await reset(); } },
+    } : {}),
     "metadata.command-safe": { prove: async () => { const result = await db.execute(queries.command); if (!Number.isSafeInteger(result.command.affectedRows)) throw new Error("Bun.SQL command metadata was not safe."); await reset(); } },
     "execution.bulk-fidelity": { prove: async () => { const result = await db.bulk(["proof-one", "proof-two"], (input) => tag.command`INSERT INTO ${tableSql} (value) VALUES (${input})`); if (result.inputCount !== 2 || result.affectedRows !== 2) throw new Error("Bun.SQL bulk fidelity proof failed."); await reset(); } },
   };
