@@ -154,7 +154,7 @@ for (const protocol of ["http", "ws", "file", undefined, "unknown"]) {
     );
     const unsafeResult = unsafeExecutor.query(sql.command`INSERT INTO users (id) VALUES (1)`.render());
     if (exact) {
-      await assert.rejects(unsafeResult, { code: "BRAID_RESULT_EXACTNESS" });
+      await assert.rejects(Promise.resolve(unsafeResult), { code: "BRAID_RESULT_EXACTNESS" });
     } else {
       assert.deepEqual(await unsafeResult, {
         kind: "command",
