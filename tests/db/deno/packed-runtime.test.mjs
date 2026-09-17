@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { sql } from "@sqlbraid/sqlite";
+import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { runMysqlSmoke, runPostgresSmoke, runSqliteSmoke } from "./runtime-driver-smoke.mjs";
 
 const observationsDirectory = Deno.env.get("SQLBRAID_DENO_OBSERVATIONS_DIR");
@@ -77,4 +80,37 @@ Deno.test("deno-sqlite.data.profile", async () => {
   const result = await runSqliteSmoke();
   assert.equal(result.profile, "sqlite-exact-string");
   await record("deno-sqlite.data.profile", result);
+});
+
+Deno.test("deno-sqlite.execution.stream-unsupported", async () => {
+  const native = new DatabaseSync(":memory:");
+  let prepares = 0;
+  const db = createNodeSqliteDatabase({
+    prepare(text) {
+      prepares += 1;
+      return native.prepare(text);
+    },
+    exec: native.exec.bind(native),
+  });
+  try {
+    await assert.rejects(
+      async () => {
+        for await (const row of db.stream(sql.rows`SELECT 1 AS value`)) void row;
+      },
+      { code: "BRAID_STREAM_UNSUPPORTED", feature: "statement.stream" },
+    );
+    assert.equal(prepares, 0);
+    const environment = await db.environment();
+    const { version } = await db.one(sql.rows`SELECT sqlite_version() AS version`);
+    await record("deno-sqlite.execution.stream-unsupported", {
+      supported: true,
+      database: { ...environment.database, version },
+      driver: environment.driver,
+      runtime: environment.runtime,
+      typePolicy: environment.typePolicy,
+      checks: ["statement.stream.unsupported"],
+    });
+  } finally {
+    native.close();
+  }
 });

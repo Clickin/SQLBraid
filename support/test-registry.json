@@ -11,6 +11,11 @@
     "file": "tests/db/deno/packed-runtime.test.mjs",
     "title": "deno-sqlite.data.profile"
   },
+  "deno-sqlite.execution.stream-unsupported": {
+    "file": "tests/db/deno/packed-runtime.test.mjs",
+    "title": "deno-sqlite.execution.stream-unsupported",
+    "outcome": "failure"
+  },
   "bun-sql-postgres.data.profile": {
     "file": "tests/db/bun-sql/capabilities.test.ts",
     "title": "bun-sql-postgres.data.profile"
