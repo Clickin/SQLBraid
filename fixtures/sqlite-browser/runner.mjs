@@ -211,8 +211,10 @@ async function streamCase(sqlite3) {
     expect((await early.next()).value.value === "1", "SQLite WASM early-return stream did not start.");
     await early.return();
     const afterReturn = await db.all(sql.rows`SELECT 5 AS value`);
-    expect(afterReturn.length === 1 && afterReturn[0].value === "5",
-      "SQLite WASM early iterator return did not release the native resource.");
+    expect(
+      afterReturn.length === 1 && afterReturn[0].value === "5",
+      "SQLite WASM early iterator return did not release the native resource.",
+    );
     return { first: first.value, blockedCode, rows: [first.value.value, ...rest], after, afterReturn };
   } finally {
     native.close();
@@ -548,12 +550,20 @@ async function transactionContracts(sqlite3) {
   const db = createSqliteWasmDatabase(native, { sqlite3 });
   const other = createSqliteWasmDatabase(observer, { sqlite3 });
   const write = (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`);
-  const rows = async () => (await other.all(sql.rows`SELECT id FROM braid_contract_tx ORDER BY id`)).map((row) => row.id);
+  const rows = async () =>
+    (await other.all(sql.rows`SELECT id FROM braid_contract_tx ORDER BY id`)).map((row) => row.id);
   const equalRows = async (expected) =>
-    expect(JSON.stringify(await rows()) === JSON.stringify(expected), "WASM independent observer saw incorrect durable state.");
+    expect(
+      JSON.stringify(await rows()) === JSON.stringify(expected),
+      "WASM independent observer saw incorrect durable state.",
+    );
   const rejects = async (operation) => {
     let failure;
-    try { await operation; } catch (error) { failure = error; }
+    try {
+      await operation;
+    } catch (error) {
+      failure = error;
+    }
     expect(failure !== undefined, "WASM contract operation unexpectedly succeeded.");
     return failure;
   };
@@ -562,25 +572,47 @@ async function transactionContracts(sqlite3) {
     native.exec("DELETE FROM braid_contract_tx");
     await equalRows([]);
     await check();
-    assertions.push({ fullName: `[contract:sqlite-wasm:${scenario}:integration] [ownership:direct]`, status: "passed" });
+    assertions.push({
+      fullName: `[contract:sqlite-wasm:${scenario}:integration] [ownership:direct]`,
+      status: "passed",
+    });
   };
   try {
-    expect(native !== observer && native.pointer !== observer.pointer, "WASM observer must use a separate native connection.");
+    expect(
+      native !== observer && native.pointer !== observer.pointer,
+      "WASM observer must use a separate native connection.",
+    );
     native.exec("DROP TABLE IF EXISTS braid_contract_tx; CREATE TABLE braid_contract_tx (id TEXT PRIMARY KEY)");
     await run("transaction.commit-confirmed", async () => {
-      const result = await db.tx(async (tx) => { await write(tx, "A"); return "committed"; });
+      const result = await db.tx(async (tx) => {
+        await write(tx, "A");
+        return "committed";
+      });
       expect(result === "committed", "WASM lost the committed callback value.");
       await equalRows(["A"]);
     });
     await run("transaction.callback-rollback", async () => {
       const failure = new Error("WASM callback rollback");
-      expect(await rejects(db.tx(async (tx) => { await write(tx, "A"); throw failure; })) === failure,
-        "WASM callback failure changed.");
+      expect(
+        (await rejects(
+          db.tx(async (tx) => {
+            await write(tx, "A");
+            throw failure;
+          }),
+        )) === failure,
+        "WASM callback failure changed.",
+      );
       await equalRows([]);
     });
     await run("transaction.statement-rollback", async () => {
       let firstWriteCompleted = false;
-      await rejects(db.tx(async (tx) => { await write(tx, "A"); firstWriteCompleted = true; await write(tx, "A"); }));
+      await rejects(
+        db.tx(async (tx) => {
+          await write(tx, "A");
+          firstWriteCompleted = true;
+          await write(tx, "A");
+        }),
+      );
       expect(firstWriteCompleted, "WASM statement failure must follow a successful mutation.");
       await equalRows([]);
     });
@@ -597,9 +629,21 @@ async function transactionContracts(sqlite3) {
       const failure = new Error("WASM nested rollback");
       await db.tx(async (tx) => {
         await write(tx, "A");
-        expect(await rejects(tx.tx(async (nested) => { await write(nested, "B"); throw failure; })) === failure,
-          "WASM nested failure changed.");
-        await rejects(tx.tx(async (nested) => { await write(nested, "D"); await write(nested, "A"); }));
+        expect(
+          (await rejects(
+            tx.tx(async (nested) => {
+              await write(nested, "B");
+              throw failure;
+            }),
+          )) === failure,
+          "WASM nested failure changed.",
+        );
+        await rejects(
+          tx.tx(async (nested) => {
+            await write(nested, "D");
+            await write(nested, "A");
+          }),
+        );
         await write(tx, "C");
       });
       await equalRows(["A", "C"]);

@@ -548,7 +548,7 @@ test("MSSQL prepared cancellation waits for native prepare drain", async () => {
   await Promise.resolve();
   assert.equal(cancelled, true);
   assert.equal(settled, false);
-  completeRequest(active);
+  completeRequest(active, reason);
   await assert.rejects(pending, (error: unknown) => error === reason);
   assert.equal(executed, false);
   assert.equal(unprepared, false);

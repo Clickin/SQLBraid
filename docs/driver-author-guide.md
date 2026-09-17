@@ -342,8 +342,8 @@ protocol cleanup and cancellation semantics.
 
 Implement `begin(options)` only for options the physical connection can honor.
 The portable isolation strings are `read-uncommitted`, `read-committed`,
-Unsupported
-options must throw `UnsupportedFeatureError` with a `BRAID_*` code (the runtime
+`repeatable-read`, and `serializable`. Unsupported options must throw
+`UnsupportedFeatureError` with a `BRAID_*` code (the runtime
 uses `BRAID_TX_OPTION_UNSUPPORTED`). Nested explicit transaction options are
 rejected; do not reacquire for `tx` inside a session.
 If exact option admissibility depends on the adapter or profile, expose the
@@ -352,6 +352,18 @@ provider, and call that same pure validator from `begin()`. A provider that
 exposes it must keep equivalent policy on its leases (runtime can inherit the
 provider validator when a lease omits the optional member); no function
 identity check is required.
+
+A fulfilled native control call is not necessarily a successful transaction:
+inspect terminal command metadata when the driver exposes it. PostgreSQL
+`COMMIT` reporting `ROLLBACK` must reject rather than return the callback's
+value. Propagate asynchronous savepoint callback errors; failed recovery must
+not permit an outer commit or healthy resource reuse. Preserve the original
+callback error alongside a rollback/cleanup failure.
+
+Access mode is tri-state: omitted inherits the session default, `true` selects
+read-only, and `false` explicitly selects read-write where supported. During a
+SQLBraid-owned transaction, driver/global statement auto-commit cannot take over
+the transaction boundary.
 
 Environment capability IDs are canonical and capability-driven. The exhaustive
 machine-readable vocabulary is exported from `@sqlbraid/core` as

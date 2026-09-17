@@ -23,6 +23,12 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 - Preserve exact node:sqlite command ROWIDs, keep Oracle auto-commit outside
   managed transactions, release pooled connections when adapter initialization
   fails, and honor explicit Bun.SQL read-write transaction options.
+- Reject PostgreSQL and Bun PostgreSQL transactions when COMMIT reports
+  ROLLBACK, and propagate Tedious savepoint rollback failures without returning
+  uncertain connections as healthy.
+- Require capability-driven semantic contract evidence alongside the existing
+  database/version matrix; missing integration or native-boundary coverage
+  blocks release certification.
 
 ## 0.1.0-rc.2 (unreleased)
 

@@ -208,38 +208,41 @@ test("postgres.pv18.parser-profiles", { timeout: 30_000 }, async () => {
   }
 });
 
-test("[contract:pg:metadata.affected-rows:integration] postgres.pv17.numeric-transport", { timeout: 30_000 }, async () => {
-  const settings = inject("postgres") as Settings;
-  const client = new Client({ connectionString: settings.connectionUri });
-  await client.connect();
-  const db = createPgDatabase(client);
-  try {
-    await client.query(
-      "CREATE TEMP TABLE braid_pv17_fidelity (id bigint NOT NULL, amount numeric(40, 20) NOT NULL, payload json NOT NULL, measured_at timestamp(6) NOT NULL)",
-    );
-    const values = [
-      { id: "9007199254740993", amount: "12345678901234567890.12345678901234567890" },
-      { id: "-9223372036854775808", amount: "-0.00000000000000000001" },
-    ];
-    const bulk = await db.bulk(
-      values,
-      (input) => sql.command`
+test(
+  "[contract:pg:metadata.affected-rows:integration] postgres.pv17.numeric-transport",
+  { timeout: 30_000 },
+  async () => {
+    const settings = inject("postgres") as Settings;
+    const client = new Client({ connectionString: settings.connectionUri });
+    await client.connect();
+    const db = createPgDatabase(client);
+    try {
+      await client.query(
+        "CREATE TEMP TABLE braid_pv17_fidelity (id bigint NOT NULL, amount numeric(40, 20) NOT NULL, payload json NOT NULL, measured_at timestamp(6) NOT NULL)",
+      );
+      const values = [
+        { id: "9007199254740993", amount: "12345678901234567890.12345678901234567890" },
+        { id: "-9223372036854775808", amount: "-0.00000000000000000001" },
+      ];
+      const bulk = await db.bulk(
+        values,
+        (input) => sql.command`
       INSERT INTO braid_pv17_fidelity (id, amount, payload, measured_at)
       VALUES (${input.id}::int8, ${input.amount}::numeric, ${exactJsonText}::json, TIMESTAMP '2026-09-14 12:34:56.123456')
     `,
-    );
-    assert.equal(bulk.inputCount, 2);
-    assert.equal(bulk.affectedRows, 2);
+      );
+      assert.equal(bulk.inputCount, 2);
+      assert.equal(bulk.affectedRows, 2);
 
-    const row = await db.one(sql.rows<{
-      readonly id: string;
-      readonly amount: string;
-      readonly total: string;
-      readonly average: string;
-      readonly count: string;
-      readonly payload: string;
-      readonly measured_at: string;
-    }>`
+      const row = await db.one(sql.rows<{
+        readonly id: string;
+        readonly amount: string;
+        readonly total: string;
+        readonly average: string;
+        readonly count: string;
+        readonly payload: string;
+        readonly measured_at: string;
+      }>`
       SELECT id, amount,
              SUM(amount) OVER () AS total,
              AVG(amount) OVER () AS average,
@@ -249,21 +252,21 @@ test("[contract:pg:metadata.affected-rows:integration] postgres.pv17.numeric-tra
       FROM braid_pv17_fidelity
       WHERE id = ${values[0]!.id}::int8
     `);
-    assert.equal(row.id, values[0]!.id);
-    assert.equal(row.amount, values[0]!.amount);
-    assert.equal(row.total, values[0]!.amount);
-    assert.equal(row.average, values[0]!.amount);
-    assert.equal(row.count, "1");
-    assert.equal(row.payload, exactJsonText);
-    assert.equal(row.measured_at, "2026-09-14 12:34:56.123456");
+      assert.equal(row.id, values[0]!.id);
+      assert.equal(row.amount, values[0]!.amount);
+      assert.equal(row.total, values[0]!.amount);
+      assert.equal(row.average, values[0]!.amount);
+      assert.equal(row.count, "1");
+      assert.equal(row.payload, exactJsonText);
+      assert.equal(row.measured_at, "2026-09-14 12:34:56.123456");
 
-    const aggregates = await db.one(sql.rows<{
-      readonly count: string;
-      readonly sumInt: string;
-      readonly sumBig: string;
-      readonly avgInt: string;
-      readonly avgNumeric: string;
-    }>`
+      const aggregates = await db.one(sql.rows<{
+        readonly count: string;
+        readonly sumInt: string;
+        readonly sumBig: string;
+        readonly avgInt: string;
+        readonly avgNumeric: string;
+      }>`
       SELECT COUNT(*) AS count,
              SUM(1::int4) AS "sumInt",
              SUM(1::int8) AS "sumBig",
@@ -271,13 +274,13 @@ test("[contract:pg:metadata.affected-rows:integration] postgres.pv17.numeric-tra
              AVG(1::numeric) AS "avgNumeric"
       FROM generate_series(1, 2)
     `);
-    assert.equal(aggregates.count, "2");
-    assert.equal(aggregates.sumInt, "2");
-    assert.equal(aggregates.sumBig, "2");
-    assert.match(aggregates.avgInt, /^1(?:\.0+)?$/u);
-    assert.match(aggregates.avgNumeric, /^1(?:\.0+)?$/u);
+      assert.equal(aggregates.count, "2");
+      assert.equal(aggregates.sumInt, "2");
+      assert.equal(aggregates.sumBig, "2");
+      assert.match(aggregates.avgInt, /^1(?:\.0+)?$/u);
+      assert.match(aggregates.avgNumeric, /^1(?:\.0+)?$/u);
 
-    const floats = await db.one(sql.rows<Record<string, number>>`
+      const floats = await db.one(sql.rows<Record<string, number>>`
       SELECT
         0::float8 AS f64_0, -0::float8 AS f64_neg_zero,
         0.1::float8 AS f64_fraction, 1.2345678901234567::float8 AS f64_value,
@@ -288,37 +291,38 @@ test("[contract:pg:metadata.affected-rows:integration] postgres.pv17.numeric-tra
         1.17549435e-38::float4 AS f32_min_normal, 3.4028235e38::float4 AS f32_max,
         1.40129846e-45::float4 AS f32_subnormal, 1.0000001192092896::float4 AS f32_roundtrip
     `);
-    for (const [index, expected] of binary64Finite.entries()) {
-      const key = [
-        "f64_0",
-        "f64_neg_zero",
-        "f64_fraction",
-        "f64_value",
-        "f64_min_normal",
-        "f64_max",
-        "f64_subnormal",
-        "f64_roundtrip",
-      ][index]!;
-      assertFloatBits(floats[key], expected, 64);
+      for (const [index, expected] of binary64Finite.entries()) {
+        const key = [
+          "f64_0",
+          "f64_neg_zero",
+          "f64_fraction",
+          "f64_value",
+          "f64_min_normal",
+          "f64_max",
+          "f64_subnormal",
+          "f64_roundtrip",
+        ][index]!;
+        assertFloatBits(floats[key], expected, 64);
+      }
+      for (const [index, expected] of binary32Finite.entries()) {
+        const key = [
+          "f32_0",
+          "f32_neg_zero",
+          "f32_fraction",
+          "f32_value",
+          "f32_min_normal",
+          "f32_max",
+          "f32_subnormal",
+          "f32_roundtrip",
+        ][index]!;
+        assertFloatBits(floats[key], expected, 32);
+      }
+      await assert.rejects(() => db.one(sql.rows`SELECT 1.23::money AS value`), { code: "BRAID_RESULT_EXACTNESS" });
+    } finally {
+      await client.end();
     }
-    for (const [index, expected] of binary32Finite.entries()) {
-      const key = [
-        "f32_0",
-        "f32_neg_zero",
-        "f32_fraction",
-        "f32_value",
-        "f32_min_normal",
-        "f32_max",
-        "f32_subnormal",
-        "f32_roundtrip",
-      ][index]!;
-      assertFloatBits(floats[key], expected, 32);
-    }
-    await assert.rejects(() => db.one(sql.rows`SELECT 1.23::money AS value`), { code: "BRAID_RESULT_EXACTNESS" });
-  } finally {
-    await client.end();
-  }
-});
+  },
+);
 
 test("postgres.data.binary", { timeout: 30_000 }, async () => {
   const settings = inject("postgres") as Settings;

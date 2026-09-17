@@ -25,35 +25,52 @@ async function endPool(pool: Pick<Pool, "end">): Promise<void> {
 }
 
 for (const mode of ["direct", "pooled"] as const) {
-  for (const contract of transactionIntegrationTests("mysql2", mode, async () => {
-    const options = { uri: inject("mysql").connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions };
-    const observer = await createConnection(options);
-    const client = mode === "direct" ? await createConnection(options) : undefined;
-    const pool = mode === "pooled" ? createPool({ ...options, connectionLimit: 1 }) : undefined;
-    const db = client ? createMysql2Database(client, { streamHighWaterMark: 1 }) : createMysql2PoolDatabase(pool!, { streamHighWaterMark: 1 });
-    await observer.query("DROP TABLE IF EXISTS braid_contract_tx");
-    await observer.query("CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY) ENGINE=InnoDB");
-    return {
-      db,
-      caughtStatementOutcome: "commit",
-      streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
-      physicalId: async (scope) => (await scope.one(sql.rows<{ id: string }>`SELECT CONNECTION_ID() AS id`)).id,
-      write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
-      committedRows: async () => {
-        const [rows] = await observer.query("SELECT id FROM braid_contract_tx ORDER BY id");
-        return (rows as { id: string }[]).map((row) => row.id);
-      },
-      accessMode: {
-        inheritedReadOnly: true,
-        setDefault: async () => { await db.execute(sql`SET SESSION TRANSACTION READ ONLY`); },
-        restoreDefault: async () => { await db.execute(sql`SET SESSION TRANSACTION READ WRITE`); },
-      },
-      close: async () => {
-        try { await observer.query("DROP TABLE braid_contract_tx"); }
-        finally { await client?.end(); await pool?.end(); await observer.end(); }
-      },
-    };
-  }, { accessMode: true, pooledLease: mode === "pooled", stream: true })) test(contract.title, contract.run);
+  for (const contract of transactionIntegrationTests(
+    "mysql2",
+    mode,
+    async () => {
+      const options = { uri: inject("mysql").connectionUri, ...MYSQL2_LOSSLESS_TEXT.connectionOptions };
+      const observer = await createConnection(options);
+      const client = mode === "direct" ? await createConnection(options) : undefined;
+      const pool = mode === "pooled" ? createPool({ ...options, connectionLimit: 1 }) : undefined;
+      const db = client
+        ? createMysql2Database(client, { streamHighWaterMark: 1 })
+        : createMysql2PoolDatabase(pool!, { streamHighWaterMark: 1 });
+      await observer.query("DROP TABLE IF EXISTS braid_contract_tx");
+      await observer.query("CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY) ENGINE=InnoDB");
+      return {
+        db,
+        caughtStatementOutcome: "commit",
+        streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
+        physicalId: async (scope) => (await scope.one(sql.rows<{ id: string }>`SELECT CONNECTION_ID() AS id`)).id,
+        write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+        committedRows: async () => {
+          const [rows] = await observer.query("SELECT id FROM braid_contract_tx ORDER BY id");
+          return (rows as { id: string }[]).map((row) => row.id);
+        },
+        accessMode: {
+          inheritedReadOnly: true,
+          setDefault: async () => {
+            await db.execute(sql`SET SESSION TRANSACTION READ ONLY`);
+          },
+          restoreDefault: async () => {
+            await db.execute(sql`SET SESSION TRANSACTION READ WRITE`);
+          },
+        },
+        close: async () => {
+          try {
+            await observer.query("DROP TABLE braid_contract_tx");
+          } finally {
+            await client?.end();
+            await pool?.end();
+            await observer.end();
+          }
+        },
+      };
+    },
+    { accessMode: true, pooledLease: mode === "pooled", stream: true },
+  ))
+    test(contract.title, contract.run);
 }
 
 test(commandMetadataTitle("mysql2"), async () => {
@@ -62,14 +79,19 @@ test(commandMetadataTitle("mysql2"), async () => {
   const observer = await createConnection(options);
   try {
     await observer.query("DROP TABLE IF EXISTS braid_contract_metadata");
-    await observer.query("CREATE TABLE braid_contract_metadata (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL)");
+    await observer.query(
+      "CREATE TABLE braid_contract_metadata (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+    );
     const observerDb = createMysql2Database(observer);
     await commandMetadataContract(createMysql2Database(client), sql, () =>
-      observerDb.all(sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`));
+      observerDb.all(sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`),
+    );
   } finally {
-    await observer.query("DROP TABLE IF EXISTS braid_contract_metadata");
-    await client.end();
-    await observer.end();
+    try {
+      await observer.query("DROP TABLE IF EXISTS braid_contract_metadata");
+    } finally {
+      await Promise.all([client.end(), observer.end()]);
+    }
   }
 });
 

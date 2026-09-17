@@ -701,86 +701,135 @@ test("Tedious pooled stream waits for request completion before releasing its le
   assert.deepEqual(events, ["complete", "release"]);
 });
 
-for (const ownership of ["direct", "pooled"] as const) for (const mode of ["stream-return", "stream-read-failure", "cleanup-failure"] as const) {
-  test(`[contract:tedious:resource.${mode}:boundary] [ownership:${ownership}] request completion precedes exactly one healthy release or discard`, async () => {
-    const primary = new Error("native row read failed");
-    const cleanup = new Error("native request cancel failed");
-    const events: string[] = [];
-    let acquired = 0;
-    let cancelled = 0;
-    const physical = {
-      ...mssqlStreamingConnection({
-        failAt: mode === "stream-return" ? undefined : 0,
-        readFailure: primary,
-        cancelFailure: mode === "cleanup-failure" ? cleanup : undefined,
-        onStart() { events.push("created"); },
-        onCancel() { cancelled++; },
-        onComplete() { events.push("completed"); },
-      }),
-      async release() { events.push("released"); },
-      async destroy() { events.push("discarded"); },
-    };
-    const db = ownership === "direct" ? createTediousDatabase(physical) : createTediousPoolDatabase({
-      async acquire() { acquired++; return physical; },
-    });
-    const consume = async () => {
-      for await (const row of db.stream(mssqlSql.rows<{ VALUE: string }>`SELECT value FROM braid_stream`)) {
-        assert.equal(row.VALUE, "1");
-        break;
-      }
-    };
-    if (mode === "stream-return") await consume();
-    else await assert.rejects(consume(), error => mode === "stream-read-failure"
-      ? error === primary
-      : error instanceof AggregateError && error.cause === primary && error.errors.includes(primary) && error.errors.includes(cleanup));
-    assert.equal(acquired, ownership === "pooled" ? 1 : 0);
-    assert.equal(cancelled, 1);
-    assert.deepEqual(events, ["created", "completed", ...(ownership === "pooled" ? [mode === "cleanup-failure" ? "discarded" : "released"] : [])]);
-    if (mode === "cleanup-failure" && ownership === "direct") {
-      await assert.rejects(db.execute(mssqlSql.command`UPDATE braid_stream SET value = 1`), { code: "BRAID_CONNECTION_POISONED" });
-      assert.deepEqual(events, ["created", "completed"]);
-    }
-  });
-}
-
-for (const ownership of ["direct", "pooled"] as const) for (const phase of ["before-handoff", "in-flight", "iteration"] as const) {
-  test(`[contract:tedious:cancellation.${phase}:boundary] [ownership:${ownership}] native cancellation drains the request before exactly one lease release`, async () => {
-    const controller = new AbortController();
-    const reason = new Error("cancel native request");
-    const started = Promise.withResolvers<void>();
-    const events: string[] = [];
-    let cancelled = 0;
-    let yielded = 0;
-    const physical = {
-      ...mssqlStreamingConnection({
-        onStart() {
-          events.push("created");
-          started.resolve();
-          if (phase === "before-handoff") controller.abort(reason);
+for (const ownership of ["direct", "pooled"] as const)
+  for (const mode of ["stream-return", "stream-read-failure", "cleanup-failure"] as const) {
+    test(`[contract:tedious:resource.${mode}:boundary] [ownership:${ownership}] request completion precedes exactly one healthy release or discard`, async () => {
+      const primary = new Error("native row read failed");
+      const cleanup = new Error("native request cancel failed");
+      const events: string[] = [];
+      let acquired = 0;
+      let cancelled = 0;
+      const physical = {
+        ...mssqlStreamingConnection({
+          failAt: mode === "stream-return" ? undefined : 0,
+          readFailure: primary,
+          cancelFailure: mode === "cleanup-failure" ? cleanup : undefined,
+          onStart() {
+            events.push("created");
+          },
+          onCancel() {
+            cancelled++;
+          },
+          onComplete() {
+            events.push("completed");
+          },
+        }),
+        async destroy() {
+          events.push("discarded");
         },
-        onCancel() { cancelled++; },
-        onComplete() { events.push("completed"); },
-      }),
-      async release() { events.push("released"); },
-      async destroy() { events.push("discarded"); },
-    };
-    const db = ownership === "direct" ? createTediousDatabase(physical) : createTediousPoolDatabase({ async acquire() { return physical; } });
-    const pending = (async () => {
-      for await (const row of db.stream(mssqlSql.rows`SELECT value FROM braid_stream`, { signal: controller.signal })) {
-        void row;
-        yielded++;
-        controller.abort(reason);
+      };
+      const db =
+        ownership === "direct"
+          ? createTediousDatabase(physical)
+          : createTediousPoolDatabase({
+              async acquire() {
+                acquired++;
+                return Object.assign(physical, {
+                  async release() {
+                    events.push("released");
+                  },
+                });
+              },
+            });
+      const consume = async () => {
+        for await (const row of db.stream(mssqlSql.rows<{ VALUE: string }>`SELECT value FROM braid_stream`)) {
+          assert.equal(row.VALUE, "1");
+          break;
+        }
+      };
+      if (mode === "stream-return") await consume();
+      else
+        await assert.rejects(consume(), (error) =>
+          mode === "stream-read-failure"
+            ? error === primary
+            : error instanceof AggregateError &&
+              error.cause === primary &&
+              error.errors.includes(primary) &&
+              error.errors.includes(cleanup),
+        );
+      assert.equal(acquired, ownership === "pooled" ? 1 : 0);
+      assert.equal(cancelled, 1);
+      assert.deepEqual(events, [
+        "created",
+        "completed",
+        ...(ownership === "pooled" ? [mode === "cleanup-failure" ? "discarded" : "released"] : []),
+      ]);
+      if (mode === "cleanup-failure" && ownership === "direct") {
+        await assert.rejects(db.execute(mssqlSql.command`UPDATE braid_stream SET value = 1`), {
+          code: "BRAID_CONNECTION_POISONED",
+        });
+        assert.deepEqual(events, ["created", "completed"]);
       }
-    })();
-    const rejected = assert.rejects(pending, error => error === reason);
-    await started.promise;
-    if (phase === "in-flight") controller.abort(reason);
-    await rejected;
-    assert.equal(yielded, phase === "iteration" ? 1 : 0);
-    assert.equal(cancelled, 1);
-    assert.deepEqual(events, ["created", "completed", ...(ownership === "pooled" ? ["released"] : [])]);
-  });
-}
+    });
+  }
+
+for (const ownership of ["direct", "pooled"] as const)
+  for (const phase of ["before-handoff", "in-flight", "iteration"] as const) {
+    test(`[contract:tedious:cancellation.${phase}:boundary] [ownership:${ownership}] native cancellation drains the request before exactly one lease release`, async () => {
+      const controller = new AbortController();
+      const reason = new Error("cancel native request");
+      const started = Promise.withResolvers<void>();
+      const events: string[] = [];
+      let cancelled = 0;
+      let yielded = 0;
+      const physical = {
+        ...mssqlStreamingConnection({
+          onStart() {
+            events.push("created");
+            started.resolve();
+            if (phase === "before-handoff") controller.abort(reason);
+          },
+          onCancel() {
+            cancelled++;
+          },
+          onComplete() {
+            events.push("completed");
+          },
+        }),
+        async destroy() {
+          events.push("discarded");
+        },
+      };
+      const db =
+        ownership === "direct"
+          ? createTediousDatabase(physical)
+          : createTediousPoolDatabase({
+              async acquire() {
+                return Object.assign(physical, {
+                  async release() {
+                    events.push("released");
+                  },
+                });
+              },
+            });
+      const pending = (async () => {
+        for await (const row of db.stream(mssqlSql.rows`SELECT value FROM braid_stream`, {
+          signal: controller.signal,
+        })) {
+          void row;
+          yielded++;
+          controller.abort(reason);
+        }
+      })();
+      const rejected = assert.rejects(pending, (error) => error === reason);
+      await started.promise;
+      if (phase === "in-flight") controller.abort(reason);
+      await rejected;
+      assert.equal(yielded, phase === "iteration" ? 1 : 0);
+      assert.equal(cancelled, 1);
+      assert.deepEqual(events, ["created", "completed", ...(ownership === "pooled" ? ["released"] : [])]);
+    });
+  }
 
 test("Tedious native procedure calls preserve OUTPUT, RETURN status, and heterogeneous result sets", async () => {
   let procedureCalls = 0;

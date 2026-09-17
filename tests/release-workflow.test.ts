@@ -156,13 +156,7 @@ test("explicit staging reaches only the staging job and a successful stage autho
 
 test("missing semantic evidence blocks certification and staging even when database jobs pass", () => {
   for (const mode of ["certify", "stage"]) {
-    const { results } = graph(
-      release,
-      "workflow_dispatch",
-      mode,
-      "refs/tags/v1.0.0",
-      "release-semantic-contracts",
-    );
+    const { results } = graph(release, "workflow_dispatch", mode, "refs/tags/v1.0.0", "release-semantic-contracts");
     assert.equal(results["release-db"].result, "success");
     assert.equal(results["release-common"].result, "success");
     assert.equal(results["release-final"].result, "skipped");

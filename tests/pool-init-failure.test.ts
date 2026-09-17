@@ -122,8 +122,11 @@ const providers: readonly {
 ];
 
 for (const fixture of providers) {
-  const id = ({ PostgreSQL: "pg", Tedious: "tedious", MariaDB: "mariadb" } as Record<string, string>)[fixture.name] ?? fixture.name;
+  const id =
+    ({ PostgreSQL: "pg", Tedious: "tedious", MariaDB: "mariadb" } as Record<string, string>)[fixture.name] ??
+    fixture.name;
   const nativeInit = id.startsWith("bun-sql-") ? ` [contract:${id}:resource.init-failure:boundary]` : "";
+  const nativeCleanup = id.startsWith("bun-sql-") ? ` [contract:${id}:resource.cleanup-failure:boundary]` : "";
   test(`[contract:${id}:pool.checkout-init-failure:boundary]${nativeInit} [ownership:pooled] ${fixture.name} releases every failed initialization and preserves its original error`, async () => {
     const primary = new Error("executor setup failed");
     let acquired = 0;
@@ -146,7 +149,7 @@ for (const fixture of providers) {
     assert.equal(released, acquired);
   });
 
-  test(`[contract:${id}:pool.checkout-init-failure:boundary] [ownership:pooled] ${fixture.name} preserves initialization and cleanup errors without retrying cleanup`, async () => {
+  test(`[contract:${id}:pool.checkout-init-failure:boundary]${nativeCleanup} [ownership:pooled] ${fixture.name} preserves initialization and cleanup errors without retrying cleanup`, async () => {
     const primary = new Error("executor setup failed");
     const cleanup = new Error("physical release failed");
     let acquired = 0;

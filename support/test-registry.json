@@ -107,7 +107,7 @@
   },
   "d1.execution.rc-session": {
     "file": "tests/db/d1/capabilities.test.ts",
-    "title": "d1.execution.bulk",
+    "title": "[contract:cloudflare-d1:metadata.affected-rows:integration] d1.execution.bulk",
     "outcome": "failure"
   },
   "postgres.sql.native-transparency": {
@@ -132,7 +132,7 @@
   },
   "postgres.numeric.transport": {
     "file": "tests/db/postgres/capabilities.test.ts",
-    "title": "postgres.pv17.numeric-transport"
+    "title": "[contract:pg:metadata.affected-rows:integration] postgres.pv17.numeric-transport"
   },
   "postgres.data.temporal-lossless": {
     "file": "tests/db/postgres/capabilities.test.ts",
@@ -500,7 +500,7 @@
   },
   "oracle.execution.transaction": {
     "file": "tests/db/oracle/pv15-routines.test.ts",
-    "title": "Oracle transaction streams retain the pinned physical session until iterator cleanup"
+    "title": "[contract:node-oracledb:resource.stream-return:integration] [ownership:direct] Oracle transaction streams retain the pinned physical session until iterator cleanup"
   },
   "oracle.execution.savepoint": {
     "file": "tests/db/oracle/w01.test.ts",
@@ -548,7 +548,7 @@
   },
   "oracle.command.safe-count": {
     "file": "tests/db/oracle/capabilities.test.ts",
-    "title": "oracle.command.safe-count"
+    "title": "[contract:node-oracledb:metadata.affected-rows:integration] oracle.command.safe-count"
   },
   "oracle.binary.finite-transport": {
     "file": "tests/db/oracle/capabilities.test.ts",
@@ -605,11 +605,11 @@
   },
   "mssql.result.rows": {
     "file": "tests/db/mssql/capabilities.test.ts",
-    "title": "mssql.dml.insert-returning"
+    "title": "[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning"
   },
   "mssql.result.command": {
     "file": "tests/db/mssql/capabilities.test.ts",
-    "title": "mssql.dml.insert-returning"
+    "title": "[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning"
   },
   "mssql.result.multiple-sets": {
     "file": "tests/db/mssql/pv15-routines.test.ts",
@@ -617,15 +617,15 @@
   },
   "mssql.result.standard-schema": {
     "file": "tests/db/mssql/capabilities.test.ts",
-    "title": "mssql.dml.insert-returning"
+    "title": "[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning"
   },
   "mssql.execution.prepared": {
     "file": "tests/db/mssql/capabilities.test.ts",
-    "title": "mssql.dml.insert-returning"
+    "title": "[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning"
   },
   "mssql.execution.bulk": {
     "file": "tests/db/mssql/capabilities.test.ts",
-    "title": "mssql.dml.insert-returning"
+    "title": "[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning"
   },
   "mssql.execution.stream": {
     "file": "tests/db/mssql/pv15-routines.test.ts",
@@ -674,19 +674,19 @@
   },
   "mssql.dml.update-returning": {
     "file": "tests/db/mssql/capabilities.test.ts",
-    "title": "mssql.dml.insert-returning"
+    "title": "[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning"
   },
   "mssql.dml.delete-returning": {
     "file": "tests/db/mssql/capabilities.test.ts",
-    "title": "mssql.dml.insert-returning"
+    "title": "[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning"
   },
   "mssql.dml.merge-returning": {
     "file": "tests/db/mssql/capabilities.test.ts",
-    "title": "mssql.dml.insert-returning"
+    "title": "[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning"
   },
   "mssql.dml.insert-returning": {
     "file": "tests/db/mssql/capabilities.test.ts",
-    "title": "mssql.dml.insert-returning"
+    "title": "[contract:tedious:metadata.affected-rows:integration] mssql.dml.insert-returning"
   },
   "mariadb.sql.native-transparency": {
     "file": "tests/db/mariadb/capabilities.test.ts",
@@ -790,7 +790,7 @@
   },
   "mariadb.execution.stream": {
     "file": "tests/db/mariadb/pv16.test.ts",
-    "title": "MariaDB Connector queryStream satisfies shared stream lifecycle"
+    "title": "[contract:mariadb:resource.stream-return:integration] [ownership:pooled] MariaDB Connector queryStream satisfies shared stream lifecycle"
   },
   "mariadb.dml.insert-returning": {
     "file": "tests/db/mariadb/pv16.test.ts",
@@ -834,7 +834,7 @@
   },
   "d1.execution.bulk": {
     "file": "tests/db/d1/capabilities.test.ts",
-    "title": "d1.execution.bulk"
+    "title": "[contract:cloudflare-d1:metadata.affected-rows:integration] d1.execution.bulk"
   },
   "d1.result.rows": {
     "file": "tests/db/d1/capabilities.test.ts",
@@ -842,16 +842,16 @@
   },
   "d1.result.command": {
     "file": "tests/db/d1/capabilities.test.ts",
-    "title": "d1.execution.bulk"
+    "title": "[contract:cloudflare-d1:metadata.affected-rows:integration] d1.execution.bulk"
   },
   "d1.execution.stream": {
     "file": "tests/db/d1/capabilities.test.ts",
-    "title": "d1.execution.bulk",
+    "title": "[contract:cloudflare-d1:metadata.affected-rows:integration] d1.execution.bulk",
     "outcome": "failure"
   },
   "d1.execution.transaction": {
     "file": "tests/db/d1/capabilities.test.ts",
-    "title": "d1.execution.bulk",
+    "title": "[contract:cloudflare-d1:metadata.affected-rows:integration] d1.execution.bulk",
     "outcome": "failure"
   },
   "wasm.sql.native-transparency": {
@@ -876,11 +876,11 @@
   },
   "wasm.execution.bulk": {
     "file": "tests/db/wasm/capabilities.test.ts",
-    "title": "wasm.execution.bulk"
+    "title": "[contract:sqlite-wasm:metadata.affected-rows:integration] wasm.execution.bulk"
   },
   "wasm.execution.stream": {
     "file": "tests/db/wasm/capabilities.test.ts",
-    "title": "wasm.execution.stream"
+    "title": "[contract:sqlite-wasm:resource.stream-return:integration] [ownership:direct] wasm.execution.stream"
   },
   "wasm.execution.mapped-transaction": {
     "file": "tests/db/wasm/capabilities.test.ts",

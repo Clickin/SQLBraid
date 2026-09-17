@@ -4,262 +4,168 @@
     {
       "id": "transaction.commit-confirmed",
       "family": "transaction-outcome",
-      "requires": [
-        "capability:transaction"
-      ],
-      "evidence": [
-        "integration"
-      ],
+      "requires": ["capability:transaction"],
+      "evidence": ["integration"],
       "ownership": "each",
       "description": "A successful callback resolves only after writes are durable to an independent physical observer."
     },
     {
       "id": "transaction.callback-rollback",
       "family": "transaction-outcome",
-      "requires": [
-        "capability:transaction"
-      ],
-      "evidence": [
-        "integration"
-      ],
+      "requires": ["capability:transaction"],
+      "evidence": ["integration"],
       "ownership": "each",
       "description": "A throwing callback leaves no transaction writes visible to an independent physical observer."
     },
     {
       "id": "transaction.statement-rollback",
       "family": "transaction-outcome",
-      "requires": [
-        "capability:transaction"
-      ],
-      "evidence": [
-        "integration"
-      ],
+      "requires": ["capability:transaction"],
+      "evidence": ["integration"],
       "ownership": "each",
       "description": "An uncaught statement error rolls back earlier writes."
     },
     {
       "id": "transaction.caught-error-terminal-outcome",
       "family": "transaction-outcome",
-      "requires": [
-        "capability:transaction"
-      ],
-      "evidence": [
-        "integration"
-      ],
+      "requires": ["capability:transaction"],
+      "evidence": ["integration"],
       "ownership": "each",
       "description": "A caught statement error never produces success when the database actually rolls back."
     },
     {
       "id": "transaction.savepoint-recovery",
       "family": "transaction-savepoint",
-      "requires": [
-        "capability:transaction.savepoint"
-      ],
-      "evidence": [
-        "integration"
-      ],
+      "requires": ["capability:transaction.savepoint"],
+      "evidence": ["integration"],
       "ownership": "each",
       "description": "Failed nested work disappears while successful outer writes commit."
     },
     {
       "id": "transaction.savepoint-rollback-failure",
       "family": "transaction-savepoint",
-      "requires": [
-        "capability:transaction.savepoint"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:transaction.savepoint"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Rollback-to failure preserves both failures and prevents commit or healthy reuse of uncertain state."
     },
     {
       "id": "transaction.savepoint-create-failure",
       "family": "transaction-savepoint",
-      "requires": [
-        "capability:transaction.savepoint"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:transaction.savepoint"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Failed native savepoint creation never enters the nested callback."
     },
     {
       "id": "transaction.savepoint-release-failure",
       "family": "transaction-savepoint",
-      "requires": [
-        "capability:transaction.savepoint",
-        "native:savepoint-release"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:transaction.savepoint", "native:savepoint-release"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Native savepoint release failure cannot report nested success."
     },
     {
       "id": "transaction.commit-failure",
       "family": "transaction-outcome",
-      "requires": [
-        "capability:transaction"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:transaction"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Failed COMMIT rejects without retry and poisons or discards uncertain resources."
     },
     {
       "id": "transaction.commit-terminal-outcome",
       "family": "transaction-outcome",
-      "requires": [
-        "capability:transaction",
-        "native:commit-status"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:transaction", "native:commit-status"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Native COMMIT metadata reporting rollback rejects instead of returning callback success."
     },
     {
       "id": "transaction.rollback-failure",
       "family": "transaction-outcome",
-      "requires": [
-        "capability:transaction"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:transaction"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Rollback failure retains the original error and prevents healthy resource reuse."
     },
     {
       "id": "transaction.autocommit-ownership",
       "family": "transaction-options",
-      "requires": [
-        "capability:transaction",
-        "native:statement-autocommit"
-      ],
-      "evidence": [
-        "integration",
-        "boundary"
-      ],
+      "requires": ["capability:transaction", "native:statement-autocommit"],
+      "evidence": ["integration", "boundary"],
       "ownership": "each",
       "description": "Explicit and global native auto-commit cannot commit SQLBraid-owned transactional work."
     },
     {
       "id": "transaction.access-mode",
       "family": "transaction-options",
-      "requires": [
-        "capability:transaction.read-only"
-      ],
-      "evidence": [
-        "integration",
-        "boundary"
-      ],
+      "requires": ["capability:transaction.read-only"],
+      "evidence": ["integration", "boundary"],
       "ownership": "each",
       "description": "Omitted, true and false preserve default, read-only and read-write semantics respectively."
     },
     {
       "id": "pool.checkout-init-failure",
       "family": "pool-ownership",
-      "requires": [
-        "native:pool"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["native:pool"],
+      "evidence": ["boundary"],
       "ownership": "pooled",
       "description": "Failed executor initialization after checkout releases or discards the native connection exactly once."
     },
     {
       "id": "resource.root-lease",
       "family": "resource-lifecycle",
-      "requires": [
-        "native:pool"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["native:pool"],
+      "evidence": ["boundary"],
       "ownership": "pooled",
       "description": "A root materialized operation acquires and releases exactly one lease on success and failure."
     },
     {
       "id": "resource.session-lease",
       "family": "resource-lifecycle",
-      "requires": [
-        "native:pool",
-        "capability:session.pinned"
-      ],
-      "evidence": [
-        "integration",
-        "boundary"
-      ],
+      "requires": ["native:pool", "capability:session.pinned"],
+      "evidence": ["integration", "boundary"],
       "ownership": "pooled",
       "description": "Session work pins one physical lease until scope completion on success and failure."
     },
     {
       "id": "resource.transaction-lease",
       "family": "resource-lifecycle",
-      "requires": [
-        "native:pool",
-        "capability:transaction"
-      ],
-      "evidence": [
-        "integration",
-        "boundary"
-      ],
+      "requires": ["native:pool", "capability:transaction"],
+      "evidence": ["integration", "boundary"],
       "ownership": "pooled",
       "description": "Transaction work owns one lease and releases once, discarding uncertain transaction state."
     },
     {
       "id": "resource.init-failure",
       "family": "resource-lifecycle",
-      "requires": [
-        "native:resource-init"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["native:resource-init"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Native resources acquired before a fallible initialization step close exactly once if that step fails."
     },
     {
       "id": "resource.stream-return",
       "family": "resource-lifecycle",
-      "requires": [
-        "capability:statement.stream"
-      ],
-      "evidence": [
-        "integration",
-        "boundary"
-      ],
+      "requires": ["capability:statement.stream"],
+      "evidence": ["integration", "boundary"],
       "ownership": "each",
       "description": "Early stream return closes native iteration and releases its lease."
     },
     {
       "id": "resource.stream-read-failure",
       "family": "resource-lifecycle",
-      "requires": [
-        "capability:statement.stream"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:statement.stream"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Read failure closes native iteration, preserves the failure and selects correct resource health."
     },
     {
       "id": "resource.cleanup-failure",
       "family": "resource-lifecycle",
-      "requires": [
-        "native:cleanup"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["native:cleanup"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Native cleanup failure is retained alongside any primary error and prevents healthy reuse."
     },
@@ -267,72 +173,47 @@
       "id": "cancellation.pre-io",
       "family": "cancellation",
       "requires": [],
-      "evidence": [
-        "boundary"
-      ],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "A pre-aborted signal rejects with its reason before lease or native I/O acquisition."
     },
     {
       "id": "cancellation.in-flight",
       "family": "cancellation",
-      "requires": [
-        "capability:statement.cancel"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:statement.cancel"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "In-flight abort invokes the native cancellation primitive and handles uncertain resource health."
     },
     {
       "id": "cancellation.before-handoff",
       "family": "cancellation",
-      "requires": [
-        "capability:statement.cancel",
-        "capability:statement.stream"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:statement.cancel", "capability:statement.stream"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Abort after native resource creation closes that resource before ownership handoff."
     },
     {
       "id": "cancellation.iteration",
       "family": "cancellation",
-      "requires": [
-        "capability:statement.cancel",
-        "capability:statement.stream"
-      ],
-      "evidence": [
-        "boundary"
-      ],
+      "requires": ["capability:statement.cancel", "capability:statement.stream"],
+      "evidence": ["boundary"],
       "ownership": "each",
       "description": "Aborted iteration closes its cursor and releases or discards its lease."
     },
     {
       "id": "metadata.exact-id",
       "family": "command-metadata",
-      "requires": [
-        "native:insert-id"
-      ],
-      "evidence": [
-        "integration",
-        "boundary"
-      ],
+      "requires": ["native:insert-id"],
+      "evidence": ["integration", "boundary"],
       "ownership": "any",
       "description": "Command insert IDs preserve exact large integers; unsafe numbers are rejected before claiming fidelity."
     },
     {
       "id": "metadata.stale-id",
       "family": "command-metadata",
-      "requires": [
-        "native:insert-id"
-      ],
-      "evidence": [
-        "integration"
-      ],
+      "requires": ["native:insert-id"],
+      "evidence": ["integration"],
       "ownership": "any",
       "description": "Large insert IDs do not contaminate subsequent UPDATE, DELETE or other command metadata."
     },
@@ -340,10 +221,7 @@
       "id": "metadata.affected-rows",
       "family": "command-metadata",
       "requires": [],
-      "evidence": [
-        "integration",
-        "boundary"
-      ],
+      "evidence": ["integration", "boundary"],
       "ownership": "any",
       "description": "Affected row counts accept safe counts and reject unsafe or malformed native metadata consistently."
     }

@@ -433,23 +433,42 @@ for (const cleanupFails of [false, true]) {
     let acquired = 0;
     let closed = 0;
     let callbackRan = false;
-    const db = createLibsqlDatabase(fakeClient(
-      async () => rowsResult([], []),
-      async () => [],
-      async () => {
-        acquired++;
-        return {
-          get execute() { throw primary; },
-          async batch() { return []; },
-          async commit() {},
-          async rollback() {},
-          async close() { closed++; if (cleanupFails) throw cleanup; },
-        };
-      },
-    ), { intMode: "string" });
-    await assert.rejects(db.tx(async () => { callbackRan = true; }), error => cleanupFails
-      ? error instanceof AggregateError && error.cause === primary && error.errors.includes(primary) && error.errors.includes(cleanup)
-      : error === primary);
+    const db = createLibsqlDatabase(
+      fakeClient(
+        async () => rowsResult([], []),
+        async () => [],
+        async () => {
+          acquired++;
+          return {
+            get execute(): never {
+              throw primary;
+            },
+            async batch() {
+              return [];
+            },
+            async commit() {},
+            async rollback() {},
+            async close() {
+              closed++;
+              if (cleanupFails) throw cleanup;
+            },
+          };
+        },
+      ),
+      { intMode: "string" },
+    );
+    await assert.rejects(
+      db.tx(async () => {
+        callbackRan = true;
+      }),
+      (error) =>
+        cleanupFails
+          ? error instanceof AggregateError &&
+            error.cause === primary &&
+            error.errors.includes(primary) &&
+            error.errors.includes(cleanup)
+          : error === primary,
+    );
     assert.equal(callbackRan, false);
     assert.equal(acquired, 1);
     assert.equal(closed, 1);

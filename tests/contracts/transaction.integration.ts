@@ -33,7 +33,9 @@ const scenarios: Record<string, (h: TransactionIntegrationHarness) => Promise<vo
     }
     assert.equal(first, "A");
     // A max-one pool must have returned its lease; direct adapters must release their iterator.
-    await db.tx(async (tx) => { await write(tx, "D"); });
+    await db.tx(async (tx) => {
+      await write(tx, "D");
+    });
     assert.deepEqual(await committedRows(), ["A", "B", "C", "D"]);
   },
   "resource.session-lease": async (h) => {
@@ -117,7 +119,11 @@ const scenarios: Record<string, (h: TransactionIntegrationHarness) => Promise<vo
       assert.equal(await result, "callback succeeded");
       assert.deepEqual(await committedRows(), ["A"]);
     }
-    assert.equal(callbackReturned, true, "the terminal outcome must follow a successful callback, not an uncaught error");
+    assert.equal(
+      callbackReturned,
+      true,
+      "the terminal outcome must follow a successful callback, not an uncaught error",
+    );
   },
   "transaction.savepoint-recovery": async ({ db, write, committedRows }) => {
     const failure = new Error("contract nested rollback");
@@ -170,7 +176,10 @@ export function transactionIntegrationTests(
   return Object.entries(scenarios)
     .filter(([scenario]) => scenario !== "transaction.access-mode" || options.accessMode)
     .filter(([scenario]) => scenario !== "resource.stream-return" || options.stream)
-    .filter(([scenario]) => !["resource.session-lease", "resource.transaction-lease"].includes(scenario) || options.pooledLease)
+    .filter(
+      ([scenario]) =>
+        !["resource.session-lease", "resource.transaction-lease"].includes(scenario) || options.pooledLease,
+    )
     .map(([scenario, run]) => ({
       title: `[contract:${transport}:${scenario}:integration] [ownership:${mode}]`,
       async run() {

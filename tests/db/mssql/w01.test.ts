@@ -53,41 +53,61 @@ async function close(connection: Connection): Promise<void> {
 }
 
 for (const mode of ["direct", "pooled"] as const) {
-  for (const contract of transactionIntegrationTests("tedious", mode, async () => {
-    const settings = inject("mssql") as MssqlSettings;
-    const observer = await connect(settings);
-    const observerDb = createTediousDatabase(observer);
-    const connection = mode === "direct" ? await connect(settings) : undefined;
-    let active = false;
-    // Tedious itself has no pool class. Exercise SQLBraid's native pool-provider boundary
-    // with real checked-out connections, closing each lease on return.
-    const db = connection ? createTediousDatabase(connection) : createTediousPoolDatabase({
-      async acquire() {
-        assert.equal(active, false, "a previous Tedious pool lease was not released");
-        active = true;
-        const leased = await connect(settings);
-        return Object.assign(leased, {
-          release: async () => { await close(leased); active = false; },
-          destroy: async () => { await close(leased); active = false; },
-        });
-      },
-    });
-    await observerDb.execute(sql`DROP TABLE IF EXISTS braid_contract_tx`);
-    await observerDb.execute(sql`CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY)`);
-    return {
-      db,
-      caughtStatementOutcome: "commit",
-      streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
-      physicalId: async (scope) => (await scope.one(sql.rows<{ id: string }>`SELECT @@SPID AS id`)).id,
-      write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
-      committedRows: async () =>
-        (await observerDb.all(sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`)).map((row) => row.id),
-      close: async () => {
-        try { await observerDb.execute(sql`DROP TABLE braid_contract_tx`); }
-        finally { if (connection) await close(connection); await close(observer); }
-      },
-    };
-  }, { pooledLease: mode === "pooled", stream: true })) test(contract.title, contract.run);
+  for (const contract of transactionIntegrationTests(
+    "tedious",
+    mode,
+    async () => {
+      const settings = inject("mssql") as MssqlSettings;
+      const observer = await connect(settings);
+      const observerDb = createTediousDatabase(observer);
+      const connection = mode === "direct" ? await connect(settings) : undefined;
+      let active: Connection | undefined;
+      // Tedious itself has no pool class. Exercise SQLBraid's native pool-provider boundary
+      // with real checked-out connections, closing each lease on return.
+      const db = connection
+        ? createTediousDatabase(connection)
+        : createTediousPoolDatabase({
+            async acquire() {
+              assert.equal(active, undefined, "a previous Tedious pool lease was not released");
+              const leased = await connect(settings);
+              active = leased;
+              return Object.assign(leased, {
+                release: async () => {
+                  await close(leased);
+                  active = undefined;
+                },
+                destroy: async () => {
+                  await close(leased);
+                  active = undefined;
+                },
+              });
+            },
+          });
+      await observerDb.execute(sql`DROP TABLE IF EXISTS braid_contract_tx`);
+      await observerDb.execute(sql`CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY)`);
+      return {
+        db,
+        caughtStatementOutcome: "commit",
+        streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
+        physicalId: async (scope) => (await scope.one(sql.rows<{ id: string }>`SELECT @@SPID AS id`)).id,
+        write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+        committedRows: async () =>
+          (await observerDb.all(sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`)).map(
+            (row) => row.id,
+          ),
+        close: async () => {
+          try {
+            assert.equal(active, undefined, "the final Tedious pool lease was not released");
+            await observerDb.execute(sql`DROP TABLE braid_contract_tx`);
+          } finally {
+            await Promise.all([connection && close(connection), active && close(active), close(observer)]);
+          }
+        },
+      };
+    },
+    { pooledLease: mode === "pooled", stream: true },
+  ))
+    test(contract.title, contract.run);
 }
 
 test("SQL Server binding diagnostics preserve literal marker text through real execution", async () => {

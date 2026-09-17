@@ -89,36 +89,51 @@ async function readManifest(dialect) {
 async function runTransactionContracts(dialect) {
   const sqlTag = dialectTags[dialect];
   const assertions = [];
-  const tests = transactionIntegrationTests(`bun-sql-${dialect}`, dialect === "sqlite" ? "direct" : "pooled", async () => {
-    const directory = dialect === "sqlite" ? await mkdtemp(join(tmpdir(), "sqlbraid-bun-contract-")) : undefined;
-    const url = directory ? join(directory, "database.db") : configuredUrl(dialect);
-    const client = dialect === "sqlite" ? connection(dialect, url) : new SQL(url, { bigint: true, max: 1 });
-    const observer = connection(dialect, url);
-    const db = createBunSqlDatabase(client, { dialect });
-    await observer.unsafe("DROP TABLE IF EXISTS braid_contract_tx", []);
-    await observer.unsafe("CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY)", []);
-    const setAccess = dialect === "postgres" ? "SET SESSION CHARACTERISTICS AS TRANSACTION" : "SET SESSION TRANSACTION";
-    return {
-      db,
-      caughtStatementOutcome: dialect === "postgres" ? "rollback" : "commit",
-      physicalId: async (scope) => (await scope.one(connectionId(sqlTag))).connection_id,
-      write: (tx, id) => tx.execute(sqlTag.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
-      committedRows: async () => (await observer.unsafe("SELECT id FROM braid_contract_tx ORDER BY id", [])).map((row) => row.id),
-      accessMode: dialect === "sqlite" ? undefined : {
-        inheritedReadOnly: true,
-        setDefault: async () => { await client.unsafe(`${setAccess} READ ONLY`, []); },
-        restoreDefault: async () => { await client.unsafe(`${setAccess} READ WRITE`, []); },
-      },
-      close: async () => {
-        try { await observer.unsafe("DROP TABLE braid_contract_tx", []); }
-        finally {
-          await client.close();
-          await observer.close();
-          if (directory) await rm(directory, { recursive: true, force: true });
-        }
-      },
-    };
-  }, { accessMode: dialect !== "sqlite", pooledLease: dialect !== "sqlite" });
+  const tests = transactionIntegrationTests(
+    `bun-sql-${dialect}`,
+    dialect === "sqlite" ? "direct" : "pooled",
+    async () => {
+      const directory = dialect === "sqlite" ? await mkdtemp(join(tmpdir(), "sqlbraid-bun-contract-")) : undefined;
+      const url = directory ? join(directory, "database.db") : configuredUrl(dialect);
+      const client = dialect === "sqlite" ? connection(dialect, url) : new SQL(url, { bigint: true, max: 1 });
+      const observer = connection(dialect, url);
+      const db = createBunSqlDatabase(client, { dialect });
+      await observer.unsafe("DROP TABLE IF EXISTS braid_contract_tx", []);
+      await observer.unsafe("CREATE TABLE braid_contract_tx (id VARCHAR(255) PRIMARY KEY)", []);
+      const setAccess =
+        dialect === "postgres" ? "SET SESSION CHARACTERISTICS AS TRANSACTION" : "SET SESSION TRANSACTION";
+      return {
+        db,
+        caughtStatementOutcome: dialect === "postgres" ? "rollback" : "commit",
+        physicalId: async (scope) => (await scope.one(connectionId(sqlTag))).connection_id,
+        write: (tx, id) => tx.execute(sqlTag.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+        committedRows: async () =>
+          (await observer.unsafe("SELECT id FROM braid_contract_tx ORDER BY id", [])).map((row) => row.id),
+        accessMode:
+          dialect === "sqlite"
+            ? undefined
+            : {
+                inheritedReadOnly: true,
+                setDefault: async () => {
+                  await client.unsafe(`${setAccess} READ ONLY`, []);
+                },
+                restoreDefault: async () => {
+                  await client.unsafe(`${setAccess} READ WRITE`, []);
+                },
+              },
+        close: async () => {
+          try {
+            await observer.unsafe("DROP TABLE braid_contract_tx", []);
+          } finally {
+            await client.close();
+            await observer.close();
+            if (directory) await rm(directory, { recursive: true, force: true });
+          }
+        },
+      };
+    },
+    { accessMode: dialect !== "sqlite", pooledLease: dialect !== "sqlite" },
+  );
   for (const contract of tests) {
     await contract.run();
     assertions.push({ fullName: contract.title, status: "passed" });
@@ -130,19 +145,28 @@ async function runTransactionContracts(dialect) {
     const observer = connection(dialect, url);
     try {
       await observer.unsafe("DROP TABLE IF EXISTS braid_contract_metadata", []);
-      await observer.unsafe(`CREATE TABLE braid_contract_metadata (id ${dialect === "sqlite" ? "INTEGER PRIMARY KEY" : "BIGINT AUTO_INCREMENT PRIMARY KEY"}, name VARCHAR(255) NOT NULL)`, []);
+      await observer.unsafe(
+        `CREATE TABLE braid_contract_metadata (id ${dialect === "sqlite" ? "INTEGER PRIMARY KEY" : "BIGINT AUTO_INCREMENT PRIMARY KEY"}, name VARCHAR(255) NOT NULL)`,
+        [],
+      );
       const db = createBunSqlDatabase(client, { dialect });
       await commandMetadataContract(db, sqlTag, async () =>
         (await observer.unsafe("SELECT id, name FROM braid_contract_metadata ORDER BY id", [])).map((row) => ({
           id: String(row.id),
           name: row.name,
-        })));
+        })),
+      );
       assertions.push({ fullName: commandMetadataTitle(`bun-sql-${dialect}`), status: "passed" });
     } finally {
-      await observer.unsafe("DROP TABLE IF EXISTS braid_contract_metadata", []);
-      await client.close();
-      await observer.close();
-      if (directory) await rm(directory, { recursive: true, force: true });
+      try {
+        await observer.unsafe("DROP TABLE IF EXISTS braid_contract_metadata", []);
+      } finally {
+        try {
+          await Promise.all([client.close(), observer.close()]);
+        } finally {
+          if (directory) await rm(directory, { recursive: true, force: true });
+        }
+      }
     }
   }
   return assertions;
@@ -257,7 +281,10 @@ async function runDialect(dialect) {
   assert.equal(bulkResult.inputCount, 2);
   assert.equal(bulkResult.affectedRows, 2);
   if (dialect === "postgres") {
-    contractAssertions.push({ fullName: "[contract:bun-sql-postgres:metadata.affected-rows:integration]", status: "passed" });
+    contractAssertions.push({
+      fullName: "[contract:bun-sql-postgres:metadata.affected-rows:integration]",
+      status: "passed",
+    });
   }
   const preparedCommand = db.prepare(
     "bun-sql-matrix-prepared-command",

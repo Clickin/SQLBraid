@@ -781,7 +781,11 @@ export function createMariaDbExecutor(
       const prepared = materialize(rendered, binding);
       const result = await executeWithCancellation(
         connection,
-        () => connection.execute({ sql: prepared.text, rowsAsArray: true, metaAsArray: true, insertIdAsNumber: false }, prepared.values),
+        () =>
+          connection.execute(
+            { sql: prepared.text, rowsAsArray: true, metaAsArray: true, insertIdAsNumber: false },
+            prepared.values,
+          ),
         executionOptions,
       );
       return resultRows(normalizeMetadataResult(result), policy) as QueryExecutionResult<Row>;
@@ -932,7 +936,11 @@ export function createMariaDbExecutor(
       const prepared = materialize(rendered, binding);
       const value = await executeWithCancellation(
         connection,
-        () => connection.execute({ sql: prepared.text, rowsAsArray: true, metaAsArray: true, insertIdAsNumber: false }, prepared.values),
+        () =>
+          connection.execute(
+            { sql: prepared.text, rowsAsArray: true, metaAsArray: true, insertIdAsNumber: false },
+            prepared.values,
+          ),
         executionOptions,
       );
       const normalized = normalizeMetadataResult(value);

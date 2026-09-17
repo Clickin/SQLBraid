@@ -132,7 +132,14 @@ try {
   for (const script of ["runtime-smoke.mjs", "runtime-driver-smoke.mjs"])
     await copyFile(join(root, "tests", "scripts", script), join(consumer, script));
   await copyFile(join(root, "tests", "db", "deno", "packed-runtime.test.mjs"), join(consumer, "deno-runtime.test.mjs"));
-  await copyFile(join(root, "tests", "scripts", "bun-sql-matrix.mjs"), join(consumer, "bun-sql-matrix.mjs"));
+  for (const script of [
+    "tests/scripts/bun-sql-matrix.mjs",
+    "tests/contracts/transaction.integration.ts",
+    "tests/db/command-metadata.ts",
+  ]) {
+    await mkdir(dirname(join(consumer, script)), { recursive: true });
+    await copyFile(join(root, script), join(consumer, script));
+  }
   await mkdir(join(consumer, "support", "targets"), { recursive: true });
   for (const dialect of ["postgres", "mysql", "mariadb", "sqlite"]) {
     await copyFile(
@@ -298,7 +305,7 @@ if (!process.versions.bun) {
           ]
         : ["entry.mjs"];
     if (target === "bun") {
-      await run("bun", ["bun-sql-matrix.mjs"], consumer, {
+      await run("bun", ["tests/scripts/bun-sql-matrix.mjs"], consumer, {
         ...env,
         SQLBRAID_RUNTIME_TARGET: target,
         SQLBRAID_SUPPORT_EVIDENCE_DIR: join(consumer, "runtime-observations"),

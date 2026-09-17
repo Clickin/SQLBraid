@@ -30,39 +30,67 @@ async function verifyBackend(dialect: string): Promise<{
   return result.results[0];
 }
 
+const results = new Map<string, ReturnType<typeof verifyBackend>>();
+function backend(dialect: string): ReturnType<typeof verifyBackend> {
+  let result = results.get(dialect);
+  if (!result) {
+    result = verifyBackend(dialect);
+    results.set(dialect, result);
+  }
+  return result;
+}
+
+async function verifyProfile(dialect: string): Promise<void> {
+  const result = await backend(dialect);
+  assert.equal(result.representations.exact_integer, "9007199254740993");
+  assert.deepEqual(result.bulk, { inputCount: 2, affectedRows: 2 });
+}
+
+test("bun-sql-postgres.data.profile", { timeout: 65_000 }, () => verifyProfile("postgres"));
+test("bun-sql-mysql.data.profile", { timeout: 65_000 }, () => verifyProfile("mysql"));
+test("bun-sql-mariadb.data.profile", { timeout: 65_000 }, () => verifyProfile("mariadb"));
+test("bun-sql-sqlite.data.profile", { timeout: 65_000 }, () => verifyProfile("sqlite"));
+
 for (const dialect of ["postgres", "mysql", "mariadb", "sqlite"]) {
   describe(`Bun SQL ${dialect}`, () => {
     let result: Awaited<ReturnType<typeof verifyBackend>>;
-    beforeAll(async () => { result = await verifyBackend(dialect); }, 65_000);
-    test(`bun-sql-${dialect}.data.profile`, () => {
-      assert.equal(result.representations.exact_integer, "9007199254740993");
-      assert.deepEqual(result.bulk, { inputCount: 2, affectedRows: 2 });
-    });
+    beforeAll(async () => {
+      result = await backend(dialect);
+    }, 65_000);
     const scenarios = [
       "transaction.commit-confirmed",
       "transaction.callback-rollback",
       "transaction.statement-rollback",
       "transaction.caught-error-terminal-outcome",
       "transaction.savepoint-recovery",
-      ...(dialect === "sqlite" ? [] : ["transaction.access-mode", "resource.session-lease", "resource.transaction-lease"]),
+      ...(dialect === "sqlite"
+        ? []
+        : ["transaction.access-mode", "resource.session-lease", "resource.transaction-lease"]),
     ];
     for (const scenario of scenarios) {
       const title = `[contract:bun-sql-${dialect}:${scenario}:integration] [ownership:${dialect === "sqlite" ? "direct" : "pooled"}]`;
       test(title, () => {
-        assert.deepEqual(result.contractAssertions.find((entry) => entry.fullName === title), {
-          fullName: title,
-          status: "passed",
-        });
+        assert.deepEqual(
+          result.contractAssertions.find((entry) => entry.fullName === title),
+          {
+            fullName: title,
+            status: "passed",
+          },
+        );
       });
     }
-    const metadataTitle = dialect === "postgres"
-      ? "[contract:bun-sql-postgres:metadata.affected-rows:integration]"
-      : commandMetadataTitle(`bun-sql-${dialect}`);
+    const metadataTitle =
+      dialect === "postgres"
+        ? "[contract:bun-sql-postgres:metadata.affected-rows:integration]"
+        : commandMetadataTitle(`bun-sql-${dialect}`);
     test(metadataTitle, () => {
-      assert.deepEqual(result.contractAssertions.find((entry) => entry.fullName === metadataTitle), {
-        fullName: metadataTitle,
-        status: "passed",
-      });
+      assert.deepEqual(
+        result.contractAssertions.find((entry) => entry.fullName === metadataTitle),
+        {
+          fullName: metadataTitle,
+          status: "passed",
+        },
+      );
     });
   });
 }

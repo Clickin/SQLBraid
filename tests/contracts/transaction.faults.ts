@@ -109,7 +109,11 @@ export function transactionFaultContracts(
     const result = await harness.db.tx(async (tx) => {
       await harness.write(tx);
       await assert.rejects(
-        () => tx.tx(async (nested) => { await harness.write(nested); throw original; }),
+        () =>
+          tx.tx(async (nested) => {
+            await harness.write(nested);
+            throw original;
+          }),
         (error: unknown) => error === original,
       );
       await harness.write(tx);

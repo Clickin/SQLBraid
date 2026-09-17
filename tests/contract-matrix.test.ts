@@ -15,12 +15,14 @@ const sourceSha = "a".repeat(40);
 const model = await loadContractMatrix();
 
 function executionFixture() {
-  const assertions = model.cells.filter((cell) => cell.releaseBlocking).map((cell) => ({
-    title: `[contract:${cell.transport}:${cell.scenario}:${cell.layer}]${cell.ownership === "any" ? "" : ` [ownership:${cell.ownership}]`} proves the observable contract`,
-    fullName: "This field is deliberately not evidence",
-    status: "passed",
-    failureMessages: [],
-  }));
+  const assertions = model.cells
+    .filter((cell) => cell.releaseBlocking)
+    .map((cell) => ({
+      title: `[contract:${cell.transport}:${cell.scenario}:${cell.layer}]${cell.ownership === "any" ? "" : ` [ownership:${cell.ownership}]`} proves the observable contract`,
+      fullName: "This field is deliberately not evidence",
+      status: "passed",
+      failureMessages: [],
+    }));
   const report = {
     success: true,
     wasInterrupted: false,
@@ -38,8 +40,8 @@ function executionFixture() {
     reportSha256: "",
     allowedLayers: ["integration", "boundary"],
     producer: { node: "v22.18.0", platform: "linux", arch: "x64" },
-    expectedTargets: Object.values(model.matrix.transports).map((entry) => {
-      const target = model.targets.get(entry.target)!;
+    expectedTargets: Array.from(new Set(model.cells.map((cell) => cell.target)), (targetId) => {
+      const target = model.targets.get(targetId)!;
       return {
         target: target.id,
         transport: target.driver.id === "bun-sql" ? `bun-sql-${target.database.product}` : target.driver.id,
@@ -77,9 +79,18 @@ test("contract matrix discovers every support transport/profile and retains capa
   const required = model.cells.filter((cell) => cell.releaseBlocking);
   assert.ok(required.some((cell) => cell.transport === "pg" && cell.ownership === "direct"));
   assert.ok(required.some((cell) => cell.transport === "pg" && cell.ownership === "pooled"));
-  assert.equal(required.some((cell) => cell.transport === "cloudflare-d1" && cell.scenario.startsWith("transaction.")), false);
-  assert.ok(model.exclusions.some((cell) => cell.transport === "node-oracledb" &&
-    cell.scenario === "transaction.savepoint-release-failure" && cell.requirement === "native:savepoint-release"));
+  assert.equal(
+    required.some((cell) => cell.transport === "cloudflare-d1" && cell.scenario.startsWith("transaction.")),
+    false,
+  );
+  assert.ok(
+    model.exclusions.some(
+      (cell) =>
+        cell.transport === "node-oracledb" &&
+        cell.scenario === "transaction.savepoint-release-failure" &&
+        cell.requirement === "native:savepoint-release",
+    ),
+  );
 });
 
 test("contract matrix rejects removed scenarios, transports, wrong layers and invented exclusions", () => {
@@ -102,7 +113,9 @@ test("contract matrix rejects removed scenarios, transports, wrong layers and in
   assert.throws(() => validateMatrix(forgedExclusion), /contradictory N\/A/u);
 
   const forgedReason = structuredClone(model.input);
-  forgedReason.matrix.transports["node-oracledb"].scenarios["transaction.savepoint-release-failure"].notApplicable.reason = "not implemented yet";
+  forgedReason.matrix.transports["node-oracledb"].scenarios[
+    "transaction.savepoint-release-failure"
+  ].notApplicable.reason = "not implemented yet";
   assert.throws(() => validateMatrix(forgedReason), /N\/A reason/u);
 
   const wrongLayer = structuredClone(model.input);
@@ -129,7 +142,9 @@ test("new support driver or profile cannot silently inherit another transport's 
 
   const contradictoryCapability = structuredClone(model.input);
   contradictoryCapability.matrix.transports.pg.capabilityEvidence["transaction"] = {
-    status: "unsupported", reason: "skip it", source: "packages/postgres/src/pg.ts",
+    status: "unsupported",
+    reason: "skip it",
+    source: "packages/postgres/src/pg.ts",
   };
   assert.throws(() => validateMatrix(contradictoryCapability), /contradicts or duplicates support/u);
 });
@@ -145,13 +160,18 @@ test("complete individual passed assertions satisfy the mandatory execution gate
 
 test("one passed assertion can supply every leading contract prefix it actually carries", async () => {
   const fixture = executionFixture();
-  const commit = fixture.assertions.find((assertion) =>
-    assertion.title.includes("[contract:pg:transaction.commit-confirmed:integration]") &&
-    assertion.title.includes("[ownership:direct]"))!;
-  const callback = fixture.assertions.findIndex((assertion) =>
-    assertion.title.includes("[contract:pg:transaction.callback-rollback:integration]") &&
-    assertion.title.includes("[ownership:direct]"));
-  commit.title = "[contract:pg:transaction.commit-confirmed:integration] " +
+  const commit = fixture.assertions.find(
+    (assertion) =>
+      assertion.title.includes("[contract:pg:transaction.commit-confirmed:integration]") &&
+      assertion.title.includes("[ownership:direct]"),
+  )!;
+  const callback = fixture.assertions.findIndex(
+    (assertion) =>
+      assertion.title.includes("[contract:pg:transaction.callback-rollback:integration]") &&
+      assertion.title.includes("[ownership:direct]"),
+  );
+  commit.title =
+    "[contract:pg:transaction.commit-confirmed:integration] " +
     "[contract:pg:transaction.callback-rollback:integration] [ownership:direct] exercises both outcomes";
   fixture.assertions.splice(callback, 1);
   fixture.report.numTotalTests -= 1;
@@ -177,9 +197,11 @@ test("a green report missing one required assertion or ownership path cannot pas
     await assert.rejects(validateReports(directory, sourceSha, model), /missing passed execution evidence/u);
   });
   const missingPoolCleanup = executionFixture();
-  const pooledStream = missingPoolCleanup.assertions.find((assertion) =>
-    assertion.title.includes("[contract:pg:resource.stream-return:integration]") &&
-    assertion.title.includes("[ownership:pooled]"))!;
+  const pooledStream = missingPoolCleanup.assertions.find(
+    (assertion) =>
+      assertion.title.includes("[contract:pg:resource.stream-return:integration]") &&
+      assertion.title.includes("[ownership:pooled]"),
+  )!;
   pooledStream.title = pooledStream.title.replace("[ownership:pooled]", "[ownership:direct]");
   await withReport(missingPoolCleanup, async (directory) => {
     await assert.rejects(validateReports(directory, sourceSha, model), /missing passed execution evidence/u);
@@ -194,13 +216,25 @@ test("suite/fullName labels and hand-authored scenario summaries are not executi
   await withReport(fixture, async (directory) => {
     await assert.rejects(validateReports(directory, sourceSha, model), /missing passed execution evidence/u);
   });
-  assert.throws(() => reportEvidence({ success: true, scenarios: ["transaction.commit-confirmed"] }, fixture.manifest, model, sourceSha), /Vitest JSON execution/u);
+  assert.throws(
+    () =>
+      reportEvidence(
+        { success: true, scenarios: ["transaction.commit-confirmed"] },
+        fixture.manifest,
+        model,
+        sourceSha,
+      ),
+    /Vitest JSON execution/u,
+  );
 });
 
 test.each(["pending", "skipped", "todo", "failed"])("%s assertions never supply passed contract evidence", (status) => {
   const fixture = executionFixture();
   fixture.assertions[0]!.status = status;
-  assert.throws(() => reportEvidence(fixture.report, fixture.manifest, model, sourceSha), /did not pass|failed or invalid/u);
+  assert.throws(
+    () => reportEvidence(fixture.report, fixture.manifest, model, sourceSha),
+    /did not pass|failed or invalid/u,
+  );
 });
 
 test("unknown scenarios, transports, malformed tags and missing ownership reject instead of being ignored", () => {
@@ -209,21 +243,31 @@ test("unknown scenarios, transports, malformed tags and missing ownership reject
     "[contract:removed-driver:transaction.commit-confirmed:integration] [ownership:direct]",
     "[contract:pg:transaction.commit-confirmed:unit] [ownership:direct]",
     "[contract:pg:transaction.commit-confirmed:integration]",
+    "[contract:pg:transaction.commit-confirmed:integration] [ownership:direct] [ownership:pooled]",
   ]) {
     const fixture = executionFixture();
     fixture.assertions[0]!.title = title;
-    assert.throws(() => reportEvidence(fixture.report, fixture.manifest, model, sourceSha), /unknown|malformed|missing ownership/u);
+    assert.throws(
+      () => reportEvidence(fixture.report, fixture.manifest, model, sourceSha),
+      /unknown|malformed|missing ownership|ambiguous ownership/u,
+    );
   }
 });
 
 test("wrong scenario layers, report layers, source revisions and profiles reject", () => {
   const wrongScenarioLayer = executionFixture();
   wrongScenarioLayer.assertions[0]!.title = "[contract:pg:transaction.commit-confirmed:boundary] [ownership:direct]";
-  assert.throws(() => reportEvidence(wrongScenarioLayer.report, wrongScenarioLayer.manifest, model, sourceSha), /wrong evidence layer/u);
+  assert.throws(
+    () => reportEvidence(wrongScenarioLayer.report, wrongScenarioLayer.manifest, model, sourceSha),
+    /wrong evidence layer/u,
+  );
 
   const wrongReportLayer = executionFixture();
   wrongReportLayer.manifest.allowedLayers = ["boundary"];
-  assert.throws(() => reportEvidence(wrongReportLayer.report, wrongReportLayer.manifest, model, sourceSha), /wrong provenance layer/u);
+  assert.throws(
+    () => reportEvidence(wrongReportLayer.report, wrongReportLayer.manifest, model, sourceSha),
+    /wrong provenance layer/u,
+  );
 
   const stale = executionFixture();
   stale.manifest.sourceSha = "b".repeat(40);
@@ -231,11 +275,17 @@ test("wrong scenario layers, report layers, source revisions and profiles reject
 
   const forgedProfile = structuredClone(executionFixture());
   forgedProfile.manifest.expectedTargets[0]!.driver.profile = "pg-native";
-  assert.throws(() => reportEvidence(forgedProfile.report, forgedProfile.manifest, model, sourceSha), /forged or stale target\/profile/u);
+  assert.throws(
+    () => reportEvidence(forgedProfile.report, forgedProfile.manifest, model, sourceSha),
+    /forged or stale target\/profile/u,
+  );
 
   const wrongRuntime = executionFixture();
   wrongRuntime.manifest.producer.node = "v24.21.0";
-  assert.throws(() => reportEvidence(wrongRuntime.report, wrongRuntime.manifest, model, sourceSha), /does not match canonical/u);
+  assert.throws(
+    () => reportEvidence(wrongRuntime.report, wrongRuntime.manifest, model, sourceSha),
+    /does not match canonical/u,
+  );
 });
 
 test("noncanonical database-version evidence cannot fill the canonical transport cells", async () => {
@@ -243,7 +293,11 @@ test("noncanonical database-version evidence cannot fill the canonical transport
   const pg = fixture.manifest.expectedTargets.findIndex((target) => target.transport === "pg");
   const current = model.targets.get("postgres-current")!;
   fixture.manifest.expectedTargets[pg] = {
-    target: current.id, transport: "pg", database: current.database, driver: current.driver, runtime: current.runtime,
+    target: current.id,
+    transport: "pg",
+    database: current.database,
+    driver: current.driver,
+    runtime: current.runtime,
   };
   await withReport(fixture, async (directory) => {
     await assert.rejects(validateReports(directory, sourceSha, model), /missing passed execution evidence/u);
@@ -260,5 +314,8 @@ test("missing provenance, tampered report bytes and truncated passing totals can
   });
   const incomplete = executionFixture();
   incomplete.assertions.pop();
-  assert.throws(() => reportEvidence(incomplete.report, incomplete.manifest, model, sourceSha), /contradictory Vitest assertion totals/u);
+  assert.throws(
+    () => reportEvidence(incomplete.report, incomplete.manifest, model, sourceSha),
+    /contradictory Vitest assertion totals/u,
+  );
 });

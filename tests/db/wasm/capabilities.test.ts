@@ -186,10 +186,13 @@ for (const scenario of [
 ]) {
   const title = `[contract:sqlite-wasm:${scenario}:integration] [ownership:direct]`;
   test(title, () => {
-    assert.deepEqual(report.contractAssertions.find((entry) => entry.fullName === title), {
-      fullName: title,
-      status: "passed",
-    });
+    assert.deepEqual(
+      report.contractAssertions.find((entry) => entry.fullName === title),
+      {
+        fullName: title,
+        status: "passed",
+      },
+    );
   });
 }
 

@@ -578,19 +578,23 @@ test("oracle.numeric.bind-nls-audit", { timeout: 60_000 }, async () => {
   }
 });
 
-test("[contract:node-oracledb:metadata.affected-rows:integration] oracle.command.safe-count", { timeout: 60_000 }, async () => {
-  const { connection } = await connect();
-  const db = createOracledbDatabase(connection);
-  try {
-    await drop(connection, "TABLE braid_pv17_count PURGE").catch(() => undefined);
-    await connection.execute("CREATE TABLE braid_pv17_count (id NUMBER)");
-    const result = await db.execute(sql.command`INSERT INTO braid_pv17_count (id) VALUES (${1})`);
-    assert.equal(result.command.affectedRows, 1);
-  } finally {
-    await drop(connection, "TABLE braid_pv17_count PURGE").catch(() => undefined);
-    await connection.close();
-  }
-});
+test(
+  "[contract:node-oracledb:metadata.affected-rows:integration] oracle.command.safe-count",
+  { timeout: 60_000 },
+  async () => {
+    const { connection } = await connect();
+    const db = createOracledbDatabase(connection);
+    try {
+      await drop(connection, "TABLE braid_pv17_count PURGE").catch(() => undefined);
+      await connection.execute("CREATE TABLE braid_pv17_count (id NUMBER)");
+      const result = await db.execute(sql.command`INSERT INTO braid_pv17_count (id) VALUES (${1})`);
+      assert.equal(result.command.affectedRows, 1);
+    } finally {
+      await drop(connection, "TABLE braid_pv17_count PURGE").catch(() => undefined);
+      await connection.close();
+    }
+  },
+);
 
 test("oracle.binary.finite-transport", { timeout: 60_000 }, async () => {
   const { connection } = await connect();

@@ -33,10 +33,7 @@
   "transports": {
     "pg": {
       "target": "postgres-pg-node-16-4",
-      "ownership": [
-        "direct",
-        "pooled"
-      ],
+      "ownership": ["direct", "pooled"],
       "native": {
         "pool": {
           "supported": true,
@@ -77,59 +74,37 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -138,73 +113,43 @@
           }
         },
         "transaction.access-mode": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "pool.checkout-init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.root-lease": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.session-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.transaction-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.stream-read-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.before-handoff": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.iteration": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "metadata.exact-id": {
           "notApplicable": {
@@ -219,19 +164,13 @@
           }
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "mysql2": {
       "target": "mysql-mysql2-node-8-4-2",
-      "ownership": [
-        "direct",
-        "pooled"
-      ],
+      "ownership": ["direct", "pooled"],
       "native": {
         "pool": {
           "supported": true,
@@ -272,49 +211,31 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -323,9 +244,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -334,99 +253,58 @@
           }
         },
         "transaction.access-mode": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "pool.checkout-init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.root-lease": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.session-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.transaction-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.stream-read-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.before-handoff": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.iteration": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "metadata.exact-id": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "metadata.stale-id": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "mariadb": {
       "target": "mariadb-connector-node-11-8-9",
-      "ownership": [
-        "direct",
-        "pooled"
-      ],
+      "ownership": ["direct", "pooled"],
       "native": {
         "pool": {
           "supported": true,
@@ -467,49 +345,31 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -518,9 +378,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -529,99 +387,58 @@
           }
         },
         "transaction.access-mode": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "pool.checkout-init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.root-lease": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.session-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.transaction-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.stream-read-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.before-handoff": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.iteration": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "metadata.exact-id": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "metadata.stale-id": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "node-oracledb": {
       "target": "oracle-oracledb-thin-node-23-9",
-      "ownership": [
-        "direct",
-        "pooled"
-      ],
+      "ownership": ["direct", "pooled"],
       "native": {
         "pool": {
           "supported": true,
@@ -662,39 +479,25 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
           "notApplicable": {
@@ -703,9 +506,7 @@
           }
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -714,84 +515,49 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "transaction.access-mode": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "pool.checkout-init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.root-lease": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.session-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.transaction-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.stream-read-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.before-handoff": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.iteration": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "metadata.exact-id": {
           "notApplicable": {
@@ -806,19 +572,13 @@
           }
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "tedious": {
       "target": "mssql-tedious-developer-node-2022-cu18",
-      "ownership": [
-        "direct",
-        "pooled"
-      ],
+      "ownership": ["direct", "pooled"],
       "native": {
         "pool": {
           "supported": true,
@@ -859,39 +619,25 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
           "notApplicable": {
@@ -900,9 +646,7 @@
           }
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -911,9 +655,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -928,67 +670,40 @@
           }
         },
         "pool.checkout-init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.root-lease": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.session-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.transaction-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.stream-read-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.before-handoff": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.iteration": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "metadata.exact-id": {
           "notApplicable": {
@@ -1003,18 +718,13 @@
           }
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "node-sqlite": {
       "target": "sqlite-node-sqlite-node-22-18-0",
-      "ownership": [
-        "direct"
-      ],
+      "ownership": ["direct"],
       "native": {
         "pool": {
           "supported": false,
@@ -1055,49 +765,31 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -1106,9 +798,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -1153,25 +843,16 @@
           }
         },
         "resource.stream-return": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.stream-read-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
           "notApplicable": {
@@ -1192,29 +873,19 @@
           }
         },
         "metadata.exact-id": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "metadata.stale-id": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "better-sqlite3": {
       "target": "better-sqlite3-node-22-18-0",
-      "ownership": [
-        "direct"
-      ],
+      "ownership": ["direct"],
       "native": {
         "pool": {
           "supported": false,
@@ -1271,49 +942,31 @@
       },
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -1322,9 +975,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -1369,25 +1020,16 @@
           }
         },
         "resource.stream-return": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.stream-read-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
           "notApplicable": {
@@ -1408,29 +1050,19 @@
           }
         },
         "metadata.exact-id": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "metadata.stale-id": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "libsql": {
       "target": "libsql-local-node-22-18-0",
-      "ownership": [
-        "direct"
-      ],
+      "ownership": ["direct"],
       "native": {
         "pool": {
           "supported": false,
@@ -1487,49 +1119,31 @@
       },
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -1538,9 +1152,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -1579,9 +1191,7 @@
           }
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
           "notApplicable": {
@@ -1596,14 +1206,10 @@
           }
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
           "notApplicable": {
@@ -1624,29 +1230,19 @@
           }
         },
         "metadata.exact-id": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "metadata.stale-id": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "sqlite-wasm": {
       "target": "sqlite-wasm-browser-3-53-4",
-      "ownership": [
-        "direct"
-      ],
+      "ownership": ["direct"],
       "native": {
         "pool": {
           "supported": false,
@@ -1687,49 +1283,31 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -1738,9 +1316,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -1779,30 +1355,19 @@
           }
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.stream-read-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
           "notApplicable": {
@@ -1835,18 +1400,13 @@
           }
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "cloudflare-d1": {
       "target": "d1-cloudflare-workerd-2026-07-30",
-      "ownership": [
-        "direct"
-      ],
+      "ownership": ["direct"],
       "native": {
         "pool": {
           "supported": false,
@@ -2013,9 +1573,7 @@
           }
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
           "notApplicable": {
@@ -2048,18 +1606,13 @@
           }
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "bun-sql-postgres": {
       "target": "bun-sql-postgres",
-      "ownership": [
-        "pooled"
-      ],
+      "ownership": ["pooled"],
       "native": {
         "pool": {
           "supported": true,
@@ -2100,59 +1653,37 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -2161,37 +1692,22 @@
           }
         },
         "transaction.access-mode": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "pool.checkout-init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.root-lease": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.session-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.transaction-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
           "notApplicable": {
@@ -2206,14 +1722,10 @@
           }
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
           "notApplicable": {
@@ -2246,18 +1758,13 @@
           }
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "bun-sql-mysql": {
       "target": "bun-sql-mysql",
-      "ownership": [
-        "pooled"
-      ],
+      "ownership": ["pooled"],
       "native": {
         "pool": {
           "supported": true,
@@ -2298,49 +1805,31 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -2349,9 +1838,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -2360,37 +1847,22 @@
           }
         },
         "transaction.access-mode": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "pool.checkout-init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.root-lease": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.session-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.transaction-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
           "notApplicable": {
@@ -2405,14 +1877,10 @@
           }
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
           "notApplicable": {
@@ -2433,29 +1901,19 @@
           }
         },
         "metadata.exact-id": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "metadata.stale-id": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "bun-sql-mariadb": {
       "target": "bun-sql-mariadb",
-      "ownership": [
-        "pooled"
-      ],
+      "ownership": ["pooled"],
       "native": {
         "pool": {
           "supported": true,
@@ -2496,49 +1954,31 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -2547,9 +1987,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -2558,37 +1996,22 @@
           }
         },
         "transaction.access-mode": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "pool.checkout-init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.root-lease": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.session-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.transaction-lease": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "resource.init-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "resource.stream-return": {
           "notApplicable": {
@@ -2603,14 +2026,10 @@
           }
         },
         "resource.cleanup-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
           "notApplicable": {
@@ -2631,29 +2050,19 @@
           }
         },
         "metadata.exact-id": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "metadata.stale-id": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     },
     "bun-sql-sqlite": {
       "target": "bun-sql-sqlite",
-      "ownership": [
-        "direct"
-      ],
+      "ownership": ["direct"],
       "native": {
         "pool": {
           "supported": false,
@@ -2694,49 +2103,31 @@
       "capabilityEvidence": {},
       "scenarios": {
         "transaction.commit-confirmed": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.callback-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.statement-rollback": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.caught-error-terminal-outcome": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-recovery": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "transaction.savepoint-rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-create-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.savepoint-release-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.commit-terminal-outcome": {
           "notApplicable": {
@@ -2745,9 +2136,7 @@
           }
         },
         "transaction.rollback-failure": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "transaction.autocommit-ownership": {
           "notApplicable": {
@@ -2810,9 +2199,7 @@
           }
         },
         "cancellation.pre-io": {
-          "evidence": [
-            "boundary"
-          ]
+          "evidence": ["boundary"]
         },
         "cancellation.in-flight": {
           "notApplicable": {
@@ -2833,21 +2220,13 @@
           }
         },
         "metadata.exact-id": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         },
         "metadata.stale-id": {
-          "evidence": [
-            "integration"
-          ]
+          "evidence": ["integration"]
         },
         "metadata.affected-rows": {
-          "evidence": [
-            "integration",
-            "boundary"
-          ]
+          "evidence": ["integration", "boundary"]
         }
       }
     }

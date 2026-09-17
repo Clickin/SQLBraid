@@ -146,6 +146,8 @@ await db.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
 
 Transaction-control uncertainty poisons a direct resource or discards a pooled lease. Use the innermost callback handle while a savepoint is active.
 
+A successful callback is not sufficient for transaction success: PostgreSQL and Bun PostgreSQL reject with `BRAID_TX_NOT_COMMITTED` if the server reports that `COMMIT` actually rolled back.
+
 ### Prepared queries
 
 `prepare` accepts an input factory (required input by default, or explicitly

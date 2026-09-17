@@ -990,13 +990,26 @@ for (const ownership of ["direct", "pooled"] as const) {
     let commits = 0;
     let released = 0;
     const connection = {
-      async execute(text: string) { statements.push(text); return {}; },
-      async commit() { commits++; },
+      async execute(text: string) {
+        statements.push(text);
+        return {};
+      },
+      async commit() {
+        commits++;
+      },
       async rollback() {},
-      async close() { released++; },
+      async close() {
+        released++;
+      },
     };
-    const db = ownership === "direct" ? createOracledbDatabase(connection)
-      : createOracledbPoolDatabase({ async getConnection() { return connection; } });
+    const db =
+      ownership === "direct"
+        ? createOracledbDatabase(connection)
+        : createOracledbPoolDatabase({
+            async getConnection() {
+              return connection;
+            },
+          });
     for (const readOnly of [undefined, true, false]) await db.tx({ readOnly }, async () => undefined);
     assert.deepEqual(statements, ["SET TRANSACTION READ ONLY", "SET TRANSACTION READ WRITE"]);
     assert.equal(commits, 3);
@@ -1011,7 +1024,7 @@ for (const ownership of ["direct", "pooled"] as const) {
         const durable: number[] = [];
         const staged: number[] = [];
         const insertNative = (value: number, options: OracleExecuteOptionsLike) => {
-          (options.autoCommit ?? oracledb.autoCommit ? durable : staged).push(value);
+          ((options.autoCommit ?? oracledb.autoCommit) ? durable : staged).push(value);
         };
         const connection = {
           async execute(text: string, binds: readonly number[], options: OracleExecuteOptionsLike) {
@@ -1023,12 +1036,22 @@ for (const ownership of ["direct", "pooled"] as const) {
             for (const row of binds) insertNative(row[0]!, options);
             return { rowsAffected: binds.length };
           },
-          async commit() { durable.push(...staged.splice(0)); },
-          async rollback() { staged.length = 0; },
+          async commit() {
+            durable.push(...staged.splice(0));
+          },
+          async rollback() {
+            staged.length = 0;
+          },
           async close() {},
         };
-        const db = ownership === "direct" ? createOracledbDatabase(connection)
-          : createOracledbPoolDatabase({ async getConnection() { return connection; } });
+        const db =
+          ownership === "direct"
+            ? createOracledbDatabase(connection)
+            : createOracledbPoolDatabase({
+                async getConnection() {
+                  return connection;
+                },
+              });
         const insert = (id: number) => sql.command`INSERT INTO contract_auto (id) VALUES (${id})`;
         const failure = new Error("callback rollback");
         for (const fail of [true, false]) {
@@ -1036,13 +1059,13 @@ for (const ownership of ["direct", "pooled"] as const) {
             await tx.execute(insert(1));
             await tx.bulk([2, 3], insert);
             await tx.call(sql.call`BEGIN write_contract(${4}); END;`);
-            await tx.tx(async nested => { await nested.execute(insert(5)); });
+            await tx.tx(async (nested) => {
+              await nested.execute(insert(5));
+            });
             if (fail) throw failure;
           };
-          const pending = sessionScoped
-            ? db.session(session => session.tx(callback))
-            : db.tx(callback);
-          if (fail) await assert.rejects(pending, error => error === failure);
+          const pending = sessionScoped ? db.session((session) => session.tx(callback)) : db.tx(callback);
+          if (fail) await assert.rejects(pending, (error) => error === failure);
           else await pending;
           assert.deepEqual(durable, fail ? [] : [1, 2, 3, 4, 5]);
           assert.deepEqual(staged, []);
@@ -1055,62 +1078,103 @@ for (const ownership of ["direct", "pooled"] as const) {
     }
   });
 
-  for (const kind of ["stream", "routine", "returning"] as const) for (const cleanupFails of [false, true]) {
-    test(`[contract:node-oracledb:cancellation.before-handoff:boundary] [contract:node-oracledb:resource.init-failure:boundary] [ownership:${ownership}] ${kind} registers all created resources before cancellation${cleanupFails ? " and preserves close failure" : ""}`, async () => {
-      const controller = new AbortController();
-      const reason = new Error("cancel after native resources exist");
-      const cleanup = new Error("native cleanup failed");
-      let created = 0;
-      let closed = 0;
-      let reads = 0;
-      let released = 0;
-      let discarded = 0;
-      class Lob extends EventEmitter {
-        constructor() { super(); created++; }
-        async getData() { reads++; return "body"; }
-        destroy() { closed++; if (cleanupFails) this.emit("error", cleanup); this.emit("close"); }
-      }
-      const cursor = () => {
-        created++;
-        return {
-          async getRow() { reads++; return null; },
-          async close() { closed++; if (cleanupFails) throw cleanup; },
-        };
-      };
-      const connection = {
-        async execute() {
-          const result = kind === "stream" ? { resultSet: cursor() }
-            : kind === "routine" ? { outBinds: [cursor(), new Lob()] }
-            : { outBinds: [[new Lob()]], rowsAffected: 1 };
-          controller.abort(reason);
-          return result;
-        },
-        async break() {},
-        async commit() {},
-        async rollback() {},
-        async close(options?: { readonly drop?: boolean }) { if (options?.drop) discarded++; else released++; },
-      };
-      const db = ownership === "direct" ? createOracledbDatabase(connection)
-        : createOracledbPoolDatabase({ async getConnection() { return connection; } });
-      const run = async () => {
-        if (kind === "stream") {
-          for await (const row of db.stream(sql.rows`SELECT body FROM contract_data`, { signal: controller.signal })) void row;
-        } else if (kind === "routine") {
-          await db.call(sql.call`BEGIN read_contract(${sql.out("cursor", oracleParameter.refCursor())}, ${sql.out("body", oracleParameter.clob())}); END;`, { signal: controller.signal });
-        } else {
-          await db.execute(sql.rows`INSERT INTO contract_data (body) VALUES ('body') RETURNING body INTO ${sql.out("body", oracleParameter.clob())}`, { signal: controller.signal });
+  for (const kind of ["stream", "routine", "returning"] as const)
+    for (const cleanupFails of [false, true]) {
+      test(`[contract:node-oracledb:cancellation.before-handoff:boundary] [contract:node-oracledb:resource.init-failure:boundary] [ownership:${ownership}] ${kind} registers all created resources before cancellation${cleanupFails ? " and preserves close failure" : ""}`, async () => {
+        const controller = new AbortController();
+        const reason = new Error("cancel after native resources exist");
+        const cleanup = new Error("native cleanup failed");
+        let created = 0;
+        let closed = 0;
+        let reads = 0;
+        let released = 0;
+        let discarded = 0;
+        class Lob extends EventEmitter {
+          constructor() {
+            super();
+            created++;
+          }
+          async getData() {
+            reads++;
+            return "body";
+          }
+          destroy() {
+            closed++;
+            if (cleanupFails) this.emit("error", cleanup);
+            this.emit("close");
+          }
         }
-      };
-      await assert.rejects(run(), error => containsError(error, reason) && (!cleanupFails || containsError(error, cleanup)));
-      assert.equal(created, kind === "routine" ? 2 : 1);
-      assert.equal(closed, created);
-      assert.equal(reads, 0);
-      assert.equal(released, 0);
-      assert.equal(discarded, ownership === "pooled" ? 1 : 0);
-      if (cleanupFails && ownership === "direct") {
-        await assert.rejects(db.execute(sql.command`UPDATE contract_data SET body = 'x'`), { code: "BRAID_CONNECTION_POISONED" });
+        const cursor = () => {
+          created++;
+          return {
+            async getRow() {
+              reads++;
+              return null;
+            },
+            async close() {
+              closed++;
+              if (cleanupFails) throw cleanup;
+            },
+          };
+        };
+        const connection = {
+          async execute() {
+            const result =
+              kind === "stream"
+                ? { resultSet: cursor() }
+                : kind === "routine"
+                  ? { outBinds: [cursor(), new Lob()] }
+                  : { outBinds: [[new Lob()]], rowsAffected: 1 };
+            controller.abort(reason);
+            return result;
+          },
+          async break() {},
+          async commit() {},
+          async rollback() {},
+          async close(options?: { readonly drop?: boolean }) {
+            if (options?.drop) discarded++;
+            else released++;
+          },
+        };
+        const db =
+          ownership === "direct"
+            ? createOracledbDatabase(connection)
+            : createOracledbPoolDatabase({
+                async getConnection() {
+                  return connection;
+                },
+              });
+        const run = async () => {
+          if (kind === "stream") {
+            for await (const row of db.stream(sql.rows`SELECT body FROM contract_data`, { signal: controller.signal }))
+              void row;
+          } else if (kind === "routine") {
+            await db.call(
+              sql.call`BEGIN read_contract(${sql.out("cursor", oracleParameter.refCursor())}, ${sql.out("body", oracleParameter.clob())}); END;`,
+              { signal: controller.signal },
+            );
+          } else {
+            await db.execute(
+              sql.rows`INSERT INTO contract_data (body) VALUES ('body') RETURNING body INTO ${sql.out("body", oracleParameter.clob())}`,
+              { signal: controller.signal },
+            );
+          }
+        };
+        await assert.rejects(
+          run(),
+          (error) => containsError(error, reason) && (!cleanupFails || containsError(error, cleanup)),
+        );
+        assert.equal(created, kind === "routine" ? 2 : 1);
         assert.equal(closed, created);
-      }
-    });
-  }
+        assert.equal(reads, 0);
+        assert.equal(released, 0);
+        assert.equal(discarded, ownership === "pooled" ? 1 : 0);
+        if (cleanupFails && ownership === "direct") {
+          await assert.rejects(db.execute(sql.command`UPDATE contract_data SET body = 'x'`), {
+            code: "BRAID_CONNECTION_POISONED",
+          });
+          assert.equal(closed, created);
+        }
+      });
+    }
 }

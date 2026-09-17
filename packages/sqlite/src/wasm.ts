@@ -373,6 +373,8 @@ export function createSqliteWasmExecutor(
   options: SqliteWasmExecutorOptions = {},
 ): QueryExecutor {
   const capi = options.sqlite3?.capi;
+  // Select a supported exact count transport before any statement can mutate data.
+  database.changes?.(false, true);
   return {
     ownershipKey: database,
     statementBinding: sqliteWasmStatementBinding,

@@ -129,26 +129,30 @@ test("SQL Server real streaming satisfies the shared streaming lifecycle contrac
   assert.equal(runs, 8);
 });
 
-test("[contract:tedious:resource.stream-return:integration] [ownership:direct] SQL Server transaction streams retain their pinned session until cleanup", { timeout: 30_000 }, async () => {
-  const settings = inject("mssql") as MssqlSettings;
-  const connection = await connect(settings);
-  try {
-    const db = createTediousDatabase(connection);
-    const query = sql.rows<{ readonly VALUE: string }>`
+test(
+  "[contract:tedious:resource.stream-return:integration] [ownership:direct] SQL Server transaction streams retain their pinned session until cleanup",
+  { timeout: 30_000 },
+  async () => {
+    const settings = inject("mssql") as MssqlSettings;
+    const connection = await connect(settings);
+    try {
+      const db = createTediousDatabase(connection);
+      const query = sql.rows<{ readonly VALUE: string }>`
       SELECT VALUE
       FROM (VALUES (1), (2)) AS values_table(VALUE)
       ORDER BY VALUE
     `;
-    await db.tx(async (tx) => {
-      const iterator = tx.stream(query)[Symbol.asyncIterator]();
-      assert.equal((await iterator.next()).value?.VALUE, "1");
-      await assert.rejects(() => tx.one(sql.rows<{ readonly VALUE: string }>`SELECT 7 AS VALUE`), {
-        code: "BRAID_STREAM_SCOPE",
+      await db.tx(async (tx) => {
+        const iterator = tx.stream(query)[Symbol.asyncIterator]();
+        assert.equal((await iterator.next()).value?.VALUE, "1");
+        await assert.rejects(() => tx.one(sql.rows<{ readonly VALUE: string }>`SELECT 7 AS VALUE`), {
+          code: "BRAID_STREAM_SCOPE",
+        });
+        await iterator.return?.();
+        assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT 7 AS VALUE`)).VALUE, "7");
       });
-      await iterator.return?.();
-      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT 7 AS VALUE`)).VALUE, "7");
-    });
-  } finally {
-    await close(connection);
-  }
-});
+    } finally {
+      await close(connection);
+    }
+  },
+);
