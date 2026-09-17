@@ -241,7 +241,6 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     () => undefined,
     () => { nativePreparedExecutes.value += 1; },
   ) as MysqlConnection;
-  const directPhysicalId = (direct as unknown as { readonly threadId?: number }).threadId;
   const physicalIds = new Set<string>();
   let streamReleases = 0;
   const streamReturns = { value: 0 };
@@ -516,7 +515,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     snapshot: (): ResourceSnapshot => ({ borrowedLeases: borrowed.value, cleanupBalance: borrowed.value }),
     sideEffects: () => acquired.value + nativeExecutes.value,
     mutationSentinel: async () => directDb.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`),
-    physicalSessionIds: () => [...physicalIds, ...(directPhysicalId === undefined ? [] : [String(directPhysicalId)])],
+    physicalSessionIds: () => [...physicalIds],
     pooledScope: async (): Promise<void> => {
       await db.session(async (session) => {
         await session.one(identity);
@@ -591,7 +590,8 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       acquired.value = 0;
       nativeExecutes.value = 0;
       nativePreparedExecutes.value = 0;
-      if (directPhysicalId !== undefined) physicalIds.add(String(directPhysicalId));
+      const directIdentityResult = await directDb.one(identity);
+      physicalIds.add(directIdentityResult.id);
       const identityResult = await db.one(identity);
       physicalIds.add(identityResult.id);
     },
