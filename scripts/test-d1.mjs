@@ -8,6 +8,17 @@ import { Miniflare } from "miniflare";
 const root = resolve(new URL("..", import.meta.url).pathname);
 const workerPath = resolve(root, "fixtures/cloudflare-d1/worker.mjs");
 const outputDirectory = await mkdtemp(join(tmpdir(), "sqlbraid-d1-"));
+const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
+const artifactPath = process.env.SQLBRAID_CERT_ARTIFACT;
+const stressValue = process.env.SQLBRAID_CERT_STRESS;
+const certificationRequested = sourceSha !== undefined || artifactPath !== undefined || stressValue !== undefined;
+if (certificationRequested && (sourceSha === undefined || artifactPath === undefined)) {
+  throw new Error("Certification mode requires SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.");
+}
+if (stressValue !== undefined && !["0", "1", "false", "true"].includes(stressValue)) {
+  throw new Error("SQLBRAID_CERT_STRESS must be 0, 1, false, or true.");
+}
+const certificationStress = stressValue === "1" || stressValue === "true";
 let worker;
 try {
   await viteBuild({
@@ -44,25 +55,19 @@ try {
   assert.deepEqual(payload.rows[0].payload, [1, 2, 3]);
   assert.equal(payload.streamCode, "BRAID_STREAM_UNSUPPORTED");
   assert.equal(payload.transactionCode, "BRAID_TX_UNSUPPORTED");
-  const sourceSha = process.env.SQLBRAID_SOURCE_SHA ?? "working-tree";
-  const certificationResponse = await worker.dispatchFetch(`http://sqlbraid.test/certification?sourceSha=${encodeURIComponent(sourceSha)}`);
-  const certificationBody = await certificationResponse.text();
-  assert.equal(certificationResponse.status, 200, certificationBody);
-  const certification = JSON.parse(certificationBody);
-  assert.equal(certification.artifact.sourceSha, sourceSha);
-  assert.equal(Object.keys(certification.artifact.cases).length, 84);
-  assert.deepEqual(
-    Object.values(certification.artifact.cases).filter((result) => result.status === "fail"),
-    [],
-  );
-  assert.equal(certification.stress.sourceSha, sourceSha);
-  assert.equal(Object.keys(certification.stress.cases).length, 84);
-  assert.deepEqual(
-    Object.values(certification.stress.cases).filter((result) => result.status === "fail"),
-    [],
-  );
-  await writeFile("/tmp/sqlbraid-rc3-sqlite-web-d1-artifact.json", JSON.stringify(certification.artifact, null, 2));
-  await writeFile("/tmp/sqlbraid-rc3-sqlite-web-d1-stress-artifact.json", JSON.stringify(certification.stress, null, 2));
+  if (certificationRequested) {
+    const certificationResponse = await worker.dispatchFetch(`http://sqlbraid.test/certification?sourceSha=${encodeURIComponent(sourceSha)}&stress=${certificationStress ? "1" : "0"}`);
+    const certificationBody = await certificationResponse.text();
+    assert.equal(certificationResponse.status, 200, certificationBody);
+    const certification = JSON.parse(certificationBody);
+    assert.equal(certification.artifact.sourceSha, sourceSha);
+    assert.equal(Object.keys(certification.artifact.cases).length, 84);
+    assert.deepEqual(
+      Object.values(certification.artifact.cases).filter((result) => result.status === "fail"),
+      [],
+    );
+    await writeFile(resolve(root, artifactPath), JSON.stringify(certification.artifact, null, 2));
+  }
   console.info(JSON.stringify({ check: "local D1 SQLBraid adapter", runtime: "workerd via Miniflare", rows: payload.rows.length }));
 } finally {
   if (worker !== undefined) await worker.dispose();

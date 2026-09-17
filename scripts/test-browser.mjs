@@ -15,6 +15,25 @@ const externalUrl = process.env.SQLBRAID_BROWSER_URL;
 const children = [];
 const repositoryRoot = resolve(process.cwd());
 
+function certificationOptions() {
+  const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
+  const artifactPath = process.env.SQLBRAID_CERT_ARTIFACT;
+  const stressValue = process.env.SQLBRAID_CERT_STRESS;
+  const requested = sourceSha !== undefined || artifactPath !== undefined || stressValue !== undefined;
+  if (!requested) return undefined;
+  if (sourceSha === undefined || artifactPath === undefined) {
+    throw new Error("Certification mode requires SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.");
+  }
+  if (stressValue !== undefined && !["0", "1", "false", "true"].includes(stressValue)) {
+    throw new Error("SQLBRAID_CERT_STRESS must be 0, 1, false, or true.");
+  }
+  return {
+    sourceSha,
+    stress: stressValue === "1" || stressValue === "true",
+    artifactPath: resolve(repositoryRoot, artifactPath),
+  };
+}
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: "inherit", ...options });
@@ -134,12 +153,15 @@ async function buildBrowserCertificationBundle() {
   return resolve(directory, "certification.js.iife.js");
 }
 
-async function runWasmConformance(browser, fixtureUrl, certificationBundle, sourceSha) {
+async function runWasmConformance(browser, fixtureUrl, certificationBundle, sourceSha, stress) {
   const page = await browser.newPage();
   let pageError;
   page.on("pageerror", (error) => { pageError = error; });
   try {
-    await page.goto(`${fixtureUrl}?sourceSha=${encodeURIComponent(sourceSha)}`, { waitUntil: "networkidle" });
+    const certificationUrl = new URL(fixtureUrl);
+    certificationUrl.searchParams.set("sourceSha", sourceSha);
+    certificationUrl.searchParams.set("stress", stress ? "1" : "0");
+    await page.goto(certificationUrl, { waitUntil: "networkidle" });
     try {
       await page.waitForFunction(
         () => window.__sqlbraidWasmConformance !== undefined || window.__sqlbraidWasmConformanceError !== undefined,
@@ -152,7 +174,7 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
     await page.waitForFunction(() => window.__sqlbraidSqlite3 !== undefined, undefined, { timeout: 30_000 });
     await page.addScriptTag({ path: certificationBundle });
     await page.waitForFunction(
-      () => window.__sqlbraidCertificationStressArtifact !== undefined || window.__sqlbraidCertificationError !== undefined,
+      () => window.__sqlbraidCertificationArtifact !== undefined || window.__sqlbraidCertificationError !== undefined,
       undefined,
       { timeout: 120_000 },
     );
@@ -160,7 +182,6 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
       report: window.__sqlbraidWasmConformance,
       error: window.__sqlbraidWasmConformanceError,
       certification: window.__sqlbraidCertificationArtifact,
-      certificationStress: window.__sqlbraidCertificationStressArtifact,
       certificationError: window.__sqlbraidCertificationError,
       certificationEvidence: window.__sqlbraidWasmCertificationEvidence,
     }));
@@ -168,8 +189,7 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
     if (result.report === undefined) throw new Error("Browser WASM conformance did not produce a report.");
     if (result.certificationError !== undefined) throw new Error(`Browser WASM certification failed: ${result.certificationError}`);
     if (result.certification === undefined) throw new Error("Browser WASM certification did not produce an artifact.");
-    if (result.certificationStress === undefined) throw new Error("Browser WASM stress certification did not produce an artifact.");
-    return { ...result.report, certification: result.certification, certificationStress: result.certificationStress, certificationEvidence: result.certificationEvidence };
+    return { ...result.report, certification: result.certification, certificationEvidence: result.certificationEvidence };
   } finally {
     await page.close();
   }
@@ -279,6 +299,7 @@ async function supportMatrix(browser, previewUrl) {
 async function main() {
   let server;
   let fixtureServer;
+  const certification = certificationOptions();
   const port = externalUrl === undefined ? await previewPort() : undefined;
   const url = externalUrl ?? `http://127.0.0.1:${port}${route}`;
   try {
@@ -302,8 +323,8 @@ async function main() {
       await waitForServer(url);
     }
 
-    fixtureServer = await startFixtureServer();
-    const certificationBundle = await buildBrowserCertificationBundle();
+    if (certification !== undefined) fixtureServer = await startFixtureServer();
+    const certificationBundle = certification === undefined ? undefined : await buildBrowserCertificationBundle();
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage();
@@ -377,28 +398,27 @@ async function main() {
       const expectedChecks = ["nested-tx", "root-escape", "stream-ownership", "mapper-reentry", "break-cleanup", "error-cleanup", "concurrent-branches", "bulk-conformance:prepared-loop"];
       if (checks.join(",") !== expectedChecks.join(",")) throw new Error(`Unexpected browser ownership checks: ${checks.join(",")}.`);
       console.log(`Browser preview passed: ${url}`);
-      const report = await runWasmConformance(browser, fixtureServer.url, certificationBundle, process.env.SQLBRAID_SOURCE_SHA ?? "working-tree");
-      if (report.certification.sourceSha !== (process.env.SQLBRAID_SOURCE_SHA ?? "working-tree")) {
-        throw new Error("Browser certification source SHA did not survive the fixture boundary.");
-      }
-      if (Object.keys(report.certification.cases ?? {}).length !== 84) {
-        throw new Error(`Browser certification executed ${Object.keys(report.certification.cases ?? {}).length} cases instead of 84.`);
-      }
-      if (Object.keys(report.certificationStress.cases ?? {}).length !== 84) {
-        throw new Error(`Browser stress certification executed ${Object.keys(report.certificationStress.cases ?? {}).length} cases instead of 84.`);
-      }
-      await writeFile("/tmp/sqlbraid-rc3-sqlite-web-browser-artifact.json", JSON.stringify(report.certification, null, 2));
-      await writeFile("/tmp/sqlbraid-rc3-sqlite-web-browser-stress-artifact.json", JSON.stringify(report.certificationStress, null, 2));
-      const integerEvidence = report.cases?.["wasm.numeric.exact-integer"];
-      if (!integerEvidence || Object.values(integerEvidence.values ?? {}).some((value) => value?.type !== "string")) {
-        throw new Error("Browser WASM exact INTEGER evidence must use canonical strings.");
-      }
-      if (integerEvidence.realValues?.some((value) => value?.type !== "number")) {
-        throw new Error("Browser WASM REAL evidence must remain JavaScript numbers.");
-      }
-      const jsonEvidence = report.cases?.["wasm.data.json-text"]?.rows?.[0]?.payload;
-      if (typeof jsonEvidence !== "string" || !jsonEvidence.includes("9007199254740993")) {
-        throw new Error("Browser WASM nested JSON must remain exact text.");
+      let report = await page.evaluate(() => window.__sqlbraidWasmConformance ?? {});
+      if (certification !== undefined) {
+        report = await runWasmConformance(browser, fixtureServer.url, certificationBundle, certification.sourceSha, certification.stress);
+        if (report.certification.sourceSha !== certification.sourceSha) {
+          throw new Error("Browser certification source SHA did not survive the fixture boundary.");
+        }
+        if (Object.keys(report.certification.cases ?? {}).length !== 84) {
+          throw new Error(`Browser certification executed ${Object.keys(report.certification.cases ?? {}).length} cases instead of 84.`);
+        }
+        await writeFile(certification.artifactPath, JSON.stringify(report.certification, null, 2));
+        const integerEvidence = report.cases?.["wasm.numeric.exact-integer"];
+        if (!integerEvidence || Object.values(integerEvidence.values ?? {}).some((value) => value?.type !== "string")) {
+          throw new Error("Browser WASM exact INTEGER evidence must use canonical strings.");
+        }
+        if (integerEvidence.realValues?.some((value) => value?.type !== "number")) {
+          throw new Error("Browser WASM REAL evidence must remain JavaScript numbers.");
+        }
+        const jsonEvidence = report.cases?.["wasm.data.json-text"]?.rows?.[0]?.payload;
+        if (typeof jsonEvidence !== "string" || !jsonEvidence.includes("9007199254740993")) {
+          throw new Error("Browser WASM nested JSON must remain exact text.");
+        }
       }
       console.log(`SQLBRAID_BROWSER_REPORT=${JSON.stringify({ ...report, browserVersion: browser.version(), matrix: await supportMatrix(browser, url) })}`);
     } finally {

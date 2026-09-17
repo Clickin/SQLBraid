@@ -11,10 +11,10 @@ export default {
     const requestUrl = new URL(request.url);
     if (requestUrl.pathname === "/certification") {
       const sourceSha = requestUrl.searchParams.get("sourceSha") ?? "working-tree";
+      const stress = requestUrl.searchParams.get("stress") === "1";
       const target = createD1Target(env.DB, sourceSha);
-      const artifact = await certifyTarget(target);
-      const stress = await certifyTarget(target, { stress: true });
-      return Response.json({ artifact, stress });
+      const artifact = await certifyTarget(target, { stress });
+      return Response.json({ artifact });
     }
     let nativeBatchCalls = 0;
     let prepareCalls = 0;
