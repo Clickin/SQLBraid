@@ -68,6 +68,17 @@ export interface CertificationQueries {
     readonly specialErrors?: Readonly<Partial<Record<CertificationCaseId, { readonly code: string; readonly feature?: string }>>>;
     readonly commandAffectedRows?: number;
     readonly failureCode?: string;
+    readonly emptyResultError?: {
+      readonly feature: string;
+      readonly code: `BRAID_${string}`;
+    };
+  };
+}
+
+export interface ExpectedGuardedCaseContract {
+  readonly emptyResultError?: {
+    readonly feature: string;
+    readonly code: `BRAID_${string}`;
   };
 }
 
@@ -127,6 +138,7 @@ export interface CertificationTarget {
   readonly allowCustomCapabilities?: boolean;
   readonly expectedCapabilities: ExpectedCapabilityContract;
   readonly expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">>;
+  readonly expectedGuardedCases?: ExpectedGuardedCaseContract;
   readonly createFixture: () => Promise<CertificationFixture>;
 }
 
@@ -146,6 +158,7 @@ export interface CertificationArtifact {
   readonly cases: Readonly<Record<CertificationCaseId, CertificationCaseResult>>;
   readonly expectedCapabilities: ExpectedCapabilityContract;
   readonly expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">>;
+  readonly expectedGuardedCases?: ExpectedGuardedCaseContract;
   readonly declaredCapabilities: Readonly<Record<string, EnvironmentCapability>>;
 }
 
@@ -158,6 +171,7 @@ export interface CertificationAggregateOptions {
   readonly requiredTargets: readonly string[];
   readonly requiredTargetContracts: Readonly<Record<string, ExpectedCapabilityContract>>;
   readonly requiredTargetOptionContracts: Readonly<Record<string, Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">>>>;
+  readonly requiredTargetGuardedCaseContracts?: Readonly<Record<string, ExpectedGuardedCaseContract | undefined>>;
   readonly requiredCaseIds?: readonly CertificationCaseId[];
 }
 

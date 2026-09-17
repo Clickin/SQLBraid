@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { PUBLIC_ERROR_DEFINITIONS, type EnvironmentCapability } from "@sqlbraid/core";
-import { REQUIRED_CASE_IDS, type CertificationAggregate, type CertificationAggregateOptions, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationTarget, type ExpectedCapability, type ExpectedCapabilityContract } from "./types.js";
+import { REQUIRED_CASE_IDS, type CertificationAggregate, type CertificationAggregateOptions, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationTarget, type ExpectedCapability, type ExpectedCapabilityContract, type ExpectedGuardedCaseContract } from "./types.js";
 export { certifyTarget } from "./execute.js";
 
 function normalize(value: unknown): unknown {
@@ -52,6 +52,14 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
   assert.ok(isRecord(value.expectedCapabilities), "Certification artifact expectedCapabilities must be an object.");
   assert.ok(isRecord(value.expectedTransactionOptions), "Certification artifact expectedTransactionOptions must be an object.");
   assert.ok(isRecord(value.declaredCapabilities), "Certification artifact declaredCapabilities must be an object.");
+  if (value.expectedGuardedCases !== undefined) {
+    assert.ok(isRecord(value.expectedGuardedCases), "Certification artifact expected guarded-case contract must be an object.");
+    if (value.expectedGuardedCases.emptyResultError !== undefined) {
+      assert.ok(isRecord(value.expectedGuardedCases.emptyResultError), "Certification artifact empty-result error contract must be an object.");
+      assert.equal(typeof value.expectedGuardedCases.emptyResultError.feature, "string");
+      assert.equal(typeof value.expectedGuardedCases.emptyResultError.code, "string");
+    }
+  }
   for (const [id, result] of Object.entries(value.cases)) {
     assert.ok(isRecord(result), `Invalid certification case ${id}.`);
     assert.equal(typeof result.status, "string", `Certification case ${id} has no status.`);
@@ -74,7 +82,7 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
 
 export function validateCertificationArtifact(
   artifact: unknown,
-  options: Pick<CertificationAggregateOptions, "sourceSha" | "requiredCaseIds"> & { readonly expectedCapabilities?: ExpectedCapabilityContract; readonly expectedTransactionOptions?: CertificationAggregateOptions["requiredTargetOptionContracts"][string] },
+  options: Pick<CertificationAggregateOptions, "sourceSha" | "requiredCaseIds"> & { readonly expectedCapabilities?: ExpectedCapabilityContract; readonly expectedTransactionOptions?: CertificationAggregateOptions["requiredTargetOptionContracts"][string]; readonly expectedGuardedCases?: ExpectedGuardedCaseContract },
 ): void {
   assertArtifactShape(artifact);
   assert.equal(artifact.sourceSha, options.sourceSha, `Certification artifact ${artifact.target} has the wrong source SHA.`);
@@ -83,6 +91,9 @@ export function validateCertificationArtifact(
   }
   if (options.expectedTransactionOptions !== undefined) {
     assert.ok(equalContract(artifact.expectedTransactionOptions, options.expectedTransactionOptions), `Certification artifact ${artifact.target} expected transaction option contract differs from the independent target contract.`);
+  }
+  if (options.expectedGuardedCases !== undefined || artifact.expectedGuardedCases !== undefined) {
+    assert.ok(equalContract((artifact.expectedGuardedCases ?? {}) as unknown as Readonly<Record<string, unknown>>, (options.expectedGuardedCases ?? {}) as unknown as Readonly<Record<string, unknown>>), `Certification artifact ${artifact.target} expected guarded-case contract differs from the independent target contract.`);
   }
   const required = options.requiredCaseIds ?? REQUIRED_CASE_IDS;
   const actualIds = Object.keys(artifact.cases).sort();
@@ -118,6 +129,9 @@ export function aggregateCertificationArtifacts(
   assert.deepEqual(actualTargets, expectedTargets, "Certification target set is incomplete or contains an unexpected target.");
   for (const target of expectedTargets) assert.ok(options.requiredTargetContracts[target], `Missing independent expected contract for ${target}.`);
   for (const target of expectedTargets) assert.ok(options.requiredTargetOptionContracts[target], `Missing independent transaction option contract for ${target}.`);
+  if (options.requiredTargetGuardedCaseContracts !== undefined) {
+    for (const target of expectedTargets) assert.ok(Object.hasOwn(options.requiredTargetGuardedCaseContracts, target), `Missing independent guarded-case contract for ${target}.`);
+  }
   const targets: Record<string, CertificationArtifact> = {};
   for (const artifact of artifacts) {
     if (targets[artifact.target]) throw new Error(`Duplicate certification target ${artifact.target}.`);
@@ -126,6 +140,7 @@ export function aggregateCertificationArtifacts(
       requiredCaseIds: required,
       expectedCapabilities: options.requiredTargetContracts[artifact.target],
       expectedTransactionOptions: options.requiredTargetOptionContracts[artifact.target],
+      expectedGuardedCases: options.requiredTargetGuardedCaseContracts?.[artifact.target],
     });
     assert.ok(equalContract(artifact.expectedCapabilities, options.requiredTargetContracts[artifact.target]!), `Certification artifact ${artifact.target} expected contract is not independently approved.`);
     targets[artifact.target] = artifact;

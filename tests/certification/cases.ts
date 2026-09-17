@@ -22,6 +22,34 @@ function capability(target: CertificationTarget, feature: string): ExpectedCapab
   return value;
 }
 
+function emptyResultError(context: CaseContext): { readonly feature: string; readonly code: `BRAID_${string}` } | undefined {
+  const configured = context.fixture.queries.expected?.emptyResultError;
+  const rows = context.target.expectedCapabilities["result.rows"];
+  const conditional = rows?.status === "guarded" && rows.conditionCode !== undefined;
+  const independent = context.target.expectedGuardedCases?.emptyResultError;
+  if (configured !== undefined) {
+    assert.ok(conditional, "empty-result error metadata requires a guarded result.rows condition.");
+    assert.deepEqual(configured, independent, "empty-result error metadata must match the independent target contract.");
+    return configured;
+  }
+  assert.equal(independent, undefined, "independent empty-result error metadata requires fixture evidence.");
+  return undefined;
+}
+
+async function assertEmptyResult(context: CaseContext, operation: () => unknown | Promise<unknown>): Promise<void> {
+  const expected = emptyResultError(context);
+  if (expected === undefined) {
+    await operation();
+    return;
+  }
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(isPublicUnsupportedFeatureError(error), `Expected a registered empty-result UnsupportedFeatureError, got ${textError(error)}`);
+    assert.equal(error.feature, expected.feature);
+    assert.equal(error.code, expected.code);
+    return true;
+  });
+}
+
 async function unsupported(context: CaseContext, id: CertificationCaseId, feature: string): Promise<CertificationCaseResult> {
   const expected = capability(context.target, feature);
   if (expected.status !== "unsupported") throw new Error(`${id} cannot use an unsupported proof while ${feature} is ${expected.status}.`);
@@ -188,13 +216,13 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     }
     return { status: "pass", name: "QRY002" };
   },
-  QRY010: async ({ fixture }) => { for (const db of databases(fixture)) assert.deepEqual(await db.all(fixture.queries.zero), []); return { status: "pass", name: "QRY010" }; },
+  QRY010: async (context) => { for (const db of databases(context.fixture)) { const expected = emptyResultError(context); if (expected === undefined) assert.deepEqual(await db.all(context.fixture.queries.zero), []); else await assertEmptyResult(context, () => db.all(context.fixture.queries.zero)); } return { status: "pass", name: "QRY010" }; },
   QRY011: async ({ fixture }) => { for (const db of databases(fixture)) assert.deepEqual(await db.all(fixture.queries.one), [fixture.queries.expected?.one]); return { status: "pass", name: "QRY011" }; },
   QRY012: async ({ fixture }) => { for (const db of databases(fixture)) assert.deepEqual(await db.all(fixture.queries.many), fixture.queries.expected?.many); return { status: "pass", name: "QRY012" }; },
   QRY020: async ({ fixture }) => { for (const db of databases(fixture)) assert.deepEqual(await db.one(fixture.queries.one), fixture.queries.expected?.one); return { status: "pass", name: "QRY020" }; },
-  QRY021: async ({ fixture }) => { for (const db of databases(fixture)) await assert.rejects(() => db.one(fixture.queries.zero), (error: unknown) => { assertCardinality(error, "one", 0); return true; }); return { status: "pass", name: "QRY021" }; },
+  QRY021: async (context) => { for (const db of databases(context.fixture)) { const expected = emptyResultError(context); if (expected === undefined) await assert.rejects(() => db.one(context.fixture.queries.zero), (error: unknown) => { assertCardinality(error, "one", 0); return true; }); else await assertEmptyResult(context, () => db.one(context.fixture.queries.zero)); } return { status: "pass", name: "QRY021" }; },
   QRY022: async ({ fixture }) => { for (const db of databases(fixture)) await assert.rejects(() => db.one(fixture.queries.many), (error: unknown) => { assertCardinality(error, "one", 2); return true; }); return { status: "pass", name: "QRY022" }; },
-  QRY030: async ({ fixture }) => { for (const db of databases(fixture)) assert.equal(await db.maybeOne(fixture.queries.zero), undefined); return { status: "pass", name: "QRY030" }; },
+  QRY030: async (context) => { for (const db of databases(context.fixture)) { const expected = emptyResultError(context); if (expected === undefined) assert.equal(await db.maybeOne(context.fixture.queries.zero), undefined); else await assertEmptyResult(context, () => db.maybeOne(context.fixture.queries.zero)); } return { status: "pass", name: "QRY030" }; },
   QRY031: async ({ fixture }) => { for (const db of databases(fixture)) assert.deepEqual(await db.maybeOne(fixture.queries.one), fixture.queries.expected?.one); return { status: "pass", name: "QRY031" }; },
   QRY032: async ({ fixture }) => { for (const db of databases(fixture)) await assert.rejects(() => db.maybeOne(fixture.queries.many), (error: unknown) => { assertCardinality(error, "maybeOne", 2); return true; }); return { status: "pass", name: "QRY032" }; },
 
@@ -240,13 +268,15 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     if (!fixture.queries.transaction) throw new Error("TX002 transaction fixture missing.");
     await fixture.reset();
     await assert.rejects(() => fixture.db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); throw new Error("cert-rollback"); }));
-    assert.equal((await fixture.db.all(fixture.queries.transaction.visible)).length, 0);
+    if (emptyResultError(context) === undefined) assert.equal((await fixture.db.all(fixture.queries.transaction!.visible)).length, 0);
+    else await assertEmptyResult(context, () => fixture.db.all(fixture.queries.transaction!.visible));
   }),
   TX003: async (context) => supported(context, "TX003", "transaction", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX003 transaction fixture missing.");
     await fixture.reset();
     await assert.rejects(() => fixture.db.tx(async (tx) => { await tx.execute(fixture.queries.transaction!.insert); await tx.execute(fixture.queries.failure); }));
-    assert.equal((await fixture.db.all(fixture.queries.transaction.visible)).length, 0);
+    if (emptyResultError(context) === undefined) assert.equal((await fixture.db.all(fixture.queries.transaction!.visible)).length, 0);
+    else await assertEmptyResult(context, () => fixture.db.all(fixture.queries.transaction!.visible));
   }),
   TX004: async (context) => supported(context, "TX004", "transaction", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX004 transaction fixture missing.");
@@ -271,7 +301,8 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     await fixture.db.tx(async (outer) => {
       await assert.rejects(() => outer.tx(async (inner) => { await inner.execute(fixture.queries.transaction!.savepointInsert); throw new Error("cert-savepoint-rollback"); }));
     });
-    assert.equal((await fixture.db.all(fixture.queries.transaction.visible)).length, 0);
+    if (emptyResultError(context) === undefined) assert.equal((await fixture.db.all(fixture.queries.transaction!.visible)).length, 0);
+    else await assertEmptyResult(context, () => fixture.db.all(fixture.queries.transaction!.visible));
   }),
   TX012: async (context) => supported(context, "TX012", "transaction", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX012 transaction fixture missing.");
@@ -280,7 +311,8 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
       await outer.tx(async (inner) => { await inner.execute(fixture.queries.transaction!.savepointInsert); });
       throw new Error("cert-outer-rollback");
     }));
-    assert.equal((await fixture.db.all(fixture.queries.transaction.visible)).length, 0);
+    if (emptyResultError(context) === undefined) assert.equal((await fixture.db.all(fixture.queries.transaction!.visible)).length, 0);
+    else await assertEmptyResult(context, () => fixture.db.all(fixture.queries.transaction!.visible));
   }),
   TX013: async (context) => supported(context, "TX013", "transaction.savepoint", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX013 transaction fixture missing.");
@@ -404,6 +436,11 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     const probes = Object.values(context.fixture.unsupported ?? {});
     const apiUnsupported = Object.entries(context.target.expectedCapabilities).filter(([, value]) => value.status === "unsupported");
     const representedApiFeatures = new Set(probes.map((probe) => probe?.feature));
+    if (context.target.expectedCapabilities["result.multiple-sets"]?.status === "unsupported"
+      && context.target.expectedCapabilities["routine.result-sets"]?.status === "unsupported"
+      && representedApiFeatures.has("routine.result-sets")) {
+      representedApiFeatures.add("result.multiple-sets");
+    }
     for (const [feature] of apiUnsupported) {
       if (feature.startsWith("data.") || feature.startsWith("numeric.") || feature.startsWith("sql.")) continue;
       if (!representedApiFeatures.has(feature)) throw new Error(`CAP002 missing unsupported API probe for ${feature}.`);

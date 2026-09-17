@@ -16,6 +16,19 @@ describe("A4 certification harness", () => {
     assert.equal(artifact.cases.STR006.code, "BRAID_CANCEL_UNSUPPORTED");
   });
 
+  test("proves guarded empty results use the actual conditional unsupported boundary", async () => {
+    const target = createSyntheticTarget("candidate-guarded-empty", true, { resultRowsGuarded: true, resultSetsUnsupported: true });
+    const artifact = await certifyTarget(target);
+    assert.equal(artifact.cases.CAP002.status, "pass");
+    assert.equal(artifact.cases.QRY010.status, "pass");
+    assert.equal(artifact.cases.QRY021.status, "pass");
+    assert.equal(artifact.cases.QRY030.status, "pass");
+    assert.deepEqual(artifact.expectedGuardedCases, target.expectedGuardedCases);
+    assert.equal(artifact.cases.CALL004.status, "pass-unsupported");
+    assert.equal(artifact.cases.CALL004.feature, "routine.result-sets");
+    assert.equal(artifact.cases.CALL004.code, "BRAID_RESULT_SETS_UNSUPPORTED");
+  });
+
   test("rejects incomplete or mismatched strict streaming evidence", async () => {
     const fixture = await createSyntheticTarget("candidate-a4-negative").createFixture();
     const stream = fixture.stream!;

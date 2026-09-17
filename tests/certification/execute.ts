@@ -71,6 +71,7 @@ export async function certifyTarget(target: CertificationTarget, options: Certif
       cases,
       expectedCapabilities: target.expectedCapabilities,
       expectedTransactionOptions: target.expectedTransactionOptions,
+      ...(target.expectedGuardedCases === undefined ? {} : { expectedGuardedCases: target.expectedGuardedCases }),
       declaredCapabilities: environment.capabilities,
     };
   } finally {
