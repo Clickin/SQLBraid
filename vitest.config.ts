@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 
 const sourceAliases = {
   "#async-context": resolve("packages/runtime/src/async-context.node.ts"),
+  "@sqlbraid/core/driver": resolve("packages/core/src/driver.ts"),
   "@sqlbraid/core": resolve("packages/core/src/index.ts"),
   "@sqlbraid/codegen": resolve("packages/codegen/src/index.ts"),
   "@sqlbraid/template": resolve("packages/template/src/index.ts"),

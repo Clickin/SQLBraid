@@ -10,6 +10,7 @@
     "paths": {
       "#async-context": ["packages/runtime/src/async-context.ts"],
       "@sqlbraid/core": ["packages/core/src/index.ts"],
+      "@sqlbraid/core/driver": ["packages/core/src/driver.ts"],
       "@sqlbraid/codegen": ["packages/codegen/src/index.ts"],
       "@sqlbraid/template": ["packages/template/src/index.ts"],
       "@sqlbraid/metadata": ["packages/metadata/src/index.ts"],

@@ -35,7 +35,7 @@ function packageBuild(cwd: string, entry: Record<string, string>): UserConfig {
 }
 
 export default defineConfig([
-  packageBuild("packages/core", { index: "src/index.ts" }),
+  packageBuild("packages/core", { index: "src/index.ts", driver: "src/driver.ts" }),
   packageBuild("packages/codegen", { index: "src/index.ts" }),
   packageBuild("packages/template", { index: "src/index.ts" }),
 
