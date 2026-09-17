@@ -194,14 +194,13 @@ function instrumentProviderStream(
     ...provider,
     async acquire() {
       const lease = await provider.acquire();
-      const stream = lease.stream.bind(lease);
       let released = false;
       let streamUsed = false;
       return {
         ...lease,
-        stream: (...args: Parameters<typeof lease.stream>) => {
+        stream: <Row>(...args: Parameters<typeof lease.stream>) => {
           streamUsed = true;
-          const source = stream(...args);
+          const source = lease.stream<Row>(...args);
           return {
             [Symbol.asyncIterator]() {
               const iterator = source[Symbol.asyncIterator]();
@@ -286,6 +285,8 @@ async function createFixture(): Promise<CertificationFixture> {
   let streamReleases = 0;
   const streamReturns = { value: 0 };
   const connection = instrumentMariaDbConnection(nativeConnection, () => { nativeExecutes.value += 1; }, () => undefined);
+  assert.ok(connection.query, "MariaDB certification requires native query support.");
+  const nativeQuery = connection.query.bind(connection);
   const physicalIds = new Set<string>();
   const trackedPool = {
     getConnection: async () => {
@@ -311,17 +312,17 @@ async function createFixture(): Promise<CertificationFixture> {
     () => { streamReleases += 1; },
   );
   const pooled = createPooledDatabase(provider);
-  await connection.query(`DROP TABLE IF EXISTS ${TABLE}`);
-  await connection.query(`CREATE TABLE ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NOT NULL CHECK (value <> ''))`);
-  await connection.query(`CREATE TABLE IF NOT EXISTS ${JSON_TABLE} (payload JSON NOT NULL)`);
-  await connection.query(`DELETE FROM ${JSON_TABLE}`);
-  await connection.query(`INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('large', CAST('9007199254740993' AS DECIMAL(19, 0))))`);
-  await connection.query("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_call");
-  await connection.query("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_sets");
-  await connection.query("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_lob");
-  await connection.query("CREATE PROCEDURE braid_rc3_mariadb_call(IN input_value VARCHAR(255)) BEGIN SELECT input_value AS value; END");
-  await connection.query("CREATE PROCEDURE braid_rc3_mariadb_sets() BEGIN SELECT 'one' AS value; SELECT 'two' AS value; END");
-  await connection.query("CREATE PROCEDURE braid_rc3_mariadb_lob() SELECT CAST('lob' AS BINARY) AS value");
+  await nativeQuery(`DROP TABLE IF EXISTS ${TABLE}`);
+  await nativeQuery(`CREATE TABLE ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NOT NULL CHECK (value <> ''))`);
+  await nativeQuery(`CREATE TABLE IF NOT EXISTS ${JSON_TABLE} (payload JSON NOT NULL)`);
+  await nativeQuery(`DELETE FROM ${JSON_TABLE}`);
+  await nativeQuery(`INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('large', CAST('9007199254740993' AS DECIMAL(19, 0))))`);
+  await nativeQuery("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_call");
+  await nativeQuery("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_sets");
+  await nativeQuery("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_lob");
+  await nativeQuery("CREATE PROCEDURE braid_rc3_mariadb_call(IN input_value VARCHAR(255)) BEGIN SELECT input_value AS value; END");
+  await nativeQuery("CREATE PROCEDURE braid_rc3_mariadb_sets() BEGIN SELECT 'one' AS value; SELECT 'two' AS value; END");
+  await nativeQuery("CREATE PROCEDURE braid_rc3_mariadb_lob() SELECT CAST('lob' AS BINARY) AS value");
   const queries = rowQueries();
   const mappingFailure = new Error("mariadb query-bound mapping failure");
   const executionSchemaFailure = new Error("mariadb execution schema failure");
@@ -608,7 +609,7 @@ async function createFixture(): Promise<CertificationFixture> {
       },
     },
     close: async () => {
-      await connection.query("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_lob").catch(() => undefined);
+      await nativeQuery("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_lob").catch(() => undefined);
       await pool.query(`DROP TABLE IF EXISTS ${JSON_TABLE}`);
       for (const fault of faultConnections) await Promise.resolve(fault.end?.()).catch(() => undefined);
       await nativeConnection.end?.();

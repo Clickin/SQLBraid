@@ -1364,6 +1364,7 @@ function makeOracledbExecutor(
           ? resultSet.metaData
           : Array.isArray(result.metaData) ? result.metaData : [];
         assertUniqueFields(fields);
+        const iterate = resultSet[Symbol.asyncIterator];
         if (resultSet.getRow) {
           while (true) {
             signal?.throwIfAborted();
@@ -1395,8 +1396,8 @@ function makeOracledbExecutor(
             }
             if (batch.length < fetchSize) break;
           }
-        } else if (resultSet[Symbol.asyncIterator]) {
-          resultIterator = resultSet[Symbol.asyncIterator]();
+        } else if (iterate) {
+          resultIterator = iterate.call(resultSet);
           cleanupScope.add(async () => { await resultIterator?.return?.(); });
           while (true) {
             signal?.throwIfAborted();

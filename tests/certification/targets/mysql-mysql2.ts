@@ -114,14 +114,13 @@ function instrumentProviderStream(
     ...provider,
     async acquire() {
       const lease = await provider.acquire();
-      const stream = lease.stream.bind(lease);
       let released = false;
       let streamUsed = false;
       return {
         ...lease,
-        stream: (...args: Parameters<typeof lease.stream>) => {
+        stream: <Row>(...args: Parameters<typeof lease.stream>) => {
           streamUsed = true;
-          const source = stream(...args);
+          const source = lease.stream<Row>(...args);
           return {
             [Symbol.asyncIterator]() {
               const iterator = source[Symbol.asyncIterator]();
@@ -576,7 +575,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       prove: async () => {
         const row = await directDb.one(sql.rows`SELECT JSON_OBJECT('large', CAST(${largeInteger} AS DECIMAL(19, 0))) AS value`);
         const value = (row as { readonly value?: unknown }).value;
-        assert.equal(typeof value, "string");
+        assert.ok(typeof value === "string");
         assert.ok(value.includes(largeInteger), "mysql2 JSON text proof must preserve the exact numeric lexeme.");
       },
     },
