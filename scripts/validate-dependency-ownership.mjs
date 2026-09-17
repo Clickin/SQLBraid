@@ -67,6 +67,7 @@ const movedScripts = [
   "agent-tooling-consumer.mjs",
   "audit-runtime.mjs",
   "bulk-execution-benchmark.mjs",
+  "bun-sql-certification.mjs",
   "bun-sql-matrix.mjs",
   "isolated-facade-consumer.mjs",
   "isolated-lsp-consumer.mjs",

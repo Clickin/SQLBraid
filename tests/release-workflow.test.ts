@@ -384,4 +384,11 @@ test("runtime manual and tag events retain full fail-open coverage", () => {
   assert.deepEqual(planChanges([], { eventName: "workflow_dispatch", baseKnown: false }), allPlan());
   assert.deepEqual(planChanges([], { eventName: "push", baseKnown: true }), allPlan());
   assert.notDeepEqual(planChanges(["README.md"], { eventName: "pull_request", baseKnown: true }), allPlan());
+  for (const path of [
+    "scripts/certification.mjs",
+    "vitest.certification.config.ts",
+    "tests/scripts/bun-sql-certification.mjs",
+  ]) {
+    assert.deepEqual(planChanges([path], { eventName: "pull_request", baseKnown: true }), allPlan());
+  }
 });

@@ -4,14 +4,14 @@ import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { SQL } from "bun";
-import { certifyTarget } from "../tests/certification/execute.ts";
-import { REQUIRED_CASE_IDS } from "../tests/certification/types.ts";
+import { certifyTarget } from "../certification/execute.ts";
+import { REQUIRED_CASE_IDS } from "../certification/types.ts";
 import {
   expectedCapabilities,
   expectedGuardedCases,
   expectedTransactionOptions,
-} from "../tests/certification/targets/bun-sql.ts";
-import { validateCertificationArtifact } from "../tests/certification/runner.ts";
+} from "../certification/targets/bun-sql.ts";
+import { validateCertificationArtifact } from "../certification/runner.ts";
 
 const dialects = ["postgres", "mysql", "mariadb", "sqlite"];
 const envNames = {
@@ -20,7 +20,7 @@ const envNames = {
   mariadb: ["SQLBRAID_BUN_SQL_MARIADB_URL", "SQLBRAID_MARIADB_URL", "MARIADB_URL"],
   sqlite: ["SQLBRAID_BUN_SQL_SQLITE_URL", "SQLBRAID_SQLITE_URL"],
 };
-const repositoryRoot = resolve(new URL("..", import.meta.url).pathname);
+const repositoryRoot = resolve(new URL("../..", import.meta.url).pathname);
 
 function configuredUrl(dialect) {
   for (const name of envNames[dialect]) {
@@ -36,7 +36,7 @@ function createClient(dialect, url) {
 }
 
 async function createTarget(dialect, sourceSha) {
-  const module = await import(`../tests/certification/targets/bun-sql-${dialect}.ts`);
+  const module = await import(`../certification/targets/bun-sql-${dialect}.ts`);
   const url = configuredUrl(dialect);
   const createClientForTarget = () => createClient(dialect, url);
   const factory = module[`createBunSql${dialect[0].toUpperCase()}${dialect.slice(1)}Target`];

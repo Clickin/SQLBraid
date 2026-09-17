@@ -440,7 +440,7 @@ async function certifyTarget(target) {
     await run(
       "bun",
       [
-        "scripts/bun-sql-certification.mjs",
+        "tests/scripts/bun-sql-certification.mjs",
         "--source-sha",
         sha,
         "--artifact",

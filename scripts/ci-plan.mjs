@@ -18,7 +18,8 @@ const allPatterns = [
   /^(?:shared|vitest\.config\.ts|tsconfig[^/]*|tsdown\.config\.ts|pnpm-workspace\.yaml|pnpm-lock\.yaml|package\.json)\b/u,
   /^tests\/(?!db\/(?:postgres|mysql|mariadb|oracle|mssql|sqlite|bun-sql|d1|wasm)\/)/u,
   /^(?:support|\.github\/workflows)\//u,
-  /^(?:scripts\/(?:ci-plan|merge-vitest-results|runtime-portability|runtime-compatibility-smoke|validate-runtime-compatibility|validate-runtime-floor)\.mjs)$/u,
+  /^(?:scripts\/(?:certification|ci-plan|merge-vitest-results|runtime-portability|runtime-compatibility-smoke|validate-runtime-compatibility|validate-runtime-floor)\.mjs)$/u,
+  /^vitest\.certification\.config\.ts$/u,
   /^\.meta\//u,
 ];
 const databasePatterns = Object.fromEntries(

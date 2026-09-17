@@ -22,6 +22,15 @@ claim.
 
 ## `@sqlbraid/core`
 
+**Driver SPI subpath:** `@sqlbraid/core/driver` exports `CleanupAction`,
+`CleanupScope`, `createCleanupScope`, `defineResultProperty`, and
+`assertSavepointName`. Drivers explicitly register resource cleanup; the scope
+runs it once in LIFO order, preserves primary failures, aggregates cleanup
+failures under `BRAID_RESOURCE_CLEANUP`, and supports ownership handoff through
+`disarm()`. Synchronous cleanup remains synchronous. The property and savepoint
+helpers preserve ordinary-object own properties and reject unsafe names.
+These are supported driver-author contracts, not application query APIs.
+
 **Application:** `CallQuery`, `CommandQuery`, `CommandResult`, `Database`,
 `DatabaseOptions`, `ExecutableQuery`, `ExecutionEvent`, `ExecutionObserver`,
 `ExecutionOptions`, `ExecutionResultOf`, `PreparedFactoryOptions`,
