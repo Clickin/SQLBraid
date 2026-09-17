@@ -69,7 +69,7 @@ export default defineConfig({
         resolve: { alias: sourceAliases },
         test: {
           name: "unit",
-          include: ["tests/*.test.ts"],
+          include: ["tests/*.test.ts", "tests/certification/**/*.test.ts"],
           exclude: ["tests/consumer.test.ts", "tests/cli.test.ts", "tests/db/**"],
         },
       },
