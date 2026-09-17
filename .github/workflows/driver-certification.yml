@@ -547,6 +547,12 @@ jobs:
           name: certification-prepared
           path: ${{ runner.temp }}/prepared
       - run: tar -xzf "$RUNNER_TEMP/prepared/prepared-build.tar.gz" -C "$GITHUB_WORKSPACE"
+      - name: Load candidate identity
+        run: |
+          { echo 'SQLBRAID_CERT_CANDIDATE_JSON<<CERT'; cat "$RUNNER_TEMP/prepared/candidate.json"; echo CERT; } >> "$GITHUB_ENV"
+          echo "SQLBRAID_CERT_PREPARED_DIR=$RUNNER_TEMP/prepared" >> "$GITHUB_ENV"
+      - name: Verify prepared bytes before global suites
+        run: node scripts/certification.mjs --verify-prepared --source-sha "$GITHUB_SHA" --output "$RUNNER_TEMP/global-prepared-before.json"
       - name: Run authoritative runtime, DB driver, and OTel suites
         env:
           SQLBRAID_CERT_SOURCE_SHA: ${{ github.sha }}
@@ -563,7 +569,9 @@ jobs:
             --maxWorkers=1 --reporter=json --outputFile="$RUNNER_TEMP/global-evidence/vitest.json"
       - name: Write same-SHA global evidence
         run: |
-          node scripts/verify-global-evidence.mjs --source-sha "$GITHUB_SHA" --report "$RUNNER_TEMP/global-evidence/vitest.json" --output "$RUNNER_TEMP/global-evidence/global.json"
+          dist_sha=$(node -p "require(process.env.RUNNER_TEMP + '/global-prepared-before.json').distSha256")
+          node scripts/certification.mjs --verify-prepared --source-sha "$GITHUB_SHA" --expected-dist-sha "$dist_sha"
+          node scripts/verify-global-evidence.mjs --source-sha "$GITHUB_SHA" --report "$RUNNER_TEMP/global-evidence/vitest.json" --prepared-evidence "$RUNNER_TEMP/global-prepared-before.json" --output "$RUNNER_TEMP/global-evidence/global.json"
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: certification-global

@@ -66,7 +66,7 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        resolve: { alias: sourceAliases },
+        resolve: { alias: process.env.SQLBRAID_CERT_PREPARED_DIR ? {} : sourceAliases },
         test: {
           name: "unit",
           include: ["tests/*.test.ts", "tests/certification/**/*.test.ts"],

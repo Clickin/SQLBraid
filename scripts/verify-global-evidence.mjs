@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -33,6 +34,16 @@ function sourceSha() {
 function validateEvidence(evidence, sha) {
   if (evidence.schemaVersion !== 1 || evidence.sourceSha !== sha || evidence.status !== "pass")
     throw new Error("Global evidence has an invalid schema, source SHA, or status.");
+  const candidate = JSON.parse(process.env.SQLBRAID_CERT_CANDIDATE_JSON ?? "null");
+  if (!candidate || candidate.sourceSha !== sha || !/^[0-9a-f]{64}$/u.test(candidate.preparedBuildSha256 ?? ""))
+    throw new Error("Global evidence requires the exact prepared candidate identity.");
+  assert.deepEqual(evidence.candidate, candidate, "Global evidence candidate identity mismatch.");
+  if (
+    evidence.prepared?.sourceSha !== sha ||
+    evidence.prepared.archiveSha256 !== candidate.preparedBuildSha256 ||
+    !/^[0-9a-f]{64}$/u.test(evidence.prepared.distSha256 ?? "")
+  )
+    throw new Error("Global evidence requires verified prepared archive and dist digests.");
   if (
     !Array.isArray(evidence.checks) ||
     evidence.checks.length !== expectedSuites.length ||
@@ -53,12 +64,18 @@ const sha = sourceSha();
 const reportPath = option("--report");
 const evidencePath = option("--evidence");
 if (reportPath !== undefined) {
+  if (!process.env.SQLBRAID_CERT_PREPARED_DIR)
+    throw new Error("Global certification must resolve packages from the prepared build.");
+  const preparedPath = option("--prepared-evidence");
+  if (!preparedPath) throw new Error("Global evidence derivation requires --prepared-evidence.");
   const report = JSON.parse(await readFile(resolve(reportPath), "utf8"));
   if (!report.success || report.numFailedTests !== 0 || report.numPendingTests !== 0 || report.numTodoTests !== 0)
     throw new Error("Shared certification suites did not produce a passing report.");
   const evidence = {
     schemaVersion: 1,
     sourceSha: sha,
+    candidate: JSON.parse(process.env.SQLBRAID_CERT_CANDIDATE_JSON ?? "null"),
+    prepared: JSON.parse(await readFile(resolve(preparedPath), "utf8")),
     status: "pass",
     checks: expectedSuites,
     testSuites: report.testResults.map((suite) => ({
