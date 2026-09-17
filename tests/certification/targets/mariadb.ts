@@ -167,7 +167,7 @@ function instrumentMariaDbConnection(
 ): MariaDbConnectionLike {
   return new Proxy(connection as object, {
     get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
+      const value = Reflect.get(target, property, target);
       if (property === "execute" && typeof value === "function") {
         return (sqlOrOptions: unknown, values?: readonly unknown[]) => {
           onExecute();
@@ -250,7 +250,7 @@ function faultMariaStream(
         });
       }
       if (property === "close" && mode === "cleanup") return () => { throw error; };
-      const value = Reflect.get(target, property, receiver);
+      const value = Reflect.get(target, property, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
   }) as import("@sqlbraid/mariadb/mariadb").MariaDbStreamLike;
@@ -267,11 +267,11 @@ function faultMariaConnection(
       if (property === "queryStream") {
         return (sqlOrOptions: unknown, values?: readonly unknown[]) => {
           if (mode === "execute") throw error;
-          const queryStream = Reflect.get(target, property, receiver) as (sqlOrOptions: unknown, values?: readonly unknown[]) => import("@sqlbraid/mariadb/mariadb").MariaDbStreamLike;
+          const queryStream = Reflect.get(target, property, target) as (sqlOrOptions: unknown, values?: readonly unknown[]) => import("@sqlbraid/mariadb/mariadb").MariaDbStreamLike;
           return faultMariaStream(queryStream.call(target, sqlOrOptions, values), mode, error);
         };
       }
-      const value = Reflect.get(target, property, receiver);
+      const value = Reflect.get(target, property, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
   }) as MariaDbPoolConnectionLike;
