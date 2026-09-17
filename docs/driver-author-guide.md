@@ -75,6 +75,7 @@ The provider and every lease must expose the exact same `statementBinding` objec
 ```ts
 interface ConnectionProvider {
   readonly statementBinding: StatementBindingAdapter;
+  validateTransactionOptions?(options: TransactionOptions): void;
   acquire(): Promise<ConnectionLease>;
 }
 
@@ -134,6 +135,7 @@ interface QueryExecutor {
     binding: BulkBindingDescription,
     options?: ExecutionOptions,
   ): Awaitable<BulkExecutionResult>;
+  validateTransactionOptions?(options: TransactionOptions): void;
   begin?(options?: TransactionOptions): Awaitable<void>;
   commit?(): Awaitable<void>;
   rollback?(): Awaitable<void>;
@@ -142,6 +144,17 @@ interface QueryExecutor {
   releaseSavepoint?(name: string): Awaitable<void>;
 }
 ```
+
+`validateTransactionOptions?` is an optional, synchronous, pure policy hook.
+When present, it is authoritative for the adapter's exact transaction-option
+admissibility and must perform no acquisition, I/O, transaction-state mutation,
+or asynchronous work. `begin()` must reuse the same validator rather than
+maintain a second option rule set. A `ConnectionProvider` may expose the same
+hook; every lease should expose equivalent validation when its policy can vary,
+although runtime does not require function identity and retains the provider
+validator as a fallback when a lease omits it. Without the hook, runtime keeps
+the conservative capability-based option checks. Generic transaction and
+savepoint capability checks still apply independently.
 
 `ExecutionOptions` contains `signal?: AbortSignal`; row validation options add
 `schema`, and stream options add the same schema plus signal. An already-aborted
@@ -330,10 +343,16 @@ protocol cleanup and cancellation semantics.
 
 Implement `begin(options)` only for options the physical connection can honor.
 The portable isolation strings are `read-uncommitted`, `read-committed`,
-`repeatable-read`, and `serializable`; `readOnly` is separate. Unsupported
+Unsupported
 options must throw `UnsupportedFeatureError` with a `BRAID_*` code (the runtime
 uses `BRAID_TX_OPTION_UNSUPPORTED`). Nested explicit transaction options are
 rejected; do not reacquire for `tx` inside a session.
+If exact option admissibility depends on the adapter or profile, expose the
+optional synchronous `validateTransactionOptions` hook on the executor and
+provider, and call that same pure validator from `begin()`. A provider that
+exposes it must keep equivalent policy on its leases (runtime can inherit the
+provider validator when a lease omits the optional member); no function
+identity check is required.
 
 Environment capability IDs are canonical and capability-driven. The exhaustive
 machine-readable vocabulary is exported from `@sqlbraid/core` as

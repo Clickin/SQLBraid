@@ -503,6 +503,27 @@ function assertTransactionCapability(
   }
 }
 
+function validateTransactionOptionSupport(
+  resource: QueryExecutor | ConnectionProvider,
+  transactionOptions: TransactionOptions,
+  fallback: DatabaseEnvironment["capabilities"] | undefined,
+  inherited?: QueryExecutor | ConnectionProvider,
+): void {
+  const validator = resource.validateTransactionOptions;
+  const owner = validator === undefined ? inherited : resource;
+  const validate = validator ?? inherited?.validateTransactionOptions;
+  if (validate !== undefined && owner !== undefined) {
+    const result = validate.call(owner, transactionOptions) as unknown;
+    if (result !== null && (typeof result === "object" || typeof result === "function")
+      && typeof (result as { readonly then?: unknown }).then === "function") {
+      void (result as PromiseLike<unknown>).then(undefined, () => undefined);
+      throw new TypeError("validateTransactionOptions() must be synchronous.");
+    }
+    return;
+  }
+  assertTransactionCapability(resource, transactionOptions, fallback);
+}
+
 function malformedExecutionResult(): never {
   throw new TypeError("Executor returned a malformed query execution result.");
 }
@@ -2709,7 +2730,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
       }
       if (hasOptions) {
         assertTransactionOptions(transactionOptions);
-        assertTransactionCapability(executor, transactionOptions, options.capabilities);
+        validateTransactionOptionSupport(executor, transactionOptions, options.capabilities);
       }
       const pinnedStreamState = options.pinned?.physicalState ?? (nested ? state : undefined);
       if (pinnedStreamState && (pinnedStreamState.streamUsers > 0 || (pinnedStreamState.pendingStreams ?? 0) > 0)) {
@@ -2796,7 +2817,7 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
             : "The selected execution resource does not expose callback transactions.",
           options.capabilities,
         );
-        if (hasOptions) assertTransactionCapability(resource, transactionOptions, options.capabilities);
+        if (hasOptions) validateTransactionOptionSupport(resource, transactionOptions!, options.capabilities, executor);
         if (!nested && (!resource.begin || !resource.commit || !resource.rollback)) {
           throw new UnsupportedFeatureError(
             "transaction",

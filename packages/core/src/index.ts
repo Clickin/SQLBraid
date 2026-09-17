@@ -1270,6 +1270,7 @@ export interface QueryExecutor {
   stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row>;
   call(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<DriverRoutineResult>;
   bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Awaitable<BulkExecutionResult>;
+  validateTransactionOptions?(options: TransactionOptions): void;
   begin?(options?: TransactionOptions): Awaitable<void>;
   commit?(): Awaitable<void>;
   rollback?(): Awaitable<void>;
@@ -1285,6 +1286,7 @@ export interface ConnectionLease extends QueryExecutor {
 export interface ConnectionProvider {
   readonly statementBinding: StatementBindingAdapter;
   readonly environment?: DriverEnvironment;
+  validateTransactionOptions?(options: TransactionOptions): void;
   acquire(): Promise<ConnectionLease>;
 }
 

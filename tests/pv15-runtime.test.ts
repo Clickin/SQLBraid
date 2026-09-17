@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   createStatementBindingDescription,
+  UnsupportedFeatureError,
   type DriverRoutineResult,
   type ExecutionEvent,
   type QueryExecutor,
@@ -9,6 +10,7 @@ import {
   type StandardSchemaV1,
   type StatementBindingAdapter,
   type Dialect,
+  type TransactionOptions,
 } from "@sqlbraid/core";
 import { createSqlTag, sql } from "@sqlbraid/template";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
@@ -39,6 +41,19 @@ function emptyRowsExecutor(overrides: Partial<QueryExecutor> = {}): QueryExecuto
   };
 }
 
+function transactionLease(begin: () => Promise<void> = async () => {}): QueryExecutor & { release(): void } {
+  return {
+    statementBinding,
+    async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
+    async *stream<Row>() { yield* [] as readonly Row[]; },
+    async call(): Promise<DriverRoutineResult> { return { output: {}, resultSets: [] }; },
+    begin,
+    async commit() {},
+    async rollback() {},
+    release() {},
+  };
+}
+
 function alternateDialect(id: string): Dialect {
   return {
     id,
@@ -46,6 +61,72 @@ function alternateDialect(id: string): Dialect {
     lexicalProfile: { lineCommentPrefixes: ["--"] },
   };
 }
+
+test("transaction option validators reject before provider acquisition and override conservative capability status", async () => {
+  let acquired = 0;
+  let began = 0;
+  const environment = { capabilities: { "transaction.read-only": { status: "unsupported" as const } } };
+  const provider = {
+    statementBinding,
+    environment,
+    validateTransactionOptions(options: TransactionOptions) {
+      if (options.readOnly === true) throw new UnsupportedFeatureError("transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", "read-only is unavailable");
+    },
+    async acquire() {
+      acquired += 1;
+      return transactionLease(async () => { began += 1; });
+    },
+  };
+  const db = createPooledDatabase(provider);
+  await db.tx({ readOnly: false }, async () => {});
+  assert.equal(acquired, 1);
+  assert.equal(began, 1);
+  await assert.rejects(() => db.tx({ readOnly: true }, async () => {}), (error) => error instanceof UnsupportedFeatureError && error.feature === "transaction.read-only");
+  assert.equal(acquired, 1);
+  assert.equal(began, 1);
+
+  let noHookAcquired = 0;
+  const noHookDb = createPooledDatabase({
+    statementBinding,
+    environment,
+    async acquire() {
+      noHookAcquired += 1;
+      return transactionLease();
+    },
+  });
+  await assert.rejects(() => noHookDb.tx({ readOnly: false }, async () => {}), (error) => error instanceof UnsupportedFeatureError);
+  assert.equal(noHookAcquired, 0);
+
+  let thenableAcquired = 0;
+  const thenableDb = createPooledDatabase({
+    statementBinding,
+    validateTransactionOptions() {
+      return Promise.resolve() as unknown as void;
+    },
+    async acquire() {
+      thenableAcquired += 1;
+      return transactionLease();
+    },
+  });
+  await assert.rejects(() => thenableDb.tx({ readOnly: false }, async () => {}), /must be synchronous/u);
+  assert.equal(thenableAcquired, 0);
+});
+
+test("provider transaction option validator is inherited when a lease omits it", async () => {
+  let began = 0;
+  const db = createPooledDatabase({
+    statementBinding,
+    environment: { capabilities: { "transaction.read-only": { status: "unsupported" as const } } },
+    validateTransactionOptions(options: TransactionOptions) {
+      if (options.readOnly !== false) throw new UnsupportedFeatureError("transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", "only explicit writable mode is supported");
+    },
+    async acquire() {
+      return transactionLease(async () => { began += 1; });
+    },
+  });
+  await db.tx({ readOnly: false }, async () => {});
+  assert.equal(began, 1);
+});
 
 test("prepared factory, render, and shape failures emit non-executing query:error events", async () => {
   const events: ExecutionEvent[] = [];
