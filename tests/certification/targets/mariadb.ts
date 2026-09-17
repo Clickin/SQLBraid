@@ -541,9 +541,9 @@ async function createFixture(): Promise<CertificationFixture> {
       await pool.query(`INSERT INTO ${TABLE} (value) VALUES ('baseline')`);
     };
     const readOptionState = async (tx: Database): Promise<string> => {
-      const row = (await tx.one(
-        sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id LIMIT 1`,
-      )) as { readonly value?: unknown };
+      const row = (await tx.one(sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id LIMIT 1`)) as {
+        readonly value?: unknown;
+      };
       return String(row.value);
     };
     const writeOptionState = sql.command`UPDATE ${sql.ident(TABLE)} SET value = 'written' ORDER BY id LIMIT 1`;
@@ -575,7 +575,8 @@ async function createFixture(): Promise<CertificationFixture> {
       } catch (error) {
         cleanupError = error;
       }
-      if (primaryError !== undefined && cleanupError !== undefined) throw new AggregateError([primaryError, cleanupError]);
+      if (primaryError !== undefined && cleanupError !== undefined)
+        throw new AggregateError([primaryError, cleanupError]);
       if (primaryError !== undefined) throw primaryError;
       if (cleanupError !== undefined) throw cleanupError;
     };
@@ -644,7 +645,10 @@ async function createFixture(): Promise<CertificationFixture> {
         if (writerError !== undefined) throw writerError;
         assert.equal(observed, "dirty", "MariaDB read-uncommitted did not observe the dirty write.");
       });
-    } else if (transactionOptions.isolation === "read-committed" || transactionOptions.isolation === "repeatable-read") {
+    } else if (
+      transactionOptions.isolation === "read-committed" ||
+      transactionOptions.isolation === "repeatable-read"
+    ) {
       await runProof(async () => {
         const witness = await openWitness();
         const ready = Promise.withResolvers<void>();
@@ -739,7 +743,8 @@ async function createFixture(): Promise<CertificationFixture> {
         try {
           await witness.connection.end?.();
         } catch (error) {
-          if (primaryError === undefined && readerError === undefined && writerError === undefined) primaryError = error;
+          if (primaryError === undefined && readerError === undefined && writerError === undefined)
+            primaryError = error;
           else writerError ??= error;
         }
         if (primaryError !== undefined) throw primaryError;

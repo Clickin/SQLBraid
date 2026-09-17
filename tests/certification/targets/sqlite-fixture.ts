@@ -622,6 +622,23 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
       );
       return row.marker;
     },
+    transactionOption: async (db: Database, selected: import("@sqlbraid/core").TransactionOptions) => {
+      await db.execute(sql.command`DELETE FROM cert_items`);
+      try {
+        await db.tx(selected, async (tx) => {
+          if (selected.isolation !== undefined) {
+            const state = await tx.one(sql.rows<{ read_uncommitted: string }>`PRAGMA read_uncommitted`);
+            if (Number(state.read_uncommitted) !== 0)
+              throw new Error("SQLite serializable transaction allows dirty reads.");
+          }
+          await tx.execute(queries.transaction!.insert);
+        });
+        if ((await db.all(queries.transaction!.visible)).length !== 1)
+          throw new Error("SQLite transaction option did not permit a durable write.");
+      } finally {
+        await db.execute(sql.command`DELETE FROM cert_items`);
+      }
+    },
     readOnlyWrite: async () => {
       await options.db.execute(sql.command`DELETE FROM cert_items`);
       await options.db.tx(async (tx) => {

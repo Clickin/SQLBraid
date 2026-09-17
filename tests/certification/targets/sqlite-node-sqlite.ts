@@ -142,7 +142,16 @@ function createFixture(streamSupported = true): Promise<CertificationFixture> {
     stats,
     transactionCleanup,
   };
-  return Promise.resolve(createSqliteFixture(options));
+  const version = native.prepare("SELECT sqlite_version() AS version").get()?.version;
+  if (typeof version !== "string") throw new Error("node:sqlite did not report its native SQLite version.");
+  return Promise.resolve({
+    ...createSqliteFixture(options),
+    measuredDatabase: {
+      product: "sqlite",
+      version,
+      edition: process.versions.deno === undefined ? "Node bundled SQLite" : "Deno bundled SQLite",
+    },
+  });
 }
 
 export const nodeSqliteCertificationTarget = {

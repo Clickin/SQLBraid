@@ -228,17 +228,16 @@ async function nativeRow(
   return rows[0];
 }
 
-async function measureDatabase(
-  client: BunSqlClient,
-  dialect: BunSqlDialect,
-): Promise<DatabaseEnvironment["database"]> {
+async function measureDatabase(client: BunSqlClient, dialect: BunSqlDialect): Promise<DatabaseEnvironment["database"]> {
   if (dialect === "postgres") {
     const row = await nativeRow(client, "SELECT version() AS banner, current_setting('server_version') AS version");
     const banner = String(row.banner);
     const configuredVersion = /^(\d+(?:\.\d+){1,2})\b/u.exec(String(row.version))?.[1];
     const bannerVersion = /^PostgreSQL\s+(\d+(?:\.\d+){1,2})\b/u.exec(banner)?.[1];
     if (configuredVersion === undefined || bannerVersion === undefined || configuredVersion !== bannerVersion) {
-      throw new Error(`Bun.SQL PostgreSQL version probe was inconsistent: banner=${banner}, setting=${String(row.version)}.`);
+      throw new Error(
+        `Bun.SQL PostgreSQL version probe was inconsistent: banner=${banner}, setting=${String(row.version)}.`,
+      );
     }
     const edition = /\balpine\b/iu.test(banner) ? "alpine" : "unknown";
     return { product: "postgres", version: configuredVersion, edition };
@@ -257,7 +256,8 @@ async function measureDatabase(
   const row = await nativeRow(client, "SELECT VERSION() AS version, @@version_comment AS version_comment");
   const rawVersion = String(row.version);
   const version = /^\d+(?:\.\d+){2}/u.exec(rawVersion)?.[0];
-  if (version === undefined) throw new Error(`Bun.SQL ${dialect} version probe was not a release version: ${rawVersion}`);
+  if (version === undefined)
+    throw new Error(`Bun.SQL ${dialect} version probe was not a release version: ${rawVersion}`);
   const evidence = `${rawVersion} ${String(row.version_comment)}`;
   const edition =
     dialect === "mysql"
@@ -396,30 +396,19 @@ async function proveTransactionOption(
             if (!(error instanceof Error) || error.message !== "cert-isolation-rollback") throw error;
           });
       } else {
-        const ready = Promise.withResolvers<void>();
-        const continueReading = Promise.withResolvers<void>();
-        const reader = db.tx(options, async (tx) => {
+        await db.tx(options, async (tx) => {
           const first = await tx.one(visibleCount);
           observedBefore = String((first as { readonly count?: unknown }).count);
-          ready.resolve();
-          await continueReading.promise;
+          await otherDb.execute(queries.transaction!.insert);
           const second = await tx.one(visibleCount);
           observedCount = String((second as { readonly count?: unknown }).count);
         });
-        await ready.promise;
-        await otherDb.tx(async (writer) => {
-          await writer.execute(queries.transaction!.insert);
-        });
-        continueReading.resolve();
-        await reader;
         await reset();
         if (observedBefore !== "0")
           throw new Error(`Bun.SQL ${optionKey(options)} baseline count=${observedBefore} was not empty.`);
         const expectedCount = options.isolation === "read-committed" ? "1" : "0";
         if (observedCount !== expectedCount) {
-          throw new Error(
-            `Bun.SQL ${optionKey(options)} observed count=${observedCount} instead of ${expectedCount}.`,
-          );
+          throw new Error(`Bun.SQL ${optionKey(options)} observed count=${observedCount} instead of ${expectedCount}.`);
         }
         return;
       }
@@ -1110,6 +1099,59 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     sideEffects: () => counters.sideEffects,
     mutationSentinel,
     transactionCleanup,
+    transactionOption: async (targetDb: CertificationFixture["db"], selected: TransactionOptions) => {
+      if (!queries.transaction) throw new Error("Bun.SQL transaction option proof requires transaction queries.");
+      await reset();
+      try {
+        if (selected.isolation !== undefined) {
+          if (dialect === "sqlite") {
+            await targetDb.tx(selected, async (tx) => {
+              const state = (await tx.one(tag.rows`SELECT read_uncommitted FROM pragma_read_uncommitted`)) as {
+                read_uncommitted: unknown;
+              };
+              if (Number(state.read_uncommitted) !== 0)
+                throw new Error("Bun.SQL SQLite serializable transaction allows dirty reads.");
+            });
+          } else {
+            await proveTransactionOption(
+              targetDb,
+              options.createClient,
+              tag,
+              dialect,
+              selected,
+              queries,
+              transactionVisibleCount,
+              reset,
+            );
+          }
+        }
+        if (selected.readOnly !== undefined) {
+          await reset();
+          let caught: unknown;
+          try {
+            await targetDb.tx(selected, (tx) => tx.execute(queries.transaction!.insert));
+          } catch (error) {
+            caught = error;
+          }
+          if (selected.readOnly) {
+            if (
+              !(caught instanceof Error) ||
+              (caught as { code?: unknown }).code !== nativeFailureCode(dialect) ||
+              !nativeErrorHas(caught, "errno", dialect === "postgres" ? "25006" : 1792)
+            )
+              throw new Error("Bun.SQL requested read-only option did not reject the native write.", { cause: caught });
+            if (String(((await targetDb.one(transactionVisibleCount)) as { count: unknown }).count) !== "0")
+              throw new Error("Bun.SQL read-only option changed committed state.");
+          } else {
+            if (caught !== undefined) throw caught;
+            if (String(((await targetDb.one(transactionVisibleCount)) as { count: unknown }).count) !== "1")
+              throw new Error("Bun.SQL requested read-write option did not commit its write.");
+          }
+        }
+      } finally {
+        await reset();
+      }
+    },
     readOnlyWrite,
   } as CertificationFixture["metrics"];
   const fixture = {

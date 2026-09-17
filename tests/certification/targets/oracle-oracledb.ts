@@ -43,7 +43,7 @@ async function measureOracleDatabase(
       (row as { readonly banner_full?: unknown }).banner_full ??
       "",
   );
-  const release = /\bRelease\s+(\d+)\.(\d+)\.\d+(?:\.\d+){0,2}\b/u.exec(banner);
+  const release = /\bVersion\s+(\d+)\.(\d+)\.\d+(?:\.\d+){0,2}\b/u.exec(banner);
   const edition = /^Oracle Database\s+\d+\w*\s+(.+?)\s+Release\s+/u.exec(banner)?.[1]?.trim();
   if (release === null || edition === undefined)
     throw new Error(`Unable to parse Oracle version/edition banner: ${banner}`);
@@ -720,12 +720,27 @@ export async function createOracleOracledbTarget(
           };
           let failed = false;
           let primary: unknown;
+          let witness: OracleConnectionLike | undefined;
           try {
-            await db.execute(remove);
+            await db.tx((tx) => tx.execute(remove));
             let transactionError: unknown;
             let transactionFailed = false;
             try {
+              if (options.isolation !== undefined) witness = await pool.getConnection();
               await db.tx(options, async (tx) => {
+                if (options.isolation !== undefined) {
+                  assert.equal(Number((await tx.one(count)).VALUE), 0);
+                  await witness!.execute(
+                    `INSERT INTO ${TABLE} (id, value) VALUES (${proofId}, 'isolation-witness')`,
+                    [],
+                    { autoCommit: true },
+                  );
+                  assert.equal(
+                    Number((await tx.one(count)).VALUE),
+                    options.isolation === "read-committed" ? 1 : 0,
+                    `Oracle ${options.isolation} did not enforce its native concurrent-commit visibility.`,
+                  );
+                }
                 if (options.readOnly === true) {
                   await tx.execute(insert);
                   throw new Error("Oracle read-only transaction accepted a write.");
@@ -754,17 +769,19 @@ export async function createOracleOracledbTarget(
             failed = true;
             primary = error;
           }
-          let cleanupError: unknown;
+          const errors: unknown[] = failed ? [primary] : [];
           try {
-            await db.execute(remove);
+            await witness?.close?.();
           } catch (error) {
-            cleanupError = error;
+            errors.push(error);
           }
-          if (failed) {
-            if (cleanupError !== undefined) throw new AggregateError([primary, cleanupError]);
-            throw primary;
+          try {
+            await db.tx((tx) => tx.execute(remove));
+          } catch (error) {
+            errors.push(error);
           }
-          if (cleanupError !== undefined) throw cleanupError;
+          if (errors.length === 1) throw errors[0];
+          if (errors.length > 1) throw new AggregateError(errors);
         },
         pooledScope: async (): Promise<void> => {
           await pooled.session(async (session) => {

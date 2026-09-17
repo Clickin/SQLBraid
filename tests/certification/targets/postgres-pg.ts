@@ -692,10 +692,7 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
           sql.rows<{ readonly marker: number }>`SELECT marker FROM ${sql.ident(state.table)} WHERE id = 'baseline'`,
         )
       ).marker,
-    transactionOption: async (
-      db: Database,
-      options: import("@sqlbraid/core").TransactionOptions,
-    ): Promise<void> => {
+    transactionOption: async (db: Database, options: import("@sqlbraid/core").TransactionOptions): Promise<void> => {
       const proofId = "transaction-option-proof";
       const insert = sql.command`INSERT INTO ${sql.ident(state.table)} (id, value, marker) VALUES (${proofId}, 'transaction-option', 0)`;
       const remove = sql.command`DELETE FROM ${sql.ident(state.table)} WHERE id = ${proofId}`;
@@ -706,10 +703,7 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
         if (error instanceof AggregateError) return error.errors.some((item) => hasNativeCode(item, code));
         if (error === null || typeof error !== "object") return false;
         const candidate = error as { readonly code?: unknown; readonly cause?: unknown };
-        return (
-          candidate.code === code ||
-          (candidate.cause !== undefined && hasNativeCode(candidate.cause, code))
-        );
+        return candidate.code === code || (candidate.cause !== undefined && hasNativeCode(candidate.cause, code));
       };
       let failed = false;
       let primary: unknown;
@@ -736,8 +730,7 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
                 `PostgreSQL transaction option observed isolation=${observed.transaction_isolation} instead of ${expectedIsolation}.`,
               );
             }
-            const expectedReadOnly =
-              options.readOnly === undefined ? undefined : options.readOnly ? "on" : "off";
+            const expectedReadOnly = options.readOnly === undefined ? undefined : options.readOnly ? "on" : "off";
             if (expectedReadOnly !== undefined && observed.transaction_read_only !== expectedReadOnly) {
               throw new Error(
                 `PostgreSQL transaction option observed read_only=${observed.transaction_read_only} instead of ${expectedReadOnly}.`,

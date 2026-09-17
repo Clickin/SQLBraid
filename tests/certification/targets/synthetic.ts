@@ -712,6 +712,20 @@ export function createSyntheticTarget(
           }),
           sideEffects: () => state.sideEffects,
           mutationSentinel: () => state.committedRows,
+          transactionOption: async (targetDb, selected) => {
+            state.committedRows = 0;
+            if (selected.readOnly === true) {
+              await assert.rejects(
+                () => targetDb.tx(selected, (tx) => tx.execute(queries.transaction!.insert)),
+                /read-only/u,
+              );
+              assert.equal(state.committedRows, 0);
+            } else {
+              await targetDb.tx(selected, (tx) => tx.execute(queries.transaction!.insert));
+              assert.equal(state.committedRows, 1);
+            }
+            state.committedRows = 0;
+          },
           readOnlyWrite,
           physicalSessionIds: () => [state.identity],
           transactionCleanup,

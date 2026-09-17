@@ -576,6 +576,16 @@ export function createSqliteWasmTarget(
           );
           return row.marker;
         },
+        transactionOption: async (
+          targetDb: CertificationFixture["db"],
+          selected: import("@sqlbraid/core").TransactionOptions,
+        ) => {
+          await targetDb.tx(selected, async (tx) => {
+            const state = await tx.one(sql.rows<{ read_uncommitted: string }>`PRAGMA read_uncommitted`);
+            if (Number(state.read_uncommitted) !== 0)
+              throw new Error("SQLite WASM serializable transaction allows dirty reads.");
+          });
+        },
         readOnlyWrite: async () => {
           observed.exec("DELETE FROM cert_values");
           await db.tx(async (tx) => {

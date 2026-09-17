@@ -13,6 +13,18 @@ const GUARDED_SHA = "b".repeat(40);
 const NEGATIVE_SHA = "c".repeat(40);
 
 describe("A4 certification harness", () => {
+  test("rejects transaction option certification without an effective-state proof", async () => {
+    const target = createSyntheticTarget(NEGATIVE_SHA);
+    const fixture = await target.createFixture();
+    const result = await executeCertificationCase(
+      target,
+      { ...fixture, metrics: { ...fixture.metrics!, transactionOption: undefined } },
+      "TX023",
+      { stress: false },
+    );
+    assert.equal(result.status, "fail");
+  });
+
   test("runs every required public API case against a deterministic synthetic target", async () => {
     const artifact = await certifyTarget(createSyntheticTarget(A4_SHA));
 

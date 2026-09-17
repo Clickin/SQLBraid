@@ -97,7 +97,7 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
   );
   assert.equal(typeof value.provenance.measured.database.product, "string");
   if (value.provenance.measured.database.versionStatus === "measured") {
-    assert.equal(typeof value.provenance.measured.database.version, "string");
+    assert.ok(typeof value.provenance.measured.database.version === "string");
     assert.ok(value.provenance.measured.database.version.trim().length > 0);
   } else {
     assert.equal(

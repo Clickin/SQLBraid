@@ -1,7 +1,14 @@
 import { Buffer } from "node:buffer";
 import assert from "node:assert/strict";
 import { createConnection, createPool, type Connection } from "mysql2/promise";
-import type { CallQuery, ConnectionProvider, Database, RowQuery, StreamOptions, TransactionOptions } from "@sqlbraid/core";
+import type {
+  CallQuery,
+  ConnectionProvider,
+  Database,
+  RowQuery,
+  StreamOptions,
+  TransactionOptions,
+} from "@sqlbraid/core";
 import {
   createMysql2Database,
   createMysql2PoolProvider,
@@ -655,7 +662,8 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       } catch (error) {
         cleanupError = error;
       }
-      if (primaryError !== undefined && cleanupError !== undefined) throw new AggregateError([primaryError, cleanupError]);
+      if (primaryError !== undefined && cleanupError !== undefined)
+        throw new AggregateError([primaryError, cleanupError]);
       if (primaryError !== undefined) throw primaryError;
       if (cleanupError !== undefined) throw cleanupError;
     };
@@ -724,7 +732,10 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
         if (writerError !== undefined) throw writerError;
         assert.equal(observed, "1", "mysql2 read-uncommitted did not observe the dirty write.");
       });
-    } else if (transactionOptions.isolation === "read-committed" || transactionOptions.isolation === "repeatable-read") {
+    } else if (
+      transactionOptions.isolation === "read-committed" ||
+      transactionOptions.isolation === "repeatable-read"
+    ) {
       await runProof(async () => {
         const witness = await openWitness();
         const ready = Promise.withResolvers<void>();
@@ -819,7 +830,8 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
         try {
           await witness.connection.end();
         } catch (error) {
-          if (primaryError === undefined && readerError === undefined && writerError === undefined) primaryError = error;
+          if (primaryError === undefined && readerError === undefined && writerError === undefined)
+            primaryError = error;
           else writerError ??= error;
         }
         if (primaryError !== undefined) throw primaryError;

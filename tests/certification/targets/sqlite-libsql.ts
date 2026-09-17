@@ -61,7 +61,11 @@ async function createFixture(): Promise<CertificationFixture> {
     const versionRow = await db.one(sql.rows<{ readonly version: string }>`SELECT sqlite_version() AS version`);
     if (!/^\d+(?:\.\d+)+$/u.test(versionRow.version))
       throw new Error(`Unable to parse libSQL SQLite version: ${versionRow.version}`);
-    const measuredDatabase = { product: "sqlite", version: versionRow.version, edition: "libSQL local SQLite" } as const;
+    const measuredDatabase = {
+      product: "sqlite",
+      version: versionRow.version,
+      edition: "libSQL local SQLite",
+    } as const;
     const transactionCleanup = async (): Promise<void> => {
       const probe = await makeLibsqlDirectory();
       const probeClient = createClient({ url: `file:${probe.directory}/database.db`, intMode: "string" });

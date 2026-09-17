@@ -312,6 +312,7 @@ export interface CertificationMetrics {
   readonly mutationSentinel?: () => Promise<unknown> | unknown;
   readonly physicalSessionIds?: () => readonly string[];
   readonly transactionCleanup?: () => Promise<void>;
+  readonly transactionOption?: (db: Database, options: import("@sqlbraid/core").TransactionOptions) => Promise<void>;
   readonly readOnlyWrite?: () => Promise<void>;
   readonly routineCleanup?: (query: CallQuery) => Promise<void>;
   readonly pooledScope?: () => Promise<void>;

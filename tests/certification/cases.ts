@@ -232,16 +232,9 @@ async function runTransactionOption(
       code: error.code,
     };
   }
-  for (const db of databases(context.fixture)) {
-    await db.tx(options, async (tx) => {
-      await tx.one(context.fixture.queries.identity);
-      if (options.readOnly === true) {
-        const transaction = context.fixture.queries.transaction;
-        if (!transaction) throw new Error(`${id} requires transaction fixture evidence.`);
-        await assert.rejects(() => tx.execute(transaction.insert));
-      }
-    });
-  }
+  const prove = context.fixture.metrics?.transactionOption;
+  if (!prove) throw new Error(`${id} requires native effective transaction option evidence for ${key}.`);
+  for (const db of databases(context.fixture)) await prove(db, options);
   return { status: "pass", name: id, feature: key };
 }
 
