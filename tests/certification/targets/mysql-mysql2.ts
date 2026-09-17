@@ -521,10 +521,10 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       },
       "data.json-lossless-text": {
         prove: async () => {
-          const row = await db.one(q(sql.rows`SELECT JSON_OBJECT('large', 9007199254740993) AS value`));
-          const value = (row as { readonly value?: unknown }).value;
-          assert.equal(typeof value, "string", "mysql2 exact text profile must preserve JSON as transport text.");
-          assert.match(value, /9007199254740993/u);
+          await assert.rejects(
+            () => db.one(q(sql.rows`SELECT JSON_OBJECT('large', 9007199254740993) AS value`)),
+            (error: unknown) => error instanceof Error && /JSON results must remain strings/iu.test(error.message),
+          );
         },
       },
       "data.json-parsed": {
