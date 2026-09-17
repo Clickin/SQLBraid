@@ -653,18 +653,20 @@ function createProvider(client: BunSqlClient, dialect: BunSqlDialect): Connectio
           if (terminalFailure !== undefined) throw terminalFailure;
           if (released) return;
           released = true;
-          if (releaseOptions?.discard === true) {
+          const discard = releaseOptions?.discard === true;
+          if (discard && typeof reserved.close !== "function") {
             terminalFailure = new UnsupportedFeatureError(
               "resource.discard",
               "BRAID_RESOURCE_CLEANUP",
-              "Bun.SQL reserved connections expose release() but no scoped discard primitive; close the owning Bun.SQL client to discard this reservation.",
+              "The Bun.SQL reserved client does not expose close() for scoped discard.",
             );
             throw terminalFailure;
           }
           try {
-            await reserved.release();
+            if (discard) await reserved.close!({ timeout: 0 });
+            else await reserved.release();
           } catch (error) {
-            terminalFailure = new UnsupportedFeatureError("resource.cleanup", "BRAID_RESOURCE_CLEANUP", "Bun.SQL reserved connection release failed.", { cause: error });
+            terminalFailure = new UnsupportedFeatureError("resource.cleanup", "BRAID_RESOURCE_CLEANUP", "Bun.SQL reserved connection cleanup failed.", { cause: error });
             throw terminalFailure;
           }
         },

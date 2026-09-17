@@ -52,7 +52,7 @@ function instrument(client: BunSqlClient, counters: Counters, leased = false): B
       counters.failRollbackNative = false;
       counters.nativeRollbackClosed = true;
       try {
-        await client.close?.();
+        await client.close?.({ timeout: 0 });
       } catch {
         // Continue to the native rollback call so the driver supplies the fault.
       }
@@ -67,14 +67,11 @@ function instrument(client: BunSqlClient, counters: Counters, leased = false): B
   };
   Object.defineProperty(wrapped, "options", { value: client.options });
   if (client.close) {
-    wrapped.close = async () => {
-      try {
-        await client.close!();
-      } finally {
-        if (leased) {
-          counters.borrowed -= 1;
-          counters.cleanupBalance -= 1;
-        }
+    wrapped.close = async (options) => {
+      await client.close!(options);
+      if (leased) {
+        counters.borrowed -= 1;
+        counters.cleanupBalance -= 1;
       }
     };
   }
@@ -88,12 +85,9 @@ function instrument(client: BunSqlClient, counters: Counters, leased = false): B
         const wrappedReserved = instrument(reserved, counters, true) as BunSqlReservedClient;
         const release = reserved.release.bind(reserved);
         wrappedReserved.release = async () => {
-          try {
-            await release();
-          } finally {
-            counters.borrowed -= 1;
-            counters.cleanupBalance -= 1;
-          }
+          await release();
+          counters.borrowed -= 1;
+          counters.cleanupBalance -= 1;
         };
         return wrappedReserved;
       } catch (error) {
@@ -615,13 +609,29 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
   };
   const transactionCleanup = async (): Promise<void> => {
     const primary = new Error("cert-transaction-primary");
+    const peer = dialect === "sqlite" ? undefined : await client.reserve!();
+    const identitySql = dialect === "postgres"
+      ? "SELECT pg_backend_pid()::text AS id"
+      : "SELECT CAST(CONNECTION_ID() AS CHAR) AS id";
     counters.failRollbackNative = true;
     counters.rollbackError = undefined;
     let caught: unknown;
     try {
-      await db.tx(async () => { throw primary; });
-    } catch (error) {
-      caught = error;
+      const before = peer === undefined ? undefined
+        : (await peer.unsafe<readonly { readonly id: string }[]>(identitySql))[0]?.id;
+      try {
+        await db.tx(async () => { throw primary; });
+      } catch (error) {
+        caught = error;
+      }
+      if (peer !== undefined) {
+        const after = (await peer.unsafe<readonly { readonly id: string }[]>(identitySql))[0]?.id;
+        if (before === undefined || !/^\d+$/u.test(before) || after !== before) {
+          throw new Error("Bun.SQL discarded another reservation's physical session.");
+        }
+      }
+    } finally {
+      await peer?.release();
     }
     const contains = (value: unknown, predicate: (candidate: unknown) => boolean): boolean => {
       if (predicate(value)) return true;
@@ -707,14 +717,15 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       values: () => bulkValues,
     } as BulkConformanceFixture<unknown>,
     close: async () => {
-      if (counters.nativeRollbackClosed) {
+      if (counters.nativeRollbackClosed && dialect === "sqlite") {
         await client.close?.();
         return;
       }
       try { await client.unsafe(`DROP TABLE ${quoteIdentifier(dialect, table)}`, []); }
       finally {
         try { await client.unsafe(`DROP TABLE ${quoteIdentifier(dialect, sentinelTable)}`, []); }
-        finally { await client.close?.(); }
+        // Bun 1.3.14 treats a zero pool-close timeout as graceful, even after native disconnects.
+        finally { await client.close?.({ timeout: 1 }); }
       }
     },
   };
