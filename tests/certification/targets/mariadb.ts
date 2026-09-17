@@ -13,7 +13,6 @@ import type {
   TransactionOptionKey,
 } from "../types.js";
 
-const SOURCE_SHA = "c7f7d4b1ec193b4da637514eabee06d9ebc47d27";
 const TABLE = "braid_rc3_mariadb_cert";
 
 function returnSchema(): StandardSchemaV1<unknown, number> {
@@ -291,7 +290,10 @@ function assertCommandAffectedRows(result: unknown): void {
   if (command?.affectedRows !== 1) throw new Error("MariaDB command-safe proof did not observe one affected row.");
 }
 
-export function createMariaDbCertificationTarget(sourceSha = SOURCE_SHA): CertificationTarget {
+export function createMariaDbCertificationTarget(sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA): CertificationTarget {
+  if (sourceSha === undefined || sourceSha.trim().length === 0) {
+    throw new Error("SQLBRAID_CERT_SOURCE_SHA is required for MariaDB certification.");
+  }
   return {
     id: "mariadb-connector-node-11-8-9",
     sourceSha,
@@ -300,5 +302,3 @@ export function createMariaDbCertificationTarget(sourceSha = SOURCE_SHA): Certif
     createFixture,
   };
 }
-
-export const mariaDbTarget = createMariaDbCertificationTarget();
