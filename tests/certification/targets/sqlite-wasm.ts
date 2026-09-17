@@ -376,7 +376,7 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
             throw new Error("SQLite WASM bulk middle-item failure was not the native NOT NULL constraint.", { cause: error });
           }
           const observedRows = await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM cert_values ORDER BY rowid`);
-          const prefixRows = [{ value: "1.0" }];
+          const prefixRows = [{ value: "1" }];
           const atomicRows: typeof prefixRows = [];
           const observedText = JSON.stringify(observedRows);
           if (observedText === JSON.stringify(prefixRows)) {
