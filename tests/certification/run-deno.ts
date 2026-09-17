@@ -23,7 +23,8 @@ export async function runDenoCertification(
   if (!factory) throw new Error(`Unknown Deno certification target: ${targetId}`);
   const descriptor = await factory(sourceSha);
   try {
-    const artifact = await certifyTarget(descriptor.target, { stress: Deno.env.get("SQLBRAID_CERT_STRESS") === "true" });
+    const stress = Deno.env.get("SQLBRAID_CERT_STRESS");
+    const artifact = await certifyTarget(descriptor.target, { stress: stress === "1" || stress === "true" });
     const artifactPath = Deno.env.get("SQLBRAID_CERT_ARTIFACT") ?? `/tmp/sqlbraid-cert-${targetId}.json`;
     await writeCertificationArtifact(artifactPath, artifact);
     validateCertificationArtifact(artifact, { sourceSha });
