@@ -372,14 +372,20 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     for (const db of databases(fixture)) {
       await db.session(async (session) => {
         const outer = await session.one(fixture.queries.identity);
+        let nestedHandle: Database | undefined;
+        let nestedTransaction: Database | undefined;
         await session.session(async (nestedSession) => {
+          nestedHandle = nestedSession;
           const nested = await nestedSession.one(fixture.queries.identity);
           assert.equal(nested.id, outer.id);
           await nestedSession.tx(async (tx) => {
+            nestedTransaction = tx;
             const transaction = await tx.one(fixture.queries.identity);
             assert.equal(transaction.id, outer.id);
           });
+          await assert.rejects(() => nestedTransaction!.one(fixture.queries.identity), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_CLOSED");
         });
+        await assert.rejects(() => nestedHandle!.one(fixture.queries.identity), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_SESSION_CLOSED");
       });
     }
   }),
@@ -563,7 +569,9 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   }),
   PRE007: async (context) => supported(context, "PRE007", "statement.prepare", async ({ fixture }) => {
     const zero = preparedQuery(fixture, "cert-prepared-maybe-zero", fixture.queries.zero);
-    assert.equal(await (zero as unknown as { maybeOne(): Promise<unknown> }).maybeOne(), undefined);
+    const maybeZero = () => (zero as unknown as { maybeOne(): Promise<unknown> }).maybeOne();
+    if (emptyResultError(context) === undefined) assert.equal(await maybeZero(), undefined);
+    else await assertEmptyResult(context, maybeZero);
     const many = preparedQuery(fixture, "cert-prepared-maybe-many", fixture.queries.many);
     await assert.rejects(() => (many as unknown as { maybeOne(): Promise<unknown> }).maybeOne(), (error: unknown) => {
       assertCardinality(error, "maybeOne", 2);
@@ -675,6 +683,7 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     return { status: "pass", name: "CAP001" };
   },
   CAP002: async (context) => {
+    const representationFeature = (feature: string): boolean => feature.startsWith("data.") || feature.startsWith("numeric.") || feature.startsWith("sql.");
     const probes = Object.values(context.fixture.unsupported ?? {});
     const apiUnsupported = Object.entries(context.target.expectedCapabilities).filter(([, value]) => value.status === "unsupported");
     const representedApiFeatures = new Set(probes.map((probe) => probe?.feature));
@@ -686,12 +695,11 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     for (const [feature] of apiUnsupported) {
       if (representedApiFeatures.has(feature)) continue;
       const proof = context.fixture.representationUnsupported?.[feature];
-      if (proof) {
+      if (proof && representationFeature(feature) && !(REQUIRED_API_CAPABILITY_IDS as readonly string[]).includes(feature)) {
         await proof.prove();
         representedApiFeatures.add(feature);
         continue;
       }
-      if (!(REQUIRED_API_CAPABILITY_IDS as readonly string[]).includes(feature)) continue;
       throw new Error(`CAP002 missing unsupported API probe for ${feature}.`);
     }
     for (const probe of probes) {
@@ -722,11 +730,13 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     const probes = Object.entries(fixture.unsupported ?? {});
     if (probes.length === 0) throw new Error("ERR001 requires at least one unsupported public API probe.");
     for (const [, probe] of probes) {
+      const before = probe.sideEffects();
       let error: unknown;
       try { await probe.run(); } catch (caught) { error = caught; }
       assert.ok(isPublicUnsupportedFeatureError(error), "ERR001 requires a registered public UnsupportedFeatureError pair.");
       assert.equal(error.code, probe.expectedCode);
       assert.equal(error.feature, probe.expectedErrorFeature ?? probe.feature);
+      assert.equal(probe.sideEffects(), before);
     }
     return { status: "pass", name: "ERR001" };
   },

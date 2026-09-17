@@ -15,7 +15,8 @@ export interface BulkConformanceFixture<Input> {
 
 export interface BulkFailureEvidence {
   readonly error: unknown;
-  readonly observed: true;
+  readonly observedRows: readonly unknown[];
+  readonly expectedRows: readonly unknown[];
   readonly durability: "prefix" | "atomic";
 }
 
@@ -42,9 +43,15 @@ export async function runBulkConformanceCase(
     const evidence = await middleFailure();
     assert.ok(evidence !== null && typeof evidence === "object", "BULK003 must expose native middle-item evidence.");
     const proof = evidence as Partial<BulkFailureEvidence>;
-    assert.equal(proof.observed, true);
     assert.ok(proof.error !== undefined, "BULK003 must expose the native middle-item failure.");
-    assert.ok(proof.durability === "prefix" || proof.durability === "atomic", "BULK003 must classify observed durability.");
+    assert.ok(Array.isArray(proof.observedRows), "BULK003 must expose observed durable rows.");
+    assert.ok(Array.isArray(proof.expectedRows), "BULK003 must expose expected durable rows.");
+    assert.deepEqual(proof.observedRows, proof.expectedRows, "BULK003 observed durable rows differ from the declared native outcome.");
+    if (proof.durability === "atomic") assert.equal(proof.expectedRows.length, 0);
+    else {
+      assert.equal(proof.durability, "prefix");
+      assert.ok(proof.expectedRows.length > 0, "BULK003 prefix durability requires a non-empty committed prefix.");
+    }
   }
 }
 

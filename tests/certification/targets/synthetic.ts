@@ -330,7 +330,7 @@ export function createSyntheticTarget(sourceSha = "synthetic-source-sha", cancel
         let error: unknown;
         try { await db.bulk([1, 2], () => commandQuery("command", definitions)); } catch (caught) { error = caught; }
         assert.ok(error instanceof Error);
-        return { error, observed: true as const, durability: "atomic" as const };
+        return { error, observedRows: [], expectedRows: [], durability: "atomic" as const };
       } };
       const transactionCleanup = async (): Promise<void> => {
         state.rollbackFault = true;
