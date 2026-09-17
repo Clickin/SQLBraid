@@ -707,7 +707,8 @@ export function parseTemplate(
       const parsedRaw = parseSequence(buildUnits(raw).units, 0, [], 0, profile, maxNestingDepth).nodes;
       if (sameTemplateShape(parsed.nodes, parsedRaw)) rawNodes = parsedRaw.map(freezeNode);
     } catch (error) {
-      if (!(error instanceof SqlRenderError) || error.code !== "BRAID_SQL_LEX") throw error;
+      // Raw JavaScript escape spelling need not have the cooked SQL's lexical shape.
+      if (!(error instanceof SqlRenderError)) throw error;
     }
   }
   return Object.freeze({
@@ -776,7 +777,7 @@ interface TrimToken {
   readonly depth: number;
 }
 
-function trimTokens(text: string): readonly TrimToken[] {
+function trimTokens(text: string, profile: DialectLexicalProfile = DEFAULT_LEXICAL_PROFILE): readonly TrimToken[] {
   const tokens: TrimToken[] = [];
   let cursor = 0;
   let depth = 0;
@@ -788,9 +789,25 @@ function trimTokens(text: string): readonly TrimToken[] {
       cursor += 1;
       continue;
     }
-    if (current === "-" && next === "-") {
-      cursor += 2;
-      while (cursor < text.length && text[cursor] !== "\n" && text[cursor] !== "\r") cursor += 1;
+    let lineComment: string | undefined;
+    for (const prefix of profile.lineCommentPrefixes) {
+      if (!text.startsWith(prefix, cursor)) continue;
+      const following = text[cursor + prefix.length];
+      if (
+        prefix === "--" &&
+        profile.doubleDashRequiresWhitespace &&
+        following !== undefined &&
+        following.charCodeAt(0) > 0x20 &&
+        following.charCodeAt(0) !== 0x7f &&
+        !/\s/u.test(following)
+      )
+        continue;
+      lineComment = prefix;
+      break;
+    }
+    if (lineComment !== undefined) {
+      cursor += lineComment.length;
+      while (cursor < text.length && !(profile.lineCommentTerminators ?? "\r\n").includes(text[cursor])) cursor += 1;
       tokens.push({ kind: "comment", text: text.slice(start, cursor), start, end: cursor, depth });
       continue;
     }
@@ -798,7 +815,7 @@ function trimTokens(text: string): readonly TrimToken[] {
       cursor += 2;
       let nested = 1;
       while (cursor < text.length && nested > 0) {
-        if (text[cursor] === "/" && text[cursor + 1] === "*") {
+        if (profile.supportsNestedBlockComments && text[cursor] === "/" && text[cursor + 1] === "*") {
           nested += 1;
           cursor += 2;
           continue;
@@ -858,27 +875,18 @@ function trimTokens(text: string): readonly TrimToken[] {
   return tokens;
 }
 
-function trimOuter(text: string): string {
+function trimOuter(text: string, profile: DialectLexicalProfile): string {
   let start = 0;
   while (start < text.length && /\s/.test(text[start])) start += 1;
-  const tokens = trimTokens(text);
-  let end = text.length;
-  while (end > start && /\s/.test(text[end - 1])) end -= 1;
-  const last = tokens.at(-1);
-  if (last?.kind === "comment" && last.text.startsWith("--")) {
-    const newline = text.indexOf("\n", last.end);
-    if (newline >= 0) end = newline + 1;
-    else end = last.end;
-  }
-  return text.slice(start, end);
+  return trimSegmentEnd(text, profile).slice(start);
 }
 
-function hasSqlToken(text: string): boolean {
-  return trimTokens(text).some((token) => token.kind !== "comment");
+function hasSqlToken(text: string, profile: DialectLexicalProfile): boolean {
+  return trimTokens(text, profile).some((token) => token.kind !== "comment");
 }
 
-function removeLeadingOverride(text: string, overrides: readonly string[]): string {
-  const tokens = trimTokens(text);
+function removeLeadingOverride(text: string, overrides: readonly string[], profile: DialectLexicalProfile): string {
+  const tokens = trimTokens(text, profile);
   const first = tokens.find((token) => token.kind !== "comment");
   if (!first || first.kind !== "identifier" || !overrides.includes(first.text.toUpperCase())) return text;
   let end = first.end;
@@ -886,21 +894,21 @@ function removeLeadingOverride(text: string, overrides: readonly string[]): stri
   return `${text.slice(0, first.start)}${text.slice(end)}`;
 }
 
-function removeTrailingOverride(text: string, overrides: readonly string[]): string {
+function removeTrailingOverride(text: string, overrides: readonly string[], profile: DialectLexicalProfile): string {
   if (!overrides.length) return text;
-  const tokens = trimTokens(text);
+  const tokens = trimTokens(text, profile);
   const candidate = [...tokens].reverse().find((token) => token.kind !== "comment" && token.depth === 0);
   if (!candidate || !overrides.includes(candidate.text.toUpperCase())) return text;
   return `${text.slice(0, candidate.start)}${text.slice(candidate.end)}`;
 }
 
-function applyTrim(text: string, attributes: TrimAttributes): string {
-  let body = trimOuter(text);
+function applyTrim(text: string, attributes: TrimAttributes, profile: DialectLexicalProfile): string {
+  let body = trimOuter(text, profile);
   if (!body) return "";
-  body = removeLeadingOverride(body, attributes.prefixOverrides);
-  body = removeTrailingOverride(body, attributes.suffixOverrides);
-  body = trimOuter(body);
-  if (!hasSqlToken(body)) return body;
+  body = removeLeadingOverride(body, attributes.prefixOverrides, profile);
+  body = removeTrailingOverride(body, attributes.suffixOverrides, profile);
+  body = trimOuter(body, profile);
+  if (!hasSqlToken(body, profile)) return body;
   return `${attributes.prefix}${body}${attributes.suffix}`;
 }
 
@@ -1031,14 +1039,14 @@ function trimSegmentStart(text: string): string {
   return text.slice(start);
 }
 
-function trimSegmentEnd(text: string): string {
+function trimSegmentEnd(text: string, profile: DialectLexicalProfile): string {
   let end = text.length;
   while (end > 0 && /\s/.test(text[end - 1])) end -= 1;
-  const tokens = trimTokens(text);
+  const tokens = trimTokens(text, profile);
   const last = tokens.at(-1);
-  if (last?.kind === "comment" && last.text.startsWith("--")) {
-    const newline = text.indexOf("\n", last.end);
-    end = newline >= 0 ? newline + 1 : last.end;
+  if (last?.kind === "comment" && profile.lineCommentPrefixes.some((prefix) => last.text.startsWith(prefix))) {
+    end = last.end;
+    if (end < text.length) end += text[end] === "\r" && text[end + 1] === "\n" ? 2 : 1;
   }
   return text.slice(0, end);
 }
@@ -1047,15 +1055,16 @@ function applyTrimToSegments(
   segments: readonly string[],
   parameters: readonly RenderedParameter[],
   attributes: TrimAttributes,
+  profile: DialectLexicalProfile,
 ): readonly string[] {
-  if (!parameters.length) return [applyTrim(segments[0] ?? "", attributes)];
+  if (!parameters.length) return [applyTrim(segments[0] ?? "", attributes, profile)];
   const trimmed = [...segments];
   trimmed[0] = trimSegmentStart(trimmed[0] ?? "");
-  trimmed[trimmed.length - 1] = trimSegmentEnd(trimmed[trimmed.length - 1] ?? "");
-  trimmed[0] = removeLeadingOverride(trimmed[0], attributes.prefixOverrides);
-  trimmed[trimmed.length - 1] = removeTrailingOverride(trimmed[trimmed.length - 1], attributes.suffixOverrides);
+  trimmed[trimmed.length - 1] = trimSegmentEnd(trimmed[trimmed.length - 1] ?? "", profile);
+  trimmed[0] = removeLeadingOverride(trimmed[0], attributes.prefixOverrides, profile);
+  trimmed[trimmed.length - 1] = removeTrailingOverride(trimmed[trimmed.length - 1], attributes.suffixOverrides, profile);
   trimmed[0] = trimSegmentStart(trimmed[0]);
-  trimmed[trimmed.length - 1] = trimSegmentEnd(trimmed[trimmed.length - 1]);
+  trimmed[trimmed.length - 1] = trimSegmentEnd(trimmed[trimmed.length - 1], profile);
   trimmed[0] = `${attributes.prefix}${trimmed[0]}`;
   trimmed[trimmed.length - 1] = `${trimmed[trimmed.length - 1]}${attributes.suffix}`;
   return trimmed;
@@ -1129,10 +1138,11 @@ function renderNodes(
       };
       renderNodes(node.children, captured, nested, rawNode.kind === "trim" ? rawNode.children : node.children);
       state.structuralItems = nested.structuralItems;
-      const trimmed = applyTrimToSegments(nested.segments, nested.parameters, node.attributes);
-      const rawTrimmed = applyTrimToSegments(nested.rawSegments, nested.parameters, node.attributes);
+      const profile = state.dialect.lexicalProfile ?? DEFAULT_LEXICAL_PROFILE;
+      const trimmed = applyTrimToSegments(nested.segments, nested.parameters, node.attributes, profile);
+      const rawTrimmed = applyTrimToSegments(nested.rawSegments, nested.parameters, node.attributes, profile);
       const body = trimmed.join("");
-      if (node.attributes.prefix === "SET " && !hasSqlToken(body) && !nested.parameters.length)
+      if (node.attributes.prefix === "SET " && !hasSqlToken(body, profile) && !nested.parameters.length)
         throw new SqlRenderError("BRAID_EMPTY_SET", "@braid set rendered no assignments.");
       appendRendered(state, trimmed, nested.parameters, rawTrimmed);
       continue;

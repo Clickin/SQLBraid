@@ -135,13 +135,13 @@ for (const { id, sql } of dialects) {
       if (fixture.codeIn.includes(id)) {
         await assert.rejects(execute, hasCode("BRAID_RESULT_KIND_AMBIGUOUS"), fixture.name);
       } else {
-        assert.equal((await execute()).affectedRows, 0, fixture.name);
+        assert.equal((await execute()).command.affectedRows, 0, fixture.name);
       }
     }
     for (const name of ["_RETURNING", "returning_value", "éRETURNING"]) {
-      assert.equal((await db.execute(sql.command(strings([`UPDATE t SET ${name} = 0`])))).affectedRows, 0);
+      assert.equal((await db.execute(sql.command(strings([`UPDATE t SET ${name} = 0`])))).command.affectedRows, 0);
     }
-    assert.equal((await db.execute(sql.command(strings(["UPDATE t SET RET", "URNING = 0"]), "bound"))).affectedRows, 0);
+    assert.equal((await db.execute(sql.command(strings(["UPDATE t SET RET", "URNING = 0"]), "bound"))).command.affectedRows, 0);
     if (id === "mysql" || id === "mariadb") {
       await assert.rejects(
         () => db.execute(sql.command(strings(["UPDATE t SET value = 0 --", " RETURNING"]), 1)),
@@ -152,6 +152,34 @@ for (const { id, sql } of dialects) {
 }
 
 for (const { id, sql } of dialects.filter(({ id }) => id === "mysql" || id === "mariadb")) {
+  test(`dialect lexical trim ${id}: WHERE and SET preserve arithmetic and native comments`, () => {
+    assert.equal(
+      parameterizedSql(sql`SELECT 1 /*@braid where*/ --1 = 1
+/*@braid end*/`.render(), () => "?"),
+      "SELECT 1 WHERE --1 = 1",
+    );
+    assert.equal(
+      parameterizedSql(sql`UPDATE t /*@braid set*/ value = --1,
+/*@braid end*/`.render(), () => "?"),
+      "UPDATE t SET value = --1",
+    );
+    assert.equal(
+      parameterizedSql(sql`UPDATE t /*@braid set*/ value = ${2}, other = --1,
+/*@braid end*/`.render(), () => "?"),
+      "UPDATE t SET value = ?, other = --1",
+    );
+    assert.equal(
+      parameterizedSql(sql`SELECT 1 /*@braid where*/ # only a comment
+/*@braid end*/`.render(), () => "?"),
+      "SELECT 1 # only a comment\n",
+    );
+    assert.equal(
+      parameterizedSql(sql`SELECT 1 /*@braid where*/ AND value = ${2} # keep the newline
+/*@braid end*/ ORDER BY value`.render(), () => "?"),
+      "SELECT 1 WHERE value = ? # keep the newline\n ORDER BY value",
+    );
+  });
+
   test(`dialect lexical ${id}: a backslash cannot hide interpolation inside a string`, () => {
     assert.throws(
       () => sql.command(strings(["UPDATE t SET value = 'prefix\\", "'"]), "unsafe").render(),
