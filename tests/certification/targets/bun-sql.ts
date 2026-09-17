@@ -1,5 +1,12 @@
 import { Buffer } from "node:buffer";
-import type { CommandQuery, CallQuery, RowQuery, SqlTag, TransactionOptions } from "@sqlbraid/core";
+import type {
+  CallQuery,
+  CommandQuery,
+  DatabaseEnvironment,
+  RowQuery,
+  SqlTag,
+  TransactionOptions,
+} from "@sqlbraid/core";
 import { assertSavepointName } from "@sqlbraid/core/driver";
 import {
   createBunSqlDatabase,
@@ -221,6 +228,52 @@ async function nativeRow(
   return rows[0];
 }
 
+async function measureDatabase(
+  client: BunSqlClient,
+  dialect: BunSqlDialect,
+): Promise<DatabaseEnvironment["database"]> {
+  if (dialect === "postgres") {
+    const row = await nativeRow(client, "SELECT version() AS banner, current_setting('server_version') AS version");
+    const banner = String(row.banner);
+    const configuredVersion = /^(\d+(?:\.\d+){1,2})\b/u.exec(String(row.version))?.[1];
+    const bannerVersion = /^PostgreSQL\s+(\d+(?:\.\d+){1,2})\b/u.exec(banner)?.[1];
+    if (configuredVersion === undefined || bannerVersion === undefined || configuredVersion !== bannerVersion) {
+      throw new Error(`Bun.SQL PostgreSQL version probe was inconsistent: banner=${banner}, setting=${String(row.version)}.`);
+    }
+    const edition = /\balpine\b/iu.test(banner) ? "alpine" : "unknown";
+    return { product: "postgres", version: configuredVersion, edition };
+  }
+  if (dialect === "sqlite") {
+    if (client.options?.adapter !== "sqlite") {
+      throw new Error("Bun.SQL SQLite version probe did not observe the SQLite driver identity.");
+    }
+    const row = await nativeRow(client, "SELECT sqlite_version() AS version");
+    const version = String(row.version);
+    if (!/^\d+(?:\.\d+){2}$/u.test(version)) {
+      throw new Error(`Bun.SQL SQLite version probe was not a release version: ${version}`);
+    }
+    return { product: "sqlite", version, edition: "bun-embedded" };
+  }
+  const row = await nativeRow(client, "SELECT VERSION() AS version, @@version_comment AS version_comment");
+  const rawVersion = String(row.version);
+  const version = /^\d+(?:\.\d+){2}/u.exec(rawVersion)?.[0];
+  if (version === undefined) throw new Error(`Bun.SQL ${dialect} version probe was not a release version: ${rawVersion}`);
+  const evidence = `${rawVersion} ${String(row.version_comment)}`;
+  const edition =
+    dialect === "mysql"
+      ? /\bcommunity\b/iu.test(evidence)
+        ? "community"
+        : /\benterprise\b/iu.test(evidence)
+          ? "enterprise"
+          : "unknown"
+      : /(?:mariadb\.org|\bcommunity\b)/iu.test(evidence)
+        ? "community"
+        : /\benterprise\b/iu.test(evidence)
+          ? "enterprise"
+          : "unknown";
+  return { product: dialect, version, edition };
+}
+
 function optionKey(options: TransactionOptions): TransactionOptionKey {
   if (options.isolation !== undefined && options.readOnly !== undefined)
     return `combination:${options.isolation}+${options.readOnly ? "readOnly" : "readWrite"}` as TransactionOptionKey;
@@ -362,6 +415,12 @@ async function proveTransactionOption(
         await reset();
         if (observedBefore !== "0")
           throw new Error(`Bun.SQL ${optionKey(options)} baseline count=${observedBefore} was not empty.`);
+        const expectedCount = options.isolation === "read-committed" ? "1" : "0";
+        if (observedCount !== expectedCount) {
+          throw new Error(
+            `Bun.SQL ${optionKey(options)} observed count=${observedCount} instead of ${expectedCount}.`,
+          );
+        }
         return;
       }
     }
@@ -386,6 +445,14 @@ async function proveTransactionOption(
 
 async function createFixture(options: BunCertificationTargetOptions): Promise<CertificationFixture> {
   const { dialect, tag } = options;
+  const rawClient = options.createClient();
+  let measuredDatabase: DatabaseEnvironment["database"];
+  try {
+    measuredDatabase = await measureDatabase(rawClient, dialect);
+  } catch (error) {
+    await rawClient.close?.({ timeout: 1 });
+    throw error;
+  }
   const counters: Counters = {
     borrowed: 0,
     cleanupBalance: 0,
@@ -399,7 +466,7 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
           await reserved.unsafe("SET SESSION innodb_lock_wait_timeout = 1", []);
         }
       : undefined;
-  const client = instrument(options.createClient(), counters, false, configureReserved);
+  const client = instrument(rawClient, counters, false, configureReserved);
   const table = `braid_cert_${dialect}_${process.pid}_${Math.random().toString(36).slice(2, 10)}`;
   const sentinelTable = `${table}_sentinel`;
   const sentinelValue = `sentinel-${table}`;
@@ -1045,7 +1112,8 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     transactionCleanup,
     readOnlyWrite,
   } as CertificationFixture["metrics"];
-  const fixture: CertificationFixture = {
+  const fixture = {
+    measuredDatabase,
     db,
     queries,
     metrics,
@@ -1101,7 +1169,7 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
         }
       }
     },
-  };
+  } as CertificationFixture;
   return fixture;
 }
 
