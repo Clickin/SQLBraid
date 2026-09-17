@@ -387,6 +387,8 @@ async function main() {
       if (Object.keys(report.certificationStress.cases ?? {}).length !== 84) {
         throw new Error(`Browser stress certification executed ${Object.keys(report.certificationStress.cases ?? {}).length} cases instead of 84.`);
       }
+      await writeFile("/tmp/sqlbraid-rc3-sqlite-web-browser-artifact.json", JSON.stringify(report.certification, null, 2));
+      await writeFile("/tmp/sqlbraid-rc3-sqlite-web-browser-stress-artifact.json", JSON.stringify(report.certificationStress, null, 2));
       const integerEvidence = report.cases?.["wasm.numeric.exact-integer"];
       if (!integerEvidence || Object.values(integerEvidence.values ?? {}).some((value) => value?.type !== "string")) {
         throw new Error("Browser WASM exact INTEGER evidence must use canonical strings.");

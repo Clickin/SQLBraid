@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { build as viteBuild } from "vite";
@@ -61,6 +61,8 @@ try {
     Object.values(certification.stress.cases).filter((result) => result.status === "fail"),
     [],
   );
+  await writeFile("/tmp/sqlbraid-rc3-sqlite-web-d1-artifact.json", JSON.stringify(certification.artifact, null, 2));
+  await writeFile("/tmp/sqlbraid-rc3-sqlite-web-d1-stress-artifact.json", JSON.stringify(certification.stress, null, 2));
   console.info(JSON.stringify({ check: "local D1 SQLBraid adapter", runtime: "workerd via Miniflare", rows: payload.rows.length }));
 } finally {
   if (worker !== undefined) await worker.dispose();
