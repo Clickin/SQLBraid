@@ -20,6 +20,7 @@ interface NativeStats {
   prepares: number;
   active: number;
   finalizeCalls: number;
+  releaseCalls: number;
   finalizeByStatement: number[];
 }
 
@@ -113,8 +114,12 @@ function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats, faults: 
           finalized = true;
           stats.finalizeByStatement[statementIndex] = 1;
           stats.finalizeCalls += 1;
-          stats.active -= 1;
-          statement.finalize();
+          try {
+            statement.finalize();
+          } finally {
+            stats.releaseCalls += 1;
+            stats.active -= 1;
+          }
           if (sqlText.includes("__cert_cleanup_failure__")) throw faults.cleanupFailure;
         },
       };
@@ -239,7 +244,7 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
     expectedTransactionOptions,
     createFixture: async (): Promise<CertificationFixture> => {
       const native = new sqlite3.oo1.DB(":memory:");
-      const stats: NativeStats = { prepares: 0, active: 0, finalizeCalls: 0, finalizeByStatement: [] };
+      const stats: NativeStats = { prepares: 0, active: 0, finalizeCalls: 0, releaseCalls: 0, finalizeByStatement: [] };
       const faults: NativeFaults = {
         initFailure: new Error("certification stream initialization failure"),
         firstNextFailure: new Error("certification stream first-next failure"),
@@ -328,7 +333,8 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         cleanupFailureQuery: sql.rows`SELECT 1 AS value /* __cert_cleanup_failure__ */`,
         cleanupFailure: faults.cleanupFailure,
         iteratorReturns: () => stats.finalizeCalls,
-        released: () => stats.finalizeCalls,
+        released: () => stats.releaseCalls,
+        initFailureCleanup: { iteratorReturns: 0, released: 0 },
         reuseAfterBreak: async () => {
           const row = await db.one(queries.identity);
           if (row.id !== "sqlite-wasm-browser") throw new Error("SQLite WASM stream reuse changed physical session identity.");
@@ -361,17 +367,25 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
           observed.exec("DELETE FROM cert_values");
           let error: unknown;
           try {
-            await db.bulk([1, 2], (input) => input === 2
-              ? sql.command`INSERT INTO cert_missing_bulk (value) VALUES (${input})`
-              : sql.command`INSERT INTO cert_values (value) VALUES (${input})`);
+            await db.bulk([1, null, 3], (input) => sql.command`INSERT INTO cert_values (value) VALUES (${input})`);
           } catch (caught) {
             error = caught;
           }
           if (error === undefined) throw new Error("SQLite WASM bulk middle-item failure was not observed.");
-          const rows = await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM cert_values`);
-          if (rows.length !== 0 && rows.length !== 1) throw new Error(`SQLite WASM bulk middle-item durability was not prefix or atomic: ${rows.length} rows.`);
-          const expectedRows = rows.length === 0 ? [] : rows;
-          return { error, observedRows: rows, expectedRows, durability: rows.length === 0 ? "atomic" as const : "prefix" as const };
+          if (!String((error as { readonly message?: unknown }).message).includes("NOT NULL constraint failed")) {
+            throw new Error("SQLite WASM bulk middle-item failure was not the native NOT NULL constraint.", { cause: error });
+          }
+          const observedRows = await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM cert_values ORDER BY rowid`);
+          const prefixRows = [{ value: "1.0" }];
+          const atomicRows: typeof prefixRows = [];
+          const observedText = JSON.stringify(observedRows);
+          if (observedText === JSON.stringify(prefixRows)) {
+            return { error, observedRows, expectedRows: prefixRows, durability: "prefix" as const };
+          }
+          if (observedText === JSON.stringify(atomicRows)) {
+            return { error, observedRows, expectedRows: atomicRows, durability: "atomic" as const };
+          }
+          throw new Error(`SQLite WASM bulk middle-item durability was not the expected prefix or atomic state: ${observedText}.`);
         },
       };
       const metrics = {
@@ -409,6 +423,7 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         metrics,
         reset: async () => {
           stats.finalizeCalls = 0;
+          stats.releaseCalls = 0;
           stats.finalizeByStatement.length = 0;
           observed.exec("DELETE FROM cert_values");
           observed.exec("UPDATE cert_sentinel SET marker = 'untouched' WHERE id = 1");

@@ -14,7 +14,7 @@ async function createFixture(): Promise<CertificationFixture> {
   const { directory, cleanup } = await makeLibsqlDirectory();
   const client = createClient({ url: `file:${directory}/database.db`, intMode: "string" });
   try {
-    const stats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0 };
+    const stats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0, iteratorReturns: 0, streamReleases: 0, activeStreams: 0 };
     const db = createLibsqlDatabase(client, {
       intMode: "string",
       observers: [{

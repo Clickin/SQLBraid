@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import type { CertificationFixture, CertificationTarget } from "../types.js";
-import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
+import { createNodeSqliteDatabase, type SqliteDatabaseLike, type SqliteStatementLike } from "@sqlbraid/sqlite/node-sqlite";
 import {
   createSqliteFixture,
   sqliteCapabilities,
@@ -16,8 +16,53 @@ function createFixture(): Promise<CertificationFixture> {
   native.exec("INSERT INTO cert_sentinel (id, marker) VALUES (1, 'untouched')");
   native.exec("CREATE TEMP TABLE cert_identity (id TEXT NOT NULL)");
   native.exec("INSERT INTO temp.cert_identity (id) VALUES ('node-sqlite-native-memory')");
-  const stats: SqliteStats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0 };
-  const db = createNodeSqliteDatabase(native, {
+  const stats: SqliteStats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0, iteratorReturns: 0, streamReleases: 0, activeStreams: 0 };
+  const observedNative: SqliteDatabaseLike = {
+    prepare(sqlText: string): SqliteStatementLike {
+      const statement = native.prepare(sqlText);
+      const iterate = statement.iterate === undefined
+        ? undefined
+        : statement.iterate.bind(statement) as (...values: readonly unknown[]) => IterableIterator<unknown>;
+      if (iterate === undefined) return statement;
+      return {
+        all: statement.all.bind(statement),
+        columns: statement.columns.bind(statement),
+        run: statement.run.bind(statement),
+        setReadBigInts: statement.setReadBigInts?.bind(statement),
+        iterate(...values: readonly unknown[]) {
+          const iterator = iterate(...values);
+          let returned = false;
+          let released = false;
+          stats.activeStreams += 1;
+          return {
+            next: iterator.next.bind(iterator),
+            return(value?: unknown) {
+              if (!returned) {
+                returned = true;
+                stats.iteratorReturns += 1;
+              }
+              try {
+                const result = iterator.return?.(value) ?? { done: true, value: undefined };
+                if (sqlText.includes("__cert_cleanup_failure__")) {
+                  throw Object.assign(new Error("SQLite iterator cleanup failed."), { code: "ERR_SQLITE_ERROR" });
+                }
+                return result;
+              } finally {
+                if (!released) {
+                  released = true;
+                  stats.streamReleases += 1;
+                  stats.activeStreams -= 1;
+                }
+              }
+            },
+            [Symbol.iterator]() { return this; },
+          };
+        },
+      };
+    },
+    exec: native.exec.bind(native),
+  };
+  const db = createNodeSqliteDatabase(observedNative, {
     observers: [{
       onEvent(event) {
         if (event.type === "bulk:ready") stats.ready += 1;

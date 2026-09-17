@@ -12,6 +12,9 @@ export interface SqliteStats {
   result: number;
   streamStarts: number;
   streamEnds: number;
+  iteratorReturns: number;
+  streamReleases: number;
+  activeStreams: number;
 }
 type AnyRowQuery = RowQuery<unknown>;
 
@@ -198,8 +201,12 @@ function queryFixtures(failureCode: string): CertificationQueries {
   };
 }
 
-function makeUnsupported(db: Database, queries: CertificationQueries, targetKind: "sqlite" | "libsql"): Partial<Record<CertificationCaseId, UnsupportedProbe>> {
-  const noSideEffects = () => 0;
+function makeUnsupported(
+  db: Database,
+  queries: CertificationQueries,
+  targetKind: "sqlite" | "libsql",
+  sideEffects: () => number,
+): Partial<Record<CertificationCaseId, UnsupportedProbe>> {
   const call = sql.call`SELECT 1`;
   const out = sql.rows`SELECT ${sql.out("answer")}`;
   const inout = sql.call`SELECT ${sql.inOut("answer", 1, { databaseType: "INTEGER" })}`;
@@ -211,62 +218,62 @@ function makeUnsupported(db: Database, queries: CertificationQueries, targetKind
   const runRows = async (query: AnyRowQuery) => { await db.all(query); };
   const probes = {
     ...(targetKind === "libsql" ? {
-      SES001: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
-      SES002: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
-      SES003: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
-      SES004: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
-      SES005: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
-      SES006: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
-      SES007: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
-      SES008: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
-      STRESS006: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
+      SES001: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects },
+      SES002: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects },
+      SES003: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects },
+      SES004: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects },
+      SES005: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects },
+      SES006: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects },
+      SES007: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects },
+      SES008: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects },
+      STRESS006: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects },
 
-      PRE003: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      PRE004: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      PRE005: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      PRE011: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STR001: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STR002: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STR003: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STR004: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STR005: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STR007: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STR008: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STR009: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STR011: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
-      STRESS004: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
+      PRE003: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      PRE004: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      PRE005: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      PRE011: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STR001: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STR002: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STR003: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STR004: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STR005: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STR007: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STR008: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STR009: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STR011: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
+      STRESS004: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects },
     } : {}),
-    PRE008: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(call), sideEffects: noSideEffects },
-    STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects: noSideEffects },
-    STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects: noSideEffects },
-    ...(targetKind === "sqlite" ? { PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects: noSideEffects } } : {}),
-    TX020: { feature: "transaction.isolation.read-uncommitted", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-uncommitted" }, async () => undefined), sideEffects: noSideEffects },
-    TX021: { feature: "transaction.read-only", expectedErrorFeature: "transaction.read-only", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ readOnly: true }, async () => undefined), sideEffects: noSideEffects },
-    TX022: { feature: "combination:read-committed+readOnly", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-committed", readOnly: true }, async () => undefined), sideEffects: noSideEffects },
-    TX023: { feature: "transaction.isolation.read-committed", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-committed" }, async () => undefined), sideEffects: noSideEffects },
-    TX024: { feature: "transaction.isolation.repeatable-read", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "repeatable-read" }, async () => undefined), sideEffects: noSideEffects },
+    PRE008: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(call), sideEffects },
+    STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects },
+    STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects },
+    ...(targetKind === "sqlite" ? { PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects } } : {}),
+    TX020: { feature: "transaction.isolation.read-uncommitted", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-uncommitted" }, async () => undefined), sideEffects },
+    TX021: { feature: "transaction.read-only", expectedErrorFeature: "transaction.read-only", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ readOnly: true }, async () => undefined), sideEffects },
+    TX022: { feature: "combination:read-committed+readOnly", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-committed", readOnly: true }, async () => undefined), sideEffects },
+    TX023: { feature: "transaction.isolation.read-committed", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-committed" }, async () => undefined), sideEffects },
+    TX024: { feature: "transaction.isolation.repeatable-read", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "repeatable-read" }, async () => undefined), sideEffects },
     TX025: targetKind === "libsql"
-      ? { feature: "transaction.isolation.serializable", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "serializable" }, async () => undefined), sideEffects: noSideEffects }
+      ? { feature: "transaction.isolation.serializable", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "serializable" }, async () => undefined), sideEffects }
       : undefined,
     TX026: targetKind === "sqlite"
-      ? { feature: "transaction.read-only", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ readOnly: false }, async () => undefined), sideEffects: noSideEffects }
+      ? { feature: "transaction.read-only", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ readOnly: false }, async () => undefined), sideEffects }
       : undefined,
-    TX027: { feature: "combination:read-uncommitted+readOnly", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-uncommitted", readOnly: true }, async () => undefined), sideEffects: noSideEffects },
-    TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: targetKind === "sqlite" ? "transaction.read-only" : "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "serializable", readOnly: true }, async () => undefined), sideEffects: noSideEffects },
-    TX029: { feature: "combination:read-uncommitted+readWrite", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-uncommitted", readOnly: false }, async () => undefined), sideEffects: noSideEffects },
-    TX030: { feature: "combination:read-committed+readWrite", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-committed", readOnly: false }, async () => undefined), sideEffects: noSideEffects },
-    TX031: { feature: "combination:repeatable-read+readOnly", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "repeatable-read", readOnly: true }, async () => undefined), sideEffects: noSideEffects },
-    TX032: { feature: "combination:repeatable-read+readWrite", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "repeatable-read", readOnly: false }, async () => undefined), sideEffects: noSideEffects },
+    TX027: { feature: "combination:read-uncommitted+readOnly", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-uncommitted", readOnly: true }, async () => undefined), sideEffects },
+    TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: targetKind === "sqlite" ? "transaction.read-only" : "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "serializable", readOnly: true }, async () => undefined), sideEffects },
+    TX029: { feature: "combination:read-uncommitted+readWrite", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-uncommitted", readOnly: false }, async () => undefined), sideEffects },
+    TX030: { feature: "combination:read-committed+readWrite", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-committed", readOnly: false }, async () => undefined), sideEffects },
+    TX031: { feature: "combination:repeatable-read+readOnly", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "repeatable-read", readOnly: true }, async () => undefined), sideEffects },
+    TX032: { feature: "combination:repeatable-read+readWrite", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "repeatable-read", readOnly: false }, async () => undefined), sideEffects },
     TX033: targetKind === "sqlite"
-      ? { feature: "combination:serializable+readWrite", expectedErrorFeature: "transaction.read-only", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "serializable", readOnly: false }, async () => undefined), sideEffects: noSideEffects }
-      : { feature: "combination:serializable+readWrite", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "serializable", readOnly: false }, async () => undefined), sideEffects: noSideEffects },
-    CALL001: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(call), sideEffects: noSideEffects },
-    CALL002: { feature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => runRows(out), sideEffects: noSideEffects },
-    CALL003: { feature: "routine.inout", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(inout), sideEffects: noSideEffects },
-    CALL004: { feature: "routine.result-sets", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(resultSets), sideEffects: noSideEffects },
-    CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => runRows(cursor), sideEffects: noSideEffects },
-    CALL006: { feature: "routine.return-value", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(returnValue), sideEffects: noSideEffects },
-    CALL007: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(call), sideEffects: noSideEffects },
+      ? { feature: "combination:serializable+readWrite", expectedErrorFeature: "transaction.read-only", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "serializable", readOnly: false }, async () => undefined), sideEffects }
+      : { feature: "combination:serializable+readWrite", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "serializable", readOnly: false }, async () => undefined), sideEffects },
+    CALL001: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(call), sideEffects },
+    CALL002: { feature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => runRows(out), sideEffects },
+    CALL003: { feature: "routine.inout", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(inout), sideEffects },
+    CALL004: { feature: "routine.result-sets", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(resultSets), sideEffects },
+    CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => runRows(cursor), sideEffects },
+    CALL006: { feature: "routine.return-value", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(returnValue), sideEffects },
+    CALL007: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => runCall(call), sideEffects },
   };
   return Object.fromEntries(Object.entries(probes).filter(([, probe]) => probe !== undefined)) as Partial<Record<CertificationCaseId, UnsupportedProbe>>;
 }
@@ -316,10 +323,11 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
       firstNextFailure: { code: options.streamFailureCode },
       midStreamFailureQuery: sql.rows`SELECT json_extract(CASE value WHEN 1 THEN '{}' ELSE '{' END, '$') AS value FROM (SELECT 1 AS value UNION ALL SELECT 2 AS value)`,
       midStreamFailure: { code: options.streamFailureCode },
-      cleanupFailureQuery: sql.rows`SELECT json_extract('{', '$') AS value`,
+      cleanupFailureQuery: sql.rows`SELECT 'cleanup' AS value /* __cert_cleanup_failure__ */`,
       cleanupFailure: { code: options.streamFailureCode },
-      iteratorReturns: () => options.stats.streamEnds,
-      released: () => options.stats.streamEnds,
+      iteratorReturns: () => options.stats.iteratorReturns,
+      released: () => options.stats.streamReleases,
+      initFailureCleanup: { iteratorReturns: 0, released: 0 },
       reuseAfterBreak: async () => {
         const row = await options.db.one(queries.identity);
         if (row.id !== options.physicalSessionId) throw new Error("SQLite stream reuse changed physical session identity.");
@@ -329,7 +337,6 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     }
     : undefined;
   const bulkFactory = (input: unknown): CommandQuery => sql.command`INSERT INTO cert_items (value) VALUES (${input})`;
-  const bulkFailure: CommandQuery = sql.command`INSERT INTO cert_items (value) VALUES (NULL)`;
   const bulk: BulkConformanceFixture<unknown> = {
     db: options.db,
     inputs: [1, 2],
@@ -341,15 +348,25 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
       await options.db.execute(sql.command`DELETE FROM cert_items`);
       let error: unknown;
       try {
-        await options.db.bulk([1, 2], (input) => input === 2 ? bulkFailure : bulkFactory(input));
+      await options.db.bulk([1, null, 3], (input) => bulkFactory(input));
       } catch (caught) {
         error = caught;
       }
       if (error === undefined) throw new Error("SQLite bulk middle-item failure was not observed.");
-      const rows = await options.db.all(sql.rows<{ readonly value: string }>`SELECT value FROM cert_items ORDER BY rowid`);
-      if (rows.length !== 0 && rows.length !== 1) throw new Error(`SQLite bulk middle-item durability was not prefix or atomic: ${rows.length} rows.`);
-      const expectedRows = rows.length === 0 ? [] : rows;
-      return { error, observedRows: rows, expectedRows, durability: rows.length === 0 ? "atomic" as const : "prefix" as const };
+      if (!String((error as { readonly message?: unknown }).message).includes("NOT NULL constraint failed")) {
+        throw new Error("SQLite bulk middle-item failure was not the native NOT NULL constraint.", { cause: error });
+      }
+      const observedRows = await options.db.all(sql.rows<{ readonly value: string }>`SELECT value FROM cert_items ORDER BY rowid`);
+      const prefixRows = [{ value: "1.0" }];
+      const atomicRows: typeof prefixRows = [];
+      const observedText = JSON.stringify(observedRows);
+      if (observedText === JSON.stringify(prefixRows)) {
+        return { error, observedRows, expectedRows: prefixRows, durability: "prefix" as const };
+      }
+      if (observedText === JSON.stringify(atomicRows)) {
+        return { error, observedRows, expectedRows: atomicRows, durability: "atomic" as const };
+      }
+      throw new Error(`SQLite bulk middle-item durability was not the expected prefix or atomic state: ${observedText}.`);
     },
   };
   const preparedCalls = { count: 0 };
@@ -358,11 +375,11 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     rows: () => { preparedCalls.count += 1; return queries.many; },
     input: "input",
     factoryCalls: () => preparedCalls.count,
-    resources: () => options.stats.streamStarts - options.stats.streamEnds,
+    resources: () => options.stats.activeStreams,
   };
   const metrics = {
     snapshot: (): ResourceSnapshot => {
-      const openCursors = options.stats.streamStarts - options.stats.streamEnds;
+      const openCursors = options.stats.activeStreams;
       return { borrowedLeases: 0, cleanupBalance: openCursors, openCursors, openPrepared: 0 };
     },
     sideEffects: () => options.stats.result,
@@ -390,7 +407,7 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     ...(options.transactionCleanup === undefined ? {} : { transactionCleanup: options.transactionCleanup }),
     ...(options.sessionSupported ? { physicalSessionIds: () => [options.physicalSessionId] } : {}),
   };
-  const unsupported = makeUnsupported(options.db, queries, options.localReadOnly ? "libsql" : "sqlite");
+  const unsupported = makeUnsupported(options.db, queries, options.localReadOnly ? "libsql" : "sqlite", () => options.stats.result);
   return {
     db: options.db,
     queries,
@@ -400,6 +417,9 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     reset: async () => {
       options.stats.streamStarts = 0;
       options.stats.streamEnds = 0;
+      options.stats.iteratorReturns = 0;
+      options.stats.streamReleases = 0;
+      options.stats.activeStreams = 0;
       await options.db.execute(sql.command`DELETE FROM cert_items`);
       await options.db.execute(sql.command`UPDATE cert_sentinel SET marker = 'untouched' WHERE id = 1`);
     },
