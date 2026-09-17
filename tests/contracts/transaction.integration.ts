@@ -18,7 +18,7 @@ export interface TransactionIntegrationHarness {
   };
 }
 
-const scenarios: Record<string, (h: TransactionIntegrationHarness) => Promise<void>> = {
+const scenarios: Record<string, (h: TransactionIntegrationHarness, ownership: string) => Promise<void>> = {
   "resource.stream-return": async ({ db, write, committedRows, streamQuery }) => {
     assert.ok(streamQuery, "stream-return contract requires a native streaming query");
     await db.tx(async (tx) => {
@@ -104,9 +104,14 @@ const scenarios: Record<string, (h: TransactionIntegrationHarness) => Promise<vo
     assert.equal(firstWriteCompleted, true);
     assert.deepEqual(await committedRows(), []);
   },
-  "transaction.caught-error-terminal-outcome": async ({ db, write, committedRows, caughtStatementOutcome }) => {
+  "transaction.caught-error-terminal-outcome": async (
+    { db, write, committedRows, caughtStatementOutcome, physicalId },
+    ownership,
+  ) => {
     let callbackReturned = false;
+    let before: string | undefined;
     const result = db.tx(async (tx) => {
+      if (physicalId && ownership === "pooled") before = await physicalId(tx);
       await write(tx, "A");
       await assert.rejects(write(tx, "A"));
       callbackReturned = true;
@@ -124,6 +129,14 @@ const scenarios: Record<string, (h: TransactionIntegrationHarness) => Promise<vo
       true,
       "the terminal outcome must follow a successful callback, not an uncaught error",
     );
+    if (physicalId && ownership === "pooled") {
+      const after = await physicalId(db);
+      if (caughtStatementOutcome === "rollback") {
+        assert.notEqual(after, before, "a rejected terminal outcome must discard the uncertain physical lease");
+      }
+      await write(db, "B");
+      assert.deepEqual(await committedRows(), caughtStatementOutcome === "rollback" ? ["B"] : ["A", "B"]);
+    }
   },
   "transaction.savepoint-recovery": async ({ db, write, committedRows }) => {
     const failure = new Error("contract nested rollback");
@@ -186,7 +199,7 @@ export function transactionIntegrationTests(
         const harness = await open();
         try {
           assert.deepEqual(await harness.committedRows(), [], "contract fixture must start empty");
-          await run(harness);
+          await run(harness, mode);
         } finally {
           await harness.close();
         }

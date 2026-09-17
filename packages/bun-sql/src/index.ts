@@ -153,10 +153,10 @@ function capabilitiesFor(dialect: BunSqlDialect): Readonly<Record<string, Enviro
     transaction: capability("guaranteed"),
     "transaction.savepoint": capability("guaranteed"),
     "transaction.read-only": capability(
-      dialect === "sqlite" ? "unsupported" : "guarded",
+      dialect === "postgres" ? "guarded" : "unsupported",
       undefined,
       undefined,
-      dialect === "sqlite" ? undefined : "bun-sql.transaction-options",
+      mysqlTransport ? "bun-sql.mysql-read-only-cache" : dialect === "postgres" ? "bun-sql.transaction-options" : undefined,
     ),
     "transaction.isolation.read-uncommitted": capability(
       dialect === "sqlite" ? "unsupported" : "guarded",
@@ -671,6 +671,7 @@ function createExecutor(
   client: BunSqlClient,
   dialect: BunSqlDialect,
   sharedBinding?: StatementBindingAdapter,
+  health?: { discard: boolean },
 ): QueryExecutor {
   const statementBinding = sharedBinding ?? bindingAdapter(dialect, client);
   const policy = representationProfileFor(dialect).typePolicy;
@@ -680,12 +681,33 @@ function createExecutor(
     typePolicy: { id: policy.id, hash: policy.hash },
     capabilities: capabilitiesFor(dialect),
   });
+  const executeNative = async <T>(strings: TemplateStringsArray | string, values: readonly unknown[]): Promise<T> => {
+    try {
+      return await (typeof strings === "string" ? client.unsafe<T>(strings, values) : client<T>(strings, ...values));
+    } catch (error) {
+      if (
+        health !== undefined &&
+        (dialect === "mysql" || dialect === "mariadb") &&
+        error !== null &&
+        typeof error === "object" &&
+        "errno" in error &&
+        error.errno === 1792 &&
+        "sqlState" in error &&
+        error.sqlState === "25006"
+      ) {
+        // Bun 1.3.14 retains this failed prepared shape until the physical connection closes.
+        // Do not interrupt the owner: rollback/commit must finish before scope release discards it.
+        health.discard = true;
+      }
+      throw error;
+    }
+  };
   const run = async <T>(rendered: RenderedStatement, binding: StatementBindingDescription): Promise<T> => {
     assertDialect(rendered, dialect);
     assertStatementSupported(rendered, dialect);
     assertStatementBinding(rendered, binding, dialect);
     const values = statementValues(rendered);
-    return client<T>(nativeTemplate(rendered), ...values);
+    return executeNative<T>(nativeTemplate(rendered), values);
   };
   const executor: QueryExecutor = {
     ownershipKey: client as object,
@@ -750,7 +772,7 @@ function createExecutor(
         const values = binding.valuesAt(index);
         assertValues(values);
         assertNativeValues(values);
-        const raw = await client<unknown>(template, ...values);
+        const raw = await executeNative<unknown>(template, values);
         const command = commandResult(raw);
         if (command.affectedRows === undefined) hasCount = false;
         else affectedRows += command.affectedRows;
@@ -763,11 +785,11 @@ function createExecutor(
     },
     begin: async (options?: TransactionOptions): Promise<void> => {
       for (const beginText of transactionBegin(dialect, options)) {
-        await client.unsafe(beginText, []);
+        await executeNative(beginText, []);
       }
     },
     commit: async (): Promise<void> => {
-      const result = await client.unsafe("COMMIT", []);
+      const result = await executeNative("COMMIT", []);
       if (
         dialect === "postgres" &&
         result !== null &&
@@ -783,16 +805,16 @@ function createExecutor(
       }
     },
     rollback: async (): Promise<void> => {
-      await client.unsafe("ROLLBACK", []);
+      await executeNative("ROLLBACK", []);
     },
     savepoint: async (name: string): Promise<void> => {
-      await client.unsafe(`SAVEPOINT ${assertSavepointName(name)}`, []);
+      await executeNative(`SAVEPOINT ${assertSavepointName(name)}`, []);
     },
     rollbackTo: async (name: string): Promise<void> => {
-      await client.unsafe(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`, []);
+      await executeNative(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`, []);
     },
     releaseSavepoint: async (name: string): Promise<void> => {
-      await client.unsafe(`RELEASE SAVEPOINT ${assertSavepointName(name)}`, []);
+      await executeNative(`RELEASE SAVEPOINT ${assertSavepointName(name)}`, []);
     },
   };
   return executor;
@@ -800,6 +822,13 @@ function createExecutor(
 
 function transactionBegin(dialect: BunSqlDialect, options?: TransactionOptions): readonly string[] {
   validateTransactionOptions(options);
+  if ((dialect === "mysql" || dialect === "mariadb") && options?.readOnly !== undefined) {
+    unsupported(
+      "transaction.read-only",
+      "BRAID_TX_OPTION_UNSUPPORTED",
+      "Bun.SQL 1.3.14 MySQL/MariaDB cannot safely reuse a statement after a read-only rejection on a pinned session.",
+    );
+  }
   if (dialect === "sqlite") {
     if (options?.readOnly === true)
       unsupported(
@@ -832,9 +861,7 @@ function transactionBegin(dialect: BunSqlDialect, options?: TransactionOptions):
   const statements: string[] = [];
   if (options?.isolation !== undefined)
     statements.push(`SET TRANSACTION ISOLATION LEVEL ${isolation[options.isolation]}`);
-  if (options?.readOnly === true) statements.push("START TRANSACTION READ ONLY");
-  else if (options?.readOnly === false) statements.push("START TRANSACTION READ WRITE");
-  else statements.push("START TRANSACTION");
+  statements.push("START TRANSACTION");
   return statements;
 }
 
@@ -881,6 +908,7 @@ function createProvider(client: BunSqlClient, dialect: BunSqlDialect): Connectio
     environment,
     acquire: async (): Promise<ConnectionLease> => {
       const reserved = await client.reserve!();
+      const health = { discard: false };
       let executor: QueryExecutor;
       try {
         if (
@@ -890,7 +918,7 @@ function createProvider(client: BunSqlClient, dialect: BunSqlDialect): Connectio
         ) {
           throw new TypeError("Bun.SQL reserve() must return a callable client with unsafe() and release().");
         }
-        executor = createExecutor(reserved, dialect, statementBinding);
+        executor = createExecutor(reserved, dialect, statementBinding, health);
       } catch (error) {
         const cleanup = createCleanupScope();
         cleanup.add(() => reserved.release());
@@ -905,7 +933,7 @@ function createProvider(client: BunSqlClient, dialect: BunSqlDialect): Connectio
           if (terminalFailure !== undefined) throw terminalFailure;
           if (released) return;
           released = true;
-          const discard = releaseOptions?.discard === true;
+          const discard = releaseOptions?.discard === true || health.discard;
           if (discard && typeof reserved.close !== "function") {
             terminalFailure = new UnsupportedFeatureError(
               "resource.discard",

@@ -26,6 +26,15 @@ const targetFiles = {
   mariadb: "support/targets/bun-sql-mariadb.json",
   sqlite: "support/targets/bun-sql-sqlite.json",
 };
+const selectedScenario = process.env.BUN_SQL_SCENARIO;
+const selectedPhase = process.env.BUN_SQL_PHASE ?? (selectedScenario ? "contracts" : undefined);
+assert.ok(selectedPhase === undefined || selectedPhase === "contracts" || selectedPhase === "profile",
+  "BUN_SQL_PHASE must be contracts or profile");
+assert.ok(!selectedScenario || selectedPhase === "contracts", "BUN_SQL_SCENARIO requires the contracts phase");
+
+function progress(dialect, status, name) {
+  console.error(`[bun-sql:${dialect}] ${status.padEnd(5)} ${name}`);
+}
 
 function configuredUrl(dialect) {
   for (const name of envNames[dialect]) if (process.env[name]) return process.env[name];
@@ -125,20 +134,27 @@ async function runTransactionContracts(dialect) {
           try {
             await observer.unsafe("DROP TABLE braid_contract_tx", []);
           } finally {
-            await client.close();
-            await observer.close();
+            await Promise.all([client.close({ timeout: 1 }), observer.close({ timeout: 1 })]);
             if (directory) await rm(directory, { recursive: true, force: true });
           }
         },
       };
     },
-    { accessMode: dialect !== "sqlite", pooledLease: dialect !== "sqlite" },
+    { accessMode: dialect === "postgres", pooledLease: dialect !== "sqlite" },
   );
-  for (const contract of tests) {
+  const matches = (title) => selectedScenario === undefined || title.includes(`:${selectedScenario}:integration]`);
+  const selected = tests.filter((contract) => matches(contract.title));
+  const metadataSelected = dialect !== "postgres" && matches(commandMetadataTitle(`bun-sql-${dialect}`));
+  assert.ok(selected.length > 0 || metadataSelected, `Unknown or inapplicable ${dialect} scenario: ${selectedScenario}`);
+  for (const contract of selected) {
+    const scenario = contract.title.split(":")[2];
+    progress(dialect, "START", scenario);
     await contract.run();
+    progress(dialect, "PASS", scenario);
     assertions.push({ fullName: contract.title, status: "passed" });
   }
-  if (dialect !== "postgres") {
+  if (metadataSelected) {
+    progress(dialect, "START", "metadata");
     const directory = dialect === "sqlite" ? await mkdtemp(join(tmpdir(), "sqlbraid-bun-metadata-")) : undefined;
     const url = directory ? join(directory, "database.db") : configuredUrl(dialect);
     const client = dialect === "sqlite" ? connection(dialect, url) : new SQL(url, { bigint: true, max: 1 });
@@ -162,12 +178,13 @@ async function runTransactionContracts(dialect) {
         await observer.unsafe("DROP TABLE IF EXISTS braid_contract_metadata", []);
       } finally {
         try {
-          await Promise.all([client.close(), observer.close()]);
+          await Promise.all([client.close({ timeout: 1 }), observer.close({ timeout: 1 })]);
         } finally {
           if (directory) await rm(directory, { recursive: true, force: true });
         }
       }
     }
+    progress(dialect, "PASS", "metadata");
   }
   return assertions;
 }
@@ -178,24 +195,31 @@ async function runDialect(dialect) {
     throw new Error(
       `Missing Bun.SQL ${dialect} URL; set ${envNames[dialect][0]} or the existing SQLBraid URL variable.`,
     );
-  const contractAssertions = await runTransactionContracts(dialect);
+  const contractAssertions = selectedPhase === "profile" ? [] : await runTransactionContracts(dialect);
+  if (selectedPhase === "contracts") return { dialect, diagnosticOnly: true, contractAssertions };
   const sqlTag = dialectTags[dialect];
   const client = connection(dialect, url);
+  try {
   const db = createBunSqlDatabase(client, { dialect });
+  progress(dialect, "START", "environment");
   const environment = await db.environment();
   const versionRow = await db.one(databaseVersion(sqlTag));
   const observedVersion = normalizeDatabaseVersion(dialect, versionRow.version);
   const manifest = await readManifest(dialect);
   if (manifest?.database?.version && dialect !== "sqlite")
     assert.equal(observedVersion.version, manifest.database.version);
+  progress(dialect, "PASS", "environment");
 
+  progress(dialect, "START", "session");
   const sessionIds = await db.session(async (session) => {
     const first = await session.one(connectionId(sqlTag));
     const second = await session.one(connectionId(sqlTag));
     assert.equal(first.connection_id, second.connection_id, `${dialect} session lost physical connection affinity`);
     return [first.connection_id, second.connection_id];
   });
+  progress(dialect, "PASS", "session");
 
+  progress(dialect, "START", "prepared");
   const prepared = db.prepare("bun-sql-matrix-cast", (value) => castInteger(sqlTag, value));
   const preparedInput = dialect === "mysql" || dialect === "mariadb" ? "9007199254740993" : 9007199254740993n;
   const preparedRow = await prepared.one(preparedInput);
@@ -245,7 +269,9 @@ async function runDialect(dialect) {
     [() => "1", () => true, () => "1", () => "1"],
   );
   assert.deepEqual(await db.one(where), { value: "1" });
+  progress(dialect, "PASS", "prepared");
 
+  progress(dialect, "START", "bulk");
   const bulkTable = "braid_bun_sql_matrix_bulk";
   if (dialect === "mysql" || dialect === "mariadb") {
     await client.unsafe(`CREATE TABLE ${bulkTable} (value TEXT)`, []);
@@ -319,6 +345,8 @@ async function runDialect(dialect) {
     assert.deepEqual(returningRows, [{ value: "returning" }]);
     resultCarriers.returningRows = returningRows.length;
   }
+  progress(dialect, "PASS", "bulk");
+  progress(dialect, "START", "isolation");
   const transactionModes = {};
   const isolationLevels = ["read-uncommitted", "read-committed", "repeatable-read", "serializable"];
   if (dialect === "postgres") {
@@ -400,26 +428,15 @@ async function runDialect(dialect) {
         );
       });
       transactionModes.serializable = { writerLockTimeout: true };
-      await db.tx({ readOnly: true }, async (tx) => {
-        await assert.rejects(
-          tx.execute(sqlTag.command`INSERT INTO ${sqlTag.raw(isolationTable)} VALUES (${2}, ${"read-only"})`),
-          (error) => error.errno === 1792,
-        );
-      });
-      await db.tx({ readOnly: false }, async (tx) => {
-        const result = await tx.execute(
-          sqlTag.command`INSERT INTO ${sqlTag.raw(isolationTable)} VALUES (${2}, ${"read-write"})`,
-        );
-        assert.equal(result.command.affectedRows, 1);
-      });
-      transactionModes.readOnly = { writeRejected: true, readWriteAccepted: true };
     } finally {
       await writer.unsafe("ROLLBACK", []).catch(() => undefined);
       await writer.unsafe(`DROP TABLE IF EXISTS ${isolationTable}`, []);
       await writer.release();
     }
   }
-  if (dialect !== "sqlite") {
+  progress(dialect, "PASS", "isolation");
+  progress(dialect, "START", "access-mode");
+  if (dialect === "postgres") {
     let accessConnection;
     const accessClient = new Proxy(client, {
       get(target, property) {
@@ -478,11 +495,70 @@ async function runDialect(dialect) {
     };
   }
   if (dialect === "mysql" || dialect === "mariadb") {
+    let accessConnection;
+    let acquisitions = 0;
+    const accessClient = new Proxy(client, {
+      get(target, property) {
+        if (property === "reserve") return async () => {
+          acquisitions += 1;
+          accessConnection = await target.reserve();
+          return accessConnection;
+        };
+        return Reflect.get(target, property, target);
+      },
+    });
+    const accessDb = createBunSqlDatabase(accessClient, { dialect });
+    for (const readOnly of [true, false]) {
+      await assert.rejects(
+        accessDb.tx({ readOnly }, async () => assert.fail("unsupported access-mode callback ran")),
+        (error) => error.code === "BRAID_TX_OPTION_UNSUPPORTED" && error.feature === "transaction.read-only",
+      );
+    }
+    assert.equal(acquisitions, 0, "unsupported access modes must reject before acquiring a native lease");
+    const observer = connection(dialect, url);
+    const write = (value) => sqlTag.command`INSERT INTO ${sqlTag.raw(bulkTable)} (value) VALUES (${value})`;
+    const recovery = [];
+    try {
+      for (const method of ["query", "bulk"]) {
+        let before;
+        await accessDb.session(async (session) => {
+          before = (await session.one(connectionId(sqlTag))).connection_id;
+          await accessConnection.unsafe("SET SESSION TRANSACTION READ ONLY", []);
+          try {
+            await assert.rejects(session.tx(async (tx) => {
+              if (method === "bulk") await tx.bulk(["rejected"], write);
+              else await tx.execute(write("rejected"));
+            }), (error) => error.errno === 1792 && error.sqlState === "25006");
+            assert.equal((await session.one(connectionId(sqlTag))).connection_id, before);
+          } finally {
+            await accessConnection.unsafe("SET SESSION TRANSACTION READ WRITE", []);
+          }
+        });
+        let after;
+        const value = `recovered-${method}`;
+        await accessDb.tx(async (tx) => {
+          after = (await tx.one(connectionId(sqlTag))).connection_id;
+          assert.notEqual(after, before, "contaminated physical lease must be discarded after its session");
+          await tx.execute(write(value));
+        });
+        assert.equal((await observer.unsafe("SELECT ID FROM information_schema.PROCESSLIST WHERE ID = ?", [before])).length, 0);
+        const rows = await observer.unsafe(`SELECT value FROM ${bulkTable} WHERE value = ?`, [value]);
+        assert.deepEqual(rows.map((row) => row.value), [value]);
+        recovery.push({ method, before, after, durableRows: rows.map((row) => row.value) });
+      }
+    } finally {
+      await observer.close({ timeout: 1 });
+    }
+    transactionModes.readOnly = { explicitOptions: "unsupported-before-acquire", inheritedRecovery: recovery };
+  }
+  progress(dialect, "PASS", "access-mode");
+  if (dialect === "mysql" || dialect === "mariadb") {
     await client.unsafe(`DROP TABLE ${bulkTable}`, []);
   } else {
     await db.execute(sqlTag.command`DROP TABLE ${sqlTag.raw(bulkTable)}`);
   }
 
+  progress(dialect, "START", "representations");
   const exactInteger = await db.one(sqlTag.rows`
     SELECT CAST(9007199254740993 AS ${dialect === "postgres" ? sqlTag.raw("BIGINT") : dialect === "sqlite" ? sqlTag.raw("INTEGER") : sqlTag.raw("SIGNED")}) AS exact_integer
   `);
@@ -603,6 +679,8 @@ async function runDialect(dialect) {
     }
   }
 
+  progress(dialect, "PASS", "representations");
+  progress(dialect, "START", "unsupported");
   const unsupported = {};
   try {
     for await (const _row of db.stream(sqlTag.rows`SELECT 1`)) {
@@ -617,7 +695,9 @@ async function runDialect(dialect) {
     unsupported.call = { code: error?.code, feature: error?.feature };
   }
   assert.equal(unsupported.call?.code, "BRAID_CALL_UNSUPPORTED");
+  progress(dialect, "PASS", "unsupported");
 
+  progress(dialect, "START", "cancellation");
   const controller = new AbortController();
   const cancellation = { capability: environment.capabilities["statement.cancel"]?.status };
   const cancellationPromise = db.execute(sleepQuery(sqlTag), { signal: controller.signal });
@@ -638,9 +718,11 @@ async function runDialect(dialect) {
     assert.equal(afterCancellation.reuse_after_cancel, 1);
     cancellation.reuse = "ok";
   }
+  progress(dialect, "PASS", "cancellation");
 
   const result = {
     dialect,
+    ...(selectedPhase ? { diagnosticOnly: true } : {}),
     contractAssertions,
     urlSource: envNames[dialect].find((name) => process.env[name]) ?? "in-memory",
     environment,
@@ -692,12 +774,23 @@ async function runDialect(dialect) {
     },
   };
   const observationsDirectory = process.env.SQLBRAID_SUPPORT_EVIDENCE_DIR;
-  if (observationsDirectory) {
+  if (observationsDirectory && selectedPhase === undefined) {
     await mkdir(observationsDirectory, { recursive: true });
     await writeFile(`${observationsDirectory}/${dialect}.json`, `${JSON.stringify(result.observedTuple, null, 2)}\n`);
   }
-  await client.close?.();
   return result;
+  } finally {
+    progress(dialect, "START", "cleanup");
+    try {
+      await client.unsafe("DROP TABLE IF EXISTS braid_bun_sql_matrix_bulk", []);
+      await client.unsafe("DROP TABLE IF EXISTS braid_bun_sql_matrix_isolation", []);
+    } finally {
+      // Pinned Bun does not decrement its pool reservation counter on reserved.close().
+      // Physical replacement and independent durable writes are asserted before bounded teardown.
+      await client.close({ timeout: 1 });
+    }
+    progress(dialect, "PASS", "cleanup");
+  }
 }
 
 const selected = process.argv.slice(2);

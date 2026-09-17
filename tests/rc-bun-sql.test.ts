@@ -183,12 +183,7 @@ test.each([
   { dialect: "postgres", readOnly: undefined, begin: "BEGIN" },
   { dialect: "postgres", readOnly: true, begin: "BEGIN READ ONLY" },
   { dialect: "postgres", readOnly: false, begin: "BEGIN READ WRITE" },
-  { dialect: "mysql", readOnly: undefined, begin: "START TRANSACTION" },
-  { dialect: "mysql", readOnly: true, begin: "START TRANSACTION READ ONLY" },
-  { dialect: "mysql", readOnly: false, begin: "START TRANSACTION READ WRITE" },
-  { dialect: "mariadb", readOnly: undefined, begin: "START TRANSACTION" },
-  { dialect: "mariadb", readOnly: true, begin: "START TRANSACTION READ ONLY" },
-  { dialect: "mariadb", readOnly: false, begin: "START TRANSACTION READ WRITE" },
+
 ] as const)(
   "[contract:bun-sql-$dialect:transaction.access-mode:boundary] [ownership:pooled] Bun.SQL $dialect preserves readOnly=$readOnly transaction access mode",
   async ({ dialect, readOnly, begin }) => {
@@ -203,6 +198,102 @@ test.each([
     );
   },
 );
+
+test.each(["mysql", "mariadb"] as const)(
+  "Bun.SQL %s rejects explicit access modes before acquiring a lease",
+  async (dialect) => {
+    const logs: Log[] = [];
+    const client = fakeClient(logs, { count: 0 });
+    let acquired = false;
+    client.reserve = async () => {
+      acquired = true;
+      throw new Error("must not acquire");
+    };
+    const db = createBunSqlDatabase(client, { dialect });
+    for (const readOnly of [true, false]) {
+      await assert.rejects(
+        db.tx({ readOnly }, async () => assert.fail("unsupported callback must not run")),
+        (error: unknown) =>
+          error instanceof UnsupportedFeatureError &&
+          error.code === "BRAID_TX_OPTION_UNSUPPORTED" &&
+          error.feature === "transaction.read-only",
+      );
+    }
+    assert.equal(acquired, false);
+    assert.deepEqual(logs, []);
+  },
+);
+
+test.each(["query", "caught-query", "bulk", "control"] as const)(
+  "Bun.SQL read-only contamination from %s discards only after its owning session ends",
+  async (path) => {
+    const client = fakeClient([], { count: 0 });
+    const reserve = client.reserve!;
+    const events: string[] = [];
+    const failure = Object.assign(new Error("read only"), { errno: 1792, sqlState: "25006" });
+    client.reserve = async () => {
+      const native = await reserve();
+      const unsafe = native.unsafe;
+      native.unsafe = <T>(text: string, values?: readonly unknown[]) => {
+        events.push(text);
+        if (path === "control" && text === "START TRANSACTION") throw failure;
+        return unsafe<T>(text, values);
+      };
+      native.close = async () => {
+        events.push("discard");
+      };
+      native.release = () => {
+        events.push("release");
+      };
+      return new Proxy(native, {
+        apply(target, thisArg, args) {
+          if (args[0].join("").startsWith("INSERT")) throw failure;
+          return Reflect.apply(target, thisArg, args);
+        },
+      });
+    };
+    const db = createBunSqlDatabase(client, { dialect: "mysql" });
+    await db.session(async (session) => {
+      const transaction = session.tx(async (tx) => {
+          const write = (value: string) => mysql.command`INSERT INTO values_table VALUES (${value})`;
+          if (path === "bulk") await tx.bulk(["A"], write);
+          else if (path === "caught-query") await assert.rejects(tx.execute(write("A")), (error) => error === failure);
+          else await tx.execute(write("A"));
+        });
+      if (path === "caught-query") await transaction;
+      else await assert.rejects(transaction, (error: unknown) => error === failure);
+      assert.ok(!events.includes("discard"), "a statement failure must not close its still-owned session");
+      if (path !== "control") assert.ok(events.includes(path === "caught-query" ? "COMMIT" : "ROLLBACK"));
+    });
+    assert.equal(events.at(-1), "discard");
+    assert.equal(events.filter((event) => event === "discard").length, 1);
+    assert.ok(!events.includes("release"), "contaminated lease must never return to the pool");
+  },
+);
+
+test("Bun.SQL ordinary MySQL statement errors do not discard a healthy lease", async () => {
+  const client = fakeClient([], { count: 0 });
+  const native = await client.reserve!();
+  let discarded = false;
+  let released = false;
+  native.close = async () => {
+    discarded = true;
+  };
+  native.release = () => {
+    released = true;
+  };
+  const failure = Object.assign(new Error("duplicate"), { errno: 1062, sqlState: "23000" });
+  client.reserve = async () =>
+    new Proxy(native, {
+      apply() {
+        throw failure;
+      },
+    });
+  const db = createBunSqlDatabase(client, { dialect: "mysql" });
+  await assert.rejects(db.execute(mysql.command`INSERT INTO values_table VALUES (${"A"})`), (error) => error === failure);
+  assert.equal(discarded, false);
+  assert.equal(released, true);
+});
 
 test("Bun.SQL uses stable native templates for bulk and rejects Bun structural helpers", async () => {
   const logs: Log[] = [];
