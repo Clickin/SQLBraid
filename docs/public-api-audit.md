@@ -80,8 +80,14 @@ physical boundary, while the public `Database` surface remains async.
 `TypePolicy`.
 
 `QueryExecutor` methods use `(statement, binding?, options?)`; `bulk` is optional,
-and transaction-control methods are optional capabilities. Provider and leases
-must expose the same immutable statement-binding adapter identity. `UnsupportedFeatureError`
+and transaction-control methods are optional capabilities. The optional
+`validateTransactionOptions?(options: TransactionOptions): void` SPI hook is
+synchronous and pure; when present it is authoritative for exact adapter
+option admissibility and must be reused by `begin()`, not duplicated. Provider
+and leases must expose the same immutable statement-binding adapter identity;
+providers exposing the hook must keep equivalent lease policy, but no function
+identity is required. Runtime inherits a provider hook when a lease omits it
+and otherwise retains conservative capability checks. `UnsupportedFeatureError`
 uses `(feature, code, message, options?)` with a `BRAID_${string}` code.
 
 **Binding and render helpers:** `createBoundParameter`, `createBulkBindingDescription`,
@@ -302,6 +308,11 @@ silently. Drivers retain their native error identity unless SQLBraid owns the
 error. Missing stream, call, cancellation, transaction, or hint capabilities
 must continue to use documented `UnsupportedFeatureError` codes; a fallback
 that changes physical ownership or SQL semantics is not compatible.
+Transaction-option validators are an exception to capability-only option
+classification: they must be synchronous, side-effect free, and reject before
+acquisition with the same public error that `begin()` would produce. Runtime
+must reject thenable returns rather than await them; generic transaction and
+savepoint support checks remain independent.
 
 ### Closed unions
 
