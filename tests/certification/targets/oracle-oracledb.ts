@@ -239,24 +239,16 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       let sideEffects = 0;
       let executeStarts = 0;
       let routineLobCloses = 0;
-      const instrumentStreamConnection = (candidate: OracleConnectionLike, countSideEffects: boolean, onBreak?: () => void): OracleConnectionLike => {
+      const instrumentStreamConnection = (candidate: OracleConnectionLike, countSideEffects: boolean): OracleConnectionLike => {
         const execute = candidate.execute.bind(candidate);
-        const breakNative = candidate.break?.bind(candidate);
-        let activeOperations = 0;
         const instrumented: OracleConnectionLike = {
           execute: async (text: string, binds?: unknown, executeOptions?: unknown): Promise<unknown> => {
           if (text.includes("CERT_INIT_FAILURE")) throw faults.initFailure;
           if (countSideEffects) sideEffects += 1;
           if (countSideEffects) executeStarts += 1;
-          activeOperations += 1;
-          let result: OracleExecuteResultLike;
-          try {
-            result = (executeOptions === undefined
-              ? await execute(text, binds)
-              : await execute(text, binds, executeOptions)) as OracleExecuteResultLike;
-          } finally {
-            activeOperations -= 1;
-          }
+          let result = (executeOptions === undefined
+            ? await execute(text, binds)
+            : await execute(text, binds, executeOptions)) as OracleExecuteResultLike;
           const wrapLob = (value: unknown): unknown => {
             if (value === null || typeof value !== "object" || typeof (value as { readonly destroy?: unknown }).destroy !== "function") return value;
             const lob = value as { destroy(error?: Error): unknown };
@@ -284,12 +276,7 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
               reads += 1;
               if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
               if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
-              activeOperations += 1;
-              try {
-                return await native.getRow!();
-              } finally {
-                activeOperations -= 1;
-              }
+              return native.getRow!();
             };
           }
           if (native.getRows) {
@@ -297,12 +284,7 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
               reads += 1;
               if (text.includes("CERT_FIRST_NEXT_FAILURE") && reads === 1) throw faults.firstNextFailure;
               if (text.includes("CERT_MID_STREAM_FAILURE") && reads === 2) throw faults.midStreamFailure;
-              activeOperations += 1;
-              try {
-                return await native.getRows!(size);
-              } finally {
-                activeOperations -= 1;
-              }
+              return native.getRows!(size);
             };
           }
           wrapped.close = async (): Promise<void> => {
@@ -316,12 +298,7 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
           commit: candidate.commit.bind(candidate),
           rollback: candidate.rollback.bind(candidate),
           ...(candidate.stmtCacheSize === undefined ? {} : { stmtCacheSize: candidate.stmtCacheSize }),
-          ...(breakNative === undefined ? {} : {
-            break: async (): Promise<void> => {
-              onBreak?.();
-              if (activeOperations > 0) await breakNative();
-            },
-          }),
+          ...(candidate.break === undefined ? {} : { break: candidate.break.bind(candidate) }),
           ...(candidate.close === undefined ? {} : { close: candidate.close.bind(candidate) }),
         };
         return instrumented;
@@ -346,10 +323,7 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         ...(pool.stmtCacheSize === undefined ? {} : { stmtCacheSize: pool.stmtCacheSize }),
         async getConnection(): Promise<OraclePoolConnectionLike> {
           const nativeConnection = await nativePoolGetConnection();
-          let cancellationRequested = false;
-          const instrumentedConnection = instrumentStreamConnection(nativeConnection, false, () => {
-            cancellationRequested = true;
-          });
+          const instrumentedConnection = instrumentStreamConnection(nativeConnection, false);
           const nativeRollback = nativeConnection.rollback.bind(nativeConnection);
           const nativeClose = nativeConnection.close.bind(nativeConnection);
           forceFaultConnectionCleanup = async () => {
@@ -372,10 +346,9 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
             },
             close: async (closeOptions) => {
               streamCounters.released += 1;
-              const effectiveCloseOptions = closeOptions ?? (cancellationRequested ? { drop: true } : undefined);
-              const closeNative = effectiveCloseOptions === undefined
+              const closeNative = closeOptions === undefined
                 ? (): Promise<void> => Promise.resolve(nativeClose())
-                : (): Promise<void> => Promise.resolve(nativeClose(effectiveCloseOptions));
+                : (): Promise<void> => Promise.resolve(nativeClose(closeOptions));
               if (releaseFailure) {
                 await closeNative();
                 throw releaseFailure;

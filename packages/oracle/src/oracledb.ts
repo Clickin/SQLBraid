@@ -1341,8 +1341,9 @@ function makeOracledbExecutor(
       let breakFailure: unknown;
       let hasBreakFailure = false;
       let breakPromise: Promise<void> | undefined;
+      let nativeOperationActive = false;
       const abort = (): void => {
-        if (breakPromise !== undefined) return;
+        if (breakPromise !== undefined || !nativeOperationActive) return;
         try {
           breakPromise = Promise.resolve(connection.break!()).catch((error) => {
             breakFailure = error;
@@ -1365,7 +1366,13 @@ function makeOracledbExecutor(
         if (resultSet.getRow) {
           while (true) {
             signal?.throwIfAborted();
-            const row = await resultSet.getRow();
+            nativeOperationActive = true;
+            let row: unknown;
+            try {
+              row = await resultSet.getRow();
+            } finally {
+              nativeOperationActive = false;
+            }
             if (row === null || row === undefined) break;
             signal?.throwIfAborted();
             yield decodeRow(row, fields, policy, driver) as Row;
@@ -1373,7 +1380,13 @@ function makeOracledbExecutor(
         } else if (resultSet.getRows) {
           while (true) {
             signal?.throwIfAborted();
-            const batch = await resultSet.getRows(fetchSize);
+            nativeOperationActive = true;
+            let batch: readonly unknown[];
+            try {
+              batch = await resultSet.getRows(fetchSize);
+            } finally {
+              nativeOperationActive = false;
+            }
             if (batch.length === 0) break;
             for (const row of batch) {
               signal?.throwIfAborted();
@@ -1382,9 +1395,19 @@ function makeOracledbExecutor(
             if (batch.length < fetchSize) break;
           }
         } else if (resultSet[Symbol.asyncIterator]) {
-          for await (const row of resultSet as AsyncIterable<unknown>) {
+          const resultIterator = resultSet[Symbol.asyncIterator]();
+          while (true) {
             signal?.throwIfAborted();
-            yield decodeRow(row, fields, policy, driver) as Row;
+            nativeOperationActive = true;
+            let next: IteratorResult<unknown>;
+            try {
+              next = await resultIterator.next();
+            } finally {
+              nativeOperationActive = false;
+            }
+            if (next.done) break;
+            signal?.throwIfAborted();
+            yield decodeRow(next.value, fields, policy, driver) as Row;
           }
         } else {
           throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "Oracle ResultSet does not expose getRow or async iteration.");
@@ -1437,8 +1460,24 @@ export function createOracledbPoolProvider(pool: OraclePoolLike, options: Omit<O
       : customOracleEnvironment(options.typePolicy ?? defaultTypePolicy, true),
     validateTransactionOptions: validateOracleTransactionOptions,
     async acquire(): Promise<ConnectionLease> {
-      const connection = await pool.getConnection();
-      assertPoolConnection(connection);
+      const nativeConnection = await pool.getConnection();
+      assertPoolConnection(nativeConnection);
+      let cancellationRequested = false;
+      const nativeBreak = nativeConnection.break?.bind(nativeConnection);
+      const connection: OraclePoolConnectionLike = {
+        ...nativeConnection,
+        execute: nativeConnection.execute.bind(nativeConnection),
+        ...(nativeConnection.executeMany === undefined ? {} : { executeMany: nativeConnection.executeMany.bind(nativeConnection) }),
+        commit: nativeConnection.commit.bind(nativeConnection),
+        rollback: nativeConnection.rollback.bind(nativeConnection),
+        ...(nativeBreak === undefined ? {} : {
+          break: async (): Promise<void> => {
+            cancellationRequested = true;
+            await nativeBreak();
+          },
+        }),
+        close: nativeConnection.close.bind(nativeConnection),
+      };
       const executor = makeOracledbExecutor(connection, options, bindingAdapter);
       let released = false;
       return {
@@ -1446,8 +1485,8 @@ export function createOracledbPoolProvider(pool: OraclePoolLike, options: Omit<O
         async release(releaseOptions = {}): Promise<void> {
           if (released) return;
           released = true;
-          if (releaseOptions.discard === true) await connection.close({ drop: true });
-          else await connection.close();
+          if (releaseOptions.discard === true || cancellationRequested) await nativeConnection.close({ drop: true });
+          else await nativeConnection.close();
         },
       };
     },

@@ -144,6 +144,7 @@ test("Oracle rejects custom exact-number decimal text for IN binds before execut
 test("Oracle adapter honors hints, rejects untyped null, and closes an aborted ResultSet", async () => {
   const calls: { readonly sql: string; readonly binds?: readonly unknown[] }[] = [];
   let closed = 0;
+  let breaks = 0;
   let rowIndex = 0;
   const driver = {
     BIND_IN: 1,
@@ -166,7 +167,7 @@ test("Oracle adapter honors hints, rejects untyped null, and closes an aborted R
         metaData: [{ name: "VALUE", dbTypeName: "NUMBER" }],
       };
     },
-    async break() {},
+    async break() { breaks += 1; },
     async commit() {},
     async rollback() {},
   };
@@ -188,6 +189,7 @@ test("Oracle adapter honors hints, rejects untyped null, and closes an aborted R
   controller.abort();
   await assert.rejects(() => iterator.next());
   assert.equal(closed, 1);
+  assert.equal(breaks, 0);
 });
 
 test("Oracle numeric result transport keeps NUMBER exact and BINARY_FLOAT approximate", async () => {
