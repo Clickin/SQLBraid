@@ -18,6 +18,15 @@ export interface DenoCertificationDescriptor {
 
 export type DenoCertificationFactory = (sourceSha: string) => DenoCertificationDescriptor | Promise<DenoCertificationDescriptor>;
 
+export async function loadDenoDriverVersion(packageName: string): Promise<string> {
+  const metadata = await import(`npm:${packageName}/package.json`, { with: { type: "json" } });
+  const version: unknown = metadata.default?.version;
+  if (typeof version !== "string" || version.length === 0) {
+    throw new Error(`Deno ${packageName} package metadata did not expose a version.`);
+  }
+  return version;
+}
+
 export async function assertDenoSourceSha(sourceSha: string): Promise<void> {
   const result = await new Deno.Command("git", { args: ["rev-parse", "HEAD"] }).output();
   if (!result.success) throw new Error("Deno certification source SHA cannot be verified because the checkout has no readable git HEAD.");

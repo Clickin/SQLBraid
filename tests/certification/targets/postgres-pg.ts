@@ -184,11 +184,10 @@ function instrumentProviderStream(provider: ReturnType<typeof createPgPoolProvid
     ...provider,
     async acquire() {
       const lease = await provider.acquire();
-      const stream = lease.stream.bind(lease);
       return {
         ...lease,
-        stream: (...args: Parameters<typeof lease.stream>) => {
-          const source = stream(...args);
+        stream: <Row>(...args: Parameters<typeof lease.stream>) => {
+          const source = lease.stream<Row>(...args);
           return {
             [Symbol.asyncIterator]() {
               const iterator = source[Symbol.asyncIterator]();

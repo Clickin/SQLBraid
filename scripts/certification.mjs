@@ -287,7 +287,7 @@ async function certifyTarget(target) {
   }
   if (denoTargets.has(target)) {
     const env = { ...commonEnv, SQLBRAID_CERT_TARGET: target, SQLBRAID_CERT_ARTIFACT: join(artifactDir, `${target}.json`) };
-    await run("deno", ["run", "--allow-all", denoTargets.get(target)], env);
+    await run("deno", ["run", "--allow-all", "--no-lock", "--node-modules-dir=manual", "--sloppy-imports", denoTargets.get(target)], env);
     await attachCandidate(artifactDir);
     const preparedAfter = await preparedIntegrity();
     if (preparedBefore !== undefined && preparedBefore.distSha256 !== preparedAfter?.distSha256) throw new Error("Prepared build dist changed during certification.");
