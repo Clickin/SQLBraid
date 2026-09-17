@@ -24,7 +24,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { assertSavepointName } from "@sqlbraid/core/driver";
+import { assertSavepointName, defineResultProperty } from "@sqlbraid/core/driver";
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -75,10 +75,12 @@ function normalizeValue(value: unknown): unknown {
 
 function plainRow(value: unknown, columns?: readonly BetterSqlite3ColumnLike[]): Record<string, unknown> {
   if (Array.isArray(value) && columns !== undefined) {
-    return Object.fromEntries(columns.map((column, index) => [
-      column.name ?? column.column ?? String(index),
-      normalizeValue(value[index]),
-    ]));
+    const row: Record<string, unknown> = {};
+    for (let index = 0; index < columns.length; index += 1) {
+      const column = columns[index]!;
+      defineResultProperty(row, column.name ?? column.column ?? String(index), normalizeValue(value[index]));
+    }
+    return row;
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("BRAID_RESULT_COLUMNS: better-sqlite3 must return object result rows.");

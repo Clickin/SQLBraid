@@ -326,7 +326,7 @@ test("libSQL closes invalid acquired transaction handles and preserves validatio
     { intMode: "string" },
   );
   await assert.rejects(
-    () => executor.begin!(),
+    async () => await executor.begin!(),
     (error: unknown) => error instanceof TypeError
       && error.message.includes("invalid transaction handle"),
   );
@@ -352,7 +352,7 @@ test("libSQL aggregates invalid-handle validation and close failures", async () 
     { intMode: "string" },
   );
   await assert.rejects(
-    () => executor.begin!(),
+    async () => await executor.begin!(),
     (error: unknown) => {
       assert.ok(error instanceof AggregateError);
       assert.equal((error as { readonly code?: unknown }).code, "BRAID_RESOURCE_CLEANUP");
@@ -384,7 +384,7 @@ test("libSQL rejects hostile savepoint names before transaction I/O", async () =
   await executor.begin!();
   for (const name of ["", "white space", "bad;name", "bad'name", "--comment", "/*comment*/", "line\nbreak", "tab\tbreak"]) {
     await assert.rejects(
-      () => executor.savepoint!(name),
+      async () => await executor.savepoint!(name),
       (error: unknown) => error instanceof TypeError,
     );
   }

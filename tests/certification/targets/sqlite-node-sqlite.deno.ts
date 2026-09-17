@@ -33,7 +33,8 @@ const target = {
     };
   },
 };
-const artifact = await certifyTarget(target, { stress: Deno.env.get("SQLBRAID_CERT_STRESS") === "true" });
+const stress = Deno.env.get("SQLBRAID_CERT_STRESS") === "1" || Deno.env.get("SQLBRAID_CERT_STRESS") === "true";
+const artifact = await certifyTarget(target, { stress });
 await Deno.writeTextFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`);
 if (Object.values(artifact.cases).some((result) => result.status === "fail")) {
   throw new Error(`${target.id} certification contains failed cases.`);

@@ -8,12 +8,14 @@ import { libsqlCertificationTarget } from "./sqlite-libsql.js";
 import { nodeSqliteCertificationTarget } from "./sqlite-node-sqlite.js";
 import { REQUIRED_CASE_IDS } from "../types.js";
 
+const stress = process.env.SQLBRAID_CERT_STRESS === "1" || process.env.SQLBRAID_CERT_STRESS === "true";
+
 for (const target of [nodeSqliteCertificationTarget, betterSqlite3CertificationTarget, libsqlCertificationTarget]) {
   const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
   if (!sourceSha) throw new Error("SQLBRAID_CERT_SOURCE_SHA is required for certification targets.");
   const candidate = { ...target, sourceSha };
   test(`RC3 certifies every common case for ${target.id}`, async () => {
-    const artifact = await certifyTarget(candidate, { stress: process.env.SQLBRAID_CERT_STRESS === "true" });
+    const artifact = await certifyTarget(candidate, { stress });
     const artifactDirectory = process.env.SQLBRAID_CERT_ARTIFACT;
     if (artifactDirectory) {
       await mkdir(artifactDirectory, { recursive: true });
@@ -23,5 +25,5 @@ for (const target of [nodeSqliteCertificationTarget, betterSqlite3CertificationT
     assert.deepEqual(Object.keys(artifact.cases).sort(), [...REQUIRED_CASE_IDS].sort());
     assert.equal(artifact.cases.CAP001.status, "pass");
     assert.equal(artifact.cases.CAP002.status, "pass");
-  }, process.env.SQLBRAID_CERT_STRESS === "true" ? 300_000 : 120_000);
+  }, stress ? 300_000 : 120_000);
 }
