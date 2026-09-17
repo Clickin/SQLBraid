@@ -89,7 +89,7 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"], relea
           code: "ERR_PNPM_PACKAGE_NOT_FOUND",
         });
       }
-      const name = names.find((name) => args[1] === name || args[1] === `${name}@${version}`)!;
+      const name = names.find((name) => args[1] === name || args[1].startsWith(`${name}@`))!;
       if (args[2] === "dist-tags") return JSON.stringify(tags.get(name));
       if (args[2] === "versions") return JSON.stringify(["0.0.0-bootstrap.0"]);
       if (args[2] === "dist.integrity") return JSON.stringify(publicIntegrity.get(name) ?? null);
@@ -198,6 +198,17 @@ test("package-specific staging validates the full candidate but uploads only the
   assert.equal(f.uploads().length, 1);
   assert.match(f.uploads()[0][2], /package-1\.tgz$/u);
   assert.equal(result?.packages[0].tag, "release-1.0.1");
+});
+
+test("package-specific staging permits unrelated workspace packages at different versions", async () => {
+  const f = await fixture("1.0.1", ["@sqlbraid/core", "@sqlbraid/postgres"], ["@sqlbraid/postgres"]);
+  f.manifest.packages[0].version = "1.0.0";
+  f.publicIntegrity.set("@sqlbraid/core", f.manifest.packages[0].integrity);
+  const result = await f.run();
+  assert.ok(result?.complete);
+  assert.equal(result?.packages[0].name, "@sqlbraid/postgres");
+  assert.equal(result?.packages[0].version, "1.0.1");
+  assert.equal(f.uploads().length, 1);
 });
 
 test("package-specific staging refuses an unpublished internal dependency", async () => {
