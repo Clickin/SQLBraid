@@ -20,7 +20,7 @@ interface MssqlSettings {
 }
 
 const tediousVersion = (
-  JSON.parse(readFileSync(new URL("../../../node_modules/tedious/package.json", import.meta.url), "utf8")) as {
+  JSON.parse(readFileSync(new URL("../../node_modules/tedious/package.json", import.meta.url), "utf8")) as {
     readonly version: string;
   }
 ).version;

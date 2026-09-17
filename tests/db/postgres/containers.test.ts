@@ -174,9 +174,8 @@ test("postgres.pv18.profiles.runtime-codegen", { timeout: 30_000 }, async () => 
         "SELECT current_setting('server_version') AS version, version() AS banner",
       )
     ).rows[0]!;
-    const pgVersion = JSON.parse(
-      readFileSync(new URL("../../../node_modules/pg/package.json", import.meta.url), "utf8"),
-    ).version as string;
+    const pgVersion = JSON.parse(readFileSync(new URL("../../node_modules/pg/package.json", import.meta.url), "utf8"))
+      .version as string;
     const edition = /alpine/iu.test(server.banner) ? "alpine" : server.banner;
     stampSupportEnvironment(
       process.env.SQLBRAID_POSTGRES_TARGET ?? "postgres",

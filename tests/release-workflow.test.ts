@@ -261,7 +261,7 @@ test("job capabilities isolate OIDC and release writes", () => {
     const permissions: Record<string, string> = job.permissions ?? release.permissions;
     if (name !== "release-stage") assert.notEqual(permissions["id-token"], "write");
     if (name !== "release-draft") assert.notEqual(permissions.contents, "write");
-    for (const env of [release.env, job.env, ...job.steps.map((step) => step.env)]) {
+    for (const env of [release.env, job.env, ...(job.steps ?? []).map((step) => step.env)]) {
       for (const [key, value] of Object.entries(env ?? {})) {
         assert.doesNotMatch(key, /^(?:NODE_AUTH_TOKEN|NPM_TOKEN|NPM_BOOTSTRAP_TOKEN)$/u);
         assert.doesNotMatch(value, /secrets\./u);
@@ -274,7 +274,7 @@ test("job capabilities isolate OIDC and release writes", () => {
     "setup-node must not inject fallback token configuration",
   );
   for (const job of Object.values(release.jobs)) {
-    for (const step of job.steps) {
+    for (const step of job.steps ?? []) {
       assert.doesNotMatch(
         step.run ?? "",
         /\bnpm\s+(?:publish|install|i)\b/u,

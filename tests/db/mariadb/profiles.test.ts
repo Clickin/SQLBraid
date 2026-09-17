@@ -77,7 +77,7 @@ async function close(connection: { end(): Promise<void> } | undefined): Promise<
 }
 
 function installedConnectorVersion(): string {
-  const packageUrl = new URL("../../../node_modules/mariadb/package.json", import.meta.url);
+  const packageUrl = new URL("../../node_modules/mariadb/package.json", import.meta.url);
   return (JSON.parse(readFileSync(packageUrl, "utf8")) as { readonly version: string }).version;
 }
 

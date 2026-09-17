@@ -165,7 +165,7 @@ beforeAll(async () => {
   assert.match(report.sqliteVersion, /^\d+\.\d+\.\d+$/u);
   assert.match(report.browserVersion, /^\d+\.\d+\.\d+\.\d+$/u);
   const driverPackage = JSON.parse(
-    readFileSync(resolve(root, "node_modules/@sqlite.org/sqlite-wasm/package.json"), "utf8"),
+    readFileSync(resolve(root, "tests/node_modules/@sqlite.org/sqlite-wasm/package.json"), "utf8"),
   );
   stampSupportEnvironment("sqlite-wasm", {
     database: { product: "sqlite", version: report.sqliteVersion, edition: "official SQLite WASM OO1" },
