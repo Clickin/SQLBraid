@@ -1,7 +1,6 @@
 import { inject, test } from "vitest";
-import { certifyTarget } from "../../certification/runner.js";
-import { validateCertificationArtifact, writeCertificationArtifact } from "../../certification/runner.js";
-import { createPostgresTarget, disposePostgresTarget } from "../../certification/targets/postgres-pg.js";
+import { certifyTarget, validateCertificationArtifact, writeCertificationArtifact } from "../runner.js";
+import { createPostgresTarget, disposePostgresTarget } from "./postgres-pg.js";
 import { writeFile } from "node:fs/promises";
 
 test("PostgreSQL certification target executes all required cases", { timeout: 1_800_000 }, async () => {

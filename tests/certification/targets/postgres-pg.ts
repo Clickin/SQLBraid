@@ -613,8 +613,10 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
   };
 }
 
+export type PostgresTargetId = "postgres-pg-node-16-4" | "postgres-current" | "postgres-pg-deno-2-9-3";
+
 export function createPostgresTarget(
-  id: "postgres-pg-node-16-4" | "postgres-current" | "postgres-pg-deno-2-9-3",
+  id: PostgresTargetId,
   connectionUri: string,
   sourceSha: string,
 ): CertificationTarget {
