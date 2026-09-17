@@ -202,9 +202,12 @@ test("package-specific staging validates the full candidate but uploads only the
 
 test("package-specific staging permits unrelated workspace packages at different versions", async () => {
   const f = await fixture("1.0.1", ["@sqlbraid/core", "@sqlbraid/postgres"], ["@sqlbraid/postgres"]);
-  f.manifest.packages[0].version = "1.0.0";
-  f.publicIntegrity.set("@sqlbraid/core", f.manifest.packages[0].integrity);
-  const result = await f.run();
+  const manifest: ReleaseManifest = {
+    ...f.manifest,
+    packages: f.manifest.packages.map((entry, index) => (index === 0 ? { ...entry, version: "1.0.0" } : entry)),
+  };
+  f.publicIntegrity.set("@sqlbraid/core", manifest.packages[0].integrity);
+  const result = await stageCandidates(manifest, { directory: f.directory });
   assert.ok(result?.complete);
   assert.equal(result?.packages[0].name, "@sqlbraid/postgres");
   assert.equal(result?.packages[0].version, "1.0.1");
