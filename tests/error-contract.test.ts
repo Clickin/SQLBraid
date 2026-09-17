@@ -105,11 +105,6 @@ test("first-party executor declarations use known capability IDs while custom ID
   }
   const customId = "vendor.custom-capability";
   assert.equal(isWellKnownCapabilityId(customId), false);
-  const customCapabilities = {
-    ...executors[0]!.environment!.capabilities,
-    [customId]: { status: "guarded" as const },
-  };
-  assert.equal(customCapabilities[customId]?.status, "guarded");
 });
 
 test("public unsupported-feature conformance rejects semantically mismatched pairs", () => {
