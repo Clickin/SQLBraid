@@ -195,6 +195,14 @@ infer an opaque client's integer mode. Transactions use libSQL's interactive
 transaction handle; ordinary calls do not claim one pinned session. The
 adapter uses native `batch()` for bulk and rejects `db.stream()` with
 `BRAID_STREAM_UNSUPPORTED` rather than buffering a complete result.
+
+Local `file:` and protocol-unknown libSQL clients omit optional
+`command.insertId`: the native binding rounds ROWID through Number before
+returning a bigint, independently of `intMode`. Query rows, transactions,
+bulk execution and `affectedRows` remain supported. For an exact ID, use
+user-authored `INSERT ... RETURNING id` with `sql.rows`; SQLBraid does not
+rewrite SQL or issue a compensating query.
+
 The SQLite inspector defaults to `introspectionScope: "main"`: metadata capture
 does not inspect attached schemas, and missing fields must not be read as proof
 that indexes or constraints are absent. better-sqlite3 and libSQL targets are

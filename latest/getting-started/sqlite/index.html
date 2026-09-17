@@ -234,8 +234,14 @@ that matters. Routines and active cancellation are unsupported.</p>
 infer an opaque client’s integer mode. Transactions use libSQL’s interactive
 transaction handle; ordinary calls do not claim one pinned session. The
 adapter uses native <code dir="auto">batch()</code> for bulk and rejects <code dir="auto">db.stream()</code> with
-<code dir="auto">BRAID_STREAM_UNSUPPORTED</code> rather than buffering a complete result.
-The SQLite inspector defaults to <code dir="auto">introspectionScope: "main"</code>: metadata capture
+<code dir="auto">BRAID_STREAM_UNSUPPORTED</code> rather than buffering a complete result.</p>
+<p>Local <code dir="auto">file:</code> and protocol-unknown libSQL clients omit optional
+<code dir="auto">command.insertId</code>: the native binding rounds ROWID through Number before
+returning a bigint, independently of <code dir="auto">intMode</code>. Query rows, transactions,
+bulk execution and <code dir="auto">affectedRows</code> remain supported. For an exact ID, use
+user-authored <code dir="auto">INSERT ... RETURNING id</code> with <code dir="auto">sql.rows</code>; SQLBraid does not
+rewrite SQL or issue a compensating query.</p>
+<p>The SQLite inspector defaults to <code dir="auto">introspectionScope: "main"</code>: metadata capture
 does not inspect attached schemas, and missing fields must not be read as proof
 that indexes or constraints are absent. better-sqlite3 and libSQL targets are
 compatible pending exact runtime/driver evidence, not certified by analogy.

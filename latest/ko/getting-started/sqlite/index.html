@@ -193,8 +193,14 @@ bulk는 prepared loop를 사용합니다. Native 호출은 event loop를 block�
 <code dir="auto">intMode: "string"</code> option이 필요합니다. Transaction은 libSQL interactive
 transaction handle을 사용하며 일반 호출은 하나의 pinned session을
 주장하지 않습니다. Native <code dir="auto">batch()</code>를 bulk에 사용하고, 완전한 result를
-buffering하는 대신 <code dir="auto">db.stream()</code>은 <code dir="auto">BRAID_STREAM_UNSUPPORTED</code>로 거부합니다.
-옵션을 생략하거나 빈 객체를 사용하면 mode 없이 <code dir="auto">client.transaction()</code>을
+buffering하는 대신 <code dir="auto">db.stream()</code>은 <code dir="auto">BRAID_STREAM_UNSUPPORTED</code>로 거부합니다.</p>
+<p>로컬 <code dir="auto">file:</code> 및 protocol을 확인할 수 없는 libSQL client에서는 선택적
+<code dir="auto">command.insertId</code>를 제공하지 않습니다. Native binding이 ROWID를 Number로
+변환한 뒤 bigint로 반환하므로 <code dir="auto">intMode</code>와 별개로 정밀도를 잃을 수 있습니다.
+조회 행, transaction, bulk 실행, <code dir="auto">affectedRows</code>는 계속 지원합니다. 정확한 ID가
+필요하면 <code dir="auto">sql.rows</code>와 직접 작성한 <code dir="auto">INSERT ... RETURNING id</code>를 사용하세요.
+SQLBraid는 SQL을 재작성하거나 보정용 query를 추가하지 않습니다.</p>
+<p>옵션을 생략하거나 빈 객체를 사용하면 mode 없이 <code dir="auto">client.transaction()</code>을
 호출하고 <code dir="auto">readOnly: false</code>는 <code dir="auto">"write"</code>를 선택합니다. 로컬
 <code dir="auto">@libsql/client@0.18.0</code> file transport는 <code dir="auto">BEGIN TRANSACTION READONLY</code>를
 생성하지만 write를 거부하지 않으므로 SQLBraid는 read-only를 guarded로
