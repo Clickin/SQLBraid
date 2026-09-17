@@ -135,7 +135,7 @@ test("d1.data.json-text", async () => {
   assert.equal(payload.json.enabled, "1");
 });
 
-test("d1.execution.bulk", async () => {
+test("[contract:cloudflare-d1:metadata.affected-rows:integration] d1.execution.bulk", async () => {
   const payload = await fixture();
   assert.deepEqual(payload.bulk, { inputCount: 2, affectedRows: 2 });
   assert.equal(payload.sessionCode, "BRAID_SESSION_UNSUPPORTED");

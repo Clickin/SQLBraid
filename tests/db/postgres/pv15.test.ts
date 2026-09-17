@@ -27,7 +27,7 @@ function rowSchema<Output>(
   };
 }
 
-test("PostgreSQL pg-cursor reuses streaming conformance with row schemas and lease counters", async () => {
+test("[contract:pg:resource.stream-return:integration] [ownership:pooled] PostgreSQL pg-cursor reuses streaming conformance with row schemas and lease counters", async () => {
   const pool = new Pool({ connectionString: inject("postgres").connectionUri, max: 1, idleTimeoutMillis: 0 });
   let releases = 0;
   let terminated = 0;

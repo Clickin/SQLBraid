@@ -11,10 +11,60 @@ import {
 } from "../../../packages/sqlite/src/better-sqlite3.js";
 import { createLibsqlDatabase } from "../../../packages/sqlite/src/libsql.js";
 import { sql } from "@sqlbraid/sqlite";
+import { transactionIntegrationTests } from "../../contracts/transaction.integration.js";
+import { commandMetadataContract, commandMetadataTitle } from "../command-metadata.js";
 
 const BetterSqlite3 = createRequire(import.meta.url)("better-sqlite3") as new (
   filename: string,
 ) => BetterSqlite3DatabaseLike & { close(): void };
+
+for (const transport of ["better-sqlite3", "libsql"] as const) {
+  for (const contract of transactionIntegrationTests(transport, "direct", async () => {
+    const directory = await mkdtemp(join(tmpdir(), `sqlbraid-contract-${transport}-`));
+    const filename = join(directory, "database.db");
+    const native = transport === "better-sqlite3" ? new BetterSqlite3(filename) : undefined;
+    const client = transport === "libsql" ? createClient({ url: `file:${filename}`, intMode: "string" }) : undefined;
+    const db = native ? createBetterSqlite3Database(native) : createLibsqlDatabase(client!, { intMode: "string" });
+    // A second native handle shares the file, never the writer's transaction-local state.
+    const observer = new BetterSqlite3(filename);
+    const observerDb = createBetterSqlite3Database(observer);
+    await db.execute(sql.command`CREATE TABLE braid_contract_tx (id TEXT PRIMARY KEY)`);
+    return {
+      db,
+      caughtStatementOutcome: "commit",
+      streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
+      write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+      committedRows: async () =>
+        (await observerDb.all(sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`)).map((row) => row.id),
+      close: async () => {
+        observer.close();
+        native?.close();
+        client?.close();
+        await rm(directory, { recursive: true, force: true });
+      },
+    };
+  }, { stream: transport === "better-sqlite3" })) test(contract.title, contract.run);
+
+  test(commandMetadataTitle(transport), async () => {
+    const directory = await mkdtemp(join(tmpdir(), `sqlbraid-metadata-${transport}-`));
+    const filename = join(directory, "database.db");
+    const native = transport === "better-sqlite3" ? new BetterSqlite3(filename) : undefined;
+    const client = transport === "libsql" ? createClient({ url: `file:${filename}`, intMode: "string" }) : undefined;
+    const db = native ? createBetterSqlite3Database(native) : createLibsqlDatabase(client!, { intMode: "string" });
+    const observer = new BetterSqlite3(filename);
+    try {
+      await db.execute(sql.command`CREATE TABLE braid_contract_metadata (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`);
+      const observerDb = createBetterSqlite3Database(observer);
+      await commandMetadataContract(db, sql, () =>
+        observerDb.all(sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`));
+    } finally {
+      observer.close();
+      native?.close();
+      client?.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
 
 test("better-sqlite3.sql.native-transparency", async () => {
   const native = new BetterSqlite3(":memory:");

@@ -9,6 +9,7 @@ import { createOracledbDatabase, createOracledbPoolDatabase } from "@sqlbraid/or
 import { createOracleInspector } from "@sqlbraid/oracle/inspector";
 import { oracleParameter, sql, typePolicy } from "@sqlbraid/oracle";
 import { bindingObserver } from "../binding.js";
+import { transactionIntegrationTests } from "../../contracts/transaction.integration.js";
 
 async function connect() {
   const settings = inject("oracle");
@@ -24,6 +25,42 @@ async function drop(connection: { execute(sql: string): Promise<unknown> }, name
   await connection.execute(
     `BEGIN EXECUTE IMMEDIATE 'DROP ${name}'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;`,
   );
+}
+
+for (const mode of ["direct", "pooled"] as const) {
+  for (const contract of transactionIntegrationTests("node-oracledb", mode, async () => {
+    const { connection: observer, settings } = await connect();
+    const connection = mode === "direct" ? (await connect()).connection : undefined;
+    const pool = mode === "pooled" ? await oracledb.createPool({
+      user: process.env.SQLBRAID_ORACLE_USER ?? "sqlbraid",
+      password: process.env.SQLBRAID_ORACLE_PASSWORD ?? "SqlbraidTest13",
+      connectString: settings.connectionUri,
+      poolMin: 0,
+      poolMax: 1,
+      poolIncrement: 1,
+    }) : undefined;
+    const db = connection ? createOracledbDatabase(connection, { streamFetchSize: 1 }) : createOracledbPoolDatabase(pool!, { streamFetchSize: 1 });
+    await drop(observer, "TABLE braid_contract_tx PURGE");
+    await observer.execute("CREATE TABLE braid_contract_tx (id VARCHAR2(255) PRIMARY KEY)");
+    const observerDb = createOracledbDatabase(observer);
+    return {
+      db,
+      caughtStatementOutcome: "commit",
+      streamQuery: sql.rows<{ id: string }>`SELECT id AS "id" FROM braid_contract_tx ORDER BY id`,
+      physicalId: async (scope) => (await scope.one(sql.rows<{ ID: string }>`SELECT SYS_CONTEXT('USERENV', 'SID') AS id FROM dual`)).ID,
+      write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+      committedRows: async () =>
+        (await observerDb.all(sql.rows<{ ID: string }>`SELECT id FROM braid_contract_tx ORDER BY id`)).map((row) => row.ID),
+      // Oracle has no persistent session read-only default: omission inherits READ WRITE.
+      accessMode: {
+        inheritedReadOnly: false,
+      },
+      close: async () => {
+        try { await drop(observer, "TABLE braid_contract_tx PURGE"); }
+        finally { await connection?.close(); await pool?.close(0); await observer.close(); }
+      },
+    };
+  }, { accessMode: true, pooledLease: mode === "pooled", stream: true })) test(contract.title, contract.run);
 }
 
 test("Oracle binding diagnostics preserve literal marker text through real execution", async () => {
@@ -43,18 +80,35 @@ test("Oracle binding diagnostics preserve literal marker text through real execu
   }
 });
 
-for (const mode of ["execute", "executeMany"] as const) {
-  test(`Oracle autoCommit true preserves ${mode} rollback across separate sessions and nested savepoints`, async () => {
+for (const ownership of ["direct", "pooled"] as const) {
+for (const source of ["executeOptions", "global"] as const) {
+for (const mode of ["execute", "executeMany", "call"] as const) {
+  test(`[contract:node-oracledb:transaction.autocommit-ownership:integration] [ownership:${ownership}] Oracle ${source} autoCommit true preserves ${mode} and transaction controls`, async () => {
+    const originalAutoCommit = oracledb.autoCommit;
     const { connection } = await connect();
-    const table = mode === "execute" ? "BRAID_AUTOCOMMIT_ONE" : "BRAID_AUTOCOMMIT_MANY";
+    const table = "BRAID_AUTOCOMMIT_CONTRACT";
+    let pool: oracledb.Pool | undefined;
     try {
+      if (source === "global") oracledb.autoCommit = true;
       const { connection: observer } = await connect();
       try {
         await drop(connection, `TABLE ${table} PURGE`);
         await connection.execute(`CREATE TABLE ${table} (id NUMBER PRIMARY KEY)`);
-        const db = createOracledbDatabase(connection, { executeOptions: { autoCommit: true } });
+        const options = source === "executeOptions" ? { executeOptions: { autoCommit: true } } : {};
+        if (ownership === "pooled") {
+          pool = await oracledb.createPool({
+            user: process.env.SQLBRAID_ORACLE_USER ?? "sqlbraid",
+            password: process.env.SQLBRAID_ORACLE_PASSWORD ?? "SqlbraidTest13",
+            connectString: inject("oracle").connectionUri,
+            poolMin: 0,
+            poolMax: 1,
+            poolIncrement: 1,
+          });
+        }
+        const db = pool ? createOracledbPoolDatabase(pool, options) : createOracledbDatabase(connection, options);
         const otherSession = createOracledbDatabase(observer);
         const insert = (id: number) => sql.command`INSERT INTO ${sql.ident(table)} (id) VALUES (${id})`;
+        const routine = (id: number) => sql.call`BEGIN INSERT INTO ${sql.ident(table)} (id) VALUES (${id}); END;`;
         const storedIds = async () =>
           (
             await otherSession.all(sql.rows<{ readonly ID: string }>`SELECT id FROM ${sql.ident(table)} ORDER BY id`)
@@ -67,7 +121,10 @@ for (const mode of ["execute", "executeMany"] as const) {
           () =>
             db.tx(async (tx) => {
               if (mode === "execute") await tx.execute(insert(2));
-              else await tx.bulk([2, 3], insert);
+              else if (mode === "executeMany") await tx.bulk([2, 3], insert);
+              else await tx.call(routine(2));
+              // SAVEPOINT must not auto-commit earlier DML when global autoCommit is enabled.
+              await tx.tx(async (nested) => { await nested.execute(insert(20)); });
               throw failure;
             }),
           (error: unknown) => error === failure,
@@ -80,15 +137,17 @@ for (const mode of ["execute", "executeMany"] as const) {
             () =>
               tx.tx(async (nested) => {
                 if (mode === "execute") await nested.execute(insert(5));
-                else await nested.bulk([5, 6], insert);
+                else if (mode === "executeMany") await nested.bulk([5, 6], insert);
+                else await nested.call(routine(5));
                 throw failure;
               }),
             (error: unknown) => error === failure,
           );
           if (mode === "execute") await tx.execute(insert(7));
-          else await tx.bulk([7, 8], insert);
+          else if (mode === "executeMany") await tx.bulk([7, 8], insert);
+          else await tx.call(routine(7));
         });
-        const committed = mode === "execute" ? ["1", "4", "7"] : ["1", "4", "7", "8"];
+        const committed = mode === "executeMany" ? ["1", "4", "7", "8"] : ["1", "4", "7"];
         assert.deepEqual(await storedIds(), committed);
 
         await db.session(async (session) => {
@@ -97,22 +156,36 @@ for (const mode of ["execute", "executeMany"] as const) {
             () =>
               session.tx(async (tx) => {
                 if (mode === "execute") await tx.execute(insert(10));
-                else await tx.bulk([10, 11], insert);
+                else if (mode === "executeMany") await tx.bulk([10, 11], insert);
+                else await tx.call(routine(10));
+                await tx.tx(async (nested) => { await nested.execute(insert(21)); });
                 throw failure;
               }),
             (error: unknown) => error === failure,
           );
           await session.execute(insert(12));
+          await session.tx(async (tx) => {
+            if (mode === "execute") await tx.execute(insert(13));
+            else if (mode === "executeMany") await tx.bulk([13, 14], insert);
+            else await tx.call(routine(13));
+          });
         });
-        assert.deepEqual(await storedIds(), [...committed, "9", "12"]);
+        assert.deepEqual(await storedIds(), [...committed, "9", "12", "13", ...(mode === "executeMany" ? ["14"] : [])]);
       } finally {
         await observer.close();
       }
     } finally {
-      await drop(connection, `TABLE ${table} PURGE`).catch(() => undefined);
-      await connection.close();
+      try {
+        await drop(connection, `TABLE ${table} PURGE`).catch(() => undefined);
+        await pool?.close(0);
+        await connection.close();
+      } finally {
+        oracledb.autoCommit = originalAutoCommit;
+      }
     }
   });
+}
+}
 }
 
 test("Oracle direct Thin adapter handles typed values, observers, mapping lifetime, stream cleanup, and nested transactions", async () => {

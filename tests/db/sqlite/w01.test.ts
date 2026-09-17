@@ -14,8 +14,48 @@ import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { createSqliteInspector } from "@sqlbraid/sqlite/inspector";
 import { sql, typePolicy as sqliteTypePolicy } from "@sqlbraid/sqlite";
 import { runW01 } from "../w01.js";
+import { transactionIntegrationTests } from "../../contracts/transaction.integration.js";
+import { commandMetadataContract, commandMetadataTitle } from "../command-metadata.js";
 import { bindingObserver } from "../binding.js";
 import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGeneratedPropertyAbsent } from "../codegen.js";
+
+for (const contract of transactionIntegrationTests("node-sqlite", "direct", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sqlbraid-contract-node-"));
+  const filename = join(directory, "database.db");
+  const native = new DatabaseSync(filename);
+  const observer = new DatabaseSync(filename);
+  native.exec("CREATE TABLE braid_contract_tx (id TEXT PRIMARY KEY)");
+  return {
+    db: createNodeSqliteDatabase(native),
+    caughtStatementOutcome: "commit",
+    streamQuery: sql.rows<{ id: string }>`SELECT id FROM braid_contract_tx ORDER BY id`,
+    write: (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`),
+    committedRows: async () =>
+      observer.prepare("SELECT id FROM braid_contract_tx ORDER BY id").all().map((row) => String(row.id)),
+    close: async () => {
+      observer.close();
+      native.close();
+      await rm(directory, { recursive: true, force: true });
+    },
+  };
+}, { stream: true })) test(contract.title, contract.run);
+
+test(commandMetadataTitle("node-sqlite"), async () => {
+  const directory = await mkdtemp(join(tmpdir(), "sqlbraid-node-metadata-"));
+  const filename = join(directory, "database.db");
+  const native = new DatabaseSync(filename);
+  const observer = new DatabaseSync(filename);
+  try {
+    native.exec("CREATE TABLE braid_contract_metadata (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
+    const observerDb = createNodeSqliteDatabase(observer);
+    await commandMetadataContract(createNodeSqliteDatabase(native), sql, () =>
+      observerDb.all(sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`));
+  } finally {
+    observer.close();
+    native.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("SQLite binding diagnostics preserve literal marker text through real execution", async () => {
   const native = new DatabaseSync(":memory:");

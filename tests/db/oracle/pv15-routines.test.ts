@@ -126,7 +126,7 @@ test("Oracle real streaming closes cursors on every lifecycle path", { timeout: 
 });
 
 test(
-  "Oracle transaction streams retain the pinned physical session until iterator cleanup",
+  "[contract:node-oracledb:resource.stream-return:integration] [ownership:direct] Oracle transaction streams retain the pinned physical session until iterator cleanup",
   { timeout: 30_000 },
   async () => {
     const { connection } = await connect();

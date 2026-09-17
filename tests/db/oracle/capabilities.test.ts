@@ -578,7 +578,7 @@ test("oracle.numeric.bind-nls-audit", { timeout: 60_000 }, async () => {
   }
 });
 
-test("oracle.command.safe-count", { timeout: 60_000 }, async () => {
+test("[contract:node-oracledb:metadata.affected-rows:integration] oracle.command.safe-count", { timeout: 60_000 }, async () => {
   const { connection } = await connect();
   const db = createOracledbDatabase(connection);
   try {
