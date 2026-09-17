@@ -55,6 +55,7 @@ Runtime 소유 class에는 `DatabaseScopeError`, `DatabaseResultKindError`,
 | `BRAID_RESOURCE_CLEANUP` | Driver close, drain 또는 cancel이 실패해 lease를 안전하게 재사용할 수 없습니다. |
 | `BRAID_PREPARED_NAME` | Prepared query 이름이 비어 있거나 중복됩니다. |
 | `BRAID_PREPARED_SHAPE` | Prepared query가 다른 logical shape를 렌더링했습니다. |
+| `BRAID_PREPARE_UNSUPPORTED` | Adapter가 필요한 prepared-statement protocol을 제공하지 않습니다. |
 | `BRAID_BIND_HINT_UNSUPPORTED` | Adapter가 명시적 bind type/facet을 적용할 수 없습니다. I/O 전에 거부합니다. |
 | `BRAID_BIND_VALUE_UNSUPPORTED` | 선택한 binding transport로 값을 표현할 수 없습니다. |
 | `BRAID_BIND_TYPE_REQUIRED` | Driver inference가 모호합니다(Oracle/SQL Server untyped null 포함). |

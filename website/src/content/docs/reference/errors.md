@@ -55,6 +55,7 @@ when they expose a stable bind code.
 | `BRAID_RESOURCE_CLEANUP` | Driver close, drain, or cancel failed; the physical lease is not safely reusable. |
 | `BRAID_PREPARED_NAME` | A prepared query name is empty or duplicated. |
 | `BRAID_PREPARED_SHAPE` | A prepared query rendered a different logical shape. |
+| `BRAID_PREPARE_UNSUPPORTED` | The adapter cannot expose the required prepared-statement protocol. |
 | `BRAID_BIND_HINT_UNSUPPORTED` | The adapter cannot honor an explicit bind type/facet; rejection occurs before I/O. |
 | `BRAID_BIND_VALUE_UNSUPPORTED` | A value cannot be represented by the selected binding transport. |
 | `BRAID_BIND_TYPE_REQUIRED` | Driver inference is ambiguous, including untyped null in Oracle or SQL Server. |

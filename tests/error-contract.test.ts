@@ -4,6 +4,7 @@ import { test } from "vitest";
 import {
   AdapterError,
   createRenderedStatement,
+  isWellKnownCapabilityId,
   isPublicUnsupportedFeatureError,
   ResultExactnessError,
   PUBLIC_ERROR_DEFINITIONS,
@@ -15,7 +16,9 @@ import {
 } from "@sqlbraid/core";
 import { createMysql2Executor } from "@sqlbraid/mysql/mysql2";
 import { createPgExecutor } from "@sqlbraid/postgres/pg";
+import { createD1Executor } from "@sqlbraid/sqlite/d1";
 import { createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";
+import { createSqliteWasmExecutor } from "@sqlbraid/sqlite/wasm";
 import {
   DatabaseResultKindError,
   DatabaseResultValidationError,
@@ -36,6 +39,7 @@ test("the public registry links to exported owner classes and both error referen
   const registryCodes = PUBLIC_ERROR_DEFINITIONS.map(({ code }) => code);
   assert.equal(new Set(registryCodes).size, registryCodes.length);
   assert.ok(registryCodes.includes("BRAID_BATCH_ABORTED"));
+  assert.ok(registryCodes.includes("BRAID_PREPARE_UNSUPPORTED"));
   const fixedClassCodes = new Map<string, readonly string[]>([
     ["ResultExactnessError", [ResultExactnessError.code]],
     ["RoutineMappingError", [RoutineMappingError.code]],
@@ -84,6 +88,30 @@ test("the machine-readable capability vocabulary matches support data and classi
   );
 });
 
+test("first-party executor declarations use known capability IDs while custom IDs remain available", () => {
+  const prepared = {
+    bind() { return prepared; },
+    async raw() { return []; },
+  };
+  const executors = [
+    createNodeSqliteExecutor({ prepare() { throw new Error("not called"); } }),
+    createD1Executor({ prepare() { return prepared; }, batch: async () => [] }),
+    createSqliteWasmExecutor({ prepare() { throw new Error("not called"); }, exec() {} }),
+  ];
+  for (const [index, executor] of executors.entries()) {
+    const ids = Object.keys(executor.environment?.capabilities ?? {});
+    assert.ok(ids.length > 0, `executor ${index} did not declare capabilities`);
+    for (const id of ids) assert.equal(isWellKnownCapabilityId(id), true, `unknown first-party capability ${id}`);
+  }
+  const customId = "vendor.custom-capability";
+  assert.equal(isWellKnownCapabilityId(customId), false);
+  const customCapabilities = {
+    ...executors[0]!.environment!.capabilities,
+    [customId]: { status: "guarded" as const },
+  };
+  assert.equal(customCapabilities[customId]?.status, "guarded");
+});
+
 test("public unsupported-feature conformance rejects semantically mismatched pairs", () => {
   assert.equal(
     isPublicUnsupportedFeatureError(new UnsupportedFeatureError(
@@ -98,6 +126,22 @@ test("public unsupported-feature conformance rejects semantically mismatched pai
       "statement.stream",
       "BRAID_BULK_UNSUPPORTED",
       "wrong feature/code pair",
+    )),
+    false,
+  );
+  assert.equal(
+    isPublicUnsupportedFeatureError(new UnsupportedFeatureError(
+      "statement.prepare",
+      "BRAID_PREPARE_UNSUPPORTED",
+      "prepared statements are unavailable",
+    )),
+    true,
+  );
+  assert.equal(
+    isPublicUnsupportedFeatureError(new UnsupportedFeatureError(
+      "statement.prepare",
+      "BRAID_BULK_UNSUPPORTED",
+      "bulk is a different capability",
     )),
     false,
   );

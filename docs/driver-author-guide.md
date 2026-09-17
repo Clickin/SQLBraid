@@ -149,6 +149,9 @@ signal must reject with its `reason`. An active signal requires a real adapter
 cancellation path. If the adapter cannot cancel an in-flight statement, reject
 before I/O with `UnsupportedFeatureError` and `BRAID_CANCEL_UNSUPPORTED`; do
 not merely stop yielding while the driver continues.
+Likewise, an unavailable prepared-statement protocol uses
+`statement.prepare` with `BRAID_PREPARE_UNSUPPORTED`; do not reuse
+`BRAID_BULK_UNSUPPORTED`, which is reserved for `statement.bulk`.
 
 ## 4. Routine and bulk results
 
@@ -385,6 +388,10 @@ numeric.scale-greater-than-precision
 numeric.negative-scale
 data.json-parsed
 data.json-lossless-text
+data.sql-variant
+data.oracle-object
+data.oracle-collection
+data.vector
 data.binary
 data.uuid
 data.temporal-native

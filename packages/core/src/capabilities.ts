@@ -29,6 +29,10 @@ const definitions = [
   { id: "numeric.negative-scale", family: "representation" },
   { id: "data.json-parsed", family: "representation" },
   { id: "data.json-lossless-text", family: "representation" },
+  { id: "data.sql-variant", family: "representation" },
+  { id: "data.oracle-object", family: "representation" },
+  { id: "data.oracle-collection", family: "representation" },
+  { id: "data.vector", family: "representation" },
   { id: "data.binary", family: "representation" },
   { id: "data.uuid", family: "representation" },
   { id: "data.temporal-native", family: "representation" },
@@ -74,3 +78,9 @@ export type WellKnownCapabilityId = (typeof definitions)[number]["id"];
 export const WELL_KNOWN_CAPABILITY_IDS: readonly WellKnownCapabilityId[] = Object.freeze(
   definitions.map(({ id }) => id),
 );
+
+const wellKnownCapabilityIds = new Set<string>(WELL_KNOWN_CAPABILITY_IDS);
+
+export function isWellKnownCapabilityId(value: string): value is WellKnownCapabilityId {
+  return wellKnownCapabilityIds.has(value);
+}

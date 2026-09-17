@@ -127,6 +127,34 @@
       }
     },
     {
+      "id": "data.sql-variant",
+      "labels": {
+        "en": "SQL variant representation",
+        "ko": "SQL variant 표현"
+      }
+    },
+    {
+      "id": "data.oracle-object",
+      "labels": {
+        "en": "Oracle object representation",
+        "ko": "Oracle 객체 표현"
+      }
+    },
+    {
+      "id": "data.oracle-collection",
+      "labels": {
+        "en": "Oracle collection representation",
+        "ko": "Oracle 컬렉션 표현"
+      }
+    },
+    {
+      "id": "data.vector",
+      "labels": {
+        "en": "Vector representation",
+        "ko": "벡터 표현"
+      }
+    },
+    {
       "id": "data.binary",
       "labels": {
         "en": "Binary representation",

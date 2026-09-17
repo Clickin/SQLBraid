@@ -45,6 +45,9 @@ status is support evidence, while `canonical` and `rawRepresentations` are
 representation evidence attached to a claim, not additional capability IDs.
 `isPublicUnsupportedFeatureError` is the conformance predicate for a public
 `UnsupportedFeatureError` feature/code pair.
+For an unavailable prepared-statement protocol, use
+`statement.prepare` with `BRAID_PREPARE_UNSUPPORTED`; `BRAID_BULK_UNSUPPORTED`
+is reserved for `statement.bulk` and must not be used as a prepare alias.
 
 `AUTHORING_MODULE_CATALOG` is a frozen data-only discovery catalog consumed by
 compiler and tooling; it records supported tag-exporting module identities and
@@ -144,6 +147,10 @@ numeric.scale-greater-than-precision
 numeric.negative-scale
 data.json-parsed
 data.json-lossless-text
+data.sql-variant
+data.oracle-object
+data.oracle-collection
+data.vector
 data.binary
 data.uuid
 data.temporal-native

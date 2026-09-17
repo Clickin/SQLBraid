@@ -25,6 +25,7 @@ export interface RenderLimits {
 export type QueryResultKind = "rows" | "command" | "call" | "unknown";
 export { AUTHORING_MODULE_CATALOG, type AuthoringModuleCatalogEntry } from "./authoring-modules.js";
 export {
+  isWellKnownCapabilityId,
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_CAPABILITY_IDS,
   type CapabilityFamily,
@@ -120,6 +121,7 @@ export const PUBLIC_ERROR_DEFINITIONS: readonly PublicErrorDefinition[] = Object
   { code: "BRAID_INTEGER_MODE_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["result.exact-integer"] },
   { code: "BRAID_CALL_LOB_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.out"] },
   { code: "BRAID_BULK_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.bulk"] },
+  { code: "BRAID_PREPARE_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.prepare"] },
   { code: "BRAID_DIALECT_MISMATCH", category: "adapter", owner: "UnsupportedFeatureError", features: ["dialect"] },
   { code: "BRAID_RESULT_KIND_AMBIGUOUS", category: "adapter", owner: "UnsupportedFeatureError", features: ["result.rows", "result.command"] },
   { code: "BRAID_PREPARED_NAME", category: "runtime", owner: "prepared query validation" },
