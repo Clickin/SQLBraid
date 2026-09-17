@@ -193,6 +193,16 @@ test("package-specific staging validates the full candidate but uploads only the
   assert.equal(result?.packages[0].tag, "release-1.0.1");
 });
 
+test("package-specific staging refuses an unpublished internal dependency", async () => {
+  const f = await fixture(
+    "1.0.1",
+    ["@sqlbraid/core", "@sqlbraid/postgres"],
+    ["@sqlbraid/postgres"],
+  );
+  await assert.rejects(f.run(), /Release dependency @sqlbraid\/core@1\.0\.1 .* is not public/u);
+  assert.equal(f.uploads().length, 0);
+});
+
 test("uncertain uploads retain pending evidence and never retry blindly", async () => {
   for (const flag of ["failAfterUpload", "invalidSummary"] as const) {
     const f = await fixture();
