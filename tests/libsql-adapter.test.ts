@@ -269,6 +269,94 @@ test("libSQL transaction cleanup clears continuity after commit or rollback fail
   assert.equal(transactionCalls, 1);
 });
 
+test("libSQL closes invalid acquired transaction handles and preserves validation failures", async () => {
+  let closeCalls = 0;
+  let rootQueries = 0;
+  const invalid = {
+    close() {
+      closeCalls += 1;
+    },
+  } as unknown as LibsqlTransactionLike;
+  const executor = createLibsqlExecutor(
+    fakeClient(
+      async () => {
+        rootQueries += 1;
+        return rowsResult(["value"], [{ 0: "root" }]);
+      },
+      async () => [],
+      async () => invalid,
+    ),
+    { intMode: "string" },
+  );
+  await assert.rejects(
+    () => executor.begin!(),
+    (error: unknown) => error instanceof TypeError
+      && error.message.includes("invalid transaction handle"),
+  );
+  assert.equal(closeCalls, 1);
+  assert.equal(rootQueries, 0);
+  assert.deepEqual(
+    await executor.query(sql.rows`SELECT 'root' AS value`.render()),
+    { kind: "rows", rowCount: 1, rows: [{ value: "root" }] },
+  );
+  assert.equal(rootQueries, 1);
+});
+
+test("libSQL aggregates invalid-handle validation and close failures", async () => {
+  const primaryMessage = "invalid transaction handle";
+  const closeFailure = new Error("transaction close failed");
+  const invalid = {
+    close() {
+      throw closeFailure;
+    },
+  } as unknown as LibsqlTransactionLike;
+  const executor = createLibsqlExecutor(
+    fakeClient(async () => rowsResult([], []), async () => [], async () => invalid),
+    { intMode: "string" },
+  );
+  await assert.rejects(
+    () => executor.begin!(),
+    (error: unknown) => {
+      assert.ok(error instanceof AggregateError);
+      assert.equal((error as { readonly code?: unknown }).code, "BRAID_RESOURCE_CLEANUP");
+      assert.equal((error as AggregateError).errors.length, 2);
+      assert.ok((error as AggregateError).errors[0] instanceof TypeError);
+      assert.match(String((error as AggregateError).errors[0]), new RegExp(primaryMessage, "u"));
+      assert.equal((error as AggregateError).errors[1], closeFailure);
+      assert.equal((error as { readonly cause?: unknown }).cause, (error as AggregateError).errors[0]);
+      return true;
+    },
+  );
+});
+
+test("libSQL rejects hostile savepoint names before transaction I/O", async () => {
+  const calls: string[] = [];
+  const transaction: LibsqlTransactionLike = {
+    async execute(statement) {
+      calls.push(String(statement));
+      return rowsResult([], []);
+    },
+    async batch() { return []; },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createLibsqlExecutor(
+    fakeClient(async () => rowsResult([], []), async () => [], async () => transaction),
+    { intMode: "string" },
+  );
+  await executor.begin!();
+  for (const name of ["", "white space", "bad;name", "bad'name", "--comment", "/*comment*/", "line\nbreak", "tab\tbreak"]) {
+    await assert.rejects(
+      () => executor.savepoint!(name),
+      (error: unknown) => error instanceof TypeError,
+    );
+  }
+  assert.deepEqual(calls, []);
+  await executor.savepoint!("braid_sp_1");
+  assert.deepEqual(calls, ["SAVEPOINT braid_sp_1"]);
+  await executor.rollback!();
+});
+
 test("libSQL advertises unsupported session pinning, stream, call, and cancellation", async () => {
   const executor = createLibsqlExecutor(fakeClient(async () => rowsResult([], [])), { intMode: "string" });
   assert.equal(executor.environment?.capabilities["session.pinned"]?.status, "unsupported");

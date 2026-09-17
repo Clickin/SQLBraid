@@ -25,6 +25,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
+import { assertSavepointName, createCleanupScope } from "@sqlbraid/core/driver";
 import { createDatabase } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -418,7 +419,7 @@ function environmentFor(client: LibsqlClientLike): DriverEnvironment {
     capabilities: Object.freeze({
       ...libsqlEnvironment.capabilities,
       "transaction.read-only": {
-        status: "guarded" as const,
+        status: "unsupported" as const,
         conditionCode: "libsql.file-read-only-not-enforced",
       },
     }),
@@ -441,7 +442,7 @@ async function closeTransaction(transaction: LibsqlTransactionLike, original?: u
 }
 
 function transactionStatement(name: string, command: "SAVEPOINT" | "ROLLBACK TO SAVEPOINT" | "RELEASE SAVEPOINT"): string {
-  return `${command} ${name}`;
+  return `${command} ${assertSavepointName(name)}`;
 }
 
 export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlExecutorOptions): QueryExecutor {
@@ -520,7 +521,13 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
         || typeof next.commit !== "function"
         || typeof next.rollback !== "function"
       ) {
-        throw new TypeError("BRAID_TRANSACTION_STATE: libSQL client returned an invalid transaction handle.");
+        const primary = new TypeError("BRAID_TRANSACTION_STATE: libSQL client returned an invalid transaction handle.");
+        if (next && typeof next === "object" && typeof (next as { readonly close?: unknown }).close === "function") {
+          const cleanup = createCleanupScope();
+          cleanup.add(() => (next as { close(): void | PromiseLike<void> }).close());
+          await cleanup.run(primary);
+        }
+        throw primary;
       }
       transaction = next;
     },

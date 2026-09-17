@@ -23,6 +23,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
+import { assertSavepointName } from "@sqlbraid/core/driver";
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -245,6 +246,8 @@ function nodeSqliteEnvironment(transactionSupported: boolean): DriverEnvironment
       "sql.native-transparency": { status: "guaranteed" },
       "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] },
       "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+      "numeric.bind-exact": { status: "guaranteed", canonical: "string", rawRepresentations: ["string", "number", "bigint"] },
+      "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Uint8Array", "ArrayBuffer"] },
       "session.pinned": { status: "guaranteed" },
       "transaction": { status: transactionSupported ? "guaranteed" : "unsupported" },
       "transaction.savepoint": { status: transactionSupported ? "guaranteed" : "unsupported" },
@@ -393,9 +396,9 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
     } : undefined,
     commit: control ? () => control("COMMIT") : undefined,
     rollback: control ? () => control("ROLLBACK") : undefined,
-    savepoint: control ? (name) => control(`SAVEPOINT ${name}`) : undefined,
-    rollbackTo: control ? (name) => control(`ROLLBACK TO SAVEPOINT ${name}`) : undefined,
-    releaseSavepoint: control ? (name) => control(`RELEASE SAVEPOINT ${name}`) : undefined,
+    savepoint: control ? (name) => control(`SAVEPOINT ${assertSavepointName(name)}`) : undefined,
+    rollbackTo: control ? (name) => control(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`) : undefined,
+    releaseSavepoint: control ? (name) => control(`RELEASE SAVEPOINT ${assertSavepointName(name)}`) : undefined,
   };
 }
 

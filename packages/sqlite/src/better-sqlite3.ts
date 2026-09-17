@@ -24,6 +24,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
+import { assertSavepointName } from "@sqlbraid/core/driver";
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -53,6 +54,7 @@ export interface BetterSqlite3StatementLike {
   iterate(...values: readonly unknown[]): IterableIterator<unknown>;
   run(...values: readonly unknown[]): BetterSqlite3RunResultLike;
   columns(): readonly BetterSqlite3ColumnLike[];
+  raw?(enabled?: boolean): unknown;
   safeIntegers(enabled?: boolean): unknown;
 }
 
@@ -71,7 +73,13 @@ function normalizeValue(value: unknown): unknown {
   return value;
 }
 
-function plainRow(value: unknown): Record<string, unknown> {
+function plainRow(value: unknown, columns?: readonly BetterSqlite3ColumnLike[]): Record<string, unknown> {
+  if (Array.isArray(value) && columns !== undefined) {
+    return Object.fromEntries(columns.map((column, index) => [
+      column.name ?? column.column ?? String(index),
+      normalizeValue(value[index]),
+    ]));
+  }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("BRAID_RESULT_COLUMNS: better-sqlite3 must return object result rows.");
   }
@@ -278,6 +286,10 @@ function configureExactIntegerReads(statement: BetterSqlite3StatementLike): void
   statement.safeIntegers(true);
 }
 
+function configureRawRows(statement: BetterSqlite3StatementLike): void {
+  statement.raw?.(true);
+}
+
 function betterSqlite3Environment(): DriverEnvironment {
   return Object.freeze<DriverEnvironment>({
     database: { product: "sqlite" },
@@ -287,6 +299,8 @@ function betterSqlite3Environment(): DriverEnvironment {
       "sql.native-transparency": { status: "guaranteed" },
       "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] },
       "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+      "numeric.bind-exact": { status: "guaranteed", canonical: "string", rawRepresentations: ["string", "number", "bigint"] },
+      "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Uint8Array", "ArrayBuffer"] },
       "session.pinned": { status: "guaranteed" },
       "transaction": { status: "guaranteed" },
       "transaction.savepoint": { status: "guaranteed" },
@@ -341,7 +355,8 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
       const columns = resultColumns(statement);
       configureExactIntegerReads(statement);
       if (columns.length > 0) {
-        const rows = statement.all(...prepared.values).map(plainRow);
+        configureRawRows(statement);
+        const rows = statement.all(...prepared.values).map((row) => plainRow(row, columns));
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
       const result = statement.run(...prepared.values);
@@ -405,6 +420,7 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
       const columns = resultColumns(statement);
       if (columns.length === 0) throw new DatabaseResultKindError("rows", "command");
       configureExactIntegerReads(statement);
+      configureRawRows(statement);
       const iterator = statement.iterate(...prepared.values);
       let failed = false;
       let readError: unknown;
@@ -412,7 +428,7 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
         while (true) {
           const next = iterator.next();
           if (next.done) break;
-          yield plainRow(next.value) as Row;
+          yield plainRow(next.value, columns) as Row;
         }
       } catch (error) {
         failed = true;
@@ -445,13 +461,13 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
       control("ROLLBACK");
     },
     savepoint(name: string): void {
-      control(`SAVEPOINT ${name}`);
+      control(`SAVEPOINT ${assertSavepointName(name)}`);
     },
     rollbackTo(name: string): void {
-      control(`ROLLBACK TO SAVEPOINT ${name}`);
+      control(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`);
     },
     releaseSavepoint(name: string): void {
-      control(`RELEASE SAVEPOINT ${name}`);
+      control(`RELEASE SAVEPOINT ${assertSavepointName(name)}`);
     },
   };
   return executor;

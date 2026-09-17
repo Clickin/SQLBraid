@@ -200,7 +200,7 @@ test("libsql.execution.bulk-read-only", async () => {
     await db.tx({ readOnly: false }, async (tx) => {
       await tx.execute(sql.command`INSERT INTO items (value) VALUES (${4})`);
     });
-    assert.equal((await db.environment()).capabilities["transaction.read-only"]?.status, "guarded");
+    assert.equal((await db.environment()).capabilities["transaction.read-only"]?.status, "unsupported");
     await assert.rejects(
       () => db.tx({ readOnly: true }, async () => undefined),
       (error: unknown) => error instanceof Error
