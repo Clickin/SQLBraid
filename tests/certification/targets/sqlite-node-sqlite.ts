@@ -16,9 +16,10 @@ function createFixture(): Promise<CertificationFixture> {
   native.exec("INSERT INTO cert_sentinel (id, marker) VALUES (1, 'untouched')");
   native.exec("CREATE TEMP TABLE cert_identity (id TEXT NOT NULL)");
   native.exec("INSERT INTO temp.cert_identity (id) VALUES ('node-sqlite-native-memory')");
-  const stats: SqliteStats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0, iteratorReturns: 0, streamReleases: 0, activeStreams: 0 };
+  const stats: SqliteStats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0, iteratorReturns: 0, streamReleases: 0, activeStreams: 0, nativeOperations: 0 };
   const observedNative: SqliteDatabaseLike = {
     prepare(sqlText: string): SqliteStatementLike {
+      stats.nativeOperations += 1;
       const statement = native.prepare(sqlText);
       const iterate = statement.iterate === undefined
         ? undefined
@@ -31,16 +32,12 @@ function createFixture(): Promise<CertificationFixture> {
         setReadBigInts: statement.setReadBigInts?.bind(statement),
         iterate(...values: readonly unknown[]) {
           const iterator = iterate(...values);
-          let returned = false;
           let released = false;
           stats.activeStreams += 1;
           return {
             next: iterator.next.bind(iterator),
             return(value?: unknown) {
-              if (!returned) {
-                returned = true;
-                stats.iteratorReturns += 1;
-              }
+              stats.iteratorReturns += 1;
               try {
                 const result = iterator.return?.(value) ?? { done: true, value: undefined };
                 if (sqlText.includes("__cert_cleanup_failure__")) {
@@ -60,7 +57,10 @@ function createFixture(): Promise<CertificationFixture> {
         },
       };
     },
-    exec: native.exec.bind(native),
+    exec(sqlText: string) {
+      stats.nativeOperations += 1;
+      return native.exec(sqlText);
+    },
   };
   const db = createNodeSqliteDatabase(observedNative, {
     observers: [{
@@ -87,7 +87,10 @@ function createFixture(): Promise<CertificationFixture> {
       } catch (error) {
         caught = error;
       }
-      if (!(caught instanceof AggregateError) || !caught.errors.includes(primary)) {
+      const nativeRollbackErrors = caught instanceof AggregateError
+        ? caught.errors.filter((error) => error !== primary && typeof (error as { code?: unknown }).code === "string")
+        : [];
+      if (!(caught instanceof AggregateError) || !caught.errors.includes(primary) || nativeRollbackErrors.length === 0) {
         throw new Error("node:sqlite transaction cleanup did not aggregate the native rollback failure.", { cause: caught });
       }
     } finally {

@@ -15,6 +15,7 @@ export interface SqliteStats {
   iteratorReturns: number;
   streamReleases: number;
   activeStreams: number;
+  nativeOperations: number;
 }
 type AnyRowQuery = RowQuery<unknown>;
 
@@ -382,7 +383,7 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
       const openCursors = options.stats.activeStreams;
       return { borrowedLeases: 0, cleanupBalance: openCursors, openCursors, openPrepared: 0 };
     },
-    sideEffects: () => options.stats.result,
+    sideEffects: () => options.stats.nativeOperations,
     mutationSentinel: async () => {
       const row = await options.db.one(sql.rows<{ readonly marker: string }>`SELECT marker FROM cert_sentinel WHERE id = 1`);
       return row.marker;
@@ -407,7 +408,7 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     ...(options.transactionCleanup === undefined ? {} : { transactionCleanup: options.transactionCleanup }),
     ...(options.sessionSupported ? { physicalSessionIds: () => [options.physicalSessionId] } : {}),
   };
-  const unsupported = makeUnsupported(options.db, queries, options.localReadOnly ? "libsql" : "sqlite", () => options.stats.result);
+  const unsupported = makeUnsupported(options.db, queries, options.localReadOnly ? "libsql" : "sqlite", () => options.stats.nativeOperations);
   return {
     db: options.db,
     queries,
@@ -420,6 +421,7 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
       options.stats.iteratorReturns = 0;
       options.stats.streamReleases = 0;
       options.stats.activeStreams = 0;
+      options.stats.nativeOperations = 0;
       await options.db.execute(sql.command`DELETE FROM cert_items`);
       await options.db.execute(sql.command`UPDATE cert_sentinel SET marker = 'untouched' WHERE id = 1`);
     },

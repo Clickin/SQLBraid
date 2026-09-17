@@ -14,8 +14,24 @@ async function createFixture(): Promise<CertificationFixture> {
   const { directory, cleanup } = await makeLibsqlDirectory();
   const client = createClient({ url: `file:${directory}/database.db`, intMode: "string" });
   try {
-    const stats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0, iteratorReturns: 0, streamReleases: 0, activeStreams: 0 };
-    const db = createLibsqlDatabase(client, {
+    const stats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0, iteratorReturns: 0, streamReleases: 0, activeStreams: 0, nativeOperations: 0 };
+    const observedClient = {
+      ...client,
+      execute: (...args: Parameters<typeof client.execute>) => {
+        stats.nativeOperations += 1;
+        return client.execute(...args);
+      },
+      batch: (...args: Parameters<typeof client.batch>) => {
+        stats.nativeOperations += 1;
+        return client.batch(...args);
+      },
+      transaction: (...args: Parameters<typeof client.transaction>) => {
+        stats.nativeOperations += 1;
+        return client.transaction(...args);
+      },
+      protocol: client.protocol,
+    };
+    const db = createLibsqlDatabase(observedClient, {
       intMode: "string",
       observers: [{
         onEvent(event) {
@@ -58,7 +74,10 @@ async function createFixture(): Promise<CertificationFixture> {
         } catch (error) {
           caught = error;
         }
-        if (!(caught instanceof AggregateError) || !caught.errors.includes(primary)) {
+        const nativeRollbackErrors = caught instanceof AggregateError
+          ? caught.errors.filter((error) => error !== primary && error instanceof Error && typeof (error as { code?: unknown }).code === "string")
+          : [];
+        if (!(caught instanceof AggregateError) || !caught.errors.includes(primary) || nativeRollbackErrors.length === 0) {
           throw new Error("libSQL transaction cleanup did not aggregate the native rollback failure.", { cause: caught });
         }
       } finally {
