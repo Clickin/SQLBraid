@@ -23,7 +23,6 @@ interface Stats {
   bulkExecutions: number;
 }
 
-const SOURCE_SHA = "c7f7d4b1ec193b4da637514eabee06d9ebc47d27";
 const TABLE = "dbo.braid_cert_mssql";
 const PROCEDURES = [
   "dbo.braid_cert_mssql_out",
@@ -227,9 +226,11 @@ const expectedTransactionOptions: CertificationTarget["expectedTransactionOption
   "combination:serializable+readWrite": "unsupported",
 };
 
-export const mssqlTediousTarget: CertificationTarget = {
+export function createMssqlTediousTarget(sourceSha: string): CertificationTarget {
+  if (!sourceSha.trim()) throw new Error("MSSQL certification requires the tested candidate source SHA.");
+  return {
   id: "mssql-tedious-developer-node-2022-cu18",
-  sourceSha: SOURCE_SHA,
+  sourceSha,
   expectedCapabilities,
   expectedTransactionOptions,
   async createFixture(): Promise<CertificationFixture> {
@@ -340,6 +341,7 @@ export const mssqlTediousTarget: CertificationTarget = {
       close: async () => { await close(raw); },
     };
   },
-};
+  };
+}
 
 export { expectedCapabilities as mssqlTediousExpectedCapabilities, expectedTransactionOptions as mssqlTediousExpectedTransactionOptions };
