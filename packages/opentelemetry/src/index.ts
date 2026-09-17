@@ -335,6 +335,19 @@ export function createOpenTelemetryObserver(
         case "bulk:result":
           finishOperation(event.operationId, "success");
           return;
+        case "stream:start": {
+          const existing = operations.get(event.operationId);
+          if (existing !== undefined) {
+            if (existing.span !== undefined) {
+              try { existing.span.setAttribute("sqlbraid.result.kind", event.declaredKind); } catch {}
+            }
+            return;
+          }
+          return;
+        }
+        case "stream:end":
+          finishOperation(event.operationId, event.status === "completed" ? "success" : "error", event.error);
+          return;
         case "query:error": {
           finishOperation(event.operationId, "error", event.error);
           return;

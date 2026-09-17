@@ -410,3 +410,208 @@ test("early stream return propagates lease cleanup and end observer failures", a
     }, (error) => error === failure);
   }
 });
+
+test("prepared streams defer the factory and preparation until consumption", async () => {
+  let factoryCalls = 0;
+  let streamCalls = 0;
+  const events: ExecutionEvent[] = [];
+  const db = createDatabase({
+    ...executor(),
+    async *stream<Row>() {
+      streamCalls += 1;
+      yield 1 as Row;
+    },
+  }, { observers: [{ onEvent(event) { events.push(event); } }] });
+  const prepared = db.prepare(
+    "lazy-stream",
+    () => {
+      factoryCalls += 1;
+      return sql.rows`SELECT 1`;
+    },
+    { input: "none" },
+  );
+
+  const stream = prepared.stream();
+  assert.equal(factoryCalls, 0);
+  assert.equal(streamCalls, 0);
+  assert.deepEqual(events, []);
+
+  const iterator = stream[Symbol.asyncIterator]();
+  assert.equal(factoryCalls, 0);
+  assert.deepEqual(await iterator.next(), { value: 1, done: false });
+  assert.equal(factoryCalls, 1);
+  assert.equal(streamCalls, 1);
+  assert.deepEqual(await iterator.next(), { value: undefined, done: true });
+  assert.equal(factoryCalls, 1);
+  assert.equal(events.filter((event: ExecutionEvent) => event.type === "query:ready").length, 1);
+  assert.equal(events.filter((event: ExecutionEvent) => event.type === "stream:start").length, 1);
+  assert.equal(events.filter((event: ExecutionEvent) => event.type === "stream:end").length, 1);
+
+  const factoryError = new Error("prepared stream factory failed");
+  const failingQuery = sql.rows`SELECT 1`;
+  const failing = db.prepare("lazy-failure", (): typeof failingQuery => { throw factoryError; }, { input: "none" });
+  const failureStream = failing.stream();
+  await assert.rejects(
+    async () => { for await (const row of failureStream) void row; },
+    (error) => error === factoryError,
+  );
+});
+
+test("prepared stream terminal paths release once and preserve consumer failures", async () => {
+  let released = 0;
+  const pooled = createPooledDatabase({
+    statementBinding,
+    async acquire() {
+      return {
+        ...executor(),
+        async *stream<Row>() {
+          yield 1 as Row;
+          yield 2 as Row;
+        },
+        release() { released += 1; },
+      };
+    },
+  });
+  const prepared = pooled.prepare("break-stream", () => sql.rows`SELECT 1`, { input: "none" });
+  for await (const row of prepared.stream()) {
+    assert.equal(row, 1);
+    break;
+  }
+  assert.equal(released, 1);
+
+  const mappingError = new Error("prepared stream mapper failed");
+  const mappingDb = createDatabase({
+    ...executor(),
+    async *stream<Row>() { yield 1 as Row; },
+  });
+  const mapped = mappingDb.prepare(
+    "mapped-stream",
+    () => sql.rows(schema(() => { throw mappingError; }))`SELECT 1`,
+    { input: "none" },
+  );
+  await assert.rejects(
+    async () => { for await (const row of mapped.stream()) void row; },
+    (error) => error === mappingError,
+  );
+
+  const abortReason = new Error("prepared stream aborted before acquisition");
+  const controller = new AbortController();
+  controller.abort(abortReason);
+  let acquired = 0;
+  const abortDb = createPooledDatabase({
+    statementBinding,
+    async acquire() {
+      acquired += 1;
+      return { ...executor(), release() {} };
+    },
+  });
+  const abortPrepared = abortDb.prepare("abort-stream", () => sql.rows`SELECT 1`, { input: "none" });
+  await assert.rejects(
+    async () => { for await (const row of abortPrepared.stream({ signal: controller.signal })) void row; },
+    (error) => error === abortReason,
+  );
+  assert.equal(acquired, 0);
+
+  const driverError = new Error("prepared stream driver failed");
+  const driverDb = createDatabase({
+    ...executor(),
+    async *stream<Row>() { throw driverError; },
+  });
+  const driverPrepared = driverDb.prepare("driver-stream", () => sql.rows`SELECT 1`, { input: "none" });
+  await assert.rejects(
+    async () => { for await (const row of driverPrepared.stream()) void row; },
+    (error) => error === driverError,
+  );
+
+  const cleanupError = new Error("prepared stream cleanup failed");
+  const cleanupDb = createPooledDatabase({
+    statementBinding,
+    async acquire() {
+      return {
+        ...executor(),
+        async *stream<Row>() { yield 1 as Row; },
+        release() { throw cleanupError; },
+      };
+    },
+  });
+  const cleanupPrepared = cleanupDb.prepare("cleanup-stream", () => sql.rows`SELECT 1`, { input: "none" });
+  await assert.rejects(
+    async () => { for await (const row of cleanupPrepared.stream()) void row; },
+    (error) => error === cleanupError,
+  );
+});
+
+test("prepared stream aborts after a row and reports observer failures to the consumer", async () => {
+  const events: ExecutionEvent[] = [];
+  const observerError = new Error("prepared stream observer failed");
+  const db = createDatabase({
+    ...executor(),
+    async *stream<Row>() {
+      yield 1 as Row;
+      yield 2 as Row;
+    },
+  }, { observers: [{
+    onEvent(event) {
+      events.push(event);
+      if (event.type === "stream:start") throw observerError;
+    },
+  }] });
+  const prepared = db.prepare("observer-stream", () => sql.rows`SELECT 1`, { input: "none" });
+  await assert.rejects(
+    async () => { for await (const row of prepared.stream()) void row; },
+    (error) => error === observerError,
+  );
+  assert.equal(events.filter((event) => event.type === "stream:start").length, 1);
+  assert.equal(events.filter((event) => event.type === "query:error").length, 1);
+
+  const controller = new AbortController();
+  const abortDb = createDatabase({
+    ...executor(),
+    environment: {
+      database: { product: "prepared-stream-test" },
+      driver: { id: "prepared-stream-test" },
+      capabilities: {
+        "statement.cancel": { status: "guaranteed" },
+        "statement.stream": { status: "guaranteed" },
+      },
+    },
+    async *stream<Row>() {
+      yield 1 as Row;
+      yield 2 as Row;
+    },
+  });
+  const abortPrepared = abortDb.prepare("abort-after-row", () => sql.rows`SELECT 1`, { input: "none" });
+  const output: unknown[] = [];
+  const abortReason = new Error("prepared stream aborted after row");
+  await assert.rejects(async () => {
+    for await (const row of abortPrepared.stream({ signal: controller.signal })) {
+      output.push(row);
+      controller.abort(abortReason);
+    }
+  }, (error) => error === abortReason);
+  assert.deepEqual(output, [1]);
+});
+
+test("prepared stream shape mismatch is delivered on consumption", async () => {
+  let alternate = false;
+  const events: ExecutionEvent[] = [];
+  const db = createDatabase({
+    ...executor(),
+    async *stream<Row>() { yield 1 as Row; },
+  }, { observers: [{ onEvent(event) { events.push(event); } }] });
+  const prepared = db.prepare(
+    "shape-stream",
+    () => {
+      alternate = !alternate;
+      return alternate ? sql.rows`SELECT 1` : sql.rows`SELECT 1, 2`;
+    },
+    { input: "none" },
+  );
+  for await (const row of prepared.stream()) void row;
+  await assert.rejects(
+    async () => { for await (const row of prepared.stream()) void row; },
+    (error) => error instanceof Error && "code" in error && error.code === "BRAID_PREPARED_SHAPE",
+  );
+  assert.equal(events.filter((event) => event.type === "stream:start").length, 1);
+  assert.equal(events.filter((event) => event.type === "query:error").length, 1);
+});

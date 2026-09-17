@@ -16,6 +16,7 @@ import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
 import type {
   BulkReadyEvent,
   BulkResultEvent,
+  Database,
   DriverRoutineResult,
   ExecutionEvent,
   QueryErrorEvent,
@@ -29,7 +30,7 @@ import type {
   StatementBindingAdapter,
 } from "@sqlbraid/core";
 import { createBulkBindingDescription, createStatementBindingDescription } from "@sqlbraid/core";
-import { createDatabase } from "@sqlbraid/runtime";
+import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { sql } from "@sqlbraid/template";
 
 const secret = "conspicuous-bind-never-export";
@@ -294,6 +295,76 @@ test("maps query lifecycle to a client span and one stable duration measurement"
   assert.ok(recording.measurements[0].value >= 0);
 });
 
+test("closes prepared stream operations exactly once", () => {
+  const observer = createOpenTelemetryObserver();
+  observer.onEvent(ready("prepared-stream", { preparedName: "users" }));
+  observer.onEvent({
+    ...ready("prepared-stream", { preparedName: "users" }),
+    type: "stream:start",
+    declaredKind: "rows",
+  });
+  observer.onEvent({
+    type: "stream:end",
+    operationId: "prepared-stream",
+    status: "completed",
+    durationMs: 2,
+    rowCount: 1,
+    transactionDepth: 0,
+    transactionScoped: false,
+  });
+  observer.onEvent({
+    type: "stream:end",
+    operationId: "prepared-stream",
+    status: "error",
+    durationMs: 3,
+    rowCount: 1,
+    error: new Error("late stream event"),
+    transactionDepth: 0,
+    transactionScoped: false,
+  });
+
+  assert.equal(recording.spans.length, 1);
+  assert.equal(recording.spans[0]?.endCount, 1);
+  assert.equal(recording.measurements.length, 1);
+});
+
+test("does not double-finish a prepared stream after a terminal query error", () => {
+  const observer = createOpenTelemetryObserver();
+  observer.onEvent(ready("prepared-stream-error"));
+  observer.onEvent({
+    ...ready("prepared-stream-error"),
+    type: "stream:start",
+    declaredKind: "rows",
+  });
+  const error = new Error("stream failed");
+  observer.onEvent({
+    type: "query:error",
+    operationId: "prepared-stream-error",
+    error,
+    stage: "stream",
+    executionStarted: true,
+    executionCompleted: false,
+    durationMs: 2,
+    transactionDepth: 0,
+    transactionScoped: false,
+  });
+  observer.onEvent({
+    type: "stream:end",
+    operationId: "prepared-stream-error",
+    status: "error",
+    durationMs: 3,
+    rowCount: 1,
+    error,
+    transactionDepth: 0,
+    transactionScoped: false,
+  });
+
+  assert.equal(recording.spans.length, 1);
+  assert.equal(recording.spans[0]?.endCount, 1);
+  assert.deepEqual(recording.spans[0]?.statuses, [{ code: SpanStatusCode.ERROR }]);
+  assert.equal(recording.measurements.length, 1);
+});
+
 test("maps every SQLBraid dialect to a low-cardinality database identity", () => {
   const observer = createOpenTelemetryObserver({
     database: {
@@ -384,6 +455,139 @@ test("tracks real runtime rows, commands, prepared execution, and mapping failur
   assert.equal(recording.measurements.length, 5);
   assert.equal(recording.spans.filter(({ statuses }) => statuses.some(({ code }) => code === SpanStatusCode.ERROR)).length, 2);
   assert.equal(recording.spans.filter(({ endCount }) => endCount === 1).length, 5);
+});
+
+test("closes runtime prepared-stream telemetry exactly once on every terminal path", async () => {
+  const observer = createOpenTelemetryObserver();
+  const binding = Object.freeze<StatementBindingAdapter>({
+    id: "otel-prepared-stream",
+    describe(statement, context) {
+      return createStatementBindingDescription(statement, context, {
+        adapterId: "otel-prepared-stream",
+        transport: "text-positional",
+        placeholder: (index) => `$${index}`,
+        reuse: { effective: "simple", owner: "sqlbraid" },
+      });
+    },
+  });
+  const baseExecutor = (): QueryExecutor => ({
+    statementBinding: binding,
+    async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
+    async *stream<Row>() { yield 1 as Row; },
+    async call(): Promise<DriverRoutineResult> { return { output: {}, resultSets: [] }; },
+  });
+  const paths = ["unused", "normal", "early-break", "abort-before", "abort-after", "mapper", "driver", "cleanup"] as const;
+  for (const path of paths) {
+    const spanStart = recording.spans.length;
+    const measurementStart = recording.measurements.length;
+    let db!: Database;
+    let start!: (options?: { readonly signal?: AbortSignal }) => AsyncIterable<unknown>;
+    let acquired = 0;
+    let abortController: AbortController | undefined;
+    let abortReason: Error | undefined;
+
+    if (path === "unused" || path === "normal" || path === "early-break" || path === "mapper" || path === "driver") {
+      db = createDatabase({
+        ...baseExecutor(),
+        ...(path === "driver" ? {
+          async *stream<Row>() { throw new Error("prepared stream driver failure"); },
+        } : {}),
+      }, { observers: [observer] });
+      if (path === "mapper") {
+        const schema = {
+          "~standard": {
+            version: 1 as const,
+            vendor: "otel-prepared-stream",
+            validate() { return { issues: [{ message: "prepared stream mapping failed" }] }; },
+          },
+        };
+        const prepared = db.prepare("otel-mapper-stream", () => sql.rows(schema)`SELECT 1`, { input: "none" });
+        start = (options) => prepared.stream(options);
+      } else {
+        const prepared = db.prepare(`otel-${path}-stream`, () => sql.rows`SELECT 1`, { input: "none" });
+        start = (options) => prepared.stream(options);
+      }
+    } else if (path === "abort-before") {
+      const environment = {
+        database: { product: "otel-prepared-stream" },
+        driver: { id: "otel-prepared-stream" },
+        capabilities: {
+          "statement.cancel": { status: "guaranteed" as const },
+          "statement.stream": { status: "guaranteed" as const },
+        },
+      };
+      db = createPooledDatabase({
+        statementBinding: binding,
+        environment,
+        async acquire() {
+          acquired += 1;
+          return { ...baseExecutor(), release() {} };
+        },
+      }, { observers: [observer] });
+      abortController = new AbortController();
+      abortReason = new Error("prepared stream aborted before start");
+      abortController.abort(abortReason);
+      const prepared = db.prepare("otel-abort-before-stream", () => sql.rows`SELECT 1`, { input: "none" });
+      start = (options) => prepared.stream(options);
+    } else if (path === "abort-after") {
+      db = createDatabase({
+        ...baseExecutor(),
+        environment: {
+          database: { product: "otel-prepared-stream" },
+          driver: { id: "otel-prepared-stream" },
+          capabilities: {
+            "statement.cancel": { status: "guaranteed" as const },
+            "statement.stream": { status: "guaranteed" as const },
+          },
+        },
+        async *stream<Row>() {
+          yield 1 as Row;
+          yield 2 as Row;
+        },
+      }, { observers: [observer] });
+      abortController = new AbortController();
+      abortReason = new Error("prepared stream aborted after row");
+      const prepared = db.prepare("otel-abort-after-stream", () => sql.rows`SELECT 1`, { input: "none" });
+      start = (options) => prepared.stream(options);
+    } else {
+      const cleanupError = new Error("prepared stream cleanup failure");
+      db = createPooledDatabase({
+        statementBinding: binding,
+        async acquire() {
+          return {
+            ...baseExecutor(),
+            async *stream<Row>() { yield 1 as Row; },
+            release() { throw cleanupError; },
+          };
+        },
+      }, { observers: [observer] });
+      const prepared = db.prepare("otel-cleanup-stream", () => sql.rows`SELECT 1`, { input: "none" });
+      start = (options) => prepared.stream(options);
+    }
+
+    if (path === "unused") {
+      start();
+      await Promise.resolve();
+      assert.equal(recording.spans.length, spanStart);
+      assert.equal(recording.measurements.length, measurementStart);
+      continue;
+    }
+
+    const stream = start(abortController === undefined ? undefined : { signal: abortController.signal });
+    const consume = async (): Promise<void> => {
+      for await (const row of stream) {
+        if (path === "early-break") break;
+        if (path === "abort-after") abortController!.abort(abortReason);
+        void row;
+      }
+    };
+    if (path === "normal" || path === "early-break") await consume();
+    else await assert.rejects(consume);
+    if (path === "abort-before") assert.equal(acquired, 0);
+    assert.equal(recording.spans.length, spanStart + 1, path);
+    assert.equal(recording.spans[spanStart]?.endCount, 1, path);
+    assert.equal(recording.measurements.length, measurementStart + 1, path);
+  }
 });
 
 test("tracks real runtime routine calls, cardinality errors, and every batch item", async () => {

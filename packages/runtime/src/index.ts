@@ -2401,19 +2401,26 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
         },
         stream: (...args: unknown[]) => {
           const current = invocation(args);
-          const preparedStream = operation(args).then((operationResult) => {
-            const preparedOperation = rowPreparedOperation(operationResult);
-            return database.stream(
-              preparedOperation.query,
-              current.options as StreamOptions<unknown> | undefined,
-              preparedOperation,
-            );
-          });
-          return {
-            async *[Symbol.asyncIterator](): AsyncIterator<unknown> {
-              yield* await preparedStream;
-            },
-          };
+          return (async function* (): AsyncGenerator<unknown> {
+            const operationResult = await operation(args);
+            let preparedOperation: PreparedOperation<RowQuery<unknown>>;
+            try {
+              preparedOperation = rowPreparedOperation(operationResult);
+            } catch (error) {
+              await notifyError(options.observers ?? [], errorEvent(operationResult, error, "prepared", false, false), error);
+            }
+            let preparedStream: AsyncIterable<unknown>;
+            try {
+              preparedStream = database.stream(
+                preparedOperation!.query,
+                current.options as StreamOptions<unknown> | undefined,
+                preparedOperation!,
+              );
+            } catch (error) {
+              await notifyError(options.observers ?? [], errorEvent(operationResult, error, "stream", false, false), error);
+            }
+            yield* preparedStream!;
+          })();
         },
         call: async (...args: unknown[]) => {
           const current = invocation(args);
