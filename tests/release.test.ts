@@ -19,6 +19,7 @@ import {
   parseSemver,
   readReleaseManifest,
   setReleaseCommand,
+  setReleasePackage,
   setReleaseVersion,
   type ReleaseManifest,
   type StagedPublication,
@@ -29,11 +30,16 @@ const directories: string[] = [];
 const uuid = (index: number) => `00000000-0000-0000-0000-${String(index).padStart(12, "0")}`;
 afterEach(async () => {
   vi.unstubAllEnvs();
+  setReleasePackage("*");
   setReleaseVersion("0.1.0-rc.0");
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
+async function fixture(
+  version = "0.1.0-rc.0",
+  names = ["@sqlbraid/core"],
+  releaseNames = names,
+) {
   setReleaseVersion(version);
   vi.stubEnv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://oidc.actions.example/token");
   vi.stubEnv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "actions-fixture");
@@ -43,6 +49,7 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"]) {
   const bytes = new Map(names.map((name) => [name, Buffer.from(`validated archive: ${name}`)]));
   const manifest: ReleaseManifest = {
     version,
+    releasePackages: releaseNames,
     commit: "a".repeat(40),
     runId: "123",
     runAttempt: "1",
@@ -169,6 +176,20 @@ test("certification exercises exact tarball staged dry-run with no registry read
   assert.equal(f.calls.filter(([cmd]) => cmd === "stage").length, 1);
   setReleaseCommand(async () => "12.3.3");
   await assert.rejects(f.run(true), /requires pnpm/);
+});
+
+test("package-specific staging validates the full candidate but uploads only the selected package", async () => {
+  const f = await fixture(
+    "1.0.1",
+    ["@sqlbraid/core", "@sqlbraid/postgres"],
+    ["@sqlbraid/postgres"],
+  );
+  const result = await f.run();
+  assert.ok(result?.complete);
+  assert.deepEqual(result?.packages.map(({ name }) => name), ["@sqlbraid/postgres"]);
+  assert.equal(f.uploads().length, 1);
+  assert.match(f.uploads()[0][2], /package-1\.tgz$/u);
+  assert.equal(result?.packages[0].tag, "release-1.0.1");
 });
 
 test("uncertain uploads retain pending evidence and never retry blindly", async () => {
@@ -446,6 +467,21 @@ test("stage authorization requires explicit dispatch and exact version tag, reje
     assert.throws(() => assertMutationAuthorization("stage", { ...authorized, ...override }));
   for (const mode of ["publish", "bootstrap-rc0", "certify"])
     assert.throws(() => assertMutationAuthorization(mode, authorized));
+});
+
+test("package-specific tag authorization uses the package slug", () => {
+  const sha = "a".repeat(40);
+  setReleasePackage("postgres");
+  setReleaseVersion("1.2.3");
+  assertMutationAuthorization("stage", {
+    GITHUB_ACTIONS: "true",
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    SQLBRAID_RELEASE_MODE: "stage",
+    GITHUB_REF: "refs/tags/postgres-v1.2.3",
+    GITHUB_SHA: sha,
+    GITHUB_RUN_ID: "123",
+    GITHUB_RUN_ATTEMPT: "1",
+  });
 });
 
 test("normal staging cannot fall back to static credentials or a supplied OIDC token", () => {
