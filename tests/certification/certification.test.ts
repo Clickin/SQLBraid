@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "vitest";
 import { aggregateCertificationArtifacts, certifyTarget, validateCertificationArtifact } from "./runner.js";
+import { executeCertificationCase } from "./cases.js";
 import { createSyntheticTarget } from "./targets/synthetic.js";
 import { REQUIRED_CERTIFICATION_TARGETS } from "./targets/inventory.js";
 import { REQUIRED_CASE_IDS } from "./types.js";
@@ -44,6 +45,51 @@ describe("A4 certification harness", () => {
     );
     await assert.rejects(() => run({ largeResultQuery: undefined }, "STR009"), /largeResultQuery/u);
     await assert.rejects(() => run({ largeResultCount: undefined }, "STR009"), /largeResultCount/u);
+  });
+
+  test("accepts native DML proofs but never bypasses an unsupported public API probe", async () => {
+    const base = createSyntheticTarget("candidate-native-family");
+    const baseFixture = await base.createFixture();
+    let nativeProofs = 0;
+    const nativeFixture = {
+      ...baseFixture,
+      representationUnsupported: {
+        "dml.insert-returning": {
+          prove: async () => {
+            nativeProofs += 1;
+            await baseFixture.db.one(baseFixture.queries.identity);
+          },
+        },
+      },
+    };
+    const nativeTarget = {
+      ...base,
+      expectedCapabilities: {
+        ...base.expectedCapabilities,
+        "dml.insert-returning": { status: "unsupported" as const },
+      },
+    };
+    const nativeResult = await executeCertificationCase(nativeTarget, nativeFixture, "CAP002", { stress: false });
+    assert.equal(nativeResult.status, "pass");
+    assert.equal(nativeProofs, 1);
+
+    const apiFixture = {
+      ...baseFixture,
+      representationUnsupported: {
+        "statement.stream": { prove: async () => undefined },
+      },
+    };
+    const apiTarget = {
+      ...base,
+      expectedCapabilities: {
+        ...base.expectedCapabilities,
+        "statement.stream": { status: "unsupported" as const },
+      },
+    };
+    const apiResult = await executeCertificationCase(apiTarget, apiFixture, "CAP002", { stress: false });
+    assert.equal(apiResult.status, "fail");
+    assert.match(apiResult.error ?? "", /missing unsupported API probe for statement\.stream/u);
+    await baseFixture.close?.();
   });
 
   test("proves exact SHA, target, case, and skip/declaration aggregation gates", async () => {
