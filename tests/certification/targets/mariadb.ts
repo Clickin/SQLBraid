@@ -458,7 +458,7 @@ async function createFixture(): Promise<CertificationFixture> {
         prove: async () => {
           const nativeConnection = await mariadb.createConnection(connectorOptions({ dateStrings: false }));
           try {
-            const nativeDb = createMariaDbDatabase(nativeConnection, { profile: MARIADB_LOSSLESS_TEXT });
+            const nativeDb = createMariaDbDatabase(nativeConnection, { profile: MARIADB_NATIVE });
             const row = await nativeDb.one(sql.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`);
             if (!((row as { readonly value?: unknown }).value instanceof Date)) throw new Error("MariaDB temporal native guard failed.");
           } finally {

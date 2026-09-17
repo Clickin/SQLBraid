@@ -522,7 +522,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       "data.json-lossless-text": {
         prove: async () => {
           await assert.rejects(
-            () => db.one(q(sql.rows`SELECT JSON_OBJECT('large', 9007199254740993) AS value`)),
+            () => db.one(q(sql.rows`SELECT JSON_OBJECT('value', 1) AS value`)),
             (error: unknown) => error instanceof Error && /JSON results must remain strings/iu.test(error.message),
           );
         },
