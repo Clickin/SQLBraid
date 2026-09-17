@@ -7,7 +7,7 @@ import { createMariaDbCertificationTarget } from "./mariadb.js";
 import { isSourceSha, REQUIRED_CASE_IDS } from "../types.js";
 import { installedPackageVersion } from "../node-version.js";
 
-test("rc3.mariadb.certification", async () => {
+test("rc3.mariadb.certification", { timeout: 900_000 }, async () => {
   const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
   assert.ok(sourceSha && isSourceSha(sourceSha), "SQLBRAID_CERT_SOURCE_SHA must be a full 40-character SHA.");
   const output = process.env.SQLBRAID_CERT_ARTIFACT;
