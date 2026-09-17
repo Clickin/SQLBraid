@@ -93,6 +93,26 @@ test("PostgreSQL transaction options lower on the pinned client and reject malfo
   assert.deepEqual(calls, ["BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY"]);
 });
 
+test("PostgreSQL savepoint controls validate names before issuing SQL", async () => {
+  const calls: string[] = [];
+  const executor = createPgExecutor(pgMock(async (value) => {
+    if (typeof value === "object" && value !== null && "text" in value && typeof value.text === "string") calls.push(value.text);
+    return result();
+  }));
+  await assert.rejects(async () => executor.savepoint!("bad; DROP TABLE users"), TypeError);
+  await assert.rejects(async () => executor.rollbackTo!("bad; DROP TABLE users"), TypeError);
+  await assert.rejects(async () => executor.releaseSavepoint!("bad; DROP TABLE users"), TypeError);
+  assert.deepEqual(calls, []);
+  await executor.savepoint!("braid_sp");
+  await executor.rollbackTo!("braid_sp");
+  await executor.releaseSavepoint!("braid_sp");
+  assert.deepEqual(calls, [
+    "SAVEPOINT braid_sp",
+    "ROLLBACK TO SAVEPOINT braid_sp",
+    "RELEASE SAVEPOINT braid_sp",
+  ]);
+});
+
 test("MySQL transaction options use same-connection control statements", async () => {
   const calls: string[] = [];
   const executor = createMysql2Executor(mysqlQueryMock(

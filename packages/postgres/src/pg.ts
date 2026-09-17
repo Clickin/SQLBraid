@@ -18,6 +18,7 @@ import type {
   TransactionIsolation,
   TransactionOptions,
 } from "@sqlbraid/core";
+import { assertSavepointName } from "@sqlbraid/core/driver";
 import {
   createBulkBindingDescription,
   createRenderedStatement,
@@ -1065,9 +1066,9 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
     },
     commit: () => runControl("COMMIT"),
     rollback: () => runControl("ROLLBACK"),
-    savepoint: (name) => runControl(`SAVEPOINT ${name}`),
-    rollbackTo: (name) => runControl(`ROLLBACK TO SAVEPOINT ${name}`),
-    releaseSavepoint: (name) => runControl(`RELEASE SAVEPOINT ${name}`),
+    savepoint: (name) => runControl(`SAVEPOINT ${assertSavepointName(name)}`),
+    rollbackTo: (name) => runControl(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`),
+    releaseSavepoint: (name) => runControl(`RELEASE SAVEPOINT ${assertSavepointName(name)}`),
   };
 }
 

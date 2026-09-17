@@ -3,11 +3,11 @@
     "pg": "npm:pg@8.23.0",
     "pg-cursor": "npm:pg-cursor@2.22.0",
     "@standard-schema/spec": "npm:@standard-schema/spec@1.1.0",
-    "@sqlbraid/core": "../../../packages/core/src/index.ts",
-    "@sqlbraid/template": "../../../packages/template/src/index.ts",
-    "@sqlbraid/runtime": "../../../packages/runtime/src/index.ts",
-    "@sqlbraid/postgres": "../../../packages/postgres/src/index.ts",
-    "@sqlbraid/postgres/pg": "../../../packages/postgres/src/pg.ts",
-    "#async-context": "../../../packages/runtime/src/async-context.node.ts"
+    "@sqlbraid/core": "../../../packages/core/dist/index.js",
+    "@sqlbraid/template": "../../../packages/template/dist/index.js",
+    "@sqlbraid/runtime": "../../../packages/runtime/dist/index.js",
+    "@sqlbraid/postgres": "../../../packages/postgres/dist/index.js",
+    "@sqlbraid/postgres/pg": "../../../packages/postgres/dist/pg.js",
+    "#async-context": "../../../packages/runtime/dist/async-context.node.js"
   }
 }
