@@ -452,7 +452,7 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       expected: {
         largeExactInteger: { value: "9007199254740993" },
         exactDecimal: { value: "12345678901234567890.123456789" },
-        temporal: { value: dialect === "sqlite" ? "2026-09-14T12:34:56.789Z" : new Date(temporalWallClockIso) },
+        temporal: { value: dialect === "sqlite" ? "2026-09-14T12:34:56.789Z" : new Date(temporalExpectedIso(dialect)) },
         injection: { value: `'; UPDATE ${quoteIdentifier(dialect, sentinelTable)} SET marker = 999 WHERE id = 1; -- ` },
       },
     },
