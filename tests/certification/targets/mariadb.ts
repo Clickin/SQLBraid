@@ -531,10 +531,10 @@ async function createFixture(): Promise<CertificationFixture> {
     guarded: {
       "numeric.exact-integer": {
         prove: async () => {
-          const before = await db.one(sql.rows`SELECT value FROM ${sql.ident(TABLE)} WHERE id = 1`);
+          const before = await db.one(sql.rows`SELECT payload FROM ${sql.ident(JSON_TABLE)}`);
           const injected = await db.one(queries.fidelity!.injection);
           assert.deepEqual(injected, queries.fidelity!.expected.injection);
-          assert.deepEqual(await db.one(sql.rows`SELECT value FROM ${sql.ident(TABLE)} WHERE id = 1`), before);
+          assert.deepEqual(await db.one(sql.rows`SELECT payload FROM ${sql.ident(JSON_TABLE)}`), before);
           const row = await db.one(queries.fidelity!.largeExactInteger);
           if ((row as { readonly value?: unknown }).value !== "9007199254740993") throw new Error("MariaDB exact integer guard failed.");
         },
