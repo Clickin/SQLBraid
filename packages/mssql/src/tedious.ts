@@ -1374,7 +1374,7 @@ function streamRows(
 }
 
 interface TediousPreparedRequest {
-  readonly request: TediousRequestLike & { error: unknown };
+  readonly request: TediousRequestLike & { error: unknown; canceled?: boolean };
   readonly parameters: readonly TediousMaterializedParameter[];
   readonly setCompletionCallback: (callback: TediousRequestCompletionCallback | undefined) => void;
 }
@@ -1512,8 +1512,7 @@ function prepareRequest(
       completionError = error;
       drained = true;
       completionCallback?.(error, rowCount);
-      if (cancellationRequested) settleCancellation(request);
-      else prepared(error);
+      prepared(error);
     }) as unknown as TediousPreparedRequest["request"];
     if (signal !== undefined && typeof request.cancel !== "function") {
       reject(
@@ -1545,7 +1544,7 @@ function prepareRequest(
     const prepared = (error?: unknown): void => {
       completionError = error;
       drained = true;
-      if (cancellationRequested) {
+      if (cancellationRequested && error !== undefined && error !== null) {
         settleCancellation(request);
         return;
       }
@@ -1558,6 +1557,9 @@ function prepareRequest(
       }
       settled = true;
       removeListeners(request);
+      // A successful native prepare owns a statement even if cancellation raced
+      // its completion. Hand it to bulk's cleanup scope; executePrepared checks
+      // the aborted signal before I/O, and unprepare still runs exactly once.
       resolve({
         request,
         parameters,
@@ -1775,8 +1777,10 @@ function unprepareRequest(connection: TediousConnectionLike, prepared: TediousPr
       if (prepared.request.once) prepared.request.once("requestCompleted", complete);
       else prepared.request.on("requestCompleted", complete);
       prepared.setCompletionCallback(callback);
-      // Tedious retains the prior execute error on a reused Request.
+      // Tedious retains both the error and cancellation flag on a reused Request.
+      // The completed execution is drained; cleanup is a new native operation.
       prepared.request.error = undefined;
+      prepared.request.canceled = false;
       unprepare.call(connection, prepared.request);
     } catch (error) {
       callbackError ??= error;

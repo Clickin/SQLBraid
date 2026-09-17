@@ -287,3 +287,67 @@ for (const fault of ["commit", "rollback", "savepoint", "rollback-to", "release-
     await assert.rejects(() => assertControlFailure(pgFixture(false, state), fault), assert.AssertionError);
   });
 }
+
+for (const pooled of [false, true]) {
+  for (const cleanupFails of [false, true]) {
+    const scenario = cleanupFails ? "resource.cleanup-failure" : "resource.init-failure";
+    test(`[contract:tedious:${scenario}:boundary] [contract:tedious:cancellation.before-handoff:boundary] [ownership:${pooled ? "pooled" : "direct"}] aborted successful prepare closes before handing back the lease${cleanupFails ? " and retains cleanup failure" : ""}`, async () => {
+      const controller = new AbortController();
+      const reason = new Error("abort while native prepare completes");
+      const cleanupFailure = new Error("native unprepare failed");
+      const events: string[] = [];
+      const connection = {
+        execSql() { throw new Error("bulk must use native prepare"); },
+        prepare(value: TediousRequestLike) {
+          const request = value as TediousRequestLike & {
+            preparing: boolean;
+            callback(error?: unknown): void;
+          };
+          events.push("prepare");
+          request.preparing = true;
+          controller.abort(reason);
+          // The server successfully prepared despite the cancellation race.
+          queueMicrotask(() => request.callback());
+        },
+        execute() { events.push("execute"); throw new Error("aborted bulk must not execute"); },
+        unprepare(value: TediousRequestLike) {
+          events.push("unprepare");
+          const request = value as TediousRequestLike & { canceled: boolean; callback(error?: unknown): void };
+          // Mirror Tedious makeRequest(): a reused canceled Request is rejected
+          // before the native unprepare operation can release its statement.
+          queueMicrotask(() => request.callback(
+            request.canceled ? new Error("Canceled request cannot unprepare") : cleanupFails ? cleanupFailure : undefined,
+          ));
+        },
+        beginTransaction(callback: () => void) { callback(); },
+        commitTransaction(callback: () => void) { callback(); },
+        rollbackTransaction(callback: () => void) { callback(); },
+        saveTransaction(callback: () => void) { callback(); },
+      };
+      const poolConnection = {
+        ...connection,
+        release() { events.push("release"); },
+        destroy() { events.push("discard"); },
+      };
+      const db = pooled
+        ? createTediousPoolDatabase({ acquire: async () => poolConnection })
+        : createTediousDatabase(connection);
+      await assert.rejects(
+        () => db.bulk([1], () => mssql.command`UPDATE contract_rows SET value = 1`, { signal: controller.signal }),
+        (error: unknown) => {
+          if (!cleanupFails) return error === reason;
+          assert.ok(error instanceof AggregateError);
+          assert.equal(error.cause, reason);
+          assert.ok(error.errors.includes(reason));
+          assert.ok(error.errors.includes(cleanupFailure));
+          return true;
+        },
+      );
+      assert.deepEqual(events, ["prepare", "unprepare", ...(pooled ? [cleanupFails ? "discard" : "release"] : [])]);
+      if (!pooled && cleanupFails) {
+        await assert.rejects(() => db.tx(async () => undefined),
+          (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_CONNECTION_POISONED");
+      }
+    });
+  }
+}
