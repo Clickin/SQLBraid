@@ -281,6 +281,7 @@ async function executeWithCancellation<T>(
   if (signal === undefined) return operation();
   let aborted = false;
   let breakFailure: unknown;
+  let hasBreakFailure = false;
   let breakPromise: Promise<void> | undefined;
   const onAbort = (): void => {
     if (aborted) return;
@@ -288,9 +289,11 @@ async function executeWithCancellation<T>(
     try {
       breakPromise = Promise.resolve(connection.break!()).catch((error) => {
         breakFailure = error;
+        hasBreakFailure = true;
       });
     } catch (error) {
       breakFailure = error;
+      hasBreakFailure = true;
       breakPromise = Promise.resolve();
     }
   };
@@ -299,7 +302,7 @@ async function executeWithCancellation<T>(
     const result = await operation();
     if (breakPromise !== undefined) await breakPromise;
     if (aborted) {
-      if (breakFailure !== undefined) {
+      if (hasBreakFailure) {
         await throwWithCleanup(signal.reason, [breakFailure]);
       }
       throw signal.reason;
@@ -307,7 +310,7 @@ async function executeWithCancellation<T>(
     return result;
   } catch (error) {
     if (breakPromise !== undefined) await breakPromise;
-    if (breakFailure !== undefined) {
+    if (hasBreakFailure) {
       await throwWithCleanup(error, [breakFailure]);
     }
     if (aborted) throw signal.reason;
@@ -959,30 +962,74 @@ async function normalizeDmlReturning(
 ): Promise<QueryExecutionResult<Record<string, unknown>> | undefined> {
   const outputs = returningParameters(rendered);
   if (rendered.resultKind !== "rows" || outputs.length === 0) return undefined;
-  const values = outputs.map(({ parameter, ordinal, index }) => {
-    const value = outBindValue(result.outBinds, ordinal, parameter.outputName);
-    if (!Array.isArray(value)) {
-      throw new TypeError(`BRAID_RETURNING_ARRAY: Oracle DML RETURNING output ${parameter.outputName ?? `parameter ${index + 1}`} was not an array.`);
-    }
-    return value;
-  });
-  const rowCount = values[0]!.length;
-  for (const [index, value] of values.entries()) {
-    if (value.length !== rowCount) {
-      throw new Error(`BRAID_RETURNING_LENGTH: Oracle DML RETURNING output arrays have different lengths (output ${index + 1} has ${value.length}, expected ${rowCount}).`);
-    }
-  }
-  if (result.rowsAffected !== undefined) {
-    const affectedRows = safeDatabaseCount(result.rowsAffected);
-    if (affectedRows !== rowCount) {
-      throw new Error(`BRAID_RETURNING_ROWCOUNT: Oracle rowsAffected (${affectedRows}) does not match returned row count (${rowCount}).`);
-    }
-  }
-
   const cleanupScope = createCleanupScope();
   let failure: unknown;
+  let hasFailure = false;
+  const recordFailure = (error: unknown): void => {
+    if (!hasFailure) {
+      failure = error;
+      hasFailure = true;
+    }
+  };
+  const values: Array<readonly unknown[] | undefined> = [];
+  for (const { parameter, ordinal, index } of outputs) {
+    try {
+      const value = outBindValue(result.outBinds, ordinal, parameter.outputName);
+      if (!Array.isArray(value)) {
+        recordFailure(new TypeError(`BRAID_RETURNING_ARRAY: Oracle DML RETURNING output ${parameter.outputName ?? `parameter ${index + 1}`} was not an array.`));
+        values.push(undefined);
+      } else {
+        values.push(value);
+      }
+    } catch (error) {
+      recordFailure(error);
+      values.push(undefined);
+    }
+  }
+  const lobs = new Map<OracleLobLike, OracleLobLike>();
+  for (let outputIndex = 0; outputIndex < outputs.length; outputIndex += 1) {
+    const { parameter, index } = outputs[outputIndex]!;
+    const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
+    const valuesForOutput = values[outputIndex];
+    if (valuesForOutput === undefined || hintType === undefined || !materializedLobType(hintType)) continue;
+    const name = parameter.outputName ?? `parameter ${index + 1}`;
+    for (const value of valuesForOutput) {
+      if (value === null || value === undefined || isMaterializedLobValue(hintType, value)) continue;
+      try {
+        const lob = oracleLob(value, name);
+        if (lob === undefined) {
+          recordFailure(new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name} did not return a Lob.`));
+          continue;
+        }
+        if (!lobs.has(lob)) {
+          lobs.set(lob, lob);
+          cleanupScope.add(() => closeLob(lob));
+        }
+      } catch (error) {
+        recordFailure(error);
+      }
+    }
+  }
+  const rowCount = values[0]?.length ?? 0;
+  if (!hasFailure) {
+    for (const [index, value] of values.entries()) {
+      if (value!.length !== rowCount) {
+        recordFailure(new Error(`BRAID_RETURNING_LENGTH: Oracle DML RETURNING output arrays have different lengths (output ${index + 1} has ${value!.length}, expected ${rowCount}).`));
+      }
+    }
+  }
+  if (!hasFailure && result.rowsAffected !== undefined) {
+    try {
+      const affectedRows = safeDatabaseCount(result.rowsAffected);
+      if (affectedRows !== rowCount) {
+        recordFailure(new Error(`BRAID_RETURNING_ROWCOUNT: Oracle rowsAffected (${affectedRows}) does not match returned row count (${rowCount}).`));
+      }
+    } catch (error) {
+      recordFailure(error);
+    }
+  }
   let rows: readonly Record<string, unknown>[] | undefined;
-  try {
+  if (!hasFailure) try {
     const materialized: Record<string, unknown>[] = [];
     for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
       const row: Record<string, unknown> = {};
@@ -993,9 +1040,8 @@ async function normalizeDmlReturning(
         const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
         let value = values[outputIndex]![rowIndex];
         if (hintType !== undefined && materializedLobType(hintType) && value !== null && value !== undefined && !isMaterializedLobValue(hintType, value)) {
-          const lob = oracleLob(value, name);
+          const lob = lobs.get(value as OracleLobLike);
           if (lob === undefined) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name} did not return a Lob.`);
-          cleanupScope.add(() => closeLob(lob));
           value = await materializeLob(lob, hintType, name);
         }
         assertOracleNumericValue(hintType, value);
@@ -1005,9 +1051,9 @@ async function normalizeDmlReturning(
     }
     rows = materialized;
   } catch (error) {
-    failure = error;
+    recordFailure(error);
   }
-  if (failure === undefined) await cleanupScope.run();
+  if (!hasFailure) await cleanupScope.run();
   else await cleanupScope.run(failure);
   return { rows: rows!, rowCount, kind: "rows" };
 }
@@ -1162,6 +1208,7 @@ function makeOracledbExecutor(
       const resultSets: DriverRoutineResult["resultSets"][number][] = [];
       const cleanupScope = createCleanupScope();
       let failure: unknown;
+      let hasFailure = false;
       let value: DriverRoutineResult | undefined;
       try {
         await executeWithCancellation(connection, async () => {
@@ -1180,10 +1227,12 @@ function makeOracledbExecutor(
           const explicitCursors: Array<{ readonly name: string; readonly index: number; readonly resultSet: OracleResultSetLike }> = [];
           let explicitLobs: Map<number, OracleLobLike> | undefined;
           let explicitResourceFailure: unknown;
+          let hasExplicitResourceFailure = false;
           let explicitResourceFailureIndex = Number.POSITIVE_INFINITY;
           const recordExplicitResourceFailure = (error: unknown, index: number): void => {
             if (index < explicitResourceFailureIndex) {
               explicitResourceFailure = error;
+              hasExplicitResourceFailure = true;
               explicitResourceFailureIndex = index;
             }
           };
@@ -1221,7 +1270,7 @@ function makeOracledbExecutor(
               recordExplicitResourceFailure(error, index);
             }
           }
-          if (explicitResourceFailure !== undefined) throw explicitResourceFailure;
+          if (hasExplicitResourceFailure) throw explicitResourceFailure;
           for (const { parameter, index, value } of explicit) {
             const name = parameter.outputName;
             if (!name) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", `Oracle output parameter ${index + 1} is missing outputName.`);
@@ -1263,8 +1312,9 @@ function makeOracledbExecutor(
         }, executionOptions);
       } catch (error) {
         failure = error;
+        hasFailure = true;
       }
-      if (failure === undefined) await cleanupScope.run();
+      if (!hasFailure) await cleanupScope.run();
       else await cleanupScope.run(failure);
       return value!;
     },
@@ -1289,19 +1339,23 @@ function makeOracledbExecutor(
       cleanupScope.add(() => resultSet!.close());
       for (const resource of Array.isArray(result.implicitResults) ? result.implicitResults : []) cleanupScope.add(() => resource.close());
       let breakFailure: unknown;
+      let hasBreakFailure = false;
       let breakPromise: Promise<void> | undefined;
       const abort = (): void => {
         if (breakPromise !== undefined) return;
         try {
           breakPromise = Promise.resolve(connection.break!()).catch((error) => {
             breakFailure = error;
+            hasBreakFailure = true;
           });
         } catch (error) {
           breakFailure = error;
+          hasBreakFailure = true;
           breakPromise = Promise.resolve();
         }
-      };
+      }
       let failure: unknown;
+      let hasFailure = false;
       signal?.addEventListener("abort", abort, { once: true });
       try {
         const fields = Array.isArray(resultSet.metaData)
@@ -1337,13 +1391,14 @@ function makeOracledbExecutor(
         }
       } catch (error) {
         failure = error;
+        hasFailure = true;
         throw error;
       } finally {
         signal?.removeEventListener("abort", abort);
         if (breakPromise !== undefined) await breakPromise;
-        if (breakFailure !== undefined) cleanupScope.add(() => { throw breakFailure; });
+        if (hasBreakFailure) cleanupScope.add(() => { throw breakFailure; });
         const primary = signal?.aborted ? signal.reason : failure;
-        if (primary === undefined) await cleanupScope.run();
+        if (!hasFailure && signal?.aborted !== true) await cleanupScope.run();
         else await cleanupScope.run(primary);
       }
     },

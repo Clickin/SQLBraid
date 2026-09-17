@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Readable } from "node:stream";
 import { test } from "vitest";
 import type { OracleDriverLike, OracleConnectionLike } from "@sqlbraid/oracle/oracledb";
 import { createOracledbExecutor, oracleOutputOrdinals } from "@sqlbraid/oracle/oracledb";
@@ -18,6 +19,8 @@ const driver: OracleDriverLike = {
   DB_TYPE_NUMBER: "NUMBER",
   DB_TYPE_DATE: "DATE",
   DB_TYPE_RAW: "RAW",
+  DB_TYPE_CLOB: "CLOB",
+  DB_TYPE_BLOB: "BLOB",
 };
 
 function connectionFor(
@@ -32,6 +35,24 @@ function directionOf(bind: unknown): unknown {
   return undefined;
 }
 
+function returningLob(
+  data: string,
+  onClose: () => void,
+  failure?: Error,
+): Readable & { getData(): Promise<string> } {
+  const stream = new Readable({ read() {} });
+  const destroy = stream.destroy.bind(stream);
+  stream.destroy = ((error?: Error) => {
+    onClose();
+    return destroy(error);
+  }) as typeof stream.destroy;
+  stream.getData = async () => {
+    if (failure !== undefined) throw failure;
+    return data;
+  };
+  return stream as Readable & { getData(): Promise<string> };
+}
+
 test("Oracle maps mixed IN/OUT results by physical OUT ordinal", async () => {
   const calls: unknown[][] = [];
   const connection = connectionFor(async (_sql, binds) => {
@@ -44,6 +65,12 @@ test("Oracle maps mixed IN/OUT results by physical OUT ordinal", async () => {
   const result = await executor.call(query.render());
   assert.deepEqual(result.output, { first: "first", second: "second" });
   assert.deepEqual(calls[0]?.map(directionOf), [undefined, "out", undefined, "out"]);
+});
+
+test("Oracle routine calls preserve an undefined primary failure", async () => {
+  const executor = createOracledbExecutor(connectionFor(async () => { throw undefined; }), { driver });
+  const query = sql.call`BEGIN fail_without_value; END;`;
+  await assert.rejects(() => executor.call(query.render()), (error: unknown) => error === undefined);
 });
 
 test("Oracle DML RETURNING zips arrays, preserves zero rows, and uses driver rowcount", async () => {
@@ -65,6 +92,32 @@ test("Oracle DML RETURNING zips arrays, preserves zero rows, and uses driver row
     async () => executor.query(returned.render()),
     { code: "BRAID_RESULT_EXACTNESS" },
   );
+});
+
+test("Oracle DML RETURNING registers every LOB before validation or materialization", async () => {
+  const firstFailure = new Error("first LOB read failed");
+  const closed: string[] = [];
+  const first = returningLob("first", () => { closed.push("first"); }, firstFailure);
+  const second = returningLob("second", () => { closed.push("second"); });
+  let response: unknown = { outBinds: [[first], [second]], rowsAffected: 1 };
+  const executor = createOracledbExecutor(connectionFor(async () => response), { driver });
+  const returned = sql.rows`UPDATE account SET name = ${"updated"} RETURNING id, name INTO ${sql.out("id", oracleParameter.clob())}, ${sql.out("name", oracleParameter.clob())}`;
+  await assert.rejects(() => executor.query(returned.render()), (error: unknown) => error === firstFailure);
+  assert.deepEqual(closed.sort(), ["first", "second"]);
+
+  closed.length = 0;
+  const mismatchedFirst = returningLob("first", () => { closed.push("mismatched-first"); });
+  const mismatchedSecond = returningLob("second", () => { closed.push("mismatched-second"); });
+  response = { outBinds: [[mismatchedFirst], [mismatchedSecond, "extra"]], rowsAffected: 1 };
+  await assert.rejects(() => executor.query(returned.render()), /BRAID_RETURNING_LENGTH/u);
+  assert.deepEqual(closed.sort(), ["mismatched-first", "mismatched-second"]);
+
+  closed.length = 0;
+  const rowCountFirst = returningLob("first", () => { closed.push("rowcount-first"); });
+  const rowCountSecond = returningLob("second", () => { closed.push("rowcount-second"); });
+  response = { outBinds: [[rowCountFirst], [rowCountSecond]], rowsAffected: 2 };
+  await assert.rejects(() => executor.query(returned.render()), /BRAID_RETURNING_ROWCOUNT/u);
+  assert.deepEqual(closed.sort(), ["rowcount-first", "rowcount-second"]);
 });
 
 test("Oracle bulk precomputes one encoded matrix and executes executeMany once", async () => {
