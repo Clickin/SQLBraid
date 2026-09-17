@@ -71,7 +71,7 @@ for (const id of transports) {
 }
 
 for (const id of exactIdTransports) {
-  test(`[contract:${id}:metadata.exact-id:boundary] [contract:${id}:metadata.stale-id:boundary] exact IDs survive later commands and unsafe Numbers fail closed`, async () => {
+  test(`[contract:${id}:metadata.exact-id:boundary] exact IDs survive later commands and unsafe Numbers fail closed`, async () => {
     const { db, state, insert, command, remove } = resourceFixture(id);
     for (const value of [1n, 9007199254740993n, 9223372036854775807n]) {
       state.insertId = value;

@@ -401,7 +401,7 @@ export function createSqliteWasmExecutor(
           return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
         }
         statement.step();
-        const changes = database.changes === undefined ? undefined : safeDatabaseCount(database.changes());
+        const changes = database.changes === undefined ? undefined : safeDatabaseCount(database.changes(false, true));
         return { rows: [], rowCount: changes, kind: "command", command: { affectedRows: changes } };
       } catch (error) {
         failed = true;
@@ -436,7 +436,7 @@ export function createSqliteWasmExecutor(
             native.reset();
           }
           if (database.changes !== undefined) {
-            affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount(database.changes()));
+            affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount(database.changes(false, true)));
           }
         }
       } catch (error) {

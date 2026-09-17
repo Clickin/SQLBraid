@@ -106,7 +106,11 @@ export function resourceFixture(id: ResourceTransport, ownership: "direct" | "po
     const client = {
       query(value: unknown) {
         if (value instanceof Cursor) { if (state.initFailure) throw state.initFailure; return value; }
-        return execute().then(() => ({ rows: [], fields: [], rowCount: state.count, command: "UPDATE" }));
+        const text = typeof value === "string" ? value : (value as { readonly text: string }).text;
+        const terminal = text === "COMMIT" || text === "ROLLBACK";
+        return (terminal ? control() : execute()).then(() => ({
+          rows: [], fields: [], rowCount: state.count, command: text.split(" ")[0],
+        }));
       },
       escapeIdentifier: (value: string) => `"${value}"`, escapeLiteral: (value: string) => `'${value}'`,
       release(error?: unknown) { if (error) discard(); else state.released++; },
@@ -210,7 +214,10 @@ export function resourceFixture(id: ResourceTransport, ownership: "direct" | "po
           step() { state.io++; if (state.readFailure) throw state.readFailure; if (state.executeFailure) throw state.executeFailure; return index++ < rows.length; },
           reset() { return this; }, get() { return "one"; }, getColumnName() { return "value"; }, finalize: close,
         };
-      }, exec() {}, changes: () => state.count as number,
+      }, exec() {},
+      changes(_total?: boolean, sixtyFour?: boolean) {
+        return (sixtyFour ? state.count : Number(state.count) | 0) as number;
+      },
     }, { sqlite3: { capi: { SQLITE_INTEGER: 1, sqlite3_column_type: () => 3, sqlite3_column_int64: () => 0n } } });
   } else {
     const native = {
