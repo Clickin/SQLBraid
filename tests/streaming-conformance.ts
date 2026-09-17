@@ -20,7 +20,10 @@ export interface StreamingConformanceFixture<Row> {
   readonly cleanupFailure?: unknown;
   readonly released?: () => number;
   readonly iteratorReturns?: () => number;
-  readonly initFailureCleanup?: number;
+  readonly initFailureCleanup?: {
+    readonly iteratorReturns: number;
+    readonly released: number;
+  };
   readonly reuseAfterBreak?: () => Promise<void>;
   readonly close?: () => void | Promise<void>;
 }
@@ -81,14 +84,14 @@ export async function runStreamingConformanceCase(
       released: (() => number) | undefined,
       beforeReturns: number | undefined,
       beforeReleased: number | undefined,
-      expected: number,
+      expected: number | { readonly iteratorReturns: number; readonly released: number },
   ): void => {
       if (iteratorReturns === undefined || released === undefined || beforeReturns === undefined || beforeReleased === undefined) {
         if (strict) throw new Error(`${id} requires iterator/release cleanup counters.`);
         return;
       }
-      assert.equal(iteratorReturns() - beforeReturns, expected);
-      assert.equal(released() - beforeReleased, expected);
+      assert.equal(iteratorReturns() - beforeReturns, typeof expected === "number" ? expected : expected.iteratorReturns);
+      assert.equal(released() - beforeReleased, typeof expected === "number" ? expected : expected.released);
   };
   await withFixture(create, async (fixture) => {
     switch (id) {
