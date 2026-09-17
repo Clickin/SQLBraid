@@ -1,14 +1,6 @@
 import { executeCertificationCase } from "./cases.js";
 import { isWellKnownCapabilityId, type EnvironmentCapability } from "@sqlbraid/core";
-import { REQUIRED_CASE_IDS, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationRunOptions, type CertificationTarget, type ExpectedCapabilityContract } from "./types.js";
-
-const REQUIRED_API_CAPABILITY_IDS = [
-  "session.pinned", "transaction", "transaction.savepoint", "transaction.read-only",
-  "transaction.isolation.read-uncommitted", "transaction.isolation.read-committed",
-  "transaction.isolation.repeatable-read", "transaction.isolation.serializable",
-  "statement.prepare", "statement.stream", "statement.cancel", "statement.bulk",
-  "routine.call", "routine.out", "routine.inout", "routine.result-sets", "routine.out-cursor", "routine.return-value",
-] as const;
+import { REQUIRED_API_CAPABILITY_IDS, REQUIRED_CASE_IDS, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationRunOptions, type CertificationTarget, type ExpectedCapabilityContract } from "./types.js";
 
 function normalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalize);

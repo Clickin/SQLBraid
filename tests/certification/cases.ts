@@ -1,5 +1,5 @@
 import { isPublicUnsupportedFeatureError, type Database, type EnvironmentCapability } from "@sqlbraid/core";
-import type { CapabilityStatus, CertificationCaseId, CertificationCaseResult, CertificationFixture, CertificationTarget, ExpectedCapability, ResourceSnapshot, TransactionOptionKey } from "./types.js";
+import { REQUIRED_API_CAPABILITY_IDS, type CapabilityStatus, type CertificationCaseId, type CertificationCaseResult, type CertificationFixture, type CertificationTarget, type ExpectedCapability, type ResourceSnapshot, type TransactionOptionKey } from "./types.js";
 import { assert } from "./assert.js";
 import { runBulkConformanceCase } from "../bulk-conformance.js";
 import { runStreamingConformanceCase } from "../streaming-conformance.js";
@@ -442,7 +442,7 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
       representedApiFeatures.add("result.multiple-sets");
     }
     for (const [feature] of apiUnsupported) {
-      if (feature.startsWith("data.") || feature.startsWith("numeric.") || feature.startsWith("sql.")) continue;
+      if (!(REQUIRED_API_CAPABILITY_IDS as readonly string[]).includes(feature)) continue;
       if (!representedApiFeatures.has(feature)) throw new Error(`CAP002 missing unsupported API probe for ${feature}.`);
     }
     for (const probe of probes) {

@@ -24,6 +24,14 @@ export const REQUIRED_CASE_IDS = [
 export type CertificationCaseId = (typeof REQUIRED_CASE_IDS)[number];
 export type CapabilityStatus = EnvironmentCapability["status"];
 
+export const REQUIRED_API_CAPABILITY_IDS = [
+  "session.pinned", "transaction", "transaction.savepoint", "transaction.read-only",
+  "transaction.isolation.read-uncommitted", "transaction.isolation.read-committed",
+  "transaction.isolation.repeatable-read", "transaction.isolation.serializable",
+  "statement.prepare", "statement.stream", "statement.cancel", "statement.bulk",
+  "routine.call", "routine.out", "routine.inout", "routine.result-sets", "routine.out-cursor", "routine.return-value",
+] as const;
+
 export interface ExpectedCapability extends EnvironmentCapability {
   readonly unsupportedCode?: `BRAID_${string}`;
 }
