@@ -286,7 +286,6 @@ async function createFixture(): Promise<CertificationFixture> {
   let streamReleases = 0;
   const streamReturns = { value: 0 };
   const connection = instrumentMariaDbConnection(nativeConnection, () => { nativeExecutes.value += 1; }, () => undefined);
-  const directPhysicalId = String((connection as unknown as { readonly threadId?: number }).threadId ?? "direct");
   const physicalIds = new Set<string>();
   const trackedPool = {
     getConnection: async () => {
@@ -445,7 +444,7 @@ async function createFixture(): Promise<CertificationFixture> {
     snapshot,
     sideEffects: () => acquisitions + nativeExecutes.value,
     mutationSentinel: async () => db.one(sql.rows`SELECT payload FROM ${sql.ident(JSON_TABLE)}`),
-    physicalSessionIds: () => [...physicalIds, directPhysicalId],
+    physicalSessionIds: () => [...physicalIds],
     pooledScope,
     routineCleanup: async (query?: CallQuery): Promise<void> => {
       const result = await pooled.call(query ?? queries.routines!.resultSets!);
@@ -510,7 +509,6 @@ async function createFixture(): Promise<CertificationFixture> {
       acquisitions = 0;
       nativeExecutes.value = 0;
       physicalIds.clear();
-      physicalIds.add(directPhysicalId);
       streamReleases = 0;
       streamReturns.value = 0;
       bulkExecutions = 0;
