@@ -60,6 +60,7 @@ try {
     const certificationBody = await certificationResponse.text();
     assert.equal(certificationResponse.status, 200, certificationBody);
     const certification = JSON.parse(certificationBody);
+    assert.equal(certification.artifact.target, "d1-cloudflare-workerd-2026-07-30");
     assert.equal(certification.artifact.sourceSha, sourceSha);
     assert.equal(Object.keys(certification.artifact.cases).length, 84);
     assert.deepEqual(

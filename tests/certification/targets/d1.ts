@@ -88,7 +88,7 @@ function probe(run: () => Promise<unknown>, feature: string, expectedCode: `BRAI
 
 export function createD1Target(database: D1DatabaseLike, sourceSha: string): CertificationTarget {
   return {
-    id: "cloudflare-d1-workerd",
+    id: "d1-cloudflare-workerd-2026-07-30",
     sourceSha,
     expectedCapabilities,
     expectedTransactionOptions,
