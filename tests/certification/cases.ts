@@ -1,4 +1,4 @@
-import { UnsupportedFeatureError, type Database, type EnvironmentCapability } from "@sqlbraid/core";
+import { isPublicUnsupportedFeatureError, type Database, type EnvironmentCapability } from "@sqlbraid/core";
 import type { CapabilityStatus, CertificationCaseId, CertificationCaseResult, CertificationFixture, CertificationTarget, ExpectedCapability, ResourceSnapshot, TransactionOptionKey } from "./types.js";
 import { assert } from "./assert.js";
 import { runBulkConformanceCase } from "../bulk-conformance.js";
@@ -34,7 +34,7 @@ async function unsupported(context: CaseContext, id: CertificationCaseId, featur
   } catch (caught) {
     error = caught;
   }
-  assert.ok(error instanceof UnsupportedFeatureError, `${id} must reject with UnsupportedFeatureError, got ${textError(error)}`);
+  assert.ok(isPublicUnsupportedFeatureError(error), `${id} must reject with a registered public UnsupportedFeatureError, got ${textError(error)}`);
   const expectedErrorFeature = probe.expectedErrorFeature ?? probe.feature;
   assert.equal(error.feature, expectedErrorFeature);
   assert.equal(error.code, probe.expectedCode);
@@ -111,7 +111,7 @@ async function runTransactionOption(context: CaseContext, id: CertificationCaseI
     const before = probe.sideEffects();
     let error: unknown;
     try { await probe.run(); } catch (caught) { error = caught; }
-    assert.ok(error instanceof UnsupportedFeatureError);
+    assert.ok(isPublicUnsupportedFeatureError(error));
     assert.equal(error.feature, probe.expectedErrorFeature ?? probe.feature);
     assert.equal(error.code, probe.expectedCode);
     assert.equal(probe.sideEffects(), before);
@@ -415,7 +415,7 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
       if (value && value.status !== "unsupported") throw new Error(`CAP002 probe ${feature} contradicts expected capability.`);
       const before = probe.sideEffects(); let error: unknown;
       try { await probe.run(); } catch (caught) { error = caught; }
-      assert.ok(error instanceof UnsupportedFeatureError);
+      assert.ok(isPublicUnsupportedFeatureError(error));
       assert.equal(error.feature, probe.expectedErrorFeature ?? feature);
       assert.equal(error.code, probe.expectedCode);
       if (probe.expectedErrorFeature === undefined && value?.unsupportedCode) assert.equal(error.code, value.unsupportedCode);
@@ -433,17 +433,20 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     return { status: "pass", name: "CAP002" };
   },
   ERR001: async ({ fixture }) => {
-    const expectedCode = fixture.queries.expected?.failureCode;
-    if (!expectedCode) throw new Error("ERR001 requires an independent expected failure code.");
-    await assert.rejects(() => fixture.db.one(fixture.queries.failure), (error: unknown) => {
-      assert.equal((error as { readonly code?: unknown }).code, expectedCode);
-      return true;
-    });
+    const probes = Object.entries(fixture.unsupported ?? {});
+    if (probes.length === 0) throw new Error("ERR001 requires at least one unsupported public API probe.");
+    for (const [, probe] of probes) {
+      let error: unknown;
+      try { await probe.run(); } catch (caught) { error = caught; }
+      assert.ok(isPublicUnsupportedFeatureError(error), "ERR001 requires a registered public UnsupportedFeatureError pair.");
+      assert.equal(error.code, probe.expectedCode);
+      assert.equal(error.feature, probe.expectedErrorFeature ?? probe.feature);
+    }
     return { status: "pass", name: "ERR001" };
   },
 
   STRESS001: async ({ fixture, stress }) => { const metrics = fixtureMetrics(fixture); const before = await metrics.snapshot(); const count = stress ? 1000 : 10; for (let index = 0; index < count; index += 1) await fixture.db.one(fixture.queries.one); assertStableStress(before, await metrics.snapshot()); await fixture.db.one(fixture.queries.one); return { status: "pass", name: "STRESS001" }; },
-  STRESS002: async ({ fixture, stress }) => { const metrics = fixtureMetrics(fixture); const before = await metrics.snapshot(); const count = stress ? 1000 : 10; for (let index = 0; index < count; index += 1) await fixture.db.tx(async (tx) => { await tx.one(fixture.queries.identity); }); assertStableStress(before, await metrics.snapshot()); await fixture.db.one(fixture.queries.one); return { status: "pass", name: "STRESS002" }; },
+  STRESS002: async (context) => supported(context, "STRESS002", "transaction", async ({ fixture, stress }) => { const metrics = fixtureMetrics(fixture); const before = await metrics.snapshot(); const count = stress ? 1000 : 10; for (let index = 0; index < count; index += 1) await fixture.db.tx(async (tx) => { await tx.one(fixture.queries.identity); }); assertStableStress(before, await metrics.snapshot()); await fixture.db.one(fixture.queries.one); }),
   STRESS003: async (context) => supported(context, "STRESS003", "statement.prepare", async ({ fixture, stress }) => { const metrics = fixtureMetrics(fixture); const before = await metrics.snapshot(); const count = stress ? 500 : 10; const prepared = fixture.queries.prepared; if (!prepared) throw new Error("STRESS003 prepared fixture missing."); for (let index = 0; index < count; index += 1) { const handle = fixture.db.prepare(`cert-stress-${index}`, (input: unknown) => prepared.rows(input)); await (handle as unknown as { all(input: unknown): Promise<readonly unknown[]> }).all(prepared.input); } assertStableStress(before, await metrics.snapshot()); await fixture.db.one(fixture.queries.one); }),
   STRESS004: async (context) => supported(context, "STRESS004", "statement.stream", async ({ fixture, stress }) => { const metrics = fixtureMetrics(fixture); const stream = streamFixture(fixture); const before = await metrics.snapshot(); const count = stress ? 500 : 10; for (let index = 0; index < count; index += 1) { for await (const row of fixture.db.stream(stream.query)) { void row; break; } } assertStableStress(before, await metrics.snapshot()); await fixture.db.one(fixture.queries.one); }),
   STRESS005: async (context) => supported(context, "STRESS005", "transaction", async ({ fixture, stress }) => { const metrics = fixtureMetrics(fixture); const before = await metrics.snapshot(); const count = stress ? 1000 : 10; for (let index = 0; index < count; index += 1) await assert.rejects(() => fixture.db.tx(async () => { throw new Error("stress-rollback"); })); assertStableStress(before, await metrics.snapshot()); await fixture.db.one(fixture.queries.one); }),

@@ -34,12 +34,14 @@ describe("A4 certification harness", () => {
     assert.throws(() => validateCertificationArtifact(mismatched, { sourceSha: "candidate-a4" }), /declaration mismatch/u);
     const forged = {
       ...artifact,
-      expectedCapabilities: { ...artifact.expectedCapabilities, "statement.cancel": { status: "guaranteed" } },
-      declaredCapabilities: { ...artifact.declaredCapabilities, "statement.cancel": { status: "guaranteed" } },
+      expectedCapabilities: { ...artifact.expectedCapabilities, "statement.stream": { status: "unsupported", unsupportedCode: "BRAID_STREAM_UNSUPPORTED" } },
+      declaredCapabilities: { ...artifact.declaredCapabilities, "statement.stream": { status: "unsupported" } },
+      cases: { ...artifact.cases, STR001: { status: "pass-unsupported", name: "STR001", feature: "statement.stream", code: "BRAID_STREAM_UNSUPPORTED" } },
     } as typeof artifact;
-    assert.throws(() => validateCertificationArtifact(forged, { sourceSha: "candidate-a4" }), /supported capability/u);
+    assert.doesNotThrow(() => validateCertificationArtifact(forged, { sourceSha: "candidate-a4" }));
+    assert.throws(() => aggregateCertificationArtifacts([forged], { sourceSha: "candidate-a4", requiredTargets, requiredTargetContracts, requiredTargetOptionContracts }), /expected capability contract/u);
     const wrongCode = { ...artifact, cases: { ...artifact.cases, STR006: { ...artifact.cases.STR006, code: "BRAID_STREAM_UNSUPPORTED" } } } as typeof artifact;
-    assert.throws(() => validateCertificationArtifact(wrongCode, { sourceSha: "candidate-a4" }), /unexpected unsupported code/u);
+    assert.throws(() => validateCertificationArtifact(wrongCode, { sourceSha: "candidate-a4" }), /unregistered unsupported/u);
     const wrongFeature = { ...artifact, cases: { ...artifact.cases, STR006: { ...artifact.cases.STR006, feature: "statement.stream" } } } as typeof artifact;
     assert.throws(() => validateCertificationArtifact(wrongFeature, { sourceSha: "candidate-a4" }), /supported capability/u);
   });

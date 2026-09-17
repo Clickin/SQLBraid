@@ -124,6 +124,7 @@ export type TransactionOptionKey =
 export interface CertificationTarget {
   readonly id: string;
   readonly sourceSha: string;
+  readonly allowCustomCapabilities?: boolean;
   readonly expectedCapabilities: ExpectedCapabilityContract;
   readonly expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">>;
   readonly createFixture: () => Promise<CertificationFixture>;

@@ -1,6 +1,14 @@
 import { executeCertificationCase } from "./cases.js";
-import type { EnvironmentCapability } from "@sqlbraid/core";
+import { isWellKnownCapabilityId, type EnvironmentCapability } from "@sqlbraid/core";
 import { REQUIRED_CASE_IDS, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationRunOptions, type CertificationTarget, type ExpectedCapabilityContract } from "./types.js";
+
+const REQUIRED_API_CAPABILITY_IDS = [
+  "session.pinned", "transaction", "transaction.savepoint", "transaction.read-only",
+  "transaction.isolation.read-uncommitted", "transaction.isolation.read-committed",
+  "transaction.isolation.repeatable-read", "transaction.isolation.serializable",
+  "statement.prepare", "statement.stream", "statement.cancel", "statement.bulk",
+  "routine.call", "routine.out", "routine.inout", "routine.result-sets", "routine.out-cursor", "routine.return-value",
+] as const;
 
 function normalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalize);
@@ -27,6 +35,14 @@ function errorResult(id: CertificationCaseId, message: string): CertificationCas
 export async function certifyTarget(target: CertificationTarget, options: CertificationRunOptions = {}): Promise<CertificationArtifact> {
   if (!target.id.trim()) throw new Error("Certification target id must be non-empty.");
   if (!target.sourceSha.trim()) throw new Error("Certification sourceSha must be non-empty.");
+  if (!target.allowCustomCapabilities) {
+    for (const feature of REQUIRED_API_CAPABILITY_IDS) {
+      if (!Object.hasOwn(target.expectedCapabilities, feature)) throw new Error(`Certification target ${target.id} is missing required capability ${feature}.`);
+    }
+    for (const feature of Object.keys(target.expectedCapabilities)) {
+      if (!isWellKnownCapabilityId(feature)) throw new Error(`Certification target ${target.id} declares unknown capability ${feature}.`);
+    }
+  }
   const fixture = await target.createFixture();
   const cases = {} as Record<CertificationCaseId, CertificationCaseResult>;
   try {

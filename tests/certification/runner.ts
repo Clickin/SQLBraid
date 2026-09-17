@@ -1,35 +1,8 @@
 import { writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
-import type { EnvironmentCapability } from "@sqlbraid/core";
+import { PUBLIC_ERROR_DEFINITIONS, type EnvironmentCapability } from "@sqlbraid/core";
 import { REQUIRED_CASE_IDS, type CertificationAggregate, type CertificationAggregateOptions, type CertificationArtifact, type CertificationCaseId, type CertificationCaseResult, type CertificationTarget, type ExpectedCapability, type ExpectedCapabilityContract } from "./types.js";
 export { certifyTarget } from "./execute.js";
-
-export const UNSUPPORTED_FEATURE_CODES: Readonly<Record<string, `BRAID_${string}`>> = Object.freeze({
-  "statement.cancel": "BRAID_CANCEL_UNSUPPORTED",
-  "statement.stream": "BRAID_STREAM_UNSUPPORTED",
-  "statement.bulk": "BRAID_BULK_UNSUPPORTED",
-  "session.pinned": "BRAID_SESSION_UNSUPPORTED",
-  transaction: "BRAID_TX_UNSUPPORTED",
-  "transaction.read-only": "BRAID_TX_OPTION_UNSUPPORTED",
-  "transaction.isolation.read-uncommitted": "BRAID_TX_OPTION_UNSUPPORTED",
-  "transaction.isolation.read-committed": "BRAID_TX_OPTION_UNSUPPORTED",
-  "transaction.isolation.repeatable-read": "BRAID_TX_OPTION_UNSUPPORTED",
-  "transaction.isolation.serializable": "BRAID_TX_OPTION_UNSUPPORTED",
-  "combination:serializable+readOnly": "BRAID_TX_OPTION_UNSUPPORTED",
-  "combination:read-uncommitted+readOnly": "BRAID_TX_OPTION_UNSUPPORTED",
-  "combination:read-uncommitted+readWrite": "BRAID_TX_OPTION_UNSUPPORTED",
-  "combination:read-committed+readOnly": "BRAID_TX_OPTION_UNSUPPORTED",
-  "combination:read-committed+readWrite": "BRAID_TX_OPTION_UNSUPPORTED",
-  "combination:repeatable-read+readOnly": "BRAID_TX_OPTION_UNSUPPORTED",
-  "combination:repeatable-read+readWrite": "BRAID_TX_OPTION_UNSUPPORTED",
-  "combination:serializable+readWrite": "BRAID_TX_OPTION_UNSUPPORTED",
-  "routine.call": "BRAID_CALL_UNSUPPORTED",
-  "routine.out": "BRAID_CALL_OUT_UNSUPPORTED",
-  "routine.inout": "BRAID_CALL_OUT_UNSUPPORTED",
-  "routine.result-sets": "BRAID_RESULT_SETS_UNSUPPORTED",
-  "routine.out-cursor": "BRAID_CALL_CURSOR_UNSUPPORTED",
-  "routine.return-value": "BRAID_CALL_RETURN_UNSUPPORTED",
-});
 
 function normalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalize);
@@ -37,6 +10,14 @@ function normalize(value: unknown): unknown {
     return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => [key, normalize(item)]));
   }
   return value;
+}
+
+function isRegisteredUnsupportedPair(feature: string, code: string): boolean {
+  return PUBLIC_ERROR_DEFINITIONS.some((definition) =>
+    definition.owner === "UnsupportedFeatureError"
+    && definition.code === code
+    && definition.features?.includes(feature),
+  );
 }
 
 function equalContract(left: Readonly<Record<string, unknown>>, right: Readonly<Record<string, unknown>>): boolean {
@@ -119,10 +100,10 @@ export function validateCertificationArtifact(
       const optionStatus = artifact.expectedTransactionOptions[result.feature! as keyof typeof artifact.expectedTransactionOptions];
       assert.ok(capability?.status === "unsupported" || optionStatus === "unsupported", `${artifact.target}/${id} is marked unsupported for a supported capability.`);
       const rejectionFeature: string = result.rejectionFeature ?? result.feature!;
-      const rejectionCapability: ExpectedCapability | undefined = artifact.expectedCapabilities[rejectionFeature];
-      const expectedCode: `BRAID_${string}` | undefined = rejectionCapability?.unsupportedCode ?? UNSUPPORTED_FEATURE_CODES[rejectionFeature];
-      assert.equal(typeof expectedCode, "string", `${artifact.target}/${id} has no registered unsupported code.`);
-      assert.equal(result.code, expectedCode, `${artifact.target}/${id} has an unexpected unsupported code.`);
+      assert.ok(isRegisteredUnsupportedPair(rejectionFeature, result.code!), `${artifact.target}/${id} has an unregistered unsupported feature/code pair.`);
+      if (result.rejectionFeature === undefined && capability?.unsupportedCode !== undefined) {
+        assert.equal(result.code, capability.unsupportedCode, `${artifact.target}/${id} has an unexpected target-declared unsupported code.`);
+      }
     }
   }
 }
