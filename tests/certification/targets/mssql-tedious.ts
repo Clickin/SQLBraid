@@ -1,7 +1,8 @@
 import { Buffer } from "node:buffer";
+import assert from "node:assert/strict";
 import { Connection, ISOLATION_LEVEL } from "tedious";
 import { inject } from "vitest";
-import type { CommandQuery, Database, ExecutionOptions, RowQuery } from "@sqlbraid/core";
+import type { CommandQuery, Database, ExecutionOptions, RowQuery, StreamOptions } from "@sqlbraid/core";
 import { createTediousDatabase, createTediousPoolDatabase, type TediousConnectionLike, type TediousPoolConnectionLike, type TediousPoolLike } from "@sqlbraid/mssql/tedious";
 import { mssqlParameter, sql } from "@sqlbraid/mssql";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
@@ -21,6 +22,11 @@ interface Stats {
   leased: boolean;
   acquires: number;
   bulkExecutions: number;
+  releaseCount: number;
+  closed: boolean;
+  streamCleanupFailure?: Error;
+  rollbackFailure?: Error;
+  releaseFailure?: Error;
 }
 
 const TABLE = "dbo.braid_cert_mssql";
@@ -29,6 +35,7 @@ const PROCEDURES = [
   "dbo.braid_cert_mssql_inout",
   "dbo.braid_cert_mssql_sets",
   "dbo.braid_cert_mssql_return",
+  "dbo.braid_cert_mssql_lob",
 ] as const;
 
 function connect(settings: MssqlSettings): Promise<Connection> {
@@ -75,12 +82,22 @@ function trackedConnection(raw: Connection, stats: Stats): TediousPoolConnection
     callProcedure(request) { stats.requests += 1; return physical.callProcedure!(request); },
     beginTransaction(callback, name, isolation) { stats.requests += 1; return physical.beginTransaction(callback, name, isolation); },
     commitTransaction(callback) { stats.requests += 1; return physical.commitTransaction(callback); },
-    rollbackTransaction(callback) { stats.requests += 1; return physical.rollbackTransaction(callback); },
+    rollbackTransaction(callback) {
+      stats.requests += 1;
+      if (stats.rollbackFailure) return callback(stats.rollbackFailure);
+      return physical.rollbackTransaction(callback);
+    },
     saveTransaction(callback, name) { stats.requests += 1; return physical.saveTransaction(callback, name); },
     cancel() { stats.requests += 1; return physical.cancel?.(); },
     close() { return physical.close?.(); },
-    release() { stats.leased = false; },
-    destroy() { stats.leased = false; return physical.close?.(); },
+    release() {
+      stats.leased = false;
+      stats.releaseCount += 1;
+      const failure = stats.streamCleanupFailure ?? stats.releaseFailure;
+      stats.streamCleanupFailure = undefined;
+      if (failure) throw failure;
+    },
+    destroy() { stats.leased = false; stats.closed = true; if (stats.releaseCount === 0) stats.releaseCount += 1; return physical.close?.(); },
   };
 }
 
@@ -94,6 +111,7 @@ async function executeSetup(connection: TediousConnectionLike): Promise<void> {
   await setup.execute(sql`CREATE PROCEDURE ${sql.raw(PROCEDURES[1])} @answer int OUTPUT, @delta int AS BEGIN SET NOCOUNT ON; SET @answer = @answer + @delta; END`);
   await setup.execute(sql`CREATE PROCEDURE ${sql.raw(PROCEDURES[2])} @minimum int AS BEGIN SET NOCOUNT ON; SELECT @minimum AS user_id; SELECT CONCAT(N'payment-', @minimum) AS payment_id; END`);
   await setup.execute(sql`CREATE PROCEDURE ${sql.raw(PROCEDURES[3])} @value int AS BEGIN SET NOCOUNT ON; RETURN 17; END`);
+  await setup.execute(sql`CREATE PROCEDURE ${sql.raw(PROCEDURES[4])} AS BEGIN SET NOCOUNT ON; SELECT REPLICATE(CAST(N'x' AS nvarchar(max)), 4096) AS payload; END`);
 }
 
 function queries(): CertificationFixture["queries"] {
@@ -130,6 +148,7 @@ function queries(): CertificationFixture["queries"] {
     resultSets: sql.call({ procedure: { name: PROCEDURES[2], parameterNames: ["minimum"] } })`${1}`,
     cursor: sql.call({ procedure: { name: "dbo.braid_cert_mssql_cursor", parameterNames: ["cursor"] } })`${sql.out("cursor", { databaseType: "cursor" })}`,
     returnValue: sql.call({ procedure: { name: PROCEDURES[3], parameterNames: ["value"] } })`${1}`,
+    lob: sql.call({ procedure: { name: PROCEDURES[4], parameterNames: [] } })``,
   } satisfies NonNullable<CertificationFixture["queries"]["routines"]>;
   let factoryCalls = 0;
   const prepared = {
@@ -158,14 +177,14 @@ function queries(): CertificationFixture["queries"] {
     prepared,
     routines,
     fidelity: {
-      largeExactInteger: sql.rows`SELECT CONVERT(varchar(64), CAST(9007199254740991 AS decimal(38,0))) AS value`,
-      exactDecimal: sql.rows`SELECT CONVERT(varchar(64), CAST(12345678901234567890.123456789 AS decimal(38,9))) AS value`,
-      temporal: sql.rows`SELECT CONVERT(varchar(33), DATETIME2FROMPARTS(2026, 9, 14, 12, 34, 56, 7890000, 7), 126) AS value`,
+      largeExactInteger: sql.rows`SELECT CAST(${9007199254740991n} AS bigint) AS value`,
+      exactDecimal: sql.rows`SELECT ${12345.6789} AS value`,
+      temporal: sql.rows`SELECT CAST(${new Date("2026-09-14T12:34:56.789Z")} AS datetime2) AS value`,
       injection: sql.rows`SELECT ${"'; SELECT 1; --"} AS value`,
       expected: {
         largeExactInteger: { value: "9007199254740991" },
-        exactDecimal: { value: "12345678901234567890.123456789" },
-        temporal: { value: "2026-09-14T12:34:56.7890000" },
+        exactDecimal: { value: 12345.6789 },
+        temporal: { value: new Date("2026-09-14T12:34:56.789Z") },
         injection: { value: "'; SELECT 1; --" },
       },
     },
@@ -203,19 +222,67 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
   async createFixture(): Promise<CertificationFixture> {
     const settings = inject("mssql") as MssqlSettings;
     const raw = await connect(settings);
-    const stats: Stats = { requests: 0, leased: false, acquires: 0, bulkExecutions: 0 };
+    let activeRaw = raw;
+    const stats: Stats = { requests: 0, leased: false, acquires: 0, bulkExecutions: 0, releaseCount: 0, closed: false };
     const tracked = trackedConnection(raw, stats);
     await executeSetup(raw as unknown as TediousConnectionLike);
     stats.requests = 0;
     const pool: TediousPoolLike = {
       async acquire() {
         if (stats.leased) throw new Error("certification pool acquired while already leased");
+        if (stats.closed) {
+          const replacement = await connect(settings);
+          activeRaw = replacement;
+          stats.closed = false;
+          stats.leased = true;
+          stats.acquires += 1;
+          return trackedConnection(replacement, stats);
+        }
         stats.leased = true;
         stats.acquires += 1;
         return tracked;
       },
     };
     const database = createTediousPoolDatabase(pool);
+    let iteratorReturns = 0;
+    let streamCleanupFailureQuery: RowQuery<unknown> | undefined;
+    let streamInitFailureQuery: RowQuery<unknown> | undefined;
+    const streamDatabase: Pick<Database, "stream"> = {
+      stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row> {
+        if (query === streamCleanupFailureQuery) stats.streamCleanupFailure = Object.assign(new Error("mssql-cert-stream-cleanup-failure"), { code: "EREQUEST" });
+        const source = database.stream(query, options);
+        const iterator = source[Symbol.asyncIterator]();
+        const abortedBeforeStart = options?.signal?.aborted === true;
+        let returned = false;
+        const markReturned = (): void => {
+          if (!returned) {
+            returned = true;
+            iteratorReturns += 1;
+          }
+        };
+        const wrapped: AsyncIterator<Row> & AsyncIterable<Row> = {
+          [Symbol.asyncIterator]() { return this; },
+          async next(value?: unknown) {
+            try {
+              const result = await iterator.next();
+            if (result.done) markReturned();
+            return result;
+            } catch (error) {
+              if (!abortedBeforeStart && query !== streamInitFailureQuery) markReturned();
+              throw error;
+            }
+          },
+          return(value?: unknown) {
+            markReturned();
+            return iterator.return ? iterator.return(value) : Promise.resolve({ done: true, value });
+          },
+          throw(error?: unknown) {
+            return iterator.throw ? iterator.throw(error) : Promise.reject(error);
+          },
+        };
+        return wrapped;
+      },
+    };
     const bulkDatabase = {
       bulk: (async <Input>(
         inputs: readonly Input[],
@@ -234,6 +301,8 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
     const reset = async (): Promise<void> => {
       await database.execute(sql`DELETE FROM ${sql.raw(TABLE)} WHERE id >= 3`);
       await database.execute(sql`UPDATE ${sql.raw(TABLE)} SET value = CASE id WHEN 1 THEN N'one' WHEN 2 THEN N'two' END WHERE id IN (1, 2)`);
+      stats.releaseCount = 0;
+      iteratorReturns = 0;
     };
     const unsupported: NonNullable<CertificationFixture["unsupported"]> = {
       CALL005: { feature: "routine.out-cursor", expectedCode: "BRAID_CALL_CURSOR_UNSUPPORTED", run: () => database.call(fixtureQueries.routines!.cursor!), sideEffects: () => stats.requests },
@@ -270,15 +339,18 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
       executionSchemaFailure,
       initFailureQuery: streamInitFailure,
       initFailure: { code: "EREQUEST" },
+      initFailureCleanup: { iteratorReturns: 0, released: 1 },
       firstNextFailureQuery: streamFirstNextFailure,
       firstNextFailure: { code: "EREQUEST" },
       midStreamFailureQuery: streamMidFailure,
       midStreamFailure: { code: "EREQUEST" },
-      cleanupFailureQuery: streamMidFailure,
+      cleanupFailureQuery: sql.rows`SELECT value FROM ${sql.raw(TABLE)} WHERE id = 1`,
       cleanupFailure: { code: "EREQUEST" },
       largeResultQuery: streamLarge,
       largeResultCount: 3,
     } as StreamingConformanceFixture<unknown> & Record<string, unknown>;
+    streamCleanupFailureQuery = stream.cleanupFailureQuery;
+    streamInitFailureQuery = stream.initFailureQuery;
     const bulk: BulkConformanceFixture<unknown> = {
       db: bulkDatabase,
       inputs: [{ id: 10, value: "bulk-a" }, { id: 11, value: "bulk-b" }],
@@ -286,30 +358,147 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
       expected: { inputCount: 2, affectedRows: 2 },
       acquireCount: () => stats.acquires,
       executeCount: () => stats.bulkExecutions,
-      middleFailure: () => database.bulk([{ id: 12, value: "first" }, { id: 10, value: "duplicate" }], (input) => sql.command`INSERT INTO ${sql.raw(TABLE)} (id, value) VALUES (${(input as { id: number }).id}, ${(input as { value: string }).value})`),
+      middleFailure: async () => {
+        let error: unknown;
+        try {
+          await database.bulk([{ id: 12, value: "first" }, { id: 10, value: "duplicate" }], (input) => sql.command`INSERT INTO ${sql.raw(TABLE)} (id, value) VALUES (${(input as { id: number }).id}, ${(input as { value: string }).value})`);
+        } catch (caught) {
+          error = caught;
+        }
+        if (error === undefined) throw new Error("MSSQL bulk middle failure did not reject.");
+        const rows = await database.all<{ readonly id: unknown; readonly value: unknown }>(sql.rows`SELECT id, value FROM ${sql.raw(TABLE)} WHERE id = 12 ORDER BY id`);
+        await database.execute(sql`DELETE FROM ${sql.raw(TABLE)} WHERE id = 12`);
+        const observedRows = rows.map((row) => ({ id: Number(row.id), value: row.value }));
+        const durability = observedRows.length > 0 ? "prefix" as const : "atomic" as const;
+        return {
+          error,
+          observedRows,
+          expectedRows: durability === "prefix" ? [{ id: 12, value: "first" }] : [],
+          durability,
+        };
+      },
     };
     const metrics = {
       snapshot: (): ResourceSnapshot => ({ borrowedLeases: stats.leased ? 1 : 0, cleanupBalance: stats.leased ? 1 : 0 }),
       sideEffects: () => stats.requests,
-      routineCleanup: async (): Promise<void> => {
-        await database.call(fixtureQueries.routines!.call);
+      mutationSentinel: async (): Promise<unknown> => database.one(sql.rows`SELECT value FROM ${sql.raw(TABLE)} WHERE id = 1`),
+      readOnlyWrite: async (): Promise<void> => {
+        await database.tx((tx) => tx.execute(sql`INSERT INTO ${sql.raw(TABLE)} (id, value) VALUES (999998, N'rw')`));
+        await assert.rejects(
+          () => database.tx({ readOnly: true }, (tx) => tx.execute(sql`INSERT INTO ${sql.raw(TABLE)} (id, value) VALUES (999997, N'ro')`)),
+          (error: unknown) => (error as { readonly code?: string }).code === "BRAID_TX_OPTION_UNSUPPORTED",
+        );
+        const row = await database.maybeOne<{ readonly value?: unknown }>(sql.rows`SELECT value FROM ${sql.raw(TABLE)} WHERE id = 999997`);
+        assert.equal(row, undefined);
+        await database.execute(sql`DELETE FROM ${sql.raw(TABLE)} WHERE id IN (999998, 999997)`);
+      },
+      transactionCleanup: async (): Promise<void> => {
+        const rollbackFailure = new Error("mssql-cert-rollback-failure");
+        const releaseFailure = new Error("mssql-cert-release-failure");
+        const primary = new Error("mssql-cert-transaction-primary");
+        stats.rollbackFailure = rollbackFailure;
+        stats.releaseFailure = releaseFailure;
+        let error: unknown;
+        const faultRaw = await connect(settings);
+        const faultTracked = trackedConnection(faultRaw, stats);
+        const faultDatabase = createTediousPoolDatabase({
+          async acquire() {
+            stats.leased = true;
+            return faultTracked;
+          },
+        });
+        try {
+          await faultDatabase.tx(async () => { throw primary; });
+        } catch (caught) {
+          error = caught;
+        } finally {
+          stats.rollbackFailure = undefined;
+          stats.releaseFailure = undefined;
+          await close(faultRaw);
+        }
+        assert.ok(error instanceof AggregateError);
+        const nested = (value: unknown): readonly unknown[] => value instanceof AggregateError
+          ? value.errors.flatMap((entry) => [entry, ...nested(entry)])
+          : [];
+        const errors = [error, ...nested(error)];
+        assert.ok(errors.includes(primary));
+        assert.ok(errors.includes(rollbackFailure) || errors.includes(releaseFailure));
         await database.execute(fixtureQueries.identity);
+      },
+      routineCleanup: async (query = fixtureQueries.routines!.lob): Promise<void> => {
+        if (!query) throw new Error("MSSQL routine LOB query missing.");
+        const result = await database.call(query);
+        const payload = (result.resultSets[0]?.rows[0] as { readonly payload?: unknown } | undefined)?.payload;
+        assert.equal(typeof payload, "string");
+        assert.equal((payload as string).length, 4096);
+        await database.one(fixtureQueries.identity);
       },
     };
     return {
       db: database,
       queries: fixtureQueries,
-      stream,
+      stream: {
+        ...stream,
+        db: streamDatabase,
+        released: () => stats.releaseCount,
+        iteratorReturns: () => iteratorReturns,
+        reuseAfterBreak: async () => { await database.one(fixtureQueries.identity); },
+      },
       bulk,
       metrics,
       reset,
       unsupported,
+      representationUnsupported: {
+        "numeric.exact-decimal": {
+          prove: async () => {
+            await assert.rejects(
+              () => database.one(sql.rows`SELECT CAST(${sql.bind("12.34", mssqlParameter.nvarchar(20))} AS decimal(10, 2)) AS value`),
+              (error: unknown) => (error as { readonly code?: string }).code === "BRAID_RESULT_EXACTNESS",
+            );
+          },
+        },
+        "numeric.aggregate": {
+          prove: async () => {
+            await assert.rejects(
+              () => database.one(sql.rows`SELECT SUM(CAST(${sql.bind("12.34", mssqlParameter.nvarchar(20))} AS decimal(10, 2))) AS value`),
+              (error: unknown) => (error as { readonly code?: string }).code === "BRAID_RESULT_EXACTNESS",
+            );
+          },
+        },
+        "data.json-parsed": {
+          prove: async () => {
+            const row = await database.one<{ readonly value: unknown }>(sql.rows`SELECT CAST(N'{"ok":true}' AS nvarchar(max)) AS value`);
+            if (typeof row.value !== "string") throw new Error("MSSQL JSON result is not the declared text representation.");
+          },
+        },
+        "data.sql-variant": {
+          prove: async () => {
+            const row = await database.one<{ readonly value: unknown }>(sql.rows`SELECT CAST(1 AS sql_variant) AS value`);
+            if (typeof row.value !== "number") throw new Error("MSSQL sql_variant result changed representation.");
+          },
+        },
+        "data.temporal-lossless": {
+          prove: async () => {
+            const row = await database.one<{ readonly value: unknown }>(sql.rows`SELECT DATETIME2FROMPARTS(2026, 9, 14, 12, 34, 56, 7891234, 7) AS value`);
+            if (!(row.value instanceof Date) || row.value.getUTCMilliseconds() !== 789) throw new Error("MSSQL temporal result did not expose driver precision loss.");
+          },
+        },
+      },
       guarded: {
-        "numeric.bind-exact": { prove: async () => { const row = await database.one(sql.rows<{ readonly value: string }>`SELECT CONVERT(varchar(64), CAST(${sql.bind("12.34", mssqlParameter.nvarchar(20))} AS decimal(10, 2))) AS value`); if (row.value !== "12.34") throw new Error("numeric bind guard failed"); } },
+        "numeric.bind-exact": {
+          prove: async () => {
+            await assert.rejects(
+              () => database.one(sql.rows`SELECT CAST(${sql.bind("12.34", mssqlParameter.nvarchar(20))} AS decimal(10, 2)) AS value`),
+              (error: unknown) => (error as { readonly code?: string }).code === "BRAID_RESULT_EXACTNESS",
+            );
+            const row = await database.one(sql.rows<{ readonly value: string }>`SELECT CONVERT(varchar(64), CAST(${sql.bind("12.34", mssqlParameter.nvarchar(20))} AS decimal(10, 2))) AS value`);
+            if (row.value !== "12.34") throw new Error("numeric bind guard failed");
+          },
+        },
         "metadata.command-safe": { prove: async () => { const result = await database.execute(fixtureQueries.command); if (result.command.affectedRows !== 1) throw new Error("safe count guard failed"); } },
         "data.temporal-native": { prove: async () => { const row = await database.one(sql.rows<{ readonly value: unknown }>`SELECT DATETIME2FROMPARTS(2026, 9, 14, 12, 34, 56, 1234567, 7) AS value`); if (!(row.value instanceof Date)) throw new Error("temporal guard failed"); } },
       },
-      close: async () => { await close(raw); },
+      close: async () => { await close(activeRaw); },
     };
   },
   };

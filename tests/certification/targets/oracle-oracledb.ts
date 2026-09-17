@@ -2,7 +2,7 @@ import oracledb from "oracledb";
 import assert from "node:assert/strict";
 import { createOracledbDatabase, createOracledbPoolDatabase, type OracleConnectionLike, type OracleExecuteResultLike, type OraclePoolLike, type OracleResultSetLike } from "@sqlbraid/oracle/oracledb";
 import { oracleParameter, sql } from "@sqlbraid/oracle";
-import type { CallQuery, CommandQuery, Database, RowQuery } from "@sqlbraid/core";
+import type { CallQuery, CommandQuery, Database, RowQuery, StreamOptions } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
 import type { CertificationFixture, CertificationTarget, ExpectedCapabilityContract, ResourceSnapshot } from "../types.js";
@@ -27,6 +27,7 @@ async function ensureSchema(connection: OracleConnectionLike): Promise<void> {
   await exec(connection, `CREATE OR REPLACE PROCEDURE BRAID_RC3_CERT_INOUT (p_value IN OUT NUMBER) IS BEGIN p_value := p_value + 1; END;`);
   await exec(connection, `CREATE OR REPLACE PROCEDURE BRAID_RC3_CERT_SETS (p_users OUT SYS_REFCURSOR, p_payments OUT SYS_REFCURSOR) IS l_implicit SYS_REFCURSOR; BEGIN OPEN p_users FOR SELECT 'user-1' AS USER_ID FROM dual; OPEN p_payments FOR SELECT 'payment-1' AS PAYMENT_ID FROM dual; OPEN l_implicit FOR SELECT 'summary-1' AS SUMMARY FROM dual; DBMS_SQL.RETURN_RESULT(l_implicit); END;`);
   await exec(connection, `CREATE OR REPLACE PROCEDURE BRAID_RC3_CERT_CURSOR (p_cursor OUT SYS_REFCURSOR) IS BEGIN OPEN p_cursor FOR SELECT 'cursor-1' AS CURSOR_ID FROM dual; END;`);
+  await exec(connection, `CREATE OR REPLACE PROCEDURE BRAID_RC3_CERT_LOB (p_payload OUT CLOB) IS BEGIN p_payload := TO_CLOB(RPAD('x', 4096, 'x')); END;`);
 }
 
 function row<Row>(text: string): RowQuery<Row> {
@@ -57,9 +58,9 @@ function makeQueries(): CertificationFixture["queries"] {
   }
   const transaction = {
     insert: command(`INSERT INTO ${TABLE} (id, value) VALUES (${SEQUENCE}.NEXTVAL, 'transaction')`),
-    visible: row(`SELECT value AS VALUE FROM ${TABLE} ORDER BY id`),
+    visible: row(`SELECT value AS VALUE FROM ${TABLE} WHERE id <> 999999 ORDER BY id`),
     savepointInsert: command(`INSERT INTO ${TABLE} (id, value) VALUES (${SEQUENCE}.NEXTVAL, 'savepoint')`),
-    savepointVisible: row(`SELECT value AS VALUE FROM ${TABLE} ORDER BY id`),
+    savepointVisible: row(`SELECT value AS VALUE FROM ${TABLE} WHERE id <> 999999 ORDER BY id`),
   };
   let factoryCalls = 0;
   const prepared = {
@@ -75,6 +76,7 @@ function makeQueries(): CertificationFixture["queries"] {
     resultSets: sql.call`BEGIN BRAID_RC3_CERT_SETS(${sql.out("users", oracleParameter.refCursor())}, ${sql.out("payments", oracleParameter.refCursor())}); END;`,
     cursor: sql.call`BEGIN BRAID_RC3_CERT_CURSOR(${sql.out("cursor", oracleParameter.refCursor())}); END;`,
     returnValue: sql.call({ returnValue: { "~standard": { version: 1, vendor: "sqlbraid-oracle-cert", validate(value: unknown) { return { value }; } } } })`BEGIN BRAID_RC3_CERT_NOOP; END;`,
+    lob: sql.call`BEGIN BRAID_RC3_CERT_LOB(${sql.out("payload", oracleParameter.clob())}); END;`,
   };
   const expected: NonNullable<CertificationFixture["queries"]["expected"]> = {
     one: { VALUE: "one" },
@@ -103,15 +105,15 @@ function makeQueries(): CertificationFixture["queries"] {
     prepared,
     routines,
     fidelity: {
-      largeExactInteger: row("SELECT TO_CHAR(CAST(9007199254740991 AS NUMBER(38,0))) AS VALUE FROM dual"),
-      exactDecimal: row("SELECT TO_CHAR(CAST(12345678901234567890.123456789 AS NUMBER(38,9))) AS VALUE FROM dual"),
-      temporal: row("SELECT TO_CHAR(TIMESTAMP '2026-09-14 12:34:56.789', 'YYYY-MM-DD HH24:MI:SS.FF3') AS VALUE FROM dual"),
-      injection: row("SELECT '''; SELECT 1; --' AS VALUE FROM dual"),
+      largeExactInteger: sql.rows`SELECT ${9007199254740991n} AS "value" FROM dual`,
+      exactDecimal: sql.rows`SELECT CAST(${12345.6789} AS NUMBER(20,4)) AS "value" FROM dual`,
+      temporal: sql.rows`SELECT CAST(${new Date("2026-09-14T12:34:56.789Z")} AS TIMESTAMP) AS "value" FROM dual`,
+      injection: sql.rows`SELECT ${"'; SELECT 1; --"} AS "value" FROM dual`,
       expected: {
-        largeExactInteger: { VALUE: "9007199254740991" },
-        exactDecimal: { VALUE: "12345678901234567890.123456789" },
-        temporal: { VALUE: "2026-09-14 12:34:56.789" },
-        injection: { VALUE: "'; SELECT 1; --" },
+        largeExactInteger: { value: "9007199254740991" },
+        exactDecimal: { value: "12345.6789" },
+        temporal: { value: new Date("2026-09-14T12:34:56.789Z") },
+        injection: { value: "'; SELECT 1; --" },
       },
     },
     expected,
@@ -125,12 +127,58 @@ interface StreamFaults {
   readonly cleanupFailure: Error;
 }
 
-function streamFixture(db: Pick<Database, "stream">, faults: StreamFaults): StreamingConformanceFixture<unknown> {
+interface StreamCounters {
+  iteratorReturns: number;
+  released: number;
+}
+
+function streamFixture(
+  db: Pick<Database, "stream">,
+  faults: StreamFaults,
+  counters: StreamCounters,
+  reuseAfterBreak: () => Promise<void>,
+): StreamingConformanceFixture<unknown> {
   const query = row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3");
+  const initFailureQuery = row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_INIT_FAILURE */");
   const mappingFailure = new Error("oracle-cert-mapping-failure");
   const executionSchemaFailure = new Error("oracle-cert-execution-schema-failure");
+  const streamDb: Pick<Database, "stream"> = {
+    stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row> {
+      const source = db.stream(query, options);
+      const iterator = source[Symbol.asyncIterator]();
+      const abortedBeforeStart = options?.signal?.aborted === true;
+      let returned = false;
+      const markReturned = (): void => {
+        if (!returned) {
+          returned = true;
+          counters.iteratorReturns += 1;
+        }
+      };
+      const wrapped: AsyncIterator<Row> & AsyncIterable<Row> = {
+        [Symbol.asyncIterator]() { return this; },
+        async next(value?: unknown) {
+          try {
+            const result = await iterator.next(value);
+            if (result.done) markReturned();
+            return result;
+          } catch (error) {
+            if (!abortedBeforeStart && query !== initFailureQuery) markReturned();
+            throw error;
+          }
+        },
+        return(value?: unknown) {
+          markReturned();
+          return iterator.return ? iterator.return(value) : Promise.resolve({ done: true, value });
+        },
+        throw(error?: unknown) {
+          return iterator.throw ? iterator.throw(error) : Promise.reject(error);
+        },
+      };
+      return wrapped;
+    },
+  };
   return {
-    db,
+    db: streamDb,
     query,
     expected: [{ VALUE: "1" }, { VALUE: "2" }, { VALUE: "3" }],
     mappingQuery: sql.rows({
@@ -142,8 +190,9 @@ function streamFixture(db: Pick<Database, "stream">, faults: StreamFaults): Stre
     })`SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3`,
     mappingFailure,
     executionSchemaFailure,
-    initFailureQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_INIT_FAILURE */"),
+    initFailureQuery,
     initFailure: faults.initFailure,
+    initFailureCleanup: { iteratorReturns: 0, released: 0 },
     firstNextFailureQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_FIRST_NEXT_FAILURE */"),
     firstNextFailure: faults.firstNextFailure,
     midStreamFailureQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 3 /* CERT_MID_STREAM_FAILURE */"),
@@ -152,10 +201,13 @@ function streamFixture(db: Pick<Database, "stream">, faults: StreamFaults): Stre
     cleanupFailure: faults.cleanupFailure,
     largeResultQuery: row("SELECT TO_CHAR(LEVEL) AS VALUE FROM dual CONNECT BY LEVEL <= 10000"),
     largeResultCount: 10000,
+    released: () => counters.released,
+    iteratorReturns: () => counters.iteratorReturns,
+    reuseAfterBreak,
   };
 }
 
-function bulkFixture(db: Pick<Database, "bulk">): BulkConformanceFixture<unknown> {
+function bulkFixture(db: Pick<Database, "bulk" | "all" | "execute">): BulkConformanceFixture<unknown> {
   const factory = (input: unknown) => {
     if (typeof input !== "number") throw new TypeError("Oracle bulk certification input must be numeric.");
     return sql.command`INSERT INTO ${sql.ident(BULK_TABLE)} (id, value) VALUES (${sql.bind(input, oracleParameter.number())}, ${sql.bind("bulk", oracleParameter.varchar2())})`;
@@ -174,7 +226,24 @@ function bulkFixture(db: Pick<Database, "bulk">): BulkConformanceFixture<unknown
     expected: { inputCount: 2, affectedRows: 2 },
     acquireCount: () => executions,
     executeCount: () => executions,
-    middleFailure: () => wrappedDb.bulk([3, "bad"], factory),
+    middleFailure: async () => {
+      let error: unknown;
+      try {
+        await wrappedDb.bulk([3, 1], factory);
+      } catch (caught) {
+        error = caught;
+      }
+      if (error === undefined) throw new Error("Oracle bulk middle failure did not reject.");
+      const rows = await db.all<{ readonly id: unknown; readonly value: unknown }>(sql.rows`SELECT id AS "id", value AS "value" FROM ${sql.ident(BULK_TABLE)} WHERE id = ${sql.bind(3, oracleParameter.number())} ORDER BY id`);
+      await db.execute(sql`DELETE FROM ${sql.ident(BULK_TABLE)} WHERE id = ${sql.bind(3, oracleParameter.number())}`);
+      const observedRows = rows.map((row) => ({ id: Number(row.id), value: row.value }));
+      return {
+        error,
+        observedRows,
+        expectedRows: [{ id: 3, value: "bulk" }],
+        durability: "prefix" as const,
+      };
+    },
   };
 }
 
@@ -203,15 +272,21 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         midStreamFailure: new Error("oracle-cert-mid-stream-failure"),
         cleanupFailure: new Error("oracle-cert-cleanup-failure"),
       };
+      const streamCounters: StreamCounters = { iteratorReturns: 0, released: 0 };
+      let sideEffects = 0;
+      let executeStarts = 0;
       const execute = connection.execute.bind(connection);
       connection.execute = async (text: string, binds?: unknown, executeOptions?: unknown): Promise<unknown> => {
         if (text.includes("CERT_INIT_FAILURE")) throw faults.initFailure;
+        sideEffects += 1;
+        executeStarts += 1;
         const result = (executeOptions === undefined
           ? await execute(text, binds)
           : await execute(text, binds, executeOptions)) as OracleExecuteResultLike;
         const native = result.resultSet;
         if (!native || typeof native.getRows !== "function") return result;
         const wrapped = Object.create(native) as OracleResultSetLike;
+        const closeNative = native.close.bind(native);
         let reads = 0;
         if (native.getRow) {
           wrapped.getRow = async (): Promise<unknown | null | undefined> => {
@@ -229,24 +304,64 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
             return native.getRows!(size);
           };
         }
-        if (text.includes("CERT_CLEANUP_FAILURE")) {
-          wrapped.close = async (): Promise<void> => {
-            await native.close();
-            throw faults.cleanupFailure;
-          };
-        }
+        wrapped.close = async (): Promise<void> => {
+          streamCounters.released += 1;
+          await closeNative();
+          if (text.includes("CERT_CLEANUP_FAILURE")) throw faults.cleanupFailure;
+        };
         return { ...result, resultSet: wrapped };
       };
       const direct = createOracledbDatabase(connection, { streamFetchSize: 2 });
       const pooled = createOracledbPoolDatabase(pool, { streamFetchSize: 2 });
       const nativePool = pool as unknown as { readonly connectionsInUse?: number; readonly connectionsOpen?: number };
       const pooledConnections = (): number => nativePool.connectionsInUse ?? 0;
-      let sideEffects = 0;
+      let rollbackFailure: Error | undefined;
+      let releaseFailure: Error | undefined;
+      let forceFaultConnectionCleanup: (() => Promise<void>) | undefined;
+      const poolWithFaults = pool as unknown as {
+        getConnection(): Promise<OracleConnectionLike>;
+      };
+      const nativeGetConnection = poolWithFaults.getConnection.bind(poolWithFaults);
+      poolWithFaults.getConnection = async (): Promise<OracleConnectionLike> => {
+        const leased = await nativeGetConnection();
+        const rollback = leased.rollback?.bind(leased);
+        const close = leased.close?.bind(leased);
+        forceFaultConnectionCleanup = async () => {
+          try {
+            await rollback?.();
+          } catch {
+            // The fault path intentionally rejects rollback; close still releases the lease.
+          }
+          try {
+            await close?.();
+          } catch {
+            // The fault path may reject release after native close has completed.
+          }
+        };
+        leased.rollback = async () => {
+          if (rollbackFailure) throw rollbackFailure;
+          await rollback?.();
+        };
+        leased.close = async () => {
+          if (releaseFailure) {
+            await close?.();
+            throw releaseFailure;
+          }
+          await close?.();
+        };
+        return leased;
+      };
       const reset = async (): Promise<void> => {
         await exec(connection, `TRUNCATE TABLE ${TABLE}`);
         await exec(connection, `TRUNCATE TABLE ${BULK_TABLE}`);
+        await exec(connection, `INSERT INTO ${TABLE} (id, value) VALUES (999999, 'sentinel')`);
+        await (connection as OracleConnectionLike & { commit?: () => Promise<void> }).commit?.();
+        streamCounters.released = 0;
+        streamCounters.iteratorReturns = 0;
       };
       await reset();
+      sideEffects = 0;
+      executeStarts = 0;
       const unsupportedTransaction = async (transactionOptions: Parameters<NonNullable<Database["tx"]>>[0]): Promise<void> => {
         const probeConnection = await oracledb.getConnection({ user: options.user, password: options.password, connectString: options.connectionUri }) as unknown as OracleConnectionLike;
         try {
@@ -271,6 +386,45 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       const metrics = {
         snapshot: (): ResourceSnapshot => ({ borrowedLeases: pooledConnections(), cleanupBalance: pooledConnections() }),
         sideEffects: () => sideEffects,
+        mutationSentinel: async (): Promise<unknown> => direct.one(row(`SELECT value AS VALUE FROM ${TABLE} WHERE id = 999999`)),
+        transactionCleanup: async (): Promise<void> => {
+          const rollbackError = new Error("oracle-cert-rollback-failure");
+          const releaseError = new Error("oracle-cert-release-failure");
+          const primary = new Error("oracle-cert-transaction-primary");
+          rollbackFailure = rollbackError;
+          releaseFailure = releaseError;
+          let error: unknown;
+          try {
+            await pooled.tx(async () => { throw primary; });
+          } catch (caught) {
+            error = caught;
+          } finally {
+            rollbackFailure = undefined;
+            releaseFailure = undefined;
+            await forceFaultConnectionCleanup?.();
+            forceFaultConnectionCleanup = undefined;
+          }
+          assert.ok(error instanceof AggregateError);
+          const nested = (value: unknown): readonly unknown[] => value instanceof AggregateError
+            ? value.errors.flatMap((entry) => [entry, ...nested(entry)])
+            : [];
+          const errors = [error, ...nested(error)];
+          assert.ok(errors.includes(primary));
+          assert.ok(errors.includes(rollbackError) || errors.includes(releaseError));
+          await direct.one(makeQueries().identity);
+        },
+        readOnlyWrite: async (): Promise<void> => {
+          const before = await direct.one(row(`SELECT COUNT(*) AS VALUE FROM ${TABLE} WHERE id = 999998`));
+          await pooled.tx({ readOnly: false }, (tx) => tx.execute(command(`INSERT INTO ${TABLE} (id, value) VALUES (999998, 'rw')`)));
+          await assert.rejects(
+            () => pooled.tx({ readOnly: true }, (tx) => tx.execute(command(`INSERT INTO ${TABLE} (id, value) VALUES (999997, 'ro')`))),
+          );
+          const after = await direct.one(row(`SELECT COUNT(*) AS VALUE FROM ${TABLE} WHERE id = 999998`));
+          assert.equal(Number((after as { readonly VALUE: number | string }).VALUE), Number((before as { readonly VALUE: number | string }).VALUE) + 1);
+          const rejected = await direct.one(row(`SELECT COUNT(*) AS VALUE FROM ${TABLE} WHERE id = 999997`));
+          assert.equal(Number((rejected as { readonly VALUE: number | string }).VALUE), 0);
+          await direct.execute(command(`DELETE FROM ${TABLE} WHERE id IN (999998, 999997)`));
+        },
         pooledScope: async (): Promise<void> => {
           await pooled.session(async (session) => {
             await session.one(makeQueries().identity);
@@ -278,8 +432,12 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
           });
           if (pooledConnections() !== 0) throw new Error("Oracle pooled session leaked its native connection.");
         },
-        routineCleanup: async (): Promise<void> => {
-          await direct.call(makeQueries().routines!.call);
+        routineCleanup: async (query = makeQueries().routines!.lob): Promise<void> => {
+          if (!query) throw new Error("Oracle routine LOB query missing.");
+          const result = await direct.call(query);
+          const payload = result.output.payload;
+          assert.equal(typeof payload, "string");
+          assert.equal((payload as string).length, 4096);
           await direct.one(makeQueries().identity);
         },
       };
@@ -287,25 +445,72 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         db: direct,
         pooled,
         queries: makeQueries(),
-        stream: streamFixture(direct, faults),
+        stream: streamFixture(direct, faults, streamCounters, async () => { await direct.one(makeQueries().identity); }),
         bulk: bulkFixture(direct),
         metrics,
         reset,
         unsupported,
+        representationUnsupported: {
+          "numeric.exact-integer": {
+            prove: async () => {
+              const result = await direct.one(row<{ readonly value: unknown }>(`SELECT CAST(9007199254740991 AS NUMBER(19,0)) AS "value" FROM dual`));
+              if (typeof result.value !== "string") throw new Error("Oracle exact integer did not expose its string representation.");
+            },
+          },
+          "numeric.bind-exact": {
+            prove: async () => {
+              const result = await direct.one(sql.rows<{ readonly value: unknown }>`SELECT CAST(${sql.bind("12.34", oracleParameter.varchar2())} AS NUMBER(10,2)) AS "value" FROM dual`);
+              if (typeof result.value !== "string") throw new Error("Oracle exact bind representation changed.");
+            },
+          },
+          "data.json-lossless-text": {
+            prove: async () => {
+              const result = await direct.one(row<{ readonly value: unknown }>(`SELECT JSON_OBJECT('ok' VALUE 1 RETURNING VARCHAR2(100)) AS "value" FROM dual`));
+              if (typeof result.value !== "string") throw new Error("Oracle JSON lossless text proof did not return serialized JSON.");
+            },
+          },
+          "data.oracle-object": {
+            prove: async () => {
+              const result = await direct.one(row<{ readonly value: unknown }>(`SELECT SYS.ANYDATA.ConvertNumber(1) AS "value" FROM dual`));
+              if (result.value === null || typeof result.value !== "object") throw new Error("Oracle object proof did not return a native object.");
+            },
+          },
+          "data.oracle-collection": {
+            prove: async () => {
+              const result = await direct.one(row<{ readonly value: unknown }>(`SELECT SYS.ODCINUMBERLIST(1, 2) AS "value" FROM dual`));
+              if (result.value === null || typeof result.value !== "object") throw new Error("Oracle collection proof did not return a native collection.");
+            },
+          },
+          "data.vector": {
+            prove: async () => {
+              const result = await direct.one(row<{ readonly value: unknown }>(`SELECT TO_VECTOR('[1,2]') AS "value" FROM dual`));
+              if (result.value === null || typeof result.value !== "object") throw new Error("Oracle vector proof did not return a native vector.");
+            },
+          },
+          "data.temporal-lossless": {
+            prove: async () => {
+              const result = await direct.one(row<{ readonly value: unknown }>(`SELECT CAST(TIMESTAMP '2026-09-14 12:34:56.789123' AS TIMESTAMP) AS "value" FROM dual`));
+              if (!(result.value instanceof Date) || result.value.getUTCMilliseconds() !== 789) throw new Error("Oracle temporal result did not expose the declared precision loss.");
+            },
+          },
+        },
         guarded: {
           "statement.cancel": {
             prove: async () => {
               const controller = new AbortController();
+              const reason = new Error("oracle-cert-cancel");
+              const beforeStarts = executeStarts;
               const pending = direct.execute(command("BEGIN DBMS_SESSION.SLEEP(60); END;"), { signal: controller.signal });
               await new Promise((resolve) => setTimeout(resolve, 50));
-              controller.abort(new Error("oracle-cert-cancel"));
-              let rejected = false;
-              try {
-                await pending;
-              } catch {
-                rejected = true;
-              }
-              assert.equal(rejected, true, "Oracle cancellation must reject the in-flight operation.");
+              assert.ok(executeStarts > beforeStarts, "Oracle cancellation query did not start.");
+              controller.abort(reason);
+              await assert.rejects(pending, (error: unknown) => {
+                const nested = (value: unknown): readonly unknown[] => value instanceof AggregateError
+                  ? value.errors.flatMap((entry) => [entry, ...nested(entry)])
+                  : [];
+                return error === reason || error instanceof AggregateError && [error, ...nested(error)].includes(reason)
+                  || error instanceof Error && error.cause === reason;
+              });
               await direct.one(row("SELECT 1 AS VALUE FROM dual"));
             },
           },
@@ -318,7 +523,6 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
           "metadata.command-safe": {
             prove: async () => {
               const result = await direct.execute(command(`INSERT INTO ${BULK_TABLE} (id, value) VALUES (999999, 'metadata')`));
-              sideEffects += 1;
               if ((result as { readonly command: { readonly affectedRows: number } }).command.affectedRows !== 1) throw new Error("Oracle command metadata guard failed.");
               await direct.execute(command(`DELETE FROM ${BULK_TABLE} WHERE id = 999999`));
             },
