@@ -40,7 +40,7 @@ function returningLob(
   onClose: () => void,
   failure?: Error,
 ): Readable & { getData(): Promise<string> } {
-  const stream = new Readable({ read() {} });
+  const stream = new Readable({ read() {} }) as Readable & { getData(): Promise<string> };
   const destroy = stream.destroy.bind(stream);
   stream.destroy = ((error?: Error) => {
     onClose();
@@ -50,7 +50,7 @@ function returningLob(
     if (failure !== undefined) throw failure;
     return data;
   };
-  return stream as Readable & { getData(): Promise<string> };
+  return stream;
 }
 
 test("Oracle maps mixed IN/OUT results by physical OUT ordinal", async () => {
@@ -70,7 +70,7 @@ test("Oracle maps mixed IN/OUT results by physical OUT ordinal", async () => {
 test("Oracle routine calls preserve an undefined primary failure", async () => {
   const executor = createOracledbExecutor(connectionFor(async () => { throw undefined; }), { driver });
   const query = sql.call`BEGIN fail_without_value; END;`;
-  await assert.rejects(() => executor.call(query.render()), (error: unknown) => error === undefined);
+  await assert.rejects(async () => await executor.call(query.render()), (error: unknown) => error === undefined);
 });
 
 test("Oracle DML RETURNING zips arrays, preserves zero rows, and uses driver rowcount", async () => {
@@ -102,21 +102,21 @@ test("Oracle DML RETURNING registers every LOB before validation or materializat
   let response: unknown = { outBinds: [[first], [second]], rowsAffected: 1 };
   const executor = createOracledbExecutor(connectionFor(async () => response), { driver });
   const returned = sql.rows`UPDATE account SET name = ${"updated"} RETURNING id, name INTO ${sql.out("id", oracleParameter.clob())}, ${sql.out("name", oracleParameter.clob())}`;
-  await assert.rejects(() => executor.query(returned.render()), (error: unknown) => error === firstFailure);
+  await assert.rejects(async () => await executor.query(returned.render()), (error: unknown) => error === firstFailure);
   assert.deepEqual(closed.sort(), ["first", "second"]);
 
   closed.length = 0;
   const mismatchedFirst = returningLob("first", () => { closed.push("mismatched-first"); });
   const mismatchedSecond = returningLob("second", () => { closed.push("mismatched-second"); });
   response = { outBinds: [[mismatchedFirst], [mismatchedSecond, "extra"]], rowsAffected: 1 };
-  await assert.rejects(() => executor.query(returned.render()), /BRAID_RETURNING_LENGTH/u);
+  await assert.rejects(async () => await executor.query(returned.render()), /BRAID_RETURNING_LENGTH/u);
   assert.deepEqual(closed.sort(), ["mismatched-first", "mismatched-second"]);
 
   closed.length = 0;
   const rowCountFirst = returningLob("first", () => { closed.push("rowcount-first"); });
   const rowCountSecond = returningLob("second", () => { closed.push("rowcount-second"); });
   response = { outBinds: [[rowCountFirst], [rowCountSecond]], rowsAffected: 2 };
-  await assert.rejects(() => executor.query(returned.render()), /BRAID_RETURNING_ROWCOUNT/u);
+  await assert.rejects(async () => await executor.query(returned.render()), /BRAID_RETURNING_ROWCOUNT/u);
   assert.deepEqual(closed.sort(), ["rowcount-first", "rowcount-second"]);
 });
 
