@@ -77,7 +77,10 @@ test("package-specific tags require exact runtime portability evidence without a
     return Response.json({ workflow_runs: [packageExact] });
   });
   assert.equal(calls, 1);
-  assert.deepEqual(evidence.map((entry) => entry.workflow), [requiredReleaseWorkflows[0]]);
+  assert.deepEqual(
+    evidence.map((entry) => entry.workflow),
+    [requiredReleaseWorkflows[0]],
+  );
 });
 
 test("workflow verification fails closed on API errors and malformed responses", async () => {
