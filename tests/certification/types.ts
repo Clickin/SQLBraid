@@ -147,6 +147,7 @@ export interface CertificationFixture {
   readonly metrics?: CertificationMetrics;
   readonly reset: () => Promise<void>;
   readonly unsupported?: Partial<Record<CertificationCaseId, UnsupportedProbe>>;
+  /** Native/lossy proof for non-API capability families (data/numeric/sql/dml/metadata/execution). */
   readonly representationUnsupported?: Partial<Record<string, RepresentationUnsupportedProof>>;
   readonly guarded?: Partial<Record<string, { readonly prove: () => Promise<void> }>>;
   readonly close?: () => Promise<void>;
