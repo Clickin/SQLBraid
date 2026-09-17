@@ -230,6 +230,9 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
   };
   const expectedOne = { value: "one" };
   const expectedMany = [{ value: "one" }, { value: "two" }];
+  const emptyResultError = dialect === "mysql" || dialect === "mariadb"
+    ? { feature: "result.rows", code: "BRAID_RESULT_KIND_AMBIGUOUS" } as const
+    : undefined;
   const special: Record<string, RowQuery<unknown>> = {
     RES001: tag.rows`SELECT ${"safe"} AS ${tag.ident("__proto__")}`,
     RES002: tag.rows`SELECT ${"safe"} AS ${tag.ident("constructor")}`,
@@ -288,6 +291,7 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       specialErrors: dialect === "mysql" || dialect === "mariadb" ? { RES010: { code: "BRAID_RESULT_EXACTNESS" } } : undefined,
       commandAffectedRows: 1,
       failureCode: nativeFailureCode(dialect),
+      emptyResultError,
     },
   };
   const unsupported: Partial<Record<CertificationCaseId, UnsupportedProbe>> = {};
@@ -370,6 +374,9 @@ export function createBunSqlCertificationTarget(options: BunCertificationTargetO
     sourceSha: options.sourceSha,
     expectedCapabilities: expectedCapabilities(options.dialect),
     expectedTransactionOptions: expectedTransactionOptions(options.dialect),
+    expectedGuardedCases: options.dialect === "mysql" || options.dialect === "mariadb"
+      ? { emptyResultError: { feature: "result.rows", code: "BRAID_RESULT_KIND_AMBIGUOUS" } as const }
+      : undefined,
     createFixture: () => createFixture(options),
   };
 }
