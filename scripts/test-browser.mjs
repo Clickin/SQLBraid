@@ -161,7 +161,7 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
     const certificationUrl = new URL(fixtureUrl);
     certificationUrl.searchParams.set("sourceSha", sourceSha);
     certificationUrl.searchParams.set("stress", stress ? "1" : "0");
-    await page.goto(certificationUrl, { waitUntil: "networkidle" });
+    await page.goto(certificationUrl.href, { waitUntil: "networkidle" });
     try {
       await page.waitForFunction(
         () => window.__sqlbraidWasmConformance !== undefined || window.__sqlbraidWasmConformanceError !== undefined,
