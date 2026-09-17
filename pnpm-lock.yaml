@@ -403,34 +403,34 @@ importers:
   packages/sqlbraid:
     dependencies:
       '@sqlbraid/bun-sql':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../bun-sql
       '@sqlbraid/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@sqlbraid/mariadb':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mariadb
       '@sqlbraid/mssql':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mssql
       '@sqlbraid/mysql':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../mysql
       '@sqlbraid/oracle':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../oracle
       '@sqlbraid/postgres':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../postgres
       '@sqlbraid/runtime':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../runtime
       '@sqlbraid/sqlite':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../sqlite
       '@sqlbraid/template':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../template
 
   packages/sqlite:
