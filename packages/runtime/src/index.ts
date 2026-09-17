@@ -1839,10 +1839,6 @@ function createScopedDatabase(executor: QueryExecutor | ConnectionProvider, stat
           "The selected execution resource does not expose a routine-call protocol.",
           options.capabilities,
         );
-      } catch (error) {
-        await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
-      }
-      try {
         if (query.routineContract?.returnValue !== undefined) {
           assertFeatureCapability(
             executor,
