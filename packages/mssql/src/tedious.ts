@@ -22,7 +22,12 @@ import type {
   TransactionOptions,
   TypePolicy,
 } from "@sqlbraid/core";
-import { createBulkBindingDescription, createRenderedStatement, createStatementBindingDescription, UnsupportedFeatureError } from "@sqlbraid/core";
+import {
+  createBulkBindingDescription,
+  createRenderedStatement,
+  createStatementBindingDescription,
+  UnsupportedFeatureError,
+} from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
 
@@ -44,8 +49,18 @@ export interface TediousRequestLike {
   on(event: string, listener: (...args: any[]) => void): this;
   once?(event: string, listener: (...args: any[]) => void): this;
   removeListener?(event: string, listener: (...args: any[]) => void): this;
-  addParameter(name: string, type: unknown, value?: unknown, options?: { readonly length?: number; readonly precision?: number; readonly scale?: number }): void;
-  addOutputParameter?(name: string, type: unknown, value?: unknown, options?: { readonly length?: number; readonly precision?: number; readonly scale?: number }): void;
+  addParameter(
+    name: string,
+    type: unknown,
+    value?: unknown,
+    options?: { readonly length?: number; readonly precision?: number; readonly scale?: number },
+  ): void;
+  addOutputParameter?(
+    name: string,
+    type: unknown,
+    value?: unknown,
+    options?: { readonly length?: number; readonly precision?: number; readonly scale?: number },
+  ): void;
   cancel?(): void;
   pause?(): void;
   resume?(): void;
@@ -111,7 +126,27 @@ export interface TediousStatementBindingOptions {
   readonly typePolicy?: TypePolicy;
 }
 
-type DatabaseType = "tinyint" | "smallint" | "int" | "bigint" | "decimal" | "numeric" | "money" | "smallmoney" | "real" | "float" | "bit" | "nvarchar" | "varchar" | "char" | "varbinary" | "binary" | "uniqueidentifier" | "date" | "datetime2" | "datetimeoffset";
+type DatabaseType =
+  | "tinyint"
+  | "smallint"
+  | "int"
+  | "bigint"
+  | "decimal"
+  | "numeric"
+  | "money"
+  | "smallmoney"
+  | "real"
+  | "float"
+  | "bit"
+  | "nvarchar"
+  | "varchar"
+  | "char"
+  | "varbinary"
+  | "binary"
+  | "uniqueidentifier"
+  | "date"
+  | "datetime2"
+  | "datetimeoffset";
 
 const typeNames: Readonly<Record<DatabaseType, string>> = {
   tinyint: "TinyInt",
@@ -143,7 +178,11 @@ function canonicalType(value: string): string {
 function typeForHint(hint: ParameterTypeHint): DatabaseType {
   const value = canonicalType(hint.databaseType);
   if (value === "cursor" || value === "cursorvarying" || value === "refcursor") {
-    throw new UnsupportedFeatureError("routine.out-cursor", "BRAID_CALL_CURSOR_UNSUPPORTED", "SQL Server cursor output parameters are not application result cursors.");
+    throw new UnsupportedFeatureError(
+      "routine.out-cursor",
+      "BRAID_CALL_CURSOR_UNSUPPORTED",
+      "SQL Server cursor output parameters are not application result cursors.",
+    );
   }
   const aliases: Readonly<Record<string, DatabaseType>> = {
     tinyint: "tinyint",
@@ -175,38 +214,97 @@ function typeForHint(hint: ParameterTypeHint): DatabaseType {
     datetimeoffset: "datetimeoffset",
   };
   const result = aliases[value];
-  if (!result) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `unsupported SQL Server parameter type ${hint.databaseType}.`);
+  if (!result)
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      `unsupported SQL Server parameter type ${hint.databaseType}.`,
+    );
   const hasUnsupportedFacet = (facet: string): never => {
-    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} does not support ${facet}.`);
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      `${hint.databaseType} does not support ${facet}.`,
+    );
   };
   if (result !== "decimal" && result !== "numeric" && hint.precision !== undefined) hasUnsupportedFacet("precision");
-  if (result !== "decimal" && result !== "numeric" && result !== "datetime2" && result !== "datetimeoffset" && hint.scale !== undefined) {
+  if (
+    result !== "decimal" &&
+    result !== "numeric" &&
+    result !== "datetime2" &&
+    result !== "datetimeoffset" &&
+    hint.scale !== undefined
+  ) {
     hasUnsupportedFacet("scale");
   }
-  if (result !== "nvarchar" && result !== "varchar" && result !== "char" && result !== "varbinary" && result !== "binary" && hint.length !== undefined) {
+  if (
+    result !== "nvarchar" &&
+    result !== "varchar" &&
+    result !== "char" &&
+    result !== "varbinary" &&
+    result !== "binary" &&
+    hint.length !== undefined
+  ) {
     hasUnsupportedFacet("length");
   }
   if ((result === "decimal" || result === "numeric") && hint.length !== undefined) hasUnsupportedFacet("length");
-  if ((result === "datetime2" || result === "datetimeoffset") && hint.length !== undefined) hasUnsupportedFacet("length");
+  if ((result === "datetime2" || result === "datetimeoffset") && hint.length !== undefined)
+    hasUnsupportedFacet("length");
   if ((result === "decimal" || result === "numeric") && (hint.precision === undefined || hint.scale === undefined)) {
-    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} requires precision and scale.`);
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      `${hint.databaseType} requires precision and scale.`,
+    );
   }
-  if ((result === "decimal" || result === "numeric")
-    && (hint.precision! < 1 || hint.precision! > 38 || hint.scale! < 0 || hint.scale! > hint.precision!)) {
-    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} precision must be 1..38 and scale must be 0..precision.`);
+  if (
+    (result === "decimal" || result === "numeric") &&
+    (hint.precision! < 1 || hint.precision! > 38 || hint.scale! < 0 || hint.scale! > hint.precision!)
+  ) {
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      `${hint.databaseType} precision must be 1..38 and scale must be 0..precision.`,
+    );
   }
-  if ((result === "datetime2" || result === "datetimeoffset")
-    && (hint.scale !== undefined && (!Number.isSafeInteger(hint.scale) || hint.scale < 0 || hint.scale > 7))) {
-    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} scale must be an integer from 0 through 7.`);
+  if (
+    (result === "datetime2" || result === "datetimeoffset") &&
+    hint.scale !== undefined &&
+    (!Number.isSafeInteger(hint.scale) || hint.scale < 0 || hint.scale > 7)
+  ) {
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      `${hint.databaseType} scale must be an integer from 0 through 7.`,
+    );
   }
-  if (result === "nvarchar" || result === "varchar" || result === "char" || result === "varbinary" || result === "binary") {
-    if (hint.length === undefined) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} requires a length or "max".`);
+  if (
+    result === "nvarchar" ||
+    result === "varchar" ||
+    result === "char" ||
+    result === "varbinary" ||
+    result === "binary"
+  ) {
+    if (hint.length === undefined)
+      throw new UnsupportedFeatureError(
+        "statement.bind-hint",
+        "BRAID_BIND_HINT_UNSUPPORTED",
+        `${hint.databaseType} requires a length or "max".`,
+      );
     if (hint.length !== "max" && (!Number.isSafeInteger(hint.length) || hint.length <= 0)) {
-      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} length must be a positive integer or "max".`);
+      throw new UnsupportedFeatureError(
+        "statement.bind-hint",
+        "BRAID_BIND_HINT_UNSUPPORTED",
+        `${hint.databaseType} length must be a positive integer or "max".`,
+      );
     }
     const maximum = result === "nvarchar" ? 4000 : 8000;
     if (hint.length !== "max" && hint.length > maximum) {
-      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `${hint.databaseType} length exceeds SQL Server's ${maximum}-character limit.`);
+      throw new UnsupportedFeatureError(
+        "statement.bind-hint",
+        "BRAID_BIND_HINT_UNSUPPORTED",
+        `${hint.databaseType} length exceeds SQL Server's ${maximum}-character limit.`,
+      );
     }
   }
   return result;
@@ -216,13 +314,17 @@ function inferType(value: unknown): { readonly type: DatabaseType; readonly valu
   if (typeof value === "string") return { type: "nvarchar", value };
   if (typeof value === "boolean") return { type: "bit", value };
   if (value instanceof Date) {
-    if (!Number.isFinite(value.getTime())) throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "invalid Date requires an explicit SQL Server hint.");
+    if (!Number.isFinite(value.getTime()))
+      throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "invalid Date requires an explicit SQL Server hint.");
     return { type: "datetime2", value };
   }
   if (typeof value === "bigint") return { type: "bigint", value: value.toString() };
   if (typeof value === "number") {
-    if (!Number.isFinite(value) || !Number.isSafeInteger(value) && Number.isInteger(value)) {
-      throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "non-finite or unsafe number requires an explicit SQL Server hint.");
+    if (!Number.isFinite(value) || (!Number.isSafeInteger(value) && Number.isInteger(value))) {
+      throw new AdapterError(
+        "BRAID_BIND_TYPE_REQUIRED",
+        "non-finite or unsafe number requires an explicit SQL Server hint.",
+      );
     }
     if (Number.isInteger(value)) {
       return Math.abs(value) <= 2_147_483_647 ? { type: "int", value } : { type: "bigint", value: String(value) };
@@ -233,24 +335,25 @@ function inferType(value: unknown): { readonly type: DatabaseType; readonly valu
   throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "this value requires an explicit SQL Server parameter hint.");
 }
 
-function decimalInput(
-  value: unknown,
-  databaseType: DatabaseType,
-  precision: number,
-  scale: number,
-): number | null {
+function decimalInput(value: unknown, databaseType: DatabaseType, precision: number, scale: number): number | null {
   if (value === null) return value;
   if (typeof value !== "number" || !Number.isFinite(value) || !/^-?\d+(?:\.\d+)?$/u.test(String(value))) {
-    throw new TypeError(`BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility inputs require a finite plain JavaScript number; use a character bind with user-authored CAST/CONVERT for exact text.`);
+    throw new TypeError(
+      `BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility inputs require a finite plain JavaScript number; use a character bind with user-authored CAST/CONVERT for exact text.`,
+    );
   }
   const text = String(value);
   const [integer, fraction = ""] = text.replace(/^-?/u, "").split(".");
   const digits = `${integer!.replace(/^0+(?=\d)/u, "")}${fraction}`;
   if (digits.length > 15) {
-    throw new TypeError(`BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility inputs are limited to 15 significant decimal digits; use a character bind with user-authored CAST/CONVERT for larger values.`);
+    throw new TypeError(
+      `BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility inputs are limited to 15 significant decimal digits; use a character bind with user-authored CAST/CONVERT for larger values.`,
+    );
   }
   if (fraction.length > scale || integer.replace(/^0+/u, "").length > precision - scale) {
-    throw new TypeError(`BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility input ${text} exceeds decimal(${precision}, ${scale}); use a character bind with user-authored CAST/CONVERT for exact text.`);
+    throw new TypeError(
+      `BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${databaseType} compatibility input ${text} exceeds decimal(${precision}, ${scale}); use a character bind with user-authored CAST/CONVERT for exact text.`,
+    );
   }
   return value;
 }
@@ -258,15 +361,15 @@ function decimalInput(
 function assertDirectConnection(connection: TediousConnectionLike): void {
   const candidate = connection as unknown as { readonly release?: unknown; readonly getConnection?: unknown };
   if (
-    !connection
-    || typeof connection !== "object"
-    || typeof connection.execSql !== "function"
-    || typeof connection.beginTransaction !== "function"
-    || typeof connection.commitTransaction !== "function"
-    || typeof connection.rollbackTransaction !== "function"
-    || typeof connection.saveTransaction !== "function"
-    || typeof candidate.release === "function"
-    || typeof candidate.getConnection === "function"
+    !connection ||
+    typeof connection !== "object" ||
+    typeof connection.execSql !== "function" ||
+    typeof connection.beginTransaction !== "function" ||
+    typeof connection.commitTransaction !== "function" ||
+    typeof connection.rollbackTransaction !== "function" ||
+    typeof connection.saveTransaction !== "function" ||
+    typeof candidate.release === "function" ||
+    typeof candidate.getConnection === "function"
   ) {
     throw new TypeError("SQLBraid SQL Server direct adapter requires a physical Tedious Connection, not a pool.");
   }
@@ -296,8 +399,8 @@ function invalidTransactionOptions(message: string): never {
 
 function validateTediousTransactionOptions(transactionOptions: unknown): void {
   if (
-    transactionOptions !== undefined
-    && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
+    transactionOptions !== undefined &&
+    (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
   ) {
     invalidTransactionOptions("Tedious transaction options must be an object.");
   }
@@ -306,11 +409,13 @@ function validateTediousTransactionOptions(transactionOptions: unknown): void {
     if (unexpected !== undefined) invalidTransactionOptions(`Unknown Tedious transaction option: ${unexpected}.`);
   }
   const options = transactionOptions as Partial<TransactionOptions> | undefined;
-  if (options?.isolation !== undefined
-    && options.isolation !== "read-uncommitted"
-    && options.isolation !== "read-committed"
-    && options.isolation !== "repeatable-read"
-    && options.isolation !== "serializable") {
+  if (
+    options?.isolation !== undefined &&
+    options.isolation !== "read-uncommitted" &&
+    options.isolation !== "read-committed" &&
+    options.isolation !== "repeatable-read" &&
+    options.isolation !== "serializable"
+  ) {
     invalidTransactionOptions(`Tedious does not recognize transaction isolation ${String(options.isolation)}.`);
   }
   if (options?.readOnly !== undefined && typeof options.readOnly !== "boolean") {
@@ -332,7 +437,9 @@ function safeProcedureStatus(value: unknown): number {
 
 function resourceCleanupError(cause: unknown, cleanupFailures: readonly unknown[]): Error {
   const values = cause === undefined ? cleanupFailures : [cause, ...cleanupFailures];
-  const error = new AggregateError(values, "BRAID_RESOURCE_CLEANUP: SQL Server request cleanup failed.", { cause: cause ?? cleanupFailures[0] });
+  const error = new AggregateError(values, "BRAID_RESOURCE_CLEANUP: SQL Server request cleanup failed.", {
+    cause: cause ?? cleanupFailures[0],
+  });
   Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
   return error;
 }
@@ -356,10 +463,11 @@ interface CollectedResult {
 }
 
 function metadataColumns(columns: unknown): readonly TediousColumnMetadataLike[] {
-  if (Array.isArray(columns)) return columns.map((value) => (value && typeof value === "object" ? value : {})) as TediousColumnMetadataLike[];
+  if (Array.isArray(columns))
+    return columns.map((value) => (value && typeof value === "object" ? value : {})) as TediousColumnMetadataLike[];
   if (columns && typeof columns === "object") {
     return Object.entries(columns).map(([name, value]) => {
-      const metadata = value && typeof value === "object" ? value as TediousColumnMetadataLike : {};
+      const metadata = value && typeof value === "object" ? (value as TediousColumnMetadataLike) : {};
       return { ...metadata, colName: metadata.colName ?? metadata.name ?? name };
     });
   }
@@ -379,23 +487,34 @@ function columnType(metadata: TediousColumnMetadataLike): string | undefined {
   switch (canonicalType(type)) {
     case "intn":
       switch (metadata.dataLength) {
-        case 1: return "tinyint";
-        case 2: return "smallint";
-        case 4: return "int";
-        case 8: return "bigint";
-        default: return type;
+        case 1:
+          return "tinyint";
+        case 2:
+          return "smallint";
+        case 4:
+          return "int";
+        case 8:
+          return "bigint";
+        default:
+          return type;
       }
     case "floatn":
       switch (metadata.dataLength) {
-        case 4: return "real";
-        case 8: return "float";
-        default: return type;
+        case 4:
+          return "real";
+        case 8:
+          return "float";
+        default:
+          return type;
       }
     case "moneyn":
       switch (metadata.dataLength) {
-        case 4: return "smallmoney";
-        case 8: return "money";
-        default: return type;
+        case 4:
+          return "smallmoney";
+        case 8:
+          return "money";
+        default:
+          return type;
       }
     case "bitn":
       return "bit";
@@ -416,7 +535,8 @@ function assertUniqueColumns(columns: readonly TediousColumnMetadataLike[]): voi
   for (const [index, metadata] of columns.entries()) {
     const name = metadata.colName ?? metadata.name;
     if (!name) continue;
-    if (names.has(name)) throw new Error(`BRAID_RESULT_COLUMNS: duplicate SQL Server result label ${name} at column ${index}.`);
+    if (names.has(name))
+      throw new Error(`BRAID_RESULT_COLUMNS: duplicate SQL Server result label ${name} at column ${index}.`);
     names.add(name);
   }
 }
@@ -426,7 +546,11 @@ function cellValue(value: unknown): unknown {
   return (value as TediousColumnLike).value;
 }
 
-function mapRow(value: unknown, columns: readonly TediousColumnMetadataLike[], policy: TypePolicy): Record<string, unknown> {
+function mapRow(
+  value: unknown,
+  columns: readonly TediousColumnMetadataLike[],
+  policy: TypePolicy,
+): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
@@ -460,9 +584,14 @@ function materializeParameter(
   outputName?: string,
 ): TediousMaterializedParameter {
   if (direction !== "in" && actualHint === undefined) {
-    throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "SQL Server OUTPUT and INOUT parameters require an explicit type hint.");
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      "SQL Server OUTPUT and INOUT parameters require an explicit type hint.",
+    );
   }
-  if (direction === "in" && actualValue === undefined) throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "undefined is not a SQL Server parameter value.");
+  if (direction === "in" && actualValue === undefined)
+    throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", "undefined is not a SQL Server parameter value.");
   const inferred = direction === "in" && actualHint === undefined ? inferType(actualValue) : undefined;
   const type = actualHint === undefined ? inferred!.type : typeForHint(actualHint);
   const input = direction === "out" ? undefined : actualHint === undefined ? inferred!.value : actualValue;
@@ -471,17 +600,30 @@ function materializeParameter(
     const precision = type === "money" ? 19 : type === "smallmoney" ? 10 : actualHint?.precision;
     const scale = type === "money" || type === "smallmoney" ? 4 : actualHint?.scale;
     if (precision === undefined || scale === undefined) {
-      throw new TypeError(`BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${type} compatibility inputs require explicit precision and scale.`);
+      throw new TypeError(
+        `BRAID_BIND_DECIMAL_EXACTNESS: SQL Server ${type} compatibility inputs require explicit precision and scale.`,
+      );
     }
     encoded = decimalInput(encoded, type, precision, scale);
   }
-  if (direction !== "out" && (type === "varbinary" || type === "binary") && encoded instanceof Uint8Array && !Buffer.isBuffer(encoded)) encoded = Buffer.from(encoded);
+  if (
+    direction !== "out" &&
+    (type === "varbinary" || type === "binary") &&
+    encoded instanceof Uint8Array &&
+    !Buffer.isBuffer(encoded)
+  )
+    encoded = Buffer.from(encoded);
   const options: { length?: number; precision?: number; scale?: number } = {};
   if (actualHint?.length !== undefined) options.length = actualHint.length === "max" ? Infinity : actualHint.length;
   if (actualHint?.precision !== undefined) options.precision = actualHint.precision;
   if (actualHint?.scale !== undefined) options.scale = actualHint.scale;
   const tediousType = TYPES[typeNames[type] as keyof typeof TYPES];
-  if (!tediousType) throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", `Tedious does not expose SQL Server type ${type}.`);
+  if (!tediousType)
+    throw new UnsupportedFeatureError(
+      "statement.bind-hint",
+      "BRAID_BIND_HINT_UNSUPPORTED",
+      `Tedious does not expose SQL Server type ${type}.`,
+    );
   // Tedious repeats this validation from Request just before sending. Run the
   // collation-independent part here so bad values fail before a pooled lease
   // is acquired. Text encoding is checked for its stable JS shape here; any
@@ -499,7 +641,9 @@ function materializeParameter(
         encoded = validate(encoded);
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
-        throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", `invalid SQL Server ${type} parameter: ${detail}`, { cause: error });
+        throw new AdapterError("BRAID_BIND_TYPE_REQUIRED", `invalid SQL Server ${type} parameter: ${detail}`, {
+          cause: error,
+        });
       }
     }
   }
@@ -520,7 +664,11 @@ function addParameter(request: TediousRequestLike, parameter: TediousMaterialize
     return;
   }
   if (typeof request.addOutputParameter !== "function") {
-    throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "Tedious Request does not expose addOutputParameter().");
+    throw new UnsupportedFeatureError(
+      "routine.out",
+      "BRAID_CALL_OUT_UNSUPPORTED",
+      "Tedious Request does not expose addOutputParameter().",
+    );
   }
   request.addOutputParameter(
     parameter.name,
@@ -537,16 +685,16 @@ function tediousLiteralValue(
 ): string {
   if (value === null || value === undefined) return "NULL";
   if (
-    databaseType === "tinyint"
-    || databaseType === "smallint"
-    || databaseType === "int"
-    || databaseType === "bigint"
-    || databaseType === "decimal"
-    || databaseType === "numeric"
-    || databaseType === "money"
-    || databaseType === "smallmoney"
-    || databaseType === "real"
-    || databaseType === "float"
+    databaseType === "tinyint" ||
+    databaseType === "smallint" ||
+    databaseType === "int" ||
+    databaseType === "bigint" ||
+    databaseType === "decimal" ||
+    databaseType === "numeric" ||
+    databaseType === "money" ||
+    databaseType === "smallmoney" ||
+    databaseType === "real" ||
+    databaseType === "float"
   ) {
     if (typeof value === "bigint") return value.toString(10);
     if (typeof value === "number") return Number.isFinite(value) ? String(value) : "[unsupported numeric value]";
@@ -558,7 +706,12 @@ function tediousLiteralValue(
     if (value === 0 || value === 1) return String(value);
     return "[unsupported bit value]";
   }
-  if (databaseType === "nvarchar" || databaseType === "varchar" || databaseType === "char" || databaseType === "uniqueidentifier") {
+  if (
+    databaseType === "nvarchar" ||
+    databaseType === "varchar" ||
+    databaseType === "char" ||
+    databaseType === "uniqueidentifier"
+  ) {
     return typeof value === "string" ? `'${value.replaceAll("'", "''")}'` : "[unsupported string value]";
   }
   if (databaseType === "date" || databaseType === "datetime2" || databaseType === "datetimeoffset") {
@@ -575,8 +728,14 @@ function tediousLiteralValue(
 
 function createBinding(options: TediousStatementBindingOptions = {}): TediousStatementBindingAdapter {
   const policy = options.typePolicy ?? defaultTypePolicy;
-  const materialized = new WeakMap<StatementBindingDescription, { readonly statement: RenderedStatement; readonly parameters: readonly TediousMaterializedParameter[] }>();
-  const materializedBulks = new WeakMap<BulkBindingDescription, { readonly bulk: RenderedBulk; readonly parameters: readonly (readonly TediousMaterializedParameter[])[] }>();
+  const materialized = new WeakMap<
+    StatementBindingDescription,
+    { readonly statement: RenderedStatement; readonly parameters: readonly TediousMaterializedParameter[] }
+  >();
+  const materializedBulks = new WeakMap<
+    BulkBindingDescription,
+    { readonly bulk: RenderedBulk; readonly parameters: readonly (readonly TediousMaterializedParameter[])[] }
+  >();
   const adapter: TediousStatementBindingAdapter = {
     id: "tedious",
     describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription {
@@ -584,14 +743,35 @@ function createBinding(options: TediousStatementBindingOptions = {}): TediousSta
       const parameters = statement.parameters.map((parameter, index) => {
         const direction = parameter.direction ?? "in";
         if (direction !== "in" && statement.resultKind !== "call") {
-          throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "OUT and INOUT parameters are legal only for sql.call().");
+          throw new UnsupportedFeatureError(
+            "routine.out",
+            "BRAID_CALL_OUT_UNSUPPORTED",
+            "OUT and INOUT parameters are legal only for sql.call().",
+          );
         }
         if (direction !== "in") {
-          if (!parameter.outputName) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "OUT and INOUT parameters require outputName.");
-          if (outputNames.has(parameter.outputName)) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", `duplicate outputName ${parameter.outputName}.`);
+          if (!parameter.outputName)
+            throw new UnsupportedFeatureError(
+              "routine.out",
+              "BRAID_CALL_OUT_UNSUPPORTED",
+              "OUT and INOUT parameters require outputName.",
+            );
+          if (outputNames.has(parameter.outputName))
+            throw new UnsupportedFeatureError(
+              "routine.out",
+              "BRAID_CALL_OUT_UNSUPPORTED",
+              `duplicate outputName ${parameter.outputName}.`,
+            );
           outputNames.add(parameter.outputName);
         }
-        return materializeParameter(index + 1, parameter.value, parameter.hint, policy, direction, parameter.outputName);
+        return materializeParameter(
+          index + 1,
+          parameter.value,
+          parameter.hint,
+          policy,
+          direction,
+          parameter.outputName,
+        );
       });
       const description = createStatementBindingDescription(statement, context, {
         adapterId: "tedious",
@@ -601,18 +781,20 @@ function createBinding(options: TediousStatementBindingOptions = {}): TediousSta
           effective: "simple",
           owner: "driver",
         },
-        formatLiteral: (_parameter, index, literalOptions) => tediousLiteralValue(
-          parameters[index]?.value,
-          parameters[index]?.databaseType ?? "nvarchar",
-          literalOptions.binary,
-        ),
+        formatLiteral: (_parameter, index, literalOptions) =>
+          tediousLiteralValue(
+            parameters[index]?.value,
+            parameters[index]?.databaseType ?? "nvarchar",
+            literalOptions.binary,
+          ),
       });
       materialized.set(description, { statement, parameters });
       return description;
     },
     describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
       const statement = createRenderedStatement(bulk.statement);
-      if (statement.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: SQL Server bulk requires command queries.");
+      if (statement.resultKind !== "command")
+        throw new Error("BRAID_BULK_SHAPE: SQL Server bulk requires command queries.");
       if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
         throw new Error("BRAID_BULK_SHAPE: SQL Server bulk does not support OUT or INOUT parameters.");
       }
@@ -620,13 +802,16 @@ function createBinding(options: TediousStatementBindingOptions = {}): TediousSta
         materializeParameter(index + 1, parameter.value, parameter.hint, policy),
       );
       const encodedRows = bulk.parameterSets.map((values) => {
-        if (values.length !== statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: SQL Server bulk parameter cardinality changed.");
+        if (values.length !== statement.parameters.length)
+          throw new Error("BRAID_BULK_SHAPE: SQL Server bulk parameter cardinality changed.");
         return values.map((value, index) => {
           const parameter = statement.parameters[index]!;
           const materializedParameter = materializeParameter(index + 1, value, parameter.hint, policy);
           const canonical = canonicalParameters[index]!;
           if (materializedParameter.databaseType !== canonical.databaseType) {
-            throw new Error(`BRAID_BULK_SHAPE: SQL Server bulk parameter ${index + 1} changed inferred type from ${canonical.databaseType} to ${materializedParameter.databaseType}.`);
+            throw new Error(
+              `BRAID_BULK_SHAPE: SQL Server bulk parameter ${index + 1} changed inferred type from ${canonical.databaseType} to ${materializedParameter.databaseType}.`,
+            );
           }
           return materializedParameter;
         });
@@ -636,20 +821,27 @@ function createBinding(options: TediousStatementBindingOptions = {}): TediousSta
         transport: "typed-request",
         placeholder: (index) => `@p${index}`,
         reuse: { effective: "reuse", owner: "driver" },
-        formatLiteral: (_parameter, index, literalOptions) => tediousLiteralValue(
-          encodedRows[0]?.[index]?.value,
-          encodedRows[0]?.[index]?.databaseType ?? "nvarchar",
-          literalOptions.binary,
-        ),
+        formatLiteral: (_parameter, index, literalOptions) =>
+          tediousLiteralValue(
+            encodedRows[0]?.[index]?.value,
+            encodedRows[0]?.[index]?.databaseType ?? "nvarchar",
+            literalOptions.binary,
+          ),
       });
       materializedBulks.set(description, { bulk, parameters: encodedRows });
       return description;
     },
-    materializedParameters(statement: RenderedStatement, description: StatementBindingDescription): readonly TediousMaterializedParameter[] | undefined {
+    materializedParameters(
+      statement: RenderedStatement,
+      description: StatementBindingDescription,
+    ): readonly TediousMaterializedParameter[] | undefined {
       const prepared = materialized.get(description);
       return prepared?.statement === statement ? prepared.parameters : undefined;
     },
-    materializedBulkParameters(bulk: RenderedBulk, description: BulkBindingDescription): readonly (readonly TediousMaterializedParameter[])[] | undefined {
+    materializedBulkParameters(
+      bulk: RenderedBulk,
+      description: BulkBindingDescription,
+    ): readonly (readonly TediousMaterializedParameter[])[] | undefined {
       const prepared = materializedBulks.get(description);
       return prepared?.bulk === bulk ? prepared.parameters : undefined;
     },
@@ -669,10 +861,12 @@ function executionBinding(
   statement: RenderedStatement,
   description: StatementBindingDescription | undefined,
 ): { readonly description: StatementBindingDescription; readonly parameters: readonly TediousMaterializedParameter[] } {
-  const binding = description ?? adapter.describe(statement, {
-    dialectId: statement.dialectId,
-    requestedReuse: "auto",
-  });
+  const binding =
+    description ??
+    adapter.describe(statement, {
+      dialectId: statement.dialectId,
+      requestedReuse: "auto",
+    });
   if (binding.adapterId !== adapter.id) {
     throw new TypeError(`SQLBraid Tedious executor requires binding adapter "${adapter.id}".`);
   }
@@ -720,13 +914,17 @@ function collect(
         settled = true;
         const failure = aborted
           ? signal?.reason
-          : eventError === undefined ? new Error("SQL Server request failed.") : asError(eventError) ?? eventError;
+          : eventError === undefined
+            ? new Error("SQL Server request failed.")
+            : (asError(eventError) ?? eventError);
         reject(failure);
         return;
       }
       if (!cancellationRequested) {
         cancellationRequested = true;
-        try { request?.cancel?.(); } catch (cancelError) {
+        try {
+          request?.cancel?.();
+        } catch (cancelError) {
           cleanupFailure = cleanupFailure === undefined ? cancelError : cleanupFailure;
         }
       }
@@ -736,9 +934,7 @@ function collect(
       if (!completed || settled) return;
       settled = true;
       signal?.removeEventListener("abort", onAbort);
-      const failure = aborted
-        ? signal?.reason
-        : asError(eventError !== undefined ? eventError : callbackError);
+      const failure = aborted ? signal?.reason : asError(eventError !== undefined ? eventError : callbackError);
       if (aborted || failure !== undefined) {
         reject(cleanupFailure === undefined ? failure : resourceCleanupError(failure, [cleanupFailure]));
         return;
@@ -753,9 +949,10 @@ function collect(
       const statementCount = doneInProcCount > 0 ? doneInProcCount : doneCount;
       let affected: number | undefined;
       try {
-        affected = rowCounts.length > 0
-          ? rowCounts.reduce((total, count) => safeDatabaseCount(total + count), 0)
-          : callbackRowCount;
+        affected =
+          rowCounts.length > 0
+            ? rowCounts.reduce((total, count) => safeDatabaseCount(total + count), 0)
+            : callbackRowCount;
       } catch (error) {
         reject(error);
         return;
@@ -766,7 +963,9 @@ function collect(
         statementCount,
         output,
         outputSeen,
-        ...(routineProcedure === undefined || procedureReturnValue === undefined ? {} : { returnValue: procedureReturnValue }),
+        ...(routineProcedure === undefined || procedureReturnValue === undefined
+          ? {}
+          : { returnValue: procedureReturnValue }),
       });
     };
     const onAbort = (): void => {
@@ -774,10 +973,11 @@ function collect(
       fail(signal?.reason);
     };
     try {
-      const requestParameters = routineProcedure === undefined
-        ? parameters
-        : parameters.map((parameter, index) => ({ ...parameter, name: routineProcedure.parameterNames[index]! }));
-      request = new Request(routineProcedure?.name ?? parameterizedSql, ((error: unknown, rowCount?: number) => {
+      const requestParameters =
+        routineProcedure === undefined
+          ? parameters
+          : parameters.map((parameter, index) => ({ ...parameter, name: routineProcedure.parameterNames[index]! }));
+      request = new Request(routineProcedure?.name ?? parameterizedSql, (error: unknown, rowCount?: number) => {
         callbackError = error;
         if (typeof rowCount === "number") {
           try {
@@ -787,7 +987,7 @@ function collect(
           }
         }
         finish();
-      })) as unknown as TediousRequestLike;
+      }) as unknown as TediousRequestLike;
       request.on("columnMetadata", (columns: unknown) => {
         try {
           const metadata = metadataColumns(columns);
@@ -838,7 +1038,11 @@ function collect(
           try {
             const parameter = requestParameters.find((candidate) => candidate.name === name);
             const outputName = parameter?.outputName ?? name;
-            setOutputValue(output, outputName, parameter === undefined ? value : policy.decode(parameter.databaseType, value));
+            setOutputValue(
+              output,
+              outputName,
+              parameter === undefined ? value : policy.decode(parameter.databaseType, value),
+            );
           } catch (error) {
             fail(error);
           }
@@ -847,13 +1051,19 @@ function collect(
       request.on("doneProc", (rowCount: unknown, _more: unknown, status: unknown) => {
         try {
           if (typeof rowCount === "number") safeDatabaseCount(rowCount);
-          if (routineProcedure !== undefined && status !== undefined) procedureReturnValue = safeProcedureStatus(status);
+          if (routineProcedure !== undefined && status !== undefined)
+            procedureReturnValue = safeProcedureStatus(status);
         } catch (error) {
           fail(error);
         }
       });
-      request.on("error", (error: unknown) => { fail(error); });
-      request.on("requestCompleted", () => { completed = true; finish(); });
+      request.on("error", (error: unknown) => {
+        fail(error);
+      });
+      request.on("requestCompleted", () => {
+        completed = true;
+        finish();
+      });
       signal?.addEventListener("abort", onAbort, { once: true });
       for (const parameter of requestParameters) addParameter(request, parameter);
       started = true;
@@ -863,7 +1073,11 @@ function collect(
       }
       if (routineProcedure !== undefined) {
         if (typeof connection.callProcedure !== "function") {
-          throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_RETURN_UNSUPPORTED", "Tedious connection does not expose callProcedure().");
+          throw new UnsupportedFeatureError(
+            "routine.call",
+            "BRAID_CALL_RETURN_UNSUPPORTED",
+            "Tedious connection does not expose callProcedure().",
+          );
         }
         connection.callProcedure(request);
       } else {
@@ -901,7 +1115,9 @@ function control(
 function rollbackTo(connection: TediousConnectionLike, name: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     try {
-      const request = new Request(`ROLLBACK TRANSACTION [${name.replaceAll("]", "]]")}]`, () => resolve()) as unknown as TediousRequestLike;
+      const request = new Request(`ROLLBACK TRANSACTION [${name.replaceAll("]", "]]")}]`, () =>
+        resolve(),
+      ) as unknown as TediousRequestLike;
       connection.execSql(request);
     } catch (error) {
       reject(error);
@@ -911,10 +1127,18 @@ function rollbackTo(connection: TediousConnectionLike, name: string): Promise<vo
 
 function rowResult(result: CollectedResult): QueryExecutionResult<Record<string, unknown>> {
   if (result.resultSets.length > 1) {
-    throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "SQL Server returned multiple result sets; use database.call().");
+    throw new UnsupportedFeatureError(
+      "routine.result-sets",
+      "BRAID_RESULT_SETS_UNSUPPORTED",
+      "SQL Server returned multiple result sets; use database.call().",
+    );
   }
   if (result.resultSets.length === 1 && result.statementCount > 1) {
-    throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "SQL Server returned rows and additional statement results; use database.call().");
+    throw new UnsupportedFeatureError(
+      "routine.result-sets",
+      "BRAID_RESULT_SETS_UNSUPPORTED",
+      "SQL Server returned rows and additional statement results; use database.call().",
+    );
   }
   if (result.resultSets.length === 1) {
     return { kind: "rows", rows: result.resultSets[0].rows, rowCount: result.resultSets[0].rows.length };
@@ -925,10 +1149,18 @@ function rowResult(result: CollectedResult): QueryExecutionResult<Record<string,
 function assertNativeProcedureStatement(rendered: RenderedStatement): void {
   if (rendered.routineProcedure === undefined) return;
   if (rendered.routineProcedure.parameterNames.length !== rendered.parameters.length) {
-    throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_RETURN_UNSUPPORTED", "native procedure parameterNames must match the rendered parameter count.");
+    throw new UnsupportedFeatureError(
+      "routine.call",
+      "BRAID_CALL_RETURN_UNSUPPORTED",
+      "native procedure parameterNames must match the rendered parameter count.",
+    );
   }
   if (rendered.segments.some((segment) => !/^[\s,]*$/u.test(segment))) {
-    throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_RETURN_UNSUPPORTED", "native procedure calls cannot include authored SQL text; use only argument placeholders separated by commas.");
+    throw new UnsupportedFeatureError(
+      "routine.call",
+      "BRAID_CALL_RETURN_UNSUPPORTED",
+      "native procedure calls cannot include authored SQL text; use only argument placeholders separated by commas.",
+    );
   }
 }
 
@@ -942,7 +1174,8 @@ function streamRows(
   maxBufferedRows: number,
   signal?: AbortSignal,
 ): AsyncGenerator<Record<string, unknown>> {
-  const max = Number.isSafeInteger(maxBufferedRows) && maxBufferedRows > 0 ? maxBufferedRows : DEFAULT_MAX_BUFFERED_ROWS;
+  const max =
+    Number.isSafeInteger(maxBufferedRows) && maxBufferedRows > 0 ? maxBufferedRows : DEFAULT_MAX_BUFFERED_ROWS;
   return (async function* (): AsyncGenerator<Record<string, unknown>> {
     const queue: Record<string, unknown>[] = [];
     const waiters: Array<() => void> = [];
@@ -954,7 +1187,9 @@ function streamRows(
     let paused = false;
     let cancellationRequested = false;
     let completion!: Promise<void>;
-    const wake = (): void => { for (const waiter of waiters.splice(0)) waiter(); };
+    const wake = (): void => {
+      for (const waiter of waiters.splice(0)) waiter();
+    };
     const waitForData = (): Promise<void> => new Promise((resolve) => waiters.push(resolve));
     const setFailure = (error: unknown): void => {
       if (failureSet) return;
@@ -968,7 +1203,10 @@ function streamRows(
       try {
         if (request?.cancel) request.cancel();
         else if (request) connection.cancel?.();
-        if (paused) { request?.resume?.(); paused = false; }
+        if (paused) {
+          request?.resume?.();
+          paused = false;
+        }
       } catch (error) {
         cleanupFailure = cleanupFailure === undefined ? error : cleanupFailure;
         setFailure(error);
@@ -989,12 +1227,12 @@ function streamRows(
         return;
       }
       try {
-        request = new Request(parameterizedSql, ((error: unknown) => {
+        request = new Request(parameterizedSql, (error: unknown) => {
           if (error !== undefined && error !== null) {
             setFailure(asError(error));
             cancel();
           }
-        })) as unknown as TediousRequestLike;
+        }) as unknown as TediousRequestLike;
         let resultSetCount = 0;
         let doneCount = 0;
         let doneInProcCount = 0;
@@ -1018,18 +1256,28 @@ function streamRows(
         });
         request.on("columnMetadata", (metadata: unknown) => {
           try {
-            if (resultSetCount > 0) throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "SQL Server stream returned multiple result sets.");
+            if (resultSetCount > 0)
+              throw new UnsupportedFeatureError(
+                "routine.result-sets",
+                "BRAID_RESULT_SETS_UNSUPPORTED",
+                "SQL Server stream returned multiple result sets.",
+              );
             resultSetCount += 1;
             columns = metadataColumns(metadata);
             assertUniqueColumns(columns);
+          } catch (error) {
+            setFailure(error);
+            cancel();
           }
-          catch (error) { setFailure(error); cancel(); }
         });
         request.on("row", (row: unknown) => {
           if (failureSet) return;
           try {
             queue.push(mapRow(row, columns, policy));
-            if (queue.length >= max && !paused) { request?.pause?.(); paused = true; }
+            if (queue.length >= max && !paused) {
+              request?.pause?.();
+              paused = true;
+            }
             wake();
           } catch (error) {
             setFailure(error);
@@ -1041,29 +1289,35 @@ function streamRows(
           cancel();
         });
         request.on("returnValue", () => {
-          setFailure(new UnsupportedFeatureError(
-            "routine.out",
-            "BRAID_CALL_OUT_UNSUPPORTED",
-            "SQL Server output parameters are not implemented.",
-          ));
+          setFailure(
+            new UnsupportedFeatureError(
+              "routine.out",
+              "BRAID_CALL_OUT_UNSUPPORTED",
+              "SQL Server output parameters are not implemented.",
+            ),
+          );
           cancel();
         });
         request.on("requestCompleted", () => {
           done = true;
           if (!failureSet && resultSetCount === 0) {
-            setFailure(new UnsupportedFeatureError(
-              "statement.stream",
-              "BRAID_STREAM_UNSUPPORTED",
-              "SQL Server request did not return a result set.",
-            ));
+            setFailure(
+              new UnsupportedFeatureError(
+                "statement.stream",
+                "BRAID_STREAM_UNSUPPORTED",
+                "SQL Server request did not return a result set.",
+              ),
+            );
           }
           const statementCount = doneInProcCount > 0 ? doneInProcCount : doneCount;
           if (!failureSet && resultSetCount === 1 && statementCount > 1) {
-            setFailure(new UnsupportedFeatureError(
-              "routine.result-sets",
-              "BRAID_RESULT_SETS_UNSUPPORTED",
-              "SQL Server stream returned rows and additional statement results.",
-            ));
+            setFailure(
+              new UnsupportedFeatureError(
+                "routine.result-sets",
+                "BRAID_RESULT_SETS_UNSUPPORTED",
+                "SQL Server stream returned rows and additional statement results.",
+              ),
+            );
           }
           wake();
           if (failureSet) reject(failure);
@@ -1091,7 +1345,10 @@ function streamRows(
         if (failureSet) throw failure;
         if (queue.length > 0) {
           const row = queue.shift()!;
-          if (paused && queue.length <= Math.floor(max / 2) && !failureSet && !done) { request?.resume?.(); paused = false; }
+          if (paused && queue.length <= Math.floor(max / 2) && !failureSet && !done) {
+            request?.resume?.();
+            paused = false;
+          }
           yield row;
           continue;
         }
@@ -1102,7 +1359,11 @@ function streamRows(
     } finally {
       if (!done) cancel();
       signal?.removeEventListener("abort", onAbort);
-      try { await completion; } catch (error) { setFailure(error); }
+      try {
+        await completion;
+      } catch (error) {
+        setFailure(error);
+      }
       if (cleanupFailure !== undefined) {
         throw resourceCleanupError(failure, [cleanupFailure]);
       }
@@ -1146,7 +1407,11 @@ const tediousEnvironment = Object.freeze<DriverEnvironment>({
     },
     "data.json-lossless-text": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
     "data.json-parsed": { status: "unsupported" },
-    "data.sql-variant": { status: "unsupported", rawRepresentations: ["driver-native"], conditionCode: "mssql.sql-variant-unclassified" },
+    "data.sql-variant": {
+      status: "unsupported",
+      rawRepresentations: ["driver-native"],
+      conditionCode: "mssql.sql-variant-unclassified",
+    },
     "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Buffer"] },
     "data.uuid": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
     "data.temporal-lossless": { status: "unsupported", conditionCode: "mssql.temporal-text-cast-required" },
@@ -1156,7 +1421,7 @@ const tediousEnvironment = Object.freeze<DriverEnvironment>({
       conditionCode: "mssql.temporal-text-cast-required",
     },
     "session.pinned": { status: "guaranteed" },
-    "transaction": { status: "guaranteed" },
+    transaction: { status: "guaranteed" },
     "transaction.savepoint": { status: "guaranteed" },
     "transaction.read-only": { status: "unsupported" },
     "transaction.isolation.read-uncommitted": { status: "guaranteed" },
@@ -1176,7 +1441,9 @@ const tediousEnvironment = Object.freeze<DriverEnvironment>({
   },
   probe: {
     statement: createRenderedStatement({
-      segments: ["SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version, CAST(SERVERPROPERTY('Edition') AS nvarchar(128)) AS edition"],
+      segments: [
+        "SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version, CAST(SERVERPROPERTY('Edition') AS nvarchar(128)) AS edition",
+      ],
       parameters: [],
       resultKind: "rows",
       dialectId: "mssql",
@@ -1200,8 +1467,18 @@ function prepareRequest(
   options?: ExecutionOptions,
 ): Promise<TediousPreparedRequest> {
   assertExecutionOptions(options);
-  if (typeof connection.prepare !== "function" || typeof connection.execute !== "function" || typeof connection.unprepare !== "function") {
-    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_PREPARE_UNSUPPORTED", "Tedious connection does not expose prepare/execute/unprepare()."));
+  if (
+    typeof connection.prepare !== "function" ||
+    typeof connection.execute !== "function" ||
+    typeof connection.unprepare !== "function"
+  ) {
+    return Promise.reject(
+      new UnsupportedFeatureError(
+        "statement.prepare",
+        "BRAID_PREPARE_UNSUPPORTED",
+        "Tedious connection does not expose prepare/execute/unprepare().",
+      ),
+    );
   }
   const prepare = connection.prepare;
   return new Promise((resolve, reject) => {
@@ -1225,19 +1502,25 @@ function prepareRequest(
       if (cancellationFailure !== undefined) {
         reject(resourceCleanupError(signal?.reason, [cancellationFailure]));
       } else {
-        reject(signal !== undefined ? signal.reason : completionError ?? new Error("SQL Server request aborted."));
+        reject(signal !== undefined ? signal.reason : (completionError ?? new Error("SQL Server request aborted.")));
       }
     };
     let request!: TediousPreparedRequest["request"];
-    request = new Request(sql, ((error: unknown, rowCount?: number) => {
+    request = new Request(sql, (error: unknown, rowCount?: number) => {
       completionError = error;
       drained = true;
       completionCallback?.(error, rowCount);
       if (cancellationRequested) settleCancellation(request);
       else prepared(error);
-    })) as unknown as TediousPreparedRequest["request"];
+    }) as unknown as TediousPreparedRequest["request"];
     if (signal !== undefined && typeof request.cancel !== "function") {
-      reject(new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "Tedious prepare Request does not expose cancel()."));
+      reject(
+        new UnsupportedFeatureError(
+          "statement.cancel",
+          "BRAID_CANCEL_UNSUPPORTED",
+          "Tedious prepare Request does not expose cancel().",
+        ),
+      );
       return;
     }
     const cancel = (): void => {
@@ -1254,7 +1537,9 @@ function prepareRequest(
       }
       settleCancellation(request);
     };
-    const onAbort = (): void => { cancel(); };
+    const onAbort = (): void => {
+      cancel();
+    };
     const prepared = (error?: unknown): void => {
       completionError = error;
       drained = true;
@@ -1296,7 +1581,8 @@ function prepareRequest(
     request.on("requestCompleted", completed);
     signal?.addEventListener("abort", onAbort, { once: true });
     try {
-      for (const parameter of parameters) request.addParameter(parameter.name, parameter.type, undefined, parameter.options);
+      for (const parameter of parameters)
+        request.addParameter(parameter.name, parameter.type, undefined, parameter.options);
       if (signal?.aborted) {
         settled = true;
         removeListeners(request);
@@ -1318,15 +1604,23 @@ function executePrepared(
 ): Promise<number | undefined> {
   assertExecutionOptions(options);
   if (typeof connection.execute !== "function") {
-    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_PREPARE_UNSUPPORTED", "Tedious connection does not expose execute()."));
+    return Promise.reject(
+      new UnsupportedFeatureError(
+        "statement.prepare",
+        "BRAID_PREPARE_UNSUPPORTED",
+        "Tedious connection does not expose execute().",
+      ),
+    );
   }
   const signal = options?.signal;
   if (signal !== undefined && typeof prepared.request.cancel !== "function") {
-    return Promise.reject(new UnsupportedFeatureError(
-      "statement.cancel",
-      "BRAID_CANCEL_UNSUPPORTED",
-      "Tedious prepared Request does not expose cancel().",
-    ));
+    return Promise.reject(
+      new UnsupportedFeatureError(
+        "statement.cancel",
+        "BRAID_CANCEL_UNSUPPORTED",
+        "Tedious prepared Request does not expose cancel().",
+      ),
+    );
   }
   const execute = connection.execute;
   const values = Object.fromEntries(parameters.map((parameter) => [parameter.name, parameter.value]));
@@ -1341,7 +1635,9 @@ function executePrepared(
     const doneRows: number[] = [];
     const doneInProcRows: number[] = [];
     const doneProcRows: number[] = [];
-    const markRows = (): void => { rowBearing = true; };
+    const markRows = (): void => {
+      rowBearing = true;
+    };
     const markDone = (target: number[], count?: unknown): void => {
       if (typeof count !== "number") return;
       try {
@@ -1372,7 +1668,9 @@ function executePrepared(
       else {
         const counts = doneInProcRows.length > 0 ? doneInProcRows : doneRows.length > 0 ? doneRows : doneProcRows;
         try {
-          resolve(counts.length > 0 ? counts.reduce((total, value) => safeDatabaseCount(total + value), 0) : callbackRowCount);
+          resolve(
+            counts.length > 0 ? counts.reduce((total, value) => safeDatabaseCount(total + value), 0) : callbackRowCount,
+          );
         } catch (error) {
           reject(error);
         }
@@ -1434,7 +1732,13 @@ function executePrepared(
 
 function unprepareRequest(connection: TediousConnectionLike, prepared: TediousPreparedRequest): Promise<void> {
   if (typeof connection.unprepare !== "function") {
-    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_PREPARE_UNSUPPORTED", "Tedious connection does not expose unprepare()."));
+    return Promise.reject(
+      new UnsupportedFeatureError(
+        "statement.prepare",
+        "BRAID_PREPARE_UNSUPPORTED",
+        "Tedious connection does not expose unprepare().",
+      ),
+    );
   }
   const unprepare = connection.unprepare;
   return new Promise((resolve, reject) => {
@@ -1490,34 +1794,73 @@ function makeTediousExecutor(
   const begin = async (transactionOptions?: TransactionOptions): Promise<void> => {
     validateTediousTransactionOptions(transactionOptions);
     const isolation = transactionOptions?.isolation;
-    const isolationLevel = isolation === undefined ? ISOLATION_LEVEL.NO_CHANGE
-      : isolation === "read-uncommitted" ? ISOLATION_LEVEL.READ_UNCOMMITTED
-        : isolation === "read-committed" ? ISOLATION_LEVEL.READ_COMMITTED
-          : isolation === "repeatable-read" ? ISOLATION_LEVEL.REPEATABLE_READ
-            : ISOLATION_LEVEL.SERIALIZABLE;
+    const isolationLevel =
+      isolation === undefined
+        ? ISOLATION_LEVEL.NO_CHANGE
+        : isolation === "read-uncommitted"
+          ? ISOLATION_LEVEL.READ_UNCOMMITTED
+          : isolation === "read-committed"
+            ? ISOLATION_LEVEL.READ_COMMITTED
+            : isolation === "repeatable-read"
+              ? ISOLATION_LEVEL.REPEATABLE_READ
+              : ISOLATION_LEVEL.SERIALIZABLE;
     await control(connection, "beginTransaction", undefined, isolationLevel);
   };
   return {
     ownershipKey: connection,
     statementBinding: bindingAdapter,
     validateTransactionOptions: validateTediousTransactionOptions,
-    environment: policy === defaultTypePolicy
-      ? tediousEnvironment
-      : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, typePolicy: { id: policy.id, hash: policy.hash }, capabilities: {} },
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
+    environment:
+      policy === defaultTypePolicy
+        ? tediousEnvironment
+        : {
+            ...tediousEnvironment,
+            driver: { id: "tedious", profile: "custom-type-policy" },
+            typePolicy: { id: policy.id, hash: policy.hash },
+            capabilities: {},
+          },
+    async query<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<QueryExecutionResult<Row>> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
-      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy, undefined, executionOptions);
-      if (result.outputSeen) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "SQL Server output parameters are not implemented.");
+      const result = await collect(
+        connection,
+        execution.description.parameterizedSql!,
+        execution.parameters,
+        policy,
+        undefined,
+        executionOptions,
+      );
+      if (result.outputSeen)
+        throw new UnsupportedFeatureError(
+          "routine.out",
+          "BRAID_CALL_OUT_UNSUPPORTED",
+          "SQL Server output parameters are not implemented.",
+        );
       return rowResult(result) as QueryExecutionResult<Row>;
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, executionOptions?: ExecutionOptions): Promise<BulkExecutionResult> {
+    async bulk(
+      bulk: RenderedBulk,
+      binding: BulkBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<BulkExecutionResult> {
       assertExecutionOptions(executionOptions);
       const parameters = bindingAdapter.materializedBulkParameters(bulk, binding);
       if (parameters === undefined) {
-        throw new TypeError("SQLBraid Tedious executor received a bulk binding description not produced by its adapter.");
+        throw new TypeError(
+          "SQLBraid Tedious executor received a bulk binding description not produced by its adapter.",
+        );
       }
-      if (binding.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: SQL Server bulk binding did not provide parameterized SQL.");
-      const prepared = await prepareRequest(connection, binding.parameterizedSql, parameters[0] ?? [], executionOptions);
+      if (binding.parameterizedSql === undefined)
+        throw new Error("BRAID_BIND_TRANSPORT: SQL Server bulk binding did not provide parameterized SQL.");
+      const prepared = await prepareRequest(
+        connection,
+        binding.parameterizedSql,
+        parameters[0] ?? [],
+        executionOptions,
+      );
       const cleanup = createCleanupScope();
       cleanup.add(() => unprepareRequest(connection, prepared));
       let failure: unknown;
@@ -1529,8 +1872,7 @@ function makeTediousExecutor(
           const rowCount = await executePrepared(connection, prepared, row, executionOptions);
           if (typeof rowCount === "number") {
             affectedRows = safeDatabaseCount(affectedRows + safeDatabaseCount(rowCount));
-          }
-          else affectedKnown = false;
+          } else affectedKnown = false;
         }
       } catch (error) {
         failure = error;
@@ -1544,15 +1886,37 @@ function makeTediousExecutor(
         executionMode: "prepared-loop",
       };
     },
-    stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): AsyncIterable<Row> {
+    stream<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): AsyncIterable<Row> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
       assertExecutionOptions(executionOptions);
-      return streamRows(connection, execution.description.parameterizedSql!, execution.parameters, policy, maxBufferedRows, executionOptions?.signal) as AsyncIterable<Row>;
+      return streamRows(
+        connection,
+        execution.description.parameterizedSql!,
+        execution.parameters,
+        policy,
+        maxBufferedRows,
+        executionOptions?.signal,
+      ) as AsyncIterable<Row>;
     },
-    async call(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<DriverRoutineResult> {
+    async call(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<DriverRoutineResult> {
       const execution = executionBinding(bindingAdapter, rendered, binding);
       assertNativeProcedureStatement(rendered);
-      const result = await collect(connection, execution.description.parameterizedSql!, execution.parameters, policy, rendered.routineProcedure, executionOptions);
+      const result = await collect(
+        connection,
+        execution.description.parameterizedSql!,
+        execution.parameters,
+        policy,
+        rendered.routineProcedure,
+        executionOptions,
+      );
       return {
         output: result.output,
         ...(result.returnValue === undefined ? {} : { returnValue: result.returnValue }),
@@ -1571,7 +1935,10 @@ function makeTediousExecutor(
   };
 }
 
-export function createTediousExecutor(connection: TediousConnectionLike, options: TediousExecutorOptions = {}): QueryExecutor {
+export function createTediousExecutor(
+  connection: TediousConnectionLike,
+  options: TediousExecutorOptions = {},
+): QueryExecutor {
   assertDirectConnection(connection);
   return makeTediousExecutor(connection, options, createBinding(options));
 }
@@ -1581,23 +1948,41 @@ export function createTediousDatabase(connection: TediousConnectionLike, options
   return createDatabase(createTediousExecutor(connection, { typePolicy, maxBufferedRows }), databaseOptions);
 }
 
-export function createTediousPoolProvider(pool: TediousPoolLike, options: TediousExecutorOptions = {}): ConnectionProvider {
-  const acquireConnection = !pool ? undefined
-    : typeof pool.acquire === "function" ? pool.acquire.bind(pool)
-      : typeof pool.connect === "function" ? pool.connect.bind(pool)
-        : typeof pool.getConnection === "function" ? pool.getConnection.bind(pool)
+export function createTediousPoolProvider(
+  pool: TediousPoolLike,
+  options: TediousExecutorOptions = {},
+): ConnectionProvider {
+  const acquireConnection = !pool
+    ? undefined
+    : typeof pool.acquire === "function"
+      ? pool.acquire.bind(pool)
+      : typeof pool.connect === "function"
+        ? pool.connect.bind(pool)
+        : typeof pool.getConnection === "function"
+          ? pool.getConnection.bind(pool)
           : undefined;
-  if (!acquireConnection) throw new TypeError("SQLBraid SQL Server pool provider requires acquire(), connect(), or getConnection().");
+  if (!acquireConnection)
+    throw new TypeError("SQLBraid SQL Server pool provider requires acquire(), connect(), or getConnection().");
   const bindingAdapter = createBinding(options);
   return {
     statementBinding: bindingAdapter,
     validateTransactionOptions: validateTediousTransactionOptions,
-    environment: options.typePolicy === undefined || options.typePolicy === defaultTypePolicy
-      ? tediousEnvironment
-      : { ...tediousEnvironment, driver: { id: "tedious", profile: "custom-type-policy" }, typePolicy: { id: (options.typePolicy ?? defaultTypePolicy).id, hash: (options.typePolicy ?? defaultTypePolicy).hash }, capabilities: {} },
+    environment:
+      options.typePolicy === undefined || options.typePolicy === defaultTypePolicy
+        ? tediousEnvironment
+        : {
+            ...tediousEnvironment,
+            driver: { id: "tedious", profile: "custom-type-policy" },
+            typePolicy: {
+              id: (options.typePolicy ?? defaultTypePolicy).id,
+              hash: (options.typePolicy ?? defaultTypePolicy).hash,
+            },
+            capabilities: {},
+          },
     async acquire(): Promise<ConnectionLease> {
       const connection = await acquireConnection();
-      if (!connection || typeof connection.release !== "function") throw new TypeError("SQL Server pool returned a connection without explicit release ownership.");
+      if (!connection || typeof connection.release !== "function")
+        throw new TypeError("SQL Server pool returned a connection without explicit release ownership.");
       const executor = makeTediousExecutor(connection, options, bindingAdapter);
       let released = false;
       return {
@@ -1610,7 +1995,9 @@ export function createTediousPoolProvider(pool: TediousPoolLike, options: Tediou
               if (typeof connection.destroy === "function") await connection.destroy();
               else if (typeof connection.close === "function") await connection.close();
               else {
-                const error = new Error("BRAID_RESOURCE_CLEANUP: SQL Server pool connection cannot be discarded safely.");
+                const error = new Error(
+                  "BRAID_RESOURCE_CLEANUP: SQL Server pool connection cannot be discarded safely.",
+                );
                 Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
                 throw error;
               }

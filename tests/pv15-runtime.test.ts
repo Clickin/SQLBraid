@@ -34,16 +34,24 @@ const unsupportedTransactionEnvironment = {
   capabilities: { "transaction.read-only": { status: "unsupported" as const } },
 };
 
-function schema<Output>(validate: (value: unknown) => StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>>): StandardSchemaV1<unknown, Output> {
+function schema<Output>(
+  validate: (value: unknown) => StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>>,
+): StandardSchemaV1<unknown, Output> {
   return { "~standard": { version: 1, vendor: "pv15-runtime", validate } };
 }
 
 function emptyRowsExecutor(overrides: Partial<QueryExecutor> = {}): QueryExecutor {
   return {
     statementBinding,
-    async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
-    async *stream<Row>() { yield* [] as readonly Row[]; },
-    async call(): Promise<DriverRoutineResult> { return { output: {}, resultSets: [] }; },
+    async query<Row>() {
+      return { kind: "rows", rows: [] as readonly Row[] };
+    },
+    async *stream<Row>() {
+      yield* [] as readonly Row[];
+    },
+    async call(): Promise<DriverRoutineResult> {
+      return { output: {}, resultSets: [] };
+    },
     ...overrides,
   };
 }
@@ -51,9 +59,15 @@ function emptyRowsExecutor(overrides: Partial<QueryExecutor> = {}): QueryExecuto
 function transactionLease(begin: () => Promise<void> = async () => {}): QueryExecutor & { release(): void } {
   return {
     statementBinding,
-    async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
-    async *stream<Row>() { yield* [] as readonly Row[]; },
-    async call(): Promise<DriverRoutineResult> { return { output: {}, resultSets: [] }; },
+    async query<Row>() {
+      return { kind: "rows", rows: [] as readonly Row[] };
+    },
+    async *stream<Row>() {
+      yield* [] as readonly Row[];
+    },
+    async call(): Promise<DriverRoutineResult> {
+      return { output: {}, resultSets: [] };
+    },
     begin,
     async commit() {},
     async rollback() {},
@@ -76,18 +90,28 @@ test("transaction option validators reject before provider acquisition and overr
     statementBinding,
     environment: unsupportedTransactionEnvironment,
     validateTransactionOptions(options: TransactionOptions) {
-      if (options.readOnly === true) throw new UnsupportedFeatureError("transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", "read-only is unavailable");
+      if (options.readOnly === true)
+        throw new UnsupportedFeatureError(
+          "transaction.read-only",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          "read-only is unavailable",
+        );
     },
     async acquire() {
       acquired += 1;
-      return transactionLease(async () => { began += 1; });
+      return transactionLease(async () => {
+        began += 1;
+      });
     },
   };
   const db = createPooledDatabase(provider);
   await db.tx({ readOnly: false }, async () => {});
   assert.equal(acquired, 1);
   assert.equal(began, 1);
-  await assert.rejects(() => db.tx({ readOnly: true }, async () => {}), (error) => error instanceof UnsupportedFeatureError && error.feature === "transaction.read-only");
+  await assert.rejects(
+    () => db.tx({ readOnly: true }, async () => {}),
+    (error) => error instanceof UnsupportedFeatureError && error.feature === "transaction.read-only",
+  );
   assert.equal(acquired, 1);
   assert.equal(began, 1);
 
@@ -100,7 +124,10 @@ test("transaction option validators reject before provider acquisition and overr
       return transactionLease();
     },
   });
-  await assert.rejects(() => noHookDb.tx({ readOnly: false }, async () => {}), (error) => error instanceof UnsupportedFeatureError);
+  await assert.rejects(
+    () => noHookDb.tx({ readOnly: false }, async () => {}),
+    (error) => error instanceof UnsupportedFeatureError,
+  );
   assert.equal(noHookAcquired, 0);
 
   let thenableAcquired = 0;
@@ -137,13 +164,17 @@ test("transaction option validators reject lazy thenables without invoking them"
       return transactionLease();
     },
   });
-  await assert.rejects(() => db.tx({ readOnly: false }, async () => {}), (error) =>
-    error instanceof TypeError && /must be synchronous/u.test(error.message));
+  await assert.rejects(
+    () => db.tx({ readOnly: false }, async () => {}),
+    (error) => error instanceof TypeError && /must be synchronous/u.test(error.message),
+  );
   assert.equal(thenCalls, 0);
   assert.equal(acquired, 0);
 
   const unhandled: unknown[] = [];
-  const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+  const onUnhandled = (reason: unknown) => {
+    unhandled.push(reason);
+  };
   process.on("unhandledRejection", onUnhandled);
   try {
     const rejection = new Error("native validator rejection");
@@ -157,9 +188,13 @@ test("transaction option validators reject lazy thenables without invoking them"
         return transactionLease();
       },
     });
-    await assert.rejects(() => rejectedDb.tx({ readOnly: false }, async () => {}), (error) =>
-      error instanceof TypeError && /must be synchronous/u.test(error.message));
-    const crossRealmRejected = runInNewContext("Promise.reject(new Error('cross-realm validator rejection'))") as PromiseLike<never>;
+    await assert.rejects(
+      () => rejectedDb.tx({ readOnly: false }, async () => {}),
+      (error) => error instanceof TypeError && /must be synchronous/u.test(error.message),
+    );
+    const crossRealmRejected = runInNewContext(
+      "Promise.reject(new Error('cross-realm validator rejection'))",
+    ) as PromiseLike<never>;
     const crossRealmDb = createPooledDatabase({
       statementBinding,
       validateTransactionOptions() {
@@ -170,8 +205,10 @@ test("transaction option validators reject lazy thenables without invoking them"
         return transactionLease();
       },
     });
-    await assert.rejects(() => crossRealmDb.tx({ readOnly: false }, async () => {}), (error) =>
-      error instanceof TypeError && /must be synchronous/u.test(error.message));
+    await assert.rejects(
+      () => crossRealmDb.tx({ readOnly: false }, async () => {}),
+      (error) => error instanceof TypeError && /must be synchronous/u.test(error.message),
+    );
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.deepEqual(unhandled, []);
   } finally {
@@ -185,10 +222,17 @@ test("provider transaction option validator is inherited when a lease omits it",
     statementBinding,
     environment: unsupportedTransactionEnvironment,
     validateTransactionOptions(options: TransactionOptions) {
-      if (options.readOnly !== false) throw new UnsupportedFeatureError("transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", "only explicit writable mode is supported");
+      if (options.readOnly !== false)
+        throw new UnsupportedFeatureError(
+          "transaction.read-only",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          "only explicit writable mode is supported",
+        );
     },
     async acquire() {
-      return transactionLease(async () => { began += 1; });
+      return transactionLease(async () => {
+        began += 1;
+      });
     },
   });
   await db.tx({ readOnly: false }, async () => {});
@@ -198,9 +242,26 @@ test("provider transaction option validator is inherited when a lease omits it",
 test("prepared factory, render, and shape failures emit non-executing query:error events", async () => {
   const events: ExecutionEvent[] = [];
   const failure = new Error("factory failed");
-  const db = createDatabase(emptyRowsExecutor(), { observers: [{ onEvent(event) { events.push(event); } }] });
-  const prepared = db.prepare("factory-failure", (): RowQuery<unknown> => { throw failure; }, { input: "none" });
-  await assert.rejects(() => prepared.execute(), (error) => error === failure);
+  const db = createDatabase(emptyRowsExecutor(), {
+    observers: [
+      {
+        onEvent(event) {
+          events.push(event);
+        },
+      },
+    ],
+  });
+  const prepared = db.prepare(
+    "factory-failure",
+    (): RowQuery<unknown> => {
+      throw failure;
+    },
+    { input: "none" },
+  );
+  await assert.rejects(
+    () => prepared.execute(),
+    (error) => error === failure,
+  );
   let errorEvent = events.at(-1);
   assert.equal(errorEvent?.type, "query:error");
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.stage : undefined, "prepared");
@@ -210,11 +271,23 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
 
   events.length = 0;
   const renderFailure = new Error("render failed");
-  const renderPrepared = db.prepare("render-failure", () => {
-    const query = sql.rows`SELECT 1`;
-    return { ...query, render: () => { throw renderFailure; } };
-  }, { input: "none" });
-  await assert.rejects(() => renderPrepared.execute(), (error) => error === renderFailure);
+  const renderPrepared = db.prepare(
+    "render-failure",
+    () => {
+      const query = sql.rows`SELECT 1`;
+      return {
+        ...query,
+        render: () => {
+          throw renderFailure;
+        },
+      };
+    },
+    { input: "none" },
+  );
+  await assert.rejects(
+    () => renderPrepared.execute(),
+    (error) => error === renderFailure,
+  );
   errorEvent = events.at(-1);
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.stage : undefined, "render");
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.executionStarted : undefined, false);
@@ -224,7 +297,9 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
   events.length = 0;
   let alternate = false;
   const otherSql = createSqlTag({ dialect: alternateDialect("other") });
-  const shapePrepared = db.prepare("dialect-shape", () => alternate ? otherSql.rows`SELECT 1` : sql.rows`SELECT 1`, { input: "none" });
+  const shapePrepared = db.prepare("dialect-shape", () => (alternate ? otherSql.rows`SELECT 1` : sql.rows`SELECT 1`), {
+    input: "none",
+  });
   await shapePrepared.execute();
   alternate = true;
   await assert.rejects(
@@ -239,11 +314,30 @@ test("prepared factory, render, and shape failures emit non-executing query:erro
 
   events.length = 0;
   const bindingFailure = new Error("binding failed");
-  const bindingDb = createDatabase(emptyRowsExecutor({
-    statementBinding: { id: "failing-binding", describe() { throw bindingFailure; } },
-  }), { observers: [{ onEvent(event) { events.push(event); } }] });
+  const bindingDb = createDatabase(
+    emptyRowsExecutor({
+      statementBinding: {
+        id: "failing-binding",
+        describe() {
+          throw bindingFailure;
+        },
+      },
+    }),
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    },
+  );
   const bindingPrepared = bindingDb.prepare("binding-failure", () => sql.rows`SELECT 1`, { input: "none" });
-  await assert.rejects(() => bindingPrepared.execute(), (error) => error === bindingFailure);
+  await assert.rejects(
+    () => bindingPrepared.execute(),
+    (error) => error === bindingFailure,
+  );
   errorEvent = events.at(-1);
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.stage : undefined, "materialize");
   assert.equal(errorEvent?.type === "query:error" ? errorEvent.executionStarted : undefined, false);
@@ -260,16 +354,27 @@ test("streaming explicitly returns the driver iterator before releasing its leas
     async acquire() {
       return {
         statementBinding,
-        async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
+        async query<Row>() {
+          return { kind: "rows", rows: [] as readonly Row[] };
+        },
         stream<Row>() {
           const iterator: AsyncIterator<Row> = {
             next: async () => ({ done: false, value: 1 as Row }),
-            return: async () => { returns += 1; order.push("iterator.return"); return { done: true, value: undefined }; },
+            return: async () => {
+              returns += 1;
+              order.push("iterator.return");
+              return { done: true, value: undefined };
+            },
           };
           return { [Symbol.asyncIterator]: () => iterator };
         },
-        async call() { return { output: {}, resultSets: [] }; },
-        release(options) { releases += 1; order.push(`release:${options?.discard === true}`); },
+        async call() {
+          return { output: {}, resultSets: [] };
+        },
+        release(options) {
+          releases += 1;
+          order.push(`release:${options?.discard === true}`);
+        },
       };
     },
   });
@@ -291,29 +396,41 @@ test("stream cleanup failure poisons and discards the lease while preserving the
     async acquire() {
       return {
         statementBinding,
-        async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
+        async query<Row>() {
+          return { kind: "rows", rows: [] as readonly Row[] };
+        },
         stream<Row>() {
           let first = true;
           return {
             [Symbol.asyncIterator]() {
               return {
-                next: async () => first ? (first = false, { done: false, value: 1 as Row }) : { done: true, value: undefined },
-                return: async () => { throw cleanup; },
+                next: async () =>
+                  first ? ((first = false), { done: false, value: 1 as Row }) : { done: true, value: undefined },
+                return: async () => {
+                  throw cleanup;
+                },
               };
             },
           };
         },
-        async call() { return { output: {}, resultSets: [] }; },
-        release(options) { discarded = options?.discard === true; },
+        async call() {
+          return { output: {}, resultSets: [] };
+        },
+        release(options) {
+          discarded = options?.discard === true;
+        },
       };
     },
   });
-  await assert.rejects(async () => {
-    for await (const row of db.stream(sql.rows<number>`SELECT stream`)) {
-      void row;
-      break;
-    }
-  }, (error: unknown) => error === cleanup || (error instanceof AggregateError && error.errors.includes(cleanup)));
+  await assert.rejects(
+    async () => {
+      for await (const row of db.stream(sql.rows<number>`SELECT stream`)) {
+        void row;
+        break;
+      }
+    },
+    (error: unknown) => error === cleanup || (error instanceof AggregateError && error.errors.includes(cleanup)),
+  );
   assert.equal(discarded, true);
 });
 
@@ -338,33 +455,59 @@ test("routine results map output, return value, and heterogeneous result sets af
     }
     return { value: { total: value.total, kind: "payment" as const } };
   });
-  const returnSchema = schema((value) => typeof value === "number" ? { value: `status-${value}` } : { issues: [{ message: "invalid status" }] });
-  const result = createPooledDatabase({
-    statementBinding,
-    async acquire() {
-      return {
-        statementBinding,
-        async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
-        async *stream<Row>() { yield* [] as readonly Row[]; },
-        async call() {
-          return {
-            output: { ok: true },
-            returnValue: 7,
-            resultSets: [
-              { rows: [{ id: 4 }], source: { kind: "emitted", index: 0 } },
-              { rows: [{ total: 12 }], source: { kind: "emitted", index: 1 } },
-            ],
-          };
-        },
-        release() { released = true; },
-      };
+  const returnSchema = schema((value) =>
+    typeof value === "number" ? { value: `status-${value}` } : { issues: [{ message: "invalid status" }] },
+  );
+  const result = createPooledDatabase(
+    {
+      statementBinding,
+      async acquire() {
+        return {
+          statementBinding,
+          async query<Row>() {
+            return { kind: "rows", rows: [] as readonly Row[] };
+          },
+          async *stream<Row>() {
+            yield* [] as readonly Row[];
+          },
+          async call() {
+            return {
+              output: { ok: true },
+              returnValue: 7,
+              resultSets: [
+                { rows: [{ id: 4 }], source: { kind: "emitted", index: 0 } },
+                { rows: [{ total: 12 }], source: { kind: "emitted", index: 1 } },
+              ],
+            };
+          },
+          release() {
+            released = true;
+          },
+        };
+      },
     },
-  }, { observers: [{ onEvent(event) { events.push(event); } }] });
-  const query = sql.call({ output: outputSchema, resultSets: [userSchema, paymentSchema] as const, returnValue: returnSchema })`CALL routine()`;
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    },
+  );
+  const query = sql.call({
+    output: outputSchema,
+    resultSets: [userSchema, paymentSchema] as const,
+    returnValue: returnSchema,
+  })`CALL routine()`;
   const mapped = await result.call(query);
   assert.equal(released, true);
   assert.deepEqual(mapped.output, { success: true });
-  assert.deepEqual(mapped.resultSets, [{ rows: [{ id: 4, kind: "user" }] }, { rows: [{ total: 12, kind: "payment" }] }]);
+  assert.deepEqual(mapped.resultSets, [
+    { rows: [{ id: 4, kind: "user" }] },
+    { rows: [{ total: 12, kind: "payment" }] },
+  ]);
   assert.equal(mapped.returnValue, "status-7");
   const resultEvent = events.find((event) => event.type === "query:result");
   assert.equal(resultEvent?.type === "query:result" ? resultEvent.resultSetCount : undefined, 2);
@@ -378,19 +521,36 @@ test("routine results map output, return value, and heterogeneous result sets af
 test("refcursor routine calls require a caller-owned transaction before acquiring a lease", async () => {
   let acquired = 0;
   const events: ExecutionEvent[] = [];
-  const db = createPooledDatabase({
-    statementBinding,
-    async acquire() {
-      acquired += 1;
-      return {
-        statementBinding,
-        async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
-        async *stream<Row>() { yield* [] as readonly Row[]; },
-        async call() { return { output: {}, resultSets: [] }; },
-        release() {},
-      };
+  const db = createPooledDatabase(
+    {
+      statementBinding,
+      async acquire() {
+        acquired += 1;
+        return {
+          statementBinding,
+          async query<Row>() {
+            return { kind: "rows", rows: [] as readonly Row[] };
+          },
+          async *stream<Row>() {
+            yield* [] as readonly Row[];
+          },
+          async call() {
+            return { output: {}, resultSets: [] };
+          },
+          release() {},
+        };
+      },
     },
-  }, { observers: [{ onEvent(event) { events.push(event); } }] });
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    },
+  );
   const query = sql.call`CALL cursor_routine(${sql.out("portal", { databaseType: "refcursor" })})`;
   await assert.rejects(() => db.call(query), /BRAID_CALL_CURSOR_TX_REQUIRED/u);
   assert.equal(acquired, 0);
@@ -406,32 +566,43 @@ test("routine mapping errors identify the failing result set and row", async () 
     if (value !== null && typeof value === "object" && "id" in value && value.id === 1) return { value };
     return { issues: [{ message: "bad" }] };
   });
-  const db = createDatabase(emptyRowsExecutor({
-    async call() {
-      return {
-        output: {},
-        resultSets: [
-          { rows: [{ status: "ready" }], source: { kind: "emitted", index: 0 } },
-          { rows: [{ id: 1 }, { id: 2 }], source: { kind: "emitted", index: 1 } },
-        ],
-      };
-    },
-  }));
+  const db = createDatabase(
+    emptyRowsExecutor({
+      async call() {
+        return {
+          output: {},
+          resultSets: [
+            { rows: [{ status: "ready" }], source: { kind: "emitted", index: 0 } },
+            { rows: [{ id: 1 }, { id: 2 }], source: { kind: "emitted", index: 1 } },
+          ],
+        };
+      },
+    }),
+  );
   const query = sql.call({ resultSets: [passing, failing] as const })`CALL routine()`;
-  await assert.rejects(() => db.call(query), (error: unknown) => {
-    if (error === null || typeof error !== "object" || !("location" in error)) return false;
-    assert.deepEqual(error.location, { kind: "result-set", resultSetIndex: 1, rowIndex: 1 });
-    return true;
-  });
+  await assert.rejects(
+    () => db.call(query),
+    (error: unknown) => {
+      if (error === null || typeof error !== "object" || !("location" in error)) return false;
+      assert.deepEqual(error.location, { kind: "result-set", resultSetIndex: 1, rowIndex: 1 });
+      return true;
+    },
+  );
 });
 
 test("routine mapping preserves output and return failure locations", async () => {
   const failure = new Error("domain mapping failed");
-  const outputSchema = schema<Readonly<Record<string, unknown>>>(() => { throw failure; });
+  const outputSchema = schema<Readonly<Record<string, unknown>>>(() => {
+    throw failure;
+  });
   const returnSchema = schema(() => ({ issues: [{ message: "invalid return status" }] }));
-  const db = createDatabase(emptyRowsExecutor({
-    async call() { return { output: {}, returnValue: 7, resultSets: [] }; },
-  }));
+  const db = createDatabase(
+    emptyRowsExecutor({
+      async call() {
+        return { output: {}, returnValue: 7, resultSets: [] };
+      },
+    }),
+  );
   await assert.rejects(() => db.call(sql.call({ output: outputSchema })`CALL routine()`), {
     code: "BRAID_CALL_MAP",
     location: { kind: "output" },
@@ -444,17 +615,19 @@ test("routine mapping preserves output and return failure locations", async () =
 });
 
 test("routine contracts reject missing return channels and extra result sets", async () => {
-  const db = createDatabase(emptyRowsExecutor({
-    async call() { return { output: {}, resultSets: [{ rows: [], source: { kind: "emitted", index: 0 } }] }; },
-  }));
+  const db = createDatabase(
+    emptyRowsExecutor({
+      async call() {
+        return { output: {}, resultSets: [{ rows: [], source: { kind: "emitted", index: 0 } }] };
+      },
+    }),
+  );
   const result = await db.call(sql.call`CALL routine()`);
   assert.equal(Object.hasOwn(result, "returnValue"), false);
-  await assert.rejects(
-    () => db.call(sql.call({ returnValue: schema(() => ({ value: 123 })) })`CALL routine()`),
-    { code: "BRAID_CALL_RETURN_UNSUPPORTED" },
-  );
-  await assert.rejects(
-    () => db.call(sql.call({ resultSets: [] as const })`CALL routine()`),
-    { code: "BRAID_CALL_RESULT_SETS" },
-  );
+  await assert.rejects(() => db.call(sql.call({ returnValue: schema(() => ({ value: 123 })) })`CALL routine()`), {
+    code: "BRAID_CALL_RETURN_UNSUPPORTED",
+  });
+  await assert.rejects(() => db.call(sql.call({ resultSets: [] as const })`CALL routine()`), {
+    code: "BRAID_CALL_RESULT_SETS",
+  });
 });

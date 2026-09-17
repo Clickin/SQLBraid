@@ -15,8 +15,10 @@ import { typePolicy as postgresTypePolicy } from "@sqlbraid/postgres";
 import { typePolicy as sqliteTypePolicy } from "@sqlbraid/sqlite";
 
 function assertExactnessFailure(run: () => unknown): void {
-  assert.throws(run, (error: unknown) => error instanceof ResultExactnessError
-    && error.code === "BRAID_RESULT_EXACTNESS");
+  assert.throws(
+    run,
+    (error: unknown) => error instanceof ResultExactnessError && error.code === "BRAID_RESULT_EXACTNESS",
+  );
 }
 
 test("exact integer decoding accepts only lossless representations and enforces bounds", () => {

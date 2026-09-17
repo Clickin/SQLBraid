@@ -31,19 +31,41 @@ function sourceSha() {
   return value;
 }
 function validateEvidence(evidence, sha) {
-  if (evidence.schemaVersion !== 1 || evidence.sourceSha !== sha || evidence.status !== "pass") throw new Error("Global evidence has an invalid schema, source SHA, or status.");
-  if (!Array.isArray(evidence.checks) || evidence.checks.length !== expectedSuites.length || evidence.checks.some((check, index) => check !== expectedSuites[index])) throw new Error("Global evidence does not name the required concrete suites.");
-  const suites = Array.isArray(evidence.testSuites) ? evidence.testSuites.slice().sort((left, right) => left.name.localeCompare(right.name)) : [];
+  if (evidence.schemaVersion !== 1 || evidence.sourceSha !== sha || evidence.status !== "pass")
+    throw new Error("Global evidence has an invalid schema, source SHA, or status.");
+  if (
+    !Array.isArray(evidence.checks) ||
+    evidence.checks.length !== expectedSuites.length ||
+    evidence.checks.some((check, index) => check !== expectedSuites[index])
+  )
+    throw new Error("Global evidence does not name the required concrete suites.");
+  const suites = Array.isArray(evidence.testSuites)
+    ? evidence.testSuites.slice().sort((left, right) => left.name.localeCompare(right.name))
+    : [];
   const names = expectedSuites.slice().sort();
-  if (suites.length !== names.length || suites.some((suite, index) => suite.name !== names[index] || suite.status !== "passed")) throw new Error("Global evidence does not prove every required suite ran and passed.");
+  if (
+    suites.length !== names.length ||
+    suites.some((suite, index) => suite.name !== names[index] || suite.status !== "passed")
+  )
+    throw new Error("Global evidence does not prove every required suite ran and passed.");
 }
 const sha = sourceSha();
 const reportPath = option("--report");
 const evidencePath = option("--evidence");
 if (reportPath !== undefined) {
   const report = JSON.parse(await readFile(resolve(reportPath), "utf8"));
-  if (!report.success || report.numFailedTests !== 0 || report.numPendingTests !== 0 || report.numTodoTests !== 0) throw new Error("Shared certification suites did not produce a passing report.");
-  const evidence = { schemaVersion: 1, sourceSha: sha, status: "pass", checks: expectedSuites, testSuites: report.testResults.map((suite) => ({ name: suite.name.replace(`${resolve(process.cwd())}/`, ""), status: suite.status })) };
+  if (!report.success || report.numFailedTests !== 0 || report.numPendingTests !== 0 || report.numTodoTests !== 0)
+    throw new Error("Shared certification suites did not produce a passing report.");
+  const evidence = {
+    schemaVersion: 1,
+    sourceSha: sha,
+    status: "pass",
+    checks: expectedSuites,
+    testSuites: report.testResults.map((suite) => ({
+      name: suite.name.replace(`${resolve(process.cwd())}/`, ""),
+      status: suite.status,
+    })),
+  };
   validateEvidence(evidence, sha);
   const outputPath = evidencePath ?? option("--output");
   if (!outputPath) throw new Error("Global evidence derivation requires --output.");

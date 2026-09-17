@@ -16,7 +16,11 @@ test("rc3.mariadb.certification", async () => {
   const artifact = await certifyTarget(target, {
     stress: process.env.SQLBRAID_CERT_STRESS === "1" || process.env.SQLBRAID_CERT_STRESS === "true",
   });
-  validateCertificationArtifact(artifact, { sourceSha, expectedCapabilities: target.expectedCapabilities, expectedTransactionOptions: target.expectedTransactionOptions });
+  validateCertificationArtifact(artifact, {
+    sourceSha,
+    expectedCapabilities: target.expectedCapabilities,
+    expectedTransactionOptions: target.expectedTransactionOptions,
+  });
   await mkdir(dirname(output), { recursive: true });
   await writeCertificationArtifact(output, artifact);
   assert.equal(Object.keys(artifact.cases).length, REQUIRED_CASE_IDS.length);

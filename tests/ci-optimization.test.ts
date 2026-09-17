@@ -63,13 +63,16 @@ test("CI planner fails open for unknown changes and selects driver-local lanes",
   assert.deepEqual(postgres.compatibility_matrix.length, 5);
   const sqlite = planChanges(["packages/sqlite/src/libsql.ts"], { eventName: "pull_request", baseKnown: true });
   assert.equal(sqlite.compatibility, true);
-  assert.deepEqual(sqlite.compatibility_matrix.map(({ id }: { readonly id: string }) => id), [
-    "node-16-20-2-runtime",
-    "node-16-20-2-better-sqlite3-9-6-0",
-    "node-22-18-0-better-sqlite3-13-0-3",
-    "node-16-20-2-libsql-0-18-0",
-    "node-16-20-2-opentelemetry-api-1-9-1",
-  ]);
+  assert.deepEqual(
+    sqlite.compatibility_matrix.map(({ id }: { readonly id: string }) => id),
+    [
+      "node-16-20-2-runtime",
+      "node-16-20-2-better-sqlite3-9-6-0",
+      "node-22-18-0-better-sqlite3-13-0-3",
+      "node-16-20-2-libsql-0-18-0",
+      "node-16-20-2-opentelemetry-api-1-9-1",
+    ],
+  );
   assert.equal(planChanges(["new/unknown-file.txt"], { eventName: "pull_request", baseKnown: true }).all, false);
   assert.equal(planChanges(["new/unknown-file.txt"], { eventName: "push", baseKnown: true }).all, true);
   assert.equal(planChanges([], { eventName: "pull_request", baseKnown: false }).all, true);
@@ -111,12 +114,25 @@ test("Vitest shard merging rejects failed, missing, and conflicting inputs", asy
   const directory = await mkdtemp(join(tmpdir(), "sqlbraid-ci-merge-"));
   try {
     const passing = report("tests/a.test.ts", "a");
-    assert.deepEqual(mergeReports([{ path: "a", report: passing }, { path: "b", report: passing }]).testResults, passing.testResults);
-    assert.throws(() => mergeReports([{ path: "failed", report: { ...passing, success: false } }]), /Vitest shard failed/u);
-    assert.throws(() => mergeReports([
-      { path: "a", report: passing },
-      { path: "b", report: report("tests/a.test.ts", "different") },
-    ]), /Conflicting duplicate/u);
+    assert.deepEqual(
+      mergeReports([
+        { path: "a", report: passing },
+        { path: "b", report: passing },
+      ]).testResults,
+      passing.testResults,
+    );
+    assert.throws(
+      () => mergeReports([{ path: "failed", report: { ...passing, success: false } }]),
+      /Vitest shard failed/u,
+    );
+    assert.throws(
+      () =>
+        mergeReports([
+          { path: "a", report: passing },
+          { path: "b", report: report("tests/a.test.ts", "different") },
+        ]),
+      /Conflicting duplicate/u,
+    );
     await shard(directory, "postgres", passing);
     await assert.rejects(
       mergeVitestResults({
@@ -151,28 +167,40 @@ test("support evidence preserves passed assertion matching and PostgreSQL target
     const evidence = join(directory, "evidence.json");
     const observations = join(directory, "observations");
     await mkdir(observations);
-    await writeFile(results, JSON.stringify(report("tests/db/postgres/capabilities.test.ts", "postgres.sql.native-transparency")));
-    await writeFile(join(observations, "postgres.json"), JSON.stringify({
-      targetId: target.id,
-      database: target.database,
-      driver: target.driver,
-      runtime: target.runtime,
-      typePolicy: target.typePolicy,
-    }));
+    await writeFile(
+      results,
+      JSON.stringify(report("tests/db/postgres/capabilities.test.ts", "postgres.sql.native-transparency")),
+    );
+    await writeFile(
+      join(observations, "postgres.json"),
+      JSON.stringify({
+        targetId: target.id,
+        database: target.database,
+        driver: target.driver,
+        runtime: target.runtime,
+        typePolicy: target.typePolicy,
+      }),
+    );
     await run(process.execPath, ["scripts/support-evidence.mjs", results, evidence, observations], { cwd: root });
     const output = JSON.parse(await readFile(evidence, "utf8"));
     const selected = output.targets.find((entry: { id: string }) => entry.id === target.id);
     assert.ok(selected);
     assert.equal(selected.exactTupleObserved, true);
-    assert.equal(output.targets.some((entry: { id: string }) => entry.id === currentTarget.id), false);
+    assert.equal(
+      output.targets.some((entry: { id: string }) => entry.id === currentTarget.id),
+      false,
+    );
 
-    await writeFile(join(observations, "postgres-current.json"), JSON.stringify({
-      targetId: currentTarget.id,
-      database: currentTarget.database,
-      driver: currentTarget.driver,
-      runtime: currentTarget.runtime,
-      typePolicy: currentTarget.typePolicy,
-    }));
+    await writeFile(
+      join(observations, "postgres-current.json"),
+      JSON.stringify({
+        targetId: currentTarget.id,
+        database: currentTarget.database,
+        driver: currentTarget.driver,
+        runtime: currentTarget.runtime,
+        typePolicy: currentTarget.typePolicy,
+      }),
+    );
     await run(process.execPath, ["scripts/support-evidence.mjs", results, evidence, observations], {
       cwd: root,
       env: { ...process.env, SQLBRAID_POSTGRES_TARGET: "postgres-current" },
@@ -181,9 +209,11 @@ test("support evidence preserves passed assertion matching and PostgreSQL target
     const current = currentOutput.targets.find((entry: { id: string }) => entry.id === currentTarget.id);
     assert.ok(current);
     assert.equal(current.exactTupleObserved, true);
-    assert.equal(currentOutput.targets.some((entry: { id: string }) => entry.id === target.id), false);
+    assert.equal(
+      currentOutput.targets.some((entry: { id: string }) => entry.id === target.id),
+      false,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
-

@@ -1,9 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { UnsupportedFeatureError } from "@sqlbraid/core";
-import type { Mysql2ConnectionLike, Mysql2FieldLike, Mysql2PoolConnectionLike, Mysql2RawCommandLike, Mysql2RawConnectionLike, Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
+import type {
+  Mysql2ConnectionLike,
+  Mysql2FieldLike,
+  Mysql2PoolConnectionLike,
+  Mysql2RawCommandLike,
+  Mysql2RawConnectionLike,
+  Mysql2RawStreamLike,
+} from "@sqlbraid/mysql/mysql2";
 import { createMysql2Executor, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
-import type { PgClientLike, PgCursorFactory, PgCursorLike, PgPoolClientLike, PgResultLike } from "@sqlbraid/postgres/pg";
+import type {
+  PgClientLike,
+  PgCursorFactory,
+  PgCursorLike,
+  PgPoolClientLike,
+  PgResultLike,
+} from "@sqlbraid/postgres/pg";
 import { createPgExecutor, createPgPoolDatabase, pgStatementBinding } from "@sqlbraid/postgres/pg";
 import { postgresParameter, sql as pgSql } from "@sqlbraid/postgres";
 import { sql as mysqlSql, typePolicy as mysqlTypePolicy } from "@sqlbraid/mysql";
@@ -17,7 +30,10 @@ class Cursor implements PgCursorLike {
     callback(null, Cursor.rows, { rows: Cursor.rows, fields: [{ name: "id", dataTypeID: 20 }] });
     Cursor.rows = [];
   }
-  close(callback: (error?: unknown) => void): void { Cursor.closes += 1; callback(); }
+  close(callback: (error?: unknown) => void): void {
+    Cursor.closes += 1;
+    callback();
+  }
 }
 
 const cursorFactory = Cursor as unknown as PgCursorFactory;
@@ -35,9 +51,10 @@ test("PostgreSQL OUT parameters are rejected outside calls before driver I/O", a
   const executor = createPgExecutor(client);
   await assert.rejects(
     async () => executor.query(pgSql.rows`SELECT ${pgSql.out("value")}`.render()),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "routine.out"
-      && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "routine.out" &&
+      error.code === "BRAID_CALL_OUT_UNSUPPORTED",
   );
   assert.equal(queryCalls, 0);
 });
@@ -53,9 +70,10 @@ test("Pooled MySQL OUT and INOUT parameters are rejected before lease acquisitio
   for (const parameter of [mysqlSql.out("value"), mysqlSql.inOut("value", 1)]) {
     await assert.rejects(
       () => db.call(mysqlSql.call`CALL routine(${parameter})`),
-      (error: unknown) => error instanceof UnsupportedFeatureError
-        && error.feature === (parameter.direction === "out" ? "routine.out" : "routine.inout")
-        && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
+      (error: unknown) =>
+        error instanceof UnsupportedFeatureError &&
+        error.feature === (parameter.direction === "out" ? "routine.out" : "routine.inout") &&
+        error.code === "BRAID_CALL_OUT_UNSUPPORTED",
     );
   }
   assert.equal(acquisitions, 0);
@@ -67,19 +85,33 @@ test("PostgreSQL abort interrupts a pending read and waits for physical terminat
   const ended = Promise.withResolvers<void>();
   const releases: boolean[] = [];
   class PendingCursor implements PgCursorLike {
-    read(): void { reading.resolve(); }
-    close(callback: (error?: unknown) => void): void { callback(); }
+    read(): void {
+      reading.resolve();
+    }
+    close(callback: (error?: unknown) => void): void {
+      callback();
+    }
   }
   const client = {
-    query(value: unknown) { return value; },
+    query(value: unknown) {
+      return value;
+    },
     escapeIdentifier: (value: string) => `"${value}"`,
     escapeLiteral: (value: string) => `'${value}'`,
-    end() { ending.resolve(); return ended.promise; },
-    release(discard = false) { releases.push(discard); },
+    end() {
+      ending.resolve();
+      return ended.promise;
+    },
+    release(discard = false) {
+      releases.push(discard);
+    },
   } as unknown as PgPoolClientLike;
-  const db = createPgPoolDatabase({ connect: async () => client }, {
-    cursor: PendingCursor as unknown as PgCursorFactory,
-  });
+  const db = createPgPoolDatabase(
+    { connect: async () => client },
+    {
+      cursor: PendingCursor as unknown as PgCursorFactory,
+    },
+  );
   const controller = new AbortController();
   const reason = new Error("cancel pending PostgreSQL read");
   const iterator = db.stream(pgSql.rows`SELECT pg_sleep(60)`, { signal: controller.signal })[Symbol.asyncIterator]();
@@ -124,15 +156,20 @@ test("PostgreSQL logical output names cannot select a different physical carrier
     async query() {
       return {
         rows: [{ first: "9007199254740993", second: "text output" }],
-        fields: [{ name: "first", dataTypeID: 20 }, { name: "second", dataTypeID: 25 }],
+        fields: [
+          { name: "first", dataTypeID: 20 },
+          { name: "second", dataTypeID: 25 },
+        ],
       };
     },
     escapeIdentifier: (value) => `"${value}"`,
     escapeLiteral: (value) => `'${value}'`,
   };
-  const result = await createPgExecutor(client).call(pgSql.call`
+  const result = await createPgExecutor(client).call(
+    pgSql.call`
     CALL outputs(${pgSql.out("second")}, ${pgSql.out("first")})
-  `.render());
+  `.render(),
+  );
   assert.deepEqual(result.output, { second: "9007199254740993", first: "text output" });
 });
 
@@ -194,10 +231,9 @@ test("MySQL rows map rowsAsArray payloads and fail closed for lossy numeric type
   });
   payload = [{ id: 9_007_199_254_740_992 }];
   fields = [{ name: "id", type: 8 }];
-  await assert.rejects(
-    async () => executor.query(mysqlSql.rows`SELECT id`.render()),
-    { code: "BRAID_RESULT_EXACTNESS" },
-  );
+  await assert.rejects(async () => executor.query(mysqlSql.rows`SELECT id`.render()), {
+    code: "BRAID_RESULT_EXACTNESS",
+  });
 });
 
 class RowsStream implements Mysql2RawStreamLike {
@@ -209,9 +245,16 @@ class RowsStream implements Mysql2RawStreamLike {
     if (event === "fields") listener([{ name: "amount", type: 246 }]);
     return this;
   }
-  resume(): this { return this; }
+  resume(): this {
+    return this;
+  }
   [Symbol.asyncIterator](): AsyncIterator<unknown> {
-    return { next: async () => this.index < this.values.length ? { done: false, value: this.values[this.index++] } : { done: true, value: undefined } };
+    return {
+      next: async () =>
+        this.index < this.values.length
+          ? { done: false, value: this.values[this.index++] }
+          : { done: true, value: undefined },
+    };
   }
 }
 
@@ -237,7 +280,9 @@ class FieldsBoundaryStream implements Mysql2RawStreamLike {
     return this.on(event, listener);
   }
 
-  resume(): this { return this; }
+  resume(): this {
+    return this;
+  }
 
   [Symbol.asyncIterator](): AsyncIterator<unknown> {
     return {
@@ -263,17 +308,21 @@ test("MySQL streaming preserves exact DECIMAL text without materialization and r
   let executeCalls = 0;
   let requestedHighWaterMark: number | undefined;
   const raw: Mysql2RawConnectionLike = {
-    execute: () => ({
-      stream: (options?: { readonly highWaterMark?: number }) => {
-        requestedHighWaterMark = options?.highWaterMark;
-        return new RowsStream();
-      },
-    }) as Mysql2RawCommandLike,
+    execute: () =>
+      ({
+        stream: (options?: { readonly highWaterMark?: number }) => {
+          requestedHighWaterMark = options?.highWaterMark;
+          return new RowsStream();
+        },
+      }) as Mysql2RawCommandLike,
     destroy: () => undefined,
   };
   const connection = {
     connection: raw,
-    execute: async () => { executeCalls += 1; return [[], []] as const; },
+    execute: async () => {
+      executeCalls += 1;
+      return [[], []] as const;
+    },
     beginTransaction: async () => undefined,
     commit: async () => undefined,
     rollback: async () => undefined,
@@ -309,10 +358,7 @@ test("MySQL streaming preserves first metadata and rejects queued rows from a se
   });
   const iterator = executor.stream(mysqlSql.rows`SELECT value FROM first_set`.render())[Symbol.asyncIterator]();
   assert.deepEqual(await iterator.next(), { done: false, value: { value: "FIRST:first" } });
-  await assert.rejects(
-    () => iterator.next(),
-    /BRAID_RESULT_SETS_UNSUPPORTED/u,
-  );
+  await assert.rejects(() => iterator.next(), /BRAID_RESULT_SETS_UNSUPPORTED/u);
   assert.equal(source.drained, true);
 });
 
@@ -332,10 +378,7 @@ test("MySQL streaming reports an empty second result set after iterator completi
   const executor = createMysql2Executor(connection);
   const iterator = executor.stream(mysqlSql.rows`SELECT value FROM first_set`.render())[Symbol.asyncIterator]();
   assert.deepEqual(await iterator.next(), { done: false, value: { value: "first" } });
-  await assert.rejects(
-    () => iterator.next(),
-    /BRAID_RESULT_SETS_UNSUPPORTED/u,
-  );
+  await assert.rejects(() => iterator.next(), /BRAID_RESULT_SETS_UNSUPPORTED/u);
   assert.equal(source.drained, true);
 });
 
@@ -353,17 +396,22 @@ test("MySQL streaming preserves second-set errors with drain cleanup failures", 
     beginTransaction: async () => undefined,
     commit: async () => undefined,
     rollback: async () => undefined,
-    release: () => { cleanup.push("release"); },
-    destroy: () => { cleanup.push("destroy"); },
+    release: () => {
+      cleanup.push("release");
+    },
+    destroy: () => {
+      cleanup.push("destroy");
+    },
   } as unknown as Mysql2PoolConnectionLike;
   const db = createMysql2PoolDatabase({ getConnection: async () => connection });
   const iterator = db.stream(mysqlSql.rows`SELECT value FROM first_set`)[Symbol.asyncIterator]();
   assert.deepEqual(await iterator.next(), { done: false, value: { value: "first" } });
   await assert.rejects(
     () => iterator.return!(),
-    (error: unknown) => error instanceof AggregateError
-      && error.errors.some((entry) => entry instanceof Error && /BRAID_RESULT_SETS_UNSUPPORTED/u.test(entry.message))
-      && error.errors.some((entry) => entry instanceof Error && entry.cause === drainFailure),
+    (error: unknown) =>
+      error instanceof AggregateError &&
+      error.errors.some((entry) => entry instanceof Error && /BRAID_RESULT_SETS_UNSUPPORTED/u.test(entry.message)) &&
+      error.errors.some((entry) => entry instanceof Error && entry.cause === drainFailure),
   );
   assert.deepEqual(cleanup, ["destroy"]);
 });
@@ -390,7 +438,10 @@ test("PostgreSQL adapter reports driver read failures", async () => {
     escapeIdentifier: (value: string) => `"${value}"`,
     escapeLiteral: (value: string) => `'${value}'`,
   } as unknown as PgClientLike;
-  const executor = createPgExecutor(client, { cursor: FailingCursor as unknown as PgCursorFactory, streamBatchSize: 1 });
+  const executor = createPgExecutor(client, {
+    cursor: FailingCursor as unknown as PgCursorFactory,
+    streamBatchSize: 1,
+  });
   await assert.rejects(
     async () => {
       for await (const row of executor.stream(pgSql.rows`SELECT 1 AS id`.render())) void row;
@@ -436,8 +487,9 @@ test("PostgreSQL adapter reports cleanup failures", async () => {
         break;
       }
     },
-    (error: unknown) => error instanceof Error
-      && (error.cause === failure || (error instanceof AggregateError && error.errors.includes(failure))),
+    (error: unknown) =>
+      error instanceof Error &&
+      (error.cause === failure || (error instanceof AggregateError && error.errors.includes(failure))),
   );
   assert.equal(closed, 1);
 });
@@ -460,7 +512,9 @@ test("PostgreSQL pooled streaming closes the cursor before releasing its lease",
     },
     escapeIdentifier: (value: string) => `"${value}"`,
     escapeLiteral: (value: string) => `'${value}'`,
-    release() { events.push("release"); },
+    release() {
+      events.push("release");
+    },
   } as unknown as PgClientLike & { release(): void };
   const db = createPgPoolDatabase(
     { connect: async () => client },
@@ -476,7 +530,10 @@ test("PostgreSQL pooled streaming closes the cursor before releasing its lease",
 test("PostgreSQL stream keeps binds value-only", async () => {
   let submitted: unknown;
   class OneRowCursor implements PgCursorLike {
-    constructor(readonly text: string, readonly values: readonly unknown[]) {}
+    constructor(
+      readonly text: string,
+      readonly values: readonly unknown[],
+    ) {}
     read(_size: number, callback: (error: unknown, rows?: readonly unknown[]) => void): void {
       callback(null, []);
     }
@@ -507,8 +564,12 @@ test("MySQL adapter reports driver read failures", async () => {
   class FailingStream implements Mysql2RawStreamLike {
     readonly readableEnded = true;
     readonly destroyed = false;
-    once(_event: string, _listener: (...args: readonly unknown[]) => void): this { return this; }
-    resume(): this { return this; }
+    once(_event: string, _listener: (...args: readonly unknown[]) => void): this {
+      return this;
+    }
+    resume(): this {
+      return this;
+    }
     async *[Symbol.asyncIterator](): AsyncGenerator<unknown> {
       throw failure;
     }
@@ -538,7 +599,9 @@ test("MySQL adapter reports stream drain failures after consumer break", async (
   class CleanupFailingStream implements Mysql2RawStreamLike {
     readonly readableEnded = false;
     readonly destroyed = false;
-    once(_event: string, _listener: (...args: readonly unknown[]) => void): this { return this; }
+    once(_event: string, _listener: (...args: readonly unknown[]) => void): this {
+      return this;
+    }
     async *[Symbol.asyncIterator](): AsyncGenerator<unknown> {
       yield { id: 1 };
       throw failure;
@@ -573,8 +636,14 @@ test("supported adapters reuse streaming conformance with query-bound row schema
       version: 1,
       vendor: "pv15-conformance",
       validate(value) {
-        if (!value || typeof value !== "object" || !("id" in value) || !("label" in value)
-          || typeof value.id !== "number" || typeof value.label !== "string") {
+        if (
+          !value ||
+          typeof value !== "object" ||
+          !("id" in value) ||
+          !("label" in value) ||
+          typeof value.id !== "number" ||
+          typeof value.label !== "string"
+        ) {
           return { issues: [{ message: "invalid conformance row" }] };
         }
         return { value: { id: value.id, label: value.label.toUpperCase() } };
@@ -582,76 +651,107 @@ test("supported adapters reuse streaming conformance with query-bound row schema
     },
   };
   const createMockDatabase = (kind: "postgres" | "mysql") => {
-    const rows = [{ id: 1, label: "one" }, { id: 2, label: "two" }] as const;
+    const rows = [
+      { id: 1, label: "one" },
+      { id: 2, label: "two" },
+    ] as const;
     const mapping = {
       "~standard": {
         version: 1 as const,
         vendor: "pv15-conformance-failure",
-        validate() { return { issues: [{ message: "mapping failed" }] }; },
+        validate() {
+          return { issues: [{ message: "mapping failed" }] };
+        },
       },
     } satisfies StandardSchemaV1<unknown, unknown>;
     let released = 0;
     let returned = 0;
-    const db = kind === "postgres"
-      ? createPgPoolDatabase({
-        async connect() {
-          return {
-            query(value: unknown) {
-              if (typeof value === "object") return value;
-              return Promise.resolve({ rows, fields: [] });
+    const db =
+      kind === "postgres"
+        ? createPgPoolDatabase(
+            {
+              async connect() {
+                return {
+                  query(value: unknown) {
+                    if (typeof value === "object") return value;
+                    return Promise.resolve({ rows, fields: [] });
+                  },
+                  escapeIdentifier: (value: string) => `"${value}"`,
+                  escapeLiteral: (value: string) => `'${value}'`,
+                  async end() {
+                    returned += 1;
+                  },
+                  release() {
+                    released += 1;
+                  },
+                } as unknown as PgPoolClientLike;
+              },
             },
-            escapeIdentifier: (value: string) => `"${value}"`,
-            escapeLiteral: (value: string) => `'${value}'`,
-            async end() { returned += 1; },
-            release() { released += 1; },
-          } as unknown as PgPoolClientLike;
-        },
-      }, {
-        cursor: class implements PgCursorLike {
-          private index = 0;
-          read(_size: number, callback: (error: unknown, rows?: readonly unknown[]) => void): void {
-            callback(null, this.index++ === 0 ? rows : []);
-          }
-          close(callback: (error?: unknown) => void): void {
-            returned += 1;
-            callback();
-          }
-        } as unknown as PgCursorFactory,
-        streamBatchSize: 2,
-      })
-      : createMysql2PoolDatabase({
-        async getConnection() {
-          const source: Mysql2RawStreamLike = {
-            readableEnded: true,
-            destroyed: false,
-            once(_event: string, _listener: (...args: readonly unknown[]) => void) { return this; },
-            resume() { return this; },
-            async *[Symbol.asyncIterator]() { yield* rows; },
-          };
-          return {
-            connection: {
-              execute: () => ({ stream: () => source }) as Mysql2RawCommandLike,
-              destroy: () => undefined,
+            {
+              cursor: class implements PgCursorLike {
+                private index = 0;
+                read(_size: number, callback: (error: unknown, rows?: readonly unknown[]) => void): void {
+                  callback(null, this.index++ === 0 ? rows : []);
+                }
+                close(callback: (error?: unknown) => void): void {
+                  returned += 1;
+                  callback();
+                }
+              } as unknown as PgCursorFactory,
+              streamBatchSize: 2,
             },
-            execute: async () => [rows, []] as const,
-            beginTransaction: async () => undefined,
-            commit: async () => undefined,
-            rollback: async () => undefined,
-            release() { released += 1; },
-            destroy() { released += 1; },
-          } as unknown as Mysql2PoolConnectionLike;
-        },
-      }, { streamHighWaterMark: 2 });
-    const query = kind === "postgres"
-      ? pgSql.rows(rowSchema)`SELECT id, label FROM braid_pv15_conformance`
-      : mysqlSql.rows(rowSchema)`SELECT id, label FROM braid_pv15_conformance`;
-    const mappingQuery = kind === "postgres"
-      ? pgSql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance`
-      : mysqlSql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance`;
+          )
+        : createMysql2PoolDatabase(
+            {
+              async getConnection() {
+                const source: Mysql2RawStreamLike = {
+                  readableEnded: true,
+                  destroyed: false,
+                  once(_event: string, _listener: (...args: readonly unknown[]) => void) {
+                    return this;
+                  },
+                  resume() {
+                    return this;
+                  },
+                  async *[Symbol.asyncIterator]() {
+                    yield* rows;
+                  },
+                };
+                return {
+                  connection: {
+                    execute: () => ({ stream: () => source }) as Mysql2RawCommandLike,
+                    destroy: () => undefined,
+                  },
+                  execute: async () => [rows, []] as const,
+                  beginTransaction: async () => undefined,
+                  commit: async () => undefined,
+                  rollback: async () => undefined,
+                  release() {
+                    released += 1;
+                  },
+                  destroy() {
+                    released += 1;
+                  },
+                } as unknown as Mysql2PoolConnectionLike;
+              },
+            },
+            { streamHighWaterMark: 2 },
+          );
+    const query =
+      kind === "postgres"
+        ? pgSql.rows(rowSchema)`SELECT id, label FROM braid_pv15_conformance`
+        : mysqlSql.rows(rowSchema)`SELECT id, label FROM braid_pv15_conformance`;
+    const mappingQuery =
+      kind === "postgres"
+        ? pgSql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance`
+        : mysqlSql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance`;
     return {
       db,
       query,
-      expected: [{ id: 1, label: "ONE" }, { id: 2, label: "TWO" }],
+      expected: [
+        { id: 1, label: "ONE" },
+        { id: 2, label: "TWO" },
+      ],
       mappingQuery,
       released: () => released,
       ...(kind === "postgres" ? { iteratorReturns: () => returned } : {}),

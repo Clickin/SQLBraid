@@ -86,149 +86,99 @@
   "capabilities": {
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "transaction.read-only": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "transaction.isolation.read-uncommitted": {
       "status": "guarded",
       "conditionCode": "pg.read-uncommitted-maps-to-read-committed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "transaction.isolation.read-committed": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "transaction.isolation.repeatable-read": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "statement.cancel": {
       "status": "guarded",
       "conditionCode": "pg.physical-connection-destroy",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "routine.call": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "numeric.exact-integer": {
       "status": "guaranteed",
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["deno-postgres.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "numeric.exact-decimal": {
       "status": "guaranteed",
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["deno-postgres.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["deno-postgres.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["deno-postgres.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "statement.stream": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "routine.out": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-postgres.data.profile"
-      ]
+      "testIds": ["deno-postgres.data.profile"]
     },
     "routine.inout": {
       "status": "unsupported",

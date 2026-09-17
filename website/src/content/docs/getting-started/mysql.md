@@ -83,9 +83,11 @@ drains the command or discards the physical connection before releasing it.
 MySQL emitted result sets may be heterogeneous:
 
 ```ts
-const result = await db.call(sql.call({
-  resultSets: [UserSchema, SummarySchema] as const,
-})`CALL dashboard()`);
+const result = await db.call(
+  sql.call({
+    resultSets: [UserSchema, SummarySchema] as const,
+  })`CALL dashboard()`,
+);
 ```
 
 Prepared CALL OUT/INOUT is currently rejected with
@@ -107,15 +109,15 @@ evidence. A neighboring version or package installation is not certification.
 Final exact-SHA Runtime, Docs, and Release gates and explicit release
 authorization remain separate requirements.
 
-| mysql2 option | `mysql2-lossless-text` | Effect |
-| --- | --- | --- |
-| `supportBigNumbers: true` | Required | Keeps large integer/decimal values out of lossy `number` inference. |
-| `bigNumberStrings: true` | Required | Returns big-number values as strings for exact application handling. |
-| `decimalNumbers: false` | Required | Avoids converting `DECIMAL` to JavaScript `number`; `true` is a different profile. |
-| `rowsAsArray: false` | Required | Keeps object rows, which SQLBraid's normalizer and schemas expect. |
-| `jsonStrings: true` | Required | Returns JSON text without `JSON.parse`; parsed JSON is a separate profile. |
-| `dateStrings: true` | Required | Returns temporal text so fractional precision is visible; `Date` is a separate profile. |
-| `typeCast` (default) | Required | A custom function changes raw representations and is a separate profile until tested. |
+| mysql2 option             | `mysql2-lossless-text` | Effect                                                                                  |
+| ------------------------- | ---------------------- | --------------------------------------------------------------------------------------- |
+| `supportBigNumbers: true` | Required               | Keeps large integer/decimal values out of lossy `number` inference.                     |
+| `bigNumberStrings: true`  | Required               | Returns big-number values as strings for exact application handling.                    |
+| `decimalNumbers: false`   | Required               | Avoids converting `DECIMAL` to JavaScript `number`; `true` is a different profile.      |
+| `rowsAsArray: false`      | Required               | Keeps object rows, which SQLBraid's normalizer and schemas expect.                      |
+| `jsonStrings: true`       | Required               | Returns JSON text without `JSON.parse`; parsed JSON is a separate profile.              |
+| `dateStrings: true`       | Required               | Returns temporal text so fractional precision is visible; `Date` is a separate profile. |
+| `typeCast` (default)      | Required               | A custom function changes raw representations and is a separate profile until tested.   |
 
 The effective profile records the mysql2 version, MySQL server, Node version,
 and every option above. SQLBraid does not inspect a custom `typeCast` function

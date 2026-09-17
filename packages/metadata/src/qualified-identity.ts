@@ -1,11 +1,7 @@
 export const QUALIFIED_IDENTITY_ENCODING = "escaped-qualified-v1" as const;
 
 function escapeQualifiedPart(value: string): string {
-  return value
-    .replaceAll("\\", "\\\\")
-    .replaceAll(".", "\\.")
-    .replaceAll(":", "\\:")
-    .replaceAll("#", "\\#");
+  return value.replaceAll("\\", "\\\\").replaceAll(".", "\\.").replaceAll(":", "\\:").replaceAll("#", "\\#");
 }
 
 /**

@@ -28,7 +28,10 @@ test("postgres.pv18.environment.refresh-extra-float-digits", { timeout: 30_000 }
     await client.query("SET extra_float_digits = 0");
     const cached = await db.environment();
     const refreshed = await db.environment({ refresh: true });
-    assert.equal(cached.capabilities["numeric.approximate-float"]?.status, initial.capabilities["numeric.approximate-float"]?.status);
+    assert.equal(
+      cached.capabilities["numeric.approximate-float"]?.status,
+      initial.capabilities["numeric.approximate-float"]?.status,
+    );
     assert.equal(refreshed.capabilities["numeric.approximate-float"]?.status, "guarded");
     await client.query(`SET extra_float_digits = ${Number.isInteger(original) ? original : 3}`);
   } finally {
@@ -151,18 +154,40 @@ test("postgres.pv18.profiles.runtime-codegen", { timeout: 30_000 }, async () => 
       assert.equal(row.stamped instanceof Date, selected.temporal === "native");
       if (selected.temporal === "text") assert.equal(typeof row.stamped, "string");
       const generated = generateModels(snapshot, { typePolicy: selected.typePolicy });
-      assertGeneratedProperty(generated.source, "BraidPv18ProfilesRow", "payload", selected.json === "text" ? "string" : "unknown", false);
-      assertGeneratedProperty(generated.source, "BraidPv18ProfilesRow", "stamped", selected.temporal === "text" ? "string" : "Date", false);
+      assertGeneratedProperty(
+        generated.source,
+        "BraidPv18ProfilesRow",
+        "payload",
+        selected.json === "text" ? "string" : "unknown",
+        false,
+      );
+      assertGeneratedProperty(
+        generated.source,
+        "BraidPv18ProfilesRow",
+        "stamped",
+        selected.temporal === "text" ? "string" : "Date",
+        false,
+      );
     }
-    const server = (await client.query<{ version: string; banner: string }>("SELECT current_setting('server_version') AS version, version() AS banner")).rows[0]!;
-    const pgVersion = JSON.parse(readFileSync(new URL("../../../node_modules/pg/package.json", import.meta.url), "utf8")).version as string;
+    const server = (
+      await client.query<{ version: string; banner: string }>(
+        "SELECT current_setting('server_version') AS version, version() AS banner",
+      )
+    ).rows[0]!;
+    const pgVersion = JSON.parse(
+      readFileSync(new URL("../../../node_modules/pg/package.json", import.meta.url), "utf8"),
+    ).version as string;
     const edition = /alpine/iu.test(server.banner) ? "alpine" : server.banner;
-    stampSupportEnvironment(process.env.SQLBRAID_POSTGRES_TARGET ?? "postgres", {
-      ...textEnvironment,
-      database: { product: "postgres", version: server.version.split(" ")[0]!, edition },
-      driver: { ...textEnvironment.driver, version: pgVersion },
-      runtime: { id: "node", version: process.versions.node },
-    }, "postgres.data.profile-runtime-codegen");
+    stampSupportEnvironment(
+      process.env.SQLBRAID_POSTGRES_TARGET ?? "postgres",
+      {
+        ...textEnvironment,
+        database: { product: "postgres", version: server.version.split(" ")[0]!, edition },
+        driver: { ...textEnvironment.driver, version: pgVersion },
+        runtime: { id: "node", version: process.versions.node },
+      },
+      "postgres.data.profile-runtime-codegen",
+    );
   } finally {
     await client.query("DROP TABLE IF EXISTS braid_pv18_profiles").catch(() => undefined);
     await client.end();
@@ -192,7 +217,24 @@ test("postgres.pv18.containers.lossless-text", { timeout: 30_000 }, async () => 
              ARRAY['550e8400-e29b-41d4-a716-446655440000'::uuid] AS uuid_values,
              ARRAY[decode('00ff10', 'hex')::bytea] AS bytea_values
     `);
-    for (const key of ["int8_values", "int2_values", "int4_values", "numeric_values", "real_values", "float8_values", "json_values", "jsonb_values", "time_values", "timetz_values", "interval_values", "timestamp_values", "timestamptz_values", "date_values", "uuid_values", "bytea_values"] as const) {
+    for (const key of [
+      "int8_values",
+      "int2_values",
+      "int4_values",
+      "numeric_values",
+      "real_values",
+      "float8_values",
+      "json_values",
+      "jsonb_values",
+      "time_values",
+      "timetz_values",
+      "interval_values",
+      "timestamp_values",
+      "timestamptz_values",
+      "date_values",
+      "uuid_values",
+      "bytea_values",
+    ] as const) {
       assert.equal(typeof row[key], "string", `${key} must remain one raw text carrier`);
     }
     assert.match(String(row.int8_values), /9007199254740993/u);
@@ -263,24 +305,51 @@ test("postgres.pv18.containers.native-classification", { timeout: 30_000 }, asyn
     assert.equal(row.domain_int8, "9007199254740993");
     assert.deepEqual(row.domain_json, { n: 9007199254740993 });
     assert.ok(row.domain_timestamp instanceof Date);
-    for (const key of ["range_value", "numeric_range", "timestamp_range", "zoned_range", "multirange_value", "numeric_multirange", "timestamp_multirange", "zoned_multirange"]) {
+    for (const key of [
+      "range_value",
+      "numeric_range",
+      "timestamp_range",
+      "zoned_range",
+      "multirange_value",
+      "numeric_multirange",
+      "timestamp_multirange",
+      "zoned_multirange",
+    ]) {
       assert.equal(typeof row[key], "string");
     }
     assert.equal(typeof row.composite_value, "string");
     const textRow = await createPgDatabase(client, { profile: profile("pg-lossless-text") }).one(query);
     assert.ok(Object.values(textRow).every((value) => typeof value === "string"));
-    for (const key of ["domain_value", "domain_int8", "domain_json", "range_value", "multirange_value", "composite_value"]) {
+    for (const key of [
+      "domain_value",
+      "domain_int8",
+      "domain_json",
+      "range_value",
+      "multirange_value",
+      "composite_value",
+    ]) {
       assert.match(String(textRow[key]), /9007199254740993/u);
     }
-    for (const key of ["numeric_range", "numeric_multirange"]) assert.match(String(textRow[key]), /12345678901234567890\.123456789/u);
-    for (const key of ["domain_timestamp", "timestamp_range", "zoned_range", "timestamp_multirange", "zoned_multirange"]) assert.match(String(textRow[key]), /\.123456/u);
+    for (const key of ["numeric_range", "numeric_multirange"])
+      assert.match(String(textRow[key]), /12345678901234567890\.123456789/u);
+    for (const key of [
+      "domain_timestamp",
+      "timestamp_range",
+      "zoned_range",
+      "timestamp_multirange",
+      "zoned_multirange",
+    ])
+      assert.match(String(textRow[key]), /\.123456/u);
     const domainDescription = await client.query(`
       SELECT 1::braid_pv18_int8_domain AS integer_value,
              1.25::braid_pv18_numeric_domain AS decimal_value,
              '{}'::braid_pv18_json_domain AS json_value,
              '2026-09-14'::braid_pv18_timestamp_domain AS temporal_value
     `);
-    assert.deepEqual(domainDescription.fields.map((field) => field.dataTypeID), [20, 1700, 3802, 1114]);
+    assert.deepEqual(
+      domainDescription.fields.map((field) => field.dataTypeID),
+      [20, 1700, 3802, 1114],
+    );
 
     const snapshot = await createPostgresInspector(client).inspect();
     assert.equal(snapshot.types["public.braid_pv18_json_domain"]?.kind, "domain");
@@ -290,14 +359,26 @@ test("postgres.pv18.containers.native-classification", { timeout: 30_000 }, asyn
     assert.equal(snapshot.types["public.braid_pv18_composite"]?.kind, "composite");
     assert.equal(snapshot.types["pg_catalog.int8range"]?.kind, "range");
     assert.equal(snapshot.types["pg_catalog.int8multirange"]?.kind, "multirange");
-    for (const name of ["numrange", "tsrange", "tstzrange"]) assert.equal(snapshot.types[`pg_catalog.${name}`]?.kind, "range");
-    for (const name of ["nummultirange", "tsmultirange", "tstzmultirange"]) assert.equal(snapshot.types[`pg_catalog.${name}`]?.kind, "multirange");
+    for (const name of ["numrange", "tsrange", "tstzrange"])
+      assert.equal(snapshot.types[`pg_catalog.${name}`]?.kind, "range");
+    for (const name of ["nummultirange", "tsmultirange", "tstzmultirange"])
+      assert.equal(snapshot.types[`pg_catalog.${name}`]?.kind, "multirange");
     const generated = generateModels(snapshot, { typePolicy: profile("pg-native").typePolicy });
     assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", "domain_json", "unknown | null", false);
     assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", "range_value", "unknown | null", false);
     assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", "multirange_value", "unknown | null", false);
     assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", "composite_value", "unknown | null", false);
-    for (const name of ["domain_numeric", "domain_int8", "domain_timestamp", "numeric_range", "timestamp_range", "zoned_range", "numeric_multirange", "timestamp_multirange", "zoned_multirange"]) {
+    for (const name of [
+      "domain_numeric",
+      "domain_int8",
+      "domain_timestamp",
+      "numeric_range",
+      "timestamp_range",
+      "zoned_range",
+      "numeric_multirange",
+      "timestamp_multirange",
+      "zoned_multirange",
+    ]) {
       assertGeneratedProperty(generated.source, "BraidPv18ContainersRow", name, "unknown | null", false);
     }
     await assertCompilesGeneratedSource(generated.source, "postgres-pv18-containers");

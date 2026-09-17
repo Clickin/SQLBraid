@@ -13,10 +13,17 @@ test("mssql-tedious certifies the independent real-database contract", { timeout
   const output = process.env.SQLBRAID_CERT_ARTIFACT;
   assert.ok(output, "SQLBRAID_CERT_ARTIFACT is required for certification artifacts.");
   const target = createMssqlTediousTarget(sourceSha, installedPackageVersion("tedious"));
-  const artifact = await certifyTarget(target, { stress: process.env.SQLBRAID_CERT_STRESS === "1" || process.env.SQLBRAID_CERT_STRESS === "true" });
+  const artifact = await certifyTarget(target, {
+    stress: process.env.SQLBRAID_CERT_STRESS === "1" || process.env.SQLBRAID_CERT_STRESS === "true",
+  });
   validateCertificationArtifact(artifact, { sourceSha: target.sourceSha });
   assert.equal(Object.keys(artifact.cases).length, REQUIRED_CASE_IDS.length);
-  assert.deepEqual(Object.values(artifact.cases).map((result) => result.status).filter((status) => status === "fail"), []);
+  assert.deepEqual(
+    Object.values(artifact.cases)
+      .map((result) => result.status)
+      .filter((status) => status === "fail"),
+    [],
+  );
   await mkdir(dirname(output), { recursive: true });
   await writeCertificationArtifact(output, artifact);
 });

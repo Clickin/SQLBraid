@@ -19,7 +19,8 @@ void (async () => {
     if (sqlite3 === undefined) throw new Error("SQLite WASM fixture did not expose its initialized sqlite3 module.");
     const measuredDriverVersion = search.get("driverVersion");
     const measuredRuntimeVersion = search.get("runtimeVersion");
-    if (measuredDriverVersion === null || measuredRuntimeVersion === null) throw new Error("SQLite WASM certification requires measured driver and browser versions.");
+    if (measuredDriverVersion === null || measuredRuntimeVersion === null)
+      throw new Error("SQLite WASM certification requires measured driver and browser versions.");
     const target = createSqliteWasmTarget(sqlite3, sourceSha, { measuredDriverVersion, measuredRuntimeVersion });
     const artifact = await certifyTarget(target, { stress });
     assertCertificationCasesPass(artifact.cases);
@@ -30,6 +31,6 @@ void (async () => {
       cases: artifact.cases,
     };
   } catch (error) {
-    window.__sqlbraidCertificationError = error instanceof Error ? error.stack ?? error.message : String(error);
+    window.__sqlbraidCertificationError = error instanceof Error ? (error.stack ?? error.message) : String(error);
   }
 })();

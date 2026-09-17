@@ -6,11 +6,7 @@ import {
   MeterProvider,
   PeriodicExportingMetricReader,
 } from "@opentelemetry/sdk-metrics";
-import {
-  BasicTracerProvider,
-  InMemorySpanExporter,
-  SimpleSpanProcessor,
-} from "@opentelemetry/sdk-trace-base";
+import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { Pool } from "pg";
 import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
 import type { ExecutionObserver } from "@sqlbraid/core";
@@ -68,13 +64,18 @@ try {
     .flatMap(({ metrics: scopeMetrics }) => scopeMetrics)
     .filter((metric) => metric.descriptor.name === "db.client.operation.duration");
   assert.ok(durationMetrics.length > 0, "SDK exporter must receive the duration metric");
-  assert.ok(durationMetrics.some((metric) => metric.dataPoints.some(({ value }) => (
-    typeof value === "object"
-    && value !== null
-    && "count" in value
-    && typeof value.count === "number"
-    && value.count >= 2
-  ))));
+  assert.ok(
+    durationMetrics.some((metric) =>
+      metric.dataPoints.some(
+        ({ value }) =>
+          typeof value === "object" &&
+          value !== null &&
+          "count" in value &&
+          typeof value.count === "number" &&
+          value.count >= 2,
+      ),
+    ),
+  );
   console.info(`PASS OpenTelemetry slow-query spans=${spans.length} duration-metrics=${durationMetrics.length}`);
 } finally {
   console.warn = originalWarn;

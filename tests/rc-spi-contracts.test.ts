@@ -74,20 +74,23 @@ function createSyntheticProvider() {
   let cancellations = 0;
   let streamsSettled = 0;
   let markCancellationStarted!: () => void;
-  const cancellationStarted = new Promise<void>((resolve) => { markCancellationStarted = resolve; });
-
-  const waitForCancellation = (signal: AbortSignal): Promise<never> => new Promise((_, reject) => {
-    const settle = () => {
-      signal.removeEventListener("abort", settle);
-      activeCancellationWaits -= 1;
-      cancellations += 1;
-      reject(abortError(signal));
-    };
-    activeCancellationWaits += 1;
-    markCancellationStarted();
-    if (signal.aborted) settle();
-    else signal.addEventListener("abort", settle, { once: true });
+  const cancellationStarted = new Promise<void>((resolve) => {
+    markCancellationStarted = resolve;
   });
+
+  const waitForCancellation = (signal: AbortSignal): Promise<never> =>
+    new Promise((_, reject) => {
+      const settle = () => {
+        signal.removeEventListener("abort", settle);
+        activeCancellationWaits -= 1;
+        cancellations += 1;
+        reject(abortError(signal));
+      };
+      activeCancellationWaits += 1;
+      markCancellationStarted();
+      if (signal.aborted) settle();
+      else signal.addEventListener("abort", settle, { once: true });
+    });
 
   const leaseFor = (leaseId: number): ConnectionLease => {
     const ownershipKey = {};
@@ -112,7 +115,11 @@ function createSyntheticProvider() {
           "routine.return-value": { status: "guaranteed" },
         },
       },
-      async query<Row>(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions) {
+      async query<Row>(
+        rendered: RenderedStatement,
+        _binding?: StatementBindingDescription,
+        options?: ExecutionOptions,
+      ) {
         assert.equal(lease.statementBinding, statementBinding);
         logs.push({ dialect: rendered.dialectId, lease: leaseId, kind: `query:${rendered.resultKind}` });
         if (rendered.segments.join("").includes("WAIT FOR CANCELLATION")) {
@@ -129,14 +136,20 @@ function createSyntheticProvider() {
         }
         return {
           kind: "rows",
-          rows: [{
-            dialect: rendered.dialectId,
-            lease: leaseId,
-            value: rendered.parameters[0]?.value,
-          }] as unknown as readonly Row[],
+          rows: [
+            {
+              dialect: rendered.dialectId,
+              lease: leaseId,
+              value: rendered.parameters[0]?.value,
+            },
+          ] as unknown as readonly Row[],
         };
       },
-      async *stream<Row>(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row> {
+      async *stream<Row>(
+        rendered: RenderedStatement,
+        _binding?: StatementBindingDescription,
+        options?: ExecutionOptions,
+      ): AsyncIterable<Row> {
         assert.equal(lease.statementBinding, statementBinding);
         logs.push({ dialect: rendered.dialectId, lease: leaseId, kind: "stream" });
         try {
@@ -169,11 +182,21 @@ function createSyntheticProvider() {
       async begin(options?: TransactionOptions) {
         lifecycle.push(`begin:${leaseId}:${options?.isolation ?? "default"}:${options?.readOnly === true}`);
       },
-      async commit() { lifecycle.push(`commit:${leaseId}`); },
-      async rollback() { lifecycle.push(`rollback:${leaseId}`); },
-      async savepoint(name: string) { lifecycle.push(`savepoint:${leaseId}:${name}`); },
-      async rollbackTo(name: string) { lifecycle.push(`rollback-to:${leaseId}:${name}`); },
-      async releaseSavepoint(name: string) { lifecycle.push(`release-savepoint:${leaseId}:${name}`); },
+      async commit() {
+        lifecycle.push(`commit:${leaseId}`);
+      },
+      async rollback() {
+        lifecycle.push(`rollback:${leaseId}`);
+      },
+      async savepoint(name: string) {
+        lifecycle.push(`savepoint:${leaseId}:${name}`);
+      },
+      async rollbackTo(name: string) {
+        lifecycle.push(`rollback-to:${leaseId}:${name}`);
+      },
+      async releaseSavepoint(name: string) {
+        lifecycle.push(`release-savepoint:${leaseId}:${name}`);
+      },
       async release() {
         releaseCount += 1;
         lifecycle.push(`release:${leaseId}`);
@@ -252,10 +275,10 @@ test("synthetic SPI covers ordinary, prepared, routine, stream, bulk and cancell
     { dialect: "postgres", lease: 4, value: 2 },
   ]);
 
-  assert.deepEqual(
-    await db.bulk([14, 15], (value) => postgres.command`UPDATE items SET value = ${value}`),
-    { inputCount: 2, affectedRows: 2 },
-  );
+  assert.deepEqual(await db.bulk([14, 15], (value) => postgres.command`UPDATE items SET value = ${value}`), {
+    inputCount: 2,
+    affectedRows: 2,
+  });
 
   const controller = new AbortController();
   const cancelled = db.execute(postgres`WAIT FOR CANCELLATION`, { signal: controller.signal });
@@ -326,48 +349,67 @@ test("one adapter serves multiple dialects while a session pins one lease", asyn
   });
   assert.equal(fixture.lifecycle.includes("begin:1:serializable:true"), true);
   assert.equal(fixture.lifecycle.includes("commit:1"), true);
-  assert.equal(fixture.lifecycle.some((entry) => entry.startsWith("savepoint:1:")), true);
-  assert.equal(fixture.lifecycle.some((entry) => entry.startsWith("release-savepoint:1:")), true);
+  assert.equal(
+    fixture.lifecycle.some((entry) => entry.startsWith("savepoint:1:")),
+    true,
+  );
+  assert.equal(
+    fixture.lifecycle.some((entry) => entry.startsWith("release-savepoint:1:")),
+    true,
+  );
   assert.equal(fixture.lifecycle.filter((entry) => entry === "release:1").length, 1);
-  assert.equal(fixture.logs.every(({ lease }) => lease === 1), true);
+  assert.equal(
+    fixture.logs.every(({ lease }) => lease === 1),
+    true,
+  );
 
   await assert.rejects(
     () => escaped!.one(postgres.rows<PortableRow>`SELECT closed`),
     (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_SESSION_CLOSED",
   );
   assert.equal(fixture.provider.statementBinding, fixture.leases[0]?.statementBinding);
-  assert.deepEqual(fixture.logs.map(({ dialect }) => dialect), ["postgres", "mysql", "mysql", "postgres", "mysql"]);
+  assert.deepEqual(
+    fixture.logs.map(({ dialect }) => dialect),
+    ["postgres", "mysql", "mysql", "postgres", "mysql"],
+  );
 });
 
 test("transaction cleanup settles savepoints and releases a failed session lease", async () => {
   const fixture = createSyntheticProvider();
   const db = createPooledDatabase(fixture.provider);
 
-  for (const options of [
-    { isolation: "drop table" },
-    { readOnly: "yes" },
-  ]) {
+  for (const options of [{ isolation: "drop table" }, { readOnly: "yes" }]) {
     await assert.rejects(
       () => db.tx(options as never, async () => undefined),
-      (error: unknown) => error instanceof TypeError
-        && "code" in error
-        && error.code === "BRAID_TX_OPTIONS_INVALID",
+      (error: unknown) => error instanceof TypeError && "code" in error && error.code === "BRAID_TX_OPTIONS_INVALID",
     );
   }
   assert.equal(fixture.counts().acquireCount, 0);
-  assert.equal(fixture.lifecycle.some((entry) => entry.startsWith("begin:")), false);
+  assert.equal(
+    fixture.lifecycle.some((entry) => entry.startsWith("begin:")),
+    false,
+  );
 
   await assert.rejects(
-    () => db.session(async (session) => session.tx(async (transaction) => {
-      await transaction.tx(async (savepoint) => {
-        await savepoint.execute(postgres`SELECT nested`);
-        throw new Error("rollback savepoint");
-      });
-    })),
+    () =>
+      db.session(async (session) =>
+        session.tx(async (transaction) => {
+          await transaction.tx(async (savepoint) => {
+            await savepoint.execute(postgres`SELECT nested`);
+            throw new Error("rollback savepoint");
+          });
+        }),
+      ),
     /rollback savepoint/u,
   );
-  assert.equal(fixture.lifecycle.some((entry) => entry.startsWith("rollback-to:1:")), true);
-  assert.equal(fixture.lifecycle.some((entry) => entry.startsWith("release-savepoint:1:")), true);
+  assert.equal(
+    fixture.lifecycle.some((entry) => entry.startsWith("rollback-to:1:")),
+    true,
+  );
+  assert.equal(
+    fixture.lifecycle.some((entry) => entry.startsWith("release-savepoint:1:")),
+    true,
+  );
   assert.equal(fixture.lifecycle.includes("rollback:1"), true);
   assert.equal(fixture.lifecycle.filter((entry) => entry === "release:1").length, 1);
 });

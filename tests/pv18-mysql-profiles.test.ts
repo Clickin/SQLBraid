@@ -79,7 +79,13 @@ function mysqlConnectionWithoutConfig(
 function mariaConnection(payload: unknown, fields: readonly Record<string, unknown>[]) {
   return {
     async execute() {
-      if (typeof payload === "object" && payload !== null && !Array.isArray(payload) && Object.hasOwn(payload, "affectedRows")) return payload;
+      if (
+        typeof payload === "object" &&
+        payload !== null &&
+        !Array.isArray(payload) &&
+        Object.hasOwn(payload, "affectedRows")
+      )
+        return payload;
       const rows = Array.isArray(payload) ? payload : [payload];
       Object.defineProperty(rows, "meta", { value: fields, enumerable: false });
       return rows;
@@ -102,56 +108,78 @@ function typePolicyContract(policy: TypePolicy): void {
 test("unprofiled MariaDB connections cannot advertise a certified representation profile", () => {
   const connection = mariaConnection([], []);
   assert.equal(createMariaDbExecutor(connection).environment?.driver.profile, "mariadb-custom-profile");
-  assert.equal(createMariaDbExecutor(connection, { profile: { dateStrings: true } }).environment?.driver.profile, "mariadb-custom-profile");
-  assert.equal(createMariaDbExecutor(connection, { profile: MARIADB_LOSSLESS_TEXT }).environment?.driver.profile, "mariadb-lossless-text");
+  assert.equal(
+    createMariaDbExecutor(connection, { profile: { dateStrings: true } }).environment?.driver.profile,
+    "mariadb-custom-profile",
+  );
+  assert.equal(
+    createMariaDbExecutor(connection, { profile: MARIADB_LOSSLESS_TEXT }).environment?.driver.profile,
+    "mariadb-lossless-text",
+  );
 });
 
 test("PV18 first-party MySQL and MariaDB profiles are immutable and policy-coherent", () => {
-  assert.deepEqual(mysqlProfiles.map(({ id }) => id), [
-    "mysql2-lossless-text",
-    "mysql2-native",
-    "mysql2-json-text",
-    "mysql2-date-text",
-  ]);
-  assert.deepEqual(mariaProfiles.map(({ id }) => id), [
-    "mariadb-lossless-text",
-    "mariadb-native",
-    "mariadb-json-text",
-    "mariadb-date-text",
-  ]);
+  assert.deepEqual(
+    mysqlProfiles.map(({ id }) => id),
+    ["mysql2-lossless-text", "mysql2-native", "mysql2-json-text", "mysql2-date-text"],
+  );
+  assert.deepEqual(
+    mariaProfiles.map(({ id }) => id),
+    ["mariadb-lossless-text", "mariadb-native", "mariadb-json-text", "mariadb-date-text"],
+  );
   typePolicyContract(MYSQL2_LOSSLESS_TEXT.typePolicy);
   typePolicyContract(MYSQL2_NATIVE.typePolicy);
   typePolicyContract(MARIADB_LOSSLESS_TEXT.typePolicy);
   typePolicyContract(MARIADB_NATIVE.typePolicy);
-  assert.equal(MYSQL2_LOSSLESS_TEXT.typePolicy.mappings.find((mapping) => mapping.databaseType === "JSON")?.outputType, "string");
-  assert.equal(MYSQL2_NATIVE.typePolicy.mappings.find((mapping) => mapping.databaseType === "JSON")?.outputType, "unknown");
-  assert.equal(MYSQL2_LOSSLESS_TEXT.typePolicy.mappings.find((mapping) => mapping.databaseType === "DATETIME")?.outputType, "string");
-  assert.equal(MYSQL2_NATIVE.typePolicy.mappings.find((mapping) => mapping.databaseType === "DATETIME")?.outputType, "Date");
+  assert.equal(
+    MYSQL2_LOSSLESS_TEXT.typePolicy.mappings.find((mapping) => mapping.databaseType === "JSON")?.outputType,
+    "string",
+  );
+  assert.equal(
+    MYSQL2_NATIVE.typePolicy.mappings.find((mapping) => mapping.databaseType === "JSON")?.outputType,
+    "unknown",
+  );
+  assert.equal(
+    MYSQL2_LOSSLESS_TEXT.typePolicy.mappings.find((mapping) => mapping.databaseType === "DATETIME")?.outputType,
+    "string",
+  );
+  assert.equal(
+    MYSQL2_NATIVE.typePolicy.mappings.find((mapping) => mapping.databaseType === "DATETIME")?.outputType,
+    "Date",
+  );
   assert.equal(MARIADB_LOSSLESS_TEXT.connectionOptions?.autoJsonMap, false);
   assert.equal(MARIADB_NATIVE.connectionOptions?.autoJsonMap, true);
 });
 
 test("PV18 MySQL auto-recognition selects matching native policy and codegen", async () => {
-  const connection = mysqlConnection({
-    supportBigNumbers: true,
-    bigNumberStrings: true,
-    decimalNumbers: false,
-    rowsAsArray: false,
-    jsonStrings: false,
-    dateStrings: false,
-    typeCast: true,
-  }, [{ payload: { nested: [1, true] }, instant: new Date("2026-09-14T12:34:56.000Z"), amount: "123.4500" }], [
-    { name: "payload", type: "JSON" },
-    { name: "instant", type: "DATETIME" },
-    { name: "amount", type: "DECIMAL" },
-  ]);
+  const connection = mysqlConnection(
+    {
+      supportBigNumbers: true,
+      bigNumberStrings: true,
+      decimalNumbers: false,
+      rowsAsArray: false,
+      jsonStrings: false,
+      dateStrings: false,
+      typeCast: true,
+    },
+    [{ payload: { nested: [1, true] }, instant: new Date("2026-09-14T12:34:56.000Z"), amount: "123.4500" }],
+    [
+      { name: "payload", type: "JSON" },
+      { name: "instant", type: "DATETIME" },
+      { name: "amount", type: "DECIMAL" },
+    ],
+  );
   const executor = createMysql2Executor(connection);
   const result = await executor.query(mysqlSql.rows`SELECT payload, instant, amount`.render());
-  assert.deepEqual(result.rows, [{ payload: { nested: [1, true] }, instant: new Date("2026-09-14T12:34:56.000Z"), amount: "123.4500" }]);
+  assert.deepEqual(result.rows, [
+    { payload: { nested: [1, true] }, instant: new Date("2026-09-14T12:34:56.000Z"), amount: "123.4500" },
+  ]);
   const environment = executor.environment;
   assert.ok(environment);
   assert.equal(environment.driver.profile, "mysql2-native");
-  const typePolicy = (environment as typeof environment & { readonly typePolicy?: { readonly id: string; readonly hash: string } }).typePolicy;
+  const typePolicy = (
+    environment as typeof environment & { readonly typePolicy?: { readonly id: string; readonly hash: string } }
+  ).typePolicy;
   assert.deepEqual(typePolicy, { id: MYSQL2_NATIVE.typePolicy.id, hash: MYSQL2_NATIVE.typePolicy.hash });
   const generated = generateModels(snapshot("mysql"), { typePolicy: MYSQL2_NATIVE.typePolicy });
   assertGeneratedProperty(generated.source, "ProfileValuesRow", "payload", "unknown", false);
@@ -160,12 +188,12 @@ test("PV18 MySQL auto-recognition selects matching native policy and codegen", a
 });
 
 test("PV18 MySQL declarative profiles stay guarded without config observation", async () => {
-  const executor = createMysql2Executor(mysqlConnectionWithoutConfig(
-    [{ payload: "{\"nested\":true}" }],
-    [{ name: "payload", type: "JSON" }],
-  ), { profile: MYSQL2_LOSSLESS_TEXT });
+  const executor = createMysql2Executor(
+    mysqlConnectionWithoutConfig([{ payload: '{"nested":true}' }], [{ name: "payload", type: "JSON" }]),
+    { profile: MYSQL2_LOSSLESS_TEXT },
+  );
   const result = await executor.query(mysqlSql.rows`SELECT payload`.render());
-  assert.deepEqual(result.rows, [{ payload: "{\"nested\":true}" }]);
+  assert.deepEqual(result.rows, [{ payload: '{"nested":true}' }]);
   const environment = executor.environment;
   assert.ok(environment);
   assert.equal(environment.driver.profile, "mysql2-custom-profile");
@@ -173,28 +201,48 @@ test("PV18 MySQL declarative profiles stay guarded without config observation", 
 });
 
 test("PV18 text profiles fail closed on parsed MySQL and MariaDB representations", async () => {
-  const mysql = createMysql2Executor(mysqlConnection({
-    supportBigNumbers: true,
-    bigNumberStrings: true,
-    decimalNumbers: false,
-    rowsAsArray: false,
-    jsonStrings: false,
-    dateStrings: false,
-    typeCast: true,
-  }, [{ payload: { nested: true } }], [{ name: "payload", type: "JSON" }]), { profile: MYSQL2_LOSSLESS_TEXT });
-  await assert.rejects(async () => mysql.query(mysqlSql.rows`SELECT payload`.render()), (error: unknown) => error instanceof ResultExactnessError);
+  const mysql = createMysql2Executor(
+    mysqlConnection(
+      {
+        supportBigNumbers: true,
+        bigNumberStrings: true,
+        decimalNumbers: false,
+        rowsAsArray: false,
+        jsonStrings: false,
+        dateStrings: false,
+        typeCast: true,
+      },
+      [{ payload: { nested: true } }],
+      [{ name: "payload", type: "JSON" }],
+    ),
+    { profile: MYSQL2_LOSSLESS_TEXT },
+  );
+  await assert.rejects(
+    async () => mysql.query(mysqlSql.rows`SELECT payload`.render()),
+    (error: unknown) => error instanceof ResultExactnessError,
+  );
 
-  const maria = createMariaDbExecutor(mariaConnection([{ payload: { nested: true } }], [{ name: "payload", columnType: 245 }]), { profile: MARIADB_LOSSLESS_TEXT });
-  await assert.rejects(async () => maria.query(mariaSql.rows`SELECT payload`.render()), (error: unknown) => error instanceof ResultExactnessError);
+  const maria = createMariaDbExecutor(
+    mariaConnection([{ payload: { nested: true } }], [{ name: "payload", columnType: 245 }]),
+    { profile: MARIADB_LOSSLESS_TEXT },
+  );
+  await assert.rejects(
+    async () => maria.query(mariaSql.rows`SELECT payload`.render()),
+    (error: unknown) => error instanceof ResultExactnessError,
+  );
 });
 
 test("PV18 MariaDB declarative native profile keeps parsed roots and Date values open", async () => {
-  const executor = createMariaDbExecutor(mariaConnection([
-    { payload: [1, { enabled: true }], instant: new Date("2026-09-14T12:34:56.000Z") },
-  ], [
-    { name: "payload", columnType: 245 },
-    { name: "instant", columnType: 12 },
-  ]), { profile: MARIADB_NATIVE });
+  const executor = createMariaDbExecutor(
+    mariaConnection(
+      [{ payload: [1, { enabled: true }], instant: new Date("2026-09-14T12:34:56.000Z") }],
+      [
+        { name: "payload", columnType: 245 },
+        { name: "instant", columnType: 12 },
+      ],
+    ),
+    { profile: MARIADB_NATIVE },
+  );
   const result = await executor.query(mariaSql.rows`SELECT payload, instant`.render());
   assert.deepEqual(result.rows, [{ payload: [1, { enabled: true }], instant: new Date("2026-09-14T12:34:56.000Z") }]);
   const environment = executor.environment;
@@ -206,6 +254,12 @@ test("PV18 MariaDB declarative native profile keeps parsed roots and Date values
 });
 
 test("PV18 MariaDB command metadata guards warningStatus and exact insertId", async () => {
-  const warning = createMariaDbExecutor(mariaConnection({ affectedRows: 1, insertId: 9007199254740993n, warningStatus: 9007199254740992 }, []), { profile: MARIADB_LOSSLESS_TEXT });
-  await assert.rejects(async () => warning.query(mariaSql.command`UPDATE profile_values SET amount = ${"1.00"}`.render()), (error: unknown) => error instanceof ResultExactnessError);
+  const warning = createMariaDbExecutor(
+    mariaConnection({ affectedRows: 1, insertId: 9007199254740993n, warningStatus: 9007199254740992 }, []),
+    { profile: MARIADB_LOSSLESS_TEXT },
+  );
+  await assert.rejects(
+    async () => warning.query(mariaSql.command`UPDATE profile_values SET amount = ${"1.00"}`.render()),
+    (error: unknown) => error instanceof ResultExactnessError,
+  );
 });

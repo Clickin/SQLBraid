@@ -142,8 +142,7 @@
       },
       "releaseBlocking": true,
       "reason": "Local libSQL client line selected for the candidate Node floor."
-    }
-    ,
+    },
     {
       "id": "node-16-20-2-opentelemetry-api-1-9-1",
       "runtime": { "id": "node", "version": "16.20.2" },

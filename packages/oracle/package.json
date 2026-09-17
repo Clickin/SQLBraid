@@ -2,39 +2,27 @@
   "name": "@sqlbraid/oracle",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid Oracle dialect, node-oracledb adapter, and metadata inspector",
+  "keywords": [
+    "database",
+    "oracle",
+    "query",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/oracle"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "oracle", "query"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=16.20.2" },
-  "dependencies": {
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/template": "workspace:*"
-  },
-  "peerDependencies": {
-    "@sqlbraid/metadata": "workspace:*",
-    "oracledb": ">=7.0.1 <8"
-  },
-  "peerDependenciesMeta": {
-    "@sqlbraid/metadata": { "optional": true },
-    "oracledb": { "optional": true }
-  },
-  "devDependencies": {
-    "@sqlbraid/metadata": "workspace:*",
-    "@types/oracledb": "7.0.3",
-    "oracledb": "7.0.1"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -48,5 +36,33 @@
       "types": "./dist/inspector.d.ts",
       "import": "./dist/inspector.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
+  "devDependencies": {
+    "@sqlbraid/metadata": "workspace:*",
+    "@types/oracledb": "7.0.3",
+    "oracledb": "7.0.1"
+  },
+  "peerDependencies": {
+    "@sqlbraid/metadata": "workspace:*",
+    "oracledb": ">=7.0.1 <8"
+  },
+  "peerDependenciesMeta": {
+    "@sqlbraid/metadata": {
+      "optional": true
+    },
+    "oracledb": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=16.20.2"
   }
 }

@@ -2,43 +2,27 @@
   "name": "@sqlbraid/postgres",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid PostgreSQL dialect, pg adapter, and metadata inspector",
+  "keywords": [
+    "database",
+    "postgresql",
+    "query",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/postgres"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "postgresql", "query"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=16.20.2" },
-  "dependencies": {
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/template": "workspace:*"
-  },
-  "peerDependencies": {
-    "pg-cursor": "^2.22.0",
-    "@sqlbraid/metadata": "workspace:*"
-  },
-  "peerDependenciesMeta": {
-    "pg-cursor": {
-      "optional": true
-    },
-    "@sqlbraid/metadata": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "@sqlbraid/metadata": "workspace:*",
-    "@types/pg-cursor": "2.7.2",
-    "pg-cursor": "^2.22.0"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -52,5 +36,33 @@
       "types": "./dist/inspector.d.ts",
       "import": "./dist/inspector.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
+  "devDependencies": {
+    "@sqlbraid/metadata": "workspace:*",
+    "@types/pg-cursor": "2.7.2",
+    "pg-cursor": "^2.22.0"
+  },
+  "peerDependencies": {
+    "@sqlbraid/metadata": "workspace:*",
+    "pg-cursor": "^2.22.0"
+  },
+  "peerDependenciesMeta": {
+    "pg-cursor": {
+      "optional": true
+    },
+    "@sqlbraid/metadata": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=16.20.2"
   }
 }

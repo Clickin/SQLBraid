@@ -200,7 +200,7 @@ jobs:
             project: db-postgres
             postgres_target: postgres
             evidence_target: ""
-            evidence_env: '{}'
+            evidence_env: "{}"
           - id: postgres-current
             project: db-postgres
             postgres_target: postgres-current
@@ -209,23 +209,23 @@ jobs:
           - id: mysql
             project: db-mysql
             evidence_target: ""
-            evidence_env: '{}'
+            evidence_env: "{}"
           - id: mariadb
             project: db-mariadb
             evidence_target: ""
-            evidence_env: '{}'
+            evidence_env: "{}"
           - id: sqlite
             project: db-sqlite
             evidence_target: ""
-            evidence_env: '{}'
+            evidence_env: "{}"
           - id: oracle
             project: db-oracle
             evidence_target: ""
-            evidence_env: '{}'
+            evidence_env: "{}"
           - id: mssql
             project: db-mssql
             evidence_target: ""
-            evidence_env: '{}'
+            evidence_env: "{}"
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: pnpm/action-setup@v6.1.0
@@ -697,7 +697,24 @@ jobs:
 
   release-final:
     if: github.event_name != 'schedule'
-    needs: [release-prep, release-common, release-db, release-node24, release-browser, release-pack, release-docs, release-examples, release-benchmark-smoke, release-runtime, release-compatibility, release-bun-sql, release-support-evidence, release-target-evidence, release-certification]
+    needs:
+      [
+        release-prep,
+        release-common,
+        release-db,
+        release-node24,
+        release-browser,
+        release-pack,
+        release-docs,
+        release-examples,
+        release-benchmark-smoke,
+        release-runtime,
+        release-compatibility,
+        release-bun-sql,
+        release-support-evidence,
+        release-target-evidence,
+        release-certification,
+      ]
     name: Final release certification
     permissions:
       contents: read

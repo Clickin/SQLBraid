@@ -39,10 +39,8 @@ describe("A4 certification harness", () => {
   test("rejects incomplete or mismatched strict streaming evidence", async () => {
     const fixture = await createSyntheticTarget(NEGATIVE_SHA).createFixture();
     const stream = fixture.stream!;
-    const run = (overrides: Partial<typeof stream>, id: "STR004" | "STR009") => runStreamingConformanceCase(
-      id,
-      () => ({ ...stream, ...overrides, close: undefined }),
-    );
+    const run = (overrides: Partial<typeof stream>, id: "STR004" | "STR009") =>
+      runStreamingConformanceCase(id, () => ({ ...stream, ...overrides, close: undefined }));
     await assert.rejects(() => run({ mappingQuery: undefined }, "STR004"), /mappingQuery/u);
     await assert.rejects(
       () => run({ mappingFailure: new Error("wrong mapping failure") }, "STR004"),
@@ -103,30 +101,91 @@ describe("A4 certification harness", () => {
     const requiredTargets = [target.id];
     const requiredTargetContracts = { [target.id]: target.expectedCapabilities };
     const requiredTargetOptionContracts = { [target.id]: target.expectedTransactionOptions };
-    const aggregate = aggregateCertificationArtifacts([artifact], { sourceSha: A4_SHA, requiredTargets, requiredTargetContracts, requiredTargetOptionContracts });
+    const aggregate = aggregateCertificationArtifacts([artifact], {
+      sourceSha: A4_SHA,
+      requiredTargets,
+      requiredTargetContracts,
+      requiredTargetOptionContracts,
+    });
     assert.deepEqual(Object.keys(aggregate.targets), requiredTargets);
-    assert.throws(() => aggregateCertificationArtifacts([artifact], { sourceSha: "d".repeat(40), requiredTargets, requiredTargetContracts, requiredTargetOptionContracts }), /source SHA/u);
-    assert.throws(() => aggregateCertificationArtifacts([artifact], { sourceSha: A4_SHA, requiredTargets: ["missing"], requiredTargetContracts, requiredTargetOptionContracts }), /target set/u);
+    assert.throws(
+      () =>
+        aggregateCertificationArtifacts([artifact], {
+          sourceSha: "d".repeat(40),
+          requiredTargets,
+          requiredTargetContracts,
+          requiredTargetOptionContracts,
+        }),
+      /source SHA/u,
+    );
+    assert.throws(
+      () =>
+        aggregateCertificationArtifacts([artifact], {
+          sourceSha: A4_SHA,
+          requiredTargets: ["missing"],
+          requiredTargetContracts,
+          requiredTargetOptionContracts,
+        }),
+      /target set/u,
+    );
 
-    const skipped = { ...artifact, cases: { ...artifact.cases, QRY001: { status: "skip", name: "QRY001" } } } as unknown as typeof artifact;
+    const skipped = {
+      ...artifact,
+      cases: { ...artifact.cases, QRY001: { status: "skip", name: "QRY001" } },
+    } as unknown as typeof artifact;
     assert.throws(() => validateCertificationArtifact(skipped, { sourceSha: A4_SHA }), /may not be skipped/u);
-    const failed = { ...artifact, cases: { ...artifact.cases, QRY001: { status: "fail", name: "QRY001", error: "native failure" } } } as unknown as typeof artifact;
+    const failed = {
+      ...artifact,
+      cases: { ...artifact.cases, QRY001: { status: "fail", name: "QRY001", error: "native failure" } },
+    } as unknown as typeof artifact;
     assert.throws(() => validateCertificationArtifact(failed, { sourceSha: A4_SHA }), /did not pass/u);
-    const missing = { ...artifact, cases: Object.fromEntries(Object.entries(artifact.cases).filter(([id]) => id !== "QRY001")) } as unknown as typeof artifact;
+    const missing = {
+      ...artifact,
+      cases: Object.fromEntries(Object.entries(artifact.cases).filter(([id]) => id !== "QRY001")),
+    } as unknown as typeof artifact;
     assert.throws(() => validateCertificationArtifact(missing, { sourceSha: A4_SHA }), /incomplete/u);
-    const mismatched = { ...artifact, declaredCapabilities: { ...artifact.declaredCapabilities, "statement.stream": { status: "unsupported" } } } as typeof artifact;
+    const mismatched = {
+      ...artifact,
+      declaredCapabilities: { ...artifact.declaredCapabilities, "statement.stream": { status: "unsupported" } },
+    } as typeof artifact;
     assert.throws(() => validateCertificationArtifact(mismatched, { sourceSha: A4_SHA }), /declaration mismatch/u);
     const forged = {
       ...artifact,
-      expectedCapabilities: { ...artifact.expectedCapabilities, "statement.stream": { status: "unsupported", unsupportedCode: "BRAID_STREAM_UNSUPPORTED" } },
+      expectedCapabilities: {
+        ...artifact.expectedCapabilities,
+        "statement.stream": { status: "unsupported", unsupportedCode: "BRAID_STREAM_UNSUPPORTED" },
+      },
       declaredCapabilities: { ...artifact.declaredCapabilities, "statement.stream": { status: "unsupported" } },
-      cases: { ...artifact.cases, STR001: { status: "pass-unsupported", name: "STR001", feature: "statement.stream", code: "BRAID_STREAM_UNSUPPORTED" } },
+      cases: {
+        ...artifact.cases,
+        STR001: {
+          status: "pass-unsupported",
+          name: "STR001",
+          feature: "statement.stream",
+          code: "BRAID_STREAM_UNSUPPORTED",
+        },
+      },
     } as typeof artifact;
     assert.doesNotThrow(() => validateCertificationArtifact(forged, { sourceSha: A4_SHA }));
-    assert.throws(() => aggregateCertificationArtifacts([forged], { sourceSha: A4_SHA, requiredTargets, requiredTargetContracts, requiredTargetOptionContracts }), /expected capability contract/u);
-    const wrongCode = { ...artifact, cases: { ...artifact.cases, STR006: { ...artifact.cases.STR006, code: "BRAID_STREAM_UNSUPPORTED" } } } as typeof artifact;
+    assert.throws(
+      () =>
+        aggregateCertificationArtifacts([forged], {
+          sourceSha: A4_SHA,
+          requiredTargets,
+          requiredTargetContracts,
+          requiredTargetOptionContracts,
+        }),
+      /expected capability contract/u,
+    );
+    const wrongCode = {
+      ...artifact,
+      cases: { ...artifact.cases, STR006: { ...artifact.cases.STR006, code: "BRAID_STREAM_UNSUPPORTED" } },
+    } as typeof artifact;
     assert.throws(() => validateCertificationArtifact(wrongCode, { sourceSha: A4_SHA }), /unregistered unsupported/u);
-    const wrongFeature = { ...artifact, cases: { ...artifact.cases, STR006: { ...artifact.cases.STR006, feature: "statement.stream" } } } as typeof artifact;
+    const wrongFeature = {
+      ...artifact,
+      cases: { ...artifact.cases, STR006: { ...artifact.cases.STR006, feature: "statement.stream" } },
+    } as typeof artifact;
     assert.throws(() => validateCertificationArtifact(wrongFeature, { sourceSha: A4_SHA }), /supported capability/u);
   });
 
@@ -158,24 +217,54 @@ describe("A4 certification harness", () => {
       requiredCandidate: candidate,
     };
     assert.doesNotThrow(() => aggregateCertificationArtifacts([artifact], options));
-    const forgedTuple = { ...artifact, provenance: { ...artifact.provenance, pinned: { ...artifact.provenance.pinned, runtime: { ...artifact.provenance.pinned.runtime, version: "0.0.0" } } } } as typeof artifact;
+    const forgedTuple = {
+      ...artifact,
+      provenance: {
+        ...artifact.provenance,
+        pinned: { ...artifact.provenance.pinned, runtime: { ...artifact.provenance.pinned.runtime, version: "0.0.0" } },
+      },
+    } as typeof artifact;
     assert.throws(() => aggregateCertificationArtifacts([forgedTuple], options), /pinned tuple/u);
     const wrongMeasuredVersion = {
       ...artifact,
-      provenance: { ...artifact.provenance, measured: { ...artifact.provenance.measured, runtime: { ...artifact.provenance.measured.runtime, version: "0.0.0" } } },
+      provenance: {
+        ...artifact.provenance,
+        measured: {
+          ...artifact.provenance.measured,
+          runtime: { ...artifact.provenance.measured.runtime, version: "0.0.0" },
+        },
+      },
     } as typeof artifact;
     assert.throws(() => aggregateCertificationArtifacts([wrongMeasuredVersion], options), /measured tuple/u);
     const missingMeasuredDriverVersion = {
       ...artifact,
-      provenance: { ...artifact.provenance, measured: { ...artifact.provenance.measured, driver: { ...artifact.provenance.measured.driver, version: undefined } } },
+      provenance: {
+        ...artifact.provenance,
+        measured: {
+          ...artifact.provenance.measured,
+          driver: { ...artifact.provenance.measured.driver, version: undefined },
+        },
+      },
     } as typeof artifact;
-    assert.throws(() => aggregateCertificationArtifacts([missingMeasuredDriverVersion], options), /measured driver version/u);
+    assert.throws(
+      () => aggregateCertificationArtifacts([missingMeasuredDriverVersion], options),
+      /measured driver version/u,
+    );
     const wrongMeasuredDriverVersion = {
       ...artifact,
-      provenance: { ...artifact.provenance, measured: { ...artifact.provenance.measured, driver: { ...artifact.provenance.measured.driver, version: "0.0.0" } } },
+      provenance: {
+        ...artifact.provenance,
+        measured: {
+          ...artifact.provenance.measured,
+          driver: { ...artifact.provenance.measured.driver, version: "0.0.0" },
+        },
+      },
     } as typeof artifact;
     assert.throws(() => aggregateCertificationArtifacts([wrongMeasuredDriverVersion], options), /measured tuple/u);
-    const forgedCandidate = { ...artifact, provenance: { ...artifact.provenance, candidate: { ...candidate, preparedBuildSha256: "f".repeat(64) } } } as typeof artifact;
+    const forgedCandidate = {
+      ...artifact,
+      provenance: { ...artifact.provenance, candidate: { ...candidate, preparedBuildSha256: "f".repeat(64) } },
+    } as typeof artifact;
     assert.throws(() => aggregateCertificationArtifacts([forgedCandidate], options), /candidate provenance/u);
   });
 });

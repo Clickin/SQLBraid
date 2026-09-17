@@ -74,7 +74,12 @@ export interface ReleaseEvidence {
       readonly run: string | null;
       readonly targetIds: readonly string[];
     };
-    readonly targets: readonly { readonly file: string; readonly sha256: string; readonly ids: readonly string[]; readonly commit: string }[];
+    readonly targets: readonly {
+      readonly file: string;
+      readonly sha256: string;
+      readonly ids: readonly string[];
+      readonly commit: string;
+    }[];
   };
   readonly publication: {
     readonly packages: readonly {
@@ -90,7 +95,10 @@ export interface ReleaseEvidence {
   };
 }
 
-export declare function assertManifestOrder(manifest: { packages: readonly { name: string }[] }, order: readonly string[]): void;
+export declare function assertManifestOrder(
+  manifest: { packages: readonly { name: string }[] },
+  order: readonly string[],
+): void;
 export declare function assertMutationAuthorization(mode: string, env?: Record<string, string | undefined>): void;
 export declare function assertPublicationCredentials(mode: string, env?: Record<string, string | undefined>): void;
 export declare function assertTaggedSha(): Promise<string>;
@@ -104,21 +112,33 @@ export declare function createReleaseEvidence(
     stagedEvidencePath?: string;
   },
 ): Promise<ReleaseEvidence>;
-export declare function stageCandidates(manifest: ReleaseManifest, options?: {
-  dryRun?: boolean;
-  directory?: string;
-  priorEvidence?: StagedPublication;
-  priorRunId?: string;
-  currentRunId?: string | null;
-  currentRunAttempt?: string | null;
-}): Promise<StagedPublication | undefined>;
-export declare function verifyPublished(manifest: ReleaseManifest, evidence: StagedPublication, options?: { requireLatest?: boolean }): Promise<void>;
+export declare function stageCandidates(
+  manifest: ReleaseManifest,
+  options?: {
+    dryRun?: boolean;
+    directory?: string;
+    priorEvidence?: StagedPublication;
+    priorRunId?: string;
+    currentRunId?: string | null;
+    currentRunAttempt?: string | null;
+  },
+): Promise<StagedPublication | undefined>;
+export declare function verifyPublished(
+  manifest: ReleaseManifest,
+  evidence: StagedPublication,
+  options?: { requireLatest?: boolean },
+): Promise<void>;
 export declare function parseSemver(value: string): ReleaseSemver;
 export declare function releasePrereleaseArg(value: string): "--prerelease" | undefined;
-export declare function readReleaseManifest(directory?: string, options?: {
-  priorCandidateRunId?: string;
-  allowCurrentAttemptMismatch?: boolean;
-}): Promise<ReleaseManifest>;
+export declare function readReleaseManifest(
+  directory?: string,
+  options?: {
+    priorCandidateRunId?: string;
+    allowCurrentAttemptMismatch?: boolean;
+  },
+): Promise<ReleaseManifest>;
 export declare function releaseTag(): string;
-export declare function setReleaseCommand(command: (file: string, args: readonly string[], cwd?: string, options?: { quiet?: boolean }) => Promise<string>): void;
+export declare function setReleaseCommand(
+  command: (file: string, args: readonly string[], cwd?: string, options?: { quiet?: boolean }) => Promise<string>,
+): void;
 export declare function setReleaseVersion(version: string): void;

@@ -121,7 +121,10 @@ function statementColumns(native: SqliteWasmDatabaseLike, text: string): readonl
   }
 }
 
-function sqliteStatementText(rendered: { readonly segments: readonly string[]; readonly parameters: readonly unknown[] }): string {
+function sqliteStatementText(rendered: {
+  readonly segments: readonly string[];
+  readonly parameters: readonly unknown[];
+}): string {
   let text = rendered.segments[0] ?? "";
   for (let index = 0; index < rendered.parameters.length; index += 1) {
     text += `?${index + 1}${rendered.segments[index + 1] ?? ""}`;
@@ -187,18 +190,22 @@ async function runBraid(request: PreviewBraidRequest): Promise<PreviewResponse> 
     return { type: "error", code: "PREVIEW_INPUT", message: "Choose a supported sort order." };
   }
   if (request.minBalance !== null && (!Number.isFinite(request.minBalance) || request.minBalance < 0)) {
-    return { type: "error", code: "PREVIEW_INPUT", message: "Minimum balance must be a non-negative finite number or blank." };
+    return {
+      type: "error",
+      code: "PREVIEW_INPUT",
+      message: "Minimum balance must be a non-negative finite number or blank.",
+    };
   }
   if (typeof request.search !== "string" || request.search.length > 200) {
     return { type: "error", code: "PREVIEW_INPUT", message: "Account-name search is limited to 200 characters." };
   }
 
-  const projection = request.projection === "compact"
-    ? sql.fragment`account_id, account_name, balance`
-    : sql.fragment`account_id, account_name, balance, currency, locale`;
-  const order = request.order === "balance-desc"
-    ? sql.fragment`balance DESC, account_id ASC`
-    : sql.fragment`account_id ASC`;
+  const projection =
+    request.projection === "compact"
+      ? sql.fragment`account_id, account_name, balance`
+      : sql.fragment`account_id, account_name, balance, currency, locale`;
+  const order =
+    request.order === "balance-desc" ? sql.fragment`balance DESC, account_id ASC` : sql.fragment`account_id ASC`;
   const hasCurrency = request.currency !== "";
   const hasMinimum = request.minBalance !== null;
   const search = request.search.trim();
@@ -251,12 +258,14 @@ async function runBraid(request: PreviewBraidRequest): Promise<PreviewResponse> 
 
 async function inspectSchema(): Promise<PreviewSchemaSuccess> {
   const database = await getDatabase();
-  const rows = await database.db.all(rawRowsQuery(`
+  const rows = await database.db.all(
+    rawRowsQuery(`
     SELECT type, name, sql
     FROM sqlite_master
     WHERE type IN ('table', 'view')
     ORDER BY type, name
-  `));
+  `),
+  );
   const tables = rows.flatMap((row) => {
     const value = row as PreviewRow;
     return typeof value.type === "string" && typeof value.name === "string" && typeof value.sql === "string"
@@ -280,9 +289,10 @@ self.addEventListener("message", (event: MessageEvent<PreviewRequest>) => {
       self.postMessage(await handle(event.data));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      const code = error && typeof error === "object" && "code" in error && typeof error.code === "string"
-        ? error.code
-        : "PREVIEW_EXECUTION";
+      const code =
+        error && typeof error === "object" && "code" in error && typeof error.code === "string"
+          ? error.code
+          : "PREVIEW_EXECUTION";
       self.postMessage({ type: "error", code, message } satisfies PreviewFailure);
     }
   });

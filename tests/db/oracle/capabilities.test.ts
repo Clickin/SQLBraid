@@ -20,7 +20,9 @@ async function connect() {
 }
 
 async function drop(connection: { execute(sql: string): Promise<unknown> }, object: string): Promise<void> {
-  await connection.execute(`BEGIN EXECUTE IMMEDIATE 'DROP ${object}'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;`);
+  await connection.execute(
+    `BEGIN EXECUTE IMMEDIATE 'DROP ${object}'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;`,
+  );
 }
 
 function canonicalDecimal(value: string): string {
@@ -47,18 +49,30 @@ async function stampOracleEnvironment(db: ReturnType<typeof createOracledbDataba
   `);
   const version = /^(\d+\.\d+)/u.exec(probe.VERSION_FULL)?.[1] ?? probe.VERSION_FULL;
   const edition = /\b(Free|Enterprise|Standard|Express|Developer)\b/iu.exec(probe.BANNER)?.[1] ?? probe.BANNER;
-  stampSupportEnvironment("oracle", {
-    ...environment,
-    database: { product: "oracle", version, edition },
-    driver: { ...environment.driver, version: oracledb.versionString },
-    runtime: { id: "node", version: process.versions.node },
-  }, testId);
+  stampSupportEnvironment(
+    "oracle",
+    {
+      ...environment,
+      database: { product: "oracle", version, edition },
+      driver: { ...environment.driver, version: oracledb.versionString },
+      runtime: { id: "node", version: process.versions.node },
+    },
+    testId,
+  );
 }
 
 test("oracle.sql.native-transparency", { timeout: 60_000 }, async () => {
   const { connection } = await connect();
   const events: ExecutionEvent[] = [];
-  const db = createOracledbDatabase(connection, { observers: [{ onEvent(event) { events.push(event); } }] });
+  const db = createOracledbDatabase(connection, {
+    observers: [
+      {
+        onEvent(event) {
+          events.push(event);
+        },
+      },
+    ],
+  });
   try {
     const query = sql.rows`
       SELECT q'[literal ? :1 @p1 $1 /*@braid*/]' AS marker,
@@ -73,7 +87,8 @@ test("oracle.sql.native-transparency", { timeout: 60_000 }, async () => {
         "\n      SELECT q'[literal ? :1 @p1 $1 /*@braid*/]' AS marker,\n             TO_CHAR(LEVEL) AS level_value,\n             ",
         " AS actual\n      FROM dual CONNECT BY LEVEL <= 1\n    ",
       ],
-      expectedParameterizedSql: "\n      SELECT q'[literal ? :1 @p1 $1 /*@braid*/]' AS marker,\n             TO_CHAR(LEVEL) AS level_value,\n             :1 AS actual\n      FROM dual CONNECT BY LEVEL <= 1\n    ",
+      expectedParameterizedSql:
+        "\n      SELECT q'[literal ? :1 @p1 $1 /*@braid*/]' AS marker,\n             TO_CHAR(LEVEL) AS level_value,\n             :1 AS actual\n      FROM dual CONNECT BY LEVEL <= 1\n    ",
       events,
       execute: () => db.all(query),
       expectedResult: [{ MARKER: "literal ? :1 @p1 $1 /*@braid*/", LEVEL_VALUE: "1", ACTUAL: "Ada" }],
@@ -116,7 +131,8 @@ test("rc.oracle.session", { timeout: 60_000 }, async () => {
       "routine.return-value",
       "routine.result-sets",
       "routine.out-cursor",
-    ]) assert.ok(environment.capabilities[capability]);
+    ])
+      assert.ok(environment.capabilities[capability]);
     await db.session(async (session) => {
       scoped = session;
       const first = await session.one(sql.rows<{ readonly SID: string }>`
@@ -160,7 +176,9 @@ test("rc.oracle.prepare", { timeout: 60_000 }, async () => {
     await command.execute(1);
     await command.execute(2);
     assert.deepEqual(
-      await db.all(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_prepare ORDER BY value`),
+      await db.all(
+        sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_prepare ORDER BY value`,
+      ),
       [{ VALUE: "1" }, { VALUE: "2" }],
     );
 
@@ -188,18 +206,34 @@ test("rc.oracle.transaction-options", { timeout: 60_000 }, async () => {
     await connection.execute("INSERT INTO braid_rc_oracle_isolation VALUES (0)");
     await connection.commit();
     await db.tx({ isolation: "read-committed" }, async (tx) => {
-      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`)).VALUE, "0");
+      assert.equal(
+        (await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`))
+          .VALUE,
+        "0",
+      );
       await observer.execute("UPDATE braid_rc_oracle_isolation SET value = 1");
       await observer.commit();
-      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`)).VALUE, "1");
+      assert.equal(
+        (await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`))
+          .VALUE,
+        "1",
+      );
     });
     await observer.execute("UPDATE braid_rc_oracle_isolation SET value = 0");
     await observer.commit();
     await db.tx({ isolation: "serializable" }, async (tx) => {
-      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`)).VALUE, "0");
+      assert.equal(
+        (await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`))
+          .VALUE,
+        "0",
+      );
       await observer.execute("UPDATE braid_rc_oracle_isolation SET value = 2");
       await observer.commit();
-      assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`)).VALUE, "0");
+      assert.equal(
+        (await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT value AS VALUE FROM braid_rc_oracle_isolation`))
+          .VALUE,
+        "0",
+      );
     });
     for (const isolation of ["read-uncommitted", "repeatable-read"] as const) {
       await assert.rejects(
@@ -210,7 +244,8 @@ test("rc.oracle.transaction-options", { timeout: 60_000 }, async () => {
     await drop(connection, "TABLE braid_rc_oracle_read_only PURGE").catch(() => undefined);
     await connection.execute("CREATE TABLE braid_rc_oracle_read_only (value NUMBER)");
     await assert.rejects(
-      () => db.tx({ readOnly: true }, (tx) => tx.execute(sql.command`INSERT INTO braid_rc_oracle_read_only VALUES (1)`)),
+      () =>
+        db.tx({ readOnly: true }, (tx) => tx.execute(sql.command`INSERT INTO braid_rc_oracle_read_only VALUES (1)`)),
       /ORA-01456|read.only/iu,
     );
   } finally {
@@ -235,15 +270,20 @@ test("rc.oracle.cancel", { timeout: 60_000 }, async () => {
 
     const controller = new AbortController();
     let settled = false;
-    const pending = db.execute(sql.command`BEGIN DBMS_SESSION.SLEEP(2); END;`, { signal: controller.signal }).finally(() => {
-      settled = true;
-    });
+    const pending = db
+      .execute(sql.command`BEGIN DBMS_SESSION.SLEEP(2); END;`, { signal: controller.signal })
+      .finally(() => {
+        settled = true;
+      });
     await new Promise((resolve) => setTimeout(resolve, 100));
     controller.abort(new Error("rc.oracle.cancelled"));
     await Promise.resolve();
     assert.equal(settled, false);
     await assert.rejects(pending, (error: unknown) => error === controller.signal.reason);
-    assert.equal((await db.one(sql.rows<{ readonly VALUE: string }>`SELECT 'reusable' AS VALUE FROM dual`)).VALUE, "reusable");
+    assert.equal(
+      (await db.one(sql.rows<{ readonly VALUE: string }>`SELECT 'reusable' AS VALUE FROM dual`)).VALUE,
+      "reusable",
+    );
   } finally {
     await connection.close();
   }
@@ -321,8 +361,14 @@ test("oracle.data.json-native", { timeout: 60_000 }, async () => {
   try {
     await drop(connection, "TABLE braid_pv16_json PURGE").catch(() => undefined);
     await connection.execute("CREATE TABLE braid_pv16_json (id NUMBER PRIMARY KEY, payload JSON)");
-    await db.execute(sql.command`INSERT INTO braid_pv16_json (id, payload) VALUES (${1}, JSON_OBJECT('enabled' VALUE 1, 'nested' VALUE JSON_OBJECT('count' VALUE 2) FORMAT JSON RETURNING JSON))`);
-    const row = await db.one(sql.rows<{ readonly PAYLOAD: { readonly enabled: number; readonly nested: { readonly count: number } }; readonly ENABLED: string; readonly NESTEDCOUNT: string }>`
+    await db.execute(
+      sql.command`INSERT INTO braid_pv16_json (id, payload) VALUES (${1}, JSON_OBJECT('enabled' VALUE 1, 'nested' VALUE JSON_OBJECT('count' VALUE 2) FORMAT JSON RETURNING JSON))`,
+    );
+    const row = await db.one(sql.rows<{
+      readonly PAYLOAD: { readonly enabled: number; readonly nested: { readonly count: number } };
+      readonly ENABLED: string;
+      readonly NESTEDCOUNT: string;
+    }>`
       SELECT payload,
              JSON_VALUE(payload, '$.enabled' RETURNING NUMBER) AS enabled,
              JSON_VALUE(payload, '$.nested.count' RETURNING NUMBER) AS nestedCount
@@ -389,7 +435,11 @@ test("oracle.data.containers-unclassified", { timeout: 60_000 }, async () => {
     await connection.execute("DROP TYPE braid_pv18_num_obj FORCE").catch(() => undefined);
     await connection.execute("CREATE TYPE braid_pv18_num_obj AS OBJECT (value NUMBER)");
     await connection.execute("CREATE TYPE braid_pv18_num_varray AS VARRAY(2) OF NUMBER");
-    const row = await db.one(sql.rows<{ readonly OBJECT_VALUE: unknown; readonly COLLECTION_VALUE: unknown; readonly VECTOR_VALUE: unknown }>`
+    const row = await db.one(sql.rows<{
+      readonly OBJECT_VALUE: unknown;
+      readonly COLLECTION_VALUE: unknown;
+      readonly VECTOR_VALUE: unknown;
+    }>`
       SELECT braid_pv18_num_obj(CAST('9007199254740993' AS NUMBER)) AS object_value,
              braid_pv18_num_varray(CAST('9007199254740993' AS NUMBER), 2) AS collection_value,
              TO_VECTOR('[1,2,3]') AS vector_value
@@ -485,7 +535,11 @@ test("oracle.numeric.bind-nls-audit", { timeout: 60_000 }, async () => {
     if ("error" in comma) {
       assert.match(String(comma.error), /ORA-01722/u);
     } else {
-      assert.notEqual(comma.value, exact, "unhinted string NUMBER conversion must not be advertised as NLS-independent");
+      assert.notEqual(
+        comma.value,
+        exact,
+        "unhinted string NUMBER conversion must not be advertised as NLS-independent",
+      );
     }
     assert.equal((await db.one(explicitQuery)).VALUE, exact);
 
@@ -495,7 +549,10 @@ test("oracle.numeric.bind-nls-audit", { timeout: 60_000 }, async () => {
     await drop(connection, "TABLE braid_pv17_nls_text PURGE").catch(() => undefined);
     await connection.execute("CREATE TABLE braid_pv17_nls_text (id NUMBER PRIMARY KEY, amount NUMBER(38, 9))");
     const bulk = await db.bulk(
-      [{ id: 1, value: exact }, { id: 2, value: exact }],
+      [
+        { id: 1, value: exact },
+        { id: 2, value: exact },
+      ],
       (input) => sql.command`
         INSERT INTO braid_pv17_nls_text (id, amount)
         VALUES (
@@ -511,7 +568,10 @@ test("oracle.numeric.bind-nls-audit", { timeout: 60_000 }, async () => {
       FROM braid_pv17_nls_text
       ORDER BY id
     `);
-    assert.deepEqual(stored, [{ ID: "1", VALUE: exact }, { ID: "2", VALUE: exact }]);
+    assert.deepEqual(stored, [
+      { ID: "1", VALUE: exact },
+      { ID: "2", VALUE: exact },
+    ]);
   } finally {
     await drop(connection, "TABLE braid_pv17_nls_text PURGE").catch(() => undefined);
     await connection.close();
@@ -600,7 +660,9 @@ test("oracle.data.uuid", { timeout: 60_000 }, async () => {
   const { connection } = await connect();
   const db = createOracledbDatabase(connection);
   try {
-    const row = await db.one(sql.rows<{ readonly ID: string }>`SELECT RAWTOHEX(HEXTORAW('550E8400E29B41D4A716446655440000')) AS id FROM dual`);
+    const row = await db.one(
+      sql.rows<{ readonly ID: string }>`SELECT RAWTOHEX(HEXTORAW('550E8400E29B41D4A716446655440000')) AS id FROM dual`,
+    );
     assert.equal(row.ID, "550E8400E29B41D4A716446655440000");
   } finally {
     await connection.close();
@@ -609,10 +671,7 @@ test("oracle.data.uuid", { timeout: 60_000 }, async () => {
 
 test("oracle.routine.scalar-out", { timeout: 60_000 }, async () => {
   const { connection } = await connect();
-  const fill = async (
-    lob: oracledb.Lob,
-    value: string | Uint8Array,
-  ): Promise<void> => {
+  const fill = async (lob: oracledb.Lob, value: string | Uint8Array): Promise<void> => {
     await new Promise<void>((resolve, reject) => {
       lob.once("error", reject);
       lob.once("finish", resolve);
@@ -671,9 +730,19 @@ test("oracle.dml.insert-returning", { timeout: 60_000 }, async () => {
     await drop(connection, "SEQUENCE braid_pv16_cap_seq").catch(() => undefined);
     await connection.execute("CREATE SEQUENCE braid_pv16_cap_seq START WITH 1 INCREMENT BY 1");
     await connection.execute('CREATE TABLE braid_pv16_cap ("Id" NUMBER PRIMARY KEY, "Name" VARCHAR2(64))');
-    await connection.execute("CREATE OR REPLACE PROCEDURE braid_pv16_mixed (p_in IN NUMBER, p_out OUT NUMBER, p_in2 IN NUMBER, p_out2 OUT NUMBER) IS BEGIN p_out := p_in + 1; p_out2 := p_in2 + 2; END;");
+    await connection.execute(
+      "CREATE OR REPLACE PROCEDURE braid_pv16_mixed (p_in IN NUMBER, p_out OUT NUMBER, p_in2 IN NUMBER, p_out2 OUT NUMBER) IS BEGIN p_out := p_in + 1; p_out2 := p_in2 + 2; END;",
+    );
     const events: ExecutionEvent[] = [];
-    const db = createOracledbDatabase(connection, { observers: [{ onEvent(event) { events.push(event); } }] });
+    const db = createOracledbDatabase(connection, {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    });
 
     const bulkReport = await verifyBulkConformance({
       db,
@@ -683,25 +752,53 @@ test("oracle.dml.insert-returning", { timeout: 60_000 }, async () => {
       events,
     });
     assert.equal(bulkReport.executionMode, "native-bulk");
-    await db.execute(sql.command`INSERT /*+ APPEND */ INTO ${sql.ident("BRAID_PV16_CAP")} ("Id", "Name") VALUES (braid_pv16_cap_seq.NEXTVAL, ${sql.bind("Ada", oracleParameter.varchar2())})`);
-    await db.execute(sql.command`MERGE INTO braid_pv16_cap target USING (SELECT ${sql.bind("Grace", oracleParameter.varchar2())} AS name FROM dual) source ON (target."Name" = source.name) WHEN NOT MATCHED THEN INSERT ("Id", "Name") VALUES (braid_pv16_cap_seq.NEXTVAL, source.name)`);
-    const native = await db.all(sql.rows`SELECT /*+ FIRST_ROWS(1) */ q'[/*@braid if \${false}*/marker]' AS marker, TO_CHAR(LEVEL) AS value FROM dual CONNECT BY LEVEL <= 1`);
+    await db.execute(
+      sql.command`INSERT /*+ APPEND */ INTO ${sql.ident("BRAID_PV16_CAP")} ("Id", "Name") VALUES (braid_pv16_cap_seq.NEXTVAL, ${sql.bind("Ada", oracleParameter.varchar2())})`,
+    );
+    await db.execute(
+      sql.command`MERGE INTO braid_pv16_cap target USING (SELECT ${sql.bind("Grace", oracleParameter.varchar2())} AS name FROM dual) source ON (target."Name" = source.name) WHEN NOT MATCHED THEN INSERT ("Id", "Name") VALUES (braid_pv16_cap_seq.NEXTVAL, source.name)`,
+    );
+    const native = await db.all(
+      sql.rows`SELECT /*+ FIRST_ROWS(1) */ q'[/*@braid if \${false}*/marker]' AS marker, TO_CHAR(LEVEL) AS value FROM dual CONNECT BY LEVEL <= 1`,
+    );
     assert.deepEqual(native, [{ MARKER: "/*@braid if ${false}*/marker", VALUE: "1" }]);
 
-    const inserted = await db.all(sql.rows<{ readonly id: string; readonly name: string }>`INSERT INTO braid_pv16_cap ("Id", "Name") VALUES (braid_pv16_cap_seq.NEXTVAL, ${sql.bind("Linus", oracleParameter.varchar2())}) RETURNING "Id", "Name" INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(64))}`);
+    const inserted = await db.all(
+      sql.rows<{
+        readonly id: string;
+        readonly name: string;
+      }>`INSERT INTO braid_pv16_cap ("Id", "Name") VALUES (braid_pv16_cap_seq.NEXTVAL, ${sql.bind("Linus", oracleParameter.varchar2())}) RETURNING "Id", "Name" INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(64))}`,
+    );
     assert.equal(inserted.length, 1);
     assert.equal(inserted[0]?.name, "Linus");
     assert.equal(typeof inserted[0]?.id, "string");
 
-    const updated = await db.all(sql.rows<{ readonly id: string; readonly name: string }>`UPDATE braid_pv16_cap SET "Name" = "Name" || ${sql.bind("!", oracleParameter.varchar2())} WHERE "Name" IN (${sql.bind("Ada", oracleParameter.varchar2())}, ${sql.bind("Grace", oracleParameter.varchar2())}) RETURNING "Id", "Name" INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(64))}`);
+    const updated = await db.all(
+      sql.rows<{
+        readonly id: string;
+        readonly name: string;
+      }>`UPDATE braid_pv16_cap SET "Name" = "Name" || ${sql.bind("!", oracleParameter.varchar2())} WHERE "Name" IN (${sql.bind("Ada", oracleParameter.varchar2())}, ${sql.bind("Grace", oracleParameter.varchar2())}) RETURNING "Id", "Name" INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(64))}`,
+    );
     assert.equal(updated.length, 2);
     assert.deepEqual(updated.map((row) => row.name).sort(), ["Ada!", "Grace!"].sort());
 
-    const deleted = await db.all(sql.rows<{ readonly id: string; readonly name: string }>`DELETE FROM braid_pv16_cap WHERE "Name" = ${sql.bind("does-not-exist", oracleParameter.varchar2())} RETURNING "Id", "Name" INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(64))}`);
+    const deleted = await db.all(
+      sql.rows<{
+        readonly id: string;
+        readonly name: string;
+      }>`DELETE FROM braid_pv16_cap WHERE "Name" = ${sql.bind("does-not-exist", oracleParameter.varchar2())} RETURNING "Id", "Name" INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(64))}`,
+    );
     assert.deepEqual(deleted, []);
-    const removed = await db.all(sql.rows<{ readonly id: string; readonly name: string }>`DELETE FROM braid_pv16_cap WHERE "Name" = ${sql.bind("Linus", oracleParameter.varchar2())} RETURNING "Id", "Name" INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(64))}`);
+    const removed = await db.all(
+      sql.rows<{
+        readonly id: string;
+        readonly name: string;
+      }>`DELETE FROM braid_pv16_cap WHERE "Name" = ${sql.bind("Linus", oracleParameter.varchar2())} RETURNING "Id", "Name" INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(64))}`,
+    );
     assert.deepEqual(removed, inserted);
-    const mixed = await db.call(sql.call`BEGIN braid_pv16_mixed(${sql.bind(3, oracleParameter.number())}, ${sql.out("first", oracleParameter.number())}, ${sql.bind(4, oracleParameter.number())}, ${sql.out("second", oracleParameter.number())}); END;`);
+    const mixed = await db.call(
+      sql.call`BEGIN braid_pv16_mixed(${sql.bind(3, oracleParameter.number())}, ${sql.out("first", oracleParameter.number())}, ${sql.bind(4, oracleParameter.number())}, ${sql.out("second", oracleParameter.number())}); END;`,
+    );
     assert.deepEqual(mixed.output, { first: "4", second: "6" });
     await db.execute(sql.command`BEGIN NULL; END;`);
   } finally {

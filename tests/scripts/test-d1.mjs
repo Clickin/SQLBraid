@@ -15,15 +15,26 @@ const sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA;
 const artifactPath = process.env.SQLBRAID_CERT_ARTIFACT;
 const stressValue = process.env.SQLBRAID_CERT_STRESS;
 const certificationRequested = sourceSha !== undefined || artifactPath !== undefined || stressValue !== undefined;
-if (certificationRequested && (sourceSha === undefined || artifactPath === undefined || !/^[0-9a-f]{40}$/iu.test(sourceSha))) {
-  throw new Error("Certification mode requires a full 40-character SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.");
+if (
+  certificationRequested &&
+  (sourceSha === undefined || artifactPath === undefined || !/^[0-9a-f]{40}$/iu.test(sourceSha))
+) {
+  throw new Error(
+    "Certification mode requires a full 40-character SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.",
+  );
 }
 if (certificationRequested) {
   let head;
   try {
-    head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    head = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
   } catch (error) {
-    throw new Error("D1 certification source SHA cannot be verified because the checkout has no readable git HEAD.", { cause: error });
+    throw new Error("D1 certification source SHA cannot be verified because the checkout has no readable git HEAD.", {
+      cause: error,
+    });
   }
   if (head.toLowerCase() !== sourceSha.toLowerCase()) {
     throw new Error(`D1 certification source SHA ${sourceSha} does not match checked-out HEAD ${head}.`);
@@ -35,9 +46,17 @@ if (stressValue !== undefined && !["0", "1", "false", "true"].includes(stressVal
 const certificationStress = stressValue === "1" || stressValue === "true";
 function validateArtifact(path, sha) {
   return new Promise((resolveValidation, rejectValidation) => {
-    const child = spawn(process.execPath, ["scripts/certification.mjs", "--validate", "--source-sha", sha, "--artifact", path], { cwd: root, stdio: "inherit" });
+    const child = spawn(
+      process.execPath,
+      ["scripts/certification.mjs", "--validate", "--source-sha", sha, "--artifact", path],
+      { cwd: root, stdio: "inherit" },
+    );
     child.once("error", rejectValidation);
-    child.once("exit", (code) => code === 0 ? resolveValidation() : rejectValidation(new Error(`Certification artifact validation exited with ${code}.`)));
+    child.once("exit", (code) =>
+      code === 0
+        ? resolveValidation()
+        : rejectValidation(new Error(`Certification artifact validation exited with ${code}.`)),
+    );
   });
 }
 let worker;
@@ -54,13 +73,15 @@ try {
     logLevel: "silent",
   });
   worker = new Miniflare({
-    workers: [{
-      compatibilityDate: "2026-07-30",
-      compatibilityFlags: ["nodejs_compat"],
-      modulesRoot: outputDirectory,
-      modules: [{ type: "ESModule", path: join(outputDirectory, "worker.mjs") }],
-      d1Databases: ["DB"],
-    }],
+    workers: [
+      {
+        compatibilityDate: "2026-07-30",
+        compatibilityFlags: ["nodejs_compat"],
+        modulesRoot: outputDirectory,
+        modules: [{ type: "ESModule", path: join(outputDirectory, "worker.mjs") }],
+        d1Databases: ["DB"],
+      },
+    ],
   });
   const response = await worker.dispatchFetch("http://sqlbraid.test/conformance");
   const body = await response.text();
@@ -99,7 +120,9 @@ try {
     await validateArtifact(pending, sourceSha);
     await rename(pending, output);
   }
-  console.info(JSON.stringify({ check: "local D1 SQLBraid adapter", runtime: "workerd via Miniflare", rows: payload.rows.length }));
+  console.info(
+    JSON.stringify({ check: "local D1 SQLBraid adapter", runtime: "workerd via Miniflare", rows: payload.rows.length }),
+  );
 } finally {
   if (worker !== undefined) await worker.dispose();
   await rm(outputDirectory, { recursive: true, force: true });

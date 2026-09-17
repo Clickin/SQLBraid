@@ -72,11 +72,7 @@ for the stream or acquiring another lease. Wrapping a transaction in
 The portable options are deliberately fixed:
 
 ```ts
-type TransactionIsolation =
-  | "read-uncommitted"
-  | "read-committed"
-  | "repeatable-read"
-  | "serializable";
+type TransactionIsolation = "read-uncommitted" | "read-committed" | "repeatable-read" | "serializable";
 
 interface TransactionOptions {
   isolation?: TransactionIsolation;

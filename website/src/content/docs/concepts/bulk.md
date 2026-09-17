@@ -52,15 +52,15 @@ selected adapter's documentation.
 
 ## Driver modes
 
-| Adapter | Mode | Structural evidence target |
-| --- | --- | --- |
-| PostgreSQL / `pg` | `prepared-loop` | sequential named execution; bounded per-client statement reuse |
-| MySQL / `mysql2` | `prepared-loop` | one prepare, N execute calls, `unprepare()` closes and evicts the cached handle |
-| MariaDB / Connector/Node.js | `native-bulk` | one `connection.batch()` call |
-| SQLite / `node:sqlite` | `prepared-loop` | one prepared statement reused |
-| SQLite / WASM | `prepared-loop` | one OO1 statement reset repeatedly |
-| Cloudflare D1 | `remote-batch` | one `D1Database.batch()` call |
-| Oracle Thin | `native-bulk` | one `executeMany()` call |
-| SQL Server / Tedious | `prepared-loop` | one prepare/unprepare around N executes |
+| Adapter                     | Mode            | Structural evidence target                                                      |
+| --------------------------- | --------------- | ------------------------------------------------------------------------------- |
+| PostgreSQL / `pg`           | `prepared-loop` | sequential named execution; bounded per-client statement reuse                  |
+| MySQL / `mysql2`            | `prepared-loop` | one prepare, N execute calls, `unprepare()` closes and evicts the cached handle |
+| MariaDB / Connector/Node.js | `native-bulk`   | one `connection.batch()` call                                                   |
+| SQLite / `node:sqlite`      | `prepared-loop` | one prepared statement reused                                                   |
+| SQLite / WASM               | `prepared-loop` | one OO1 statement reset repeatedly                                              |
+| Cloudflare D1               | `remote-batch`  | one `D1Database.batch()` call                                                   |
+| Oracle Thin                 | `native-bulk`   | one `executeMany()` call                                                        |
+| SQL Server / Tedious        | `prepared-loop` | one prepare/unprepare around N executes                                         |
 
 See [Runtime and driver support](/SQLBraid/reference/support/) for revision-specific profile and capability conditions.

@@ -70,10 +70,14 @@ export default async function setup(project: TestProject) {
       MSSQL_PID: "Developer",
     })
     .withExposedPorts(1433)
-    .withWaitStrategy(Wait.forAll([
-      Wait.forLogMessage("SQL Server is now ready for client connections."),
-      Wait.forSuccessfulCommand('/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b -Q "SELECT 1"'),
-    ]))
+    .withWaitStrategy(
+      Wait.forAll([
+        Wait.forLogMessage("SQL Server is now ready for client connections."),
+        Wait.forSuccessfulCommand(
+          '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -b -Q "SELECT 1"',
+        ),
+      ]),
+    )
     .withStartupTimeout(180_000)
     .start();
   const server = container.getHost();
@@ -90,5 +94,7 @@ export default async function setup(project: TestProject) {
   };
   project.provide("mssql", settings);
   console.info(`[db-mssql] image=${MSSQL_IMAGE} version=2022-CU18 server=${server} port=${port}`);
-  return async () => { await container.stop(); };
+  return async () => {
+    await container.stop();
+  };
 }

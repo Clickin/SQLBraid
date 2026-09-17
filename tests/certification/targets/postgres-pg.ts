@@ -1,5 +1,14 @@
 import { Client, Pool } from "pg";
-import { createPgDatabase, createPgPoolDatabase, createPgPoolProvider, type PgClientLike, type PgCursorFactory, type PgPoolClientLike, type PgPoolLike, type PgResultLike } from "@sqlbraid/postgres/pg";
+import {
+  createPgDatabase,
+  createPgPoolDatabase,
+  createPgPoolProvider,
+  type PgClientLike,
+  type PgCursorFactory,
+  type PgPoolClientLike,
+  type PgPoolLike,
+  type PgResultLike,
+} from "@sqlbraid/postgres/pg";
 import { postgresParameter, sql } from "@sqlbraid/postgres";
 import type { CallQuery, CommandQuery, Database, ExecutionEvent, RowQuery } from "@sqlbraid/core";
 import { createPooledDatabase } from "@sqlbraid/runtime";
@@ -95,7 +104,10 @@ function trackedClient(raw: PgClientLike, state: Metrics, pooled: boolean): PgPo
     ...raw,
     async query(value: unknown, values?: readonly unknown[]) {
       markSideEffect(queryText(value), state);
-      return (query as unknown as (query: unknown, values?: readonly unknown[]) => Promise<PgResultLike>)(value, values);
+      return (query as unknown as (query: unknown, values?: readonly unknown[]) => Promise<PgResultLike>)(
+        value,
+        values,
+      );
     },
     escapeIdentifier: raw.escapeIdentifier.bind(raw),
     escapeLiteral: raw.escapeLiteral.bind(raw),
@@ -117,7 +129,7 @@ function trackedClient(raw: PgClientLike, state: Metrics, pooled: boolean): PgPo
 function makePoolLike(rawPool: Pool, state: Metrics): PgPoolLike {
   return {
     async connect() {
-      const raw = await rawPool.connect() as unknown as PgPoolClientLike;
+      const raw = (await rawPool.connect()) as unknown as PgPoolClientLike;
       state.acquireCount.value += 1;
       state.activeLeases.value += 1;
       try {
@@ -135,7 +147,7 @@ function makePoolLike(rawPool: Pool, state: Metrics): PgPoolLike {
 function makeCancelPoolLike(rawPool: Pool): PgPoolLike {
   return {
     async connect() {
-      const raw = await rawPool.connect() as unknown as PgPoolClientLike;
+      const raw = (await rawPool.connect()) as unknown as PgPoolClientLike;
       await raw.query({ text: "SET extra_float_digits = 0", values: [] });
       return raw;
     },
@@ -145,7 +157,7 @@ function makeCancelPoolLike(rawPool: Pool): PgPoolLike {
 function makeRollbackFaultPoolLike(rawPool: Pool, state: Metrics): PgPoolLike {
   return {
     async connect() {
-      const raw = await rawPool.connect() as unknown as PgPoolClientLike;
+      const raw = (await rawPool.connect()) as unknown as PgPoolClientLike;
       state.acquireCount.value += 1;
       state.activeLeases.value += 1;
       const tracked = trackedClient(raw, state, true) as PgPoolClientLike;
@@ -157,7 +169,10 @@ function makeRollbackFaultPoolLike(rawPool: Pool, state: Metrics): PgPoolLike {
             failed = true;
             throw new Error("cert-rollback-cleanup");
           }
-          return (tracked.query as unknown as (query: unknown, values?: readonly unknown[]) => Promise<PgResultLike>)(value, values);
+          return (tracked.query as unknown as (query: unknown, values?: readonly unknown[]) => Promise<PgResultLike>)(
+            value,
+            values,
+          );
         },
       };
     },
@@ -174,12 +189,18 @@ function makeRoutineCleanupFaultClient(raw: PgClientLike, state: Metrics): PgCli
         failed = true;
         throw new Error("cert-routine-cleanup");
       }
-      return (tracked.query as unknown as (query: unknown, values?: readonly unknown[]) => Promise<PgResultLike>)(value, values);
+      return (tracked.query as unknown as (query: unknown, values?: readonly unknown[]) => Promise<PgResultLike>)(
+        value,
+        values,
+      );
     },
   };
 }
 
-function instrumentProviderStream(provider: ReturnType<typeof createPgPoolProvider>, state: Shared): ReturnType<typeof createPgPoolProvider> {
+function instrumentProviderStream(
+  provider: ReturnType<typeof createPgPoolProvider>,
+  state: Shared,
+): ReturnType<typeof createPgPoolProvider> {
   return {
     ...provider,
     async acquire() {
@@ -208,7 +229,7 @@ function instrumentProviderStream(provider: ReturnType<typeof createPgPoolProvid
 }
 
 async function loadCursor(): Promise<PgCursorFactory> {
-  const loaded = await import("pg-cursor") as unknown as { readonly default?: unknown };
+  const loaded = (await import("pg-cursor")) as unknown as { readonly default?: unknown };
   return (loaded.default ?? loaded) as PgCursorFactory;
 }
 
@@ -234,7 +255,10 @@ function faultCursorFactory(base: PgCursorFactory, state: Metrics): PgCursorFact
       state.openCursors.value += 1;
     }
 
-    override read(rowCount: number, callback: (error: unknown, rows?: readonly unknown[], result?: PgResultLike) => void): void {
+    override read(
+      rowCount: number,
+      callback: (error: unknown, rows?: readonly unknown[], result?: PgResultLike) => void,
+    ): void {
       this.reads += 1;
       // Keep the native cursor result contract while injecting deterministic faults.
       if (this.mode === "first" && this.reads === 1) {
@@ -263,7 +287,10 @@ function faultCursorFactory(base: PgCursorFactory, state: Metrics): PgCursorFact
 
 function cancelCursorFactory(base: PgCursorFactory, ready: { resolve: () => void }): PgCursorFactory {
   return class CancellationCursor extends base {
-    override read(rowCount: number, callback: (error: unknown, rows?: readonly unknown[], result?: PgResultLike) => void): void {
+    override read(
+      rowCount: number,
+      callback: (error: unknown, rows?: readonly unknown[], result?: PgResultLike) => void,
+    ): void {
       ready.resolve();
       super.read(rowCount, callback as never);
     }
@@ -316,7 +343,9 @@ async function createShared(targetId: string, connectionUri: string): Promise<Sh
     await client.query(`DROP PROCEDURE IF EXISTS ${identifier(scalarProcedure)}(integer,integer)`);
     await client.query(`DROP PROCEDURE IF EXISTS ${identifier(setsProcedure)}(integer,refcursor,refcursor)`);
     await client.query(`DROP PROCEDURE IF EXISTS ${identifier(cursorProcedure)}(integer,refcursor)`);
-    await client.query(`CREATE TABLE ${identifier(table)} (id text PRIMARY KEY, value text NOT NULL, marker integer NOT NULL)`);
+    await client.query(
+      `CREATE TABLE ${identifier(table)} (id text PRIMARY KEY, value text NOT NULL, marker integer NOT NULL)`,
+    );
     await client.query(`
       CREATE PROCEDURE ${identifier(callProcedure)}(IN p integer)
       LANGUAGE plpgsql AS $$ BEGIN PERFORM p; END; $$
@@ -349,9 +378,15 @@ async function createShared(targetId: string, connectionUri: string): Promise<Sh
   const dispose = async (): Promise<void> => {
     await client.query(`DROP TABLE IF EXISTS ${identifier(table)} CASCADE`).catch(() => undefined);
     await client.query(`DROP PROCEDURE IF EXISTS ${identifier(callProcedure)}(integer)`).catch(() => undefined);
-    await client.query(`DROP PROCEDURE IF EXISTS ${identifier(scalarProcedure)}(integer,integer)`).catch(() => undefined);
-    await client.query(`DROP PROCEDURE IF EXISTS ${identifier(setsProcedure)}(integer,refcursor,refcursor)`).catch(() => undefined);
-    await client.query(`DROP PROCEDURE IF EXISTS ${identifier(cursorProcedure)}(integer,refcursor)`).catch(() => undefined);
+    await client
+      .query(`DROP PROCEDURE IF EXISTS ${identifier(scalarProcedure)}(integer,integer)`)
+      .catch(() => undefined);
+    await client
+      .query(`DROP PROCEDURE IF EXISTS ${identifier(setsProcedure)}(integer,refcursor,refcursor)`)
+      .catch(() => undefined);
+    await client
+      .query(`DROP PROCEDURE IF EXISTS ${identifier(cursorProcedure)}(integer,refcursor)`)
+      .catch(() => undefined);
     await client.end().catch(() => undefined);
     await pool.end().catch(() => undefined);
     await cancelPool.end().catch(() => undefined);
@@ -427,8 +462,10 @@ function rowQueries(state: Shared): CertificationFixture["queries"] {
     RES011: sql.rows`SELECT 1::integer AS value, 2::integer AS value`,
   };
   const prepared = {
-    command: (input: unknown): CommandQuery => sql.command`UPDATE ${table} SET value = ${String(input)} WHERE id = 'baseline'`,
-    rows: (input: unknown): RowQuery<unknown> => sql.rows`SELECT id, value FROM ${table} WHERE id IN ('one', 'two') AND ${String(input)}::text IS NOT NULL ORDER BY id`,
+    command: (input: unknown): CommandQuery =>
+      sql.command`UPDATE ${table} SET value = ${String(input)} WHERE id = 'baseline'`,
+    rows: (input: unknown): RowQuery<unknown> =>
+      sql.rows`SELECT id, value FROM ${table} WHERE id IN ('one', 'two') AND ${String(input)}::text IS NOT NULL ORDER BY id`,
     input: "prepared",
     factoryCalls: () => preparedCalls,
     resources: () => state.openCursors.value,
@@ -454,7 +491,11 @@ function rowQueries(state: Shared): CertificationFixture["queries"] {
     resultSets: sql.call`CALL ${sql.ident(state.setsProcedure)}(${1}, ${sql.out("users", postgresParameter.refcursor())}, ${sql.out("payments", postgresParameter.refcursor())})`,
     cursor: sql.call`CALL ${sql.ident(state.cursorProcedure)}(${1}, ${sql.out("users", postgresParameter.refcursor())})`,
     inout: sql.call`CALL ${sql.ident(state.scalarProcedure)}(${sql.inOut("answer", 1)})`,
-    returnValue: sql.call({ returnValue: { "~standard": { version: 1, vendor: "sqlbraid-pg-cert", validate: (value: unknown) => ({ value }) } } })`SELECT 1`,
+    returnValue: sql.call({
+      returnValue: {
+        "~standard": { version: 1, vendor: "sqlbraid-pg-cert", validate: (value: unknown) => ({ value }) },
+      },
+    })`SELECT 1`,
   };
   return {
     zero: sql.rows`SELECT id, value FROM ${table} WHERE false`,
@@ -487,7 +528,10 @@ function rowQueries(state: Shared): CertificationFixture["queries"] {
     },
     expected: {
       one: { id: "one", value: "one" },
-      many: [{ id: "one", value: "one" }, { id: "two", value: "two" }],
+      many: [
+        { id: "one", value: "one" },
+        { id: "two", value: "two" },
+      ],
       special: {
         RES001: Object.fromEntries([["__proto__", "value"]]),
         RES002: Object.fromEntries([["constructor", "value"]]),
@@ -501,7 +545,10 @@ function rowQueries(state: Shared): CertificationFixture["queries"] {
         RES010: { value: Buffer.from([0, 255, 16]) },
         CALL001: { output: {}, resultSets: [] },
         CALL002: { output: { answer: "14" }, resultSets: [] },
-        CALL004: { output: {}, resultSets: [{ rows: [{ id: "1", value: "set-one" }] }, { rows: [{ id: "2", value: "set-two" }] }] },
+        CALL004: {
+          output: {},
+          resultSets: [{ rows: [{ id: "1", value: "set-one" }] }, { rows: [{ id: "2", value: "set-two" }] }],
+        },
         CALL005: { output: {}, resultSets: [{ rows: [{ id: "1", value: "cursor" }] }] },
       },
       specialErrors: { RES011: { code: "BRAID_RESULT_COLUMNS" } },
@@ -534,27 +581,46 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       return pooled.bulk(inputs, factory, options);
     },
   };
-  const inputs = [{ id: "bulk-one", value: "one" }, { id: "bulk-two", value: "two" }];
+  const inputs = [
+    { id: "bulk-one", value: "one" },
+    { id: "bulk-two", value: "two" },
+  ];
   const bulk: BulkConformanceFixture<unknown> = {
     db: bulkDb,
     inputs,
-    factory: (input) => sql.command`INSERT INTO ${sql.ident(state.table)} (id, value, marker) VALUES (${(input as typeof inputs[number]).id}, ${(input as typeof inputs[number]).value}, ${1})`,
+    factory: (input) =>
+      sql.command`INSERT INTO ${sql.ident(state.table)} (id, value, marker) VALUES (${(input as (typeof inputs)[number]).id}, ${(input as (typeof inputs)[number]).value}, ${1})`,
     expected: { inputCount: 2, affectedRows: 2 },
     acquireCount: () => state.acquireCount.value,
     executeCount: () => bulkExec,
     values: () => bulkValues,
     middleFailure: async () => {
-      const failureInputs = [{ id: "bulk-middle", value: "first" }, { id: "bulk-middle", value: "duplicate" }, { id: "bulk-later", value: "later" }];
+      const failureInputs = [
+        { id: "bulk-middle", value: "first" },
+        { id: "bulk-middle", value: "duplicate" },
+        { id: "bulk-later", value: "later" },
+      ];
       let error: unknown;
       try {
-        await bulkDb.bulk(failureInputs, (input) => sql.command`INSERT INTO ${sql.ident(state.table)} (id, value, marker) VALUES (${input.id}, ${input.value}, ${1})`);
+        await bulkDb.bulk(
+          failureInputs,
+          (input) =>
+            sql.command`INSERT INTO ${sql.ident(state.table)} (id, value, marker) VALUES (${input.id}, ${input.value}, ${1})`,
+        );
       } catch (caught) {
         error = caught;
       }
-      if ((error as { readonly code?: unknown } | undefined)?.code !== "23505") throw new Error("BULK003 did not report its native unique constraint violation.");
-      const observedRows = await direct.all(sql.rows<{ readonly id: string; readonly value: string }>`SELECT id, value FROM ${sql.ident(state.table)} WHERE id IN ('bulk-middle', 'bulk-later') ORDER BY id`);
+      if ((error as { readonly code?: unknown } | undefined)?.code !== "23505")
+        throw new Error("BULK003 did not report its native unique constraint violation.");
+      const observedRows = await direct.all(
+        sql.rows<{
+          readonly id: string;
+          readonly value: string;
+        }>`SELECT id, value FROM ${sql.ident(state.table)} WHERE id IN ('bulk-middle', 'bulk-later') ORDER BY id`,
+      );
       const expectedRows = [{ id: "bulk-middle", value: "first" }];
-      if (JSON.stringify(observedRows) !== JSON.stringify(expectedRows)) throw new Error(`BULK003 expected one durable prefix row, got ${JSON.stringify(observedRows)}.`);
+      if (JSON.stringify(observedRows) !== JSON.stringify(expectedRows))
+        throw new Error(`BULK003 expected one durable prefix row, got ${JSON.stringify(observedRows)}.`);
       await direct.one(sql.rows`SELECT 1 AS usable`);
       return { error, observedRows, expectedRows, durability: "prefix" as const };
     },
@@ -565,39 +631,46 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     "~standard": {
       version: 1,
       vendor: "sqlbraid-pg-cert",
-      validate: () => { throw mappingFailure; },
+      validate: () => {
+        throw mappingFailure;
+      },
     },
   } as const;
-  const stream = Object.assign({
-    db: pooled,
-    query: queries.stream!,
-    expected: [queries.expected!.many[0], queries.expected!.many[1]],
-    mappingQuery: sql.rows(mappingSchema)`SELECT id, value FROM ${sql.ident(state.table)} WHERE id IN ('one', 'two') ORDER BY id`,
-    initFailureQuery: sql.rows`/* CERT_STREAM_INIT */ SELECT id, value FROM ${sql.ident(state.table)}`,
-    firstNextFailureQuery: sql.rows`/* CERT_STREAM_FIRST */ SELECT id, value FROM ${sql.ident(state.table)}`,
-    midStreamFailureQuery: sql.rows`/* CERT_STREAM_MID */ SELECT id, value FROM ${sql.ident(state.table)}`,
-    cleanupFailureQuery: sql.rows`/* CERT_STREAM_CLEANUP */ SELECT id, value FROM ${sql.ident(state.table)}`,
-    largeResultQuery: sql.rows`SELECT value::text AS id FROM generate_series(1, 100000) AS value`,
-    cleanupFailure: state.streamErrors.cleanup,
-    released: () => {
-      return state.releaseCount.value - state.releaseBefore;
+  const stream = Object.assign(
+    {
+      db: pooled,
+      query: queries.stream!,
+      expected: [queries.expected!.many[0], queries.expected!.many[1]],
+      mappingQuery: sql.rows(
+        mappingSchema,
+      )`SELECT id, value FROM ${sql.ident(state.table)} WHERE id IN ('one', 'two') ORDER BY id`,
+      initFailureQuery: sql.rows`/* CERT_STREAM_INIT */ SELECT id, value FROM ${sql.ident(state.table)}`,
+      firstNextFailureQuery: sql.rows`/* CERT_STREAM_FIRST */ SELECT id, value FROM ${sql.ident(state.table)}`,
+      midStreamFailureQuery: sql.rows`/* CERT_STREAM_MID */ SELECT id, value FROM ${sql.ident(state.table)}`,
+      cleanupFailureQuery: sql.rows`/* CERT_STREAM_CLEANUP */ SELECT id, value FROM ${sql.ident(state.table)}`,
+      largeResultQuery: sql.rows`SELECT value::text AS id FROM generate_series(1, 100000) AS value`,
+      cleanupFailure: state.streamErrors.cleanup,
+      released: () => {
+        return state.releaseCount.value - state.releaseBefore;
+      },
+      iteratorReturns: () => {
+        return state.iteratorReturns.value - state.iteratorReturnBefore;
+      },
+      reuseAfterBreak: async () => {
+        await pooled.one(queries.identity);
+        if (state.activeLeases.value !== 0) throw new Error("STR011 did not release the pooled resource after reuse.");
+      },
     },
-    iteratorReturns: () => {
-      return state.iteratorReturns.value - state.iteratorReturnBefore;
+    {
+      mappingFailure,
+      executionSchemaFailure,
+      initFailure: state.streamErrors.init,
+      initFailureCleanup: { iteratorReturns: 1, released: 1 },
+      firstNextFailure: state.streamErrors.first,
+      midStreamFailure: state.streamErrors.mid,
+      largeResultCount: 100000,
     },
-    reuseAfterBreak: async () => {
-      await pooled.one(queries.identity);
-      if (state.activeLeases.value !== 0) throw new Error("STR011 did not release the pooled resource after reuse.");
-    },
-  }, {
-    mappingFailure,
-    executionSchemaFailure,
-    initFailure: state.streamErrors.init,
-    initFailureCleanup: { iteratorReturns: 1, released: 1 },
-    firstNextFailure: state.streamErrors.first,
-    midStreamFailure: state.streamErrors.mid,
-    largeResultCount: 100000,
-  }) as StreamingConformanceFixture<unknown>;
+  ) as StreamingConformanceFixture<unknown>;
   const metrics = {
     snapshot: (): ResourceSnapshot => ({
       borrowedLeases: state.activeLeases.value,
@@ -605,7 +678,12 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       openCursors: state.openCursors.value,
     }),
     sideEffects: () => state.sideEffects.value,
-    mutationSentinel: async () => (await pooled.one(sql.rows<{ readonly marker: number }>`SELECT marker FROM ${sql.ident(state.table)} WHERE id = 'baseline'`)).marker,
+    mutationSentinel: async () =>
+      (
+        await pooled.one(
+          sql.rows<{ readonly marker: number }>`SELECT marker FROM ${sql.ident(state.table)} WHERE id = 'baseline'`,
+        )
+      ).marker,
     pooledScope: async (): Promise<void> => {
       await pooled.session(async (session) => {
         await session.one(queries.identity);
@@ -618,11 +696,17 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       const primary = new Error("cert-transaction-primary");
       let error: unknown;
       try {
-        await faultDb.tx(async () => { throw primary; });
+        await faultDb.tx(async () => {
+          throw primary;
+        });
       } catch (caught) {
         error = caught;
       }
-      if (!(error instanceof AggregateError) || !error.errors.includes(primary) || !error.errors.some((item) => item instanceof Error && item.message === "cert-rollback-cleanup")) {
+      if (
+        !(error instanceof AggregateError) ||
+        !error.errors.includes(primary) ||
+        !error.errors.some((item) => item instanceof Error && item.message === "cert-rollback-cleanup")
+      ) {
         throw new Error("TX007 did not preserve both the transaction primary and rollback cleanup failures.");
       }
       if (state.activeLeases.value !== 0) throw new Error("TX007 leaked the faulted pooled lease.");
@@ -630,33 +714,55 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     },
     readOnlyWrite: async (): Promise<void> => {
       await state.client.query(`DELETE FROM ${identifier(state.table)}`);
-      await state.client.query(`INSERT INTO ${identifier(state.table)} (id, value, marker) VALUES ('one', 'one', 0), ('two', 'two', 0), ('baseline', 'baseline', 0)`);
-      await pooled.tx(async (tx) => { await tx.execute(queries.transaction!.insert); });
-      const committed = await direct.one(sql.rows<{ readonly count: string }>`SELECT count(*)::text AS count FROM ${sql.ident(state.table)} WHERE id = 'tx-row'`);
+      await state.client.query(
+        `INSERT INTO ${identifier(state.table)} (id, value, marker) VALUES ('one', 'one', 0), ('two', 'two', 0), ('baseline', 'baseline', 0)`,
+      );
+      await pooled.tx(async (tx) => {
+        await tx.execute(queries.transaction!.insert);
+      });
+      const committed = await direct.one(
+        sql.rows<{
+          readonly count: string;
+        }>`SELECT count(*)::text AS count FROM ${sql.ident(state.table)} WHERE id = 'tx-row'`,
+      );
       if (committed.count !== "1") throw new Error("TX009 did not establish a valid read-write baseline.");
       await state.client.query(`DELETE FROM ${identifier(state.table)} WHERE id = 'tx-row'`);
       let error: unknown;
       try {
-        await pooled.tx({ readOnly: true }, async (tx) => { await tx.execute(queries.transaction!.insert); });
+        await pooled.tx({ readOnly: true }, async (tx) => {
+          await tx.execute(queries.transaction!.insert);
+        });
       } catch (caught) {
         error = caught;
       }
-      if ((error as { readonly code?: unknown } | undefined)?.code !== "25006") throw new Error(`TX009 read-only write returned an unexpected native code: ${String((error as { readonly code?: unknown } | undefined)?.code)}`);
-      const durable = await direct.one(sql.rows<{ readonly count: string }>`SELECT count(*)::text AS count FROM ${sql.ident(state.table)} WHERE id = 'tx-row'`);
+      if ((error as { readonly code?: unknown } | undefined)?.code !== "25006")
+        throw new Error(
+          `TX009 read-only write returned an unexpected native code: ${String((error as { readonly code?: unknown } | undefined)?.code)}`,
+        );
+      const durable = await direct.one(
+        sql.rows<{
+          readonly count: string;
+        }>`SELECT count(*)::text AS count FROM ${sql.ident(state.table)} WHERE id = 'tx-row'`,
+      );
       if (durable.count !== "0") throw new Error("TX009 read-only write changed durable state.");
     },
     routineCleanup: async (query?: CallQuery): Promise<void> => {
       if (query === undefined) throw new Error("CALL007 routine cleanup query missing.");
-      const faultDb = createPgDatabase(makeRoutineCleanupFaultClient(state.client as unknown as PgClientLike, state), { cursor: state.cursor });
+      const faultDb = createPgDatabase(makeRoutineCleanupFaultClient(state.client as unknown as PgClientLike, state), {
+        cursor: state.cursor,
+      });
       let error: unknown;
       try {
-        await faultDb.tx(async (tx) => { await tx.call(query); });
+        await faultDb.tx(async (tx) => {
+          await tx.call(query);
+        });
       } catch (caught) {
         error = caught;
       }
-      const cleanupPreserved = error instanceof AggregateError
-        ? error.errors.some((item) => item instanceof Error && item.message === "cert-routine-cleanup")
-        : error instanceof Error && error.message === "cert-routine-cleanup";
+      const cleanupPreserved =
+        error instanceof AggregateError
+          ? error.errors.some((item) => item instanceof Error && item.message === "cert-routine-cleanup")
+          : error instanceof Error && error.message === "cert-routine-cleanup";
       if (!cleanupPreserved) throw new Error("CALL007 did not preserve the native routine cursor cleanup failure.");
       await direct.one(queries.identity);
     },
@@ -680,8 +786,10 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     "transaction.isolation.read-uncommitted": {
       prove: async () => {
         const observed = await direct.tx({ isolation: "read-uncommitted" }, async (tx) =>
-          tx.one(sql.rows<{ readonly transaction_isolation: string }>`SHOW transaction_isolation`));
-        if (observed.transaction_isolation !== "read uncommitted") throw new Error(`PostgreSQL read-uncommitted setting was not observed: ${observed.transaction_isolation}`);
+          tx.one(sql.rows<{ readonly transaction_isolation: string }>`SHOW transaction_isolation`),
+        );
+        if (observed.transaction_isolation !== "read uncommitted")
+          throw new Error(`PostgreSQL read-uncommitted setting was not observed: ${observed.transaction_isolation}`);
       },
     },
     "numeric.approximate-float": {
@@ -701,12 +809,18 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
         const db = createPgPoolDatabase(state.cancelPoolLike, { cursor });
         const before = await db.one(sql.rows<{ readonly id: string }>`SELECT pg_backend_pid()::text AS id`);
         const controller = new AbortController();
-        const iterator = db.stream(sql.rows`SELECT pg_sleep(60)`, { signal: controller.signal })[Symbol.asyncIterator]();
+        const iterator = db
+          .stream(sql.rows`SELECT pg_sleep(60)`, { signal: controller.signal })
+          [Symbol.asyncIterator]();
         const next = iterator.next();
         await Promise.race([ready.promise, state.cancelReady()]);
         controller.abort(new Error("cert-statement-abort"));
         let rejected = false;
-        try { await next; } catch { rejected = true; }
+        try {
+          await next;
+        } catch {
+          rejected = true;
+        }
         if (!rejected) throw new Error("statement.cancel did not reject the active stream.");
         const after = await db.one(sql.rows<{ readonly id: string }>`SELECT pg_backend_pid()::text AS id`);
         if (after.id === before.id) throw new Error("statement.cancel reused the destroyed physical connection.");
@@ -722,7 +836,9 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     metrics,
     reset: async () => {
       await state.client.query(`DELETE FROM ${identifier(state.table)}`);
-      await state.client.query(`INSERT INTO ${identifier(state.table)} (id, value, marker) VALUES ('one', 'one', 0), ('two', 'two', 0), ('baseline', 'baseline', 0)`);
+      await state.client.query(
+        `INSERT INTO ${identifier(state.table)} (id, value, marker) VALUES ('one', 'one', 0), ('two', 'two', 0), ('baseline', 'baseline', 0)`,
+      );
       state.sideEffects.value = 0;
       state.releaseBefore = state.releaseCount.value;
       state.cursorCloseBefore = state.cursorCloses.value;
@@ -734,14 +850,20 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     representationUnsupported: {
       "data.json-parsed": {
         prove: async () => {
-          const observed = await pooled.one(sql.rows<{ readonly value: unknown }>`SELECT '{"value": 1}'::jsonb AS value`);
-          if (typeof observed.value !== "string") throw new Error(`PostgreSQL JSON parser unexpectedly returned ${typeof observed.value}.`);
+          const observed = await pooled.one(
+            sql.rows<{ readonly value: unknown }>`SELECT '{"value": 1}'::jsonb AS value`,
+          );
+          if (typeof observed.value !== "string")
+            throw new Error(`PostgreSQL JSON parser unexpectedly returned ${typeof observed.value}.`);
         },
       },
       "data.temporal-native": {
         prove: async () => {
-          const observed = await pooled.one(sql.rows<{ readonly value: unknown }>`SELECT TIMESTAMP '2026-09-14 12:34:56.789' AS value`);
-          if (typeof observed.value !== "string") throw new Error(`PostgreSQL temporal parser unexpectedly returned ${typeof observed.value}.`);
+          const observed = await pooled.one(
+            sql.rows<{ readonly value: unknown }>`SELECT TIMESTAMP '2026-09-14 12:34:56.789' AS value`,
+          );
+          if (typeof observed.value !== "string")
+            throw new Error(`PostgreSQL temporal parser unexpectedly returned ${typeof observed.value}.`);
         },
       },
     },
@@ -769,4 +891,7 @@ export function createPostgresTarget(
   };
 }
 
-export { expectedCapabilities as postgresExpectedCapabilities, expectedTransactionOptions as postgresExpectedTransactionOptions };
+export {
+  expectedCapabilities as postgresExpectedCapabilities,
+  expectedTransactionOptions as postgresExpectedTransactionOptions,
+};

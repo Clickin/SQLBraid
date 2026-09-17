@@ -3,70 +3,78 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "vitest";
 import { createPooledDatabase, DatabaseScopeError } from "@sqlbraid/runtime";
 import type { QueryExecutor } from "@sqlbraid/core";
-import {
-  createNodeSqliteDatabase,
-  createNodeSqliteExecutor,
-} from "@sqlbraid/sqlite/node-sqlite";
+import { createNodeSqliteDatabase, createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";
 import { sql, typePolicy } from "@sqlbraid/sqlite";
 import { runStreamingConformance } from "./streaming-conformance.js";
 
 test("SQLite satisfies shared streaming lifecycle and releases only after iterator return", async () => {
-  await runStreamingConformance(() => {
-    const native = new DatabaseSync(":memory:");
-    const executor = createNodeSqliteExecutor(native);
-    let returns = 0;
-    let releases = 0;
-    let cleaned = false;
-    const db = createPooledDatabase({
-      statementBinding: executor.statementBinding,
-      async acquire() {
-        return {
-          ...executor,
-          stream<Row>(...args: Parameters<QueryExecutor["stream"]>): AsyncIterable<Row> {
-            const iterator = executor.stream<Row>(...args)[Symbol.asyncIterator]();
-            return {
-              [Symbol.asyncIterator]() {
-                return {
-                  next: () => iterator.next(),
-                  async return() {
-                    returns += 1;
-                    const result = await iterator.return?.();
-                    cleaned = true;
-                    return result ?? { done: true as const, value: undefined };
-                  },
-                };
-              },
-            };
-          },
-          release() {
-            assert.equal(cleaned, true);
-            releases += 1;
-          },
-        };
-      },
-    });
-    const rowSchema = {
-      "~standard": {
-        version: 1 as const,
-        vendor: "sqlite-conformance",
-        validate(value: unknown) {
-          assert.ok(value !== null && typeof value === "object" && "value" in value && typeof value.value === "number");
-          return { value: { value: value.value * 2 } };
+  await runStreamingConformance(
+    () => {
+      const native = new DatabaseSync(":memory:");
+      const executor = createNodeSqliteExecutor(native);
+      let returns = 0;
+      let releases = 0;
+      let cleaned = false;
+      const db = createPooledDatabase({
+        statementBinding: executor.statementBinding,
+        async acquire() {
+          return {
+            ...executor,
+            stream<Row>(...args: Parameters<QueryExecutor["stream"]>): AsyncIterable<Row> {
+              const iterator = executor.stream<Row>(...args)[Symbol.asyncIterator]();
+              return {
+                [Symbol.asyncIterator]() {
+                  return {
+                    next: () => iterator.next(),
+                    async return() {
+                      returns += 1;
+                      const result = await iterator.return?.();
+                      cleaned = true;
+                      return result ?? { done: true as const, value: undefined };
+                    },
+                  };
+                },
+              };
+            },
+            release() {
+              assert.equal(cleaned, true);
+              releases += 1;
+            },
+          };
         },
-      },
-    };
-    return {
-      db,
-      query: sql.rows(rowSchema)`SELECT CAST(1 AS REAL) AS value UNION ALL SELECT CAST(2 AS REAL)`,
-      expected: [{ value: 2 }, { value: 4 }],
-      mappingQuery: sql.rows({
-        "~standard": { version: 1, vendor: "sqlite-conformance", validate() { throw new Error("query mapper failed"); } },
-      })`SELECT CAST(1 AS REAL) AS value`,
-      released: () => releases,
-      iteratorReturns: () => returns,
-      close: () => native.close(),
-    };
-  }, { cancellation: "unsupported" });
+      });
+      const rowSchema = {
+        "~standard": {
+          version: 1 as const,
+          vendor: "sqlite-conformance",
+          validate(value: unknown) {
+            assert.ok(
+              value !== null && typeof value === "object" && "value" in value && typeof value.value === "number",
+            );
+            return { value: { value: value.value * 2 } };
+          },
+        },
+      };
+      return {
+        db,
+        query: sql.rows(rowSchema)`SELECT CAST(1 AS REAL) AS value UNION ALL SELECT CAST(2 AS REAL)`,
+        expected: [{ value: 2 }, { value: 4 }],
+        mappingQuery: sql.rows({
+          "~standard": {
+            version: 1,
+            vendor: "sqlite-conformance",
+            validate() {
+              throw new Error("query mapper failed");
+            },
+          },
+        })`SELECT CAST(1 AS REAL) AS value`,
+        released: () => releases,
+        iteratorReturns: () => returns,
+        close: () => native.close(),
+      };
+    },
+    { cancellation: "unsupported" },
+  );
 });
 
 test("SQLite preserves read and cleanup errors and discards an uncertain lease", async () => {
@@ -77,14 +85,24 @@ test("SQLite preserves read and cleanup errors and discards an uncertain lease",
     prepare() {
       return {
         columns: () => [{ name: "value" }],
-        all() { throw new Error("must not materialize"); },
-        run() { throw new Error("must not execute a command"); },
+        all() {
+          throw new Error("must not materialize");
+        },
+        run() {
+          throw new Error("must not execute a command");
+        },
         setReadBigInts() {},
         iterate() {
           return {
-            [Symbol.iterator]() { return this; },
-            next() { throw readFailure; },
-            return() { throw closeFailure; },
+            [Symbol.iterator]() {
+              return this;
+            },
+            next() {
+              throw readFailure;
+            },
+            return() {
+              throw closeFailure;
+            },
           };
         },
       };
@@ -102,10 +120,17 @@ test("SQLite preserves read and cleanup errors and discards an uncertain lease",
       };
     },
   });
-  await assert.rejects(async () => {
-    for await (const row of db.stream(sql.rows`SELECT 1 AS value`)) void row;
-  }, (error: unknown) => error instanceof AggregateError && error.errors.includes(readFailure)
-    && error.errors.some((nested: unknown) => nested === closeFailure || (nested instanceof Error && nested.cause === closeFailure)));
+  await assert.rejects(
+    async () => {
+      for await (const row of db.stream(sql.rows`SELECT 1 AS value`)) void row;
+    },
+    (error: unknown) =>
+      error instanceof AggregateError &&
+      error.errors.includes(readFailure) &&
+      error.errors.some(
+        (nested: unknown) => nested === closeFailure || (nested instanceof Error && nested.cause === closeFailure),
+      ),
+  );
   assert.equal(discarded, 1);
 });
 
@@ -125,13 +150,18 @@ test("SQLite exact INTEGER reads are strings while REAL remains number", async (
       { value: 0.1 },
     );
     const streamed: string[] = [];
-    for await (const row of createNodeSqliteDatabase(native).stream(sql.rows<{ value: string }>`SELECT 9223372036854775807 AS value`)) {
+    for await (const row of createNodeSqliteDatabase(native).stream(
+      sql.rows<{ value: string }>`SELECT 9223372036854775807 AS value`,
+    )) {
       streamed.push(row.value);
     }
     assert.deepEqual(streamed, ["9223372036854775807"]);
 
     assert.equal(typePolicy.mappings.find((mapping) => mapping.databaseType === "INTEGER")?.outputType, "string");
-    assert.equal(typePolicy.mappings.find((mapping) => mapping.databaseType === "INTEGER")?.numeric?.representation, "string");
+    assert.equal(
+      typePolicy.mappings.find((mapping) => mapping.databaseType === "INTEGER")?.numeric?.representation,
+      "string",
+    );
   } finally {
     native.close();
   }
@@ -145,7 +175,7 @@ test("SQLite rejects row reads without native integer transport but keeps comman
     prepare(text) {
       const rows = text.startsWith("SELECT");
       return {
-        columns: () => rows ? [{ name: "value" }] : [],
+        columns: () => (rows ? [{ name: "value" }] : []),
         all: () => {
           allCalls += 1;
           return [{ value: 9007199254740992 }];
@@ -162,16 +192,10 @@ test("SQLite rejects row reads without native integer transport but keeps comman
     },
   });
 
-  await assert.rejects(
-    () => db.all(sql.rows`SELECT 9007199254740993 AS value`),
-    /BRAID_INTEGER_MODE_UNSUPPORTED/,
-  );
-  await assert.rejects(
-    async () => {
-      for await (const row of db.stream(sql.rows`SELECT 9007199254740993 AS value`)) void row;
-    },
-    /BRAID_INTEGER_MODE_UNSUPPORTED/,
-  );
+  await assert.rejects(() => db.all(sql.rows`SELECT 9007199254740993 AS value`), /BRAID_INTEGER_MODE_UNSUPPORTED/);
+  await assert.rejects(async () => {
+    for await (const row of db.stream(sql.rows`SELECT 9007199254740993 AS value`)) void row;
+  }, /BRAID_INTEGER_MODE_UNSUPPORTED/);
   assert.equal(allCalls, 0);
   assert.equal(iterateCalls, 0);
 
@@ -238,7 +262,9 @@ test("SQLite streams 100k rows without materializing an application array", asyn
     abort.abort(new Error("stop"));
     await assert.rejects(
       async () => {
-        for await (const row of db.stream(sql.rows<{ value: string }>`SELECT value FROM pv15_stream`, { signal: abort.signal })) {
+        for await (const row of db.stream(sql.rows<{ value: string }>`SELECT value FROM pv15_stream`, {
+          signal: abort.signal,
+        })) {
           void row;
         }
       },
@@ -258,7 +284,15 @@ test("SQLite stream mapper errors and transaction ownership release iteration", 
     await assert.rejects(
       async () => {
         for await (const row of db.stream(sql.rows<{ value: string }>`SELECT value FROM pv15_tx`, {
-          schema: { "~standard": { version: 1, vendor: "pv15", validate() { throw failure; } } },
+          schema: {
+            "~standard": {
+              version: 1,
+              vendor: "pv15",
+              validate() {
+                throw failure;
+              },
+            },
+          },
         })) {
           void row;
         }
@@ -275,7 +309,10 @@ test("SQLite stream mapper errors and transaction ownership release iteration", 
         (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_TX_SCOPE",
       );
     });
-    assert.deepEqual(await db.all(sql.rows<{ value: string }>`SELECT value FROM pv15_tx`), [{ value: "1" }, { value: "2" }]);
+    assert.deepEqual(await db.all(sql.rows<{ value: string }>`SELECT value FROM pv15_tx`), [
+      { value: "1" },
+      { value: "2" },
+    ]);
   } finally {
     native.close();
   }
@@ -295,11 +332,17 @@ test("SQLite custom scalar and aggregate functions remain ordinary row queries",
     });
     const db = createNodeSqliteDatabase(native);
     assert.deepEqual(
-      await db.all(sql.rows<{ value: number }>`SELECT CAST(pv15_double(value) AS REAL) AS value FROM (SELECT 3 AS value)`),
+      await db.all(
+        sql.rows<{ value: number }>`SELECT CAST(pv15_double(value) AS REAL) AS value FROM (SELECT 3 AS value)`,
+      ),
       [{ value: 6 }],
     );
     assert.deepEqual(
-      await db.all(sql.rows<{ value: number }>`SELECT CAST(pv15_total(value) AS REAL) AS value FROM (SELECT 3 AS value UNION ALL SELECT 4)`),
+      await db.all(
+        sql.rows<{
+          value: number;
+        }>`SELECT CAST(pv15_total(value) AS REAL) AS value FROM (SELECT 3 AS value UNION ALL SELECT 4)`,
+      ),
       [{ value: 7 }],
     );
     await assert.rejects(

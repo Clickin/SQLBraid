@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { createRenderedStatement, createStatementBindingDescription } from "@sqlbraid/core";
-import type { ParameterTypeHint, QueryExecutor, QueryResultKind, RenderedStatement, StatementBindingAdapter } from "@sqlbraid/core";
+import type {
+  ParameterTypeHint,
+  QueryExecutor,
+  QueryResultKind,
+  RenderedStatement,
+  StatementBindingAdapter,
+} from "@sqlbraid/core";
 import { createDatabase } from "@sqlbraid/runtime";
 import { createPgExecutor } from "@sqlbraid/postgres/pg";
 import { createMysql2Executor } from "@sqlbraid/mysql/mysql2";
@@ -21,7 +27,7 @@ const statementBinding = Object.freeze<StatementBindingAdapter>({
       reuse: { effective: "simple", owner: "sqlbraid" },
     });
   },
-})
+});
 
 function rendered(resultKind: QueryResultKind = "rows", value = 1): RenderedStatement {
   return createRenderedStatement({
@@ -53,27 +59,49 @@ function noRowsExecutor(values: unknown[]): QueryExecutor {
       values.push(...query.parameters.map((parameter) => parameter.value));
       return { kind: "rows", rows: [] as readonly Row[] };
     },
-    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
-    async call() { throw new Error("BRAID_CALL_UNSUPPORTED"); },
+    async *stream<Row>(): AsyncGenerator<Row> {
+      throw new Error("BRAID_STREAM_UNSUPPORTED");
+    },
+    async call() {
+      throw new Error("BRAID_CALL_UNSUPPORTED");
+    },
   };
 }
 
 test("query:ready exposes immutable parameter hints and adapters receive them", async () => {
   const events: Array<{ readonly type: string; readonly parameterHints?: readonly unknown[] }> = [];
   let received: RenderedStatement | undefined;
-  const db = createDatabase({
-    statementBinding,
-    async query<Row>(query: RenderedStatement) {
-      received = query;
-      return { kind: "rows", rows: [] as readonly Row[] };
+  const db = createDatabase(
+    {
+      statementBinding,
+      async query<Row>(query: RenderedStatement) {
+        received = query;
+        return { kind: "rows", rows: [] as readonly Row[] };
+      },
+      async *stream<Row>(): AsyncGenerator<Row> {
+        throw new Error("BRAID_STREAM_UNSUPPORTED");
+      },
+      async call() {
+        throw new Error("BRAID_CALL_UNSUPPORTED");
+      },
     },
-    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
-    async call() { throw new Error("BRAID_CALL_UNSUPPORTED"); },
-  }, { observers: [{ onEvent(event) { events.push(event); } }] });
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    },
+  );
 
   await db.execute(hintedQuery(1));
 
-  assert.deepEqual(received?.parameters.map((parameter) => parameter.hint), [hint]);
+  assert.deepEqual(
+    received?.parameters.map((parameter) => parameter.hint),
+    [hint],
+  );
   const ready = events.find((event) => event.type === "query:ready");
   assert.ok(ready?.parameterHints);
   assert.deepEqual(ready.parameterHints, [hint]);
@@ -101,9 +129,16 @@ test("prepared queries treat hint metadata as shape but ignore values", async ()
 test("legacy adapters reject explicit hints before driver I/O", async () => {
   let pgCalls = 0;
   const pg = createPgExecutor({
-    async query() { pgCalls += 1; return { rows: [] }; },
-    escapeIdentifier(value: string) { return value; },
-    escapeLiteral(value: string) { return value; },
+    async query() {
+      pgCalls += 1;
+      return { rows: [] };
+    },
+    escapeIdentifier(value: string) {
+      return value;
+    },
+    escapeLiteral(value: string) {
+      return value;
+    },
   });
   await assert.rejects(async () => pg.query(rendered()), /BRAID_BIND_HINT_UNSUPPORTED/);
   await assert.rejects(async () => pg.call!(rendered("call")), /BRAID_BIND_HINT_UNSUPPORTED/);
@@ -111,7 +146,10 @@ test("legacy adapters reject explicit hints before driver I/O", async () => {
 
   let mysqlCalls = 0;
   const mysql = createMysql2Executor({
-    async execute() { mysqlCalls += 1; return [[], []] as const; },
+    async execute() {
+      mysqlCalls += 1;
+      return [[], []] as const;
+    },
     async beginTransaction() {},
     async commit() {},
     async rollback() {},
@@ -151,7 +189,11 @@ test("prepared segment changes fail before typed materialization even with inval
       },
     },
   });
-  const prepared = db.prepare("segment-shape", () => changed ? sql.rows`SELECT ${"invalid"} AS changed` : sql.rows`SELECT ${1}`, { input: "none" });
+  const prepared = db.prepare(
+    "segment-shape",
+    () => (changed ? sql.rows`SELECT ${"invalid"} AS changed` : sql.rows`SELECT ${1}`),
+    { input: "none" },
+  );
   await prepared.execute();
   changed = true;
   await assert.rejects(() => prepared.execute(), /BRAID_PREPARED_SHAPE/);

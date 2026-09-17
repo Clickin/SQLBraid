@@ -20,46 +20,66 @@ function transferConfig(config: SqlBraidConfig): SqlBraidConfig {
             ...(mapping.numeric === undefined ? {} : { numeric: { ...mapping.numeric } }),
           })),
         },
-        ...(target.filters ? {
-          filters: {
-            ...(target.filters.includeNamespaces ? { includeNamespaces: [...target.filters.includeNamespaces] } : {}),
-            ...(target.filters.excludeNamespaces ? { excludeNamespaces: [...target.filters.excludeNamespaces] } : {}),
-            ...(target.filters.includeRelations ? { includeRelations: [...target.filters.includeRelations] } : {}),
-            ...(target.filters.excludeRelations ? { excludeRelations: [...target.filters.excludeRelations] } : {}),
-            ...(target.filters.kinds ? { kinds: [...target.filters.kinds] } : {}),
-          },
-        } : {}),
-        ...(target.naming ? {
-          naming: {
-            ...(target.naming.relations ? { relations: { ...target.naming.relations } } : {}),
-            ...(target.naming.suffixes ? { suffixes: { ...target.naming.suffixes } } : {}),
-          },
-        } : {}),
-        ...(target.typeOverrides ? {
-          typeOverrides: {
-            ...(target.typeOverrides.databaseTypes ? {
-              databaseTypes: Object.fromEntries(Object.entries(target.typeOverrides.databaseTypes).map(([databaseType, override]) => [
-                databaseType,
-                {
-                  ...(override.inputType ? { inputType: override.inputType } : {}),
-                  ...(override.outputType ? { outputType: override.outputType } : {}),
-                },
-              ])),
-            } : {}),
-            ...(target.typeOverrides.columns ? {
-              columns: Object.fromEntries(Object.entries(target.typeOverrides.columns).map(([relation, columns]) => [
-                relation,
-                Object.fromEntries(Object.entries(columns).map(([column, override]) => [
-                  column,
-                  {
-                    ...(override.inputType ? { inputType: override.inputType } : {}),
-                    ...(override.outputType ? { outputType: override.outputType } : {}),
-                  },
-                ])),
-              ])),
-            } : {}),
-          },
-        } : {}),
+        ...(target.filters
+          ? {
+              filters: {
+                ...(target.filters.includeNamespaces
+                  ? { includeNamespaces: [...target.filters.includeNamespaces] }
+                  : {}),
+                ...(target.filters.excludeNamespaces
+                  ? { excludeNamespaces: [...target.filters.excludeNamespaces] }
+                  : {}),
+                ...(target.filters.includeRelations ? { includeRelations: [...target.filters.includeRelations] } : {}),
+                ...(target.filters.excludeRelations ? { excludeRelations: [...target.filters.excludeRelations] } : {}),
+                ...(target.filters.kinds ? { kinds: [...target.filters.kinds] } : {}),
+              },
+            }
+          : {}),
+        ...(target.naming
+          ? {
+              naming: {
+                ...(target.naming.relations ? { relations: { ...target.naming.relations } } : {}),
+                ...(target.naming.suffixes ? { suffixes: { ...target.naming.suffixes } } : {}),
+              },
+            }
+          : {}),
+        ...(target.typeOverrides
+          ? {
+              typeOverrides: {
+                ...(target.typeOverrides.databaseTypes
+                  ? {
+                      databaseTypes: Object.fromEntries(
+                        Object.entries(target.typeOverrides.databaseTypes).map(([databaseType, override]) => [
+                          databaseType,
+                          {
+                            ...(override.inputType ? { inputType: override.inputType } : {}),
+                            ...(override.outputType ? { outputType: override.outputType } : {}),
+                          },
+                        ]),
+                      ),
+                    }
+                  : {}),
+                ...(target.typeOverrides.columns
+                  ? {
+                      columns: Object.fromEntries(
+                        Object.entries(target.typeOverrides.columns).map(([relation, columns]) => [
+                          relation,
+                          Object.fromEntries(
+                            Object.entries(columns).map(([column, override]) => [
+                              column,
+                              {
+                                ...(override.inputType ? { inputType: override.inputType } : {}),
+                                ...(override.outputType ? { outputType: override.outputType } : {}),
+                              },
+                            ]),
+                          ),
+                        ]),
+                      ),
+                    }
+                  : {}),
+              },
+            }
+          : {}),
       })),
     },
   };
@@ -73,5 +93,9 @@ try {
   validateConfig(config);
   parentPort?.postMessage({ ok: true, value: transferConfig(config) });
 } catch (error) {
-  parentPort?.postMessage({ ok: false, configuration: error instanceof Error && error.name === "ConfigurationError", error: error instanceof Error ? error.message : String(error) });
+  parentPort?.postMessage({
+    ok: false,
+    configuration: error instanceof Error && error.name === "ConfigurationError",
+    error: error instanceof Error ? error.message : String(error),
+  });
 }

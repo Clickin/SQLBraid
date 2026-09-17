@@ -63,14 +63,14 @@ Connector/Node.js does not expose effective options. An omitted descriptor or
 partial option declaration reports `mariadb-custom-profile`, not a certified
 profile. Explicit descriptors remain guarded declarations, not observations.
 
-| MariaDB value | Driver raw / SQLBraid canonical representation | Caveat |
-| --- | --- | --- |
-| TINYINT/SMALLINT/INT/BIGINT | driver-dependent → `string` | Exact integer results are canonical text; `decodeExactInteger` is an application opt-in. |
-| DECIMAL/NUMERIC | text → `string` | Exact precision and scale remain text; use an application decimal transform if needed. |
-| FLOAT/DOUBLE | number → `number` | Approximate binary values remain JavaScript numbers. |
-| JSON alias | text with `autoJsonMap:false` → `string` | `autoJsonMap:true` is a separate convenience profile and does not guarantee nested numeric fidelity. |
-| DATE/TIME/DATETIME | text with `dateStrings:true` → `string` | Native `Date` is a separate convenience profile and may lose fractional/zone detail. |
-| BLOB | bytes/Buffer | Preserve bytes or explicitly encode. |
+| MariaDB value               | Driver raw / SQLBraid canonical representation | Caveat                                                                                               |
+| --------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| TINYINT/SMALLINT/INT/BIGINT | driver-dependent → `string`                    | Exact integer results are canonical text; `decodeExactInteger` is an application opt-in.             |
+| DECIMAL/NUMERIC             | text → `string`                                | Exact precision and scale remain text; use an application decimal transform if needed.               |
+| FLOAT/DOUBLE                | number → `number`                              | Approximate binary values remain JavaScript numbers.                                                 |
+| JSON alias                  | text with `autoJsonMap:false` → `string`       | `autoJsonMap:true` is a separate convenience profile and does not guarantee nested numeric fidelity. |
+| DATE/TIME/DATETIME          | text with `dateStrings:true` → `string`        | Native `Date` is a separate convenience profile and may lose fractional/zone detail.                 |
+| BLOB                        | bytes/Buffer                                   | Preserve bytes or explicitly encode.                                                                 |
 
 The adapter uses value-only execution, native `queryStream()`, and one
 `connection.batch()` call for homogeneous bulk. Native `RETURNING` is a

@@ -96,13 +96,78 @@ const READABLE_RELATION_KINDS = new Set<RelationSnapshot["kind"]>([
 const IDENTIFIER_PART = /^(?:[$_\u00b7\u0387\u1369-\u1371\u19da\u200c\u200d]|\p{ID_Continue})$/u;
 const IDENTIFIER_START = /^(?:[$_\u2118\u212e\u309b\u309c]|\p{ID_Start})$/u;
 const RESERVED_EXPORT_NAMES = new Set([
-  "any", "as", "asserts", "bigint", "boolean", "break", "case", "catch", "class", "const", "continue",
-  "debugger", "declare", "default", "delete", "do", "else", "enum", "export", "extends", "false", "finally",
-  "for", "from", "function", "get", "if", "implements", "import", "in", "infer", "instanceof", "interface",
-  "keyof", "let", "module", "namespace", "never", "new", "null", "number", "object", "of", "package",
-  "private", "protected", "public", "readonly", "require", "return", "set", "static", "string", "super",
-  "switch", "symbol", "this", "throw", "true", "try", "type", "typeof", "undefined", "unique", "unknown",
-  "using", "var", "void", "while", "with", "yield", "await",
+  "any",
+  "as",
+  "asserts",
+  "bigint",
+  "boolean",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "declare",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "enum",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "from",
+  "function",
+  "get",
+  "if",
+  "implements",
+  "import",
+  "in",
+  "infer",
+  "instanceof",
+  "interface",
+  "keyof",
+  "let",
+  "module",
+  "namespace",
+  "never",
+  "new",
+  "null",
+  "number",
+  "object",
+  "of",
+  "package",
+  "private",
+  "protected",
+  "public",
+  "readonly",
+  "require",
+  "return",
+  "set",
+  "static",
+  "string",
+  "super",
+  "switch",
+  "symbol",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "type",
+  "typeof",
+  "undefined",
+  "unique",
+  "unknown",
+  "using",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+  "await",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -218,13 +283,19 @@ function validateOptions(options: unknown): asserts options is CodegenOptions {
   const naming = options.naming;
   if (naming !== undefined) {
     if (!isRecord(naming)) throw new TypeError("Codegen naming must be an object.");
-    if (naming.relations !== undefined && (!isRecord(naming.relations) || Object.entries(naming.relations).some(([, name]) => typeof name !== "string"))) {
+    if (
+      naming.relations !== undefined &&
+      (!isRecord(naming.relations) || Object.entries(naming.relations).some(([, name]) => typeof name !== "string"))
+    ) {
       throw new TypeError("Codegen naming.relations must be a string map.");
     }
     if (naming.suffixes !== undefined) {
       if (!isRecord(naming.suffixes)) throw new TypeError("Codegen naming.suffixes must be an object.");
       for (const field of ["row", "insert", "update"]) {
-        if (naming.suffixes[field] !== undefined && (typeof naming.suffixes[field] !== "string" || naming.suffixes[field].length === 0)) {
+        if (
+          naming.suffixes[field] !== undefined &&
+          (typeof naming.suffixes[field] !== "string" || naming.suffixes[field].length === 0)
+        ) {
           throw new TypeError(`Codegen naming.suffixes.${field} must be a non-empty string.`);
         }
       }
@@ -234,20 +305,27 @@ function validateOptions(options: unknown): asserts options is CodegenOptions {
   if (typeOverrides !== undefined) {
     if (!isRecord(typeOverrides)) throw new TypeError("Codegen typeOverrides must be an object.");
     if (typeOverrides.databaseTypes !== undefined) {
-      if (!isRecord(typeOverrides.databaseTypes)) throw new TypeError("Codegen typeOverrides.databaseTypes must be an object.");
-      for (const [key, value] of Object.entries(typeOverrides.databaseTypes)) validateOverride(value, `typeOverrides.databaseTypes[${JSON.stringify(key)}]`);
+      if (!isRecord(typeOverrides.databaseTypes))
+        throw new TypeError("Codegen typeOverrides.databaseTypes must be an object.");
+      for (const [key, value] of Object.entries(typeOverrides.databaseTypes))
+        validateOverride(value, `typeOverrides.databaseTypes[${JSON.stringify(key)}]`);
     }
     if (typeOverrides.columns !== undefined) {
       if (!isRecord(typeOverrides.columns)) throw new TypeError("Codegen typeOverrides.columns must be an object.");
       for (const [relation, columns] of Object.entries(typeOverrides.columns)) {
-        if (!isRecord(columns)) throw new TypeError(`Codegen typeOverrides.columns[${JSON.stringify(relation)}] must be an object.`);
-        for (const [column, value] of Object.entries(columns)) validateOverride(value, `typeOverrides.columns[${JSON.stringify(relation)}][${JSON.stringify(column)}]`);
+        if (!isRecord(columns))
+          throw new TypeError(`Codegen typeOverrides.columns[${JSON.stringify(relation)}] must be an object.`);
+        for (const [column, value] of Object.entries(columns))
+          validateOverride(value, `typeOverrides.columns[${JSON.stringify(relation)}][${JSON.stringify(column)}]`);
       }
     }
   }
 }
 
-function indexTypePolicy(policy: CodegenOptions["typePolicy"], diagnostics: CodegenDiagnostic[]): ReadonlyMap<string, TypeMapping | undefined> {
+function indexTypePolicy(
+  policy: CodegenOptions["typePolicy"],
+  diagnostics: CodegenDiagnostic[],
+): ReadonlyMap<string, TypeMapping | undefined> {
   const grouped = new Map<string, TypeMapping[]>();
   for (const mapping of policy.mappings) {
     const normalized = normalizeDatabaseType(mapping.databaseType);
@@ -260,9 +338,10 @@ function indexTypePolicy(policy: CodegenOptions["typePolicy"], diagnostics: Code
   for (const [normalized, mappings] of grouped) {
     const first = mappings[0]!;
     const conflicting = mappings.some(
-      (mapping) => mapping.inputType !== first.inputType
-        || mapping.outputType !== first.outputType
-        || (mapping.numeric === undefined
+      (mapping) =>
+        mapping.inputType !== first.inputType ||
+        mapping.outputType !== first.outputType ||
+        (mapping.numeric === undefined
           ? first.numeric !== undefined
           : first.numeric === undefined || canonicalValue(mapping.numeric) !== canonicalValue(first.numeric)),
     );
@@ -321,7 +400,8 @@ function resolveType(
     diagnostics.push({
       code: "CODEGEN_SQLITE_DYNAMIC_TYPE",
       severity: "warning",
-      message: "SQLite non-STRICT declared affinity is insufficient for automatic TypePolicy mapping; unresolved override sides remain unknown.",
+      message:
+        "SQLite non-STRICT declared affinity is insufficient for automatic TypePolicy mapping; unresolved override sides remain unknown.",
       relation: relation.identity,
       column: column.name,
       databaseType: column.type,
@@ -329,9 +409,11 @@ function resolveType(
   }
 
   const columnOverrides = overrides?.columns?.[relation.identity];
-  const columnOverride = columnOverrides && Object.hasOwn(columnOverrides, column.name) ? columnOverrides[column.name] : undefined;
+  const columnOverride =
+    columnOverrides && Object.hasOwn(columnOverrides, column.name) ? columnOverrides[column.name] : undefined;
   const databaseOverrides = overrides?.databaseTypes;
-  const databaseOverride = databaseOverrides && Object.hasOwn(databaseOverrides, column.type) ? databaseOverrides[column.type] : undefined;
+  const databaseOverride =
+    databaseOverrides && Object.hasOwn(databaseOverrides, column.type) ? databaseOverrides[column.type] : undefined;
   let mapping: TypeMapping | undefined;
   let hasPolicyMapping = false;
   if (!isDynamicSqlite) {
@@ -348,8 +430,8 @@ function resolveType(
   const outputType = columnOverride?.outputType ?? databaseOverride?.outputType ?? mapping?.outputType;
   const numericSemantics: NumericSemantics | undefined = mapping?.numeric?.semantics;
   if (
-    (numericSemantics === "exact-integer" || numericSemantics === "exact-decimal")
-    && mapping?.numeric?.fidelity !== "lossless"
+    (numericSemantics === "exact-integer" || numericSemantics === "exact-decimal") &&
+    mapping?.numeric?.fidelity !== "lossless"
   ) {
     diagnostics.push({
       code: "CODEGEN_NUMERIC_FIDELITY_UNAVAILABLE",
@@ -371,22 +453,24 @@ function resolveType(
       databaseType: column.type,
     });
   } else {
-    if (needsInput && !inputType) diagnostics.push({
-      code: "CODEGEN_UNKNOWN_INPUT_TYPE",
-      severity: "warning",
-      message: `No input representation is available for database type ${JSON.stringify(column.type)}.`,
-      relation: relation.identity,
-      column: column.name,
-      databaseType: column.type,
-    });
-    if (!outputType) diagnostics.push({
-      code: "CODEGEN_UNKNOWN_OUTPUT_TYPE",
-      severity: "warning",
-      message: `No output representation is available for database type ${JSON.stringify(column.type)}.`,
-      relation: relation.identity,
-      column: column.name,
-      databaseType: column.type,
-    });
+    if (needsInput && !inputType)
+      diagnostics.push({
+        code: "CODEGEN_UNKNOWN_INPUT_TYPE",
+        severity: "warning",
+        message: `No input representation is available for database type ${JSON.stringify(column.type)}.`,
+        relation: relation.identity,
+        column: column.name,
+        databaseType: column.type,
+      });
+    if (!outputType)
+      diagnostics.push({
+        code: "CODEGEN_UNKNOWN_OUTPUT_TYPE",
+        severity: "warning",
+        message: `No output representation is available for database type ${JSON.stringify(column.type)}.`,
+        relation: relation.identity,
+        column: column.name,
+        databaseType: column.type,
+      });
   }
   return { inputType, outputType, hasPolicyMapping };
 }
@@ -524,8 +608,14 @@ function disambiguateRelations(
     .sort((left, right) => compareStrings(left.relation.identity, right.relation.identity));
 }
 
-function selectedRelations(metadata: MetadataSnapshot, filters: CodegenRelationFilter | undefined, diagnostics: CodegenDiagnostic[]): readonly RelationSnapshot[] {
-  const allRelations = Object.values(metadata.relations).sort((left, right) => compareStrings(left.identity, right.identity));
+function selectedRelations(
+  metadata: MetadataSnapshot,
+  filters: CodegenRelationFilter | undefined,
+  diagnostics: CodegenDiagnostic[],
+): readonly RelationSnapshot[] {
+  const allRelations = Object.values(metadata.relations).sort((left, right) =>
+    compareStrings(left.identity, right.identity),
+  );
   const includeRelations = filters?.includeRelations;
   for (const identity of includeRelations ?? []) {
     if (!allRelations.some((relation) => relation.identity === identity)) {
@@ -541,7 +631,12 @@ function selectedRelations(metadata: MetadataSnapshot, filters: CodegenRelationF
     const namespace = relation.namespace;
     if (includeRelations && includeRelations.length > 0 && !includeRelations.includes(relation.identity)) return false;
     if (filters?.excludeRelations?.includes(relation.identity)) return false;
-    if (filters?.includeNamespaces && filters.includeNamespaces.length > 0 && (namespace === undefined || !filters.includeNamespaces.includes(namespace))) return false;
+    if (
+      filters?.includeNamespaces &&
+      filters.includeNamespaces.length > 0 &&
+      (namespace === undefined || !filters.includeNamespaces.includes(namespace))
+    )
+      return false;
     if (namespace !== undefined && filters?.excludeNamespaces?.includes(namespace)) return false;
     if (filters?.kinds && filters.kinds.length > 0 && !filters.kinds.includes(relation.kind)) return false;
     return true;
@@ -583,18 +678,28 @@ function nameRelations(
   const modelGroups = groupByName(named);
   for (const [modelName, group] of modelGroups) {
     if (group.length < 2) continue;
-    const ordered = [...group].sort((left, right) =>
-      Number(explicit[right.relation.identity] !== undefined) - Number(explicit[left.relation.identity] !== undefined)
-      || compareStrings(left.relation.identity, right.relation.identity));
+    const ordered = [...group].sort(
+      (left, right) =>
+        Number(explicit[right.relation.identity] !== undefined) -
+          Number(explicit[left.relation.identity] !== undefined) ||
+        compareStrings(left.relation.identity, right.relation.identity),
+    );
     diagnostics.push({
       code: "CODEGEN_MODEL_NAME_COLLISION",
       severity: "error",
-      message: `Model name ${JSON.stringify(modelName)} is used by multiple relations: ${group.map((entry) => entry.relation.identity).sort(compareStrings).join(", ")}.`,
+      message: `Model name ${JSON.stringify(modelName)} is used by multiple relations: ${group
+        .map((entry) => entry.relation.identity)
+        .sort(compareStrings)
+        .join(", ")}.`,
       relation: ordered[0]?.relation.identity,
     });
     for (const entry of ordered.slice(1)) {
       const index = named.indexOf(entry);
-      if (index >= 0) named[index] = { ...entry, modelName: `${entry.modelName}_${stableDigest(entry.relation.identity).slice(0, 12)}` };
+      if (index >= 0)
+        named[index] = {
+          ...entry,
+          modelName: `${entry.modelName}_${stableDigest(entry.relation.identity).slice(0, 12)}`,
+        };
     }
   }
   const suffixes = naming?.suffixes;
@@ -602,7 +707,11 @@ function nameRelations(
     const rowName = `${entry.modelName}${suffixes?.row ?? "Row"}`;
     const insertName = `${entry.modelName}${suffixes?.insert ?? "Insert"}`;
     const updateName = `${entry.modelName}${suffixes?.update ?? "Update"}`;
-    if (!isValidExportIdentifier(rowName) || (entry.relation.kind === "table" && (!isValidExportIdentifier(insertName) || !isValidExportIdentifier(updateName)))) {
+    if (
+      !isValidExportIdentifier(rowName) ||
+      (entry.relation.kind === "table" &&
+        (!isValidExportIdentifier(insertName) || !isValidExportIdentifier(updateName)))
+    ) {
       diagnostics.push({
         code: "CODEGEN_INVALID_MODEL_NAME",
         severity: "error",
@@ -612,7 +721,9 @@ function nameRelations(
       return {
         ...entry,
         rowName: `${entry.modelName}Row`,
-        ...(entry.relation.kind === "table" ? { insertName: `${entry.modelName}Insert`, updateName: `${entry.modelName}Update` } : {}),
+        ...(entry.relation.kind === "table"
+          ? { insertName: `${entry.modelName}Insert`, updateName: `${entry.modelName}Update` }
+          : {}),
       };
     }
     return {
@@ -674,9 +785,10 @@ function renderRelation(
   );
   const resolved = new Map<string, ResolvedType>();
   for (const column of columns) {
-    const needsInput = relation.kind === "table"
-      && column.generated !== true
-      && (column.insertable !== false || column.updatable !== false);
+    const needsInput =
+      relation.kind === "table" &&
+      column.generated !== true &&
+      (column.insertable !== false || column.updatable !== false);
     resolved.set(column.name, resolveType(metadata, policy, relation, column, overrides, needsInput, diagnostics));
   }
 
@@ -690,7 +802,11 @@ function renderRelation(
       .filter((column) => column.insertable !== false && column.generated !== true)
       .map((column) => {
         const mapping = resolved.get(column.name);
-        return renderProperty(column, mapping?.inputType ?? "unknown", column.identity === true || column.defaultExpression !== undefined || column.nullable);
+        return renderProperty(
+          column,
+          mapping?.inputType ?? "unknown",
+          column.identity === true || column.defaultExpression !== undefined || column.nullable,
+        );
       });
     const updateProperties = columns
       .filter((column) => column.updatable !== false && column.generated !== true)
@@ -706,34 +822,21 @@ function renderRelation(
 
 function diagnosticSort(left: CodegenDiagnostic, right: CodegenDiagnostic): number {
   return compareStrings(
-    [
-      left.code,
-      left.relation ?? "",
-      left.column ?? "",
-      left.databaseType ?? "",
-      left.message,
-    ].join("\u0000"),
-    [
-      right.code,
-      right.relation ?? "",
-      right.column ?? "",
-      right.databaseType ?? "",
-      right.message,
-    ].join("\u0000"),
+    [left.code, left.relation ?? "", left.column ?? "", left.databaseType ?? "", left.message].join("\u0000"),
+    [right.code, right.relation ?? "", right.column ?? "", right.databaseType ?? "", right.message].join("\u0000"),
   );
 }
 
-export function generateModels(
-  metadata: MetadataSnapshot,
-  options: CodegenOptions,
-): CodegenResult {
+export function generateModels(metadata: MetadataSnapshot, options: CodegenOptions): CodegenResult {
   validateSnapshot(metadata);
   validateOptions(options);
   const policy = options.typePolicy;
   const diagnostics: CodegenDiagnostic[] = [];
   const policyIndex = indexTypePolicy(policy, diagnostics);
   const metadataHash = hashSnapshot(metadata);
-  const allRelations = Object.values(metadata.relations).sort((left, right) => compareStrings(left.identity, right.identity));
+  const allRelations = Object.values(metadata.relations).sort((left, right) =>
+    compareStrings(left.identity, right.identity),
+  );
   const filteredRelations = selectedRelations(metadata, options.filters, diagnostics);
   for (const relation of filteredRelations) {
     if (relation.kind === "unknown") {
@@ -746,7 +849,8 @@ export function generateModels(
     }
   }
   const relations = filteredRelations.filter(
-    (relation) => READABLE_RELATION_KINDS.has(relation.kind) || (relation.kind === "unknown" && relation.columns.length > 0),
+    (relation) =>
+      READABLE_RELATION_KINDS.has(relation.kind) || (relation.kind === "unknown" && relation.columns.length > 0),
   );
   const typeOverrides = options.typeOverrides;
   for (const [identity, columns] of Object.entries(typeOverrides?.columns ?? {})) {
@@ -761,13 +865,14 @@ export function generateModels(
       continue;
     }
     for (const column of Object.keys(columns)) {
-      if (!relation.columns.some((candidate) => candidate.name === column)) diagnostics.push({
-        code: "CODEGEN_TYPE_COLUMN_NOT_FOUND",
-        severity: "warning",
-        message: `Type override column ${JSON.stringify(column)} was not found on relation ${JSON.stringify(identity)}.`,
-        relation: identity,
-        column,
-      });
+      if (!relation.columns.some((candidate) => candidate.name === column))
+        diagnostics.push({
+          code: "CODEGEN_TYPE_COLUMN_NOT_FOUND",
+          severity: "warning",
+          message: `Type override column ${JSON.stringify(column)} was not found on relation ${JSON.stringify(identity)}.`,
+          relation: identity,
+          column,
+        });
     }
   }
   for (const databaseType of Object.keys(typeOverrides?.databaseTypes ?? {})) {
@@ -781,7 +886,9 @@ export function generateModels(
     }
   }
   const namedRelations = nameRelations(relations, options.naming, allRelations, diagnostics);
-  const blocks = namedRelations.map((named) => renderRelation(named.relation, named, metadata, policyIndex, typeOverrides, diagnostics));
+  const blocks = namedRelations.map((named) =>
+    renderRelation(named.relation, named, metadata, policyIndex, typeOverrides, diagnostics),
+  );
   const generationOptions = {
     filters: options.filters,
     naming: options.naming,

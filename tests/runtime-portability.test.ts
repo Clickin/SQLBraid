@@ -6,7 +6,19 @@ import { auditRuntime } from "./scripts/audit-runtime.mjs";
 
 test("runtime portability audit rejects a Node builtin in the OTel bridge", async () => {
   const root = await mkdtemp(join(import.meta.dirname, ".sqlbraid-runtime-audit-"));
-  const packageNames = ["core", "template", "runtime", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql", "bun-sql", "opentelemetry"];
+  const packageNames = [
+    "core",
+    "template",
+    "runtime",
+    "postgres",
+    "mysql",
+    "mariadb",
+    "sqlite",
+    "oracle",
+    "mssql",
+    "bun-sql",
+    "opentelemetry",
+  ];
   try {
     for (const packageName of packageNames) {
       const packageRoot = join(root, packageName);
@@ -16,10 +28,7 @@ test("runtime portability audit rejects a Node builtin in the OTel bridge", asyn
     }
     await auditRuntime(root, "src");
     await writeFile(join(root, "opentelemetry", "src", "index.ts"), 'import "node:fs";\n');
-    await assert.rejects(
-      auditRuntime(root, "src"),
-      /Unreviewed compatibility import: node:fs/u,
-    );
+    await assert.rejects(auditRuntime(root, "src"), /Unreviewed compatibility import: node:fs/u);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

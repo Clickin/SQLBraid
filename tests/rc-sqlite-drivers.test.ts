@@ -47,40 +47,38 @@ test("node:sqlite exposes frozen capability boundaries and serializable-only tra
     await rollback();
     await assert.rejects(
       async () => begin({ isolation: "read-committed" }),
-      (error: unknown) => error instanceof UnsupportedFeatureError
-        && error.feature === "transaction.isolation.read-committed"
-        && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+      (error: unknown) =>
+        error instanceof UnsupportedFeatureError &&
+        error.feature === "transaction.isolation.read-committed" &&
+        error.code === "BRAID_TX_OPTION_UNSUPPORTED",
     );
     await assert.rejects(
       async () => begin({ readOnly: true }),
-      (error: unknown) => error instanceof UnsupportedFeatureError
-        && error.feature === "transaction.read-only"
-        && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+      (error: unknown) =>
+        error instanceof UnsupportedFeatureError &&
+        error.feature === "transaction.read-only" &&
+        error.code === "BRAID_TX_OPTION_UNSUPPORTED",
     );
     await assert.rejects(
       async () => begin({ isolation: "DROP TABLE users" } as never),
-      (error: unknown) => error instanceof TypeError
-        && "code" in error
-        && error.code === "BRAID_TX_OPTIONS_INVALID",
+      (error: unknown) => error instanceof TypeError && "code" in error && error.code === "BRAID_TX_OPTIONS_INVALID",
     );
     await assert.rejects(
       async () => begin({ readOnly: "yes" } as never),
-      (error: unknown) => error instanceof TypeError
-        && "code" in error
-        && error.code === "BRAID_TX_OPTIONS_INVALID",
+      (error: unknown) => error instanceof TypeError && "code" in error && error.code === "BRAID_TX_OPTIONS_INVALID",
     );
     let controlCalls = 0;
     const guarded = createNodeSqliteExecutor({
-      prepare() { throw new Error("Unexpected SQLite prepare during option validation."); },
+      prepare() {
+        throw new Error("Unexpected SQLite prepare during option validation.");
+      },
       exec() {
         controlCalls += 1;
       },
     });
     await assert.rejects(
       async () => guarded.begin!({ isolation: "serializable", extra: true } as never),
-      (error: unknown) => error instanceof TypeError
-        && "code" in error
-        && error.code === "BRAID_TX_OPTIONS_INVALID",
+      (error: unknown) => error instanceof TypeError && "code" in error && error.code === "BRAID_TX_OPTIONS_INVALID",
     );
     assert.equal(controlCalls, 0);
   } finally {
@@ -101,9 +99,10 @@ test("SQLite adapters reject active cancellation before statement I/O", async ()
   });
   await assert.rejects(
     async () => node.query(query, undefined, { signal: active.signal }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.cancel"
-      && error.code === "BRAID_CANCEL_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.cancel" &&
+      error.code === "BRAID_CANCEL_UNSUPPORTED",
   );
   assert.equal(nodePrepares, 0);
 
@@ -117,9 +116,10 @@ test("SQLite adapters reject active cancellation before statement I/O", async ()
   });
   await assert.rejects(
     async () => wasm.query(query, undefined, { signal: active.signal }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.cancel"
-      && error.code === "BRAID_CANCEL_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.cancel" &&
+      error.code === "BRAID_CANCEL_UNSUPPORTED",
   );
   assert.equal(wasmPrepares, 0);
 
@@ -133,9 +133,10 @@ test("SQLite adapters reject active cancellation before statement I/O", async ()
   });
   await assert.rejects(
     async () => d1.query(query, undefined, { signal: active.signal }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.cancel"
-      && error.code === "BRAID_CANCEL_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.cancel" &&
+      error.code === "BRAID_CANCEL_UNSUPPORTED",
   );
   assert.equal(d1Prepares, 0);
 });
@@ -161,14 +162,20 @@ test("SQLite adapters preserve a null AbortSignal reason before I/O", async () =
   const query = sql.rows`SELECT 1 AS value`.render();
   const signal = AbortSignal.abort(null);
   const node = createNodeSqliteExecutor({
-    prepare() { throw new Error("node I/O should not start"); },
+    prepare() {
+      throw new Error("node I/O should not start");
+    },
   });
   const wasm = createSqliteWasmExecutor({
-    prepare() { throw new Error("WASM I/O should not start"); },
+    prepare() {
+      throw new Error("WASM I/O should not start");
+    },
     exec() {},
   });
   const d1 = createD1Executor({
-    prepare() { throw new Error("D1 I/O should not start"); },
+    prepare() {
+      throw new Error("D1 I/O should not start");
+    },
     batch: async () => [],
   });
   for (const executor of [node, wasm, d1]) {
@@ -196,9 +203,10 @@ test("SQLite adapters reject row OUT parameters before acquisition or prepare", 
     });
     await assert.rejects(
       () => db.all(query),
-      (error: unknown) => error instanceof UnsupportedFeatureError
-        && error.feature === "routine.out"
-        && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
+      (error: unknown) =>
+        error instanceof UnsupportedFeatureError &&
+        error.feature === "routine.out" &&
+        error.code === "BRAID_CALL_OUT_UNSUPPORTED",
     );
     assert.equal(acquires, 0);
 
@@ -212,9 +220,10 @@ test("SQLite adapters reject row OUT parameters before acquisition or prepare", 
     });
     await assert.rejects(
       async () => wasm.query(rendered),
-      (error: unknown) => error instanceof UnsupportedFeatureError
-        && error.feature === "routine.out"
-        && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
+      (error: unknown) =>
+        error instanceof UnsupportedFeatureError &&
+        error.feature === "routine.out" &&
+        error.code === "BRAID_CALL_OUT_UNSUPPORTED",
     );
     assert.equal(wasmPrepares, 0);
 
@@ -228,9 +237,10 @@ test("SQLite adapters reject row OUT parameters before acquisition or prepare", 
     });
     await assert.rejects(
       async () => d1.query(rendered),
-      (error: unknown) => error instanceof UnsupportedFeatureError
-        && error.feature === "routine.out"
-        && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
+      (error: unknown) =>
+        error instanceof UnsupportedFeatureError &&
+        error.feature === "routine.out" &&
+        error.code === "BRAID_CALL_OUT_UNSUPPORTED",
     );
     assert.equal(d1Prepares, 0);
   } finally {
@@ -241,25 +251,44 @@ test("SQLite adapters reject row OUT parameters before acquisition or prepare", 
 test("SQLite WASM exact row reads expose ResultExactnessError when OO1 pointer metadata is missing", async () => {
   const statement = {
     columnCount: 1,
-    bind() { return this; },
-    step() { return true; },
-    get() { return 1; },
-    getColumnName() { return "value"; },
-    reset() { return this; },
+    bind() {
+      return this;
+    },
+    step() {
+      return true;
+    },
+    get() {
+      return 1;
+    },
+    getColumnName() {
+      return "value";
+    },
+    reset() {
+      return this;
+    },
     finalize() {},
   };
-  const executor = createSqliteWasmExecutor({
-    prepare() { return statement; },
-    exec() {},
-  }, {
-    sqlite3: {
-      capi: {
-        SQLITE_INTEGER: 1,
-        sqlite3_column_type() { return 1; },
-        sqlite3_column_int64() { return 1n; },
+  const executor = createSqliteWasmExecutor(
+    {
+      prepare() {
+        return statement;
+      },
+      exec() {},
+    },
+    {
+      sqlite3: {
+        capi: {
+          SQLITE_INTEGER: 1,
+          sqlite3_column_type() {
+            return 1;
+          },
+          sqlite3_column_int64() {
+            return 1n;
+          },
+        },
       },
     },
-  });
+  );
   await assert.rejects(
     async () => executor.query(sql.rows`SELECT 1 AS value`.render()),
     (error: unknown) => error instanceof ResultExactnessError && error.code === "BRAID_RESULT_EXACTNESS",
@@ -272,32 +301,51 @@ test("SQLite stream guards expose DatabaseResultKindError for non-row statements
     const node = createNodeSqliteExecutor(native);
     await assert.rejects(
       async () => {
-        for await (const _row of node.stream(sql.rows`CREATE TABLE braid_stream_guard (value TEXT)`.render())) void _row;
+        for await (const _row of node.stream(sql.rows`CREATE TABLE braid_stream_guard (value TEXT)`.render()))
+          void _row;
       },
-      (error: unknown) => error instanceof DatabaseResultKindError
-        && error.code === "BRAID_RESULT_KIND"
-        && error.declaredKind === "rows"
-        && error.actualKind === "command",
+      (error: unknown) =>
+        error instanceof DatabaseResultKindError &&
+        error.code === "BRAID_RESULT_KIND" &&
+        error.declaredKind === "rows" &&
+        error.actualKind === "command",
     );
 
     const statement = {
       columnCount: 0,
-      bind() { return this; },
-      step() { return false; },
-      get() { return undefined; },
-      getColumnName() { return ""; },
-      reset() { return this; },
+      bind() {
+        return this;
+      },
+      step() {
+        return false;
+      },
+      get() {
+        return undefined;
+      },
+      getColumnName() {
+        return "";
+      },
+      reset() {
+        return this;
+      },
       finalize() {},
     };
-    const wasm = createSqliteWasmExecutor({ prepare() { return statement; }, exec() {} });
+    const wasm = createSqliteWasmExecutor({
+      prepare() {
+        return statement;
+      },
+      exec() {},
+    });
     await assert.rejects(
       async () => {
-        for await (const _row of wasm.stream(sql.rows`CREATE TABLE braid_stream_guard_wasm (value TEXT)`.render())) void _row;
+        for await (const _row of wasm.stream(sql.rows`CREATE TABLE braid_stream_guard_wasm (value TEXT)`.render()))
+          void _row;
       },
-      (error: unknown) => error instanceof DatabaseResultKindError
-        && error.code === "BRAID_RESULT_KIND"
-        && error.declaredKind === "rows"
-        && error.actualKind === "command",
+      (error: unknown) =>
+        error instanceof DatabaseResultKindError &&
+        error.code === "BRAID_RESULT_KIND" &&
+        error.declaredKind === "rows" &&
+        error.actualKind === "command",
     );
   } finally {
     native.close();
@@ -328,12 +376,18 @@ test("native SQLite sessions retain TEMP state, nested transactions, prepared in
 
     await db.session(async (session) => {
       closedSession = session;
-      const row = session.prepare("lookup-user", (id: number) => sql.rows<{ readonly name: string }>`
+      const row = session.prepare(
+        "lookup-user",
+        (id: number) => sql.rows<{ readonly name: string }>`
         SELECT name FROM users WHERE id = ${id}
-      `);
-      const insert = session.prepare("insert-user", (name: string) => sql.command`
+      `,
+      );
+      const insert = session.prepare(
+        "insert-user",
+        (name: string) => sql.command`
         INSERT INTO users (name) VALUES (${name})
-      `);
+      `,
+      );
       await session.execute(sql.command`CREATE TEMP TABLE session_marker (value TEXT NOT NULL)`);
       await session.execute(sql.command`INSERT INTO session_marker VALUES (${"pinned"})`);
       await session.tx(async (tx) => {
@@ -360,10 +414,7 @@ test("native SQLite sessions retain TEMP state, nested transactions, prepared in
       () => closedSession!.execute(sql`SELECT 1`),
       (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_SESSION_CLOSED",
     );
-    assert.deepEqual(await db.all(sql.rows`SELECT name FROM users ORDER BY id`), [
-      { name: "Ada" },
-      { name: "Grace" },
-    ]);
+    assert.deepEqual(await db.all(sql.rows`SELECT name FROM users ORDER BY id`), [{ name: "Ada" }, { name: "Grace" }]);
   } finally {
     native.close();
   }
@@ -387,15 +438,17 @@ test("native SQLite transaction options and active cancellation fail before user
     });
     await assert.rejects(
       () => db.tx({ isolation: "read-committed" }, async () => undefined),
-      (error: unknown) => error instanceof UnsupportedFeatureError
-        && error.feature === "transaction.isolation.read-committed"
-        && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+      (error: unknown) =>
+        error instanceof UnsupportedFeatureError &&
+        error.feature === "transaction.isolation.read-committed" &&
+        error.code === "BRAID_TX_OPTION_UNSUPPORTED",
     );
     await assert.rejects(
       () => db.tx({ readOnly: true }, async () => undefined),
-      (error: unknown) => error instanceof UnsupportedFeatureError
-        && error.feature === "transaction.read-only"
-        && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+      (error: unknown) =>
+        error instanceof UnsupportedFeatureError &&
+        error.feature === "transaction.read-only" &&
+        error.code === "BRAID_TX_OPTION_UNSUPPORTED",
     );
     const beforeAbortAcquire = acquires;
     const controller = new AbortController();
@@ -420,8 +473,12 @@ test("native SQLite transaction options and active cancellation fail before user
 test("D1 and SQLite WASM advertise physical session limitations honestly", async () => {
   const controls: string[] = [];
   const wasm = createSqliteWasmExecutor({
-    prepare: () => { throw new Error("unused"); },
-    exec(sqlText) { controls.push(sqlText); },
+    prepare: () => {
+      throw new Error("unused");
+    },
+    exec(sqlText) {
+      controls.push(sqlText);
+    },
   });
   assertCapability(wasm.environment?.capabilities ?? {}, "session.pinned", "guaranteed");
   assertCapability(wasm.environment?.capabilities ?? {}, "transaction", "guaranteed");
@@ -431,18 +488,22 @@ test("D1 and SQLite WASM advertise physical session limitations honestly", async
   assert.deepEqual(controls, ["BEGIN"]);
   await assert.rejects(
     async () => begin({ readOnly: true }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "transaction.read-only"
-      && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "transaction.read-only" &&
+      error.code === "BRAID_TX_OPTION_UNSUPPORTED",
   );
   await assert.rejects(
     async () => begin({ isolation: "serializable", extra: true } as never),
-    (error: unknown) => error instanceof TypeError
-      && "code" in error
-      && error.code === "BRAID_TX_OPTIONS_INVALID",
+    (error: unknown) => error instanceof TypeError && "code" in error && error.code === "BRAID_TX_OPTIONS_INVALID",
   );
   assert.deepEqual(controls, ["BEGIN"]);
-  const d1 = createD1Executor({ prepare: () => { throw new Error("unused"); }, batch: async () => [] });
+  const d1 = createD1Executor({
+    prepare: () => {
+      throw new Error("unused");
+    },
+    batch: async () => [],
+  });
   assertCapability(d1.environment?.capabilities ?? {}, "session.pinned", "unsupported");
   assertCapability(d1.environment?.capabilities ?? {}, "transaction", "unsupported");
   assertCapability(d1.environment?.capabilities ?? {}, "statement.stream", "unsupported");

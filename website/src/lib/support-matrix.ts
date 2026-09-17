@@ -165,12 +165,24 @@ export function supportMatrixCapabilityLabel(data: SupportMatrixData, id: string
 }
 
 function conditionLabel(data: SupportMatrixData, code: string | undefined, locale: SupportMatrixLocale): string {
-  return code ? data.conditions.find((condition) => condition.code === code)?.labels[locale] ?? code : "—";
+  return code ? (data.conditions.find((condition) => condition.code === code)?.labels[locale] ?? code) : "—";
 }
 
-function capabilitySummary(data: SupportMatrixData, target: SupportTarget, prefix: string, locale: SupportMatrixLocale): string {
+function capabilitySummary(
+  data: SupportMatrixData,
+  target: SupportTarget,
+  prefix: string,
+  locale: SupportMatrixLocale,
+): string {
   const entries = Object.entries(target.capabilities).filter(([id]) => id === prefix || id.startsWith(`${prefix}.`));
-  return entries.map(([id, claim]) => `${entries.length > 1 ? `${supportMatrixCapabilityLabel(data, id, locale)}: ` : ""}${supportMatrixStatus(claim.status, locale)}${claim.conditionCode ? ` (${conditionLabel(data, claim.conditionCode, locale)})` : ""}`).join("; ") || "—";
+  return (
+    entries
+      .map(
+        ([id, claim]) =>
+          `${entries.length > 1 ? `${supportMatrixCapabilityLabel(data, id, locale)}: ` : ""}${supportMatrixStatus(claim.status, locale)}${claim.conditionCode ? ` (${conditionLabel(data, claim.conditionCode, locale)})` : ""}`,
+      )
+      .join("; ") || "—"
+  );
 }
 
 function numericLabel(target: SupportTarget, kind: keyof SupportTarget["numeric"]): string {
@@ -195,10 +207,38 @@ function targetRuntimeLabel(target: SupportTarget): string {
 export function supportMatrixColumns(view: SupportMatrixView, locale: SupportMatrixLocale): readonly string[] {
   const l = labels[locale];
   if (view === "database") {
-    return [l.target, l.database, l.driver, l.runtime, l.status, l.exactNumeric, l.json, l.temporal, l.transaction, l.stream];
+    return [
+      l.target,
+      l.database,
+      l.driver,
+      l.runtime,
+      l.status,
+      l.exactNumeric,
+      l.json,
+      l.temporal,
+      l.transaction,
+      l.stream,
+    ];
   }
   if (view === "driver") {
-    return [l.driver, l.version, l.target, l.runtime, l.profile, l.integer, l.decimal, l.rawJson, l.rawTemporal, l.canonical, l.policy, l.options, l.stream, l.routine, l.bulk, l.exclusions];
+    return [
+      l.driver,
+      l.version,
+      l.target,
+      l.runtime,
+      l.profile,
+      l.integer,
+      l.decimal,
+      l.rawJson,
+      l.rawTemporal,
+      l.canonical,
+      l.policy,
+      l.options,
+      l.stream,
+      l.routine,
+      l.bulk,
+      l.exclusions,
+    ];
   }
   return [l.capability, l.target, l.status, l.condition, l.test, l.ci];
 }
@@ -252,20 +292,34 @@ export function projectSupportMatrixRow(
     targetRuntimeLabel(target),
     supportMatrixStatus(target.status, locale),
     [numericLabel(target, "exact-integer"), numericLabel(target, "exact-decimal")].join(" / "),
-    [capabilitySummary(data, target, "data.json-parsed", locale), capabilitySummary(data, target, "data.json-lossless-text", locale)].filter((value) => value !== "—").join(" / ") || "—",
-    [capabilitySummary(data, target, "data.temporal-native", locale), capabilitySummary(data, target, "data.temporal-lossless", locale)].filter((value) => value !== "—").join(" / ") || "—",
+    [
+      capabilitySummary(data, target, "data.json-parsed", locale),
+      capabilitySummary(data, target, "data.json-lossless-text", locale),
+    ]
+      .filter((value) => value !== "—")
+      .join(" / ") || "—",
+    [
+      capabilitySummary(data, target, "data.temporal-native", locale),
+      capabilitySummary(data, target, "data.temporal-lossless", locale),
+    ]
+      .filter((value) => value !== "—")
+      .join(" / ") || "—",
     capabilitySummary(data, target, "transaction", locale),
     capabilitySummary(data, target, "statement.stream", locale),
   ];
 }
 
-const targetModules = (import.meta as ImportMeta & {
-  glob<T>(pattern: string, options?: { eager?: boolean; import?: string }): Record<string, T>;
-}).glob<SupportTarget>("../../../support/targets/*.json", { eager: true, import: "default" });
+const targetModules = (
+  import.meta as ImportMeta & {
+    glob<T>(pattern: string, options?: { eager?: boolean; import?: string }): Record<string, T>;
+  }
+).glob<SupportTarget>("../../../support/targets/*.json", { eager: true, import: "default" });
 
 /** Read the build-time manifest shared by CI and the documentation UI. */
 export function loadSupportMatrix(): SupportMatrixData {
-  const targets = Object.keys(targetModules).sort().map((name) => targetModules[name]!);
+  const targets = Object.keys(targetModules)
+    .sort()
+    .map((name) => targetModules[name]!);
   return { ...manifest, targets };
 }
 
@@ -278,4 +332,3 @@ export function serializeSupportMatrix(data: SupportMatrixData): string {
     .replaceAll("\u2028", "\\u2028")
     .replaceAll("\u2029", "\\u2029");
 }
-

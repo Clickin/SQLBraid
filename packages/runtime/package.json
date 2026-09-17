@@ -2,24 +2,26 @@
   "name": "@sqlbraid/runtime",
   "version": "1.0.0-rc.2",
   "description": "Execute typed SQLBraid queries with connection-safe transactions and result mapping",
+  "keywords": [
+    "database",
+    "query",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/runtime"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "query"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=16.20.2" },
-  "dependencies": {
-    "@sqlbraid/core": "workspace:*"
-  },
   "imports": {
     "#async-context": {
       "types": "./dist/async-context.d.ts",
@@ -35,5 +37,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=16.20.2"
   }
 }

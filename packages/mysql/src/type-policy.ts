@@ -64,8 +64,20 @@ const commonMappings: readonly TypeMapping[] = Object.freeze([
   ...integerTypes.map(exactIntegerMapping),
   exactDecimalMapping("DECIMAL"),
   exactDecimalMapping("NEWDECIMAL"),
-  { databaseType: "FLOAT", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 32 } },
-  { databaseType: "DOUBLE", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 64 } },
+  {
+    databaseType: "FLOAT",
+    inputType: "number",
+    outputType: "number",
+    nullable: true,
+    numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 32 },
+  },
+  {
+    databaseType: "DOUBLE",
+    inputType: "number",
+    outputType: "number",
+    nullable: true,
+    numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 64 },
+  },
   { databaseType: "VARCHAR", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "CHAR", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "TEXT", inputType: "string", outputType: "string", nullable: true },
@@ -107,28 +119,37 @@ const profileHashes = {
 function freezePolicy(policy: TypePolicy): TypePolicy {
   return Object.freeze({
     ...policy,
-    mappings: Object.freeze(policy.mappings.map((mapping) => Object.freeze({
-      ...mapping,
-      ...(mapping.numeric === undefined ? {} : { numeric: Object.freeze({ ...mapping.numeric }) }),
-    }))),
+    mappings: Object.freeze(
+      policy.mappings.map((mapping) =>
+        Object.freeze({
+          ...mapping,
+          ...(mapping.numeric === undefined ? {} : { numeric: Object.freeze({ ...mapping.numeric }) }),
+        }),
+      ),
+    ),
   });
 }
 
 function createTypePolicy(json: Mysql2JsonProfile, temporal: Mysql2TemporalProfile): TypePolicy {
   const mappings = [
     ...commonMappings,
-    { databaseType: "JSON", inputType: json === "text" ? "string" : "unknown", outputType: json === "text" ? "string" : "unknown", nullable: true },
+    {
+      databaseType: "JSON",
+      inputType: json === "text" ? "string" : "unknown",
+      outputType: json === "text" ? "string" : "unknown",
+      nullable: true,
+    },
     ...(temporal === "native"
       ? [
-        { databaseType: "DATE", inputType: "Date", outputType: "Date", nullable: true },
-        { databaseType: "DATETIME", inputType: "Date", outputType: "Date", nullable: true },
-        { databaseType: "TIMESTAMP", inputType: "Date", outputType: "Date", nullable: true },
-      ]
+          { databaseType: "DATE", inputType: "Date", outputType: "Date", nullable: true },
+          { databaseType: "DATETIME", inputType: "Date", outputType: "Date", nullable: true },
+          { databaseType: "TIMESTAMP", inputType: "Date", outputType: "Date", nullable: true },
+        ]
       : [
-        { databaseType: "DATE", inputType: "Date | string", outputType: "string", nullable: true },
-        { databaseType: "DATETIME", inputType: "Date | string", outputType: "string", nullable: true },
-        { databaseType: "TIMESTAMP", inputType: "Date | string", outputType: "string", nullable: true },
-      ]),
+          { databaseType: "DATE", inputType: "Date | string", outputType: "string", nullable: true },
+          { databaseType: "DATETIME", inputType: "Date | string", outputType: "string", nullable: true },
+          { databaseType: "TIMESTAMP", inputType: "Date | string", outputType: "string", nullable: true },
+        ]),
   ];
   return freezePolicy({
     id: profileId(json, temporal),
@@ -145,10 +166,18 @@ function createTypePolicy(json: Mysql2JsonProfile, temporal: Mysql2TemporalProfi
       if (type === "TIME" && typeof value !== "string") {
         throw new ResultExactnessError("mysql2 TIME results must remain strings.");
       }
-      if ((type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") && temporal === "text" && typeof value !== "string") {
+      if (
+        (type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") &&
+        temporal === "text" &&
+        typeof value !== "string"
+      ) {
         throw new ResultExactnessError(`mysql2 ${type} results must remain strings for the selected text profile.`);
       }
-      if ((type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") && temporal === "native" && !(value instanceof Date)) {
+      if (
+        (type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") &&
+        temporal === "native" &&
+        !(value instanceof Date)
+      ) {
         throw new ResultExactnessError(`mysql2 ${type} results must be Date values for the selected native profile.`);
       }
       return value;
@@ -168,18 +197,44 @@ const descriptor = (
   json: Mysql2JsonProfile,
   temporal: Mysql2TemporalProfile,
   connectionOptions?: Readonly<Mysql2ConnectionOptions>,
-): Mysql2RepresentationProfile => Object.freeze({
-  id: profileId(json, temporal),
-  json,
-  temporal,
-  typePolicy: policies[json === "text" ? temporal === "text" ? "textText" : "textNative" : temporal === "text" ? "nativeText" : "nativeNative"],
-  ...(connectionOptions === undefined ? {} : { connectionOptions }),
-});
+): Mysql2RepresentationProfile =>
+  Object.freeze({
+    id: profileId(json, temporal),
+    json,
+    temporal,
+    typePolicy:
+      policies[
+        json === "text"
+          ? temporal === "text"
+            ? "textText"
+            : "textNative"
+          : temporal === "text"
+            ? "nativeText"
+            : "nativeNative"
+      ],
+    ...(connectionOptions === undefined ? {} : { connectionOptions }),
+  });
 
-export const MYSQL2_LOSSLESS_TEXT = descriptor("text", "text", Object.freeze({ ...exactNumericOptions, jsonStrings: true, dateStrings: true }));
-export const MYSQL2_NATIVE = descriptor("native", "native", Object.freeze({ ...exactNumericOptions, jsonStrings: false, dateStrings: false }));
-export const MYSQL2_JSON_TEXT = descriptor("text", "native", Object.freeze({ ...exactNumericOptions, jsonStrings: true, dateStrings: false }));
-export const MYSQL2_DATE_TEXT = descriptor("native", "text", Object.freeze({ ...exactNumericOptions, jsonStrings: false, dateStrings: true }));
+export const MYSQL2_LOSSLESS_TEXT = descriptor(
+  "text",
+  "text",
+  Object.freeze({ ...exactNumericOptions, jsonStrings: true, dateStrings: true }),
+);
+export const MYSQL2_NATIVE = descriptor(
+  "native",
+  "native",
+  Object.freeze({ ...exactNumericOptions, jsonStrings: false, dateStrings: false }),
+);
+export const MYSQL2_JSON_TEXT = descriptor(
+  "text",
+  "native",
+  Object.freeze({ ...exactNumericOptions, jsonStrings: true, dateStrings: false }),
+);
+export const MYSQL2_DATE_TEXT = descriptor(
+  "native",
+  "text",
+  Object.freeze({ ...exactNumericOptions, jsonStrings: false, dateStrings: true }),
+);
 
 export const representationProfiles: readonly Mysql2RepresentationProfile[] = Object.freeze([
   MYSQL2_LOSSLESS_TEXT,
@@ -192,9 +247,14 @@ function descriptorFor(json: Mysql2JsonProfile, temporal: Mysql2TemporalProfile)
   return representationProfiles.find((profile) => profile.json === json && profile.temporal === temporal)!;
 }
 
-export function typePolicyForProfile(profile: { readonly json: Mysql2JsonProfile; readonly temporal: Mysql2TemporalProfile }): TypePolicy {
-  if (profile.json !== "text" && profile.json !== "native") throw new TypeError("mysql2 profile json must be 'text' or 'native'.");
-  if (profile.temporal !== "text" && profile.temporal !== "native") throw new TypeError("mysql2 profile temporal must be 'text' or 'native'.");
+export function typePolicyForProfile(profile: {
+  readonly json: Mysql2JsonProfile;
+  readonly temporal: Mysql2TemporalProfile;
+}): TypePolicy {
+  if (profile.json !== "text" && profile.json !== "native")
+    throw new TypeError("mysql2 profile json must be 'text' or 'native'.");
+  if (profile.temporal !== "text" && profile.temporal !== "native")
+    throw new TypeError("mysql2 profile temporal must be 'text' or 'native'.");
   return descriptorFor(profile.json, profile.temporal).typePolicy;
 }
 

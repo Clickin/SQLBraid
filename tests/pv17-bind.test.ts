@@ -7,7 +7,6 @@ import {
   type ConnectionProvider,
   type DriverRoutineResult,
   type QueryExecutor,
-
   type StatementBindingAdapter,
 } from "@sqlbraid/core";
 import { sql } from "@sqlbraid/template";
@@ -26,10 +25,9 @@ const statementBinding = Object.freeze<StatementBindingAdapter>({
 });
 
 function hasUnsupportedBindCode(error: unknown): boolean {
-  return error !== null
-    && typeof error === "object"
-    && "code" in error
-    && error.code === "BRAID_BIND_VALUE_UNSUPPORTED";
+  return (
+    error !== null && typeof error === "object" && "code" in error && error.code === "BRAID_BIND_VALUE_UNSUPPORTED"
+  );
 }
 
 function provider(acquired: { value: number }): ConnectionProvider {
@@ -56,12 +54,13 @@ function provider(acquired: { value: number }): ConnectionProvider {
 
 test("rendered statements reject undefined IN values but retain legal OUT placeholders", () => {
   assert.throws(
-    () => createRenderedStatement({
-      segments: ["SELECT ", ""],
-      parameters: [{ value: undefined }],
-      resultKind: "rows",
-      dialectId: "test",
-    }),
+    () =>
+      createRenderedStatement({
+        segments: ["SELECT ", ""],
+        parameters: [{ value: undefined }],
+        resultKind: "rows",
+        dialectId: "test",
+      }),
     hasUnsupportedBindCode,
   );
   const rendered = createRenderedStatement({
@@ -84,12 +83,9 @@ test("all ordinary undefined IN paths fail before a pooled lease is acquired", a
     () => db.bulk([undefined], (value) => sql.command`INSERT INTO values (value) VALUES (${value})`),
     hasUnsupportedBindCode,
   );
-  await assert.rejects(
-    async () => {
-      for await (const row of db.stream(sql.rows`SELECT ${undefined}`)) void row;
-    },
-    hasUnsupportedBindCode,
-  );
+  await assert.rejects(async () => {
+    for await (const row of db.stream(sql.rows`SELECT ${undefined}`)) void row;
+  }, hasUnsupportedBindCode);
   await assert.rejects(() => db.call(sql.call`CALL procedure(${undefined})`), hasUnsupportedBindCode);
   assert.equal(acquired.value, 0);
 });

@@ -1,39 +1,54 @@
 {
   "name": "sqlbraid-vscode",
   "displayName": "SQLBraid",
-  "description": "SQLBraid language tooling for TypeScript projects",
   "version": "0.1.0",
-  "type": "commonjs",
-  "publisher": "sqlbraid",
+  "description": "SQLBraid language tooling for TypeScript projects",
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "database",
+    "lsp",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://clickin.github.io/SQLBraid/",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "extensions/vscode"
   },
-  "homepage": "https://clickin.github.io/SQLBraid/",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": [
-    "sql",
-    "typescript",
-    "database",
-    "lsp"
+  "publisher": "sqlbraid",
+  "files": [
+    "dist/**",
+    "node_modules/**",
+    "package.json",
+    "README.md",
+    "LICENSE"
   ],
-  "engines": {
-    "vscode": ">=1.121.0"
-  },
-  "categories": [
-    "Programming Languages"
-  ],
+  "type": "commonjs",
   "main": "./dist/extension.js",
-  "activationEvents": [
-    "workspaceContains:package.json",
-    "workspaceContains:sqlbraid.config.mjs",
-    "workspaceContains:sqlbraid.config.js",
-    "workspaceContains:sqlbraid.config.cjs"
-  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "compile-tests": "tsc -p tsconfig.test.json",
+    "test": "pnpm run build && pnpm run compile-tests && node --test dist-test/test/project.test.js",
+    "test:host": "pnpm run build && pnpm run compile-tests && node dist-test/test/runTest.js"
+  },
+  "dependencies": {
+    "@sqlbraid/cli": "workspace:1.0.0-rc.2",
+    "@sqlbraid/language-server": "workspace:1.0.0-rc.2",
+    "vscode-languageclient": "9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/vscode": "1.95.0",
+    "@vscode/test-electron": "3.1.0",
+    "typescript": "5.9.3"
+  },
   "contributes": {
     "commands": [
       {
@@ -50,28 +65,13 @@
       }
     ]
   },
-  "files": [
-    "dist/**",
-    "node_modules/**",
-    "package.json",
-    "README.md",
-    "LICENSE"
+  "activationEvents": [
+    "workspaceContains:package.json",
+    "workspaceContains:sqlbraid.config.cjs",
+    "workspaceContains:sqlbraid.config.js",
+    "workspaceContains:sqlbraid.config.mjs"
   ],
-  "dependencies": {
-    "@sqlbraid/cli": "workspace:1.0.0-rc.2",
-    "@sqlbraid/language-server": "workspace:1.0.0-rc.2",
-    "vscode-languageclient": "9.0.1"
-  },
-  "devDependencies": {
-    "@types/node": "22.20.1",
-    "@types/vscode": "1.95.0",
-    "@vscode/test-electron": "3.1.0",
-    "typescript": "5.9.3"
-  },
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "compile-tests": "tsc -p tsconfig.test.json",
-    "test": "pnpm run build && pnpm run compile-tests && node --test dist-test/test/project.test.js",
-    "test:host": "pnpm run build && pnpm run compile-tests && node dist-test/test/runTest.js"
+  "engines": {
+    "vscode": ">=1.121.0"
   }
 }

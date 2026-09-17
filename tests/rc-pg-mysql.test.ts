@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import {
-  type StandardSchemaV1,
-  UnsupportedFeatureError,
-} from "@sqlbraid/core";
+import { type StandardSchemaV1, UnsupportedFeatureError } from "@sqlbraid/core";
 import { createMysql2Executor, type Mysql2ConnectionLike, type Mysql2FieldPayload } from "@sqlbraid/mysql/mysql2";
 import { sql as mysql } from "@sqlbraid/mysql";
-import { createPgDatabase, createPgExecutor, createPgPoolDatabase, type PgClientLike, type PgResultLike } from "@sqlbraid/postgres/pg";
+import {
+  createPgDatabase,
+  createPgExecutor,
+  createPgPoolDatabase,
+  type PgClientLike,
+  type PgResultLike,
+} from "@sqlbraid/postgres/pg";
 import { sql as postgres } from "@sqlbraid/postgres";
 
 const canonicalCapabilities = [
@@ -38,11 +41,13 @@ function pgMock(query: (value: unknown) => Promise<PgResultLike>): PgClientLike 
   };
 }
 
-function mysqlMock(execute: (sql: string, values?: readonly unknown[]) => Promise<readonly [unknown, Mysql2FieldPayload | undefined]>): Mysql2ConnectionLike {
+function mysqlMock(
+  execute: (sql: string, values?: readonly unknown[]) => Promise<readonly [unknown, Mysql2FieldPayload | undefined]>,
+): Mysql2ConnectionLike {
   return {
     async execute(sqlOrOptions, values) {
       const sql = typeof sqlOrOptions === "string" ? sqlOrOptions : sqlOrOptions.sql;
-      const binds = typeof sqlOrOptions === "string" ? values : sqlOrOptions.values ?? values;
+      const binds = typeof sqlOrOptions === "string" ? values : (sqlOrOptions.values ?? values);
       return execute(sql, binds);
     },
     beginTransaction: async () => undefined,
@@ -84,10 +89,13 @@ test("RC pg and mysql adapters expose every canonical SPI capability", () => {
 
 test("PostgreSQL transaction options lower on the pinned client and reject malformed values", async () => {
   const calls: string[] = [];
-  const executor = createPgExecutor(pgMock(async (value) => {
-    if (typeof value === "object" && value !== null && "text" in value && typeof value.text === "string") calls.push(value.text);
-    return result();
-  }));
+  const executor = createPgExecutor(
+    pgMock(async (value) => {
+      if (typeof value === "object" && value !== null && "text" in value && typeof value.text === "string")
+        calls.push(value.text);
+      return result();
+    }),
+  );
   await executor.begin!({ isolation: "serializable", readOnly: true });
   assert.deepEqual(calls, ["BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY"]);
   await assert.rejects(
@@ -99,10 +107,13 @@ test("PostgreSQL transaction options lower on the pinned client and reject malfo
 
 test("PostgreSQL savepoint controls validate names before issuing SQL", async () => {
   const calls: string[] = [];
-  const executor = createPgExecutor(pgMock(async (value) => {
-    if (typeof value === "object" && value !== null && "text" in value && typeof value.text === "string") calls.push(value.text);
-    return result();
-  }));
+  const executor = createPgExecutor(
+    pgMock(async (value) => {
+      if (typeof value === "object" && value !== null && "text" in value && typeof value.text === "string")
+        calls.push(value.text);
+      return result();
+    }),
+  );
   await assert.rejects(async () => executor.savepoint!("bad; DROP TABLE users"), TypeError);
   await assert.rejects(async () => executor.rollbackTo!("bad; DROP TABLE users"), TypeError);
   await assert.rejects(async () => executor.releaseSavepoint!("bad; DROP TABLE users"), TypeError);
@@ -110,30 +121,25 @@ test("PostgreSQL savepoint controls validate names before issuing SQL", async ()
   await executor.savepoint!("braid_sp");
   await executor.rollbackTo!("braid_sp");
   await executor.releaseSavepoint!("braid_sp");
-  assert.deepEqual(calls, [
-    "SAVEPOINT braid_sp",
-    "ROLLBACK TO SAVEPOINT braid_sp",
-    "RELEASE SAVEPOINT braid_sp",
-  ]);
+  assert.deepEqual(calls, ["SAVEPOINT braid_sp", "ROLLBACK TO SAVEPOINT braid_sp", "RELEASE SAVEPOINT braid_sp"]);
 });
 
 test("MySQL transaction options use same-connection control statements", async () => {
   const calls: string[] = [];
-  const executor = createMysql2Executor(mysqlQueryMock(
-    async (sql) => {
-      calls.push(sql);
-      return [[], []];
-    },
-    async (sql) => {
-      calls.push(sql);
-      return [[], []];
-    },
-  ));
+  const executor = createMysql2Executor(
+    mysqlQueryMock(
+      async (sql) => {
+        calls.push(sql);
+        return [[], []];
+      },
+      async (sql) => {
+        calls.push(sql);
+        return [[], []];
+      },
+    ),
+  );
   await executor.begin!({ isolation: "repeatable-read", readOnly: true });
-  assert.deepEqual(calls, [
-    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ",
-    "START TRANSACTION READ ONLY",
-  ]);
+  assert.deepEqual(calls, ["SET TRANSACTION ISOLATION LEVEL REPEATABLE READ", "START TRANSACTION READ ONLY"]);
   await assert.rejects(
     async () => executor.begin!({ readOnly: "yes" as never }),
     (error: unknown) => error instanceof TypeError && errorCode(error) === "BRAID_TX_OPTIONS_INVALID",
@@ -144,19 +150,29 @@ test("MySQL transaction options use same-connection control statements", async (
 test("Already-aborted signals reject without physical I/O", async () => {
   let pgCalls = 0;
   let mysqlCalls = 0;
-  const pg = createPgExecutor(pgMock(async () => {
-    pgCalls += 1;
-    return result();
-  }));
-  const mysqlExecutor = createMysql2Executor(mysqlMock(async () => {
-    mysqlCalls += 1;
-    return [[], []];
-  }));
+  const pg = createPgExecutor(
+    pgMock(async () => {
+      pgCalls += 1;
+      return result();
+    }),
+  );
+  const mysqlExecutor = createMysql2Executor(
+    mysqlMock(async () => {
+      mysqlCalls += 1;
+      return [[], []];
+    }),
+  );
   const reason = new Error("already aborted");
   const controller = new AbortController();
   controller.abort(reason);
-  await assert.rejects(async () => pg.query(postgres`SELECT 1`.render(), undefined, { signal: controller.signal }), (error: unknown) => error === reason);
-  await assert.rejects(async () => mysqlExecutor.query(mysql`SELECT 1`.render(), undefined, { signal: controller.signal }), (error: unknown) => error === reason);
+  await assert.rejects(
+    async () => pg.query(postgres`SELECT 1`.render(), undefined, { signal: controller.signal }),
+    (error: unknown) => error === reason,
+  );
+  await assert.rejects(
+    async () => mysqlExecutor.query(mysql`SELECT 1`.render(), undefined, { signal: controller.signal }),
+    (error: unknown) => error === reason,
+  );
   assert.equal(pgCalls, 0);
   assert.equal(mysqlCalls, 0);
 });
@@ -164,27 +180,33 @@ test("Already-aborted signals reject without physical I/O", async () => {
 test("Active cancellation without a physical destroy mechanism is unsupported before I/O", async () => {
   let pgCalls = 0;
   let mysqlCalls = 0;
-  const pg = createPgExecutor(pgMock(async () => {
-    pgCalls += 1;
-    return result();
-  }));
-  const mysqlExecutor = createMysql2Executor(mysqlMock(async () => {
-    mysqlCalls += 1;
-    return [[], []];
-  }));
+  const pg = createPgExecutor(
+    pgMock(async () => {
+      pgCalls += 1;
+      return result();
+    }),
+  );
+  const mysqlExecutor = createMysql2Executor(
+    mysqlMock(async () => {
+      mysqlCalls += 1;
+      return [[], []];
+    }),
+  );
   const pgController = new AbortController();
   const mysqlController = new AbortController();
   await assert.rejects(
     async () => pg.query(postgres`SELECT 1`.render(), undefined, { signal: pgController.signal }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.cancel"
-      && error.code === "BRAID_CANCEL_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.cancel" &&
+      error.code === "BRAID_CANCEL_UNSUPPORTED",
   );
   await assert.rejects(
     async () => mysqlExecutor.query(mysql`SELECT 1`.render(), undefined, { signal: mysqlController.signal }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.cancel"
-      && error.code === "BRAID_CANCEL_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.cancel" &&
+      error.code === "BRAID_CANCEL_UNSUPPORTED",
   );
   assert.equal(pgCalls, 0);
   assert.equal(mysqlCalls, 0);
@@ -193,21 +215,31 @@ test("Active cancellation without a physical destroy mechanism is unsupported be
 test("Routine output limitations are explicit and happen before driver I/O", async () => {
   let pgCalls = 0;
   let mysqlCalls = 0;
-  const pg = createPgExecutor(pgMock(async () => {
-    pgCalls += 1;
-    return result();
-  }));
-  const mysqlExecutor = createMysql2Executor(mysqlMock(async () => {
-    mysqlCalls += 1;
-    return [[], []];
-  }));
+  const pg = createPgExecutor(
+    pgMock(async () => {
+      pgCalls += 1;
+      return result();
+    }),
+  );
+  const mysqlExecutor = createMysql2Executor(
+    mysqlMock(async () => {
+      mysqlCalls += 1;
+      return [[], []];
+    }),
+  );
   await assert.rejects(
     async () => pg.call(postgres.call`CALL routine(${postgres.inOut("value", 1)})`.render()),
-    (error: unknown) => error instanceof UnsupportedFeatureError && error.feature === "routine.inout" && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "routine.inout" &&
+      error.code === "BRAID_CALL_OUT_UNSUPPORTED",
   );
   await assert.rejects(
     async () => mysqlExecutor.call(mysql.call`CALL routine(${mysql.out("value")})`.render()),
-    (error: unknown) => error instanceof UnsupportedFeatureError && error.feature === "routine.out" && error.code === "BRAID_CALL_OUT_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "routine.out" &&
+      error.code === "BRAID_CALL_OUT_UNSUPPORTED",
   );
   assert.equal(pgCalls, 0);
   assert.equal(mysqlCalls, 0);
@@ -215,15 +247,18 @@ test("Routine output limitations are explicit and happen before driver I/O", asy
 
 test("Routine return schemas reject before direct execution", async () => {
   let calls = 0;
-  const db = createPgDatabase(pgMock(async () => {
-    calls += 1;
-    return result();
-  }));
+  const db = createPgDatabase(
+    pgMock(async () => {
+      calls += 1;
+      return result();
+    }),
+  );
   await assert.rejects(
     () => db.call(postgres.call({ returnValue: returnSchema() })`CALL routine()`),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "routine.return-value"
-      && error.code === "BRAID_CALL_RETURN_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "routine.return-value" &&
+      error.code === "BRAID_CALL_RETURN_UNSUPPORTED",
   );
   assert.equal(calls, 0);
 });
@@ -241,9 +276,10 @@ test("Routine return schemas reject before pooled acquisition, including prepare
   });
   const query = postgres.call({ returnValue: returnSchema() })`CALL routine()`;
   const prepared = db.prepare("return-value", () => query, { input: "none" });
-  const matches = (error: unknown) => error instanceof UnsupportedFeatureError
-    && error.feature === "routine.return-value"
-    && error.code === "BRAID_CALL_RETURN_UNSUPPORTED";
+  const matches = (error: unknown) =>
+    error instanceof UnsupportedFeatureError &&
+    error.feature === "routine.return-value" &&
+    error.code === "BRAID_CALL_RETURN_UNSUPPORTED";
   await assert.rejects(() => db.call(query), matches);
   await assert.rejects(() => prepared.call(), matches);
   assert.equal(acquisitions, 0);

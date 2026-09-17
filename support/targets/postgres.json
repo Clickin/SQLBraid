@@ -86,89 +86,61 @@
   "capabilities": {
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.rc-session"
-      ]
+      "testIds": ["postgres.execution.rc-session"]
     },
     "transaction.read-only": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.rc-session"
-      ]
+      "testIds": ["postgres.execution.rc-session"]
     },
     "transaction.isolation.read-uncommitted": {
       "status": "guarded",
       "conditionCode": "pg.read-uncommitted-maps-to-read-committed",
-      "testIds": [
-        "postgres.execution.rc-session"
-      ]
+      "testIds": ["postgres.execution.rc-session"]
     },
     "transaction.isolation.read-committed": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.rc-session"
-      ]
+      "testIds": ["postgres.execution.rc-session"]
     },
     "transaction.isolation.repeatable-read": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.rc-session"
-      ]
+      "testIds": ["postgres.execution.rc-session"]
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.rc-session"
-      ]
+      "testIds": ["postgres.execution.rc-session"]
     },
     "statement.cancel": {
       "status": "guarded",
       "conditionCode": "pg.physical-connection-destroy",
-      "testIds": [
-        "postgres.execution.rc-cancel"
-      ]
+      "testIds": ["postgres.execution.rc-cancel"]
     },
     "routine.call": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.routine.scalar-out"
-      ]
+      "testIds": ["postgres.routine.scalar-out"]
     },
     "sql.native-transparency": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.sql.native-transparency"
-      ]
+      "testIds": ["postgres.sql.native-transparency"]
     },
     "sql.generated-structure": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.sql.generated-structure"
-      ]
+      "testIds": ["postgres.sql.generated-structure"]
     },
     "numeric.exact-integer": {
       "status": "guaranteed",
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "postgres.numeric.exact-integer"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.numeric.exact-integer"],
+      "driverRawRepresentations": ["string"]
     },
     "numeric.exact-decimal": {
       "status": "guaranteed",
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "postgres.numeric.exact-decimal"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.numeric.exact-decimal"],
+      "driverRawRepresentations": ["string"]
     },
     "numeric.approximate-float": {
       "status": "guarded",
@@ -176,160 +148,100 @@
       "semantics": "approximate-binary",
       "representation": "number",
       "fidelity": "guarded",
-      "testIds": [
-        "postgres.numeric.transport",
-        "postgres.numeric.environment-refresh"
-      ],
-      "driverRawRepresentations": [
-        "number"
-      ]
+      "testIds": ["postgres.numeric.transport", "postgres.numeric.environment-refresh"],
+      "driverRawRepresentations": ["number"]
     },
     "numeric.bind-exact": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.numeric.transport"
-      ]
+      "testIds": ["postgres.numeric.transport"]
     },
     "numeric.aggregate": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.numeric.transport"
-      ]
+      "testIds": ["postgres.numeric.transport"]
     },
     "numeric.scale-greater-than-precision": {
       "status": "guaranteed",
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "postgres.numeric.scale-greater-than-precision"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.numeric.scale-greater-than-precision"],
+      "driverRawRepresentations": ["string"]
     },
     "numeric.negative-scale": {
       "status": "guaranteed",
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "postgres.numeric.negative-scale"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.numeric.negative-scale"],
+      "driverRawRepresentations": ["string"]
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.numeric.transport",
-        "postgres.data.containers-lossless-text"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.numeric.transport", "postgres.data.containers-lossless-text"],
+      "driverRawRepresentations": ["string"]
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.data.temporal-lossless",
-        "postgres.data.containers-lossless-text"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.data.temporal-lossless", "postgres.data.containers-lossless-text"],
+      "driverRawRepresentations": ["string"]
     },
     "data.binary": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.data.binary"
-      ],
-      "driverRawRepresentations": [
-        "Buffer",
-        "Uint8Array"
-      ]
+      "testIds": ["postgres.data.binary"],
+      "driverRawRepresentations": ["Buffer", "Uint8Array"]
     },
     "data.uuid": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.data.uuid"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.data.uuid"],
+      "driverRawRepresentations": ["string"]
     },
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.result.rows"
-      ]
+      "testIds": ["postgres.result.rows"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.result.command"
-      ]
+      "testIds": ["postgres.result.command"]
     },
     "result.multiple-sets": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.result.multiple-sets"
-      ]
+      "testIds": ["postgres.result.multiple-sets"]
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.result.standard-schema"
-      ]
+      "testIds": ["postgres.result.standard-schema"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.prepared"
-      ]
+      "testIds": ["postgres.execution.prepared"]
     },
     "statement.stream": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.stream"
-      ]
+      "testIds": ["postgres.execution.stream"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.bulk"
-      ]
+      "testIds": ["postgres.execution.bulk"]
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.transaction"
-      ]
+      "testIds": ["postgres.execution.transaction"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.execution.savepoint"
-      ]
+      "testIds": ["postgres.execution.savepoint"]
     },
     "routine.out": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.routine.scalar-out"
-      ]
+      "testIds": ["postgres.routine.scalar-out"]
     },
     "routine.result-sets": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.routine.resultsets"
-      ]
+      "testIds": ["postgres.routine.resultsets"]
     },
     "routine.out-cursor": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.routine.cursor"
-      ]
+      "testIds": ["postgres.routine.cursor"]
     },
     "routine.inout": {
       "status": "unsupported",
@@ -341,51 +253,35 @@
     },
     "metadata.identity": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.metadata.identity"
-      ]
+      "testIds": ["postgres.metadata.identity"]
     },
     "metadata.generated": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.metadata.generated"
-      ]
+      "testIds": ["postgres.metadata.generated"]
     },
     "metadata.routines": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.metadata.routines"
-      ]
+      "testIds": ["postgres.metadata.routines"]
     },
     "metadata.types": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.metadata.types"
-      ]
+      "testIds": ["postgres.metadata.types"]
     },
     "dml.insert-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.dml.insert-returning"
-      ]
+      "testIds": ["postgres.dml.insert-returning"]
     },
     "dml.upsert-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.dml.upsert-returning"
-      ]
+      "testIds": ["postgres.dml.upsert-returning"]
     },
     "dml.update-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.dml.update-returning"
-      ]
+      "testIds": ["postgres.dml.update-returning"]
     },
     "dml.delete-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.dml.delete-returning"
-      ]
+      "testIds": ["postgres.dml.delete-returning"]
     }
   },
   "evidence": {

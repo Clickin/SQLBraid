@@ -91,10 +91,17 @@ function touch<T>(cache: Map<string, T>, key: string, value: T, limit: number): 
 }
 
 function digest(value: unknown): string {
-  return createHash("sha1").update(JSON.stringify(value) ?? "").digest("hex");
+  return createHash("sha1")
+    .update(JSON.stringify(value) ?? "")
+    .digest("hex");
 }
 
-async function fileEvidence(path: string, cache: Map<string, FileEvidence>, limit: number, cancellation?: Cancellation): Promise<FileEvidence | undefined> {
+async function fileEvidence(
+  path: string,
+  cache: Map<string, FileEvidence>,
+  limit: number,
+  cancellation?: Cancellation,
+): Promise<FileEvidence | undefined> {
   checkCancellation(cancellation);
   let information;
   try {
@@ -134,7 +141,12 @@ function projectFile(rootPath: string): string | undefined {
 }
 
 function projectOptions(options: LanguageServiceOptions, context?: TypeScriptProjectContext): LanguageServiceOptions {
-  const modules = [...new Set([...(options.moduleSpecifiers ?? []), ...AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier)])];
+  const modules = [
+    ...new Set([
+      ...(options.moduleSpecifiers ?? []),
+      ...AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier),
+    ]),
+  ];
   return {
     ...options,
     moduleSpecifiers: modules,
@@ -142,11 +154,16 @@ function projectOptions(options: LanguageServiceOptions, context?: TypeScriptPro
   };
 }
 
-function currentProgram(context: TypeScriptProjectContext, documents: ReadonlyMap<string, SourceDocument>, rootPath: string): ts.Program {
+function currentProgram(
+  context: TypeScriptProjectContext,
+  documents: ReadonlyMap<string, SourceDocument>,
+  rootPath: string,
+): ts.Program {
   if (documents.size === 0) return context.program;
   const host = ts.createCompilerHost(context.compilerOptions, true);
   const roots = [...new Set([...context.fileNames, ...documents.keys()])];
-  const documentFor = (fileName: string): SourceDocument | undefined => documents.get(canonicalPath(fileName, rootPath));
+  const documentFor = (fileName: string): SourceDocument | undefined =>
+    documents.get(canonicalPath(fileName, rootPath));
   const defaultGetSourceFile = host.getSourceFile.bind(host);
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
     const document = documentFor(fileName);
@@ -199,7 +216,11 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
     return projectContext;
   }
 
-  async function loadTarget(target: CodegenTargetConfig, configDirectory: string, cancellation?: Cancellation): Promise<ToolingTarget | undefined> {
+  async function loadTarget(
+    target: CodegenTargetConfig,
+    configDirectory: string,
+    cancellation?: Cancellation,
+  ): Promise<ToolingTarget | undefined> {
     checkCancellation(cancellation);
     const metadataPath = canonicalPath(resolve(configDirectory, target.metadata), rootPath);
     const metadataEvidence = await fileEvidence(metadataPath, fileCache, maxEntries, cancellation);
@@ -233,7 +254,7 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
     });
     const outputKey = outputDocument
       ? `document:${outputDocument.version ?? ""}:${digest(outputText)}`
-      : outputEvidence?.key ?? "missing";
+      : (outputEvidence?.key ?? "missing");
     const generatedKey = `${metadataHash}:${optionsKey}:${outputPath}:${outputKey}`;
     let generated = generatedCache.get(generatedKey);
     if (!generated) {
@@ -257,9 +278,17 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
     };
   }
 
-  async function loadSources(context: TypeScriptProjectContext | undefined, targets: readonly ToolingTarget[], cancellation?: Cancellation): Promise<{ readonly sources: readonly SourceDocument[]; readonly sourceFiles: readonly string[] }> {
+  async function loadSources(
+    context: TypeScriptProjectContext | undefined,
+    targets: readonly ToolingTarget[],
+    cancellation?: Cancellation,
+  ): Promise<{ readonly sources: readonly SourceDocument[]; readonly sourceFiles: readonly string[] }> {
     const result = new Map<string, SourceDocument>();
-    const generatedPaths = new Map(targets.filter((target) => target.outFile).map((target) => [canonicalPath(target.outFile as string, rootPath), target.generatedSource]));
+    const generatedPaths = new Map(
+      targets
+        .filter((target) => target.outFile)
+        .map((target) => [canonicalPath(target.outFile as string, rootPath), target.generatedSource]),
+    );
     for (const document of documents.values()) {
       checkCancellation(cancellation);
       if (generatedPaths.has(document.fileName) && generatedPaths.get(document.fileName) === undefined) continue;
@@ -278,7 +307,10 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
       const path = canonicalPath(target.outFile, rootPath);
       if (!result.has(path)) result.set(path, sourceDocument(path, target.generatedSource));
     }
-    return { sources: [...result.values()], sourceFiles: diskFiles.filter((fileName) => !generatedPaths.has(fileName)) };
+    return {
+      sources: [...result.values()],
+      sourceFiles: diskFiles.filter((fileName) => !generatedPaths.has(fileName)),
+    };
   }
 
   const loadSourceFile: SourceFileLoader = async (fileName, cancellation) => {
@@ -294,8 +326,17 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
     checkCancellation(cancellation);
     const configPath = options.configPath ? canonicalPath(options.configPath, rootPath) : undefined;
     let loaded;
-    if (configPath || ["sqlbraid.config.mjs", "sqlbraid.config.js", "sqlbraid.config.cjs"].some((name) => existsSync(join(rootPath, name)))) {
-      const key = configPath ?? ["sqlbraid.config.mjs", "sqlbraid.config.js", "sqlbraid.config.cjs"].map((name) => join(rootPath, name)).find((path) => existsSync(path));
+    if (
+      configPath ||
+      ["sqlbraid.config.mjs", "sqlbraid.config.js", "sqlbraid.config.cjs"].some((name) =>
+        existsSync(join(rootPath, name)),
+      )
+    ) {
+      const key =
+        configPath ??
+        ["sqlbraid.config.mjs", "sqlbraid.config.js", "sqlbraid.config.cjs"]
+          .map((name) => join(rootPath, name))
+          .find((path) => existsSync(path));
       if (key) {
         const evidence = await fileEvidence(key, fileCache, maxEntries, cancellation);
         const cacheKey = evidence?.key ?? key;
@@ -315,11 +356,14 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
         if (evidence) configuredTargets.push(evidence);
       }
     }
-    const targets: readonly ToolingTarget[] = (configuredTargets.length ? configuredTargets : [...(options.targets ?? [])]).map((target): ToolingTarget => {
+    const targets: readonly ToolingTarget[] = (
+      configuredTargets.length ? configuredTargets : [...(options.targets ?? [])]
+    ).map((target): ToolingTarget => {
       if (!target.outFile) return target;
       const outputDocument = documents.get(canonicalPath(target.outFile, rootPath));
       if (!outputDocument) return target;
-      if (target.generation?.source === outputDocument.sourceText) return { ...target, generatedSource: outputDocument.sourceText };
+      if (target.generation?.source === outputDocument.sourceText)
+        return { ...target, generatedSource: outputDocument.sourceText };
       const { generatedSource: _generatedSource, ...withoutStaleEvidence } = target;
       return withoutStaleEvidence;
     });
@@ -334,7 +378,9 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
         name: target.name,
         metadataPath: target.metadataPath,
         outFile: target.outFile,
-        generation: target.generation ? [target.generation.metadataHash, target.generation.optionsHash, target.generation.source] : undefined,
+        generation: target.generation
+          ? [target.generation.metadataHash, target.generation.optionsHash, target.generation.source]
+          : undefined,
         generatedSource: target.generatedSource,
       })),
       sources: sources.map((source) => [source.fileName, source.version, digest(source.sourceText)]),
@@ -381,8 +427,14 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
         }
       }, 10);
       pending.then(
-        (value) => { clearInterval(timer); resolve(value); },
-        (error: unknown) => { clearInterval(timer); reject(error); },
+        (value) => {
+          clearInterval(timer);
+          resolve(value);
+        },
+        (error: unknown) => {
+          clearInterval(timer);
+          reject(error);
+        },
       );
     });
   }

@@ -31,7 +31,7 @@ const statementBinding = Object.freeze<StatementBindingAdapter>({
       reuse: { effective: "simple", owner: "sqlbraid" },
     });
   },
-})
+});
 
 function statementText(statement: RenderedStatement): string {
   return statement.segments.join("?");
@@ -44,12 +44,18 @@ function rowsExecutor(rows: readonly unknown[], calls: string[] = []): QueryExec
       calls.push(statementText(rendered));
       return { kind: "rows" as const, rows: rows as readonly Row[] };
     },
-    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
-    async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
+    async *stream<Row>(): AsyncGenerator<Row> {
+      throw new Error("BRAID_STREAM_UNSUPPORTED");
+    },
+    async call(): Promise<DriverRoutineResult> {
+      throw new Error("BRAID_CALL_UNSUPPORTED");
+    },
   };
 }
 
-function schema<Output>(validate: (_value: unknown) => StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>>): StandardSchemaV1<unknown, Output> {
+function schema<Output>(
+  validate: (_value: unknown) => StandardSchemaV1.Result<Output> | Promise<StandardSchemaV1.Result<Output>>,
+): StandardSchemaV1<unknown, Output> {
   return { "~standard": { version: 1, vendor: "runtime-boundary-test", validate } };
 }
 
@@ -65,7 +71,11 @@ test("materialized mappers run after the direct physical turn is released", asyn
 }, 1000);
 
 test("pooled roots lease independently and a batch holds one lease", async () => {
-  const log: { acquired: string[]; released: { id: string; discard: boolean }[]; queries: string[] } = { acquired: [], released: [], queries: [] };
+  const log: { acquired: string[]; released: { id: string; discard: boolean }[]; queries: string[] } = {
+    acquired: [],
+    released: [],
+    queries: [],
+  };
   const gate = Promise.withResolvers<void>();
   let running = 0;
   const provider: ConnectionProvider = {
@@ -82,9 +92,15 @@ test("pooled roots lease independently and a batch holds one lease", async () =>
           running -= 1;
           return { kind: "rows" as const, rows: [] as readonly Row[] };
         },
-        async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
-        async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
-        release(options) { log.released.push({ id, discard: options?.discard === true }); },
+        async *stream<Row>(): AsyncGenerator<Row> {
+          throw new Error("BRAID_STREAM_UNSUPPORTED");
+        },
+        async call(): Promise<DriverRoutineResult> {
+          throw new Error("BRAID_CALL_UNSUPPORTED");
+        },
+        release(options) {
+          log.released.push({ id, discard: options?.discard === true });
+        },
       };
     },
   };
@@ -109,16 +125,37 @@ test("pooled transactions pin one lease, nest with savepoints, and reject root e
     async acquire() {
       const lease: ConnectionLease = {
         statementBinding,
-        async query<Row>(rendered: RenderedStatement) { log.push(`query:${statementText(rendered)}`); return { kind: "rows" as const, rows: [] as readonly Row[] }; },
-        async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
-        async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
-        async begin() { log.push("BEGIN"); },
-        async commit() { log.push("COMMIT"); },
-        async rollback() { log.push("ROLLBACK"); },
-        async savepoint(name) { log.push(`SAVEPOINT:${name}`); },
-        async rollbackTo(name) { log.push(`ROLLBACK TO:${name}`); },
-        async releaseSavepoint(name) { log.push(`RELEASE:${name}`); },
-        release() { releases += 1; },
+        async query<Row>(rendered: RenderedStatement) {
+          log.push(`query:${statementText(rendered)}`);
+          return { kind: "rows" as const, rows: [] as readonly Row[] };
+        },
+        async *stream<Row>(): AsyncGenerator<Row> {
+          throw new Error("BRAID_STREAM_UNSUPPORTED");
+        },
+        async call(): Promise<DriverRoutineResult> {
+          throw new Error("BRAID_CALL_UNSUPPORTED");
+        },
+        async begin() {
+          log.push("BEGIN");
+        },
+        async commit() {
+          log.push("COMMIT");
+        },
+        async rollback() {
+          log.push("ROLLBACK");
+        },
+        async savepoint(name) {
+          log.push(`SAVEPOINT:${name}`);
+        },
+        async rollbackTo(name) {
+          log.push(`ROLLBACK TO:${name}`);
+        },
+        async releaseSavepoint(name) {
+          log.push(`RELEASE:${name}`);
+        },
+        release() {
+          releases += 1;
+        },
       };
       return lease;
     },
@@ -126,8 +163,13 @@ test("pooled transactions pin one lease, nest with savepoints, and reject root e
   const db = createPooledDatabase(provider);
   await db.tx(async (tx) => {
     await tx.execute(sql`SELECT one`);
-    await tx.tx(async (nested) => { await nested.execute(sql`SELECT two`); });
-    await assert.rejects(() => db.execute(sql`SELECT escaped`), (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_TX_SCOPE");
+    await tx.tx(async (nested) => {
+      await nested.execute(sql`SELECT two`);
+    });
+    await assert.rejects(
+      () => db.execute(sql`SELECT escaped`),
+      (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_TX_SCOPE",
+    );
   });
   const savepoint = log.find((entry) => entry.startsWith("SAVEPOINT:"))!;
   assert.deepEqual(log.slice(0, 4), ["BEGIN", "query:SELECT one", savepoint, "query:SELECT two"]);
@@ -145,19 +187,34 @@ test("leaked transaction handles are closed and poisoned cleanup discards a leas
     async acquire() {
       return {
         statementBinding,
-        async query<Row>() { return { kind: "rows" as const, rows: [] as readonly Row[] }; },
-        async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
-        async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
+        async query<Row>() {
+          return { kind: "rows" as const, rows: [] as readonly Row[] };
+        },
+        async *stream<Row>(): AsyncGenerator<Row> {
+          throw new Error("BRAID_STREAM_UNSUPPORTED");
+        },
+        async call(): Promise<DriverRoutineResult> {
+          throw new Error("BRAID_CALL_UNSUPPORTED");
+        },
         async begin() {},
-        async commit() { if (shouldFailCommit) throw new Error("commit failed"); },
+        async commit() {
+          if (shouldFailCommit) throw new Error("commit failed");
+        },
         async rollback() {},
-        release(options) { releaseOptions = options; },
+        release(options) {
+          releaseOptions = options;
+        },
       };
     },
   };
   const db = createPooledDatabase(provider);
-  await db.tx(async (tx) => { leaked = tx; });
-  await assert.rejects(() => leaked!.execute(sql`SELECT leaked`), (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_TX_CLOSED");
+  await db.tx(async (tx) => {
+    leaked = tx;
+  });
+  await assert.rejects(
+    () => leaked!.execute(sql`SELECT leaked`),
+    (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_TX_CLOSED",
+  );
   shouldFailCommit = true;
   await assert.rejects(() => db.tx(async () => undefined), /commit failed/);
   assert.equal(releaseOptions?.discard, true);
@@ -172,23 +229,39 @@ test("stream leases release on completion, early return, mapping failure, and ab
       const id = `lease-${index++}`;
       return {
         statementBinding,
-        async query<Row>() { return { kind: "rows" as const, rows: [] as readonly Row[] }; },
-        async *stream<Row>() { yield 1 as Row; yield 2 as Row; },
-        async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
-        release() { released.push(id); },
+        async query<Row>() {
+          return { kind: "rows" as const, rows: [] as readonly Row[] };
+        },
+        async *stream<Row>() {
+          yield 1 as Row;
+          yield 2 as Row;
+        },
+        async call(): Promise<DriverRoutineResult> {
+          throw new Error("BRAID_CALL_UNSUPPORTED");
+        },
+        release() {
+          released.push(id);
+        },
       };
     },
   };
   const db = createPooledDatabase(provider);
   const all: number[] = [];
   for await (const row of db.stream(sql.rows<number>`SELECT stream`)) all.push(row);
-  for await (const row of db.stream(sql.rows<number>`SELECT early`)) { void row; break; }
+  for await (const row of db.stream(sql.rows<number>`SELECT early`)) {
+    void row;
+    break;
+  }
   const failing = schema<number>(() => ({ issues: [{ message: "bad row" }] }));
-  await assert.rejects(async () => { for await (const row of db.stream(sql.rows(failing)`SELECT invalid`)) void row; }, DatabaseResultValidationError);
+  await assert.rejects(async () => {
+    for await (const row of db.stream(sql.rows(failing)`SELECT invalid`)) void row;
+  }, DatabaseResultValidationError);
   const controller = new AbortController();
   controller.abort(new Error("cancelled"));
   const acquiredBeforeAbort = index;
-  await assert.rejects(async () => { for await (const row of db.stream(sql.rows<number>`SELECT abort`, { signal: controller.signal })) void row; }, /cancelled/);
+  await assert.rejects(async () => {
+    for await (const row of db.stream(sql.rows<number>`SELECT abort`, { signal: controller.signal })) void row;
+  }, /cancelled/);
   assert.deepEqual(all, [1, 2]);
   assert.equal(index, acquiredBeforeAbort, "a pre-aborted stream must not acquire a lease");
   assert.equal(released.length, index);
@@ -196,33 +269,54 @@ test("stream leases release on completion, early return, mapping failure, and ab
 
 test("direct stream mapper re-entry fails with BRAID_STREAM_SCOPE instead of waiting", async () => {
   let db!: ReturnType<typeof createDatabase>;
-  const mapper = schema(async (value) => { await db.execute(sql`SELECT nested`); return { value }; });
+  const mapper = schema(async (value) => {
+    await db.execute(sql`SELECT nested`);
+    return { value };
+  });
   db = createDatabase({
     statementBinding,
-    async query<Row>() { return { kind: "rows" as const, rows: [] as readonly Row[] }; },
-    async *stream<Row>() { yield 1 as Row; },
-    async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
+    async query<Row>() {
+      return { kind: "rows" as const, rows: [] as readonly Row[] };
+    },
+    async *stream<Row>() {
+      yield 1 as Row;
+    },
+    async call(): Promise<DriverRoutineResult> {
+      throw new Error("BRAID_CALL_UNSUPPORTED");
+    },
   });
-  await assert.rejects(async () => { for await (const row of db.stream(sql.rows(mapper)`SELECT stream`)) void row; }, (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_STREAM_SCOPE");
+  await assert.rejects(
+    async () => {
+      for await (const row of db.stream(sql.rows(mapper)`SELECT stream`)) void row;
+    },
+    (error: unknown) => error instanceof DatabaseScopeError && error.code === "BRAID_STREAM_SCOPE",
+  );
 });
 
 test("all materialized row APIs and calls release exactly one root lease", async () => {
   let acquired = 0;
   let released = 0;
-  const db = createPooledDatabase({ statementBinding, async acquire() {
-    acquired += 1;
-    return {
-      ...rowsExecutor([{ id: 1 }]),
-      async call(): Promise<DriverRoutineResult> {
-        return { output: {}, resultSets: [{ rows: [], source: { kind: "emitted", index: 0 } }] };
-      },
-      release() { released += 1; },
-    };
-  } });
-  const query = sql.rows(schema((value) => {
-    assert.equal(acquired, released, "mapping must not retain the lease");
-    return { value };
-  }))`SELECT row`;
+  const db = createPooledDatabase({
+    statementBinding,
+    async acquire() {
+      acquired += 1;
+      return {
+        ...rowsExecutor([{ id: 1 }]),
+        async call(): Promise<DriverRoutineResult> {
+          return { output: {}, resultSets: [{ rows: [], source: { kind: "emitted", index: 0 } }] };
+        },
+        release() {
+          released += 1;
+        },
+      };
+    },
+  });
+  const query = sql.rows(
+    schema((value) => {
+      assert.equal(acquired, released, "mapping must not retain the lease");
+      return { value };
+    }),
+  )`SELECT row`;
   await db.execute(query);
   await db.all(query);
   await db.one(query);
@@ -235,14 +329,21 @@ test("all materialized row APIs and calls release exactly one root lease", async
 test("pooled stream mapper reentry uses another lease while the cursor retains its own", async () => {
   let acquired = 0;
   let released = 0;
-  const db = createPooledDatabase({ statementBinding, async acquire() {
-    acquired += 1;
-    return {
-      ...rowsExecutor([]),
-      async *stream<Row>() { yield 1 as Row; },
-      release() { released += 1; },
-    };
-  } });
+  const db = createPooledDatabase({
+    statementBinding,
+    async acquire() {
+      acquired += 1;
+      return {
+        ...rowsExecutor([]),
+        async *stream<Row>() {
+          yield 1 as Row;
+        },
+        release() {
+          released += 1;
+        },
+      };
+    },
+  });
   const mapper = schema(async (value) => {
     assert.equal(released, 0);
     await db.execute(sql`SELECT nested`);
@@ -260,25 +361,42 @@ test("pooled lease binding identity mismatch discards the lease before execution
   const mismatchedBinding = Object.freeze<StatementBindingAdapter>({
     ...statementBinding,
     describe: statementBinding.describe,
-  })
+  });
   let released: { readonly discard?: boolean } | undefined;
   let queries = 0;
   const events: ExecutionEvent[] = [];
-  const db = createPooledDatabase({
-    statementBinding,
-    async acquire() {
-      return {
-        statementBinding: mismatchedBinding,
-        async query() {
-          queries += 1;
-          return { kind: "rows" as const, rows: [] as const };
-        },
-        async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
-        async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
-        release(options) { released = options; },
-      };
+  const db = createPooledDatabase(
+    {
+      statementBinding,
+      async acquire() {
+        return {
+          statementBinding: mismatchedBinding,
+          async query() {
+            queries += 1;
+            return { kind: "rows" as const, rows: [] as const };
+          },
+          async *stream<Row>(): AsyncGenerator<Row> {
+            throw new Error("BRAID_STREAM_UNSUPPORTED");
+          },
+          async call(): Promise<DriverRoutineResult> {
+            throw new Error("BRAID_CALL_UNSUPPORTED");
+          },
+          release(options) {
+            released = options;
+          },
+        };
+      },
     },
-  }, { observers: [{ onEvent(event) { events.push(event); } }] });
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    },
+  );
 
   await assert.rejects(() => db.execute(sql`SELECT mismatch`), /BRAID_BINDING_IDENTITY/);
   assert.equal(queries, 0);
@@ -312,26 +430,34 @@ test("prepared invocation renders once and passes one binding description to exe
       describedBinding = description;
       return description;
     },
-  })
+  });
   const db = createDatabase({
     statementBinding: adapter,
     async query<Row>(_statement: RenderedStatement, binding?: StatementBindingDescription) {
       receivedBinding = binding;
       return { kind: "rows" as const, rows: [] as readonly Row[] };
     },
-    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
-    async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
+    async *stream<Row>(): AsyncGenerator<Row> {
+      throw new Error("BRAID_STREAM_UNSUPPORTED");
+    },
+    async call(): Promise<DriverRoutineResult> {
+      throw new Error("BRAID_CALL_UNSUPPORTED");
+    },
   });
-  const prepared = db.prepare("render-once", () => {
-    const query = sql.rows`SELECT ${renders}`;
-    return {
-      ...query,
-      render() {
-        renders += 1;
-        return query.render();
-      },
-    };
-  }, { input: "none" });
+  const prepared = db.prepare(
+    "render-once",
+    () => {
+      const query = sql.rows`SELECT ${renders}`;
+      return {
+        ...query,
+        render() {
+          renders += 1;
+          return query.render();
+        },
+      };
+    },
+    { input: "none" },
+  );
 
   await prepared.execute();
   assert.equal(renders, 1);
@@ -343,8 +469,12 @@ test("prepared invocation renders once and passes one binding description to exe
 test("transaction stream consumer cannot run another pinned physical operation", async () => {
   const db = createDatabase({
     ...rowsExecutor([]),
-    async begin() {}, async commit() {}, async rollback() {},
-    async *stream<Row>() { yield 1 as Row; },
+    async begin() {},
+    async commit() {},
+    async rollback() {},
+    async *stream<Row>() {
+      yield 1 as Row;
+    },
   });
   await db.tx(async (tx) => {
     for await (const row of tx.stream(sql.rows`SELECT stream`)) {

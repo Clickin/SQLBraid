@@ -10,13 +10,13 @@ npm install @sqlbraid/sqlite
 The application creates and owns the database or Worker binding, then uses the
 matching adapter subpath:
 
-| Subpath | Physical API | Semantics |
-| --- | --- | --- |
-| `/node-sqlite` | Node `DatabaseSync` / `StatementSync` | synchronous physical calls behind the async public API; exact INTEGER strings, native iteration, prepared-loop bulk |
-| `/better-sqlite3` | `better-sqlite3` database/statements | synchronous and event-loop-blocking physical calls; statement-local `safeIntegers(true)`, native iteration, prepared-loop bulk |
-| `/libsql` | `@libsql/client` | requires an explicit `intMode: "string"` assertion; interactive transaction handles, remote batch, no pinned session or stream fallback |
-| `/wasm` | SQLite WASM OO1 | synchronous OO1 calls with an async-generator stream adapter |
-| `/d1` | Cloudflare D1 | prepared binds; no streaming or callback transactions |
+| Subpath           | Physical API                          | Semantics                                                                                                                               |
+| ----------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `/node-sqlite`    | Node `DatabaseSync` / `StatementSync` | synchronous physical calls behind the async public API; exact INTEGER strings, native iteration, prepared-loop bulk                     |
+| `/better-sqlite3` | `better-sqlite3` database/statements  | synchronous and event-loop-blocking physical calls; statement-local `safeIntegers(true)`, native iteration, prepared-loop bulk          |
+| `/libsql`         | `@libsql/client`                      | requires an explicit `intMode: "string"` assertion; interactive transaction handles, remote batch, no pinned session or stream fallback |
+| `/wasm`           | SQLite WASM OO1                       | synchronous OO1 calls with an async-generator stream adapter                                                                            |
+| `/d1`             | Cloudflare D1                         | prepared binds; no streaming or callback transactions                                                                                   |
 
 Node requires `node:sqlite` from Node 22.18 or newer. The Node,
 better-sqlite3, libSQL exact-string, and WASM adapters preserve INTEGER values

@@ -94,15 +94,23 @@ function spanFor(
       Object.assign(state.attributes, attributes);
       return span;
     },
-    addEvent() { return span; },
-    addLink() { return span; },
-    addLinks() { return span; },
+    addEvent() {
+      return span;
+    },
+    addLink() {
+      return span;
+    },
+    addLinks() {
+      return span;
+    },
     setStatus(status: { readonly code: SpanStatusCode }) {
       if (recording.throwOnSpanMutation) throw new Error("telemetry span mutation failed");
       state.statuses.push(status);
       return span;
     },
-    updateName() { return span; },
+    updateName() {
+      return span;
+    },
     end(endTime?: readonly [number, number]) {
       if (recording.throwOnSpanMutation) throw new Error("telemetry span mutation failed");
       state.endTime = endTime;
@@ -157,10 +165,7 @@ function installProviders(): void {
   metrics.setGlobalMeterProvider({ getMeter: () => meter });
 }
 
-function ready(
-  operationId: string,
-  overrides: Partial<QueryReadyEvent> = {},
-): QueryReadyEvent {
+function ready(operationId: string, overrides: Partial<QueryReadyEvent> = {}): QueryReadyEvent {
   return {
     type: "query:ready",
     operationId,
@@ -288,7 +293,10 @@ test("maps query lifecycle to a client span and one stable duration measurement"
   assert.equal(recording.measurements.length, 1);
   assert.equal(recording.histogramName, "db.client.operation.duration");
   assert.equal(recording.histogramOptions?.unit, "s");
-  assert.deepEqual(recording.histogramOptions?.advice?.explicitBucketBoundaries, [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10]);
+  assert.deepEqual(
+    recording.histogramOptions?.advice?.explicitBucketBoundaries,
+    [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10],
+  );
   assert.equal(recording.measurements[0].attributes["db.system.name"], "postgresql");
   assert.equal("sqlbraid.operation.id" in recording.measurements[0].attributes, false);
   assert.equal("sqlbraid.query.fingerprint" in recording.measurements[0].attributes, false);
@@ -447,13 +455,17 @@ test("tracks real runtime rows, commands, prepared execution, and mapping failur
     },
   };
   await assert.rejects(db.all(sql.rows(schema)`SELECT 1`), (error) => error === mappingError);
-  await assert.rejects(db.execute(sql.rows`UPDATE users SET active = ${true}`), (error) => (
-    error instanceof Error && "code" in error && error.code === "BRAID_RESULT_KIND"
-  ));
+  await assert.rejects(
+    db.execute(sql.rows`UPDATE users SET active = ${true}`),
+    (error) => error instanceof Error && "code" in error && error.code === "BRAID_RESULT_KIND",
+  );
 
   assert.equal(recording.spans.length, 5);
   assert.equal(recording.measurements.length, 5);
-  assert.equal(recording.spans.filter(({ statuses }) => statuses.some(({ code }) => code === SpanStatusCode.ERROR)).length, 2);
+  assert.equal(
+    recording.spans.filter(({ statuses }) => statuses.some(({ code }) => code === SpanStatusCode.ERROR)).length,
+    2,
+  );
   assert.equal(recording.spans.filter(({ endCount }) => endCount === 1).length, 5);
 });
 
@@ -472,11 +484,26 @@ test("closes runtime prepared-stream telemetry exactly once on every terminal pa
   });
   const baseExecutor = (): QueryExecutor => ({
     statementBinding: binding,
-    async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
-    async *stream<Row>() { yield 1 as Row; },
-    async call(): Promise<DriverRoutineResult> { return { output: {}, resultSets: [] }; },
+    async query<Row>() {
+      return { kind: "rows", rows: [] as readonly Row[] };
+    },
+    async *stream<Row>() {
+      yield 1 as Row;
+    },
+    async call(): Promise<DriverRoutineResult> {
+      return { output: {}, resultSets: [] };
+    },
   });
-  const paths = ["unused", "normal", "early-break", "abort-before", "abort-after", "mapper", "driver", "cleanup"] as const;
+  const paths = [
+    "unused",
+    "normal",
+    "early-break",
+    "abort-before",
+    "abort-after",
+    "mapper",
+    "driver",
+    "cleanup",
+  ] as const;
   for (const path of paths) {
     const spanStart = recording.spans.length;
     const measurementStart = recording.measurements.length;
@@ -487,18 +514,27 @@ test("closes runtime prepared-stream telemetry exactly once on every terminal pa
     let abortReason: Error | undefined;
 
     if (path === "unused" || path === "normal" || path === "early-break" || path === "mapper" || path === "driver") {
-      db = createDatabase({
-        ...baseExecutor(),
-        ...(path === "driver" ? {
-          async *stream<_Row>() { throw new Error("prepared stream driver failure"); },
-        } : {}),
-      }, { observers: [observer] });
+      db = createDatabase(
+        {
+          ...baseExecutor(),
+          ...(path === "driver"
+            ? {
+                async *stream<_Row>() {
+                  throw new Error("prepared stream driver failure");
+                },
+              }
+            : {}),
+        },
+        { observers: [observer] },
+      );
       if (path === "mapper") {
         const schema = {
           "~standard": {
             version: 1 as const,
             vendor: "otel-prepared-stream",
-            validate() { return { issues: [{ message: "prepared stream mapping failed" }] }; },
+            validate() {
+              return { issues: [{ message: "prepared stream mapping failed" }] };
+            },
           },
         };
         const prepared = db.prepare("otel-mapper-stream", () => sql.rows(schema)`SELECT 1`, { input: "none" });
@@ -516,51 +552,64 @@ test("closes runtime prepared-stream telemetry exactly once on every terminal pa
           "statement.stream": { status: "guaranteed" as const },
         },
       };
-      db = createPooledDatabase({
-        statementBinding: binding,
-        environment,
-        async acquire() {
-          acquired += 1;
-          return { ...baseExecutor(), release() {} };
+      db = createPooledDatabase(
+        {
+          statementBinding: binding,
+          environment,
+          async acquire() {
+            acquired += 1;
+            return { ...baseExecutor(), release() {} };
+          },
         },
-      }, { observers: [observer] });
+        { observers: [observer] },
+      );
       abortController = new AbortController();
       abortReason = new Error("prepared stream aborted before start");
       abortController.abort(abortReason);
       const prepared = db.prepare("otel-abort-before-stream", () => sql.rows`SELECT 1`, { input: "none" });
       start = (options) => prepared.stream(options);
     } else if (path === "abort-after") {
-      db = createDatabase({
-        ...baseExecutor(),
-        environment: {
-          database: { product: "otel-prepared-stream" },
-          driver: { id: "otel-prepared-stream" },
-          capabilities: {
-            "statement.cancel": { status: "guaranteed" as const },
-            "statement.stream": { status: "guaranteed" as const },
+      db = createDatabase(
+        {
+          ...baseExecutor(),
+          environment: {
+            database: { product: "otel-prepared-stream" },
+            driver: { id: "otel-prepared-stream" },
+            capabilities: {
+              "statement.cancel": { status: "guaranteed" as const },
+              "statement.stream": { status: "guaranteed" as const },
+            },
+          },
+          async *stream<Row>() {
+            yield 1 as Row;
+            yield 2 as Row;
           },
         },
-        async *stream<Row>() {
-          yield 1 as Row;
-          yield 2 as Row;
-        },
-      }, { observers: [observer] });
+        { observers: [observer] },
+      );
       abortController = new AbortController();
       abortReason = new Error("prepared stream aborted after row");
       const prepared = db.prepare("otel-abort-after-stream", () => sql.rows`SELECT 1`, { input: "none" });
       start = (options) => prepared.stream(options);
     } else {
       const cleanupError = new Error("prepared stream cleanup failure");
-      db = createPooledDatabase({
-        statementBinding: binding,
-        async acquire() {
-          return {
-            ...baseExecutor(),
-            async *stream<Row>() { yield 1 as Row; },
-            release() { throw cleanupError; },
-          };
+      db = createPooledDatabase(
+        {
+          statementBinding: binding,
+          async acquire() {
+            return {
+              ...baseExecutor(),
+              async *stream<Row>() {
+                yield 1 as Row;
+              },
+              release() {
+                throw cleanupError;
+              },
+            };
+          },
         },
-      }, { observers: [observer] });
+        { observers: [observer] },
+      );
       const prepared = db.prepare("otel-cleanup-stream", () => sql.rows`SELECT 1`, { input: "none" });
       start = (options) => prepared.stream(options);
     }
@@ -618,9 +667,10 @@ test("tracks real runtime routine calls, cardinality errors, and every batch ite
 
   const routine = await db.call(sql.call`CALL refresh_users()`);
   assert.deepEqual(routine.output, { refreshed: true });
-  await assert.rejects(() => db.one(sql.rows`SELECT MANY`), (error: unknown) => (
-    error instanceof Error && error.name === "DatabaseCardinalityError"
-  ));
+  await assert.rejects(
+    () => db.one(sql.rows`SELECT MANY`),
+    (error: unknown) => error instanceof Error && error.name === "DatabaseCardinalityError",
+  );
   const batch = await db.batch([sql.rows`SELECT 1`, sql.rows`SELECT 2`] as const);
   assert.equal(batch.length, 2);
 
@@ -628,7 +678,9 @@ test("tracks real runtime routine calls, cardinality errors, and every batch ite
   assert.equal(recording.measurements.length, 4);
   assert.equal(recording.spans.filter(({ endCount }) => endCount === 1).length, 4);
   assert.equal(recording.spans[0]?.attributes["sqlbraid.result.kind"], "call");
-  const cardinalitySpan = recording.spans.find(({ statuses }) => statuses.some(({ code }) => code === SpanStatusCode.ERROR));
+  const cardinalitySpan = recording.spans.find(({ statuses }) =>
+    statuses.some(({ code }) => code === SpanStatusCode.ERROR),
+  );
   assert.ok(cardinalitySpan);
   assert.equal(cardinalitySpan?.attributes["error.type"], "Error");
 });
@@ -646,21 +698,31 @@ test("closes the OpenTelemetry span for malformed routine results", async () => 
       });
     },
   });
-  const db = createDatabase({
-    statementBinding,
-    async query<Row>() { return { kind: "rows", rows: [] as readonly Row[] }; },
-    async *stream<Row>(): AsyncGenerator<Row> {},
-    async call() { return { output: {}, resultSets: [null] } as never; },
-  }, { observers: [observer] });
+  const db = createDatabase(
+    {
+      statementBinding,
+      async query<Row>() {
+        return { kind: "rows", rows: [] as readonly Row[] };
+      },
+      async *stream<Row>(): AsyncGenerator<Row> {},
+      async call() {
+        return { output: {}, resultSets: [null] } as never;
+      },
+    },
+    { observers: [observer] },
+  );
 
   await assert.rejects(
     () => db.call(sql.call`CALL malformed_otel()`),
-    (error: unknown) => error instanceof TypeError
-      && error.message === "Executor returned a malformed routine execution result.",
+    (error: unknown) =>
+      error instanceof TypeError && error.message === "Executor returned a malformed routine execution result.",
   );
   assert.equal(recording.spans.length, 1);
   assert.equal(recording.spans[0]?.endCount, 1);
-  assert.equal(recording.spans[0]?.statuses.some(({ code }) => code === SpanStatusCode.ERROR), true);
+  assert.equal(
+    recording.spans[0]?.statuses.some(({ code }) => code === SpanStatusCode.ERROR),
+    true,
+  );
 });
 
 test("requires OTel last so late mapped and bulk observers turn spans into failures", async () => {
@@ -687,12 +749,16 @@ test("requires OTel last so late mapped and bulk observers turn spans into failu
   });
   const executor: QueryExecutor = {
     statementBinding: binding,
-    async query<Row>() { return { kind: "rows" as const, rows: [{ value: 1 }] as unknown as readonly Row[] }; },
+    async query<Row>() {
+      return { kind: "rows" as const, rows: [{ value: 1 }] as unknown as readonly Row[] };
+    },
     async bulk(): Promise<{ inputCount: number; affectedRows: number; executionMode: "native-bulk" }> {
       return { inputCount: 1, affectedRows: 1, executionMode: "native-bulk" };
     },
     async *stream<Row>(): AsyncGenerator<Row> {},
-    async call(): Promise<DriverRoutineResult> { return { output: {}, resultSets: [] }; },
+    async call(): Promise<DriverRoutineResult> {
+      return { output: {}, resultSets: [] };
+    },
   };
   const lateObserver = {
     async onEvent(event: ExecutionEvent) {
@@ -703,10 +769,16 @@ test("requires OTel last so late mapped and bulk observers turn spans into failu
   const observer = createOpenTelemetryObserver();
   const db = createDatabase(executor, { observers: [lateObserver, observer] });
 
-  await assert.rejects(() => db.execute(sql.rows`SELECT 1`), (error) => error === lateMapped);
+  await assert.rejects(
+    () => db.execute(sql.rows`SELECT 1`),
+    (error) => error === lateMapped,
+  );
   assert.equal(recording.spans[0]?.endCount, 1);
   assert.deepEqual(recording.spans[0]?.statuses, [{ code: SpanStatusCode.ERROR }]);
-  await assert.rejects(() => db.bulk([1], (value) => sql.command`UPDATE users SET value = ${value}`), (error) => error === lateBulk);
+  await assert.rejects(
+    () => db.bulk([1], (value) => sql.command`UPDATE users SET value = ${value}`),
+    (error) => error === lateBulk,
+  );
   assert.equal(recording.spans[1]?.endCount, 1);
   assert.deepEqual(recording.spans[1]?.statuses, [{ code: SpanStatusCode.ERROR }]);
 });
@@ -833,8 +905,8 @@ test("uses one explicit timestamp pair for span and metric duration", async () =
   assert.ok(span?.startTime);
   assert.ok(span?.endTime);
   assert.ok(
-    (span?.endTime?.[0] ?? 0) > (span?.startTime?.[0] ?? 0)
-      || (span?.endTime?.[0] === span?.startTime?.[0] && (span?.endTime?.[1] ?? 0) >= (span?.startTime?.[1] ?? 0)),
+    (span?.endTime?.[0] ?? 0) > (span?.startTime?.[0] ?? 0) ||
+      (span?.endTime?.[0] === span?.startTime?.[0] && (span?.endTime?.[1] ?? 0) >= (span?.startTime?.[1] ?? 0)),
   );
   assert.ok((recording.measurements[0]?.value ?? 0) >= 0);
 });
@@ -846,7 +918,10 @@ test("closes only the batch operation named by each terminal event", () => {
   observer.onEvent(ready("other"));
   observer.onEvent(mapped("other"));
   observer.onEvent(failure("batch-a", { batchId: "batch-1" }));
-  assert.equal(recording.spans.find(({ attributes }) => attributes["sqlbraid.operation.id"] === "batch-b")?.endCount, 0);
+  assert.equal(
+    recording.spans.find(({ attributes }) => attributes["sqlbraid.operation.id"] === "batch-b")?.endCount,
+    0,
+  );
   observer.onEvent(failure("batch-b", { batchId: "batch-1" }));
   observer.onEvent(mapped("batch-a"));
   observer.onEvent(bulkReady("bulk-1"));
@@ -936,16 +1011,19 @@ test("isolates provider and instrument failures from observer delivery", async (
     observer.onEvent(mapped("provider-failure"));
   });
   await assert.doesNotReject(async () => {
-    const result = await createDatabase({
-      statementBinding,
-      async query<Row>() {
-        return { kind: "rows", rows: [{ value: 1 }] as unknown as readonly Row[] };
+    const result = await createDatabase(
+      {
+        statementBinding,
+        async query<Row>() {
+          return { kind: "rows", rows: [{ value: 1 }] as unknown as readonly Row[] };
+        },
+        async *stream<Row>(): AsyncGenerator<Row> {},
+        async call(): Promise<DriverRoutineResult> {
+          return { output: {}, resultSets: [] };
+        },
       },
-      async *stream<Row>(): AsyncGenerator<Row> {},
-      async call(): Promise<DriverRoutineResult> {
-        return { output: {}, resultSets: [] };
-      },
-    }, { observers: [observer] }).execute(sql.rows`SELECT 1`);
+      { observers: [observer] },
+    ).execute(sql.rows`SELECT 1`);
     assert.deepEqual(result, { kind: "rows", rows: [{ value: 1 }] });
   });
 

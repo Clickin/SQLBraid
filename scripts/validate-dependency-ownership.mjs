@@ -10,29 +10,78 @@ const testsRoot = join(root, "tests");
 const rootManifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const testsManifest = JSON.parse(await readFile(join(testsRoot, "package.json"), "utf8"));
 const rootDependencies = new Set(Object.keys({ ...rootManifest.dependencies, ...rootManifest.devDependencies }));
-const testsDependencies = new Set(Object.keys({
-  ...testsManifest.dependencies,
-  ...testsManifest.devDependencies,
-  ...testsManifest.peerDependencies,
-}));
+const testsDependencies = new Set(
+  Object.keys({
+    ...testsManifest.dependencies,
+    ...testsManifest.devDependencies,
+    ...testsManifest.peerDependencies,
+  }),
+);
 const stableRootDependencies = new Set([
-  "@sqlbraid/bun-sql", "@sqlbraid/core", "@sqlbraid/mariadb", "@sqlbraid/mssql", "@sqlbraid/mysql",
-  "@sqlbraid/oracle", "@sqlbraid/postgres", "@sqlbraid/runtime", "@sqlbraid/sqlite", "@sqlbraid/template",
+  "@sqlbraid/bun-sql",
+  "@sqlbraid/core",
+  "@sqlbraid/mariadb",
+  "@sqlbraid/mssql",
+  "@sqlbraid/mysql",
+  "@sqlbraid/oracle",
+  "@sqlbraid/postgres",
+  "@sqlbraid/runtime",
+  "@sqlbraid/sqlite",
+  "@sqlbraid/template",
   "vite",
 ]);
 const forbiddenRootDependencies = new Set([
-  "@jridgewell/trace-mapping", "@libsql/client", "@opentelemetry/api", "@opentelemetry/context-async-hooks",
-  "@opentelemetry/sdk-metrics", "@opentelemetry/sdk-trace-base", "@standard-schema/spec",
-  "@testcontainers/mysql", "@testcontainers/postgresql", "@types/oracledb", "@types/pg", "better-sqlite3", "mariadb",
-  "mysql2", "oracledb", "pg", "pg-cursor", "tedious", "testcontainers", "valibot", "yaml", "zod",
-  "@sqlbraid/cli", "@sqlbraid/codegen", "@sqlbraid/compiler", "@sqlbraid/language-server", "@sqlbraid/metadata",
-  "@sqlbraid/opentelemetry", "@sqlbraid/operations", "@sqlbraid/tooling", "@sqlbraid/vite",
+  "@jridgewell/trace-mapping",
+  "@libsql/client",
+  "@opentelemetry/api",
+  "@opentelemetry/context-async-hooks",
+  "@opentelemetry/sdk-metrics",
+  "@opentelemetry/sdk-trace-base",
+  "@standard-schema/spec",
+  "@testcontainers/mysql",
+  "@testcontainers/postgresql",
+  "@types/oracledb",
+  "@types/pg",
+  "better-sqlite3",
+  "mariadb",
+  "mysql2",
+  "oracledb",
+  "pg",
+  "pg-cursor",
+  "tedious",
+  "testcontainers",
+  "valibot",
+  "yaml",
+  "zod",
+  "@sqlbraid/cli",
+  "@sqlbraid/codegen",
+  "@sqlbraid/compiler",
+  "@sqlbraid/language-server",
+  "@sqlbraid/metadata",
+  "@sqlbraid/opentelemetry",
+  "@sqlbraid/operations",
+  "@sqlbraid/tooling",
+  "@sqlbraid/vite",
 ]);
 const movedScripts = [
-  "agent-tooling-consumer.mjs", "audit-runtime.mjs", "bulk-execution-benchmark.mjs", "bun-sql-matrix.mjs",
-  "isolated-facade-consumer.mjs", "isolated-lsp-consumer.mjs", "otel-api-consumer.mjs", "runtime-compatibility-consumer.mjs",
-  "runtime-driver-smoke.mjs", "runtime-packed-five-db.mjs", "runtime-portability.mjs", "runtime-smoke.mjs",
-  "sync-boundary-benchmark.mjs", "test-browser.mjs", "test-d1.mjs", "test-examples.mjs", "test-tanstack-start.mjs", "validate-packages.mjs",
+  "agent-tooling-consumer.mjs",
+  "audit-runtime.mjs",
+  "bulk-execution-benchmark.mjs",
+  "bun-sql-matrix.mjs",
+  "isolated-facade-consumer.mjs",
+  "isolated-lsp-consumer.mjs",
+  "otel-api-consumer.mjs",
+  "runtime-compatibility-consumer.mjs",
+  "runtime-driver-smoke.mjs",
+  "runtime-packed-five-db.mjs",
+  "runtime-portability.mjs",
+  "runtime-smoke.mjs",
+  "sync-boundary-benchmark.mjs",
+  "test-browser.mjs",
+  "test-d1.mjs",
+  "test-examples.mjs",
+  "test-tanstack-start.mjs",
+  "validate-packages.mjs",
   "value-fidelity-benchmark.mjs",
 ];
 const builtin = new Set(["bun", ...builtinModules, ...builtinModules.map((name) => `node:${name}`)]);
@@ -43,20 +92,29 @@ function importSpecifiers(path, source) {
   function visit(node) {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const clause = node.importClause;
-      const runtime = clause === undefined
-        ? true
-        : !clause.isTypeOnly && (clause.name !== undefined
-          || ts.isNamespaceImport(clause.namedBindings)
-          || (ts.isNamedImports(clause.namedBindings) && clause.namedBindings.elements.some((element) => !element.isTypeOnly)));
+      const runtime =
+        clause === undefined
+          ? true
+          : !clause.isTypeOnly &&
+            (clause.name !== undefined ||
+              ts.isNamespaceImport(clause.namedBindings) ||
+              (ts.isNamedImports(clause.namedBindings) &&
+                clause.namedBindings.elements.some((element) => !element.isTypeOnly)));
       imports.push({ specifier: node.moduleSpecifier.text, runtime });
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-      const runtime = !node.isTypeOnly
-        && (!node.exportClause || !ts.isNamedExports(node.exportClause)
-          || node.exportClause.elements.some((element) => !element.isTypeOnly));
+      const runtime =
+        !node.isTypeOnly &&
+        (!node.exportClause ||
+          !ts.isNamedExports(node.exportClause) ||
+          node.exportClause.elements.some((element) => !element.isTypeOnly));
       imports.push({ specifier: node.moduleSpecifier.text, runtime });
     }
-    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
-      && node.arguments.length === 1 && ts.isStringLiteral(node.arguments[0])) {
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length === 1 &&
+      ts.isStringLiteral(node.arguments[0])
+    ) {
       imports.push({ specifier: node.arguments[0].text, runtime: true });
     }
     ts.forEachChild(node, visit);
@@ -66,17 +124,27 @@ function importSpecifiers(path, source) {
 }
 
 function packageName(specifier) {
-  if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("node:") || specifier.startsWith("#") || builtin.has(specifier)) return undefined;
+  if (
+    specifier.startsWith(".") ||
+    specifier.startsWith("/") ||
+    specifier.startsWith("node:") ||
+    specifier.startsWith("#") ||
+    builtin.has(specifier)
+  )
+    return undefined;
   return specifier.startsWith("@") ? specifier.split("/", 2).join("/") : specifier.split("/", 1)[0];
 }
 
 async function sourceFiles(directory) {
   const entries = await readdir(directory, { recursive: true, withFileTypes: true });
-  return entries.filter((entry) => entry.isFile() && /\.(?:[cm]?js|ts|mts|cts)$/u.test(entry.name))
+  return entries
+    .filter((entry) => entry.isFile() && /\.(?:[cm]?js|ts|mts|cts)$/u.test(entry.name))
     .map((entry) => join(entry.parentPath, entry.name));
 }
 
-const rootLeaks = [...forbiddenRootDependencies].filter((name) => rootDependencies.has(name) && !stableRootDependencies.has(name));
+const rootLeaks = [...forbiddenRootDependencies].filter(
+  (name) => rootDependencies.has(name) && !stableRootDependencies.has(name),
+);
 if (rootLeaks.length) throw new Error(`Forbidden test-only root dependencies: ${rootLeaks.sort().join(", ")}`);
 for (const script of movedScripts) {
   const oldPath = join(root, "scripts", script);
@@ -104,22 +172,29 @@ for (const path of testFiles) {
   }
 }
 const missingTests = [...testImports].filter((name) => !testsDependencies.has(name));
-if (missingTests.length) throw new Error(`Tests package does not declare imported dependencies: ${missingTests.sort().join(", ")}`);
+if (missingTests.length)
+  throw new Error(`Tests package does not declare imported dependencies: ${missingTests.sort().join(", ")}`);
 
-for (const packageDirectory of (await readdir(join(root, "packages"), { withFileTypes: true })).filter((entry) => entry.isDirectory())) {
+for (const packageDirectory of (await readdir(join(root, "packages"), { withFileTypes: true })).filter((entry) =>
+  entry.isDirectory(),
+)) {
   const packageRoot = join(root, "packages", packageDirectory.name);
   const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
-  const declared = new Set(Object.keys({
-    ...manifest.dependencies,
-    ...manifest.optionalDependencies,
-    ...manifest.peerDependencies,
-    ...manifest.devDependencies,
-  }));
-  const production = new Set(Object.keys({
-    ...manifest.dependencies,
-    ...manifest.optionalDependencies,
-    ...manifest.peerDependencies,
-  }));
+  const declared = new Set(
+    Object.keys({
+      ...manifest.dependencies,
+      ...manifest.optionalDependencies,
+      ...manifest.peerDependencies,
+      ...manifest.devDependencies,
+    }),
+  );
+  const production = new Set(
+    Object.keys({
+      ...manifest.dependencies,
+      ...manifest.optionalDependencies,
+      ...manifest.peerDependencies,
+    }),
+  );
   const imports = new Map();
   for (const path of await sourceFiles(join(packageRoot, "src"))) {
     const source = await readFile(path, "utf8");
@@ -128,8 +203,11 @@ for (const packageDirectory of (await readdir(join(root, "packages"), { withFile
       if (name && name !== manifest.name) imports.set(name, (imports.get(name) ?? false) || runtime);
     }
   }
-  const missing = [...imports].filter(([name, runtime]) => runtime ? !production.has(name) : !declared.has(name)).map(([name]) => name);
-  if (missing.length) throw new Error(`${manifest.name} source imports undeclared packages: ${missing.sort().join(", ")}`);
+  const missing = [...imports]
+    .filter(([name, runtime]) => (runtime ? !production.has(name) : !declared.has(name)))
+    .map(([name]) => name);
+  if (missing.length)
+    throw new Error(`${manifest.name} source imports undeclared packages: ${missing.sort().join(", ")}`);
 }
 
 for (const name of [...testImports].filter((name) => testsDependencies.has(name)).sort()) {
@@ -140,4 +218,6 @@ for (const name of [...testImports].filter((name) => testsDependencies.has(name)
     throw new Error(`Tests package cannot resolve ${name}: ${error.message}`);
   }
 }
-console.info(`PASS dependency ownership: ${testImports.size} test imports, ${movedScripts.length} moved scripts, ${rootLeaks.length} forbidden root dependencies, package imports declared.`);
+console.info(
+  `PASS dependency ownership: ${testImports.size} test imports, ${movedScripts.length} moved scripts, ${rootLeaks.length} forbidden root dependencies, package imports declared.`,
+);

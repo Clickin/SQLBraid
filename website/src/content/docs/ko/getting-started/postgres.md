@@ -17,7 +17,10 @@ npm install sqlbraid pg
 import { Client } from "pg";
 import { createPgDatabase, sql } from "sqlbraid/pg";
 
-interface UserRow { id: string; name: string }
+interface UserRow {
+  id: string;
+  name: string;
+}
 
 const client = new Client({ connectionString: process.env.DATABASE_URL });
 await client.connect();
@@ -110,16 +113,16 @@ OID별 parser 동작을 뜻하며 모든 temporal 타입이 `Date`가 된다는 
 아닙니다. custom `pg-types` parser는 또 다른 프로필이므로 자체 raw-value
 증거가 필요합니다.
 
-| 값 | Driver raw / SQLBraid canonical 출력 | 정확도 경계 |
-| --- | --- | --- |
-| `int2` / `int4` / `int8` / `oid` | driver 의존 → `string` | exact 출력은 `number`나 `bigint`가 아닌 canonical text입니다. |
-| `numeric` / `decimal` | text → `string` | JavaScript `number`는 exact로 허용하지 않습니다. |
-| `float4` / `float8` | number → `number` | 근사 이진 값이며 lossless text read에는 `SHOW extra_float_digits` 양수가 필요합니다. |
-| `money` | unsupported | locale 형식 text는 표준 숫자값이 아니므로 사용자가 명시적 format 변환을 작성해야 합니다. |
-| `json` / `jsonb` | text → `string`; native → `unknown` | Parsed root는 string, number, boolean, `null`, array, object일 수 있어 중첩 숫자 정확도를 보장하지 않습니다. |
-| `date` / `timestamp` / `timestamptz` | text → `string`; native → `Date` | native `time`/`timetz`는 text이며 `interval`은 `unknown`입니다. |
-| `bytea` | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
-| `uuid` | string | 필요하면 애플리케이션 schema에서 형식을 검증합니다. |
+| 값                                   | Driver raw / SQLBraid canonical 출력 | 정확도 경계                                                                                                  |
+| ------------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `int2` / `int4` / `int8` / `oid`     | driver 의존 → `string`               | exact 출력은 `number`나 `bigint`가 아닌 canonical text입니다.                                                |
+| `numeric` / `decimal`                | text → `string`                      | JavaScript `number`는 exact로 허용하지 않습니다.                                                             |
+| `float4` / `float8`                  | number → `number`                    | 근사 이진 값이며 lossless text read에는 `SHOW extra_float_digits` 양수가 필요합니다.                         |
+| `money`                              | unsupported                          | locale 형식 text는 표준 숫자값이 아니므로 사용자가 명시적 format 변환을 작성해야 합니다.                     |
+| `json` / `jsonb`                     | text → `string`; native → `unknown`  | Parsed root는 string, number, boolean, `null`, array, object일 수 있어 중첩 숫자 정확도를 보장하지 않습니다. |
+| `date` / `timestamp` / `timestamptz` | text → `string`; native → `Date`     | native `time`/`timetz`는 text이며 `interval`은 `unknown`입니다.                                              |
+| `bytea`                              | `Buffer`                             | byte로 유지하거나 명시적으로 encode합니다.                                                                   |
+| `uuid`                               | string                               | 필요하면 애플리케이션 schema에서 형식을 검증합니다.                                                          |
 
 문서화된 프로필에서 end-to-end 왕복이 증명된 경우 text-positional bind로
 정확한 문자열 입력을 지원합니다. 일반 `undefined` bind는 connection을

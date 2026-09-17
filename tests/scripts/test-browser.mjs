@@ -7,9 +7,8 @@ import { dirname, extname, resolve } from "node:path";
 import process from "node:process";
 import { chromium } from "playwright";
 
-const configuredPort = process.env.SQLBRAID_BROWSER_PORT === undefined
-  ? undefined
-  : Number(process.env.SQLBRAID_BROWSER_PORT);
+const configuredPort =
+  process.env.SQLBRAID_BROWSER_PORT === undefined ? undefined : Number(process.env.SQLBRAID_BROWSER_PORT);
 const basePath = "/SQLBraid/latest";
 const route = `${basePath}/interactive-preview/`;
 const externalUrl = process.env.SQLBRAID_BROWSER_URL;
@@ -24,13 +23,22 @@ function certificationOptions() {
   const requested = sourceSha !== undefined || artifactPath !== undefined || stressValue !== undefined;
   if (!requested) return undefined;
   if (sourceSha === undefined || artifactPath === undefined || !/^[0-9a-f]{40}$/iu.test(sourceSha)) {
-    throw new Error("Certification mode requires a full 40-character SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.");
+    throw new Error(
+      "Certification mode requires a full 40-character SQLBRAID_CERT_SOURCE_SHA and SQLBRAID_CERT_ARTIFACT.",
+    );
   }
   let head;
   try {
-    head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    head = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
   } catch (error) {
-    throw new Error("Browser certification source SHA cannot be verified because the checkout has no readable git HEAD.", { cause: error });
+    throw new Error(
+      "Browser certification source SHA cannot be verified because the checkout has no readable git HEAD.",
+      { cause: error },
+    );
   }
   if (head.toLowerCase() !== sourceSha.toLowerCase()) {
     throw new Error(`Browser certification source SHA ${sourceSha} does not match checked-out HEAD ${head}.`);
@@ -87,7 +95,7 @@ async function probePort(port) {
     return address.port;
   } finally {
     if (listening) {
-      await new Promise((resolveClose, reject) => probe.close((error) => error ? reject(error) : resolveClose()));
+      await new Promise((resolveClose, reject) => probe.close((error) => (error ? reject(error) : resolveClose())));
     }
   }
 }
@@ -104,14 +112,16 @@ async function previewPort() {
 }
 
 function contentType(file) {
-  return {
-    ".css": "text/css",
-    ".html": "text/html",
-    ".js": "text/javascript",
-    ".mjs": "text/javascript",
-    ".json": "application/json",
-    ".wasm": "application/wasm",
-  }[extname(file)] ?? "application/octet-stream";
+  return (
+    {
+      ".css": "text/css",
+      ".html": "text/html",
+      ".js": "text/javascript",
+      ".mjs": "text/javascript",
+      ".json": "application/json",
+      ".wasm": "application/wasm",
+    }[extname(file)] ?? "application/octet-stream"
+  );
 }
 
 async function startFixtureServer() {
@@ -166,10 +176,20 @@ async function buildBrowserCertificationBundle() {
   return resolve(directory, "certification.js.iife.js");
 }
 
-async function runWasmConformance(browser, fixtureUrl, certificationBundle, sourceSha, stress, measuredDriverVersion, measuredRuntimeVersion) {
+async function runWasmConformance(
+  browser,
+  fixtureUrl,
+  certificationBundle,
+  sourceSha,
+  stress,
+  measuredDriverVersion,
+  measuredRuntimeVersion,
+) {
   const page = await browser.newPage();
   let pageError;
-  page.on("pageerror", (error) => { pageError = error; });
+  page.on("pageerror", (error) => {
+    pageError = error;
+  });
   try {
     const certificationUrl = new URL(fixtureUrl);
     if (sourceSha !== undefined) {
@@ -199,7 +219,8 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
     if (result.error !== undefined) throw new Error(`Browser WASM conformance failed: ${result.error}`);
     if (result.report === undefined) throw new Error("Browser WASM conformance did not produce a report.");
     if (certificationBundle !== undefined) {
-      if (sourceSha === undefined || stress === undefined) throw new Error("Browser WASM certification inputs are incomplete.");
+      if (sourceSha === undefined || stress === undefined)
+        throw new Error("Browser WASM certification inputs are incomplete.");
       await page.addScriptTag({ path: certificationBundle });
       await page.waitForFunction(
         () => window.__sqlbraidCertificationArtifact !== undefined || window.__sqlbraidCertificationError !== undefined,
@@ -211,8 +232,10 @@ async function runWasmConformance(browser, fixtureUrl, certificationBundle, sour
         error: window.__sqlbraidCertificationError,
         evidence: window.__sqlbraidWasmCertificationEvidence,
       }));
-      if (certification.error !== undefined) throw new Error(`Browser WASM certification failed: ${certification.error}`);
-      if (certification.artifact === undefined) throw new Error("Browser WASM certification did not produce an artifact.");
+      if (certification.error !== undefined)
+        throw new Error(`Browser WASM certification failed: ${certification.error}`);
+      if (certification.artifact === undefined)
+        throw new Error("Browser WASM certification did not produce an artifact.");
       return { ...result.report, certification: certification.artifact, certificationEvidence: certification.evidence };
     }
     return result.report;
@@ -240,69 +263,113 @@ async function supportMatrix(browser, previewUrl) {
             totalRows: Number(viewport.getAttribute("aria-rowcount")) - 1,
             renderedRows: rows.length,
             rowHeights: rows.map((row) => row.getBoundingClientRect().height),
-            rowGaps: rows.slice(1).map((row, index) => row.getBoundingClientRect().top - rows[index].getBoundingClientRect().bottom),
+            rowGaps: rows
+              .slice(1)
+              .map((row, index) => row.getBoundingClientRect().top - rows[index].getBoundingClientRect().bottom),
             viewportWidth: viewport.getBoundingClientRect().width,
             documentWidth: document.documentElement.scrollWidth,
             windowWidth: innerWidth,
           };
         });
-        if (geometry.renderedRows > 20 || geometry.rowHeights.some((height) => height !== 56) || geometry.rowGaps.some((gap) => gap !== 0)) throw new Error("Support matrix lost bounded fixed-height virtualization.");
+        if (
+          geometry.renderedRows > 20 ||
+          geometry.rowHeights.some((height) => height !== 56) ||
+          geometry.rowGaps.some((gap) => gap !== 0)
+        )
+          throw new Error("Support matrix lost bounded fixed-height virtualization.");
         if (geometry.documentWidth > geometry.windowWidth) throw new Error("Support matrix overflows the document.");
         measurements.push({ locale, view, ...geometry });
       }
       await matrix.locator('[data-view="database"]').click();
       await matrix.locator('[data-index="0"]').focus();
       const selectedDatabaseTab = matrix.locator('[role="tab"][data-view="database"]');
-      const databaseTotalRows = measurements.findLast((measurement) => measurement.locale === locale && measurement.view === "database").totalRows;
-      if (await selectedDatabaseTab.getAttribute("aria-selected") !== "true") throw new Error("Support matrix database tab was not selected before row keyboard navigation.");
+      const databaseTotalRows = measurements.findLast(
+        (measurement) => measurement.locale === locale && measurement.view === "database",
+      ).totalRows;
+      if ((await selectedDatabaseTab.getAttribute("aria-selected")) !== "true")
+        throw new Error("Support matrix database tab was not selected before row keyboard navigation.");
       await page.keyboard.press("Home");
       const firstFocused = await page.evaluate(() => Number(document.activeElement.dataset.index));
-      if (firstFocused !== 0 || await selectedDatabaseTab.getAttribute("aria-selected") !== "true") throw new Error("Support matrix row Home was interpreted as tab navigation.");
+      if (firstFocused !== 0 || (await selectedDatabaseTab.getAttribute("aria-selected")) !== "true")
+        throw new Error("Support matrix row Home was interpreted as tab navigation.");
       await page.keyboard.press("End");
       const focused = await page.evaluate(() => Number(document.activeElement.dataset.index));
-      if (focused !== databaseTotalRows - 1 || await selectedDatabaseTab.getAttribute("aria-selected") !== "true") throw new Error("Support matrix row End was interpreted as tab navigation.");
+      if (focused !== databaseTotalRows - 1 || (await selectedDatabaseTab.getAttribute("aria-selected")) !== "true")
+        throw new Error("Support matrix row End was interpreted as tab navigation.");
       await matrix.locator("[data-reset]").click();
       await matrix.locator('[data-view="database"]').click();
       await matrix.locator("[data-search]").fill("mysql-mysql2-deno-2-9-3");
       const searchRows = await matrix.locator("[data-index]").allTextContents();
-      if (searchRows.length !== 1 || !searchRows[0].includes("mysql-mysql2-deno-2-9-3")) throw new Error("Support matrix search did not isolate the requested runtime tuple.");
+      if (searchRows.length !== 1 || !searchRows[0].includes("mysql-mysql2-deno-2-9-3"))
+        throw new Error("Support matrix search did not isolate the requested runtime tuple.");
       await matrix.locator("[data-reset]").click();
       await matrix.locator('[data-filter="database"]').selectOption("postgres");
-      if ((await matrix.locator("[data-index]").allTextContents()).some((text) => !text.includes("postgres"))) throw new Error("Support matrix database filter leaked another engine.");
+      if ((await matrix.locator("[data-index]").allTextContents()).some((text) => !text.includes("postgres")))
+        throw new Error("Support matrix database filter leaked another engine.");
       await matrix.locator("[data-reset]").click();
       await matrix.locator('[data-view="driver"]').click();
       await matrix.locator('[data-filter="profile"]').selectOption("mysql2-lossless-text");
       const profileRows = await matrix.locator("[data-index]").allTextContents();
       const expectedProfileTargets = await page.locator("[data-support-matrix]").evaluate((element) =>
-        JSON.parse(element.textContent).targets.filter((target) => target.driver.profile === "mysql2-lossless-text").map((target) => target.id));
-      if (profileRows.length !== expectedProfileTargets.length
-        || expectedProfileTargets.some((id) => !profileRows.some((row) => row.includes(id)))
-        || profileRows.some((row) => !row.includes("mysql2-lossless-text"))) throw new Error("Support matrix profile filter lost a runtime tuple or leaked another profile.");
+        JSON.parse(element.textContent)
+          .targets.filter((target) => target.driver.profile === "mysql2-lossless-text")
+          .map((target) => target.id),
+      );
+      if (
+        profileRows.length !== expectedProfileTargets.length ||
+        expectedProfileTargets.some((id) => !profileRows.some((row) => row.includes(id))) ||
+        profileRows.some((row) => !row.includes("mysql2-lossless-text"))
+      )
+        throw new Error("Support matrix profile filter lost a runtime tuple or leaked another profile.");
       measurements.push({ locale, view: "profile-filter", profile: "mysql2-lossless-text", rows: profileRows.length });
       await matrix.locator("[data-reset]").click();
       await matrix.locator('[data-view="capability"]').click();
-      const capabilityStatusOptions = await matrix.locator('[data-filter="status"] option').evaluateAll((options) => options.map((option) => option.value));
-      if (!capabilityStatusOptions.includes("guarded") || !capabilityStatusOptions.includes("guaranteed")) throw new Error("Capability view status filter did not expose capability statuses.");
+      const capabilityStatusOptions = await matrix
+        .locator('[data-filter="status"] option')
+        .evaluateAll((options) => options.map((option) => option.value));
+      if (!capabilityStatusOptions.includes("guarded") || !capabilityStatusOptions.includes("guaranteed"))
+        throw new Error("Capability view status filter did not expose capability statuses.");
       await matrix.locator('[data-filter="status"]').selectOption("guarded");
-      const expectedGuardedRows = await page.locator("[data-support-matrix]").evaluate((element) =>
-        JSON.parse(element.textContent).targets.reduce((count, target) => count + Object.values(target.capabilities).filter((capability) => capability.status === "guarded").length, 0));
+      const expectedGuardedRows = await page
+        .locator("[data-support-matrix]")
+        .evaluate((element) =>
+          JSON.parse(element.textContent).targets.reduce(
+            (count, target) =>
+              count + Object.values(target.capabilities).filter((capability) => capability.status === "guarded").length,
+            0,
+          ),
+        );
       const guardedResult = await matrix.evaluate((element) => ({
         totalRows: Number(element.querySelector("[data-viewport]").getAttribute("aria-rowcount")) - 1,
-        renderedStatuses: [...element.querySelectorAll("[data-index] [data-status]")].map((status) => status.getAttribute("data-status")),
+        renderedStatuses: [...element.querySelectorAll("[data-index] [data-status]")].map((status) =>
+          status.getAttribute("data-status"),
+        ),
       }));
-      if (guardedResult.totalRows !== expectedGuardedRows || guardedResult.renderedStatuses.length === 0
-        || guardedResult.renderedStatuses.some((status) => status !== "guarded")) throw new Error("Capability status filter leaked a non-guarded row or lost guarded capability rows.");
+      if (
+        guardedResult.totalRows !== expectedGuardedRows ||
+        guardedResult.renderedStatuses.length === 0 ||
+        guardedResult.renderedStatuses.some((status) => status !== "guarded")
+      )
+        throw new Error("Capability status filter leaked a non-guarded row or lost guarded capability rows.");
       measurements.push({ locale, view: "capability-status-filter", status: "guarded", rows: guardedResult.totalRows });
       await matrix.locator('[data-view="database"]').click();
-      if (await matrix.locator('[data-filter="status"]').inputValue() !== "") throw new Error("Switching from capability to database view retained an invalid capability status filter.");
+      if ((await matrix.locator('[data-filter="status"]').inputValue()) !== "")
+        throw new Error("Switching from capability to database view retained an invalid capability status filter.");
       await page.setViewportSize({ width: 375, height: 812 });
       await matrix.scrollIntoViewIfNeeded();
-      const mobile = await page.evaluate(() => ({ documentWidth: document.documentElement.scrollWidth, windowWidth: innerWidth }));
+      const mobile = await page.evaluate(() => ({
+        documentWidth: document.documentElement.scrollWidth,
+        windowWidth: innerWidth,
+      }));
       if (mobile.documentWidth > mobile.windowWidth) throw new Error("Support matrix overflows a mobile viewport.");
       measurements.push({ locale, view: "mobile", ...mobile });
       await page.screenshot({ path: resolve(directory, `${locale}-mobile.png`) });
       await page.emulateMedia({ media: "print" });
-      if (!(await page.locator(".support-matrix__fallback").isVisible()) || await matrix.locator(".support-matrix__interactive").isVisible()) throw new Error("Support matrix print fallback is incomplete.");
+      if (
+        !(await page.locator(".support-matrix__fallback").isVisible()) ||
+        (await matrix.locator(".support-matrix__interactive").isVisible())
+      )
+        throw new Error("Support matrix print fallback is incomplete.");
       await page.emulateMedia({ media: "screen" });
       await page.setViewportSize({ width: 1440, height: 1000 });
     }
@@ -310,12 +377,19 @@ async function supportMatrix(browser, previewUrl) {
     try {
       const fallback = await noScript.newPage();
       await fallback.goto(englishUrl);
-      if (!(await fallback.locator(".support-matrix__fallback").isVisible()) || await fallback.locator(".support-matrix__fallback tbody tr").count() !== measurements[0].totalRows) throw new Error("Support matrix no-JavaScript summary lost targets.");
+      if (
+        !(await fallback.locator(".support-matrix__fallback").isVisible()) ||
+        (await fallback.locator(".support-matrix__fallback tbody tr").count()) !== measurements[0].totalRows
+      )
+        throw new Error("Support matrix no-JavaScript summary lost targets.");
     } finally {
       await noScript.close();
     }
     await writeFile(resolve(directory, "measurements.json"), JSON.stringify(measurements, null, 2));
-    await writeFile(resolve(directory, "report.md"), "# Support matrix browser evidence\n\nEN/KO database, driver and capability views; bounded contiguous 56px rows; Home/End navigation; search, database, profile and capability-status filtering; 375px mobile layout; print and no-JavaScript fallback passed.\n");
+    await writeFile(
+      resolve(directory, "report.md"),
+      "# Support matrix browser evidence\n\nEN/KO database, driver and capability views; bounded contiguous 56px rows; Home/End navigation; search, database, profile and capability-status filtering; 375px mobile layout; print and no-JavaScript fallback passed.\n",
+    );
     return { directory, measurements };
   } finally {
     await page.close();
@@ -340,11 +414,15 @@ async function main() {
       // Vitest exports its own "/" BASE_URL; let Astro resolve the docs base.
       delete env.BASE_URL;
       await run("pnpm", ["--dir", "website", "build"], { env });
-      server = spawn("pnpm", ["--dir", "website", "preview", "--ignore-lock", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
-        env,
-        stdio: "inherit",
-        detached: process.platform !== "win32",
-      });
+      server = spawn(
+        "pnpm",
+        ["--dir", "website", "preview", "--ignore-lock", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
+        {
+          env,
+          stdio: "inherit",
+          detached: process.platform !== "win32",
+        },
+      );
       children.push(server);
       await waitForServer(url);
     }
@@ -353,7 +431,9 @@ async function main() {
     const certificationBundle = certification === undefined ? undefined : await buildBrowserCertificationBundle();
     const browser = await chromium.launch({ headless: true });
     try {
-      const sqliteWasmVersion = JSON.parse(await readFile(require.resolve("@sqlite.org/sqlite-wasm/package.json"), "utf8")).version;
+      const sqliteWasmVersion = JSON.parse(
+        await readFile(require.resolve("@sqlite.org/sqlite-wasm/package.json"), "utf8"),
+      ).version;
       const page = await browser.newPage();
       await page.goto(url, { waitUntil: "networkidle" });
       const preview = page.getByTestId("interactive-preview");
@@ -370,8 +450,10 @@ async function main() {
         await runButton.click();
         await page.waitForFunction(() => !document.querySelector("[data-testid='preview-run']")?.disabled);
       };
-      const cells = () => table.locator("tbody tr").evaluateAll((rows) =>
-        rows.map((row) => [...row.cells].map((cell) => cell.textContent)));
+      const cells = () =>
+        table
+          .locator("tbody tr")
+          .evaluateAll((rows) => rows.map((row) => [...row.cells].map((cell) => cell.textContent)));
 
       await preview.getByTestId("preview-schema").click();
       await page.waitForFunction(() => !document.querySelector("[data-testid='preview-run']")?.disabled);
@@ -384,31 +466,46 @@ async function main() {
       if (JSON.stringify(await cells()) !== JSON.stringify([["한빛증권"], ["푸른은행"]])) {
         throw new Error("User-authored SQL did not select the expected Unicode rows.");
       }
-      await executeSql("SELECT a.account_name, b.account_name AS other FROM finance_accounts a JOIN finance_accounts b ON b.account_id = a.account_id + 1 WHERE a.account_id = 1;");
+      await executeSql(
+        "SELECT a.account_name, b.account_name AS other FROM finance_accounts a JOIN finance_accounts b ON b.account_id = a.account_id + 1 WHERE a.account_id = 1;",
+      );
       if (JSON.stringify(await cells()) !== JSON.stringify([["한빛증권", "푸른은행"]])) {
         throw new Error("User-authored JOIN did not execute against the seeded database.");
       }
       await executeSql("SELECT FROM");
-      if (!(await preview.getByTestId("preview-error").isVisible()) || !(await status.textContent()).includes("error")) {
+      if (
+        !(await preview.getByTestId("preview-error").isVisible()) ||
+        !(await status.textContent()).includes("error")
+      ) {
         throw new Error("Invalid SQL did not expose the actual execution error.");
       }
       await executeSql("SELECT account_name FROM finance_accounts WHERE account_id = 3;");
-      if (await preview.getByTestId("preview-error").isVisible() || JSON.stringify(await cells()) !== JSON.stringify([["東京パートナーズ"]])) {
+      if (
+        (await preview.getByTestId("preview-error").isVisible()) ||
+        JSON.stringify(await cells()) !== JSON.stringify([["東京パートナーズ"]])
+      ) {
         throw new Error("The SQL editor did not recover after a syntax error.");
       }
       await executeSql("UPDATE finance_accounts SET balance = 0 WHERE account_id = 1;");
       await executeSql("SELECT balance FROM finance_accounts WHERE account_id = 1;");
-      if (JSON.stringify(await cells()) !== JSON.stringify([["0"]])) throw new Error("Edited SQL did not mutate the disposable database.");
+      if (JSON.stringify(await cells()) !== JSON.stringify([["0"]]))
+        throw new Error("Edited SQL did not mutate the disposable database.");
       await preview.getByTestId("preview-reset").click();
       await page.waitForFunction(() => !document.querySelector("[data-testid='preview-run']")?.disabled);
       await executeSql("SELECT balance FROM finance_accounts WHERE account_id = 1;");
-      if (JSON.stringify(await cells()) !== JSON.stringify([["1250000"]])) throw new Error("Database reset did not restore seeded data.");
+      if (JSON.stringify(await cells()) !== JSON.stringify([["1250000"]]))
+        throw new Error("Database reset did not restore seeded data.");
       await executeSql("SELECT account_name FROM finance_accounts WHERE 0;");
-      if ((await table.locator("thead th").allTextContents()).join(",") !== "account_name" || !(await table.textContent()).includes("No rows")) {
+      if (
+        (await table.locator("thead th").allTextContents()).join(",") !== "account_name" ||
+        !(await table.textContent()).includes("No rows")
+      ) {
         throw new Error("An empty query result lost its column metadata.");
       }
-      await executeSql("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM n WHERE x < 1002) SELECT x FROM n;");
-      if (await table.locator("tbody tr").count() !== 1000 || !(await status.textContent()).includes("first 1,000")) {
+      await executeSql(
+        "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM n WHERE x < 1002) SELECT x FROM n;",
+      );
+      if ((await table.locator("tbody tr").count()) !== 1000 || !(await status.textContent()).includes("first 1,000")) {
         throw new Error("The playground did not bound displayed results or disclose truncation.");
       }
       await editor.fill("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x + 1 FROM n) SELECT sum(x) FROM n;");
@@ -420,10 +517,23 @@ async function main() {
       }
 
       await ownershipRun.evaluate((button) => (button instanceof HTMLButtonElement ? button.click() : undefined));
-      await page.waitForFunction(() => document.querySelector("[data-testid='browser-ownership-status']")?.textContent?.includes("passed") ?? false);
-      const checks = (await ownershipStatus.getAttribute("data-checks") ?? "").split(",").filter(Boolean);
-      const expectedChecks = ["nested-tx", "root-escape", "stream-ownership", "mapper-reentry", "break-cleanup", "error-cleanup", "concurrent-branches", "bulk-conformance:prepared-loop"];
-      if (checks.join(",") !== expectedChecks.join(",")) throw new Error(`Unexpected browser ownership checks: ${checks.join(",")}.`);
+      await page.waitForFunction(
+        () =>
+          document.querySelector("[data-testid='browser-ownership-status']")?.textContent?.includes("passed") ?? false,
+      );
+      const checks = ((await ownershipStatus.getAttribute("data-checks")) ?? "").split(",").filter(Boolean);
+      const expectedChecks = [
+        "nested-tx",
+        "root-escape",
+        "stream-ownership",
+        "mapper-reentry",
+        "break-cleanup",
+        "error-cleanup",
+        "concurrent-branches",
+        "bulk-conformance:prepared-loop",
+      ];
+      if (checks.join(",") !== expectedChecks.join(","))
+        throw new Error(`Unexpected browser ownership checks: ${checks.join(",")}.`);
       console.log(`Browser preview passed: ${url}`);
       const report = await runWasmConformance(
         browser,
@@ -441,7 +551,11 @@ async function main() {
         await mkdir(dirname(certification.artifactPath), { recursive: true });
         const pending = `${certification.artifactPath}.pending`;
         await writeFile(pending, `${JSON.stringify(report.certification, null, 2)}\n`);
-        await run(process.execPath, ["scripts/certification.mjs", "--validate", "--source-sha", certification.sourceSha, "--artifact", pending], { cwd: repositoryRoot });
+        await run(
+          process.execPath,
+          ["scripts/certification.mjs", "--validate", "--source-sha", certification.sourceSha, "--artifact", pending],
+          { cwd: repositoryRoot },
+        );
         const integerEvidence = report.cases?.["wasm.numeric.exact-integer"];
         if (!integerEvidence || Object.values(integerEvidence.values ?? {}).some((value) => value?.type !== "string")) {
           throw new Error("Browser WASM exact INTEGER evidence must use canonical strings.");
@@ -455,14 +569,19 @@ async function main() {
         }
         await rename(pending, certification.artifactPath);
       }
-      console.log(`SQLBRAID_BROWSER_REPORT=${JSON.stringify({ ...report, browserVersion: browser.version(), matrix: await supportMatrix(browser, url) })}`);
+      console.log(
+        `SQLBRAID_BROWSER_REPORT=${JSON.stringify({ ...report, browserVersion: browser.version(), matrix: await supportMatrix(browser, url) })}`,
+      );
     } finally {
       await browser.close();
     }
   } finally {
     if (server?.pid && process.platform !== "win32") {
-      try { process.kill(-server.pid, "SIGTERM"); }
-      catch (error) { if (error.code !== "ESRCH") throw error; }
+      try {
+        process.kill(-server.pid, "SIGTERM");
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+      }
     }
     if (fixtureServer !== undefined) {
       await new Promise((resolveServer) => fixtureServer.server.close(resolveServer));

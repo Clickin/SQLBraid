@@ -3,28 +3,28 @@ title: 패키지 맵
 description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 ---
 
-| 패키지 | 책임 |
-| --- | --- |
-| `sqlbraid` | 표준 runtime facade; 결합된 driver+dialect/query subpath는 matching adapter를 사용하며 `/bun-sql`은 명시적 dialect를 받는 multi-dialect adapter |
-| `@sqlbraid/core` | 공개 계약, Standard Schema 대상 타입, 렌더링된 파라미터 메타데이터 |
-| `@sqlbraid/template` | 태그 템플릿, 지시문, 렌더링, 구조적 조각, `sql.bind` |
-| `@sqlbraid/runtime` | 실행, 매핑, 결과 종류 검사, 트랜잭션, 스트리밍, prepared shape |
-| `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg` 어댑터; `/inspector` |
-| `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2` 어댑터; `/inspector` |
-| `@sqlbraid/mariadb` | MariaDB dialect/TypePolicy; `/mariadb` 어댑터 |
-| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1` 어댑터; `/inspector` |
-| `@sqlbraid/oracle` | Oracle dialect/TypePolicy 및 파라미터 힌트; `/oracledb` 어댑터; `/inspector` |
-| `@sqlbraid/mssql` | SQL Server dialect/TypePolicy 및 파라미터 힌트; `/tedious` 어댑터; `/inspector` |
-| `@sqlbraid/bun-sql` | 사용자가 PostgreSQL/MySQL/MariaDB/SQLite dialect를 선택하는 Bun.SQL adapter family |
-| `@sqlbraid/compiler` | TypeScript 검색 및 보호된 템플릿 lowering |
-| `@sqlbraid/vite` | source map을 보존하는 guarded-template용 Vite 8 pre-transform |
-| `@sqlbraid/opentelemetry` | observer를 통한 선택적 OpenTelemetry DB client span 및 duration metric |
-| `@sqlbraid/metadata` | DB 사실 스냅샷, 검증, identity, drift |
-| `@sqlbraid/codegen` | 메타데이터 + TypePolicy에서 Row/Insert/Update 선언 생성 |
-| `@sqlbraid/tooling` | 공유 설정/워크스페이스 증거 및 의미 인덱스 |
-| `@sqlbraid/operations` | fingerprint 및 선언 manifest |
-| `@sqlbraid/cli` | codegen, inspect, diagnostics, drift, 명령줄 대체 수단 |
-| `@sqlbraid/language-server` | 표준 stdio LSP 통합 |
+| 패키지                      | 책임                                                                                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sqlbraid`                  | 표준 runtime facade; 결합된 driver+dialect/query subpath는 matching adapter를 사용하며 `/bun-sql`은 명시적 dialect를 받는 multi-dialect adapter |
+| `@sqlbraid/core`            | 공개 계약, Standard Schema 대상 타입, 렌더링된 파라미터 메타데이터                                                                              |
+| `@sqlbraid/template`        | 태그 템플릿, 지시문, 렌더링, 구조적 조각, `sql.bind`                                                                                            |
+| `@sqlbraid/runtime`         | 실행, 매핑, 결과 종류 검사, 트랜잭션, 스트리밍, prepared shape                                                                                  |
+| `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg` 어댑터; `/inspector`                                                                                       |
+| `@sqlbraid/mysql`           | MySQL dialect/TypePolicy; `/mysql2` 어댑터; `/inspector`                                                                                        |
+| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` 어댑터                                                                                                   |
+| `@sqlbraid/sqlite`          | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1` 어댑터; `/inspector`                                               |
+| `@sqlbraid/oracle`          | Oracle dialect/TypePolicy 및 파라미터 힌트; `/oracledb` 어댑터; `/inspector`                                                                    |
+| `@sqlbraid/mssql`           | SQL Server dialect/TypePolicy 및 파라미터 힌트; `/tedious` 어댑터; `/inspector`                                                                 |
+| `@sqlbraid/bun-sql`         | 사용자가 PostgreSQL/MySQL/MariaDB/SQLite dialect를 선택하는 Bun.SQL adapter family                                                              |
+| `@sqlbraid/compiler`        | TypeScript 검색 및 보호된 템플릿 lowering                                                                                                       |
+| `@sqlbraid/vite`            | source map을 보존하는 guarded-template용 Vite 8 pre-transform                                                                                   |
+| `@sqlbraid/opentelemetry`   | observer를 통한 선택적 OpenTelemetry DB client span 및 duration metric                                                                          |
+| `@sqlbraid/metadata`        | DB 사실 스냅샷, 검증, identity, drift                                                                                                           |
+| `@sqlbraid/codegen`         | 메타데이터 + TypePolicy에서 Row/Insert/Update 선언 생성                                                                                         |
+| `@sqlbraid/tooling`         | 공유 설정/워크스페이스 증거 및 의미 인덱스                                                                                                      |
+| `@sqlbraid/operations`      | fingerprint 및 선언 manifest                                                                                                                    |
+| `@sqlbraid/cli`             | codegen, inspect, diagnostics, drift, 명령줄 대체 수단                                                                                          |
+| `@sqlbraid/language-server` | 표준 stdio LSP 통합                                                                                                                             |
 
 애플리케이션 코드는 `sqlbraid`를 설치한 뒤 결합된 driver+dialect/query
 subpath인 `sqlbraid/pg`,

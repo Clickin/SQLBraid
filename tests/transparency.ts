@@ -13,7 +13,10 @@ export interface TransparencyCase<T> {
 
 function latestReady(events: readonly ExecutionEvent[]): QueryReadyEvent {
   const ready = events.findLast((event): event is QueryReadyEvent => event.type === "query:ready");
-  assert.ok(ready, `${events.length ? "query:ready event was not emitted" : "transparency case has no observed events"}`);
+  assert.ok(
+    ready,
+    `${events.length ? "query:ready event was not emitted" : "transparency case has no observed events"}`,
+  );
   return ready;
 }
 

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import {
-  createBulkBindingDescription,
-  createStatementBindingDescription,
-} from "@sqlbraid/core";
+import { createBulkBindingDescription, createStatementBindingDescription } from "@sqlbraid/core";
 import type {
   QueryExecutionResult,
   QueryExecutor,
@@ -15,7 +12,13 @@ import { createDatabase } from "@sqlbraid/runtime";
 import { sql } from "@sqlbraid/template";
 
 function stringId(value: unknown): number {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || !("id" in value) || typeof value.id !== "string") {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    !("id" in value) ||
+    typeof value.id !== "string"
+  ) {
     throw new TypeError("expected a string id");
   }
   return Number(value.id);
@@ -55,12 +58,24 @@ function executorFixture(): QueryExecutor & { readonly calls: string[] } {
     call() {
       throw new Error("call unsupported in fixture");
     },
-    begin() { calls.push("BEGIN"); },
-    commit() { calls.push("COMMIT"); },
-    rollback() { calls.push("ROLLBACK"); },
-    savepoint(name) { calls.push(`SAVEPOINT ${name}`); },
-    rollbackTo(name) { calls.push(`ROLLBACK TO ${name}`); },
-    releaseSavepoint(name) { calls.push(`RELEASE ${name}`); },
+    begin() {
+      calls.push("BEGIN");
+    },
+    commit() {
+      calls.push("COMMIT");
+    },
+    rollback() {
+      calls.push("ROLLBACK");
+    },
+    savepoint(name) {
+      calls.push(`SAVEPOINT ${name}`);
+    },
+    rollbackTo(name) {
+      calls.push(`ROLLBACK TO ${name}`);
+    },
+    releaseSavepoint(name) {
+      calls.push(`RELEASE ${name}`);
+    },
   };
 }
 
@@ -72,20 +87,33 @@ test("sync and async query executors both stay behind the async Database API", a
   assert.deepEqual(await createDatabase(sync).all(sql.rows`SELECT 1`), [{ value: 1 }]);
 
   const asynchronous = executorFixture();
-  asynchronous.query = async <Row>(): Promise<QueryExecutionResult<Row>> => ({ kind: "rows", rows: [{ value: 2 } as Row] });
+  asynchronous.query = async <Row>(): Promise<QueryExecutionResult<Row>> => ({
+    kind: "rows",
+    rows: [{ value: 2 } as Row],
+  });
   assert.deepEqual(await createDatabase(asynchronous).all(sql.rows`SELECT 2`), [{ value: 2 }]);
 });
 
 test("sync throws and async rejections use the normal driver error path", async () => {
   const syncFailure = new Error("sync query failed");
   const sync = executorFixture();
-  sync.query = () => { throw syncFailure; };
-  await assert.rejects(() => createDatabase(sync).execute(sql`SELECT sync_failure`), (error) => error === syncFailure);
+  sync.query = () => {
+    throw syncFailure;
+  };
+  await assert.rejects(
+    () => createDatabase(sync).execute(sql`SELECT sync_failure`),
+    (error) => error === syncFailure,
+  );
 
   const asyncFailure = new Error("async query failed");
   const asynchronous = executorFixture();
-  asynchronous.query = async () => { throw asyncFailure; };
-  await assert.rejects(() => createDatabase(asynchronous).execute(sql`SELECT async_failure`), (error) => error === asyncFailure);
+  asynchronous.query = async () => {
+    throw asyncFailure;
+  };
+  await assert.rejects(
+    () => createDatabase(asynchronous).execute(sql`SELECT async_failure`),
+    (error) => error === asyncFailure,
+  );
 });
 
 test("sync bulk results are normalized by the async Database API", async () => {
@@ -111,7 +139,10 @@ test("sync transaction controls include nested savepoint cleanup", async () => {
   const db = createDatabase(executor);
   await db.tx(async (tx) => {
     await assert.rejects(
-      () => tx.tx(async () => { throw new Error("nested failure"); }),
+      () =>
+        tx.tx(async () => {
+          throw new Error("nested failure");
+        }),
       /nested failure/,
     );
     await tx.execute(sql`SELECT after_savepoint`);
@@ -133,45 +164,60 @@ test("observer failures preserve sync driver errors and report before/after stag
     return { kind: "rows", rows: [] as readonly Row[] };
   };
   const beforeDb = createDatabase(beforeExecutor, {
-    observers: [{
-      async onEvent(event) {
-        if (event.type === "query:ready") throw beforeError;
+    observers: [
+      {
+        async onEvent(event) {
+          if (event.type === "query:ready") throw beforeError;
+        },
       },
-    }],
+    ],
   });
-  await assert.rejects(() => beforeDb.execute(sql`SELECT before`), (error) => error === beforeError);
+  await assert.rejects(
+    () => beforeDb.execute(sql`SELECT before`),
+    (error) => error === beforeError,
+  );
   assert.equal(beforeExecuted, false);
 
   const physicalError = new Error("sync physical error");
   const observerError = new Error("observer error");
   const afterExecutor = executorFixture();
-  afterExecutor.query = () => { throw physicalError; };
+  afterExecutor.query = () => {
+    throw physicalError;
+  };
   const events: string[] = [];
   const afterDb = createDatabase(afterExecutor, {
-    observers: [{
-      async onEvent(event) {
-        events.push(event.type === "query:error" ? event.stage : event.type);
-        if (event.type === "query:error") throw observerError;
+    observers: [
+      {
+        async onEvent(event) {
+          events.push(event.type === "query:error" ? event.stage : event.type);
+          if (event.type === "query:error") throw observerError;
+        },
       },
-    }],
+    ],
   });
-  await assert.rejects(() => afterDb.execute(sql`SELECT after`), (error) => {
-    return error instanceof AggregateError
-      && error.errors[0] === physicalError
-      && error.errors[1] === observerError;
-  });
+  await assert.rejects(
+    () => afterDb.execute(sql`SELECT after`),
+    (error) => {
+      return error instanceof AggregateError && error.errors[0] === physicalError && error.errors[1] === observerError;
+    },
+  );
   assert.deepEqual(events, ["query:ready", "driver"]);
 
   const observerAfterError = new Error("observer after");
   const observerAfterExecutor = executorFixture();
   const observerAfterDb = createDatabase(observerAfterExecutor, {
-    observers: [{
-      async onEvent(event) {
-        if (event.type === "query:result") throw observerAfterError;
+    observers: [
+      {
+        async onEvent(event) {
+          if (event.type === "query:result") throw observerAfterError;
+        },
       },
-    }],
+    ],
   });
-  await assert.rejects(() => observerAfterDb.execute(sql`SELECT observer_after`), (error) => error === observerAfterError);
+  await assert.rejects(
+    () => observerAfterDb.execute(sql`SELECT observer_after`),
+    (error) => error === observerAfterError,
+  );
 });
 
 test("async Standard Schema mapping runs after a synchronous result", async () => {

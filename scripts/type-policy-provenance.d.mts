@@ -42,9 +42,19 @@ export interface LoadPolicyOptions {
   readonly packages?: readonly string[];
 }
 
-export declare function canonicalPolicyContract(policy: PolicyContractLike): { readonly id: string; readonly mappings: readonly PolicyMapping[] };
+export declare function canonicalPolicyContract(policy: PolicyContractLike): {
+  readonly id: string;
+  readonly mappings: readonly PolicyMapping[];
+};
 export declare function canonicalPolicyJson(policy: PolicyContractLike): string;
 export declare function typePolicyDigest(policy: PolicyContractLike): string;
-export declare function validateTypePolicy(policy: TypePolicyLike, options?: { readonly expectedHash?: string; readonly requireFrozen?: boolean }): { readonly id: string; readonly hash: string; readonly mappings: readonly PolicyMapping[] };
+export declare function validateTypePolicy(
+  policy: TypePolicyLike,
+  options?: { readonly expectedHash?: string; readonly requireFrozen?: boolean },
+): { readonly id: string; readonly hash: string; readonly mappings: readonly PolicyMapping[] };
 export declare function loadFirstPartyPolicies(options?: LoadPolicyOptions): Promise<readonly PolicyRecord[]>;
-export declare function validateFirstPartyPolicies(options?: LoadPolicyOptions): Promise<{ readonly records: readonly PolicyRecord[]; readonly policies: readonly TypePolicyLike[]; readonly hashes: readonly string[] }>;
+export declare function validateFirstPartyPolicies(options?: LoadPolicyOptions): Promise<{
+  readonly records: readonly PolicyRecord[];
+  readonly policies: readonly TypePolicyLike[];
+  readonly hashes: readonly string[];
+}>;

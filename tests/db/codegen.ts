@@ -12,16 +12,19 @@ export async function assertCompilesGeneratedSource(source: string, label: strin
   try {
     await writeFile(join(directory, "models.ts"), source);
     await writeFile(join(directory, "package.json"), JSON.stringify({ type: "module" }));
-    await writeFile(join(directory, "tsconfig.json"), JSON.stringify({
-      compilerOptions: {
-        target: "ES2022",
-        module: "NodeNext",
-        moduleResolution: "NodeNext",
-        strict: true,
-        noEmit: true,
-      },
-      include: ["models.ts"],
-    }));
+    await writeFile(
+      join(directory, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          target: "ES2022",
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          strict: true,
+          noEmit: true,
+        },
+        include: ["models.ts"],
+      }),
+    );
     await exec(process.execPath, [
       join(process.cwd(), "node_modules/typescript/bin/tsc"),
       "--project",
@@ -39,12 +42,16 @@ export interface GeneratedProperty {
   readonly type: string;
 }
 
-export function generatedProperty(source: string, interfaceName: string, propertyName: string): GeneratedProperty | undefined {
+export function generatedProperty(
+  source: string,
+  interfaceName: string,
+  propertyName: string,
+): GeneratedProperty | undefined {
   const body = interfaceBody(source, interfaceName);
   for (const line of body.split("\n")) {
     const match = /^\s*(?:readonly\s+)?(?:"((?:\\.|[^"])*)"|([A-Za-z_$][\w$]*))(\?)?:\s*(.+);\s*$/u.exec(line);
     if (!match) continue;
-    const name = match[1] === undefined ? match[2] : JSON.parse(`"${match[1]}"`) as string;
+    const name = match[1] === undefined ? match[2] : (JSON.parse(`"${match[1]}"`) as string);
     if (name !== propertyName) continue;
     return {
       optional: match[3] !== undefined,
@@ -61,7 +68,11 @@ export function assertGeneratedProperty(
   type: string,
   optional: boolean,
 ): void {
-  assert.deepEqual(generatedProperty(source, interfaceName, propertyName), { optional, type }, `${interfaceName}.${propertyName}`);
+  assert.deepEqual(
+    generatedProperty(source, interfaceName, propertyName),
+    { optional, type },
+    `${interfaceName}.${propertyName}`,
+  );
 }
 
 export function assertGeneratedPropertyAbsent(source: string, interfaceName: string, propertyName: string): void {

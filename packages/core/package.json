@@ -2,27 +2,26 @@
   "name": "@sqlbraid/core",
   "version": "1.0.0-rc.2",
   "description": "Core SQLBraid types and SQL template interfaces for typed database applications",
+  "keywords": [
+    "database",
+    "query",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/core"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "query"],
-  "type": "module",
   "files": [
     "dist"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "engines": {
-    "node": ">=16.20.2"
-  },
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -33,7 +32,13 @@
       "import": "./dist/driver.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@standard-schema/spec": "1.1.0"
+  },
+  "engines": {
+    "node": ">=16.20.2"
   }
 }

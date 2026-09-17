@@ -41,18 +41,42 @@ function makePolicy(dialect: BunSqlDialect, json: "text" | "native", temporal: "
       inputType: "string | number",
       outputType: "string",
       nullable: true,
-      numeric: Object.freeze({ semantics: "exact-decimal", representation: "string", fidelity: dialect === "postgres" ? "lossless" : "unsupported" }),
+      numeric: Object.freeze({
+        semantics: "exact-decimal",
+        representation: "string",
+        fidelity: dialect === "postgres" ? "lossless" : "unsupported",
+      }),
     }),
     Object.freeze({
       databaseType: "DOUBLE",
       inputType: "number",
       outputType: "number",
       nullable: true,
-      numeric: Object.freeze({ semantics: "approximate-binary", representation: "number", fidelity: "guarded", binaryPrecision: 64 }),
+      numeric: Object.freeze({
+        semantics: "approximate-binary",
+        representation: "number",
+        fidelity: "guarded",
+        binaryPrecision: 64,
+      }),
     }),
-    Object.freeze({ databaseType: "JSON", inputType: "unknown", outputType: json === "native" ? "unknown" : "string", nullable: true }),
-    Object.freeze({ databaseType: "TEMPORAL", inputType: "Date | string", outputType: temporal === "native" ? "Date | string" : "string", nullable: true }),
-    Object.freeze({ databaseType: "BINARY", inputType: "Uint8Array", outputType: dialect === "mysql" || dialect === "mariadb" ? "unknown" : "Uint8Array", nullable: true }),
+    Object.freeze({
+      databaseType: "JSON",
+      inputType: "unknown",
+      outputType: json === "native" ? "unknown" : "string",
+      nullable: true,
+    }),
+    Object.freeze({
+      databaseType: "TEMPORAL",
+      inputType: "Date | string",
+      outputType: temporal === "native" ? "Date | string" : "string",
+      nullable: true,
+    }),
+    Object.freeze({
+      databaseType: "BINARY",
+      inputType: "Uint8Array",
+      outputType: dialect === "mysql" || dialect === "mariadb" ? "unknown" : "Uint8Array",
+      nullable: true,
+    }),
   ]);
   return Object.freeze<TypePolicy>({
     id: `bun-sql-${dialect}-1.3.14`,
@@ -71,7 +95,11 @@ function makePolicy(dialect: BunSqlDialect, json: "text" | "native", temporal: "
   });
 }
 
-function profile(dialect: BunSqlDialect, json: "text" | "native", temporal: "text" | "native"): BunSqlRepresentationProfile {
+function profile(
+  dialect: BunSqlDialect,
+  json: "text" | "native",
+  temporal: "text" | "native",
+): BunSqlRepresentationProfile {
   const typePolicy = makePolicy(dialect, json, temporal);
   return Object.freeze({
     id: typePolicy.id,

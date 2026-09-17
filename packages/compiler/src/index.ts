@@ -2,7 +2,13 @@ import ts from "typescript";
 import { dirname } from "node:path";
 import { GenMapping, addSegment, setSourceContent, toEncodedMap } from "@jridgewell/gen-mapping";
 import { parseTemplate, postgresDialect } from "@sqlbraid/template";
-import { AUTHORING_MODULE_CATALOG, type Dialect, type QueryResultKind, type TemplateIr, type TemplateNode } from "@sqlbraid/core";
+import {
+  AUTHORING_MODULE_CATALOG,
+  type Dialect,
+  type QueryResultKind,
+  type TemplateIr,
+  type TemplateNode,
+} from "@sqlbraid/core";
 
 export interface SourceRange {
   readonly start: number;
@@ -108,7 +114,8 @@ function range(node: ts.Node, sourceFile: ts.SourceFile): SourceRange {
 }
 
 function createTemplateStrings(values: readonly string[], rawValues: readonly string[] = values): TemplateStringsArray {
-  if (values.length !== rawValues.length) throw new TypeError("Template cooked/raw segments must have matching lengths.");
+  if (values.length !== rawValues.length)
+    throw new TypeError("Template cooked/raw segments must have matching lengths.");
   const strings = [...values] as string[] & { raw?: readonly string[] };
   const raw = Object.freeze([...rawValues]);
   Object.defineProperty(strings, "raw", { value: raw });
@@ -125,11 +132,18 @@ function scriptKindForFileName(fileName: string): ts.ScriptKind {
 }
 
 function sourceFileScriptKind(sourceFile: ts.SourceFile): ts.ScriptKind {
-  return (sourceFile as ts.SourceFile & { readonly scriptKind?: ts.ScriptKind }).scriptKind ?? scriptKindForFileName(sourceFile.fileName);
+  return (
+    (sourceFile as ts.SourceFile & { readonly scriptKind?: ts.ScriptKind }).scriptKind ??
+    scriptKindForFileName(sourceFile.fileName)
+  );
 }
 
-function impliedNodeFormatForFileName(fileName: string, compilerOptions: ts.CompilerOptions): ts.ModuleKind.ESNext | ts.ModuleKind.CommonJS | undefined {
-  if (compilerOptions.module !== ts.ModuleKind.Node16 && compilerOptions.module !== ts.ModuleKind.NodeNext) return undefined;
+function impliedNodeFormatForFileName(
+  fileName: string,
+  compilerOptions: ts.CompilerOptions,
+): ts.ModuleKind.ESNext | ts.ModuleKind.CommonJS | undefined {
+  if (compilerOptions.module !== ts.ModuleKind.Node16 && compilerOptions.module !== ts.ModuleKind.NodeNext)
+    return undefined;
   const lower = fileName.toLowerCase();
   if (lower.endsWith(".mts") || lower.endsWith(".mjs")) return ts.ModuleKind.ESNext;
   if (lower.endsWith(".cts") || lower.endsWith(".cjs")) return ts.ModuleKind.CommonJS;
@@ -137,55 +151,102 @@ function impliedNodeFormatForFileName(fileName: string, compilerOptions: ts.Comp
 }
 
 function sourceFileFor(sourceText: string, fileName: string, options: OverlayOptions): ts.SourceFile {
-  const original = options.sourceFile && ts.sys.resolvePath(options.sourceFile.fileName) === ts.sys.resolvePath(fileName) ? options.sourceFile : undefined;
+  const original =
+    options.sourceFile && ts.sys.resolvePath(options.sourceFile.fileName) === ts.sys.resolvePath(fileName)
+      ? options.sourceFile
+      : undefined;
   if (original?.text === sourceText) return original;
   const languageVersion = original?.languageVersion ?? options.compilerOptions?.target ?? ts.ScriptTarget.Latest;
-  const sourceFile = ts.createSourceFile(fileName, sourceText, languageVersion, true, original ? sourceFileScriptKind(original) : scriptKindForFileName(fileName));
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    sourceText,
+    languageVersion,
+    true,
+    original ? sourceFileScriptKind(original) : scriptKindForFileName(fileName),
+  );
   if (original?.impliedNodeFormat !== undefined) sourceFile.impliedNodeFormat = original.impliedNodeFormat;
   else {
-    const impliedNodeFormat = impliedNodeFormatForFileName(fileName, options.compilerOptions ?? defaultCompilerOptions());
+    const impliedNodeFormat = impliedNodeFormatForFileName(
+      fileName,
+      options.compilerOptions ?? defaultCompilerOptions(),
+    );
     if (impliedNodeFormat !== undefined) sourceFile.impliedNodeFormat = impliedNodeFormat;
   }
   return sourceFile;
 }
 
 function configuredModules(options: OverlayOptions): readonly string[] {
-  return options.moduleSpecifiers ?? (options.moduleSpecifier
-    ? [options.moduleSpecifier]
-    : AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier));
+  return (
+    options.moduleSpecifiers ??
+    (options.moduleSpecifier
+      ? [options.moduleSpecifier]
+      : AUTHORING_MODULE_CATALOG.map(({ moduleSpecifier }) => moduleSpecifier))
+  );
 }
 
 function defaultCompilerOptions(): ts.CompilerOptions {
-  return { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, strict: true, noEmit: true, skipLibCheck: true, allowJs: false };
+  return {
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true,
+    allowJs: false,
+  };
 }
 
 function dialectForModule(moduleSpecifier: string | undefined, options: OverlayOptions): Dialect {
   if (options.dialect) return options.dialect;
   const dialectId = AUTHORING_MODULE_CATALOG.find((entry) => entry.moduleSpecifier === moduleSpecifier)?.dialectId;
-  if (dialectId === "oracle") return {
-    id: "oracle",
-    quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
-    lexicalProfile: {
-      lineCommentPrefixes: ["--"],
-      supportsNestedBlockComments: false,
-      supportsDollarQuotes: false,
-      backslashEscapes: false,
-      supportsOracleQQuotes: true,
-    },
-  };
-  if (dialectId === "mssql") return {
-    id: "mssql",
-    quoteIdentifier: (identifier) => `[${identifier.replaceAll("]", "]]")}]`,
-    lexicalProfile: {
-      lineCommentPrefixes: ["--"],
-      supportsNestedBlockComments: true,
-      supportsDollarQuotes: false,
-      supportsBracketIdentifiers: true,
-      backslashEscapes: false,
-    },
-  };
-  if (dialectId === "mysql" || dialectId === "mariadb") return { id: dialectId, quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBacktickIdentifiers: true, backslashEscapes: true } };
-  if (dialectId === "sqlite") return { id: "sqlite", quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`, lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsDollarQuotes: false, supportsBracketIdentifiers: true, backslashEscapes: false } };
+  if (dialectId === "oracle")
+    return {
+      id: "oracle",
+      quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
+      lexicalProfile: {
+        lineCommentPrefixes: ["--"],
+        supportsNestedBlockComments: false,
+        supportsDollarQuotes: false,
+        backslashEscapes: false,
+        supportsOracleQQuotes: true,
+      },
+    };
+  if (dialectId === "mssql")
+    return {
+      id: "mssql",
+      quoteIdentifier: (identifier) => `[${identifier.replaceAll("]", "]]")}]`,
+      lexicalProfile: {
+        lineCommentPrefixes: ["--"],
+        supportsNestedBlockComments: true,
+        supportsDollarQuotes: false,
+        supportsBracketIdentifiers: true,
+        backslashEscapes: false,
+      },
+    };
+  if (dialectId === "mysql" || dialectId === "mariadb")
+    return {
+      id: dialectId,
+      quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``,
+      lexicalProfile: {
+        lineCommentPrefixes: ["--", "#"],
+        supportsNestedBlockComments: false,
+        supportsDollarQuotes: false,
+        supportsBacktickIdentifiers: true,
+        backslashEscapes: true,
+      },
+    };
+  if (dialectId === "sqlite")
+    return {
+      id: "sqlite",
+      quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
+      lexicalProfile: {
+        lineCommentPrefixes: ["--", "#"],
+        supportsNestedBlockComments: false,
+        supportsDollarQuotes: false,
+        supportsBracketIdentifiers: true,
+        backslashEscapes: false,
+      },
+    };
   return postgresDialect;
 }
 
@@ -202,7 +263,12 @@ function importBindings(sourceFile: ts.SourceFile, options: OverlayOptions): Imp
   const tagExport = options.tagExport ?? "sql";
   const modules = new Set(configuredModules(options));
   for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !modules.has(statement.moduleSpecifier.text)) continue;
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      !modules.has(statement.moduleSpecifier.text)
+    )
+      continue;
     const clause = statement.importClause;
     if (!clause || clause.isTypeOnly) continue;
     if (clause.name && tagExport === "default") defaults.set(clause.name.text, statement.moduleSpecifier.text);
@@ -224,11 +290,23 @@ function importBindings(sourceFile: ts.SourceFile, options: OverlayOptions): Imp
 function isShadowed(identifier: ts.Identifier): boolean {
   let current: ts.Node | undefined = identifier.parent;
   while (current) {
-    if (ts.isFunctionLike(current) && current.parameters.some((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === identifier.text)) return true;
-    if (ts.isCatchClause(current) && current.variableDeclaration && ts.isIdentifier(current.variableDeclaration.name) && current.variableDeclaration.name.text === identifier.text) return true;
+    if (
+      ts.isFunctionLike(current) &&
+      current.parameters.some((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === identifier.text)
+    )
+      return true;
+    if (
+      ts.isCatchClause(current) &&
+      current.variableDeclaration &&
+      ts.isIdentifier(current.variableDeclaration.name) &&
+      current.variableDeclaration.name.text === identifier.text
+    )
+      return true;
     if (ts.isBlock(current) || ts.isSourceFile(current)) {
       for (const statement of current.statements) {
-        if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name) && declaration.name.text === identifier.text) return true;
+        if (ts.isVariableStatement(statement))
+          for (const declaration of statement.declarationList.declarations)
+            if (ts.isIdentifier(declaration.name) && declaration.name.text === identifier.text) return true;
         if (ts.isClassDeclaration(statement) && statement.name?.text === identifier.text) return true;
         if (ts.isFunctionDeclaration(statement) && statement.name?.text === identifier.text) return true;
       }
@@ -239,17 +317,24 @@ function isShadowed(identifier: ts.Identifier): boolean {
 }
 
 function explicitResultKind(expression: ts.Expression): "rows" | "command" | "call" | undefined {
-  if (ts.isCallExpression(expression)
-    && expression.arguments.length === 1
-    && ts.isPropertyAccessExpression(expression.expression)
-    && expression.expression.name.text === "call") return "call";
+  if (
+    ts.isCallExpression(expression) &&
+    expression.arguments.length === 1 &&
+    ts.isPropertyAccessExpression(expression.expression) &&
+    expression.expression.name.text === "call"
+  )
+    return "call";
   if (!ts.isPropertyAccessExpression(expression)) return undefined;
-  return expression.name.text === "rows" || expression.name.text === "command" || expression.name.text === "call" ? expression.name.text : undefined;
+  return expression.name.text === "rows" || expression.name.text === "command" || expression.name.text === "call"
+    ? expression.name.text
+    : undefined;
 }
 
 function mappedRowsCall(expression: ts.Expression): ts.CallExpression | undefined {
   if (!ts.isCallExpression(expression) || expression.arguments.length !== 1) return undefined;
-  return ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === "rows" ? expression : undefined;
+  return ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === "rows"
+    ? expression
+    : undefined;
 }
 
 function tagExpression(expression: ts.Expression): ts.Expression {
@@ -258,9 +343,11 @@ function tagExpression(expression: ts.Expression): ts.Expression {
 
 function importedTagModule(expression: ts.Expression, bindings: ImportBindings, tagExport: string): string | undefined {
   if (ts.isIdentifier(expression)) return bindings.named.get(expression.text) ?? bindings.defaults.get(expression.text);
-  if (ts.isCallExpression(expression) && explicitResultKind(expression) === "call") return importedTagModule(expression.expression, bindings, tagExport);
+  if (ts.isCallExpression(expression) && explicitResultKind(expression) === "call")
+    return importedTagModule(expression.expression, bindings, tagExport);
   if (!ts.isPropertyAccessExpression(expression)) return undefined;
-  if (expression.name.text === tagExport && ts.isIdentifier(expression.expression)) return bindings.namespaces.get(expression.expression.text);
+  if (expression.name.text === tagExport && ts.isIdentifier(expression.expression))
+    return bindings.namespaces.get(expression.expression.text);
   if (explicitResultKind(expression)) return importedTagModule(expression.expression, bindings, tagExport);
   return undefined;
 }
@@ -268,26 +355,47 @@ function importedTagModule(expression: ts.Expression, bindings: ImportBindings, 
 function tagRoot(expression: ts.Expression): ts.Identifier | undefined {
   expression = tagExpression(expression);
   if (ts.isIdentifier(expression)) return expression;
-  if (ts.isCallExpression(expression) && explicitResultKind(expression) === "call") return tagRoot(expression.expression);
-  if (ts.isPropertyAccessExpression(expression) && explicitResultKind(expression)) return tagRoot(expression.expression);
+  if (ts.isCallExpression(expression) && explicitResultKind(expression) === "call")
+    return tagRoot(expression.expression);
+  if (ts.isPropertyAccessExpression(expression) && explicitResultKind(expression))
+    return tagRoot(expression.expression);
   if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)) return expression.expression;
   return undefined;
 }
 
-function resolvedModulePath(moduleSpecifier: string, sourceFile: ts.SourceFile, options: OverlayOptions): string | undefined {
-  return ts.resolveModuleName(moduleSpecifier, sourceFile.fileName, options.compilerOptions ?? defaultCompilerOptions(), ts.sys).resolvedModule?.resolvedFileName;
+function resolvedModulePath(
+  moduleSpecifier: string,
+  sourceFile: ts.SourceFile,
+  options: OverlayOptions,
+): string | undefined {
+  return ts.resolveModuleName(
+    moduleSpecifier,
+    sourceFile.fileName,
+    options.compilerOptions ?? defaultCompilerOptions(),
+    ts.sys,
+  ).resolvedModule?.resolvedFileName;
 }
 
 function catalogModuleFromDeclaration(declaration: ts.Declaration): string | undefined {
   let owner: ts.Node | undefined = declaration;
   while (owner) {
-    if ((ts.isImportDeclaration(owner) || ts.isExportDeclaration(owner)) && owner.moduleSpecifier && ts.isStringLiteral(owner.moduleSpecifier)) return owner.moduleSpecifier.text;
+    if (
+      (ts.isImportDeclaration(owner) || ts.isExportDeclaration(owner)) &&
+      owner.moduleSpecifier &&
+      ts.isStringLiteral(owner.moduleSpecifier)
+    )
+      return owner.moduleSpecifier.text;
     owner = owner.parent;
   }
   return undefined;
 }
 
-function catalogReexportFromDeclaration(declaration: ts.Declaration, sourceFile: ts.SourceFile, options: OverlayOptions, _checker: ts.TypeChecker): string | undefined {
+function catalogReexportFromDeclaration(
+  declaration: ts.Declaration,
+  sourceFile: ts.SourceFile,
+  options: OverlayOptions,
+  _checker: ts.TypeChecker,
+): string | undefined {
   let owner: ts.Node | undefined = declaration;
   while (owner && !ts.isImportDeclaration(owner)) owner = owner.parent;
   if (!owner || !owner.moduleSpecifier || !ts.isStringLiteral(owner.moduleSpecifier)) return undefined;
@@ -295,9 +403,16 @@ function catalogReexportFromDeclaration(declaration: ts.Declaration, sourceFile:
   if (AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === imported)) return imported;
   const resolved = resolvedModulePath(imported, sourceFile, options);
   const importedText = resolved ? ts.sys.readFile(resolved) : undefined;
-  const importedFile = resolved && importedText !== undefined ? ts.createSourceFile(resolved, importedText, ts.ScriptTarget.Latest, true, scriptKindForFileName(resolved)) : undefined;
+  const importedFile =
+    resolved && importedText !== undefined
+      ? ts.createSourceFile(resolved, importedText, ts.ScriptTarget.Latest, true, scriptKindForFileName(resolved))
+      : undefined;
   for (const statement of importedFile?.statements ?? []) {
-    if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+    if (
+      ts.isExportDeclaration(statement) &&
+      statement.moduleSpecifier &&
+      ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
       const candidate = statement.moduleSpecifier.text;
       if (AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === candidate)) return candidate;
     }
@@ -305,17 +420,23 @@ function catalogReexportFromDeclaration(declaration: ts.Declaration, sourceFile:
   return undefined;
 }
 
-function checkerTagModule(expression: ts.Expression, sourceFile: ts.SourceFile, options: OverlayOptions): string | undefined {
+function checkerTagModule(
+  expression: ts.Expression,
+  sourceFile: ts.SourceFile,
+  options: OverlayOptions,
+): string | undefined {
   const checker = options.typeChecker;
   if (!checker) return undefined;
   const symbolNode = ts.isPropertyAccessExpression(expression) ? expression.name : expression;
   let symbol = checker.getSymbolAtLocation(symbolNode);
-  if (!symbol && ts.isPropertyAccessExpression(expression)) symbol = checker.getTypeAtLocation(expression.expression).getProperty(expression.name.text);
+  if (!symbol && ts.isPropertyAccessExpression(expression))
+    symbol = checker.getTypeAtLocation(expression.expression).getProperty(expression.name.text);
   if (!symbol) return undefined;
   while ((symbol.flags & ts.SymbolFlags.Alias) !== 0) {
     for (const declaration of symbol.declarations ?? []) {
       const moduleSpecifier = catalogModuleFromDeclaration(declaration);
-      if (moduleSpecifier && AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === moduleSpecifier)) return moduleSpecifier;
+      if (moduleSpecifier && AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === moduleSpecifier))
+        return moduleSpecifier;
       const reexport = catalogReexportFromDeclaration(declaration, sourceFile, options, checker);
       if (reexport) return reexport;
     }
@@ -328,20 +449,33 @@ function checkerTagModule(expression: ts.Expression, sourceFile: ts.SourceFile, 
     const resolved = resolvedModulePath(moduleSpecifier, sourceFile, options);
     if (!resolved) continue;
     const canonical = ts.sys.resolvePath(resolved);
-    if (declarations.some((declaration) => ts.sys.resolvePath(declaration.getSourceFile().fileName) === canonical)) return moduleSpecifier;
+    if (declarations.some((declaration) => ts.sys.resolvePath(declaration.getSourceFile().fileName) === canonical))
+      return moduleSpecifier;
   }
   if (ts.isCallExpression(expression)) return checkerTagModule(expression.expression, sourceFile, options);
   if (ts.isPropertyAccessExpression(expression)) return checkerTagModule(expression.expression, sourceFile, options);
   return undefined;
 }
 
-function tagIdentity(expression: ts.Expression, bindings: ImportBindings, tagExport: string, sourceFile: ts.SourceFile, options: OverlayOptions): { readonly name?: string; readonly moduleSpecifier?: string; readonly declaredResultKind: QueryResultKind } {
+function tagIdentity(
+  expression: ts.Expression,
+  bindings: ImportBindings,
+  tagExport: string,
+  sourceFile: ts.SourceFile,
+  options: OverlayOptions,
+): { readonly name?: string; readonly moduleSpecifier?: string; readonly declaredResultKind: QueryResultKind } {
   const tag = tagExpression(expression);
   const kind = explicitResultKind(tag);
   const root = tagRoot(tag);
   const moduleSpecifier = root && !isShadowed(root) ? importedTagModule(tag, bindings, tagExport) : undefined;
-  const checkedModule = moduleSpecifier ?? (kind && root ? checkerTagModule(root, sourceFile, options) : undefined) ?? checkerTagModule(expression, sourceFile, options);
-  return { ...(checkedModule ? { name: expression.getText(sourceFile), moduleSpecifier: checkedModule } : {}), declaredResultKind: kind ?? "unknown" };
+  const checkedModule =
+    moduleSpecifier ??
+    (kind && root ? checkerTagModule(root, sourceFile, options) : undefined) ??
+    checkerTagModule(expression, sourceFile, options);
+  return {
+    ...(checkedModule ? { name: expression.getText(sourceFile), moduleSpecifier: checkedModule } : {}),
+    declaredResultKind: kind ?? "unknown",
+  };
 }
 
 interface ExtractedTemplate {
@@ -351,7 +485,10 @@ interface ExtractedTemplate {
   readonly templateRange: SourceRange;
 }
 
-function extractTemplate(node: ts.NoSubstitutionTemplateLiteral | ts.TemplateExpression, sourceFile: ts.SourceFile): ExtractedTemplate {
+function extractTemplate(
+  node: ts.NoSubstitutionTemplateLiteral | ts.TemplateExpression,
+  sourceFile: ts.SourceFile,
+): ExtractedTemplate {
   if (ts.isNoSubstitutionTemplateLiteral(node)) {
     return {
       strings: [node.text],
@@ -364,15 +501,26 @@ function extractTemplate(node: ts.NoSubstitutionTemplateLiteral | ts.TemplateExp
   const rawStrings: string[] = [sourceFile.text.slice(node.head.getStart(sourceFile) + 1, node.head.end - 2)];
   const bindings: BindingSite[] = [];
   for (const [index, span] of node.templateSpans.entries()) {
-    bindings.push({ interpolation: bindings.length, range: range(span.expression, sourceFile), expression: span.expression.getText(sourceFile) });
+    bindings.push({
+      interpolation: bindings.length,
+      range: range(span.expression, sourceFile),
+      expression: span.expression.getText(sourceFile),
+    });
     strings.push(span.literal.text);
-    rawStrings.push(sourceFile.text.slice(span.literal.getStart(sourceFile) + 1, span.literal.end - (index === node.templateSpans.length - 1 ? 1 : 2)));
+    rawStrings.push(
+      sourceFile.text.slice(
+        span.literal.getStart(sourceFile) + 1,
+        span.literal.end - (index === node.templateSpans.length - 1 ? 1 : 2),
+      ),
+    );
   }
   return { strings, rawStrings, bindings, templateRange: range(node, sourceFile) };
 }
 
 function hasGuard(nodes: readonly TemplateNode[]): boolean {
-  return nodes.some((node) => node.kind === "if" || node.kind === "choose" || node.kind === "trim" && hasGuard(node.children));
+  return nodes.some(
+    (node) => node.kind === "if" || node.kind === "choose" || (node.kind === "trim" && hasGuard(node.children)),
+  );
 }
 
 export function discoverQueries(sourceText: string, fileName: string, options: OverlayOptions): SourceAnalysisResult {
@@ -384,7 +532,8 @@ export function discoverQueries(sourceText: string, fileName: string, options: O
   function visit(node: ts.Node): void {
     if (ts.isTaggedTemplateExpression(node)) {
       const identity = tagIdentity(node.tag, bindings, tagExport, sourceFile, options);
-      const declaredRowType = identity.declaredResultKind === "unknown" ? undefined : node.typeArguments?.[0]?.getText(sourceFile);
+      const declaredRowType =
+        identity.declaredResultKind === "unknown" ? undefined : node.typeArguments?.[0]?.getText(sourceFile);
       if (identity.name && identity.moduleSpecifier) {
         const extracted = extractTemplate(node.template, sourceFile);
         const schemaCall = mappedRowsCall(node.tag);
@@ -398,16 +547,30 @@ export function discoverQueries(sourceText: string, fileName: string, options: O
             strings: extracted.strings,
             rawStrings: extracted.rawStrings,
             bindings: extracted.bindings,
-            ir: parseTemplate(createTemplateStrings(extracted.strings, extracted.rawStrings), dialectForModule(identity.moduleSpecifier, options).lexicalProfile, options.limits?.maxNestingDepth),
+            ir: parseTemplate(
+              createTemplateStrings(extracted.strings, extracted.rawStrings),
+              dialectForModule(identity.moduleSpecifier, options).lexicalProfile,
+              options.limits?.maxNestingDepth,
+            ),
             mappedRow: identity.declaredResultKind === "rows" && resultSchema !== undefined,
-            ...(resultSchema ? { resultSchemaExpression: resultSchema.getText(sourceFile), resultSchemaRange: range(resultSchema, sourceFile) } : {}),
+            ...(resultSchema
+              ? {
+                  resultSchemaExpression: resultSchema.getText(sourceFile),
+                  resultSchemaRange: range(resultSchema, sourceFile),
+                }
+              : {}),
             ...(declaredRowType ? { declaredRowType } : {}),
             declaredResultKind: identity.declaredResultKind,
           };
           queries.push(query);
         } catch (error) {
           const code = error && typeof error === "object" && "code" in error ? String(error.code) : "BRAID_TEMPLATE";
-          diagnostics.push({ code, message: error instanceof Error ? error.message : String(error), severity: "error", range: range(node.template, sourceFile) });
+          diagnostics.push({
+            code,
+            message: error instanceof Error ? error.message : String(error),
+            severity: "error",
+            range: range(node.template, sourceFile),
+          });
         }
       }
     }
@@ -432,7 +595,8 @@ export interface VirtualTypeScriptOverlay {
 }
 
 function typeArgumentsOf(type: ts.Type, checker: ts.TypeChecker): readonly ts.Type[] {
-  const aliasTypeArguments = (type as ts.Type & { readonly aliasTypeArguments?: readonly ts.Type[] }).aliasTypeArguments;
+  const aliasTypeArguments = (type as ts.Type & { readonly aliasTypeArguments?: readonly ts.Type[] })
+    .aliasTypeArguments;
   if (aliasTypeArguments?.length) return aliasTypeArguments;
   if ((type.flags & ts.TypeFlags.Object) !== 0) return checker.getTypeArguments(type as ts.TypeReference);
   return [];
@@ -445,7 +609,8 @@ function mappedRowType(node: ts.TaggedTemplateExpression, checker: ts.TypeChecke
   if (signature) candidates.push(checker.getReturnTypeOfSignature(signature));
   for (const candidate of candidates) {
     const argumentsOfType = typeArgumentsOf(candidate, checker);
-    if (argumentsOfType.length === 1) return checker.typeToString(argumentsOfType[0], node, ts.TypeFormatFlags.NoTruncation);
+    if (argumentsOfType.length === 1)
+      return checker.typeToString(argumentsOfType[0], node, ts.TypeFormatFlags.NoTruncation);
     if (argumentsOfType.length < 2) continue;
     const first = checker.typeToString(argumentsOfType[0], node, ts.TypeFormatFlags.NoTruncation);
     const second = checker.typeToString(argumentsOfType[1], node, ts.TypeFormatFlags.NoTruncation);
@@ -527,8 +692,22 @@ function topLevelAwaitOrYield(node: ts.Expression): boolean {
   return found;
 }
 
-function elementAssignment(factory: ts.NodeFactory, valuesName: string, interpolation: number, expression: ts.Expression): ts.Statement {
-  return factory.createExpressionStatement(factory.createBinaryExpression(factory.createElementAccessExpression(factory.createIdentifier(valuesName), factory.createNumericLiteral(interpolation)), factory.createToken(ts.SyntaxKind.EqualsToken), expression));
+function elementAssignment(
+  factory: ts.NodeFactory,
+  valuesName: string,
+  interpolation: number,
+  expression: ts.Expression,
+): ts.Statement {
+  return factory.createExpressionStatement(
+    factory.createBinaryExpression(
+      factory.createElementAccessExpression(
+        factory.createIdentifier(valuesName),
+        factory.createNumericLiteral(interpolation),
+      ),
+      factory.createToken(ts.SyntaxKind.EqualsToken),
+      expression,
+    ),
+  );
 }
 
 interface CaptureContext {
@@ -546,8 +725,18 @@ function expressionAt(context: CaptureContext, interpolation: number): ts.Expres
 
 function readCall(context: CaptureContext, interpolation: number): ts.Expression {
   if (!context.readName) return expressionAt(context, interpolation);
-  const thunk = context.factory.createArrowFunction(undefined, undefined, [], undefined, undefined, expressionAt(context, interpolation));
-  return context.factory.createCallExpression(context.factory.createIdentifier(context.readName), undefined, [context.factory.createNumericLiteral(interpolation), thunk]);
+  const thunk = context.factory.createArrowFunction(
+    undefined,
+    undefined,
+    [],
+    undefined,
+    undefined,
+    expressionAt(context, interpolation),
+  );
+  return context.factory.createCallExpression(context.factory.createIdentifier(context.readName), undefined, [
+    context.factory.createNumericLiteral(interpolation),
+    thunk,
+  ]);
 }
 
 function conditionExpression(context: CaptureContext, interpolation: number): ts.Expression {
@@ -564,13 +753,30 @@ function captureStatements(nodes: readonly TemplateNode[], context: CaptureConte
   for (const node of nodes) {
     if (node.kind === "bind") {
       const expression = expressionAt(context, node.interpolation);
-      statements.push(context.checkerMode ? elementAssignment(context.factory, context.valuesName, node.interpolation, expression) : context.factory.createExpressionStatement(readCall(context, node.interpolation)));
+      statements.push(
+        context.checkerMode
+          ? elementAssignment(context.factory, context.valuesName, node.interpolation, expression)
+          : context.factory.createExpressionStatement(readCall(context, node.interpolation)),
+      );
       continue;
     }
     if (node.kind === "if") {
-      const thenStatements = [...(context.checkerMode ? [elementAssignment(context.factory, context.valuesName, node.condition, context.factory.createTrue())] : []), ...captureStatements(node.children, context)];
-      const elseStatements = context.checkerMode ? [elementAssignment(context.factory, context.valuesName, node.condition, context.factory.createFalse())] : [];
-      statements.push(context.factory.createIfStatement(conditionExpression(context, node.condition), context.factory.createBlock(thenStatements, true), context.factory.createBlock(elseStatements, true)));
+      const thenStatements = [
+        ...(context.checkerMode
+          ? [elementAssignment(context.factory, context.valuesName, node.condition, context.factory.createTrue())]
+          : []),
+        ...captureStatements(node.children, context),
+      ];
+      const elseStatements = context.checkerMode
+        ? [elementAssignment(context.factory, context.valuesName, node.condition, context.factory.createFalse())]
+        : [];
+      statements.push(
+        context.factory.createIfStatement(
+          conditionExpression(context, node.condition),
+          context.factory.createBlock(thenStatements, true),
+          context.factory.createBlock(elseStatements, true),
+        ),
+      );
       continue;
     }
     if (node.kind === "choose") {
@@ -583,30 +789,141 @@ function captureStatements(nodes: readonly TemplateNode[], context: CaptureConte
   return statements;
 }
 
-function chooseStatement(whens: readonly { readonly condition: number; readonly children: readonly TemplateNode[] }[], otherwise: readonly TemplateNode[] | undefined, index: number, context: CaptureContext): ts.Statement | undefined {
-  if (index >= whens.length) return otherwise ? context.factory.createBlock(captureStatements(otherwise, context), true) : undefined;
+function chooseStatement(
+  whens: readonly { readonly condition: number; readonly children: readonly TemplateNode[] }[],
+  otherwise: readonly TemplateNode[] | undefined,
+  index: number,
+  context: CaptureContext,
+): ts.Statement | undefined {
+  if (index >= whens.length)
+    return otherwise ? context.factory.createBlock(captureStatements(otherwise, context), true) : undefined;
   const when = whens[index];
-  const thenStatements = [...(context.checkerMode ? [elementAssignment(context.factory, context.valuesName, when.condition, context.factory.createTrue())] : []), ...captureStatements(when.children, context)];
+  const thenStatements = [
+    ...(context.checkerMode
+      ? [elementAssignment(context.factory, context.valuesName, when.condition, context.factory.createTrue())]
+      : []),
+    ...captureStatements(when.children, context),
+  ];
   const next = chooseStatement(whens, otherwise, index + 1, context);
-  return context.factory.createIfStatement(conditionExpression(context, when.condition), context.factory.createBlock(thenStatements, true), next);
+  return context.factory.createIfStatement(
+    conditionExpression(context, when.condition),
+    context.factory.createBlock(thenStatements, true),
+    next,
+  );
 }
 
-function captureSetup(factory: ts.NodeFactory, valuesName: string, evaluatedName: string, readName: string): readonly ts.Statement[] {
-  const evaluated = factory.createVariableStatement(undefined, factory.createVariableDeclarationList([factory.createVariableDeclaration(factory.createIdentifier(evaluatedName), undefined, undefined, factory.createNewExpression(factory.createPropertyAccessExpression(factory.createIdentifier("globalThis"), "Set"), undefined, []))], ts.NodeFlags.Const));
+function captureSetup(
+  factory: ts.NodeFactory,
+  valuesName: string,
+  evaluatedName: string,
+  readName: string,
+): readonly ts.Statement[] {
+  const evaluated = factory.createVariableStatement(
+    undefined,
+    factory.createVariableDeclarationList(
+      [
+        factory.createVariableDeclaration(
+          factory.createIdentifier(evaluatedName),
+          undefined,
+          undefined,
+          factory.createNewExpression(
+            factory.createPropertyAccessExpression(factory.createIdentifier("globalThis"), "Set"),
+            undefined,
+            [],
+          ),
+        ),
+      ],
+      ts.NodeFlags.Const,
+    ),
+  );
   // Runtime lowering also feeds Vite's JavaScript loader. Keep generated helpers
   // executable JavaScript; TypeScript checking uses the separate checker overlay.
-  const index = factory.createParameterDeclaration(undefined, undefined, factory.createIdentifier("index"), undefined, undefined, undefined);
-  const thunk = factory.createParameterDeclaration(undefined, undefined, factory.createIdentifier("thunk"), undefined, undefined, undefined);
-  const seen = factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier(evaluatedName), "has"), undefined, [factory.createIdentifier("index")]);
-  const store = factory.createExpressionStatement(factory.createBinaryExpression(factory.createElementAccessExpression(factory.createIdentifier(valuesName), factory.createIdentifier("index")), factory.createToken(ts.SyntaxKind.EqualsToken), factory.createCallExpression(factory.createIdentifier("thunk"), undefined, [])));
-  const mark = factory.createExpressionStatement(factory.createCallExpression(factory.createPropertyAccessExpression(factory.createIdentifier(evaluatedName), "add"), undefined, [factory.createIdentifier("index")]));
-  const read = factory.createVariableStatement(undefined, factory.createVariableDeclarationList([factory.createVariableDeclaration(factory.createIdentifier(readName), undefined, undefined, factory.createArrowFunction(undefined, undefined, [index, thunk], undefined, undefined, factory.createBlock([factory.createIfStatement(factory.createPrefixUnaryExpression(ts.SyntaxKind.ExclamationToken, seen), factory.createBlock([store, mark], true)), factory.createReturnStatement(factory.createElementAccessExpression(factory.createIdentifier(valuesName), factory.createIdentifier("index")))], true)))], ts.NodeFlags.Const));
+  const index = factory.createParameterDeclaration(
+    undefined,
+    undefined,
+    factory.createIdentifier("index"),
+    undefined,
+    undefined,
+    undefined,
+  );
+  const thunk = factory.createParameterDeclaration(
+    undefined,
+    undefined,
+    factory.createIdentifier("thunk"),
+    undefined,
+    undefined,
+    undefined,
+  );
+  const seen = factory.createCallExpression(
+    factory.createPropertyAccessExpression(factory.createIdentifier(evaluatedName), "has"),
+    undefined,
+    [factory.createIdentifier("index")],
+  );
+  const store = factory.createExpressionStatement(
+    factory.createBinaryExpression(
+      factory.createElementAccessExpression(factory.createIdentifier(valuesName), factory.createIdentifier("index")),
+      factory.createToken(ts.SyntaxKind.EqualsToken),
+      factory.createCallExpression(factory.createIdentifier("thunk"), undefined, []),
+    ),
+  );
+  const mark = factory.createExpressionStatement(
+    factory.createCallExpression(
+      factory.createPropertyAccessExpression(factory.createIdentifier(evaluatedName), "add"),
+      undefined,
+      [factory.createIdentifier("index")],
+    ),
+  );
+  const read = factory.createVariableStatement(
+    undefined,
+    factory.createVariableDeclarationList(
+      [
+        factory.createVariableDeclaration(
+          factory.createIdentifier(readName),
+          undefined,
+          undefined,
+          factory.createArrowFunction(
+            undefined,
+            undefined,
+            [index, thunk],
+            undefined,
+            undefined,
+            factory.createBlock(
+              [
+                factory.createIfStatement(
+                  factory.createPrefixUnaryExpression(ts.SyntaxKind.ExclamationToken, seen),
+                  factory.createBlock([store, mark], true),
+                ),
+                factory.createReturnStatement(
+                  factory.createElementAccessExpression(
+                    factory.createIdentifier(valuesName),
+                    factory.createIdentifier("index"),
+                  ),
+                ),
+              ],
+              true,
+            ),
+          ),
+        ),
+      ],
+      ts.NodeFlags.Const,
+    ),
+  );
   return [evaluated, read];
 }
 
-function stringsArray(factory: ts.NodeFactory, strings: readonly string[], rawStrings: readonly string[]): ts.Expression {
-  const cooked = factory.createArrayLiteralExpression(strings.map((value) => factory.createStringLiteral(value)), false);
-  const raw = factory.createArrayLiteralExpression(rawStrings.map((value) => factory.createStringLiteral(value)), false);
+function stringsArray(
+  factory: ts.NodeFactory,
+  strings: readonly string[],
+  rawStrings: readonly string[],
+): ts.Expression {
+  const cooked = factory.createArrayLiteralExpression(
+    strings.map((value) => factory.createStringLiteral(value)),
+    false,
+  );
+  const raw = factory.createArrayLiteralExpression(
+    rawStrings.map((value) => factory.createStringLiteral(value)),
+    false,
+  );
   const frozenRaw = factory.createCallExpression(
     factory.createPropertyAccessExpression(factory.createIdentifier("Object"), "freeze"),
     undefined,
@@ -618,7 +935,10 @@ function stringsArray(factory: ts.NodeFactory, strings: readonly string[], rawSt
     [
       cooked,
       factory.createStringLiteral("raw"),
-      factory.createObjectLiteralExpression([factory.createPropertyAssignment(factory.createIdentifier("value"), frozenRaw)], false),
+      factory.createObjectLiteralExpression(
+        [factory.createPropertyAssignment(factory.createIdentifier("value"), frozenRaw)],
+        false,
+      ),
     ],
   );
   return factory.createCallExpression(
@@ -629,76 +949,181 @@ function stringsArray(factory: ts.NodeFactory, strings: readonly string[], rawSt
 }
 
 function sourceRangeExpression(factory: ts.NodeFactory, value: SourceRange): ts.ObjectLiteralExpression {
-  return factory.createObjectLiteralExpression([
-    factory.createPropertyAssignment(factory.createIdentifier("start"), factory.createNumericLiteral(value.start)),
-    factory.createPropertyAssignment(factory.createIdentifier("end"), factory.createNumericLiteral(value.end)),
-  ], false);
+  return factory.createObjectLiteralExpression(
+    [
+      factory.createPropertyAssignment(factory.createIdentifier("start"), factory.createNumericLiteral(value.start)),
+      factory.createPropertyAssignment(factory.createIdentifier("end"), factory.createNumericLiteral(value.end)),
+    ],
+    false,
+  );
 }
 
 function templateNodeArray(factory: ts.NodeFactory, nodes: readonly TemplateNode[]): ts.ArrayLiteralExpression {
-  return factory.createArrayLiteralExpression(nodes.map((node) => templateNodeExpression(factory, node)), false);
+  return factory.createArrayLiteralExpression(
+    nodes.map((node) => templateNodeExpression(factory, node)),
+    false,
+  );
 }
 
 function templateNodeExpression(factory: ts.NodeFactory, node: TemplateNode): ts.ObjectLiteralExpression {
   switch (node.kind) {
     case "text":
-      return factory.createObjectLiteralExpression([
-        factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
-        factory.createPropertyAssignment(factory.createIdentifier("text"), factory.createStringLiteral(node.text)),
-        factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)),
-      ], false);
+      return factory.createObjectLiteralExpression(
+        [
+          factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
+          factory.createPropertyAssignment(factory.createIdentifier("text"), factory.createStringLiteral(node.text)),
+          factory.createPropertyAssignment(
+            factory.createIdentifier("range"),
+            sourceRangeExpression(factory, node.range),
+          ),
+        ],
+        false,
+      );
     case "bind":
-      return factory.createObjectLiteralExpression([
-        factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
-        factory.createPropertyAssignment(factory.createIdentifier("interpolation"), factory.createNumericLiteral(node.interpolation)),
-        factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)),
-      ], false);
+      return factory.createObjectLiteralExpression(
+        [
+          factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
+          factory.createPropertyAssignment(
+            factory.createIdentifier("interpolation"),
+            factory.createNumericLiteral(node.interpolation),
+          ),
+          factory.createPropertyAssignment(
+            factory.createIdentifier("range"),
+            sourceRangeExpression(factory, node.range),
+          ),
+        ],
+        false,
+      );
     case "if":
-      return factory.createObjectLiteralExpression([
-        factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
-        factory.createPropertyAssignment(factory.createIdentifier("condition"), factory.createNumericLiteral(node.condition)),
-        factory.createPropertyAssignment(factory.createIdentifier("children"), templateNodeArray(factory, node.children)),
-        factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)),
-      ], false);
+      return factory.createObjectLiteralExpression(
+        [
+          factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
+          factory.createPropertyAssignment(
+            factory.createIdentifier("condition"),
+            factory.createNumericLiteral(node.condition),
+          ),
+          factory.createPropertyAssignment(
+            factory.createIdentifier("children"),
+            templateNodeArray(factory, node.children),
+          ),
+          factory.createPropertyAssignment(
+            factory.createIdentifier("range"),
+            sourceRangeExpression(factory, node.range),
+          ),
+        ],
+        false,
+      );
     case "choose": {
       const properties = [
         factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
-        factory.createPropertyAssignment(factory.createIdentifier("whens"), factory.createArrayLiteralExpression(node.whens.map((when) => factory.createObjectLiteralExpression([
-          factory.createPropertyAssignment(factory.createIdentifier("condition"), factory.createNumericLiteral(when.condition)),
-          factory.createPropertyAssignment(factory.createIdentifier("children"), templateNodeArray(factory, when.children)),
-          factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, when.range)),
-        ], false)), false)),
+        factory.createPropertyAssignment(
+          factory.createIdentifier("whens"),
+          factory.createArrayLiteralExpression(
+            node.whens.map((when) =>
+              factory.createObjectLiteralExpression(
+                [
+                  factory.createPropertyAssignment(
+                    factory.createIdentifier("condition"),
+                    factory.createNumericLiteral(when.condition),
+                  ),
+                  factory.createPropertyAssignment(
+                    factory.createIdentifier("children"),
+                    templateNodeArray(factory, when.children),
+                  ),
+                  factory.createPropertyAssignment(
+                    factory.createIdentifier("range"),
+                    sourceRangeExpression(factory, when.range),
+                  ),
+                ],
+                false,
+              ),
+            ),
+            false,
+          ),
+        ),
       ];
-      if (node.otherwise !== undefined) properties.push(factory.createPropertyAssignment(factory.createIdentifier("otherwise"), templateNodeArray(factory, node.otherwise)));
-      properties.push(factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)));
+      if (node.otherwise !== undefined)
+        properties.push(
+          factory.createPropertyAssignment(
+            factory.createIdentifier("otherwise"),
+            templateNodeArray(factory, node.otherwise),
+          ),
+        );
+      properties.push(
+        factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)),
+      );
       return factory.createObjectLiteralExpression(properties, false);
     }
     case "trim":
-      return factory.createObjectLiteralExpression([
-        factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
-        factory.createPropertyAssignment(factory.createIdentifier("attributes"), factory.createObjectLiteralExpression([
-          factory.createPropertyAssignment(factory.createIdentifier("prefix"), factory.createStringLiteral(node.attributes.prefix)),
-          factory.createPropertyAssignment(factory.createIdentifier("prefixOverrides"), factory.createArrayLiteralExpression(node.attributes.prefixOverrides.map((value) => factory.createStringLiteral(value)), false)),
-          factory.createPropertyAssignment(factory.createIdentifier("suffix"), factory.createStringLiteral(node.attributes.suffix)),
-          factory.createPropertyAssignment(factory.createIdentifier("suffixOverrides"), factory.createArrayLiteralExpression(node.attributes.suffixOverrides.map((value) => factory.createStringLiteral(value)), false)),
-        ], false)),
-        factory.createPropertyAssignment(factory.createIdentifier("children"), templateNodeArray(factory, node.children)),
-        factory.createPropertyAssignment(factory.createIdentifier("range"), sourceRangeExpression(factory, node.range)),
-      ], false);
+      return factory.createObjectLiteralExpression(
+        [
+          factory.createPropertyAssignment(factory.createIdentifier("kind"), factory.createStringLiteral(node.kind)),
+          factory.createPropertyAssignment(
+            factory.createIdentifier("attributes"),
+            factory.createObjectLiteralExpression(
+              [
+                factory.createPropertyAssignment(
+                  factory.createIdentifier("prefix"),
+                  factory.createStringLiteral(node.attributes.prefix),
+                ),
+                factory.createPropertyAssignment(
+                  factory.createIdentifier("prefixOverrides"),
+                  factory.createArrayLiteralExpression(
+                    node.attributes.prefixOverrides.map((value) => factory.createStringLiteral(value)),
+                    false,
+                  ),
+                ),
+                factory.createPropertyAssignment(
+                  factory.createIdentifier("suffix"),
+                  factory.createStringLiteral(node.attributes.suffix),
+                ),
+                factory.createPropertyAssignment(
+                  factory.createIdentifier("suffixOverrides"),
+                  factory.createArrayLiteralExpression(
+                    node.attributes.suffixOverrides.map((value) => factory.createStringLiteral(value)),
+                    false,
+                  ),
+                ),
+              ],
+              false,
+            ),
+          ),
+          factory.createPropertyAssignment(
+            factory.createIdentifier("children"),
+            templateNodeArray(factory, node.children),
+          ),
+          factory.createPropertyAssignment(
+            factory.createIdentifier("range"),
+            sourceRangeExpression(factory, node.range),
+          ),
+        ],
+        false,
+      );
     default:
       throw new Error(`Unsupported source template node: ${node.kind}`);
   }
 }
 
 function templateIrExpression(factory: ts.NodeFactory, ir: TemplateIr): ts.ObjectLiteralExpression {
-  return factory.createObjectLiteralExpression([
-    factory.createPropertyAssignment(factory.createIdentifier("version"), factory.createNumericLiteral(ir.version)),
-    factory.createPropertyAssignment(factory.createIdentifier("nodes"), templateNodeArray(factory, ir.nodes)),
-    factory.createPropertyAssignment(factory.createIdentifier("sourceLength"), factory.createNumericLiteral(ir.sourceLength)),
-    ...(ir.rawNodes === undefined
-      ? []
-      : [factory.createPropertyAssignment(factory.createIdentifier("rawNodes"), templateNodeArray(factory, ir.rawNodes))]),
-  ], false);
+  return factory.createObjectLiteralExpression(
+    [
+      factory.createPropertyAssignment(factory.createIdentifier("version"), factory.createNumericLiteral(ir.version)),
+      factory.createPropertyAssignment(factory.createIdentifier("nodes"), templateNodeArray(factory, ir.nodes)),
+      factory.createPropertyAssignment(
+        factory.createIdentifier("sourceLength"),
+        factory.createNumericLiteral(ir.sourceLength),
+      ),
+      ...(ir.rawNodes === undefined
+        ? []
+        : [
+            factory.createPropertyAssignment(
+              factory.createIdentifier("rawNodes"),
+              templateNodeArray(factory, ir.rawNodes),
+            ),
+          ]),
+    ],
+    false,
+  );
 }
 
 interface LoweredSource {
@@ -737,10 +1162,18 @@ function directivePrologueEnd(statements: readonly ts.Statement[]): number {
 function insertGeneratedStatements(sourceFile: ts.SourceFile, generated: readonly ts.Statement[]): ts.SourceFile {
   if (!generated.length) return sourceFile;
   const index = directivePrologueEnd(sourceFile.statements);
-  return ts.factory.updateSourceFile(sourceFile, [...sourceFile.statements.slice(0, index), ...generated, ...sourceFile.statements.slice(index)]);
+  return ts.factory.updateSourceFile(sourceFile, [
+    ...sourceFile.statements.slice(0, index),
+    ...generated,
+    ...sourceFile.statements.slice(index),
+  ]);
 }
 
-function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysisResult, mode: "runtime" | "checker"): LoweringPlan {
+function createLoweringPlan(
+  sourceFile: ts.SourceFile,
+  discovered: SourceAnalysisResult,
+  mode: "runtime" | "checker",
+): LoweringPlan {
   const factory = ts.factory;
   const allocator = createNameAllocator(sourceFile);
   const queryByKey = new Map(discovered.queries.map((query) => [queryKey(query.range), query]));
@@ -765,17 +1198,37 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
   if (captureName) {
     const imports = [
       factory.createImportSpecifier(false, factory.createIdentifier("capture"), factory.createIdentifier(captureName)),
-      ...(assertConditionName ? [factory.createImportSpecifier(false, factory.createIdentifier("assertDirectiveCondition"), factory.createIdentifier(assertConditionName))] : []),
+      ...(assertConditionName
+        ? [
+            factory.createImportSpecifier(
+              false,
+              factory.createIdentifier("assertDirectiveCondition"),
+              factory.createIdentifier(assertConditionName),
+            ),
+          ]
+        : []),
     ];
-    const helperModule = discovered.queries.some((query) =>
-      AUTHORING_MODULE_CATALOG.find((entry) => entry.moduleSpecifier === query.moduleSpecifier)?.helperFamily === "facade")
+    const helperModule = discovered.queries.some(
+      (query) =>
+        AUTHORING_MODULE_CATALOG.find((entry) => entry.moduleSpecifier === query.moduleSpecifier)?.helperFamily ===
+        "facade",
+    )
       ? "sqlbraid/compiled"
       : "@sqlbraid/template";
-    prefix.push(factory.createImportDeclaration(undefined, factory.createImportClause(false, undefined, factory.createNamedImports(imports)), factory.createStringLiteral(helperModule), undefined));
+    prefix.push(
+      factory.createImportDeclaration(
+        undefined,
+        factory.createImportClause(false, undefined, factory.createNamedImports(imports)),
+        factory.createStringLiteral(helperModule),
+        undefined,
+      ),
+    );
   }
   const transformer: ts.TransformerFactory<ts.SourceFile> = (context) => {
     function visit(node: ts.Node): ts.VisitResult<ts.Node> {
-      const originalKey = ts.isTaggedTemplateExpression(node) ? queryKey({ start: node.getStart(), end: node.getEnd() }) : undefined;
+      const originalKey = ts.isTaggedTemplateExpression(node)
+        ? queryKey({ start: node.getStart(), end: node.getEnd() })
+        : undefined;
       const updated = ts.visitEachChild(node, visit, context);
       if (!ts.isTaggedTemplateExpression(updated) || !originalKey) return updated;
       const query = queryByKey.get(originalKey);
@@ -786,28 +1239,71 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
       }
       const expressions = expressionNodesFor(updated.template);
       if (expressions.some(topLevelAwaitOrYield)) {
-        diagnostics.push({ code: "BRAID_ASYNC_CONTEXT", message: "Guarded templates cannot be lowered in an await/yield expression context.", severity: "error", range: query.templateRange });
+        diagnostics.push({
+          code: "BRAID_ASYNC_CONTEXT",
+          message: "Guarded templates cannot be lowered in an await/yield expression context.",
+          severity: "error",
+          range: query.templateRange,
+        });
         loweredNodes.set(originalKey, updated);
         return updated;
       }
       const key = queryKey(query.range);
       const valuesName = valuesNames.get(key) ?? allocator.fresh("__sqlbraidValues");
-      const captureContext: CaptureContext = { factory, valuesName, expressions, checkerMode: mode === "checker", ...(mode === "runtime" ? { readName: readNames.get(key), assertConditionName } : {}) };
-      const body = mode === "runtime"
-        ? [...captureSetup(factory, valuesName, evaluatedNames.get(key) ?? allocator.fresh("__sqlbraidEvaluated"), readNames.get(key) ?? allocator.fresh("__sqlbraidRead")), ...captureStatements(query.ir.nodes, captureContext)]
-        : captureStatements(query.ir.nodes, captureContext);
-      const callback = factory.createArrowFunction(undefined, undefined, [factory.createParameterDeclaration(undefined, undefined, factory.createIdentifier(valuesName), undefined, undefined, undefined)], undefined, undefined, factory.createBlock(body, true));
+      const captureContext: CaptureContext = {
+        factory,
+        valuesName,
+        expressions,
+        checkerMode: mode === "checker",
+        ...(mode === "runtime" ? { readName: readNames.get(key), assertConditionName } : {}),
+      };
+      const body =
+        mode === "runtime"
+          ? [
+              ...captureSetup(
+                factory,
+                valuesName,
+                evaluatedNames.get(key) ?? allocator.fresh("__sqlbraidEvaluated"),
+                readNames.get(key) ?? allocator.fresh("__sqlbraidRead"),
+              ),
+              ...captureStatements(query.ir.nodes, captureContext),
+            ]
+          : captureStatements(query.ir.nodes, captureContext);
+      const callback = factory.createArrowFunction(
+        undefined,
+        undefined,
+        [
+          factory.createParameterDeclaration(
+            undefined,
+            undefined,
+            factory.createIdentifier(valuesName),
+            undefined,
+            undefined,
+            undefined,
+          ),
+        ],
+        undefined,
+        undefined,
+        factory.createBlock(body, true),
+      );
       const typeArguments = updated.typeArguments;
-      const captureTypes = query.declaredResultKind === "call" && typeArguments?.length === 1
-        ? [typeArguments[0]!, factory.createLiteralTypeNode(factory.createStringLiteral("call"))]
-        : undefined;
-      const tag = typeArguments && !captureTypes ? factory.createExpressionWithTypeArguments(updated.tag, typeArguments) : updated.tag;
-      const replacement = withOriginal(factory.createCallExpression(factory.createIdentifier(captureName ?? "__sqlbraidCapture"), captureTypes, [
-        tag,
-        stringsArray(factory, query.strings, query.rawStrings),
-        callback,
-        templateIrExpression(factory, query.ir),
-      ]), node);
+      const captureTypes =
+        query.declaredResultKind === "call" && typeArguments?.length === 1
+          ? [typeArguments[0]!, factory.createLiteralTypeNode(factory.createStringLiteral("call"))]
+          : undefined;
+      const tag =
+        typeArguments && !captureTypes
+          ? factory.createExpressionWithTypeArguments(updated.tag, typeArguments)
+          : updated.tag;
+      const replacement = withOriginal(
+        factory.createCallExpression(factory.createIdentifier(captureName ?? "__sqlbraidCapture"), captureTypes, [
+          tag,
+          stringsArray(factory, query.strings, query.rawStrings),
+          callback,
+          templateIrExpression(factory, query.ir),
+        ]),
+        node,
+      );
       loweredNodes.set(originalKey, replacement);
       return replacement;
     }
@@ -819,7 +1315,11 @@ function createLoweringPlan(sourceFile: ts.SourceFile, discovered: SourceAnalysi
   return { transformer, diagnostics, loweredNodes, prefix };
 }
 
-function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisResult, mode: "runtime" | "checker"): LoweredSource {
+function lowerSourceFile(
+  sourceFile: ts.SourceFile,
+  discovered: SourceAnalysisResult,
+  mode: "runtime" | "checker",
+): LoweredSource {
   const plan = createLoweringPlan(sourceFile, discovered, mode);
   const transformed = ts.transform(sourceFile, [plan.transformer]);
   const transformedFile = transformed.transformed[0];
@@ -827,7 +1327,9 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
   const output = printer.printFile(transformedFile);
   const origins: SourceMapOrigin[] = [];
   let searchStart = 0;
-  function fallbackGeneratedRange(query: DiscoveredQuery): { readonly start: number; readonly end: number } | undefined {
+  function fallbackGeneratedRange(
+    query: DiscoveredQuery,
+  ): { readonly start: number; readonly end: number } | undefined {
     const candidateStrings = query.strings
       .map((value, index) => ({ value, index }))
       .filter(({ value }) => value.length > 0)
@@ -890,7 +1392,9 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
     return outputTokens;
   }
   for (const statement of sourceFile.statements) {
-    const transformedStatement = transformedFile.statements.find((candidate) => ts.getOriginalNode(candidate) === statement);
+    const transformedStatement = transformedFile.statements.find(
+      (candidate) => ts.getOriginalNode(candidate) === statement,
+    );
     if (!transformedStatement) continue;
     const statementText = printer.printNode(ts.EmitHint.Unspecified, transformedStatement, transformedFile);
     const generatedStart = output.indexOf(statementText, statementSearchStart);
@@ -903,9 +1407,14 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
       const sourceToken = sourceTokens[index];
       const generatedToken = generatedTokens[index];
       if (sourceToken.pos < 0 || sourceToken.end < 0 || generatedToken.pos < 0 || generatedToken.end < 0) continue;
-      if (sourceToken.kind !== generatedToken.kind || sourceToken.getText(sourceFile) !== generatedToken.getText(transformedFile)) continue;
+      if (
+        sourceToken.kind !== generatedToken.kind ||
+        sourceToken.getText(sourceFile) !== generatedToken.getText(transformedFile)
+      )
+        continue;
       mappingOrigins.push({
-        generatedStart: generatedStart + generatedToken.getStart(transformedFile) - transformedStatement.getStart(transformedFile),
+        generatedStart:
+          generatedStart + generatedToken.getStart(transformedFile) - transformedStatement.getStart(transformedFile),
         generatedEnd: generatedStart + generatedToken.getEnd() - transformedStatement.getStart(transformedFile),
         sourceStart: sourceToken.getStart(sourceFile),
         sourceEnd: sourceToken.getEnd(),
@@ -913,7 +1422,9 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
     }
   }
   for (const origin of origins) {
-    const query = discovered.queries.find((candidate) => candidate.range.start === origin.sourceStart && candidate.range.end === origin.sourceEnd);
+    const query = discovered.queries.find(
+      (candidate) => candidate.range.start === origin.sourceStart && candidate.range.end === origin.sourceEnd,
+    );
     if (!query) continue;
     const generatedQuery = output.slice(origin.generatedStart, origin.generatedEnd);
     let bindingSearchOffset = Math.max(0, generatedQuery.indexOf("=> {"));
@@ -933,13 +1444,26 @@ function lowerSourceFile(sourceFile: ts.SourceFile, discovered: SourceAnalysisRe
   return { sourceText: output, diagnostics: plan.diagnostics, origins, mappingOrigins, transformer: plan.transformer };
 }
 
-export function createVirtualOverlay(sourceText: string, fileName: string, options: OverlayOptions): VirtualTypeScriptOverlay {
+export function createVirtualOverlay(
+  sourceText: string,
+  fileName: string,
+  options: OverlayOptions,
+): VirtualTypeScriptOverlay {
   const compilerOptions = compilerOptionsFor(options);
   let sourceFile = sourceFileFor(sourceText, fileName, options);
   let typeChecker = options.typeChecker;
-  let discovered = discoverQueries(sourceText, fileName, { ...options, compilerOptions, sourceFile, ...(typeChecker ? { typeChecker } : {}) });
+  let discovered = discoverQueries(sourceText, fileName, {
+    ...options,
+    compilerOptions,
+    sourceFile,
+    ...(typeChecker ? { typeChecker } : {}),
+  });
   if (!typeChecker && hasMappedRowsTag(sourceFile)) {
-    const originalProgram = ts.createProgram([fileName], compilerOptions, sourceHost(compilerOptions, fileName, sourceText));
+    const originalProgram = ts.createProgram(
+      [fileName],
+      compilerOptions,
+      sourceHost(compilerOptions, fileName, sourceText),
+    );
     sourceFile = sourceFileInProgram(originalProgram, fileName) ?? sourceFile;
     typeChecker = originalProgram.getTypeChecker();
     discovered = discoverQueries(sourceText, fileName, { ...options, compilerOptions, sourceFile, typeChecker });
@@ -948,15 +1472,24 @@ export function createVirtualOverlay(sourceText: string, fileName: string, optio
     const node = queryNodeFor(sourceFile, query);
     return {
       range: query.range,
-      rowType: query.declaredRowType
-        ?? (query.mappedRow && typeChecker && node
-          ? mappedRowType(node, typeChecker) ?? "unknown"
-          : query.declaredResultKind === "command" ? 'import("@sqlbraid/core").CommandResult' : "unknown"),
+      rowType:
+        query.declaredRowType ??
+        (query.mappedRow && typeChecker && node
+          ? (mappedRowType(node, typeChecker) ?? "unknown")
+          : query.declaredResultKind === "command"
+            ? 'import("@sqlbraid/core").CommandResult'
+            : "unknown"),
       resultKind: query.declaredResultKind,
     };
   });
   const transformed = lowerSourceFile(sourceFile, discovered, "runtime");
-  return { sourceFileName: fileName, sourceText, virtualSourceText: transformed.sourceText, queryTypes, diagnostics: transformed.diagnostics };
+  return {
+    sourceFileName: fileName,
+    sourceText,
+    virtualSourceText: transformed.sourceText,
+    queryTypes,
+    diagnostics: transformed.diagnostics,
+  };
 }
 
 interface SourceEdit {
@@ -978,7 +1511,11 @@ function lineStarts(text: string): readonly number[] {
   return starts;
 }
 
-function positionAt(text: string, starts: readonly number[], offset: number): { readonly line: number; readonly column: number } {
+function positionAt(
+  text: string,
+  starts: readonly number[],
+  offset: number,
+): { readonly line: number; readonly column: number } {
   const safeOffset = Math.max(0, Math.min(offset, text.length));
   let low = 0;
   let high = starts.length;
@@ -990,7 +1527,14 @@ function positionAt(text: string, starts: readonly number[], offset: number): { 
   return { line: low, column: safeOffset - starts[low] };
 }
 
-function addChunkLinePoints(points: MappingPoint[], generatedText: string, generatedStart: number, sourceText: string, sourceStart: number, exactSourceLines = true): void {
+function addChunkLinePoints(
+  points: MappingPoint[],
+  generatedText: string,
+  generatedStart: number,
+  sourceText: string,
+  sourceStart: number,
+  exactSourceLines = true,
+): void {
   points.push({ generatedOffset: generatedStart, sourceOffset: sourceStart });
   for (let index = 0; index < generatedText.length; index += 1) {
     if (generatedText[index] === "\n") {
@@ -1030,7 +1574,14 @@ function sourceMapFor(
     const generatedLineStart = generatedStarts[generatedLine] ?? generatedText.length;
     for (const point of entries) {
       const original = positionAt(sourceText, sourceStarts, point.sourceOffset);
-      addSegment(generator, generatedLine, point.generatedOffset - generatedLineStart, fileName, original.line, original.column);
+      addSegment(
+        generator,
+        generatedLine,
+        point.generatedOffset - generatedLineStart,
+        fileName,
+        original.line,
+        original.column,
+      );
     }
   }
   const encoded = toEncodedMap(generator);
@@ -1042,7 +1593,9 @@ function prefixInsertionOffset(sourceFile: ts.SourceFile): number {
   if (index === 0) {
     if (!sourceFile.text.startsWith("#!")) return 0;
     const lineBreak = sourceFile.text.search(/\r\n|\r|\n/u);
-    return lineBreak < 0 ? sourceFile.text.length : lineBreak + (sourceFile.text[lineBreak] === "\r" && sourceFile.text[lineBreak + 1] === "\n" ? 2 : 1);
+    return lineBreak < 0
+      ? sourceFile.text.length
+      : lineBreak + (sourceFile.text[lineBreak] === "\r" && sourceFile.text[lineBreak + 1] === "\n" ? 2 : 1);
   }
   const last = sourceFile.statements[index - 1];
   let offset = last.end;
@@ -1081,7 +1634,9 @@ function lowerSourcePreserving(
     edits.push({ sourceStart: offset, sourceEnd: offset, generatedText });
   }
   if (!edits.length) return { code: sourceFile.text, diagnostics: plan.diagnostics, map: null };
-  const ordered = [...edits].sort((left, right) => left.sourceStart - right.sourceStart || left.sourceEnd - right.sourceEnd);
+  const ordered = [...edits].sort(
+    (left, right) => left.sourceStart - right.sourceStart || left.sourceEnd - right.sourceEnd,
+  );
   const points: MappingPoint[] = [];
   let sourceCursor = 0;
   let generatedCursor = 0;
@@ -1095,16 +1650,24 @@ function lowerSourcePreserving(
     const replacementStart = generatedCursor;
     code += edit.generatedText;
     addChunkLinePoints(points, edit.generatedText, replacementStart, sourceFile.text, edit.sourceStart, false);
-    const query = discovered.queries.find((candidate) => candidate.range.start === edit.sourceStart && candidate.range.end === edit.sourceEnd);
+    const query = discovered.queries.find(
+      (candidate) => candidate.range.start === edit.sourceStart && candidate.range.end === edit.sourceEnd,
+    );
     let bindingSearchOffset = Math.max(0, edit.generatedText.indexOf("=> {"));
     for (const binding of query?.bindings ?? []) {
       let bindingOffset = edit.generatedText.indexOf(binding.expression, bindingSearchOffset);
       while (bindingOffset >= 0) {
         const before = edit.generatedText[bindingOffset - 1];
         const after = edit.generatedText[bindingOffset + binding.expression.length];
-        const identifierExpression = /[\p{L}\p{N}_$]/u.test(binding.expression[0] ?? "") && /[\p{L}\p{N}_$]/u.test(binding.expression.at(-1) ?? "");
-        if (!identifierExpression || (!/[\p{L}\p{N}_$]/u.test(before ?? "") && !/[\p{L}\p{N}_$]/u.test(after ?? ""))) break;
-        bindingOffset = edit.generatedText.indexOf(binding.expression, bindingOffset + Math.max(1, binding.expression.length));
+        const identifierExpression =
+          /[\p{L}\p{N}_$]/u.test(binding.expression[0] ?? "") &&
+          /[\p{L}\p{N}_$]/u.test(binding.expression.at(-1) ?? "");
+        if (!identifierExpression || (!/[\p{L}\p{N}_$]/u.test(before ?? "") && !/[\p{L}\p{N}_$]/u.test(after ?? "")))
+          break;
+        bindingOffset = edit.generatedText.indexOf(
+          binding.expression,
+          bindingOffset + Math.max(1, binding.expression.length),
+        );
       }
       if (bindingOffset < 0) continue;
       points.push({ generatedOffset: replacementStart + bindingOffset, sourceOffset: binding.range.start });
@@ -1126,7 +1689,11 @@ function lowerSourcePreserving(
   return { code, diagnostics: plan.diagnostics, map };
 }
 
-export function transformSource(sourceText: string, fileName: string, options: TransformSourceOptions = {}): TransformSourceResult {
+export function transformSource(
+  sourceText: string,
+  fileName: string,
+  options: TransformSourceOptions = {},
+): TransformSourceResult {
   // ponytail: avoid the TypeScript parser for the overwhelmingly common unrelated-module path.
   if (!sourceText.includes("@braid")) return { code: sourceText, map: null, diagnostics: [] };
   const sourceFile = sourceFileFor(sourceText, fileName, options);
@@ -1134,21 +1701,43 @@ export function transformSource(sourceText: string, fileName: string, options: T
   return lowerSourcePreserving(sourceFile, discovered);
 }
 
-function virtualSourceFile(name: string, text: string, languageVersion: ts.ScriptTarget, original?: ts.SourceFile, impliedNodeFormat?: ts.ModuleKind.ESNext | ts.ModuleKind.CommonJS): ts.SourceFile {
-  const sourceFile = ts.createSourceFile(name, text, languageVersion, true, original ? sourceFileScriptKind(original) : scriptKindForFileName(name));
+function virtualSourceFile(
+  name: string,
+  text: string,
+  languageVersion: ts.ScriptTarget,
+  original?: ts.SourceFile,
+  impliedNodeFormat?: ts.ModuleKind.ESNext | ts.ModuleKind.CommonJS,
+): ts.SourceFile {
+  const sourceFile = ts.createSourceFile(
+    name,
+    text,
+    languageVersion,
+    true,
+    original ? sourceFileScriptKind(original) : scriptKindForFileName(name),
+  );
   if (original?.impliedNodeFormat !== undefined) sourceFile.impliedNodeFormat = original.impliedNodeFormat;
   else if (impliedNodeFormat !== undefined) sourceFile.impliedNodeFormat = impliedNodeFormat;
   return sourceFile;
 }
 
-function virtualHost(compilerOptions: ts.CompilerOptions, virtualFiles: ReadonlyMap<string, string>, originalFiles: ReadonlyMap<string, ts.SourceFile> = new Map()): ts.CompilerHost {
+function virtualHost(
+  compilerOptions: ts.CompilerOptions,
+  virtualFiles: ReadonlyMap<string, string>,
+  originalFiles: ReadonlyMap<string, ts.SourceFile> = new Map(),
+): ts.CompilerHost {
   const defaultHost = ts.createCompilerHost(compilerOptions, true);
   return {
     ...defaultHost,
     getSourceFile(name, languageVersion: ts.ScriptTarget) {
       const text = virtualFiles.get(ts.sys.resolvePath(name));
       if (text === undefined) return defaultHost.getSourceFile(name, languageVersion);
-      return virtualSourceFile(name, text, languageVersion, originalFiles.get(ts.sys.resolvePath(name)), impliedNodeFormatForFileName(name, compilerOptions));
+      return virtualSourceFile(
+        name,
+        text,
+        languageVersion,
+        originalFiles.get(ts.sys.resolvePath(name)),
+        impliedNodeFormatForFileName(name, compilerOptions),
+      );
     },
     readFile(name) {
       return virtualFiles.get(ts.sys.resolvePath(name)) ?? defaultHost.readFile(name);
@@ -1165,7 +1754,15 @@ function sourceHost(compilerOptions: ts.CompilerOptions, fileName: string, sourc
   return {
     ...defaultHost,
     getSourceFile(name, languageVersion: ts.ScriptTarget) {
-      return ts.sys.resolvePath(name) === canonical ? virtualSourceFile(name, sourceText, languageVersion, undefined, impliedNodeFormatForFileName(name, compilerOptions)) : defaultHost.getSourceFile(name, languageVersion);
+      return ts.sys.resolvePath(name) === canonical
+        ? virtualSourceFile(
+            name,
+            sourceText,
+            languageVersion,
+            undefined,
+            impliedNodeFormatForFileName(name, compilerOptions),
+          )
+        : defaultHost.getSourceFile(name, languageVersion);
     },
     readFile(name) {
       return ts.sys.resolvePath(name) === canonical ? sourceText : defaultHost.readFile(name);
@@ -1182,17 +1779,29 @@ function sourceFileInProgram(program: ts.Program, fileName: string): ts.SourceFi
 }
 
 function mapGeneratedRange(record: FileRecord, start: number, _end: number): SourceRange {
-  const origin = record.lowered.mappingOrigins.filter((candidate) => start >= candidate.generatedStart && start < candidate.generatedEnd).sort((left, right) => (left.generatedEnd - left.generatedStart) - (right.generatedEnd - right.generatedStart))[0];
-  const fallbackOrigin = origin ?? record.lowered.origins.find((candidate) => start >= candidate.generatedStart && start < candidate.generatedEnd);
+  const origin = record.lowered.mappingOrigins
+    .filter((candidate) => start >= candidate.generatedStart && start < candidate.generatedEnd)
+    .sort((left, right) => left.generatedEnd - left.generatedStart - (right.generatedEnd - right.generatedStart))[0];
+  const fallbackOrigin =
+    origin ??
+    record.lowered.origins.find((candidate) => start >= candidate.generatedStart && start < candidate.generatedEnd);
   if (fallbackOrigin) {
-    const query = record.discovered.queries.find((candidate) => candidate.range.start === fallbackOrigin.sourceStart && candidate.range.end === fallbackOrigin.sourceEnd);
+    const query = record.discovered.queries.find(
+      (candidate) =>
+        candidate.range.start === fallbackOrigin.sourceStart && candidate.range.end === fallbackOrigin.sourceEnd,
+    );
     if (query) {
-      const generatedQuery = record.lowered.sourceText.slice(fallbackOrigin.generatedStart, fallbackOrigin.generatedEnd);
+      const generatedQuery = record.lowered.sourceText.slice(
+        fallbackOrigin.generatedStart,
+        fallbackOrigin.generatedEnd,
+      );
       const callbackStart = generatedQuery.indexOf("=> {");
       const searchStart = callbackStart >= 0 ? callbackStart : 0;
       const bindingOffsets = new Map<number, number>();
       for (const expression of new Set(query.bindings.map((binding) => binding.expression))) {
-        const bindings = query.bindings.filter((binding) => binding.expression === expression).sort((left, right) => left.interpolation - right.interpolation);
+        const bindings = query.bindings
+          .filter((binding) => binding.expression === expression)
+          .sort((left, right) => left.interpolation - right.interpolation);
         let offset = searchStart;
         for (const binding of bindings) {
           let found = generatedQuery.indexOf(expression, offset);
@@ -1210,16 +1819,24 @@ function mapGeneratedRange(record: FileRecord, start: number, _end: number): Sou
       }
       for (const binding of query.bindings) {
         const bindingOffset = bindingOffsets.get(binding.interpolation);
-        if (bindingOffset !== undefined && start >= fallbackOrigin.generatedStart + bindingOffset && start <= fallbackOrigin.generatedStart + bindingOffset + binding.expression.length) return binding.range;
+        if (
+          bindingOffset !== undefined &&
+          start >= fallbackOrigin.generatedStart + bindingOffset &&
+          start <= fallbackOrigin.generatedStart + bindingOffset + binding.expression.length
+        )
+          return binding.range;
       }
       return { start: fallbackOrigin.sourceStart, end: fallbackOrigin.sourceEnd };
     }
     return { start: fallbackOrigin.sourceStart, end: fallbackOrigin.sourceEnd };
   }
-  const nearest = record.discovered.queries.reduce<{ readonly distance: number; readonly query?: DiscoveredQuery }>((best, query) => {
-    const distance = Math.abs(query.range.start - start);
-    return distance < best.distance ? { distance, query } : best;
-  }, { distance: Number.POSITIVE_INFINITY });
+  const nearest = record.discovered.queries.reduce<{ readonly distance: number; readonly query?: DiscoveredQuery }>(
+    (best, query) => {
+      const distance = Math.abs(query.range.start - start);
+      return distance < best.distance ? { distance, query } : best;
+    },
+    { distance: Number.POSITIVE_INFINITY },
+  );
   return nearest.query?.templateRange ?? { start: 0, end: Math.min(1, record.sourceText.length) };
 }
 
@@ -1258,7 +1875,9 @@ function programDiagnostics(
       addDiagnostic(diagnostics, seen, tsDiagnostic(diagnostic, { start: 0, end: 0 }));
       continue;
     }
-    const record = records.find((candidate) => ts.sys.resolvePath(candidate.fileName) === ts.sys.resolvePath(diagnostic.file?.fileName ?? ""));
+    const record = records.find(
+      (candidate) => ts.sys.resolvePath(candidate.fileName) === ts.sys.resolvePath(diagnostic.file?.fileName ?? ""),
+    );
     if (!record) continue;
     const start = diagnostic.start ?? 0;
     const end = start + (diagnostic.length ?? 1);
@@ -1270,7 +1889,8 @@ function programDiagnostics(
 function braidDiagnostics(records: readonly FileRecord[]): readonly CompileDiagnostic[] {
   const diagnostics: CompileDiagnostic[] = [];
   const seen = new Set<string>();
-  for (const record of records) for (const diagnostic of record.lowered.diagnostics) addDiagnostic(diagnostics, seen, diagnostic);
+  for (const record of records)
+    for (const diagnostic of record.lowered.diagnostics) addDiagnostic(diagnostics, seen, diagnostic);
   return diagnostics;
 }
 
@@ -1283,8 +1903,10 @@ function sameDiagnosticSource(left: CompileDiagnostic, right: CompileDiagnostic)
   if (left.range.start === right.range.start && left.range.end === right.range.end) return true;
   const leftContainsRight = left.range.start <= right.range.start && left.range.end >= right.range.end;
   const rightContainsLeft = right.range.start <= left.range.start && right.range.end >= left.range.end;
-  return (leftContainsRight || rightContainsLeft)
-    && (left.range.start === right.range.start || left.range.end === right.range.end);
+  return (
+    (leftContainsRight || rightContainsLeft) &&
+    (left.range.start === right.range.start || left.range.end === right.range.end)
+  );
 }
 
 function overlayOnlyDiagnostics(
@@ -1301,9 +1923,11 @@ function overlayOnlyDiagnostics(
         const leftWidth = left.candidate.range.end - left.candidate.range.start;
         const rightWidth = right.candidate.range.end - right.candidate.range.start;
         const diagnosticWidth = diagnostic.range.end - diagnostic.range.start;
-        return Math.abs(leftWidth - diagnosticWidth) - Math.abs(rightWidth - diagnosticWidth)
-          || left.candidate.range.start - right.candidate.range.start
-          || left.candidate.range.end - right.candidate.range.end;
+        return (
+          Math.abs(leftWidth - diagnosticWidth) - Math.abs(rightWidth - diagnosticWidth) ||
+          left.candidate.range.start - right.candidate.range.start ||
+          left.candidate.range.end - right.candidate.range.end
+        );
       })[0];
     if (!match) {
       only.push(diagnostic);
@@ -1322,14 +1946,23 @@ function compilerOptionsFor(options: TypeScriptCheckOptions): ts.CompilerOptions
   return { ...defaultCompilerOptions(), ...options.compilerOptions };
 }
 
-export function createSourceContext(sourceText: string, fileName: string, options: TypeScriptCheckOptions): TypeScriptSourceContext {
+export function createSourceContext(
+  sourceText: string,
+  fileName: string,
+  options: TypeScriptCheckOptions,
+): TypeScriptSourceContext {
   const compilerOptions = compilerOptionsFor(options);
   const program = ts.createProgram([fileName], compilerOptions, sourceHost(compilerOptions, fileName, sourceText));
-  const sourceFile = sourceFileInProgram(program, fileName) ?? sourceFileFor(sourceText, fileName, { ...options, compilerOptions });
+  const sourceFile =
+    sourceFileInProgram(program, fileName) ?? sourceFileFor(sourceText, fileName, { ...options, compilerOptions });
   return { compilerOptions, program, sourceFile, checker: program.getTypeChecker() };
 }
 
-export function checkSource(sourceText: string, fileName: string, options: TypeScriptCheckOptions): readonly CompileDiagnostic[] {
+export function checkSource(
+  sourceText: string,
+  fileName: string,
+  options: TypeScriptCheckOptions,
+): readonly CompileDiagnostic[] {
   const context = createSourceContext(sourceText, fileName, options);
   const { compilerOptions, sourceFile: originalSourceFile } = context;
   const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: context.checker };
@@ -1338,11 +1971,19 @@ export function checkSource(sourceText: string, fileName: string, options: TypeS
   const records: FileRecord[] = [{ fileName, sourceText, discovered, lowered }];
   const virtualFiles = new Map([[ts.sys.resolvePath(fileName), lowered.sourceText]]);
   const originalFiles = new Map([[ts.sys.resolvePath(fileName), originalSourceFile]]);
-  const virtualProgram = ts.createProgram([fileName], compilerOptions, virtualHost(compilerOptions, virtualFiles, originalFiles));
+  const virtualProgram = ts.createProgram(
+    [fileName],
+    compilerOptions,
+    virtualHost(compilerOptions, virtualFiles, originalFiles),
+  );
   return checkVirtualRecords(records, virtualProgram);
 }
 
-export function checkSourceDetailed(sourceText: string, fileName: string, options: TypeScriptCheckOptions): DetailedCheckResult {
+export function checkSourceDetailed(
+  sourceText: string,
+  fileName: string,
+  options: TypeScriptCheckOptions,
+): DetailedCheckResult {
   const context = createSourceContext(sourceText, fileName, options);
   const { compilerOptions, sourceFile: originalSourceFile } = context;
   const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: context.checker };
@@ -1351,7 +1992,11 @@ export function checkSourceDetailed(sourceText: string, fileName: string, option
   const records: FileRecord[] = [{ fileName, sourceText, discovered, lowered }];
   const virtualFiles = new Map([[ts.sys.resolvePath(fileName), lowered.sourceText]]);
   const originalFiles = new Map([[ts.sys.resolvePath(fileName), originalSourceFile]]);
-  const virtualProgram = ts.createProgram([fileName], compilerOptions, virtualHost(compilerOptions, virtualFiles, originalFiles));
+  const virtualProgram = ts.createProgram(
+    [fileName],
+    compilerOptions,
+    virtualHost(compilerOptions, virtualFiles, originalFiles),
+  );
   const braid = braidDiagnostics(records);
   const native = programDiagnostics(records, context.program, (record, start, end) => {
     const boundedStart = Math.max(0, Math.min(record.sourceText.length, start));
@@ -1367,20 +2012,44 @@ export function checkSourceDetailed(sourceText: string, fileName: string, option
   };
 }
 
-function readProject(projectFile: string, compilerOptionsOverride?: ts.CompilerOptions): { readonly compilerOptions: ts.CompilerOptions; readonly fileNames: readonly string[] } {
+function readProject(
+  projectFile: string,
+  compilerOptionsOverride?: ts.CompilerOptions,
+): { readonly compilerOptions: ts.CompilerOptions; readonly fileNames: readonly string[] } {
   const normalizedProjectFile = ts.sys.resolvePath(projectFile);
   const config = ts.readConfigFile(normalizedProjectFile, ts.sys.readFile);
-  if (config.error) throw new Error(`TS${config.error.code}: ${ts.flattenDiagnosticMessageText(config.error.messageText, " ")}`);
-  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(normalizedProjectFile), compilerOptionsOverride, normalizedProjectFile);
-  if (parsed.errors.length) throw new Error(parsed.errors.map((diagnostic) => `TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`).join("\n"));
+  if (config.error)
+    throw new Error(`TS${config.error.code}: ${ts.flattenDiagnosticMessageText(config.error.messageText, " ")}`);
+  const parsed = ts.parseJsonConfigFileContent(
+    config.config,
+    ts.sys,
+    dirname(normalizedProjectFile),
+    compilerOptionsOverride,
+    normalizedProjectFile,
+  );
+  if (parsed.errors.length)
+    throw new Error(
+      parsed.errors
+        .map((diagnostic) => `TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`)
+        .join("\n"),
+    );
   return { compilerOptions: parsed.options, fileNames: parsed.fileNames };
 }
 
-export function createProjectContext(projectFile: string, options: Pick<TypeScriptCheckOptions, "compilerOptions"> = {}): TypeScriptProjectContext {
+export function createProjectContext(
+  projectFile: string,
+  options: Pick<TypeScriptCheckOptions, "compilerOptions"> = {},
+): TypeScriptProjectContext {
   const parsed = readProject(projectFile, options.compilerOptions);
   const compilerOptions = { ...parsed.compilerOptions, ...options.compilerOptions };
   const program = ts.createProgram(parsed.fileNames, compilerOptions);
-  return { projectFile: ts.sys.resolvePath(projectFile), compilerOptions, fileNames: parsed.fileNames, program, checker: program.getTypeChecker() };
+  return {
+    projectFile: ts.sys.resolvePath(projectFile),
+    compilerOptions,
+    fileNames: parsed.fileNames,
+    program,
+    checker: program.getTypeChecker(),
+  };
 }
 
 export function checkProject(projectFile: string, options: TypeScriptCheckOptions = {}): readonly CompileDiagnostic[] {
@@ -1393,17 +2062,33 @@ export function checkProject(projectFile: string, options: TypeScriptCheckOption
       const sourceFile = sourceFileInProgram(context.program, fileName);
       const sourceText = sourceFile?.text ?? ts.sys.readFile(fileName);
       if (sourceText === undefined || !sourceFile) continue;
-      const fileOptions = { ...options, compilerOptions: context.compilerOptions, sourceFile, typeChecker: context.checker };
+      const fileOptions = {
+        ...options,
+        compilerOptions: context.compilerOptions,
+        sourceFile,
+        typeChecker: context.checker,
+      };
       const discovered = discoverQueries(sourceText, fileName, fileOptions);
       const lowered = lowerSourceFile(sourceFile, discovered, "checker");
       records.push({ fileName, sourceText, discovered, lowered });
       virtualFiles.set(ts.sys.resolvePath(fileName), lowered.sourceText);
       originalFiles.set(ts.sys.resolvePath(fileName), sourceFile);
     }
-    const virtualProgram = ts.createProgram(context.fileNames, context.compilerOptions, virtualHost(context.compilerOptions, virtualFiles, originalFiles));
+    const virtualProgram = ts.createProgram(
+      context.fileNames,
+      context.compilerOptions,
+      virtualHost(context.compilerOptions, virtualFiles, originalFiles),
+    );
     return checkVirtualRecords(records, virtualProgram);
   } catch (error) {
-    return [{ code: "BRAID_PROJECT_CONFIG", message: error instanceof Error ? error.message : String(error), severity: "error", range: { start: 0, end: 0 } }];
+    return [
+      {
+        code: "BRAID_PROJECT_CONFIG",
+        message: error instanceof Error ? error.message : String(error),
+        severity: "error",
+        range: { start: 0, end: 0 },
+      },
+    ];
   }
 }
 
@@ -1414,8 +2099,12 @@ function emitCompilerOptions(options: OverlayOptions): ts.CompilerOptions {
     ...defaultCompilerOptions(),
     target: provided.target ?? ts.ScriptTarget.ES2022,
     module,
-    moduleResolution: provided.moduleResolution ?? (module === ts.ModuleKind.Node16 || module === ts.ModuleKind.NodeNext ? ts.ModuleResolutionKind.NodeNext : ts.ModuleResolutionKind.Node10),
-    sourceMap: provided.inlineSourceMap ? false : provided.sourceMap ?? true,
+    moduleResolution:
+      provided.moduleResolution ??
+      (module === ts.ModuleKind.Node16 || module === ts.ModuleKind.NodeNext
+        ? ts.ModuleResolutionKind.NodeNext
+        : ts.ModuleResolutionKind.Node10),
+    sourceMap: provided.inlineSourceMap ? false : (provided.sourceMap ?? true),
     ...provided,
     noEmit: false,
   };
@@ -1423,24 +2112,57 @@ function emitCompilerOptions(options: OverlayOptions): ts.CompilerOptions {
   return compilerOptions;
 }
 
-export function emitSource(sourceText: string, fileName: string, options: OverlayOptions): { readonly outputText: string; readonly sourceMapText?: string; readonly diagnostics: readonly CompileDiagnostic[] } {
+export function emitSource(
+  sourceText: string,
+  fileName: string,
+  options: OverlayOptions,
+): {
+  readonly outputText: string;
+  readonly sourceMapText?: string;
+  readonly diagnostics: readonly CompileDiagnostic[];
+} {
   const compilerOptions = emitCompilerOptions(options);
-  const originalProgram = ts.createProgram([fileName], compilerOptions, sourceHost(compilerOptions, fileName, sourceText));
-  const originalSourceFile = sourceFileInProgram(originalProgram, fileName) ?? sourceFileFor(sourceText, fileName, { ...options, compilerOptions });
-  const fileOptions = { ...options, compilerOptions, sourceFile: originalSourceFile, typeChecker: originalProgram.getTypeChecker() };
+  const originalProgram = ts.createProgram(
+    [fileName],
+    compilerOptions,
+    sourceHost(compilerOptions, fileName, sourceText),
+  );
+  const originalSourceFile =
+    sourceFileInProgram(originalProgram, fileName) ??
+    sourceFileFor(sourceText, fileName, { ...options, compilerOptions });
+  const fileOptions = {
+    ...options,
+    compilerOptions,
+    sourceFile: originalSourceFile,
+    typeChecker: originalProgram.getTypeChecker(),
+  };
   const discovered = discoverQueries(sourceText, fileName, fileOptions);
   const transformed = lowerSourceFile(originalSourceFile, discovered, "runtime");
   let outputText = "";
   let sourceMapText: string | undefined;
-  const emitted = originalProgram.emit(undefined, (outputFileName, text) => {
-    if (outputFileName.endsWith(".map")) sourceMapText = text;
-    else if (!outputFileName.endsWith(".d.ts")) outputText = text;
-  }, undefined, false, { before: [transformed.transformer] });
-  const diagnostics = [...transformed.diagnostics, ...(emitted.diagnostics ?? []).map((diagnostic) => {
-    const start = diagnostic.start ?? 0;
-    const end = start + (diagnostic.length ?? 1);
-    return { code: `TS${diagnostic.code}`, message: ts.flattenDiagnosticMessageText(diagnostic.messageText, " "), severity: "error" as const, range: { start, end } };
-  })];
+  const emitted = originalProgram.emit(
+    undefined,
+    (outputFileName, text) => {
+      if (outputFileName.endsWith(".map")) sourceMapText = text;
+      else if (!outputFileName.endsWith(".d.ts")) outputText = text;
+    },
+    undefined,
+    false,
+    { before: [transformed.transformer] },
+  );
+  const diagnostics = [
+    ...transformed.diagnostics,
+    ...(emitted.diagnostics ?? []).map((diagnostic) => {
+      const start = diagnostic.start ?? 0;
+      const end = start + (diagnostic.length ?? 1);
+      return {
+        code: `TS${diagnostic.code}`,
+        message: ts.flattenDiagnosticMessageText(diagnostic.messageText, " "),
+        severity: "error" as const,
+        range: { start, end },
+      };
+    }),
+  ];
   if (sourceMapText && transformed.origins) {
     try {
       const sourceMap = JSON.parse(sourceMapText) as Record<string, unknown>;
@@ -1451,7 +2173,10 @@ export function emitSource(sourceText: string, fileName: string, options: Overla
   return { outputText, ...(sourceMapText ? { sourceMapText } : {}), diagnostics };
 }
 
-export function sourcePosition(sourceText: string, offset: number): { readonly line: number; readonly character: number } {
+export function sourcePosition(
+  sourceText: string,
+  offset: number,
+): { readonly line: number; readonly character: number } {
   const safeOffset = Math.max(0, Math.min(offset, sourceText.length));
   const prefix = sourceText.slice(0, safeOffset);
   const lines = prefix.split(/\r\n|\r|\n/u);

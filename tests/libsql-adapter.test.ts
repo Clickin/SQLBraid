@@ -34,13 +34,11 @@ test("libSQL requires an explicit exact-string integer assertion", () => {
   const client = fakeClient(async () => rowsResult([], []));
   assert.throws(
     () => createLibsqlExecutor(client, undefined as never),
-    (error: unknown) => error instanceof TypeError
-      && error.message.includes("BRAID_INTEGER_MODE_REQUIRED"),
+    (error: unknown) => error instanceof TypeError && error.message.includes("BRAID_INTEGER_MODE_REQUIRED"),
   );
   assert.throws(
     () => createLibsqlExecutor(client, { intMode: "bigint" } as never),
-    (error: unknown) => error instanceof TypeError
-      && error.message.includes("BRAID_INTEGER_MODE_REQUIRED"),
+    (error: unknown) => error instanceof TypeError && error.message.includes("BRAID_INTEGER_MODE_REQUIRED"),
   );
 });
 
@@ -69,28 +67,31 @@ test("libSQL classifies rows from columns metadata and normalizes integers and b
     fakeClient(async () => rowsResult(["id"], [])),
     { intMode: "string" },
   );
-  assert.deepEqual(
-    await emptyRows.query(sql.rows`SELECT id FROM users WHERE 0`.render()),
-    { kind: "rows", rowCount: 0, rows: [] },
-  );
+  assert.deepEqual(await emptyRows.query(sql.rows`SELECT id FROM users WHERE 0`.render()), {
+    kind: "rows",
+    rowCount: 0,
+    rows: [],
+  });
 
   const nullableInteger = createLibsqlExecutor(
     fakeClient(async () => rowsResult(["value"], [{ 0: null }], ["INTEGER"])),
     { intMode: "string" },
   );
-  assert.deepEqual(
-    await nullableInteger.query(sql.rows`SELECT NULL AS value`.render()),
-    { kind: "rows", rowCount: 1, rows: [{ value: null }] },
-  );
+  assert.deepEqual(await nullableInteger.query(sql.rows`SELECT NULL AS value`.render()), {
+    kind: "rows",
+    rowCount: 1,
+    rows: [{ value: null }],
+  });
 
   const dynamicIntegerAffinity = createLibsqlExecutor(
     fakeClient(async () => rowsResult(["value"], [{ 0: 1.5 }, { 0: "text" }], ["INTEGER"])),
     { intMode: "string" },
   );
-  assert.deepEqual(
-    await dynamicIntegerAffinity.query(sql.rows`SELECT value FROM dynamic_values`.render()),
-    { kind: "rows", rowCount: 2, rows: [{ value: 1.5 }, { value: "text" }] },
-  );
+  assert.deepEqual(await dynamicIntegerAffinity.query(sql.rows`SELECT value FROM dynamic_values`.render()), {
+    kind: "rows",
+    rowCount: 2,
+    rows: [{ value: 1.5 }, { value: "text" }],
+  });
 });
 
 test("libSQL rejects duplicate labels before row conversion and maps command metadata", async () => {
@@ -100,8 +101,7 @@ test("libSQL rejects duplicate labels before row conversion and maps command met
   );
   await assert.rejects(
     async () => duplicate.query(sql.rows`SELECT 1 AS id, 2 AS id`.render()),
-    (error: unknown) => error instanceof Error
-      && error.message.includes("BRAID_RESULT_COLUMNS"),
+    (error: unknown) => error instanceof Error && error.message.includes("BRAID_RESULT_COLUMNS"),
   );
 
   const command = createLibsqlExecutor(
@@ -113,27 +113,26 @@ test("libSQL rejects duplicate labels before row conversion and maps command met
     })),
     { intMode: "string" },
   );
-  assert.deepEqual(
-    await command.query(sql.command`INSERT INTO users (id) VALUES (1)`.render()),
-    {
-      kind: "command",
-      rowCount: 2,
-      rows: [],
-      command: { affectedRows: 2, insertId: "17" },
-    },
-  );
+  assert.deepEqual(await command.query(sql.command`INSERT INTO users (id) VALUES (1)`.render()), {
+    kind: "command",
+    rowCount: 2,
+    rows: [],
+    command: { affectedRows: 2, insertId: "17" },
+  });
 });
 
 test("libSQL materializes hostile row labels as own data properties", async () => {
   const executor = createLibsqlExecutor(
-    fakeClient(async () => rowsResult(
-      ["__proto__", "constructor", "toString", ""],
-      [{ 0: "proto-value", 1: "constructor-value", 2: "toString-value", 3: "empty-key" }],
-    )),
+    fakeClient(async () =>
+      rowsResult(
+        ["__proto__", "constructor", "toString", ""],
+        [{ 0: "proto-value", 1: "constructor-value", 2: "toString-value", 3: "empty-key" }],
+      ),
+    ),
     { intMode: "string" },
   );
   const result = await executor.query(sql.rows`SELECT 1`.render());
-  const row = result.kind === "rows" ? result.rows[0] as Record<string, unknown> : undefined;
+  const row = result.kind === "rows" ? (result.rows[0] as Record<string, unknown>) : undefined;
   assert.ok(row);
   assert.equal(Object.getPrototypeOf(row), Object.prototype);
   assert.deepEqual(Object.keys(row), ["__proto__", "constructor", "toString", ""]);
@@ -144,7 +143,9 @@ test("libSQL materializes hostile row labels as own data properties", async () =
   assert.equal(row[""], "empty-key");
   assert.deepEqual(
     JSON.parse(JSON.stringify(row)),
-    JSON.parse('{ "__proto__": "proto-value", "constructor": "constructor-value", "toString": "toString-value", "": "empty-key" }'),
+    JSON.parse(
+      '{ "__proto__": "proto-value", "constructor": "constructor-value", "toString": "toString-value", "": "empty-key" }',
+    ),
   );
 });
 
@@ -180,7 +181,7 @@ test("libSQL uses native batch for root and active transactions, never client BE
   );
   const executor = createLibsqlExecutor(client, { intMode: "string" });
   const bulk: RenderedBulk = {
-    statement: sql.command`INSERT INTO users (name) VALUES (${ "a" })`.render(),
+    statement: sql.command`INSERT INTO users (name) VALUES (${"a"})`.render(),
     parameterSets: [["a"], ["b"]],
   };
   const binding = executor.statementBinding.describeBulk!(bulk, { dialectId: "sqlite", requestedReuse: "auto" });
@@ -209,8 +210,12 @@ test("libSQL uses native batch for root and active transactions, never client BE
 test("libSQL leaves default transaction mode to the client and maps explicit readOnly", async () => {
   const calls: unknown[][] = [];
   const tx: LibsqlTransactionLike = {
-    async execute() { return rowsResult([], []); },
-    async batch() { return []; },
+    async execute() {
+      return rowsResult([], []);
+    },
+    async batch() {
+      return [];
+    },
     async commit() {},
     async rollback() {},
   };
@@ -244,8 +249,12 @@ test("libSQL validates transaction options without acquiring and preserves isola
       async () => {
         transactionCalls += 1;
         return {
-          async execute() { return rowsResult([], []); },
-          async batch() { return []; },
+          async execute() {
+            return rowsResult([], []);
+          },
+          async batch() {
+            return [];
+          },
           async commit() {},
           async rollback() {},
         };
@@ -253,21 +262,25 @@ test("libSQL validates transaction options without acquiring and preserves isola
     ),
     { intMode: "string" },
   );
-  const validate = (executor as QueryExecutor & {
-    readonly validateTransactionOptions: (options?: TransactionOptions) => void;
-  }).validateTransactionOptions;
+  const validate = (
+    executor as QueryExecutor & {
+      readonly validateTransactionOptions: (options?: TransactionOptions) => void;
+    }
+  ).validateTransactionOptions;
   assert.doesNotThrow(() => validate({ readOnly: false }));
   assert.throws(
     () => validate({ readOnly: true }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "transaction.read-only"
-      && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "transaction.read-only" &&
+      error.code === "BRAID_TX_OPTION_UNSUPPORTED",
   );
   assert.throws(
     () => validate({ isolation: "serializable", readOnly: true }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "transaction.isolation.serializable"
-      && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "transaction.isolation.serializable" &&
+      error.code === "BRAID_TX_OPTION_UNSUPPORTED",
   );
   assert.equal(transactionCalls, 0);
 });
@@ -327,15 +340,15 @@ test("libSQL closes invalid acquired transaction handles and preserves validatio
   );
   await assert.rejects(
     async () => await executor.begin!(),
-    (error: unknown) => error instanceof TypeError
-      && error.message.includes("invalid transaction handle"),
+    (error: unknown) => error instanceof TypeError && error.message.includes("invalid transaction handle"),
   );
   assert.equal(closeCalls, 1);
   assert.equal(rootQueries, 0);
-  assert.deepEqual(
-    await executor.query(sql.rows`SELECT 'root' AS value`.render()),
-    { kind: "rows", rowCount: 1, rows: [{ value: "root" }] },
-  );
+  assert.deepEqual(await executor.query(sql.rows`SELECT 'root' AS value`.render()), {
+    kind: "rows",
+    rowCount: 1,
+    rows: [{ value: "root" }],
+  });
   assert.equal(rootQueries, 1);
 });
 
@@ -348,7 +361,11 @@ test("libSQL aggregates invalid-handle validation and close failures", async () 
     },
   } as unknown as LibsqlTransactionLike;
   const executor = createLibsqlExecutor(
-    fakeClient(async () => rowsResult([], []), async () => [], async () => invalid),
+    fakeClient(
+      async () => rowsResult([], []),
+      async () => [],
+      async () => invalid,
+    ),
     { intMode: "string" },
   );
   await assert.rejects(
@@ -373,16 +390,31 @@ test("libSQL rejects hostile savepoint names before transaction I/O", async () =
       calls.push(String(statement));
       return rowsResult([], []);
     },
-    async batch() { return []; },
+    async batch() {
+      return [];
+    },
     async commit() {},
     async rollback() {},
   };
   const executor = createLibsqlExecutor(
-    fakeClient(async () => rowsResult([], []), async () => [], async () => transaction),
+    fakeClient(
+      async () => rowsResult([], []),
+      async () => [],
+      async () => transaction,
+    ),
     { intMode: "string" },
   );
   await executor.begin!();
-  for (const name of ["", "white space", "bad;name", "bad'name", "--comment", "/*comment*/", "line\nbreak", "tab\tbreak"]) {
+  for (const name of [
+    "",
+    "white space",
+    "bad;name",
+    "bad'name",
+    "--comment",
+    "/*comment*/",
+    "line\nbreak",
+    "tab\tbreak",
+  ]) {
     await assert.rejects(
       async () => await executor.savepoint!(name),
       (error: unknown) => error instanceof TypeError,
@@ -395,14 +427,19 @@ test("libSQL rejects hostile savepoint names before transaction I/O", async () =
 });
 
 test("libSQL advertises unsupported session pinning, stream, call, and cancellation", async () => {
-  const executor = createLibsqlExecutor(fakeClient(async () => rowsResult([], [])), { intMode: "string" });
+  const executor = createLibsqlExecutor(
+    fakeClient(async () => rowsResult([], [])),
+    { intMode: "string" },
+  );
   assert.equal(executor.environment?.capabilities["session.pinned"]?.status, "unsupported");
   assert.equal(executor.environment?.capabilities["statement.stream"]?.status, "unsupported");
-  const database = createLibsqlDatabase(fakeClient(async () => rowsResult([], [])), { intMode: "string" });
+  const database = createLibsqlDatabase(
+    fakeClient(async () => rowsResult([], [])),
+    { intMode: "string" },
+  );
   await assert.rejects(
     () => database.session(async () => undefined),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "session.pinned",
+    (error: unknown) => error instanceof UnsupportedFeatureError && error.feature === "session.pinned",
   );
   await assert.rejects(
     async () => {
@@ -410,17 +447,14 @@ test("libSQL advertises unsupported session pinning, stream, call, and cancellat
         void _row;
       }
     },
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.stream",
+    (error: unknown) => error instanceof UnsupportedFeatureError && error.feature === "statement.stream",
   );
   await assert.rejects(
     async () => executor.call(sql`SELECT 1`.render()),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "routine.call",
+    (error: unknown) => error instanceof UnsupportedFeatureError && error.feature === "routine.call",
   );
   await assert.rejects(
     async () => executor.query(sql.rows`SELECT 1`.render(), undefined, { signal: new AbortController().signal }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.cancel",
+    (error: unknown) => error instanceof UnsupportedFeatureError && error.feature === "statement.cancel",
   );
 });

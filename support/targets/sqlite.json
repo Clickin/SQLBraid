@@ -80,45 +80,31 @@
   "capabilities": {
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.execution.rc-session"
-      ]
+      "testIds": ["sqlite.execution.rc-session"]
     },
     "transaction.read-only": {
       "status": "unsupported",
-      "testIds": [
-        "sqlite.execution.rc-options"
-      ]
+      "testIds": ["sqlite.execution.rc-options"]
     },
     "transaction.isolation.read-uncommitted": {
       "status": "unsupported",
-      "testIds": [
-        "sqlite.execution.rc-options"
-      ]
+      "testIds": ["sqlite.execution.rc-options"]
     },
     "transaction.isolation.read-committed": {
       "status": "unsupported",
-      "testIds": [
-        "sqlite.execution.rc-options"
-      ]
+      "testIds": ["sqlite.execution.rc-options"]
     },
     "transaction.isolation.repeatable-read": {
       "status": "unsupported",
-      "testIds": [
-        "sqlite.execution.rc-options"
-      ]
+      "testIds": ["sqlite.execution.rc-options"]
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.execution.rc-session"
-      ]
+      "testIds": ["sqlite.execution.rc-session"]
     },
     "statement.cancel": {
       "status": "unsupported",
-      "testIds": [
-        "sqlite.execution.rc-options"
-      ]
+      "testIds": ["sqlite.execution.rc-options"]
     },
     "routine.call": {
       "status": "unsupported",
@@ -126,28 +112,19 @@
     },
     "sql.native-transparency": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.sql.native-transparency"
-      ]
+      "testIds": ["sqlite.sql.native-transparency"]
     },
     "sql.generated-structure": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.sql.generated-structure"
-      ]
+      "testIds": ["sqlite.sql.generated-structure"]
     },
     "numeric.exact-integer": {
       "status": "guaranteed",
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "sqlite.numeric.exact-integer"
-      ],
-      "driverRawRepresentations": [
-        "bigint",
-        "string"
-      ]
+      "testIds": ["sqlite.numeric.exact-integer"],
+      "driverRawRepresentations": ["bigint", "string"]
     },
     "numeric.exact-decimal": {
       "status": "unsupported",
@@ -161,45 +138,27 @@
       "semantics": "approximate-binary",
       "representation": "number",
       "fidelity": "lossless",
-      "testIds": [
-        "sqlite.numeric.approximate-float"
-      ],
-      "driverRawRepresentations": [
-        "number"
-      ]
+      "testIds": ["sqlite.numeric.approximate-float"],
+      "driverRawRepresentations": ["number"]
     },
     "numeric.bind-exact": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.numeric.dynamic-storage-and-bind-exact"
-      ]
+      "testIds": ["sqlite.numeric.dynamic-storage-and-bind-exact"]
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.data.json-lossless-text"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["sqlite.data.json-lossless-text"],
+      "driverRawRepresentations": ["string"]
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.data.temporal-lossless"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["sqlite.data.temporal-lossless"],
+      "driverRawRepresentations": ["string"]
     },
     "data.binary": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.data.binary"
-      ],
-      "driverRawRepresentations": [
-        "Uint8Array"
-      ]
+      "testIds": ["sqlite.data.binary"],
+      "driverRawRepresentations": ["Uint8Array"]
     },
     "data.uuid": {
       "status": "unsupported",
@@ -207,15 +166,11 @@
     },
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.result.rows"
-      ]
+      "testIds": ["sqlite.result.rows"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.result.command"
-      ]
+      "testIds": ["sqlite.result.command"]
     },
     "result.multiple-sets": {
       "status": "unsupported",
@@ -223,39 +178,27 @@
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.result.standard-schema"
-      ]
+      "testIds": ["sqlite.result.standard-schema"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.execution.prepared"
-      ]
+      "testIds": ["sqlite.execution.prepared"]
     },
     "statement.stream": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.execution.stream"
-      ]
+      "testIds": ["sqlite.execution.stream"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.execution.bulk"
-      ]
+      "testIds": ["sqlite.execution.bulk"]
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.execution.transaction"
-      ]
+      "testIds": ["sqlite.execution.transaction"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.execution.savepoint"
-      ]
+      "testIds": ["sqlite.execution.savepoint"]
     },
     "routine.out": {
       "status": "unsupported",
@@ -279,15 +222,11 @@
     },
     "metadata.identity": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.metadata.identity"
-      ]
+      "testIds": ["sqlite.metadata.identity"]
     },
     "metadata.generated": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.metadata.generated"
-      ]
+      "testIds": ["sqlite.metadata.generated"]
     },
     "metadata.routines": {
       "status": "unsupported",
@@ -295,33 +234,23 @@
     },
     "metadata.types": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.metadata.types"
-      ]
+      "testIds": ["sqlite.metadata.types"]
     },
     "dml.insert-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.result.rows"
-      ]
+      "testIds": ["sqlite.result.rows"]
     },
     "dml.upsert-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.dml.upsert-returning"
-      ]
+      "testIds": ["sqlite.dml.upsert-returning"]
     },
     "dml.update-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.dml.update-returning"
-      ]
+      "testIds": ["sqlite.dml.update-returning"]
     },
     "dml.delete-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "sqlite.dml.delete-returning"
-      ]
+      "testIds": ["sqlite.dml.delete-returning"]
     }
   },
   "evidence": {

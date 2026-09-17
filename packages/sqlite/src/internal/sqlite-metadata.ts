@@ -27,7 +27,10 @@ export function quoteSqliteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-export function readSqliteMetadataRows(database: SqliteMetadataDatabaseLike, sql: string): readonly SqliteMetadataRow[] {
+export function readSqliteMetadataRows(
+  database: SqliteMetadataDatabaseLike,
+  sql: string,
+): readonly SqliteMetadataRow[] {
   return database.prepare(sql).all().map(sqliteMetadataRow);
 }
 
@@ -40,10 +43,11 @@ export function findSqliteRowidIdentityColumn(
   if (withoutRowid) return undefined;
   const primary = info.filter((entry) => (sqliteMetadataInteger(entry.pk) ?? 0) !== 0);
   if (
-    primary.length !== 1
-    || sqliteMetadataInteger(primary[0]?.pk) !== 1
-    || sqliteMetadataText(primary[0]?.type)?.toUpperCase() !== "INTEGER"
-  ) return undefined;
+    primary.length !== 1 ||
+    sqliteMetadataInteger(primary[0]?.pk) !== 1 ||
+    sqliteMetadataText(primary[0]?.type)?.toUpperCase() !== "INTEGER"
+  )
+    return undefined;
 
   // A primary-key autoindex proves this is not the special rowid alias (including DESC).
   const indexes = readSqliteMetadataRows(database, `PRAGMA main.index_list(${quoteSqliteIdentifier(table)})`);

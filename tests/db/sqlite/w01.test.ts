@@ -22,10 +22,10 @@ test("SQLite binding diagnostics preserve literal marker text through real execu
   try {
     const probe = bindingObserver("sqlite", "text-positional");
     const db = createNodeSqliteDatabase(native, { observers: [probe.observer] });
-    assert.deepEqual(
-      await db.one(sql.rows`SELECT ${"O'Reilly"} AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */`),
-      { value: "O'Reilly", marker: "$1 ? :1 @p1" },
-    );
+    assert.deepEqual(await db.one(sql.rows`SELECT ${"O'Reilly"} AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */`), {
+      value: "O'Reilly",
+      marker: "$1 ? :1 @p1",
+    });
     probe.verify("SELECT ? AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */");
   } finally {
     native.close();
@@ -49,7 +49,10 @@ test("SQLite materialized query mappers reenter after releasing the root resourc
     const query = sql.rows(mapper)`SELECT 1`;
     assert.deepEqual((await db.execute(query)).rows, [42]);
     assert.deepEqual((await db.prepare("reentry", () => query, { input: "none" }).execute()).rows, [42]);
-    assert.deepEqual((await db.batch([query, query])).map((result) => result.rows), [[42], [42]]);
+    assert.deepEqual(
+      (await db.batch([query, query])).map((result) => result.rows),
+      [[42], [42]],
+    );
   } finally {
     native.close();
   }
@@ -100,9 +103,12 @@ test("SQLite stream mapper reentry rejects without retaining the resource", asyn
         },
       },
     };
-    await assert.rejects(async () => {
-      for await (const row of db.stream(sql.rows(mapper)`SELECT 1`)) void row;
-    }, (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_STREAM_SCOPE");
+    await assert.rejects(
+      async () => {
+        for await (const row of db.stream(sql.rows(mapper)`SELECT 1`)) void row;
+      },
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_STREAM_SCOPE",
+    );
     assert.deepEqual(await db.one(sql.rows`SELECT CAST(3 AS REAL) AS value`), { value: 3 });
   } finally {
     native.close();
@@ -119,20 +125,36 @@ test("SQLite streams close native iteration on break, mapper failure and abort",
       break;
     }
     const failure = new Error("mapper failed");
-    await assert.rejects(async () => {
-      for await (const row of db.stream(query, {
-        schema: { "~standard": { version: 1, vendor: "failure", validate() { throw failure; } } },
-      })) void row;
-    }, (error) => error === failure);
+    await assert.rejects(
+      async () => {
+        for await (const row of db.stream(query, {
+          schema: {
+            "~standard": {
+              version: 1,
+              vendor: "failure",
+              validate() {
+                throw failure;
+              },
+            },
+          },
+        }))
+          void row;
+      },
+      (error) => error === failure,
+    );
     const abort = new AbortController();
-    await assert.rejects(async () => {
-      for await (const row of db.stream(query, { signal: abort.signal })) {
-        assert.equal(row.value, 1);
-        abort.abort(failure);
-      }
-    }, (error) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.cancel"
-      && error.code === "BRAID_CANCEL_UNSUPPORTED");
+    await assert.rejects(
+      async () => {
+        for await (const row of db.stream(query, { signal: abort.signal })) {
+          assert.equal(row.value, 1);
+          abort.abort(failure);
+        }
+      },
+      (error) =>
+        error instanceof UnsupportedFeatureError &&
+        error.feature === "statement.cancel" &&
+        error.code === "BRAID_CANCEL_UNSUPPORTED",
+    );
     await db.tx(async (tx) => {
       assert.deepEqual(await tx.one(sql.rows`SELECT CAST(3 AS REAL) AS value`), { value: 3 });
     });
@@ -146,17 +168,30 @@ test("SQLite observer failures preserve root side effects but roll back transact
   native.exec("CREATE TABLE audit_effect (id INTEGER PRIMARY KEY)");
   const failure = new Error("post-execution audit failed");
   let rejectResult = true;
-  const db = createNodeSqliteDatabase(native, { observers: [{
-    onEvent(event) {
-      if (rejectResult && event.type === "query:result") throw failure;
-    },
-  }] });
+  const db = createNodeSqliteDatabase(native, {
+    observers: [
+      {
+        onEvent(event) {
+          if (rejectResult && event.type === "query:result") throw failure;
+        },
+      },
+    ],
+  });
   try {
     await assert.rejects(db.execute(sql.command`INSERT INTO audit_effect VALUES (1)`), (error) => error === failure);
-    assert.deepEqual(native.prepare("SELECT id FROM audit_effect").all().map((row) => row.id), [1]);
-    await assert.rejects(db.tx(async (tx) => {
-      await tx.execute(sql.command`INSERT INTO audit_effect VALUES (2)`);
-    }), (error) => error === failure);
+    assert.deepEqual(
+      native
+        .prepare("SELECT id FROM audit_effect")
+        .all()
+        .map((row) => row.id),
+      [1],
+    );
+    await assert.rejects(
+      db.tx(async (tx) => {
+        await tx.execute(sql.command`INSERT INTO audit_effect VALUES (2)`);
+      }),
+      (error) => error === failure,
+    );
     rejectResult = false;
     assert.deepEqual(await db.all(sql.rows`SELECT id FROM audit_effect`), [{ id: "1" }]);
   } finally {
@@ -178,8 +213,11 @@ test("SQLite wrappers sharing one database preserve transaction isolation", asyn
       db,
       secondaryDb,
       sql,
-      rows: async () => (observer.prepare("SELECT id FROM braid_w01 ORDER BY id").all() as { id: string }[]).map((row) => row.id),
-      clear: async () => { observer.prepare("DELETE FROM braid_w01").run(); },
+      rows: async () =>
+        (observer.prepare("SELECT id FROM braid_w01 ORDER BY id").all() as { id: string }[]).map((row) => row.id),
+      clear: async () => {
+        observer.prepare("DELETE FROM braid_w01").run();
+      },
     });
   } finally {
     observer.close();
@@ -194,7 +232,9 @@ test("SQLite result kinds follow native columns metadata", async () => {
     native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO users (name) VALUES ('Ada');");
     const db = createNodeSqliteDatabase(native);
 
-    const explicitRows = await db.execute(sql.rows<{ readonly id: string; readonly name: string }>`SELECT id, name FROM users`);
+    const explicitRows = await db.execute(
+      sql.rows<{ readonly id: string; readonly name: string }>`SELECT id, name FROM users`,
+    );
     assert.equal(explicitRows.kind, "rows");
     assert.deepEqual(explicitRows.rows, [{ id: "1", name: "Ada" }]);
 
@@ -222,18 +262,20 @@ test("SQLite result kinds follow native columns metadata", async () => {
 
     await assert.rejects(
       () => db.execute(sql.command`SELECT name FROM users`),
-      (error) => error instanceof DatabaseResultKindError
-        && error.code === "BRAID_RESULT_KIND"
-        && error.declaredKind === "command"
-        && error.actualKind === "rows",
+      (error) =>
+        error instanceof DatabaseResultKindError &&
+        error.code === "BRAID_RESULT_KIND" &&
+        error.declaredKind === "command" &&
+        error.actualKind === "rows",
     );
 
     await assert.rejects(
       () => db.execute(sql.rows`DELETE FROM users`),
-      (error) => error instanceof DatabaseResultKindError
-        && error.code === "BRAID_RESULT_KIND"
-        && error.declaredKind === "rows"
-        && error.actualKind === "command",
+      (error) =>
+        error instanceof DatabaseResultKindError &&
+        error.code === "BRAID_RESULT_KIND" &&
+        error.declaredKind === "rows" &&
+        error.actualKind === "command",
     );
     await assert.rejects(() => db.call(sql.call`CALL unsupported()`), /BRAID_CALL_UNSUPPORTED/);
     await assert.rejects(() => db.execute(sql`SELECT 1 AS duplicate, 2 AS duplicate`), /BRAID_RESULT_COLUMNS/);
@@ -257,10 +299,9 @@ test("SQLite result kinds follow native columns metadata", async () => {
     const mapped = v.object({
       payload: v.pipe(v.string(), v.parseJson(), v.object({ enabled: v.boolean() })),
     });
-    assert.deepEqual(
-      (await db.execute(sql.rows(mapped)`SELECT '{"enabled":true}' AS payload`)).rows,
-      [{ payload: { enabled: true } }],
-    );
+    assert.deepEqual((await db.execute(sql.rows(mapped)`SELECT '{"enabled":true}' AS payload`)).rows, [
+      { payload: { enabled: true } },
+    ]);
   } finally {
     native.close();
   }
@@ -269,7 +310,9 @@ test("SQLite result kinds follow native columns metadata", async () => {
 test("SQLite inspector reports only proven rowid identity", async () => {
   const native = new DatabaseSync(":memory:");
   try {
-    native.exec("CREATE TABLE braid_pv8_rowid (id INTEGER PRIMARY KEY, payload TEXT); CREATE TABLE braid_pv8_desc (id INTEGER PRIMARY KEY DESC); CREATE TABLE braid_pv8_composite (a INTEGER, b INTEGER, PRIMARY KEY (a, b)); CREATE TABLE braid_pv8_without (id INTEGER PRIMARY KEY) WITHOUT ROWID");
+    native.exec(
+      "CREATE TABLE braid_pv8_rowid (id INTEGER PRIMARY KEY, payload TEXT); CREATE TABLE braid_pv8_desc (id INTEGER PRIMARY KEY DESC); CREATE TABLE braid_pv8_composite (a INTEGER, b INTEGER, PRIMARY KEY (a, b)); CREATE TABLE braid_pv8_without (id INTEGER PRIMARY KEY) WITHOUT ROWID",
+    );
     const snapshot = await createSqliteInspector(native).inspect();
     assert.equal(snapshot.format, "sqlbraid-metadata");
     assert.equal(snapshot.relations["main.braid_pv8_rowid"]?.columns[0]?.identity, true);
@@ -308,9 +351,12 @@ test("SQLite inspector reads structured STRICT and WITHOUT ROWID flags in either
     assert.equal(relation("braid_pv18_words")?.withoutRowid, false);
     const generated = generateModels(snapshot, { typePolicy: sqliteTypePolicy });
     assertGeneratedProperty(generated.source, "BraidPv18StrictRow", "id", "string", false);
-    assert.ok(generated.diagnostics.some((diagnostic) =>
-      diagnostic.code === "CODEGEN_SQLITE_DYNAMIC_TYPE"
-      && diagnostic.relation === "main.braid_pv18_words"));
+    assert.ok(
+      generated.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "CODEGEN_SQLITE_DYNAMIC_TYPE" && diagnostic.relation === "main.braid_pv18_words",
+      ),
+    );
   } finally {
     native.close();
   }
@@ -412,7 +458,12 @@ test("SQLite inspector evidence generates compiling strict and conservative dyna
         assertGeneratedProperty(result.source, model, column.name, expectedType, optional);
       }
     }
-    assert.ok(result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_SQLITE_DYNAMIC_TYPE" && diagnostic.relation === "main.braid_pv9_dynamic"));
+    assert.ok(
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.code === "CODEGEN_SQLITE_DYNAMIC_TYPE" && diagnostic.relation === "main.braid_pv9_dynamic",
+      ),
+    );
 
     await assertCompilesGeneratedSource(result.source, "sqlite-pv9");
   } finally {

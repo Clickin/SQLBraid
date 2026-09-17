@@ -27,7 +27,12 @@ function connectionFor(
   execute: OracleConnectionLike["execute"],
   executeMany?: NonNullable<OracleConnectionLike["executeMany"]>,
 ): OracleConnectionLike {
-  return { execute, ...(executeMany === undefined ? {} : { executeMany }), commit: async () => undefined, rollback: async () => undefined };
+  return {
+    execute,
+    ...(executeMany === undefined ? {} : { executeMany }),
+    commit: async () => undefined,
+    rollback: async () => undefined,
+  };
 }
 
 function directionOf(bind: unknown): unknown {
@@ -35,11 +40,7 @@ function directionOf(bind: unknown): unknown {
   return undefined;
 }
 
-function returningLob(
-  data: string,
-  onClose: () => void,
-  failure?: Error,
-): Readable & { getData(): Promise<string> } {
+function returningLob(data: string, onClose: () => void, failure?: Error): Readable & { getData(): Promise<string> } {
   const stream = new Readable({ read() {} }) as Readable & { getData(): Promise<string> };
   const destroy = stream.destroy.bind(stream);
   stream.destroy = ((error?: Error) => {
@@ -68,19 +69,36 @@ test("Oracle maps mixed IN/OUT results by physical OUT ordinal", async () => {
 });
 
 test("Oracle routine calls preserve an undefined primary failure", async () => {
-  const executor = createOracledbExecutor(connectionFor(async () => { throw undefined; }), { driver });
+  const executor = createOracledbExecutor(
+    connectionFor(async () => {
+      throw undefined;
+    }),
+    { driver },
+  );
   const query = sql.call`BEGIN fail_without_value; END;`;
-  await assert.rejects(async () => await executor.call(query.render()), (error: unknown) => error === undefined);
+  await assert.rejects(
+    async () => await executor.call(query.render()),
+    (error: unknown) => error === undefined,
+  );
 });
 
 test("Oracle DML RETURNING zips arrays, preserves zero rows, and uses driver rowcount", async () => {
-  let next: unknown = { outBinds: [["1", "2"], ["Ada", "Grace"]], rowsAffected: 2 };
+  let next: unknown = {
+    outBinds: [
+      ["1", "2"],
+      ["Ada", "Grace"],
+    ],
+    rowsAffected: 2,
+  };
   const connection = connectionFor(async () => next);
   const executor = createOracledbExecutor(connection, { driver });
   const returned = sql.rows`UPDATE account SET name = ${"updated"} RETURNING id, name INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(32))}`;
   assert.deepEqual(await executor.query(returned.render()), {
     kind: "rows",
-    rows: [{ id: "1", name: "Ada" }, { id: "2", name: "Grace" }],
+    rows: [
+      { id: "1", name: "Ada" },
+      { id: "2", name: "Grace" },
+    ],
     rowCount: 2,
   });
   next = { outBinds: [[], []], rowsAffected: 0 };
@@ -88,33 +106,52 @@ test("Oracle DML RETURNING zips arrays, preserves zero rows, and uses driver row
   next = { outBinds: [["1"], []], rowsAffected: 1 };
   await assert.rejects(async () => executor.query(returned.render()), /BRAID_RETURNING_LENGTH/u);
   next = { outBinds: [[1], ["Ada"]], rowsAffected: 1 };
-  await assert.rejects(
-    async () => executor.query(returned.render()),
-    { code: "BRAID_RESULT_EXACTNESS" },
-  );
+  await assert.rejects(async () => executor.query(returned.render()), { code: "BRAID_RESULT_EXACTNESS" });
 });
 
 test("Oracle DML RETURNING registers every LOB before validation or materialization", async () => {
   const firstFailure = new Error("first LOB read failed");
   const closed: string[] = [];
-  const first = returningLob("first", () => { closed.push("first"); }, firstFailure);
-  const second = returningLob("second", () => { closed.push("second"); });
+  const first = returningLob(
+    "first",
+    () => {
+      closed.push("first");
+    },
+    firstFailure,
+  );
+  const second = returningLob("second", () => {
+    closed.push("second");
+  });
   let response: unknown = { outBinds: [[first], [second]], rowsAffected: 1 };
-  const executor = createOracledbExecutor(connectionFor(async () => response), { driver });
+  const executor = createOracledbExecutor(
+    connectionFor(async () => response),
+    { driver },
+  );
   const returned = sql.rows`UPDATE account SET name = ${"updated"} RETURNING id, name INTO ${sql.out("id", oracleParameter.clob())}, ${sql.out("name", oracleParameter.clob())}`;
-  await assert.rejects(async () => await executor.query(returned.render()), (error: unknown) => error === firstFailure);
+  await assert.rejects(
+    async () => await executor.query(returned.render()),
+    (error: unknown) => error === firstFailure,
+  );
   assert.deepEqual(closed.sort(), ["first", "second"]);
 
   closed.length = 0;
-  const mismatchedFirst = returningLob("first", () => { closed.push("mismatched-first"); });
-  const mismatchedSecond = returningLob("second", () => { closed.push("mismatched-second"); });
+  const mismatchedFirst = returningLob("first", () => {
+    closed.push("mismatched-first");
+  });
+  const mismatchedSecond = returningLob("second", () => {
+    closed.push("mismatched-second");
+  });
   response = { outBinds: [[mismatchedFirst], [mismatchedSecond, "extra"]], rowsAffected: 1 };
   await assert.rejects(async () => await executor.query(returned.render()), /BRAID_RETURNING_LENGTH/u);
   assert.deepEqual(closed.sort(), ["mismatched-first", "mismatched-second"]);
 
   closed.length = 0;
-  const rowCountFirst = returningLob("first", () => { closed.push("rowcount-first"); });
-  const rowCountSecond = returningLob("second", () => { closed.push("rowcount-second"); });
+  const rowCountFirst = returningLob("first", () => {
+    closed.push("rowcount-first");
+  });
+  const rowCountSecond = returningLob("second", () => {
+    closed.push("rowcount-second");
+  });
   response = { outBinds: [[rowCountFirst], [rowCountSecond]], rowsAffected: 2 };
   await assert.rejects(async () => await executor.query(returned.render()), /BRAID_RETURNING_ROWCOUNT/u);
   assert.deepEqual(closed.sort(), ["rowcount-first", "rowcount-second"]);
@@ -136,13 +173,31 @@ test("Oracle bulk precomputes one encoded matrix and executes executeMany once",
   const executor = createOracledbExecutor(connection, { driver });
   const adapter = executor.statementBinding;
   const statement = sql.command`UPDATE account SET name = ${"first"} WHERE id = ${1}`.render();
-  const bulk = createRenderedBulk({ statement, parameterSets: [["Ada", 1], ["Grace", 2]] });
+  const bulk = createRenderedBulk({
+    statement,
+    parameterSets: [
+      ["Ada", 1],
+      ["Grace", 2],
+    ],
+  });
   const binding = adapter.describeBulk!(bulk, { dialectId: "oracle", requestedReuse: "auto" });
-  assert.deepEqual(await executor.bulk!(bulk, binding), { inputCount: 2, affectedRows: 2, executionMode: "native-bulk" });
+  assert.deepEqual(await executor.bulk!(bulk, binding), {
+    inputCount: 2,
+    affectedRows: 2,
+    executionMode: "native-bulk",
+  });
   assert.equal(executions, 1);
-  assert.deepEqual(receivedBinds, [["Ada", 1], ["Grace", 2]]);
+  assert.deepEqual(receivedBinds, [
+    ["Ada", 1],
+    ["Grace", 2],
+  ]);
   let definitions: readonly unknown[] = [];
-  if (receivedOptions && typeof receivedOptions === "object" && "bindDefs" in receivedOptions && Array.isArray(receivedOptions.bindDefs)) {
+  if (
+    receivedOptions &&
+    typeof receivedOptions === "object" &&
+    "bindDefs" in receivedOptions &&
+    Array.isArray(receivedOptions.bindDefs)
+  ) {
     definitions = receivedOptions.bindDefs;
   }
   const first = definitions[0];
@@ -152,4 +207,3 @@ test("Oracle bulk precomputes one encoded matrix and executes executeMany once",
   assert.equal(firstMaxSize, 5);
   assert.equal(secondMaxSize, undefined);
 });
-

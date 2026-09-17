@@ -19,12 +19,14 @@ import { typePolicy } from "@sqlbraid/mysql";
 
 export default defineConfig({
   codegen: {
-    targets: [{
-      name: "main",
-      metadata: "./db/main.metadata.json",
-      outFile: "./src/generated/database.ts",
-      typePolicy,
-    }],
+    targets: [
+      {
+        name: "main",
+        metadata: "./db/main.metadata.json",
+        outFile: "./src/generated/database.ts",
+        typePolicy,
+      },
+    ],
   },
 });
 ```

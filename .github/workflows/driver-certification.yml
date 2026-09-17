@@ -12,7 +12,7 @@ on:
         default: false
         type: boolean
   schedule:
-    - cron: '17 3 * * *'
+    - cron: "17 3 * * *"
   workflow_call:
     inputs:
       stress:
@@ -573,7 +573,19 @@ jobs:
 
   certification-final:
     name: Aggregate complete certification matrix
-    needs: [certify-postgres, certify-mysql, certify-mariadb, certify-oracle, certify-mssql, certify-sqlite, certify-deno, certify-bun-sql, certify-web, certify-global]
+    needs:
+      [
+        certify-postgres,
+        certify-mysql,
+        certify-mariadb,
+        certify-oracle,
+        certify-mssql,
+        certify-sqlite,
+        certify-deno,
+        certify-bun-sql,
+        certify-web,
+        certify-global,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

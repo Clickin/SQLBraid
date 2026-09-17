@@ -32,11 +32,12 @@ async function installedVersion(packageName, expected) {
 async function record(testId, result) {
   assert.equal(result.supported, true);
   assert.ok(result.database && result.driver && result.runtime && result.typePolicy);
-  const driverVersion = result.driver.id === "pg"
-    ? await installedVersion("pg", Deno.env.get("SQLBRAID_PG_VERSION"))
-    : result.driver.id === "mysql2"
-      ? await installedVersion("mysql2", Deno.env.get("SQLBRAID_MYSQL2_VERSION"))
-      : result.runtime.version;
+  const driverVersion =
+    result.driver.id === "pg"
+      ? await installedVersion("pg", Deno.env.get("SQLBRAID_PG_VERSION"))
+      : result.driver.id === "mysql2"
+        ? await installedVersion("mysql2", Deno.env.get("SQLBRAID_MYSQL2_VERSION"))
+        : result.runtime.version;
   const databaseVersion = normalizeDatabaseVersion(result);
   const database = {
     ...result.database,
@@ -47,7 +48,9 @@ async function record(testId, result) {
   };
   const observation = {
     testIds: [testId],
-    targetId: [database.product, result.driver.id, result.runtime.id, result.runtime.version.replaceAll(".", "-")].join("-"),
+    targetId: [database.product, result.driver.id, result.runtime.id, result.runtime.version.replaceAll(".", "-")].join(
+      "-",
+    ),
     database,
     driver: { ...result.driver, version: driverVersion },
     runtime: result.runtime,

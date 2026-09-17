@@ -41,7 +41,10 @@ class FakeStatement implements BetterSqlite3StatementLike {
     return this.rows;
   }
 
-  run(...values: readonly unknown[]): { readonly changes?: number | bigint; readonly lastInsertRowid?: number | bigint } {
+  run(...values: readonly unknown[]): {
+    readonly changes?: number | bigint;
+    readonly lastInsertRowid?: number | bigint;
+  } {
     this.runValues.push([...values]);
     return this.runResult;
   }
@@ -87,9 +90,9 @@ class FakeDatabase implements BetterSqlite3DatabaseLike {
             ? new FakeStatement([{ name: "value" }], [{ value: "mapped" }])
             : text.startsWith("SELECT")
               ? new FakeStatement(
-                [{ name: "integer" }, { name: "real" }, { name: "bytes" }],
-                [{ integer: 9007199254740993n, real: 1, bytes: Uint8Array.from([0, 255]) }],
-              )
+                  [{ name: "integer" }, { name: "real" }, { name: "bytes" }],
+                  [{ integer: 9007199254740993n, real: 1, bytes: Uint8Array.from([0, 255]) }],
+                )
               : new FakeStatement([], []);
     this.statements.push(statement);
     return statement;
@@ -104,22 +107,18 @@ test("better-sqlite3 uses statement-local safe integers and preserves SQLite res
   const native = new FakeDatabase();
   const db = createBetterSqlite3Database(native);
 
-  assert.deepEqual(
-    await db.all(sql.rows`SELECT integer, real, bytes`),
-    [{ integer: "9007199254740993", real: 1, bytes: Uint8Array.from([0, 255]) }],
-  );
+  assert.deepEqual(await db.all(sql.rows`SELECT integer, real, bytes`), [
+    { integer: "9007199254740993", real: 1, bytes: Uint8Array.from([0, 255]) },
+  ]);
   assert.deepEqual(await db.all(sql.rows`SELECT value WHERE 0`), []);
   assert.equal(native.statements[0]?.safeIntegerModes[0], true);
   assert.equal(native.statements[1]?.safeIntegerModes[0], true);
-  assert.deepEqual(
-    await db.execute(sql`INSERT INTO values_table (value) VALUES (${1})`),
-    {
-      rows: [],
-      rowCount: 1,
-      kind: "command",
-      command: { affectedRows: 1, insertId: "9007199254740993" },
-    },
-  );
+  assert.deepEqual(await db.execute(sql`INSERT INTO values_table (value) VALUES (${1})`), {
+    rows: [],
+    rowCount: 1,
+    kind: "command",
+    command: { affectedRows: 1, insertId: "9007199254740993" },
+  });
   assert.equal(native.statements[2]?.safeIntegerModes[0], true);
   await assert.rejects(() => db.execute(sql`SELECT 1 AS duplicate, 2 AS duplicate`), /BRAID_RESULT_COLUMNS/);
   const bytes = Uint8Array.from([9, 8, 7, 6]);
@@ -165,10 +164,14 @@ test("better-sqlite3 async mapping, prepared bulk, and explicit transaction cont
   assert.equal(native.executedSql[3], "COMMIT");
 
   const failed = new Error("transaction callback failed");
-  await assert.rejects(() => db.tx(async (tx) => {
-    await tx.execute(sql.command`INSERT INTO names (name) VALUES (${"rollback"})`);
-    throw failed;
-  }), (error) => error === failed);
+  await assert.rejects(
+    () =>
+      db.tx(async (tx) => {
+        await tx.execute(sql.command`INSERT INTO names (name) VALUES (${"rollback"})`);
+        throw failed;
+      }),
+    (error) => error === failed,
+  );
   assert.equal(native.executedSql.at(-1), "ROLLBACK");
 });
 
@@ -186,8 +189,7 @@ test("better-sqlite3 streams native iteration with cleanup and rejects unsupport
   const signal = new AbortController();
   await assert.rejects(
     () => db.execute(sql`SELECT stream`, { signal: signal.signal }),
-    (error) => error instanceof UnsupportedFeatureError
-      && error.code === "BRAID_CANCEL_UNSUPPORTED",
+    (error) => error instanceof UnsupportedFeatureError && error.code === "BRAID_CANCEL_UNSUPPORTED",
   );
   await assert.rejects(() => db.call(sql.call`CALL unsupported()`), /BRAID_CALL_UNSUPPORTED/);
 

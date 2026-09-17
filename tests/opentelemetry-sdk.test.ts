@@ -7,11 +7,7 @@ import {
   MeterProvider,
   PeriodicExportingMetricReader,
 } from "@opentelemetry/sdk-metrics";
-import {
-  BasicTracerProvider,
-  InMemorySpanExporter,
-  SimpleSpanProcessor,
-} from "@opentelemetry/sdk-trace-base";
+import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { afterEach, test } from "vitest";
 import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
 import type {
@@ -77,7 +73,12 @@ function bulkReady(operationId: string, itemCount: number): BulkReadyEvent {
     itemCount,
     sql: "UPDATE items SET value = ?",
     valuesAt: () => [],
-    literalizedSql: () => ({ text: "UPDATE items SET value = ?", complete: true, redactedParameters: 0, truncatedParameters: 0 }),
+    literalizedSql: () => ({
+      text: "UPDATE items SET value = ?",
+      complete: true,
+      redactedParameters: 0,
+      truncatedParameters: 0,
+    }),
     transactionDepth: 0,
     transactionScoped: false,
   };
@@ -234,9 +235,9 @@ test("keeps varying bulk sizes in one bounded metric series", async () => {
   observer.onEvent(bulkResult("bulk-two", 200));
   await meterProvider.forceFlush();
 
-  const metric = metricExporter.getMetrics()[0]?.scopeMetrics[0]?.metrics.find(
-    (candidate) => candidate.descriptor.name === "db.client.operation.duration",
-  );
+  const metric = metricExporter
+    .getMetrics()[0]
+    ?.scopeMetrics[0]?.metrics.find((candidate) => candidate.descriptor.name === "db.client.operation.duration");
   const dataPoint = metric?.dataPointType === 0 ? metric.dataPoints[0] : undefined;
   assert.ok(dataPoint);
   assert.equal(dataPoint.value.count, 2);

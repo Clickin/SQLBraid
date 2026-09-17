@@ -16,7 +16,12 @@ export function hasSqlBraidDependency(value: unknown): boolean {
   for (const field of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]) {
     const dependencies = packageJson[field];
     if (!dependencies || typeof dependencies !== "object" || Array.isArray(dependencies)) continue;
-    if (Object.keys(dependencies as Record<string, unknown>).some((name) => name === "sqlbraid" || name.startsWith(SQLBRAID_PACKAGE_PREFIX))) return true;
+    if (
+      Object.keys(dependencies as Record<string, unknown>).some(
+        (name) => name === "sqlbraid" || name.startsWith(SQLBRAID_PACKAGE_PREFIX),
+      )
+    )
+      return true;
   }
   return false;
 }
@@ -32,7 +37,9 @@ export function isProjectEvidencePath(filePath: string, rootPath: string): boole
     : relative(resolve(rootPath), resolve(filePath));
   if (relativePath === ".." || relativePath.startsWith(`..${windows ? win32.sep : sep}`)) return false;
   const fileName = windows ? win32.basename(relativePath) : basename(relativePath);
-  return SQLBRAID_CONFIG_FILES.includes(fileName as (typeof SQLBRAID_CONFIG_FILES)[number]) || fileName === "package.json";
+  return (
+    SQLBRAID_CONFIG_FILES.includes(fileName as (typeof SQLBRAID_CONFIG_FILES)[number]) || fileName === "package.json"
+  );
 }
 
 export async function findProjectEvidence(rootPath: string): Promise<ProjectEvidence | undefined> {

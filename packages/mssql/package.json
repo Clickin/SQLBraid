@@ -2,42 +2,28 @@
   "name": "@sqlbraid/mssql",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid Microsoft SQL Server dialect, Tedious adapter, and metadata inspector",
+  "keywords": [
+    "database",
+    "mssql",
+    "query",
+    "sql",
+    "sql-server",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/mssql"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "mssql", "sql-server", "query"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=16.20.2" },
-  "dependencies": {
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/template": "workspace:*"
-  },
-  "peerDependencies": {
-    "@sqlbraid/metadata": "workspace:*",
-    "tedious": "20.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@sqlbraid/metadata": {
-      "optional": true
-    },
-    "tedious": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "@sqlbraid/metadata": "workspace:*",
-    "tedious": "20.0.0"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -51,5 +37,32 @@
       "types": "./dist/inspector.d.ts",
       "import": "./dist/inspector.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
+  "devDependencies": {
+    "@sqlbraid/metadata": "workspace:*",
+    "tedious": "20.0.0"
+  },
+  "peerDependencies": {
+    "@sqlbraid/metadata": "workspace:*",
+    "tedious": "20.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@sqlbraid/metadata": {
+      "optional": true
+    },
+    "tedious": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=16.20.2"
   }
 }

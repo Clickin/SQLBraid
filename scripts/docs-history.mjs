@@ -1,22 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import {
-  copyFile,
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+const semverPattern =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 
 export function isSemVer(value) {
   if (typeof value !== "string") return false;
@@ -172,11 +163,18 @@ async function writeVersions(historyDirectory, index) {
   await mkdir(historyDirectory, { recursive: true });
   const path = join(historyDirectory, "versions.json");
   const temporary = `${path}.tmp-${process.pid}`;
-  await writeFile(temporary, `${JSON.stringify({
-    stable: index.stable,
-    versions: sortVersions(index.versions),
-    pages: index.pages,
-  }, null, 2)}\n`);
+  await writeFile(
+    temporary,
+    `${JSON.stringify(
+      {
+        stable: index.stable,
+        versions: sortVersions(index.versions),
+        pages: index.pages,
+      },
+      null,
+      2,
+    )}\n`,
+  );
   await rename(temporary, path);
 }
 
@@ -219,7 +217,8 @@ export async function assertReleaseSource({ rootDirectory = root, version, commi
   }
   if (!commit) throw new Error("Release documentation requires the checked-out commit SHA.");
   const manifest = JSON.parse(await readFile(join(rootDirectory, "package.json"), "utf8"));
-  if (manifest.version !== version) throw new Error(`Release docs version ${version} differs from package version ${manifest.version}.`);
+  if (manifest.version !== version)
+    throw new Error(`Release docs version ${version} differs from package version ${manifest.version}.`);
   const head = await git(rootDirectory, ["rev-parse", "HEAD"]);
   if (head !== commit) throw new Error(`Release docs source is ${head}, expected exact commit ${commit}.`);
   const tag = `v${version}`;
@@ -245,13 +244,14 @@ export async function archiveRelease({
   if (!isSemVer(version)) {
     throw new Error(`Release documentation version must be a SemVer: ${version}`);
   }
-  if (!sourceDirectory || !historyDirectory) throw new Error("Release archive requires sourceDirectory and historyDirectory.");
+  if (!sourceDirectory || !historyDirectory)
+    throw new Error("Release archive requires sourceDirectory and historyDirectory.");
   if (verifySource) await assertReleaseSource({ rootDirectory, version, commit, ref });
   const index = await migrateLegacyLatest(historyDirectory, await readVersions(historyDirectory));
   const destination = join(historyDirectory, "v", version);
   if (await exists(destination)) {
     const provenancePath = join(destination, ".sqlbraid-source.json");
-    const provenance = await exists(provenancePath) ? JSON.parse(await readFile(provenancePath, "utf8")) : undefined;
+    const provenance = (await exists(provenancePath)) ? JSON.parse(await readFile(provenancePath, "utf8")) : undefined;
     if (!verifySource || (provenance && (provenance.commit !== commit || provenance.version !== version))) {
       throw new Error(`Documentation archive v/${version} already exists and cannot be overwritten.`);
     }
@@ -261,7 +261,8 @@ export async function archiveRelease({
     const temporary = await mkdtemp(join(dirname(destination), `.v-${version}-`));
     try {
       await copyTree(sourceDirectory, temporary);
-      if (verifySource) await writeFile(join(temporary, ".sqlbraid-source.json"), `${JSON.stringify({ version, commit })}\n`);
+      if (verifySource)
+        await writeFile(join(temporary, ".sqlbraid-source.json"), `${JSON.stringify({ version, commit })}\n`);
       await rename(temporary, destination);
     } catch (error) {
       await rm(temporary, { recursive: true, force: true });
@@ -279,7 +280,8 @@ export async function archiveRelease({
 }
 
 export async function syncLatest({ sourceDirectory, historyDirectory } = {}) {
-  if (!sourceDirectory || !historyDirectory) throw new Error("Latest docs sync requires sourceDirectory and historyDirectory.");
+  if (!sourceDirectory || !historyDirectory)
+    throw new Error("Latest docs sync requires sourceDirectory and historyDirectory.");
   const destination = join(historyDirectory, "latest");
   await mkdir(historyDirectory, { recursive: true });
   await migrateLegacyLatest(historyDirectory, await readVersions(historyDirectory));
@@ -308,18 +310,24 @@ export async function rewriteLegacyBaseLinks(outputDirectory, base) {
       continue;
     }
     const localePrefix = relative(outputDirectory, file).split(sep)[0] === "ko" ? "ko/" : "";
-    rewritten = rewritten.replace(/((?:href|src)=")(https:\/\/clickin\.github\.io)?\/SQLBraid\/(?!v\/)(latest\/)?([^"]*)/gu, (match, prefix, origin, channel, target) => {
-      const isPage = prefix.startsWith("href=") && !channel && !target.startsWith("_") && !/\.[^/]+(?:[?#].*)?$/u.test(target);
-      const localizedTarget = isPage && !target.startsWith("ko/") ? `${localePrefix}${target}` : target;
-      return `${prefix}${origin ?? ""}${normalizedBase}/${localizedTarget}`;
-    });
+    rewritten = rewritten.replace(
+      /((?:href|src)=")(https:\/\/clickin\.github\.io)?\/SQLBraid\/(?!v\/)(latest\/)?([^"]*)/gu,
+      (match, prefix, origin, channel, target) => {
+        const isPage =
+          prefix.startsWith("href=") && !channel && !target.startsWith("_") && !/\.[^/]+(?:[?#].*)?$/u.test(target);
+        const localizedTarget = isPage && !target.startsWith("ko/") ? `${localePrefix}${target}` : target;
+        return `${prefix}${origin ?? ""}${normalizedBase}/${localizedTarget}`;
+      },
+    );
     if (rewritten !== source) await writeFile(file, rewritten);
   }
 }
 
 export async function releaseTags({ rootDirectory = root } = {}) {
   const tags = await git(rootDirectory, ["tag", "--list", "v*"]);
-  return tags.split("\n").filter(Boolean)
+  return tags
+    .split("\n")
+    .filter(Boolean)
     .map((tag) => ({ tag, version: tag.slice(1) }))
     .filter(({ version }) => isSemVer(version))
     .sort((left, right) => compareSemVer(right.version, left.version));
@@ -335,16 +343,21 @@ export async function missingReleaseTags({ historyDirectory, rootDirectory = roo
     if (!index.versions.includes(entry.version) || !(await exists(destination))) missing.push(entry);
   }
   for (const version of index.versions) {
-    if (!(await exists(join(historyDirectory, "v", version)))
-      && !tags.some((entry) => entry.version === version)) {
+    if (!(await exists(join(historyDirectory, "v", version))) && !tags.some((entry) => entry.version === version)) {
       throw new Error(`Documentation versions.json indexes a missing release archive v/${version}.`);
     }
   }
   return missing;
 }
 
-export async function stageDeployment({ historyDirectory, outputDirectory, latestDirectory, publicRoot = "/SQLBraid" } = {}) {
-  if (!historyDirectory || !outputDirectory) throw new Error("Documentation deployment requires historyDirectory and outputDirectory.");
+export async function stageDeployment({
+  historyDirectory,
+  outputDirectory,
+  latestDirectory,
+  publicRoot = "/SQLBraid",
+} = {}) {
+  if (!historyDirectory || !outputDirectory)
+    throw new Error("Documentation deployment requires historyDirectory and outputDirectory.");
   await rm(outputDirectory, { recursive: true, force: true });
   await mkdir(outputDirectory, { recursive: true });
   const index = await readVersions(historyDirectory);
@@ -375,7 +388,8 @@ export async function stageDeployment({ historyDirectory, outputDirectory, lates
     const fallback = join(outputDirectory, "latest", "404.html");
     const releaseFallback = stagedIndex.stable ? join(outputDirectory, "v", stagedIndex.stable, "404.html") : undefined;
     if (await exists(fallback)) await copyFile(fallback, join(outputDirectory, "404.html"));
-    else if (releaseFallback && await exists(releaseFallback)) await copyFile(releaseFallback, join(outputDirectory, "404.html"));
+    else if (releaseFallback && (await exists(releaseFallback)))
+      await copyFile(releaseFallback, join(outputDirectory, "404.html"));
   }
   return stagedIndex;
 }
@@ -445,7 +459,9 @@ async function cli(args) {
     });
     return;
   }
-  throw new Error("Usage: docs-history.mjs assert-source|versions|archive|sync-latest|missing-tags|rewrite-links|stage");
+  throw new Error(
+    "Usage: docs-history.mjs assert-source|versions|archive|sync-latest|missing-tags|rewrite-links|stage",
+  );
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

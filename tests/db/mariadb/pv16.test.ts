@@ -149,12 +149,19 @@ test("MariaDB Connector pool supports native bulk and transaction savepoints", a
   try {
     await pool.query("DROP TABLE IF EXISTS braid_pv16_mariadb_bulk");
     await pool.query("CREATE TABLE braid_pv16_mariadb_bulk (id BIGINT PRIMARY KEY, label VARCHAR(255) NOT NULL)");
-    const values = [{ id: "9007199254740993", label: "one" }, { id: "9007199254740994", label: "two" }, { id: "9007199254740995", label: "three" }] as const;
+    const values = [
+      { id: "9007199254740993", label: "one" },
+      { id: "9007199254740994", label: "two" },
+      { id: "9007199254740995", label: "three" },
+    ] as const;
     assert.deepEqual(
-      await db.bulk(values, (value) => sql.command`
+      await db.bulk(
+        values,
+        (value) => sql.command`
         INSERT INTO braid_pv16_mariadb_bulk (id, label)
         VALUES (${value.id}, ${value.label})
-      `),
+      `,
+      ),
       { inputCount: 3, affectedRows: 3 },
     );
     await db.tx(async (tx) => {
@@ -189,7 +196,10 @@ test("MariaDB Connector queryStream satisfies shared stream lifecycle", async ()
       query: sql.rows<{ readonly id: string; readonly label: string }>`
         SELECT id, label FROM braid_pv16_mariadb_stream ORDER BY id
       `,
-      expected: [{ id: "1", label: "one" }, { id: "2", label: "two" }],
+      expected: [
+        { id: "1", label: "one" },
+        { id: "2", label: "two" },
+      ],
       close: async () => {
         await pool.query("DROP TABLE IF EXISTS braid_pv16_mariadb_stream").catch(() => undefined);
         await endPool(pool);

@@ -14,7 +14,11 @@ const packageRoot = join(root, "packages");
 const extensionRoot = join(root, "extensions", "vscode");
 const preRelease = process.argv.includes("--pre-release") || process.env.SQLBRAID_VSIX_PRE_RELEASE === "true";
 const outOptionIndex = process.argv.indexOf("--out");
-const output = resolve(outOptionIndex >= 0 ? process.argv[outOptionIndex + 1] : process.env.SQLBRAID_VSIX_OUTPUT ?? join(root, "sqlbraid-vscode.vsix"));
+const output = resolve(
+  outOptionIndex >= 0
+    ? process.argv[outOptionIndex + 1]
+    : (process.env.SQLBRAID_VSIX_OUTPUT ?? join(root, "sqlbraid-vscode.vsix")),
+);
 const temp = await mkdtemp(join(tmpdir(), "sqlbraid-vscode-package-"));
 
 function packageDirectory(name) {
@@ -31,13 +35,18 @@ async function run(command, args, cwd = root) {
 }
 
 async function sha256(path) {
-  return createHash("sha256").update(await readFile(path)).digest("hex");
+  return createHash("sha256")
+    .update(await readFile(path))
+    .digest("hex");
 }
 
 function numericExtensionVersion(version) {
   const parts = /^([0-9]+)\.([0-9]+)\.([0-9]+)$/u.exec(version)?.slice(1).map(Number);
-  return parts?.length === 3 && parts.some((value) => value !== 0)
-    && parts.every((value) => Number.isSafeInteger(value) && value >= 0 && value <= 2147483647);
+  return (
+    parts?.length === 3 &&
+    parts.some((value) => value !== 0) &&
+    parts.every((value) => Number.isSafeInteger(value) && value >= 0 && value <= 2147483647)
+  );
 }
 
 async function packFirstParty(name, tarballs) {
@@ -63,15 +72,21 @@ try {
     throw new Error(`VS Code extension version must be numeric major.minor.patch; found ${extensionManifest.version}.`);
   }
 
-  const extensionDependencies = Object.fromEntries(Object.entries(extensionManifest.dependencies ?? {}).map(([name, specifier]) => [
-    name,
-    typeof specifier === "string" ? specifier.replace(/^workspace:/u, "") : specifier,
-  ]));
+  const extensionDependencies = Object.fromEntries(
+    Object.entries(extensionManifest.dependencies ?? {}).map(([name, specifier]) => [
+      name,
+      typeof specifier === "string" ? specifier.replace(/^workspace:/u, "") : specifier,
+    ]),
+  );
   const firstPartyRoots = Object.keys(extensionDependencies).filter((name) => name.startsWith("@sqlbraid/"));
   for (const required of ["@sqlbraid/cli", "@sqlbraid/language-server"]) {
     if (!firstPartyRoots.includes(required)) throw new Error(`VS Code extension must depend on ${required}.`);
     const manifest = await json(join(packageDirectory(required), "package.json"));
-    assert.equal(extensionDependencies[required], manifest.version, `${required} dependency must match the bundled source version.`);
+    assert.equal(
+      extensionDependencies[required],
+      manifest.version,
+      `${required} dependency must match the bundled source version.`,
+    );
   }
 
   const tarballs = new Map();
@@ -82,16 +97,22 @@ try {
   await cp(join(extensionRoot, "dist"), join(extension, "dist"), { recursive: true });
   await copyFile(join(extensionRoot, "README.md"), join(extension, "README.md"));
   await copyFile(join(root, "LICENSE"), join(extension, "LICENSE"));
-  await writeFile(join(extension, "package.json"), JSON.stringify({
-    ...extensionManifest,
-    devDependencies: {},
-    dependencies: {
-      ...extensionDependencies,
-      ...Object.fromEntries([...tarballs].map(([name, path]) => [name, `file:${path}`])),
-    },
-  }));
+  await writeFile(
+    join(extension, "package.json"),
+    JSON.stringify({
+      ...extensionManifest,
+      devDependencies: {},
+      dependencies: {
+        ...extensionDependencies,
+        ...Object.fromEntries([...tarballs].map(([name, path]) => [name, `file:${path}`])),
+      },
+    }),
+  );
   await run("npm", ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], extension);
-  await writeFile(join(extension, "package.json"), JSON.stringify({ ...extensionManifest, devDependencies: {}, dependencies: extensionDependencies }));
+  await writeFile(
+    join(extension, "package.json"),
+    JSON.stringify({ ...extensionManifest, devDependencies: {}, dependencies: extensionDependencies }),
+  );
   await rm(join(extension, "package-lock.json"), { force: true });
 
   const packaged = join(temp, basename(output));
@@ -113,7 +134,11 @@ try {
   const licensePath = [...files].find((file) => /^extension\/license(?:\.(?:txt|md))?$/iu.test(file));
   assert.ok(licensePath, "VSIX must include its license document.");
   const { stdout: license } = await run("unzip", ["-p", packaged, licensePath]);
-  assert.equal(license, await readFile(join(root, "LICENSE"), "utf8"), "VSIX must ship the repository Apache-2.0 license.");
+  assert.equal(
+    license,
+    await readFile(join(root, "LICENSE"), "utf8"),
+    "VSIX must ship the repository Apache-2.0 license.",
+  );
 
   const readVsixJson = async (path) => JSON.parse((await run("unzip", ["-p", packaged, path])).stdout);
   const packagedManifest = await readVsixJson("extension/package.json");
@@ -146,10 +171,14 @@ try {
     preRelease,
     file: basename(output),
     sha256: await sha256(output),
-    bundled: Object.fromEntries(await Promise.all(["@sqlbraid/cli", "@sqlbraid/language-server"].map(async (name) => [
-      name,
-      (await json(join(packageDirectory(name), "package.json"))).version,
-    ]))),
+    bundled: Object.fromEntries(
+      await Promise.all(
+        ["@sqlbraid/cli", "@sqlbraid/language-server"].map(async (name) => [
+          name,
+          (await json(join(packageDirectory(name), "package.json"))).version,
+        ]),
+      ),
+    ),
   };
   process.stdout.write(`${JSON.stringify(identity)}\n`);
 } finally {

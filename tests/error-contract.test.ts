@@ -19,11 +19,7 @@ import { createPgExecutor } from "@sqlbraid/postgres/pg";
 import { createD1Executor } from "@sqlbraid/sqlite/d1";
 import { createNodeSqliteExecutor } from "@sqlbraid/sqlite/node-sqlite";
 import { createSqliteWasmExecutor } from "@sqlbraid/sqlite/wasm";
-import {
-  DatabaseResultKindError,
-  DatabaseResultValidationError,
-  DatabaseScopeError,
-} from "@sqlbraid/runtime";
+import { DatabaseResultKindError, DatabaseResultValidationError, DatabaseScopeError } from "@sqlbraid/runtime";
 
 const docs = [
   new URL("../website/src/content/docs/reference/errors.md", import.meta.url),
@@ -31,7 +27,9 @@ const docs = [
 ];
 
 function documentedCodes(url: URL): Set<string> {
-  const rows = readFileSync(url, "utf8").split("\n").filter((line) => line.startsWith("|"));
+  const rows = readFileSync(url, "utf8")
+    .split("\n")
+    .filter((line) => line.startsWith("|"));
   return new Set(rows.flatMap((line) => line.match(/BRAID_[A-Z0-9_]+/gu) ?? []));
 }
 
@@ -48,9 +46,9 @@ test("the public registry links to exported owner classes and both error referen
     ["@sqlbraid/runtime:DatabaseScopeError", DatabaseScopeError.codes],
   ]);
   for (const [owner, codes] of fixedClassCodes) {
-    const registryCodesForOwner = PUBLIC_ERROR_DEFINITIONS
-      .filter((definition) => definition.owner === owner)
-      .map((definition) => definition.code);
+    const registryCodesForOwner = PUBLIC_ERROR_DEFINITIONS.filter((definition) => definition.owner === owner).map(
+      (definition) => definition.code,
+    );
     assert.deepEqual([...registryCodesForOwner].sort(), [...codes].sort(), `${owner} registry linkage changed`);
   }
   const dynamicOwners = [UnsupportedFeatureError.name, AdapterError.name, SqlRenderError.name];
@@ -62,10 +60,7 @@ test("the public registry links to exported owner classes and both error referen
     "runtime batch lifecycle/synthetic observer error",
   ]);
   const knownOwners = new Set([...fixedClassCodes.keys(), ...dynamicOwners, ...nonClassOwners]);
-  assert.deepEqual(
-    [...new Set(PUBLIC_ERROR_DEFINITIONS.map(({ owner }) => owner))].sort(),
-    [...knownOwners].sort(),
-  );
+  assert.deepEqual([...new Set(PUBLIC_ERROR_DEFINITIONS.map(({ owner }) => owner))].sort(), [...knownOwners].sort());
   for (const url of docs) {
     assert.deepEqual([...documentedCodes(url)].sort(), [...registryCodes].sort(), String(url));
   }
@@ -90,13 +85,31 @@ test("the machine-readable capability vocabulary matches support data and classi
 
 test("first-party executor declarations use known capability IDs while custom IDs remain available", () => {
   const prepared = {
-    bind() { return prepared; },
-    async raw() { return []; },
+    bind() {
+      return prepared;
+    },
+    async raw() {
+      return [];
+    },
   };
   const executors = [
-    createNodeSqliteExecutor({ prepare() { throw new Error("not called"); } }),
-    createD1Executor({ prepare() { return prepared; }, batch: async () => [] }),
-    createSqliteWasmExecutor({ prepare() { throw new Error("not called"); }, exec() {} }),
+    createNodeSqliteExecutor({
+      prepare() {
+        throw new Error("not called");
+      },
+    }),
+    createD1Executor({
+      prepare() {
+        return prepared;
+      },
+      batch: async () => [],
+    }),
+    createSqliteWasmExecutor({
+      prepare() {
+        throw new Error("not called");
+      },
+      exec() {},
+    }),
   ];
   for (const [index, executor] of executors.entries()) {
     const ids = Object.keys(executor.environment?.capabilities ?? {});
@@ -109,35 +122,31 @@ test("first-party executor declarations use known capability IDs while custom ID
 
 test("public unsupported-feature conformance rejects semantically mismatched pairs", () => {
   assert.equal(
-    isPublicUnsupportedFeatureError(new UnsupportedFeatureError(
-      "statement.stream",
-      "BRAID_STREAM_UNSUPPORTED",
-      "streaming is unavailable",
-    )),
+    isPublicUnsupportedFeatureError(
+      new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "streaming is unavailable"),
+    ),
     true,
   );
   assert.equal(
-    isPublicUnsupportedFeatureError(new UnsupportedFeatureError(
-      "statement.stream",
-      "BRAID_BULK_UNSUPPORTED",
-      "wrong feature/code pair",
-    )),
+    isPublicUnsupportedFeatureError(
+      new UnsupportedFeatureError("statement.stream", "BRAID_BULK_UNSUPPORTED", "wrong feature/code pair"),
+    ),
     false,
   );
   assert.equal(
-    isPublicUnsupportedFeatureError(new UnsupportedFeatureError(
-      "statement.prepare",
-      "BRAID_PREPARE_UNSUPPORTED",
-      "prepared statements are unavailable",
-    )),
+    isPublicUnsupportedFeatureError(
+      new UnsupportedFeatureError(
+        "statement.prepare",
+        "BRAID_PREPARE_UNSUPPORTED",
+        "prepared statements are unavailable",
+      ),
+    ),
     true,
   );
   assert.equal(
-    isPublicUnsupportedFeatureError(new UnsupportedFeatureError(
-      "statement.prepare",
-      "BRAID_BULK_UNSUPPORTED",
-      "bulk is a different capability",
-    )),
+    isPublicUnsupportedFeatureError(
+      new UnsupportedFeatureError("statement.prepare", "BRAID_BULK_UNSUPPORTED", "bulk is a different capability"),
+    ),
     false,
   );
 });
@@ -153,39 +162,53 @@ function hinted(dialectId: string) {
 
 test("adapter-owned unsupported paths expose UnsupportedFeatureError and a code", async () => {
   const pg = createPgExecutor({
-    async query() { throw new Error("must not execute"); },
-    escapeIdentifier(value: string) { return value; },
-    escapeLiteral(value: string) { return value; },
+    async query() {
+      throw new Error("must not execute");
+    },
+    escapeIdentifier(value: string) {
+      return value;
+    },
+    escapeLiteral(value: string) {
+      return value;
+    },
   });
   await assert.rejects(
     async () => pg.query(hinted("postgres")),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.bind-hint"
-      && error.code === "BRAID_BIND_HINT_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.bind-hint" &&
+      error.code === "BRAID_BIND_HINT_UNSUPPORTED",
   );
 
   const mysql = createMysql2Executor({
-    async execute() { throw new Error("must not execute"); },
+    async execute() {
+      throw new Error("must not execute");
+    },
     async beginTransaction() {},
     async commit() {},
     async rollback() {},
   });
   await assert.rejects(
     async () => mysql.query(hinted("mysql")),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.bind-hint"
-      && error.code === "BRAID_BIND_HINT_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.bind-hint" &&
+      error.code === "BRAID_BIND_HINT_UNSUPPORTED",
   );
   assert.throws(
-    () => mysql.statementBinding.describeBulk!({
-      statement: createRenderedStatement({
-        segments: ["INSERT INTO example VALUES (", ")"],
-        parameters: [{ value: 1 }],
-        dialectId: "mysql",
-        resultKind: "command",
-      }),
-      parameterSets: [[() => undefined]],
-    }, { dialectId: "mysql", requestedReuse: "auto", transactionScoped: false }),
+    () =>
+      mysql.statementBinding.describeBulk!(
+        {
+          statement: createRenderedStatement({
+            segments: ["INSERT INTO example VALUES (", ")"],
+            parameters: [{ value: 1 }],
+            dialectId: "mysql",
+            resultKind: "command",
+          }),
+          parameterSets: [[() => undefined]],
+        },
+        { dialectId: "mysql", requestedReuse: "auto", transactionScoped: false },
+      ),
     (error: unknown) => error instanceof AdapterError && error.code === "BRAID_BIND_VALUE_UNSUPPORTED",
   );
 
@@ -198,9 +221,10 @@ test("adapter-owned unsupported paths expose UnsupportedFeatureError and a code"
   });
   await assert.rejects(
     async () => sqlite.query(hinted("sqlite")),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.bind-hint"
-      && error.code === "BRAID_BIND_HINT_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.bind-hint" &&
+      error.code === "BRAID_BIND_HINT_UNSUPPORTED",
   );
   assert.equal(prepares, 0);
 });

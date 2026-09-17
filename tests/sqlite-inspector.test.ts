@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import {
-  createSqliteInspector,
-  type SqliteMetadataDatabaseLike,
-} from "@sqlbraid/sqlite/inspector";
+import { createSqliteInspector, type SqliteMetadataDatabaseLike } from "@sqlbraid/sqlite/inspector";
 import {
   quoteSqliteIdentifier,
   sqliteMetadataInteger,
@@ -26,9 +23,15 @@ test("SQLite inspector accepts only its neutral metadata query surface", async (
   const responses = new Map<string, readonly unknown[]>([
     ["SELECT sqlite_version() AS version", [{ version: "3.45.0" }]],
     ["PRAGMA database_list", [{ seq: 0, name: "main", file: "" }]],
-    ["PRAGMA table_list", [{ schema: "main", name: "quoted\"table", strict: 1, wr: 0 }]],
-    ["SELECT type, name, sql FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name", [{ type: "table", name: "quoted\"table", sql: null }]],
-    ['PRAGMA main.table_xinfo("quoted""table")', [{ cid: 0, name: "id", type: "INTEGER", notnull: 0, dflt_value: null, pk: 1, hidden: 0 }]],
+    ["PRAGMA table_list", [{ schema: "main", name: 'quoted"table', strict: 1, wr: 0 }]],
+    [
+      "SELECT type, name, sql FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name",
+      [{ type: "table", name: 'quoted"table', sql: null }],
+    ],
+    [
+      'PRAGMA main.table_xinfo("quoted""table")',
+      [{ cid: 0, name: "id", type: "INTEGER", notnull: 0, dflt_value: null, pk: 1, hidden: 0 }],
+    ],
     ['PRAGMA main.index_list("quoted""table")', []],
     ["PRAGMA compile_options", [{ compile_options: "ENABLE_JSON1" }]],
   ]);

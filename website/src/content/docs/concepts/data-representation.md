@@ -83,7 +83,10 @@ library is documentation-only, not an SQLBraid dependency):
 
 ```ts
 import Decimal from "decimal.js";
-const Amount = v.pipe(v.string(), v.transform(value => new Decimal(value)));
+const Amount = v.pipe(
+  v.string(),
+  v.transform((value) => new Decimal(value)),
+);
 ```
 
 A schema cannot recover digits a driver already rounded.
@@ -133,15 +136,15 @@ database values and use canonical decimal text. `affectedRows`, `rowCount`,
 and bulk input counts are operational counts and remain safe-integer-guarded
 numbers.
 
-| Target | Fidelity-first canonical output | Compatibility boundary |
-| --- | --- | --- |
-| PostgreSQL / `pg` | exact numerics → `string`; JSON/temporal text → `string`; floats → `number` | native JSON → `unknown`; native `date`/`timestamp`/`timestamptz` → `Date`; `time`/`timetz` remain `string`; `interval` is `unknown` |
-| MySQL / `mysql2` | exact integer/`DECIMAL` → `string`; `jsonStrings`/`dateStrings` → `string` | native JSON/temporal are separate convenience profile; exact evidence does not transfer |
-| MariaDB Connector | exact integer/`DECIMAL` → `string`; `autoJsonMap:false`/`dateStrings:true` → `string` | native JSON/temporal are separate convenience profile; exact evidence does not transfer |
-| Node SQLite / WASM | INTEGER storage → `string`; REAL storage → `number` | native bigint is transport-only; D1 is guarded to the safe-integer range |
-| Bun SQL 1.3.14 | PostgreSQL/MySQL/MariaDB `{ bigint: true }`; PostgreSQL decimal → `string`; SQLite `{ safeIntegers: true }`; MariaDB/SQLite JSON → text | integral `Number` rows reject; MySQL/MariaDB DECIMAL and binary share ambiguous bytes and reject; author `CAST(... AS CHAR)`/`HEX(...)`; SQLite native decimal is unsupported |
-| Oracle Thin | `NUMBER` family → `string`; approximate binary → `number` | native JSON/temporal values are profile-specific convenience representations |
-| SQL Server / Tedious | preserved exact integer → `string`; approximate binary → `number` | native DECIMAL/NUMERIC/MONEY exact output is unsupported; author text casts |
+| Target               | Fidelity-first canonical output                                                                                                         | Compatibility boundary                                                                                                                                                        |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL / `pg`    | exact numerics → `string`; JSON/temporal text → `string`; floats → `number`                                                             | native JSON → `unknown`; native `date`/`timestamp`/`timestamptz` → `Date`; `time`/`timetz` remain `string`; `interval` is `unknown`                                           |
+| MySQL / `mysql2`     | exact integer/`DECIMAL` → `string`; `jsonStrings`/`dateStrings` → `string`                                                              | native JSON/temporal are separate convenience profile; exact evidence does not transfer                                                                                       |
+| MariaDB Connector    | exact integer/`DECIMAL` → `string`; `autoJsonMap:false`/`dateStrings:true` → `string`                                                   | native JSON/temporal are separate convenience profile; exact evidence does not transfer                                                                                       |
+| Node SQLite / WASM   | INTEGER storage → `string`; REAL storage → `number`                                                                                     | native bigint is transport-only; D1 is guarded to the safe-integer range                                                                                                      |
+| Bun SQL 1.3.14       | PostgreSQL/MySQL/MariaDB `{ bigint: true }`; PostgreSQL decimal → `string`; SQLite `{ safeIntegers: true }`; MariaDB/SQLite JSON → text | integral `Number` rows reject; MySQL/MariaDB DECIMAL and binary share ambiguous bytes and reject; author `CAST(... AS CHAR)`/`HEX(...)`; SQLite native decimal is unsupported |
+| Oracle Thin          | `NUMBER` family → `string`; approximate binary → `number`                                                                               | native JSON/temporal values are profile-specific convenience representations                                                                                                  |
+| SQL Server / Tedious | preserved exact integer → `string`; approximate binary → `number`                                                                       | native DECIMAL/NUMERIC/MONEY exact output is unsupported; author text casts                                                                                                   |
 
 SQLite dynamic-typing columns follow the runtime storage class, not declared
 INTEGER affinity. Arrays, domains, ranges, multiranges, composites, Oracle

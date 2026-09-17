@@ -5,7 +5,10 @@ import { dirname } from "node:path";
 declare const Deno: {
   readonly env: { get(name: string): string | undefined };
   readonly version: { readonly deno: string };
-  readonly Command: new (command: string, options: { readonly args: readonly string[] }) => {
+  readonly Command: new (
+    command: string,
+    options: { readonly args: readonly string[] },
+  ) => {
     output(): Promise<{ readonly success: boolean; readonly stdout: Uint8Array }>;
   };
   readonly mkdir: (path: string, options?: { readonly recursive?: boolean }) => Promise<void>;
@@ -16,7 +19,9 @@ export interface DenoCertificationDescriptor {
   readonly dispose: () => void | Promise<void>;
 }
 
-export type DenoCertificationFactory = (sourceSha: string) => DenoCertificationDescriptor | Promise<DenoCertificationDescriptor>;
+export type DenoCertificationFactory = (
+  sourceSha: string,
+) => DenoCertificationDescriptor | Promise<DenoCertificationDescriptor>;
 
 export async function loadDenoDriverVersion(packageName: string): Promise<string> {
   const metadata = await import(`npm:${packageName}/package.json`, { with: { type: "json" } });
@@ -29,7 +34,8 @@ export async function loadDenoDriverVersion(packageName: string): Promise<string
 
 export async function assertDenoSourceSha(sourceSha: string): Promise<void> {
   const result = await new Deno.Command("git", { args: ["rev-parse", "HEAD"] }).output();
-  if (!result.success) throw new Error("Deno certification source SHA cannot be verified because the checkout has no readable git HEAD.");
+  if (!result.success)
+    throw new Error("Deno certification source SHA cannot be verified because the checkout has no readable git HEAD.");
   const head = new TextDecoder().decode(result.stdout).trim();
   if (head.toLowerCase() !== sourceSha.toLowerCase()) {
     throw new Error(`Deno certification source SHA ${sourceSha} does not match checked-out HEAD ${head}.`);
@@ -41,7 +47,8 @@ export async function runDenoCertification(
   defaultTarget: string,
 ): Promise<void> {
   const sourceSha = Deno.env.get("SQLBRAID_CERT_SOURCE_SHA");
-  if (!sourceSha || !isSourceSha(sourceSha)) throw new Error("SQLBRAID_CERT_SOURCE_SHA must be a full 40-character SHA.");
+  if (!sourceSha || !isSourceSha(sourceSha))
+    throw new Error("SQLBRAID_CERT_SOURCE_SHA must be a full 40-character SHA.");
   await assertDenoSourceSha(sourceSha);
   const targetId = Deno.env.get("SQLBRAID_CERT_TARGET") ?? defaultTarget;
   const factory = factories[targetId];

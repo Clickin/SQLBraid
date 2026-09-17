@@ -56,11 +56,21 @@ function executor(
     async bulk(bulk) {
       onBulk(bulk);
       lifecycle.push("bulk");
-      return { inputCount: bulk.parameterSets.length, affectedRows: bulk.parameterSets.length, executionMode: "native-bulk" };
+      return {
+        inputCount: bulk.parameterSets.length,
+        affectedRows: bulk.parameterSets.length,
+        executionMode: "native-bulk",
+      };
     },
-    async begin() { lifecycle.push("begin"); },
-    async commit() { lifecycle.push("commit"); },
-    async rollback() { lifecycle.push("rollback"); },
+    async begin() {
+      lifecycle.push("begin");
+    },
+    async commit() {
+      lifecycle.push("commit");
+    },
+    async rollback() {
+      lifecycle.push("rollback");
+    },
   };
 }
 
@@ -76,7 +86,11 @@ test("bulk preflights every factory result, snapshots values, and executes once"
   assert.deepEqual(result, { inputCount: 3, affectedRows: 3 });
   assert.equal(factoryCalls, 3);
   assert.equal(captured.length, 1);
-  assert.deepEqual(captured[0]!.parameterSets, [[true, 1], [true, 2], [true, 3]]);
+  assert.deepEqual(captured[0]!.parameterSets, [
+    [true, 1],
+    [true, 2],
+    [true, 3],
+  ]);
   assert.equal(Object.isFrozen(captured[0]!.parameterSets), true);
   assert.equal(Object.isFrozen(captured[0]!.parameterSets[0]), true);
 });
@@ -84,7 +98,11 @@ test("bulk preflights every factory result, snapshots values, and executes once"
 test("empty bulk is a true no-op", async () => {
   let factoryCalls = 0;
   let bulkCalls = 0;
-  const db = createDatabase(executor(adapterWithBulk(), () => { bulkCalls += 1; }));
+  const db = createDatabase(
+    executor(adapterWithBulk(), () => {
+      bulkCalls += 1;
+    }),
+  );
   const result = await db.bulk([], () => {
     factoryCalls += 1;
     return sql.command`DELETE FROM account`;
@@ -127,19 +145,20 @@ test("bulk rejects guarded, list-cardinality, and hint shape changes before leas
       statementBinding,
       async acquire() {
         acquisitions += 1;
-        const resource = executor(statementBinding, () => { executions += 1; });
+        const resource = executor(statementBinding, () => {
+          executions += 1;
+        });
         return { ...resource, release() {} };
       },
     });
     await assert.rejects(
-      () => db.bulk([1, 2], (id) => {
-        factoryCalls += 1;
-        return shapeCase.factory(id);
-      }),
-      (error: unknown) => typeof error === "object"
-        && error !== null
-        && "code" in error
-        && error.code === "BRAID_BULK_SHAPE",
+      () =>
+        db.bulk([1, 2], (id) => {
+          factoryCalls += 1;
+          return shapeCase.factory(id);
+        }),
+      (error: unknown) =>
+        typeof error === "object" && error !== null && "code" in error && error.code === "BRAID_BULK_SHAPE",
       shapeCase.name,
     );
     assert.equal(factoryCalls, 2);
@@ -156,22 +175,23 @@ test("bulk rejects a rendered non-command before lease acquisition", async () =>
     statementBinding,
     async acquire() {
       acquisitions += 1;
-      const resource = executor(statementBinding, () => { executions += 1; });
+      const resource = executor(statementBinding, () => {
+        executions += 1;
+      });
       return { ...resource, release() {} };
     },
   });
   await assert.rejects(
-    () => db.bulk([1], (id) => {
-      const query = sql.command`UPDATE account SET touched = ${true} WHERE id = ${id}`;
-      return {
-        ...query,
-        render: () => ({ ...query.render(), resultKind: "rows" as const }),
-      } as CommandQuery;
-    }),
-    (error: unknown) => typeof error === "object"
-      && error !== null
-      && "code" in error
-      && error.code === "BRAID_BULK_SHAPE",
+    () =>
+      db.bulk([1], (id) => {
+        const query = sql.command`UPDATE account SET touched = ${true} WHERE id = ${id}`;
+        return {
+          ...query,
+          render: () => ({ ...query.render(), resultKind: "rows" as const }),
+        } as CommandQuery;
+      }),
+    (error: unknown) =>
+      typeof error === "object" && error !== null && "code" in error && error.code === "BRAID_BULK_SHAPE",
   );
   assert.equal(acquisitions, 0);
   assert.equal(executions, 0);
@@ -203,16 +223,28 @@ test("rejected concurrent nested transaction leaves the parent scope usable", as
 test("bulk emits one ready/result operation and transaction bulk stays pinned", async () => {
   const lifecycle: string[] = [];
   const events: ExecutionEvent[] = [];
-  const db = createDatabase(executor(adapterWithBulk(), () => undefined, lifecycle), {
-    observers: [{ onEvent(event) { events.push(event); } }],
-  });
+  const db = createDatabase(
+    executor(adapterWithBulk(), () => undefined, lifecycle),
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    },
+  );
   await db.tx(async (tx) => {
     const result = await tx.bulk([1, 2], (id) => sql.command`UPDATE account SET touched = ${true} WHERE id = ${id}`);
     assert.equal(result.inputCount, 2);
   });
   assert.deepEqual(lifecycle, ["begin", "bulk", "commit"]);
   const operations = events.filter((event) => event.type !== "transaction");
-  assert.deepEqual(operations.map((event) => event.type), ["bulk:ready", "bulk:result"]);
+  assert.deepEqual(
+    operations.map((event) => event.type),
+    ["bulk:ready", "bulk:result"],
+  );
   const ready = operations[0];
   assert.equal(ready?.type, "bulk:ready");
   if (ready?.type === "bulk:ready") {
@@ -236,13 +268,20 @@ test("bulk reports explicit unsupported capability without acquisition", async (
   };
   const db = createDatabase({
     statementBinding,
-    async query<Row>() { return { kind: "rows" as const, rows: [] as readonly Row[] }; },
-    async *stream<Row>(): AsyncGenerator<Row> { return; },
-    async call() { return { output: {}, resultSets: [] }; },
+    async query<Row>() {
+      return { kind: "rows" as const, rows: [] as readonly Row[] };
+    },
+    async *stream<Row>(): AsyncGenerator<Row> {
+      return;
+    },
+    async call() {
+      return { output: {}, resultSets: [] };
+    },
   });
   await assert.rejects(
     () => db.bulk([1], (id) => sql.command`DELETE FROM account WHERE id = ${id}`),
-    (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "BRAID_BULK_UNSUPPORTED",
+    (error: unknown) =>
+      typeof error === "object" && error !== null && "code" in error && error.code === "BRAID_BULK_UNSUPPORTED",
   );
 });
 
@@ -254,16 +293,25 @@ test("pooled bulk reports a missing leased capability and releases the lease", a
     async acquire() {
       return {
         statementBinding,
-        async query<Row>() { return { kind: "rows" as const, rows: [] as readonly Row[] }; },
-        async *stream<Row>(): AsyncGenerator<Row> { return; },
-        async call() { return { output: {}, resultSets: [] }; },
-        release() { releases += 1; },
+        async query<Row>() {
+          return { kind: "rows" as const, rows: [] as readonly Row[] };
+        },
+        async *stream<Row>(): AsyncGenerator<Row> {
+          return;
+        },
+        async call() {
+          return { output: {}, resultSets: [] };
+        },
+        release() {
+          releases += 1;
+        },
       };
     },
   });
   await assert.rejects(
     () => db.bulk([1], (id) => sql.command`DELETE FROM account WHERE id = ${id}`),
-    (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === "BRAID_BULK_UNSUPPORTED",
+    (error: unknown) =>
+      typeof error === "object" && error !== null && "code" in error && error.code === "BRAID_BULK_UNSUPPORTED",
   );
   assert.equal(releases, 1);
 });
@@ -278,7 +326,12 @@ test("pooled bulk releases exactly once on success, driver failure, and observer
       async acquire() {
         acquisitions += 1;
         const resource = executor(statementBinding, () => undefined);
-        return { ...resource, release() { releases += 1; } };
+        return {
+          ...resource,
+          release() {
+            releases += 1;
+          },
+        };
       },
     });
     await db.bulk([1, 2, 3], (id) => sql.command`UPDATE account SET touched = ${true} WHERE id = ${id}`);
@@ -298,7 +351,12 @@ test("pooled bulk releases exactly once on success, driver failure, and observer
         const resource = executor(statementBinding, () => {
           if (attempts === 1) throw driverFailure;
         });
-        return { ...resource, release() { releases += 1; } };
+        return {
+          ...resource,
+          release() {
+            releases += 1;
+          },
+        };
       },
     });
     await assert.rejects(
@@ -314,19 +372,29 @@ test("pooled bulk releases exactly once on success, driver failure, and observer
     let releases = 0;
     const observerFailure = new Error("bulk observer failure");
     const statementBinding = adapterWithBulk();
-    const db = createPooledDatabase({
-      statementBinding,
-      async acquire() {
-        const resource = executor(statementBinding, () => undefined);
-        return { ...resource, release() { releases += 1; } };
-      },
-    }, {
-      observers: [{
-        onEvent(event) {
-          if (rejectResult && event.type === "bulk:result") throw observerFailure;
+    const db = createPooledDatabase(
+      {
+        statementBinding,
+        async acquire() {
+          const resource = executor(statementBinding, () => undefined);
+          return {
+            ...resource,
+            release() {
+              releases += 1;
+            },
+          };
         },
-      }],
-    });
+      },
+      {
+        observers: [
+          {
+            onEvent(event) {
+              if (rejectResult && event.type === "bulk:result") throw observerFailure;
+            },
+          },
+        ],
+      },
+    );
     await assert.rejects(
       () => db.bulk([1], (id) => sql.command`UPDATE account SET touched = ${true} WHERE id = ${id}`),
       observerFailure,
@@ -340,9 +408,18 @@ test("pooled bulk releases exactly once on success, driver failure, and observer
 test("bulk shares one logical metadata description across 10k items", async () => {
   const captured: RenderedBulk[] = [];
   const events: ExecutionEvent[] = [];
-  const db = createDatabase(executor(adapterWithBulk(), (bulk) => captured.push(bulk)), {
-    observers: [{ onEvent(event) { events.push(event); } }],
-  });
+  const db = createDatabase(
+    executor(adapterWithBulk(), (bulk) => captured.push(bulk)),
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    },
+  );
   const inputs = Array.from({ length: 10_001 }, (_, index) => index);
   await db.bulk(inputs, (id) => sql.command`UPDATE account SET touched = ${true} WHERE id = ${id}`);
   assert.equal(captured.length, 1);

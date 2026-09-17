@@ -1,6 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
 import type { CertificationFixture, CertificationTarget } from "../types.js";
-import { createNodeSqliteDatabase, type SqliteDatabaseLike, type SqliteStatementLike } from "@sqlbraid/sqlite/node-sqlite";
+import {
+  createNodeSqliteDatabase,
+  type SqliteDatabaseLike,
+  type SqliteStatementLike,
+} from "@sqlbraid/sqlite/node-sqlite";
 import {
   createSqliteFixture,
   sqliteCapabilities,
@@ -16,14 +20,24 @@ function createFixture(): Promise<CertificationFixture> {
   native.exec("INSERT INTO cert_sentinel (id, marker) VALUES (1, 'untouched')");
   native.exec("CREATE TEMP TABLE cert_identity (id TEXT NOT NULL)");
   native.exec("INSERT INTO temp.cert_identity (id) VALUES ('node-sqlite-native-memory')");
-  const stats: SqliteStats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0, iteratorReturns: 0, streamReleases: 0, activeStreams: 0, nativeOperations: 0 };
+  const stats: SqliteStats = {
+    ready: 0,
+    result: 0,
+    streamStarts: 0,
+    streamEnds: 0,
+    iteratorReturns: 0,
+    streamReleases: 0,
+    activeStreams: 0,
+    nativeOperations: 0,
+  };
   const observedNative: SqliteDatabaseLike = {
     prepare(sqlText: string): SqliteStatementLike {
       stats.nativeOperations += 1;
       const statement = native.prepare(sqlText);
-      const iterate = statement.iterate === undefined
-        ? undefined
-        : statement.iterate.bind(statement) as (...values: readonly unknown[]) => IterableIterator<unknown>;
+      const iterate =
+        statement.iterate === undefined
+          ? undefined
+          : (statement.iterate.bind(statement) as (...values: readonly unknown[]) => IterableIterator<unknown>);
       if (iterate === undefined) return statement;
       return {
         all: statement.all.bind(statement),
@@ -52,7 +66,9 @@ function createFixture(): Promise<CertificationFixture> {
                 }
               }
             },
-            [Symbol.iterator]() { return this; },
+            [Symbol.iterator]() {
+              return this;
+            },
           };
         },
       };
@@ -63,14 +79,16 @@ function createFixture(): Promise<CertificationFixture> {
     },
   };
   const db = createNodeSqliteDatabase(observedNative, {
-    observers: [{
-      onEvent(event) {
-        if (event.type === "bulk:ready") stats.ready += 1;
-        if (event.type === "bulk:result") stats.result += 1;
-        if (event.type === "stream:start") stats.streamStarts += 1;
-        if (event.type === "stream:end") stats.streamEnds += 1;
+    observers: [
+      {
+        onEvent(event) {
+          if (event.type === "bulk:ready") stats.ready += 1;
+          if (event.type === "bulk:result") stats.result += 1;
+          if (event.type === "stream:start") stats.streamStarts += 1;
+          if (event.type === "stream:end") stats.streamEnds += 1;
+        },
       },
-    }],
+    ],
   });
   const transactionCleanup = async (): Promise<void> => {
     const probeNative = new DatabaseSync(":memory:");
@@ -87,19 +105,32 @@ function createFixture(): Promise<CertificationFixture> {
       } catch (error) {
         caught = error;
       }
-      const nativeRollbackErrors = caught instanceof AggregateError
-        ? caught.errors.filter((error) => error !== primary && typeof (error as { code?: unknown }).code === "string")
-        : [];
-      if (!(caught instanceof AggregateError) || !caught.errors.includes(primary) || nativeRollbackErrors.length === 0) {
-        throw new Error("node:sqlite transaction cleanup did not aggregate the native rollback failure.", { cause: caught });
+      const nativeRollbackErrors =
+        caught instanceof AggregateError
+          ? caught.errors.filter((error) => error !== primary && typeof (error as { code?: unknown }).code === "string")
+          : [];
+      if (
+        !(caught instanceof AggregateError) ||
+        !caught.errors.includes(primary) ||
+        nativeRollbackErrors.length === 0
+      ) {
+        throw new Error("node:sqlite transaction cleanup did not aggregate the native rollback failure.", {
+          cause: caught,
+        });
       }
     } finally {
-      try { probeNative.close(); } catch { /* already closed by the fault */ }
+      try {
+        probeNative.close();
+      } catch {
+        /* already closed by the fault */
+      }
     }
   };
   const options: SqliteFixtureOptions = {
     db,
-    close: async () => { native.close(); },
+    close: async () => {
+      native.close();
+    },
     physicalSessionId: "node-sqlite-native-memory",
     capabilities: sqliteCapabilities(),
     expectedTransactionOptions: sqliteTransactionOptions(),

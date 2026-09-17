@@ -2,37 +2,27 @@
   "name": "@sqlbraid/mysql",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid MySQL dialect, mysql2 adapter, and metadata inspector",
+  "keywords": [
+    "database",
+    "mysql",
+    "query",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/mysql"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "mysql", "query"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=16.20.2" },
-  "dependencies": {
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/template": "workspace:*"
-  },
-  "peerDependencies": {
-    "@sqlbraid/metadata": "workspace:*"
-  },
-  "peerDependenciesMeta": {
-    "@sqlbraid/metadata": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "@sqlbraid/metadata": "workspace:*"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -46,5 +36,27 @@
       "types": "./dist/inspector.d.ts",
       "import": "./dist/inspector.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
+  "devDependencies": {
+    "@sqlbraid/metadata": "workspace:*"
+  },
+  "peerDependencies": {
+    "@sqlbraid/metadata": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@sqlbraid/metadata": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=16.20.2"
   }
 }

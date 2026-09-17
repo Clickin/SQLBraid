@@ -4,7 +4,9 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const databases = ["postgres", "mysql", "mariadb", "oracle", "mssql", "sqlite"];
-const compatibilityManifest = JSON.parse(readFileSync(new URL("../support/runtime-compatibility.json", import.meta.url), "utf8"));
+const compatibilityManifest = JSON.parse(
+  readFileSync(new URL("../support/runtime-compatibility.json", import.meta.url), "utf8"),
+);
 const compatibilityMatrix = compatibilityManifest.cells.map((cell) => ({
   id: cell.id,
   node: cell.runtime.version,
@@ -19,10 +21,15 @@ const allPatterns = [
   /^(?:scripts\/(?:ci-plan|merge-vitest-results|runtime-portability|runtime-compatibility-smoke|validate-runtime-compatibility|validate-runtime-floor)\.mjs)$/u,
   /^\.meta\//u,
 ];
-const databasePatterns = Object.fromEntries(databases.map((database) => [database, [
-  new RegExp(`^packages/${database === "sqlite" ? "sqlite" : database}/`, "u"),
-  new RegExp(`^tests/db/${database}/`, "u"),
-]]));
+const databasePatterns = Object.fromEntries(
+  databases.map((database) => [
+    database,
+    [
+      new RegExp(`^packages/${database === "sqlite" ? "sqlite" : database}/`, "u"),
+      new RegExp(`^tests/db/${database}/`, "u"),
+    ],
+  ]),
+);
 
 if (import.meta.main) main(process.argv.slice(2));
 
@@ -65,7 +72,12 @@ function emptyPlan() {
 }
 
 function planChanges(files, { eventName = "pull_request", baseKnown = true } = {}) {
-  if (eventName !== "pull_request" || !baseKnown || files.some((file) => allPatterns.some((pattern) => pattern.test(file)))) return allPlan();
+  if (
+    eventName !== "pull_request" ||
+    !baseKnown ||
+    files.some((file) => allPatterns.some((pattern) => pattern.test(file)))
+  )
+    return allPlan();
   const plan = emptyPlan();
   for (const file of files) {
     let matchedDatabase = false;
@@ -94,7 +106,11 @@ function planChanges(files, { eventName = "pull_request", baseKnown = true } = {
       plan.compatibility = true;
       continue;
     }
-    if (/^(?:tests\/scripts\/test-browser\.mjs|tests\/scripts\/test-d1\.mjs|tests\/db\/(?:d1|wasm)\/|packages\/sqlite\/)/u.test(file)) {
+    if (
+      /^(?:tests\/scripts\/test-browser\.mjs|tests\/scripts\/test-d1\.mjs|tests\/db\/(?:d1|wasm)\/|packages\/sqlite\/)/u.test(
+        file,
+      )
+    ) {
       plan.web = true;
       plan.common = true;
       plan.packages = true;
@@ -127,12 +143,20 @@ function planChanges(files, { eventName = "pull_request", baseKnown = true } = {
 }
 
 function outputPlan(plan, outputPath) {
-  const lines = [`plan=${JSON.stringify(plan)}`, ...Object.entries(plan).map(([key, value]) => `${key}=${typeof value === "string" ? value : JSON.stringify(value)}`)];
+  const lines = [
+    `plan=${JSON.stringify(plan)}`,
+    ...Object.entries(plan).map(
+      ([key, value]) => `${key}=${typeof value === "string" ? value : JSON.stringify(value)}`,
+    ),
+  ];
   return outputPath ? writeFileSync(outputPath, `${lines.join("\n")}\n`) : lines.join("\n");
 }
 
 function gitFiles(base, head) {
-  return execFileSync("git", ["diff", "--name-only", `${base}...${head}`], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+  return execFileSync("git", ["diff", "--name-only", `${base}...${head}`], { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter(Boolean);
 }
 
 function verifyPlan(plan, results) {
@@ -156,7 +180,9 @@ function verifyPlan(plan, results) {
 }
 
 function parseArgs(argv) {
-  const args = Object.fromEntries(argv.map((arg, index) => arg.startsWith("--") ? [arg.slice(2), argv[index + 1]] : []).filter(([key]) => key));
+  const args = Object.fromEntries(
+    argv.map((arg, index) => (arg.startsWith("--") ? [arg.slice(2), argv[index + 1]] : [])).filter(([key]) => key),
+  );
   return args;
 }
 

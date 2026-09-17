@@ -8,12 +8,15 @@ export function preparedShape(resultKind: QueryResultKind, rendered: RenderedSta
     variantFingerprint: rendered.variantFingerprint ?? null,
     parameters: rendered.parameters.map(({ hint, direction, outputName, interpolation }) => ({
       ...(interpolation === undefined ? {} : { interpolation }),
-      hint: hint === undefined ? null : {
-        databaseType: hint.databaseType,
-        ...(hint.length === undefined ? {} : { length: hint.length }),
-        ...(hint.precision === undefined ? {} : { precision: hint.precision }),
-        ...(hint.scale === undefined ? {} : { scale: hint.scale }),
-      },
+      hint:
+        hint === undefined
+          ? null
+          : {
+              databaseType: hint.databaseType,
+              ...(hint.length === undefined ? {} : { length: hint.length }),
+              ...(hint.precision === undefined ? {} : { precision: hint.precision }),
+              ...(hint.scale === undefined ? {} : { scale: hint.scale }),
+            },
       ...(direction === undefined ? {} : { direction }),
       ...(outputName === undefined ? {} : { outputName }),
     })),

@@ -12,13 +12,32 @@ export function assertRepresentationConformance(
 ): void {
   assert.deepEqual(raw, expectedRaw, "Driver raw carrier/value differs from the fixture.");
   assert.deepEqual(canonical, expectedCanonical, "Canonical value differs from the representation contract.");
-  assert.equal(policy.mappings.find(mapping => mapping.databaseType === databaseType)?.outputType, outputType);
+  assert.equal(policy.mappings.find((mapping) => mapping.databaseType === databaseType)?.outputType, outputType);
 }
 
-export const exactJsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
+export const exactJsonText =
+  '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
 
-export const binary64Finite = [0, -0, 0.1, 1.2345678901234567, 2 ** -1022, Number.MAX_VALUE, Number.MIN_VALUE, 1.0000000000000002] as const;
-export const binary32Finite = [0, -0, Math.fround(0.1), Math.fround(1.234567), 2 ** -126, Math.fround(3.4028234663852886e38), 2 ** -149, Math.fround(1.0000001192092896)] as const;
+export const binary64Finite = [
+  0,
+  -0,
+  0.1,
+  1.2345678901234567,
+  2 ** -1022,
+  Number.MAX_VALUE,
+  Number.MIN_VALUE,
+  1.0000000000000002,
+] as const;
+export const binary32Finite = [
+  0,
+  -0,
+  Math.fround(0.1),
+  Math.fround(1.234567),
+  2 ** -126,
+  Math.fround(3.4028234663852886e38),
+  2 ** -149,
+  Math.fround(1.0000001192092896),
+] as const;
 
 export function assertFloatBits(actual: unknown, expected: number, precision: 32 | 64): void {
   assert.equal(typeof actual, "number");

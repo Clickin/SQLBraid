@@ -38,5 +38,7 @@ export default async function setup(project: TestProject) {
   const uri = `mariadb://${DEFAULT_USER}:${DEFAULT_PASSWORD}@127.0.0.1:${port}/${DEFAULT_DATABASE}`;
   project.provide("mariadb", { connectionUri: uri, image: MARIADB_IMAGE, version: MARIADB_VERSION });
   console.info(`[db-mariadb] image=${MARIADB_IMAGE} version=${MARIADB_VERSION}`);
-  return async () => { await container.stop(); };
+  return async () => {
+    await container.stop();
+  };
 }

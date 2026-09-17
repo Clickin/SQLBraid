@@ -100,14 +100,18 @@ try {
     await measure("query-executor", readExecutor),
     await measure("public-database", readPublic),
   ];
-  const json = `${JSON.stringify({
-    benchmark: "sync-boundary",
-    schemaVersion: 1,
-    iterations: ITERATIONS,
-    warmups: WARMUPS,
-    note: "Diagnostic only; timings are reported without a pass/fail threshold.",
-    results,
-  }, null, 2)}\n`;
+  const json = `${JSON.stringify(
+    {
+      benchmark: "sync-boundary",
+      schemaVersion: 1,
+      iterations: ITERATIONS,
+      warmups: WARMUPS,
+      note: "Diagnostic only; timings are reported without a pass/fail threshold.",
+      results,
+    },
+    null,
+    2,
+  )}\n`;
   const output = outputPath();
   if (output === undefined) console.log(json.trimEnd());
   else {

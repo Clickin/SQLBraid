@@ -14,9 +14,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const packageRoot = join(root, "packages");
 const examplesRoot = join(root, "examples");
 const temp = await mkdtemp(join(tmpdir(), "sqlbraid-examples-"));
-const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR
-  ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR)
-  : undefined;
+const packInputDir = process.env.SQLBRAID_PACK_INPUT_DIR ? resolve(process.env.SQLBRAID_PACK_INPUT_DIR) : undefined;
 
 function isFirstPartyPackage(packageName) {
   return packageName === "sqlbraid" || packageName.startsWith("@sqlbraid/");
@@ -95,7 +93,10 @@ async function packPackages() {
     assert.equal(added.length, 1, `expected one tarball for ${entry.name}`);
     const tarball = join(temp, added[0]);
     const manifest = await packageManifest(tarball);
-    assert.ok(manifest && typeof manifest.name === "string" && manifest.name.length > 0, `invalid package manifest for ${entry.name}`);
+    assert.ok(
+      manifest && typeof manifest.name === "string" && manifest.name.length > 0,
+      `invalid package manifest for ${entry.name}`,
+    );
     assert.ok(!tarballs.has(manifest.name), `duplicate package manifest for ${manifest.name}`);
     tarballs.set(manifest.name, { tarball, manifest });
   }
@@ -110,9 +111,7 @@ async function installExample(name, tarballs) {
   const packageJsonPath = join(directory, "package.json");
   const manifest = JSON.parse(await readFile(packageJsonPath, "utf8"));
   const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies"];
-  const dependencies = Object.fromEntries(
-    dependencyFields.map((field) => [field, { ...manifest[field] }]),
-  );
+  const dependencies = Object.fromEntries(dependencyFields.map((field) => [field, { ...manifest[field] }]));
   const included = new Set();
   function include(packageName) {
     if (!isFirstPartyPackage(packageName) || included.has(packageName)) return;
@@ -214,13 +213,21 @@ try {
   const source = /```ts\n([\s\S]*?)```/.exec(quickstart)?.[1];
   assert.ok(source, "the public SQLite quickstart must contain runnable TypeScript");
   await writeFile(join(sqlite, "src/docs-quickstart.ts"), source);
-  await run(process.execPath, ["--input-type=module", "--eval", `
+  await run(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `
     import assert from "node:assert/strict";
     let rows;
     console.log = (value) => { rows = value; };
     await import("./src/docs-quickstart.ts");
     assert.deepEqual(rows.map((row) => ({ ...row })), [{ id: "1", name: "Ada" }]);
-  `], sqlite);
+  `,
+    ],
+    sqlite,
+  );
   console.info("PASS exact published SQLite quickstart without compiler lowering");
   await compileAndRun("sqlite", sqlite);
   await runCodegen(codegen);
@@ -233,9 +240,6 @@ try {
   mysql = await startMysql();
   await compileAndRun("mysql", mysqlExample, { SQLBRAID_MYSQL_URL: mysql.url });
 } finally {
-  await Promise.allSettled([
-    postgres?.stop?.(),
-    mysql?.stop?.(),
-  ]);
+  await Promise.allSettled([postgres?.stop?.(), mysql?.stop?.()]);
   await rm(temp, { recursive: true, force: true });
 }

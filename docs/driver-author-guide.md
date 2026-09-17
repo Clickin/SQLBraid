@@ -57,14 +57,8 @@ interface StatementBindingContext {
 
 interface StatementBindingAdapter {
   readonly id: string;
-  describe(
-    statement: RenderedStatement,
-    context: StatementBindingContext,
-  ): StatementBindingDescription;
-  readonly describeBulk?: (
-    bulk: RenderedBulk,
-    context: StatementBindingContext,
-  ) => BulkBindingDescription;
+  describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription;
+  readonly describeBulk?: (bulk: RenderedBulk, context: StatementBindingContext) => BulkBindingDescription;
 }
 ```
 
@@ -212,11 +206,14 @@ interface WireClient {
   release(options?: { readonly discard?: boolean }): void | Promise<void>;
 }
 
-const requests = new WeakMap<StatementBindingDescription, {
-  readonly statement: RenderedStatement;
-  readonly sql: string;
-  readonly values: readonly unknown[];
-}>();
+const requests = new WeakMap<
+  StatementBindingDescription,
+  {
+    readonly statement: RenderedStatement;
+    readonly sql: string;
+    readonly values: readonly unknown[];
+  }
+>();
 
 function assertSignal(options?: ExecutionOptions): void {
   const signal = options?.signal;
@@ -276,10 +273,12 @@ export function createAcmeExecutor(client: WireClient): QueryExecutor {
     ): Promise<QueryExecutionResult<Row>> {
       assertSignal(options);
       statement = createRenderedStatement(statement);
-      const description = binding ?? acmeStatementBinding.describe(statement, {
-        dialectId: statement.dialectId,
-        requestedReuse: "auto",
-      });
+      const description =
+        binding ??
+        acmeStatementBinding.describe(statement, {
+          dialectId: statement.dialectId,
+          requestedReuse: "auto",
+        });
       const request = requests.get(description);
       if (request?.statement !== statement) throw new TypeError("BRAID_BINDING_IDENTITY");
       return client.execute<Row>(request.sql, request.values);
@@ -361,6 +360,7 @@ families keep execution support separate from representation and metadata
 evidence:
 
 <!-- sqlbraid-capability-vocabulary -->
+
 ```text
 # support
 sql.native-transparency

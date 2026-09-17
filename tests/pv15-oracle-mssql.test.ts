@@ -2,10 +2,23 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { test } from "vitest";
 import { oracleParameter, sql as oracleSql } from "@sqlbraid/oracle";
-import { createOracledbDatabase, createOracledbExecutor, createOracledbPoolDatabase, createOracledbStatementBinding, type OracleConnectionLike } from "@sqlbraid/oracle/oracledb";
+import {
+  createOracledbDatabase,
+  createOracledbExecutor,
+  createOracledbPoolDatabase,
+  createOracledbStatementBinding,
+  type OracleConnectionLike,
+} from "@sqlbraid/oracle/oracledb";
 import type { TypePolicy } from "@sqlbraid/core";
 import { mssqlParameter, sql as mssqlSql } from "@sqlbraid/mssql";
-import { createTediousDatabase, createTediousExecutor, createTediousPoolDatabase, createTediousStatementBinding, type TediousConnectionLike, type TediousRequestLike } from "@sqlbraid/mssql/tedious";
+import {
+  createTediousDatabase,
+  createTediousExecutor,
+  createTediousPoolDatabase,
+  createTediousStatementBinding,
+  type TediousConnectionLike,
+  type TediousRequestLike,
+} from "@sqlbraid/mssql/tedious";
 import { runStreamingConformance } from "./streaming-conformance.js";
 
 function emit(request: TediousRequestLike, event: string, ...args: unknown[]): void {
@@ -47,11 +60,7 @@ function oracleCursor(
 
 const oracleRows = [{ VALUE: "one" }, { VALUE: "two" }, { VALUE: "three" }] as const;
 
-function oracleLob(
-  data: string | Uint8Array,
-  onDestroy?: () => void,
-  destroyFailure?: Error,
-) {
+function oracleLob(data: string | Uint8Array, onDestroy?: () => void, destroyFailure?: Error) {
   const stream = new Readable({ read() {} });
   const destroy = stream.destroy.bind(stream);
   stream.destroy = ((error?: Error) => {
@@ -64,7 +73,8 @@ function oracleLob(
 
 test("Oracle and Tedious value-only binds remain outside executable SQL text", () => {
   const payload = "O'Reilly /* $1 ? :1 @p1 */";
-  const oracleRendered = oracleSql`SELECT ${oracleSql.bind(payload, oracleParameter.varchar2())} AS VALUE FROM dual`.render();
+  const oracleRendered =
+    oracleSql`SELECT ${oracleSql.bind(payload, oracleParameter.varchar2())} AS VALUE FROM dual`.render();
   const oracleDescription = createOracledbStatementBinding({ driver: oracleDriver() }).describe(oracleRendered, {
     dialectId: "oracle",
     requestedReuse: "auto",
@@ -82,11 +92,13 @@ test("Oracle and Tedious value-only binds remain outside executable SQL text", (
   assert.equal(tediousSqlText?.includes(payload) ?? false, false);
 });
 
-function oracleStreamingConnection(options: {
-  readonly rows?: readonly Record<string, unknown>[];
-  readonly close?: () => Promise<void>;
-  readonly onRead?: (size: number) => void;
-} = {}): OracleConnectionLike {
+function oracleStreamingConnection(
+  options: {
+    readonly rows?: readonly Record<string, unknown>[];
+    readonly close?: () => Promise<void>;
+    readonly onRead?: (size: number) => void;
+  } = {},
+): OracleConnectionLike {
   return {
     async execute() {
       return {
@@ -101,9 +113,15 @@ function oracleStreamingConnection(options: {
 
 test("Oracle routine calls map scalar and heterogeneous cursor channels and close every cursor", async () => {
   let closed = 0;
-  const users = oracleCursor([{ USER_ID: "u1" }], async () => { closed += 1; });
-  const payments = oracleCursor([{ PAYMENT_ID: "p1" }], async () => { closed += 1; });
-  const implicit = oracleCursor([{ SUMMARY: "ok" }], async () => { closed += 1; });
+  const users = oracleCursor([{ USER_ID: "u1" }], async () => {
+    closed += 1;
+  });
+  const payments = oracleCursor([{ PAYMENT_ID: "p1" }], async () => {
+    closed += 1;
+  });
+  const implicit = oracleCursor([{ SUMMARY: "ok" }], async () => {
+    closed += 1;
+  });
   const connection = {
     async execute(_text: string, _binds: readonly unknown[]) {
       return { outBinds: ["42", users, payments], implicitResults: [implicit] };
@@ -115,12 +133,18 @@ test("Oracle routine calls map scalar and heterogeneous cursor channels and clos
   const query = oracleSql.call`BEGIN braid_routine(${oracleSql.out("answer", oracleParameter.number())}, ${oracleSql.out("users", oracleParameter.refCursor())}, ${oracleSql.out("payments", oracleParameter.refCursor())}); END;`;
   const result = await executor.call(query.render());
   assert.deepEqual(result.output, { answer: "42" });
-  assert.deepEqual(result.resultSets.map((set) => set.rows), [[{ USER_ID: "u1" }], [{ PAYMENT_ID: "p1" }], [{ SUMMARY: "ok" }]]);
-  assert.deepEqual(result.resultSets.map((set) => set.source), [
-    { kind: "out-cursor", name: "users", parameterIndex: 1 },
-    { kind: "out-cursor", name: "payments", parameterIndex: 2 },
-    { kind: "implicit", index: 0 },
-  ]);
+  assert.deepEqual(
+    result.resultSets.map((set) => set.rows),
+    [[{ USER_ID: "u1" }], [{ PAYMENT_ID: "p1" }], [{ SUMMARY: "ok" }]],
+  );
+  assert.deepEqual(
+    result.resultSets.map((set) => set.source),
+    [
+      { kind: "out-cursor", name: "users", parameterIndex: 1 },
+      { kind: "out-cursor", name: "payments", parameterIndex: 2 },
+      { kind: "implicit", index: 0 },
+    ],
+  );
   assert.equal(closed, 3);
 });
 
@@ -129,12 +153,20 @@ test("Oracle routine cursor cleanup closes unread siblings after fetch failure",
   let secondClosed = 0;
   const first = {
     metaData: [{ name: "VALUE", dbTypeName: "VARCHAR2" }],
-    async getRows() { throw new Error("fetch failed"); },
-    async close() { firstClosed += 1; },
+    async getRows() {
+      throw new Error("fetch failed");
+    },
+    async close() {
+      firstClosed += 1;
+    },
   };
-  const second = oracleCursor([{ VALUE: "never-read" }], async () => { secondClosed += 1; });
+  const second = oracleCursor([{ VALUE: "never-read" }], async () => {
+    secondClosed += 1;
+  });
   const connection = {
-    async execute() { return { outBinds: [first, second] }; },
+    async execute() {
+      return { outBinds: [first, second] };
+    },
     async commit() {},
     async rollback() {},
   };
@@ -147,8 +179,12 @@ test("Oracle routine cursor cleanup closes unread siblings after fetch failure",
 
 test("Oracle routine materializes CLOB and BLOB outputs before destroying Lobs and applies TypePolicy", async () => {
   const events: string[] = [];
-  const text = oracleLob("clob payload", () => { events.push("text-destroy"); });
-  const bytes = oracleLob(Uint8Array.from([1, 2, 3]), () => { events.push("bytes-destroy"); });
+  const text = oracleLob("clob payload", () => {
+    events.push("text-destroy");
+  });
+  const bytes = oracleLob(Uint8Array.from([1, 2, 3]), () => {
+    events.push("bytes-destroy");
+  });
   const decoded: Array<{ readonly type: string; readonly value: unknown }> = [];
   const policy: TypePolicy = {
     id: "oracle-test",
@@ -161,7 +197,9 @@ test("Oracle routine materializes CLOB and BLOB outputs before destroying Lobs a
     },
   };
   const connection = {
-    async execute() { return { outBinds: [text, bytes] }; },
+    async execute() {
+      return { outBinds: [text, bytes] };
+    },
     async commit() {},
     async rollback() {},
   };
@@ -169,10 +207,13 @@ test("Oracle routine materializes CLOB and BLOB outputs before destroying Lobs a
   const query = oracleSql.call`BEGIN braid_lob(${oracleSql.out("text", oracleParameter.clob())}, ${oracleSql.inOut("bytes", Uint8Array.from([9]), oracleParameter.blob())}); END;`;
   const result = await executor.call(query.render());
   assert.deepEqual(result.output, { text: "clob payload", bytes: Uint8Array.from([1, 2, 3]) });
-  assert.deepEqual(decoded.map(({ type, value }) => [type, value]), [
-    ["CLOB", "clob payload"],
-    ["BLOB", Uint8Array.from([1, 2, 3])],
-  ]);
+  assert.deepEqual(
+    decoded.map(({ type, value }) => [type, value]),
+    [
+      ["CLOB", "clob payload"],
+      ["BLOB", Uint8Array.from([1, 2, 3])],
+    ],
+  );
   assert.deepEqual(events, ["text-destroy", "bytes-destroy"]);
   assert.equal(text.closed, true);
   assert.equal(bytes.closed, true);
@@ -180,7 +221,9 @@ test("Oracle routine materializes CLOB and BLOB outputs before destroying Lobs a
 
 test("Oracle routine preserves already-materialized CLOB strings and BLOB bytes", async () => {
   const connection = {
-    async execute() { return { outBinds: ["ready", Uint8Array.from([4, 5])] }; },
+    async execute() {
+      return { outBinds: ["ready", Uint8Array.from([4, 5])] };
+    },
     async commit() {},
     async rollback() {},
   };
@@ -194,11 +237,23 @@ test("Oracle routine LOB read failure destroys unread sibling Lobs and preserves
   const primary = new Error("clob read failed");
   const cleanup = new Error("blob destroy failed");
   const events: string[] = [];
-  const text = oracleLob("never returned", () => { events.push("text-destroy"); });
-  text.getData = async () => { throw primary; };
-  const bytes = oracleLob(Uint8Array.from([1]), () => { events.push("bytes-destroy"); }, cleanup);
+  const text = oracleLob("never returned", () => {
+    events.push("text-destroy");
+  });
+  text.getData = async () => {
+    throw primary;
+  };
+  const bytes = oracleLob(
+    Uint8Array.from([1]),
+    () => {
+      events.push("bytes-destroy");
+    },
+    cleanup,
+  );
   const connection = {
-    async execute() { return { outBinds: [text, bytes] }; },
+    async execute() {
+      return { outBinds: [text, bytes] };
+    },
     async commit() {},
     async rollback() {},
   };
@@ -209,10 +264,12 @@ test("Oracle routine LOB read failure destroys unread sibling Lobs and preserves
     (error: unknown) => {
       if (!(error instanceof Error) || !("code" in error) || error.code !== "BRAID_RESOURCE_CLEANUP") return false;
       const details = error as Error & { readonly cause?: unknown; readonly errors?: readonly unknown[] };
-      return details.cause === primary
-        && Array.isArray(details.errors)
-        && details.errors.includes(primary)
-        && details.errors.includes(cleanup);
+      return (
+        details.cause === primary &&
+        Array.isArray(details.errors) &&
+        details.errors.includes(primary) &&
+        details.errors.includes(cleanup)
+      );
     },
   );
   assert.deepEqual(events, ["text-destroy", "bytes-destroy"]);
@@ -223,7 +280,13 @@ test("Oracle routine LOB read failure destroys unread sibling Lobs and preserves
 test("Oracle pooled routine discards a lease after Lob cleanup failure", async () => {
   const cleanup = new Error("blob destroy failed");
   const events: string[] = [];
-  const bytes = oracleLob(Uint8Array.from([1]), () => { events.push("bytes-destroy"); }, cleanup);
+  const bytes = oracleLob(
+    Uint8Array.from([1]),
+    () => {
+      events.push("bytes-destroy");
+    },
+    cleanup,
+  );
   const physical = {
     async execute() {
       events.push("execute");
@@ -236,15 +299,22 @@ test("Oracle pooled routine discards a lease after Lob cleanup failure", async (
     },
   };
   const db = createOracledbPoolDatabase(
-    { async getConnection() { return physical; } },
+    {
+      async getConnection() {
+        return physical;
+      },
+    },
     { driver: oracleDriver() },
   );
   const query = oracleSql.call`BEGIN braid_lob(${oracleSql.out("bytes", oracleParameter.blob())}); END;`;
-  await assert.rejects(() => db.call(query), (error: unknown) => {
-    if (!(error instanceof Error) || !("code" in error) || error.code !== "BRAID_RESOURCE_CLEANUP") return false;
-    const details = error as Error & { readonly cause?: unknown };
-    return details.cause === cleanup;
-  });
+  await assert.rejects(
+    () => db.call(query),
+    (error: unknown) => {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "BRAID_RESOURCE_CLEANUP") return false;
+      const details = error as Error & { readonly cause?: unknown };
+      return details.cause === cleanup;
+    },
+  );
   assert.deepEqual(events, ["execute", "bytes-destroy", "discard"]);
 });
 
@@ -256,16 +326,26 @@ test("Oracle stream uses configured fetch size and marks close failures", async 
       sizes.push(size);
       return sizes.length === 1 ? [{ VALUE: "1" }] : [];
     },
-    async close() { throw new Error("close failed"); },
+    async close() {
+      throw new Error("close failed");
+    },
   };
   const connection = {
-    async execute() { return { resultSet, metaData: resultSet.metaData }; },
+    async execute() {
+      return { resultSet, metaData: resultSet.metaData };
+    },
     async commit() {},
     async rollback() {},
   };
   const executor = createOracledbExecutor(connection, { driver: oracleDriver(), streamFetchSize: 7 });
   const stream = executor.stream(oracleSql`SELECT 1 FROM dual`.render());
-  await assert.rejects(async () => { for await (const _row of stream) {} }, (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_RESOURCE_CLEANUP");
+  await assert.rejects(
+    async () => {
+      for await (const _row of stream) {
+      }
+    },
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_RESOURCE_CLEANUP",
+  );
   assert.ok(sizes.every((size) => size === 7));
 });
 
@@ -283,11 +363,15 @@ test("Oracle stream decodes with ResultSet metadata and rejects duplicate labels
   };
   const resultSet = {
     metaData: [{ name: "VALUE", dbTypeName: "NUMBER" }],
-    async getRows() { return [{ VALUE: "7" }]; },
+    async getRows() {
+      return [{ VALUE: "7" }];
+    },
     close() {},
   };
   const connection = {
-    async execute() { return { resultSet, metaData: [{ name: "WRONG", dbTypeName: "VARCHAR2" }] }; },
+    async execute() {
+      return { resultSet, metaData: [{ name: "WRONG", dbTypeName: "VARCHAR2" }] };
+    },
     async commit() {},
     async rollback() {},
   };
@@ -299,18 +383,25 @@ test("Oracle stream decodes with ResultSet metadata and rejects duplicate labels
 
   const duplicateResultSet = {
     metaData: [{ name: "VALUE" }, { name: "VALUE" }],
-    async getRows() { return []; },
+    async getRows() {
+      return [];
+    },
     close() {},
   };
-  const duplicateExecutor = createOracledbExecutor({
-    async execute() { return { resultSet: duplicateResultSet }; },
-    async commit() {},
-    async rollback() {},
-  }, { driver: oracleDriver() });
-  await assert.rejects(
-    async () => { for await (const _row of duplicateExecutor.stream(oracleSql`SELECT 7 FROM dual`.render())) {} },
-    /duplicate Oracle result label VALUE/u,
+  const duplicateExecutor = createOracledbExecutor(
+    {
+      async execute() {
+        return { resultSet: duplicateResultSet };
+      },
+      async commit() {},
+      async rollback() {},
+    },
+    { driver: oracleDriver() },
   );
+  await assert.rejects(async () => {
+    for await (const _row of duplicateExecutor.stream(oracleSql`SELECT 7 FROM dual`.render())) {
+    }
+  }, /duplicate Oracle result label VALUE/u);
 });
 
 test("Oracle stream closes the ResultSet after a driver read failure", async () => {
@@ -336,7 +427,10 @@ test("Oracle stream closes the ResultSet after a driver read failure", async () 
   };
   const executor = createOracledbExecutor(connection, { driver: oracleDriver() });
   await assert.rejects(
-    async () => { for await (const _row of executor.stream(oracleSql`SELECT 1 FROM dual`.render())) {} },
+    async () => {
+      for await (const _row of executor.stream(oracleSql`SELECT 1 FROM dual`.render())) {
+      }
+    },
     (error: unknown) => error === driverFailure,
   );
   assert.deepEqual(events, ["execute", "read", "close"]);
@@ -368,10 +462,15 @@ test("Oracle pooled stream closes the ResultSet before releasing its lease", asy
     },
   };
   const db = createOracledbPoolDatabase(
-    { async getConnection() { return physical; } },
+    {
+      async getConnection() {
+        return physical;
+      },
+    },
     { driver: oracleDriver() },
   );
-  for await (const _row of db.stream(oracleSql.rows`SELECT 1 FROM dual`)) {}
+  for await (const _row of db.stream(oracleSql.rows`SELECT 1 FROM dual`)) {
+  }
   assert.deepEqual(events, ["execute", "read", "close", "release"]);
 });
 
@@ -386,42 +485,60 @@ test("Oracle stream satisfies the shared streaming lifecycle contract", async ()
       },
     },
   })`SELECT value FROM braid_stream`;
-  await runStreamingConformance(() => {
-    run += 1;
-    const cleanupFailure = new Error("oracle cleanup failed");
-    const connection = oracleStreamingConnection({
-      rows: oracleRows,
-      close: run === 8 ? async () => { throw cleanupFailure; } : undefined,
-    });
-    const db = createOracledbDatabase(connection, { driver: oracleDriver(), streamFetchSize: 2 });
-    const query = oracleSql.rows<typeof oracleRows[number]>`SELECT value FROM braid_stream`;
-    return {
-      db,
-      query,
-      expected: oracleRows,
-      mappingQuery,
-      ...(run === 8 ? { cleanupFailureQuery: query, cleanupFailure } : {}),
-    };
-  }, { abortError: new Error("oracle stream aborted") });
+  await runStreamingConformance(
+    () => {
+      run += 1;
+      const cleanupFailure = new Error("oracle cleanup failed");
+      const connection = oracleStreamingConnection({
+        rows: oracleRows,
+        close:
+          run === 8
+            ? async () => {
+                throw cleanupFailure;
+              }
+            : undefined,
+      });
+      const db = createOracledbDatabase(connection, { driver: oracleDriver(), streamFetchSize: 2 });
+      const query = oracleSql.rows<(typeof oracleRows)[number]>`SELECT value FROM braid_stream`;
+      return {
+        db,
+        query,
+        expected: oracleRows,
+        mappingQuery,
+        ...(run === 8 ? { cleanupFailureQuery: query, cleanupFailure } : {}),
+      };
+    },
+    { abortError: new Error("oracle stream aborted") },
+  );
 });
 
 function mssqlConnection(run: (request: TediousRequestLike) => void) {
   return {
     execSql: run,
-    beginTransaction(callback: (error?: unknown) => void) { callback(); },
-    commitTransaction(callback: (error?: unknown) => void) { callback(); },
-    rollbackTransaction(callback: (error?: unknown) => void) { callback(); },
-    saveTransaction(callback: (error?: unknown) => void) { callback(); },
+    beginTransaction(callback: (error?: unknown) => void) {
+      callback();
+    },
+    commitTransaction(callback: (error?: unknown) => void) {
+      callback();
+    },
+    rollbackTransaction(callback: (error?: unknown) => void) {
+      callback();
+    },
+    saveTransaction(callback: (error?: unknown) => void) {
+      callback();
+    },
   };
 }
 
-function mssqlStreamingConnection(options: {
-  readonly rows?: readonly number[];
-  readonly failAt?: number;
-  readonly cancelFailure?: unknown;
-  readonly onEmit?: () => void;
-  readonly onComplete?: () => void;
-} = {}): TediousConnectionLike {
+function mssqlStreamingConnection(
+  options: {
+    readonly rows?: readonly number[];
+    readonly failAt?: number;
+    readonly cancelFailure?: unknown;
+    readonly onEmit?: () => void;
+    readonly onComplete?: () => void;
+  } = {},
+): TediousConnectionLike {
   const values = options.rows ?? [1, 2, 3];
   let cancelled = false;
   let completed = false;
@@ -478,10 +595,18 @@ function mssqlStreamingConnection(options: {
       };
       setImmediate(pump);
     },
-    beginTransaction(callback) { callback(); },
-    commitTransaction(callback) { callback(); },
-    rollbackTransaction(callback) { callback(); },
-    saveTransaction(callback) { callback(); },
+    beginTransaction(callback) {
+      callback();
+    },
+    commitTransaction(callback) {
+      callback();
+    },
+    rollbackTransaction(callback) {
+      callback();
+    },
+    saveTransaction(callback) {
+      callback();
+    },
   };
   return connection;
 }
@@ -497,24 +622,27 @@ test("Tedious stream satisfies the shared streaming lifecycle contract", async (
       },
     },
   })`SELECT value FROM braid_stream`;
-  await runStreamingConformance(() => {
-    run += 1;
-    const cleanupFailure = new Error("tedious cleanup failed");
-    const connection = mssqlStreamingConnection({
-      rows: [1, 2, 3],
-      failAt: run === 8 ? 0 : undefined,
-      cancelFailure: run === 8 ? cleanupFailure : undefined,
-    });
-    const db = createTediousDatabase(connection, { maxBufferedRows: 2 });
-    const query = mssqlSql.rows<{ readonly VALUE: string }>`SELECT value FROM braid_stream`;
-    return {
-      db,
-      query,
-      expected: [{ VALUE: "1" }, { VALUE: "2" }, { VALUE: "3" }],
-      mappingQuery,
-      ...(run === 8 ? { cleanupFailureQuery: query, cleanupFailure } : {}),
-    };
-  }, { abortError: new Error("tedious stream aborted") });
+  await runStreamingConformance(
+    () => {
+      run += 1;
+      const cleanupFailure = new Error("tedious cleanup failed");
+      const connection = mssqlStreamingConnection({
+        rows: [1, 2, 3],
+        failAt: run === 8 ? 0 : undefined,
+        cancelFailure: run === 8 ? cleanupFailure : undefined,
+      });
+      const db = createTediousDatabase(connection, { maxBufferedRows: 2 });
+      const query = mssqlSql.rows<{ readonly VALUE: string }>`SELECT value FROM braid_stream`;
+      return {
+        db,
+        query,
+        expected: [{ VALUE: "1" }, { VALUE: "2" }, { VALUE: "3" }],
+        mappingQuery,
+        ...(run === 8 ? { cleanupFailureQuery: query, cleanupFailure } : {}),
+      };
+    },
+    { abortError: new Error("tedious stream aborted") },
+  );
 });
 
 test("Tedious stream bounds the queued rows and reports driver failures", async () => {
@@ -536,10 +664,10 @@ test("Tedious stream bounds the queued rows and reports driver failures", async 
   assert.ok(maximumPending <= 2);
 
   const failing = createTediousExecutor(mssqlStreamingConnection({ failAt: 0 }));
-  await assert.rejects(
-    async () => { for await (const _row of failing.stream(mssqlSql`SELECT value FROM braid_stream`.render())) {} },
-    /tedious driver failed/u,
-  );
+  await assert.rejects(async () => {
+    for await (const _row of failing.stream(mssqlSql`SELECT value FROM braid_stream`.render())) {
+    }
+  }, /tedious driver failed/u);
 });
 
 test("Tedious pooled stream waits for request completion before releasing its lease", async () => {
@@ -556,10 +684,15 @@ test("Tedious pooled stream waits for request completion before releasing its le
     },
   };
   const db = createTediousPoolDatabase(
-    { async acquire() { return physical; } },
+    {
+      async acquire() {
+        return physical;
+      },
+    },
     { maxBufferedRows: 2 },
   );
-  for await (const _row of db.stream(mssqlSql.rows`SELECT value FROM braid_stream`)) {}
+  for await (const _row of db.stream(mssqlSql.rows`SELECT value FROM braid_stream`)) {
+  }
   assert.deepEqual(events, ["complete", "release"]);
 });
 
@@ -580,13 +713,24 @@ test("Tedious native procedure calls preserve OUTPUT, RETURN status, and heterog
     },
   };
   const executor = createTediousExecutor(connection);
-  const query = mssqlSql.call({ procedure: { name: "dbo.braid_routine", parameterNames: ["outAnswer", "minimum"] } })`${mssqlSql.out("answer", mssqlParameter.int())}, ${1}`;
+  const query = mssqlSql.call({
+    procedure: { name: "dbo.braid_routine", parameterNames: ["outAnswer", "minimum"] },
+  })`${mssqlSql.out("answer", mssqlParameter.int())}, ${1}`;
   const result = await executor.call(query.render());
   assert.equal(procedureCalls, 1);
   assert.deepEqual(result.output, { answer: "7" });
   assert.equal(result.returnValue, 7);
-  assert.deepEqual(result.resultSets.map((set) => set.rows), [[{ USER_ID: "1" }], [{ PAYMENT_ID: "2" }]]);
-  assert.deepEqual(result.resultSets.map((set) => set.source), [{ kind: "emitted", index: 0 }, { kind: "emitted", index: 1 }]);
+  assert.deepEqual(
+    result.resultSets.map((set) => set.rows),
+    [[{ USER_ID: "1" }], [{ PAYMENT_ID: "2" }]],
+  );
+  assert.deepEqual(
+    result.resultSets.map((set) => set.source),
+    [
+      { kind: "emitted", index: 0 },
+      { kind: "emitted", index: 1 },
+    ],
+  );
 });
 
 test("Tedious text calls never report the sp_executesql wrapper status", async () => {
@@ -604,7 +748,9 @@ test("Tedious text calls never report the sp_executesql wrapper status", async (
 
 test("Tedious rejects direct CURSOR VARYING output parameters", async () => {
   let called = false;
-  const connection = mssqlConnection(() => { called = true; });
+  const connection = mssqlConnection(() => {
+    called = true;
+  });
   const executor = createTediousExecutor(connection);
   const query = mssqlSql.call`EXEC dbo.braid_cursor ${mssqlSql.out("cursor", { databaseType: "cursor" })} OUTPUT`;
   await assert.rejects(async () => executor.call(query.render()), /BRAID_CALL_CURSOR_UNSUPPORTED/u);

@@ -23,5 +23,7 @@ export default async function setup(project: TestProject) {
   const connectionUri = container.getConnectionUri();
   project.provide("postgres", { connectionUri, image, version: POSTGRES_VERSION });
   console.info(`[db-postgres] image=${image} version=${POSTGRES_VERSION}`);
-  return async () => { await container.stop(); };
+  return async () => {
+    await container.stop();
+  };
 }

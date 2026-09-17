@@ -25,9 +25,15 @@ async function smokeBetterSqlite3() {
   const native = new BetterSqlite3(":memory:");
   const db = createBetterSqlite3Database(native);
   try {
-    await db.execute(sql.command`CREATE TABLE values_table (id INTEGER PRIMARY KEY, exact INTEGER NOT NULL, real_value REAL NOT NULL)`);
-    await db.execute(sql.command`INSERT INTO values_table (exact, real_value) VALUES (${"9223372036854775807"}, ${1.5})`);
-    assert.deepEqual(await db.all(sql.rows`SELECT exact, real_value FROM values_table`), [{ exact: "9223372036854775807", real_value: 1.5 }]);
+    await db.execute(
+      sql.command`CREATE TABLE values_table (id INTEGER PRIMARY KEY, exact INTEGER NOT NULL, real_value REAL NOT NULL)`,
+    );
+    await db.execute(
+      sql.command`INSERT INTO values_table (exact, real_value) VALUES (${"9223372036854775807"}, ${1.5})`,
+    );
+    assert.deepEqual(await db.all(sql.rows`SELECT exact, real_value FROM values_table`), [
+      { exact: "9223372036854775807", real_value: 1.5 },
+    ]);
     await assert.rejects(
       db.tx(async (tx) => {
         await tx.execute(sql.command`INSERT INTO values_table (exact, real_value) VALUES (${"7"}, ${2.5})`);
@@ -35,7 +41,9 @@ async function smokeBetterSqlite3() {
       }),
       /compatibility rollback/u,
     );
-    assert.deepEqual(await db.all(sql.rows`SELECT exact, real_value FROM values_table`), [{ exact: "9223372036854775807", real_value: 1.5 }]);
+    assert.deepEqual(await db.all(sql.rows`SELECT exact, real_value FROM values_table`), [
+      { exact: "9223372036854775807", real_value: 1.5 },
+    ]);
   } finally {
     native.close();
   }
@@ -48,9 +56,13 @@ async function smokeLibsql() {
   const { createLibsqlDatabase } = await import("@sqlbraid/sqlite/libsql");
   const client = createClient({ url: `file:${process.cwd()}/compatibility.db`, intMode: "string" });
   const db = createLibsqlDatabase(client, { intMode: "string" });
-  await db.execute(sql.command`CREATE TABLE values_table (id INTEGER PRIMARY KEY, exact INTEGER NOT NULL, real_value REAL NOT NULL)`);
+  await db.execute(
+    sql.command`CREATE TABLE values_table (id INTEGER PRIMARY KEY, exact INTEGER NOT NULL, real_value REAL NOT NULL)`,
+  );
   await db.execute(sql.command`INSERT INTO values_table (exact, real_value) VALUES (${"9223372036854775807"}, ${1.5})`);
-  assert.deepEqual(await db.all(sql.rows`SELECT exact, real_value FROM values_table`), [{ exact: "9223372036854775807", real_value: 1.5 }]);
+  assert.deepEqual(await db.all(sql.rows`SELECT exact, real_value FROM values_table`), [
+    { exact: "9223372036854775807", real_value: 1.5 },
+  ]);
   await assert.rejects(
     db.tx(async (tx) => {
       await tx.execute(sql.command`INSERT INTO values_table (exact, real_value) VALUES (${"7"}, ${2.5})`);
@@ -58,6 +70,8 @@ async function smokeLibsql() {
     }),
     /compatibility rollback/u,
   );
-  assert.deepEqual(await db.all(sql.rows`SELECT exact, real_value FROM values_table`), [{ exact: "9223372036854775807", real_value: 1.5 }]);
+  assert.deepEqual(await db.all(sql.rows`SELECT exact, real_value FROM values_table`), [
+    { exact: "9223372036854775807", real_value: 1.5 },
+  ]);
   client.close?.();
 }

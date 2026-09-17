@@ -82,9 +82,7 @@
   "capabilities": {
     "session.pinned": {
       "status": "unsupported",
-      "testIds": [
-        "d1.execution.rc-session"
-      ]
+      "testIds": ["d1.execution.rc-session"]
     },
     "transaction.read-only": {
       "status": "unsupported",
@@ -108,9 +106,7 @@
     },
     "statement.cancel": {
       "status": "unsupported",
-      "testIds": [
-        "d1.execution.rc-session"
-      ]
+      "testIds": ["d1.execution.rc-session"]
     },
     "routine.call": {
       "status": "unsupported",
@@ -118,15 +114,11 @@
     },
     "sql.native-transparency": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.sql.native-transparency"
-      ]
+      "testIds": ["d1.sql.native-transparency"]
     },
     "sql.generated-structure": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.sql.generated-structure"
-      ]
+      "testIds": ["d1.sql.generated-structure"]
     },
     "numeric.exact-integer": {
       "status": "guarded",
@@ -134,12 +126,8 @@
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "guarded",
-      "testIds": [
-        "d1.numeric.exact-integer"
-      ],
-      "driverRawRepresentations": [
-        "number"
-      ]
+      "testIds": ["d1.numeric.exact-integer"],
+      "driverRawRepresentations": ["number"]
     },
     "numeric.exact-decimal": {
       "status": "unsupported",
@@ -150,51 +138,31 @@
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.data.json-lossless-text"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["d1.data.json-lossless-text"],
+      "driverRawRepresentations": ["string"]
     },
     "data.binary": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.data.mapping-returning"
-      ],
-      "driverRawRepresentations": [
-        "number[]"
-      ]
+      "testIds": ["d1.data.mapping-returning"],
+      "driverRawRepresentations": ["number[]"]
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.data.temporal-lossless"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["d1.data.temporal-lossless"],
+      "driverRawRepresentations": ["string"]
     },
     "data.uuid": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.data.mapping-returning"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["d1.data.mapping-returning"],
+      "driverRawRepresentations": ["string"]
     },
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.sql.native-transparency"
-      ]
+      "testIds": ["d1.sql.native-transparency"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.execution.bulk"
-      ]
+      "testIds": ["d1.execution.bulk"]
     },
     "result.multiple-sets": {
       "status": "unsupported",
@@ -202,33 +170,23 @@
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.data.mapping-returning"
-      ]
+      "testIds": ["d1.data.mapping-returning"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.execution.bulk"
-      ]
+      "testIds": ["d1.execution.bulk"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.data.mapping-returning"
-      ]
+      "testIds": ["d1.data.mapping-returning"]
     },
     "statement.stream": {
       "status": "unsupported",
-      "testIds": [
-        "d1.execution.stream"
-      ]
+      "testIds": ["d1.execution.stream"]
     },
     "transaction": {
       "status": "unsupported",
-      "testIds": [
-        "d1.execution.transaction"
-      ]
+      "testIds": ["d1.execution.transaction"]
     },
     "transaction.savepoint": {
       "status": "unsupported",
@@ -272,21 +230,15 @@
     },
     "dml.insert-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.data.mapping-returning"
-      ]
+      "testIds": ["d1.data.mapping-returning"]
     },
     "dml.update-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.data.mapping-returning"
-      ]
+      "testIds": ["d1.data.mapping-returning"]
     },
     "dml.delete-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "d1.data.mapping-returning"
-      ]
+      "testIds": ["d1.data.mapping-returning"]
     }
   },
   "evidence": {

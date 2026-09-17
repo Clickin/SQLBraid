@@ -2,34 +2,45 @@
   "name": "@sqlbraid/vite",
   "version": "1.0.0-rc.2",
   "description": "Vite integration for SQLBraid guarded-template lowering",
+  "keywords": [
+    "compiler",
+    "sql",
+    "sqlbraid",
+    "vite"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/vite"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "vite", "compiler", "sqlbraid"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=22.18.0" },
-  "dependencies": {
-    "@sqlbraid/compiler": "workspace:*"
-  },
-  "peerDependencies": {
-    "vite": ">=8.0.0"
-  },
-  "devDependencies": {
-    "vite": ">=8.0.0"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/compiler": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": ">=8.0.0"
+  },
+  "peerDependencies": {
+    "vite": ">=8.0.0"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

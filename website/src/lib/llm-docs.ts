@@ -16,26 +16,33 @@ export function rawMarkdownUrl(id: string, base = docsBasePath()) {
 }
 
 function supportTargetMarkdown(target: SupportTarget, conditionLabels: ReadonlyMap<string, string>) {
-  const capabilityRows = Object.entries(target.capabilities).map(([id, claim]) => {
-    const details = [
-      claim.status,
-      claim.conditionCode && `${claim.conditionCode}: ${conditionLabels.get(claim.conditionCode) ?? "condition details unavailable"}`,
-      claim.semantics,
-      claim.representation,
-      claim.fidelity,
-      claim.binaryPrecision === undefined ? undefined : `binaryPrecision=${claim.binaryPrecision}`,
-      claim.driverRawRepresentations?.length ? `raw=${claim.driverRawRepresentations.join(", ")}` : undefined,
-    ].filter(Boolean).join("; ");
-    return `| \`${id}\` | ${details || "—"} |`;
-  }).join("\n");
+  const capabilityRows = Object.entries(target.capabilities)
+    .map(([id, claim]) => {
+      const details = [
+        claim.status,
+        claim.conditionCode &&
+          `${claim.conditionCode}: ${conditionLabels.get(claim.conditionCode) ?? "condition details unavailable"}`,
+        claim.semantics,
+        claim.representation,
+        claim.fidelity,
+        claim.binaryPrecision === undefined ? undefined : `binaryPrecision=${claim.binaryPrecision}`,
+        claim.driverRawRepresentations?.length ? `raw=${claim.driverRawRepresentations.join(", ")}` : undefined,
+      ]
+        .filter(Boolean)
+        .join("; ");
+      return `| \`${id}\` | ${details || "—"} |`;
+    })
+    .join("\n");
   const numericRows = Object.entries(target.numeric)
-    .map(([kind, contract]) => `| ${kind} | ${contract.representation} | ${contract.fidelity} | ${contract.profile ?? "—"} |`)
+    .map(
+      ([kind, contract]) =>
+        `| ${kind} | ${contract.representation} | ${contract.fidelity} | ${contract.profile ?? "—"} |`,
+    )
     .join("\n");
   const containerRows = Object.entries(target.containers)
     .map(([name, status]) => `| ${name} | ${status} |`)
     .join("\n");
-  const exclusions = target.driver.exclusions?.length
-    ? `\nExclusions: ${target.driver.exclusions.join(" ")}` : "";
+  const exclusions = target.driver.exclusions?.length ? `\nExclusions: ${target.driver.exclusions.join(" ")}` : "";
   return [
     `### ${target.id}`,
     "",
@@ -86,36 +93,43 @@ function rewriteDestination(destination: string, base: string) {
 
 export function rewriteMarkdownDocLinks(source: string, base = docsBasePath()) {
   let fence: "```" | "~~~" | undefined;
-  return source.split("\n").map((line) => {
-    const trimmed = line.trimStart();
-    if (!fence && (trimmed.startsWith("```") || trimmed.startsWith("~~~"))) {
-      fence = trimmed.startsWith("```") ? "```" : "~~~";
-      return line;
-    }
-    if (fence && trimmed.startsWith(fence)) {
-      fence = undefined;
-      return line;
-    }
-    if (fence) return line;
+  return source
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trimStart();
+      if (!fence && (trimmed.startsWith("```") || trimmed.startsWith("~~~"))) {
+        fence = trimmed.startsWith("```") ? "```" : "~~~";
+        return line;
+      }
+      if (fence && trimmed.startsWith(fence)) {
+        fence = undefined;
+        return line;
+      }
+      if (fence) return line;
 
-    return line.replace(/(\]\()([^\s)]+)([^)]*\))/gu, (_match, open, destination, close) => {
-      return `${open}${rewriteDestination(destination, base)}${close}`;
-    });
-  }).join("\n");
+      return line.replace(/(\]\()([^\s)]+)([^)]*\))/gu, (_match, open, destination, close) => {
+        return `${open}${rewriteDestination(destination, base)}${close}`;
+      });
+    })
+    .join("\n");
 }
 
 export function renderRawMarkdown(entry: CollectionEntry<"docs">, base = docsBasePath()) {
-  const description = typeof entry.data.description === "string" && entry.data.description.trim()
-    ? `\n> ${entry.data.description.trim()}\n`
-    : "";
+  const description =
+    typeof entry.data.description === "string" && entry.data.description.trim()
+      ? `\n> ${entry.data.description.trim()}\n`
+      : "";
   let source = entry.body ?? "";
   if (entry.id === "interactive-preview" || entry.id === "ko/interactive-preview") {
     const renderedPreviewUrl = `https://clickin.github.io${base}/${entry.id}/`;
     source = source
       .replace(/^import InteractivePreview from "[^"]+";\n*/u, "")
-      .replace("<InteractivePreview />", entry.id.startsWith("ko/")
-        ? `문서 사이트에서 렌더링된 [인터랙티브 미리보기](${renderedPreviewUrl})를 사용할 수 있습니다.`
-        : `The rendered [interactive preview](${renderedPreviewUrl}) is available on the documentation site.`);
+      .replace(
+        "<InteractivePreview />",
+        entry.id.startsWith("ko/")
+          ? `문서 사이트에서 렌더링된 [인터랙티브 미리보기](${renderedPreviewUrl})를 사용할 수 있습니다.`
+          : `The rendered [interactive preview](${renderedPreviewUrl}) is available on the documentation site.`,
+      );
   }
   if (entry.id === "reference/support" || entry.id === "ko/reference/support") {
     source = source

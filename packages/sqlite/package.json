@@ -2,37 +2,27 @@
   "name": "@sqlbraid/sqlite",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid SQLite dialect adapters for node:sqlite, better-sqlite3, libSQL, SQLite WASM, and Cloudflare D1, plus metadata inspection",
+  "keywords": [
+    "database",
+    "query",
+    "sql",
+    "sqlite",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/sqlite"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "sqlite", "query"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=16.20.2" },
-  "dependencies": {
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/template": "workspace:*"
-  },
-  "peerDependencies": {
-    "@sqlbraid/metadata": "workspace:*"
-  },
-  "peerDependenciesMeta": {
-    "@sqlbraid/metadata": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "@sqlbraid/metadata": "workspace:*"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -62,5 +52,27 @@
       "types": "./dist/inspector.d.ts",
       "import": "./dist/inspector.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
+  "devDependencies": {
+    "@sqlbraid/metadata": "workspace:*"
+  },
+  "peerDependencies": {
+    "@sqlbraid/metadata": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@sqlbraid/metadata": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=16.20.2"
   }
 }

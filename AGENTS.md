@@ -187,10 +187,10 @@ Keep one logical statement plus a value matrix and one bulk observer lifecycle.
 Canonical tags:
 
 ```ts
-sql.rows<Row>`...`
-sql.command`...`
-sql.call<RoutineCallResult<Output, Sets, ReturnValue>>`...`
-sql`...` // unknown
+sql.rows<Row>`...`;
+sql.command`...`;
+sql.call<RoutineCallResult<Output, Sets, ReturnValue>>`...`;
+sql`...`; // unknown
 ```
 
 Adapters report actual row/command kind. Runtime enforces the declaration centrally.

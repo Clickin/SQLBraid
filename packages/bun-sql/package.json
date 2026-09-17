@@ -2,27 +2,43 @@
   "name": "@sqlbraid/bun-sql",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid Bun.SQL multi-dialect driver adapter",
+  "keywords": [
+    "bun",
+    "database",
+    "mysql",
+    "postgresql",
+    "sql",
+    "sqlite",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/bun-sql"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": { "url": "https://github.com/Clickin/SQLBraid/issues" },
-  "keywords": ["sql", "typescript", "database", "bun", "postgresql", "mysql", "sqlite"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "bun": ">=1.3.14" },
-  "dependencies": {
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/runtime": "workspace:*"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/runtime": "workspace:*"
+  },
+  "engines": {
+    "bun": ">=1.3.14"
   }
 }

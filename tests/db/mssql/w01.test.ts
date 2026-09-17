@@ -17,7 +17,10 @@ interface MssqlSettings {
   readonly database: string;
 }
 
-function connect(settings: MssqlSettings, connectionIsolationLevel = ISOLATION_LEVEL.READ_COMMITTED): Promise<Connection> {
+function connect(
+  settings: MssqlSettings,
+  connectionIsolationLevel = ISOLATION_LEVEL.READ_COMMITTED,
+): Promise<Connection> {
   const connection = new Connection({
     server: settings.server,
     options: {
@@ -35,7 +38,7 @@ function connect(settings: MssqlSettings, connectionIsolationLevel = ISOLATION_L
     },
   });
   return new Promise<Connection>((resolve, reject) => {
-    connection.once("connect", (error) => error ? reject(error) : resolve(connection));
+    connection.once("connect", (error) => (error ? reject(error) : resolve(connection)));
     connection.connect();
   });
 }
@@ -54,7 +57,9 @@ test("SQL Server binding diagnostics preserve literal marker text through real e
     const probe = bindingObserver("mssql", "typed-request");
     const db = createTediousDatabase(connection, { observers: [probe.observer] });
     assert.deepEqual(
-      await db.one(sql.rows`SELECT ${sql.bind("O'Reilly", mssqlParameter.nvarchar(40))} AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */`),
+      await db.one(
+        sql.rows`SELECT ${sql.bind("O'Reilly", mssqlParameter.nvarchar(40))} AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */`,
+      ),
       { value: "O'Reilly", marker: "$1 ? :1 @p1" },
     );
     probe.verify("SELECT @p1 AS value, '$1 ? :1 @p1' AS marker /* $1 ? :1 @p1 */");
@@ -74,8 +79,15 @@ test("SQL Server wrappers sharing one Tedious connection preserve transaction is
       db,
       secondaryDb,
       sql,
-      rows: async () => (await createTediousDatabase(observer).all(sql.rows<{ readonly id: string }>`SELECT id FROM dbo.braid_w01 ORDER BY id`)).map((row) => row.id),
-      clear: async () => { await createTediousDatabase(observer).execute(sql`DELETE FROM dbo.braid_w01`); },
+      rows: async () =>
+        (
+          await createTediousDatabase(observer).all(
+            sql.rows<{ readonly id: string }>`SELECT id FROM dbo.braid_w01 ORDER BY id`,
+          )
+        ).map((row) => row.id),
+      clear: async () => {
+        await createTediousDatabase(observer).execute(sql`DELETE FROM dbo.braid_w01`);
+      },
     });
   } finally {
     await close(observer);
@@ -89,10 +101,19 @@ test("SQL Server binds explicit types, reports kinds, and preserves result-set b
   try {
     const db = createTediousDatabase(connection);
     await db.execute(sql`DROP TABLE IF EXISTS dbo.braid_pv13`);
-    await db.execute(sql`CREATE TABLE dbo.braid_pv13 (id int NOT NULL PRIMARY KEY, amount decimal(19,4) NULL, label nvarchar(100) NULL, payload varbinary(16) NULL)`);
-    await db.execute(sql`INSERT INTO dbo.braid_pv13 (id, amount, label, payload) VALUES (${1}, ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}, ${sql.bind("Ada", mssqlParameter.nvarchar(100))}, ${sql.bind(new Uint8Array([1, 2]), mssqlParameter.varbinary(16))})`);
+    await db.execute(
+      sql`CREATE TABLE dbo.braid_pv13 (id int NOT NULL PRIMARY KEY, amount decimal(19,4) NULL, label nvarchar(100) NULL, payload varbinary(16) NULL)`,
+    );
+    await db.execute(
+      sql`INSERT INTO dbo.braid_pv13 (id, amount, label, payload) VALUES (${1}, ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}, ${sql.bind("Ada", mssqlParameter.nvarchar(100))}, ${sql.bind(new Uint8Array([1, 2]), mssqlParameter.varbinary(16))})`,
+    );
 
-    const selected = await db.all(sql.rows<{ readonly id: string; readonly amount: string; readonly label: string; readonly payload: Uint8Array }>`
+    const selected = await db.all(sql.rows<{
+      readonly id: string;
+      readonly amount: string;
+      readonly label: string;
+      readonly payload: Uint8Array;
+    }>`
       SELECT id, CONVERT(varchar(64), amount) AS amount, label, payload FROM dbo.braid_pv13
       WHERE amount = ${sql.bind(12.34, mssqlParameter.decimal(19, 4))}
         AND id = ${sql.bind(1, mssqlParameter.int())}
@@ -103,7 +124,9 @@ test("SQL Server binds explicit types, reports kinds, and preserves result-set b
     assert.equal(selected[0]?.label, "Ada");
     assert.deepEqual([...selected[0]!.payload], [1, 2]);
 
-    const command = await db.execute(sql.command`UPDATE dbo.braid_pv13 SET label = ${sql.bind(null, mssqlParameter.nvarchar(100))} WHERE id = ${1}`);
+    const command = await db.execute(
+      sql.command`UPDATE dbo.braid_pv13 SET label = ${sql.bind(null, mssqlParameter.nvarchar(100))} WHERE id = ${1}`,
+    );
     assert.equal(command.kind, "command");
     assert.equal(command.command.affectedRows, 1);
     await assert.rejects(
@@ -119,16 +142,18 @@ test("SQL Server binds explicit types, reports kinds, and preserves result-set b
     `);
     assert.equal(decimalInput.value, "12.3400");
     await assert.rejects(() => db.execute(sql`SELECT ${null}`), /BRAID_BIND_TYPE_REQUIRED/u);
-    await assert.rejects(
-      () => db.execute(sql.rows`SELECT 1 AS duplicate, 2 AS duplicate`),
-      /BRAID_RESULT_COLUMNS/u,
-    );
+    await assert.rejects(() => db.execute(sql.rows`SELECT 1 AS duplicate, 2 AS duplicate`), /BRAID_RESULT_COLUMNS/u);
 
     const call = await db.call(sql.call`SELECT 1 AS first; SELECT 2 AS second`);
     assert.equal(call.resultSets.length, 2);
-    assert.deepEqual(call.resultSets.map((set) => set.rows), [[{ first: "1" }], [{ second: "2" }]]);
+    assert.deepEqual(
+      call.resultSets.map((set) => set.rows),
+      [[{ first: "1" }], [{ second: "2" }]],
+    );
   } finally {
-    await createTediousDatabase(connection).execute(sql`DROP TABLE IF EXISTS dbo.braid_pv13`).catch(() => undefined);
+    await createTediousDatabase(connection)
+      .execute(sql`DROP TABLE IF EXISTS dbo.braid_pv13`)
+      .catch(() => undefined);
     await close(connection);
   }
 });
@@ -143,7 +168,9 @@ test("SQL Server transaction entry preserves the actual session isolation level"
     assert.equal((await db.one(isolation)).level, "3");
     await db.tx(async (tx) => {
       assert.equal((await tx.one(isolation)).level, "3");
-      await tx.tx(async (nested) => { assert.equal((await nested.one(isolation)).level, "3"); });
+      await tx.tx(async (nested) => {
+        assert.equal((await nested.one(isolation)).level, "3");
+      });
     });
     assert.equal((await db.one(isolation)).level, "3");
   } finally {
@@ -173,10 +200,15 @@ test("SQL Server row-event streaming supports early break and abort", async () =
     assert.equal((await db.one(sql.rows<{ readonly n: string }>`SELECT 7 AS n`)).n, "7");
 
     const controller = new AbortController();
-    const live = db.stream(sql.rows<{ readonly n: string }>`
+    const live = db
+      .stream(
+        sql.rows<{ readonly n: string }>`
       SELECT TOP (100) CAST(ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS int) AS n
       FROM sys.all_objects a CROSS JOIN sys.all_objects b
-    `, { signal: controller.signal })[Symbol.asyncIterator]();
+    `,
+        { signal: controller.signal },
+      )
+      [Symbol.asyncIterator]();
     assert.equal((await live.next()).value?.n, "1");
     controller.abort(new Error("live stop"));
     await assert.rejects(() => live.next(), /live stop/u);
@@ -185,7 +217,11 @@ test("SQL Server row-event streaming supports early break and abort", async () =
     const preAborted = new AbortController();
     preAborted.abort(new Error("stop"));
     const aborted = db.stream(sql.rows`SELECT 1 AS n`, { signal: preAborted.signal });
-    await assert.rejects(async () => { for await (const _row of aborted) { /* pre-aborted */ } }, /stop/u);
+    await assert.rejects(async () => {
+      for await (const _row of aborted) {
+        /* pre-aborted */
+      }
+    }, /stop/u);
   } finally {
     await close(connection);
   }
@@ -204,12 +240,16 @@ test("SQL Server inspector captures conservative catalogs for codegen", async ()
     await db.execute(sql`DROP FUNCTION IF EXISTS dbo.braid_pv13_tvf`);
     await db.execute(sql`DROP TYPE IF EXISTS dbo.braid_pv13_alias`);
     await db.execute(sql`CREATE TYPE dbo.braid_pv13_alias FROM int NOT NULL`);
-    await db.execute(sql`CREATE TABLE dbo.braid_pv13_codegen (external_id int NOT NULL PRIMARY KEY, alias_id dbo.braid_pv13_alias, identity_value bigint IDENTITY(1,1) NOT NULL, amount decimal(12,2) NOT NULL DEFAULT 0, label nvarchar(100) NOT NULL, computed AS (external_id + 1))`);
+    await db.execute(
+      sql`CREATE TABLE dbo.braid_pv13_codegen (external_id int NOT NULL PRIMARY KEY, alias_id dbo.braid_pv13_alias, identity_value bigint IDENTITY(1,1) NOT NULL, amount decimal(12,2) NOT NULL DEFAULT 0, label nvarchar(100) NOT NULL, computed AS (external_id + 1))`,
+    );
     await db.execute(sql`CREATE PROCEDURE dbo.braid_pv13_proc @value int AS SELECT @value AS value`);
     await db.execute(sql`CREATE PROCEDURE dbo.[constructor] AS SELECT 1 AS value`);
     await db.execute(sql`CREATE PROCEDURE dbo.[toString] AS SELECT 1 AS value`);
     await db.execute(sql`CREATE PROCEDURE dbo.[__proto__] AS SELECT 1 AS value`);
-    await db.execute(sql`CREATE FUNCTION dbo.braid_pv13_tvf(@minimum int) RETURNS TABLE AS RETURN (SELECT alias_id FROM dbo.braid_pv13_codegen WHERE external_id >= @minimum)`);
+    await db.execute(
+      sql`CREATE FUNCTION dbo.braid_pv13_tvf(@minimum int) RETURNS TABLE AS RETURN (SELECT alias_id FROM dbo.braid_pv13_codegen WHERE external_id >= @minimum)`,
+    );
 
     const snapshot = await createMssqlInspector(connection).inspect();
     const relation = snapshot.relations["dbo.braid_pv13_codegen"];
@@ -221,28 +261,49 @@ test("SQL Server inspector captures conservative catalogs for codegen", async ()
     assert.equal(columns.get("amount")?.type, "decimal");
     assert.equal(columns.get("computed")?.generated, true);
     assert.equal(columns.get("computed")?.insertable, false);
-    const routine = Object.values(snapshot.routines).flat().find((entry) => entry.name === "braid_pv13_proc");
+    const routine = Object.values(snapshot.routines)
+      .flat()
+      .find((entry) => entry.name === "braid_pv13_proc");
     assert.equal(routine?.argumentsComplete, true);
     assert.equal(routine?.arguments[0]?.type, "int");
     assert.equal(snapshot.routines.constructor?.length, 1);
     assert.equal(snapshot.routines.toString?.length, 1);
     assert.equal(snapshot.routines.__proto__?.length, 1);
-    const tvf = Object.values(snapshot.routines).flat().find((entry) => entry.name === "braid_pv13_tvf");
+    const tvf = Object.values(snapshot.routines)
+      .flat()
+      .find((entry) => entry.name === "braid_pv13_tvf");
     assert.equal(tvf?.result.kind, "table");
     assert.equal(tvf?.result.kind === "table" ? tvf.result.columns?.[0]?.name : undefined, "alias_id");
     assert.equal(tvf?.result.kind === "table" ? tvf.result.columns?.[0]?.type : undefined, "dbo.braid_pv13_alias");
     assert.equal(snapshot.types["dbo.braid_pv13_alias"]?.identity, "dbo.braid_pv13_alias");
     const generated = generateModels(snapshot, { typePolicy });
     assert.equal(generated.typePolicyId, typePolicy.id);
-    assert.equal(generated.models.some((model) => model.relationIdentity === relation.identity), true);
+    assert.equal(
+      generated.models.some((model) => model.relationIdentity === relation.identity),
+      true,
+    );
   } finally {
-    await createTediousDatabase(connection).execute(sql`DROP FUNCTION IF EXISTS dbo.braid_pv13_tvf`).catch(() => undefined);
-    await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_pv13_proc`).catch(() => undefined);
-    await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.[constructor]`).catch(() => undefined);
-    await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.[toString]`).catch(() => undefined);
-    await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.[__proto__]`).catch(() => undefined);
-    await createTediousDatabase(connection).execute(sql`DROP TABLE IF EXISTS dbo.braid_pv13_codegen`).catch(() => undefined);
-    await createTediousDatabase(connection).execute(sql`DROP TYPE IF EXISTS dbo.braid_pv13_alias`).catch(() => undefined);
+    await createTediousDatabase(connection)
+      .execute(sql`DROP FUNCTION IF EXISTS dbo.braid_pv13_tvf`)
+      .catch(() => undefined);
+    await createTediousDatabase(connection)
+      .execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_pv13_proc`)
+      .catch(() => undefined);
+    await createTediousDatabase(connection)
+      .execute(sql`DROP PROCEDURE IF EXISTS dbo.[constructor]`)
+      .catch(() => undefined);
+    await createTediousDatabase(connection)
+      .execute(sql`DROP PROCEDURE IF EXISTS dbo.[toString]`)
+      .catch(() => undefined);
+    await createTediousDatabase(connection)
+      .execute(sql`DROP PROCEDURE IF EXISTS dbo.[__proto__]`)
+      .catch(() => undefined);
+    await createTediousDatabase(connection)
+      .execute(sql`DROP TABLE IF EXISTS dbo.braid_pv13_codegen`)
+      .catch(() => undefined);
+    await createTediousDatabase(connection)
+      .execute(sql`DROP TYPE IF EXISTS dbo.braid_pv13_alias`)
+      .catch(() => undefined);
     await close(connection);
   }
 });

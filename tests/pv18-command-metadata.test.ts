@@ -24,7 +24,11 @@ const statementBinding = Object.freeze<StatementBindingAdapter>({
   },
 });
 
-function commandExecutor(command: Record<string, unknown>, environment?: QueryExecutor["environment"], rowCount?: number): QueryExecutor {
+function commandExecutor(
+  command: Record<string, unknown>,
+  environment?: QueryExecutor["environment"],
+  rowCount?: number,
+): QueryExecutor {
   return {
     statementBinding,
     environment,
@@ -58,9 +62,10 @@ test.each([
   const db = createDatabase(commandExecutor({ insertId }));
   await assert.rejects(
     () => db.execute(sql.command`INSERT INTO records DEFAULT VALUES`),
-    (error: unknown) => error instanceof ResultExactnessError
-      && error.code === "BRAID_RESULT_EXACTNESS"
-      && error.message === "Database insertId must be represented as an exact string.",
+    (error: unknown) =>
+      error instanceof ResultExactnessError &&
+      error.code === "BRAID_RESULT_EXACTNESS" &&
+      error.message === "Database insertId must be represented as an exact string.",
   );
 });
 
@@ -79,8 +84,7 @@ test("command metadata keeps non-negative safe count checks", async () => {
     const db = createDatabase(commandExecutor(command, undefined, rowCount));
     await assert.rejects(
       () => db.execute(sql.command`UPDATE records SET active = TRUE`),
-      (error: unknown) => error instanceof ResultExactnessError
-        && error.code === "BRAID_RESULT_EXACTNESS",
+      (error: unknown) => error instanceof ResultExactnessError && error.code === "BRAID_RESULT_EXACTNESS",
     );
   }
 });
@@ -121,12 +125,17 @@ function exactTarget(environment: DatabaseEnvironment, typePolicy = environment.
 
 test("environment snapshots freeze policy identity and reject incomplete certification targets", async () => {
   const sourcePolicy = { id: "pv18-test-policy", hash: "pv18-test-policy-hash" };
-  const db = createDatabase(commandExecutor({}, {
-    database: { product: "pv18-test-db", version: "1", edition: "community" },
-    driver: { id: "pv18-test-driver", version: "1", profile: "lossless-text" },
-    typePolicy: sourcePolicy,
-    capabilities: {},
-  }));
+  const db = createDatabase(
+    commandExecutor(
+      {},
+      {
+        database: { product: "pv18-test-db", version: "1", edition: "community" },
+        driver: { id: "pv18-test-driver", version: "1", profile: "lossless-text" },
+        typePolicy: sourcePolicy,
+        capabilities: {},
+      },
+    ),
+  );
   const environment = await db.environment();
   assert.deepEqual(environment.typePolicy, {
     id: "pv18-test-policy",
@@ -143,9 +152,11 @@ test("environment snapshots freeze policy identity and reject incomplete certifi
   // @ts-expect-error A JavaScript caller may omit the required policy identity.
   assert.equal((await db.environment({ targets: [incompleteTarget] })).supportMatch.status, "compatible");
   assert.equal(
-    (await db.environment({
-      targets: [{ ...target, typePolicy: { id: "wrong-policy", hash: "wrong-hash" } }],
-    })).supportMatch.status,
+    (
+      await db.environment({
+        targets: [{ ...target, typePolicy: { id: "wrong-policy", hash: "wrong-hash" } }],
+      })
+    ).supportMatch.status,
     "compatible",
   );
 });

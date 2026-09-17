@@ -1,10 +1,21 @@
 import { defineResultProperty } from "@sqlbraid/core/driver";
 import { sql } from "@sqlbraid/sqlite";
 import type { RowQuery } from "@sqlbraid/core";
-import { createSqliteWasmDatabase, type SqliteWasmDatabaseLike, type SqliteWasmStatementLike } from "@sqlbraid/sqlite/wasm";
+import {
+  createSqliteWasmDatabase,
+  type SqliteWasmDatabaseLike,
+  type SqliteWasmStatementLike,
+} from "@sqlbraid/sqlite/wasm";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
-import type { CertificationFixture, CertificationTarget, ExpectedCapabilityContract, ResourceSnapshot, TransactionOptionKey, UnsupportedProbe } from "../types.js";
+import type {
+  CertificationFixture,
+  CertificationTarget,
+  ExpectedCapabilityContract,
+  ResourceSnapshot,
+  TransactionOptionKey,
+  UnsupportedProbe,
+} from "../types.js";
 
 interface Sqlite3Like {
   readonly version: { readonly libVersion: string };
@@ -39,7 +50,11 @@ function expectedObject(key: string, value: unknown): Record<string, unknown> {
 
 import { WASM_EXPECTED_CAPABILITIES, WASM_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
 
-function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats, faults: NativeFaults): SqliteWasmDatabaseLike & { close(): void } {
+function wrapNative(
+  native: SqliteWasmDatabaseLike,
+  stats: NativeStats,
+  faults: NativeFaults,
+): SqliteWasmDatabaseLike & { close(): void } {
   const database = native as SqliteWasmDatabaseLike & { close(): void };
   return {
     prepare(sqlText: string) {
@@ -55,19 +70,36 @@ function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats, faults: 
       const statementIndex = stats.finalizeByStatement.length - 1;
       let stepCalls = 0;
       const exposed: SqliteWasmStatementLike = {
-        get columnCount() { return statement.columnCount; },
-        get pointer() { return statement.pointer; },
-        bind(...values) { statement.bind(...values); return exposed; },
+        get columnCount() {
+          return statement.columnCount;
+        },
+        get pointer() {
+          return statement.pointer;
+        },
+        bind(...values) {
+          statement.bind(...values);
+          return exposed;
+        },
         step() {
           stepCalls += 1;
           if (sqlText.includes("__cert_first_next_failure__") && stepCalls === 1) throw faults.firstNextFailure;
           if (sqlText.includes("__cert_mid_stream_failure__") && stepCalls === 2) throw faults.midStreamFailure;
           return statement.step();
         },
-        stepReset() { statement.stepReset?.(); return exposed; },
-        reset(alsoClearBinds) { statement.reset(alsoClearBinds); return exposed; },
-        get(index) { return statement.get(index); },
-        getColumnName(index) { return statement.getColumnName(index); },
+        stepReset() {
+          statement.stepReset?.();
+          return exposed;
+        },
+        reset(alsoClearBinds) {
+          statement.reset(alsoClearBinds);
+          return exposed;
+        },
+        get(index) {
+          return statement.get(index);
+        },
+        getColumnName(index) {
+          return statement.getColumnName(index);
+        },
         finalize() {
           if (finalized) throw new Error("SQLite WASM statement finalized twice.");
           finalized = true;
@@ -241,38 +273,203 @@ export function createSqliteWasmTarget(
         } catch (error) {
           caught = error;
         }
-        const nativeRollbackErrors = caught instanceof AggregateError
-          ? caught.errors.filter((error) => error !== primary && typeof (error as { resultCode?: unknown }).resultCode === "number")
-          : [];
-        if (!(caught instanceof AggregateError) || !caught.errors.includes(primary) || nativeRollbackErrors.length === 0) {
-          throw new Error("SQLite WASM transaction cleanup did not aggregate the native rollback failure.", { cause: caught });
+        const nativeRollbackErrors =
+          caught instanceof AggregateError
+            ? caught.errors.filter(
+                (error) => error !== primary && typeof (error as { resultCode?: unknown }).resultCode === "number",
+              )
+            : [];
+        if (
+          !(caught instanceof AggregateError) ||
+          !caught.errors.includes(primary) ||
+          nativeRollbackErrors.length === 0
+        ) {
+          throw new Error("SQLite WASM transaction cleanup did not aggregate the native rollback failure.", {
+            cause: caught,
+          });
         }
       };
       const unsupported: NonNullable<CertificationFixture["unsupported"]> = {
-        STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
-        STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
-        PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
-        PRE008: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.call), sideEffects: () => stats.prepares },
-        CALL001: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.call), sideEffects: () => stats.prepares },
-        CALL002: { feature: "routine.out", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.out!), sideEffects: () => stats.prepares },
-        CALL003: { feature: "routine.inout", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.inout!), sideEffects: () => stats.prepares },
-        CALL004: { feature: "routine.result-sets", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.resultSets!), sideEffects: () => stats.prepares },
-        CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.cursor!), sideEffects: () => stats.prepares },
-        CALL006: { feature: "routine.return-value", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.returnValue!), sideEffects: () => stats.prepares },
-        CALL007: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.call), sideEffects: () => stats.prepares },
-        TX020: optionsProbe(db, { isolation: "read-uncommitted" }, "transaction.isolation.read-uncommitted", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX021: optionsProbe(db, { readOnly: true }, "transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX022: optionsProbe(db, { isolation: "read-committed", readOnly: true }, "transaction.isolation.read-committed", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX023: optionsProbe(db, { isolation: "read-committed" }, "transaction.isolation.read-committed", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX024: optionsProbe(db, { isolation: "repeatable-read" }, "transaction.isolation.repeatable-read", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX026: optionsProbe(db, { readOnly: false }, "transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX027: optionsProbe(db, { isolation: "read-uncommitted", readOnly: true }, "transaction.isolation.read-uncommitted", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX028: optionsProbe(db, { isolation: "serializable", readOnly: true }, "transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX029: optionsProbe(db, { isolation: "read-uncommitted", readOnly: false }, "transaction.isolation.read-uncommitted", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX030: optionsProbe(db, { isolation: "read-committed", readOnly: false }, "transaction.isolation.read-committed", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX031: optionsProbe(db, { isolation: "repeatable-read", readOnly: true }, "transaction.isolation.repeatable-read", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX032: optionsProbe(db, { isolation: "repeatable-read", readOnly: false }, "transaction.isolation.repeatable-read", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
-        TX033: optionsProbe(db, { isolation: "serializable", readOnly: false }, "transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", stats) as never,
+        STR006: {
+          feature: "statement.cancel",
+          expectedCode: "BRAID_CANCEL_UNSUPPORTED",
+          run: async () => {
+            const controller = new AbortController();
+            for await (const row of db.stream(queries.stream!, { signal: controller.signal })) {
+              void row;
+              controller.abort(new Error("cancel"));
+            }
+          },
+          sideEffects: () => stats.prepares,
+        },
+        STR010: {
+          feature: "statement.cancel",
+          expectedCode: "BRAID_CANCEL_UNSUPPORTED",
+          run: async () => {
+            const controller = new AbortController();
+            for await (const row of db.stream(queries.stream!, { signal: controller.signal })) {
+              void row;
+              controller.abort(new Error("cancel"));
+            }
+          },
+          sideEffects: () => stats.prepares,
+        },
+        PRE011: {
+          feature: "statement.cancel",
+          expectedCode: "BRAID_CANCEL_UNSUPPORTED",
+          run: async () => {
+            const controller = new AbortController();
+            for await (const row of db.stream(queries.stream!, { signal: controller.signal })) {
+              void row;
+              controller.abort(new Error("cancel"));
+            }
+          },
+          sideEffects: () => stats.prepares,
+        },
+        PRE008: {
+          feature: "routine.call",
+          expectedCode: "BRAID_CALL_UNSUPPORTED",
+          run: () => db.call(queries.routines!.call),
+          sideEffects: () => stats.prepares,
+        },
+        CALL001: {
+          feature: "routine.call",
+          expectedCode: "BRAID_CALL_UNSUPPORTED",
+          run: () => db.call(queries.routines!.call),
+          sideEffects: () => stats.prepares,
+        },
+        CALL002: {
+          feature: "routine.out",
+          expectedErrorFeature: "routine.call",
+          expectedCode: "BRAID_CALL_UNSUPPORTED",
+          run: () => db.call(queries.routines!.out!),
+          sideEffects: () => stats.prepares,
+        },
+        CALL003: {
+          feature: "routine.inout",
+          expectedErrorFeature: "routine.call",
+          expectedCode: "BRAID_CALL_UNSUPPORTED",
+          run: () => db.call(queries.routines!.inout!),
+          sideEffects: () => stats.prepares,
+        },
+        CALL004: {
+          feature: "routine.result-sets",
+          expectedErrorFeature: "routine.call",
+          expectedCode: "BRAID_CALL_UNSUPPORTED",
+          run: () => db.call(queries.routines!.resultSets!),
+          sideEffects: () => stats.prepares,
+        },
+        CALL005: {
+          feature: "routine.out-cursor",
+          expectedErrorFeature: "routine.call",
+          expectedCode: "BRAID_CALL_UNSUPPORTED",
+          run: () => db.call(queries.routines!.cursor!),
+          sideEffects: () => stats.prepares,
+        },
+        CALL006: {
+          feature: "routine.return-value",
+          expectedErrorFeature: "routine.call",
+          expectedCode: "BRAID_CALL_UNSUPPORTED",
+          run: () => db.call(queries.routines!.returnValue!),
+          sideEffects: () => stats.prepares,
+        },
+        CALL007: {
+          feature: "routine.call",
+          expectedCode: "BRAID_CALL_UNSUPPORTED",
+          run: () => db.call(queries.routines!.call),
+          sideEffects: () => stats.prepares,
+        },
+        TX020: optionsProbe(
+          db,
+          { isolation: "read-uncommitted" },
+          "transaction.isolation.read-uncommitted",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX021: optionsProbe(
+          db,
+          { readOnly: true },
+          "transaction.read-only",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX022: optionsProbe(
+          db,
+          { isolation: "read-committed", readOnly: true },
+          "transaction.isolation.read-committed",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX023: optionsProbe(
+          db,
+          { isolation: "read-committed" },
+          "transaction.isolation.read-committed",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX024: optionsProbe(
+          db,
+          { isolation: "repeatable-read" },
+          "transaction.isolation.repeatable-read",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX026: optionsProbe(
+          db,
+          { readOnly: false },
+          "transaction.read-only",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX027: optionsProbe(
+          db,
+          { isolation: "read-uncommitted", readOnly: true },
+          "transaction.isolation.read-uncommitted",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX028: optionsProbe(
+          db,
+          { isolation: "serializable", readOnly: true },
+          "transaction.read-only",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX029: optionsProbe(
+          db,
+          { isolation: "read-uncommitted", readOnly: false },
+          "transaction.isolation.read-uncommitted",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX030: optionsProbe(
+          db,
+          { isolation: "read-committed", readOnly: false },
+          "transaction.isolation.read-committed",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX031: optionsProbe(
+          db,
+          { isolation: "repeatable-read", readOnly: true },
+          "transaction.isolation.repeatable-read",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX032: optionsProbe(
+          db,
+          { isolation: "repeatable-read", readOnly: false },
+          "transaction.isolation.repeatable-read",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
+        TX033: optionsProbe(
+          db,
+          { isolation: "serializable", readOnly: false },
+          "transaction.read-only",
+          "BRAID_TX_OPTION_UNSUPPORTED",
+          stats,
+        ) as never,
       };
       const mappingFailure = new Error("cert-mapper-failure");
       const executionSchemaFailure = new Error("execution schema failed");
@@ -285,7 +482,9 @@ export function createSqliteWasmTarget(
           },
         },
       } as const;
-      const mappingQuery = sql.rows(mappingSchema)`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 3) SELECT value FROM n ORDER BY value`;
+      const mappingQuery = sql.rows(
+        mappingSchema,
+      )`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 3) SELECT value FROM n ORDER BY value`;
       const initFailureQuery = sql.rows`SELECT 1 AS value /* __cert_init_failure__ */`;
       const firstNextFailureQuery = sql.rows`SELECT 1 AS value /* __cert_first_next_failure__ */`;
       const midStreamFailureQuery = sql.rows`SELECT value FROM (SELECT 1 AS value UNION ALL SELECT 2 AS value) /* __cert_mid_stream_failure__ */`;
@@ -310,7 +509,8 @@ export function createSqliteWasmTarget(
         initFailureCleanup: { iteratorReturns: 0, released: 0 },
         reuseAfterBreak: async () => {
           const row = await db.one(queries.identity);
-          if (row.id !== "sqlite-wasm-browser") throw new Error("SQLite WASM stream reuse changed physical session identity.");
+          if (row.id !== "sqlite-wasm-browser")
+            throw new Error("SQLite WASM stream reuse changed physical session identity.");
         },
         largeResultQuery,
         largeResultCount: 10000,
@@ -346,9 +546,13 @@ export function createSqliteWasmTarget(
           }
           if (error === undefined) throw new Error("SQLite WASM bulk middle-item failure was not observed.");
           if (!String((error as { readonly message?: unknown }).message).includes("NOT NULL constraint failed")) {
-            throw new Error("SQLite WASM bulk middle-item failure was not the native NOT NULL constraint.", { cause: error });
+            throw new Error("SQLite WASM bulk middle-item failure was not the native NOT NULL constraint.", {
+              cause: error,
+            });
           }
-          const observedRows = await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM cert_values ORDER BY rowid`);
+          const observedRows = await db.all(
+            sql.rows<{ readonly value: string }>`SELECT value FROM cert_values ORDER BY rowid`,
+          );
           const prefixRows = [{ value: "1" }];
           const atomicRows: typeof prefixRows = [];
           const observedText = JSON.stringify(observedRows);
@@ -358,32 +562,49 @@ export function createSqliteWasmTarget(
           if (observedText === JSON.stringify(atomicRows)) {
             return { error, observedRows, expectedRows: atomicRows, durability: "atomic" as const };
           }
-          throw new Error(`SQLite WASM bulk middle-item durability was not the expected prefix or atomic state: ${observedText}.`);
+          throw new Error(
+            `SQLite WASM bulk middle-item durability was not the expected prefix or atomic state: ${observedText}.`,
+          );
         },
       };
       const metrics = {
-        snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: stats.active, openCursors: stats.active, openPrepared: 0 }),
+        snapshot: (): ResourceSnapshot => ({
+          borrowedLeases: 0,
+          cleanupBalance: stats.active,
+          openCursors: stats.active,
+          openPrepared: 0,
+        }),
         sideEffects: () => stats.prepares,
         mutationSentinel: async () => {
-          const row = await db.one(sql.rows<{ readonly marker: string }>`SELECT marker FROM cert_sentinel WHERE id = 1`);
+          const row = await db.one(
+            sql.rows<{ readonly marker: string }>`SELECT marker FROM cert_sentinel WHERE id = 1`,
+          );
           return row.marker;
         },
         readOnlyWrite: async () => {
           observed.exec("DELETE FROM cert_values");
-          await db.tx(async (tx) => { await tx.execute(queries.transaction!.insert); });
+          await db.tx(async (tx) => {
+            await tx.execute(queries.transaction!.insert);
+          });
           const before = await db.all(queries.transaction!.visible);
-          if (before.length !== 1) throw new Error(`SQLite WASM read-write transaction proof expected one row, got ${before.length}.`);
+          if (before.length !== 1)
+            throw new Error(`SQLite WASM read-write transaction proof expected one row, got ${before.length}.`);
           let error: unknown;
           try {
-            await db.tx({ readOnly: true }, async (tx) => { await tx.execute(queries.transaction!.savepointInsert); });
+            await db.tx({ readOnly: true }, async (tx) => {
+              await tx.execute(queries.transaction!.savepointInsert);
+            });
           } catch (caught) {
             error = caught;
           }
           if ((error as { readonly code?: unknown } | undefined)?.code !== "BRAID_TX_OPTION_UNSUPPORTED") {
-            throw new Error("SQLite WASM read-only transaction did not reject with BRAID_TX_OPTION_UNSUPPORTED.", { cause: error });
+            throw new Error("SQLite WASM read-only transaction did not reject with BRAID_TX_OPTION_UNSUPPORTED.", {
+              cause: error,
+            });
           }
           const after = await db.all(queries.transaction!.visible);
-          if (after.length !== 1) throw new Error(`SQLite WASM read-only rejection changed state: ${after.length} rows.`);
+          if (after.length !== 1)
+            throw new Error(`SQLite WASM read-only rejection changed state: ${after.length} rows.`);
         },
         transactionCleanup,
         physicalSessionIds: () => ["sqlite-wasm-browser"],
@@ -402,7 +623,9 @@ export function createSqliteWasmTarget(
           observed.exec("UPDATE cert_sentinel SET marker = 'untouched' WHERE id = 1");
         },
         unsupported,
-        close: async () => { observed.close(); },
+        close: async () => {
+          observed.close();
+        },
       };
     },
   };

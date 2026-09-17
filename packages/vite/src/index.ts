@@ -16,7 +16,8 @@ export type FilterPattern = string | RegExp | readonly (string | RegExp)[];
 
 const SOURCE_EXTENSION = /\.(?:ts|tsx|js|jsx|mts|cts)$/u;
 const OUTPUT_PATH = /(?:^|[\\/])(?:node_modules|dist|build|out|\.vite|coverage)(?:[\\/]|$)/u;
-const GENERATED_PATH = /(?:^|[\\/])(?:generated|__generated__)(?:[\\/]|$)|\.(?:generated|gen)\.(?:ts|tsx|js|jsx|mts|cts)$/u;
+const GENERATED_PATH =
+  /(?:^|[\\/])(?:generated|__generated__)(?:[\\/]|$)|\.(?:generated|gen)\.(?:ts|tsx|js|jsx|mts|cts)$/u;
 
 function cleanId(id: string): string {
   return id.split(/[?#]/u, 1)[0] ?? id;
@@ -24,14 +25,23 @@ function cleanId(id: string): string {
 
 function shouldTransform(id: string): boolean {
   const fileName = cleanId(id);
-  return !fileName.startsWith("\0")
-    && SOURCE_EXTENSION.test(fileName)
-    && !/\.d\.(?:ts|mts|cts)$/u.test(fileName)
-    && !OUTPUT_PATH.test(fileName)
-    && !GENERATED_PATH.test(fileName);
+  return (
+    !fileName.startsWith("\0") &&
+    SOURCE_EXTENSION.test(fileName) &&
+    !/\.d\.(?:ts|mts|cts)$/u.test(fileName) &&
+    !OUTPUT_PATH.test(fileName) &&
+    !GENERATED_PATH.test(fileName)
+  );
 }
 
-function diagnosticMessage(fileName: string, source: string, diagnostic: CompileDiagnostic): { readonly message: string; readonly loc: { readonly file: string; readonly line: number; readonly column: number } } {
+function diagnosticMessage(
+  fileName: string,
+  source: string,
+  diagnostic: CompileDiagnostic,
+): {
+  readonly message: string;
+  readonly loc: { readonly file: string; readonly line: number; readonly column: number };
+} {
   const position = sourcePosition(source, diagnostic.range.start);
   return {
     message: `${diagnostic.code}: ${diagnostic.message} (${fileName}:${position.line + 1}:${position.character + 1})`,
@@ -55,12 +65,15 @@ export default function sqlbraid(options: SqlBraidViteOptions = {}): Plugin {
       if (result.code === source) return null;
       return {
         code: result.code,
-        map: result.map === null ? null : {
-          ...result.map,
-          names: [...result.map.names],
-          sources: [...result.map.sources],
-          sourcesContent: result.map.sourcesContent === undefined ? undefined : [...result.map.sourcesContent],
-        },
+        map:
+          result.map === null
+            ? null
+            : {
+                ...result.map,
+                names: [...result.map.names],
+                sources: [...result.map.sources],
+                sourcesContent: result.map.sourcesContent === undefined ? undefined : [...result.map.sourcesContent],
+              },
       };
     },
   };

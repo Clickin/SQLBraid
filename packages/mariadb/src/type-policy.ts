@@ -56,8 +56,20 @@ const commonMappings: readonly TypeMapping[] = Object.freeze([
   ...integerTypes.map(exactIntegerMapping),
   exactDecimalMapping("DECIMAL"),
   exactDecimalMapping("NEWDECIMAL"),
-  { databaseType: "FLOAT", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 32 } },
-  { databaseType: "DOUBLE", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 64 } },
+  {
+    databaseType: "FLOAT",
+    inputType: "number",
+    outputType: "number",
+    nullable: true,
+    numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 32 },
+  },
+  {
+    databaseType: "DOUBLE",
+    inputType: "number",
+    outputType: "number",
+    nullable: true,
+    numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 64 },
+  },
   { databaseType: "VARCHAR", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "CHAR", inputType: "string", outputType: "string", nullable: true },
   { databaseType: "TEXT", inputType: "string", outputType: "string", nullable: true },
@@ -88,28 +100,37 @@ const profileId = (json: MariaDbJsonProfile, temporal: MariaDbTemporalProfile): 
 function freezePolicy(policy: TypePolicy): TypePolicy {
   return Object.freeze({
     ...policy,
-    mappings: Object.freeze(policy.mappings.map((mapping) => Object.freeze({
-      ...mapping,
-      ...(mapping.numeric === undefined ? {} : { numeric: Object.freeze({ ...mapping.numeric }) }),
-    }))),
+    mappings: Object.freeze(
+      policy.mappings.map((mapping) =>
+        Object.freeze({
+          ...mapping,
+          ...(mapping.numeric === undefined ? {} : { numeric: Object.freeze({ ...mapping.numeric }) }),
+        }),
+      ),
+    ),
   });
 }
 
 function createTypePolicy(json: MariaDbJsonProfile, temporal: MariaDbTemporalProfile): TypePolicy {
   const mappings = [
     ...commonMappings,
-    { databaseType: "JSON", inputType: json === "text" ? "string" : "unknown", outputType: json === "text" ? "string" : "unknown", nullable: true },
+    {
+      databaseType: "JSON",
+      inputType: json === "text" ? "string" : "unknown",
+      outputType: json === "text" ? "string" : "unknown",
+      nullable: true,
+    },
     ...(temporal === "native"
       ? [
-        { databaseType: "DATE", inputType: "Date", outputType: "Date", nullable: true },
-        { databaseType: "DATETIME", inputType: "Date", outputType: "Date", nullable: true },
-        { databaseType: "TIMESTAMP", inputType: "Date", outputType: "Date", nullable: true },
-      ]
+          { databaseType: "DATE", inputType: "Date", outputType: "Date", nullable: true },
+          { databaseType: "DATETIME", inputType: "Date", outputType: "Date", nullable: true },
+          { databaseType: "TIMESTAMP", inputType: "Date", outputType: "Date", nullable: true },
+        ]
       : [
-        { databaseType: "DATE", inputType: "Date | string", outputType: "string", nullable: true },
-        { databaseType: "DATETIME", inputType: "Date | string", outputType: "string", nullable: true },
-        { databaseType: "TIMESTAMP", inputType: "Date | string", outputType: "string", nullable: true },
-      ]),
+          { databaseType: "DATE", inputType: "Date | string", outputType: "string", nullable: true },
+          { databaseType: "DATETIME", inputType: "Date | string", outputType: "string", nullable: true },
+          { databaseType: "TIMESTAMP", inputType: "Date | string", outputType: "string", nullable: true },
+        ]),
   ];
   return freezePolicy({
     id: profileId(json, temporal),
@@ -135,10 +156,18 @@ function createTypePolicy(json: MariaDbJsonProfile, temporal: MariaDbTemporalPro
       if (type === "TIME" && typeof value !== "string") {
         throw new ResultExactnessError("MariaDB TIME results must remain strings.");
       }
-      if ((type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") && temporal === "text" && typeof value !== "string") {
+      if (
+        (type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") &&
+        temporal === "text" &&
+        typeof value !== "string"
+      ) {
         throw new ResultExactnessError(`MariaDB ${type} results must remain strings for the selected text profile.`);
       }
-      if ((type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") && temporal === "native" && !(value instanceof Date)) {
+      if (
+        (type === "DATE" || type === "DATETIME" || type === "TIMESTAMP") &&
+        temporal === "native" &&
+        !(value instanceof Date)
+      ) {
         throw new ResultExactnessError(`MariaDB ${type} results must be Date values for the selected native profile.`);
       }
       return value;
@@ -158,13 +187,23 @@ const descriptor = (
   json: MariaDbJsonProfile,
   temporal: MariaDbTemporalProfile,
   connectionOptions?: Readonly<MariaDbConnectionOptions>,
-): MariaDbRepresentationProfile => Object.freeze({
-  id: profileId(json, temporal),
-  json,
-  temporal,
-  typePolicy: policies[json === "text" ? temporal === "text" ? "textText" : "textNative" : temporal === "text" ? "nativeText" : "nativeNative"],
-  ...(connectionOptions === undefined ? {} : { connectionOptions }),
-});
+): MariaDbRepresentationProfile =>
+  Object.freeze({
+    id: profileId(json, temporal),
+    json,
+    temporal,
+    typePolicy:
+      policies[
+        json === "text"
+          ? temporal === "text"
+            ? "textText"
+            : "textNative"
+          : temporal === "text"
+            ? "nativeText"
+            : "nativeNative"
+      ],
+    ...(connectionOptions === undefined ? {} : { connectionOptions }),
+  });
 
 const exactNumericOptions = {
   bigIntAsNumber: false,
@@ -173,10 +212,26 @@ const exactNumericOptions = {
   timezone: "Z",
 } as const;
 
-export const MARIADB_LOSSLESS_TEXT = descriptor("text", "text", Object.freeze({ ...exactNumericOptions, autoJsonMap: false, dateStrings: true }));
-export const MARIADB_NATIVE = descriptor("native", "native", Object.freeze({ ...exactNumericOptions, autoJsonMap: true, dateStrings: false }));
-export const MARIADB_JSON_TEXT = descriptor("text", "native", Object.freeze({ ...exactNumericOptions, autoJsonMap: false, dateStrings: false }));
-export const MARIADB_DATE_TEXT = descriptor("native", "text", Object.freeze({ ...exactNumericOptions, autoJsonMap: true, dateStrings: true }));
+export const MARIADB_LOSSLESS_TEXT = descriptor(
+  "text",
+  "text",
+  Object.freeze({ ...exactNumericOptions, autoJsonMap: false, dateStrings: true }),
+);
+export const MARIADB_NATIVE = descriptor(
+  "native",
+  "native",
+  Object.freeze({ ...exactNumericOptions, autoJsonMap: true, dateStrings: false }),
+);
+export const MARIADB_JSON_TEXT = descriptor(
+  "text",
+  "native",
+  Object.freeze({ ...exactNumericOptions, autoJsonMap: false, dateStrings: false }),
+);
+export const MARIADB_DATE_TEXT = descriptor(
+  "native",
+  "text",
+  Object.freeze({ ...exactNumericOptions, autoJsonMap: true, dateStrings: true }),
+);
 
 export const representationProfiles: readonly MariaDbRepresentationProfile[] = Object.freeze([
   MARIADB_LOSSLESS_TEXT,
@@ -189,9 +244,14 @@ function descriptorFor(json: MariaDbJsonProfile, temporal: MariaDbTemporalProfil
   return representationProfiles.find((profile) => profile.json === json && profile.temporal === temporal)!;
 }
 
-export function typePolicyForProfile(profile: { readonly json: MariaDbJsonProfile; readonly temporal: MariaDbTemporalProfile }): TypePolicy {
-  if (profile.json !== "text" && profile.json !== "native") throw new TypeError("MariaDB profile json must be 'text' or 'native'.");
-  if (profile.temporal !== "text" && profile.temporal !== "native") throw new TypeError("MariaDB profile temporal must be 'text' or 'native'.");
+export function typePolicyForProfile(profile: {
+  readonly json: MariaDbJsonProfile;
+  readonly temporal: MariaDbTemporalProfile;
+}): TypePolicy {
+  if (profile.json !== "text" && profile.json !== "native")
+    throw new TypeError("MariaDB profile json must be 'text' or 'native'.");
+  if (profile.temporal !== "text" && profile.temporal !== "native")
+    throw new TypeError("MariaDB profile temporal must be 'text' or 'native'.");
   return descriptorFor(profile.json, profile.temporal).typePolicy;
 }
 

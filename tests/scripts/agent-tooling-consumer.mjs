@@ -10,21 +10,65 @@ import { generateModels } from "@sqlbraid/codegen";
 import "@sqlbraid/cli";
 
 const metadata = {
-  format: "sqlbraid-metadata", formatVersion: 1, dialect: "postgres", dialectVersion: "16",
-  server: {}, namespaces: {}, types: {},
-  relations: { "public.users": { identity: "public.users", name: "users", namespace: "public", kind: "table", columns: [{ name: "id", ordinal: 1, type: "int4", nullable: false }] } },
-  routines: { "public.calculate_fee": [{ identity: "public.calculate_fee", name: "calculate_fee", schema: "public", kind: "function", arguments: [], argumentsComplete: false, result: { kind: "scalar", type: "numeric" } }] },
+  format: "sqlbraid-metadata",
+  formatVersion: 1,
+  dialect: "postgres",
+  dialectVersion: "16",
+  server: {},
+  namespaces: {},
+  types: {},
+  relations: {
+    "public.users": {
+      identity: "public.users",
+      name: "users",
+      namespace: "public",
+      kind: "table",
+      columns: [{ name: "id", ordinal: 1, type: "int4", nullable: false }],
+    },
+  },
+  routines: {
+    "public.calculate_fee": [
+      {
+        identity: "public.calculate_fee",
+        name: "calculate_fee",
+        schema: "public",
+        kind: "function",
+        arguments: [],
+        argumentsComplete: false,
+        result: { kind: "scalar", type: "numeric" },
+      },
+    ],
+  },
   metadata: { completeness: "partial", introspectionScope: "public" },
 };
-const typePolicy = { id: "agent-consumer", hash: "agent-consumer-v1", mappings: [{ databaseType: "int4", inputType: "number", outputType: "number", nullable: false }] };
-const config = defineConfig({ codegen: { targets: [{ name: "db", metadata: "agent-metadata.json", outFile: "agent-models.ts", typePolicy }] } });
+const typePolicy = {
+  id: "agent-consumer",
+  hash: "agent-consumer-v1",
+  mappings: [{ databaseType: "int4", inputType: "number", outputType: "number", nullable: false }],
+};
+const config = defineConfig({
+  codegen: { targets: [{ name: "db", metadata: "agent-metadata.json", outFile: "agent-models.ts", typePolicy }] },
+});
 await writeFile("agent-metadata.json", JSON.stringify(metadata, null, 2));
 await writeFile("sqlbraid.config.mjs", `export default ${JSON.stringify(config)};\n`);
 await writeFile("agent-models.ts", generateModels(metadata, { typePolicy }).source);
-const source = 'import { sql } from "@sqlbraid/template";\nconst query = sql.rows<{id:number}>`SELECT public.users.id FROM public.users`;\n';
+const source =
+  'import { sql } from "@sqlbraid/template";\nconst query = sql.rows<{id:number}>`SELECT public.users.id FROM public.users`;\n';
 const fileName = resolve("agent-query.ts");
 await writeFile(fileName, source);
-await writeFile("tsconfig.json", JSON.stringify({ compilerOptions: { strict: true, target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", skipLibCheck: true }, files: ["agent-query.ts"] }));
+await writeFile(
+  "tsconfig.json",
+  JSON.stringify({
+    compilerOptions: {
+      strict: true,
+      target: "ES2022",
+      module: "NodeNext",
+      moduleResolution: "NodeNext",
+      skipLibCheck: true,
+    },
+    files: ["agent-query.ts"],
+  }),
+);
 const workspace = createWorkspace({ rootPath: process.cwd() });
 const workspaceStart = performance.now();
 const service = await workspace.service();
@@ -44,13 +88,23 @@ const repeated100Ms = performance.now() - repeatedStart;
 const reuseStart = performance.now();
 await workspace.service();
 const workspaceReuseMs = performance.now() - reuseStart;
-console.info(JSON.stringify({ check: "packed tooling evidence", workspaceLoadMs, workspaceReuseMs, coldMs, repeated100Ms, definition }));
+console.info(
+  JSON.stringify({
+    check: "packed tooling evidence",
+    workspaceLoadMs,
+    workspaceReuseMs,
+    coldMs,
+    repeated100Ms,
+    definition,
+  }),
+);
 workspace.dispose();
 
 const line = source.slice(0, offset).split("\n").length - 1;
 const character = offset - source.lastIndexOf("\n", offset - 1) - 1;
 const cli = resolve("node_modules/@sqlbraid/cli/dist/index.js");
-const inspect = (...args) => JSON.parse(execFileSync(process.execPath, [cli, "inspect", ...args, "--json"], { encoding: "utf8" }));
+const inspect = (...args) =>
+  JSON.parse(execFileSync(process.execPath, [cli, "inspect", ...args, "--json"], { encoding: "utf8" }));
 const inspected = inspect("query", "--file", fileName, "--line", String(line + 1), "--column", String(character + 1));
 assert.equal(inspected.resolved, true);
 assert.match(inspected.contents, /UsersRow/);
@@ -59,12 +113,16 @@ assert.deepEqual(inspect("diagnostics", "--file", fileName).diagnostics, []);
 console.info("PASS packed CLI inspection: query, symbol, structured diagnostics");
 
 // Wire framing belongs to this external client, never the server implementation.
-const child = spawn(process.execPath, [resolve("node_modules/@sqlbraid/language-server/dist/cli.js")], { stdio: ["pipe", "pipe", "pipe"] });
+const child = spawn(process.execPath, [resolve("node_modules/@sqlbraid/language-server/dist/cli.js")], {
+  stdio: ["pipe", "pipe", "pipe"],
+});
 let buffer = Buffer.alloc(0);
 let sequence = 0;
 let stderr = "";
 const pending = new Map();
-child.stderr.on("data", (chunk) => { stderr += chunk; });
+child.stderr.on("data", (chunk) => {
+  stderr += chunk;
+});
 child.stdout.on("data", (chunk) => {
   buffer = Buffer.concat([buffer, chunk]);
   while (true) {
@@ -89,14 +147,39 @@ function send(method, params, id) {
 function request(method, params) {
   const id = ++sequence;
   return new Promise((resolveResult, reject) => {
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`${method} timed out: ${stderr}`)); }, 30_000);
-    pending.set(id, { resolve: (result) => { clearTimeout(timer); resolveResult(result); }, reject: (error) => { clearTimeout(timer); reject(error); } });
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error(`${method} timed out: ${stderr}`));
+    }, 30_000);
+    pending.set(id, {
+      resolve: (result) => {
+        clearTimeout(timer);
+        resolveResult(result);
+      },
+      reject: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    });
     send(method, params, id);
   });
 }
 try {
-  const initialize = await request("initialize", { processId: process.pid, rootUri: pathToFileURL(process.cwd()).href, capabilities: { textDocument: { diagnostic: {} }, workspace: { workspaceFolders: true } } });
-  for (const capability of ["hoverProvider", "definitionProvider", "referencesProvider", "documentSymbolProvider", "workspaceSymbolProvider", "completionProvider", "diagnosticProvider"]) assert.ok(initialize.capabilities[capability], capability);
+  const initialize = await request("initialize", {
+    processId: process.pid,
+    rootUri: pathToFileURL(process.cwd()).href,
+    capabilities: { textDocument: { diagnostic: {} }, workspace: { workspaceFolders: true } },
+  });
+  for (const capability of [
+    "hoverProvider",
+    "definitionProvider",
+    "referencesProvider",
+    "documentSymbolProvider",
+    "workspaceSymbolProvider",
+    "completionProvider",
+    "diagnosticProvider",
+  ])
+    assert.ok(initialize.capabilities[capability], capability);
   send("initialized", {});
   const uri = pathToFileURL(fileName).href;
   send("textDocument/didOpen", { textDocument: { uri, languageId: "typescript", version: 1, text: source } });
@@ -109,11 +192,16 @@ try {
   await request("shutdown", null);
   const exited = new Promise((resolveExit, reject) => {
     const timer = setTimeout(() => reject(new Error("Server did not exit")), 10_000);
-    child.once("exit", (code) => { clearTimeout(timer); code === 0 ? resolveExit() : reject(new Error(`Server exit ${code}: ${stderr}`)); });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      code === 0 ? resolveExit() : reject(new Error(`Server exit ${code}: ${stderr}`));
+    });
   });
   send("exit", null);
   await exited;
-  console.info("PASS packed standard LSP: initialize, diagnostics, hover, definition, document/workspace symbols, shutdown/exit");
+  console.info(
+    "PASS packed standard LSP: initialize, diagnostics, hover, definition, document/workspace symbols, shutdown/exit",
+  );
 } finally {
   child.kill();
   for (const entry of pending.values()) entry.reject(new Error("Client closed"));

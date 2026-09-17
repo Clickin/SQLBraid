@@ -2,21 +2,35 @@
   "name": "@sqlbraid/tooling",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid Node-first semantic tooling shared by the CLI and language server",
+  "keywords": [
+    "database",
+    "lsp",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/tooling"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "lsp"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=22.18.0" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@sqlbraid/codegen": "workspace:*",
     "@sqlbraid/compiler": "workspace:*",
@@ -24,10 +38,7 @@
     "@sqlbraid/metadata": "workspace:*",
     "typescript": "5.9.3"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

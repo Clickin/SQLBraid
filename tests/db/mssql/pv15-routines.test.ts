@@ -28,7 +28,7 @@ function connect(settings: MssqlSettings): Promise<Connection> {
     authentication: { type: "default", options: { userName: settings.userName, password: settings.password } },
   });
   return new Promise<Connection>((resolve, reject) => {
-    connection.once("connect", (error) => error ? reject(error) : resolve(connection));
+    connection.once("connect", (error) => (error ? reject(error) : resolve(connection)));
     connection.connect();
   });
 }
@@ -41,31 +41,49 @@ async function close(connection: Connection): Promise<void> {
   });
 }
 
-test("SQL Server routine fixture exposes OUTPUT, RETURN status, and heterogeneous SELECT sets", { timeout: 30_000 }, async () => {
-  const settings = inject("mssql") as MssqlSettings;
-  const connection = await connect(settings);
-  try {
-    const db = createTediousDatabase(connection);
-    await db.execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_pv15_routine`);
-    await db.execute(sql`CREATE PROCEDURE dbo.braid_pv15_routine @answer int OUTPUT, @minimum int AS BEGIN SET NOCOUNT ON; SET @answer = @minimum + 41; SELECT @minimum AS USER_ID; SELECT CONCAT('payment-', @minimum) AS PAYMENT_ID; RETURN 17; END`);
-    const query = sql.call({ procedure: { name: "dbo.braid_pv15_routine", parameterNames: ["answer", "minimum"] } })`${sql.out("answer", mssqlParameter.int())}, ${1}`;
-    const result = await db.call(query);
-    assert.deepEqual(result.output, { answer: "42" });
-    assert.equal(result.returnValue, 17);
-    assert.deepEqual(result.resultSets.map((set) => set.rows), [[{ USER_ID: "1" }], [{ PAYMENT_ID: "payment-1" }]]);
-    assert.equal(result.resultSets.some((set) => "source" in set), false);
-  } finally {
-    await createTediousDatabase(connection).execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_pv15_routine`).catch(() => undefined);
-    await close(connection);
-  }
-});
+test(
+  "SQL Server routine fixture exposes OUTPUT, RETURN status, and heterogeneous SELECT sets",
+  { timeout: 30_000 },
+  async () => {
+    const settings = inject("mssql") as MssqlSettings;
+    const connection = await connect(settings);
+    try {
+      const db = createTediousDatabase(connection);
+      await db.execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_pv15_routine`);
+      await db.execute(
+        sql`CREATE PROCEDURE dbo.braid_pv15_routine @answer int OUTPUT, @minimum int AS BEGIN SET NOCOUNT ON; SET @answer = @minimum + 41; SELECT @minimum AS USER_ID; SELECT CONCAT('payment-', @minimum) AS PAYMENT_ID; RETURN 17; END`,
+      );
+      const query = sql.call({
+        procedure: { name: "dbo.braid_pv15_routine", parameterNames: ["answer", "minimum"] },
+      })`${sql.out("answer", mssqlParameter.int())}, ${1}`;
+      const result = await db.call(query);
+      assert.deepEqual(result.output, { answer: "42" });
+      assert.equal(result.returnValue, 17);
+      assert.deepEqual(
+        result.resultSets.map((set) => set.rows),
+        [[{ USER_ID: "1" }], [{ PAYMENT_ID: "payment-1" }]],
+      );
+      assert.equal(
+        result.resultSets.some((set) => "source" in set),
+        false,
+      );
+    } finally {
+      await createTediousDatabase(connection)
+        .execute(sql`DROP PROCEDURE IF EXISTS dbo.braid_pv15_routine`)
+        .catch(() => undefined);
+      await close(connection);
+    }
+  },
+);
 
 test("SQL Server rejects CURSOR VARYING output before sending a request", { timeout: 30_000 }, async () => {
   const settings = inject("mssql") as MssqlSettings;
   const connection = await connect(settings);
   try {
     const executor = createTediousExecutor(connection);
-    const query = sql.call({ procedure: { name: "dbo.braid_pv15_cursor", parameterNames: ["cursor"] } })`${sql.out("cursor", { databaseType: "cursor" })}`;
+    const query = sql.call({
+      procedure: { name: "dbo.braid_pv15_cursor", parameterNames: ["cursor"] },
+    })`${sql.out("cursor", { databaseType: "cursor" })}`;
     await assert.rejects(async () => executor.call(query.render()), /BRAID_CALL_CURSOR_UNSUPPORTED/u);
   } finally {
     await close(connection);
@@ -76,7 +94,7 @@ test("SQL Server real streaming satisfies the shared streaming lifecycle contrac
   const settings = inject("mssql") as MssqlSettings;
   let runs = 0;
   const expected = [{ VALUE: "1" }, { VALUE: "2" }, { VALUE: "3" }] as const;
-  const query = sql.rows<typeof expected[number]>`
+  const query = sql.rows<(typeof expected)[number]>`
     SELECT VALUE
     FROM (VALUES (1), (2), (3)) AS values_table(VALUE)
     ORDER BY VALUE
@@ -94,17 +112,20 @@ test("SQL Server real streaming satisfies the shared streaming lifecycle contrac
     FROM (VALUES (1), (2), (3)) AS values_table(VALUE)
     ORDER BY VALUE
   `;
-  await runStreamingConformance(async () => {
-    runs += 1;
-    const connection = await connect(settings);
-    return {
-      db: createTediousDatabase(connection, { maxBufferedRows: 2 }),
-      query,
-      expected,
-      mappingQuery,
-      close: () => close(connection),
-    };
-  }, { abortError: new Error("SQL Server real stream aborted") });
+  await runStreamingConformance(
+    async () => {
+      runs += 1;
+      const connection = await connect(settings);
+      return {
+        db: createTediousDatabase(connection, { maxBufferedRows: 2 }),
+        query,
+        expected,
+        mappingQuery,
+        close: () => close(connection),
+      };
+    },
+    { abortError: new Error("SQL Server real stream aborted") },
+  );
   assert.equal(runs, 8);
 });
 
@@ -121,10 +142,9 @@ test("SQL Server transaction streams retain their pinned session until cleanup",
     await db.tx(async (tx) => {
       const iterator = tx.stream(query)[Symbol.asyncIterator]();
       assert.equal((await iterator.next()).value?.VALUE, "1");
-      await assert.rejects(
-        () => tx.one(sql.rows<{ readonly VALUE: string }>`SELECT 7 AS VALUE`),
-        { code: "BRAID_STREAM_SCOPE" },
-      );
+      await assert.rejects(() => tx.one(sql.rows<{ readonly VALUE: string }>`SELECT 7 AS VALUE`), {
+        code: "BRAID_STREAM_SCOPE",
+      });
       await iterator.return?.();
       assert.equal((await tx.one(sql.rows<{ readonly VALUE: string }>`SELECT 7 AS VALUE`)).VALUE, "7");
     });

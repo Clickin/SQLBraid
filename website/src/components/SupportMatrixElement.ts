@@ -14,16 +14,40 @@ const ROW_HEIGHT = 56;
 const views: readonly SupportMatrixView[] = ["database", "driver", "capability"];
 const labels = {
   en: {
-    database: "Database", driver: "Driver", capability: "Capability", version: "Version", runtime: "Runtime", status: "Support status",
-    search: "Search", all: "All", reset: "Reset", results: "results", profile: "Profile", target: "Target",
+    database: "Database",
+    driver: "Driver",
+    capability: "Capability",
+    version: "Version",
+    runtime: "Runtime",
+    status: "Support status",
+    search: "Search",
+    all: "All",
+    reset: "Reset",
+    results: "results",
+    profile: "Profile",
+    target: "Target",
   },
   ko: {
-    database: "데이터베이스", driver: "드라이버", capability: "기능", version: "버전", runtime: "런타임", status: "지원 상태",
-    search: "검색", all: "전체", reset: "초기화", results: "개 결과", profile: "프로필", target: "대상",
+    database: "데이터베이스",
+    driver: "드라이버",
+    capability: "기능",
+    version: "버전",
+    runtime: "런타임",
+    status: "지원 상태",
+    search: "검색",
+    all: "전체",
+    reset: "초기화",
+    results: "개 결과",
+    profile: "프로필",
+    target: "대상",
   },
 } as const;
 const filterKeys: readonly FilterKey[] = ["database", "driver", "runtime", "status", "profile", "capability"];
-const escape = (value: unknown): string => String(value ?? "").replace(/[&<>"']/gu, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+const escape = (value: unknown): string =>
+  String(value ?? "").replace(
+    /[&<>"']/gu,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
+  );
 
 class SupportMatrixElement extends HTMLElement {
   private data!: SupportMatrixData;
@@ -78,22 +102,39 @@ class SupportMatrixElement extends HTMLElement {
     this.viewport = this.querySelector<HTMLElement>("[data-viewport]")!;
     this.layer = this.querySelector<HTMLElement>("[data-rows]")!;
     this.search = this.querySelector<HTMLInputElement>("[data-search]")!;
-    this.filters = Object.fromEntries([...this.querySelectorAll<HTMLSelectElement>("[data-filter]")].map((select) => [select.dataset.filter!, select])) as Record<FilterKey, HTMLSelectElement>;
+    this.filters = Object.fromEntries(
+      [...this.querySelectorAll<HTMLSelectElement>("[data-filter]")].map((select) => [select.dataset.filter!, select]),
+    ) as Record<FilterKey, HTMLSelectElement>;
     for (const key of filterKeys) {
       if (key === "status") continue;
       const select = this.filters[key];
-      const values = key === "capability"
-        ? this.data.capabilities.map((capability) => capability.id)
-        : [...new Set(this.data.targets.map((target) => key === "database" ? target.database.product : key === "driver" ? target.driver.id : key === "profile" ? target.driver.profile : target.runtime.id).filter((value): value is string => Boolean(value)))];
+      const values =
+        key === "capability"
+          ? this.data.capabilities.map((capability) => capability.id)
+          : [
+              ...new Set(
+                this.data.targets
+                  .map((target) =>
+                    key === "database"
+                      ? target.database.product
+                      : key === "driver"
+                        ? target.driver.id
+                        : key === "profile"
+                          ? target.driver.profile
+                          : target.runtime.id,
+                  )
+                  .filter((value): value is string => Boolean(value)),
+              ),
+            ];
       for (const value of values.sort()) {
-        const label = key === "capability"
-          ? supportMatrixCapabilityLabel(this.data, value, this.locale)
-          : value;
+        const label = key === "capability" ? supportMatrixCapabilityLabel(this.data, value, this.locale) : value;
         select.add(new Option(label, value));
       }
     }
     this.refreshStatusFilter();
-    this.addEventListener("input", (event) => { if (event.target === this.search) this.rebuild(); });
+    this.addEventListener("input", (event) => {
+      if (event.target === this.search) this.rebuild();
+    });
     this.addEventListener("change", () => this.rebuild());
     this.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
@@ -103,14 +144,28 @@ class SupportMatrixElement extends HTMLElement {
         this.refreshStatusFilter();
         this.rebuild();
       }
-      if (target.closest("[data-reset]")) { this.search.value = ""; Object.values(this.filters).forEach((select) => { select.value = ""; }); this.rebuild(); }
+      if (target.closest("[data-reset]")) {
+        this.search.value = "";
+        Object.values(this.filters).forEach((select) => {
+          select.value = "";
+        });
+        this.rebuild();
+      }
       const link = target.closest<HTMLAnchorElement>("[data-target-link]");
-      if (link) { event.preventDefault(); history.replaceState(null, "", link.hash); this.followHash(); }
+      if (link) {
+        event.preventDefault();
+        history.replaceState(null, "", link.hash);
+        this.followHash();
+      }
     });
     this.addEventListener("keydown", (event) => this.keydown(event));
     this.viewport.addEventListener("scroll", () => {
       this.updateScrollEdges();
-      if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = 0; this.renderVisible(); });
+      if (!this.frame)
+        this.frame = requestAnimationFrame(() => {
+          this.frame = 0;
+          this.renderVisible();
+        });
     });
     parent?.classList.add("has-js");
     this.classList.add("is-ready");
@@ -129,9 +184,16 @@ class SupportMatrixElement extends HTMLElement {
   private refreshStatusFilter(): void {
     const select = this.filters.status;
     const selected = select.value;
-    const values = this.view === "capability"
-      ? [...new Set(this.data.targets.flatMap((target) => Object.values(target.capabilities).map((capability) => capability.status)))]
-      : [...new Set(this.data.targets.map((target) => target.status))];
+    const values =
+      this.view === "capability"
+        ? [
+            ...new Set(
+              this.data.targets.flatMap((target) =>
+                Object.values(target.capabilities).map((capability) => capability.status),
+              ),
+            ),
+          ]
+        : [...new Set(this.data.targets.map((target) => target.status))];
     const allowed = new Set(values);
     while (select.options.length > 1) select.remove(1);
     for (const value of values.sort()) select.add(new Option(supportMatrixStatus(value, this.locale), value));
@@ -141,18 +203,42 @@ class SupportMatrixElement extends HTMLElement {
   private rebuild(): void {
     const f = this.filters;
     const search = this.search.value.trim().toLocaleLowerCase(this.locale);
-    const targets = this.data.targets.filter((target) =>
-      (!f.database.value || target.database.product === f.database.value)
-      && (!f.driver.value || target.driver.id === f.driver.value)
-      && (!f.runtime.value || target.runtime.id === f.runtime.value)
-      && (this.view === "capability" || !f.status.value || target.status === f.status.value)
-      && (!f.profile.value || target.driver.profile === f.profile.value)
-      && (!f.capability.value || Object.hasOwn(target.capabilities, f.capability.value)));
-    this.rows = targets.flatMap((target): SupportMatrixRow[] => this.view === "capability"
-      ? Object.entries(target.capabilities)
-        .filter(([id, capability]) => (!f.capability.value || id === f.capability.value) && (!f.status.value || capability.status === f.status.value))
-        .map(([capabilityId, capability]) => ({ target, capabilityId, capability }))
-      : [{ target }]).filter((row) => !search || JSON.stringify([row.target.id, row.target.database, row.target.driver, row.target.runtime, row.target.status, row.capabilityId ?? "", row.capability]).toLocaleLowerCase(this.locale).includes(search));
+    const targets = this.data.targets.filter(
+      (target) =>
+        (!f.database.value || target.database.product === f.database.value) &&
+        (!f.driver.value || target.driver.id === f.driver.value) &&
+        (!f.runtime.value || target.runtime.id === f.runtime.value) &&
+        (this.view === "capability" || !f.status.value || target.status === f.status.value) &&
+        (!f.profile.value || target.driver.profile === f.profile.value) &&
+        (!f.capability.value || Object.hasOwn(target.capabilities, f.capability.value)),
+    );
+    this.rows = targets
+      .flatMap((target): SupportMatrixRow[] =>
+        this.view === "capability"
+          ? Object.entries(target.capabilities)
+              .filter(
+                ([id, capability]) =>
+                  (!f.capability.value || id === f.capability.value) &&
+                  (!f.status.value || capability.status === f.status.value),
+              )
+              .map(([capabilityId, capability]) => ({ target, capabilityId, capability }))
+          : [{ target }],
+      )
+      .filter(
+        (row) =>
+          !search ||
+          JSON.stringify([
+            row.target.id,
+            row.target.database,
+            row.target.driver,
+            row.target.runtime,
+            row.target.status,
+            row.capabilityId ?? "",
+            row.capability,
+          ])
+            .toLocaleLowerCase(this.locale)
+            .includes(search),
+      );
     const columns = supportMatrixColumns(this.view, this.locale);
     this.style.setProperty("--matrix-columns", String(columns.length));
     this.querySelector("[data-panel]")!.setAttribute("aria-labelledby", `matrix-${this.locale}-${this.view}`);
@@ -161,7 +247,8 @@ class SupportMatrixElement extends HTMLElement {
       button.setAttribute("aria-selected", String(selected));
       button.tabIndex = selected ? 0 : -1;
     });
-    this.querySelector("[data-header]")!.innerHTML = `<div class="support-matrix__row support-matrix__header" role="row" aria-rowindex="1">${columns.map((column) => `<span role="columnheader">${escape(column)}</span>`).join("")}</div>`;
+    this.querySelector("[data-header]")!.innerHTML =
+      `<div class="support-matrix__row support-matrix__header" role="row" aria-rowindex="1">${columns.map((column) => `<span role="columnheader">${escape(column)}</span>`).join("")}</div>`;
     this.viewport.setAttribute("aria-rowcount", String(this.rows.length + 1));
     this.viewport.setAttribute("aria-colcount", String(columns.length));
     this.layer.style.height = `${this.rows.length * ROW_HEIGHT}px`;
@@ -174,9 +261,10 @@ class SupportMatrixElement extends HTMLElement {
   private renderCell(value: string, index: number, row: SupportMatrixRow): string {
     const targetIndex = this.view === "database" ? 0 : this.view === "driver" ? 2 : 1;
     const statusIndex = this.view === "database" ? 4 : this.view === "capability" ? 2 : -1;
-    const content = index === targetIndex
-      ? `<a data-target-link href="#${encodeURIComponent(row.target.id)}">${escape(value)}</a>`
-      : escape(value);
+    const content =
+      index === targetIndex
+        ? `<a data-target-link href="#${encodeURIComponent(row.target.id)}">${escape(value)}</a>`
+        : escape(value);
     if (index !== statusIndex) return content;
     const status = (this.view === "capability" ? row.capability?.status : row.target.status) ?? "unknown";
     const className = status.toLowerCase().replace(/[^a-z0-9-]/gu, "-");
@@ -187,19 +275,29 @@ class SupportMatrixElement extends HTMLElement {
     const active = document.activeElement?.closest<HTMLElement>("[data-index]");
     const focused = active && this.layer.contains(active) ? Number(active.dataset.index) : undefined;
     const start = Math.max(0, Math.floor(this.viewport.scrollTop / ROW_HEIGHT) - 4);
-    const end = Math.min(this.rows.length, Math.ceil((this.viewport.scrollTop + (this.viewport.clientHeight || 560)) / ROW_HEIGHT) + 4);
-    this.layer.innerHTML = this.rows.slice(start, end).map((row, offset) => {
-      const index = start + offset;
-      const cells = projectSupportMatrixRow(this.data, this.view, row, this.locale);
-      return `<div role="row" aria-rowindex="${index + 2}" class="support-matrix__row support-matrix__data-row" data-row-view="${this.view}" tabindex="0" data-index="${index}" style="top:${index * ROW_HEIGHT}px">${cells.map((cell, cellIndex) => `<span role="cell" title="${escape(cell)}">${this.renderCell(cell, cellIndex, row)}</span>`).join("")}</div>`;
-    }).join("");
-    if (focused !== undefined) this.layer.querySelector<HTMLElement>(`[data-index="${focused}"]`)?.focus({ preventScroll: true });
+    const end = Math.min(
+      this.rows.length,
+      Math.ceil((this.viewport.scrollTop + (this.viewport.clientHeight || 560)) / ROW_HEIGHT) + 4,
+    );
+    this.layer.innerHTML = this.rows
+      .slice(start, end)
+      .map((row, offset) => {
+        const index = start + offset;
+        const cells = projectSupportMatrixRow(this.data, this.view, row, this.locale);
+        return `<div role="row" aria-rowindex="${index + 2}" class="support-matrix__row support-matrix__data-row" data-row-view="${this.view}" tabindex="0" data-index="${index}" style="top:${index * ROW_HEIGHT}px">${cells.map((cell, cellIndex) => `<span role="cell" title="${escape(cell)}">${this.renderCell(cell, cellIndex, row)}</span>`).join("")}</div>`;
+      })
+      .join("");
+    if (focused !== undefined)
+      this.layer.querySelector<HTMLElement>(`[data-index="${focused}"]`)?.focus({ preventScroll: true });
   }
 
   private updateScrollEdges(): void {
     if (!this.viewport) return;
     this.viewport.toggleAttribute("data-scroll-left", this.viewport.scrollLeft > 1);
-    this.viewport.toggleAttribute("data-scroll-right", this.viewport.scrollLeft + this.viewport.clientWidth < this.viewport.scrollWidth - 1);
+    this.viewport.toggleAttribute(
+      "data-scroll-right",
+      this.viewport.scrollLeft + this.viewport.clientWidth < this.viewport.scrollWidth - 1,
+    );
   }
 
   private focusRow(index: number): void {
@@ -211,7 +309,11 @@ class SupportMatrixElement extends HTMLElement {
 
   private followHash(): void {
     let id: string;
-    try { id = decodeURIComponent(location.hash.slice(1)); } catch { return; }
+    try {
+      id = decodeURIComponent(location.hash.slice(1));
+    } catch {
+      return;
+    }
     const index = this.rows.findIndex((row) => row.target.id === id);
     if (index >= 0) this.focusRow(index);
   }
@@ -222,7 +324,12 @@ class SupportMatrixElement extends HTMLElement {
     if (tab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
       event.preventDefault();
       const index = views.indexOf(this.view);
-      const next = event.key === "Home" ? 0 : event.key === "End" ? views.length - 1 : (index + (event.key === "ArrowRight" ? 1 : views.length - 1)) % views.length;
+      const next =
+        event.key === "Home"
+          ? 0
+          : event.key === "End"
+            ? views.length - 1
+            : (index + (event.key === "ArrowRight" ? 1 : views.length - 1)) % views.length;
       this.view = views[next]!;
       this.refreshStatusFilter();
       this.rebuild();
@@ -233,7 +340,13 @@ class SupportMatrixElement extends HTMLElement {
     if (!row || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     const index = Number(row.dataset.index);
-    this.focusRow(event.key === "Home" ? 0 : event.key === "End" ? this.rows.length - 1 : index + (event.key === "ArrowDown" ? 1 : -1));
+    this.focusRow(
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? this.rows.length - 1
+          : index + (event.key === "ArrowDown" ? 1 : -1),
+    );
   }
 }
 if (!customElements.get("support-matrix")) customElements.define("support-matrix", SupportMatrixElement);

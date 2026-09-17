@@ -22,7 +22,9 @@ export interface BulkFailureEvidence {
 
 export async function runBulkConformanceCase(
   id: "BULK001" | "BULK002" | "BULK003",
-  fixtureOrCreate: BulkConformanceFixture<unknown> | (() => BulkConformanceFixture<unknown> | Promise<BulkConformanceFixture<unknown>>),
+  fixtureOrCreate:
+    | BulkConformanceFixture<unknown>
+    | (() => BulkConformanceFixture<unknown> | Promise<BulkConformanceFixture<unknown>>),
 ): Promise<void> {
   const fixture = typeof fixtureOrCreate === "function" ? await fixtureOrCreate() : fixtureOrCreate;
   const acquireBefore = fixture.acquireCount?.() ?? 0;
@@ -46,7 +48,11 @@ export async function runBulkConformanceCase(
     assert.ok(proof.error !== undefined, "BULK003 must expose the native middle-item failure.");
     assert.ok(Array.isArray(proof.observedRows), "BULK003 must expose observed durable rows.");
     assert.ok(Array.isArray(proof.expectedRows), "BULK003 must expose expected durable rows.");
-    assert.deepEqual(proof.observedRows, proof.expectedRows, "BULK003 observed durable rows differ from the declared native outcome.");
+    assert.deepEqual(
+      proof.observedRows,
+      proof.expectedRows,
+      "BULK003 observed durable rows differ from the declared native outcome.",
+    );
     if (proof.durability === "atomic") assert.equal(proof.expectedRows.length, 0);
     else {
       assert.equal(proof.durability, "prefix");

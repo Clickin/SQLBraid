@@ -86,7 +86,10 @@ function resolveTransport(cliTransport) {
 
 const SELECTED_TRANSPORT = resolveTransport(CLI.transport);
 const ACTIVE_TRANSPORTS = SELECTED_TRANSPORT === "all" ? TRANSPORTS : [SELECTED_TRANSPORT];
-const MATERIALIZED_ROWS = positiveInteger("SQLBRAID_VALUE_FIDELITY_MATERIALIZED_ROWS", PROFILE_DEFAULT.materializedRows);
+const MATERIALIZED_ROWS = positiveInteger(
+  "SQLBRAID_VALUE_FIDELITY_MATERIALIZED_ROWS",
+  PROFILE_DEFAULT.materializedRows,
+);
 const STREAMED_ROWS = positiveInteger("SQLBRAID_VALUE_FIDELITY_STREAMED_ROWS", PROFILE_DEFAULT.streamedRows);
 const WARMUP_ITERATIONS = nonNegativeInteger("SQLBRAID_VALUE_FIDELITY_WARMUPS", PROFILE_DEFAULT.warmupIterations);
 const MEASURED_REPEATS = positiveInteger("SQLBRAID_VALUE_FIDELITY_REPEATS", PROFILE_DEFAULT.measuredRepeats);
@@ -129,7 +132,9 @@ function maxMemory(left, right) {
 }
 
 function runtimeName() {
-  return process.release?.name ?? (typeof Bun !== "undefined" ? "bun" : typeof Deno !== "undefined" ? "deno" : "unknown");
+  return (
+    process.release?.name ?? (typeof Bun !== "undefined" ? "bun" : typeof Deno !== "undefined" ? "deno" : "unknown")
+  );
 }
 
 function shellQuote(value) {
@@ -138,7 +143,12 @@ function shellQuote(value) {
 
 function invocationMetadata() {
   const script = process.argv[1];
-  const commandArgs = [process.execPath, ...process.execArgv, ...(script === undefined ? [] : [script]), ...process.argv.slice(2)];
+  const commandArgs = [
+    process.execPath,
+    ...process.execArgv,
+    ...(script === undefined ? [] : [script]),
+    ...process.argv.slice(2),
+  ];
   return {
     command: commandArgs.map(shellQuote).join(" "),
     executable: process.execPath,
@@ -159,7 +169,10 @@ function exactValueSql(transport, id) {
 }
 
 function queryFor(transport, rows, width, schema) {
-  const columns = Array.from({ length: width }, (_, index) => `${exactValueSql(transport, "id")} AS v${index + 1}`).join(", ");
+  const columns = Array.from(
+    { length: width },
+    (_, index) => `${exactValueSql(transport, "id")} AS v${index + 1}`,
+  ).join(", ");
   const text = `
     WITH RECURSIVE nums(id) AS (
       SELECT 1
@@ -184,7 +197,7 @@ const exactBigIntTypePolicy = Object.freeze({
   id: "value-fidelity-exact-bigint-v1",
   hash: "value-fidelity-exact-bigint-v1",
   mappings: [],
-  decode: (_databaseType, value) => value == null ? value : decodeExactInteger(value),
+  decode: (_databaseType, value) => (value == null ? value : decodeExactInteger(value)),
   encode: (_databaseType, value) => value,
 });
 
@@ -192,7 +205,7 @@ const exactStringTypePolicy = Object.freeze({
   id: "value-fidelity-exact-string-v1",
   hash: "value-fidelity-exact-string-v1",
   mappings: [],
-  decode: (_databaseType, value) => value == null ? value : normalizeExactInteger(value),
+  decode: (_databaseType, value) => (value == null ? value : normalizeExactInteger(value)),
   encode: (_databaseType, value) => value,
 });
 
@@ -202,7 +215,9 @@ function plainRow(value) {
 }
 
 function decodeRow(row, policy) {
-  return Object.fromEntries(Object.entries(plainRow(row)).map(([key, value]) => [key, policy.decode("INTEGER", value)]));
+  return Object.fromEntries(
+    Object.entries(plainRow(row)).map(([key, value]) => [key, policy.decode("INTEGER", value)]),
+  );
 }
 
 function createRawExecutor(native, transport, policy) {
@@ -234,7 +249,11 @@ function createRawExecutor(native, transport, policy) {
       }
     },
     async call() {
-      throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "Benchmark executor does not support calls.");
+      throw new UnsupportedFeatureError(
+        "routine.call",
+        "BRAID_CALL_UNSUPPORTED",
+        "Benchmark executor does not support calls.",
+      );
     },
   };
 }
@@ -250,7 +269,8 @@ function decimalText(value) {
 
 function canonicalText(value) {
   if (value instanceof DecimalLike) return decimalText(value);
-  if (typeof value === "number") assert.ok(Number.isSafeInteger(value), "Benchmark must not checksum an unsafe Number.");
+  if (typeof value === "number")
+    assert.ok(Number.isSafeInteger(value), "Benchmark must not checksum an unsafe Number.");
   return normalizeExactInteger(value);
 }
 
@@ -261,7 +281,10 @@ function transformSchema(width, transform) {
       version: 1,
       vendor: "sqlbraid-value-fidelity-benchmark",
       validate(input) {
-        assert.ok(input !== null && typeof input === "object" && !Array.isArray(input), "SQLBraid returned a row object.");
+        assert.ok(
+          input !== null && typeof input === "object" && !Array.isArray(input),
+          "SQLBraid returned a row object.",
+        );
         const output = {};
         for (let index = 0; index < width; index += 1) {
           const key = `v${index + 1}`;
@@ -286,8 +309,8 @@ function expectedChecksum(rows, width) {
   if (cached !== undefined) return cached;
   const rowCount = BigInt(rows);
   const columnCount = BigInt(width);
-  const rowSum = rowCount * (rowCount + 1n) / 2n;
-  const columnSum = columnCount * (columnCount + 1n) / 2n;
+  const rowSum = (rowCount * (rowCount + 1n)) / 2n;
+  const columnSum = (columnCount * (columnCount + 1n)) / 2n;
   const checksum = (rowSum * columnSum) & MASK_64;
   expectedChecksums.set(key, checksum);
   return checksum;
@@ -448,12 +471,27 @@ async function runMaterialized(db, transport, rawObserved, rows, width, transfor
   const after = memory();
   assert.equal(checksum, expectedChecksum(rows, width), "Materialized checksum changed.");
   await new Promise((resolve) => setImmediate(resolve));
-  const output = metric(before, after, peak, executionMs, rows, { transport, observed: rawObserved }, transform, "materialized", width);
+  const output = metric(
+    before,
+    after,
+    peak,
+    executionMs,
+    rows,
+    { transport, observed: rawObserved },
+    transform,
+    "materialized",
+    width,
+  );
   output.checksum = `0x${checksum.toString(16).padStart(16, "0")}`;
   output.verificationMs = Number(verificationMs.toFixed(3));
   output.verificationMode = "post-materialization checksum";
   output.gcCount = gcEvents.length - gcStart;
-  output.gcDurationMs = Number(gcEvents.slice(gcStart).reduce((sum, event) => sum + event.duration, 0).toFixed(3));
+  output.gcDurationMs = Number(
+    gcEvents
+      .slice(gcStart)
+      .reduce((sum, event) => sum + event.duration, 0)
+      .toFixed(3),
+  );
   return output;
 }
 
@@ -477,12 +515,27 @@ async function runStream(db, transport, rawObserved, rows, width, transform, gcE
   assert.equal(count, rows);
   assert.equal(checksum, expectedChecksum(rows, width), "Stream checksum changed.");
   await new Promise((resolve) => setImmediate(resolve));
-  const output = metric(before, after, peak, executionMs, rows, { transport, observed: rawObserved }, transform, "stream", width);
+  const output = metric(
+    before,
+    after,
+    peak,
+    executionMs,
+    rows,
+    { transport, observed: rawObserved },
+    transform,
+    "stream",
+    width,
+  );
   output.checksum = `0x${checksum.toString(16).padStart(16, "0")}`;
   output.verificationMs = 0;
   output.verificationMode = "inline checksum while consuming stream";
   output.gcCount = gcEvents.length - gcStart;
-  output.gcDurationMs = Number(gcEvents.slice(gcStart).reduce((sum, event) => sum + event.duration, 0).toFixed(3));
+  output.gcDurationMs = Number(
+    gcEvents
+      .slice(gcStart)
+      .reduce((sum, event) => sum + event.duration, 0)
+      .toFixed(3),
+  );
   return output;
 }
 
@@ -505,14 +558,26 @@ function rawDriverProbe(native) {
 }
 
 function policyFor(transform) {
-  return transform === "raw" ? rawTypePolicy : transform === "exact-bigint" ? exactBigIntTypePolicy : exactStringTypePolicy;
+  return transform === "raw"
+    ? rawTypePolicy
+    : transform === "exact-bigint"
+      ? exactBigIntTypePolicy
+      : exactStringTypePolicy;
 }
 
 async function runCase(native, transport, rawObserved, workload, events) {
   const db = benchmarkDatabase(native, transport, policyFor(workload.transform));
   try {
     if (workload.kind === "materialized") {
-      return await runMaterialized(db, transport, rawObserved, workload.rows, workload.width, workload.transform, events);
+      return await runMaterialized(
+        db,
+        transport,
+        rawObserved,
+        workload.rows,
+        workload.width,
+        workload.transform,
+        events,
+      );
     }
     return await runStream(db, transport, rawObserved, workload.rows, workload.width, workload.transform, events);
   } finally {
@@ -619,23 +684,35 @@ function runFamilyProcess(transport, transportIndex) {
       reject(new Error("Value-fidelity benchmark requires a script path for family isolation."));
       return;
     }
-    const child = spawn(process.execPath, [...process.execArgv, script, "--profile", PROFILE, "--transport", transport], {
-      env: {
-        ...process.env,
-        SQLBRAID_VALUE_FIDELITY_CHILD: "1",
-        SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT: transport,
-        SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT_INDEX: String(transportIndex),
+    const child = spawn(
+      process.execPath,
+      [...process.execArgv, script, "--profile", PROFILE, "--transport", transport],
+      {
+        env: {
+          ...process.env,
+          SQLBRAID_VALUE_FIDELITY_CHILD: "1",
+          SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT: transport,
+          SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT_INDEX: String(transportIndex),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
       },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    );
     let stdout = "";
     let stderr = "";
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
     child.once("error", reject);
     child.once("close", (status, signal) => {
       if (status !== 0) {
-        reject(new Error(`Value-fidelity benchmark child failed for ${transport} (exit ${status ?? signal}): ${stderr.trim()}`));
+        reject(
+          new Error(
+            `Value-fidelity benchmark child failed for ${transport} (exit ${status ?? signal}): ${stderr.trim()}`,
+          ),
+        );
         return;
       }
       try {
@@ -655,21 +732,30 @@ async function main() {
     const transport = process.env.SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT;
     if (!TRANSPORTS.includes(transport)) throw new Error("SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT is invalid.");
     const family = await runFamily(transport, Number(process.env.SQLBRAID_VALUE_FIDELITY_CHILD_TRANSPORT_INDEX ?? 0));
-    process.stdout.write(`${JSON.stringify({
-      benchmark: "value-fidelity",
-      schemaVersion: 2,
-      profile: PROFILE,
-      role: "family",
-      methodology: resolvedMethodology(),
-      ...family,
-    }, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          benchmark: "value-fidelity",
+          schemaVersion: 2,
+          profile: PROFILE,
+          role: "family",
+          methodology: resolvedMethodology(),
+          ...family,
+        },
+        null,
+        2,
+      )}\n`,
+    );
     return;
   }
 
   // Each family is an isolated child process; run them concurrently without sharing DB or heap state.
-  const families = ISOLATION === "family"
-    ? await Promise.all(ACTIVE_TRANSPORTS.map((transport) => runFamilyProcess(transport, TRANSPORTS.indexOf(transport))))
-    : [];
+  const families =
+    ISOLATION === "family"
+      ? await Promise.all(
+          ACTIVE_TRANSPORTS.map((transport) => runFamilyProcess(transport, TRANSPORTS.indexOf(transport))),
+        )
+      : [];
   if (ISOLATION === "none") {
     for (const transport of ACTIVE_TRANSPORTS) families.push(await runFamily(transport, TRANSPORTS.indexOf(transport)));
   }

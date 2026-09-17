@@ -82,15 +82,11 @@
   "capabilities": {
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.rc-session"
-      ]
+      "testIds": ["oracle.execution.rc-session"]
     },
     "transaction.read-only": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.rc-options"
-      ]
+      "testIds": ["oracle.execution.rc-options"]
     },
     "transaction.isolation.read-uncommitted": {
       "status": "unsupported",
@@ -98,9 +94,7 @@
     },
     "transaction.isolation.read-committed": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.rc-options"
-      ]
+      "testIds": ["oracle.execution.rc-options"]
     },
     "transaction.isolation.repeatable-read": {
       "status": "unsupported",
@@ -108,34 +102,24 @@
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.rc-options"
-      ]
+      "testIds": ["oracle.execution.rc-options"]
     },
     "statement.cancel": {
       "status": "guarded",
       "conditionCode": "oracle.connection-break",
-      "testIds": [
-        "oracle.execution.rc-cancel"
-      ]
+      "testIds": ["oracle.execution.rc-cancel"]
     },
     "routine.call": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.rc-prepare"
-      ]
+      "testIds": ["oracle.execution.rc-prepare"]
     },
     "sql.native-transparency": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.sql.native-transparency"
-      ]
+      "testIds": ["oracle.sql.native-transparency"]
     },
     "sql.generated-structure": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.sql.generated-structure"
-      ]
+      "testIds": ["oracle.sql.generated-structure"]
     },
     "numeric.exact-integer": {
       "status": "unsupported",
@@ -149,190 +133,118 @@
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "oracle.numeric.exact-decimal"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["oracle.numeric.exact-decimal"],
+      "driverRawRepresentations": ["string"]
     },
     "numeric.approximate-float": {
       "status": "guaranteed",
       "semantics": "approximate-binary",
       "representation": "number",
       "fidelity": "lossless",
-      "testIds": [
-        "oracle.binary.finite-transport"
-      ],
-      "driverRawRepresentations": [
-        "number"
-      ]
+      "testIds": ["oracle.binary.finite-transport"],
+      "driverRawRepresentations": ["number"]
     },
     "numeric.approximate-special": {
       "status": "guaranteed",
       "semantics": "approximate-binary",
       "representation": "number",
       "fidelity": "lossless",
-      "testIds": [
-        "oracle.binary.nonfinite-probe"
-      ],
-      "driverRawRepresentations": [
-        "number"
-      ]
+      "testIds": ["oracle.binary.nonfinite-probe"],
+      "driverRawRepresentations": ["number"]
     },
     "numeric.bind-exact": {
       "status": "guarded",
       "conditionCode": "oracle.bind-nls-sensitive",
-      "testIds": [
-        "oracle.numeric.bind-nls-audit"
-      ]
+      "testIds": ["oracle.numeric.bind-nls-audit"]
     },
     "numeric.aggregate": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.numeric.aggregate-composite"
-      ]
+      "testIds": ["oracle.numeric.aggregate-composite"]
     },
     "data.json-parsed": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.data.json-roots"
-      ],
-      "driverRawRepresentations": [
-        "object",
-        "array",
-        "string",
-        "number",
-        "boolean",
-        "null"
-      ]
+      "testIds": ["oracle.data.json-roots"],
+      "driverRawRepresentations": ["object", "array", "string", "number", "boolean", "null"]
     },
     "data.json-lossless-text": {
       "status": "guarded",
       "conditionCode": "oracle.json-serialize-required",
-      "testIds": [
-        "oracle.data.json-lossless-text"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["oracle.data.json-lossless-text"],
+      "driverRawRepresentations": ["string"]
     },
     "data.temporal-native": {
       "status": "guarded",
       "conditionCode": "oracle.date-millisecond-precision",
-      "testIds": [
-        "oracle.data.temporal-lossless"
-      ],
-      "driverRawRepresentations": [
-        "Date"
-      ]
+      "testIds": ["oracle.data.temporal-lossless"],
+      "driverRawRepresentations": ["Date"]
     },
     "data.temporal-lossless": {
       "status": "guarded",
       "conditionCode": "oracle.temporal-text-cast-required",
-      "testIds": [
-        "oracle.data.temporal-lossless"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["oracle.data.temporal-lossless"],
+      "driverRawRepresentations": ["string"]
     },
     "data.binary": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.data.binary"
-      ],
-      "driverRawRepresentations": [
-        "Buffer",
-        "Uint8Array"
-      ]
+      "testIds": ["oracle.data.binary"],
+      "driverRawRepresentations": ["Buffer", "Uint8Array"]
     },
     "data.uuid": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.data.uuid"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["oracle.data.uuid"],
+      "driverRawRepresentations": ["string"]
     },
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.result.rows"
-      ]
+      "testIds": ["oracle.result.rows"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.result.command"
-      ]
+      "testIds": ["oracle.result.command"]
     },
     "result.multiple-sets": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.result.multiple-sets"
-      ]
+      "testIds": ["oracle.result.multiple-sets"]
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.result.standard-schema"
-      ]
+      "testIds": ["oracle.result.standard-schema"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.bulk"
-      ]
+      "testIds": ["oracle.execution.bulk"]
     },
     "statement.stream": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.stream"
-      ]
+      "testIds": ["oracle.execution.stream"]
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.transaction"
-      ]
+      "testIds": ["oracle.execution.transaction"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.savepoint"
-      ]
+      "testIds": ["oracle.execution.savepoint"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.execution.rc-prepare"
-      ]
+      "testIds": ["oracle.execution.rc-prepare"]
     },
     "routine.out": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.routine.scalar-out"
-      ]
+      "testIds": ["oracle.routine.scalar-out"]
     },
     "routine.inout": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.routine.inout"
-      ]
+      "testIds": ["oracle.routine.inout"]
     },
     "routine.result-sets": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.routine.resultsets"
-      ]
+      "testIds": ["oracle.routine.resultsets"]
     },
     "routine.out-cursor": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.routine.cursor"
-      ]
+      "testIds": ["oracle.routine.cursor"]
     },
     "routine.return-value": {
       "status": "unsupported",
@@ -340,52 +252,36 @@
     },
     "metadata.identity": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.metadata.identity"
-      ]
+      "testIds": ["oracle.metadata.identity"]
     },
     "metadata.generated": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.metadata.generated"
-      ]
+      "testIds": ["oracle.metadata.generated"]
     },
     "metadata.routines": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.metadata.routines"
-      ]
+      "testIds": ["oracle.metadata.routines"]
     },
     "metadata.types": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.metadata.types"
-      ]
+      "testIds": ["oracle.metadata.types"]
     },
     "dml.insert-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.dml.insert-returning"
-      ]
+      "testIds": ["oracle.dml.insert-returning"]
     },
     "dml.update-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.dml.update-returning"
-      ]
+      "testIds": ["oracle.dml.update-returning"]
     },
     "dml.delete-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "oracle.dml.delete-returning"
-      ]
+      "testIds": ["oracle.dml.delete-returning"]
     },
     "metadata.command-safe": {
       "status": "guarded",
       "conditionCode": "oracle.count-safe-integer",
-      "testIds": [
-        "oracle.command.safe-count"
-      ]
+      "testIds": ["oracle.command.safe-count"]
     }
   },
   "evidence": {

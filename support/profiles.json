@@ -64,10 +64,7 @@
         "id": "postgres-native",
         "hash": "5fa897b30c2b3d6a91127df6bbfdeb090356595542616e828ae3bbe302cfdb8e"
       },
-      "fixtureTestIds": [
-        "postgres.data.parser-profiles",
-        "postgres.data.containers-native-classification"
-      ]
+      "fixtureTestIds": ["postgres.data.parser-profiles", "postgres.data.containers-native-classification"]
     },
     "mysql2-lossless-text": {
       "id": "mysql2-lossless-text",
@@ -136,10 +133,7 @@
         "id": "mysql2-native",
         "hash": "a0e47c8a69732bcd1779dfa76872182e8dd921d5f5dbd5f6c679e88cc1bd0c3c"
       },
-      "fixtureTestIds": [
-        "mysql.data.temporal-native",
-        "mysql.data.native-profile-conformance"
-      ]
+      "fixtureTestIds": ["mysql.data.temporal-native", "mysql.data.native-profile-conformance"]
     },
     "mariadb-lossless-text": {
       "id": "mariadb-lossless-text",
@@ -325,10 +319,7 @@
         "id": "sqlite-default",
         "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
       },
-      "fixtureTestIds": [
-        "better-sqlite3.numeric.exact-integer",
-        "better-sqlite3.data.binary"
-      ]
+      "fixtureTestIds": ["better-sqlite3.numeric.exact-integer", "better-sqlite3.data.binary"]
     },
     "libsql-exact-string": {
       "id": "libsql-exact-string",
@@ -356,10 +347,7 @@
         "id": "sqlite-default",
         "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
       },
-      "fixtureTestIds": [
-        "libsql.numeric.exact-integer",
-        "libsql.data.binary"
-      ]
+      "fixtureTestIds": ["libsql.numeric.exact-integer", "libsql.data.binary"]
     },
     "sqlite-wasm-exact-string": {
       "id": "sqlite-wasm-exact-string",
@@ -383,11 +371,7 @@
         "id": "sqlite-default",
         "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
       },
-      "fixtureTestIds": [
-        "wasm.numeric.exact-integer",
-        "wasm.data.json-lossless-text",
-        "wasm.data.temporal-lossless"
-      ]
+      "fixtureTestIds": ["wasm.numeric.exact-integer", "wasm.data.json-lossless-text", "wasm.data.temporal-lossless"]
     },
     "d1-guarded-safe-integer": {
       "id": "d1-guarded-safe-integer",
@@ -411,11 +395,7 @@
         "id": "sqlite-default",
         "hash": "2fa022b4d147e26bc070a1fa5c30e3d5d4b9ac9d1ab048993bdcf3f970c61563"
       },
-      "fixtureTestIds": [
-        "d1.numeric.exact-integer",
-        "d1.data.json-lossless-text",
-        "d1.data.temporal-lossless"
-      ]
+      "fixtureTestIds": ["d1.numeric.exact-integer", "d1.data.json-lossless-text", "d1.data.temporal-lossless"]
     },
     "pg-json-native-temporal-text": {
       "id": "pg-json-native-temporal-text",
@@ -444,9 +424,7 @@
         "id": "postgres-json-native-temporal-text",
         "hash": "5019c418c92a7b8062b2910c945f87f0340cf2bcead966df7602605d0a2a66f1"
       },
-      "fixtureTestIds": [
-        "postgres.data.pg-json-native-temporal-text-conformance"
-      ]
+      "fixtureTestIds": ["postgres.data.pg-json-native-temporal-text-conformance"]
     },
     "pg-json-text-temporal-native": {
       "id": "pg-json-text-temporal-native",
@@ -475,9 +453,7 @@
         "id": "postgres-json-text-temporal-native",
         "hash": "d0b807fc59ee744ceae6f491876cd264da188f79180ed66b8f3f31feff5ce61f"
       },
-      "fixtureTestIds": [
-        "postgres.data.pg-json-text-temporal-native-conformance"
-      ]
+      "fixtureTestIds": ["postgres.data.pg-json-text-temporal-native-conformance"]
     },
     "mysql2-json-text": {
       "id": "mysql2-json-text",
@@ -508,9 +484,7 @@
         "id": "mysql2-json-text",
         "hash": "d48f7d69b942368c7bd14c7eed82a7e8ecf0840bacff644bf52b5fc190f0d8fc"
       },
-      "fixtureTestIds": [
-        "mysql.data.mysql2-json-text-conformance"
-      ]
+      "fixtureTestIds": ["mysql.data.mysql2-json-text-conformance"]
     },
     "mysql2-date-text": {
       "id": "mysql2-date-text",
@@ -541,9 +515,7 @@
         "id": "mysql2-date-text",
         "hash": "84c902429eefd3d596a6167449b4960bb8bcceca48a57ae9ac870c3dce00f2d8"
       },
-      "fixtureTestIds": [
-        "mysql.data.mysql2-date-text-conformance"
-      ]
+      "fixtureTestIds": ["mysql.data.mysql2-date-text-conformance"]
     },
     "mariadb-json-text": {
       "id": "mariadb-json-text",
@@ -574,9 +546,7 @@
         "id": "mariadb-json-text",
         "hash": "893bc575754a4a525c5acc0a37fc060729024472e07335267db7579437bcb069"
       },
-      "fixtureTestIds": [
-        "mariadb.data.mariadb-json-text-conformance"
-      ]
+      "fixtureTestIds": ["mariadb.data.mariadb-json-text-conformance"]
     },
     "mariadb-date-text": {
       "id": "mariadb-date-text",
@@ -607,9 +577,7 @@
         "id": "mariadb-date-text",
         "hash": "2c1dad0aff904f15e32e33183db5424253b52e6098a57d9106e77e84942aaec9"
       },
-      "fixtureTestIds": [
-        "mariadb.data.mariadb-date-text-conformance"
-      ]
+      "fixtureTestIds": ["mariadb.data.mariadb-date-text-conformance"]
     },
     "bun-sql-mariadb-1.3.14": {
       "id": "bun-sql-mariadb-1.3.14",
@@ -637,9 +605,7 @@
         "id": "bun-sql-mariadb-1.3.14",
         "hash": "23a4d18d16ad0ccc16c28e2a61037ad4c07d213e7b57c05b41ce61fced69c5c1"
       },
-      "fixtureTestIds": [
-        "bun-sql-mariadb.data.profile"
-      ]
+      "fixtureTestIds": ["bun-sql-mariadb.data.profile"]
     },
     "bun-sql-mysql-1.3.14": {
       "id": "bun-sql-mysql-1.3.14",
@@ -667,9 +633,7 @@
         "id": "bun-sql-mysql-1.3.14",
         "hash": "edee9e61c170a31cfeb0c196065a176af3e218f7b36a93ee952359325f68de28"
       },
-      "fixtureTestIds": [
-        "bun-sql-mysql.data.profile"
-      ]
+      "fixtureTestIds": ["bun-sql-mysql.data.profile"]
     },
     "bun-sql-postgres-1.3.14": {
       "id": "bun-sql-postgres-1.3.14",
@@ -695,9 +659,7 @@
         "id": "bun-sql-postgres-1.3.14",
         "hash": "e25904b7284db8a2277358bca08473eb97f128bd513b75702af9b183f890bc87"
       },
-      "fixtureTestIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "fixtureTestIds": ["bun-sql-postgres.data.profile"]
     },
     "bun-sql-sqlite-1.3.14": {
       "id": "bun-sql-sqlite-1.3.14",
@@ -723,9 +685,7 @@
         "id": "bun-sql-sqlite-1.3.14",
         "hash": "ff6fa6dee6180525bdcac0c046ac2c58631d05ed5402e9175ea26e79134299f0"
       },
-      "fixtureTestIds": [
-        "bun-sql-sqlite.data.profile"
-      ]
+      "fixtureTestIds": ["bun-sql-sqlite.data.profile"]
     }
   },
   "fixtures": {

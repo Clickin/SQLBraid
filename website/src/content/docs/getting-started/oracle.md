@@ -112,14 +112,14 @@ is the currently documented environment; it must not be presented as Oracle
 19c evidence. Thick mode and another server line are separate, untested
 profiles until their manifests contain matching evidence.
 
-| Oracle value | Driver raw / SQLBraid canonical representation | Notes |
-| --- | --- | --- |
-| `NUMBER` / `FLOAT` / ANSI numeric aliases | text → `string` | One exact-decimal family, including `NUMBER(p,0)`; `decodeExactDecimal` or `decodeExactInteger` is an application transform. |
-| `BINARY_FLOAT` / `BINARY_DOUBLE` | JavaScript number | Approximate binary32/binary64 values; special-value support is profile-tested. |
-| CLOB / NCLOB | string | Routine LOBs are read and destroyed before lease release. |
-| BLOB / RAW | `Buffer` | Keep bytes or explicitly encode them. |
-| DATE / TIMESTAMP variants | `Date` | Guarded convenience profile; use authored `TO_CHAR` text for fractional/zone fidelity. |
-| Native JSON | parsed object | Convenience only; nested numeric exactness is not guaranteed. |
+| Oracle value                              | Driver raw / SQLBraid canonical representation | Notes                                                                                                                        |
+| ----------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `NUMBER` / `FLOAT` / ANSI numeric aliases | text → `string`                                | One exact-decimal family, including `NUMBER(p,0)`; `decodeExactDecimal` or `decodeExactInteger` is an application transform. |
+| `BINARY_FLOAT` / `BINARY_DOUBLE`          | JavaScript number                              | Approximate binary32/binary64 values; special-value support is profile-tested.                                               |
+| CLOB / NCLOB                              | string                                         | Routine LOBs are read and destroyed before lease release.                                                                    |
+| BLOB / RAW                                | `Buffer`                                       | Keep bytes or explicitly encode them.                                                                                        |
+| DATE / TIMESTAMP variants                 | `Date`                                         | Guarded convenience profile; use authored `TO_CHAR` text for fractional/zone fidelity.                                       |
+| Native JSON                               | parsed object                                  | Convenience only; nested numeric exactness is not guaranteed.                                                                |
 
 The binding transport is text-positional `:1`, `:2`, … with node-oracledb bind
 descriptors. OUT ordinals follow the SQL bind order, independently of

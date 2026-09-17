@@ -2,15 +2,31 @@ import { Buffer } from "node:buffer";
 import assert from "node:assert/strict";
 import { createConnection, createPool, type Connection } from "mysql2/promise";
 import type { CallQuery, ConnectionProvider, Database, RowQuery, StreamOptions } from "@sqlbraid/core";
-import { createMysql2Database, createMysql2PoolProvider, MYSQL2_LOSSLESS_TEXT, type Mysql2ConnectionLike, type Mysql2ExecuteOptionsLike, type Mysql2PoolConnectionLike, type Mysql2PoolLike, type Mysql2RawCommandLike, type Mysql2RawConnectionLike, type Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
+import {
+  createMysql2Database,
+  createMysql2PoolProvider,
+  MYSQL2_LOSSLESS_TEXT,
+  type Mysql2ConnectionLike,
+  type Mysql2ExecuteOptionsLike,
+  type Mysql2PoolConnectionLike,
+  type Mysql2PoolLike,
+  type Mysql2RawCommandLike,
+  type Mysql2RawConnectionLike,
+  type Mysql2RawStreamLike,
+} from "@sqlbraid/mysql/mysql2";
 import { sql } from "@sqlbraid/mysql";
 import { createPooledDatabase } from "@sqlbraid/runtime";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
-import type { CertificationFixture, CertificationTarget, ExpectedCapabilityContract, ResourceSnapshot, TransactionOptionKey } from "../types.js";
+import type {
+  CertificationFixture,
+  CertificationTarget,
+  ExpectedCapabilityContract,
+  ResourceSnapshot,
+  TransactionOptionKey,
+} from "../types.js";
 
 import { MYSQL2_EXPECTED_CAPABILITIES, MYSQL2_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
-
 
 type FaultMode = "normal" | "execute" | "stream" | "iterator" | "first" | "mid" | "cleanup";
 type MysqlConnection = Mysql2ConnectionLike & {
@@ -47,7 +63,9 @@ function schema() {
     "~standard": {
       version: 1,
       vendor: "sqlbraid-mysql-certification",
-      validate(value: unknown) { return { value }; },
+      validate(value: unknown) {
+        return { value };
+      },
     },
   } as const;
 }
@@ -85,7 +103,7 @@ function instrumentMysqlConnection(
       if (property === "prepare" && typeof value === "function") {
         return async (sqlText: string) => {
           onPrepare();
-          const prepared = await value.call(target, sqlText) as object;
+          const prepared = (await value.call(target, sqlText)) as object;
           return new Proxy(prepared, {
             get(statementTarget, statementProperty, statementReceiver) {
               const statementValue = Reflect.get(statementTarget, statementProperty, statementReceiver);
@@ -150,16 +168,23 @@ function instrumentProviderStream(
   };
 }
 
-function faultSource(
-  source: Mysql2RawStreamLike,
-  mode: FaultMode,
-  error: Error,
-): Mysql2RawStreamLike {
+function faultSource(source: Mysql2RawStreamLike, mode: FaultMode, error: Error): Mysql2RawStreamLike {
   const wrapped: Mysql2RawStreamLike = {
-    get destroyed() { return source.destroyed; },
-    on(event, listener) { source.on?.call(source, event, listener); return wrapped; },
-    once(event, listener) { source.once.call(source, event, listener); return wrapped; },
-    destroy(reason) { source.destroy?.call(source, reason); return wrapped; },
+    get destroyed() {
+      return source.destroyed;
+    },
+    on(event, listener) {
+      source.on?.call(source, event, listener);
+      return wrapped;
+    },
+    once(event, listener) {
+      source.once.call(source, event, listener);
+      return wrapped;
+    },
+    destroy(reason) {
+      source.destroy?.call(source, reason);
+      return wrapped;
+    },
     [Symbol.asyncIterator]() {
       if (mode === "iterator") throw error;
       const iterator = source[Symbol.asyncIterator]();
@@ -188,11 +213,13 @@ function faultConnection(
   const raw: Mysql2RawConnectionLike = {
     execute(sqlOrOptions, values) {
       if (mode === "execute") throw error;
-      const options: Mysql2ExecuteOptionsLike = typeof sqlOrOptions === "string"
-        ? { sql: sqlOrOptions, ...(values === undefined ? {} : { values }) }
-        : sqlOrOptions;
+      const options: Mysql2ExecuteOptionsLike =
+        typeof sqlOrOptions === "string"
+          ? { sql: sqlOrOptions, ...(values === undefined ? {} : { values }) }
+          : sqlOrOptions;
       const command = physical.connection.execute(options);
-      if (mode !== "stream" && mode !== "iterator" && mode !== "first" && mode !== "mid" && mode !== "cleanup") return command;
+      if (mode !== "stream" && mode !== "iterator" && mode !== "first" && mode !== "mid" && mode !== "cleanup")
+        return command;
       return {
         stream(options?: { readonly highWaterMark?: number }) {
           if (mode === "stream") throw error;
@@ -212,7 +239,9 @@ function faultConnection(
     beginTransaction: api.beginTransaction.bind(api),
     commit: api.commit.bind(api),
     rollback: api.rollback.bind(api),
-    release: async () => { await api.end(); },
+    release: async () => {
+      await api.end();
+    },
     destroy: api.connection.destroy.bind(api.connection),
   };
 }
@@ -235,10 +264,14 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   const nativeExecutes = { value: 0 };
   const nativePreparedExecutes = { value: 0 };
   const direct = instrumentMysqlConnection(
-    await createConnection(options) as unknown as Mysql2ConnectionLike,
-    () => { nativeExecutes.value += 1; },
+    (await createConnection(options)) as unknown as Mysql2ConnectionLike,
+    () => {
+      nativeExecutes.value += 1;
+    },
     () => undefined,
-    () => { nativePreparedExecutes.value += 1; },
+    () => {
+      nativePreparedExecutes.value += 1;
+    },
   ) as MysqlConnection;
   const physicalIds = new Set<string>();
   let streamReleases = 0;
@@ -258,8 +291,12 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       acquired.value += 1;
       return instrumentMysqlConnection(
         connection,
-        () => { nativeExecutes.value += 1; },
-        () => { bulkExecutions += 1; },
+        () => {
+          nativeExecutes.value += 1;
+        },
+        () => {
+          bulkExecutions += 1;
+        },
         (values) => {
           nativePreparedExecutes.value += 1;
           bulkValues = [...bulkValues, values === undefined ? [] : [...values]];
@@ -268,22 +305,34 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     },
   };
   const baseProvider = createMysql2PoolProvider(trackedPool, { profile: MYSQL2_LOSSLESS_TEXT });
-  const provider: ConnectionProvider = instrumentProviderStream({
-    ...baseProvider,
-    async acquire() {
-      const lease = await baseProvider.acquire();
-      borrowed.value += 1;
-      let released = false;
-      return {
-        ...lease,
-        async release(releaseOptions?: Parameters<typeof lease.release>[0]): Promise<void> {
-          if (released) return;
-          released = true;
-          try { await lease.release(releaseOptions); } finally { borrowed.value -= 1; }
-        },
-      };
+  const provider: ConnectionProvider = instrumentProviderStream(
+    {
+      ...baseProvider,
+      async acquire() {
+        const lease = await baseProvider.acquire();
+        borrowed.value += 1;
+        let released = false;
+        return {
+          ...lease,
+          async release(releaseOptions?: Parameters<typeof lease.release>[0]): Promise<void> {
+            if (released) return;
+            released = true;
+            try {
+              await lease.release(releaseOptions);
+            } finally {
+              borrowed.value -= 1;
+            }
+          },
+        };
+      },
     },
-  }, () => { streamReturns.value += 1; }, () => { streamReleases += 1; });
+    () => {
+      streamReturns.value += 1;
+    },
+    () => {
+      streamReleases += 1;
+    },
+  );
   const db = createPooledDatabase(provider);
   const directDb = createMysql2Database(direct);
   await pool.query(`DROP PROCEDURE IF EXISTS ${tableSql(setsProcedure)}`);
@@ -293,7 +342,9 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   await pool.query(`DROP TABLE IF EXISTS ${tableSql(table)}`);
   await pool.query(`CREATE TABLE ${tableSql(table)} (id INT PRIMARY KEY, value INT NOT NULL) ENGINE=InnoDB`);
   await pool.query(`INSERT INTO ${tableSql(table)} (id, value) VALUES (1, 0)`);
-  await pool.query(`CREATE PROCEDURE ${tableSql(setsProcedure)}(IN input INT) BEGIN SELECT CAST(input AS CHAR) AS value; SELECT CAST(input + 1 AS CHAR) AS value; END`);
+  await pool.query(
+    `CREATE PROCEDURE ${tableSql(setsProcedure)}(IN input INT) BEGIN SELECT CAST(input AS CHAR) AS value; SELECT CAST(input + 1 AS CHAR) AS value; END`,
+  );
   await pool.query(`CREATE PROCEDURE ${tableSql(lobProcedure)}() SELECT CAST('lob' AS BINARY) AS value`);
   await pool.query(`CREATE PROCEDURE ${tableSql(callProcedure)}(IN input INT) SELECT CAST(input AS CHAR) AS value`);
   await pool.query(`CREATE PROCEDURE ${tableSql(outProcedure)}(OUT answer INT) SET answer = 42`);
@@ -310,11 +361,15 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     "~standard": {
       version: 1,
       vendor: "sqlbraid-mysql-certification",
-      validate() { throw mappingFailure; },
+      validate() {
+        throw mappingFailure;
+      },
     },
   } as const;
   const mappingQuery = sql.rows(mappingSchema)`SELECT '1' AS value UNION ALL SELECT '2' AS value`;
-  const largeResultQuery = q(sql.rows`WITH RECURSIVE seq AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM seq WHERE n < 1000) SELECT CAST(n AS CHAR) AS value FROM seq`);
+  const largeResultQuery = q(
+    sql.rows`WITH RECURSIVE seq AS (SELECT 1 AS n UNION ALL SELECT n + 1 FROM seq WHERE n < 1000) SELECT CAST(n AS CHAR) AS value FROM seq`,
+  );
   const zero = q(sql.rows`SELECT 'zero' AS value WHERE 1 = 0`);
   const command = sql.command`UPDATE ${sql.ident(table)} SET value = value + 1 WHERE id = 1`;
   const identity = sql.rows<{ readonly id: string }>`SELECT CAST(CONNECTION_ID() AS CHAR) AS id`;
@@ -340,8 +395,14 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   };
   let preparedCalls = 0;
   const prepared = {
-    command: () => { preparedCalls += 1; return command; },
-    rows: () => { preparedCalls += 1; return many; },
+    command: () => {
+      preparedCalls += 1;
+      return command;
+    },
+    rows: () => {
+      preparedCalls += 1;
+      return many;
+    },
     input: undefined,
     factoryCalls: () => preparedCalls,
   };
@@ -424,8 +485,12 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     const physical = faultConnection(connection, mode, error);
     const faultProvider = instrumentProviderStream(
       createMysql2PoolProvider({ getConnection: async () => physical }, { profile: MYSQL2_LOSSLESS_TEXT }),
-      () => { streamReturns.value += 1; },
-      () => { streamReleases += 1; },
+      () => {
+        streamReturns.value += 1;
+      },
+      () => {
+        streamReleases += 1;
+      },
     );
     faultDatabases.set(query as object, createPooledDatabase(faultProvider));
   };
@@ -468,7 +533,11 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       try {
         const reusedId = Number((reused as unknown as { readonly threadId?: number }).threadId);
         await (reused as unknown as { query: (sql: string) => Promise<unknown> }).query("SELECT 1");
-        assert.equal(reusedId, lastStreamPhysicalId, "mysql2 stream break must release and reuse the same physical session.");
+        assert.equal(
+          reusedId,
+          lastStreamPhysicalId,
+          "mysql2 stream break must release and reuse the same physical session.",
+        );
       } finally {
         (reused as unknown as { release: () => void }).release();
       }
@@ -484,7 +553,8 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     values: () => bulkValues,
     middleFailure: async () => {
       await pool.query(`UPDATE ${tableSql(table)} SET value = 0 WHERE id = 1`);
-      const factory = (input: number | null) => sql.command`UPDATE ${sql.ident(table)} SET value = ${input} WHERE id = 1`;
+      const factory = (input: number | null) =>
+        sql.command`UPDATE ${sql.ident(table)} SET value = ${input} WHERE id = 1`;
       const beforePreparedExecutes = nativePreparedExecutes.value;
       let transactionFailure: unknown;
       let observedInTransaction: readonly unknown[] = [];
@@ -494,7 +564,9 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
             await tx.bulk([1, null, 3], factory);
           } catch (error) {
             assert.equal((error as { readonly code?: unknown }).code, "ER_BAD_NULL_ERROR");
-            observedInTransaction = await tx.all(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1 AND value > 0`);
+            observedInTransaction = await tx.all(
+              sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1 AND value > 0`,
+            );
             assert.deepEqual(observedInTransaction, [{ value: "1" }]);
             throw error;
           }
@@ -504,7 +576,9 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       }
       assert.ok(transactionFailure instanceof Error, "mysql2 transactional bulk middle failure must reject.");
       assert.equal(nativePreparedExecutes.value - beforePreparedExecutes, 2);
-      const observedRows = await directDb.all(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1 AND value > 0`);
+      const observedRows = await directDb.all(
+        sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1 AND value > 0`,
+      );
       const expectedRows: readonly unknown[] = [];
       assert.deepEqual(observedRows, expectedRows);
       return { error: transactionFailure, observedRows, expectedRows, durability: "atomic" as const };
@@ -513,7 +587,8 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   const metrics = {
     snapshot: (): ResourceSnapshot => ({ borrowedLeases: borrowed.value, cleanupBalance: borrowed.value }),
     sideEffects: () => acquired.value + nativeExecutes.value,
-    mutationSentinel: async () => directDb.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`),
+    mutationSentinel: async () =>
+      directDb.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`),
     physicalSessionIds: () => [...physicalIds],
     pooledScope: async (): Promise<void> => {
       await db.session(async (session) => {
@@ -537,17 +612,27 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
         ...provider,
         async acquire() {
           const lease = await provider.acquire();
-          return { ...lease, rollback: async () => { throw cleanupError; } };
+          return {
+            ...lease,
+            rollback: async () => {
+              throw cleanupError;
+            },
+          };
         },
       };
       const failingDb = createPooledDatabase(failingProvider, { observers: [] });
       let caught: unknown;
       try {
-        await failingDb.tx(async () => { throw primaryError; });
+        await failingDb.tx(async () => {
+          throw primaryError;
+        });
       } catch (error) {
         caught = error;
       }
-      assert.ok(caught instanceof AggregateError, "mysql2 transaction cleanup must aggregate primary and rollback errors.");
+      assert.ok(
+        caught instanceof AggregateError,
+        "mysql2 transaction cleanup must aggregate primary and rollback errors.",
+      );
       assert.equal(caught.errors[0], primaryError);
       assert.ok(caught.errors.some((error) => error === cleanupError));
       assert.equal(borrowed.value, 0);
@@ -555,25 +640,64 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     },
     readOnlyWrite: async (): Promise<void> => {
       await pool.query(`UPDATE ${tableSql(table)} SET value = 0 WHERE id = 1`);
-      await db.tx({ readOnly: false }, async (tx) => { await tx.execute(sql.command`UPDATE ${sql.ident(table)} SET value = value + 1 WHERE id = 1`); });
+      await db.tx({ readOnly: false }, async (tx) => {
+        await tx.execute(sql.command`UPDATE ${sql.ident(table)} SET value = value + 1 WHERE id = 1`);
+      });
       await assert.rejects(
-        () => db.tx({ readOnly: true }, async (tx) => { await tx.execute(sql.command`UPDATE ${sql.ident(table)} SET value = value + 1 WHERE id = 1`); }),
+        () =>
+          db.tx({ readOnly: true }, async (tx) => {
+            await tx.execute(sql.command`UPDATE ${sql.ident(table)} SET value = value + 1 WHERE id = 1`);
+          }),
         (error: unknown) => error instanceof Error,
       );
-      assert.deepEqual(await db.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`), { value: "1" });
+      assert.deepEqual(
+        await db.one(sql.rows`SELECT CAST(value AS CHAR) AS value FROM ${sql.ident(table)} WHERE id = 1`),
+        { value: "1" },
+      );
       await pool.query(`UPDATE ${tableSql(table)} SET value = 0 WHERE id = 1`);
     },
   };
   const unsupported = {
-    CALL002: { feature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await db.call(routines.out); }, sideEffects: () => acquired.value + nativeExecutes.value },
-    CALL003: { feature: "routine.inout", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await db.call(routines.inout); }, sideEffects: () => acquired.value + nativeExecutes.value },
-    CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await db.call(routines.cursor); }, sideEffects: () => acquired.value + nativeExecutes.value },
-    CALL006: { feature: "routine.return-value", expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED" as const, run: async () => { await db.call(routines.returnValue); }, sideEffects: () => acquired.value + nativeExecutes.value },
+    CALL002: {
+      feature: "routine.out",
+      expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const,
+      run: async () => {
+        await db.call(routines.out);
+      },
+      sideEffects: () => acquired.value + nativeExecutes.value,
+    },
+    CALL003: {
+      feature: "routine.inout",
+      expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const,
+      run: async () => {
+        await db.call(routines.inout);
+      },
+      sideEffects: () => acquired.value + nativeExecutes.value,
+    },
+    CALL005: {
+      feature: "routine.out-cursor",
+      expectedErrorFeature: "routine.out",
+      expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const,
+      run: async () => {
+        await db.call(routines.cursor);
+      },
+      sideEffects: () => acquired.value + nativeExecutes.value,
+    },
+    CALL006: {
+      feature: "routine.return-value",
+      expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED" as const,
+      run: async () => {
+        await db.call(routines.returnValue);
+      },
+      sideEffects: () => acquired.value + nativeExecutes.value,
+    },
   };
   const representationUnsupported = {
     "data.json-parsed": {
       prove: async () => {
-        const row = await directDb.one(sql.rows`SELECT JSON_OBJECT('large', CAST(${largeInteger} AS DECIMAL(19, 0))) AS value`);
+        const row = await directDb.one(
+          sql.rows`SELECT JSON_OBJECT('large', CAST(${largeInteger} AS DECIMAL(19, 0))) AS value`,
+        );
         const value = (row as { readonly value?: unknown }).value;
         assert.ok(typeof value === "string");
         assert.ok(value.includes(largeInteger), "mysql2 JSON text proof must preserve the exact numeric lexeme.");
@@ -636,7 +760,8 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       await pool.query(`DROP PROCEDURE IF EXISTS ${tableSql(callProcedure)}`).catch(() => undefined);
       await pool.query(`DROP PROCEDURE IF EXISTS ${tableSql(outProcedure)}`).catch(() => undefined);
       await pool.query(`DROP TABLE IF EXISTS ${tableSql(table)}`).catch(() => undefined);
-      for (const connection of faultConnections) await end(connection as unknown as MysqlConnection).catch(() => undefined);
+      for (const connection of faultConnections)
+        await end(connection as unknown as MysqlConnection).catch(() => undefined);
       await end(direct);
       await end(pool);
     },
@@ -644,7 +769,11 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   return fixture;
 }
 
-export function createMysql2NodeTarget(connectionUri: string, sourceSha: string, measuredDriverVersion?: string): CertificationTarget {
+export function createMysql2NodeTarget(
+  connectionUri: string,
+  sourceSha: string,
+  measuredDriverVersion?: string,
+): CertificationTarget {
   return {
     id: "mysql-mysql2-node-8-4-2",
     sourceSha,
@@ -655,7 +784,11 @@ export function createMysql2NodeTarget(connectionUri: string, sourceSha: string,
   };
 }
 
-export function createMysql2DenoTarget(connectionUri: string, sourceSha: string, measuredDriverVersion?: string): CertificationTarget {
+export function createMysql2DenoTarget(
+  connectionUri: string,
+  sourceSha: string,
+  measuredDriverVersion?: string,
+): CertificationTarget {
   return {
     id: "mysql-mysql2-deno-2-9-3",
     sourceSha,

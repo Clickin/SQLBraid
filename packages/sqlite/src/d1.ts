@@ -53,17 +53,29 @@ export interface D1DatabaseOptions extends DatabaseOptions {}
 
 function assertRoutineUnsupported(rendered: RenderedStatement): void {
   if (rendered.resultKind === "call" || rendered.routineProcedure !== undefined) {
-    throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "Cloudflare D1 does not support routine calls.");
+    throw new UnsupportedFeatureError(
+      "routine.call",
+      "BRAID_CALL_UNSUPPORTED",
+      "Cloudflare D1 does not support routine calls.",
+    );
   }
 }
 
 function assertRoutineParametersUnsupported(rendered: RenderedStatement): void {
   for (const parameter of rendered.parameters) {
     if (parameter.direction === "inout") {
-      throw new UnsupportedFeatureError("routine.inout", "BRAID_CALL_OUT_UNSUPPORTED", "Cloudflare D1 does not expose a routine INOUT parameter carrier.");
+      throw new UnsupportedFeatureError(
+        "routine.inout",
+        "BRAID_CALL_OUT_UNSUPPORTED",
+        "Cloudflare D1 does not expose a routine INOUT parameter carrier.",
+      );
     }
     if (parameter.direction === "out" || parameter.outputName !== undefined) {
-      throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "Cloudflare D1 does not expose a routine OUT parameter carrier.");
+      throw new UnsupportedFeatureError(
+        "routine.out",
+        "BRAID_CALL_OUT_UNSUPPORTED",
+        "Cloudflare D1 does not expose a routine OUT parameter carrier.",
+      );
     }
   }
 }
@@ -79,7 +91,8 @@ function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
 }
 
 function assertCommand(rendered: RenderedStatement): void {
-  if (rendered.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: Cloudflare D1 bulk requires command queries.");
+  if (rendered.resultKind !== "command")
+    throw new Error("BRAID_BULK_SHAPE: Cloudflare D1 bulk requires command queries.");
   if (rendered.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
     throw new Error("BRAID_BULK_SHAPE: Cloudflare D1 bulk does not support OUT or INOUT parameters.");
   }
@@ -93,13 +106,22 @@ function assertD1Value(value: unknown): void {
   if (value === null || typeof value === "string") return;
   if (typeof value === "boolean") return;
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "D1 binds require finite numbers.");
-    if (Number.isInteger(value) && !Number.isSafeInteger(value)) throw new RangeError("BRAID_INTEGER_UNSAFE: D1 cannot safely bind an integer outside JavaScript's safe range.");
+    if (!Number.isFinite(value))
+      throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "D1 binds require finite numbers.");
+    if (Number.isInteger(value) && !Number.isSafeInteger(value))
+      throw new RangeError("BRAID_INTEGER_UNSAFE: D1 cannot safely bind an integer outside JavaScript's safe range.");
     return;
   }
-  if (Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isInteger(entry) && entry >= 0 && entry < 256)) return;
+  if (
+    Array.isArray(value) &&
+    value.every((entry) => typeof entry === "number" && Number.isInteger(entry) && entry >= 0 && entry < 256)
+  )
+    return;
   if (value instanceof ArrayBuffer || isArrayBufferView(value)) return;
-  throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "D1 binds support null, strings, booleans, finite numbers, and binary buffers.");
+  throw new AdapterError(
+    "BRAID_BIND_VALUE_UNSUPPORTED",
+    "D1 binds support null, strings, booleans, finite numbers, and binary buffers.",
+  );
 }
 
 function assertD1Values(values: readonly unknown[]): void {
@@ -123,7 +145,10 @@ function normalizeValue(value: unknown): unknown {
     if (value instanceof Uint8Array) return value;
     return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
   }
-  if (Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isInteger(entry) && entry >= 0 && entry < 256)) {
+  if (
+    Array.isArray(value) &&
+    value.every((entry) => typeof entry === "number" && Number.isInteger(entry) && entry >= 0 && entry < 256)
+  ) {
     return Uint8Array.from(value);
   }
   if (typeof value === "number" && Number.isInteger(value)) {
@@ -179,7 +204,8 @@ export const d1StatementBinding: StatementBindingAdapter = Object.freeze({
     assertCommand(statement);
     assertParameterHintsUnsupported(statement);
     for (const values of bulk.parameterSets) {
-      if (values.length !== statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: Cloudflare D1 bulk parameter cardinality changed.");
+      if (values.length !== statement.parameters.length)
+        throw new Error("BRAID_BULK_SHAPE: Cloudflare D1 bulk parameter cardinality changed.");
       assertD1Values(values);
     }
     const description = createBulkBindingDescription(bulk, context, {
@@ -193,11 +219,17 @@ export const d1StatementBinding: StatementBindingAdapter = Object.freeze({
   },
 });
 
-function materialize(statement: RenderedStatement, binding: StatementBindingDescription | undefined): { readonly text: string; readonly values: readonly unknown[] } {
+function materialize(
+  statement: RenderedStatement,
+  binding: StatementBindingDescription | undefined,
+): { readonly text: string; readonly values: readonly unknown[] } {
   statement = createRenderedStatement(statement);
-  const description = binding ?? d1StatementBinding.describe(statement, { dialectId: statement.dialectId, requestedReuse: "auto" });
-  if (describedStatements.get(description) !== statement) throw new TypeError("BRAID_BINDING_IDENTITY: D1 description belongs to another statement or adapter.");
-  if (description.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: D1 binding description did not provide parameterized SQL.");
+  const description =
+    binding ?? d1StatementBinding.describe(statement, { dialectId: statement.dialectId, requestedReuse: "auto" });
+  if (describedStatements.get(description) !== statement)
+    throw new TypeError("BRAID_BINDING_IDENTITY: D1 description belongs to another statement or adapter.");
+  if (description.parameterizedSql === undefined)
+    throw new Error("BRAID_BIND_TRANSPORT: D1 binding description did not provide parameterized SQL.");
   return { text: description.parameterizedSql, values: statement.parameters.map((parameter) => parameter.value) };
 }
 
@@ -207,11 +239,26 @@ const d1Environment = Object.freeze<DriverEnvironment>({
   typePolicy: { id: typePolicy.id, hash: typePolicy.hash },
   capabilities: {
     "sql.native-transparency": { status: "guaranteed" },
-    "numeric.exact-integer": { status: "guarded", canonical: "string", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.safe-integer" },
-    "numeric.approximate-float": { status: "guarded", canonical: "number", rawRepresentations: ["number"], conditionCode: "cloudflare-d1.numeric-profile" },
-    "numeric.bind-exact": { status: "guarded", canonical: "string", rawRepresentations: ["string"], conditionCode: "cloudflare-d1.safe-integer" },
+    "numeric.exact-integer": {
+      status: "guarded",
+      canonical: "string",
+      rawRepresentations: ["number"],
+      conditionCode: "cloudflare-d1.safe-integer",
+    },
+    "numeric.approximate-float": {
+      status: "guarded",
+      canonical: "number",
+      rawRepresentations: ["number"],
+      conditionCode: "cloudflare-d1.numeric-profile",
+    },
+    "numeric.bind-exact": {
+      status: "guarded",
+      canonical: "string",
+      rawRepresentations: ["string"],
+      conditionCode: "cloudflare-d1.safe-integer",
+    },
     "session.pinned": { status: "unsupported", conditionCode: "cloudflare-d1.no-physical-session-pinning" },
-    "transaction": { status: "unsupported" },
+    transaction: { status: "unsupported" },
     "transaction.savepoint": { status: "unsupported" },
     "transaction.read-only": { status: "unsupported" },
     "transaction.isolation.read-uncommitted": { status: "unsupported" },
@@ -237,7 +284,11 @@ export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
     ownershipKey: database,
     statementBinding: d1StatementBinding,
     environment: d1Environment,
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<QueryExecutionResult<Row>> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
@@ -253,12 +304,18 @@ export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
       const rows = raw.slice(1).map((entry) => normalizeRow(entry, names));
       return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult> {
+    async bulk(
+      bulk: RenderedBulk,
+      binding: BulkBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<BulkExecutionResult> {
       assertExecutionOptions(options);
       assertRoutineParametersUnsupported(bulk.statement);
-      if (!binding || describedBulks.get(binding) !== bulk) throw new TypeError("BRAID_BINDING_IDENTITY: D1 bulk description belongs to another bulk or adapter.");
+      if (!binding || describedBulks.get(binding) !== bulk)
+        throw new TypeError("BRAID_BINDING_IDENTITY: D1 bulk description belongs to another bulk or adapter.");
       const text = binding.parameterizedSql;
-      if (text === undefined) throw new Error("BRAID_BIND_TRANSPORT: D1 bulk binding description did not provide parameterized SQL.");
+      if (text === undefined)
+        throw new Error("BRAID_BIND_TRANSPORT: D1 bulk binding description did not provide parameterized SQL.");
       const canonical = database.prepare(text);
       const statements = bulk.parameterSets.map((_, index) => canonical.bind(...binding.valuesAt(index)));
       const results = await database.batch(statements);
@@ -280,16 +337,32 @@ export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
         executionMode: "remote-batch",
       };
     },
-    async call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult> {
+    async call(
+      rendered: RenderedStatement,
+      _binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<DriverRoutineResult> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
-      throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "Cloudflare D1 adapter does not support routine calls.");
+      throw new UnsupportedFeatureError(
+        "routine.call",
+        "BRAID_CALL_UNSUPPORTED",
+        "Cloudflare D1 adapter does not support routine calls.",
+      );
     },
-    async *stream<Row>(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncGenerator<Row> {
+    async *stream<Row>(
+      rendered: RenderedStatement,
+      _binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): AsyncGenerator<Row> {
       assertExecutionOptions(options);
       assertRoutineParametersUnsupported(rendered);
-      throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "Cloudflare D1 has no incremental row cursor API.");
+      throw new UnsupportedFeatureError(
+        "statement.stream",
+        "BRAID_STREAM_UNSUPPORTED",
+        "Cloudflare D1 has no incremental row cursor API.",
+      );
     },
   };
 }

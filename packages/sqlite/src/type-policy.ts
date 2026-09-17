@@ -1,7 +1,4 @@
-import {
-  normalizeExactInteger,
-  type TypePolicy,
-} from "@sqlbraid/core";
+import { normalizeExactInteger, type TypePolicy } from "@sqlbraid/core";
 
 const mappings = [
   {

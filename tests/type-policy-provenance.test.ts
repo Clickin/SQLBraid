@@ -36,7 +36,11 @@ test("valid mapping mutations cannot retain a stale provenance hash", async () =
   assert.notEqual(outputIndex, -1, `${policy.id} must expose a non-numeric mapping for outputType coverage`);
   const outputMutation = {
     ...policy,
-    mappings: policy.mappings.map((mapping, index) => index === outputIndex ? { ...mapping, outputType: mapping.outputType === "unknown" ? "string" : "unknown" } : mapping),
+    mappings: policy.mappings.map((mapping, index) =>
+      index === outputIndex
+        ? { ...mapping, outputType: mapping.outputType === "unknown" ? "string" : "unknown" }
+        : mapping,
+    ),
   };
   assert.notEqual(typePolicyDigest(outputMutation), policy.hash);
   assert.throws(() => validateTypePolicy(outputMutation), /TYPE_POLICY_HASH_MISMATCH/u);
@@ -45,16 +49,32 @@ test("valid mapping mutations cannot retain a stale provenance hash", async () =
   assert.notEqual(numericIndex, -1, `${policy.id} must expose a numeric mapping for provenance coverage`);
   const fidelityMutation = {
     ...policy,
-    mappings: policy.mappings.map((mapping, index): typeof mapping => index === numericIndex
-      ? { ...mapping, numeric: { ...mapping.numeric!, fidelity: mapping.numeric!.fidelity === "lossless" ? "guarded" : "lossless" } }
-      : mapping),
+    mappings: policy.mappings.map((mapping, index): typeof mapping =>
+      index === numericIndex
+        ? {
+            ...mapping,
+            numeric: {
+              ...mapping.numeric!,
+              fidelity: mapping.numeric!.fidelity === "lossless" ? "guarded" : "lossless",
+            },
+          }
+        : mapping,
+    ),
   };
   assert.throws(() => validateTypePolicy(fidelityMutation), /TYPE_POLICY_HASH_MISMATCH/u);
   const representationMutation = {
     ...policy,
-    mappings: policy.mappings.map((mapping, index): typeof mapping => index === numericIndex
-      ? { ...mapping, numeric: { ...mapping.numeric!, representation: mapping.numeric!.representation === "string" ? "number" : "string" } }
-      : mapping),
+    mappings: policy.mappings.map((mapping, index): typeof mapping =>
+      index === numericIndex
+        ? {
+            ...mapping,
+            numeric: {
+              ...mapping.numeric!,
+              representation: mapping.numeric!.representation === "string" ? "number" : "string",
+            },
+          }
+        : mapping,
+    ),
   };
   assert.throws(() => validateTypePolicy(representationMutation), /TYPE_POLICY_(HASH_MISMATCH|NUMERIC)/u);
 });

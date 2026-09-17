@@ -90,35 +90,23 @@
   "capabilities": {
     "result.rows": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.result-kind-metadata"
     },
     "result.command": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.result-kind-metadata"
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ]
+      "testIds": ["bun-sql-mariadb.data.profile"]
     },
     "numeric.exact-integer": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.integer-width-profile",
-      "driverRawRepresentations": [
-        "number",
-        "bigint",
-        "string"
-      ],
+      "driverRawRepresentations": ["number", "bigint", "string"],
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "guarded"
@@ -129,19 +117,13 @@
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "unsupported",
-      "driverRawRepresentations": [
-        "Uint8Array"
-      ]
+      "driverRawRepresentations": ["Uint8Array"]
     },
     "numeric.approximate-float": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.float-profile",
-      "driverRawRepresentations": [
-        "number"
-      ],
+      "driverRawRepresentations": ["number"],
       "semantics": "approximate-binary",
       "representation": "number",
       "fidelity": "guarded",
@@ -153,15 +135,11 @@
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ]
+      "testIds": ["bun-sql-mariadb.data.profile"]
     },
     "data.temporal-native": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.temporal-profile"
     },
     "data.temporal-lossless": {
@@ -170,21 +148,15 @@
     },
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ]
+      "testIds": ["bun-sql-mariadb.data.profile"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ]
+      "testIds": ["bun-sql-mariadb.data.profile"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ]
+      "testIds": ["bun-sql-mariadb.data.profile"]
     },
     "statement.stream": {
       "status": "unsupported",
@@ -196,49 +168,35 @@
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ]
+      "testIds": ["bun-sql-mariadb.data.profile"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ]
+      "testIds": ["bun-sql-mariadb.data.profile"]
     },
     "transaction.read-only": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "transaction.isolation.read-uncommitted": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "transaction.isolation.read-committed": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "transaction.isolation.repeatable-read": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "transaction.isolation.serializable": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-mariadb.data.profile"
-      ],
+      "testIds": ["bun-sql-mariadb.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "routine.call": {

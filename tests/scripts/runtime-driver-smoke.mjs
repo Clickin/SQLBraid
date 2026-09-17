@@ -9,7 +9,8 @@ import { sql as mysql } from "@sqlbraid/mysql";
 import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";
 import { sql as sqlite } from "@sqlbraid/sqlite";
 
-const exactJsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
+const exactJsonText =
+  '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
 const exactTimestampText = "2026-09-14 12:34:56.123456";
 
 function runtimeName() {
@@ -51,20 +52,33 @@ async function assertSessionPrepareAndOptions(db, tag, identityQuery, prefix) {
   let environment = await db.environment();
   assert.ok(environment.driver.id, `${prefix} environment must identify its driver`);
   assert.ok(environment.typePolicy?.id, `${prefix} environment must identify its representation profile`);
-  assert.equal(capabilityStatus(environment, "session.pinned"), "guaranteed", `${prefix} must guarantee pinned sessions`);
-  assert.equal(capabilityStatus(environment, "statement.prepare"), "guaranteed", `${prefix} must guarantee prepared execution`);
+  assert.equal(
+    capabilityStatus(environment, "session.pinned"),
+    "guaranteed",
+    `${prefix} must guarantee pinned sessions`,
+  );
+  assert.equal(
+    capabilityStatus(environment, "statement.prepare"),
+    "guaranteed",
+    `${prefix} must guarantee prepared execution`,
+  );
 
   const ids = [];
   let escaped;
   await db.session(async (session) => {
     environment = await session.environment();
     ids.push(await session.one(identityQuery));
-    const prepared = session.prepare(`${prefix}-input-${Date.now()}`, (value) => tag.rows`SELECT ${value} AS prepared_value`);
+    const prepared = session.prepare(
+      `${prefix}-input-${Date.now()}`,
+      (value) => tag.rows`SELECT ${value} AS prepared_value`,
+    );
     assert.deepEqual(await prepared.one("prepared"), { prepared_value: "prepared" });
     ids.push(await session.one(identityQuery));
 
     const isolationLevels = ["read-uncommitted", "read-committed", "repeatable-read", "serializable"];
-    for (const isolation of isolationLevels.filter((level) => capabilitySupported(environment, `transaction.isolation.${level}`))) {
+    for (const isolation of isolationLevels.filter((level) =>
+      capabilitySupported(environment, `transaction.isolation.${level}`),
+    )) {
       const options = capabilitySupported(environment, "transaction.read-only")
         ? { isolation, readOnly: true }
         : { isolation };
@@ -74,9 +88,15 @@ async function assertSessionPrepareAndOptions(db, tag, identityQuery, prefix) {
     }
     escaped = session.stream(tag.rows`SELECT 1 AS escaped_session_stream`);
   });
-  assert.equal(new Set(ids.map((row) => JSON.stringify(row))).size, 1, `${prefix} session must pin one physical connection`);
+  assert.equal(
+    new Set(ids.map((row) => JSON.stringify(row))).size,
+    1,
+    `${prefix} session must pin one physical connection`,
+  );
   await assert.rejects(
-    async () => { for await (const row of escaped) void row; },
+    async () => {
+      for await (const row of escaped) void row;
+    },
     (error) => ["BRAID_SESSION_CLOSED", "BRAID_SESSION_SCOPE"].includes(errorCode(error)),
   );
   return environment;
@@ -114,10 +134,22 @@ function assertObserverContent(events, placeholder, boundValue) {
   assert.equal(ready.execution.transport, "text-positional", "observer must receive binding transport metadata");
   assert.equal(typeof ready.literalizedSql, "function", "observer must expose diagnostic SQL literalization");
   assert.equal(ready.declaredKind, "unknown");
-  assert.ok(events.some((event) => event.type === "query:result" && event.actualKind === "rows"), "observer must receive row result");
-  assert.ok(events.some((event) => event.type === "query:mapped" && event.queryMapped), "observer must receive mapper result");
-  assert.ok(events.some((event) => event.type === "transaction" && event.phase === "begin" && event.status === "completed"), "observer must receive transaction begin");
-  assert.ok(events.some((event) => event.type === "transaction" && event.phase === "commit" && event.status === "completed"), "observer must receive transaction commit");
+  assert.ok(
+    events.some((event) => event.type === "query:result" && event.actualKind === "rows"),
+    "observer must receive row result",
+  );
+  assert.ok(
+    events.some((event) => event.type === "query:mapped" && event.queryMapped),
+    "observer must receive mapper result",
+  );
+  assert.ok(
+    events.some((event) => event.type === "transaction" && event.phase === "begin" && event.status === "completed"),
+    "observer must receive transaction begin",
+  );
+  assert.ok(
+    events.some((event) => event.type === "transaction" && event.phase === "commit" && event.status === "completed"),
+    "observer must receive transaction commit",
+  );
   assertEventDurations(events);
 }
 
@@ -133,29 +165,50 @@ async function streamingSmoke(db, tag) {
   }
   assert.deepEqual(await db.one(tag.rows(integerRow)`SELECT 4 AS id`), { id: 4 }, "break leaves a reusable connection");
   const failure = new Error("stream mapper failed");
-  await assert.rejects(async () => {
-    for await (const row of db.stream(query, { schema: schema(() => { throw failure; }) })) void row;
-  }, (error) => error === failure || error.cause === failure);
-  assert.deepEqual(await db.one(tag.rows(integerRow)`SELECT 5 AS id`), { id: 5 }, "mapping failure cleans up before reuse");
-  await assert.rejects(async () => {
-    for await (const row of db.stream(query)) {
-      void row;
-      throw failure;
-    }
-  }, (error) => error === failure);
+  await assert.rejects(
+    async () => {
+      for await (const row of db.stream(query, {
+        schema: schema(() => {
+          throw failure;
+        }),
+      }))
+        void row;
+    },
+    (error) => error === failure || error.cause === failure,
+  );
+  assert.deepEqual(
+    await db.one(tag.rows(integerRow)`SELECT 5 AS id`),
+    { id: 5 },
+    "mapping failure cleans up before reuse",
+  );
+  await assert.rejects(
+    async () => {
+      for await (const row of db.stream(query)) {
+        void row;
+        throw failure;
+      }
+    },
+    (error) => error === failure,
+  );
   const controller = new AbortController();
   controller.abort();
-  await assert.rejects(async () => {
-    for await (const row of db.stream(query, { signal: controller.signal })) void row;
-  }, (error) => error === controller.signal.reason);
+  await assert.rejects(
+    async () => {
+      for await (const row of db.stream(query, { signal: controller.signal })) void row;
+    },
+    (error) => error === controller.signal.reason,
+  );
   const activeController = new AbortController();
   const abortFailure = new Error("active stream aborted");
-  await assert.rejects(async () => {
-    for await (const row of db.stream(query, { signal: activeController.signal })) {
-      void row;
-      activeController.abort(abortFailure);
-    }
-  }, (error) => error === abortFailure || error.cause === abortFailure);
+  await assert.rejects(
+    async () => {
+      for await (const row of db.stream(query, { signal: activeController.signal })) {
+        void row;
+        activeController.abort(abortFailure);
+      }
+    },
+    (error) => error === abortFailure || error.cause === abortFailure,
+  );
   assert.deepEqual(await db.one(tag.rows(integerRow)`SELECT 6 AS id`), { id: 6 }, "abort leaves a reusable pool");
   await db.tx(async (tx) => {
     let count = 0;
@@ -189,8 +242,12 @@ export async function runPostgresSmoke(url) {
     assert.equal(inserted.kind, "command");
     assert.equal(inserted.command.affectedRows, 1);
 
-    await db.execute(postgres.command`UPDATE ${directIdentifier} SET payload = ${exactJsonText}, stamp = ${exactTimestampText} WHERE id = ${1}`);
-    const normalized = await db.one(postgres.rows`SELECT id, name, amount, big_value, payload::text AS payload, stamp::text AS stamp FROM ${directIdentifier} WHERE id = ${1}`);
+    await db.execute(
+      postgres.command`UPDATE ${directIdentifier} SET payload = ${exactJsonText}, stamp = ${exactTimestampText} WHERE id = ${1}`,
+    );
+    const normalized = await db.one(
+      postgres.rows`SELECT id, name, amount, big_value, payload::text AS payload, stamp::text AS stamp FROM ${directIdentifier} WHERE id = ${1}`,
+    );
     assert.deepEqual(normalized, {
       id: "1",
       name: "Ada",
@@ -200,29 +257,30 @@ export async function runPostgresSmoke(url) {
       stamp: exactTimestampText,
     });
 
-    const command = await db.execute(postgres.command`UPDATE ${directIdentifier} SET name = ${"Grace"} WHERE id = ${1}`);
+    const command = await db.execute(
+      postgres.command`UPDATE ${directIdentifier} SET name = ${"Grace"} WHERE id = ${1}`,
+    );
     assert.equal(command.kind, "command");
     assert.equal(command.command.affectedRows, 1);
-    assert.deepEqual((await db.one(postgres.rows`SELECT name FROM ${directIdentifier} WHERE id = ${1}`)), { name: "Grace" });
+    assert.deepEqual(await db.one(postgres.rows`SELECT name FROM ${directIdentifier} WHERE id = ${1}`), {
+      name: "Grace",
+    });
 
     await assert.rejects(
       () => db.execute(postgres.command`SELECT id FROM ${directIdentifier}`),
-      (error) => errorCode(error) === "BRAID_RESULT_KIND"
-        && error.declaredKind === "command"
-        && error.actualKind === "rows",
+      (error) =>
+        errorCode(error) === "BRAID_RESULT_KIND" && error.declaredKind === "command" && error.actualKind === "rows",
     );
     await assert.rejects(
       () => db.execute(postgres.rows`UPDATE ${directIdentifier} SET name = ${"Dora"} WHERE id = ${999}`),
-      (error) => errorCode(error) === "BRAID_RESULT_KIND"
-        && error.declaredKind === "rows"
-        && error.actualKind === "command",
+      (error) =>
+        errorCode(error) === "BRAID_RESULT_KIND" && error.declaredKind === "rows" && error.actualKind === "command",
     );
 
     const queryMapper = schema((value) => ({ id: Number(value.id) + 10 }));
-    assert.deepEqual(
-      await db.all(postgres.rows(queryMapper)`SELECT id FROM ${directIdentifier} WHERE id = ${1}`),
-      [{ id: 11 }],
-    );
+    assert.deepEqual(await db.all(postgres.rows(queryMapper)`SELECT id FROM ${directIdentifier} WHERE id = ${1}`), [
+      { id: 11 },
+    ]);
     const executionMapper = schema((value) => ({ label: value.name.toUpperCase() }));
     assert.deepEqual(
       await db.all(postgres.rows`SELECT name FROM ${directIdentifier} WHERE id = ${1}`, { schema: executionMapper }),
@@ -279,7 +337,15 @@ export async function runPostgresSmoke(url) {
   let databaseVersion;
   try {
     const events = [];
-    const db = createPgPoolDatabase(pool, { observers: [{ onEvent(event) { events.push(event); } }] });
+    const db = createPgPoolDatabase(pool, {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    });
     const pgEnvironment = await assertSessionPrepareAndOptions(
       db,
       postgres,
@@ -318,7 +384,8 @@ export async function runPostgresSmoke(url) {
     });
     const bulk = await db.bulk(
       ["bulk-a", "bulk-b"],
-      (name) => postgres.command`INSERT INTO ${preparedIdentifier} (id, name) VALUES (${name === "bulk-a" ? 2 : 3}, ${name})`,
+      (name) =>
+        postgres.command`INSERT INTO ${preparedIdentifier} (id, name) VALUES (${name === "bulk-a" ? 2 : 3}, ${name})`,
     );
     assert.equal(bulk.inputCount, 2);
     assert.equal(bulk.affectedRows, 2);
@@ -337,10 +404,11 @@ export async function runPostgresSmoke(url) {
     `);
     const preparedCall = db.prepare(
       "runtime-smoke-postgres-call",
-      (value) => postgres.call({
-        output: schema((row) => ({ output_value: String(row.output_value) })),
-        procedure: { name: routineName, parameterNames: ["input_value", "output_value"] },
-      })`CALL ${postgres.ident(routineName)}(${value}, ${postgres.out("output_value")})`,
+      (value) =>
+        postgres.call({
+          output: schema((row) => ({ output_value: String(row.output_value) })),
+          procedure: { name: routineName, parameterNames: ["input_value", "output_value"] },
+        })`CALL ${postgres.ident(routineName)}(${value}, ${postgres.out("output_value")})`,
     );
     const callResult = await preparedCall.call("prepared-call");
     assert.deepEqual(callResult.output, { output_value: "prepared-call-out" });
@@ -374,12 +442,20 @@ export async function runPostgresSmoke(url) {
       }),
       /outer pooled PostgreSQL rollback/,
     );
-    assert.deepEqual(
-      await db.all(postgres.rows`SELECT id FROM ${poolIdentifier} ORDER BY id`),
-      [{ id: "1" }, { id: "3" }],
-    );
+    assert.deepEqual(await db.all(postgres.rows`SELECT id FROM ${poolIdentifier} ORDER BY id`), [
+      { id: "1" },
+      { id: "3" },
+    ]);
 
-    const singleDb = createPgPoolDatabase(singlePool, { observers: [{ onEvent(event) { events.push(event); } }] });
+    const singleDb = createPgPoolDatabase(singlePool, {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    });
     const mapper = schema(async (value) => {
       await singleDb.execute(postgres`SELECT ${2}`);
       return { value: Number(value.value) + 1 };
@@ -396,10 +472,15 @@ export async function runPostgresSmoke(url) {
     await withTimeout(operation, "PostgreSQL max-one mapper re-entry timed out");
 
     await db.execute(postgres`SELECT ${"observer-secret"}`);
-    await db.tx(async (tx) => { await tx.execute(postgres`SELECT ${1}`); });
+    await db.tx(async (tx) => {
+      await tx.execute(postgres`SELECT ${1}`);
+    });
     await assert.rejects(db.execute(postgres`SELECT * FROM ${postgres.ident(testName("pg_missing"))}`));
     assertObserverContent(events, "$1", "observer-secret");
-    assert.ok(events.some((event) => event.type === "query:error" && event.stage === "driver" && event.executionStarted), "observer must receive driver errors");
+    assert.ok(
+      events.some((event) => event.type === "query:error" && event.stage === "driver" && event.executionStarted),
+      "observer must receive driver errors",
+    );
     assert.equal(pool.idleCount, pool.totalCount);
     assert.ok(pool.totalCount > 0);
   } finally {
@@ -420,7 +501,22 @@ export async function runPostgresSmoke(url) {
     driver: environment?.driver,
     profile: environment?.driver.profile,
     typePolicy: environment?.typePolicy,
-    checks: ["direct-bind", "exact-numeric-string", "json-text", "temporal-text", "result-kind", "type-policy", "schema", "pool-concurrency", "transaction-pinning", "nested-savepoint", "rollback", "root-escape", "observer-events", "max-one-mapper-reentry"],
+    checks: [
+      "direct-bind",
+      "exact-numeric-string",
+      "json-text",
+      "temporal-text",
+      "result-kind",
+      "type-policy",
+      "schema",
+      "pool-concurrency",
+      "transaction-pinning",
+      "nested-savepoint",
+      "rollback",
+      "root-escape",
+      "observer-events",
+      "max-one-mapper-reentry",
+    ],
   };
 }
 
@@ -456,10 +552,17 @@ export async function runMysqlSmoke(url) {
     assert.equal(inserted.kind, "command");
     assert.equal(inserted.command.affectedRows, 1);
 
-    await db.execute(mysql.command`UPDATE ${directIdentifier} SET payload = ${exactJsonText}, stamp = ${exactTimestampText} WHERE id = ${1}`);
+    await db.execute(
+      mysql.command`UPDATE ${directIdentifier} SET payload = ${exactJsonText}, stamp = ${exactTimestampText} WHERE id = ${1}`,
+    );
     // Native JSON canonicalizes numeric storage; fidelity starts at the DB result.
-    const [nativeJson] = await client.execute(`SELECT CAST(payload AS CHAR) AS payload FROM ${client.escapeId(directTable)} WHERE id = ?`, [1]);
-    const normalized = await db.one(mysql.rows`SELECT id, name, amount, big_value, payload, stamp FROM ${directIdentifier} WHERE id = ${1}`);
+    const [nativeJson] = await client.execute(
+      `SELECT CAST(payload AS CHAR) AS payload FROM ${client.escapeId(directTable)} WHERE id = ?`,
+      [1],
+    );
+    const normalized = await db.one(
+      mysql.rows`SELECT id, name, amount, big_value, payload, stamp FROM ${directIdentifier} WHERE id = ${1}`,
+    );
     assert.deepEqual(normalized, {
       id: "1",
       name: "Ada",
@@ -472,26 +575,23 @@ export async function runMysqlSmoke(url) {
     const command = await db.execute(mysql.command`UPDATE ${directIdentifier} SET name = ${"Grace"} WHERE id = ${1}`);
     assert.equal(command.kind, "command");
     assert.equal(command.command.affectedRows, 1);
-    assert.deepEqual((await db.one(mysql.rows`SELECT name FROM ${directIdentifier} WHERE id = ${1}`)), { name: "Grace" });
+    assert.deepEqual(await db.one(mysql.rows`SELECT name FROM ${directIdentifier} WHERE id = ${1}`), { name: "Grace" });
 
     await assert.rejects(
       () => db.execute(mysql.command`SELECT id FROM ${directIdentifier}`),
-      (error) => errorCode(error) === "BRAID_RESULT_KIND"
-        && error.declaredKind === "command"
-        && error.actualKind === "rows",
+      (error) =>
+        errorCode(error) === "BRAID_RESULT_KIND" && error.declaredKind === "command" && error.actualKind === "rows",
     );
     await assert.rejects(
       () => db.execute(mysql.rows`UPDATE ${directIdentifier} SET name = ${"Dora"} WHERE id = ${999}`),
-      (error) => errorCode(error) === "BRAID_RESULT_KIND"
-        && error.declaredKind === "rows"
-        && error.actualKind === "command",
+      (error) =>
+        errorCode(error) === "BRAID_RESULT_KIND" && error.declaredKind === "rows" && error.actualKind === "command",
     );
 
     const queryMapper = schema((value) => ({ id: Number(value.id) + 10 }));
-    assert.deepEqual(
-      await db.all(mysql.rows(queryMapper)`SELECT id FROM ${directIdentifier} WHERE id = ${1}`),
-      [{ id: 11 }],
-    );
+    assert.deepEqual(await db.all(mysql.rows(queryMapper)`SELECT id FROM ${directIdentifier} WHERE id = ${1}`), [
+      { id: 11 },
+    ]);
     const executionMapper = schema((value) => ({ label: value.name.toUpperCase() }));
     assert.deepEqual(
       await db.all(mysql.rows`SELECT name FROM ${directIdentifier} WHERE id = ${1}`, { schema: executionMapper }),
@@ -562,7 +662,16 @@ export async function runMysqlSmoke(url) {
   let databaseVersion;
   try {
     const events = [];
-    const db = createMysql2PoolDatabase(pool, { profile: MYSQL2_LOSSLESS_TEXT, observers: [{ onEvent(event) { events.push(event); } }] });
+    const db = createMysql2PoolDatabase(pool, {
+      profile: MYSQL2_LOSSLESS_TEXT,
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    });
     const mysqlEnvironment = await assertSessionPrepareAndOptions(
       db,
       mysql,
@@ -601,7 +710,8 @@ export async function runMysqlSmoke(url) {
     });
     const bulk = await db.bulk(
       ["bulk-a", "bulk-b"],
-      (name) => mysql.command`INSERT INTO ${preparedIdentifier} (id, name) VALUES (${name === "bulk-a" ? 2 : 3}, ${name})`,
+      (name) =>
+        mysql.command`INSERT INTO ${preparedIdentifier} (id, name) VALUES (${name === "bulk-a" ? 2 : 3}, ${name})`,
     );
     assert.equal(bulk.inputCount, 2);
     assert.equal(bulk.affectedRows, 2);
@@ -619,7 +729,10 @@ export async function runMysqlSmoke(url) {
       (value) => mysql.call`CALL ${mysql.ident(routineName)}(${value})`,
     );
     const callResult = await preparedCall.call("prepared-call");
-    assert.deepEqual(callResult.resultSets.map((set) => set.rows), [[{ value: "prepared-call-out" }]]);
+    assert.deepEqual(
+      callResult.resultSets.map((set) => set.rows),
+      [[{ value: "prepared-call-out" }]],
+    );
 
     const pinned = [];
     await db.tx(async (tx) => {
@@ -650,12 +763,21 @@ export async function runMysqlSmoke(url) {
       }),
       /outer pooled MySQL rollback/,
     );
-    assert.deepEqual(
-      await db.all(mysql.rows`SELECT id FROM ${poolIdentifier} ORDER BY id`),
-      [{ id: "1" }, { id: "3" }],
-    );
+    assert.deepEqual(await db.all(mysql.rows`SELECT id FROM ${poolIdentifier} ORDER BY id`), [
+      { id: "1" },
+      { id: "3" },
+    ]);
 
-    const singleDb = createMysql2PoolDatabase(singlePool, { profile: MYSQL2_LOSSLESS_TEXT, observers: [{ onEvent(event) { events.push(event); } }] });
+    const singleDb = createMysql2PoolDatabase(singlePool, {
+      profile: MYSQL2_LOSSLESS_TEXT,
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    });
     const mapper = schema(async (value) => {
       await singleDb.execute(mysql`SELECT ${2}`);
       return { value: Number(value.value) + 1 };
@@ -672,10 +794,15 @@ export async function runMysqlSmoke(url) {
     await withTimeout(operation, "MySQL max-one mapper re-entry timed out");
 
     await db.execute(mysql`SELECT ${"observer-secret"}`);
-    await db.tx(async (tx) => { await tx.execute(mysql`SELECT ${1}`); });
+    await db.tx(async (tx) => {
+      await tx.execute(mysql`SELECT ${1}`);
+    });
     await assert.rejects(db.execute(mysql`SELECT * FROM ${mysql.ident(testName("mysql_missing"))}`));
     assertObserverContent(events, "?", "observer-secret");
-    assert.ok(events.some((event) => event.type === "query:error" && event.stage === "driver" && event.executionStarted), "observer must receive driver errors");
+    assert.ok(
+      events.some((event) => event.type === "query:error" && event.stage === "driver" && event.executionStarted),
+      "observer must receive driver errors",
+    );
   } finally {
     try {
       await pool.query(`DROP PROCEDURE IF EXISTS \`${routineName.replaceAll("`", "``")}\``);
@@ -694,7 +821,22 @@ export async function runMysqlSmoke(url) {
     driver: environment?.driver,
     profile: environment?.driver.profile,
     typePolicy: environment?.typePolicy,
-    checks: ["direct-bind", "exact-numeric-string", "json-text", "temporal-text", "result-kind", "type-policy", "schema", "pool-concurrency", "transaction-pinning", "nested-savepoint", "rollback", "root-escape", "observer-events", "max-one-mapper-reentry"],
+    checks: [
+      "direct-bind",
+      "exact-numeric-string",
+      "json-text",
+      "temporal-text",
+      "result-kind",
+      "type-policy",
+      "schema",
+      "pool-concurrency",
+      "transaction-pinning",
+      "nested-savepoint",
+      "rollback",
+      "root-escape",
+      "observer-events",
+      "max-one-mapper-reentry",
+    ],
   };
 }
 
@@ -754,7 +896,15 @@ export async function runSqliteSmoke() {
   let environment;
   let sqliteVersion;
   try {
-    const db = createNodeSqliteDatabase(native, { observers: [{ onEvent(event) { events.push(event); } }] });
+    const db = createNodeSqliteDatabase(native, {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    });
     const sqliteEnvironment = await db.environment();
     sqliteVersion = String(native.prepare("SELECT sqlite_version() AS version").get().version);
     environment = sqliteEnvironment;
@@ -764,18 +914,19 @@ export async function runSqliteSmoke() {
     assert.equal(capabilityStatus(sqliteEnvironment, "statement.cancel"), "unsupported");
     assert.equal(capabilityStatus(sqliteEnvironment, "transaction.read-only"), "unsupported");
     if (runtimeName() === "deno") assert.equal(sqliteEnvironment.runtime.id, "deno");
-    const sqlitePrepared = db.prepare(`${tableName}-input-prepared`, (value) => sqlite.rows`SELECT ${value} AS prepared_value`);
+    const sqlitePrepared = db.prepare(
+      `${tableName}-input-prepared`,
+      (value) => sqlite.rows`SELECT ${value} AS prepared_value`,
+    );
     assert.deepEqual(await sqlitePrepared.one("prepared"), { prepared_value: "prepared" });
     await assert.rejects(
       () => db.tx({ readOnly: true }, async () => undefined),
-      (error) => error instanceof UnsupportedFeatureError
-        && error.feature === "transaction.read-only",
+      (error) => error instanceof UnsupportedFeatureError && error.feature === "transaction.read-only",
     );
     const sqliteCancellation = new AbortController();
     await assert.rejects(
       () => db.execute(sqlite`SELECT 1`, { signal: sqliteCancellation.signal }),
-      (error) => error instanceof UnsupportedFeatureError
-        && error.feature === "statement.cancel",
+      (error) => error instanceof UnsupportedFeatureError && error.feature === "statement.cancel",
     );
     await db.execute(sqlite.command`CREATE TABLE ${preparedTableIdentifier} (
       id INTEGER PRIMARY KEY,
@@ -784,14 +935,16 @@ export async function runSqliteSmoke() {
     )`);
     const preparedCommand = db.prepare(
       `${preparedTableName}-command`,
-      (value) => sqlite.command`INSERT INTO ${preparedTableIdentifier} (id, name, amount) VALUES (${1}, ${value}, ${1.25})`,
+      (value) =>
+        sqlite.command`INSERT INTO ${preparedTableIdentifier} (id, name, amount) VALUES (${1}, ${value}, ${1.25})`,
     );
     const preparedCommandResult = await preparedCommand.execute("prepared-command");
     assert.equal(preparedCommandResult.kind, "command");
     assert.equal(preparedCommandResult.command.affectedRows, 1);
     const preparedBulk = await db.bulk(
       ["bulk-a", "bulk-b"],
-      (value) => sqlite.command`INSERT INTO ${preparedTableIdentifier} (id, name, amount) VALUES (${value === "bulk-a" ? 2 : 3}, ${value}, ${2.5})`,
+      (value) =>
+        sqlite.command`INSERT INTO ${preparedTableIdentifier} (id, name, amount) VALUES (${value === "bulk-a" ? 2 : 3}, ${value}, ${2.5})`,
     );
     assert.equal(preparedBulk.inputCount, 2);
     assert.equal(preparedBulk.affectedRows, 2);
@@ -800,10 +953,7 @@ export async function runSqliteSmoke() {
       { id: "2", name: "bulk-a" },
       { id: "3", name: "bulk-b" },
     ]);
-    const preparedCall = db.prepare(
-      `${preparedTableName}-call`,
-      (value) => sqlite.call`CALL unsupported(${value})`,
-    );
+    const preparedCall = db.prepare(`${preparedTableName}-call`, (value) => sqlite.call`CALL unsupported(${value})`);
     await assert.rejects(
       () => db.call(sqlite.call`CALL unsupported()`),
       (error) => errorCode(error) === "BRAID_CALL_UNSUPPORTED",
@@ -824,10 +974,11 @@ export async function runSqliteSmoke() {
     assert.equal(inserted.kind, "command");
     assert.equal(inserted.command.affectedRows, 1);
 
-    assert.deepEqual(
-      await db.one(sqlite.rows`SELECT id, name, amount FROM ${tableIdentifier} WHERE id = ${1}`),
-      { id: "1", name: "Ada", amount: 12.34 },
-    );
+    assert.deepEqual(await db.one(sqlite.rows`SELECT id, name, amount FROM ${tableIdentifier} WHERE id = ${1}`), {
+      id: "1",
+      name: "Ada",
+      amount: 12.34,
+    });
     assert.deepEqual(
       await db.one(sqlite.rows`SELECT CAST(${1.5} AS REAL) AS amount`),
       { amount: 1.5 },
@@ -844,22 +995,19 @@ export async function runSqliteSmoke() {
     assert.equal(command.command.affectedRows, 1);
     await assert.rejects(
       () => db.execute(sqlite.command`SELECT id FROM ${tableIdentifier}`),
-      (error) => errorCode(error) === "BRAID_RESULT_KIND"
-        && error.declaredKind === "command"
-        && error.actualKind === "rows",
+      (error) =>
+        errorCode(error) === "BRAID_RESULT_KIND" && error.declaredKind === "command" && error.actualKind === "rows",
     );
     await assert.rejects(
       () => db.execute(sqlite.rows`UPDATE ${tableIdentifier} SET name = ${"Dora"} WHERE id = ${999}`),
-      (error) => errorCode(error) === "BRAID_RESULT_KIND"
-        && error.declaredKind === "rows"
-        && error.actualKind === "command",
+      (error) =>
+        errorCode(error) === "BRAID_RESULT_KIND" && error.declaredKind === "rows" && error.actualKind === "command",
     );
 
     const queryMapper = schema((value) => ({ id: Number(value.id) + 10 }));
-    assert.deepEqual(
-      await db.all(sqlite.rows(queryMapper)`SELECT id FROM ${tableIdentifier} WHERE id = ${1}`),
-      [{ id: 11 }],
-    );
+    assert.deepEqual(await db.all(sqlite.rows(queryMapper)`SELECT id FROM ${tableIdentifier} WHERE id = ${1}`), [
+      { id: 11 },
+    ]);
     const executionMapper = schema((value) => ({ label: value.name.toUpperCase() }));
     assert.deepEqual(
       await db.all(sqlite.rows`SELECT name FROM ${tableIdentifier} WHERE id = ${1}`, { schema: executionMapper }),
@@ -872,10 +1020,14 @@ export async function runSqliteSmoke() {
     assert.deepEqual(returning.rows, [{ id: "2" }]);
 
     await db.tx(async (tx) => {
-      await tx.execute(sqlite.command`INSERT INTO ${tableIdentifier} (id, name, amount) VALUES (${3}, ${"Committed"}, ${4.56})`);
+      await tx.execute(
+        sqlite.command`INSERT INTO ${tableIdentifier} (id, name, amount) VALUES (${3}, ${"Committed"}, ${4.56})`,
+      );
       await assert.rejects(
         tx.tx(async (nested) => {
-          await nested.execute(sqlite.command`INSERT INTO ${tableIdentifier} (id, name, amount) VALUES (${4}, ${"Nested"}, ${5.67})`);
+          await nested.execute(
+            sqlite.command`INSERT INTO ${tableIdentifier} (id, name, amount) VALUES (${4}, ${"Nested"}, ${5.67})`,
+          );
           await assertScopeRejection(tx.execute(sqlite`SELECT ${1}`));
           throw new Error("nested SQLite rollback");
         }),
@@ -889,7 +1041,9 @@ export async function runSqliteSmoke() {
     await assertScopeRejection(db.tx(async () => db.execute(sqlite`SELECT ${1}`)));
     await assert.rejects(
       db.tx(async (tx) => {
-        await tx.execute(sqlite.command`INSERT INTO ${tableIdentifier} (id, name, amount) VALUES (${5}, ${"Rolled"}, ${6.78})`);
+        await tx.execute(
+          sqlite.command`INSERT INTO ${tableIdentifier} (id, name, amount) VALUES (${5}, ${"Rolled"}, ${6.78})`,
+        );
         throw new Error("outer SQLite rollback");
       }),
       /outer SQLite rollback/,
@@ -900,7 +1054,8 @@ export async function runSqliteSmoke() {
     );
 
     const streamed = [];
-    for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`)) streamed.push(row.id);
+    for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`))
+      streamed.push(row.id);
     assert.deepEqual(streamed, ["1", "2", "3"]);
     for await (const row of db.stream(sqlite.rows`SELECT id FROM ${tableIdentifier} ORDER BY id`)) {
       assert.equal(row.id, "1");
@@ -909,10 +1064,15 @@ export async function runSqliteSmoke() {
     assert.deepEqual(await db.one(sqlite.rows`SELECT COUNT(*) AS count FROM ${tableIdentifier}`), { count: "3" });
 
     await db.execute(sqlite`SELECT ${"observer-secret"}`);
-    await db.tx(async (tx) => { await tx.execute(sqlite`SELECT ${1}`); });
+    await db.tx(async (tx) => {
+      await tx.execute(sqlite`SELECT ${1}`);
+    });
     await assert.rejects(db.execute(sqlite`SELECT * FROM ${sqlite.ident(testName("sqlite_missing"))}`));
     assertObserverContent(events, "?", "observer-secret");
-    assert.ok(events.some((event) => event.type === "query:error" && event.stage === "driver" && event.executionStarted), "observer must receive driver errors");
+    assert.ok(
+      events.some((event) => event.type === "query:error" && event.stage === "driver" && event.executionStarted),
+      "observer must receive driver errors",
+    );
   } finally {
     native.close();
   }
@@ -925,6 +1085,18 @@ export async function runSqliteSmoke() {
     driver: environment?.driver,
     profile: environment?.driver.profile,
     typePolicy: environment?.typePolicy,
-    checks: ["direct-bind", "exact-numeric-string", "rows", "commands", "result-kind", "normalization", "schema", "returning", "transaction-rollback", "root-escape", "observer-events"],
+    checks: [
+      "direct-bind",
+      "exact-numeric-string",
+      "rows",
+      "commands",
+      "result-kind",
+      "normalization",
+      "schema",
+      "returning",
+      "transaction-rollback",
+      "root-escape",
+      "observer-events",
+    ],
   };
 }

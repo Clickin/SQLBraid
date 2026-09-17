@@ -14,19 +14,15 @@ const NO_PRIMARY = Symbol("sqlbraid.no-primary");
 const RESOURCE_CLEANUP_CODE = "BRAID_RESOURCE_CLEANUP" as const;
 const SAVEPOINT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 
-function resourceCleanupError(
-  primary: unknown | typeof NO_PRIMARY,
-  failures: readonly unknown[],
-): Error {
+function resourceCleanupError(primary: unknown | typeof NO_PRIMARY, failures: readonly unknown[]): Error {
   const hasPrimary = primary !== NO_PRIMARY;
   const values = hasPrimary ? [primary, ...failures] : failures;
-  const error = values.length === 1 && !hasPrimary
-    ? new Error("BRAID_RESOURCE_CLEANUP: resource cleanup failed.", { cause: failures[0] })
-    : new AggregateError(
-      values,
-      "BRAID_RESOURCE_CLEANUP: resource cleanup failed.",
-      { cause: hasPrimary ? primary : failures[0] },
-    );
+  const error =
+    values.length === 1 && !hasPrimary
+      ? new Error("BRAID_RESOURCE_CLEANUP: resource cleanup failed.", { cause: failures[0] })
+      : new AggregateError(values, "BRAID_RESOURCE_CLEANUP: resource cleanup failed.", {
+          cause: hasPrimary ? primary : failures[0],
+        });
   Object.defineProperty(error, "code", {
     configurable: false,
     enumerable: true,
@@ -117,11 +113,7 @@ export function createCleanupScope(): CleanupScope {
   };
 }
 
-export function defineResultProperty(
-  row: Record<string, unknown>,
-  key: string,
-  value: unknown,
-): void {
+export function defineResultProperty(row: Record<string, unknown>, key: string, value: unknown): void {
   Object.defineProperty(row, key, {
     configurable: true,
     enumerable: true,

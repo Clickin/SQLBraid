@@ -2,21 +2,26 @@
   "name": "sqlbraid",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid's canonical SQL-first runtime package",
+  "keywords": [
+    "database",
+    "query",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/sqlbraid"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "query"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=16.20.2" },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -91,16 +96,22 @@
       "import": "./dist/compiled.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@sqlbraid/bun-sql": "workspace:*",
     "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/template": "workspace:*",
     "@sqlbraid/mariadb": "workspace:*",
     "@sqlbraid/mssql": "workspace:*",
     "@sqlbraid/mysql": "workspace:*",
     "@sqlbraid/oracle": "workspace:*",
     "@sqlbraid/postgres": "workspace:*",
     "@sqlbraid/runtime": "workspace:*",
-    "@sqlbraid/sqlite": "workspace:*"
+    "@sqlbraid/sqlite": "workspace:*",
+    "@sqlbraid/template": "workspace:*"
+  },
+  "engines": {
+    "node": ">=16.20.2"
   }
 }

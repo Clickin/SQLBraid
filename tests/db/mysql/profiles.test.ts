@@ -4,12 +4,7 @@ import { createConnection, createPool, type Connection, type RowDataPacket } fro
 import { inject, test } from "vitest";
 import { generateModels } from "@sqlbraid/codegen";
 import { createMysql2Database, createMysql2PoolDatabase } from "@sqlbraid/mysql/mysql2";
-import {
-  MYSQL2_LOSSLESS_TEXT,
-  MYSQL2_NATIVE,
-  representationProfiles,
-  sql,
-} from "@sqlbraid/mysql";
+import { MYSQL2_LOSSLESS_TEXT, MYSQL2_NATIVE, representationProfiles, sql } from "@sqlbraid/mysql";
 import { createMysqlInspector } from "@sqlbraid/mysql/inspector";
 import { assertGeneratedProperty } from "../codegen.js";
 import { stampSupportEnvironment } from "../support-target.js";
@@ -19,7 +14,11 @@ interface MysqlSettings {
 }
 
 test("mysql.data.pool-observed-profile", { timeout: 30_000 }, async () => {
-  const pool = createPool({ uri: inject("mysql").connectionUri, ...MYSQL2_NATIVE.connectionOptions, connectionLimit: 1 });
+  const pool = createPool({
+    uri: inject("mysql").connectionUri,
+    ...MYSQL2_NATIVE.connectionOptions,
+    connectionLimit: 1,
+  });
   try {
     const db = createMysql2PoolDatabase(pool);
     const query = sql.rows<{ payload: unknown; instant: Date }>`
@@ -50,9 +49,11 @@ interface RawProfileRow extends RowDataPacket {
   readonly decimal_value: unknown;
 }
 
-const mysql2Version = (JSON.parse(
-  readFileSync(new URL("../../../node_modules/mysql2/package.json", import.meta.url), "utf8"),
-) as { readonly version: string }).version;
+const mysql2Version = (
+  JSON.parse(readFileSync(new URL("../../../node_modules/mysql2/package.json", import.meta.url), "utf8")) as {
+    readonly version: string;
+  }
+).version;
 
 const tableName = "braid_pv18_profile_conformance";
 const dateTimeValue = "2026-09-14 12:34:56.123456";
@@ -62,22 +63,8 @@ const textValue = "profile-conformance";
 const binaryValue = Buffer.from([0, 255, 16]);
 const bigintValue = "9007199254740993";
 const decimalValue = "12345678901234567890.12345678901234567890";
-const jsonTextRoots = [
-  '{"enabled":true}',
-  '[1,true,"text"]',
-  '"text"',
-  "7",
-  "true",
-  "null",
-] as const;
-const jsonNativeRoots: readonly unknown[] = [
-  { enabled: true },
-  [1, true, "text"],
-  "text",
-  7,
-  true,
-  null,
-];
+const jsonTextRoots = ['{"enabled":true}', '[1,true,"text"]', '"text"', "7", "true", "null"] as const;
+const jsonNativeRoots: readonly unknown[] = [{ enabled: true }, [1, true, "text"], "text", 7, true, null];
 
 function connect(profile: typeof MYSQL2_LOSSLESS_TEXT | typeof MYSQL2_NATIVE): Promise<Connection> {
   const settings = inject("mysql") as MysqlSettings;
@@ -101,14 +88,17 @@ function assertRawCommon(row: RawProfileRow): void {
   assert.equal(typeof row.text_value, "string");
   assert.equal(row.text_value, textValue);
   assert.ok(Buffer.isBuffer(row.binary_value));
-  assert.deepEqual([...row.binary_value as Buffer], [...binaryValue]);
+  assert.deepEqual([...(row.binary_value as Buffer)], [...binaryValue]);
   assert.equal(typeof row.bigint_value, "string");
   assert.equal(row.bigint_value, bigintValue);
   assert.equal(typeof row.decimal_value, "string");
   assert.equal(row.decimal_value, decimalValue);
 }
 
-function assertLocalDate(value: unknown, date: { readonly year: number; readonly month: number; readonly day: number }): void {
+function assertLocalDate(
+  value: unknown,
+  date: { readonly year: number; readonly month: number; readonly day: number },
+): void {
   assert.ok(value instanceof Date);
   assert.equal(value.getFullYear(), date.year);
   assert.equal(value.getMonth(), date.month - 1);
@@ -229,7 +219,10 @@ test("mysql.data.profile-conformance", { timeout: 60_000 }, async () => {
       FROM ${sql.ident(tableName)}
       ORDER BY id
     `);
-    assert.deepEqual(nativeRows.map((row) => row.payload), jsonNativeRoots);
+    assert.deepEqual(
+      nativeRows.map((row) => row.payload),
+      jsonNativeRoots,
+    );
 
     const snapshot = await createMysqlInspector(losslessConnection).inspect();
     const relation = Object.values(snapshot.relations).find((entry) => entry.name === tableName);
@@ -306,8 +299,20 @@ test("mysql.data.profile-conformance", { timeout: 60_000 }, async () => {
         assert.equal(row.datetime_value instanceof Date, selected.temporal === "native");
         if (selected.temporal === "text") assert.equal(typeof row.datetime_value, "string");
         const generated = generateModels(snapshot, { ...codegenOptions, typePolicy: selected.typePolicy });
-        assertGeneratedProperty(generated.source, losslessModel.rowName, "payload", selected.json === "text" ? "string" : "unknown", false);
-        assertGeneratedProperty(generated.source, losslessModel.rowName, "datetime_value", selected.temporal === "text" ? "string" : "Date", false);
+        assertGeneratedProperty(
+          generated.source,
+          losslessModel.rowName,
+          "payload",
+          selected.json === "text" ? "string" : "unknown",
+          false,
+        );
+        assertGeneratedProperty(
+          generated.source,
+          losslessModel.rowName,
+          "datetime_value",
+          selected.temporal === "text" ? "string" : "Date",
+          false,
+        );
       } finally {
         await connection.end();
       }
@@ -324,22 +329,28 @@ test("mysql.data.profile-conformance", { timeout: 60_000 }, async () => {
       id: MYSQL2_LOSSLESS_TEXT.typePolicy.id,
       hash: MYSQL2_LOSSLESS_TEXT.typePolicy.hash,
     });
-    const probe = await losslessDb.one(sql.rows<{
-      readonly version: string;
-      readonly version_comment: string;
-    }>`SELECT VERSION() AS version, @@version_comment AS version_comment`);
+    const probe = await losslessDb.one(
+      sql.rows<{
+        readonly version: string;
+        readonly version_comment: string;
+      }>`SELECT VERSION() AS version, @@version_comment AS version_comment`,
+    );
     const edition = /\bcommunity\b/iu.test(`${probe.version} ${probe.version_comment}`)
       ? "community"
       : /\benterprise\b/iu.test(`${probe.version} ${probe.version_comment}`)
         ? "enterprise"
         : "unknown";
     assert.equal(edition, "community");
-    stampSupportEnvironment("mysql", {
-      ...environment,
-      database: { product: "mysql", version: probe.version, edition },
-      driver: { ...environment.driver, version: mysql2Version },
-      runtime: { id: "node", version: process.versions.node },
-    }, "mysql.data.profile-conformance");
+    stampSupportEnvironment(
+      "mysql",
+      {
+        ...environment,
+        database: { product: "mysql", version: probe.version, edition },
+        driver: { ...environment.driver, version: mysql2Version },
+        runtime: { id: "node", version: process.versions.node },
+      },
+      "mysql.data.profile-conformance",
+    );
   } finally {
     await losslessConnection.query(`DROP TABLE IF EXISTS ${tableName}`).catch(() => undefined);
     if (nativeConnection !== undefined) await nativeConnection.end().catch(() => undefined);

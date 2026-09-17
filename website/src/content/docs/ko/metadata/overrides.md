@@ -19,7 +19,7 @@ const generated = generateModels(metadata, {
   },
   typeOverrides: {
     databaseTypes: {
-      "jsonb": { inputType: "unknown", outputType: "unknown" },
+      jsonb: { inputType: "unknown", outputType: "unknown" },
     },
     columns: {
       "public.events": {

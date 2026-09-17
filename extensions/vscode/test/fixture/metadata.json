@@ -12,9 +12,7 @@
       "name": "users",
       "namespace": "public",
       "kind": "table",
-      "columns": [
-        { "name": "id", "ordinal": 0, "type": "int4", "nullable": false }
-      ]
+      "columns": [{ "name": "id", "ordinal": 0, "type": "int4", "nullable": false }]
     }
   },
   "routines": {},

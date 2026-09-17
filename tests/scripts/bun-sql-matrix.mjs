@@ -84,7 +84,10 @@ async function readManifest(dialect) {
 
 async function runDialect(dialect) {
   const url = configuredUrl(dialect);
-  if (url === undefined) throw new Error(`Missing Bun.SQL ${dialect} URL; set ${envNames[dialect][0]} or the existing SQLBraid URL variable.`);
+  if (url === undefined)
+    throw new Error(
+      `Missing Bun.SQL ${dialect} URL; set ${envNames[dialect][0]} or the existing SQLBraid URL variable.`,
+    );
   const sqlTag = dialectTags[dialect];
   const client = connection(dialect, url);
   const db = createBunSqlDatabase(client, { dialect });
@@ -92,7 +95,8 @@ async function runDialect(dialect) {
   const versionRow = await db.one(databaseVersion(sqlTag));
   const observedVersion = normalizeDatabaseVersion(dialect, versionRow.version);
   const manifest = await readManifest(dialect);
-  if (manifest?.database?.version && dialect !== "sqlite") assert.equal(observedVersion.version, manifest.database.version);
+  if (manifest?.database?.version && dialect !== "sqlite")
+    assert.equal(observedVersion.version, manifest.database.version);
 
   const sessionIds = await db.session(async (session) => {
     const first = await session.one(connectionId(sqlTag));
@@ -128,23 +132,20 @@ async function runDialect(dialect) {
     null_value: null,
   });
   const bunHelper = client({ value: "not a SQLBraid value" });
-  await assert.rejects(
-    db.one(sqlTag.rows`SELECT ${bunHelper}`),
-    /Bun\.SQL structural helper/u,
-  );
+  await assert.rejects(db.one(sqlTag.rows`SELECT ${bunHelper}`), /Bun\.SQL structural helper/u);
   const bunFragment = client`AND 1 = ${1}`;
-  await assert.rejects(
-    db.one(sqlTag.rows`SELECT 1 ${bunFragment}`),
-    /Bun\.SQL query or fragment/u,
-  );
-  await assert.rejects(
-    db.one(sqlTag.rows`SELECT ${ { json: true } }`),
-    /ambiguous Bun\.SQL object value/u,
-  );
+  await assert.rejects(db.one(sqlTag.rows`SELECT 1 ${bunFragment}`), /Bun\.SQL query or fragment/u);
+  await assert.rejects(db.one(sqlTag.rows`SELECT ${{ json: true }}`), /ambiguous Bun\.SQL object value/u);
   const inactive = guarded(
     sqlTag.rows,
     ["SELECT ", " AS value /*@braid if ", "*/ AND 1 = ", " /*@braid end*/"],
-    [() => "1", () => false, () => { throw new Error("inactive Bun branch evaluated"); }],
+    [
+      () => "1",
+      () => false,
+      () => {
+        throw new Error("inactive Bun branch evaluated");
+      },
+    ],
   );
   assert.deepEqual(await db.one(inactive), { value: "1" });
   const where = guarded(
@@ -166,19 +167,25 @@ async function runDialect(dialect) {
       await nested.execute(sqlTag.command`INSERT INTO ${sqlTag.raw(bulkTable)} (value) VALUES (${"nested"})`);
     });
     const rollback = new Error("rollback nested Bun transaction");
-    await assert.rejects(tx.tx(async (nested) => {
-      await nested.execute(sqlTag.command`INSERT INTO ${sqlTag.raw(bulkTable)} (value) VALUES (${"rolled-back"})`);
-      throw rollback;
-    }), (error) => error === rollback);
+    await assert.rejects(
+      tx.tx(async (nested) => {
+        await nested.execute(sqlTag.command`INSERT INTO ${sqlTag.raw(bulkTable)} (value) VALUES (${"rolled-back"})`);
+        throw rollback;
+      }),
+      (error) => error === rollback,
+    );
     return tx.all(sqlTag.rows`SELECT value FROM ${sqlTag.raw(bulkTable)} ORDER BY value`);
   };
-  const transactionResult = dialect === "sqlite"
-    ? await db.tx(transactionWork)
-    : await db.tx({ isolation: "serializable" }, transactionWork);
-  assert.deepEqual(transactionResult.map((row) => row.value), ["nested", "ok"]);
+  const transactionResult =
+    dialect === "sqlite" ? await db.tx(transactionWork) : await db.tx({ isolation: "serializable" }, transactionWork);
+  assert.deepEqual(
+    transactionResult.map((row) => row.value),
+    ["nested", "ok"],
+  );
 
-  const bulkResult = await db.bulk(["bulk-a", "bulk-b"], (value) =>
-    sqlTag.command`INSERT INTO ${sqlTag.raw(bulkTable)} (value) VALUES (${value})`,
+  const bulkResult = await db.bulk(
+    ["bulk-a", "bulk-b"],
+    (value) => sqlTag.command`INSERT INTO ${sqlTag.raw(bulkTable)} (value) VALUES (${value})`,
   );
   assert.equal(bulkResult.inputCount, 2);
   assert.equal(bulkResult.affectedRows, 2);
@@ -237,15 +244,22 @@ async function runDialect(dialect) {
     }
   } else if (dialect === "sqlite") {
     await db.tx({ isolation: "serializable" }, async (tx) => {
-      assert.deepEqual(await tx.one(sqlTag.rows`SELECT value FROM ${sqlTag.raw(bulkTable)} WHERE value = ${"ok"}`), { value: "ok" });
+      assert.deepEqual(await tx.one(sqlTag.rows`SELECT value FROM ${sqlTag.raw(bulkTable)} WHERE value = ${"ok"}`), {
+        value: "ok",
+      });
     });
     transactionModes.serializable = "native transaction";
     for (const isolation of isolationLevels.filter((level) => level !== "serializable")) {
-      await assert.rejects(db.tx({ isolation }, async () => undefined),
-        (error) => error.code === "BRAID_TX_OPTION_UNSUPPORTED" && error.feature === `transaction.isolation.${isolation}`);
+      await assert.rejects(
+        db.tx({ isolation }, async () => undefined),
+        (error) =>
+          error.code === "BRAID_TX_OPTION_UNSUPPORTED" && error.feature === `transaction.isolation.${isolation}`,
+      );
     }
-    await assert.rejects(db.tx({ readOnly: true }, async () => undefined),
-      (error) => error.code === "BRAID_TX_OPTION_UNSUPPORTED" && error.feature === "transaction.read-only");
+    await assert.rejects(
+      db.tx({ readOnly: true }, async () => undefined),
+      (error) => error.code === "BRAID_TX_OPTION_UNSUPPORTED" && error.feature === "transaction.read-only",
+    );
   } else {
     const isolationTable = "braid_bun_sql_matrix_isolation";
     const writer = await client.reserve();
@@ -266,7 +280,10 @@ async function runDialect(dialect) {
         });
         await writer.unsafe("ROLLBACK", []);
       }
-      for (const [isolation, seesCommit] of [["read-committed", true], ["repeatable-read", false]]) {
+      for (const [isolation, seesCommit] of [
+        ["read-committed", true],
+        ["repeatable-read", false],
+      ]) {
         await writer.unsafe(`UPDATE ${isolationTable} SET value = 'base' WHERE id = 1`, []);
         await db.tx({ isolation }, async (tx) => {
           const before = await tx.one(sqlTag.rows`SELECT value FROM ${sqlTag.raw(isolationTable)} WHERE id = ${1}`);
@@ -280,16 +297,22 @@ async function runDialect(dialect) {
       await writer.unsafe("SET SESSION innodb_lock_wait_timeout = 1", []);
       await db.tx({ isolation: "serializable" }, async (tx) => {
         await tx.one(sqlTag.rows`SELECT value FROM ${sqlTag.raw(isolationTable)} WHERE id = ${1}`);
-        await assert.rejects(writer.unsafe(`UPDATE ${isolationTable} SET value = 'blocked' WHERE id = 1`, []),
-          (error) => error.errno === 1205);
+        await assert.rejects(
+          writer.unsafe(`UPDATE ${isolationTable} SET value = 'blocked' WHERE id = 1`, []),
+          (error) => error.errno === 1205,
+        );
       });
       transactionModes.serializable = { writerLockTimeout: true };
       await db.tx({ readOnly: true }, async (tx) => {
-        await assert.rejects(tx.execute(sqlTag.command`INSERT INTO ${sqlTag.raw(isolationTable)} VALUES (${2}, ${"read-only"})`),
-          (error) => error.errno === 1792);
+        await assert.rejects(
+          tx.execute(sqlTag.command`INSERT INTO ${sqlTag.raw(isolationTable)} VALUES (${2}, ${"read-only"})`),
+          (error) => error.errno === 1792,
+        );
       });
       await db.tx({ readOnly: false }, async (tx) => {
-        const result = await tx.execute(sqlTag.command`INSERT INTO ${sqlTag.raw(isolationTable)} VALUES (${2}, ${"read-write"})`);
+        const result = await tx.execute(
+          sqlTag.command`INSERT INTO ${sqlTag.raw(isolationTable)} VALUES (${2}, ${"read-write"})`,
+        );
         assert.equal(result.command.affectedRows, 1);
       });
       transactionModes.readOnly = { writeRejected: true, readWriteAccepted: true };
@@ -322,21 +345,37 @@ async function runDialect(dialect) {
     integralApproximateError = error?.code;
   }
   assert.equal(integralApproximateError, "BRAID_RESULT_EXACTNESS");
-  const temporalAndJson = dialect === "postgres"
-    ? await db.one(sqlTag.rows`SELECT TIMESTAMP '2026-09-15 12:34:56.123456' AS temporal_value, '{"kind":"bun","exact":9007199254740993}'::JSONB AS json_value`)
-    : dialect === "mysql" || dialect === "mariadb"
-      ? await db.one(sqlTag.rows`SELECT CAST('2026-09-15 12:34:56.123456' AS DATETIME(6)) AS temporal_value, JSON_OBJECT('kind', 'bun', 'exact', CAST('9007199254740993' AS DECIMAL(20, 0))) AS json_value`)
-      : await db.one(sqlTag.rows`SELECT CAST('2026-09-15 12:34:56.123456' AS TEXT) AS temporal_value, json(${'{"kind":"bun","exact":9007199254740993}'}) AS json_value`);
+  const temporalAndJson =
+    dialect === "postgres"
+      ? await db.one(
+          sqlTag.rows`SELECT TIMESTAMP '2026-09-15 12:34:56.123456' AS temporal_value, '{"kind":"bun","exact":9007199254740993}'::JSONB AS json_value`,
+        )
+      : dialect === "mysql" || dialect === "mariadb"
+        ? await db.one(
+            sqlTag.rows`SELECT CAST('2026-09-15 12:34:56.123456' AS DATETIME(6)) AS temporal_value, JSON_OBJECT('kind', 'bun', 'exact', CAST('9007199254740993' AS DECIMAL(20, 0))) AS json_value`,
+          )
+        : await db.one(
+            sqlTag.rows`SELECT CAST('2026-09-15 12:34:56.123456' AS TEXT) AS temporal_value, json(${'{"kind":"bun","exact":9007199254740993}'}) AS json_value`,
+          );
   if (dialect === "sqlite") {
-    await assert.rejects(db.one(sqlTag.rows`SELECT json('{"kind":"bun","exact":9007199254740993}') AS json_value`),
-      (error) => error.code === "BRAID_RESULT_KIND");
+    await assert.rejects(
+      db.one(sqlTag.rows`SELECT json('{"kind":"bun","exact":9007199254740993}') AS json_value`),
+      (error) => error.code === "BRAID_RESULT_KIND",
+    );
     resultCarriers.mixedQuoteLiteral = "native parser misclassification rejected";
   }
-  const temporalParts = dialect === "postgres"
-    ? await db.one(sqlTag.rows`SELECT CAST(${"2026-09-15"} AS DATE) AS date_value, CAST(${"12:34:56.123456"} AS TIME) AS time_value`)
-    : dialect === "sqlite"
-      ? await db.one(sqlTag.rows`SELECT date(${"2026-09-15"}) AS date_value, CAST(${"12:34:56.123456"} AS TEXT) AS time_value`)
-      : await db.one(sqlTag.rows`SELECT CAST(${"2026-09-15"} AS DATE) AS date_value, CAST(${"12:34:56.123456"} AS TIME(6)) AS time_value`);
+  const temporalParts =
+    dialect === "postgres"
+      ? await db.one(
+          sqlTag.rows`SELECT CAST(${"2026-09-15"} AS DATE) AS date_value, CAST(${"12:34:56.123456"} AS TIME) AS time_value`,
+        )
+      : dialect === "sqlite"
+        ? await db.one(
+            sqlTag.rows`SELECT date(${"2026-09-15"}) AS date_value, CAST(${"12:34:56.123456"} AS TEXT) AS time_value`,
+          )
+        : await db.one(
+            sqlTag.rows`SELECT CAST(${"2026-09-15"} AS DATE) AS date_value, CAST(${"12:34:56.123456"} AS TIME(6)) AS time_value`,
+          );
   assert.equal(typeof temporalParts.time_value, "string");
   assert.match(temporalParts.time_value, /^12:34:56(?:\.123456)?$/u);
   if (dialect === "sqlite") assert.equal(temporalParts.date_value, "2026-09-15");
@@ -344,8 +383,10 @@ async function runDialect(dialect) {
   const bytes = new Uint8Array([0, 255, 39, 0]);
   let binary;
   if (dialect === "mysql" || dialect === "mariadb") {
-    await assert.rejects(db.one(sqlTag.rows`SELECT UNHEX('00ff2700') AS binary_value`),
-      (error) => error.code === "BRAID_RESULT_EXACTNESS");
+    await assert.rejects(
+      db.one(sqlTag.rows`SELECT UNHEX('00ff2700') AS binary_value`),
+      (error) => error.code === "BRAID_RESULT_EXACTNESS",
+    );
     const encoded = await db.one(sqlTag.rows`SELECT HEX(${bytes}) AS binary_hex`);
     assert.equal(encoded.binary_hex, "00FF2700");
     binary = { nativeOutput: "ambiguous bytes rejected", explicitHex: encoded.binary_hex };
@@ -365,7 +406,9 @@ async function runDialect(dialect) {
     decimalProbe = { exact_decimal: undefined, error: error.code };
   }
   if (dialect === "mysql" || dialect === "mariadb") {
-    const explicit = await db.one(sqlTag.rows`SELECT CAST(CAST(${"12345678901234567890.123456789"} AS DECIMAL(30, 9)) AS CHAR) AS exact_decimal`);
+    const explicit = await db.one(
+      sqlTag.rows`SELECT CAST(CAST(${"12345678901234567890.123456789"} AS DECIMAL(30, 9)) AS CHAR) AS exact_decimal`,
+    );
     assert.equal(explicit.exact_decimal, "12345678901234567890.123456789");
     decimalProbe.explicit_decimal_text = explicit.exact_decimal;
   }
@@ -381,7 +424,9 @@ async function runDialect(dialect) {
     json_value: temporalAndJson.json_value,
     json_transport: typeof temporalAndJson.json_value === "string" ? "text" : "native",
     ...(decimalProbe.error === undefined ? {} : { decimalError: decimalProbe.error }),
-    ...(decimalProbe.explicit_decimal_text === undefined ? {} : { explicit_decimal_text: decimalProbe.explicit_decimal_text }),
+    ...(decimalProbe.explicit_decimal_text === undefined
+      ? {}
+      : { explicit_decimal_text: decimalProbe.explicit_decimal_text }),
   };
   assert.equal(typeof representation.exact_integer, "string");
   if (dialect === "sqlite") {
@@ -405,7 +450,8 @@ async function runDialect(dialect) {
 
   const unsupported = {};
   try {
-    for await (const _row of db.stream(sqlTag.rows`SELECT 1`)) {}
+    for await (const _row of db.stream(sqlTag.rows`SELECT 1`)) {
+    }
   } catch (error) {
     unsupported.stream = { code: error?.code, feature: error?.feature };
   }
@@ -461,7 +507,8 @@ async function runDialect(dialect) {
     cancellation,
     supportEvidence: {
       status: "compatible",
-      reason: "Bun.SQL is exercised against the existing database target; no Bun tuple is promoted to official support by this matrix.",
+      reason:
+        "Bun.SQL is exercised against the existing database target; no Bun tuple is promoted to official support by this matrix.",
       existingTarget: manifest?.id ?? null,
       existingTargetVersion: manifest?.database?.version ?? null,
     },
@@ -470,10 +517,12 @@ async function runDialect(dialect) {
       database: {
         product: environment.database.product,
         ...observedVersion,
-        edition: process.env[`SQLBRAID_BUN_SQL_${dialect.toUpperCase()}_EDITION`]
-          ?? (dialect === "sqlite" ? "bun-embedded"
-            : process.env[`SQLBRAID_${dialect.toUpperCase()}_EDITION`] ?? manifest?.database?.edition)
-          ?? "bun-sql-runtime",
+        edition:
+          process.env[`SQLBRAID_BUN_SQL_${dialect.toUpperCase()}_EDITION`] ??
+          (dialect === "sqlite"
+            ? "bun-embedded"
+            : (process.env[`SQLBRAID_${dialect.toUpperCase()}_EDITION`] ?? manifest?.database?.edition)) ??
+          "bun-sql-runtime",
       },
       driver: {
         id: environment.driver.id,

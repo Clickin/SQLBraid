@@ -17,7 +17,11 @@ export default async function setup(project: TestProject) {
   const user = process.env.SQLBRAID_ORACLE_USER ?? DEFAULT_USER;
   const password = process.env.SQLBRAID_ORACLE_PASSWORD ?? DEFAULT_PASSWORD;
   if (connectionUri) {
-    project.provide("oracle", { connectionUri, image: "external", version: process.env.SQLBRAID_ORACLE_VERSION ?? "external" });
+    project.provide("oracle", {
+      connectionUri,
+      image: "external",
+      version: process.env.SQLBRAID_ORACLE_VERSION ?? "external",
+    });
     console.info(`[db-oracle] external connection=${connectionUri}`);
     return async () => undefined;
   }
@@ -27,7 +31,13 @@ export default async function setup(project: TestProject) {
     .withWaitStrategy(Wait.forLogMessage(/DATABASE IS READY TO USE/iu))
     .start();
   const port = container.getMappedPort(1521);
-  project.provide("oracle", { connectionUri: `127.0.0.1:${port}/${DEFAULT_SERVICE}`, image: ORACLE_IMAGE, version: ORACLE_VERSION });
+  project.provide("oracle", {
+    connectionUri: `127.0.0.1:${port}/${DEFAULT_SERVICE}`,
+    image: ORACLE_IMAGE,
+    version: ORACLE_VERSION,
+  });
   console.info(`[db-oracle] image=${ORACLE_IMAGE} version=${ORACLE_VERSION} service=${DEFAULT_SERVICE}`);
-  return async () => { await container.stop(); };
+  return async () => {
+    await container.stop();
+  };
 }

@@ -31,7 +31,13 @@ function packageBuild(cwd: string, entry: Record<string, string>): UserConfig {
     "packages/opentelemetry",
     "packages/sqlbraid",
   ]);
-  return { ...shared, cwd, entry, outDir: "dist", tsconfig: floorPackages.has(cwd) ? "../../tsconfig.runtime-floor.json" : shared.tsconfig };
+  return {
+    ...shared,
+    cwd,
+    entry,
+    outDir: "dist",
+    tsconfig: floorPackages.has(cwd) ? "../../tsconfig.runtime-floor.json" : shared.tsconfig,
+  };
 }
 
 export default defineConfig([
@@ -55,7 +61,11 @@ export default defineConfig([
     deps: { neverBundle: ["#async-context"] },
   },
   packageBuild("packages/postgres", { index: "src/index.ts", pg: "src/pg.ts", inspector: "src/inspector.ts" }),
-  packageBuild("packages/oracle", { index: "src/index.ts", oracledb: "src/oracledb.ts", inspector: "src/inspector.ts" }),
+  packageBuild("packages/oracle", {
+    index: "src/index.ts",
+    oracledb: "src/oracledb.ts",
+    inspector: "src/inspector.ts",
+  }),
   packageBuild("packages/mssql", { index: "src/index.ts", tedious: "src/tedious.ts", inspector: "src/inspector.ts" }),
   packageBuild("packages/sqlbraid", {
     index: "src/index.ts",

@@ -2,30 +2,30 @@
   "name": "@sqlbraid/cli",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid command-line tools for inspecting projects and generating typed models",
+  "keywords": [
+    "cli",
+    "codegen",
+    "database",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
+  "bin": {
+    "sqlbraid": "./dist/index.js"
   },
-  "keywords": ["sql", "typescript", "database", "codegen", "cli"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=22.18.0" },
-  "bin": { "sqlbraid": "./dist/index.js" },
-  "dependencies": {
-    "@sqlbraid/codegen": "workspace:*",
-    "@sqlbraid/compiler": "workspace:*",
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/metadata": "workspace:*",
-    "@sqlbraid/operations": "workspace:*",
-    "@sqlbraid/tooling": "workspace:*"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -35,5 +35,19 @@
       "types": "./dist/config.d.ts",
       "import": "./dist/config.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/codegen": "workspace:*",
+    "@sqlbraid/compiler": "workspace:*",
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/metadata": "workspace:*",
+    "@sqlbraid/operations": "workspace:*",
+    "@sqlbraid/tooling": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

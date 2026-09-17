@@ -2,7 +2,13 @@ import mariadb, { type Pool } from "mariadb";
 import assert from "node:assert/strict";
 import { inject } from "vitest";
 import { sql, MARIADB_LOSSLESS_TEXT, MARIADB_NATIVE } from "@sqlbraid/mariadb";
-import { createMariaDbDatabase, createMariaDbPoolDatabase, createMariaDbPoolProvider, type MariaDbConnectionLike, type MariaDbPoolConnectionLike } from "@sqlbraid/mariadb/mariadb";
+import {
+  createMariaDbDatabase,
+  createMariaDbPoolDatabase,
+  createMariaDbPoolProvider,
+  type MariaDbConnectionLike,
+  type MariaDbPoolConnectionLike,
+} from "@sqlbraid/mariadb/mariadb";
 import { createPooledDatabase } from "@sqlbraid/runtime";
 import type { CallQuery, CommandQuery, ConnectionProvider, Database, RowQuery, StandardSchemaV1 } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
@@ -19,7 +25,9 @@ const TABLE = "braid_rc3_mariadb_cert";
 const JSON_TABLE = "braid_rc3_mariadb_json";
 
 function returnSchema(): StandardSchemaV1<unknown, number> {
-  return { "~standard": { version: 1, vendor: "sqlbraid-rc3-mariadb", validate: (value) => ({ value: Number(value) }) } };
+  return {
+    "~standard": { version: 1, vendor: "sqlbraid-rc3-mariadb", validate: (value) => ({ value: Number(value) }) },
+  };
 }
 
 import { MARIADB_EXPECTED_CAPABILITIES, MARIADB_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
@@ -109,7 +117,16 @@ function rowQueries(): CertificationFixture["queries"] {
     special,
     transaction,
     prepared,
-    routines: { executionScope: "root", call, out, inout, resultSets, lob: sql.call`CALL braid_rc3_mariadb_lob()`, cursor, returnValue },
+    routines: {
+      executionScope: "root",
+      call,
+      out,
+      inout,
+      resultSets,
+      lob: sql.call`CALL braid_rc3_mariadb_lob()`,
+      cursor,
+      returnValue,
+    },
     fidelity: {
       largeExactInteger: sql.rows`SELECT CAST(${largeInteger} AS DECIMAL(19, 0)) AS value`,
       exactDecimal: sql.rows`SELECT CAST(${exactDecimal} AS DECIMAL(30, 9)) AS value`,
@@ -243,12 +260,20 @@ function faultMariaStream(
         return () => ({
           next: async () => {
             nextCalls += 1;
-            if ((mode === "first" && nextCalls === 1) || (mode === "mid" && nextCalls === 2) || (mode === "cleanup" && nextCalls === 1)) throw error;
+            if (
+              (mode === "first" && nextCalls === 1) ||
+              (mode === "mid" && nextCalls === 2) ||
+              (mode === "cleanup" && nextCalls === 1)
+            )
+              throw error;
             return sourceIterator.next();
           },
         });
       }
-      if (property === "close" && mode === "cleanup") return () => { throw error; };
+      if (property === "close" && mode === "cleanup")
+        return () => {
+          throw error;
+        };
       const value = Reflect.get(target, property, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
@@ -262,11 +287,17 @@ function faultMariaConnection(
 ): MariaDbPoolConnectionLike {
   return new Proxy(connection as object, {
     get(target, property, receiver) {
-      if (property === "release") return async () => { await Promise.resolve(connection.end?.()); };
+      if (property === "release")
+        return async () => {
+          await Promise.resolve(connection.end?.());
+        };
       if (property === "queryStream") {
         return (sqlOrOptions: unknown, values?: readonly unknown[]) => {
           if (mode === "execute") throw error;
-          const queryStream = Reflect.get(target, property, target) as (sqlOrOptions: unknown, values?: readonly unknown[]) => import("@sqlbraid/mariadb/mariadb").MariaDbStreamLike;
+          const queryStream = Reflect.get(target, property, target) as (
+            sqlOrOptions: unknown,
+            values?: readonly unknown[],
+          ) => import("@sqlbraid/mariadb/mariadb").MariaDbStreamLike;
           return faultMariaStream(queryStream.call(target, sqlOrOptions, values), mode, error);
         };
       }
@@ -276,7 +307,7 @@ function faultMariaConnection(
   }) as MariaDbPoolConnectionLike;
 }
 async function createFixture(): Promise<CertificationFixture> {
-  const nativeConnection = await mariadb.createConnection(connectorOptions()) as unknown as MariaDbConnectionLike;
+  const nativeConnection = (await mariadb.createConnection(connectorOptions())) as unknown as MariaDbConnectionLike;
   const pool: Pool = mariadb.createPool(connectorOptions());
   let acquisitions = 0;
   let bulkExecutions = 0;
@@ -284,19 +315,27 @@ async function createFixture(): Promise<CertificationFixture> {
   const nativeExecutes = { value: 0 };
   let streamReleases = 0;
   const streamReturns = { value: 0 };
-  const connection = instrumentMariaDbConnection(nativeConnection, () => { nativeExecutes.value += 1; }, () => undefined);
+  const connection = instrumentMariaDbConnection(
+    nativeConnection,
+    () => {
+      nativeExecutes.value += 1;
+    },
+    () => undefined,
+  );
   assert.ok(connection.query, "MariaDB certification requires native query support.");
   const nativeQuery = connection.query.bind(connection);
   const physicalIds = new Set<string>();
   const trackedPool = {
     getConnection: async () => {
       acquisitions += 1;
-      const pooledConnection = await pool.getConnection() as unknown as MariaDbPoolConnectionLike;
+      const pooledConnection = (await pool.getConnection()) as unknown as MariaDbPoolConnectionLike;
       const physicalId = (pooledConnection as unknown as { readonly threadId?: number }).threadId;
       if (physicalId !== undefined) physicalIds.add(String(physicalId));
       return instrumentMariaDbConnection(
         pooledConnection,
-        () => { nativeExecutes.value += 1; },
+        () => {
+          nativeExecutes.value += 1;
+        },
         (values) => {
           nativeExecutes.value += 1;
           bulkExecutions += 1;
@@ -308,20 +347,32 @@ async function createFixture(): Promise<CertificationFixture> {
   const db = createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT });
   const provider = instrumentProviderStream(
     createMariaDbPoolProvider(trackedPool, { profile: MARIADB_LOSSLESS_TEXT }),
-    () => { streamReturns.value += 1; },
-    () => { streamReleases += 1; },
+    () => {
+      streamReturns.value += 1;
+    },
+    () => {
+      streamReleases += 1;
+    },
   );
   const pooled = createPooledDatabase(provider);
   await nativeQuery(`DROP TABLE IF EXISTS ${TABLE}`);
-  await nativeQuery(`CREATE TABLE ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NOT NULL CHECK (value <> ''))`);
+  await nativeQuery(
+    `CREATE TABLE ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NOT NULL CHECK (value <> ''))`,
+  );
   await nativeQuery(`CREATE TABLE IF NOT EXISTS ${JSON_TABLE} (payload JSON NOT NULL)`);
   await nativeQuery(`DELETE FROM ${JSON_TABLE}`);
-  await nativeQuery(`INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('large', CAST('9007199254740993' AS DECIMAL(19, 0))))`);
+  await nativeQuery(
+    `INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('large', CAST('9007199254740993' AS DECIMAL(19, 0))))`,
+  );
   await nativeQuery("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_call");
   await nativeQuery("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_sets");
   await nativeQuery("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_lob");
-  await nativeQuery("CREATE PROCEDURE braid_rc3_mariadb_call(IN input_value VARCHAR(255)) BEGIN SELECT input_value AS value; END");
-  await nativeQuery("CREATE PROCEDURE braid_rc3_mariadb_sets() BEGIN SELECT 'one' AS value; SELECT 'two' AS value; END");
+  await nativeQuery(
+    "CREATE PROCEDURE braid_rc3_mariadb_call(IN input_value VARCHAR(255)) BEGIN SELECT input_value AS value; END",
+  );
+  await nativeQuery(
+    "CREATE PROCEDURE braid_rc3_mariadb_sets() BEGIN SELECT 'one' AS value; SELECT 'two' AS value; END",
+  );
   await nativeQuery("CREATE PROCEDURE braid_rc3_mariadb_lob() SELECT CAST('lob' AS BINARY) AS value");
   const queries = rowQueries();
   const mappingFailure = new Error("mariadb query-bound mapping failure");
@@ -341,15 +392,22 @@ async function createFixture(): Promise<CertificationFixture> {
     mode: "execute" | "first" | "mid" | "cleanup",
     error: Error,
   ): Promise<void> => {
-    const faultNative = await mariadb.createConnection(connectorOptions()) as unknown as MariaDbConnectionLike;
+    const faultNative = (await mariadb.createConnection(connectorOptions())) as unknown as MariaDbConnectionLike;
     faultConnections.push(faultNative);
     const faultConnection = faultMariaConnection(faultNative, mode, error);
     const faultProvider = instrumentProviderStream(
-      createMariaDbPoolProvider({
-        getConnection: async () => faultConnection,
-      }, { profile: MARIADB_LOSSLESS_TEXT }),
-      () => { streamReturns.value += 1; },
-      () => { streamReleases += 1; },
+      createMariaDbPoolProvider(
+        {
+          getConnection: async () => faultConnection,
+        },
+        { profile: MARIADB_LOSSLESS_TEXT },
+      ),
+      () => {
+        streamReturns.value += 1;
+      },
+      () => {
+        streamReleases += 1;
+      },
     );
     faultDatabases.set(query as object, createPooledDatabase(faultProvider));
   };
@@ -463,7 +521,10 @@ async function createFixture(): Promise<CertificationFixture> {
           const native = await pool.getConnection();
           return new Proxy(native, {
             get(target, property, receiver) {
-              if (property === "rollback") return async () => { throw cleanupError; };
+              if (property === "rollback")
+                return async () => {
+                  throw cleanupError;
+                };
               const value = Reflect.get(target, property, receiver);
               return typeof value === "function" ? value.bind(target) : value;
             },
@@ -473,11 +534,16 @@ async function createFixture(): Promise<CertificationFixture> {
       const failingDb = createMariaDbPoolDatabase(failingPool, { profile: MARIADB_LOSSLESS_TEXT });
       let caught: unknown;
       try {
-        await failingDb.tx(async () => { throw primaryError; });
+        await failingDb.tx(async () => {
+          throw primaryError;
+        });
       } catch (error) {
         caught = error;
       }
-      assert.ok(caught instanceof AggregateError, "MariaDB transaction cleanup must aggregate primary and rollback errors.");
+      assert.ok(
+        caught instanceof AggregateError,
+        "MariaDB transaction cleanup must aggregate primary and rollback errors.",
+      );
       assert.equal(caught.errors[0], primaryError);
       assert.ok(caught.errors.some((error) => error === cleanupError));
       assert.equal(pool.activeConnections(), 0);
@@ -485,9 +551,14 @@ async function createFixture(): Promise<CertificationFixture> {
     },
     readOnlyWrite: async (): Promise<void> => {
       await pool.query(`DELETE FROM ${TABLE}`);
-      await db.tx({ readOnly: false }, async (tx) => { await tx.execute(queries.transaction!.insert); });
+      await db.tx({ readOnly: false }, async (tx) => {
+        await tx.execute(queries.transaction!.insert);
+      });
       await assert.rejects(
-        () => db.tx({ readOnly: true }, async (tx) => { await tx.execute(sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES ('must-not-commit')`); }),
+        () =>
+          db.tx({ readOnly: true }, async (tx) => {
+            await tx.execute(sql.command`INSERT INTO ${sql.ident(TABLE)} (value) VALUES ('must-not-commit')`);
+          }),
         (error: unknown) => error instanceof Error,
       );
       assert.deepEqual(await db.all(sql.rows`SELECT value FROM ${sql.ident(TABLE)} ORDER BY id`), [{ value: "tx" }]);
@@ -502,11 +573,15 @@ async function createFixture(): Promise<CertificationFixture> {
     bulk,
     metrics,
     reset: async () => {
-      await pool.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NOT NULL CHECK (value <> ''))`);
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NOT NULL CHECK (value <> ''))`,
+      );
       await pool.query(`CREATE TABLE IF NOT EXISTS ${JSON_TABLE} (payload JSON NOT NULL)`);
       await pool.query(`DELETE FROM ${TABLE}`);
       await pool.query(`DELETE FROM ${JSON_TABLE}`);
-      await pool.query(`INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('large', CAST('9007199254740993' AS DECIMAL(19, 0))))`);
+      await pool.query(
+        `INSERT INTO ${JSON_TABLE} (payload) VALUES (JSON_OBJECT('large', CAST('9007199254740993' AS DECIMAL(19, 0))))`,
+      );
       acquisitions = 0;
       nativeExecutes.value = 0;
       physicalIds.clear();
@@ -517,16 +592,29 @@ async function createFixture(): Promise<CertificationFixture> {
     },
     unsupported: {
       CALL002: {
-        feature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => db.call(queries.routines!.out!), sideEffects: () => acquisitions + nativeExecutes.value,
+        feature: "routine.out",
+        expectedCode: "BRAID_CALL_OUT_UNSUPPORTED",
+        run: () => db.call(queries.routines!.out!),
+        sideEffects: () => acquisitions + nativeExecutes.value,
       },
       CALL003: {
-        feature: "routine.inout", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => db.call(queries.routines!.inout!), sideEffects: () => acquisitions + nativeExecutes.value,
+        feature: "routine.inout",
+        expectedCode: "BRAID_CALL_OUT_UNSUPPORTED",
+        run: () => db.call(queries.routines!.inout!),
+        sideEffects: () => acquisitions + nativeExecutes.value,
       },
       CALL005: {
-        feature: "routine.out-cursor", expectedErrorFeature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED", run: () => db.tx((tx) => tx.call(queries.routines!.cursor!)), sideEffects: () => acquisitions + nativeExecutes.value,
+        feature: "routine.out-cursor",
+        expectedErrorFeature: "routine.out",
+        expectedCode: "BRAID_CALL_OUT_UNSUPPORTED",
+        run: () => db.tx((tx) => tx.call(queries.routines!.cursor!)),
+        sideEffects: () => acquisitions + nativeExecutes.value,
       },
       CALL006: {
-        feature: "routine.return-value", expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED", run: () => db.call(queries.routines!.returnValue!), sideEffects: () => acquisitions + nativeExecutes.value,
+        feature: "routine.return-value",
+        expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED",
+        run: () => db.call(queries.routines!.returnValue!),
+        sideEffects: () => acquisitions + nativeExecutes.value,
       },
     },
     guarded: {
@@ -537,31 +625,37 @@ async function createFixture(): Promise<CertificationFixture> {
           assert.deepEqual(injected, queries.fidelity!.expected.injection);
           assert.deepEqual(await db.one(sql.rows`SELECT payload FROM ${sql.ident(JSON_TABLE)}`), before);
           const row = await db.one(queries.fidelity!.largeExactInteger);
-          if ((row as { readonly value?: unknown }).value !== "9007199254740993") throw new Error("MariaDB exact integer guard failed.");
+          if ((row as { readonly value?: unknown }).value !== "9007199254740993")
+            throw new Error("MariaDB exact integer guard failed.");
         },
       },
       "numeric.exact-decimal": {
         prove: async () => {
           const row = await db.one(queries.fidelity!.exactDecimal);
-          if ((row as { readonly value?: unknown }).value !== "12345678901234567890.123456789") throw new Error("MariaDB exact decimal guard failed.");
+          if ((row as { readonly value?: unknown }).value !== "12345678901234567890.123456789")
+            throw new Error("MariaDB exact decimal guard failed.");
         },
       },
       "data.json-lossless-text": {
         prove: async () => {
           const row = await db.one(sql.rows`SELECT payload AS value FROM ${sql.ident(JSON_TABLE)}`);
           const value = (row as { readonly value?: unknown }).value;
-          if (typeof value !== "string" || !value.includes("9007199254740993")) throw new Error("MariaDB JSON lossless guard failed.");
+          if (typeof value !== "string" || !value.includes("9007199254740993"))
+            throw new Error("MariaDB JSON lossless guard failed.");
         },
       },
       "data.json-parsed": {
         prove: async () => {
-          const parsedConnection = await mariadb.createConnection(connectorOptions({ autoJsonMap: true, dateStrings: false }));
+          const parsedConnection = await mariadb.createConnection(
+            connectorOptions({ autoJsonMap: true, dateStrings: false }),
+          );
           try {
             const parsedDb = createMariaDbDatabase(parsedConnection, { profile: MARIADB_NATIVE });
             const row = await parsedDb.one(sql.rows`SELECT payload AS value FROM ${sql.ident(JSON_TABLE)}`);
             const value = (row as { readonly value?: unknown }).value;
             if (value === null || typeof value !== "object") throw new Error("MariaDB JSON parsed guard failed.");
-            if (typeof (value as { readonly large?: unknown }).large !== "number") throw new Error("MariaDB JSON parsed guard did not observe native numeric JSON.");
+            if (typeof (value as { readonly large?: unknown }).large !== "number")
+              throw new Error("MariaDB JSON parsed guard did not observe native numeric JSON.");
           } finally {
             await parsedConnection.end();
           }
@@ -570,7 +664,8 @@ async function createFixture(): Promise<CertificationFixture> {
       "data.temporal-lossless": {
         prove: async () => {
           const row = await db.one(queries.fidelity!.temporal);
-          if ((row as { readonly value?: unknown }).value !== "2026-09-14 12:34:56.789") throw new Error("MariaDB temporal text guard failed.");
+          if ((row as { readonly value?: unknown }).value !== "2026-09-14 12:34:56.789")
+            throw new Error("MariaDB temporal text guard failed.");
         },
       },
       "data.temporal-native": {
@@ -579,7 +674,8 @@ async function createFixture(): Promise<CertificationFixture> {
           try {
             const nativeDb = createMariaDbDatabase(nativeConnection, { profile: MARIADB_NATIVE });
             const row = await nativeDb.one(queries.fidelity!.temporal);
-            if (!((row as { readonly value?: unknown }).value instanceof Date)) throw new Error("MariaDB temporal native guard failed.");
+            if (!((row as { readonly value?: unknown }).value instanceof Date))
+              throw new Error("MariaDB temporal native guard failed.");
           } finally {
             await nativeConnection.end();
           }
@@ -605,7 +701,9 @@ async function createFixture(): Promise<CertificationFixture> {
         },
       },
       "metadata.command-safe": {
-        prove: async () => { assertCommandAffectedRows(await db.execute(queries.command)); },
+        prove: async () => {
+          assertCommandAffectedRows(await db.execute(queries.command));
+        },
       },
     },
     close: async () => {
@@ -624,7 +722,10 @@ function assertCommandAffectedRows(result: unknown): void {
   if (command?.affectedRows !== 1) throw new Error("MariaDB command-safe proof did not observe one affected row.");
 }
 
-export function createMariaDbCertificationTarget(sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA, measuredDriverVersion?: string): CertificationTarget {
+export function createMariaDbCertificationTarget(
+  sourceSha = process.env.SQLBRAID_CERT_SOURCE_SHA,
+  measuredDriverVersion?: string,
+): CertificationTarget {
   if (sourceSha === undefined || sourceSha.trim().length === 0) {
     throw new Error("SQLBRAID_CERT_SOURCE_SHA is required for MariaDB certification.");
   }

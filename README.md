@@ -12,7 +12,10 @@ pnpm add sqlbraid
 import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
 import { DatabaseSync } from "node:sqlite";
 
-interface UserRow { id: string; name: string }
+interface UserRow {
+  id: string;
+  name: string;
+}
 
 const native = new DatabaseSync(":memory:");
 const db = createNodeSqliteDatabase(native);
@@ -63,10 +66,10 @@ Use `sql.bind(value, hint)` only when a first-party adapter documents the databa
 ## Result contracts and mapping
 
 ```ts
-sql.rows<UserRow>`SELECT ...`
-sql.command`UPDATE ...`
-sql.call({ resultSets: [UserSchema] as const })`CALL ...`
-sql`driver-specific SQL` // unknown result kind
+sql.rows<UserRow>`SELECT ...`;
+sql.command`UPDATE ...`;
+sql.call({ resultSets: [UserSchema] as const })`CALL ...`;
+sql`driver-specific SQL`; // unknown result kind
 ```
 
 `db.all`, `db.one`, `db.maybeOne`, and `db.stream` require `sql.rows`. `db.execute` accepts row, command, or unknown queries and checks the actual result kind after execution. `db.call` accepts `sql.call` and returns `output`, ordered heterogeneous `resultSets`, and an optional `returnValue`.
@@ -153,9 +156,12 @@ hint/direction/output metadata, and dialect. Values may change; shape changes
 fail before driver I/O with `BRAID_PREPARED_SHAPE`.
 
 ```ts
-const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`
+const byId = db.prepare(
+  "user-by-id",
+  (id: string) => sql.rows<UserRow>`
   SELECT id, name FROM users WHERE id = ${id}
-`);
+`,
+);
 
 await byId.execute("u_1", { signal });
 await byId.all("u_1", { schema: UserSchema });
@@ -225,28 +231,28 @@ SQLBraid is not an ORM, query-builder-first language, complete SQL parser, unive
 
 ## Packages
 
-| Package | Responsibility |
-| --- | --- |
-| `sqlbraid` | Canonical runtime facade; combined driver+dialect/query subpaths use matching adapters, while `/bun-sql` is a multi-dialect adapter with an explicit dialect |
-| `@sqlbraid/core` | Public contracts, rendered statements, binding SPI, observers, Standard Schema types |
-| `@sqlbraid/template` | Dialect-neutral tags, directives, fragments, `sql.bind` |
-| `@sqlbraid/runtime` | Execution, sessions, leases, transactions, prepared shapes, streams, mapping |
-| `@sqlbraid/postgres` | PostgreSQL dialect/TypePolicy; `/pg`; `/inspector` |
-| `@sqlbraid/mysql` | MySQL dialect/TypePolicy; `/mysql2`; `/inspector` |
-| `@sqlbraid/mariadb` | MariaDB dialect/TypePolicy; `/mariadb`; `/inspector` |
-| `@sqlbraid/sqlite` | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1`; `/inspector` |
-| `@sqlbraid/oracle` | Oracle portable dialect/TypePolicy; `/oracledb`; `/inspector` |
-| `@sqlbraid/mssql` | SQL Server portable dialect/TypePolicy; `/tedious`; `/inspector` |
-| `@sqlbraid/bun-sql` | Bun.SQL multi-dialect driver adapter; requires user-selected dialect |
-| `@sqlbraid/compiler` | Guarded-template lowering and source maps |
-| `@sqlbraid/vite` | Vite pre-transform |
-| `@sqlbraid/opentelemetry` | Optional OpenTelemetry DB client spans and duration metrics |
-| `@sqlbraid/metadata` | Database-fact snapshots, validation, hashing, drift |
-| `@sqlbraid/codegen` | Pure metadata + TypePolicy → Row/Insert/Update source |
-| `@sqlbraid/tooling` | Node-first config/workspace/evidence services |
-| `@sqlbraid/operations` | Fingerprints and declaration manifests |
-| `@sqlbraid/cli` | Optional CLI for codegen, inspect, diagnostics, and drift |
-| `@sqlbraid/language-server` | Standard stdio LSP |
+| Package                     | Responsibility                                                                                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sqlbraid`                  | Canonical runtime facade; combined driver+dialect/query subpaths use matching adapters, while `/bun-sql` is a multi-dialect adapter with an explicit dialect |
+| `@sqlbraid/core`            | Public contracts, rendered statements, binding SPI, observers, Standard Schema types                                                                         |
+| `@sqlbraid/template`        | Dialect-neutral tags, directives, fragments, `sql.bind`                                                                                                      |
+| `@sqlbraid/runtime`         | Execution, sessions, leases, transactions, prepared shapes, streams, mapping                                                                                 |
+| `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg`; `/inspector`                                                                                                           |
+| `@sqlbraid/mysql`           | MySQL dialect/TypePolicy; `/mysql2`; `/inspector`                                                                                                            |
+| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb`; `/inspector`                                                                                                         |
+| `@sqlbraid/sqlite`          | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1`; `/inspector`                                                                   |
+| `@sqlbraid/oracle`          | Oracle portable dialect/TypePolicy; `/oracledb`; `/inspector`                                                                                                |
+| `@sqlbraid/mssql`           | SQL Server portable dialect/TypePolicy; `/tedious`; `/inspector`                                                                                             |
+| `@sqlbraid/bun-sql`         | Bun.SQL multi-dialect driver adapter; requires user-selected dialect                                                                                         |
+| `@sqlbraid/compiler`        | Guarded-template lowering and source maps                                                                                                                    |
+| `@sqlbraid/vite`            | Vite pre-transform                                                                                                                                           |
+| `@sqlbraid/opentelemetry`   | Optional OpenTelemetry DB client spans and duration metrics                                                                                                  |
+| `@sqlbraid/metadata`        | Database-fact snapshots, validation, hashing, drift                                                                                                          |
+| `@sqlbraid/codegen`         | Pure metadata + TypePolicy → Row/Insert/Update source                                                                                                        |
+| `@sqlbraid/tooling`         | Node-first config/workspace/evidence services                                                                                                                |
+| `@sqlbraid/operations`      | Fingerprints and declaration manifests                                                                                                                       |
+| `@sqlbraid/cli`             | Optional CLI for codegen, inspect, diagnostics, and drift                                                                                                    |
+| `@sqlbraid/language-server` | Standard stdio LSP                                                                                                                                           |
 
 Runtime packages do not pull tooling, metadata, codegen, editor, or Vite
 dependencies. The facade also does not install database drivers; install the

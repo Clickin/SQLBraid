@@ -85,58 +85,38 @@
   "capabilities": {
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "testIds": ["bun-sql-postgres.data.profile"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "testIds": ["bun-sql-postgres.data.profile"]
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "testIds": ["bun-sql-postgres.data.profile"]
     },
     "numeric.exact-integer": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
       "conditionCode": "bun-sql.integer-width-profile",
-      "driverRawRepresentations": [
-        "number",
-        "bigint",
-        "string"
-      ],
+      "driverRawRepresentations": ["number", "bigint", "string"],
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "guarded"
     },
     "numeric.exact-decimal": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
+      "driverRawRepresentations": ["string"],
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "lossless"
     },
     "numeric.approximate-float": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
       "conditionCode": "bun-sql.float-profile",
-      "driverRawRepresentations": [
-        "number"
-      ],
+      "driverRawRepresentations": ["number"],
       "semantics": "approximate-binary",
       "representation": "number",
       "fidelity": "guarded",
@@ -144,9 +124,7 @@
     },
     "data.json-parsed": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
       "conditionCode": "bun-sql.json-parser-profile"
     },
     "data.json-lossless-text": {
@@ -155,9 +133,7 @@
     },
     "data.temporal-native": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
       "conditionCode": "bun-sql.temporal-profile"
     },
     "data.temporal-lossless": {
@@ -166,21 +142,15 @@
     },
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "testIds": ["bun-sql-postgres.data.profile"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "testIds": ["bun-sql-postgres.data.profile"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "testIds": ["bun-sql-postgres.data.profile"]
     },
     "statement.stream": {
       "status": "unsupported",
@@ -192,49 +162,35 @@
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "testIds": ["bun-sql-postgres.data.profile"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "testIds": ["bun-sql-postgres.data.profile"]
     },
     "transaction.read-only": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "transaction.isolation.read-uncommitted": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "transaction.isolation.read-committed": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "transaction.isolation.repeatable-read": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "transaction.isolation.serializable": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ],
+      "testIds": ["bun-sql-postgres.data.profile"],
       "conditionCode": "bun-sql.transaction-options"
     },
     "routine.call": {
@@ -263,9 +219,7 @@
     },
     "data.binary": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-postgres.data.profile"
-      ]
+      "testIds": ["bun-sql-postgres.data.profile"]
     }
   },
   "evidence": {

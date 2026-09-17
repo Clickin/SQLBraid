@@ -4,7 +4,12 @@ import type { Dialect, SqlTag } from "@sqlbraid/core";
 export const dialect: Dialect = {
   id: "mysql",
   quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``,
-  lexicalProfile: { lineCommentPrefixes: ["--", "#"], supportsNestedBlockComments: false, supportsBacktickIdentifiers: true, backslashEscapes: true },
+  lexicalProfile: {
+    lineCommentPrefixes: ["--", "#"],
+    supportsNestedBlockComments: false,
+    supportsBacktickIdentifiers: true,
+    backslashEscapes: true,
+  },
 };
 
 export const sql: SqlTag = createSqlTag({ dialect });

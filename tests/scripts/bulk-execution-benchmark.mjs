@@ -27,7 +27,8 @@ const countedDatabase = {
         runCount += 1;
         return statement.run(...values);
       },
-      setReadBigInts: statement.setReadBigInts === undefined ? undefined : (enabled) => statement.setReadBigInts(enabled),
+      setReadBigInts:
+        statement.setReadBigInts === undefined ? undefined : (enabled) => statement.setReadBigInts(enabled),
     };
   },
   exec(text) {
@@ -97,7 +98,9 @@ async function measure(size, mode) {
     await db.bulk(values, (input) => command(input));
   }
   const wallMs = performance.now() - started;
-  const total = native.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM braid_bulk_execution_benchmark").get().total;
+  const total = native
+    .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM braid_bulk_execution_benchmark")
+    .get().total;
   assert.equal(total, size, `${mode} execution changed the wrong number of rows for N=${size}`);
   assert.equal(runCount, size, `${mode} execution did not execute one item per input for N=${size}`);
   if (mode === "bulk") assert.equal(prepareCount, 1, `bulk must prepare once for N=${size}`);

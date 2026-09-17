@@ -38,7 +38,10 @@ export interface SqliteColumnLike {
 export interface SqliteStatementLike {
   all(...values: readonly unknown[]): readonly unknown[];
   iterate?(...values: readonly unknown[]): IterableIterator<unknown>;
-  run(...values: readonly unknown[]): { readonly changes?: number | bigint; readonly lastInsertRowid?: number | bigint };
+  run(...values: readonly unknown[]): {
+    readonly changes?: number | bigint;
+    readonly lastInsertRowid?: number | bigint;
+  };
   columns(): readonly SqliteColumnLike[];
   /** Required for row-producing statements; command-only adapters may omit it. */
   setReadBigInts?(enabled: boolean): void;
@@ -56,10 +59,12 @@ function plainRow(value: unknown): Record<string, unknown> {
   // setReadBigInts() distinguishes INTEGER storage from integral REAL storage.
   // Only native bigint values are normalized; numbers retain their SQLite
   // storage-class semantics for dynamic columns.
-  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
-    key,
-    typeof entry === "bigint" ? normalizeExactInteger(entry) : entry,
-  ]));
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      typeof entry === "bigint" ? normalizeExactInteger(entry) : entry,
+    ]),
+  );
 }
 
 function resultColumns(statement: SqliteStatementLike): readonly SqliteColumnLike[] {
@@ -67,14 +72,19 @@ function resultColumns(statement: SqliteStatementLike): readonly SqliteColumnLik
   const names = new Set<string>();
   for (const column of columns) {
     const name = column.name ?? column.column;
-    if (name != null && names.has(name)) throw new Error(`BRAID_RESULT_COLUMNS: duplicate SQLite result label ${name}.`);
+    if (name != null && names.has(name))
+      throw new Error(`BRAID_RESULT_COLUMNS: duplicate SQLite result label ${name}.`);
     if (name != null) names.add(name);
   }
   return columns;
 }
 
 function unsupportedCall(): never {
-  throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "SQLite adapter does not support routine calls.");
+  throw new UnsupportedFeatureError(
+    "routine.call",
+    "BRAID_CALL_UNSUPPORTED",
+    "SQLite adapter does not support routine calls.",
+  );
 }
 
 function assertRoutineUnsupported(rendered: RenderedStatement): void {
@@ -84,10 +94,18 @@ function assertRoutineUnsupported(rendered: RenderedStatement): void {
 function assertRoutineParametersUnsupported(rendered: RenderedStatement): void {
   for (const parameter of rendered.parameters) {
     if (parameter.direction === "inout") {
-      throw new UnsupportedFeatureError("routine.inout", "BRAID_CALL_OUT_UNSUPPORTED", "SQLite does not expose a routine INOUT parameter carrier.");
+      throw new UnsupportedFeatureError(
+        "routine.inout",
+        "BRAID_CALL_OUT_UNSUPPORTED",
+        "SQLite does not expose a routine INOUT parameter carrier.",
+      );
     }
     if (parameter.direction === "out" || parameter.outputName !== undefined) {
-      throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "SQLite does not expose a routine OUT parameter carrier.");
+      throw new UnsupportedFeatureError(
+        "routine.out",
+        "BRAID_CALL_OUT_UNSUPPORTED",
+        "SQLite does not expose a routine OUT parameter carrier.",
+      );
     }
   }
 }
@@ -111,7 +129,10 @@ function assertNodeSqliteValue(value: unknown): void {
     return;
   }
   if (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView(value)) return;
-  throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "node:sqlite binds support null, numbers, bigint, strings, and ArrayBufferView values.");
+  throw new AdapterError(
+    "BRAID_BIND_VALUE_UNSUPPORTED",
+    "node:sqlite binds support null, numbers, bigint, strings, and ArrayBufferView values.",
+  );
 }
 
 function assertNodeSqliteValues(values: readonly unknown[]): void {
@@ -130,7 +151,11 @@ function assertExecutionOptions(options?: ExecutionOptions): void {
 }
 
 function unsupportedTransactionOption(feature: string, option: string): never {
-  throw new UnsupportedFeatureError(feature, "BRAID_TX_OPTION_UNSUPPORTED", `SQLite does not support transaction option ${option}.`);
+  throw new UnsupportedFeatureError(
+    feature,
+    "BRAID_TX_OPTION_UNSUPPORTED",
+    `SQLite does not support transaction option ${option}.`,
+  );
 }
 
 function invalidTransactionOptions(message: string): never {
@@ -151,11 +176,11 @@ function validateTransactionOptions(options?: TransactionOptions): void {
     invalidTransactionOptions("transaction readOnly must be boolean.");
   }
   if (
-    candidate.isolation !== undefined
-    && candidate.isolation !== "read-uncommitted"
-    && candidate.isolation !== "read-committed"
-    && candidate.isolation !== "repeatable-read"
-    && candidate.isolation !== "serializable"
+    candidate.isolation !== undefined &&
+    candidate.isolation !== "read-uncommitted" &&
+    candidate.isolation !== "read-committed" &&
+    candidate.isolation !== "repeatable-read" &&
+    candidate.isolation !== "serializable"
   ) {
     invalidTransactionOptions("transaction isolation is not a supported standard literal.");
   }
@@ -183,13 +208,15 @@ export const nodeSqliteStatementBinding: StatementBindingAdapter = Object.freeze
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
     const statement = createRenderedStatement(bulk.statement);
     assertRoutineParametersUnsupported(statement);
-    if (statement.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: node:sqlite bulk requires command queries.");
+    if (statement.resultKind !== "command")
+      throw new Error("BRAID_BULK_SHAPE: node:sqlite bulk requires command queries.");
     if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
       throw new Error("BRAID_BULK_SHAPE: node:sqlite bulk does not support OUT or INOUT parameters.");
     }
     assertParameterHintsUnsupported(statement);
     for (const values of bulk.parameterSets) {
-      if (values.length !== statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: node:sqlite bulk parameter cardinality changed.");
+      if (values.length !== statement.parameters.length)
+        throw new Error("BRAID_BULK_SHAPE: node:sqlite bulk parameter cardinality changed.");
       assertNodeSqliteValues(values);
     }
     const description = createBulkBindingDescription(bulk, context, {
@@ -216,7 +243,8 @@ function materialize(
 ): { readonly text: string; readonly values: readonly unknown[] } {
   statement = createRenderedStatement(statement);
   const description = binding ?? nodeSqliteStatementBinding.describe(statement, bindingContext(statement));
-  if (describedStatements.get(description) !== statement) throw new TypeError("BRAID_BINDING_IDENTITY: SQLite description belongs to another statement or adapter.");
+  if (describedStatements.get(description) !== statement)
+    throw new TypeError("BRAID_BINDING_IDENTITY: SQLite description belongs to another statement or adapter.");
   if (description.parameterizedSql === undefined) {
     throw new Error("BRAID_BIND_TRANSPORT: SQLite binding description did not provide parameterized SQL.");
   }
@@ -246,10 +274,18 @@ function nodeSqliteEnvironment(transactionSupported: boolean): DriverEnvironment
       "sql.native-transparency": { status: "guaranteed" },
       "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] },
       "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-      "numeric.bind-exact": { status: "guaranteed", canonical: "string", rawRepresentations: ["string", "number", "bigint"] },
-      "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Uint8Array", "ArrayBuffer"] },
+      "numeric.bind-exact": {
+        status: "guaranteed",
+        canonical: "string",
+        rawRepresentations: ["string", "number", "bigint"],
+      },
+      "data.binary": {
+        status: "guaranteed",
+        canonical: "Uint8Array",
+        rawRepresentations: ["Uint8Array", "ArrayBuffer"],
+      },
       "session.pinned": { status: "guaranteed" },
-      "transaction": { status: transactionSupported ? "guaranteed" : "unsupported" },
+      transaction: { status: transactionSupported ? "guaranteed" : "unsupported" },
       "transaction.savepoint": { status: transactionSupported ? "guaranteed" : "unsupported" },
       "transaction.read-only": { status: "unsupported" },
       "transaction.isolation.read-uncommitted": { status: "unsupported" },
@@ -285,12 +321,20 @@ function nodeSqliteEnvironment(transactionSupported: boolean): DriverEnvironment
 }
 
 export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
-  const control = database.exec ? (sql: string): void => { database.exec?.(sql); } : undefined;
+  const control = database.exec
+    ? (sql: string): void => {
+        database.exec?.(sql);
+      }
+    : undefined;
   return {
     ownershipKey: database,
     statementBinding: nodeSqliteStatementBinding,
     environment: nodeSqliteEnvironment(control !== undefined),
-    query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): QueryExecutionResult<Row> {
+    query<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): QueryExecutionResult<Row> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
@@ -323,9 +367,11 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
         throw new TypeError("BRAID_BINDING_IDENTITY: node:sqlite bulk description belongs to another bulk or adapter.");
       }
       const prepared = binding.parameterizedSql;
-      if (prepared === undefined) throw new Error("BRAID_BIND_TRANSPORT: SQLite bulk binding description did not provide parameterized SQL.");
+      if (prepared === undefined)
+        throw new Error("BRAID_BIND_TRANSPORT: SQLite bulk binding description did not provide parameterized SQL.");
       const native = database.prepare(prepared);
-      if (resultColumns(native).length > 0) throw new Error("BRAID_BULK_SHAPE: node:sqlite bulk requires a non-row statement.");
+      if (resultColumns(native).length > 0)
+        throw new Error("BRAID_BULK_SHAPE: node:sqlite bulk requires a non-row statement.");
       let affectedRows: number | undefined = 0;
       for (let index = 0; index < bulk.parameterSets.length; index += 1) {
         const result = native.run(...binding.valuesAt(index));
@@ -341,13 +387,21 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
         executionMode: "prepared-loop",
       };
     },
-    call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): DriverRoutineResult {
+    call(
+      rendered: RenderedStatement,
+      _binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): DriverRoutineResult {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
       unsupportedCall();
     },
-    async *stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncGenerator<Row> {
+    async *stream<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): AsyncGenerator<Row> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
@@ -355,7 +409,11 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
       const prepared = materialize(rendered, binding);
       const statement = database.prepare(prepared.text);
       if (!statement.iterate) {
-        throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "SQLite statement does not expose iteration.");
+        throw new UnsupportedFeatureError(
+          "statement.stream",
+          "BRAID_STREAM_UNSUPPORTED",
+          "SQLite statement does not expose iteration.",
+        );
       }
       if (resultColumns(statement).length === 0) {
         throw new DatabaseResultKindError("rows", "command");
@@ -381,19 +439,22 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
           const cleanup = Object.assign(new Error("SQLite iterator cleanup failed.", { cause }), {
             code: "BRAID_RESOURCE_CLEANUP",
           });
-          if (failed) throw new AggregateError([readError, cleanup], "SQLite read and cleanup failed.", { cause: readError });
+          if (failed)
+            throw new AggregateError([readError, cleanup], "SQLite read and cleanup failed.", { cause: readError });
           throw cleanup;
         }
       }
     },
-    begin: control ? (options?: TransactionOptions) => {
-      validateTransactionOptions(options);
-      if (options?.readOnly === true) unsupportedTransactionOption("transaction.read-only", "readOnly");
-      if (options?.isolation !== undefined && options.isolation !== "serializable") {
-        unsupportedTransactionOption(`transaction.isolation.${options.isolation}`, options.isolation);
-      }
-      return control("BEGIN");
-    } : undefined,
+    begin: control
+      ? (options?: TransactionOptions) => {
+          validateTransactionOptions(options);
+          if (options?.readOnly === true) unsupportedTransactionOption("transaction.read-only", "readOnly");
+          if (options?.isolation !== undefined && options.isolation !== "serializable") {
+            unsupportedTransactionOption(`transaction.isolation.${options.isolation}`, options.isolation);
+          }
+          return control("BEGIN");
+        }
+      : undefined,
     commit: control ? () => control("COMMIT") : undefined,
     rollback: control ? () => control("ROLLBACK") : undefined,
     savepoint: control ? (name) => control(`SAVEPOINT ${assertSavepointName(name)}`) : undefined,

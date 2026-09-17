@@ -47,8 +47,12 @@ export async function runW01(options: W01Options): Promise<void> {
   expect(isolatedRows).toEqual(["B"]);
 
   await clear();
-  const first = db.tx(async (tx) => { await tx.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"C"})`); });
-  const second = db.tx(async (tx) => { await tx.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"D"})`); });
+  const first = db.tx(async (tx) => {
+    await tx.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"C"})`);
+  });
+  const second = db.tx(async (tx) => {
+    await tx.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"D"})`);
+  });
   await Promise.all([first, second]);
   expect(await rows()).toEqual(["C", "D"]);
 
@@ -62,7 +66,9 @@ export async function runW01(options: W01Options): Promise<void> {
   });
   await parentStarted.promise;
   let outsideSettled = false;
-  const waitingOutside = db.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"F"})`).finally(() => { outsideSettled = true; });
+  const waitingOutside = db.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"F"})`).finally(() => {
+    outsideSettled = true;
+  });
   await tick();
   expect(outsideSettled).toBe(false);
   parentRelease.resolve();
@@ -72,24 +78,30 @@ export async function runW01(options: W01Options): Promise<void> {
 
   await clear();
   await db.tx(async (tx) => {
-    await tx.tx(async (nested) => { await nested.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"G"})`); });
+    await tx.tx(async (nested) => {
+      await nested.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"G"})`);
+    });
     await tx.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"H"})`);
   });
   expect(await rows()).toEqual(["G", "H"]);
 
   await clear();
   await db.tx(async (tx) => {
-    await expect(tx.tx(async (nested) => {
-      await nested.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"I"})`);
-      throw new Error("rollback savepoint");
-    })).rejects.toThrow("rollback savepoint");
+    await expect(
+      tx.tx(async (nested) => {
+        await nested.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"I"})`);
+        throw new Error("rollback savepoint");
+      }),
+    ).rejects.toThrow("rollback savepoint");
     await tx.execute(sql`INSERT INTO braid_w01 (id) VALUES (${"J"})`);
   });
   expect(await rows()).toEqual(["J"]);
 
   await clear();
   let leaked: DatabaseLike | undefined;
-  await db.tx(async (tx) => { leaked = tx; });
+  await db.tx(async (tx) => {
+    leaked = tx;
+  });
   await expect(leaked!.execute(sql`SELECT 1`)).rejects.toMatchObject({ code: "BRAID_TX_CLOSED" });
 
   await clear();

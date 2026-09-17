@@ -2,21 +2,44 @@
   "name": "@sqlbraid/mariadb",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid MariaDB dialect and official Connector/Node.js adapter",
+  "keywords": [
+    "database",
+    "mariadb",
+    "query",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/mariadb"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "mariadb", "query"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=16.20.2" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./mariadb": {
+      "types": "./dist/mariadb.d.ts",
+      "import": "./dist/mariadb.js"
+    },
+    "./inspector": {
+      "types": "./dist/inspector.d.ts",
+      "import": "./dist/inspector.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@sqlbraid/core": "workspace:*",
     "@sqlbraid/runtime": "workspace:*",
@@ -34,18 +57,7 @@
       "optional": true
     }
   },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./mariadb": {
-      "types": "./dist/mariadb.d.ts",
-      "import": "./dist/mariadb.js"
-    },
-    "./inspector": {
-      "types": "./dist/inspector.d.ts",
-      "import": "./dist/inspector.js"
-    }
+  "engines": {
+    "node": ">=16.20.2"
   }
 }

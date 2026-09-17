@@ -70,11 +70,22 @@ const FILE_WATCH_GLOBS = [
 ] as const;
 
 function uriPath(uri: string): string {
-  try { return fileURLToPath(uri); } catch { return uri; }
+  try {
+    return fileURLToPath(uri);
+  } catch {
+    return uri;
+  }
 }
 
 function configPathFrom(value: unknown): string | undefined {
-  if (value && typeof value === "object" && !Array.isArray(value) && "configPath" in value && typeof value.configPath === "string") return value.configPath;
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    "configPath" in value &&
+    typeof value.configPath === "string"
+  )
+    return value.configPath;
   return undefined;
 }
 
@@ -174,7 +185,11 @@ export function startStdioLanguageServer(
     const fallbackRoot = normalizedPath(rootPath);
     const existing = workspaces.get(fallbackRoot);
     if (existing) return existing.workspace;
-    const workspace = createWorkspace({ ...serverOptions, rootPath: fallbackRoot, ...(configPath ? { configPath } : {}) });
+    const workspace = createWorkspace({
+      ...serverOptions,
+      rootPath: fallbackRoot,
+      ...(configPath ? { configPath } : {}),
+    });
     workspaces.set(fallbackRoot, { rootPath: fallbackRoot, workspace });
     return workspace;
   }
@@ -239,7 +254,10 @@ export function startStdioLanguageServer(
     pendingDiagnostics.set(uri, { version, timer });
   }
 
-  async function computeDiagnostics(document: TextDocument, token?: Cancellation): Promise<readonly CompileDiagnostic[]> {
+  async function computeDiagnostics(
+    document: TextDocument,
+    token?: Cancellation,
+  ): Promise<readonly CompileDiagnostic[]> {
     if (token?.isCancellationRequested) return [];
     const currentWorkspace = workspaceForFile(uriPath(document.uri));
     const revision = workspaceRevision;
@@ -253,7 +271,13 @@ export function startStdioLanguageServer(
     await yieldToEventLoop();
     if (token?.isCancellationRequested) return [];
     const current = documents.get(document.uri);
-    if (!current || current.version !== document.version || currentWorkspace !== workspaceForFile(uriPath(document.uri)) || revision !== workspaceRevision) return [];
+    if (
+      !current ||
+      current.version !== document.version ||
+      currentWorkspace !== workspaceForFile(uriPath(document.uri)) ||
+      revision !== workspaceRevision
+    )
+      return [];
     const diagnostics = service.diagnostics(document.getText(), uriPath(document.uri));
     await yieldToEventLoop();
     if (token?.isCancellationRequested) return [];
@@ -266,16 +290,40 @@ export function startStdioLanguageServer(
     if (!document || document.version !== version || stopped) return;
     const revision = workspaceRevision;
     let cancelled = false;
-    const token = { get isCancellationRequested() { return cancelled; } };
-    const active: ActiveDiagnostics = { version, cancel: () => { cancelled = true; } };
+    const token = {
+      get isCancellationRequested() {
+        return cancelled;
+      },
+    };
+    const active: ActiveDiagnostics = {
+      version,
+      cancel: () => {
+        cancelled = true;
+      },
+    };
     activeDiagnostics.set(uri, active);
     try {
       const diagnostics = await computeDiagnostics(document, token);
       const latest = documents.get(uri);
-      if (cancelled || stopped || !latest || latest.version !== version || revision !== workspaceRevision || pendingDiagnostics.has(uri)) return;
-      connection.sendDiagnostics({ uri, version, diagnostics: diagnostics.map((entry) => diagnosticFor(document, entry)) });
+      if (
+        cancelled ||
+        stopped ||
+        !latest ||
+        latest.version !== version ||
+        revision !== workspaceRevision ||
+        pendingDiagnostics.has(uri)
+      )
+        return;
+      connection.sendDiagnostics({
+        uri,
+        version,
+        diagnostics: diagnostics.map((entry) => diagnosticFor(document, entry)),
+      });
     } catch (error) {
-      if (!cancelled && !stopped) console.error(`SQLBraid diagnostics failed for ${uri}: ${error instanceof Error ? error.message : String(error)}`);
+      if (!cancelled && !stopped)
+        console.error(
+          `SQLBraid diagnostics failed for ${uri}: ${error instanceof Error ? error.message : String(error)}`,
+        );
     } finally {
       if (activeDiagnostics.get(uri) === active) activeDiagnostics.delete(uri);
     }
@@ -306,11 +354,20 @@ export function startStdioLanguageServer(
     }
     await yieldToEventLoop();
     const current = documents.get(uri);
-    if (token?.isCancellationRequested || !current || current.version !== version || currentWorkspace !== workspaceForFile(uriPath(uri)) || revision !== workspaceRevision) return undefined;
+    if (
+      token?.isCancellationRequested ||
+      !current ||
+      current.version !== version ||
+      currentWorkspace !== workspaceForFile(uriPath(uri)) ||
+      revision !== workspaceRevision
+    )
+      return undefined;
     const result = await callback(service, document);
     await yieldToEventLoop();
     const latest = documents.get(uri);
-    return token?.isCancellationRequested || !latest || latest.version !== version || revision !== workspaceRevision ? undefined : result;
+    return token?.isCancellationRequested || !latest || latest.version !== version || revision !== workspaceRevision
+      ? undefined
+      : result;
   }
 
   connection.onInitialize((params) => {
@@ -353,9 +410,21 @@ export function startStdioLanguageServer(
     }
     for (const folder of event.added) {
       const path = normalizedPath(uriPath(folder.uri));
-      if (workspaces.size < MAX_WORKSPACES && !workspaces.has(path)) workspaces.set(path, { rootPath: path, workspace: createWorkspace({ ...serverOptions, rootPath: path, ...(configPath ? { configPath } : {}) }) });
+      if (workspaces.size < MAX_WORKSPACES && !workspaces.has(path))
+        workspaces.set(path, {
+          rootPath: path,
+          workspace: createWorkspace({ ...serverOptions, rootPath: path, ...(configPath ? { configPath } : {}) }),
+        });
     }
-    if (!workspaces.size) workspaces.set(normalizedPath(rootPath), { rootPath: normalizedPath(rootPath), workspace: createWorkspace({ ...serverOptions, rootPath: normalizedPath(rootPath), ...(configPath ? { configPath } : {}) }) });
+    if (!workspaces.size)
+      workspaces.set(normalizedPath(rootPath), {
+        rootPath: normalizedPath(rootPath),
+        workspace: createWorkspace({
+          ...serverOptions,
+          rootPath: normalizedPath(rootPath),
+          ...(configPath ? { configPath } : {}),
+        }),
+      });
     if (!workspaces.has(normalizedPath(rootPath))) rootPath = [...workspaces.keys()][0] ?? rootPath;
     workspaceRevision += 1;
     resetDocumentsInWorkspaces();
@@ -363,11 +432,16 @@ export function startStdioLanguageServer(
   }
 
   connection.onInitialized(() => {
-    if (workspaceFoldersSupported) workspaceFolderListener = connection.workspace.onDidChangeWorkspaceFolders(updateWorkspaceFolders);
+    if (workspaceFoldersSupported)
+      workspaceFolderListener = connection.workspace.onDidChangeWorkspaceFolders(updateWorkspaceFolders);
     if (watchedFilesSupported) {
-      void connection.client.register(DidChangeWatchedFilesNotification.type, { watchers: FILE_WATCH_GLOBS.map((globPattern) => ({ globPattern })) }).catch(
-        (error: unknown) => { if (!stopped) console.error(`SQLBraid file-watch registration failed: ${String(error)}`); },
-      );
+      void connection.client
+        .register(DidChangeWatchedFilesNotification.type, {
+          watchers: FILE_WATCH_GLOBS.map((globPattern) => ({ globPattern })),
+        })
+        .catch((error: unknown) => {
+          if (!stopped) console.error(`SQLBraid file-watch registration failed: ${String(error)}`);
+        });
     }
   });
 
@@ -395,41 +469,77 @@ export function startStdioLanguageServer(
     connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
   });
 
-  connection.onRequest("textDocument/diagnostic", async (params: { readonly textDocument: { readonly uri: string } }, token: CancellationToken) => {
-    const document = documents.get(params.textDocument.uri);
-    if (!document) return { kind: "full", resultId: "missing", items: [] };
-    const diagnostics = await computeDiagnostics(document, token);
-    if (token.isCancellationRequested || documents.get(document.uri)?.version !== document.version) return { kind: "full", resultId: String(document.version), items: [] };
-    return { kind: "full", resultId: String(document.version), items: diagnostics.map((entry) => diagnosticFor(document, entry)) };
-  });
+  connection.onRequest(
+    "textDocument/diagnostic",
+    async (params: { readonly textDocument: { readonly uri: string } }, token: CancellationToken) => {
+      const document = documents.get(params.textDocument.uri);
+      if (!document) return { kind: "full", resultId: "missing", items: [] };
+      const diagnostics = await computeDiagnostics(document, token);
+      if (token.isCancellationRequested || documents.get(document.uri)?.version !== document.version)
+        return { kind: "full", resultId: String(document.version), items: [] };
+      return {
+        kind: "full",
+        resultId: String(document.version),
+        items: diagnostics.map((entry) => diagnosticFor(document, entry)),
+      };
+    },
+  );
 
   connection.onHover(async (params, token) => {
-    const result = await withService(params.textDocument.uri, token, (service, document) => service.hover(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
+    const result = await withService(params.textDocument.uri, token, (service, document) =>
+      service.hover(document.getText(), uriPath(document.uri), document.offsetAt(params.position)),
+    );
     if (!result) return null;
     const document = documents.get(params.textDocument.uri);
-    return document ? { contents: { kind: MarkupKind.Markdown, value: result.contents }, range: rangeFor(document, result.range.start, result.range.end) } : null;
+    return document
+      ? {
+          contents: { kind: MarkupKind.Markdown, value: result.contents },
+          range: rangeFor(document, result.range.start, result.range.end),
+        }
+      : null;
   });
 
   connection.onCompletion(async (params, token) => {
-    const result = await withService(params.textDocument.uri, token, (service, document) => service.complete(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
-    return { isIncomplete: false, items: (result ?? []).map((entry) => ({ label: entry.label, kind: completionKind(entry.kind), ...(entry.detail ? { detail: entry.detail } : {}) })) };
+    const result = await withService(params.textDocument.uri, token, (service, document) =>
+      service.complete(document.getText(), uriPath(document.uri), document.offsetAt(params.position)),
+    );
+    return {
+      isIncomplete: false,
+      items: (result ?? []).map((entry) => ({
+        label: entry.label,
+        kind: completionKind(entry.kind),
+        ...(entry.detail ? { detail: entry.detail } : {}),
+      })),
+    };
   });
 
   connection.onDefinition(async (params, token) => {
-    const result = await withService(params.textDocument.uri, token, (service, document) => service.definition(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
+    const result = await withService(params.textDocument.uri, token, (service, document) =>
+      service.definition(document.getText(), uriPath(document.uri), document.offsetAt(params.position)),
+    );
     return result ? locationFor(result) : null;
   });
 
   connection.onReferences(async (params, token) => {
-    const result = await withService(params.textDocument.uri, token, (service, document) => service.references(document.getText(), uriPath(document.uri), document.offsetAt(params.position), token));
+    const result = await withService(params.textDocument.uri, token, (service, document) =>
+      service.references(document.getText(), uriPath(document.uri), document.offsetAt(params.position), token),
+    );
     return (result ?? []).map(locationFor);
   });
 
   connection.onDocumentSymbol(async (params, token) => {
-    const result = await withService(params.textDocument.uri, token, (service, document) => service.documentSymbols(document.getText(), uriPath(document.uri)));
+    const result = await withService(params.textDocument.uri, token, (service, document) =>
+      service.documentSymbols(document.getText(), uriPath(document.uri)),
+    );
     const document = documents.get(params.textDocument.uri);
     if (!document) return [];
-    return (result ?? []).map((entry) => ({ name: entry.name, detail: entry.detail, kind: SymbolKind.Function, range: rangeFor(document, entry.range.start, entry.range.end), selectionRange: rangeFor(document, entry.selectionRange.start, entry.selectionRange.end) }));
+    return (result ?? []).map((entry) => ({
+      name: entry.name,
+      detail: entry.detail,
+      kind: SymbolKind.Function,
+      range: rangeFor(document, entry.range.start, entry.range.end),
+      selectionRange: rangeFor(document, entry.selectionRange.start, entry.selectionRange.end),
+    }));
   });
 
   connection.onWorkspaceSymbol(async (params, token) => {
@@ -449,12 +559,25 @@ export function startStdioLanguageServer(
       symbols.push(...service.workspaceSymbols(params.query).slice(0, MAX_WORKSPACE_SYMBOLS - symbols.length));
       if (symbols.length >= MAX_WORKSPACE_SYMBOLS) break;
     }
-    return symbols.map((entry) => ({ name: entry.name, kind: symbolKind(entry.kind), location: locationFor(entry.location), ...(entry.detail ? { containerName: entry.detail } : {}) }));
+    return symbols.map((entry) => ({
+      name: entry.name,
+      kind: symbolKind(entry.kind),
+      location: locationFor(entry.location),
+      ...(entry.detail ? { containerName: entry.detail } : {}),
+    }));
   });
 
   connection.onSignatureHelp(async (params, token) => {
-    const result = await withService(params.textDocument.uri, token, (service, document) => service.signatureHelp(document.getText(), uriPath(document.uri), document.offsetAt(params.position)));
-    return result ? { signatures: [{ label: result.label, parameters: result.parameters.map((label) => ({ label })) }], activeSignature: 0, activeParameter: result.activeParameter } : null;
+    const result = await withService(params.textDocument.uri, token, (service, document) =>
+      service.signatureHelp(document.getText(), uriPath(document.uri), document.offsetAt(params.position)),
+    );
+    return result
+      ? {
+          signatures: [{ label: result.label, parameters: result.parameters.map((label) => ({ label })) }],
+          activeSignature: 0,
+          activeParameter: result.activeParameter,
+        }
+      : null;
   });
 
   const documentsListener = documents.listen(connection);

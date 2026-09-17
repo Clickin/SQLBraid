@@ -29,15 +29,26 @@ const statementBinding: StatementBindingAdapter = Object.freeze({
 function executor(overrides: Partial<QueryExecutor> = {}): QueryExecutor {
   return {
     statementBinding,
-    async query<Row>() { return { kind: "rows" as const, rows: [{ value: 1 }] as unknown as readonly Row[] }; },
-    async *stream<Row>() { yield* [] as readonly Row[]; },
-    async call() { return { output: {}, resultSets: [] }; },
+    async query<Row>() {
+      return { kind: "rows" as const, rows: [{ value: 1 }] as unknown as readonly Row[] };
+    },
+    async *stream<Row>() {
+      yield* [] as readonly Row[];
+    },
+    async call() {
+      return { output: {}, resultSets: [] };
+    },
     ...overrides,
   };
 }
 
-function terminalEvents(events: readonly ExecutionEvent[]): Extract<ExecutionEvent, { type: "query:error" | "query:mapped" }>[] {
-  return events.filter((event): event is Extract<ExecutionEvent, { type: "query:error" | "query:mapped" }> => event.type === "query:error" || event.type === "query:mapped");
+function terminalEvents(
+  events: readonly ExecutionEvent[],
+): Extract<ExecutionEvent, { type: "query:error" | "query:mapped" }>[] {
+  return events.filter(
+    (event): event is Extract<ExecutionEvent, { type: "query:error" | "query:mapped" }> =>
+      event.type === "query:error" || event.type === "query:mapped",
+  );
 }
 
 function rowQueries(count: number): readonly ExecutableQuery[] {
@@ -48,16 +59,32 @@ test("batch driver failure terminates every ready sibling without extra executio
   const events: ExecutionEvent[] = [];
   let calls = 0;
   const driverFailure = new Error("driver failed");
-  const db = createDatabase(executor({
-    async query<Row>() {
-      calls += 1;
-      if (calls === 2) throw driverFailure;
-      return { kind: "rows" as const, rows: [{ value: calls }] as unknown as readonly Row[] };
+  const db = createDatabase(
+    executor({
+      async query<Row>() {
+        calls += 1;
+        if (calls === 2) throw driverFailure;
+        return { kind: "rows" as const, rows: [{ value: calls }] as unknown as readonly Row[] };
+      },
+    }),
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
     },
-  }), { observers: [{ onEvent(event) { events.push(event); } }] });
+  );
 
-  await assert.rejects(() => db.batch(rowQueries(3)), (error) => error === driverFailure);
-  const ready = events.filter((event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready");
+  await assert.rejects(
+    () => db.batch(rowQueries(3)),
+    (error) => error === driverFailure,
+  );
+  const ready = events.filter(
+    (event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready",
+  );
   const terminals = terminalEvents(events);
   assert.equal(calls, 2);
   assert.equal(ready.length, 3);
@@ -93,22 +120,45 @@ test("driver failure at each batch item preserves one terminal event per announc
     const events: ExecutionEvent[] = [];
     let calls = 0;
     const driverFailure = new Error(`driver failed at ${failureAt}`);
-    const db = createDatabase(executor({
-      async query<Row>() {
-        const index = calls;
-        calls += 1;
-        if (index === failureAt) throw driverFailure;
-        return { kind: "rows" as const, rows: [{ value: index }] as unknown as readonly Row[] };
+    const db = createDatabase(
+      executor({
+        async query<Row>() {
+          const index = calls;
+          calls += 1;
+          if (index === failureAt) throw driverFailure;
+          return { kind: "rows" as const, rows: [{ value: index }] as unknown as readonly Row[] };
+        },
+      }),
+      {
+        observers: [
+          {
+            onEvent(event) {
+              events.push(event);
+            },
+          },
+        ],
       },
-    }), { observers: [{ onEvent(event) { events.push(event); } }] });
-    await assert.rejects(() => db.batch(rowQueries(3)), (error) => error === driverFailure);
-    const ready = events.filter((event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready");
+    );
+    await assert.rejects(
+      () => db.batch(rowQueries(3)),
+      (error) => error === driverFailure,
+    );
+    const ready = events.filter(
+      (event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready",
+    );
     const terminals = terminalEvents(events);
     assert.equal(calls, failureAt + 1);
     assert.equal(ready.length, 3);
     assert.equal(terminals.length, 3);
-    assert.equal(terminals.every((event) => event.type === "query:error"), true);
-    assert.equal(terminals.filter((event) => event.type === "query:error" && event.executionStarted && !event.executionCompleted).length, 1);
+    assert.equal(
+      terminals.every((event) => event.type === "query:error"),
+      true,
+    );
+    assert.equal(
+      terminals.filter((event) => event.type === "query:error" && event.executionStarted && !event.executionCompleted)
+        .length,
+      1,
+    );
   }
 });
 
@@ -127,16 +177,32 @@ test("batch mapper failure is fail-fast while remaining ready siblings still ter
       },
     },
   };
-  const db = createDatabase(executor({
-    async query<Row>() {
-      calls += 1;
-      return { kind: "rows" as const, rows: [{ value: calls }] as unknown as readonly Row[] };
+  const db = createDatabase(
+    executor({
+      async query<Row>() {
+        calls += 1;
+        return { kind: "rows" as const, rows: [{ value: calls }] as unknown as readonly Row[] };
+      },
+    }),
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
     },
-  }), { observers: [{ onEvent(event) { events.push(event); } }] });
+  );
   const queries = [sql.rows(schema)`SELECT 1`, sql.rows(schema)`SELECT 2`, sql.rows(schema)`SELECT 3`] as const;
 
-  await assert.rejects(() => db.batch(queries), (error) => error === mapperFailure);
-  const ready = events.filter((event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready");
+  await assert.rejects(
+    () => db.batch(queries),
+    (error) => error === mapperFailure,
+  );
+  const ready = events.filter(
+    (event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready",
+  );
   const terminals = terminalEvents(events);
   assert.equal(calls, 3);
   assert.equal(mapperCalls, 1);
@@ -153,18 +219,42 @@ test("batch mapper failure is fail-fast while remaining ready siblings still ter
 test("batch acquisition failure terminates every prepared sibling before physical execution", async () => {
   const events: ExecutionEvent[] = [];
   const acquireFailure = new Error("acquire failed");
-  const db = createPooledDatabase({
-    statementBinding,
-    async acquire() { throw acquireFailure; },
-  }, { observers: [{ onEvent(event) { events.push(event); } }] });
+  const db = createPooledDatabase(
+    {
+      statementBinding,
+      async acquire() {
+        throw acquireFailure;
+      },
+    },
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    },
+  );
 
-  await assert.rejects(() => db.batch(rowQueries(3)), (error) => error === acquireFailure);
-  const ready = events.filter((event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready");
+  await assert.rejects(
+    () => db.batch(rowQueries(3)),
+    (error) => error === acquireFailure,
+  );
+  const ready = events.filter(
+    (event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready",
+  );
   const terminals = terminalEvents(events);
   assert.equal(ready.length, 3);
   assert.equal(terminals.length, 3);
-  assert.equal(terminals.every((event) => event.type === "query:error"), true);
-  assert.equal(terminals.every((event) => event.type === "query:error" && !event.executionStarted && !event.executionCompleted), true);
+  assert.equal(
+    terminals.every((event) => event.type === "query:error"),
+    true,
+  );
+  assert.equal(
+    terminals.every((event) => event.type === "query:error" && !event.executionStarted && !event.executionCompleted),
+    true,
+  );
 });
 
 test("batch preparation failure terminates only the already announced siblings", async () => {
@@ -173,62 +263,108 @@ test("batch preparation failure terminates only the already announced siblings",
   const preparationFailure = new Error("render failed");
   const bad = {
     ...sql.rows`SELECT 2`,
-    render() { throw preparationFailure; },
-  };
-  const db = createDatabase(executor({
-    async query<Row>() {
-      calls += 1;
-      return { kind: "rows" as const, rows: [{ value: calls }] as unknown as readonly Row[] };
+    render() {
+      throw preparationFailure;
     },
-  }), { observers: [{ onEvent(event) { events.push(event); } }] });
+  };
+  const db = createDatabase(
+    executor({
+      async query<Row>() {
+        calls += 1;
+        return { kind: "rows" as const, rows: [{ value: calls }] as unknown as readonly Row[] };
+      },
+    }),
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    },
+  );
 
   await assert.rejects(
     () => db.batch([sql.rows`SELECT 1`, bad, sql.rows`SELECT 3`] as const),
     (error) => error === preparationFailure,
   );
-  const ready = events.filter((event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready");
+  const ready = events.filter(
+    (event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready",
+  );
   const terminals = terminalEvents(events);
   assert.equal(calls, 0);
   assert.equal(ready.length, 1);
   assert.equal(terminals.length, 2);
-  assert.equal(terminals.every((event) => event.type === "query:error"), true);
+  assert.equal(
+    terminals.every((event) => event.type === "query:error"),
+    true,
+  );
 });
 
 test("batch release failure still reports all ready siblings when error observers throw", async () => {
   const events: ExecutionEvent[] = [];
   let releases = 0;
   const releaseFailure = new Error("release failed");
-  const db = createPooledDatabase({
-    statementBinding,
-    async acquire() {
-      return {
-        statementBinding,
-        async query<Row>() { return { kind: "rows" as const, rows: [{ value: 1 }] as unknown as readonly Row[] }; },
-        async *stream<Row>() { yield* [] as readonly Row[]; },
-        async call() { return { output: {}, resultSets: [] }; },
-        release() { releases += 1; throw releaseFailure; },
-      };
+  const db = createPooledDatabase(
+    {
+      statementBinding,
+      async acquire() {
+        return {
+          statementBinding,
+          async query<Row>() {
+            return { kind: "rows" as const, rows: [{ value: 1 }] as unknown as readonly Row[] };
+          },
+          async *stream<Row>() {
+            yield* [] as readonly Row[];
+          },
+          async call() {
+            return { output: {}, resultSets: [] };
+          },
+          release() {
+            releases += 1;
+            throw releaseFailure;
+          },
+        };
+      },
     },
-  }, {
-    observers: [
-      { onEvent(event) { events.push(event); } },
-      { onEvent(event) { if (event.type === "query:error") throw new Error("observer failed"); } },
-    ],
-  });
+    {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+        {
+          onEvent(event) {
+            if (event.type === "query:error") throw new Error("observer failed");
+          },
+        },
+      ],
+    },
+  );
 
-  await assert.rejects(() => db.batch(rowQueries(3)), (error) => error instanceof AggregateError && error.errors.includes(releaseFailure));
+  await assert.rejects(
+    () => db.batch(rowQueries(3)),
+    (error) => error instanceof AggregateError && error.errors.includes(releaseFailure),
+  );
   assert.equal(releases, 1);
-  const ready = events.filter((event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready");
+  const ready = events.filter(
+    (event): event is Extract<ExecutionEvent, { type: "query:ready" }> => event.type === "query:ready",
+  );
   const terminals = terminalEvents(events);
   assert.equal(ready.length, 3);
   assert.equal(terminals.length, 3);
-  assert.equal(terminals.every((event) => event.type === "query:error"), true);
+  assert.equal(
+    terminals.every((event) => event.type === "query:error"),
+    true,
+  );
 });
 
 test.each(
-  (["ready", "result", "mapped", "mapper", "result-kind"] as const).flatMap((phase) => (
-    [0, 1, 2].map((index) => ({ phase, index }))
-  )),
+  (["ready", "result", "mapped", "mapper", "result-kind"] as const).flatMap((phase) =>
+    [0, 1, 2].map((index) => ({ phase, index })),
+  ),
 )("batch $phase failure at item $index reports each announced terminal exactly once", async ({ phase, index }) => {
   const events: ExecutionEvent[] = [];
   const original = new Error(`${phase} failed at ${index}`);
@@ -260,8 +396,12 @@ test.each(
           }
           return { kind: "rows" as const, rows: [{ value: callIndex }] as unknown as readonly Row[] };
         },
-        async *stream<Row>() { yield* [] as readonly Row[]; },
-        async call() { return { output: {}, resultSets: [] }; },
+        async *stream<Row>() {
+          yield* [] as readonly Row[];
+        },
+        async call() {
+          return { output: {}, resultSets: [] };
+        },
         release() {
           releases += 1;
         },
@@ -285,13 +425,16 @@ test.each(
   const db = createPooledDatabase(pooled, {
     observers: [
       ordinaryObserver,
-      { onEvent(event) { events.push(event); } },
+      {
+        onEvent(event) {
+          events.push(event);
+        },
+      },
       createOpenTelemetryObserver({ metrics: false }),
     ],
   });
-  const queries = phase === "mapper"
-    ? schemas.map((schema, queryIndex) => sql.rows(schema)`SELECT ${queryIndex}`)
-    : rowQueries(3);
+  const queries =
+    phase === "mapper" ? schemas.map((schema, queryIndex) => sql.rows(schema)`SELECT ${queryIndex}`) : rowQueries(3);
 
   let callerError: unknown;
   await assert.rejects(
@@ -306,10 +449,7 @@ test.each(
   const expectedIds = [...readyIds];
   assert.equal(readyIds.length, phase === "ready" ? index + 1 : 3);
   assert.equal(terminals.length, expectedIds.length);
-  assert.deepEqual(
-    [...new Set(terminals.map((event) => event.operationId))].sort(),
-    [...new Set(expectedIds)].sort(),
-  );
+  assert.deepEqual([...new Set(terminals.map((event) => event.operationId))].sort(), [...new Set(expectedIds)].sort());
   for (const operationId of expectedIds) {
     assert.equal(terminals.filter((event) => event.operationId === operationId).length, 1);
   }
@@ -329,9 +469,12 @@ test.each(
   }
   const originalEvent = terminals.find((event) => event.operationId === expectedIds[index]);
   assert.ok(originalEvent?.type === "query:error");
-  const expectedCaller = phase === "ready" || phase === "result" || phase === "mapped" || phase === "mapper"
-    ? original
-    : originalEvent?.type === "query:error" ? originalEvent.error : undefined;
+  const expectedCaller =
+    phase === "ready" || phase === "result" || phase === "mapped" || phase === "mapper"
+      ? original
+      : originalEvent?.type === "query:error"
+        ? originalEvent.error
+        : undefined;
   assert.equal(callerError, expectedCaller);
   assert.equal(originalEvent?.type === "query:error" ? originalEvent.error : undefined, expectedCaller);
 });

@@ -32,23 +32,33 @@ function fakeClient(logs: Log[], releaseCounts: { count: number }): BunSqlClient
     const lease = ++leaseSequence;
     const client = ((strings: TemplateStringsArray, ...values: readonly unknown[]): PromiseLike<unknown> => {
       const text = strings.join("");
-      logs.push({ kind: "native", text, values, lease, template: strings, strings: [...strings], raw: [...strings.raw] });
+      logs.push({
+        kind: "native",
+        text,
+        values,
+        lease,
+        template: strings,
+        strings: [...strings],
+        raw: [...strings.raw],
+      });
       const rows = text.startsWith("SELECT")
-        ? [{ value: text.includes("CAST") ? String(values[0] ?? 1) : values[0] ?? 1 }]
+        ? [{ value: text.includes("CAST") ? String(values[0] ?? 1) : (values[0] ?? 1) }]
         : text.startsWith("SHOW")
           ? [{ value: lease }]
           : [];
-      return immediateQuery(Object.assign(rows, {
-        command: text.startsWith("SELECT") || text.startsWith("SHOW") ? "SELECT" : "UPDATE",
-        count: rows.length,
-        lastInsertRowid: null,
-        affectedRows: rows.length,
-      }));
+      return immediateQuery(
+        Object.assign(rows, {
+          command: text.startsWith("SELECT") || text.startsWith("SHOW") ? "SELECT" : "UPDATE",
+          count: rows.length,
+          lastInsertRowid: null,
+          affectedRows: rows.length,
+        }),
+      );
     }) as BunSqlReservedClient;
     client.unsafe = <T = unknown>(text: string, values: readonly unknown[] = []): PromiseLike<T> => {
       logs.push({ kind: "unsafe", text, values, lease });
       const rows = text.startsWith("SELECT")
-        ? [{ value: text.includes("CAST") ? String(values[0] ?? 1) : values[0] ?? 1 }]
+        ? [{ value: text.includes("CAST") ? String(values[0] ?? 1) : (values[0] ?? 1) }]
         : text.startsWith("SHOW")
           ? [{ value: lease }]
           : [];
@@ -60,34 +70,48 @@ function fakeClient(logs: Log[], releaseCounts: { count: number }): BunSqlClient
       });
       return immediateQuery(result as T);
     };
-    client.release = (): void => { releaseCounts.count += 1; };
+    client.release = (): void => {
+      releaseCounts.count += 1;
+    };
     Object.defineProperty(client, "options", { value: { prepare: true } });
     return client;
   };
   const client = ((strings: TemplateStringsArray, ...values: readonly unknown[]): PromiseLike<unknown> => {
     const text = strings.join("");
-    logs.push({ kind: "native", text, values, lease: 0, template: strings, strings: [...strings], raw: [...strings.raw] });
+    logs.push({
+      kind: "native",
+      text,
+      values,
+      lease: 0,
+      template: strings,
+      strings: [...strings],
+      raw: [...strings.raw],
+    });
     const rows = text.startsWith("SELECT")
-      ? [{ value: text.includes("CAST") ? String(values[0] ?? 1) : values[0] ?? 1 }]
+      ? [{ value: text.includes("CAST") ? String(values[0] ?? 1) : (values[0] ?? 1) }]
       : [];
-    return immediateQuery(Object.assign(rows, {
-      command: text.startsWith("SELECT") ? "SELECT" : "UPDATE",
-      count: rows.length,
-      lastInsertRowid: null,
-      affectedRows: rows.length,
-    }));
+    return immediateQuery(
+      Object.assign(rows, {
+        command: text.startsWith("SELECT") ? "SELECT" : "UPDATE",
+        count: rows.length,
+        lastInsertRowid: null,
+        affectedRows: rows.length,
+      }),
+    );
   }) as BunSqlClient;
   client.unsafe = <T = unknown>(text: string, values: readonly unknown[] = []): PromiseLike<T> => {
     logs.push({ kind: "unsafe", text, values, lease: 0 });
     const rows = text.startsWith("SELECT")
-      ? [{ value: text.includes("CAST") ? String(values[0] ?? 1) : values[0] ?? 1 }]
+      ? [{ value: text.includes("CAST") ? String(values[0] ?? 1) : (values[0] ?? 1) }]
       : [];
-    return immediateQuery(Object.assign(rows, {
-      command: text.startsWith("SELECT") ? "SELECT" : "UPDATE",
-      count: rows.length,
-      lastInsertRowid: null,
-      affectedRows: rows.length,
-    }) as T);
+    return immediateQuery(
+      Object.assign(rows, {
+        command: text.startsWith("SELECT") ? "SELECT" : "UPDATE",
+        count: rows.length,
+        lastInsertRowid: null,
+        affectedRows: rows.length,
+      }) as T,
+    );
   };
   client.reserve = async () => makeReserved();
   Object.defineProperty(client, "options", { value: { prepare: true } });
@@ -150,17 +174,16 @@ test("Bun.SQL reserved connections pin sessions and transactions", async () => {
   assert.equal(releaseCounts.count, 1);
   assert.ok(logs.some((entry) => entry.kind === "unsafe" && entry.text.startsWith("START TRANSACTION")));
   assert.ok(logs.some((entry) => entry.kind === "unsafe" && entry.text === "COMMIT"));
-  assert.ok(logs.some((entry) => entry.kind === "native" && entry.strings?.[0] === "SELECT CAST(" && entry.values[0] === 11));
+  assert.ok(
+    logs.some((entry) => entry.kind === "native" && entry.strings?.[0] === "SELECT CAST(" && entry.values[0] === 11),
+  );
 });
 
 test("Bun.SQL uses stable native templates for bulk and rejects Bun structural helpers", async () => {
   const logs: Log[] = [];
   const client = fakeClient(logs, { count: 0 });
   const db = createBunSqlDatabase(client, { dialect: "sqlite" });
-  const prepared = db.prepare(
-    "native-prepared",
-    (value: number) => sqlite.command`UPDATE values SET value = ${value}`,
-  );
+  const prepared = db.prepare("native-prepared", (value: number) => sqlite.command`UPDATE values SET value = ${value}`);
   await prepared.execute(3);
   await prepared.execute(4);
   await db.bulk([1, 2], (value) => sqlite.command`UPDATE values SET value = ${value}`);
@@ -168,24 +191,18 @@ test("Bun.SQL uses stable native templates for bulk and rejects Bun structural h
   assert.equal(bulkEntries.length, 4);
   assert.equal(bulkEntries[0]?.template, bulkEntries[1]?.template);
   assert.equal(bulkEntries[2]?.template, bulkEntries[3]?.template);
-  assert.deepEqual(bulkEntries.map((entry) => entry.values), [[3], [4], [1], [2]]);
+  assert.deepEqual(
+    bulkEntries.map((entry) => entry.values),
+    [[3], [4], [1], [2]],
+  );
   const fragment = client`AND value = ${1}`;
   const before = logs.length;
   const helper = { value: [{ id: 1 }], columns: ["id"] };
-  await assert.rejects(
-    () => db.one(sqlite.rows`SELECT ${helper}`),
-    /Bun\.SQL structural helper/u,
-  );
+  await assert.rejects(() => db.one(sqlite.rows`SELECT ${helper}`), /Bun\.SQL structural helper/u);
   assert.equal(logs.length, before);
-  await assert.rejects(
-    () => db.one(sqlite.rows`SELECT 1 ${fragment}`),
-    /Bun\.SQL query or fragment/u,
-  );
+  await assert.rejects(() => db.one(sqlite.rows`SELECT 1 ${fragment}`), /Bun\.SQL query or fragment/u);
   assert.equal(logs.length, before);
-  await assert.rejects(
-    () => db.one(sqlite.rows`SELECT ${ { json: true } }`),
-    /ambiguous Bun\.SQL object value/u,
-  );
+  await assert.rejects(() => db.one(sqlite.rows`SELECT ${{ json: true }}`), /ambiguous Bun\.SQL object value/u);
   assert.equal(logs.length, before);
 });
 
@@ -195,9 +212,10 @@ test("Bun.SQL quarantines discard requests without a scoped discard primitive", 
   const lease = await provider.acquire();
   await assert.rejects(
     async () => lease.release({ discard: true }),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.code === "BRAID_RESOURCE_CLEANUP"
-      && error.feature === "resource.discard",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.code === "BRAID_RESOURCE_CLEANUP" &&
+      error.feature === "resource.discard",
   );
   await assert.rejects(
     async () => lease.release(),
@@ -211,7 +229,11 @@ test("Bun.SQL exposes explicit unsupported streaming and routine paths", async (
   const db = createBunSqlDatabase(fakeClient(logs, { count: 0 }), { dialect: "mariadb" });
   const stream = db.stream(mariadb.rows<{ value: number }>`SELECT 1`);
   await assert.rejects(
-    async () => { for await (const _row of stream) { /* unreachable */ } },
+    async () => {
+      for await (const _row of stream) {
+        /* unreachable */
+      }
+    },
     (error: unknown) => error instanceof UnsupportedFeatureError && error.code === "BRAID_STREAM_UNSUPPORTED",
   );
   await assert.rejects(
@@ -220,7 +242,6 @@ test("Bun.SQL exposes explicit unsupported streaming and routine paths", async (
   );
   assert.equal(logs.length, 0, "unsupported operations must fail before statement I/O");
 });
-
 
 test("Bun.SQL SQLite uses one direct physical client and advertises canonical capabilities", async () => {
   const logs: Log[] = [];

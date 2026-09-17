@@ -9,13 +9,13 @@ description: Node에 내장된 SQLite 드라이버로 첫 SQLBraid 쿼리를 실
 
 SQLite dialect는 공유하지만 물리적 adapter는 subpath로 선택합니다.
 
-| Subpath | 물리적 경계 | 중요한 제한 |
-| --- | --- | --- |
-| `sqlbraid/node-sqlite` | Node `DatabaseSync` / `StatementSync` | 물리 호출은 동기식이며 INTEGER는 exact string; stream은 native `iterate()` |
-| `sqlbraid/better-sqlite3` | better-sqlite3 statement | 동기식이고 event loop를 block함; statement-local `safeIntegers(true)`와 native iteration |
-| `sqlbraid/libsql` | `@libsql/client` | `intMode: "string"` 필요; interactive transaction; pinned session이나 stream fallback 없음 |
-| `sqlbraid/sqlite-wasm` | SQLite WASM OO1 | OO1 statement ownership; stream은 async generator로 변환 |
-| `sqlbraid/d1` | Cloudflare D1 | prepared bind; streaming과 callback transaction 없음 |
+| Subpath                   | 물리적 경계                           | 중요한 제한                                                                                |
+| ------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `sqlbraid/node-sqlite`    | Node `DatabaseSync` / `StatementSync` | 물리 호출은 동기식이며 INTEGER는 exact string; stream은 native `iterate()`                 |
+| `sqlbraid/better-sqlite3` | better-sqlite3 statement              | 동기식이고 event loop를 block함; statement-local `safeIntegers(true)`와 native iteration   |
+| `sqlbraid/libsql`         | `@libsql/client`                      | `intMode: "string"` 필요; interactive transaction; pinned session이나 stream fallback 없음 |
+| `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                       | OO1 statement ownership; stream은 async generator로 변환                                   |
+| `sqlbraid/d1`             | Cloudflare D1                         | prepared bind; streaming과 callback transaction 없음                                       |
 
 모든 adapter의 public `Database` API는 async로 유지됩니다. `Awaitable<T>`는
 동기식 adapter가 Promise wrapper 없이 plain result를 반환하도록 하는
@@ -37,15 +37,15 @@ checkout을 인증하지 않습니다. 최종 exact-SHA Runtime, Docs, Release g
 Node와 Node에 번들된 SQLite library를 기록합니다. INTEGER는 public 결과에서
 canonical `string`이며 native `bigint`는 어댑터 내부 표현일 뿐입니다.
 
-| SQLite 표면 | 프로필 표현 | 상태/주의 |
-| --- | --- | --- |
-| INTEGER | JavaScript `string` | int64를 lossless하게 보존합니다. native `bigint`는 public API가 아닙니다. |
-| REAL | JavaScript `number` | IEEE binary 부동소수점이며 decimal exactness를 주장하지 않습니다. |
-| `STRICT` table | SQLite native affinity enforcement | schema 기능이며 SQLBraid parser 보장이 아닙니다. |
-| non-STRICT table / `ANY` | SQLite dynamic value | 저장된 값과 driver에 따라 반환 표현이 달라집니다. |
-| JSON1 | text | Standard Schema로 JSON text를 파싱/검증합니다. |
-| BLOB | `Buffer`/bytes | binary로 유지하거나 명시적으로 encode합니다. |
-| `RETURNING` | materialized rowset | 전달 전에 output을 축적하며 DML-returning stream은 주장하지 않습니다. |
+| SQLite 표면              | 프로필 표현                        | 상태/주의                                                                 |
+| ------------------------ | ---------------------------------- | ------------------------------------------------------------------------- |
+| INTEGER                  | JavaScript `string`                | int64를 lossless하게 보존합니다. native `bigint`는 public API가 아닙니다. |
+| REAL                     | JavaScript `number`                | IEEE binary 부동소수점이며 decimal exactness를 주장하지 않습니다.         |
+| `STRICT` table           | SQLite native affinity enforcement | schema 기능이며 SQLBraid parser 보장이 아닙니다.                          |
+| non-STRICT table / `ANY` | SQLite dynamic value               | 저장된 값과 driver에 따라 반환 표현이 달라집니다.                         |
+| JSON1                    | text                               | Standard Schema로 JSON text를 파싱/검증합니다.                            |
+| BLOB                     | `Buffer`/bytes                     | binary로 유지하거나 명시적으로 encode합니다.                              |
+| `RETURNING`              | materialized rowset                | 전달 전에 output을 축적하며 DML-returning stream은 주장하지 않습니다.     |
 
 Native binding은 `?` placeholder와 `StatementSync`를 사용하고, `iterate()`가
 stream primitive이며 prepared loop가 bulk 전략입니다. SQLite에는
@@ -203,5 +203,3 @@ IN 값은 acquire 전에 거부되고 `null`은 SQL `NULL`입니다. SQLite
 scalar/aggregate/window function은 일반 SQL 함수이며 virtual-table/table-valued
 extension도 stored procedure가 아닌 일반 행 쿼리입니다.
 :::
-
-

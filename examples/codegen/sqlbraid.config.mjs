@@ -3,11 +3,13 @@ import { typePolicy } from "@sqlbraid/sqlite";
 
 export default defineConfig({
   codegen: {
-    targets: [{
-      name: "db",
-      metadata: "metadata.json",
-      outFile: "generated.ts",
-      typePolicy,
-    }],
+    targets: [
+      {
+        name: "db",
+        metadata: "metadata.json",
+        outFile: "generated.ts",
+        typePolicy,
+      },
+    ],
   },
 });

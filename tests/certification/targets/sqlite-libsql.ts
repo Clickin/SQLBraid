@@ -14,7 +14,16 @@ async function createFixture(): Promise<CertificationFixture> {
   const { directory, cleanup } = await makeLibsqlDirectory();
   const client = createClient({ url: `file:${directory}/database.db`, intMode: "string" });
   try {
-    const stats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0, iteratorReturns: 0, streamReleases: 0, activeStreams: 0, nativeOperations: 0 };
+    const stats = {
+      ready: 0,
+      result: 0,
+      streamStarts: 0,
+      streamEnds: 0,
+      iteratorReturns: 0,
+      streamReleases: 0,
+      activeStreams: 0,
+      nativeOperations: 0,
+    };
     const observedClient = {
       ...client,
       execute: (...args: Parameters<typeof client.execute>) => {
@@ -33,14 +42,16 @@ async function createFixture(): Promise<CertificationFixture> {
     };
     const db = createLibsqlDatabase(observedClient, {
       intMode: "string",
-      observers: [{
-        onEvent(event) {
-          if (event.type === "bulk:ready") stats.ready += 1;
-          if (event.type === "bulk:result") stats.result += 1;
-          if (event.type === "stream:start") stats.streamStarts += 1;
-          if (event.type === "stream:end") stats.streamEnds += 1;
+      observers: [
+        {
+          onEvent(event) {
+            if (event.type === "bulk:ready") stats.ready += 1;
+            if (event.type === "bulk:result") stats.result += 1;
+            if (event.type === "stream:start") stats.streamStarts += 1;
+            if (event.type === "stream:end") stats.streamEnds += 1;
+          },
         },
-      }],
+      ],
     });
     await db.execute(sql.command`CREATE TABLE cert_items (value TEXT NOT NULL)`);
     await db.execute(sql.command`CREATE TABLE cert_sentinel (id INTEGER PRIMARY KEY, marker TEXT NOT NULL)`);
@@ -54,7 +65,8 @@ async function createFixture(): Promise<CertificationFixture> {
       const observedClient = {
         protocol: probeClient.protocol,
         execute: (statement: Parameters<typeof probeClient.execute>[0]) => probeClient.execute(statement),
-        batch: (statements: Parameters<typeof probeClient.batch>[0], mode?: "write" | "read" | "deferred") => probeClient.batch(statements, mode),
+        batch: (statements: Parameters<typeof probeClient.batch>[0], mode?: "write" | "read" | "deferred") =>
+          probeClient.batch(statements, mode),
         transaction: async (mode?: "write" | "read" | "deferred") => {
           nativeTransaction = await probeClient.transaction(mode);
           return nativeTransaction;
@@ -74,11 +86,21 @@ async function createFixture(): Promise<CertificationFixture> {
         } catch (error) {
           caught = error;
         }
-        const nativeRollbackErrors = caught instanceof AggregateError
-          ? caught.errors.filter((error) => error !== primary && error instanceof Error && typeof (error as { code?: unknown }).code === "string")
-          : [];
-        if (!(caught instanceof AggregateError) || !caught.errors.includes(primary) || nativeRollbackErrors.length === 0) {
-          throw new Error("libSQL transaction cleanup did not aggregate the native rollback failure.", { cause: caught });
+        const nativeRollbackErrors =
+          caught instanceof AggregateError
+            ? caught.errors.filter(
+                (error) =>
+                  error !== primary && error instanceof Error && typeof (error as { code?: unknown }).code === "string",
+              )
+            : [];
+        if (
+          !(caught instanceof AggregateError) ||
+          !caught.errors.includes(primary) ||
+          nativeRollbackErrors.length === 0
+        ) {
+          throw new Error("libSQL transaction cleanup did not aggregate the native rollback failure.", {
+            cause: caught,
+          });
         }
       } finally {
         probeClient.close();

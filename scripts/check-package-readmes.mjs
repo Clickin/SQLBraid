@@ -13,13 +13,11 @@ function exportKeys(exportsField) {
   if (exportsField === null || typeof exportsField !== "object") return new Set();
 
   const keys = Object.keys(exportsField);
-  return keys.some((key) => key.startsWith("."))
-    ? new Set(keys)
-    : new Set(["."]);
+  return keys.some((key) => key.startsWith(".")) ? new Set(keys) : new Set(["."]);
 }
 
 function readFencedBlocks(text) {
-  const lines = text.split("\n").map((line) => line.endsWith("\r") ? line.slice(0, -1) : line);
+  const lines = text.split("\n").map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line));
   const blocks = [];
   let current;
 
@@ -92,7 +90,9 @@ async function discoverPackages() {
   const manifests = new Map();
   const errors = [];
 
-  for (const entry of entries.filter((entry) => entry.isDirectory()).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
+  for (const entry of entries
+    .filter((entry) => entry.isDirectory())
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
     const packageDir = join(packagesRoot, entry.name);
     const manifestPath = join(packageDir, "package.json");
     let manifest;
@@ -130,9 +130,9 @@ async function checkPackage(readme, packageInfo) {
   if (!readme.includes(canonicalDocsRoot)) {
     errors.push(`${displayPath}: missing canonical docs link ${canonicalDocsRoot}`);
   }
-  const installLine = lines.findIndex((line) =>
-    /\b(?:npm\s+(?:install|i)|pnpm\s+add|yarn\s+add|bun\s+add)\b/iu.test(line) &&
-    line.includes(packageInfo.name),
+  const installLine = lines.findIndex(
+    (line) =>
+      /\b(?:npm\s+(?:install|i)|pnpm\s+add|yarn\s+add|bun\s+add)\b/iu.test(line) && line.includes(packageInfo.name),
   );
   if (installLine === -1) {
     errors.push(`${displayPath}: missing an install command for ${packageInfo.name}`);
@@ -143,12 +143,16 @@ async function checkPackage(readme, packageInfo) {
       const packageImportInfo = packageImport(imported.specifier, packageInfo.discovered);
       if (!packageImportInfo) continue;
       if (!packageImportInfo.manifest) {
-        errors.push(`${displayPath}:${imported.number}: first-party import "${imported.specifier}" is not a discovered publishable package`);
+        errors.push(
+          `${displayPath}:${imported.number}: first-party import "${imported.specifier}" is not a discovered publishable package`,
+        );
         continue;
       }
       if (!packageImportInfo.manifest.exports.has(packageImportInfo.subpath)) {
         const available = [...packageImportInfo.manifest.exports].sort().join(", ") || "(none)";
-        errors.push(`${displayPath}:${imported.number}: import "${imported.specifier}" is not exported by ${packageImportInfo.packageName}; available exports: ${available}`);
+        errors.push(
+          `${displayPath}:${imported.number}: import "${imported.specifier}" is not exported by ${packageImportInfo.packageName}; available exports: ${available}`,
+        );
       }
     }
   }
@@ -157,7 +161,9 @@ async function checkPackage(readme, packageInfo) {
 
 async function main() {
   const { manifests, errors } = await discoverPackages();
-  const packages = [...manifests.values()].sort((a, b) => a.directory < b.directory ? -1 : a.directory > b.directory ? 1 : 0);
+  const packages = [...manifests.values()].sort((a, b) =>
+    a.directory < b.directory ? -1 : a.directory > b.directory ? 1 : 0,
+  );
   for (const packageInfo of packages) {
     packageInfo.discovered = manifests;
     const readmePath = join(packageInfo.directory, "README.md");
@@ -168,7 +174,7 @@ async function main() {
       errors.push(`${relative(root, readmePath)}: unable to read README.md (${error.message})`);
       continue;
     }
-    errors.push(...await checkPackage(readme, packageInfo));
+    errors.push(...(await checkPackage(readme, packageInfo)));
   }
 
   if (errors.length > 0) {

@@ -2,29 +2,40 @@
   "name": "@sqlbraid/codegen",
   "version": "1.0.0-rc.2",
   "description": "Generate TypeScript models from SQLBraid database metadata snapshots",
+  "keywords": [
+    "codegen",
+    "database",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/codegen"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
-  },
-  "keywords": ["sql", "typescript", "database", "codegen"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=22.18.0" },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@sqlbraid/core": "workspace:*",
     "@sqlbraid/metadata": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

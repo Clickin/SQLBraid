@@ -104,7 +104,11 @@ function resultColumns(statement: BetterSqlite3StatementLike): readonly BetterSq
 }
 
 function unsupportedCall(): never {
-  throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "better-sqlite3 does not support routine calls.");
+  throw new UnsupportedFeatureError(
+    "routine.call",
+    "BRAID_CALL_UNSUPPORTED",
+    "better-sqlite3 does not support routine calls.",
+  );
 }
 
 function assertRoutineUnsupported(rendered: RenderedStatement): void {
@@ -203,11 +207,11 @@ function validateTransactionOptions(options?: TransactionOptions): void {
     invalidTransactionOptions("transaction readOnly must be boolean.");
   }
   if (
-    candidate.isolation !== undefined
-    && candidate.isolation !== "read-uncommitted"
-    && candidate.isolation !== "read-committed"
-    && candidate.isolation !== "repeatable-read"
-    && candidate.isolation !== "serializable"
+    candidate.isolation !== undefined &&
+    candidate.isolation !== "read-uncommitted" &&
+    candidate.isolation !== "read-committed" &&
+    candidate.isolation !== "repeatable-read" &&
+    candidate.isolation !== "serializable"
   ) {
     invalidTransactionOptions("transaction isolation is not a supported standard literal.");
   }
@@ -236,13 +240,15 @@ export const betterSqlite3StatementBinding: StatementBindingAdapter = Object.fre
   describeBulk(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription {
     const statement = createRenderedStatement(bulk.statement);
     assertRoutineParametersUnsupported(statement);
-    if (statement.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: better-sqlite3 bulk requires command queries.");
+    if (statement.resultKind !== "command")
+      throw new Error("BRAID_BULK_SHAPE: better-sqlite3 bulk requires command queries.");
     if (statement.parameters.some((parameter) => (parameter.direction ?? "in") !== "in")) {
       throw new Error("BRAID_BULK_SHAPE: better-sqlite3 bulk does not support OUT or INOUT parameters.");
     }
     assertParameterHintsUnsupported(statement);
     for (const values of bulk.parameterSets) {
-      if (values.length !== statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: better-sqlite3 bulk parameter cardinality changed.");
+      if (values.length !== statement.parameters.length)
+        throw new Error("BRAID_BULK_SHAPE: better-sqlite3 bulk parameter cardinality changed.");
       assertBetterSqlite3Values(values);
     }
     const description = createBulkBindingDescription(bulk, context, {
@@ -301,10 +307,18 @@ function betterSqlite3Environment(): DriverEnvironment {
       "sql.native-transparency": { status: "guaranteed" },
       "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["bigint", "string"] },
       "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-      "numeric.bind-exact": { status: "guaranteed", canonical: "string", rawRepresentations: ["string", "number", "bigint"] },
-      "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Uint8Array", "ArrayBuffer"] },
+      "numeric.bind-exact": {
+        status: "guaranteed",
+        canonical: "string",
+        rawRepresentations: ["string", "number", "bigint"],
+      },
+      "data.binary": {
+        status: "guaranteed",
+        canonical: "Uint8Array",
+        rawRepresentations: ["Uint8Array", "ArrayBuffer"],
+      },
       "session.pinned": { status: "guaranteed" },
-      "transaction": { status: "guaranteed" },
+      transaction: { status: "guaranteed" },
       "transaction.savepoint": { status: "guaranteed" },
       "transaction.read-only": { status: "unsupported" },
       "transaction.isolation.read-uncommitted": { status: "unsupported" },
@@ -347,7 +361,11 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
     ownershipKey: database,
     statementBinding: betterSqlite3StatementBinding,
     environment: betterSqlite3Environment(),
-    query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): QueryExecutionResult<Row> {
+    query<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): QueryExecutionResult<Row> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
@@ -378,12 +396,18 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
       assertExecutionOptions(options);
       assertRoutineParametersUnsupported(bulk.statement);
       if (!binding || describedBulks.get(binding) !== bulk) {
-        throw new TypeError("BRAID_BINDING_IDENTITY: better-sqlite3 bulk description belongs to another bulk or adapter.");
+        throw new TypeError(
+          "BRAID_BINDING_IDENTITY: better-sqlite3 bulk description belongs to another bulk or adapter.",
+        );
       }
       const prepared = binding.parameterizedSql;
-      if (prepared === undefined) throw new Error("BRAID_BIND_TRANSPORT: better-sqlite3 bulk binding description did not provide parameterized SQL.");
+      if (prepared === undefined)
+        throw new Error(
+          "BRAID_BIND_TRANSPORT: better-sqlite3 bulk binding description did not provide parameterized SQL.",
+        );
       const native = database.prepare(prepared);
-      if (resultColumns(native).length > 0) throw new Error("BRAID_BULK_SHAPE: better-sqlite3 bulk requires a non-row statement.");
+      if (resultColumns(native).length > 0)
+        throw new Error("BRAID_BULK_SHAPE: better-sqlite3 bulk requires a non-row statement.");
       configureExactIntegerReads(native);
       let affectedRows: number | undefined = 0;
       for (let index = 0; index < bulk.parameterSets.length; index += 1) {
@@ -402,7 +426,11 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
         executionMode: "prepared-loop",
       };
     },
-    call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): DriverRoutineResult {
+    call(
+      rendered: RenderedStatement,
+      _binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): DriverRoutineResult {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
@@ -443,7 +471,8 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
           const cleanup = Object.assign(new Error("better-sqlite3 iterator cleanup failed.", { cause }), {
             code: "BRAID_RESOURCE_CLEANUP",
           });
-          if (failed) throw new AggregateError([readError, cleanup], "SQLite read and cleanup failed.", { cause: readError });
+          if (failed)
+            throw new AggregateError([readError, cleanup], "SQLite read and cleanup failed.", { cause: readError });
           throw cleanup;
         }
       }

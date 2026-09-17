@@ -13,11 +13,13 @@ const typePolicy = {
 
 export default defineConfig({
   codegen: {
-    targets: [{
-      name: "fixture",
-      metadata: "./metadata.json",
-      outFile: "./generated/database.ts",
-      typePolicy,
-    }],
+    targets: [
+      {
+        name: "fixture",
+        metadata: "./metadata.json",
+        outFile: "./generated/database.ts",
+        typePolicy,
+      },
+    ],
   },
 });

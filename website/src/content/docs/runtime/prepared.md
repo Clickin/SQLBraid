@@ -6,9 +6,12 @@ description: Reuse a stable SQLBraid query shape without promising native driver
 Register a named input factory (required input by default):
 
 ```ts
-const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`
+const byId = db.prepare(
+  "user-by-id",
+  (id: string) => sql.rows<UserRow>`
   SELECT id, name FROM users WHERE id = ${id}
-`);
+`,
+);
 
 const user = await byId.maybeOne("u_1");
 const all = await byId.all("u_1", { schema: UserSchema });
@@ -18,21 +21,15 @@ for await (const row of byId.stream("u_1", { signal })) consume(row);
 You may make the required-input contract explicit:
 
 ```ts
-const byId = db.prepare(
-  "user-by-id",
-  (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`,
-  { input: "required" },
-);
+const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`, {
+  input: "required",
+});
 ```
 
 Declare a zero-input factory explicitly with `{ input: "none" }`:
 
 ```ts
-const users = db.prepare(
-  "users",
-  () => sql.rows<UserRow>`SELECT id, name FROM users`,
-  { input: "none" },
-);
+const users = db.prepare("users", () => sql.rows<UserRow>`SELECT id, name FROM users`, { input: "none" });
 await users.all({ signal });
 ```
 

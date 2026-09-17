@@ -91,11 +91,11 @@ export type LibsqlDatabaseOptions = DatabaseOptions & LibsqlExecutorOptions;
 
 function assertClient(client: LibsqlClientLike): void {
   if (
-    client === null
-    || typeof client !== "object"
-    || typeof client.execute !== "function"
-    || typeof client.batch !== "function"
-    || typeof client.transaction !== "function"
+    client === null ||
+    typeof client !== "object" ||
+    typeof client.execute !== "function" ||
+    typeof client.batch !== "function" ||
+    typeof client.transaction !== "function"
   ) {
     throw new TypeError("SQLBraid libSQL adapter requires a client with execute(), batch(), and transaction().");
   }
@@ -103,23 +103,37 @@ function assertClient(client: LibsqlClientLike): void {
 
 function assertExactStringMode(options: LibsqlExecutorOptions): void {
   if (options === null || typeof options !== "object" || options.intMode !== "string") {
-    throw new TypeError("BRAID_INTEGER_MODE_REQUIRED: libSQL adapter requires an explicit intMode: \"string\" assertion.");
+    throw new TypeError(
+      'BRAID_INTEGER_MODE_REQUIRED: libSQL adapter requires an explicit intMode: "string" assertion.',
+    );
   }
 }
 
 function assertRoutineUnsupported(rendered: RenderedStatement): void {
   if (rendered.resultKind === "call" || rendered.routineProcedure !== undefined) {
-    throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "libSQL does not support routine calls.");
+    throw new UnsupportedFeatureError(
+      "routine.call",
+      "BRAID_CALL_UNSUPPORTED",
+      "libSQL does not support routine calls.",
+    );
   }
 }
 
 function assertRoutineParametersUnsupported(rendered: RenderedStatement): void {
   for (const parameter of rendered.parameters) {
     if (parameter.direction === "inout") {
-      throw new UnsupportedFeatureError("routine.inout", "BRAID_CALL_OUT_UNSUPPORTED", "libSQL does not expose a routine INOUT parameter carrier.");
+      throw new UnsupportedFeatureError(
+        "routine.inout",
+        "BRAID_CALL_OUT_UNSUPPORTED",
+        "libSQL does not expose a routine INOUT parameter carrier.",
+      );
     }
     if (parameter.direction === "out" || parameter.outputName !== undefined) {
-      throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "libSQL does not expose a routine OUT parameter carrier.");
+      throw new UnsupportedFeatureError(
+        "routine.out",
+        "BRAID_CALL_OUT_UNSUPPORTED",
+        "libSQL does not expose a routine OUT parameter carrier.",
+      );
     }
   }
 }
@@ -145,7 +159,8 @@ function isArrayBuffer(value: unknown): value is ArrayBuffer {
 function assertLibsqlValue(value: unknown): asserts value is LibsqlValue {
   if (value === null || typeof value === "string" || typeof value === "boolean" || value instanceof Date) return;
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "libSQL binds require finite numbers.");
+    if (!Number.isFinite(value))
+      throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "libSQL binds require finite numbers.");
     return;
   }
   if (typeof value === "bigint") {
@@ -155,12 +170,16 @@ function assertLibsqlValue(value: unknown): asserts value is LibsqlValue {
     return;
   }
   if (isArrayBuffer(value) || value instanceof Uint8Array) return;
-  throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "libSQL binds support null, strings, booleans, finite numbers, bigint, Date, and binary buffers.");
+  throw new AdapterError(
+    "BRAID_BIND_VALUE_UNSUPPORTED",
+    "libSQL binds support null, strings, booleans, finite numbers, bigint, Date, and binary buffers.",
+  );
 }
 
 function assertLibsqlValues(values: readonly unknown[]): asserts values is readonly LibsqlValue[] {
   for (const value of values) {
-    if (value === undefined) throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "undefined cannot be passed as a libSQL argument.");
+    if (value === undefined)
+      throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", "undefined cannot be passed as a libSQL argument.");
     assertLibsqlValue(value);
   }
 }
@@ -203,10 +222,10 @@ function transactionModeFor(client: LibsqlClientLike, options?: TransactionOptio
   }
   if (candidate.isolation !== undefined) {
     if (
-      candidate.isolation !== "read-uncommitted"
-      && candidate.isolation !== "read-committed"
-      && candidate.isolation !== "repeatable-read"
-      && candidate.isolation !== "serializable"
+      candidate.isolation !== "read-uncommitted" &&
+      candidate.isolation !== "read-committed" &&
+      candidate.isolation !== "repeatable-read" &&
+      candidate.isolation !== "serializable"
     ) {
       invalidTransactionOptions("transaction isolation is not a supported standard literal.");
     }
@@ -246,19 +265,19 @@ function normalizeValue(value: unknown): unknown {
 }
 
 function valueAt(row: LibsqlRowLike, index: number, name: string): unknown {
-  if (row === null || typeof row !== "object") throw new TypeError("BRAID_RESULT_ROW: libSQL returned a non-object row.");
+  if (row === null || typeof row !== "object")
+    throw new TypeError("BRAID_RESULT_ROW: libSQL returned a non-object row.");
   if (index in row) return row[index];
   return row[name];
 }
 
 function normalizeRow(row: LibsqlRowLike, columns: readonly string[]): Record<string, unknown> {
-  return Object.fromEntries(
-    columns.map((name, index) => [name, normalizeValue(valueAt(row, index, name))]),
-  );
+  return Object.fromEntries(columns.map((name, index) => [name, normalizeValue(valueAt(row, index, name))]));
 }
 
 function resultRows<Row>(result: LibsqlResultSetLike): readonly Row[] {
-  if (!Array.isArray(result.columns)) throw new TypeError("BRAID_RESULT_COLUMNS: libSQL result metadata must include columns.");
+  if (!Array.isArray(result.columns))
+    throw new TypeError("BRAID_RESULT_COLUMNS: libSQL result metadata must include columns.");
   validateColumns(result.columns);
   if (!Array.isArray(result.rows)) throw new TypeError("BRAID_RESULT_ROWS: libSQL result metadata must include rows.");
   if (result.columns.length === 0) {
@@ -269,7 +288,8 @@ function resultRows<Row>(result: LibsqlResultSetLike): readonly Row[] {
 }
 
 function commandResult(result: LibsqlResultSetLike): CommandExecutionResult {
-  if (!Array.isArray(result.columns)) throw new TypeError("BRAID_RESULT_COLUMNS: libSQL result metadata must include columns.");
+  if (!Array.isArray(result.columns))
+    throw new TypeError("BRAID_RESULT_COLUMNS: libSQL result metadata must include columns.");
   validateColumns(result.columns);
   if (result.columns.length > 0) {
     throw new Error("BRAID_RESULT_KIND: libSQL returned a row-producing result for a command.");
@@ -277,12 +297,14 @@ function commandResult(result: LibsqlResultSetLike): CommandExecutionResult {
   if (!Array.isArray(result.rows) || result.rows.length !== 0) {
     throw new Error("BRAID_RESULT_KIND: libSQL returned rows without column metadata.");
   }
-  const affectedRows = result.rowsAffected === undefined || result.rowsAffected === null
-    ? undefined
-    : safeDatabaseCount(result.rowsAffected);
-  const insertId = result.lastInsertRowid === undefined || result.lastInsertRowid === null
-    ? undefined
-    : normalizeExactInteger(result.lastInsertRowid);
+  const affectedRows =
+    result.rowsAffected === undefined || result.rowsAffected === null
+      ? undefined
+      : safeDatabaseCount(result.rowsAffected);
+  const insertId =
+    result.lastInsertRowid === undefined || result.lastInsertRowid === null
+      ? undefined
+      : normalizeExactInteger(result.lastInsertRowid);
   return {
     rows: [],
     ...(affectedRows === undefined ? {} : { rowCount: affectedRows }),
@@ -295,7 +317,8 @@ function commandResult(result: LibsqlResultSetLike): CommandExecutionResult {
 }
 
 function materializeResult<Row>(result: LibsqlResultSetLike): QueryExecutionResult<Row> {
-  if (!Array.isArray(result.columns)) throw new TypeError("BRAID_RESULT_COLUMNS: libSQL result metadata must include columns.");
+  if (!Array.isArray(result.columns))
+    throw new TypeError("BRAID_RESULT_COLUMNS: libSQL result metadata must include columns.");
   validateColumns(result.columns);
   if (result.columns.length === 0) return commandResult(result) as QueryExecutionResult<Row>;
   return { rows: resultRows<Row>(result), rowCount: result.rows.length, kind: "rows" };
@@ -332,7 +355,8 @@ export const libsqlStatementBinding: StatementBindingAdapter = Object.freeze({
     if (statement.resultKind !== "command") throw new Error("BRAID_BULK_SHAPE: libSQL bulk requires command queries.");
     assertParameterHintsUnsupported(statement);
     for (const values of bulk.parameterSets) {
-      if (values.length !== statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: libSQL bulk parameter cardinality changed.");
+      if (values.length !== statement.parameters.length)
+        throw new Error("BRAID_BULK_SHAPE: libSQL bulk parameter cardinality changed.");
       assertLibsqlValues(values);
     }
     const description = createBulkBindingDescription(bulk, context, {
@@ -356,8 +380,10 @@ function materialize(
 ): { readonly text: string; readonly values: readonly LibsqlValue[] } {
   statement = createRenderedStatement(statement);
   const description = binding ?? libsqlStatementBinding.describe(statement, bindingContext(statement));
-  if (describedStatements.get(description) !== statement) throw new TypeError("BRAID_BINDING_IDENTITY: libSQL description belongs to another statement or adapter.");
-  if (description.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: libSQL binding description did not provide parameterized SQL.");
+  if (describedStatements.get(description) !== statement)
+    throw new TypeError("BRAID_BINDING_IDENTITY: libSQL description belongs to another statement or adapter.");
+  if (description.parameterizedSql === undefined)
+    throw new Error("BRAID_BIND_TRANSPORT: libSQL binding description did not provide parameterized SQL.");
   const values = statement.parameters.map((parameter) => parameter.value);
   assertLibsqlValues(values);
   return { text: description.parameterizedSql, values };
@@ -370,7 +396,8 @@ function materializeBulk(
   if (!binding || describedBulks.get(binding) !== bulk) {
     throw new TypeError("BRAID_BINDING_IDENTITY: libSQL bulk description belongs to another bulk or adapter.");
   }
-  if (binding.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: libSQL bulk binding description did not provide parameterized SQL.");
+  if (binding.parameterizedSql === undefined)
+    throw new Error("BRAID_BIND_TRANSPORT: libSQL bulk binding description did not provide parameterized SQL.");
   return { text: binding.parameterizedSql, valuesAt: (index) => binding.valuesAt(index) as readonly LibsqlValue[] };
 }
 
@@ -382,10 +409,14 @@ const libsqlEnvironment = Object.freeze<DriverEnvironment>({
     "sql.native-transparency": { status: "guaranteed" },
     "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
     "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-    "numeric.bind-exact": { status: "guaranteed", canonical: "string", rawRepresentations: ["string", "number", "bigint"] },
+    "numeric.bind-exact": {
+      status: "guaranteed",
+      canonical: "string",
+      rawRepresentations: ["string", "number", "bigint"],
+    },
     "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["ArrayBuffer", "Uint8Array"] },
     "session.pinned": { status: "unsupported", conditionCode: "libsql.client-no-session-pinning" },
-    "transaction": { status: "guaranteed" },
+    transaction: { status: "guaranteed" },
     "transaction.savepoint": { status: "guaranteed" },
     "transaction.read-only": { status: "guaranteed" },
     "transaction.isolation.read-uncommitted": { status: "unsupported" },
@@ -443,12 +474,16 @@ async function closeTransaction(transaction: LibsqlTransactionLike, original?: u
   try {
     await transaction.close();
   } catch (cause) {
-    if (original !== undefined) throw new AggregateError([original, cause], "libSQL transaction and cleanup failed.", { cause: original });
+    if (original !== undefined)
+      throw new AggregateError([original, cause], "libSQL transaction and cleanup failed.", { cause: original });
     throw cause;
   }
 }
 
-function transactionStatement(name: string, command: "SAVEPOINT" | "ROLLBACK TO SAVEPOINT" | "RELEASE SAVEPOINT"): string {
+function transactionStatement(
+  name: string,
+  command: "SAVEPOINT" | "ROLLBACK TO SAVEPOINT" | "RELEASE SAVEPOINT",
+): string {
   return `${command} ${assertSavepointName(name)}`;
 }
 
@@ -464,7 +499,11 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
     validateTransactionOptions: (options?: TransactionOptions): void => {
       transactionModeFor(client, options);
     },
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<QueryExecutionResult<Row>> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
@@ -473,7 +512,11 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
       const result = await (transaction ?? client).execute(statementInput(prepared.text, prepared.values));
       return materializeResult<Row>(result);
     },
-    async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult> {
+    async bulk(
+      bulk: RenderedBulk,
+      binding: BulkBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<BulkExecutionResult> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(bulk.statement);
       assertRoutineParametersUnsupported(bulk.statement);
@@ -485,7 +528,8 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
         statements.push(statementInput(prepared.text, values));
       }
       const results = await (transaction ?? client).batch(statements);
-      if (results.length !== statements.length) throw new Error("BRAID_BULK_RESULT_COUNT: libSQL batch returned an unexpected result count.");
+      if (results.length !== statements.length)
+        throw new Error("BRAID_BULK_RESULT_COUNT: libSQL batch returned an unexpected result count.");
       let affectedRows = 0;
       let hasAffectedRows = false;
       for (const result of results) {
@@ -501,28 +545,45 @@ export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlEx
         executionMode: "remote-batch",
       };
     },
-    async call(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<DriverRoutineResult> {
+    async call(
+      rendered: RenderedStatement,
+      _binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<DriverRoutineResult> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
-      throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "libSQL does not support routine calls.");
+      throw new UnsupportedFeatureError(
+        "routine.call",
+        "BRAID_CALL_UNSUPPORTED",
+        "libSQL does not support routine calls.",
+      );
     },
-    async *stream<Row>(rendered: RenderedStatement, _binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncGenerator<Row> {
+    async *stream<Row>(
+      rendered: RenderedStatement,
+      _binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): AsyncGenerator<Row> {
       assertExecutionOptions(options);
       assertRoutineUnsupported(rendered);
       assertRoutineParametersUnsupported(rendered);
-      throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "libSQL does not expose an incremental row cursor API.");
+      throw new UnsupportedFeatureError(
+        "statement.stream",
+        "BRAID_STREAM_UNSUPPORTED",
+        "libSQL does not expose an incremental row cursor API.",
+      );
     },
     begin: async (options?: TransactionOptions): Promise<void> => {
-      if (transaction !== undefined) throw new TypeError("BRAID_TRANSACTION_STATE: a libSQL transaction is already active.");
+      if (transaction !== undefined)
+        throw new TypeError("BRAID_TRANSACTION_STATE: a libSQL transaction is already active.");
       const mode = transactionModeFor(client, options);
       const next = mode === undefined ? await client.transaction() : await client.transaction(mode);
       if (
-        !next
-        || typeof next.execute !== "function"
-        || typeof next.batch !== "function"
-        || typeof next.commit !== "function"
-        || typeof next.rollback !== "function"
+        !next ||
+        typeof next.execute !== "function" ||
+        typeof next.batch !== "function" ||
+        typeof next.commit !== "function" ||
+        typeof next.rollback !== "function"
       ) {
         const primary = new TypeError("BRAID_TRANSACTION_STATE: libSQL client returned an invalid transaction handle.");
         if (next && typeof next === "object" && typeof (next as { readonly close?: unknown }).close === "function") {

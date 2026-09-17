@@ -87,17 +87,23 @@ async function stamp(
   testId: string,
 ): Promise<void> {
   const environment = await db.environment();
-  const probeRows = await connection.query("SELECT VERSION() AS version, @@version_comment AS edition") as readonly RawRow[];
+  const probeRows = (await connection.query(
+    "SELECT VERSION() AS version, @@version_comment AS edition",
+  )) as readonly RawRow[];
   const probe = probeRows[0] ?? {};
   const version = typeof probe.version === "string" ? /^\d+\.\d+\.\d+/u.exec(probe.version)?.[0] : undefined;
   const edition = typeof probe.edition === "string" && /mariadb.org/iu.test(probe.edition) ? "community" : undefined;
   assert.ok(version && edition, "MariaDB release/edition probe must identify the tested community distribution.");
-  stampSupportEnvironment("mariadb-connector-node-11-8-9", {
-    ...environment,
-    database: { product: environment.database.product, version, edition },
-    driver: { ...environment.driver, version: installedConnectorVersion() },
-    runtime: { id: "node", version: process.versions.node },
-  }, testId);
+  stampSupportEnvironment(
+    "mariadb-connector-node-11-8-9",
+    {
+      ...environment,
+      database: { product: environment.database.product, version, edition },
+      driver: { ...environment.driver, version: installedConnectorVersion() },
+      runtime: { id: "node", version: process.versions.node },
+    },
+    testId,
+  );
 }
 
 function modelFor(snapshot: Parameters<typeof generateModels>[0], policy: typeof MARIADB_LOSSLESS_TEXT.typePolicy) {
@@ -141,11 +147,21 @@ test("mariadb.data.profile-conformance", { timeout: 120_000 }, async () => {
         (6, 'null', '${DATETIME_TEXT}', '${DATE_TEXT}', '${TIME_TEXT}', 'profile text', UNHEX('00FF10'), '${EXACT_INTEGER}', '${EXACT_DECIMAL}')
     `);
 
-    const rawLossless = await losslessConnection.query(`SELECT id, payload, instant, date_value, time_value, text_value, binary_value, big_value, decimal_value FROM ${TABLE} ORDER BY id`) as readonly RawRow[];
+    const rawLossless = (await losslessConnection.query(
+      `SELECT id, payload, instant, date_value, time_value, text_value, binary_value, big_value, decimal_value FROM ${TABLE} ORDER BY id`,
+    )) as readonly RawRow[];
     assert.equal(rawLossless.length, jsonSamples.length);
-    assert.deepEqual(rawLossless.map((row) => row.payload), jsonSamples.map((sample) => sample.canonical));
+    assert.deepEqual(
+      rawLossless.map((row) => row.payload),
+      jsonSamples.map((sample) => sample.canonical),
+    );
     assert.ok(rawLossless.every((row) => typeof row.payload === "string"));
-    assert.ok(rawLossless.every((row) => typeof row.instant === "string" && typeof row.date_value === "string" && typeof row.time_value === "string"));
+    assert.ok(
+      rawLossless.every(
+        (row) =>
+          typeof row.instant === "string" && typeof row.date_value === "string" && typeof row.time_value === "string",
+      ),
+    );
     assert.ok(rawLossless.every((row) => Buffer.isBuffer(row.binary_value)));
     assert.ok(rawLossless.every((row) => typeof row.big_value === "bigint" || typeof row.big_value === "string"));
     assert.ok(rawLossless.every((row) => typeof row.decimal_value === "string"));
@@ -154,21 +170,44 @@ test("mariadb.data.profile-conformance", { timeout: 120_000 }, async () => {
       SELECT id, payload, instant, date_value, time_value, text_value, binary_value, big_value, decimal_value
       FROM ${sql.ident(TABLE)} ORDER BY id
     `);
-    assert.deepEqual(losslessRows.map((row) => row.payload), jsonSamples.map((sample) => sample.canonical));
-    assert.ok(losslessRows.every((row) => typeof row.instant === "string" && typeof row.date_value === "string" && row.time_value === TIME_TEXT));
+    assert.deepEqual(
+      losslessRows.map((row) => row.payload),
+      jsonSamples.map((sample) => sample.canonical),
+    );
+    assert.ok(
+      losslessRows.every(
+        (row) => typeof row.instant === "string" && typeof row.date_value === "string" && row.time_value === TIME_TEXT,
+      ),
+    );
     assert.ok(losslessRows.every((row) => row.text_value === "profile text" && Buffer.isBuffer(row.binary_value)));
     assert.ok(losslessRows.every((row) => row.big_value === EXACT_INTEGER && row.decimal_value === EXACT_DECIMAL));
     assert.deepEqual([...losslessRows[0]!.binary_value], BINARY);
 
-    const rawNative = await nativeConnection.query(`SELECT id, payload, instant, date_value, time_value FROM ${TABLE} ORDER BY id`) as readonly RawRow[];
-    assert.deepEqual(rawNative.map((row) => row.payload), jsonSamples.map((sample) => sample.value));
-    assert.ok(rawNative.every((row) => row.instant instanceof Date && row.date_value instanceof Date && typeof row.time_value === "string"));
+    const rawNative = (await nativeConnection.query(
+      `SELECT id, payload, instant, date_value, time_value FROM ${TABLE} ORDER BY id`,
+    )) as readonly RawRow[];
+    assert.deepEqual(
+      rawNative.map((row) => row.payload),
+      jsonSamples.map((sample) => sample.value),
+    );
+    assert.ok(
+      rawNative.every(
+        (row) => row.instant instanceof Date && row.date_value instanceof Date && typeof row.time_value === "string",
+      ),
+    );
     const nativeRows = await nativeDb.all(sql.rows<NativeRow>`
       SELECT id, payload, instant, date_value, time_value, text_value, binary_value, big_value, decimal_value
       FROM ${sql.ident(TABLE)} ORDER BY id
     `);
-    assert.deepEqual(nativeRows.map((row) => row.payload), jsonSamples.map((sample) => sample.value));
-    assert.ok(nativeRows.every((row) => row.instant instanceof Date && row.date_value instanceof Date && row.time_value === TIME_TEXT));
+    assert.deepEqual(
+      nativeRows.map((row) => row.payload),
+      jsonSamples.map((sample) => sample.value),
+    );
+    assert.ok(
+      nativeRows.every(
+        (row) => row.instant instanceof Date && row.date_value instanceof Date && row.time_value === TIME_TEXT,
+      ),
+    );
     assert.equal(nativeRows[0]!.instant.getTime(), new Date(2026, 8, 14, 12, 34, 56, 123).getTime());
     assert.equal(nativeRows[0]!.date_value.getTime(), new Date(2026, 8, 14).getTime());
     assert.ok(nativeRows.every((row) => row.big_value === EXACT_INTEGER && row.decimal_value === EXACT_DECIMAL));
@@ -177,13 +216,26 @@ test("mariadb.data.profile-conformance", { timeout: 120_000 }, async () => {
     const snapshot = await inspector.inspect();
     const relation = Object.values(snapshot.relations).find((entry) => entry.name === TABLE);
     assert.ok(relation, `inspector did not find ${TABLE}`);
-    assert.deepEqual(relation.columns.map((column) => column.name), ["id", "payload", "instant", "date_value", "time_value", "text_value", "binary_value", "big_value", "decimal_value"]);
+    assert.deepEqual(
+      relation.columns.map((column) => column.name),
+      [
+        "id",
+        "payload",
+        "instant",
+        "date_value",
+        "time_value",
+        "text_value",
+        "binary_value",
+        "big_value",
+        "decimal_value",
+      ],
+    );
     const columns = new Map(relation.columns.map((column) => [column.name, column]));
-    const metadataEvidence = await losslessConnection.query(`
+    const metadataEvidence = (await losslessConnection.query(`
       SELECT DATA_TYPE AS data_type, COLUMN_TYPE AS column_type
       FROM information_schema.columns
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '${TABLE}' AND COLUMN_NAME = 'payload'
-    `) as readonly RawRow[];
+    `)) as readonly RawRow[];
     assert.equal(metadataEvidence.length, 1);
     // MariaDB exposes JSON as LONGTEXT in information_schema; the inspector recovers
     // the JSON extended-format signal from the field metadata instead of guessing.
@@ -198,26 +250,116 @@ test("mariadb.data.profile-conformance", { timeout: 120_000 }, async () => {
     assert.equal(columns.get("decimal_value")?.type, "decimal");
 
     const losslessGenerated = modelFor(snapshot, MARIADB_LOSSLESS_TEXT.typePolicy);
-    assertGeneratedProperty(losslessGenerated.generated.source, losslessGenerated.model.rowName, "payload", "string | null", false);
-    assertGeneratedProperty(losslessGenerated.generated.source, losslessGenerated.model.rowName, "instant", "string", false);
-    assertGeneratedProperty(losslessGenerated.generated.source, losslessGenerated.model.rowName, "date_value", "string", false);
-    assertGeneratedProperty(losslessGenerated.generated.source, losslessGenerated.model.rowName, "time_value", "string", false);
-    assertGeneratedProperty(losslessGenerated.generated.source, losslessGenerated.model.rowName, "text_value", "string", false);
-    assertGeneratedProperty(losslessGenerated.generated.source, losslessGenerated.model.rowName, "binary_value", "Uint8Array", false);
-    assertGeneratedProperty(losslessGenerated.generated.source, losslessGenerated.model.rowName, "big_value", "string", false);
-    assertGeneratedProperty(losslessGenerated.generated.source, losslessGenerated.model.rowName, "decimal_value", "string", false);
+    assertGeneratedProperty(
+      losslessGenerated.generated.source,
+      losslessGenerated.model.rowName,
+      "payload",
+      "string | null",
+      false,
+    );
+    assertGeneratedProperty(
+      losslessGenerated.generated.source,
+      losslessGenerated.model.rowName,
+      "instant",
+      "string",
+      false,
+    );
+    assertGeneratedProperty(
+      losslessGenerated.generated.source,
+      losslessGenerated.model.rowName,
+      "date_value",
+      "string",
+      false,
+    );
+    assertGeneratedProperty(
+      losslessGenerated.generated.source,
+      losslessGenerated.model.rowName,
+      "time_value",
+      "string",
+      false,
+    );
+    assertGeneratedProperty(
+      losslessGenerated.generated.source,
+      losslessGenerated.model.rowName,
+      "text_value",
+      "string",
+      false,
+    );
+    assertGeneratedProperty(
+      losslessGenerated.generated.source,
+      losslessGenerated.model.rowName,
+      "binary_value",
+      "Uint8Array",
+      false,
+    );
+    assertGeneratedProperty(
+      losslessGenerated.generated.source,
+      losslessGenerated.model.rowName,
+      "big_value",
+      "string",
+      false,
+    );
+    assertGeneratedProperty(
+      losslessGenerated.generated.source,
+      losslessGenerated.model.rowName,
+      "decimal_value",
+      "string",
+      false,
+    );
     await assertCompilesGeneratedSource(losslessGenerated.generated.source, "mariadb-pv18-lossless");
 
     const nativeGenerated = modelFor(snapshot, MARIADB_NATIVE.typePolicy);
     // The native descriptor and recovered JSON metadata agree on the unknown runtime root type.
-    assertGeneratedProperty(nativeGenerated.generated.source, nativeGenerated.model.rowName, "payload", "unknown | null", false);
+    assertGeneratedProperty(
+      nativeGenerated.generated.source,
+      nativeGenerated.model.rowName,
+      "payload",
+      "unknown | null",
+      false,
+    );
     assertGeneratedProperty(nativeGenerated.generated.source, nativeGenerated.model.rowName, "instant", "Date", false);
-    assertGeneratedProperty(nativeGenerated.generated.source, nativeGenerated.model.rowName, "date_value", "Date", false);
-    assertGeneratedProperty(nativeGenerated.generated.source, nativeGenerated.model.rowName, "time_value", "string", false);
-    assertGeneratedProperty(nativeGenerated.generated.source, nativeGenerated.model.rowName, "text_value", "string", false);
-    assertGeneratedProperty(nativeGenerated.generated.source, nativeGenerated.model.rowName, "binary_value", "Uint8Array", false);
-    assertGeneratedProperty(nativeGenerated.generated.source, nativeGenerated.model.rowName, "big_value", "string", false);
-    assertGeneratedProperty(nativeGenerated.generated.source, nativeGenerated.model.rowName, "decimal_value", "string", false);
+    assertGeneratedProperty(
+      nativeGenerated.generated.source,
+      nativeGenerated.model.rowName,
+      "date_value",
+      "Date",
+      false,
+    );
+    assertGeneratedProperty(
+      nativeGenerated.generated.source,
+      nativeGenerated.model.rowName,
+      "time_value",
+      "string",
+      false,
+    );
+    assertGeneratedProperty(
+      nativeGenerated.generated.source,
+      nativeGenerated.model.rowName,
+      "text_value",
+      "string",
+      false,
+    );
+    assertGeneratedProperty(
+      nativeGenerated.generated.source,
+      nativeGenerated.model.rowName,
+      "binary_value",
+      "Uint8Array",
+      false,
+    );
+    assertGeneratedProperty(
+      nativeGenerated.generated.source,
+      nativeGenerated.model.rowName,
+      "big_value",
+      "string",
+      false,
+    );
+    assertGeneratedProperty(
+      nativeGenerated.generated.source,
+      nativeGenerated.model.rowName,
+      "decimal_value",
+      "string",
+      false,
+    );
     await assertCompilesGeneratedSource(nativeGenerated.generated.source, "mariadb-pv18-native");
 
     for (const selected of representationProfiles.filter((entry) => entry.json !== entry.temporal)) {
@@ -231,8 +373,20 @@ test("mariadb.data.profile-conformance", { timeout: 120_000 }, async () => {
         assert.equal(row.instant instanceof Date, selected.temporal === "native");
         if (selected.temporal === "text") assert.equal(typeof row.instant, "string");
         const { generated, model } = modelFor(snapshot, selected.typePolicy);
-        assertGeneratedProperty(generated.source, model.rowName, "payload", selected.json === "text" ? "string | null" : "unknown | null", false);
-        assertGeneratedProperty(generated.source, model.rowName, "instant", selected.temporal === "text" ? "string" : "Date", false);
+        assertGeneratedProperty(
+          generated.source,
+          model.rowName,
+          "payload",
+          selected.json === "text" ? "string | null" : "unknown | null",
+          false,
+        );
+        assertGeneratedProperty(
+          generated.source,
+          model.rowName,
+          "instant",
+          selected.temporal === "text" ? "string" : "Date",
+          false,
+        );
       } finally {
         await connection.end();
       }

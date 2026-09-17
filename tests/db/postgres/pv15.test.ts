@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { Pool } from "pg";
 import { inject, test } from "vitest";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { createPgPoolDatabase, type PgCursorFactory, type PgCursorLike, type PgPoolClientLike } from "@sqlbraid/postgres/pg";
+import {
+  createPgPoolDatabase,
+  type PgCursorFactory,
+  type PgCursorLike,
+  type PgPoolClientLike,
+} from "@sqlbraid/postgres/pg";
 import { postgresParameter, sql } from "@sqlbraid/postgres";
 import { runStreamingConformance } from "../../streaming-conformance.js";
 
@@ -26,25 +31,30 @@ test("PostgreSQL pg-cursor reuses streaming conformance with row schemas and lea
   const pool = new Pool({ connectionString: inject("postgres").connectionUri, max: 1, idleTimeoutMillis: 0 });
   let releases = 0;
   let terminated = 0;
-  pool.on("release", () => { releases += 1; });
-  pool.on("remove", () => { terminated += 1; });
+  pool.on("release", () => {
+    releases += 1;
+  });
+  pool.on("remove", () => {
+    terminated += 1;
+  });
   try {
     await pool.query("DROP TABLE IF EXISTS braid_pv15_conformance");
     await pool.query("CREATE TABLE braid_pv15_conformance (id INTEGER PRIMARY KEY, label TEXT NOT NULL)");
     await pool.query("INSERT INTO braid_pv15_conformance (id, label) VALUES (1, 'one'), (2, 'two')");
     const schema = rowSchema<{ readonly id: string; readonly label: string }>((value) => {
       if (
-        !value
-        || typeof value !== "object"
-        || !("id" in value)
-        || !("label" in value)
-        || typeof value.id !== "string"
-        || typeof value.label !== "string"
-      ) return { issues: [{ message: "invalid PostgreSQL conformance row" }] };
+        !value ||
+        typeof value !== "object" ||
+        !("id" in value) ||
+        !("label" in value) ||
+        typeof value.id !== "string" ||
+        typeof value.label !== "string"
+      )
+        return { issues: [{ message: "invalid PostgreSQL conformance row" }] };
       return { value: { id: value.id, label: value.label } };
     });
     const mapping = rowSchema<never>(() => ({ issues: [{ message: "query-bound mapper failed" }] }));
-    const loaded = await import("pg-cursor") as unknown as { readonly default?: unknown };
+    const loaded = (await import("pg-cursor")) as unknown as { readonly default?: unknown };
     const Cursor = (loaded.default ?? loaded) as unknown as PgCursorFactory;
     await runStreamingConformance(() => {
       const releaseStart = releases;
@@ -60,7 +70,10 @@ test("PostgreSQL pg-cursor reuses streaming conformance with row schemas and lea
       return {
         db,
         query: sql.rows(schema)`SELECT id, label FROM braid_pv15_conformance ORDER BY id`,
-        expected: [{ id: "1", label: "one" }, { id: "2", label: "two" }],
+        expected: [
+          { id: "1", label: "one" },
+          { id: "2", label: "two" },
+        ],
         mappingQuery: sql.rows(mapping)`SELECT id, label FROM braid_pv15_conformance ORDER BY id`,
         released: () => releases - releaseStart,
         iteratorReturns: () => closes + terminated - terminatedStart,
@@ -74,7 +87,7 @@ test("PostgreSQL pg-cursor reuses streaming conformance with row schemas and lea
 
 test("PostgreSQL abort interrupts native pending Execute and frees a single-connection pool", async () => {
   const pool = new Pool({ connectionString: inject("postgres").connectionUri, max: 1 });
-  const loaded = await import("pg-cursor") as unknown as { readonly default?: unknown };
+  const loaded = (await import("pg-cursor")) as unknown as { readonly default?: unknown };
   const Cursor = (loaded.default ?? loaded) as unknown as PgCursorFactory;
   const reading = Promise.withResolvers<void>();
   class PendingCursor extends Cursor {
@@ -103,7 +116,7 @@ test("PostgreSQL abort interrupts native pending Execute and frees a single-conn
 
 test("PostgreSQL transaction streaming pins its backend and keeps binds value-only", async () => {
   const pool = new Pool({ connectionString: inject("postgres").connectionUri, max: 1, idleTimeoutMillis: 0 });
-  const loaded = await import("pg-cursor") as unknown as { readonly default?: unknown };
+  const loaded = (await import("pg-cursor")) as unknown as { readonly default?: unknown };
   const Cursor = (loaded.default ?? loaded) as unknown as PgCursorFactory;
   const db = createPgPoolDatabase(pool, { cursor: Cursor, streamBatchSize: 2 });
   try {
@@ -111,7 +124,12 @@ test("PostgreSQL transaction streaming pins its backend and keeps binds value-on
     await db.tx(async (tx) => {
       const before = await tx.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
       const rows: { readonly pid: string; readonly value: string }[] = [];
-      for await (const row of tx.stream(sql.rows<{ readonly pid: string; readonly value: string }>`SELECT pg_backend_pid() AS pid, ${secret}::text AS value`)) {
+      for await (const row of tx.stream(
+        sql.rows<{
+          readonly pid: string;
+          readonly value: string;
+        }>`SELECT pg_backend_pid() AS pid, ${secret}::text AS value`,
+      )) {
         rows.push(row);
       }
       const after = await tx.one(sql.rows<{ readonly pid: string }>`SELECT pg_backend_pid() AS pid`);
@@ -126,7 +144,7 @@ test("PostgreSQL transaction streaming pins its backend and keeps binds value-on
 
 test("PostgreSQL pg-cursor streams 100k rows and releases after break", async () => {
   const pool = new Pool({ connectionString: inject("postgres").connectionUri, max: 1 });
-  const loaded = await import("pg-cursor") as unknown as { readonly default?: unknown };
+  const loaded = (await import("pg-cursor")) as unknown as { readonly default?: unknown };
   const Cursor = (loaded.default ?? loaded) as unknown as PgCursorFactory;
   const db = createPgPoolDatabase(pool, { cursor: Cursor, streamBatchSize: 100 });
   try {
@@ -152,27 +170,33 @@ test("PostgreSQL pg-cursor streams 100k rows and releases after break", async ()
 
 test("PostgreSQL refcursor routines require tx and close heterogeneous portals", async () => {
   const pool = new Pool({ connectionString: inject("postgres").connectionUri, max: 1 });
-  const loaded = await import("pg-cursor") as unknown as { readonly default?: unknown };
+  const loaded = (await import("pg-cursor")) as unknown as { readonly default?: unknown };
   const Cursor = (loaded.default ?? loaded) as unknown as PgCursorFactory;
   const controlSql: string[] = [];
-  const db = createPgPoolDatabase({
-    async connect() {
-      const client = await pool.connect();
-      const query = client.query.bind(client) as unknown as (query: unknown, queryValues?: readonly unknown[]) => Promise<unknown>;
-      return {
-        query(value: unknown, values?: readonly unknown[]) {
-          if (typeof value === "object" && value !== null && "text" in value) {
-            controlSql.push((value as { readonly text: string }).text);
-          }
-          return query(value, values);
-        },
-        escapeIdentifier: client.escapeIdentifier.bind(client),
-        escapeLiteral: client.escapeLiteral.bind(client),
-        end: client.end.bind(client),
-        release: client.release.bind(client),
-      } as unknown as PgPoolClientLike;
+  const db = createPgPoolDatabase(
+    {
+      async connect() {
+        const client = await pool.connect();
+        const query = client.query.bind(client) as unknown as (
+          query: unknown,
+          queryValues?: readonly unknown[],
+        ) => Promise<unknown>;
+        return {
+          query(value: unknown, values?: readonly unknown[]) {
+            if (typeof value === "object" && value !== null && "text" in value) {
+              controlSql.push((value as { readonly text: string }).text);
+            }
+            return query(value, values);
+          },
+          escapeIdentifier: client.escapeIdentifier.bind(client),
+          escapeLiteral: client.escapeLiteral.bind(client),
+          end: client.end.bind(client),
+          release: client.release.bind(client),
+        } as unknown as PgPoolClientLike;
+      },
     },
-  }, { cursor: Cursor });
+    { cursor: Cursor },
+  );
   try {
     await pool.query("DROP PROCEDURE IF EXISTS braid_pv15_routine(integer)");
     await pool.query(`
@@ -198,20 +222,22 @@ test("PostgreSQL refcursor routines require tx and close heterogeneous portals",
       LANGUAGE SQL
       AS $$ VALUES (1, 'table-function'::text), (2, 'table-function-2'::text) $$;
     `);
-    const tableSchema = rowSchema<{ readonly id: string; readonly label: string; readonly source: "table-function" }>((value) => {
-      if (
-        !value
-        || typeof value !== "object"
-        || !("id" in value)
-        || !("label" in value)
-        || typeof value.id !== "string"
-        || typeof value.label !== "string"
-      ) {
-        return { issues: [{ message: "invalid table-function row" }] };
-      }
-      const row = value as { readonly id: string; readonly label: string };
-      return { value: { id: row.id, label: row.label, source: "table-function" } };
-    });
+    const tableSchema = rowSchema<{ readonly id: string; readonly label: string; readonly source: "table-function" }>(
+      (value) => {
+        if (
+          !value ||
+          typeof value !== "object" ||
+          !("id" in value) ||
+          !("label" in value) ||
+          typeof value.id !== "string" ||
+          typeof value.label !== "string"
+        ) {
+          return { issues: [{ message: "invalid table-function row" }] };
+        }
+        const row = value as { readonly id: string; readonly label: string };
+        return { value: { id: row.id, label: row.label, source: "table-function" } };
+      },
+    );
     const tableRows: { readonly id: string; readonly label: string; readonly source: "table-function" }[] = [];
     for await (const row of db.stream(sql.rows(tableSchema)`SELECT * FROM braid_pv15_rows()`)) tableRows.push(row);
     assert.deepEqual(tableRows, [
@@ -220,7 +246,10 @@ test("PostgreSQL refcursor routines require tx and close heterogeneous portals",
     ]);
     assert.deepEqual(
       await db.all(sql.rows<{ readonly id: string; readonly label: string }>`SELECT * FROM braid_pv15_rows()`),
-      [{ id: "1", label: "table-function" }, { id: "2", label: "table-function-2" }],
+      [
+        { id: "1", label: "table-function" },
+        { id: "2", label: "table-function-2" },
+      ],
     );
     const outputSchema = rowSchema<{ readonly users: string }>((value) => {
       if (!value || typeof value !== "object" || !("users" in value) || typeof value.users !== "string") {
@@ -230,12 +259,12 @@ test("PostgreSQL refcursor routines require tx and close heterogeneous portals",
     });
     const usersSchema = rowSchema<{ readonly user_id: string; readonly name: string }>((value) => {
       if (
-        !value
-        || typeof value !== "object"
-        || !("user_id" in value)
-        || !("name" in value)
-        || typeof value.user_id !== "string"
-        || typeof value.name !== "string"
+        !value ||
+        typeof value !== "object" ||
+        !("user_id" in value) ||
+        !("name" in value) ||
+        typeof value.user_id !== "string" ||
+        typeof value.name !== "string"
       ) {
         return { issues: [{ message: "invalid PostgreSQL users result set" }] };
       }
@@ -244,12 +273,12 @@ test("PostgreSQL refcursor routines require tx and close heterogeneous portals",
     });
     const paymentsSchema = rowSchema<{ readonly payment_id: string; readonly amount: string }>((value) => {
       if (
-        !value
-        || typeof value !== "object"
-        || !("payment_id" in value)
-        || !("amount" in value)
-        || typeof value.payment_id !== "string"
-        || typeof value.amount !== "string"
+        !value ||
+        typeof value !== "object" ||
+        !("payment_id" in value) ||
+        !("amount" in value) ||
+        typeof value.payment_id !== "string" ||
+        typeof value.amount !== "string"
       ) {
         return { issues: [{ message: "invalid PostgreSQL payments result set" }] };
       }
@@ -312,12 +341,12 @@ test("PostgreSQL refcursor routines require tx and close heterogeneous portals",
     `;
     await assert.rejects(
       () => db.tx(async (tx) => tx.call(fetchFailure)),
-      (error: unknown) => error instanceof AggregateError
-        && error.errors.some((nested) => nested instanceof Error && /cursor/i.test(nested.message)),
+      (error: unknown) =>
+        error instanceof AggregateError &&
+        error.errors.some((nested) => nested instanceof Error && /cursor/i.test(nested.message)),
     );
     assert.ok(controlSql.includes('CLOSE "braid_pv15_failure_users"'));
     assert.ok(controlSql.includes('CLOSE "braid_pv15_failure_missing"'));
-
   } finally {
     await pool.query("DROP PROCEDURE IF EXISTS braid_pv15_routine(integer)").catch(() => undefined);
     await pool.query("DROP PROCEDURE IF EXISTS braid_pv15_fetch_failure(integer)").catch(() => undefined);

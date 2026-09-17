@@ -1,22 +1,38 @@
 import { writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { PUBLIC_ERROR_DEFINITIONS, type EnvironmentCapability } from "@sqlbraid/core";
-import { isSourceSha, REQUIRED_CASE_IDS, type CertificationAggregate, type CertificationAggregateOptions, type CertificationArtifact, type CertificationCaseResult, type CertificationTuple, type ExpectedCapability, type ExpectedCapabilityContract, type ExpectedGuardedCaseContract } from "./types.js";
+import {
+  isSourceSha,
+  REQUIRED_CASE_IDS,
+  type CertificationAggregate,
+  type CertificationAggregateOptions,
+  type CertificationArtifact,
+  type CertificationCaseResult,
+  type CertificationTuple,
+  type ExpectedCapability,
+  type ExpectedCapabilityContract,
+  type ExpectedGuardedCaseContract,
+} from "./types.js";
 export { certifyTarget } from "./execute.js";
 
 function normalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalize);
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => [key, normalize(item)]));
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, normalize(item)]),
+    );
   }
   return value;
 }
 
 function isRegisteredUnsupportedPair(feature: string, code: string): boolean {
-  return PUBLIC_ERROR_DEFINITIONS.some((definition) =>
-    definition.owner === "UnsupportedFeatureError"
-    && definition.code === code
-    && definition.features?.includes(feature),
+  return PUBLIC_ERROR_DEFINITIONS.some(
+    (definition) =>
+      definition.owner === "UnsupportedFeatureError" &&
+      definition.code === code &&
+      definition.features?.includes(feature),
   );
 }
 
@@ -29,24 +45,29 @@ function measuredTupleMatchesExpected(
   expected: CertificationTuple | undefined,
 ): boolean {
   if (expected === undefined) return true;
-  const databaseVersionMatches = expected.database.versionStatus === "unknown"
-    ? measured.database.versionStatus === "unknown" && measured.database.version === undefined
-    : measured.database.versionStatus === "measured" && measured.database.version === expected.database.version;
-  return measured.database.product === expected.database.product
-    && (measured.database.edition ?? "unknown") === expected.database.edition
-    && databaseVersionMatches
-    && measured.driver.id === expected.driver.id
-    && measured.driver.profile === expected.driver.profile
-    && measured.driver.version === expected.driver.version
-    && measured.runtime.id === expected.runtime.id
-    && measured.runtime.version === expected.runtime.version;
+  const databaseVersionMatches =
+    expected.database.versionStatus === "unknown"
+      ? measured.database.versionStatus === "unknown" && measured.database.version === undefined
+      : measured.database.versionStatus === "measured" && measured.database.version === expected.database.version;
+  return (
+    measured.database.product === expected.database.product &&
+    (measured.database.edition ?? "unknown") === expected.database.edition &&
+    databaseVersionMatches &&
+    measured.driver.id === expected.driver.id &&
+    measured.driver.profile === expected.driver.profile &&
+    measured.driver.version === expected.driver.version &&
+    measured.runtime.id === expected.runtime.id &&
+    measured.runtime.version === expected.runtime.version
+  );
 }
 
 function declaredContract(expected: ExpectedCapabilityContract): Readonly<Record<string, EnvironmentCapability>> {
-  return Object.fromEntries(Object.entries(expected).map(([key, value]) => {
-    const { unsupportedCode: _unsupportedCode, ...declaration } = value;
-    return [key, declaration];
-  }));
+  return Object.fromEntries(
+    Object.entries(expected).map(([key, value]) => {
+      const { unsupportedCode: _unsupportedCode, ...declaration } = value;
+      return [key, declaration];
+    }),
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -55,10 +76,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isCapability(value: unknown): value is EnvironmentCapability {
   if (!isRecord(value)) return false;
-  return (value.status === "guaranteed" || value.status === "guarded" || value.status === "unsupported")
-    && (value.canonical === undefined || value.canonical === "string" || value.canonical === "number" || value.canonical === "Uint8Array")
-    && (value.rawRepresentations === undefined || Array.isArray(value.rawRepresentations))
-    && (value.conditionCode === undefined || typeof value.conditionCode === "string");
+  return (
+    (value.status === "guaranteed" || value.status === "guarded" || value.status === "unsupported") &&
+    (value.canonical === undefined ||
+      value.canonical === "string" ||
+      value.canonical === "number" ||
+      value.canonical === "Uint8Array") &&
+    (value.rawRepresentations === undefined || Array.isArray(value.rawRepresentations)) &&
+    (value.conditionCode === undefined || typeof value.conditionCode === "string")
+  );
 }
 
 function assertArtifactShape(value: unknown): asserts value is CertificationArtifact {
@@ -68,28 +94,65 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
   assert.equal(typeof value.sourceSha, "string", "Certification artifact sourceSha must be a string.");
   assert.ok(isRecord(value.cases), "Certification artifact cases must be an object.");
   assert.ok(isRecord(value.expectedCapabilities), "Certification artifact expectedCapabilities must be an object.");
-  assert.ok(isRecord(value.expectedTransactionOptions), "Certification artifact expectedTransactionOptions must be an object.");
+  assert.ok(
+    isRecord(value.expectedTransactionOptions),
+    "Certification artifact expectedTransactionOptions must be an object.",
+  );
   assert.ok(isRecord(value.declaredCapabilities), "Certification artifact declaredCapabilities must be an object.");
   assert.ok(isRecord(value.provenance), "Certification artifact provenance must be an object.");
   assert.equal(value.provenance.schemaVersion, 1, "Unsupported certification provenance schema.");
   assert.equal(value.provenance.target, value.target, "Certification artifact provenance target mismatch.");
   assert.equal(value.provenance.sourceSha, value.sourceSha, "Certification artifact provenance source SHA mismatch.");
   assert.ok(isRecord(value.provenance.measured), "Certification artifact measured tuple is required.");
-  assert.ok(isRecord(value.provenance.measured.database), "Certification artifact measured database tuple is required.");
+  assert.ok(
+    isRecord(value.provenance.measured.database),
+    "Certification artifact measured database tuple is required.",
+  );
   assert.ok(isRecord(value.provenance.measured.driver), "Certification artifact measured driver tuple is required.");
   assert.ok(isRecord(value.provenance.measured.runtime), "Certification artifact measured runtime tuple is required.");
-  assert.ok(value.provenance.measured.database.versionStatus === "measured" || value.provenance.measured.database.versionStatus === "unknown", "Certification artifact database version status is invalid.");
-  assert.equal(typeof value.provenance.measured.driver.id, "string", "Certification artifact measured driver id is required.");
-  assert.equal(typeof value.provenance.measured.driver.version, "string", "Certification artifact measured driver version is required.");
-  assert.equal(typeof value.provenance.measured.driver.profile, "string", "Certification artifact measured driver profile is required.");
-  assert.equal(typeof value.provenance.measured.runtime.id, "string", "Certification artifact measured runtime id is required.");
-  assert.equal(typeof value.provenance.measured.runtime.version, "string", "Certification artifact measured runtime version is required.");
+  assert.ok(
+    value.provenance.measured.database.versionStatus === "measured" ||
+      value.provenance.measured.database.versionStatus === "unknown",
+    "Certification artifact database version status is invalid.",
+  );
+  assert.equal(
+    typeof value.provenance.measured.driver.id,
+    "string",
+    "Certification artifact measured driver id is required.",
+  );
+  assert.equal(
+    typeof value.provenance.measured.driver.version,
+    "string",
+    "Certification artifact measured driver version is required.",
+  );
+  assert.equal(
+    typeof value.provenance.measured.driver.profile,
+    "string",
+    "Certification artifact measured driver profile is required.",
+  );
+  assert.equal(
+    typeof value.provenance.measured.runtime.id,
+    "string",
+    "Certification artifact measured runtime id is required.",
+  );
+  assert.equal(
+    typeof value.provenance.measured.runtime.version,
+    "string",
+    "Certification artifact measured runtime version is required.",
+  );
   assert.ok(isRecord(value.provenance.pinned), "Certification artifact pinned tuple is required.");
-  for (const part of ["database", "driver", "runtime"]) assert.ok(isRecord(value.provenance.pinned[part]), `Certification artifact pinned ${part} tuple is required.`);
+  for (const part of ["database", "driver", "runtime"])
+    assert.ok(isRecord(value.provenance.pinned[part]), `Certification artifact pinned ${part} tuple is required.`);
   if (value.expectedGuardedCases !== undefined) {
-    assert.ok(isRecord(value.expectedGuardedCases), "Certification artifact expected guarded-case contract must be an object.");
+    assert.ok(
+      isRecord(value.expectedGuardedCases),
+      "Certification artifact expected guarded-case contract must be an object.",
+    );
     if (value.expectedGuardedCases.emptyResultError !== undefined) {
-      assert.ok(isRecord(value.expectedGuardedCases.emptyResultError), "Certification artifact empty-result error contract must be an object.");
+      assert.ok(
+        isRecord(value.expectedGuardedCases.emptyResultError),
+        "Certification artifact empty-result error contract must be an object.",
+      );
       assert.equal(typeof value.expectedGuardedCases.emptyResultError.feature, "string");
       assert.equal(typeof value.expectedGuardedCases.emptyResultError.code, "string");
     }
@@ -98,10 +161,18 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
     assert.ok(isRecord(result), `Invalid certification case ${id}.`);
     assert.equal(typeof result.status, "string", `Certification case ${id} has no status.`);
     assert.equal(typeof result.name, "string", `Certification case ${id} has no name.`);
-    if (result.feature !== undefined) assert.equal(typeof result.feature, "string", `Certification case ${id} feature must be a string.`);
-    if (result.rejectionFeature !== undefined) assert.equal(typeof result.rejectionFeature, "string", `Certification case ${id} rejectionFeature must be a string.`);
-    if (result.code !== undefined) assert.equal(typeof result.code, "string", `Certification case ${id} code must be a string.`);
-    if (result.error !== undefined) assert.equal(typeof result.error, "string", `Certification case ${id} error must be a string.`);
+    if (result.feature !== undefined)
+      assert.equal(typeof result.feature, "string", `Certification case ${id} feature must be a string.`);
+    if (result.rejectionFeature !== undefined)
+      assert.equal(
+        typeof result.rejectionFeature,
+        "string",
+        `Certification case ${id} rejectionFeature must be a string.`,
+      );
+    if (result.code !== undefined)
+      assert.equal(typeof result.code, "string", `Certification case ${id} code must be a string.`);
+    if (result.error !== undefined)
+      assert.equal(typeof result.error, "string", `Certification case ${id} error must be a string.`);
   }
   for (const [key, status] of Object.entries(value.expectedTransactionOptions)) {
     assert.ok(status === "guaranteed" || status === "unsupported", `Invalid transaction option status for ${key}.`);
@@ -111,53 +182,119 @@ function assertArtifactShape(value: unknown): asserts value is CertificationArti
     assert.ok(isCapability(capability), `Invalid declared fields for expected capability ${feature}.`);
     if (capability.unsupportedCode !== undefined) assert.equal(typeof capability.unsupportedCode, "string");
   }
-  for (const [feature, capability] of Object.entries(value.declaredCapabilities)) assert.ok(isCapability(capability), `Invalid declared capability ${feature}.`);
+  for (const [feature, capability] of Object.entries(value.declaredCapabilities))
+    assert.ok(isCapability(capability), `Invalid declared capability ${feature}.`);
 }
 
 export function validateCertificationArtifact(
   artifact: unknown,
-  options: Pick<CertificationAggregateOptions, "sourceSha" | "requiredCaseIds" | "requiredTargetTuples" | "requiredCandidate"> & { readonly expectedCapabilities?: ExpectedCapabilityContract; readonly expectedTransactionOptions?: CertificationAggregateOptions["requiredTargetOptionContracts"][string]; readonly expectedGuardedCases?: ExpectedGuardedCaseContract },
+  options: Pick<
+    CertificationAggregateOptions,
+    "sourceSha" | "requiredCaseIds" | "requiredTargetTuples" | "requiredCandidate"
+  > & {
+    readonly expectedCapabilities?: ExpectedCapabilityContract;
+    readonly expectedTransactionOptions?: CertificationAggregateOptions["requiredTargetOptionContracts"][string];
+    readonly expectedGuardedCases?: ExpectedGuardedCaseContract;
+  },
 ): void {
   assertArtifactShape(artifact);
   assert.ok(isSourceSha(options.sourceSha), "Certification aggregate sourceSha must be a full 40-character SHA.");
-  assert.equal(artifact.sourceSha, options.sourceSha, `Certification artifact ${artifact.target} has the wrong source SHA.`);
-  assert.ok(isSourceSha(artifact.sourceSha), `Certification artifact ${artifact.target} sourceSha must be a full 40-character SHA.`);
+  assert.equal(
+    artifact.sourceSha,
+    options.sourceSha,
+    `Certification artifact ${artifact.target} has the wrong source SHA.`,
+  );
+  assert.ok(
+    isSourceSha(artifact.sourceSha),
+    `Certification artifact ${artifact.target} sourceSha must be a full 40-character SHA.`,
+  );
   if (options.requiredTargetTuples?.[artifact.target] !== undefined) {
     const expectedTuple = options.requiredTargetTuples[artifact.target]!;
-    assert.ok(equalContract(artifact.provenance.pinned as unknown as Readonly<Record<string, unknown>>, expectedTuple as unknown as Readonly<Record<string, unknown>>), `Certification artifact ${artifact.target} pinned tuple differs from the independent target tuple.`);
-    assert.ok(measuredTupleMatchesExpected(artifact.provenance.measured, expectedTuple), `Certification artifact ${artifact.target} measured tuple differs from the independent target tuple.`);
+    assert.ok(
+      equalContract(
+        artifact.provenance.pinned as unknown as Readonly<Record<string, unknown>>,
+        expectedTuple as unknown as Readonly<Record<string, unknown>>,
+      ),
+      `Certification artifact ${artifact.target} pinned tuple differs from the independent target tuple.`,
+    );
+    assert.ok(
+      measuredTupleMatchesExpected(artifact.provenance.measured, expectedTuple),
+      `Certification artifact ${artifact.target} measured tuple differs from the independent target tuple.`,
+    );
   }
   if (options.requiredCandidate !== undefined) {
-    assert.ok(equalContract((artifact.provenance.candidate ?? {}) as unknown as Readonly<Record<string, unknown>>, options.requiredCandidate as unknown as Readonly<Record<string, unknown>>), `Certification artifact ${artifact.target} candidate provenance differs from the required candidate.`);
+    assert.ok(
+      equalContract(
+        (artifact.provenance.candidate ?? {}) as unknown as Readonly<Record<string, unknown>>,
+        options.requiredCandidate as unknown as Readonly<Record<string, unknown>>,
+      ),
+      `Certification artifact ${artifact.target} candidate provenance differs from the required candidate.`,
+    );
   }
   if (options.expectedCapabilities !== undefined) {
-    assert.ok(equalContract(artifact.expectedCapabilities, options.expectedCapabilities), `Certification artifact ${artifact.target} expected capability contract differs from the independent target contract.`);
+    assert.ok(
+      equalContract(artifact.expectedCapabilities, options.expectedCapabilities),
+      `Certification artifact ${artifact.target} expected capability contract differs from the independent target contract.`,
+    );
   }
   if (options.expectedTransactionOptions !== undefined) {
-    assert.ok(equalContract(artifact.expectedTransactionOptions, options.expectedTransactionOptions), `Certification artifact ${artifact.target} expected transaction option contract differs from the independent target contract.`);
+    assert.ok(
+      equalContract(artifact.expectedTransactionOptions, options.expectedTransactionOptions),
+      `Certification artifact ${artifact.target} expected transaction option contract differs from the independent target contract.`,
+    );
   }
   if (options.expectedGuardedCases !== undefined || artifact.expectedGuardedCases !== undefined) {
-    assert.ok(equalContract((artifact.expectedGuardedCases ?? {}) as unknown as Readonly<Record<string, unknown>>, (options.expectedGuardedCases ?? {}) as unknown as Readonly<Record<string, unknown>>), `Certification artifact ${artifact.target} expected guarded-case contract differs from the independent target contract.`);
+    assert.ok(
+      equalContract(
+        (artifact.expectedGuardedCases ?? {}) as unknown as Readonly<Record<string, unknown>>,
+        (options.expectedGuardedCases ?? {}) as unknown as Readonly<Record<string, unknown>>,
+      ),
+      `Certification artifact ${artifact.target} expected guarded-case contract differs from the independent target contract.`,
+    );
   }
   const required = options.requiredCaseIds ?? REQUIRED_CASE_IDS;
   const actualIds = Object.keys(artifact.cases).sort();
-  assert.deepEqual(actualIds, [...required].sort(), `Certification artifact ${artifact.target} has an incomplete or unexpected case set.`);
-  assert.ok(equalContract(declaredContract(artifact.expectedCapabilities), artifact.declaredCapabilities), `Certification artifact ${artifact.target} has a capability declaration mismatch.`);
+  assert.deepEqual(
+    actualIds,
+    [...required].sort(),
+    `Certification artifact ${artifact.target} has an incomplete or unexpected case set.`,
+  );
+  assert.ok(
+    equalContract(declaredContract(artifact.expectedCapabilities), artifact.declaredCapabilities),
+    `Certification artifact ${artifact.target} has a capability declaration mismatch.`,
+  );
   for (const id of required) {
     const result: CertificationCaseResult | undefined = artifact.cases[id];
     assert.ok(result, `Certification artifact ${artifact.target} is missing ${id}.`);
-    assert.ok(!["skip", "skipped"].includes((result as { readonly status: string }).status), `${artifact.target}/${id} may not be skipped.`);
-    assert.ok(result.status === "pass" || result.status === "pass-unsupported", `${artifact.target}/${id} did not pass: ${result.error ?? result.status}`);
+    assert.ok(
+      !["skip", "skipped"].includes((result as { readonly status: string }).status),
+      `${artifact.target}/${id} may not be skipped.`,
+    );
+    assert.ok(
+      result.status === "pass" || result.status === "pass-unsupported",
+      `${artifact.target}/${id} did not pass: ${result.error ?? result.status}`,
+    );
     if (result.status === "pass-unsupported") {
       assert.equal(typeof result.feature, "string", `${artifact.target}/${id} unsupported evidence lacks a feature.`);
       assert.equal(typeof result.code, "string", `${artifact.target}/${id} unsupported evidence lacks a code.`);
       const capability: ExpectedCapability | undefined = artifact.expectedCapabilities[result.feature!];
-      const optionStatus = artifact.expectedTransactionOptions[result.feature! as keyof typeof artifact.expectedTransactionOptions];
-      assert.ok(capability?.status === "unsupported" || optionStatus === "unsupported", `${artifact.target}/${id} is marked unsupported for a supported capability.`);
+      const optionStatus =
+        artifact.expectedTransactionOptions[result.feature! as keyof typeof artifact.expectedTransactionOptions];
+      assert.ok(
+        capability?.status === "unsupported" || optionStatus === "unsupported",
+        `${artifact.target}/${id} is marked unsupported for a supported capability.`,
+      );
       const rejectionFeature: string = result.rejectionFeature ?? result.feature!;
-      assert.ok(isRegisteredUnsupportedPair(rejectionFeature, result.code!), `${artifact.target}/${id} has an unregistered unsupported feature/code pair.`);
+      assert.ok(
+        isRegisteredUnsupportedPair(rejectionFeature, result.code!),
+        `${artifact.target}/${id} has an unregistered unsupported feature/code pair.`,
+      );
       if (result.rejectionFeature === undefined && capability?.unsupportedCode !== undefined) {
-        assert.equal(result.code, capability.unsupportedCode, `${artifact.target}/${id} has an unexpected target-declared unsupported code.`);
+        assert.equal(
+          result.code,
+          capability.unsupportedCode,
+          `${artifact.target}/${id} has an unexpected target-declared unsupported code.`,
+        );
       }
     }
   }
@@ -169,16 +306,34 @@ export function aggregateCertificationArtifacts(
 ): CertificationAggregate {
   const required = options.requiredCaseIds ?? REQUIRED_CASE_IDS;
   const expectedTargets = [...options.requiredTargets].sort();
-  assert.equal(new Set(expectedTargets).size, expectedTargets.length, "Certification target registry contains duplicate IDs.");
+  assert.equal(
+    new Set(expectedTargets).size,
+    expectedTargets.length,
+    "Certification target registry contains duplicate IDs.",
+  );
   const actualTargets = artifacts.map((artifact) => artifact.target).sort();
-  assert.deepEqual(actualTargets, expectedTargets, "Certification target set is incomplete or contains an unexpected target.");
-  for (const target of expectedTargets) assert.ok(options.requiredTargetContracts[target], `Missing independent expected contract for ${target}.`);
-  for (const target of expectedTargets) assert.ok(options.requiredTargetOptionContracts[target], `Missing independent transaction option contract for ${target}.`);
+  assert.deepEqual(
+    actualTargets,
+    expectedTargets,
+    "Certification target set is incomplete or contains an unexpected target.",
+  );
+  for (const target of expectedTargets)
+    assert.ok(options.requiredTargetContracts[target], `Missing independent expected contract for ${target}.`);
+  for (const target of expectedTargets)
+    assert.ok(
+      options.requiredTargetOptionContracts[target],
+      `Missing independent transaction option contract for ${target}.`,
+    );
   if (options.requiredTargetTuples !== undefined) {
-    for (const target of expectedTargets) assert.ok(options.requiredTargetTuples[target], `Missing independent target tuple for ${target}.`);
+    for (const target of expectedTargets)
+      assert.ok(options.requiredTargetTuples[target], `Missing independent target tuple for ${target}.`);
   }
   if (options.requiredTargetGuardedCaseContracts !== undefined) {
-    for (const target of expectedTargets) assert.ok(Object.hasOwn(options.requiredTargetGuardedCaseContracts, target), `Missing independent guarded-case contract for ${target}.`);
+    for (const target of expectedTargets)
+      assert.ok(
+        Object.hasOwn(options.requiredTargetGuardedCaseContracts, target),
+        `Missing independent guarded-case contract for ${target}.`,
+      );
   }
   const targets: Record<string, CertificationArtifact> = {};
   for (const artifact of artifacts) {
@@ -192,12 +347,22 @@ export function aggregateCertificationArtifacts(
       requiredTargetTuples: options.requiredTargetTuples,
       requiredCandidate: options.requiredCandidate,
     });
-    assert.ok(equalContract(artifact.expectedCapabilities, options.requiredTargetContracts[artifact.target]!), `Certification artifact ${artifact.target} expected contract is not independently approved.`);
+    assert.ok(
+      equalContract(artifact.expectedCapabilities, options.requiredTargetContracts[artifact.target]!),
+      `Certification artifact ${artifact.target} expected contract is not independently approved.`,
+    );
     targets[artifact.target] = artifact;
   }
   const candidate = options.requiredCandidate ?? artifacts[0]?.provenance.candidate;
   if (candidate !== undefined) {
-    for (const artifact of artifacts) assert.ok(equalContract((artifact.provenance.candidate ?? {}) as unknown as Readonly<Record<string, unknown>>, candidate as unknown as Readonly<Record<string, unknown>>), `Certification artifact ${artifact.target} candidate provenance differs from aggregate candidate.`);
+    for (const artifact of artifacts)
+      assert.ok(
+        equalContract(
+          (artifact.provenance.candidate ?? {}) as unknown as Readonly<Record<string, unknown>>,
+          candidate as unknown as Readonly<Record<string, unknown>>,
+        ),
+        `Certification artifact ${artifact.target} candidate provenance differs from aggregate candidate.`,
+      );
   }
   return { schemaVersion: 1, sourceSha: options.sourceSha, targets, ...(candidate === undefined ? {} : { candidate }) };
 }
@@ -210,7 +375,9 @@ export async function writeCertificationAggregate(path: string, aggregate: Certi
   await writeFile(path, `${JSON.stringify(aggregate, null, 2)}\n`, "utf8");
 }
 
-export function expectedDeclaration(contract: ExpectedCapabilityContract): Readonly<Record<string, EnvironmentCapability>> {
+export function expectedDeclaration(
+  contract: ExpectedCapabilityContract,
+): Readonly<Record<string, EnvironmentCapability>> {
   return declaredContract(contract);
 }
 

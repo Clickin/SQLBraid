@@ -4,7 +4,9 @@ import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises"
 import { join, resolve } from "node:path";
 
 function usage() {
-  throw new Error("Usage: node scripts/merge-vitest-results.mjs --output <report.json> --input-root <artifact-root> --expected <name,...> --observations-output <dir>");
+  throw new Error(
+    "Usage: node scripts/merge-vitest-results.mjs --output <report.json> --input-root <artifact-root> --expected <name,...> --observations-output <dir>",
+  );
 }
 
 async function readJson(path) {
@@ -39,7 +41,10 @@ function mergeReports(reports) {
     assert.equal(report.success, true, `Vitest shard failed: ${path}`);
     assert.ok(Array.isArray(report.testResults), `Vitest shard has no testResults array: ${path}`);
     for (const result of report.testResults) {
-      assert.ok(result && typeof result === "object" && typeof result.name === "string", `Malformed Vitest result in ${path}`);
+      assert.ok(
+        result && typeof result === "object" && typeof result.name === "string",
+        `Malformed Vitest result in ${path}`,
+      );
       const key = normalizedFileName(result.name);
       const previous = files.get(key);
       if (previous && !sameJson(previous, result)) {
@@ -71,8 +76,9 @@ async function collectArtifactReports(root, expected) {
 async function mergeObservationDirectories(inputs, output) {
   await mkdir(output, { recursive: true });
   for (const { name, path } of inputs) {
-    const files = (await readdir(path, { withFileTypes: true })).filter((entry) => entry.isFile()
-      && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl"))).sort((left, right) => left.name.localeCompare(right.name));
+    const files = (await readdir(path, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl")))
+      .sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of files) {
       const source = join(path, entry.name);
       const text = await readFile(source, "utf8");
@@ -94,7 +100,11 @@ async function mergeVitestResults({ artifactRoot, expected, output, observations
   await mkdir(resolve(output, ".."), { recursive: true });
   await writeFile(output, `${JSON.stringify(merged, null, 2)}\n`);
   await mergeObservationDirectories(observations, observationsOutput);
-  return { reportCount: reports.length, testFileCount: merged.testResults.length, observationDirectory: observationsOutput };
+  return {
+    reportCount: reports.length,
+    testFileCount: merged.testResults.length,
+    observationDirectory: observationsOutput,
+  };
 }
 
 function parseArgs(argv) {

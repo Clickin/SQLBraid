@@ -44,7 +44,9 @@ function diagnosticSql(statement, placeholder = () => "?") {
 
 function barrier() {
   let resolve;
-  const promise = new Promise((fulfill) => { resolve = fulfill; });
+  const promise = new Promise((fulfill) => {
+    resolve = fulfill;
+  });
   return { promise, resolve };
 }
 
@@ -59,12 +61,10 @@ function standardSchema(validate, vendor = "runtime-smoke") {
 }
 
 async function expectCode(action, code) {
-  await assert.rejects(action, (error) => (
-    error !== null
-    && typeof error === "object"
-    && "code" in error
-    && error.code === code
-  ));
+  await assert.rejects(
+    action,
+    (error) => error !== null && typeof error === "object" && "code" in error && error.code === code,
+  );
 }
 
 async function expectSame(action, expected) {
@@ -105,12 +105,24 @@ function physical(log, options = {}) {
         throw options.streamFailure;
       }
     },
-    async begin(transactionOptions) { log.push(transactionOptions ? `begin:${JSON.stringify(transactionOptions)}` : "begin"); },
-    async commit() { log.push("commit"); },
-    async rollback() { log.push("rollback"); },
-    async savepoint(name) { log.push(`savepoint:${name}`); },
-    async rollbackTo(name) { log.push(`rollback-to:${name}`); },
-    async releaseSavepoint(name) { log.push(`release:${name}`); },
+    async begin(transactionOptions) {
+      log.push(transactionOptions ? `begin:${JSON.stringify(transactionOptions)}` : "begin");
+    },
+    async commit() {
+      log.push("commit");
+    },
+    async rollback() {
+      log.push("rollback");
+    },
+    async savepoint(name) {
+      log.push(`savepoint:${name}`);
+    },
+    async rollbackTo(name) {
+      log.push(`rollback-to:${name}`);
+    },
+    async releaseSavepoint(name) {
+      log.push(`release:${name}`);
+    },
   };
 }
 
@@ -145,10 +157,10 @@ function assertEventDurations(events) {
   for (const event of events) {
     assert.equal(Object.hasOwn(event, "duration"), false);
     if (
-      event.type === "query:result"
-      || event.type === "query:mapped"
-      || event.type === "stream:end"
-      || (event.type === "transaction" && event.status !== "requested")
+      event.type === "query:result" ||
+      event.type === "query:mapped" ||
+      event.type === "stream:end" ||
+      (event.type === "transaction" && event.status !== "requested")
     ) {
       assert.equal(typeof event.durationMs, "number");
     }
@@ -160,30 +172,25 @@ function assertEventDurations(events) {
 
 async function templateCoreSmoke() {
   const pg = sql;
-  const pgRendered = pg`SELECT ${pg.ident(["public", "users"])} WHERE id IN (${pg.list([3, 5])}) AND state = ${"ready"}`.render();
-  assert.deepEqual(pgRendered.segments, [
-    'SELECT "public"."users" WHERE id IN (',
-    ", ",
-    ") AND state = ",
-    "",
-  ]);
+  const pgRendered =
+    pg`SELECT ${pg.ident(["public", "users"])} WHERE id IN (${pg.list([3, 5])}) AND state = ${"ready"}`.render();
+  assert.deepEqual(pgRendered.segments, ['SELECT "public"."users" WHERE id IN (', ", ", ") AND state = ", ""]);
   assert.equal(
     diagnosticSql(pgRendered, (index) => `$${index}`),
     'SELECT "public"."users" WHERE id IN ($1, $2) AND state = $3',
   );
-  assert.deepEqual(pgRendered.parameters, [
-    { value: 3 },
-    { value: 5 },
-    { value: "ready", interpolation: 2 },
-  ]);
+  assert.deepEqual(pgRendered.parameters, [{ value: 3 }, { value: 5 }, { value: "ready", interpolation: 2 }]);
 
-  const joined = pg.join(
-    [pg.fragment`(${10})`, pg.fragment`(${20})`],
-    pg.fragment`, `,
-  );
+  const joined = pg.join([pg.fragment`(${10})`, pg.fragment`(${20})`], pg.fragment`, `);
   const joinedRendered = pg`VALUES ${joined}`.render();
-  assert.equal(diagnosticSql(joinedRendered, (index) => `$${index}`), "VALUES ($1), ($2)");
-  assert.deepEqual(joinedRendered.parameters.map(({ value }) => value), [10, 20]);
+  assert.equal(
+    diagnosticSql(joinedRendered, (index) => `$${index}`),
+    "VALUES ($1), ($2)",
+  );
+  assert.deepEqual(
+    joinedRendered.parameters.map(({ value }) => value),
+    [10, 20],
+  );
 
   const selected = pg`
     SELECT *
@@ -196,9 +203,18 @@ async function templateCoreSmoke() {
       /*@braid end*/
     /*@braid end*/
   `.render();
-  assert.match(diagnosticSql(selected, (index) => `$${index}`), /WHERE\s+email = \$1/);
-  assert.doesNotMatch(diagnosticSql(selected, (index) => `$${index}`), /@braid|id =|active =/);
-  assert.deepEqual(selected.parameters.map(({ value }) => value), ["ada@example.com"]);
+  assert.match(
+    diagnosticSql(selected, (index) => `$${index}`),
+    /WHERE\s+email = \$1/,
+  );
+  assert.doesNotMatch(
+    diagnosticSql(selected, (index) => `$${index}`),
+    /@braid|id =|active =/,
+  );
+  assert.deepEqual(
+    selected.parameters.map(({ value }) => value),
+    ["ada@example.com"],
+  );
 
   const update = pg`
     UPDATE users
@@ -208,26 +224,50 @@ async function templateCoreSmoke() {
     /*@braid end*/
     WHERE id = ${7}
   `.render();
-  assert.match(diagnosticSql(update, (index) => `$${index}`), /SET\s+name = \$1\s+WHERE id = \$2/);
-  assert.deepEqual(update.parameters.map(({ value }) => value), ["Ada", 7]);
+  assert.match(
+    diagnosticSql(update, (index) => `$${index}`),
+    /SET\s+name = \$1\s+WHERE id = \$2/,
+  );
+  assert.deepEqual(
+    update.parameters.map(({ value }) => value),
+    ["Ada", 7],
+  );
 
-  const trimmed = pg`SELECT 1 /*@braid trim prefix="WHERE " prefixOverrides="AND|OR"*/ AND id = ${8} /*@braid end*/`.render();
-  assert.match(diagnosticSql(trimmed, (index) => `$${index}`), /WHERE\s+id = \$1/);
-  assert.doesNotMatch(diagnosticSql(trimmed, (index) => `$${index}`), /@braid|\bAND\b/);
-  assert.deepEqual(trimmed.parameters.map(({ value }) => value), [8]);
+  const trimmed =
+    pg`SELECT 1 /*@braid trim prefix="WHERE " prefixOverrides="AND|OR"*/ AND id = ${8} /*@braid end*/`.render();
+  assert.match(
+    diagnosticSql(trimmed, (index) => `$${index}`),
+    /WHERE\s+id = \$1/,
+  );
+  assert.doesNotMatch(
+    diagnosticSql(trimmed, (index) => `$${index}`),
+    /@braid|\bAND\b/,
+  );
+  assert.deepEqual(
+    trimmed.parameters.map(({ value }) => value),
+    [8],
+  );
   assert.equal(
     diagnosticSql(mysql`SELECT ${mysql.ident("users.name")} WHERE id = ${4}`.render()),
     "SELECT `users`.`name` WHERE id = ?",
   );
-  assert.deepEqual(mysql`SELECT ${mysql.ident("users.name")} WHERE id = ${4}`.render().parameters.map(({ value }) => value), [4]);
+  assert.deepEqual(
+    mysql`SELECT ${mysql.ident("users.name")} WHERE id = ${4}`.render().parameters.map(({ value }) => value),
+    [4],
+  );
   assert.equal(
     diagnosticSql(sqlite`SELECT ${sqlite.ident("users.name")} WHERE id = ${4}`.render()),
     'SELECT "users"."name" WHERE id = ?',
   );
-  assert.deepEqual(sqlite`SELECT ${sqlite.ident("users.name")} WHERE id = ${4}`.render().parameters.map(({ value }) => value), [4]);
+  assert.deepEqual(
+    sqlite`SELECT ${sqlite.ident("users.name")} WHERE id = ${4}`.render().parameters.map(({ value }) => value),
+    [4],
+  );
   const hinted = sql`SELECT ${sql.bind("Ada", { databaseType: "VARCHAR2", length: 40 })}`.render();
   assert.deepEqual(hinted.segments, ["SELECT ", ""]);
-  assert.deepEqual(hinted.parameters, [{ value: "Ada", interpolation: 0, hint: { databaseType: "VARCHAR2", length: 40 } }]);
+  assert.deepEqual(hinted.parameters, [
+    { value: "Ada", interpolation: 0, hint: { databaseType: "VARCHAR2", length: 40 } },
+  ]);
   assert.deepEqual(oracle`SELECT ${1}`.render().segments, ["SELECT ", ""]);
   assert.deepEqual(mssql`SELECT ${1}`.render().segments, ["SELECT ", ""]);
 
@@ -246,18 +286,27 @@ async function templateCoreSmoke() {
     (error) => error?.code === "BRAID_SQL_LIMIT",
   );
 
-  const mappedSchema = standardSchema((value) => ({
-    value: { id: value.id, accepted: true },
-  }), "runtime-smoke-template");
+  const mappedSchema = standardSchema(
+    (value) => ({
+      value: { id: value.id, accepted: true },
+    }),
+    "runtime-smoke-template",
+  );
   const captured = capture(sql.rows(mappedSchema), ["SELECT ", ""], (values) => {
     values[0] = 1;
   });
   assert.equal(captured.resultKind, "rows");
   assert.equal(captured.resultSchema, mappedSchema);
-  assert.deepEqual(captured.render().parameters.map(({ value }) => value), [1]);
+  assert.deepEqual(
+    captured.render().parameters.map(({ value }) => value),
+    [1],
+  );
   const guardedQuery = guarded(sql.rows(mappedSchema), ["SELECT ", ""], [() => 1]);
   assert.equal(guardedQuery.resultSchema, mappedSchema);
-  assert.deepEqual(guardedQuery.render().parameters.map(({ value }) => value), [1]);
+  assert.deepEqual(
+    guardedQuery.render().parameters.map(({ value }) => value),
+    [1],
+  );
 }
 
 async function runtimeSmoke() {
@@ -288,10 +337,14 @@ async function runtimeSmoke() {
 
   const cardinalityEvents = [];
   const cardinality = createDatabase(physical([]), {
-    observers: [{ async onEvent(event) {
-      await Promise.resolve();
-      cardinalityEvents.push(event);
-    } }],
+    observers: [
+      {
+        async onEvent(event) {
+          await Promise.resolve();
+          cardinalityEvents.push(event);
+        },
+      },
+    ],
   });
   await assert.rejects(
     () => cardinality.one(sql.rows`SELECT many`),
@@ -302,14 +355,27 @@ async function runtimeSmoke() {
     (error) => error instanceof DatabaseCardinalityError && error.expected === "maybeOne" && error.actual === 2,
   );
   const cardinalityErrors = cardinalityEvents.filter((event) => event.type === "query:error");
-  assert.deepEqual(cardinalityErrors.map((event) => event.stage), ["cardinality", "cardinality"]);
+  assert.deepEqual(
+    cardinalityErrors.map((event) => event.stage),
+    ["cardinality", "cardinality"],
+  );
   assertEventDurations(cardinalityEvents);
 
   const orderTrace = [];
   const ordered = createDatabase(physical(orderTrace), {
     observers: [
-      { async onEvent(event) { await Promise.resolve(); orderTrace.push(`A:${event.type}`); } },
-      { async onEvent(event) { await Promise.resolve(); orderTrace.push(`B:${event.type}`); } },
+      {
+        async onEvent(event) {
+          await Promise.resolve();
+          orderTrace.push(`A:${event.type}`);
+        },
+      },
+      {
+        async onEvent(event) {
+          await Promise.resolve();
+          orderTrace.push(`B:${event.type}`);
+        },
+      },
     ],
   });
   await ordered.execute(sql`SELECT observer-order`);
@@ -335,12 +401,14 @@ async function runtimeSmoke() {
     return { value: { id: value.id, nested: true } };
   });
   pooledMappingDb = createPooledDatabase(pooledMapping.provider);
-  assert.deepEqual(
-    await pooledMappingDb.all(sql.rows(releaseBeforeMapper)`SELECT mapper-outer`),
-    [{ id: "1", nested: true }],
-  );
+  assert.deepEqual(await pooledMappingDb.all(sql.rows(releaseBeforeMapper)`SELECT mapper-outer`), [
+    { id: "1", nested: true },
+  ]);
   assert.equal(pooledMapping.records.length, 2);
-  assert.deepEqual(pooledMapping.records.map((record) => record.releaseCount), [1, 1]);
+  assert.deepEqual(
+    pooledMapping.records.map((record) => record.releaseCount),
+    [1, 1],
+  );
 
   const observerTrace = [];
   const observerEvents = [];
@@ -369,28 +437,32 @@ async function runtimeSmoke() {
   });
   await observerDb.tx(async (tx) => {
     await tx.execute(sql.rows(queryEscapeSchema)`SELECT query-mapper`);
-    assert.deepEqual(
-      await tx.all(sql.rows`SELECT execution-mapper`, { schema: executionEscapeSchema }),
-      [{ id: "1", checked: true }],
-    );
+    assert.deepEqual(await tx.all(sql.rows`SELECT execution-mapper`, { schema: executionEscapeSchema }), [
+      { id: "1", checked: true },
+    ]);
   });
   assert.equal(observerTrace.length, 2);
 
   const failClosedError = new Error("observer refused acquisition");
   let acquisitionCount = 0;
-  const failClosedDb = createPooledDatabase({
-    statementBinding: syntheticStatementBinding,
-    async acquire() {
-      acquisitionCount += 1;
-      return { ...physical([]), release() {} };
-    },
-  }, {
-    observers: [{
-      onEvent(event) {
-        if (event.type === "query:ready") throw failClosedError;
+  const failClosedDb = createPooledDatabase(
+    {
+      statementBinding: syntheticStatementBinding,
+      async acquire() {
+        acquisitionCount += 1;
+        return { ...physical([]), release() {} };
       },
-    }],
-  });
+    },
+    {
+      observers: [
+        {
+          onEvent(event) {
+            if (event.type === "query:ready") throw failClosedError;
+          },
+        },
+      ],
+    },
+  );
   await expectSame(() => failClosedDb.execute(sql`SELECT blocked`), failClosedError);
   assert.equal(acquisitionCount, 0);
 
@@ -408,7 +480,11 @@ async function runtimeSmoke() {
   });
   assert.equal(directTxLog[0], "begin");
   assert.ok(directTxLog.some((entry) => entry.startsWith("savepoint:")));
-  assert.ok(directTxLog.includes("release:" + directTxLog.find((entry) => entry.startsWith("savepoint:")).slice("savepoint:".length)));
+  assert.ok(
+    directTxLog.includes(
+      "release:" + directTxLog.find((entry) => entry.startsWith("savepoint:")).slice("savepoint:".length),
+    ),
+  );
   assert.equal(directTxLog.at(-1), "commit");
 
   const concurrent = pooledFake();
@@ -429,12 +505,15 @@ async function runtimeSmoke() {
   });
   await Promise.all([first, second]);
   assert.equal(concurrent.records.length, 2);
-  assert.deepEqual(concurrent.records.map((record) => record.releaseCount), [1, 1]);
+  assert.deepEqual(
+    concurrent.records.map((record) => record.releaseCount),
+    [1, 1],
+  );
   assert.ok(concurrent.records.every((record) => record.log.includes("begin") && record.log.includes("commit")));
-  assert.deepEqual(concurrent.records.map((record) => record.log.filter((entry) => entry.startsWith("query:"))), [
-    ["query:SELECT first-scoped"],
-    ["query:SELECT second-scoped"],
-  ]);
+  assert.deepEqual(
+    concurrent.records.map((record) => record.log.filter((entry) => entry.startsWith("query:"))),
+    [["query:SELECT first-scoped"], ["query:SELECT second-scoped"]],
+  );
 
   const unrelated = pooledFake();
   const unrelatedDb = createPooledDatabase(unrelated.provider);
@@ -449,7 +528,10 @@ async function runtimeSmoke() {
   releaseTransaction.resolve();
   await transaction;
   assert.equal(unrelated.records.length, 2);
-  assert.deepEqual(unrelated.records.map((record) => record.releaseCount), [1, 1]);
+  assert.deepEqual(
+    unrelated.records.map((record) => record.releaseCount),
+    [1, 1],
+  );
 
   const pinned = pooledFake();
   const pinnedDb = createPooledDatabase(pinned.provider);
@@ -486,14 +568,18 @@ async function runtimeSmoke() {
   assert.equal(sessionPool.records.length, 1);
   assert.equal(sessionPool.records[0].releaseCount, 1);
   assert.deepEqual(
-    sessionPool.records[0].log.filter((entry) => entry.startsWith("query:")).map((entry) => entry.slice("query:".length)),
+    sessionPool.records[0].log
+      .filter((entry) => entry.startsWith("query:"))
+      .map((entry) => entry.slice("query:".length)),
     ["SELECT session-one", "SELECT session-two", "SELECT session-tx"],
   );
   assert.ok(sessionPool.records[0].log.includes('begin:{"isolation":"serializable","readOnly":true}'));
   assert.ok(sessionPool.records[0].log.includes("commit"));
   await expectCode(() => sessionHandle.execute(sql`SELECT closed-session`), "BRAID_SESSION_CLOSED");
   await assert.rejects(
-    async () => { for await (const row of escapedSessionStream) void row; },
+    async () => {
+      for await (const row of escapedSessionStream) void row;
+    },
     (error) => error?.code === "BRAID_SESSION_CLOSED" || error?.code === "BRAID_SESSION_SCOPE",
   );
 
@@ -507,7 +593,11 @@ async function runtimeSmoke() {
   assert.deepEqual(preparedInputs, ["first", "second"]);
   const zeroInput = direct.prepare("runtime-zero-prepared", () => sql.rows`SELECT zero-input`, { input: "none" });
   await zeroInput.execute();
-  const commandPrepared = direct.prepare("runtime-command-prepared", () => sql.command`UPDATE users SET active = ${true}`, { input: "none" });
+  const commandPrepared = direct.prepare(
+    "runtime-command-prepared",
+    () => sql.command`UPDATE users SET active = ${true}`,
+    { input: "none" },
+  );
   assert.equal((await commandPrepared.execute()).kind, "command");
 
   const unsupportedCancellationEnvironment = Object.freeze({
@@ -530,9 +620,10 @@ async function runtimeSmoke() {
   const activeController = new AbortController();
   await assert.rejects(
     () => unsupportedCancellationDb.execute(sql`SELECT unsupported-active`, { signal: activeController.signal }),
-    (error) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.cancel"
-      && error.code === "BRAID_CANCEL_UNSUPPORTED",
+    (error) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.cancel" &&
+      error.code === "BRAID_CANCEL_UNSUPPORTED",
   );
   assert.equal(unsupportedCancellation.records.length, 0);
 
@@ -556,7 +647,10 @@ async function runtimeSmoke() {
     await Promise.resolve();
     assert.equal(pooledStream.records[0].releaseCount, 0);
     await pooledStreamDb.execute(sql`SELECT pooled-stream-reentry`);
-    assert.deepEqual(pooledStream.records.map((record) => record.releaseCount), [0, 1]);
+    assert.deepEqual(
+      pooledStream.records.map((record) => record.releaseCount),
+      [0, 1],
+    );
     return { value };
   });
   pooledStreamDb = createPooledDatabase(pooledStream.provider);
@@ -566,14 +660,18 @@ async function runtimeSmoke() {
   }
   assert.deepEqual(pooledRows, [{ id: "1" }]);
   assert.equal(pooledStream.records.length, 2);
-  assert.deepEqual(pooledStream.records.map((record) => record.releaseCount), [1, 1]);
+  assert.deepEqual(
+    pooledStream.records.map((record) => record.releaseCount),
+    [1, 1],
+  );
 
   const transactionToken = { kind: "transaction-rejection" };
   await expectSame(
-    () => directTx.tx(async () => {
-      await Promise.resolve();
-      throw transactionToken;
-    }),
+    () =>
+      directTx.tx(async () => {
+        await Promise.resolve();
+        throw transactionToken;
+      }),
     transactionToken,
   );
   await directTx.execute(sql`SELECT reusable-after-rejection`);

@@ -80,9 +80,7 @@
   "capabilities": {
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "transaction.read-only": {
       "status": "unsupported",
@@ -102,9 +100,7 @@
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "statement.cancel": {
       "status": "unsupported",
@@ -119,13 +115,8 @@
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "bigint",
-        "string"
-      ]
+      "testIds": ["deno-sqlite.data.profile"],
+      "driverRawRepresentations": ["bigint", "string"]
     },
     "numeric.exact-decimal": {
       "status": "unsupported",
@@ -136,69 +127,45 @@
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["deno-sqlite.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["deno-sqlite.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "statement.stream": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-sqlite.data.profile"
-      ]
+      "testIds": ["deno-sqlite.data.profile"]
     },
     "routine.out": {
       "status": "unsupported",

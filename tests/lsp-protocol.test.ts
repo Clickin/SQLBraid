@@ -8,7 +8,12 @@ import { test } from "vitest";
 import { generateModels } from "@sqlbraid/codegen";
 import type { MetadataSnapshot } from "@sqlbraid/metadata";
 
-type JsonRpcMessage = { readonly id?: number | string; readonly method?: string; readonly result?: unknown; readonly params?: unknown };
+type JsonRpcMessage = {
+  readonly id?: number | string;
+  readonly method?: string;
+  readonly result?: unknown;
+  readonly params?: unknown;
+};
 type Position = { readonly line: number; readonly character: number };
 
 type MessageReader = {
@@ -20,7 +25,12 @@ function createMessageReader(process: ChildProcessWithoutNullStreams): MessageRe
   let buffer = Buffer.alloc(0);
   let stderr = "";
   const messages: JsonRpcMessage[] = [];
-  const waiters: Array<{ readonly match: (message: JsonRpcMessage) => boolean; readonly resolve: (message: JsonRpcMessage) => void; readonly reject: (error: Error) => void; readonly timer: ReturnType<typeof setTimeout> }> = [];
+  const waiters: Array<{
+    readonly match: (message: JsonRpcMessage) => boolean;
+    readonly resolve: (message: JsonRpcMessage) => void;
+    readonly reject: (error: Error) => void;
+    readonly timer: ReturnType<typeof setTimeout>;
+  }> = [];
   const onData = (chunk: Buffer): void => {
     buffer = Buffer.concat([buffer, chunk]);
     while (true) {
@@ -38,7 +48,11 @@ function createMessageReader(process: ChildProcessWithoutNullStreams): MessageRe
       const body = buffer.subarray(bodyStart, bodyEnd).toString("utf8");
       buffer = buffer.subarray(bodyEnd);
       let message: JsonRpcMessage;
-      try { message = JSON.parse(body) as JsonRpcMessage; } catch { continue; }
+      try {
+        message = JSON.parse(body) as JsonRpcMessage;
+      } catch {
+        continue;
+      }
       const waiter = waiters.find((candidate) => candidate.match(message));
       if (waiter) {
         waiters.splice(waiters.indexOf(waiter), 1);
@@ -54,9 +68,15 @@ function createMessageReader(process: ChildProcessWithoutNullStreams): MessageRe
       waiter.reject(error);
     }
   };
-  const onStderr = (chunk: Buffer): void => { stderr += chunk.toString("utf8"); };
-  const onError = (error: Error): void => { failPending(`LSP process error: ${error.message}`); };
-  const onClose = (code: number | null): void => { failPending(`LSP process closed before the response (code ${code ?? "unknown"}).`); };
+  const onStderr = (chunk: Buffer): void => {
+    stderr += chunk.toString("utf8");
+  };
+  const onError = (error: Error): void => {
+    failPending(`LSP process error: ${error.message}`);
+  };
+  const onClose = (code: number | null): void => {
+    failPending(`LSP process closed before the response (code ${code ?? "unknown"}).`);
+  };
   process.stdout.on("data", onData);
   process.stderr.on("data", onStderr);
   process.once("error", onError);
@@ -108,7 +128,10 @@ function waitForExit(process: ChildProcessWithoutNullStreams, timeoutMs = 10000)
   const { promise, resolve: resolveExit, reject: rejectExit } = Promise.withResolvers<void>();
   // Real child-process shutdown needs a bounded wall-clock guard.
   const timer = setTimeout(() => rejectExit(new Error("LSP server did not exit")), timeoutMs);
-  process.once("close", () => { clearTimeout(timer); resolveExit(); });
+  process.once("close", () => {
+    clearTimeout(timer);
+    resolveExit();
+  });
   return promise;
 }
 
@@ -144,47 +167,121 @@ test("built stdio server speaks standard LSP methods", async () => {
     assert.equal(initialized.capabilities.signatureHelpProvider !== undefined, true);
     assert.equal(initialized.capabilities.diagnosticProvider !== undefined, true);
     send(server, { jsonrpc: "2.0", method: "initialized", params: {} });
-    send(server, { jsonrpc: "2.0", method: "textDocument/didOpen", params: { textDocument: { uri, languageId: "typescript", version: 1, text: source } } });
+    send(server, {
+      jsonrpc: "2.0",
+      method: "textDocument/didOpen",
+      params: { textDocument: { uri, languageId: "typescript", version: 1, text: source } },
+    });
     const published = await reader.next((message) => message.method === "textDocument/publishDiagnostics");
     assert.equal((published.params as { readonly version?: number }).version, 1);
 
     const selectOffset = source.indexOf("SELECT");
     send(server, { jsonrpc: "2.0", id: 2, method: "textDocument/diagnostic", params: { textDocument: { uri } } });
     assert.equal(resultOf<{ readonly items: readonly unknown[] }>(await response(reader, 2)).items.length, 0);
-    send(server, { jsonrpc: "2.0", id: 3, method: "textDocument/hover", params: { textDocument: { uri }, position: { line: 3, character: selectOffset - source.lastIndexOf("\n", selectOffset) - 1 } } });
+    send(server, {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "textDocument/hover",
+      params: {
+        textDocument: { uri },
+        position: { line: 3, character: selectOffset - source.lastIndexOf("\n", selectOffset) - 1 },
+      },
+    });
     assert.match(JSON.stringify(resultOf<unknown>(await response(reader, 3))), /RowQuery<UserRow>/u);
-    send(server, { jsonrpc: "2.0", id: 4, method: "textDocument/completion", params: { textDocument: { uri }, position: { line: 2, character: source.split("\n")[2].length } } });
+    send(server, {
+      jsonrpc: "2.0",
+      id: 4,
+      method: "textDocument/completion",
+      params: { textDocument: { uri }, position: { line: 2, character: source.split("\n")[2].length } },
+    });
     assert.deepEqual(resultOf<{ readonly items: readonly unknown[] }>(await response(reader, 4)).items, []);
-    send(server, { jsonrpc: "2.0", id: 5, method: "textDocument/definition", params: { textDocument: { uri }, position: { line: 3, character: 53 } } });
+    send(server, {
+      jsonrpc: "2.0",
+      id: 5,
+      method: "textDocument/definition",
+      params: { textDocument: { uri }, position: { line: 3, character: 53 } },
+    });
     assert.equal(resultOf<unknown>(await response(reader, 5)), null);
-    send(server, { jsonrpc: "2.0", id: 6, method: "textDocument/references", params: { textDocument: { uri }, position: { line: 3, character: 53 }, context: { includeDeclaration: true } } });
+    send(server, {
+      jsonrpc: "2.0",
+      id: 6,
+      method: "textDocument/references",
+      params: { textDocument: { uri }, position: { line: 3, character: 53 }, context: { includeDeclaration: true } },
+    });
     assert.deepEqual(resultOf<readonly unknown[]>(await response(reader, 6)), []);
     send(server, { jsonrpc: "2.0", id: 7, method: "textDocument/documentSymbol", params: { textDocument: { uri } } });
-    assert.equal((resultOf<readonly unknown[]>(await response(reader, 7))).length, 1);
+    assert.equal(resultOf<readonly unknown[]>(await response(reader, 7)).length, 1);
     send(server, { jsonrpc: "2.0", id: 8, method: "workspace/symbol", params: { query: "does-not-exist" } });
     assert.deepEqual(resultOf<readonly unknown[]>(await response(reader, 8)), []);
-    send(server, { jsonrpc: "2.0", id: 9, method: "textDocument/signatureHelp", params: { textDocument: { uri }, position: { line: 3, character: 53 } } });
+    send(server, {
+      jsonrpc: "2.0",
+      id: 9,
+      method: "textDocument/signatureHelp",
+      params: { textDocument: { uri }, position: { line: 3, character: 53 } },
+    });
     assert.deepEqual(resultOf<unknown>(await response(reader, 9)), null);
 
     const staleRequest = 12;
     const broken = `${source}\nconst broken = sql.rows<UserRow>\`SELECT /*@braid if */ id\`;`;
-    send(server, { jsonrpc: "2.0", method: "textDocument/didChange", params: { textDocument: { uri, version: 2 }, contentChanges: [{ text: broken }] } });
-    send(server, { jsonrpc: "2.0", id: staleRequest, method: "textDocument/diagnostic", params: { textDocument: { uri } } });
+    send(server, {
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: { textDocument: { uri, version: 2 }, contentChanges: [{ text: broken }] },
+    });
+    send(server, {
+      jsonrpc: "2.0",
+      id: staleRequest,
+      method: "textDocument/diagnostic",
+      params: { textDocument: { uri } },
+    });
     send(server, { jsonrpc: "2.0", method: "$/cancelRequest", params: { id: staleRequest } });
-    send(server, { jsonrpc: "2.0", method: "textDocument/didChange", params: { textDocument: { uri, version: 3 }, contentChanges: [{ text: source }] } });
-    const latestPublished = await reader.next((message) => message.method === "textDocument/publishDiagnostics" && (message.params as { readonly version?: number }).version === 3);
+    send(server, {
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: { textDocument: { uri, version: 3 }, contentChanges: [{ text: source }] },
+    });
+    const latestPublished = await reader.next(
+      (message) =>
+        message.method === "textDocument/publishDiagnostics" &&
+        (message.params as { readonly version?: number }).version === 3,
+    );
     assert.equal((latestPublished.params as { readonly version?: number }).version, 3);
 
     const mixed = `${source}\nconst native: string = 123;\nconst malformed = sql\`SELECT 1 /*@braid otherwise*/\`;`;
-    send(server, { jsonrpc: "2.0", method: "textDocument/didChange", params: { textDocument: { uri, version: 4 }, contentChanges: [{ text: mixed }] } });
+    send(server, {
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: { textDocument: { uri, version: 4 }, contentChanges: [{ text: mixed }] },
+    });
     send(server, { jsonrpc: "2.0", id: 13, method: "textDocument/diagnostic", params: { textDocument: { uri } } });
-    const mixedDiagnostics = resultOf<{ readonly items: readonly { readonly code?: string }[] }>(await response(reader, 13)).items;
-    assert.equal(mixedDiagnostics.some((diagnostic) => diagnostic.code === "BRAID_STRUCTURE"), true);
-    assert.equal(mixedDiagnostics.some((diagnostic) => diagnostic.code === "TS2322"), false);
-    send(server, { jsonrpc: "2.0", method: "textDocument/didChange", params: { textDocument: { uri, version: 5 }, contentChanges: [{ text: source }] } });
-    await reader.next((message) => message.method === "textDocument/publishDiagnostics" && (message.params as { readonly version?: number }).version === 5);
+    const mixedDiagnostics = resultOf<{ readonly items: readonly { readonly code?: string }[] }>(
+      await response(reader, 13),
+    ).items;
+    assert.equal(
+      mixedDiagnostics.some((diagnostic) => diagnostic.code === "BRAID_STRUCTURE"),
+      true,
+    );
+    assert.equal(
+      mixedDiagnostics.some((diagnostic) => diagnostic.code === "TS2322"),
+      false,
+    );
+    send(server, {
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: { textDocument: { uri, version: 5 }, contentChanges: [{ text: source }] },
+    });
+    await reader.next(
+      (message) =>
+        message.method === "textDocument/publishDiagnostics" &&
+        (message.params as { readonly version?: number }).version === 5,
+    );
 
-    send(server, { jsonrpc: "2.0", id: 10, method: "textDocument/hover", params: { textDocument: { uri }, position: { line: 3, character: selectOffset } } });
+    send(server, {
+      jsonrpc: "2.0",
+      id: 10,
+      method: "textDocument/hover",
+      params: { textDocument: { uri }, position: { line: 3, character: selectOffset } },
+    });
     send(server, { jsonrpc: "2.0", method: "$/cancelRequest", params: { id: 10 } });
     send(server, { jsonrpc: "2.0", id: 11, method: "shutdown", params: null });
     assert.equal(resultOf<unknown>(await response(reader, 11)), null);
@@ -204,8 +301,8 @@ test("built stdio server discovers facade metadata with default configuration", 
   const uri = pathToFileURL(sourcePath).href;
   const source = [
     'import { sql } from "sqlbraid/sqlite";',
-    'type UserRow = { id: number };',
-    'export const query = sql.rows<UserRow>`SELECT calculate_fee(1) AS id FROM main.users`;',
+    "type UserRow = { id: number };",
+    "export const query = sql.rows<UserRow>`SELECT calculate_fee(1) AS id FROM main.users`;",
   ].join("\n");
   const snapshot = {
     format: "sqlbraid-metadata",
@@ -225,30 +322,34 @@ test("built stdio server discovers facade metadata with default configuration", 
       },
     },
     routines: {
-      "main.calculate_fee": [{
-        name: "calculate_fee",
-        schema: "main",
-        identity: "main.calculate_fee",
-        kind: "function",
-        arguments: [{ name: "amount", mode: "in", type: "INTEGER" }],
-        argumentsComplete: true,
-        result: { kind: "scalar", type: "INTEGER", nullable: false },
-      }],
+      "main.calculate_fee": [
+        {
+          name: "calculate_fee",
+          schema: "main",
+          identity: "main.calculate_fee",
+          kind: "function",
+          arguments: [{ name: "amount", mode: "in", type: "INTEGER" }],
+          argumentsComplete: true,
+          result: { kind: "scalar", type: "INTEGER", nullable: false },
+        },
+      ],
     },
     metadata: { introspectionScope: "main", completeness: "partial" },
   };
   const config = {
     codegen: {
-      targets: [{
-        name: "sqlite",
-        metadata: "./metadata.json",
-        outFile: "./generated.ts",
-        typePolicy: {
-          id: "sqlite-lsp-test",
-          hash: "sqlite-lsp-test-v1",
-          mappings: [{ databaseType: "INTEGER", inputType: "number", outputType: "number", nullable: false }],
+      targets: [
+        {
+          name: "sqlite",
+          metadata: "./metadata.json",
+          outFile: "./generated.ts",
+          typePolicy: {
+            id: "sqlite-lsp-test",
+            hash: "sqlite-lsp-test-v1",
+            mappings: [{ databaseType: "INTEGER", inputType: "number", outputType: "number", nullable: false }],
+          },
         },
-      }],
+      ],
     },
   };
   const positionAt = (offset: number): Position => {
@@ -274,28 +375,76 @@ test("built stdio server discovers facade metadata with default configuration", 
     });
     await response(reader, 1);
     send(server, { jsonrpc: "2.0", method: "initialized", params: {} });
-    send(server, { jsonrpc: "2.0", method: "textDocument/didOpen", params: { textDocument: { uri, languageId: "typescript", version: 1, text: source } } });
+    send(server, {
+      jsonrpc: "2.0",
+      method: "textDocument/didOpen",
+      params: { textDocument: { uri, languageId: "typescript", version: 1, text: source } },
+    });
     await reader.next((message) => message.method === "textDocument/publishDiagnostics");
 
     const relationOffset = source.indexOf("main.users") + "main.".length;
     send(server, { jsonrpc: "2.0", id: 2, method: "textDocument/diagnostic", params: { textDocument: { uri } } });
     assert.deepEqual(resultOf<{ readonly items: readonly unknown[] }>(await response(reader, 2)).items, []);
-    send(server, { jsonrpc: "2.0", id: 3, method: "textDocument/completion", params: { textDocument: { uri }, position: positionAt(relationOffset) } });
-    assert.deepEqual(resultOf<{ readonly items: readonly { readonly label: string }[] }>(await response(reader, 3)).items.map((item) => item.label), ["users"]);
-    send(server, { jsonrpc: "2.0", id: 4, method: "textDocument/hover", params: { textDocument: { uri }, position: positionAt(relationOffset) } });
+    send(server, {
+      jsonrpc: "2.0",
+      id: 3,
+      method: "textDocument/completion",
+      params: { textDocument: { uri }, position: positionAt(relationOffset) },
+    });
+    assert.deepEqual(
+      resultOf<{ readonly items: readonly { readonly label: string }[] }>(await response(reader, 3)).items.map(
+        (item) => item.label,
+      ),
+      ["users"],
+    );
+    send(server, {
+      jsonrpc: "2.0",
+      id: 4,
+      method: "textDocument/hover",
+      params: { textDocument: { uri }, position: positionAt(relationOffset) },
+    });
     assert.match(JSON.stringify(resultOf<unknown>(await response(reader, 4))), /Relation main\.users/u);
-    send(server, { jsonrpc: "2.0", id: 5, method: "textDocument/definition", params: { textDocument: { uri }, position: positionAt(relationOffset) } });
+    send(server, {
+      jsonrpc: "2.0",
+      id: 5,
+      method: "textDocument/definition",
+      params: { textDocument: { uri }, position: positionAt(relationOffset) },
+    });
     assert.match(JSON.stringify(resultOf<unknown>(await response(reader, 5))), /metadata\.json/u);
-    send(server, { jsonrpc: "2.0", id: 6, method: "textDocument/references", params: { textDocument: { uri }, position: positionAt(relationOffset), context: { includeDeclaration: true } } });
+    send(server, {
+      jsonrpc: "2.0",
+      id: 6,
+      method: "textDocument/references",
+      params: { textDocument: { uri }, position: positionAt(relationOffset), context: { includeDeclaration: true } },
+    });
     assert.ok(resultOf<readonly unknown[]>(await response(reader, 6)).length >= 1);
     send(server, { jsonrpc: "2.0", id: 7, method: "textDocument/documentSymbol", params: { textDocument: { uri } } });
-    assert.deepEqual((resultOf<readonly { readonly name: string }[]>(await response(reader, 7))).map((symbol) => symbol.name), ["sql.rows"]);
+    assert.deepEqual(
+      resultOf<readonly { readonly name: string }[]>(await response(reader, 7)).map((symbol) => symbol.name),
+      ["sql.rows"],
+    );
     send(server, { jsonrpc: "2.0", id: 8, method: "workspace/symbol", params: { query: "users" } });
-    assert.deepEqual((resultOf<readonly { readonly name: string; readonly kind: number }[]>(await response(reader, 8))).map((symbol) => [symbol.name, symbol.kind]), [["users", 5]]);
+    assert.deepEqual(
+      resultOf<readonly { readonly name: string; readonly kind: number }[]>(await response(reader, 8)).map((symbol) => [
+        symbol.name,
+        symbol.kind,
+      ]),
+      [["users", 5]],
+    );
     const signatureOffset = source.indexOf("calculate_fee(") + "calculate_fee(".length;
-    send(server, { jsonrpc: "2.0", id: 9, method: "textDocument/signatureHelp", params: { textDocument: { uri }, position: positionAt(signatureOffset) } });
-    const signature = resultOf<{ readonly signatures: readonly { readonly parameters: readonly { readonly label: string }[] }[] }>(await response(reader, 9));
-    assert.deepEqual(signature.signatures[0]?.parameters.map((parameter) => parameter.label), ["amount: INTEGER"]);
+    send(server, {
+      jsonrpc: "2.0",
+      id: 9,
+      method: "textDocument/signatureHelp",
+      params: { textDocument: { uri }, position: positionAt(signatureOffset) },
+    });
+    const signature = resultOf<{
+      readonly signatures: readonly { readonly parameters: readonly { readonly label: string }[] }[];
+    }>(await response(reader, 9));
+    assert.deepEqual(
+      signature.signatures[0]?.parameters.map((parameter) => parameter.label),
+      ["amount: INTEGER"],
+    );
 
     send(server, { jsonrpc: "2.0", id: 10, method: "shutdown", params: null });
     assert.equal(resultOf<unknown>(await response(reader, 10)), null);
@@ -342,27 +491,31 @@ test("built stdio server routes workspace symbols across multiple roots", async 
   };
   const config = {
     codegen: {
-      targets: [{
-        name: "database",
-        metadata: "metadata.json",
-        outFile: "generated.ts",
-        typePolicy: {
-          id: testTypePolicy.id,
-          hash: testTypePolicy.hash,
-          mappings: testTypePolicy.mappings,
+      targets: [
+        {
+          name: "database",
+          metadata: "metadata.json",
+          outFile: "generated.ts",
+          typePolicy: {
+            id: testTypePolicy.id,
+            hash: testTypePolicy.hash,
+            mappings: testTypePolicy.mappings,
+          },
         },
-      }],
+      ],
     },
   };
-  await Promise.all([alphaRoot, betaRoot].flatMap((projectRoot, index) => {
-    const metadata = snapshot(index === 0 ? "alpha_users" : "beta_users");
-    const generated = generateModels(metadata, { typePolicy: testTypePolicy });
-    return [
-      writeFile(join(projectRoot, "metadata.json"), JSON.stringify(metadata)),
-      writeFile(join(projectRoot, "generated.ts"), generated.source),
-      writeFile(join(projectRoot, "sqlbraid.config.mjs"), `export default ${JSON.stringify(config)};`),
-    ];
-  }));
+  await Promise.all(
+    [alphaRoot, betaRoot].flatMap((projectRoot, index) => {
+      const metadata = snapshot(index === 0 ? "alpha_users" : "beta_users");
+      const generated = generateModels(metadata, { typePolicy: testTypePolicy });
+      return [
+        writeFile(join(projectRoot, "metadata.json"), JSON.stringify(metadata)),
+        writeFile(join(projectRoot, "generated.ts"), generated.source),
+        writeFile(join(projectRoot, "sqlbraid.config.mjs"), `export default ${JSON.stringify(config)};`),
+      ];
+    }),
+  );
   const server = spawn(process.execPath, [resolve("packages/language-server/dist/cli.js")], { stdio: "pipe" });
   const reader = createMessageReader(server);
   try {
@@ -384,10 +537,16 @@ test("built stdio server routes workspace symbols across multiple roots", async 
     send(server, { jsonrpc: "2.0", method: "initialized", params: {} });
     send(server, { jsonrpc: "2.0", id: 2, method: "workspace/symbol", params: { query: "alpha_users" } });
     const alpha = resultOf<readonly { readonly name: string }[]>(await response(reader, 2));
-    assert.deepEqual(alpha.map((symbol) => symbol.name), ["alpha_users"]);
+    assert.deepEqual(
+      alpha.map((symbol) => symbol.name),
+      ["alpha_users"],
+    );
     send(server, { jsonrpc: "2.0", id: 3, method: "workspace/symbol", params: { query: "beta_users" } });
     const beta = resultOf<readonly { readonly name: string }[]>(await response(reader, 3));
-    assert.deepEqual(beta.map((symbol) => symbol.name), ["beta_users"]);
+    assert.deepEqual(
+      beta.map((symbol) => symbol.name),
+      ["beta_users"],
+    );
     send(server, { jsonrpc: "2.0", id: 4, method: "shutdown", params: null });
     await response(reader, 4);
     send(server, { jsonrpc: "2.0", method: "exit", params: null });
@@ -417,8 +576,16 @@ test("stdio server registers only relevant project file watchers", async () => {
     await response(reader, 1);
     send(server, { jsonrpc: "2.0", method: "initialized", params: {} });
     const registration = await reader.next((message) => message.method === "client/registerCapability");
-    const registrations = (registration.params as { readonly registrations: readonly { readonly registerOptions?: { readonly watchers?: readonly { readonly globPattern: string }[] } }[] }).registrations;
-    const watchers = registrations.flatMap((entry) => entry.registerOptions?.watchers ?? []).map((watcher) => watcher.globPattern);
+    const registrations = (
+      registration.params as {
+        readonly registrations: readonly {
+          readonly registerOptions?: { readonly watchers?: readonly { readonly globPattern: string }[] };
+        }[];
+      }
+    ).registrations;
+    const watchers = registrations
+      .flatMap((entry) => entry.registerOptions?.watchers ?? [])
+      .map((watcher) => watcher.globPattern);
     assert.deepEqual(watchers, [
       "**/sqlbraid.config.mjs",
       "**/sqlbraid.config.js",
@@ -459,17 +626,39 @@ test("real LSP diagnostics preserve native, Braid, and overlay-only ownership", 
       jsonrpc: "2.0",
       id: 1,
       method: "initialize",
-      params: { processId: process.pid, rootUri: pathToFileURL(root).href, capabilities: {}, workspaceFolders: [{ uri: pathToFileURL(root).href, name: "diagnostics" }] },
+      params: {
+        processId: process.pid,
+        rootUri: pathToFileURL(root).href,
+        capabilities: {},
+        workspaceFolders: [{ uri: pathToFileURL(root).href, name: "diagnostics" }],
+      },
     });
     await response(reader, 1);
     send(server, { jsonrpc: "2.0", method: "initialized", params: {} });
-    send(server, { jsonrpc: "2.0", method: "textDocument/didOpen", params: { textDocument: { uri, languageId: "typescript", version: 1, text: source } } });
+    send(server, {
+      jsonrpc: "2.0",
+      method: "textDocument/didOpen",
+      params: { textDocument: { uri, languageId: "typescript", version: 1, text: source } },
+    });
     const published = await reader.next((message) => message.method === "textDocument/publishDiagnostics");
-    const diagnostics = (published.params as { readonly diagnostics: readonly { readonly code?: string }[] }).diagnostics;
-    assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "BRAID_STRUCTURE"), true);
-    assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "TS2307"), true);
-    assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "TS7006"), true);
-    assert.equal(diagnostics.some((diagnostic) => diagnostic.code === "TS2322"), false);
+    const diagnostics = (published.params as { readonly diagnostics: readonly { readonly code?: string }[] })
+      .diagnostics;
+    assert.equal(
+      diagnostics.some((diagnostic) => diagnostic.code === "BRAID_STRUCTURE"),
+      true,
+    );
+    assert.equal(
+      diagnostics.some((diagnostic) => diagnostic.code === "TS2307"),
+      true,
+    );
+    assert.equal(
+      diagnostics.some((diagnostic) => diagnostic.code === "TS7006"),
+      true,
+    );
+    assert.equal(
+      diagnostics.some((diagnostic) => diagnostic.code === "TS2322"),
+      false,
+    );
     send(server, { jsonrpc: "2.0", id: 2, method: "shutdown", params: null });
     await response(reader, 2);
     send(server, { jsonrpc: "2.0", method: "exit", params: null });

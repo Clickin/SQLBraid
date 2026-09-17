@@ -11,8 +11,16 @@ const data = loadSupportMatrix();
 
 test("database projection exposes only the intended support columns and real target values", () => {
   assert.deepEqual(supportMatrixColumns("database", "en"), [
-    "Target", "Database", "Driver", "Runtime", "Support status",
-    "Exact numeric", "JSON", "Temporal", "Transaction", "Streaming",
+    "Target",
+    "Database",
+    "Driver",
+    "Runtime",
+    "Support status",
+    "Exact numeric",
+    "JSON",
+    "Temporal",
+    "Transaction",
+    "Streaming",
   ]);
 
   const target = data.targets.find((candidate) => candidate.id === "postgres-pg-node-16-4");
@@ -26,10 +34,12 @@ test("database projection exposes only the intended support columns and real tar
     `${target.runtime.id}@${target.runtime.version}`,
     supportMatrixStatus(target.status, "en"),
   ]);
-  assert.equal(cells[5], [
-    target.numeric["exact-integer"],
-    target.numeric["exact-decimal"],
-  ].map((contract) => `${contract.representation} · ${contract.fidelity} · ${contract.profile}`).join(" / "));
+  assert.equal(
+    cells[5],
+    [target.numeric["exact-integer"], target.numeric["exact-decimal"]]
+      .map((contract) => `${contract.representation} · ${contract.fidelity} · ${contract.profile}`)
+      .join(" / "),
+  );
   assert.match(cells[6], /Guaranteed/);
   assert.match(cells[7], /Guaranteed/);
   assert.match(cells[8], /Guaranteed/);
@@ -38,9 +48,22 @@ test("database projection exposes only the intended support columns and real tar
 
 test("driver projection retains raw/canonical representation and policy evidence", () => {
   assert.deepEqual(supportMatrixColumns("driver", "en"), [
-    "Driver", "Version", "Target", "Runtime", "Profile",
-    "Driver raw integer", "Driver raw decimal", "Driver raw JSON", "Driver raw temporal",
-    "SQLBraid canonical", "TypePolicy", "Required options", "Streaming", "Routines", "Bulk", "Excluded profiles",
+    "Driver",
+    "Version",
+    "Target",
+    "Runtime",
+    "Profile",
+    "Driver raw integer",
+    "Driver raw decimal",
+    "Driver raw JSON",
+    "Driver raw temporal",
+    "SQLBraid canonical",
+    "TypePolicy",
+    "Required options",
+    "Streaming",
+    "Routines",
+    "Bulk",
+    "Excluded profiles",
   ]);
 
   const target = data.targets.find((candidate) => candidate.id === "better-sqlite3-node-22-18-0");
@@ -56,12 +79,17 @@ test("driver projection retains raw/canonical representation and policy evidence
   ]);
   assert.equal(cells[5], target.driver.driverRawRepresentations?.integer);
   assert.equal(cells[6], target.driver.driverRawRepresentations?.decimal);
-  assert.equal(cells[9], [
-    target.driver.sqlbraidRepresentations?.integer,
-    target.driver.sqlbraidRepresentations?.decimal,
-    target.driver.sqlbraidRepresentations?.json,
-    target.driver.sqlbraidRepresentations?.temporal,
-  ].filter(Boolean).join(" · "));
+  assert.equal(
+    cells[9],
+    [
+      target.driver.sqlbraidRepresentations?.integer,
+      target.driver.sqlbraidRepresentations?.decimal,
+      target.driver.sqlbraidRepresentations?.json,
+      target.driver.sqlbraidRepresentations?.temporal,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  );
   assert.equal(cells[10], `${target.typePolicy?.id}@${target.typePolicy?.hash}`);
   assert.equal(cells[11], JSON.stringify(target.driver.requiredOptions));
   assert.equal(cells[12], target.driver.stream);
@@ -75,11 +103,16 @@ test("capability projection preserves evidence details without changing vocabula
   assert.ok(target);
   const capability = target.capabilities["sql.native-transparency"];
   assert.ok(capability);
-  const cells = projectSupportMatrixRow(data, "capability", {
-    target,
-    capabilityId: "sql.native-transparency",
-    capability,
-  }, "en");
+  const cells = projectSupportMatrixRow(
+    data,
+    "capability",
+    {
+      target,
+      capabilityId: "sql.native-transparency",
+      capability,
+    },
+    "en",
+  );
   assert.equal(cells[0], data.capabilities.find((entry) => entry.id === "sql.native-transparency")?.labels.en);
   assert.equal(cells[1], target.id);
   assert.equal(cells[2], "Guaranteed");

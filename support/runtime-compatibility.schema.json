@@ -104,10 +104,7 @@
           "items": { "$ref": "#/$defs/packageName" }
         },
         "driver": {
-          "anyOf": [
-            { "type": "null" },
-            { "$ref": "#/$defs/driver" }
-          ]
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/driver" }]
         },
         "smoke": { "$ref": "#/$defs/smoke" },
         "releaseBlocking": {

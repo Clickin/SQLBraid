@@ -13,9 +13,10 @@ const sections = [
 ] as const;
 
 function item(entry: CollectionEntry<"docs">, base: string) {
-  const description = typeof entry.data.description === "string" && entry.data.description.trim()
-    ? `: ${entry.data.description.trim()}`
-    : "";
+  const description =
+    typeof entry.data.description === "string" && entry.data.description.trim()
+      ? `: ${entry.data.description.trim()}`
+      : "";
   return `- [${entry.data.title}](${rawMarkdownUrl(entry.id, base)})${description}`;
 }
 
@@ -38,7 +39,14 @@ export const GET: APIRoute = async () => {
     "## Start here",
   ];
 
-  for (const id of ["index", "concepts/sql-tags", "concepts/safe-binds", "concepts/structural-fragments", "runtime/transactions", "agents/skill"]) {
+  for (const id of [
+    "index",
+    "concepts/sql-tags",
+    "concepts/safe-binds",
+    "concepts/structural-fragments",
+    "runtime/transactions",
+    "agents/skill",
+  ]) {
     const entry = byId.get(id);
     if (entry) lines.push(item(entry, base));
   }

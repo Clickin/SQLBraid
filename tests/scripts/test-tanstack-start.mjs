@@ -17,13 +17,17 @@ async function reexecOnNode24() {
   const major = Number(process.versions.node.split(".")[0]);
   if (major === 24 || process.env.SQLBRAID_FINANCE_NODE_BOOTSTRAPPED === "1") {
     if (major !== 24) {
-      throw new Error("TanStack Start finance gate requires Node 24; SQLBRAID_FINANCE_NODE points to a non-Node-24 executable.");
+      throw new Error(
+        "TanStack Start finance gate requires Node 24; SQLBRAID_FINANCE_NODE points to a non-Node-24 executable.",
+      );
     }
     return false;
   }
   const executable = process.env.SQLBRAID_FINANCE_NODE;
   if (!executable) {
-    throw new Error(`TanStack Start finance gate requires Node 24 (found ${process.versions.node}); set SQLBRAID_FINANCE_NODE to an explicit Node 24 executable.`);
+    throw new Error(
+      `TanStack Start finance gate requires Node 24 (found ${process.versions.node}); set SQLBRAID_FINANCE_NODE to an explicit Node 24 executable.`,
+    );
   }
   const child = spawn(executable, [script, ...process.argv.slice(2)], {
     cwd: root,
@@ -63,8 +67,9 @@ function dependencyEntries(manifest) {
 async function packSqlbraidPackages(app, packageDirectory) {
   const appManifest = await packageManifest(app);
   const names = new Set(
-    Object.keys({ ...appManifest.dependencies, ...appManifest.devDependencies })
-      .filter((name) => name.startsWith("@sqlbraid/")),
+    Object.keys({ ...appManifest.dependencies, ...appManifest.devDependencies }).filter((name) =>
+      name.startsWith("@sqlbraid/"),
+    ),
   );
   const manifests = new Map();
   for (const name of names) {
@@ -90,7 +95,10 @@ async function packSqlbraidPackages(app, packageDirectory) {
   for (const name of names) {
     const directory = localPackageDirectory(name);
     const before = new Set((await readdir(packageDirectory)).filter((entry) => entry.endsWith(".tgz")));
-    await execFile("pnpm", ["--dir", directory, "pack", "--pack-destination", packageDirectory], { cwd: root, maxBuffer: 20 * 1024 * 1024 });
+    await execFile("pnpm", ["--dir", directory, "pack", "--pack-destination", packageDirectory], {
+      cwd: root,
+      maxBuffer: 20 * 1024 * 1024,
+    });
     const added = (await readdir(packageDirectory)).filter((entry) => entry.endsWith(".tgz") && !before.has(entry));
     if (added.length !== 1) throw new Error(`Expected one tarball for ${name}, found ${added.length}.`);
     tarballs.set(name, join(packageDirectory, added[0]));
@@ -100,7 +108,10 @@ async function packSqlbraidPackages(app, packageDirectory) {
     const path = relative(app, tarball).replaceAll("\\", "/");
     return path.startsWith(".") ? path : `./${path}`;
   };
-  for (const [section, values] of [["dependencies", appManifest.dependencies], ["devDependencies", appManifest.devDependencies]]) {
+  for (const [section, values] of [
+    ["dependencies", appManifest.dependencies],
+    ["devDependencies", appManifest.devDependencies],
+  ]) {
     for (const name of Object.keys(values ?? {})) {
       const tarball = tarballs.get(name);
       if (tarball) values[name] = localPath(tarball);
@@ -158,8 +169,12 @@ function startProcess(command, args, cwd, env) {
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
-  child.stdout.on("data", (chunk) => { output += chunk; });
-  child.stderr.on("data", (chunk) => { output += chunk; });
+  child.stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    output += chunk;
+  });
   child.output = () => output;
   return child;
 }
@@ -206,9 +221,9 @@ async function sourceMapFor(code, base, sourcePath, _child) {
   if (marker.startsWith("data:")) {
     const comma = marker.indexOf(",");
     const payload = marker.slice(comma + 1);
-    return JSON.parse(marker.includes(";base64,")
-      ? Buffer.from(payload, "base64").toString("utf8")
-      : decodeURIComponent(payload));
+    return JSON.parse(
+      marker.includes(";base64,") ? Buffer.from(payload, "base64").toString("utf8") : decodeURIComponent(payload),
+    );
   }
   const response = await fetch(new URL(marker, base));
   if (!response.ok) throw new Error(`Unable to fetch source map for ${sourcePath}: ${response.status}`);
@@ -218,8 +233,15 @@ async function sourceMapFor(code, base, sourcePath, _child) {
 function assertUnicodeSourceMap(map, sourcePath) {
   assert.equal(map.version, 3, `source map for ${sourcePath} was not a v3 map`);
   assert.ok(typeof map.mappings === "string" && map.mappings.length > 0, `source map for ${sourcePath} was empty`);
-  assert.ok(Array.isArray(map.sources) && map.sources.some((source) => source.endsWith(sourcePath)), `source map did not point to ${sourcePath}`);
-  assert.ok(Array.isArray(map.sourcesContent) && map.sourcesContent.some((source) => source?.includes("재무 거래") && source.includes("고객")), `source map for ${sourcePath} lost Korean source content`);
+  assert.ok(
+    Array.isArray(map.sources) && map.sources.some((source) => source.endsWith(sourcePath)),
+    `source map did not point to ${sourcePath}`,
+  );
+  assert.ok(
+    Array.isArray(map.sourcesContent) &&
+      map.sourcesContent.some((source) => source?.includes("재무 거래") && source.includes("고객")),
+    `source map for ${sourcePath} lost Korean source content`,
+  );
 }
 
 async function assertClientBundleSafe(app) {
@@ -228,7 +250,11 @@ async function assertClientBundleSafe(app) {
   const assets = files.filter((file) => /\.(?:js|mjs|map)$/u.test(file));
   assert.ok(assets.length > 0, "TanStack Start production build emitted no client assets.");
   const clientText = (await Promise.all(assets.map((file) => readFile(file, "utf8")))).join("\n");
-  assert.doesNotMatch(clientText, /node:sqlite|@sqlbraid\/sqlite\/node-sqlite|DatabaseSync|createNodeSqliteDatabase|(?:^|[/@"'])(?:pg|mysql2|oracledb|tedious)(?:[/@"'])/iu, "SQLite or a database driver leaked into the client bundle.");
+  assert.doesNotMatch(
+    clientText,
+    /node:sqlite|@sqlbraid\/sqlite\/node-sqlite|DatabaseSync|createNodeSqliteDatabase|(?:^|[/@"'])(?:pg|mysql2|oracledb|tedious)(?:[/@"'])/iu,
+    "SQLite or a database driver leaked into the client bundle.",
+  );
 }
 
 async function main() {
@@ -246,12 +272,25 @@ async function main() {
   const transformBase = `http://127.0.0.1:${port}/`;
   try {
     const sourceFiles = await filesUnder(app);
-    const sourceText = (await Promise.all(sourceFiles.filter((file) => /\.(?:ts|tsx|js|jsx|json)$/u.test(file)).map((file) => readFile(file, "utf8")))).join("\n");
-    assert.doesNotMatch(sourceText, /(?:packages\/|workspace:|file:\.\.?\/(?:packages|src))/u, "Finance fixture contains a workspace-source import.");
+    const sourceText = (
+      await Promise.all(
+        sourceFiles.filter((file) => /\.(?:ts|tsx|js|jsx|json)$/u.test(file)).map((file) => readFile(file, "utf8")),
+      )
+    ).join("\n");
+    assert.doesNotMatch(
+      sourceText,
+      /(?:packages\/|workspace:|file:\.\.?\/(?:packages|src))/u,
+      "Finance fixture contains a workspace-source import.",
+    );
     await packSqlbraidPackages(app, packageDirectory);
     await run("npm", ["install", "--include=dev", "--ignore-scripts", "--no-audit", "--no-fund"], app);
 
-    dev = startProcess(process.execPath, [join(app, "node_modules", "vite", "bin", "vite.js"), "--host", "127.0.0.1", "--port", String(port)], app, { PORT: String(port) });
+    dev = startProcess(
+      process.execPath,
+      [join(app, "node_modules", "vite", "bin", "vite.js"), "--host", "127.0.0.1", "--port", String(port)],
+      app,
+      { PORT: String(port) },
+    );
     const devHtml = await waitForHttp(transformBase, dev);
     assert.match(devHtml, /김하늘/u);
     assert.match(devHtml, /9007199254740993/u);
@@ -263,12 +302,18 @@ async function main() {
     const transformedTsx = await fetchTransformed(transformBase, "/src/FinanceTable.tsx", dev);
     assert.match(transformedTsx, /재무 거래/u);
     assert.match(transformedTsx, /capture/u);
-    assertUnicodeSourceMap(await sourceMapFor(transformedTsx, transformBase, "FinanceTable.tsx", dev), "FinanceTable.tsx");
+    assertUnicodeSourceMap(
+      await sourceMapFor(transformedTsx, transformBase, "FinanceTable.tsx", dev),
+      "FinanceTable.tsx",
+    );
     const transformedJs = await fetchTransformed(transformBase, "/src/query-preview.js", dev);
     assert.match(transformedJs, /재무 거래/u);
     assert.match(transformedJs, /capture/u);
     assert.doesNotMatch(transformedJs, /\b(?:index|thunk)\s*:\s*/u);
-    assertUnicodeSourceMap(await sourceMapFor(transformedJs, transformBase, "query-preview.js", dev), "query-preview.js");
+    assertUnicodeSourceMap(
+      await sourceMapFor(transformedJs, transformBase, "query-preview.js", dev),
+      "query-preview.js",
+    );
 
     const originalTsxPath = join(app, "src", "FinanceTable.tsx");
     const originalTsx = await readFile(originalTsxPath, "utf8");
@@ -288,19 +333,32 @@ async function main() {
     await assertClientBundleSafe(app);
     const serverEntry = join(app, ".output", "server", "index.mjs");
     await readFile(serverEntry);
-    production = startProcess(process.execPath, [serverEntry], app, { PORT: String(productionPort), HOST: "127.0.0.1" });
+    production = startProcess(process.execPath, [serverEntry], app, {
+      PORT: String(productionPort),
+      HOST: "127.0.0.1",
+    });
     const productionHtml = await waitForHttp(`http://127.0.0.1:${productionPort}/`, production);
     assert.match(productionHtml, /김하늘/u);
     assert.match(productionHtml, /9007199254740993/u);
     assert.match(productionHtml, /정산 완료/u);
     assert.match(productionHtml, /data-js-query-preview/u);
-    console.info(JSON.stringify({
-      gate: "tanstack-start-finance",
-      node: process.versions.node,
-      vite: "8.3.0",
-      tanstackStart: "1.168.53",
-      checks: ["packed-install", "exact-integer-string", "dev-transform", "source-map-unicode", "hmr", "production-ssr", "client-bundle-boundary"],
-    }));
+    console.info(
+      JSON.stringify({
+        gate: "tanstack-start-finance",
+        node: process.versions.node,
+        vite: "8.3.0",
+        tanstackStart: "1.168.53",
+        checks: [
+          "packed-install",
+          "exact-integer-string",
+          "dev-transform",
+          "source-map-unicode",
+          "hmr",
+          "production-ssr",
+          "client-bundle-boundary",
+        ],
+      }),
+    );
   } catch (error) {
     keep = true;
     throw error;

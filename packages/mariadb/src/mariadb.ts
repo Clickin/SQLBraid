@@ -28,11 +28,7 @@ import {
 } from "@sqlbraid/core";
 import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
-import {
-  typePolicyForProfile,
-  type MariaDbProfileOptions,
-  type MariaDbRepresentationProfile,
-} from "./type-policy.js";
+import { typePolicyForProfile, type MariaDbProfileOptions, type MariaDbRepresentationProfile } from "./type-policy.js";
 
 export type {
   MariaDbConnectionOptions,
@@ -123,23 +119,23 @@ const fieldTypes: Readonly<Record<number, string>> = {
   7: "TIMESTAMP",
   8: "BIGINT",
   9: "MEDIUMINT",
- 10: "DATE",
- 11: "TIME",
- 12: "DATETIME",
- 13: "YEAR",
- 15: "VARCHAR",
- 16: "BIT",
- 245: "JSON",
- 246: "DECIMAL",
- 247: "ENUM",
- 248: "SET",
- 249: "TINYTEXT",
- 250: "TEXT",
- 251: "MEDIUMTEXT",
- 252: "BLOB",
- 253: "VARCHAR",
- 254: "CHAR",
- 255: "GEOMETRY",
+  10: "DATE",
+  11: "TIME",
+  12: "DATETIME",
+  13: "YEAR",
+  15: "VARCHAR",
+  16: "BIT",
+  245: "JSON",
+  246: "DECIMAL",
+  247: "ENUM",
+  248: "SET",
+  249: "TINYTEXT",
+  250: "TEXT",
+  251: "MEDIUMTEXT",
+  252: "BLOB",
+  253: "VARCHAR",
+  254: "CHAR",
+  255: "GEOMETRY",
 };
 
 function assertMariaDbConnection(connection: MariaDbConnectionLike): void {
@@ -147,13 +143,13 @@ function assertMariaDbConnection(connection: MariaDbConnectionLike): void {
     readonly getConnection?: unknown;
   };
   if (
-    !connection
-    || typeof connection !== "object"
-    || typeof connection.execute !== "function"
-    || typeof connection.beginTransaction !== "function"
-    || typeof connection.commit !== "function"
-    || typeof connection.rollback !== "function"
-    || typeof candidate.getConnection === "function"
+    !connection ||
+    typeof connection !== "object" ||
+    typeof connection.execute !== "function" ||
+    typeof connection.beginTransaction !== "function" ||
+    typeof connection.commit !== "function" ||
+    typeof connection.rollback !== "function" ||
+    typeof candidate.getConnection === "function"
   ) {
     throw new TypeError("SQLBraid MariaDB direct adapter requires a physical MariaDB Connector/Node.js Connection.");
   }
@@ -197,11 +193,19 @@ async function executeWithCancellation<T>(
       const cleanup = cleanupError("MariaDB cancellation cleanup failed.", destroyFailure);
       throw cleanup;
     }
-    if (aborted) throw cleanupError("MariaDB cancellation discarded the physical connection.", signal.reason ?? new Error("Execution aborted."));
+    if (aborted)
+      throw cleanupError(
+        "MariaDB cancellation discarded the physical connection.",
+        signal.reason ?? new Error("Execution aborted."),
+      );
     return result;
   } catch (error) {
     if (destroyFailure !== undefined) {
-      throw cleanupAggregate([error, cleanupError("MariaDB cancellation cleanup failed.", destroyFailure)], "MariaDB cancellation cleanup failed.", error);
+      throw cleanupAggregate(
+        [error, cleanupError("MariaDB cancellation cleanup failed.", destroyFailure)],
+        "MariaDB cancellation cleanup failed.",
+        error,
+      );
     }
     if (aborted) {
       throw cleanupError("MariaDB cancellation discarded the physical connection.", signal.reason ?? error);
@@ -218,8 +222,14 @@ function cleanupError(message: string, cause?: unknown): Error & { readonly code
   return error;
 }
 
-function cleanupAggregate(errors: readonly unknown[], message: string, cause?: unknown): AggregateError & { readonly code: string } {
-  const error = new AggregateError(errors, message, cause === undefined ? undefined : { cause }) as AggregateError & { readonly code: string };
+function cleanupAggregate(
+  errors: readonly unknown[],
+  message: string,
+  cause?: unknown,
+): AggregateError & { readonly code: string } {
+  const error = new AggregateError(errors, message, cause === undefined ? undefined : { cause }) as AggregateError & {
+    readonly code: string;
+  };
   Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
   return error;
 }
@@ -247,11 +257,13 @@ function fieldsFor(value: unknown): readonly MariaDbFieldLike[] {
 }
 
 function isFieldMetadata(value: unknown): value is readonly MariaDbFieldLike[] {
-  return Array.isArray(value) && value.every((field) => (
-    field !== null
-    && typeof field === "object"
-    && ("name" in field || "type" in field || "columnType" in field)
-  ));
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (field) =>
+        field !== null && typeof field === "object" && ("name" in field || "type" in field || "columnType" in field),
+    )
+  );
 }
 
 function attachMetadata(rows: readonly unknown[], fields: readonly MariaDbFieldLike[]): MariaDbRowSet {
@@ -262,22 +274,22 @@ function attachMetadata(rows: readonly unknown[], fields: readonly MariaDbFieldL
 function normalizeMetadataResult(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
   if (
-    value.length === 2
-    && value[0] !== null
-    && typeof value[0] === "object"
-    && !Array.isArray(value[0])
-    && Array.isArray(value[1])
-    && value[1].length === 0
+    value.length === 2 &&
+    value[0] !== null &&
+    typeof value[0] === "object" &&
+    !Array.isArray(value[0]) &&
+    Array.isArray(value[1]) &&
+    value[1].length === 0
   ) {
     return value[0];
   }
   if (
-    value.length === 2
-    && Array.isArray(value[0])
-    && Array.isArray(value[1])
-    && value[0].some((entry) => Array.isArray(entry))
-    && value[1].some((entry) => Array.isArray(entry))
-    && !isFieldMetadata(value[1])
+    value.length === 2 &&
+    Array.isArray(value[0]) &&
+    Array.isArray(value[1]) &&
+    value[0].some((entry) => Array.isArray(entry)) &&
+    value[1].some((entry) => Array.isArray(entry)) &&
+    !isFieldMetadata(value[1])
   ) {
     const rowSets: MariaDbRowSet[] = [];
     const rows = value[0];
@@ -289,19 +301,14 @@ function normalizeMetadataResult(value: unknown): unknown {
     }
     return rowSets;
   }
-  if (
-    value.length === 2
-    && Array.isArray(value[0])
-    && isFieldMetadata(value[1])
-  ) {
+  if (value.length === 2 && Array.isArray(value[0]) && isFieldMetadata(value[1])) {
     return attachMetadata(value[0], value[1]);
   }
-  if (value.every((entry) => (
-    Array.isArray(entry)
-    && entry.length === 2
-    && Array.isArray(entry[0])
-    && isFieldMetadata(entry[1])
-  ))) {
+  if (
+    value.every(
+      (entry) => Array.isArray(entry) && entry.length === 2 && Array.isArray(entry[0]) && isFieldMetadata(entry[1]),
+    )
+  ) {
     return value.map((entry) => normalizeMetadataResult(entry));
   }
   return value;
@@ -340,7 +347,9 @@ function plainRow(value: unknown, fields: readonly MariaDbFieldLike[], policy: T
   }
   for (const [key, entry] of Object.entries(value)) {
     if (key === undefined) continue;
-    const field = fields.find((candidate) => (typeof candidate.name === "function" ? candidate.name() : candidate.name) === key);
+    const field = fields.find(
+      (candidate) => (typeof candidate.name === "function" ? candidate.name() : candidate.name) === key,
+    );
     const type = databaseType(field);
     assertMariaDbNumericValue(type, entry);
     defineResultProperty(row, key, type === undefined ? entry : policy.decode(type, entry));
@@ -393,7 +402,9 @@ function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
 }
 
 function assertRoutineOutputsUnsupported(rendered: RenderedStatement): void {
-  const output = rendered.parameters.find((parameter) => parameter.direction !== undefined && parameter.direction !== "in");
+  const output = rendered.parameters.find(
+    (parameter) => parameter.direction !== undefined && parameter.direction !== "in",
+  );
   const direction = output?.direction;
   if (direction === undefined) return;
   throw new UnsupportedFeatureError(
@@ -404,14 +415,16 @@ function assertRoutineOutputsUnsupported(rendered: RenderedStatement): void {
 }
 
 function isNestedResultPayload(value: unknown): value is readonly unknown[][] {
-  return Array.isArray(value)
-    && !Object.hasOwn(value, "meta")
-    && value.some((entry) => Array.isArray(entry));
+  return Array.isArray(value) && !Object.hasOwn(value, "meta") && value.some((entry) => Array.isArray(entry));
 }
 
 function resultRows(value: unknown, policy: TypePolicy): QueryExecutionResult<unknown> {
   if (isNestedResultPayload(value)) {
-    throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "MariaDB returned multiple result sets; use database.call().");
+    throw new UnsupportedFeatureError(
+      "routine.result-sets",
+      "BRAID_RESULT_SETS_UNSUPPORTED",
+      "MariaDB returned multiple result sets; use database.call().",
+    );
   }
   if (Array.isArray(value)) {
     const fields = fieldsFor(value);
@@ -426,7 +439,9 @@ function resultRows(value: unknown, policy: TypePolicy): QueryExecutionResult<un
   const command: MariaDbCommandResult = {
     ...rawCommand,
     ...(rawCommand.affectedRows === undefined ? {} : { affectedRows: safeDatabaseCount(rawCommand.affectedRows) }),
-    ...(rawCommand.insertId === undefined || rawCommand.insertId === null ? {} : { insertId: normalizeExactInteger(rawCommand.insertId) }),
+    ...(rawCommand.insertId === undefined || rawCommand.insertId === null
+      ? {}
+      : { insertId: normalizeExactInteger(rawCommand.insertId) }),
     ...(rawCommand.warningStatus === undefined ? {} : { warningStatus: safeDatabaseCount(rawCommand.warningStatus) }),
   };
   return {
@@ -478,12 +493,16 @@ export const mariaDbStatementBinding: StatementBindingAdapter = Object.freeze({
     const statement = createRenderedStatement(bulk.statement);
     assertRoutineOutputsUnsupported(statement);
     assertParameterHintsUnsupported(statement);
-    const parameterSets = Object.freeze(bulk.parameterSets.map((values) => {
-      if (!Array.isArray(values) || values.length !== statement.parameters.length) {
-        throw new Error("BRAID_BULK_SHAPE: MariaDB bulk parameter sets must match the first rendered statement shape.");
-      }
-      return Object.freeze([...values]);
-    }));
+    const parameterSets = Object.freeze(
+      bulk.parameterSets.map((values) => {
+        if (!Array.isArray(values) || values.length !== statement.parameters.length) {
+          throw new Error(
+            "BRAID_BULK_SHAPE: MariaDB bulk parameter sets must match the first rendered statement shape.",
+          );
+        }
+        return Object.freeze([...values]);
+      }),
+    );
     const description = createBulkBindingDescription(bulk, context, {
       adapterId: "mariadb",
       transport: "text-positional",
@@ -501,22 +520,26 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   requestedReuse: "auto",
 });
 
-function isRepresentationProfile(value: MariaDbProfileOptions | MariaDbRepresentationProfile | undefined): value is MariaDbRepresentationProfile {
+function isRepresentationProfile(
+  value: MariaDbProfileOptions | MariaDbRepresentationProfile | undefined,
+): value is MariaDbRepresentationProfile {
   return Boolean(value && "json" in value && "temporal" in value && "typePolicy" in value);
 }
 
-function mariaDbProfile(value: MariaDbProfileOptions | MariaDbRepresentationProfile | undefined): MariaDbRepresentationProfile {
+function mariaDbProfile(
+  value: MariaDbProfileOptions | MariaDbRepresentationProfile | undefined,
+): MariaDbRepresentationProfile {
   const options = isRepresentationProfile(value) ? value.connectionOptions : value;
   const json = options?.autoJsonMap === true ? "native" : "text";
   const temporal = options?.dateStrings === false ? "native" : "text";
   return isRepresentationProfile(value)
     ? value
     : {
-      id: `mariadb-${json === "text" && temporal === "text" ? "lossless-text" : json === "native" && temporal === "native" ? "native" : json === "text" ? "json-text" : "date-text"}`,
-      json,
-      temporal,
-      typePolicy: typePolicyForProfile({ json, temporal }),
-    };
+        id: `mariadb-${json === "text" && temporal === "text" ? "lossless-text" : json === "native" && temporal === "native" ? "native" : json === "text" ? "json-text" : "date-text"}`,
+        json,
+        temporal,
+        typePolicy: typePolicyForProfile({ json, temporal }),
+      };
 }
 
 function mariaDbEnvironment(
@@ -527,70 +550,79 @@ function mariaDbEnvironment(
   const policyMatchesProfile = policy === profile.typePolicy;
   return Object.freeze<DriverEnvironment>({
     database: { product: "mariadb" },
-    driver: { id: "mariadb", profile: !policyMatchesProfile ? "custom-type-policy" : isRepresentationProfile(supplied) ? profile.id : "mariadb-custom-profile" },
+    driver: {
+      id: "mariadb",
+      profile: !policyMatchesProfile
+        ? "custom-type-policy"
+        : isRepresentationProfile(supplied)
+          ? profile.id
+          : "mariadb-custom-profile",
+    },
     typePolicy: { id: policy.id, hash: policy.hash },
-    capabilities: policyMatchesProfile ? {
-      "sql.native-transparency": { status: "guaranteed" },
-      "numeric.exact-integer": {
-        status: "guarded",
-        canonical: "string",
-        rawRepresentations: ["number", "string", "bigint"],
-        conditionCode: "mariadb.exact-numeric-profile",
-      },
-      "numeric.exact-decimal": {
-        status: "guarded",
-        canonical: "string",
-        rawRepresentations: ["string"],
-        conditionCode: "mariadb.exact-numeric-profile",
-      },
-      "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-      "data.json-lossless-text": {
-        status: "guarded",
-        canonical: "string",
-        rawRepresentations: ["string"],
-        conditionCode: "mariadb.auto-json-map-false",
-      },
-      "data.json-parsed": {
-        status: "guarded",
-        rawRepresentations: ["object", "array", "string", "number", "boolean", "null"],
-        conditionCode: "mariadb.auto-json-map-true",
-      },
-      "data.temporal-lossless": {
-        status: "guarded",
-        canonical: "string",
-        rawRepresentations: ["string"],
-        conditionCode: "mariadb.date-strings-true",
-      },
-      "data.temporal-native": {
-        status: "guarded",
-        rawRepresentations: ["Date"],
-        conditionCode: "mariadb.date-strings-false",
-      },
-      "metadata.command-safe": {
-        status: "guarded",
-        canonical: "number",
-        rawRepresentations: ["number", "bigint", "string"],
-        conditionCode: "mariadb.safe-command-count",
-      },
-      "session.pinned": { status: "guaranteed" },
-      "transaction": { status: "guaranteed" },
-      "transaction.savepoint": { status: "guaranteed" },
-      "transaction.read-only": { status: "guaranteed" },
-      "transaction.isolation.read-uncommitted": { status: "guaranteed" },
-      "transaction.isolation.read-committed": { status: "guaranteed" },
-      "transaction.isolation.repeatable-read": { status: "guaranteed" },
-      "transaction.isolation.serializable": { status: "guaranteed" },
-      "statement.prepare": { status: "guaranteed" },
-      "statement.cancel": { status: "guarded", conditionCode: "mariadb.connection-destroy" },
-      "statement.stream": { status: "guaranteed" },
-      "statement.bulk": { status: "guaranteed" },
-      "routine.call": { status: "guaranteed" },
-      "routine.out": { status: "unsupported" },
-      "routine.inout": { status: "unsupported" },
-      "routine.return-value": { status: "unsupported" },
-      "routine.result-sets": { status: "guaranteed" },
-      "routine.out-cursor": { status: "unsupported" },
-    } : {},
+    capabilities: policyMatchesProfile
+      ? {
+          "sql.native-transparency": { status: "guaranteed" },
+          "numeric.exact-integer": {
+            status: "guarded",
+            canonical: "string",
+            rawRepresentations: ["number", "string", "bigint"],
+            conditionCode: "mariadb.exact-numeric-profile",
+          },
+          "numeric.exact-decimal": {
+            status: "guarded",
+            canonical: "string",
+            rawRepresentations: ["string"],
+            conditionCode: "mariadb.exact-numeric-profile",
+          },
+          "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
+          "data.json-lossless-text": {
+            status: "guarded",
+            canonical: "string",
+            rawRepresentations: ["string"],
+            conditionCode: "mariadb.auto-json-map-false",
+          },
+          "data.json-parsed": {
+            status: "guarded",
+            rawRepresentations: ["object", "array", "string", "number", "boolean", "null"],
+            conditionCode: "mariadb.auto-json-map-true",
+          },
+          "data.temporal-lossless": {
+            status: "guarded",
+            canonical: "string",
+            rawRepresentations: ["string"],
+            conditionCode: "mariadb.date-strings-true",
+          },
+          "data.temporal-native": {
+            status: "guarded",
+            rawRepresentations: ["Date"],
+            conditionCode: "mariadb.date-strings-false",
+          },
+          "metadata.command-safe": {
+            status: "guarded",
+            canonical: "number",
+            rawRepresentations: ["number", "bigint", "string"],
+            conditionCode: "mariadb.safe-command-count",
+          },
+          "session.pinned": { status: "guaranteed" },
+          transaction: { status: "guaranteed" },
+          "transaction.savepoint": { status: "guaranteed" },
+          "transaction.read-only": { status: "guaranteed" },
+          "transaction.isolation.read-uncommitted": { status: "guaranteed" },
+          "transaction.isolation.read-committed": { status: "guaranteed" },
+          "transaction.isolation.repeatable-read": { status: "guaranteed" },
+          "transaction.isolation.serializable": { status: "guaranteed" },
+          "statement.prepare": { status: "guaranteed" },
+          "statement.cancel": { status: "guarded", conditionCode: "mariadb.connection-destroy" },
+          "statement.stream": { status: "guaranteed" },
+          "statement.bulk": { status: "guaranteed" },
+          "routine.call": { status: "guaranteed" },
+          "routine.out": { status: "unsupported" },
+          "routine.inout": { status: "unsupported" },
+          "routine.return-value": { status: "unsupported" },
+          "routine.result-sets": { status: "guaranteed" },
+          "routine.out-cursor": { status: "unsupported" },
+        }
+      : {},
     probe: {
       statement: createRenderedStatement({
         segments: ["SELECT VERSION() AS version"],
@@ -613,10 +645,12 @@ function materialize(
   binding: StatementBindingDescription | undefined,
 ): { readonly text: string; readonly values: readonly unknown[] } {
   statement = createRenderedStatement(statement);
-  const description = binding ?? mariaDbStatementBinding.describe(statement, {
-    dialectId: statement.dialectId,
-    requestedReuse: defaultBindingContext.requestedReuse,
-  });
+  const description =
+    binding ??
+    mariaDbStatementBinding.describe(statement, {
+      dialectId: statement.dialectId,
+      requestedReuse: defaultBindingContext.requestedReuse,
+    });
   if (describedStatements.get(description) !== statement) {
     throw new TypeError("BRAID_BINDING_IDENTITY: MariaDB description belongs to another statement or adapter.");
   }
@@ -636,10 +670,12 @@ function materializeBulk(
   const statement = createRenderedStatement(bulk.statement);
   assertParameterHintsUnsupported(statement);
   assertRoutineOutputsUnsupported(statement);
-  const description = binding ?? mariaDbStatementBinding.describeBulk!(bulk, {
-    dialectId: statement.dialectId,
-    requestedReuse: defaultBindingContext.requestedReuse,
-  });
+  const description =
+    binding ??
+    mariaDbStatementBinding.describeBulk!(bulk, {
+      dialectId: statement.dialectId,
+      requestedReuse: defaultBindingContext.requestedReuse,
+    });
   if (describedBulks.get(description) !== bulk) {
     throw new TypeError("BRAID_BINDING_IDENTITY: MariaDB description belongs to another bulk statement or adapter.");
   }
@@ -647,10 +683,13 @@ function materializeBulk(
     throw new Error("BRAID_BIND_TRANSPORT: MariaDB bulk binding description did not provide parameterized SQL.");
   }
   if (description.itemCount !== bulk.parameterSets.length) {
-    throw new TypeError("BRAID_BULK_SHAPE: MariaDB bulk binding item count does not match the rendered parameter matrix.");
+    throw new TypeError(
+      "BRAID_BULK_SHAPE: MariaDB bulk binding item count does not match the rendered parameter matrix.",
+    );
   }
   const matrix = bulkMatrices.get(description);
-  if (matrix === undefined) throw new TypeError("BRAID_BINDING_IDENTITY: MariaDB bulk description has no encoded parameter matrix.");
+  if (matrix === undefined)
+    throw new TypeError("BRAID_BINDING_IDENTITY: MariaDB bulk description has no encoded parameter matrix.");
   const values: readonly (readonly unknown[])[] = Array.from(
     { length: description.itemCount },
     (_, index) => matrix[index] ?? description.valuesAt(index),
@@ -679,15 +718,18 @@ function invalidTransactionOptions(message: string): never {
   throw error;
 }
 
-export function createMariaDbExecutor(connection: MariaDbConnectionLike, options: MariaDbExecutorOptions = {}): QueryExecutor {
+export function createMariaDbExecutor(
+  connection: MariaDbConnectionLike,
+  options: MariaDbExecutorOptions = {},
+): QueryExecutor {
   assertMariaDbConnection(connection);
   const representationProfile = mariaDbProfile(options.profile);
   const policy = options.typePolicy ?? representationProfile.typePolicy;
   const control = connectionControl(connection);
   const begin = async (transactionOptions?: TransactionOptions): Promise<void> => {
     if (
-      transactionOptions !== undefined
-      && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
+      transactionOptions !== undefined &&
+      (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
     ) {
       invalidTransactionOptions("MariaDB transaction options must be an object.");
     }
@@ -696,12 +738,16 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
       if (unexpected !== undefined) invalidTransactionOptions(`Unknown MariaDB transaction option: ${unexpected}.`);
     }
     const clauses: string[] = [];
-    if (transactionOptions?.isolation !== undefined
-      && transactionOptions.isolation !== "read-uncommitted"
-      && transactionOptions.isolation !== "read-committed"
-      && transactionOptions.isolation !== "repeatable-read"
-      && transactionOptions.isolation !== "serializable") {
-      invalidTransactionOptions(`MariaDB does not recognize transaction isolation ${String(transactionOptions.isolation)}.`);
+    if (
+      transactionOptions?.isolation !== undefined &&
+      transactionOptions.isolation !== "read-uncommitted" &&
+      transactionOptions.isolation !== "read-committed" &&
+      transactionOptions.isolation !== "repeatable-read" &&
+      transactionOptions.isolation !== "serializable"
+    ) {
+      invalidTransactionOptions(
+        `MariaDB does not recognize transaction isolation ${String(transactionOptions.isolation)}.`,
+      );
     }
     if (transactionOptions?.readOnly !== undefined && typeof transactionOptions.readOnly !== "boolean") {
       invalidTransactionOptions("MariaDB readOnly must be a boolean.");
@@ -724,7 +770,11 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
     ownershipKey: connection,
     statementBinding: mariaDbStatementBinding,
     environment: mariaDbEnvironment(options.profile, policy),
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<QueryExecutionResult<Row>> {
       assertParameterHintsUnsupported(rendered);
       assertRoutineOutputsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
@@ -735,16 +785,27 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
       );
       return resultRows(normalizeMetadataResult(result), policy) as QueryExecutionResult<Row>;
     },
-    async *stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): AsyncGenerator<Row> {
+    async *stream<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): AsyncGenerator<Row> {
       assertParameterHintsUnsupported(rendered);
       assertRoutineOutputsUnsupported(rendered);
       assertExecutionOptions(connection, executionOptions);
       const signal = executionOptions?.signal;
       if (typeof connection.queryStream !== "function") {
-        throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "MariaDB Connector/Node.js connection does not expose queryStream().");
+        throw new UnsupportedFeatureError(
+          "statement.stream",
+          "BRAID_STREAM_UNSUPPORTED",
+          "MariaDB Connector/Node.js connection does not expose queryStream().",
+        );
       }
       const prepared = materialize(rendered, binding);
-      const stream = connection.queryStream({ sql: prepared.text, rowsAsArray: true, metaAsArray: true }, prepared.values);
+      const stream = connection.queryStream(
+        { sql: prepared.text, rowsAsArray: true, metaAsArray: true },
+        prepared.values,
+      );
       const cleanup = createCleanupScope();
       const noPrimary = Symbol("mariadb.stream.no-primary");
       let primary: unknown = noPrimary;
@@ -755,10 +816,14 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
       const onFields = (value: unknown): void => {
         fieldsSeen += 1;
         if (fieldsSeen === 1) {
-          fields = Array.isArray(value) ? value as readonly MariaDbFieldLike[] : [];
+          fields = Array.isArray(value) ? (value as readonly MariaDbFieldLike[]) : [];
           fieldsChanged = true;
         } else {
-          pendingError ??= new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "MariaDB stream returned multiple result sets; use database.call().");
+          pendingError ??= new UnsupportedFeatureError(
+            "routine.result-sets",
+            "BRAID_RESULT_SETS_UNSUPPORTED",
+            "MariaDB stream returned multiple result sets; use database.call().",
+          );
         }
       };
       let exhausted = false;
@@ -817,7 +882,11 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
           }
         });
         if (typeof stream.close !== "function") {
-          throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "MariaDB Connector/Node.js queryStream does not expose close().");
+          throw new UnsupportedFeatureError(
+            "statement.stream",
+            "BRAID_STREAM_UNSUPPORTED",
+            "MariaDB Connector/Node.js queryStream does not expose close().",
+          );
         }
         (stream.on ?? stream.once)?.call(stream, "fields", onFields);
         const iterator = stream[Symbol.asyncIterator]();
@@ -852,7 +921,11 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
         }
       }
     },
-    async call(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): Promise<DriverRoutineResult> {
+    async call(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      executionOptions?: ExecutionOptions,
+    ): Promise<DriverRoutineResult> {
       assertRoutineOutputsUnsupported(rendered);
       assertParameterHintsUnsupported(rendered);
       const prepared = materialize(rendered, binding);
@@ -879,9 +952,17 @@ export function createMariaDbExecutor(connection: MariaDbConnectionLike, options
     async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, executionOptions?: ExecutionOptions) {
       const prepared = materializeBulk(bulk, binding);
       if (typeof connection.batch !== "function") {
-        throw new UnsupportedFeatureError("statement.bulk", "BRAID_BULK_UNSUPPORTED", "MariaDB Connector/Node.js connection does not expose batch().");
+        throw new UnsupportedFeatureError(
+          "statement.bulk",
+          "BRAID_BULK_UNSUPPORTED",
+          "MariaDB Connector/Node.js connection does not expose batch().",
+        );
       }
-      const result = await executeWithCancellation(connection, () => connection.batch!(prepared.text, prepared.values), executionOptions);
+      const result = await executeWithCancellation(
+        connection,
+        () => connection.batch!(prepared.text, prepared.values),
+        executionOptions,
+      );
       return {
         inputCount: prepared.itemCount,
         affectedRows: affectedRows(result),
@@ -902,7 +983,10 @@ export function createMariaDbDatabase(connection: MariaDbConnectionLike, options
   return createDatabase(createMariaDbExecutor(connection, { typePolicy, profile }), databaseOptions);
 }
 
-export function createMariaDbPoolProvider(pool: MariaDbPoolLike, options: MariaDbExecutorOptions = {}): ConnectionProvider {
+export function createMariaDbPoolProvider(
+  pool: MariaDbPoolLike,
+  options: MariaDbExecutorOptions = {},
+): ConnectionProvider {
   if (!pool || typeof pool !== "object" || typeof pool.getConnection !== "function") {
     throw new TypeError("SQLBraid MariaDB pool adapter requires a MariaDB Connector/Node.js Pool.");
   }

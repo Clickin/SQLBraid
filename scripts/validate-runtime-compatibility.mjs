@@ -62,7 +62,10 @@ function assertExactVersion(value, label) {
 function assertEngineCompatible(engine, runtimeVersion, packageName) {
   const match = /^>=(\d+\.\d+\.\d+)$/u.exec(engine ?? "");
   if (!match || compareVersions(runtimeVersion, match[1]) < 0) {
-    fail("RUNTIME_COMPATIBILITY_ENGINE", `${packageName} declares ${engine ?? "no engine"}, incompatible with Node ${runtimeVersion}.`);
+    fail(
+      "RUNTIME_COMPATIBILITY_ENGINE",
+      `${packageName} declares ${engine ?? "no engine"}, incompatible with Node ${runtimeVersion}.`,
+    );
   }
 }
 
@@ -104,7 +107,10 @@ async function validateRuntimeCompatibility({ root = scriptRoot } = {}) {
       fail("RUNTIME_COMPATIBILITY_CLASSIFICATION", `${packageName} must be classified at ${expectedEngine}.`);
     }
     if (packageManifest.engines?.node !== expectedEngine) {
-      fail("RUNTIME_COMPATIBILITY_ENGINE", `${packageName} manifest must declare ${expectedEngine}; found ${packageManifest.engines?.node ?? "missing"}.`);
+      fail(
+        "RUNTIME_COMPATIBILITY_ENGINE",
+        `${packageName} manifest must declare ${expectedEngine}; found ${packageManifest.engines?.node ?? "missing"}.`,
+      );
     }
   }
   const bunSql = packages.get("@sqlbraid/bun-sql");
@@ -120,7 +126,8 @@ async function validateRuntimeCompatibility({ root = scriptRoot } = {}) {
     assertExactVersion(cell.runtime.version, `${cell.id}.runtime.version`);
     if (cell.runtime.id !== "node") fail("RUNTIME_COMPATIBILITY_RUNTIME", `${cell.id} must use Node.`);
     for (const packageName of cell.packages) {
-      if (!packages.has(packageName)) fail("RUNTIME_COMPATIBILITY_PACKAGE", `${cell.id} references unknown package ${packageName}.`);
+      if (!packages.has(packageName))
+        fail("RUNTIME_COMPATIBILITY_PACKAGE", `${cell.id} references unknown package ${packageName}.`);
       const packageEngine = manifest.packageEngines[packageName];
       if (packageEngine) assertEngineCompatible(packageEngine, cell.runtime.version, packageName);
     }
@@ -138,8 +145,10 @@ async function validateRuntimeCompatibility({ root = scriptRoot } = {}) {
     }
     if (cell.releaseBlocking) blockingCells.push(cell.id);
   }
-  for (const required of requiredCells) if (!ids.has(required)) fail("RUNTIME_COMPATIBILITY_CELL", `Missing required exact cell ${required}.`);
-  if (!blockingCells.length) fail("RUNTIME_COMPATIBILITY_CI", "At least one compatibility cell must be release-blocking.");
+  for (const required of requiredCells)
+    if (!ids.has(required)) fail("RUNTIME_COMPATIBILITY_CELL", `Missing required exact cell ${required}.`);
+  if (!blockingCells.length)
+    fail("RUNTIME_COMPATIBILITY_CI", "At least one compatibility cell must be release-blocking.");
   return {
     manifest,
     packageNames: expectedNames,
@@ -151,7 +160,9 @@ async function validateRuntimeCompatibility({ root = scriptRoot } = {}) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     const result = await validateRuntimeCompatibility();
-    console.info(`Runtime compatibility manifest valid: ${result.cells.length} exact cells, ${result.blockingCells.length} release-blocking.`);
+    console.info(
+      `Runtime compatibility manifest valid: ${result.cells.length} exact cells, ${result.blockingCells.length} release-blocking.`,
+    );
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

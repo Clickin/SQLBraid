@@ -47,11 +47,13 @@ test("better-sqlite3.data.binary", async () => {
   try {
     const readyValues: unknown[] = [];
     const db = createBetterSqlite3Database(native, {
-      observers: [{
-        onEvent(event) {
-          if (event.type === "query:ready") readyValues.push(event.values[0]);
+      observers: [
+        {
+          onEvent(event) {
+            if (event.type === "query:ready") readyValues.push(event.values[0]);
+          },
         },
-      }],
+      ],
     });
     const source = Uint8Array.from([9, 0, 255, 16, 8]);
     const payload = source.subarray(1, 4);
@@ -63,9 +65,14 @@ test("better-sqlite3.data.binary", async () => {
     `);
     assert.ok(row.payload instanceof Uint8Array);
     assert.deepEqual([...row.payload], [0, 255, 16]);
-    await db.bulk([Uint8Array.of(1), new Uint8Array()], (value) => sql.command`INSERT INTO blobs (payload) VALUES (${value})`);
+    await db.bulk(
+      [Uint8Array.of(1), new Uint8Array()],
+      (value) => sql.command`INSERT INTO blobs (payload) VALUES (${value})`,
+    );
     const streamed: number[][] = [];
-    for await (const streamedRow of db.stream(sql.rows<{ readonly payload: Uint8Array }>`SELECT payload FROM blobs ORDER BY rowid`)) {
+    for await (const streamedRow of db.stream(
+      sql.rows<{ readonly payload: Uint8Array }>`SELECT payload FROM blobs ORDER BY rowid`,
+    )) {
       streamed.push([...streamedRow.payload]);
     }
     assert.deepEqual(streamed, [[0, 255, 16], [1], []]);
@@ -85,10 +92,10 @@ test("better-sqlite3.execution.transaction", async () => {
         await nested.execute(sql.command`INSERT INTO items (value) VALUES (${"nested"})`);
       });
     });
-    assert.deepEqual(
-      await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM items ORDER BY rowid`),
-      [{ value: "outer" }, { value: "nested" }],
-    );
+    assert.deepEqual(await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM items ORDER BY rowid`), [
+      { value: "outer" },
+      { value: "nested" },
+    ]);
   } finally {
     native.close();
   }
@@ -99,10 +106,10 @@ test("better-sqlite3.execution.bulk-stream", async () => {
   try {
     const db = createBetterSqlite3Database(native);
     await db.execute(sql.command`CREATE TABLE items (value INTEGER NOT NULL)`);
-    assert.deepEqual(
-      await db.bulk([1, 2, 3], (value) => sql.command`INSERT INTO items (value) VALUES (${value})`),
-      { inputCount: 3, affectedRows: 3 },
-    );
+    assert.deepEqual(await db.bulk([1, 2, 3], (value) => sql.command`INSERT INTO items (value) VALUES (${value})`), {
+      inputCount: 3,
+      affectedRows: 3,
+    });
     const values: string[] = [];
     for await (const row of db.stream(sql.rows<{ readonly value: string }>`SELECT value FROM items ORDER BY value`)) {
       values.push(row.value);
@@ -177,10 +184,10 @@ test("libsql.execution.transaction", async () => {
         await nested.execute(sql.command`INSERT INTO items (value) VALUES (${"nested"})`);
       });
     });
-    assert.deepEqual(
-      await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM items ORDER BY rowid`),
-      [{ value: "outer" }, { value: "nested" }],
-    );
+    assert.deepEqual(await db.all(sql.rows<{ readonly value: string }>`SELECT value FROM items ORDER BY rowid`), [
+      { value: "outer" },
+      { value: "nested" },
+    ]);
   } finally {
     client.close();
     await rm(directory, { recursive: true, force: true });
@@ -193,19 +200,17 @@ test("libsql.execution.bulk-read-only", async () => {
   try {
     const db = createLibsqlDatabase(client, { intMode: "string" });
     await db.execute(sql.command`CREATE TABLE items (value INTEGER NOT NULL)`);
-    assert.deepEqual(
-      await db.bulk([1, 2, 3], (value) => sql.command`INSERT INTO items (value) VALUES (${value})`),
-      { inputCount: 3, affectedRows: 3 },
-    );
+    assert.deepEqual(await db.bulk([1, 2, 3], (value) => sql.command`INSERT INTO items (value) VALUES (${value})`), {
+      inputCount: 3,
+      affectedRows: 3,
+    });
     await db.tx({ readOnly: false }, async (tx) => {
       await tx.execute(sql.command`INSERT INTO items (value) VALUES (${4})`);
     });
     assert.equal((await db.environment()).capabilities["transaction.read-only"]?.status, "unsupported");
     await assert.rejects(
       () => db.tx({ readOnly: true }, async () => undefined),
-      (error: unknown) => error instanceof Error
-        && "code" in error
-        && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
+      (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_TX_OPTION_UNSUPPORTED",
     );
   } finally {
     client.close();

@@ -33,8 +33,12 @@ const policy = {
   id: "test-policy",
   hash: "test-policy-v1",
   mappings: [{ databaseType: "int4", inputType: "number", outputType: "number", nullable: false }],
-  decode(_databaseType: string, value: unknown) { return value; },
-  encode(_databaseType: string, value: unknown) { return value; },
+  decode(_databaseType: string, value: unknown) {
+    return value;
+  },
+  encode(_databaseType: string, value: unknown) {
+    return value;
+  },
 };
 
 function config(relation: string): string {
@@ -49,12 +53,20 @@ test("workspace refreshes unsaved source and metadata evidence without writing g
     const configFile = join(directory, "sqlbraid.config.mjs");
     await writeFile(metadataFile, JSON.stringify(metadata("users")));
     await writeFile(configFile, config("users"));
-    const staleGenerated = 'export interface UsersRow { id: string; }\n';
+    const staleGenerated = "export interface UsersRow { id: string; }\n";
     await writeFile(join(directory, "generated.ts"), staleGenerated);
     const workspace = createWorkspace({ rootPath: directory, configPath: configFile });
-    workspace.setDocument(file, 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;', 1);
+    workspace.setDocument(
+      file,
+      'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;',
+      1,
+    );
     const first = await workspace.service();
-    const staleDefinition = first.definition('import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;', file, 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;'.indexOf("users"));
+    const staleDefinition = first.definition(
+      'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;',
+      file,
+      'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;'.indexOf("users"),
+    );
     assert.ok(staleDefinition?.uri.endsWith("/metadata.json"));
     assert.equal(await readFile(join(directory, "generated.ts"), "utf8"), staleGenerated);
 
@@ -65,7 +77,14 @@ test("workspace refreshes unsaved source and metadata evidence without writing g
     await writeFile(metadataFile, JSON.stringify(metadata("orders")));
     const third = await workspace.service();
     assert.ok(third.definition(changedSource, file, changedSource.indexOf("orders"))?.uri.endsWith("/metadata.json"));
-    assert.equal(third.definition('import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;', file, 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;'.indexOf("users")), undefined);
+    assert.equal(
+      third.definition(
+        'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;',
+        file,
+        'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM users`;'.indexOf("users"),
+      ),
+      undefined,
+    );
     const loaded = await loadConfig(configFile, directory);
     assert.equal(loaded.config.codegen?.targets[0]?.name, "users");
     await writeFile(configFile, config("orders"));
@@ -79,7 +98,11 @@ test("workspace refreshes unsaved source and metadata evidence without writing g
 
 test("workspace reference coverage is exhaustive beyond bounded caches and keeps unsaved documents", async () => {
   const directory = await mkdtemp(join(process.cwd(), ".sqlbraid-workspace-"));
-  const workspace = createWorkspace({ rootPath: directory, configPath: join(directory, "sqlbraid.config.mjs"), maxEntries: 1 });
+  const workspace = createWorkspace({
+    rootPath: directory,
+    configPath: join(directory, "sqlbraid.config.mjs"),
+    maxEntries: 1,
+  });
   try {
     await writeFile(join(directory, "metadata.json"), JSON.stringify(metadata("users")));
     await writeFile(join(directory, "sqlbraid.config.mjs"), config("users"));
@@ -95,12 +118,29 @@ test("workspace reference coverage is exhaustive beyond bounded caches and keeps
     const service = await workspace.service();
     const references = await service.references(source, queryFile, source.indexOf("public.users"));
     assert.equal(references.length, 263);
-    assert.equal(references.some((reference) => reference.uri.endsWith("/query.ts")), true);
-    assert.equal(references.some((reference) => reference.uri.endsWith("/disk-259.ts")), true);
-    assert.equal(references.some((reference) => reference.uri.endsWith("/unsaved-a.ts")), true);
-    assert.equal(references.some((reference) => reference.uri.endsWith("/unsaved-b.ts")), true);
+    assert.equal(
+      references.some((reference) => reference.uri.endsWith("/query.ts")),
+      true,
+    );
+    assert.equal(
+      references.some((reference) => reference.uri.endsWith("/disk-259.ts")),
+      true,
+    );
+    assert.equal(
+      references.some((reference) => reference.uri.endsWith("/unsaved-a.ts")),
+      true,
+    );
+    assert.equal(
+      references.some((reference) => reference.uri.endsWith("/unsaved-b.ts")),
+      true,
+    );
     let checks = 0;
-    const cancellation = { get isCancellationRequested(): boolean { checks += 1; return checks > 8; } };
+    const cancellation = {
+      get isCancellationRequested(): boolean {
+        checks += 1;
+        return checks > 8;
+      },
+    };
     assert.deepEqual(await service.references(source, queryFile, source.indexOf("public.users"), cancellation), []);
   } finally {
     workspace.dispose();
@@ -121,12 +161,18 @@ test("workspace hover does not read every indexed project source", async () => {
     const source = 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT id FROM public.users`;';
     workspace.setDocument(queryFile, source, 1);
     const first = await workspace.service();
-    assert.match(first.hover(source, queryFile, source.indexOf("public.users"))?.contents ?? "", /^Relation public.users/u);
+    assert.match(
+      first.hover(source, queryFile, source.indexOf("public.users"))?.contents ?? "",
+      /^Relation public.users/u,
+    );
 
     await rm(indexedSource, { force: true });
     await mkdir(indexedSource);
     const second = await workspace.service();
-    assert.match(second.hover(source, queryFile, source.indexOf("public.users"))?.contents ?? "", /^Relation public.users/u);
+    assert.match(
+      second.hover(source, queryFile, source.indexOf("public.users"))?.contents ?? "",
+      /^Relation public.users/u,
+    );
   } finally {
     workspace.dispose();
     await rm(directory, { recursive: true, force: true });
@@ -138,17 +184,26 @@ test("one cancelled workspace caller does not cancel another caller's shared ref
   const workspace = createWorkspace({ rootPath: directory });
   try {
     await writeFile(join(directory, "metadata.json"), JSON.stringify(metadata("users")));
-    await writeFile(join(directory, "sqlbraid.config.mjs"), `await new Promise(resolve => setTimeout(resolve, 100));\n${config("users")}`);
+    await writeFile(
+      join(directory, "sqlbraid.config.mjs"),
+      `await new Promise(resolve => setTimeout(resolve, 100));\n${config("users")}`,
+    );
     const cancellation = { isCancellationRequested: false };
     const cancelled = workspace.service(cancellation);
     const active = workspace.service();
-    setTimeout(() => { cancellation.isCancellationRequested = true; }, 10);
+    setTimeout(() => {
+      cancellation.isCancellationRequested = true;
+    }, 10);
     const [cancelledResult, activeResult] = await Promise.allSettled([cancelled, active]);
     assert.equal(cancelledResult.status, "rejected");
     assert.equal(activeResult.status, "fulfilled");
     if (activeResult.status === "fulfilled") {
       const source = 'import { sql } from "@sqlbraid/template"; const q = sql`SELECT * FROM users`;';
-      assert.ok(activeResult.value.definition(source, join(directory, "query.ts"), source.indexOf("users"))?.uri.endsWith("/metadata.json"));
+      assert.ok(
+        activeResult.value
+          .definition(source, join(directory, "query.ts"), source.indexOf("users"))
+          ?.uri.endsWith("/metadata.json"),
+      );
     }
   } finally {
     workspace.dispose();
@@ -161,14 +216,20 @@ test("disposing a workspace terminates an in-flight executable config", async ()
   const workspace = createWorkspace({ rootPath: directory });
   try {
     const started = join(directory, "started");
-    await writeFile(join(directory, "sqlbraid.config.mjs"), `import { writeFile } from "node:fs/promises";
+    await writeFile(
+      join(directory, "sqlbraid.config.mjs"),
+      `import { writeFile } from "node:fs/promises";
 await writeFile(${JSON.stringify(started)}, "started");
 await new Promise(resolve => setTimeout(resolve, 60_000));
-export default {};`);
-    const outcome = workspace.service().then(() => undefined, (error: unknown) => error);
+export default {};`,
+    );
+    const outcome = workspace.service().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
     for (let attempt = 0; attempt < 200; attempt += 1) {
-      if (await readFile(started, "utf8").catch(() => "") === "started") break;
-      await new Promise(resolve => setTimeout(resolve, 10));
+      if ((await readFile(started, "utf8").catch(() => "")) === "started") break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
     assert.equal(await readFile(started, "utf8"), "started");
     workspace.dispose();
@@ -186,14 +247,20 @@ test("workspace cancellation stops asynchronous config loading", async () => {
     const configFile = join(directory, "sqlbraid.config.mjs");
     await writeFile(configFile, `export default ${JSON.stringify({})};`);
     const workspace = createWorkspace({ rootPath: directory, configPath: configFile });
-    await assert.rejects(workspace.service({ isCancellationRequested: true }), (error: unknown) => error instanceof Error && error.name === "WorkspaceCancellationError");
+    await assert.rejects(
+      workspace.service({ isCancellationRequested: true }),
+      (error: unknown) => error instanceof Error && error.name === "WorkspaceCancellationError",
+    );
     const slowConfig = join(directory, "slow.config.mjs");
-    await writeFile(slowConfig, 'await new Promise((resolve) => setTimeout(resolve, 100)); export default {};\n');
+    await writeFile(slowConfig, "await new Promise((resolve) => setTimeout(resolve, 100)); export default {};\n");
     const cancellation = { isCancellationRequested: false };
     const pending = loadConfig(slowConfig, directory, cancellation);
     await new Promise((resolve) => setTimeout(resolve, 10));
     cancellation.isCancellationRequested = true;
-    await assert.rejects(pending, (error: unknown) => error instanceof Error && error.name === "ConfigurationCancellationError");
+    await assert.rejects(
+      pending,
+      (error: unknown) => error instanceof Error && error.name === "ConfigurationCancellationError",
+    );
     workspace.dispose();
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -238,12 +305,13 @@ test("isolated config loading refreshes CJS dependencies", async () => {
   try {
     const dependency = join(directory, "config-dependency.cjs");
     const configFile = join(directory, "sqlbraid.config.cjs");
-    const target = (name: string) => `module.exports = { codegen: { targets: [{ name: require("./config-dependency.cjs").name, metadata: "./missing.json", outFile: "./generated.ts", typePolicy: { id: "${name}", hash: "${name}", mappings: [] } }] } };`;
-    await writeFile(dependency, "exports.name = \"first\";\n");
+    const target = (name: string) =>
+      `module.exports = { codegen: { targets: [{ name: require("./config-dependency.cjs").name, metadata: "./missing.json", outFile: "./generated.ts", typePolicy: { id: "${name}", hash: "${name}", mappings: [] } }] } };`;
+    await writeFile(dependency, 'exports.name = "first";\n');
     await writeFile(configFile, target("policy"));
     const first = await loadConfig(configFile, directory);
     assert.equal(first.config.codegen?.targets[0]?.name, "first");
-    await writeFile(dependency, "exports.name = \"second\";\n");
+    await writeFile(dependency, 'exports.name = "second";\n');
     const second = await loadConfig(configFile, directory);
     assert.equal(second.config.codegen?.targets[0]?.name, "second");
   } finally {

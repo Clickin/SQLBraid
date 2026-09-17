@@ -7,11 +7,7 @@ import { qualifiedIdentity, SnapshotValidationError } from "@sqlbraid/metadata";
 import { typePolicy as mysqlTypePolicy } from "@sqlbraid/mysql";
 import { typePolicy as postgresTypePolicy } from "@sqlbraid/postgres";
 import { typePolicy as sqliteTypePolicy } from "@sqlbraid/sqlite";
-import {
-  assertCompilesGeneratedSource,
-  assertGeneratedProperty,
-  assertGeneratedPropertyAbsent,
-} from "./db/codegen.js";
+import { assertCompilesGeneratedSource, assertGeneratedProperty, assertGeneratedPropertyAbsent } from "./db/codegen.js";
 
 type ColumnSeed = Pick<ColumnSnapshot, "name" | "type" | "nullable"> & Partial<ColumnSnapshot>;
 
@@ -19,11 +15,41 @@ const policy: TypePolicy = {
   id: "test-policy",
   hash: "test-policy-v1",
   mappings: [
-    { databaseType: "int2", inputType: "number | string", outputType: "string", nullable: true, numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" } },
-    { databaseType: "int4", inputType: "number | string", outputType: "string", nullable: true, numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" } },
-    { databaseType: "int8", inputType: "bigint | string", outputType: "string", nullable: true, numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" } },
-    { databaseType: "numeric", inputType: "string", outputType: "string", nullable: true, numeric: { semantics: "exact-decimal", representation: "string", fidelity: "lossless" } },
-    { databaseType: "float8", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 64 } },
+    {
+      databaseType: "int2",
+      inputType: "number | string",
+      outputType: "string",
+      nullable: true,
+      numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" },
+    },
+    {
+      databaseType: "int4",
+      inputType: "number | string",
+      outputType: "string",
+      nullable: true,
+      numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" },
+    },
+    {
+      databaseType: "int8",
+      inputType: "bigint | string",
+      outputType: "string",
+      nullable: true,
+      numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" },
+    },
+    {
+      databaseType: "numeric",
+      inputType: "string",
+      outputType: "string",
+      nullable: true,
+      numeric: { semantics: "exact-decimal", representation: "string", fidelity: "lossless" },
+    },
+    {
+      databaseType: "float8",
+      inputType: "number",
+      outputType: "number",
+      nullable: true,
+      numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossless", binaryPrecision: 64 },
+    },
     { databaseType: "text", inputType: "string", outputType: "string", nullable: true },
     { databaseType: "bool", inputType: "boolean", outputType: "boolean", nullable: true },
     { databaseType: "json", inputType: "unknown", outputType: "unknown", nullable: true },
@@ -67,20 +93,23 @@ function snapshot(
 }
 
 test("generates Row, Insert, and Update with database evidence controlling nullability and write shape", async () => {
-  const result = generateModels({
-    ...snapshot({
-      "public.users": relation("public.users", "users", "table", [
-        { name: "id", type: "int4", nullable: false },
-        { name: "nickname", type: "text", nullable: true },
-        { name: "created_at", type: "text", nullable: false, defaultExpression: "now()" },
-        { name: "identity_id", type: "int4", nullable: false, identity: true },
-        { name: "computed", type: "text", nullable: false, generated: true },
-        { name: "locked", type: "text", nullable: false, updatable: false },
-        { name: "insert_forbidden", type: "text", nullable: false, insertable: false },
-        { name: "explicit_identity", type: "int4", nullable: false, identity: true },
-      ]),
-    }),
-  }, { typePolicy: policy });
+  const result = generateModels(
+    {
+      ...snapshot({
+        "public.users": relation("public.users", "users", "table", [
+          { name: "id", type: "int4", nullable: false },
+          { name: "nickname", type: "text", nullable: true },
+          { name: "created_at", type: "text", nullable: false, defaultExpression: "now()" },
+          { name: "identity_id", type: "int4", nullable: false, identity: true },
+          { name: "computed", type: "text", nullable: false, generated: true },
+          { name: "locked", type: "text", nullable: false, updatable: false },
+          { name: "insert_forbidden", type: "text", nullable: false, insertable: false },
+          { name: "explicit_identity", type: "int4", nullable: false, identity: true },
+        ]),
+      }),
+    },
+    { typePolicy: policy },
+  );
 
   assert.equal(result.models[0]?.modelName, "Users");
   assert.equal(result.models[0]?.rowName, "UsersRow");
@@ -106,71 +135,95 @@ test("generates Row, Insert, and Update with database evidence controlling nulla
 test("qualified relation identities remain distinct through filters and overrides", async () => {
   const leftIdentity = qualifiedIdentity("a.b", "c");
   const rightIdentity = qualifiedIdentity("a", "b.c");
-  const result = generateModels(snapshot({
-    [leftIdentity]: relation(leftIdentity, "c", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "a.b" }),
-    [rightIdentity]: relation(rightIdentity, "b.c", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "a" }),
-  }), {
-    typePolicy: policy,
-    filters: { includeRelations: [leftIdentity, rightIdentity] },
-    naming: { relations: { [leftIdentity]: "DotSchema", [rightIdentity]: "DotTable" } },
-    typeOverrides: { columns: { [rightIdentity]: { value: { outputType: "number" } } } },
-  });
+  const result = generateModels(
+    snapshot({
+      [leftIdentity]: relation(leftIdentity, "c", "table", [{ name: "value", type: "text", nullable: false }], {
+        namespace: "a.b",
+      }),
+      [rightIdentity]: relation(rightIdentity, "b.c", "table", [{ name: "value", type: "text", nullable: false }], {
+        namespace: "a",
+      }),
+    }),
+    {
+      typePolicy: policy,
+      filters: { includeRelations: [leftIdentity, rightIdentity] },
+      naming: { relations: { [leftIdentity]: "DotSchema", [rightIdentity]: "DotTable" } },
+      typeOverrides: { columns: { [rightIdentity]: { value: { outputType: "number" } } } },
+    },
+  );
   assert.equal(result.models.length, 2);
-  assert.equal(result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_TYPE_RELATION_NOT_FOUND"), false);
+  assert.equal(
+    result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_TYPE_RELATION_NOT_FOUND"),
+    false,
+  );
   assertGeneratedProperty(result.source, "DotSchemaRow", "value", "string", false);
   assertGeneratedProperty(result.source, "DotTableRow", "value", "number", false);
 });
 
 test("keeps Row-only models for non-table relations and warns for unknown kinds", () => {
-  const result = generateModels({
-    ...snapshot({
-      "public.v": relation("public.v", "v", "view", [{ name: "value", type: "text", nullable: false }]),
-      "public.m": relation("public.m", "m", "materialized", [{ name: "value", type: "text", nullable: false }]),
-      "public.f": relation("public.f", "f", "foreign", [{ name: "value", type: "text", nullable: false }]),
-      "public.virtual": relation("public.virtual", "virtual", "virtual", [{ name: "value", type: "text", nullable: false }]),
-      "public.u": relation("public.u", "u", "unknown", [{ name: "value", type: "text", nullable: false }]),
-      "public.empty": relation("public.empty", "empty", "unknown", []),
-    }),
-  }, { typePolicy: policy });
+  const result = generateModels(
+    {
+      ...snapshot({
+        "public.v": relation("public.v", "v", "view", [{ name: "value", type: "text", nullable: false }]),
+        "public.m": relation("public.m", "m", "materialized", [{ name: "value", type: "text", nullable: false }]),
+        "public.f": relation("public.f", "f", "foreign", [{ name: "value", type: "text", nullable: false }]),
+        "public.virtual": relation("public.virtual", "virtual", "virtual", [
+          { name: "value", type: "text", nullable: false },
+        ]),
+        "public.u": relation("public.u", "u", "unknown", [{ name: "value", type: "text", nullable: false }]),
+        "public.empty": relation("public.empty", "empty", "unknown", []),
+      }),
+    },
+    { typePolicy: policy },
+  );
 
-  assert.deepEqual(result.models.map((model) => model.relationIdentity), [
-    "public.f",
-    "public.m",
-    "public.u",
-    "public.v",
-    "public.virtual",
-  ]);
+  assert.deepEqual(
+    result.models.map((model) => model.relationIdentity),
+    ["public.f", "public.m", "public.u", "public.v", "public.virtual"],
+  );
   for (const model of result.models) {
     assert.equal(model.insertName, undefined);
     assert.equal(model.updateName, undefined);
     assert.match(result.source, new RegExp(`export interface ${model.rowName} \\{`, "u"));
   }
-  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_RELATION_KIND").length, 2);
-  assert.equal(result.models.some((model) => model.relationIdentity === "public.empty"), false);
+  assert.equal(
+    result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_RELATION_KIND").length,
+    2,
+  );
+  assert.equal(
+    result.models.some((model) => model.relationIdentity === "public.empty"),
+    false,
+  );
 });
 
 test("resolves qualified and case-insensitive type evidence without suffix guessing", () => {
-  const result = generateModels({
-    ...snapshot({
-      "public.values": relation("public.values", "values", "table", [
-        { name: "small_id", type: "pg_catalog.int2", nullable: false },
-        { name: "id", type: "pg_catalog.int4", nullable: false },
-        { name: "big_id", type: "pg_catalog.int8", nullable: false },
-        { name: "amount", type: "pg_catalog.numeric", nullable: false },
-        { name: "label", type: "TEXT", nullable: false },
-        { name: "enabled", type: "pg_catalog.bool", nullable: false },
-        { name: "custom", type: "vendor.int4_custom", nullable: false },
-      ]),
-    }, {
-      types: {
-        "pg_catalog.int2": { identity: "pg_catalog.int2", name: "int2", kind: "scalar" },
-        "pg_catalog.int4": { identity: "pg_catalog.int4", name: "int4", kind: "scalar" },
-        "pg_catalog.int8": { identity: "pg_catalog.int8", name: "int8", kind: "scalar" },
-        "pg_catalog.numeric": { identity: "pg_catalog.numeric", name: "numeric", kind: "scalar" },
-        "pg_catalog.bool": { identity: "pg_catalog.bool", name: "bool", kind: "scalar" },
-      },
-    }),
-  }, { typePolicy: postgresTypePolicy });
+  const result = generateModels(
+    {
+      ...snapshot(
+        {
+          "public.values": relation("public.values", "values", "table", [
+            { name: "small_id", type: "pg_catalog.int2", nullable: false },
+            { name: "id", type: "pg_catalog.int4", nullable: false },
+            { name: "big_id", type: "pg_catalog.int8", nullable: false },
+            { name: "amount", type: "pg_catalog.numeric", nullable: false },
+            { name: "label", type: "TEXT", nullable: false },
+            { name: "enabled", type: "pg_catalog.bool", nullable: false },
+            { name: "custom", type: "vendor.int4_custom", nullable: false },
+          ]),
+        },
+        {
+          types: {
+            "pg_catalog.int2": { identity: "pg_catalog.int2", name: "int2", kind: "scalar" },
+            "pg_catalog.int4": { identity: "pg_catalog.int4", name: "int4", kind: "scalar" },
+            "pg_catalog.int8": { identity: "pg_catalog.int8", name: "int8", kind: "scalar" },
+            "pg_catalog.numeric": { identity: "pg_catalog.numeric", name: "numeric", kind: "scalar" },
+            "pg_catalog.bool": { identity: "pg_catalog.bool", name: "bool", kind: "scalar" },
+          },
+        },
+      ),
+    },
+    { typePolicy: postgresTypePolicy },
+  );
 
   assertGeneratedProperty(result.source, "ValuesRow", "small_id", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "id", "string", false);
@@ -180,7 +233,10 @@ test("resolves qualified and case-insensitive type evidence without suffix guess
   assertGeneratedProperty(result.source, "ValuesRow", "enabled", "boolean", false);
   assertGeneratedProperty(result.source, "ValuesRow", "custom", "unknown", false);
   assertGeneratedProperty(result.source, "ValuesInsert", "amount", "string", false);
-  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE").length, 1);
+  assert.equal(
+    result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE").length,
+    1,
+  );
 });
 
 test("uses unknown plus a stable diagnostic for conflicting normalized mappings", () => {
@@ -191,11 +247,14 @@ test("uses unknown plus a stable diagnostic for conflicting normalized mappings"
       { databaseType: "int4", inputType: "bigint", outputType: "bigint", nullable: true },
     ],
   };
-  const result = generateModels({
-    ...snapshot({
-      "public.values": relation("public.values", "values", "table", [{ name: "id", type: "int4", nullable: false }]),
-    }),
-  }, { typePolicy: conflicting });
+  const result = generateModels(
+    {
+      ...snapshot({
+        "public.values": relation("public.values", "values", "table", [{ name: "id", type: "int4", nullable: false }]),
+      }),
+    },
+    { typePolicy: conflicting },
+  );
 
   assertGeneratedProperty(result.source, "ValuesRow", "id", "unknown", false);
   assertGeneratedProperty(result.source, "ValuesInsert", "id", "unknown", false);
@@ -204,7 +263,8 @@ test("uses unknown plus a stable diagnostic for conflicting normalized mappings"
   assert.match(diagnostic?.message ?? "", /INT4.*int4/u);
   assert.deepEqual(
     generateModels(snapshot({}), { typePolicy: conflicting }).diagnostics,
-    generateModels(snapshot({}), { typePolicy: { ...conflicting, mappings: [...conflicting.mappings].reverse() } }).diagnostics,
+    generateModels(snapshot({}), { typePolicy: { ...conflicting, mappings: [...conflicting.mappings].reverse() } })
+      .diagnostics,
   );
   assert.equal(generateModels(snapshot({}), { typePolicy: conflicting }).diagnostics[0]?.severity, "error");
 });
@@ -215,9 +275,15 @@ test("selected policy controls input and output while column evidence controls n
   });
   const custom: TypePolicy = {
     ...policy,
-    mappings: [{ databaseType: "numeric", inputType: "string", outputType: "Readonly<{ amount: string }>", nullable: false }],
-    encode: () => { throw new Error("codegen must not execute codecs"); },
-    decode: () => { throw new Error("codegen must not execute codecs"); },
+    mappings: [
+      { databaseType: "numeric", inputType: "string", outputType: "Readonly<{ amount: string }>", nullable: false },
+    ],
+    encode: () => {
+      throw new Error("codegen must not execute codecs");
+    },
+    decode: () => {
+      throw new Error("codegen must not execute codecs");
+    },
   };
   const result = generateModels(metadata, { typePolicy: custom });
   assertGeneratedProperty(result.source, "TRow", "amount", "Readonly<{ amount: string }> | null", false);
@@ -228,27 +294,37 @@ test("selected policy controls input and output while column evidence controls n
 });
 
 test("type evidence must be an own metadata entry rather than an object prototype member", () => {
-  const metadata = snapshot({ t: relation("t", "t", "table", [{ name: "value", type: "constructor", nullable: false }]) });
-  const result = generateModels(metadata, { typePolicy: {
-    ...policy,
-    mappings: [{ databaseType: "Object", inputType: "string", outputType: "string", nullable: false }],
-  } });
+  const metadata = snapshot({
+    t: relation("t", "t", "table", [{ name: "value", type: "constructor", nullable: false }]),
+  });
+  const result = generateModels(metadata, {
+    typePolicy: {
+      ...policy,
+      mappings: [{ databaseType: "Object", inputType: "string", outputType: "string", nullable: false }],
+    },
+  });
   assertGeneratedProperty(result.source, "TRow", "value", "unknown", false);
   assert.equal(result.diagnostics[0]?.code, "CODEGEN_UNKNOWN_DATABASE_TYPE");
 });
 
 test("matches MySQL metadata spellings to first-party case-normalized policy mappings", () => {
-  const result = generateModels({
-    ...snapshot({
-      "app.values": relation("app.values", "values", "table", [
-        { name: "id", type: "int", nullable: false },
-        { name: "big_id", type: "bigint", nullable: false },
-        { name: "amount", type: "decimal", nullable: false },
-        { name: "label", type: "varchar", nullable: false },
-        { name: "payload", type: "json", nullable: true },
-      ]),
-    }, { dialect: "mysql" }),
-  }, { typePolicy: mysqlTypePolicy });
+  const result = generateModels(
+    {
+      ...snapshot(
+        {
+          "app.values": relation("app.values", "values", "table", [
+            { name: "id", type: "int", nullable: false },
+            { name: "big_id", type: "bigint", nullable: false },
+            { name: "amount", type: "decimal", nullable: false },
+            { name: "label", type: "varchar", nullable: false },
+            { name: "payload", type: "json", nullable: true },
+          ]),
+        },
+        { dialect: "mysql" },
+      ),
+    },
+    { typePolicy: mysqlTypePolicy },
+  );
   assertGeneratedProperty(result.source, "ValuesRow", "id", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "big_id", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "amount", "string", false);
@@ -258,96 +334,158 @@ test("matches MySQL metadata spellings to first-party case-normalized policy map
 });
 
 test("distinguishes exact, lossy, known-open, and unknown type mappings", () => {
-  const result = generateModels({
-    ...snapshot({
-      "public.values": relation("public.values", "values", "table", [
-        { name: "amount", type: "decimal", nullable: false },
-        { name: "ratio", type: "float8", nullable: false },
-        { name: "payload", type: "json", nullable: true },
-        { name: "missing", type: "vendor_number", nullable: false },
-      ]),
-    }),
-  }, {
-    typePolicy: {
-      ...policy,
-      mappings: [
-        { databaseType: "decimal", inputType: "string", outputType: "unknown", nullable: true, numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" } },
-        { databaseType: "float8", inputType: "number", outputType: "number", nullable: true, numeric: { semantics: "approximate-binary", representation: "number", fidelity: "lossy", binaryPrecision: 64 } },
-        { databaseType: "json", inputType: "unknown", outputType: "unknown", nullable: true },
-        { databaseType: "int8", inputType: "string", outputType: "string", nullable: true, numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" } },
-      ],
+  const result = generateModels(
+    {
+      ...snapshot({
+        "public.values": relation("public.values", "values", "table", [
+          { name: "amount", type: "decimal", nullable: false },
+          { name: "ratio", type: "float8", nullable: false },
+          { name: "payload", type: "json", nullable: true },
+          { name: "missing", type: "vendor_number", nullable: false },
+        ]),
+      }),
     },
-    typeOverrides: {
-      columns: { "public.values": { amount: { outputType: "string" } } },
+    {
+      typePolicy: {
+        ...policy,
+        mappings: [
+          {
+            databaseType: "decimal",
+            inputType: "string",
+            outputType: "unknown",
+            nullable: true,
+            numeric: { semantics: "exact-decimal", representation: "string", fidelity: "unsupported" },
+          },
+          {
+            databaseType: "float8",
+            inputType: "number",
+            outputType: "number",
+            nullable: true,
+            numeric: {
+              semantics: "approximate-binary",
+              representation: "number",
+              fidelity: "lossy",
+              binaryPrecision: 64,
+            },
+          },
+          { databaseType: "json", inputType: "unknown", outputType: "unknown", nullable: true },
+          {
+            databaseType: "int8",
+            inputType: "string",
+            outputType: "string",
+            nullable: true,
+            numeric: { semantics: "exact-integer", representation: "string", fidelity: "lossless" },
+          },
+        ],
+      },
+      typeOverrides: {
+        columns: { "public.values": { amount: { outputType: "string" } } },
+      },
     },
-  });
+  );
 
   assertGeneratedProperty(result.source, "ValuesRow", "amount", "string", false);
   assertGeneratedProperty(result.source, "ValuesRow", "ratio", "number", false);
   assertGeneratedProperty(result.source, "ValuesRow", "payload", "unknown | null", false);
   assertGeneratedProperty(result.source, "ValuesRow", "missing", "unknown", false);
-  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_NUMERIC_FIDELITY_UNAVAILABLE").length, 1);
-  assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE").length, 1);
-  assert.equal(result.diagnostics.some((diagnostic) => diagnostic.databaseType === "json"), false);
+  assert.equal(
+    result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_NUMERIC_FIDELITY_UNAVAILABLE").length,
+    1,
+  );
+  assert.equal(
+    result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE").length,
+    1,
+  );
+  assert.equal(
+    result.diagnostics.some((diagnostic) => diagnostic.databaseType === "json"),
+    false,
+  );
 });
 
 test("keeps SQLite non-STRICT columns conservative but maps supported STRICT declarations", async () => {
-  const strict = generateModels({
-    ...snapshot({
-      "main.strict_table": relation("main.strict_table", "strict_table", "table", [
-        { name: "id", type: "INTEGER", nullable: false },
-        { name: "ratio", type: "REAL", nullable: false },
-        { name: "label", type: "TEXT", nullable: false },
-        { name: "bytes", type: "BLOB", nullable: false },
-        { name: "anything", type: "ANY", nullable: false },
-      ], { strict: true }),
-    }, { dialect: "sqlite" }),
-  }, { typePolicy: sqliteTypePolicy });
+  const strict = generateModels(
+    {
+      ...snapshot(
+        {
+          "main.strict_table": relation(
+            "main.strict_table",
+            "strict_table",
+            "table",
+            [
+              { name: "id", type: "INTEGER", nullable: false },
+              { name: "ratio", type: "REAL", nullable: false },
+              { name: "label", type: "TEXT", nullable: false },
+              { name: "bytes", type: "BLOB", nullable: false },
+              { name: "anything", type: "ANY", nullable: false },
+            ],
+            { strict: true },
+          ),
+        },
+        { dialect: "sqlite" },
+      ),
+    },
+    { typePolicy: sqliteTypePolicy },
+  );
   assertGeneratedProperty(strict.source, "StrictTableRow", "id", "string", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "ratio", "number", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "label", "string", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "bytes", "Uint8Array", false);
   assertGeneratedProperty(strict.source, "StrictTableRow", "anything", "unknown", false);
-  assert.equal(strict.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_NUMERIC_FIDELITY_UNAVAILABLE").length, 0);
+  assert.equal(
+    strict.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_NUMERIC_FIDELITY_UNAVAILABLE").length,
+    0,
+  );
   await assertCompilesGeneratedSource(strict.source, "codegen-sqlite-strict");
 
-  const dynamic = generateModels({
-    ...snapshot({
-      "main.dynamic": relation("main.dynamic", "dynamic", "table", [
-        { name: "id", type: "INTEGER", nullable: false },
-      ]),
-    }, { dialect: "sqlite" }),
-  }, {
-    typePolicy: {
-      ...policy,
-      mappings: [{ databaseType: "INTEGER", inputType: "number", outputType: "number", nullable: true }],
+  const dynamic = generateModels(
+    {
+      ...snapshot(
+        {
+          "main.dynamic": relation("main.dynamic", "dynamic", "table", [
+            { name: "id", type: "INTEGER", nullable: false },
+          ]),
+        },
+        { dialect: "sqlite" },
+      ),
     },
-  });
+    {
+      typePolicy: {
+        ...policy,
+        mappings: [{ databaseType: "INTEGER", inputType: "number", outputType: "number", nullable: true }],
+      },
+    },
+  );
   assertGeneratedProperty(dynamic.source, "DynamicRow", "id", "unknown", false);
   assert.equal(dynamic.diagnostics[0]?.code, "CODEGEN_SQLITE_DYNAMIC_TYPE");
 });
 
 test("applies SQLite non-STRICT column and exact database-type overrides independently per side", () => {
-  const result = generateModels({
-    ...snapshot({
-      "main.dynamic": relation("main.dynamic", "dynamic", "table", [
-        { name: "column_only", type: "int4", nullable: false },
-        { name: "database_only", type: "text", nullable: false },
-        { name: "both", type: "text", nullable: false },
-      ]),
-    }, { dialect: "sqlite" }),
-  }, {
-    typePolicy: policy,
-    typeOverrides: {
-      databaseTypes: { text: { inputType: "DatabaseInput", outputType: "DatabaseOutput" } },
-      columns: {
-        "main.dynamic": {
-          column_only: { outputType: "ColumnOutput" },
-          both: { outputType: "ColumnOutput" },
+  const result = generateModels(
+    {
+      ...snapshot(
+        {
+          "main.dynamic": relation("main.dynamic", "dynamic", "table", [
+            { name: "column_only", type: "int4", nullable: false },
+            { name: "database_only", type: "text", nullable: false },
+            { name: "both", type: "text", nullable: false },
+          ]),
+        },
+        { dialect: "sqlite" },
+      ),
+    },
+    {
+      typePolicy: policy,
+      typeOverrides: {
+        databaseTypes: { text: { inputType: "DatabaseInput", outputType: "DatabaseOutput" } },
+        columns: {
+          "main.dynamic": {
+            column_only: { outputType: "ColumnOutput" },
+            both: { outputType: "ColumnOutput" },
+          },
         },
       },
     },
-  });
+  );
 
   assertGeneratedProperty(result.source, "DynamicRow", "column_only", "ColumnOutput", false);
   assertGeneratedProperty(result.source, "DynamicInsert", "column_only", "unknown", false);
@@ -356,62 +494,103 @@ test("applies SQLite non-STRICT column and exact database-type overrides indepen
   assertGeneratedProperty(result.source, "DynamicRow", "both", "ColumnOutput", false);
   assertGeneratedProperty(result.source, "DynamicInsert", "both", "DatabaseInput", false);
   assert.equal(result.diagnostics.filter((diagnostic) => diagnostic.code === "CODEGEN_SQLITE_DYNAMIC_TYPE").length, 3);
-  assert.equal(result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE"), false);
+  assert.equal(
+    result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_DATABASE_TYPE"),
+    false,
+  );
 });
 
 test("disambiguates every final exported declaration name, including same-relation and cross-relation collisions", () => {
-  const sameRelation = generateModels({
-    ...snapshot({
-      "public.users": relation("public.users", "users", "table", [
-        { name: "id", type: "int4", nullable: false },
-      ]),
-    }),
-  }, {
-    typePolicy: policy,
-    naming: { suffixes: { row: "Model", insert: "Model", update: "Patch" } },
-  });
+  const sameRelation = generateModels(
+    {
+      ...snapshot({
+        "public.users": relation("public.users", "users", "table", [{ name: "id", type: "int4", nullable: false }]),
+      }),
+    },
+    {
+      typePolicy: policy,
+      naming: { suffixes: { row: "Model", insert: "Model", update: "Patch" } },
+    },
+  );
   const sameRelationNames = sameRelation.models.flatMap((model) =>
     [model.rowName, model.insertName, model.updateName].filter((name): name is string => name !== undefined),
   );
   assert.equal(new Set(sameRelationNames).size, sameRelationNames.length);
-  assert.equal(sameRelation.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_MODEL_NAME_COLLISION" && diagnostic.severity === "error"), true);
+  assert.equal(
+    sameRelation.diagnostics.some(
+      (diagnostic) => diagnostic.code === "CODEGEN_MODEL_NAME_COLLISION" && diagnostic.severity === "error",
+    ),
+    true,
+  );
 
-  const crossRelation = generateModels({
-    ...snapshot({
-      "public.user": relation("public.user", "user", "table", [{ name: "id", type: "int4", nullable: false }]),
-      "public.user_row": relation("public.user_row", "user_row", "view", [{ name: "id", type: "int4", nullable: false }]),
-    }),
-  }, {
-    typePolicy: policy,
-    naming: { suffixes: { row: "X", insert: "Create", update: "RowX" } },
-  });
+  const crossRelation = generateModels(
+    {
+      ...snapshot({
+        "public.user": relation("public.user", "user", "table", [{ name: "id", type: "int4", nullable: false }]),
+        "public.user_row": relation("public.user_row", "user_row", "view", [
+          { name: "id", type: "int4", nullable: false },
+        ]),
+      }),
+    },
+    {
+      typePolicy: policy,
+      naming: { suffixes: { row: "X", insert: "Create", update: "RowX" } },
+    },
+  );
   const crossRelationNames = crossRelation.models.flatMap((model) =>
     [model.rowName, model.insertName, model.updateName].filter((name): name is string => name !== undefined),
   );
   assert.equal(new Set(crossRelationNames).size, crossRelationNames.length);
-  assert.equal(crossRelation.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_MODEL_NAME_COLLISION" && diagnostic.severity === "error"), true);
+  assert.equal(
+    crossRelation.diagnostics.some(
+      (diagnostic) => diagnostic.code === "CODEGEN_MODEL_NAME_COLLISION" && diagnostic.severity === "error",
+    ),
+    true,
+  );
   assert.match(crossRelation.source, /export interface UserRowX_[0-9a-f]{12} \{/u);
 });
 
 test("sanitizes arbitrary names, preserves exact property keys, and resolves collisions independent of map order", async () => {
   const relations = {
-    "public.users": relation("public.users", "users", "table", [{ name: "select", type: "text", nullable: false }], { namespace: "public" }),
-    "audit.users": relation("audit.users", "users", "table", [{ name: "patient-id", type: "text", nullable: false }], { namespace: "audit" }),
-    "main.123_table": relation("main.123_table", "123_table", "table", [{ name: "환자 번호", type: "text", nullable: false }], { namespace: "main" }),
-    "main.order-items": relation("main.order-items", "order-items", "table", [{ name: "class", type: "text", nullable: false }], { namespace: "main" }),
+    "public.users": relation("public.users", "users", "table", [{ name: "select", type: "text", nullable: false }], {
+      namespace: "public",
+    }),
+    "audit.users": relation("audit.users", "users", "table", [{ name: "patient-id", type: "text", nullable: false }], {
+      namespace: "audit",
+    }),
+    "main.123_table": relation(
+      "main.123_table",
+      "123_table",
+      "table",
+      [{ name: "환자 번호", type: "text", nullable: false }],
+      { namespace: "main" },
+    ),
+    "main.order-items": relation(
+      "main.order-items",
+      "order-items",
+      "table",
+      [{ name: "class", type: "text", nullable: false }],
+      { namespace: "main" },
+    ),
   };
   const first = generateModels({ ...snapshot(relations) }, { typePolicy: policy });
-  const second = generateModels({
-    ...snapshot({
-      "main.order-items": relations["main.order-items"],
-      "main.123_table": relations["main.123_table"],
-      "audit.users": relations["audit.users"],
-      "public.users": relations["public.users"],
-    }),
-  }, { typePolicy: policy });
+  const second = generateModels(
+    {
+      ...snapshot({
+        "main.order-items": relations["main.order-items"],
+        "main.123_table": relations["main.123_table"],
+        "audit.users": relations["audit.users"],
+        "public.users": relations["public.users"],
+      }),
+    },
+    { typePolicy: policy },
+  );
 
   assert.equal(first.source, second.source);
-  assert.deepEqual(first.models.map((model) => model.modelName), ["AuditUsers", "_123Table", "OrderItems", "PublicUsers"]);
+  assert.deepEqual(
+    first.models.map((model) => model.modelName),
+    ["AuditUsers", "_123Table", "OrderItems", "PublicUsers"],
+  );
   assertGeneratedProperty(first.source, "PublicUsersRow", "select", "string", false);
   assertGeneratedProperty(first.source, "AuditUsersRow", "patient-id", "string", false);
   assertGeneratedProperty(first.source, "_123TableRow", "환자 번호", "string", false);
@@ -421,17 +600,59 @@ test("sanitizes arbitrary names, preserves exact property keys, and resolves col
 
 test("handles reserved, Unicode, punctuation-only, and namespace/hash collisions without renaming unrelated models", async () => {
   const coreRelations = {
-    "public.class": relation("public.class", "class", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "public" }),
-    "public.default": relation("public.default", "default", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "public" }),
-    "public.function": relation("public.function", "function", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "public" }),
-    "public.interface": relation("public.interface", "interface", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "public" }),
-    "public.korean": relation("public.korean", "환자/번호", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "public" }),
-    "public.numeric": relation("public.numeric", "123", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "public" }),
-    "public.unicode-number": relation("public.unicode-number", "x²", "table", [{ name: "quote\"\\\n\u2028", type: "text", nullable: false }]),
-    "public.combining": relation("public.combining", "\u0301x", "table", [{ name: "value", type: "text", nullable: false }]),
-    "public.punctuation": relation("public.punctuation", "---", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "public" }),
-    "a.first": relation("a.first", "---", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "a" }),
-    "a.second": relation("a.second", "---", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "a" }),
+    "public.class": relation("public.class", "class", "table", [{ name: "value", type: "text", nullable: false }], {
+      namespace: "public",
+    }),
+    "public.default": relation(
+      "public.default",
+      "default",
+      "table",
+      [{ name: "value", type: "text", nullable: false }],
+      { namespace: "public" },
+    ),
+    "public.function": relation(
+      "public.function",
+      "function",
+      "table",
+      [{ name: "value", type: "text", nullable: false }],
+      { namespace: "public" },
+    ),
+    "public.interface": relation(
+      "public.interface",
+      "interface",
+      "table",
+      [{ name: "value", type: "text", nullable: false }],
+      { namespace: "public" },
+    ),
+    "public.korean": relation(
+      "public.korean",
+      "환자/번호",
+      "table",
+      [{ name: "value", type: "text", nullable: false }],
+      { namespace: "public" },
+    ),
+    "public.numeric": relation("public.numeric", "123", "table", [{ name: "value", type: "text", nullable: false }], {
+      namespace: "public",
+    }),
+    "public.unicode-number": relation("public.unicode-number", "x²", "table", [
+      { name: 'quote"\\\n\u2028', type: "text", nullable: false },
+    ]),
+    "public.combining": relation("public.combining", "\u0301x", "table", [
+      { name: "value", type: "text", nullable: false },
+    ]),
+    "public.punctuation": relation(
+      "public.punctuation",
+      "---",
+      "table",
+      [{ name: "value", type: "text", nullable: false }],
+      { namespace: "public" },
+    ),
+    "a.first": relation("a.first", "---", "table", [{ name: "value", type: "text", nullable: false }], {
+      namespace: "a",
+    }),
+    "a.second": relation("a.second", "---", "table", [{ name: "value", type: "text", nullable: false }], {
+      namespace: "a",
+    }),
   };
   const result = generateModels({ ...snapshot(coreRelations) }, { typePolicy: policy });
   const byIdentity = new Map(result.models.map((model) => [model.relationIdentity, model.modelName]));
@@ -447,43 +668,76 @@ test("handles reserved, Unicode, punctuation-only, and namespace/hash collisions
   assert.notEqual(byIdentity.get("a.first"), byIdentity.get("a.second"));
   assert.equal(result.models.filter((model) => model.modelName === "ARelation").length, 0);
 
-  const extended = generateModels({
-    ...snapshot({
-      ...coreRelations,
-      "public.unrelated": relation("public.unrelated", "unrelated", "table", [{ name: "value", type: "text", nullable: false }], { namespace: "public" }),
-    }),
-  }, { typePolicy: policy });
+  const extended = generateModels(
+    {
+      ...snapshot({
+        ...coreRelations,
+        "public.unrelated": relation(
+          "public.unrelated",
+          "unrelated",
+          "table",
+          [{ name: "value", type: "text", nullable: false }],
+          { namespace: "public" },
+        ),
+      }),
+    },
+    { typePolicy: policy },
+  );
   for (const model of result.models) {
-    assert.equal(extended.models.find((candidate) => candidate.relationIdentity === model.relationIdentity)?.modelName, model.modelName);
+    assert.equal(
+      extended.models.find((candidate) => candidate.relationIdentity === model.relationIdentity)?.modelName,
+      model.modelName,
+    );
   }
   await assertCompilesGeneratedSource(result.source, "codegen-identifiers");
 });
 
 test("accepts ECMAScript underscore, dollar, Unicode, and numeric export identifiers", async () => {
-  const result = generateModels({
-    ...snapshot({
-      "public.numeric": relation("public.numeric", "2026Orders", "table", [{ name: "value", type: "text", nullable: false }]),
-      "public.other-id-start": relation("public.other-id-start", "℘orders", "table", [{ name: "value", type: "text", nullable: false }]),
-      "public.underscore": relation("public.underscore", "_orders", "table", [{ name: "value", type: "text", nullable: false }]),
-      "public.dollar": relation("public.dollar", "$orders", "table", [{ name: "value", type: "text", nullable: false }]),
-      "public.unicode": relation("public.unicode", "π‍orders", "table", [{ name: "value", type: "text", nullable: false }]),
-    }),
-  }, { typePolicy: policy });
+  const result = generateModels(
+    {
+      ...snapshot({
+        "public.numeric": relation("public.numeric", "2026Orders", "table", [
+          { name: "value", type: "text", nullable: false },
+        ]),
+        "public.other-id-start": relation("public.other-id-start", "℘orders", "table", [
+          { name: "value", type: "text", nullable: false },
+        ]),
+        "public.underscore": relation("public.underscore", "_orders", "table", [
+          { name: "value", type: "text", nullable: false },
+        ]),
+        "public.dollar": relation("public.dollar", "$orders", "table", [
+          { name: "value", type: "text", nullable: false },
+        ]),
+        "public.unicode": relation("public.unicode", "π‍orders", "table", [
+          { name: "value", type: "text", nullable: false },
+        ]),
+      }),
+    },
+    { typePolicy: policy },
+  );
   assert.deepEqual(
     result.models.map((model) => model.modelName),
     ["$Orders", "_2026Orders", "℘orders", "_Orders", "Π‍orders"],
   );
-  assert.equal(result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_INVALID_MODEL_NAME"), false);
+  assert.equal(
+    result.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_INVALID_MODEL_NAME"),
+    false,
+  );
   await assertCompilesGeneratedSource(result.source, "codegen-ecmascript-identifiers");
 
-  const explicit = generateModels({
-    ...snapshot({
-      "public.explicit": relation("public.explicit", "explicit", "table", [{ name: "value", type: "text", nullable: false }]),
-    }),
-  }, {
-    typePolicy: policy,
-    naming: { relations: { "public.explicit": "$2026Orders" } },
-  });
+  const explicit = generateModels(
+    {
+      ...snapshot({
+        "public.explicit": relation("public.explicit", "explicit", "table", [
+          { name: "value", type: "text", nullable: false },
+        ]),
+      }),
+    },
+    {
+      typePolicy: policy,
+      naming: { relations: { "public.explicit": "$2026Orders" } },
+    },
+  );
   assert.equal(explicit.models[0]?.modelName, "$2026Orders");
   assert.equal(explicit.diagnostics.length, 0);
 });
@@ -493,13 +747,22 @@ test("reordered metadata maps and capture timestamps preserve bytes without muta
     "pg_catalog.text": { identity: "pg_catalog.text", name: "text", kind: "scalar" },
     "pg_catalog.int4": { identity: "pg_catalog.int4", name: "int4", kind: "scalar" },
   };
-  const metadata = snapshot({ t: relation("t", "t", "table", [
-    { name: "first", type: "pg_catalog.int4", nullable: false },
-    { name: "second", type: "pg_catalog.text", nullable: true },
-  ]) }, { types });
+  const metadata = snapshot(
+    {
+      t: relation("t", "t", "table", [
+        { name: "first", type: "pg_catalog.int4", nullable: false },
+        { name: "second", type: "pg_catalog.text", nullable: true },
+      ]),
+    },
+    { types },
+  );
   const before = JSON.stringify(metadata);
   const first = generateModels(metadata, { typePolicy: policy });
-  const reordered = { ...metadata, types: Object.fromEntries(Object.entries(types).reverse()), metadata: { generatedAt: "later" } };
+  const reordered = {
+    ...metadata,
+    types: Object.fromEntries(Object.entries(types).reverse()),
+    metadata: { generatedAt: "later" },
+  };
   const second = generateModels(reordered, { typePolicy: policy });
   assert.equal(first.source, second.source);
   assert.equal(first.metadataHash, second.metadataHash);
@@ -510,11 +773,16 @@ test("reordered metadata maps and capture timestamps preserve bytes without muta
 });
 
 test("returns provenance and keeps policy comments single-line", () => {
-  const result = generateModels({
-    ...snapshot({
-      "public.values": relation("public.values", "values", "table", [{ name: "value", type: "text", nullable: false }]),
-    }),
-  }, { typePolicy: { ...policy, id: "policy\nid", hash: "hash\u2028value" } });
+  const result = generateModels(
+    {
+      ...snapshot({
+        "public.values": relation("public.values", "values", "table", [
+          { name: "value", type: "text", nullable: false },
+        ]),
+      }),
+    },
+    { typePolicy: { ...policy, id: "policy\nid", hash: "hash\u2028value" } },
+  );
   assert.equal(result.typePolicyId, "policy\nid");
   assert.equal(result.typePolicyHash, "hash\u2028value");
   assert.match(result.source, /\/\/ Metadata: [0-9a-f]{64}\n/u);
@@ -524,16 +792,22 @@ test("returns provenance and keeps policy comments single-line", () => {
 
 test("filters exact relations, applies naming and type override precedence, and hashes policy options canonically", () => {
   const metadata = snapshot({
-    "public.users": relation("public.users", "users", "table", [
-      { name: "id", type: "int4", nullable: false },
-      { name: "created_at", type: "text", nullable: false },
-    ], { namespace: "public" }),
-    "audit.users": relation("audit.users", "users", "table", [
-      { name: "id", type: "int4", nullable: false },
-    ], { namespace: "audit" }),
-    "public.view": relation("public.view", "view", "view", [
-      { name: "id", type: "int4", nullable: false },
-    ], { namespace: "public" }),
+    "public.users": relation(
+      "public.users",
+      "users",
+      "table",
+      [
+        { name: "id", type: "int4", nullable: false },
+        { name: "created_at", type: "text", nullable: false },
+      ],
+      { namespace: "public" },
+    ),
+    "audit.users": relation("audit.users", "users", "table", [{ name: "id", type: "int4", nullable: false }], {
+      namespace: "audit",
+    }),
+    "public.view": relation("public.view", "view", "view", [{ name: "id", type: "int4", nullable: false }], {
+      namespace: "public",
+    }),
   });
   const first = generateModels(metadata, {
     typePolicy: policy,
@@ -544,7 +818,10 @@ test("filters exact relations, applies naming and type override precedence, and 
       columns: { "public.users": { created_at: { inputType: "DomainDate", outputType: "DomainDate" } } },
     },
   });
-  assert.deepEqual(first.models.map((model) => model.modelName), ["User"]);
+  assert.deepEqual(
+    first.models.map((model) => model.modelName),
+    ["User"],
+  );
   assert.match(first.source, /export interface UserRecord/u);
   assert.match(first.source, /export interface UserCreate/u);
   assertGeneratedProperty(first.source, "UserRecord", "created_at", "DomainDate", false);
@@ -569,28 +846,55 @@ test("filters exact relations, applies naming and type override precedence, and 
   });
   assertGeneratedProperty(partial.source, "UsersRow", "created_at", "DomainDate", false);
   assertGeneratedProperty(partial.source, "UsersInsert", "created_at", "unknown", false);
-  assert.equal(partial.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_INPUT_TYPE"), true);
+  assert.equal(
+    partial.diagnostics.some((diagnostic) => diagnostic.code === "CODEGEN_UNKNOWN_INPUT_TYPE"),
+    true,
+  );
 });
 
 test("rejects invalid or colliding explicit model names and reports unused exact overrides", () => {
   const metadata = snapshot({
-    "public.first": relation("public.first", "first", "table", [{ name: "id", type: "int4", nullable: false }], { namespace: "public" }),
-    "public.second": relation("public.second", "second", "table", [{ name: "id", type: "int4", nullable: false }], { namespace: "public" }),
-    "public.third": relation("public.third", "third", "table", [{ name: "id", type: "int4", nullable: false }], { namespace: "public" }),
+    "public.first": relation("public.first", "first", "table", [{ name: "id", type: "int4", nullable: false }], {
+      namespace: "public",
+    }),
+    "public.second": relation("public.second", "second", "table", [{ name: "id", type: "int4", nullable: false }], {
+      namespace: "public",
+    }),
+    "public.third": relation("public.third", "third", "table", [{ name: "id", type: "int4", nullable: false }], {
+      namespace: "public",
+    }),
   });
   const result = generateModels(metadata, {
     typePolicy: policy,
     naming: { relations: { "public.first": "1Bad", "public.second": "Same", "public.third": "Same" } },
     typeOverrides: {
-      columns: { "missing.relation": { id: { outputType: "Id" } }, "public.first": { missing: { outputType: "Missing" } } },
+      columns: {
+        "missing.relation": { id: { outputType: "Id" } },
+        "public.first": { missing: { outputType: "Missing" } },
+      },
       databaseTypes: { missing_type: { outputType: "Missing" } },
     },
   });
-  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_INVALID_MODEL_NAME")?.severity, "error");
-  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_MODEL_NAME_COLLISION")?.severity, "error");
-  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_TYPE_RELATION_NOT_FOUND")?.severity, "warning");
-  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_TYPE_COLUMN_NOT_FOUND")?.severity, "warning");
-  assert.equal(result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_DATABASE_TYPE_OVERRIDE_UNUSED")?.severity, "warning");
+  assert.equal(
+    result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_INVALID_MODEL_NAME")?.severity,
+    "error",
+  );
+  assert.equal(
+    result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_MODEL_NAME_COLLISION")?.severity,
+    "error",
+  );
+  assert.equal(
+    result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_TYPE_RELATION_NOT_FOUND")?.severity,
+    "warning",
+  );
+  assert.equal(
+    result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_TYPE_COLUMN_NOT_FOUND")?.severity,
+    "warning",
+  );
+  assert.equal(
+    result.diagnostics.find((diagnostic) => diagnostic.code === "CODEGEN_DATABASE_TYPE_OVERRIDE_UNUSED")?.severity,
+    "warning",
+  );
 });
 
 test("rejects malformed policies before generation", () => {
@@ -602,38 +906,50 @@ test("rejects malformed policies before generation", () => {
     (error: unknown) => error instanceof TypeError && /id/u.test(error.message),
   );
   assert.throws(
-    () => generateModels(value, { typePolicy: { ...policy, mappings: [{ databaseType: "int4", inputType: "", outputType: "number", nullable: true }] } }),
+    () =>
+      generateModels(value, {
+        typePolicy: {
+          ...policy,
+          mappings: [{ databaseType: "int4", inputType: "", outputType: "number", nullable: true }],
+        },
+      }),
     TypeError,
   );
   assert.throws(
-    () => generateModels(value, {
-      typePolicy: {
-        ...policy,
-        mappings: [{
-          databaseType: "int4",
-          inputType: "string",
-          outputType: "string",
-          nullable: true,
-          // @ts-expect-error Untrusted JavaScript can supply an invalid fidelity tag.
-          numeric: { semantics: "exact-integer", representation: "string", fidelity: "unavailable" },
-        }],
-      },
-    }),
+    () =>
+      generateModels(value, {
+        typePolicy: {
+          ...policy,
+          mappings: [
+            {
+              databaseType: "int4",
+              inputType: "string",
+              outputType: "string",
+              nullable: true,
+              // @ts-expect-error Untrusted JavaScript can supply an invalid fidelity tag.
+              numeric: { semantics: "exact-integer", representation: "string", fidelity: "unavailable" },
+            },
+          ],
+        },
+      }),
     (error: unknown) => error instanceof TypeError && /fidelity/u.test(error.message),
   );
   assert.throws(
-    () => generateModels(value, {
-      typePolicy: {
-        ...policy,
-        mappings: [{
-          databaseType: "int4",
-          inputType: "number",
-          outputType: "number",
-          nullable: true,
-          numeric: { semantics: "exact-integer", representation: "number", fidelity: "lossless" },
-        }],
-      },
-    }),
+    () =>
+      generateModels(value, {
+        typePolicy: {
+          ...policy,
+          mappings: [
+            {
+              databaseType: "int4",
+              inputType: "number",
+              outputType: "number",
+              nullable: true,
+              numeric: { semantics: "exact-integer", representation: "number", fidelity: "lossless" },
+            },
+          ],
+        },
+      }),
     (error: unknown) => error instanceof TypeError && /string representation/u.test(error.message),
   );
   const legacyMapping = {

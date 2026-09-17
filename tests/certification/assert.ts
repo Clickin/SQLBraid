@@ -28,12 +28,19 @@ function equalValues(actual: unknown, expected: unknown, seen = new Map<object, 
   seen.set(actual, expected);
   if (Object.getPrototypeOf(actual) !== Object.getPrototypeOf(expected)) return false;
   if (Array.isArray(actual) !== Array.isArray(expected)) return false;
-  if (!Array.isArray(actual) && Object.getPrototypeOf(actual) !== Object.prototype && Object.getPrototypeOf(actual) !== null) return false;
+  if (
+    !Array.isArray(actual) &&
+    Object.getPrototypeOf(actual) !== Object.prototype &&
+    Object.getPrototypeOf(actual) !== null
+  )
+    return false;
   const leftKeys = Object.keys(actual);
   const rightKeys = Object.keys(expected);
   if (Array.isArray(actual) && actual.length !== (expected as unknown[]).length) return false;
   if (leftKeys.length !== rightKeys.length || leftKeys.some((key) => !Object.hasOwn(expected, key))) return false;
-  return leftKeys.every((key) => equalValues((actual as Record<string, unknown>)[key], (expected as Record<string, unknown>)[key], seen));
+  return leftKeys.every((key) =>
+    equalValues((actual as Record<string, unknown>)[key], (expected as Record<string, unknown>)[key], seen),
+  );
 }
 
 interface CertificationAssert {
@@ -57,7 +64,10 @@ export const assert: CertificationAssert = Object.freeze({
   deepEqual(actual: unknown, expected: unknown, message = "Values are not deeply equal."): void {
     if (!equalValues(actual, expected)) fail(message);
   },
-  async rejects(operation: () => unknown | Promise<unknown>, predicate?: (error: unknown) => boolean | void): Promise<void> {
+  async rejects(
+    operation: () => unknown | Promise<unknown>,
+    predicate?: (error: unknown) => boolean | void,
+  ): Promise<void> {
     let rejected = false;
     try {
       await operation();

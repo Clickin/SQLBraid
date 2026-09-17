@@ -15,7 +15,7 @@ const statementBinding = Object.freeze<StatementBindingAdapter>({
       reuse: { effective: "simple", owner: "sqlbraid" },
     });
   },
-})
+});
 
 function statementText(statement: RenderedStatement): string {
   return statement.segments.join("?");
@@ -24,20 +24,46 @@ function statementText(statement: RenderedStatement): string {
 function physical(log: string[]): QueryExecutor {
   return {
     statementBinding,
-    async query<Row>(query: RenderedStatement) { log.push(statementText(query)); return { kind: "rows", rows: [] as readonly Row[] }; },
-    async *stream<Row>(): AsyncGenerator<Row> { throw new Error("BRAID_STREAM_UNSUPPORTED"); },
-    async call(): Promise<DriverRoutineResult> { throw new Error("BRAID_CALL_UNSUPPORTED"); },
-    async begin() { log.push("begin"); }, async commit() { log.push("commit"); }, async rollback() { log.push("rollback"); },
-    async savepoint(name) { log.push(`savepoint:${name}`); },
-    async rollbackTo(name) { log.push(`rollback-to:${name}`); },
-    async releaseSavepoint(name) { log.push(`release:${name}`); },
+    async query<Row>(query: RenderedStatement) {
+      log.push(statementText(query));
+      return { kind: "rows", rows: [] as readonly Row[] };
+    },
+    async *stream<Row>(): AsyncGenerator<Row> {
+      throw new Error("BRAID_STREAM_UNSUPPORTED");
+    },
+    async call(): Promise<DriverRoutineResult> {
+      throw new Error("BRAID_CALL_UNSUPPORTED");
+    },
+    async begin() {
+      log.push("begin");
+    },
+    async commit() {
+      log.push("commit");
+    },
+    async rollback() {
+      log.push("rollback");
+    },
+    async savepoint(name) {
+      log.push(`savepoint:${name}`);
+    },
+    async rollbackTo(name) {
+      log.push(`rollback-to:${name}`);
+    },
+    async releaseSavepoint(name) {
+      log.push(`release:${name}`);
+    },
   };
 }
 
 test("concurrent pooled transactions each retain root escape protection", async () => {
   const firstReady = Promise.withResolvers<void>();
   const secondReady = Promise.withResolvers<void>();
-  const db = createPooledDatabase({ statementBinding, async acquire() { return { ...physical([]), release() {} }; } });
+  const db = createPooledDatabase({
+    statementBinding,
+    async acquire() {
+      return { ...physical([]), release() {} };
+    },
+  });
   await Promise.all([
     db.tx(async () => {
       firstReady.resolve();
@@ -57,10 +83,20 @@ test("begin observer failure rolls back but committed observer failure cannot ro
     const log: string[] = [];
     const failure = new Error("observer failed");
     let fail = true;
-    const db = createDatabase(physical(log), { observers: [{ onEvent(event) {
-      if (fail && event.type === "transaction" && event.phase === phase && event.status === "completed") throw failure;
-    } }] });
-    await assert.rejects(db.tx(async () => undefined), (error) => error === failure);
+    const db = createDatabase(physical(log), {
+      observers: [
+        {
+          onEvent(event) {
+            if (fail && event.type === "transaction" && event.phase === phase && event.status === "completed")
+              throw failure;
+          },
+        },
+      ],
+    });
+    await assert.rejects(
+      db.tx(async () => undefined),
+      (error) => error === failure,
+    );
     assert.deepEqual(log, phase === "begin" ? ["begin", "rollback"] : ["begin", "commit"]);
     fail = false;
     await db.execute(sql`SELECT healthy`);
@@ -73,24 +109,35 @@ test("rollback cleanup observer preserves the primary error and releases the poo
   const cleanup = new Error("transaction rollback cleanup failure");
   const log: string[] = [];
   let releases = 0;
-  const db = createPooledDatabase({
-    statementBinding,
-    async acquire() {
-      return {
-        ...physical(log),
-        release() { releases += 1; },
-      };
-    },
-  }, {
-    observers: [{
-      onEvent(event) {
-        if (event.type === "transaction" && event.phase === "rollback" && event.status === "completed") throw cleanup;
+  const db = createPooledDatabase(
+    {
+      statementBinding,
+      async acquire() {
+        return {
+          ...physical(log),
+          release() {
+            releases += 1;
+          },
+        };
       },
-    }],
-  });
+    },
+    {
+      observers: [
+        {
+          onEvent(event) {
+            if (event.type === "transaction" && event.phase === "rollback" && event.status === "completed")
+              throw cleanup;
+          },
+        },
+      ],
+    },
+  );
 
   await assert.rejects(
-    () => db.tx(async () => { throw primary; }),
+    () =>
+      db.tx(async () => {
+        throw primary;
+      }),
     (error: unknown) => {
       assert.ok(error instanceof AggregateError);
       assert.equal(error.errors[0], primary);
@@ -108,25 +155,44 @@ test("nested observer failures clean savepoints and reject parent or sibling sco
     const log: string[] = [];
     const failure = new Error("savepoint observer failed");
     let failed = false;
-    const db = createDatabase(physical(log), { observers: [{ onEvent(event) {
-      const status = phase === "savepoint" ? "completed" : "requested";
-      if (!failed && event.type === "transaction" && event.phase === phase && event.status === status) {
-        failed = true;
-        throw failure;
-      }
-    } }] });
+    const db = createDatabase(physical(log), {
+      observers: [
+        {
+          onEvent(event) {
+            const status = phase === "savepoint" ? "completed" : "requested";
+            if (!failed && event.type === "transaction" && event.phase === phase && event.status === status) {
+              failed = true;
+              throw failure;
+            }
+          },
+        },
+      ],
+    });
     await db.tx(async (tx) => {
-      await assert.rejects(tx.tx(async () => undefined), (error) => error === failure);
+      await assert.rejects(
+        tx.tx(async () => undefined),
+        (error) => error === failure,
+      );
       await tx.execute(sql`SELECT parent`);
     });
     const savepoint = log.find((entry) => entry.startsWith("savepoint:"))!.slice("savepoint:".length);
-    assert.deepEqual(log, ["begin", `savepoint:${savepoint}`, `rollback-to:${savepoint}`, `release:${savepoint}`, "SELECT parent", "commit"]);
+    assert.deepEqual(log, [
+      "begin",
+      `savepoint:${savepoint}`,
+      `rollback-to:${savepoint}`,
+      `release:${savepoint}`,
+      "SELECT parent",
+      "commit",
+    ]);
   }
   const db = createDatabase(physical([]));
   await db.tx(async (tx) => {
     await tx.tx(async (nested) => {
       await assert.rejects(tx.execute(sql`SELECT parent_escape`), { code: "BRAID_TX_SCOPE" });
-      await assert.rejects(tx.tx(async () => undefined), { code: "BRAID_TX_SCOPE" });
+      await assert.rejects(
+        tx.tx(async () => undefined),
+        { code: "BRAID_TX_SCOPE" },
+      );
       await nested.execute(sql`SELECT nested`);
     });
   });
@@ -134,42 +200,68 @@ test("nested observer failures clean savepoints and reject parent or sibling sco
 
 test("a live transaction stream prevents transaction completion and closes before rollback", async () => {
   const log: string[] = [];
-  const db = createDatabase({ ...physical(log), async *stream<Row>() {
-    try { yield 1 as Row; yield 2 as Row; } finally { log.push("stream-close"); }
-  } });
-  await assert.rejects(db.tx(async (tx) => {
-    const stream = tx.stream(sql.rows`SELECT stream`)[Symbol.asyncIterator]();
-    await stream.next();
-  }), { code: "BRAID_STREAM_SCOPE" });
+  const db = createDatabase({
+    ...physical(log),
+    async *stream<Row>() {
+      try {
+        yield 1 as Row;
+        yield 2 as Row;
+      } finally {
+        log.push("stream-close");
+      }
+    },
+  });
+  await assert.rejects(
+    db.tx(async (tx) => {
+      const stream = tx.stream(sql.rows`SELECT stream`)[Symbol.asyncIterator]();
+      await stream.next();
+    }),
+    { code: "BRAID_STREAM_SCOPE" },
+  );
   assert.deepEqual(log, ["begin", "stream-close", "rollback"]);
   await db.execute(sql`SELECT healthy`);
 });
 
 test("an open session stream rejects transaction re-entry before control I/O", async () => {
-  for (const [pooled, started] of [[false, false], [false, true], [true, false], [true, true]] as const) {
+  for (const [pooled, started] of [
+    [false, false],
+    [false, true],
+    [true, false],
+    [true, true],
+  ] as const) {
     const log: string[] = [];
     let acquires = 0;
     let releases = 0;
     const resource = pooled
       ? createPooledDatabase({
-        statementBinding,
-        async acquire() {
-          acquires += 1;
-          return {
-            ...physical(log),
-            async *stream<Row>() {
-              try { yield 1 as Row; } finally { log.push("stream-close"); }
-            },
-            release() { releases += 1; },
-          };
-        },
-      })
+          statementBinding,
+          async acquire() {
+            acquires += 1;
+            return {
+              ...physical(log),
+              async *stream<Row>() {
+                try {
+                  yield 1 as Row;
+                } finally {
+                  log.push("stream-close");
+                }
+              },
+              release() {
+                releases += 1;
+              },
+            };
+          },
+        })
       : createDatabase({
-        ...physical(log),
-        async *stream<Row>() {
-          try { yield 1 as Row; } finally { log.push("stream-close"); }
-        },
-      });
+          ...physical(log),
+          async *stream<Row>() {
+            try {
+              yield 1 as Row;
+            } finally {
+              log.push("stream-close");
+            }
+          },
+        });
 
     if (!pooled) {
       const rootIterator = resource.stream(sql.rows`SELECT root_stream`)[Symbol.asyncIterator]();
@@ -228,19 +320,21 @@ test("queued parent work rechecks savepoint scope before physical execution", as
       return { kind: "rows", rows: [] as readonly Row[] };
     },
   });
-  await db.tx(async (outer) => outer.session(async (parent) => {
-    const holding = parent.execute(sql`SELECT holding`);
-    await entered.promise;
-    const queued = parent.execute(sql`SELECT escaped`);
-    const rejected = assert.rejects(queued, { code: "BRAID_TX_SCOPE" });
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    const nested = parent.tx(async (inner) => {
-      await inner.execute(sql`SELECT inner`);
-    });
-    release.resolve();
-    await Promise.all([holding, rejected, nested]);
-    await parent.execute(sql`SELECT restored`);
-  }));
+  await db.tx(async (outer) =>
+    outer.session(async (parent) => {
+      const holding = parent.execute(sql`SELECT holding`);
+      await entered.promise;
+      const queued = parent.execute(sql`SELECT escaped`);
+      const rejected = assert.rejects(queued, { code: "BRAID_TX_SCOPE" });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const nested = parent.tx(async (inner) => {
+        await inner.execute(sql`SELECT inner`);
+      });
+      release.resolve();
+      await Promise.all([holding, rejected, nested]);
+      await parent.execute(sql`SELECT restored`);
+    }),
+  );
   assert.equal(log.includes("SELECT escaped"), false);
   assert.equal(log.includes("SELECT inner"), true);
   assert.equal(log.at(-1), "commit");
@@ -252,11 +346,11 @@ test("transaction and session wrappers retain active savepoint scope", async () 
     const base = physical(log);
     const resource = pooled
       ? createPooledDatabase({
-        statementBinding,
-        async acquire() {
-          return { ...base, release() {} };
-        },
-      })
+          statementBinding,
+          async acquire() {
+            return { ...base, release() {} };
+          },
+        })
       : createDatabase(base);
     let leakedTransaction: import("@sqlbraid/core").Database | undefined;
     let leakedSession: import("@sqlbraid/core").Database | undefined;
@@ -298,7 +392,13 @@ test("transaction and session wrappers retain active savepoint scope", async () 
       () => leakedSession!.execute(sql`SELECT closed_session`),
       (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_SESSION_CLOSED",
     );
-    assert.equal(log.some((entry) => entry === "SELECT parent_escape" || entry === "SELECT outer_escape" || entry === "SELECT sibling_escape"), false);
+    assert.equal(
+      log.some(
+        (entry) =>
+          entry === "SELECT parent_escape" || entry === "SELECT outer_escape" || entry === "SELECT sibling_escape",
+      ),
+      false,
+    );
 
     await resource.session(async (session) => {
       await session.tx(async (transaction) => {
@@ -317,6 +417,9 @@ test("transaction and session wrappers retain active savepoint scope", async () 
         });
       });
     });
-    assert.equal(log.some((entry) => entry === "SELECT transaction_session_escape" || entry === "SELECT transaction_escape"), false);
+    assert.equal(
+      log.some((entry) => entry === "SELECT transaction_session_escape" || entry === "SELECT transaction_escape"),
+      false,
+    );
   }
 });

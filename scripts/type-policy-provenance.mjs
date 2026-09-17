@@ -46,7 +46,8 @@ function mappingSortKey(mapping) {
 /** Return the only declaration covered by a TypePolicy provenance hash. */
 export function canonicalPolicyContract(policy) {
   if (!policy || typeof policy !== "object") failure("TYPE_POLICY_SHAPE", "TypePolicy must be an object.");
-  if (typeof policy.id !== "string" || policy.id.length === 0) failure("TYPE_POLICY_ID", "TypePolicy.id must be a non-empty string.");
+  if (typeof policy.id !== "string" || policy.id.length === 0)
+    failure("TYPE_POLICY_ID", "TypePolicy.id must be a non-empty string.");
   if (!Array.isArray(policy.mappings)) failure("TYPE_POLICY_MAPPINGS", `${policy.id}: mappings must be an array.`);
   const mappings = policy.mappings.slice().sort((a, b) => {
     const left = mappingSortKey(a);
@@ -67,17 +68,24 @@ export function typePolicyDigest(policy) {
 }
 
 function validateMapping(policyId, mapping, index) {
-  if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) failure("TYPE_POLICY_MAPPING", `${policyId}: mapping ${index} must be an object.`);
+  if (!mapping || typeof mapping !== "object" || Array.isArray(mapping))
+    failure("TYPE_POLICY_MAPPING", `${policyId}: mapping ${index} must be an object.`);
   for (const key of ["databaseType", "inputType", "outputType"]) {
-    if (typeof mapping[key] !== "string" || mapping[key].length === 0) failure("TYPE_POLICY_MAPPING", `${policyId}: mapping ${index}.${key} must be a non-empty string.`);
+    if (typeof mapping[key] !== "string" || mapping[key].length === 0)
+      failure("TYPE_POLICY_MAPPING", `${policyId}: mapping ${index}.${key} must be a non-empty string.`);
   }
-  if (typeof mapping.nullable !== "boolean") failure("TYPE_POLICY_MAPPING", `${policyId}: mapping ${index}.nullable must be boolean.`);
+  if (typeof mapping.nullable !== "boolean")
+    failure("TYPE_POLICY_MAPPING", `${policyId}: mapping ${index}.nullable must be boolean.`);
   if (mapping.numeric === undefined) return;
   const numeric = mapping.numeric;
-  if (!numeric || typeof numeric !== "object" || Array.isArray(numeric)) failure("TYPE_POLICY_NUMERIC", `${policyId}: mapping ${index}.numeric must be an object.`);
-  if (!NUMERIC_SEMANTICS.has(numeric.semantics)) failure("TYPE_POLICY_NUMERIC", `${policyId}: mapping ${index} has invalid numeric.semantics.`);
-  if (!NUMERIC_REPRESENTATIONS.has(numeric.representation)) failure("TYPE_POLICY_NUMERIC", `${policyId}: mapping ${index} has invalid numeric.representation.`);
-  if (!NUMERIC_FIDELITIES.has(numeric.fidelity)) failure("TYPE_POLICY_NUMERIC", `${policyId}: mapping ${index} has invalid numeric.fidelity.`);
+  if (!numeric || typeof numeric !== "object" || Array.isArray(numeric))
+    failure("TYPE_POLICY_NUMERIC", `${policyId}: mapping ${index}.numeric must be an object.`);
+  if (!NUMERIC_SEMANTICS.has(numeric.semantics))
+    failure("TYPE_POLICY_NUMERIC", `${policyId}: mapping ${index} has invalid numeric.semantics.`);
+  if (!NUMERIC_REPRESENTATIONS.has(numeric.representation))
+    failure("TYPE_POLICY_NUMERIC", `${policyId}: mapping ${index} has invalid numeric.representation.`);
+  if (!NUMERIC_FIDELITIES.has(numeric.fidelity))
+    failure("TYPE_POLICY_NUMERIC", `${policyId}: mapping ${index} has invalid numeric.fidelity.`);
   if (numeric.semantics === "approximate-binary" && numeric.representation !== "number") {
     failure("TYPE_POLICY_NUMERIC", `${policyId}: approximate-binary mappings must use number representation.`);
   }
@@ -117,12 +125,15 @@ export function validateTypePolicy(policy, { expectedHash = policy?.hash, requir
   const seenTypes = new Set();
   contract.mappings.forEach((mapping, index) => {
     validateMapping(contract.id, mapping, index);
-    if (seenTypes.has(mapping.databaseType)) failure("TYPE_POLICY_MAPPING", `${contract.id}: duplicate databaseType ${mapping.databaseType}.`);
+    if (seenTypes.has(mapping.databaseType))
+      failure("TYPE_POLICY_MAPPING", `${contract.id}: duplicate databaseType ${mapping.databaseType}.`);
     seenTypes.add(mapping.databaseType);
   });
-  if (typeof expectedHash !== "string" || !HASH_RE.test(expectedHash)) failure("TYPE_POLICY_HASH", `${contract.id}: hash must be a lowercase SHA-256 digest.`);
+  if (typeof expectedHash !== "string" || !HASH_RE.test(expectedHash))
+    failure("TYPE_POLICY_HASH", `${contract.id}: hash must be a lowercase SHA-256 digest.`);
   const digest = typePolicyDigest(policy);
-  if (digest !== expectedHash) failure("TYPE_POLICY_HASH_MISMATCH", `${contract.id}: expected ${expectedHash}, computed ${digest}.`);
+  if (digest !== expectedHash)
+    failure("TYPE_POLICY_HASH_MISMATCH", `${contract.id}: expected ${expectedHash}, computed ${digest}.`);
   return { id: contract.id, hash: digest, mappings: contract.mappings };
 }
 
@@ -136,24 +147,44 @@ function isDescriptor(value) {
 
 function addRecord(records, policy, metadata) {
   if (!isPolicy(policy)) return;
-  records.push({ packageName: metadata.packageName, exportName: metadata.exportName, sourcePath: metadata.sourcePath, profileId: metadata.profileId ?? policy.id, policy, ...(metadata.profile ? { profile: metadata.profile } : {}) });
+  records.push({
+    packageName: metadata.packageName,
+    exportName: metadata.exportName,
+    sourcePath: metadata.sourcePath,
+    profileId: metadata.profileId ?? policy.id,
+    policy,
+    ...(metadata.profile ? { profile: metadata.profile } : {}),
+  });
 }
 
 function collectExport(value, metadata, records, seen = new WeakSet()) {
   if (!value || typeof value !== "object") return;
   if (isPolicy(value)) addRecord(records, value, metadata);
   if (isDescriptor(value)) {
-    if (!Object.isFrozen(value)) failure("TYPE_POLICY_IMMUTABLE", `${metadata.packageName}/${metadata.exportName}: profile descriptor must be frozen.`);
-    if (value.connectionOptions && !Object.isFrozen(value.connectionOptions)) failure("TYPE_POLICY_IMMUTABLE", `${metadata.packageName}/${metadata.exportName}: connection options must be frozen.`);
+    if (!Object.isFrozen(value))
+      failure(
+        "TYPE_POLICY_IMMUTABLE",
+        `${metadata.packageName}/${metadata.exportName}: profile descriptor must be frozen.`,
+      );
+    if (value.connectionOptions && !Object.isFrozen(value.connectionOptions))
+      failure(
+        "TYPE_POLICY_IMMUTABLE",
+        `${metadata.packageName}/${metadata.exportName}: connection options must be frozen.`,
+      );
     addRecord(records, value.typePolicy, { ...metadata, profileId: value.id, profile: value });
   }
   if (seen.has(value)) return;
   seen.add(value);
   if (Array.isArray(value)) {
     if (/representationProfiles/u.test(metadata.exportName) && !Object.isFrozen(value)) {
-      failure("TYPE_POLICY_IMMUTABLE", `${metadata.packageName}/${metadata.exportName}: representationProfiles must be frozen.`);
+      failure(
+        "TYPE_POLICY_IMMUTABLE",
+        `${metadata.packageName}/${metadata.exportName}: representationProfiles must be frozen.`,
+      );
     }
-    value.forEach((item, index) => collectExport(item, { ...metadata, exportName: `${metadata.exportName}[${index}]` }, records, seen));
+    value.forEach((item, index) =>
+      collectExport(item, { ...metadata, exportName: `${metadata.exportName}[${index}]` }, records, seen),
+    );
   } else {
     for (const [key, child] of Object.entries(value)) {
       if (key === "mappings" || key === "numeric") continue;
@@ -177,8 +208,14 @@ async function loadSourceModule(packageName, root) {
     const coreOut = join(temp, "core.mjs");
     const authoringOut = join(temp, "authoring-modules.mjs");
     const capabilitiesOut = join(temp, "capabilities.mjs");
-    await writeFile(authoringOut, ts.transpileModule(authoringSource, { compilerOptions, fileName: authoringPath }).outputText);
-    await writeFile(capabilitiesOut, ts.transpileModule(capabilitiesSource, { compilerOptions, fileName: capabilitiesPath }).outputText);
+    await writeFile(
+      authoringOut,
+      ts.transpileModule(authoringSource, { compilerOptions, fileName: authoringPath }).outputText,
+    );
+    await writeFile(
+      capabilitiesOut,
+      ts.transpileModule(capabilitiesSource, { compilerOptions, fileName: capabilitiesPath }).outputText,
+    );
     let coreJavaScript = ts.transpileModule(coreSource, { compilerOptions, fileName: corePath }).outputText;
     coreJavaScript = coreJavaScript
       .replaceAll('"./authoring-modules.js"', JSON.stringify(pathToFileURL(authoringOut).href))
@@ -188,7 +225,9 @@ async function loadSourceModule(packageName, root) {
     await writeFile(coreOut, coreJavaScript);
     const policyOut = join(temp, `${packageName}.mjs`);
     let policyJavaScript = ts.transpileModule(source, { compilerOptions, fileName: sourcePath }).outputText;
-    policyJavaScript = policyJavaScript.replaceAll('"@sqlbraid/core"', JSON.stringify(pathToFileURL(coreOut).href)).replaceAll("'@sqlbraid/core'", JSON.stringify(pathToFileURL(coreOut).href));
+    policyJavaScript = policyJavaScript
+      .replaceAll('"@sqlbraid/core"', JSON.stringify(pathToFileURL(coreOut).href))
+      .replaceAll("'@sqlbraid/core'", JSON.stringify(pathToFileURL(coreOut).href));
     await writeFile(policyOut, policyJavaScript);
     const module = await import(`${pathToFileURL(policyOut).href}?source=${Date.now()}`);
     return { module, sourcePath };
@@ -204,11 +243,23 @@ export async function loadFirstPartyPolicies({ root = scriptRoot, packages = FIR
     const { module, sourcePath } = await loadSourceModule(packageName, root);
     for (const [exportName, value] of Object.entries(module)) {
       if (typeof value === "function" && /typePolicyFor(?:Profile|[A-Z].*Profile)$/u.test(exportName)) {
-        for (const json of PROFILE_VALUES) for (const temporal of PROFILE_VALUES) {
-          let selected;
-          try { selected = value({ json, temporal }); } catch (error) { failure("TYPE_POLICY_PROFILE", `${packageName}/${exportName}(${json},${temporal}) failed: ${error.message}`); }
-          collectExport(selected, { packageName, exportName: `${exportName}(${json},${temporal})`, sourcePath, profileId: selected?.id }, records);
-        }
+        for (const json of PROFILE_VALUES)
+          for (const temporal of PROFILE_VALUES) {
+            let selected;
+            try {
+              selected = value({ json, temporal });
+            } catch (error) {
+              failure(
+                "TYPE_POLICY_PROFILE",
+                `${packageName}/${exportName}(${json},${temporal}) failed: ${error.message}`,
+              );
+            }
+            collectExport(
+              selected,
+              { packageName, exportName: `${exportName}(${json},${temporal})`, sourcePath, profileId: selected?.id },
+              records,
+            );
+          }
       } else {
         collectExport(value, { packageName, exportName, sourcePath }, records);
       }

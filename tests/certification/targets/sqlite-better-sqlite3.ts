@@ -1,6 +1,10 @@
 import { createRequire } from "node:module";
 import type { CertificationFixture, CertificationTarget } from "../types.js";
-import { createBetterSqlite3Database, type BetterSqlite3DatabaseLike, type BetterSqlite3StatementLike } from "@sqlbraid/sqlite/better-sqlite3";
+import {
+  createBetterSqlite3Database,
+  type BetterSqlite3DatabaseLike,
+  type BetterSqlite3StatementLike,
+} from "@sqlbraid/sqlite/better-sqlite3";
 import {
   createSqliteFixture,
   sqliteCapabilities,
@@ -9,7 +13,9 @@ import {
   type SqliteFixtureOptions,
 } from "./sqlite-fixture.js";
 
-const BetterSqlite3 = createRequire(import.meta.url)("better-sqlite3") as new (filename: string) => BetterSqlite3DatabaseLike & { close(): void; exec(sql: string): unknown };
+const BetterSqlite3 = createRequire(import.meta.url)("better-sqlite3") as new (
+  filename: string,
+) => BetterSqlite3DatabaseLike & { close(): void; exec(sql: string): unknown };
 
 function createFixture(): Promise<CertificationFixture> {
   const native = new BetterSqlite3(":memory:");
@@ -18,7 +24,16 @@ function createFixture(): Promise<CertificationFixture> {
   native.exec("INSERT INTO cert_sentinel (id, marker) VALUES (1, 'untouched')");
   native.exec("CREATE TEMP TABLE cert_identity (id TEXT NOT NULL)");
   native.exec("INSERT INTO temp.cert_identity (id) VALUES ('better-sqlite3-native-memory')");
-  const stats: SqliteStats = { ready: 0, result: 0, streamStarts: 0, streamEnds: 0, iteratorReturns: 0, streamReleases: 0, activeStreams: 0, nativeOperations: 0 };
+  const stats: SqliteStats = {
+    ready: 0,
+    result: 0,
+    streamStarts: 0,
+    streamEnds: 0,
+    iteratorReturns: 0,
+    streamReleases: 0,
+    activeStreams: 0,
+    nativeOperations: 0,
+  };
   const observedNative: BetterSqlite3DatabaseLike = {
     prepare(sqlText: string): BetterSqlite3StatementLike {
       stats.nativeOperations += 1;
@@ -52,7 +67,9 @@ function createFixture(): Promise<CertificationFixture> {
                 }
               }
             },
-            [Symbol.iterator]() { return this; },
+            [Symbol.iterator]() {
+              return this;
+            },
           };
         },
       };
@@ -63,14 +80,16 @@ function createFixture(): Promise<CertificationFixture> {
     },
   };
   const db = createBetterSqlite3Database(observedNative, {
-    observers: [{
-      onEvent(event) {
-        if (event.type === "bulk:ready") stats.ready += 1;
-        if (event.type === "bulk:result") stats.result += 1;
-        if (event.type === "stream:start") stats.streamStarts += 1;
-        if (event.type === "stream:end") stats.streamEnds += 1;
+    observers: [
+      {
+        onEvent(event) {
+          if (event.type === "bulk:ready") stats.ready += 1;
+          if (event.type === "bulk:result") stats.result += 1;
+          if (event.type === "stream:start") stats.streamStarts += 1;
+          if (event.type === "stream:end") stats.streamEnds += 1;
+        },
       },
-    }],
+    ],
   });
   const transactionCleanup = async (): Promise<void> => {
     const probeNative = new BetterSqlite3(":memory:");
@@ -87,19 +106,35 @@ function createFixture(): Promise<CertificationFixture> {
       } catch (error) {
         caught = error;
       }
-      const nativeRollbackErrors = caught instanceof AggregateError
-        ? caught.errors.filter((error) => error !== primary && error instanceof Error && error.message === "The database connection is not open")
-        : [];
-      if (!(caught instanceof AggregateError) || !caught.errors.includes(primary) || nativeRollbackErrors.length === 0) {
-        throw new Error("better-sqlite3 transaction cleanup did not aggregate the native rollback failure.", { cause: caught });
+      const nativeRollbackErrors =
+        caught instanceof AggregateError
+          ? caught.errors.filter(
+              (error) =>
+                error !== primary && error instanceof Error && error.message === "The database connection is not open",
+            )
+          : [];
+      if (
+        !(caught instanceof AggregateError) ||
+        !caught.errors.includes(primary) ||
+        nativeRollbackErrors.length === 0
+      ) {
+        throw new Error("better-sqlite3 transaction cleanup did not aggregate the native rollback failure.", {
+          cause: caught,
+        });
       }
     } finally {
-      try { probeNative.close(); } catch { /* already closed by the fault */ }
+      try {
+        probeNative.close();
+      } catch {
+        /* already closed by the fault */
+      }
     }
   };
   const options: SqliteFixtureOptions = {
     db,
-    close: async () => { native.close(); },
+    close: async () => {
+      native.close();
+    },
     physicalSessionId: "better-sqlite3-native-memory",
     capabilities: sqliteCapabilities(),
     expectedTransactionOptions: sqliteTransactionOptions(),

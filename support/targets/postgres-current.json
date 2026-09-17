@@ -15,9 +15,7 @@
     "stream": "pg-cursor",
     "routine": "SQL CALL; OUT row and transaction-owned refcursor FETCH",
     "bulk": "prepared-loop",
-    "exclusions": [
-      "Only the PostgreSQL capability fixture is covered by this current target's gate"
-    ],
+    "exclusions": ["Only the PostgreSQL capability fixture is covered by this current target's gate"],
     "requiredOptions": {
       "parserProfile": {
         "json": "text",
@@ -85,39 +83,27 @@
   "capabilities": {
     "sql.native-transparency": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.sql.native-transparency"
-      ]
+      "testIds": ["postgres.sql.native-transparency"]
     },
     "sql.generated-structure": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.sql.generated-structure"
-      ]
+      "testIds": ["postgres.sql.generated-structure"]
     },
     "numeric.exact-integer": {
       "status": "guaranteed",
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "postgres.numeric.exact-integer"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.numeric.exact-integer"],
+      "driverRawRepresentations": ["string"]
     },
     "numeric.exact-decimal": {
       "status": "guaranteed",
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "postgres.numeric.exact-decimal"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.numeric.exact-decimal"],
+      "driverRawRepresentations": ["string"]
     },
     "numeric.approximate-float": {
       "status": "guarded",
@@ -125,84 +111,52 @@
       "semantics": "approximate-binary",
       "representation": "number",
       "fidelity": "guarded",
-      "testIds": [
-        "postgres.numeric.transport"
-      ],
-      "driverRawRepresentations": [
-        "number"
-      ]
+      "testIds": ["postgres.numeric.transport"],
+      "driverRawRepresentations": ["number"]
     },
     "numeric.bind-exact": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.numeric.transport"
-      ]
+      "testIds": ["postgres.numeric.transport"]
     },
     "numeric.aggregate": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.numeric.transport"
-      ]
+      "testIds": ["postgres.numeric.transport"]
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.numeric.transport"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.numeric.transport"],
+      "driverRawRepresentations": ["string"]
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.data.temporal-lossless"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.data.temporal-lossless"],
+      "driverRawRepresentations": ["string"]
     },
     "data.binary": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.data.binary"
-      ],
-      "driverRawRepresentations": [
-        "Buffer"
-      ]
+      "testIds": ["postgres.data.binary"],
+      "driverRawRepresentations": ["Buffer"]
     },
     "data.uuid": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.data.uuid"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["postgres.data.uuid"],
+      "driverRawRepresentations": ["string"]
     },
     "dml.insert-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.dml.insert-returning"
-      ]
+      "testIds": ["postgres.dml.insert-returning"]
     },
     "dml.upsert-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.dml.upsert-returning"
-      ]
+      "testIds": ["postgres.dml.upsert-returning"]
     },
     "dml.update-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.dml.update-returning"
-      ]
+      "testIds": ["postgres.dml.update-returning"]
     },
     "dml.delete-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "postgres.dml.delete-returning"
-      ]
+      "testIds": ["postgres.dml.delete-returning"]
     }
   },
   "evidence": {

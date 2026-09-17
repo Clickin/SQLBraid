@@ -3,10 +3,6 @@
   "version": "1.0.0-rc.2",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=22.18.0"
-  },
-  "packageManager": "pnpm@12.3.4",
   "scripts": {
     "build:packages": "tsdown && node scripts/validate-runtime-floor.mjs --dist",
     "build:vscode": "pnpm --dir extensions/vscode run build",
@@ -110,5 +106,9 @@
     "typescript": "5.9.3",
     "vite": "8.3.0",
     "vitest": "5.0.0"
-  }
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "packageManager": "pnpm@12.3.4"
 }

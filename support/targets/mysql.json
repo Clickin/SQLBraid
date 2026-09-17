@@ -89,64 +89,44 @@
   "capabilities": {
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.rc-session"
-      ]
+      "testIds": ["mysql.execution.rc-session"]
     },
     "transaction.read-only": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.rc-session"
-      ]
+      "testIds": ["mysql.execution.rc-session"]
     },
     "transaction.isolation.read-uncommitted": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.rc-isolation"
-      ]
+      "testIds": ["mysql.execution.rc-isolation"]
     },
     "transaction.isolation.read-committed": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.rc-isolation"
-      ]
+      "testIds": ["mysql.execution.rc-isolation"]
     },
     "transaction.isolation.repeatable-read": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.rc-isolation"
-      ]
+      "testIds": ["mysql.execution.rc-isolation"]
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.rc-isolation"
-      ]
+      "testIds": ["mysql.execution.rc-isolation"]
     },
     "statement.cancel": {
       "status": "guarded",
       "conditionCode": "mysql2.physical-connection-destroy",
-      "testIds": [
-        "mysql.execution.rc-cancel"
-      ]
+      "testIds": ["mysql.execution.rc-cancel"]
     },
     "routine.call": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.routine.resultsets"
-      ]
+      "testIds": ["mysql.routine.resultsets"]
     },
     "sql.native-transparency": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.sql.native-transparency"
-      ]
+      "testIds": ["mysql.sql.native-transparency"]
     },
     "sql.generated-structure": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.sql.generated-structure"
-      ]
+      "testIds": ["mysql.sql.generated-structure"]
     },
     "numeric.exact-integer": {
       "status": "guarded",
@@ -154,141 +134,89 @@
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "guarded",
-      "testIds": [
-        "mysql.numeric.exact-integer"
-      ],
-      "driverRawRepresentations": [
-        "number",
-        "string"
-      ]
+      "testIds": ["mysql.numeric.exact-integer"],
+      "driverRawRepresentations": ["number", "string"]
     },
     "numeric.exact-decimal": {
       "status": "guaranteed",
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "mysql.numeric.exact-decimal"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["mysql.numeric.exact-decimal"],
+      "driverRawRepresentations": ["string"]
     },
     "numeric.approximate-float": {
       "status": "guaranteed",
       "semantics": "approximate-binary",
       "representation": "number",
       "fidelity": "lossless",
-      "testIds": [
-        "mysql.numeric.approximate-float"
-      ],
-      "driverRawRepresentations": [
-        "number"
-      ]
+      "testIds": ["mysql.numeric.approximate-float"],
+      "driverRawRepresentations": ["number"]
     },
     "numeric.bind-exact": {
       "status": "guarded",
       "conditionCode": "mysql2.exact-numeric-profile",
-      "testIds": [
-        "mysql.numeric.exact-bind"
-      ]
+      "testIds": ["mysql.numeric.exact-bind"]
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.data.json-lossless-text"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["mysql.data.json-lossless-text"],
+      "driverRawRepresentations": ["string"]
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.data.temporal-lossless"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["mysql.data.temporal-lossless"],
+      "driverRawRepresentations": ["string"]
     },
     "data.binary": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.data.binary"
-      ],
-      "driverRawRepresentations": [
-        "Buffer",
-        "Uint8Array"
-      ]
+      "testIds": ["mysql.data.binary"],
+      "driverRawRepresentations": ["Buffer", "Uint8Array"]
     },
     "data.uuid": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.data.uuid"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["mysql.data.uuid"],
+      "driverRawRepresentations": ["string"]
     },
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.result.rows"
-      ]
+      "testIds": ["mysql.result.rows"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.result.command"
-      ]
+      "testIds": ["mysql.result.command"]
     },
     "result.multiple-sets": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.result.multiple-sets"
-      ]
+      "testIds": ["mysql.result.multiple-sets"]
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.result.standard-schema"
-      ]
+      "testIds": ["mysql.result.standard-schema"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.prepared"
-      ]
+      "testIds": ["mysql.execution.prepared"]
     },
     "statement.stream": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.stream"
-      ]
+      "testIds": ["mysql.execution.stream"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.bulk"
-      ]
+      "testIds": ["mysql.execution.bulk"]
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.transaction"
-      ]
+      "testIds": ["mysql.execution.transaction"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.execution.savepoint"
-      ]
+      "testIds": ["mysql.execution.savepoint"]
     },
     "routine.result-sets": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.routine.resultsets"
-      ]
+      "testIds": ["mysql.routine.resultsets"]
     },
     "routine.out": {
       "status": "unsupported",
@@ -308,27 +236,19 @@
     },
     "metadata.identity": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.metadata.identity"
-      ]
+      "testIds": ["mysql.metadata.identity"]
     },
     "metadata.generated": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.metadata.generated"
-      ]
+      "testIds": ["mysql.metadata.generated"]
     },
     "metadata.routines": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.metadata.routines"
-      ]
+      "testIds": ["mysql.metadata.routines"]
     },
     "metadata.types": {
       "status": "guaranteed",
-      "testIds": [
-        "mysql.metadata.types"
-      ]
+      "testIds": ["mysql.metadata.types"]
     },
     "dml.insert-returning": {
       "status": "unsupported",

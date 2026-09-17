@@ -11,9 +11,11 @@ import { validateRuntimeCompatibility } from "../../scripts/validate-runtime-com
 const execFile = promisify(execFileCallback);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const targets = process.argv.slice(2);
-if (!targets.length || targets.some((target) => !["node", "bun", "deno"].includes(target))) throw new Error("Usage: node tests/scripts/runtime-portability.mjs node|bun|deno [...]");
+if (!targets.length || targets.some((target) => !["node", "bun", "deno"].includes(target)))
+  throw new Error("Usage: node tests/scripts/runtime-portability.mjs node|bun|deno [...]");
 const revision = (await execFile("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
-if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== revision) throw new Error("Runtime evidence must describe the checked-out CI SHA.");
+if (process.env.GITHUB_SHA && process.env.GITHUB_SHA !== revision)
+  throw new Error("Runtime evidence must describe the checked-out CI SHA.");
 const workspace = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const runtimeCompatibility = await validateRuntimeCompatibility({ root });
 const postgresTarget = JSON.parse(await readFile(join(root, "support/targets/postgres.json"), "utf8"));
@@ -23,7 +25,8 @@ const temp = await realpath(await mkdtemp(join(tmpdir(), "sqlbraid-portability-"
 const consumer = join(temp, "consumer");
 const containers = [];
 const databaseUrls = { postgres: process.env.SQLBRAID_POSTGRES_URL, mysql: process.env.SQLBRAID_MYSQL_URL };
-const existingMariaDbUrl = process.env.SQLBRAID_BUN_SQL_MARIADB_URL ?? process.env.SQLBRAID_MARIADB_URL ?? process.env.MARIADB_URL;
+const existingMariaDbUrl =
+  process.env.SQLBRAID_BUN_SQL_MARIADB_URL ?? process.env.SQLBRAID_MARIADB_URL ?? process.env.MARIADB_URL;
 if (existingMariaDbUrl) databaseUrls.mariadb = existingMariaDbUrl;
 function redact(text) {
   for (const url of Object.values(databaseUrls)) if (url) text = text.replaceAll(url, "<REDACTED>");
@@ -36,14 +39,20 @@ async function run(command, args, cwd = root, env = process.env) {
     if (result.stderr.trim()) console.error(redact(result.stderr.trim()));
     return result;
   } catch (error) {
-    throw new Error(redact(`${command} failed (${error.code ?? error.signal}):\n${error.stdout ?? ""}\n${error.stderr ?? ""}`));
+    throw new Error(
+      redact(`${command} failed (${error.code ?? error.signal}):\n${error.stdout ?? ""}\n${error.stderr ?? ""}`),
+    );
   }
 }
 try {
   if (process.env.SQLBRAID_USE_PREBUILT_DIST !== "true") await run("pnpm", ["run", "build:packages"]);
   await auditRuntime(join(root, "packages"), "src", { packages: runtimeAuditPackages });
   await mkdir(consumer);
-  const dependencies = { pg: workspace.devDependencies.pg, "pg-cursor": workspace.devDependencies["pg-cursor"], mysql2: workspace.devDependencies.mysql2 };
+  const dependencies = {
+    pg: workspace.devDependencies.pg,
+    "pg-cursor": workspace.devDependencies["pg-cursor"],
+    mysql2: workspace.devDependencies.mysql2,
+  };
   for (const name of runtimePackages) {
     await run("pnpm", ["--dir", join(root, "packages", name), "pack", "--pack-destination", temp]);
     const manifest = JSON.parse(await readFile(join(root, "packages", name, "package.json"), "utf8"));
@@ -56,10 +65,17 @@ try {
     }
     dependencies[manifest.name] = `file:${join(temp, tarball)}`;
   }
-  await writeFile(join(consumer, "package.json"), JSON.stringify({ name: "sqlbraid-runtime-consumer", private: true, type: "module", dependencies }));
+  await writeFile(
+    join(consumer, "package.json"),
+    JSON.stringify({ name: "sqlbraid-runtime-consumer", private: true, type: "module", dependencies }),
+  );
   await run("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], consumer);
   const installedPackages = await readdir(join(consumer, "node_modules/@sqlbraid"));
-  if (["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode", "opentelemetry"].some((name) => installedPackages.includes(name))) {
+  if (
+    ["metadata", "codegen", "tooling", "compiler", "vite", "cli", "language-server", "vscode", "opentelemetry"].some(
+      (name) => installedPackages.includes(name),
+    )
+  ) {
     throw new Error("Runtime-only installation pulled in development tooling or optional integrations");
   }
   const topLevelPackages = await readdir(join(consumer, "node_modules"));
@@ -71,33 +87,58 @@ try {
   }
   console.info("PASS runtime-only npm install without metadata, codegen, tooling, CLI, LSP or editor");
   const core = JSON.parse(await readFile(join(consumer, "node_modules/@sqlbraid/core/package.json"), "utf8"));
-  if (!core.dependencies?.["@standard-schema/spec"]) throw new Error("Standard Schema is not a regular packed dependency");
+  if (!core.dependencies?.["@standard-schema/spec"])
+    throw new Error("Standard Schema is not a regular packed dependency");
   await readFile(join(consumer, "node_modules/@standard-schema/spec/package.json"));
   await auditRuntime(join(consumer, "node_modules/@sqlbraid"), "dist", { packages: runtimePackages });
-  await writeFile(join(consumer, "types.ts"), [
-    'import type { ExecutionEvent } from "@sqlbraid/core";',
-    'import { sql } from "@sqlbraid/template";',
-    'import { createDatabase } from "@sqlbraid/runtime";',
-    'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
-    'import { createMysql2Database } from "@sqlbraid/mysql/mysql2";',
-    'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
-    'import { createBunSqlDatabase } from "@sqlbraid/bun-sql";',
-    'import { sql as oracle, oracleParameter } from "@sqlbraid/oracle";',
-    'import { sql as mssql, mssqlParameter } from "@sqlbraid/mssql";',
-    'declare const event: ExecutionEvent;',
-    'if (event.type === "query:result") { const ms: number = event.durationMs; void ms; }',
-    'const oracleHint = oracleParameter.number();',
-    'const mssqlHint = mssqlParameter.nvarchar(40);',
-    'void [sql, createDatabase, createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createBunSqlDatabase, oracle, mssql, oracleHint, mssqlHint];',
-  ].join("\n"));
-  await writeFile(join(consumer, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true, noEmit: true, types: [], target: "ES2024", module: "NodeNext", moduleResolution: "NodeNext" }, files: ["types.ts"] }));
-  await run(process.execPath, [join(root, "node_modules/typescript/bin/tsc"), "-p", join(consumer, "tsconfig.json")], consumer);
-  for (const script of ["runtime-smoke.mjs", "runtime-driver-smoke.mjs"]) await copyFile(join(root, "tests", "scripts", script), join(consumer, script));
+  await writeFile(
+    join(consumer, "types.ts"),
+    [
+      'import type { ExecutionEvent } from "@sqlbraid/core";',
+      'import { sql } from "@sqlbraid/template";',
+      'import { createDatabase } from "@sqlbraid/runtime";',
+      'import { createPgDatabase } from "@sqlbraid/postgres/pg";',
+      'import { createMysql2Database } from "@sqlbraid/mysql/mysql2";',
+      'import { createNodeSqliteDatabase } from "@sqlbraid/sqlite/node-sqlite";',
+      'import { createBunSqlDatabase } from "@sqlbraid/bun-sql";',
+      'import { sql as oracle, oracleParameter } from "@sqlbraid/oracle";',
+      'import { sql as mssql, mssqlParameter } from "@sqlbraid/mssql";',
+      "declare const event: ExecutionEvent;",
+      'if (event.type === "query:result") { const ms: number = event.durationMs; void ms; }',
+      "const oracleHint = oracleParameter.number();",
+      "const mssqlHint = mssqlParameter.nvarchar(40);",
+      "void [sql, createDatabase, createPgDatabase, createMysql2Database, createNodeSqliteDatabase, createBunSqlDatabase, oracle, mssql, oracleHint, mssqlHint];",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(consumer, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        types: [],
+        target: "ES2024",
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+      },
+      files: ["types.ts"],
+    }),
+  );
+  await run(
+    process.execPath,
+    [join(root, "node_modules/typescript/bin/tsc"), "-p", join(consumer, "tsconfig.json")],
+    consumer,
+  );
+  for (const script of ["runtime-smoke.mjs", "runtime-driver-smoke.mjs"])
+    await copyFile(join(root, "tests", "scripts", script), join(consumer, script));
   await copyFile(join(root, "tests", "db", "deno", "packed-runtime.test.mjs"), join(consumer, "deno-runtime.test.mjs"));
   await copyFile(join(root, "tests", "scripts", "bun-sql-matrix.mjs"), join(consumer, "bun-sql-matrix.mjs"));
   await mkdir(join(consumer, "support", "targets"), { recursive: true });
   for (const dialect of ["postgres", "mysql", "mariadb", "sqlite"]) {
-    await copyFile(join(root, "support", "targets", `${dialect}.json`), join(consumer, "support", "targets", `${dialect}.json`));
+    await copyFile(
+      join(root, "support", "targets", `${dialect}.json`),
+      join(consumer, "support", "targets", `${dialect}.json`),
+    );
   }
   await writeFile(join(consumer, "deno.json"), JSON.stringify({ nodeModulesDir: "manual" }));
   if (!databaseUrls.postgres) {
@@ -130,7 +171,9 @@ try {
     containers.push(container);
     databaseUrls.mariadb = `mysql://sqlbraid:sqlbraid@127.0.0.1:${container.getMappedPort(3306)}/sqlbraid`;
   }
-  await writeFile(join(consumer, "entry.mjs"), `import assert from "node:assert/strict";
+  await writeFile(
+    join(consumer, "entry.mjs"),
+    `import assert from "node:assert/strict";
 import process from "node:process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -218,7 +261,8 @@ if (!process.versions.bun) {
   assert.equal(sqlite.profile, "sqlite-exact-string");
   await record("sqlite-" + (sqlite.runtime?.id ?? "unknown"), sqlite);
 }
-`);
+`,
+  );
   const env = {
     ...process.env,
     SQLBRAID_POSTGRES_URL: databaseUrls.postgres,
@@ -235,8 +279,24 @@ if (!process.versions.bun) {
     ...(databaseUrls.mariadb ? { SQLBRAID_BUN_SQL_MARIADB_URL: databaseUrls.mariadb } : {}),
   };
   for (const target of targets) {
-    console.info(`Runtime matrix: ${target}; pg ${dependencies.pg}; mysql2 ${dependencies.mysql2}; PostgreSQL 16.4 / MySQL 8.4.2 test services`);
-    const args = target === "deno" ? ["run", "--no-prompt", "--allow-read=" + consumer, "--allow-write=" + consumer, "--allow-env=SQLBRAID_*,PG*,NODE_*,USER,USERNAME,TZ", "--allow-net=" + Object.values(databaseUrls).map((url) => new URL(url).host).join(","), "entry.mjs"] : ["entry.mjs"];
+    console.info(
+      `Runtime matrix: ${target}; pg ${dependencies.pg}; mysql2 ${dependencies.mysql2}; PostgreSQL 16.4 / MySQL 8.4.2 test services`,
+    );
+    const args =
+      target === "deno"
+        ? [
+            "run",
+            "--no-prompt",
+            "--allow-read=" + consumer,
+            "--allow-write=" + consumer,
+            "--allow-env=SQLBRAID_*,PG*,NODE_*,USER,USERNAME,TZ",
+            "--allow-net=" +
+              Object.values(databaseUrls)
+                .map((url) => new URL(url).host)
+                .join(","),
+            "entry.mjs",
+          ]
+        : ["entry.mjs"];
     if (target === "bun") {
       await run("bun", ["bun-sql-matrix.mjs"], consumer, {
         ...env,
@@ -246,32 +306,54 @@ if (!process.versions.bun) {
     }
     if (target === "deno") {
       const denoObservationDirectory = join(consumer, "runtime-observations");
-      await run("deno", [
-        "test",
-        "--no-prompt",
-        "--allow-read=" + consumer,
-        "--allow-write=" + consumer,
-        "--allow-env=SQLBRAID_*,PG*,NODE_*,USER,USERNAME,TZ",
-        "--allow-net=" + Object.values(databaseUrls).map((url) => new URL(url).host).join(","),
-        "deno-runtime.test.mjs",
-      ], consumer, {
-        ...env,
-        SQLBRAID_RUNTIME_TARGET: target,
-        SQLBRAID_DENO_OBSERVATIONS_DIR: denoObservationDirectory,
-      });
+      await run(
+        "deno",
+        [
+          "test",
+          "--no-prompt",
+          "--allow-read=" + consumer,
+          "--allow-write=" + consumer,
+          "--allow-env=SQLBRAID_*,PG*,NODE_*,USER,USERNAME,TZ",
+          "--allow-net=" +
+            Object.values(databaseUrls)
+              .map((url) => new URL(url).host)
+              .join(","),
+          "deno-runtime.test.mjs",
+        ],
+        consumer,
+        {
+          ...env,
+          SQLBRAID_RUNTIME_TARGET: target,
+          SQLBRAID_DENO_OBSERVATIONS_DIR: denoObservationDirectory,
+        },
+      );
       const denoTestIds = ["deno-postgres.data.profile", "deno-mysql.data.profile", "deno-sqlite.data.profile"];
-      const denoObservations = await Promise.all(denoTestIds.map(async (testId) => JSON.parse(await readFile(join(denoObservationDirectory, `${testId}.json`), "utf8"))));
-      await writeFile(join(denoObservationDirectory, "deno-runtime-tests.json"), `${JSON.stringify({
-        format: "sqlbraid-runtime-tests",
-        version: 1,
-        commit: revision,
-        run: process.env.GITHUB_RUN_ID ?? null,
-        runtime: denoObservations[0]?.runtime ?? { id: "deno", version: "2.9.3" },
-        testIds: denoTestIds,
-        observations: denoObservations,
-      }, null, 2)}\n`);
+      const denoObservations = await Promise.all(
+        denoTestIds.map(async (testId) =>
+          JSON.parse(await readFile(join(denoObservationDirectory, `${testId}.json`), "utf8")),
+        ),
+      );
+      await writeFile(
+        join(denoObservationDirectory, "deno-runtime-tests.json"),
+        `${JSON.stringify(
+          {
+            format: "sqlbraid-runtime-tests",
+            version: 1,
+            commit: revision,
+            run: process.env.GITHUB_RUN_ID ?? null,
+            runtime: denoObservations[0]?.runtime ?? { id: "deno", version: "2.9.3" },
+            testIds: denoTestIds,
+            observations: denoObservations,
+          },
+          null,
+          2,
+        )}\n`,
+      );
     }
-    await run(target === "node" ? process.execPath : target, args, consumer, { ...env, SQLBRAID_RUNTIME_TARGET: target });
+    await run(target === "node" ? process.execPath : target, args, consumer, {
+      ...env,
+      SQLBRAID_RUNTIME_TARGET: target,
+    });
     const evidenceDir = process.env.SQLBRAID_SUPPORT_EVIDENCE_DIR;
     if (evidenceDir) {
       await mkdir(evidenceDir, { recursive: true });

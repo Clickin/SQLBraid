@@ -88,52 +88,36 @@
   "capabilities": {
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "transaction.read-only": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "transaction.isolation.read-uncommitted": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "transaction.isolation.read-committed": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "transaction.isolation.repeatable-read": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "statement.cancel": {
       "status": "guarded",
       "conditionCode": "mysql2.physical-connection-destroy",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "routine.call": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "numeric.exact-integer": {
       "status": "guarded",
@@ -141,91 +125,58 @@
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "guarded",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "number",
-        "string"
-      ]
+      "testIds": ["deno-mysql.data.profile"],
+      "driverRawRepresentations": ["number", "string"]
     },
     "numeric.exact-decimal": {
       "status": "guaranteed",
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["deno-mysql.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["deno-mysql.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["deno-mysql.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "statement.stream": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     },
     "routine.out": {
       "status": "unsupported",
@@ -241,9 +192,7 @@
     },
     "routine.result-sets": {
       "status": "guaranteed",
-      "testIds": [
-        "deno-mysql.data.profile"
-      ]
+      "testIds": ["deno-mysql.data.profile"]
     }
   },
   "evidence": {

@@ -32,7 +32,7 @@ const connection = new Connection({
   options: { database: process.env.SQLSERVER_DATABASE ?? "app", trustServerCertificate: true },
 });
 await new Promise<void>((resolve, reject) => {
-  connection.once("connect", (error) => error ? reject(error) : resolve());
+  connection.once("connect", (error) => (error ? reject(error) : resolve()));
   connection.connect();
 });
 const db = createTediousDatabase(connection);
@@ -98,15 +98,15 @@ native typed DECIMAL/NUMERIC/MONEY 편의 경로는 JavaScript `number` 범위�
 아니라 support manifest가 지정합니다. 다른 SQL Server edition이나 runtime은
 별도의 프로필입니다.
 
-| SQL Server 값 | Driver raw / SQLBraid canonical 표현 | 상태/주의 |
-| --- | --- | --- |
-| `tinyint` / `smallint` / `int` / `bigint` | string | 정확한 정수 전송은 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다. |
-| `decimal` / `numeric` / `money` / `smallmoney` | number → exact output unsupported | character bind와 authored text `CAST`/`CONVERT`를 사용하며 손실된 Number를 stringify하지 않습니다. |
-| `real` / `float` | JavaScript `number` | 근사 binary32/binary64 값이며 SQL Server는 NaN/Infinity를 지원한다고 주장하지 않습니다. |
-| `datetime2` / `datetimeoffset` | `Date` | Native 편의 프로필이며 100ns나 offset 정확도에는 ISO/text conversion을 작성합니다. |
-| `uniqueidentifier` | string | 필요하면 애플리케이션 schema로 검증합니다. |
-| `varbinary` | `Buffer` | byte로 유지하거나 명시적으로 encode합니다. |
-| JSON | text | SQL Server JSON은 character data이며 SQLBraid가 파싱하지 않으므로 중첩 숫자 lexeme을 text로 보존할 수 있습니다. |
+| SQL Server 값                                  | Driver raw / SQLBraid canonical 표현 | 상태/주의                                                                                                       |
+| ---------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `tinyint` / `smallint` / `int` / `bigint`      | string                               | 정확한 정수 전송은 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다.                      |
+| `decimal` / `numeric` / `money` / `smallmoney` | number → exact output unsupported    | character bind와 authored text `CAST`/`CONVERT`를 사용하며 손실된 Number를 stringify하지 않습니다.              |
+| `real` / `float`                               | JavaScript `number`                  | 근사 binary32/binary64 값이며 SQL Server는 NaN/Infinity를 지원한다고 주장하지 않습니다.                         |
+| `datetime2` / `datetimeoffset`                 | `Date`                               | Native 편의 프로필이며 100ns나 offset 정확도에는 ISO/text conversion을 작성합니다.                              |
+| `uniqueidentifier`                             | string                               | 필요하면 애플리케이션 schema로 검증합니다.                                                                      |
+| `varbinary`                                    | `Buffer`                             | byte로 유지하거나 명시적으로 encode합니다.                                                                      |
+| JSON                                           | text                                 | SQL Server JSON은 character data이며 SQLBraid가 파싱하지 않으므로 중첩 숫자 lexeme을 text로 보존할 수 있습니다. |
 
 바인드 전송은 deterministic `@p1`, `@p2`, … 이름과 `TYPES.*` metadata를
 사용하는 typed Tedious request입니다. Native `OUTPUT` 행은 `sql.rows`로

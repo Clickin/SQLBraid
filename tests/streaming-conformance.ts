@@ -50,13 +50,22 @@ function containsExpectedError(error: unknown, expected: unknown): boolean {
   if (error === expected) return true;
   const expectedErrorCode = errorCode(expected);
   if (expectedErrorCode !== undefined && errorCode(error) === expectedErrorCode) return true;
-  if (error instanceof AggregateError && error.errors.some((nested) => containsExpectedError(nested, expected))) return true;
+  if (error instanceof AggregateError && error.errors.some((nested) => containsExpectedError(nested, expected)))
+    return true;
   if (error instanceof Error && "cause" in error && containsExpectedError(error.cause, expected)) return true;
   return false;
 }
 
 function throwingSchema(failure: unknown): StandardSchemaV1<unknown, unknown> {
-  return { "~standard": { version: 1, vendor: "stream-conformance", validate() { throw failure; } } };
+  return {
+    "~standard": {
+      version: 1,
+      vendor: "stream-conformance",
+      validate() {
+        throw failure;
+      },
+    },
+  };
 }
 
 export interface StreamingConformanceOptions {
@@ -80,23 +89,30 @@ export async function runStreamingConformanceCase(
     return value as T;
   };
   const assertCleanup = (
-      iteratorReturns: (() => number) | undefined,
-      released: (() => number) | undefined,
-      beforeReturns: number | undefined,
-      beforeReleased: number | undefined,
-      expected: number | { readonly iteratorReturns: number; readonly released: number },
+    iteratorReturns: (() => number) | undefined,
+    released: (() => number) | undefined,
+    beforeReturns: number | undefined,
+    beforeReleased: number | undefined,
+    expected: number | { readonly iteratorReturns: number; readonly released: number },
   ): void => {
-      if (iteratorReturns === undefined || released === undefined || beforeReturns === undefined || beforeReleased === undefined) {
-        if (strict) throw new Error(`${id} requires iterator/release cleanup counters.`);
-        return;
-      }
-      assert.equal(iteratorReturns() - beforeReturns, typeof expected === "number" ? expected : expected.iteratorReturns);
-      assert.equal(released() - beforeReleased, typeof expected === "number" ? expected : expected.released);
+    if (
+      iteratorReturns === undefined ||
+      released === undefined ||
+      beforeReturns === undefined ||
+      beforeReleased === undefined
+    ) {
+      if (strict) throw new Error(`${id} requires iterator/release cleanup counters.`);
+      return;
+    }
+    assert.equal(iteratorReturns() - beforeReturns, typeof expected === "number" ? expected : expected.iteratorReturns);
+    assert.equal(released() - beforeReleased, typeof expected === "number" ? expected : expected.released);
   };
   await withFixture(create, async (fixture) => {
     switch (id) {
       case "STR001": {
-        const iteratorReturns = strict ? requireField(fixture.iteratorReturns, "iteratorReturns") : fixture.iteratorReturns;
+        const iteratorReturns = strict
+          ? requireField(fixture.iteratorReturns, "iteratorReturns")
+          : fixture.iteratorReturns;
         const released = strict ? requireField(fixture.released, "released") : fixture.released;
         const actual: unknown[] = [];
         for await (const row of fixture.db.stream(fixture.query)) actual.push(row);
@@ -105,49 +121,76 @@ export async function runStreamingConformanceCase(
         return;
       }
       case "STR002": {
-        const iteratorReturns = strict ? requireField(fixture.iteratorReturns, "iteratorReturns") : fixture.iteratorReturns;
+        const iteratorReturns = strict
+          ? requireField(fixture.iteratorReturns, "iteratorReturns")
+          : fixture.iteratorReturns;
         const released = strict ? requireField(fixture.released, "released") : fixture.released;
         const beforeReturns = iteratorReturns?.();
         const beforeReleased = released?.();
-        for await (const row of fixture.db.stream(fixture.query)) { void row; break; }
+        for await (const row of fixture.db.stream(fixture.query)) {
+          void row;
+          break;
+        }
         assertCleanup(iteratorReturns, released, beforeReturns, beforeReleased, 1);
         return;
       }
       case "STR003": {
-        const iteratorReturns = strict ? requireField(fixture.iteratorReturns, "iteratorReturns") : fixture.iteratorReturns;
+        const iteratorReturns = strict
+          ? requireField(fixture.iteratorReturns, "iteratorReturns")
+          : fixture.iteratorReturns;
         const released = strict ? requireField(fixture.released, "released") : fixture.released;
         const beforeReturns = iteratorReturns?.();
         const beforeReleased = released?.();
         const error = new Error("cert-consumer-failure");
-        await assert.rejects(async () => {
-          for await (const row of fixture.db.stream(fixture.query)) { void row; throw error; }
-        }, (caught: unknown) => caught === error);
+        await assert.rejects(
+          async () => {
+            for await (const row of fixture.db.stream(fixture.query)) {
+              void row;
+              throw error;
+            }
+          },
+          (caught: unknown) => caught === error,
+        );
         assertCleanup(iteratorReturns, released, beforeReturns, beforeReleased, 1);
         return;
       }
       case "STR004": {
-        const iteratorReturns = strict ? requireField(fixture.iteratorReturns, "iteratorReturns") : fixture.iteratorReturns;
+        const iteratorReturns = strict
+          ? requireField(fixture.iteratorReturns, "iteratorReturns")
+          : fixture.iteratorReturns;
         const released = strict ? requireField(fixture.released, "released") : fixture.released;
         const mapping = requireField(fixture.mappingQuery, "mappingQuery");
         if (mapping === undefined) return;
         if (!strict) {
-          await assert.rejects(async () => { for await (const row of fixture.db.stream(mapping)) void row; });
+          await assert.rejects(async () => {
+            for await (const row of fixture.db.stream(mapping)) void row;
+          });
           return;
         }
-        if (mapping.resultSchema === undefined) throw new Error("STR004 requires mappingQuery.resultSchema fixture evidence.");
+        if (mapping.resultSchema === undefined)
+          throw new Error("STR004 requires mappingQuery.resultSchema fixture evidence.");
         const mappingFailure = requireField(fixture.mappingFailure, "mappingFailure");
         const mappingReturns = iteratorReturns?.();
         const mappingReleased = released?.();
-        await assert.rejects(async () => {
-          for await (const row of fixture.db.stream(mapping)) void row;
-        }, (caught: unknown) => containsExpectedError(caught, mappingFailure));
+        await assert.rejects(
+          async () => {
+            for await (const row of fixture.db.stream(mapping)) void row;
+          },
+          (caught: unknown) => containsExpectedError(caught, mappingFailure),
+        );
         assertCleanup(iteratorReturns, released, mappingReturns, mappingReleased, 1);
         const executionSchemaFailure = requireField(fixture.executionSchemaFailure, "executionSchemaFailure");
         const schemaReturns = iteratorReturns?.();
         const schemaReleased = released?.();
-        await assert.rejects(async () => {
-          for await (const row of fixture.db.stream(fixture.query, { schema: throwingSchema(executionSchemaFailure) })) void row;
-        }, (caught: unknown) => containsExpectedError(caught, executionSchemaFailure));
+        await assert.rejects(
+          async () => {
+            for await (const row of fixture.db.stream(fixture.query, {
+              schema: throwingSchema(executionSchemaFailure),
+            }))
+              void row;
+          },
+          (caught: unknown) => containsExpectedError(caught, executionSchemaFailure),
+        );
         assertCleanup(iteratorReturns, released, schemaReturns, schemaReleased, 1);
         return;
       }
@@ -156,19 +199,25 @@ export async function runStreamingConformanceCase(
         await assert.rejects(async () => {
           for await (const row of fixture.db.stream(fixture.query, {
             schema: throwingSchema(new Error("execution schema failed")),
-          })) void row;
+          }))
+            void row;
         });
         return;
       }
       case "STR005": {
-        const iteratorReturns = strict ? requireField(fixture.iteratorReturns, "iteratorReturns") : fixture.iteratorReturns;
+        const iteratorReturns = strict
+          ? requireField(fixture.iteratorReturns, "iteratorReturns")
+          : fixture.iteratorReturns;
         const released = strict ? requireField(fixture.released, "released") : fixture.released;
         const controller = new AbortController();
         const abortError = options.abortError ?? new Error("cert-abort-before");
         controller.abort(abortError);
-        await assert.rejects(async () => {
-          for await (const row of fixture.db.stream(fixture.query, { signal: controller.signal })) void row;
-        }, (caught: unknown) => containsExpectedError(caught, abortError));
+        await assert.rejects(
+          async () => {
+            for await (const row of fixture.db.stream(fixture.query, { signal: controller.signal })) void row;
+          },
+          (caught: unknown) => containsExpectedError(caught, abortError),
+        );
         if (iteratorReturns !== undefined && released !== undefined) {
           assert.equal(iteratorReturns(), 0);
           assert.equal(released(), 0);
@@ -176,34 +225,49 @@ export async function runStreamingConformanceCase(
         return;
       }
       case "STR006": {
-        const iteratorReturns = strict ? requireField(fixture.iteratorReturns, "iteratorReturns") : fixture.iteratorReturns;
+        const iteratorReturns = strict
+          ? requireField(fixture.iteratorReturns, "iteratorReturns")
+          : fixture.iteratorReturns;
         const released = strict ? requireField(fixture.released, "released") : fixture.released;
         const beforeReturns = iteratorReturns?.();
         const beforeReleased = released?.();
         const controller = new AbortController();
         const abortError = options.abortError ?? new Error("cert-abort-during");
-        await assert.rejects(async () => {
-          for await (const row of fixture.db.stream(fixture.query, { signal: controller.signal })) {
-            void row;
-            controller.abort(abortError);
-          }
-        }, (caught: unknown) => options.cancellation === "unsupported"
-          ? caught instanceof UnsupportedFeatureError && caught.feature === "statement.cancel"
-          : containsExpectedError(caught, abortError));
+        await assert.rejects(
+          async () => {
+            for await (const row of fixture.db.stream(fixture.query, { signal: controller.signal })) {
+              void row;
+              controller.abort(abortError);
+            }
+          },
+          (caught: unknown) =>
+            options.cancellation === "unsupported"
+              ? caught instanceof UnsupportedFeatureError && caught.feature === "statement.cancel"
+              : containsExpectedError(caught, abortError),
+        );
         const expectedCleanup = options.cancellation === "unsupported" ? 0 : 1;
         assertCleanup(iteratorReturns, released, beforeReturns, beforeReleased, expectedCleanup);
         return;
       }
       case "STR007": {
-        const iteratorReturns = strict ? requireField(fixture.iteratorReturns, "iteratorReturns") : fixture.iteratorReturns;
+        const iteratorReturns = strict
+          ? requireField(fixture.iteratorReturns, "iteratorReturns")
+          : fixture.iteratorReturns;
         const released = strict ? requireField(fixture.released, "released") : fixture.released;
         const init = requireField(fixture.initFailureQuery, "initFailureQuery");
         const initFailure = requireField(fixture.initFailure, "initFailure");
-        const initCleanup = strict ? requireField(fixture.initFailureCleanup, "initFailureCleanup") : fixture.initFailureCleanup;
+        const initCleanup = strict
+          ? requireField(fixture.initFailureCleanup, "initFailureCleanup")
+          : fixture.initFailureCleanup;
         if (init === undefined) return;
         const initReturns = iteratorReturns?.();
         const initReleased = released?.();
-        await assert.rejects(async () => { for await (const row of fixture.db.stream(init)) void row; }, (caught: unknown) => containsExpectedError(caught, initFailure));
+        await assert.rejects(
+          async () => {
+            for await (const row of fixture.db.stream(init)) void row;
+          },
+          (caught: unknown) => containsExpectedError(caught, initFailure),
+        );
         if (initCleanup !== undefined) assertCleanup(iteratorReturns, released, initReturns, initReleased, initCleanup);
         else if (strict) throw new Error("STR007 requires initFailureCleanup fixture evidence.");
         const first = requireField(fixture.firstNextFailureQuery, "firstNextFailureQuery");
@@ -211,38 +275,60 @@ export async function runStreamingConformanceCase(
         if (first === undefined) return;
         const firstReturns = iteratorReturns?.();
         const firstReleased = released?.();
-        await assert.rejects(async () => { for await (const row of fixture.db.stream(first)) void row; }, (caught: unknown) => containsExpectedError(caught, firstFailure));
+        await assert.rejects(
+          async () => {
+            for await (const row of fixture.db.stream(first)) void row;
+          },
+          (caught: unknown) => containsExpectedError(caught, firstFailure),
+        );
         assertCleanup(iteratorReturns, released, firstReturns, firstReleased, 1);
         const mid = requireField(fixture.midStreamFailureQuery, "midStreamFailureQuery");
         const midFailure = requireField(fixture.midStreamFailure, "midStreamFailure");
         if (mid === undefined) return;
         const midReturns = iteratorReturns?.();
         const midReleased = released?.();
-        await assert.rejects(async () => { for await (const row of fixture.db.stream(mid)) void row; }, (caught: unknown) => containsExpectedError(caught, midFailure));
+        await assert.rejects(
+          async () => {
+            for await (const row of fixture.db.stream(mid)) void row;
+          },
+          (caught: unknown) => containsExpectedError(caught, midFailure),
+        );
         assertCleanup(iteratorReturns, released, midReturns, midReleased, 1);
         return;
       }
       case "STR008": {
-        const iteratorReturns = strict ? requireField(fixture.iteratorReturns, "iteratorReturns") : fixture.iteratorReturns;
+        const iteratorReturns = strict
+          ? requireField(fixture.iteratorReturns, "iteratorReturns")
+          : fixture.iteratorReturns;
         const released = strict ? requireField(fixture.released, "released") : fixture.released;
         const query = requireField(fixture.cleanupFailureQuery, "cleanupFailureQuery");
         const cleanupFailure = requireField(fixture.cleanupFailure, "cleanupFailure");
         if (query === undefined) return;
         const beforeReturns = iteratorReturns?.();
         const beforeReleased = released?.();
-        await assert.rejects(async () => { for await (const row of fixture.db.stream(query)) void row; }, (caught: unknown) => containsExpectedError(caught, cleanupFailure));
+        await assert.rejects(
+          async () => {
+            for await (const row of fixture.db.stream(query)) void row;
+          },
+          (caught: unknown) => containsExpectedError(caught, cleanupFailure),
+        );
         assertCleanup(iteratorReturns, released, beforeReturns, beforeReleased, 1);
         return;
       }
       case "STR009": {
-        const iteratorReturns = strict ? requireField(fixture.iteratorReturns, "iteratorReturns") : fixture.iteratorReturns;
+        const iteratorReturns = strict
+          ? requireField(fixture.iteratorReturns, "iteratorReturns")
+          : fixture.iteratorReturns;
         const released = strict ? requireField(fixture.released, "released") : fixture.released;
         const query = requireField(fixture.largeResultQuery, "largeResultQuery");
         const expectedCount = requireField(fixture.largeResultCount, "largeResultCount");
         if (query === undefined || expectedCount === undefined) return;
         assert.ok(expectedCount > fixture.expected.length);
         let actualCount = 0;
-        for await (const row of fixture.db.stream(query)) { void row; actualCount += 1; }
+        for await (const row of fixture.db.stream(query)) {
+          void row;
+          actualCount += 1;
+        }
         assert.equal(actualCount, expectedCount);
         assertCleanup(iteratorReturns, released, 0, 0, 1);
         return;
@@ -251,7 +337,10 @@ export async function runStreamingConformanceCase(
         const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
         const released = requireField(fixture.released, "released");
         const reuseAfterBreak = requireField(fixture.reuseAfterBreak, "reuseAfterBreak");
-        for await (const row of fixture.db.stream(fixture.query)) { void row; break; }
+        for await (const row of fixture.db.stream(fixture.query)) {
+          void row;
+          break;
+        }
         assert.equal(iteratorReturns(), 1);
         assert.equal(released(), 1);
         await reuseAfterBreak();
@@ -269,6 +358,10 @@ export async function runStreamingConformance<Row>(
 ): Promise<void> {
   const ids = ["STR001", "STR003", "STR004", "STR004_SCHEMA", "STR005", "STR006", "STR002", "STR008"] as const;
   for (const id of ids) {
-    await runStreamingConformanceCase(id, create as () => StreamingConformanceFixture<unknown> | Promise<StreamingConformanceFixture<unknown>>, { ...options, strict: false });
+    await runStreamingConformanceCase(
+      id,
+      create as () => StreamingConformanceFixture<unknown> | Promise<StreamingConformanceFixture<unknown>>,
+      { ...options, strict: false },
+    );
   }
 }

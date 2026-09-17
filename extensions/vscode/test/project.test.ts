@@ -63,4 +63,3 @@ test("project evidence matching remains root-scoped for Windows-shaped paths", (
   assert.equal(isProjectEvidencePath("C:\\workspace\\app\\package.json", root), true);
   assert.equal(isProjectEvidencePath("C:\\workspace\\other\\package.json", root), false);
 });
-

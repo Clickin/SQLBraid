@@ -11,7 +11,7 @@ async function walk(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await walk(path));
+    if (entry.isDirectory()) files.push(...(await walk(path)));
     else if (entry.isFile() && /\.(?:md|mdx)$/u.test(entry.name)) files.push(path);
   }
   return files;
@@ -27,7 +27,13 @@ function fail(messages) {
 }
 
 const registry = JSON.parse(await readFile(registryPath, "utf8"));
-if (!registry || registry.version !== 1 || registry.sourceLocale !== "en" || registry.targetLocale !== "ko" || !Array.isArray(registry.entries)) {
+if (
+  !registry ||
+  registry.version !== 1 ||
+  registry.sourceLocale !== "en" ||
+  registry.targetLocale !== "ko" ||
+  !Array.isArray(registry.entries)
+) {
   throw new Error("Translation registry must declare version 1, en/ko locales, and an entries array.");
 }
 
@@ -78,9 +84,13 @@ for (const entry of entries.values()) {
   if (entry.optOut === true) continue;
   const actual = digest(await readFile(sourcePath));
   if (actual !== entry.sourceDigest) {
-    errors.push(`DOCS_TRANSLATION_STALE: ${entry.source} -> ${entry.translation}; expected sourceDigest ${entry.sourceDigest}, found ${actual}. Update the Korean prose and registry digest, or add an explicit opt-out with a reason. No automatic translation is performed.`);
+    errors.push(
+      `DOCS_TRANSLATION_STALE: ${entry.source} -> ${entry.translation}; expected sourceDigest ${entry.sourceDigest}, found ${actual}. Update the Korean prose and registry digest, or add an explicit opt-out with a reason. No automatic translation is performed.`,
+    );
   }
 }
 
 fail(errors);
-console.log(`PASS translation registry: ${entries.size} EN pages checked (${[...entries.values()].filter((entry) => entry.optOut === true).length} explicit opt-outs)`);
+console.log(
+  `PASS translation registry: ${entries.size} EN pages checked (${[...entries.values()].filter((entry) => entry.optOut === true).length} explicit opt-outs)`,
+);

@@ -80,10 +80,26 @@ hint/direction/output metadata입니다. `$1`, `?`, `:1`, `@p1` 표기는 transp
 ```ts
 interface QueryExecutor {
   readonly statementBinding: StatementBindingAdapter;
-  query<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<QueryExecutionResult<Row>>;
-  stream<Row>(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row>;
-  call(statement: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<DriverRoutineResult>;
-  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Awaitable<BulkExecutionResult>;
+  query<Row>(
+    statement: RenderedStatement,
+    binding?: StatementBindingDescription,
+    options?: ExecutionOptions,
+  ): Awaitable<QueryExecutionResult<Row>>;
+  stream<Row>(
+    statement: RenderedStatement,
+    binding?: StatementBindingDescription,
+    options?: ExecutionOptions,
+  ): AsyncIterable<Row>;
+  call(
+    statement: RenderedStatement,
+    binding?: StatementBindingDescription,
+    options?: ExecutionOptions,
+  ): Awaitable<DriverRoutineResult>;
+  bulk?(
+    bulk: RenderedBulk,
+    binding: BulkBindingDescription,
+    options?: ExecutionOptions,
+  ): Awaitable<BulkExecutionResult>;
   begin?(options?: TransactionOptions): Awaitable<void>;
   commit?(): Awaitable<void>;
   rollback?(): Awaitable<void>;
@@ -124,11 +140,19 @@ interface WireClient {
   release(options?: { discard?: boolean }): void | Promise<void>;
 }
 
-const requests = new WeakMap<StatementBindingDescription, { statement: RenderedStatement; text: string; values: readonly unknown[] }>();
+const requests = new WeakMap<
+  StatementBindingDescription,
+  { statement: RenderedStatement; text: string; values: readonly unknown[] }
+>();
 
 function assertSignal(options?: ExecutionOptions): void {
   if (options?.signal?.aborted) throw options.signal.reason;
-  if (options?.signal) throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "acme-wire는 활성 statement를 취소할 수 없습니다");
+  if (options?.signal)
+    throw new UnsupportedFeatureError(
+      "statement.cancel",
+      "BRAID_CANCEL_UNSUPPORTED",
+      "acme-wire는 활성 statement를 취소할 수 없습니다",
+    );
 }
 
 export const acmeBinding: StatementBindingAdapter = Object.freeze({
@@ -136,7 +160,11 @@ export const acmeBinding: StatementBindingAdapter = Object.freeze({
   describe(statement: RenderedStatement, context: StatementBindingContext) {
     statement = createRenderedStatement(statement);
     if (statement.parameters.some((parameter) => parameter.hint !== undefined)) {
-      throw new UnsupportedFeatureError("parameter.hint", "BRAID_BIND_HINT_UNSUPPORTED", "acme-wire에는 hint API가 없습니다");
+      throw new UnsupportedFeatureError(
+        "parameter.hint",
+        "BRAID_BIND_HINT_UNSUPPORTED",
+        "acme-wire에는 hint API가 없습니다",
+      );
     }
     const binding = createStatementBindingDescription(statement, context, {
       adapterId: "acme-wire",
@@ -158,18 +186,27 @@ export function createAcmeExecutor(client: WireClient): QueryExecutor {
     async query<Row>(statement, binding, options) {
       assertSignal(options);
       statement = createRenderedStatement(statement);
-      const description = binding ?? acmeBinding.describe(statement, { dialectId: statement.dialectId, requestedReuse: "auto" });
+      const description =
+        binding ?? acmeBinding.describe(statement, { dialectId: statement.dialectId, requestedReuse: "auto" });
       const request = requests.get(description);
       if (request?.statement !== statement) throw new TypeError("BRAID_BINDING_IDENTITY");
       return client.execute<Row>(request.text, request.values);
     },
     stream(_statement, _binding, options): AsyncIterable<never> {
       assertSignal(options);
-      throw new UnsupportedFeatureError("statement.stream", "BRAID_STREAM_UNSUPPORTED", "acme-wire에는 stream protocol이 없습니다");
+      throw new UnsupportedFeatureError(
+        "statement.stream",
+        "BRAID_STREAM_UNSUPPORTED",
+        "acme-wire에는 stream protocol이 없습니다",
+      );
     },
     async call(_statement, _binding, options): Promise<never> {
       assertSignal(options);
-      throw new UnsupportedFeatureError("routine.call", "BRAID_CALL_UNSUPPORTED", "acme-wire에는 routine protocol이 없습니다");
+      throw new UnsupportedFeatureError(
+        "routine.call",
+        "BRAID_CALL_UNSUPPORTED",
+        "acme-wire에는 routine protocol이 없습니다",
+      );
     },
   };
 }
@@ -181,7 +218,14 @@ export function createAcmeProvider(acquireClient: () => Promise<WireClient>): Co
       const client = await acquireClient();
       const executor = createAcmeExecutor(client);
       let released = false;
-      return { ...executor, async release(options) { if (released) return; released = true; await client.release(options); } };
+      return {
+        ...executor,
+        async release(options) {
+          if (released) return;
+          released = true;
+          await client.release(options);
+        },
+      };
     },
   };
 }

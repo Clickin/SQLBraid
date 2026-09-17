@@ -33,18 +33,11 @@ export {
   type WellKnownCapabilityId,
 } from "./capabilities.js";
 
-export type NumericSemantics =
-  | "exact-integer"
-  | "exact-decimal"
-  | "approximate-binary";
+export type NumericSemantics = "exact-integer" | "exact-decimal" | "approximate-binary";
 
 export type NumericRepresentation = "string" | "number";
 
-export type TransportFidelity =
-  | "lossless"
-  | "guarded"
-  | "lossy"
-  | "unsupported";
+export type TransportFidelity = "lossless" | "guarded" | "lossy" | "unsupported";
 
 export interface NumericTypeContract {
   readonly semantics: NumericSemantics;
@@ -103,27 +96,123 @@ export const PUBLIC_ERROR_DEFINITIONS: readonly PublicErrorDefinition[] = Object
   { code: "BRAID_REENTRY", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
   { code: "BRAID_TX_OPTIONS_NESTED", category: "runtime", owner: "@sqlbraid/runtime:DatabaseScopeError" },
   { code: "BRAID_CALL_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.call"] },
-  { code: "BRAID_RESULT_SETS_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.result-sets"] },
-  { code: "BRAID_STREAM_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.stream"] },
-  { code: "BRAID_CANCEL_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.cancel"] },
-  { code: "BRAID_SESSION_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["session.pinned"] },
-  { code: "BRAID_TX_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["transaction", "transaction.savepoint"] },
+  {
+    code: "BRAID_RESULT_SETS_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["routine.result-sets"],
+  },
+  {
+    code: "BRAID_STREAM_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["statement.stream"],
+  },
+  {
+    code: "BRAID_CANCEL_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["statement.cancel"],
+  },
+  {
+    code: "BRAID_SESSION_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["session.pinned"],
+  },
+  {
+    code: "BRAID_TX_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["transaction", "transaction.savepoint"],
+  },
   { code: "BRAID_TX_OPTIONS_INVALID", category: "runtime", owner: "TypeError with code" },
-  { code: "BRAID_TX_OPTION_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["transaction.read-only", "transaction.isolation.read-uncommitted", "transaction.isolation.read-committed", "transaction.isolation.repeatable-read", "transaction.isolation.serializable"] },
-  { code: "BRAID_CALL_RESULT_SETS", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.result-sets"] },
-  { code: "BRAID_CALL_CURSOR_TX_REQUIRED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.out-cursor"] },
-  { code: "BRAID_CALL_OUT_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.out", "routine.inout"] },
-  { code: "BRAID_CALL_RETURN_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.call", "routine.return-value"] },
-  { code: "BRAID_CALL_CURSOR_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.out-cursor"] },
-  { code: "BRAID_RESOURCE_CLEANUP", category: "adapter", owner: "adapter cleanup error with code", features: ["resource.cleanup", "resource.discard"] },
-  { code: "BRAID_BIND_HINT_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.bind-hint"] },
+  {
+    code: "BRAID_TX_OPTION_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: [
+      "transaction.read-only",
+      "transaction.isolation.read-uncommitted",
+      "transaction.isolation.read-committed",
+      "transaction.isolation.repeatable-read",
+      "transaction.isolation.serializable",
+    ],
+  },
+  {
+    code: "BRAID_CALL_RESULT_SETS",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["routine.result-sets"],
+  },
+  {
+    code: "BRAID_CALL_CURSOR_TX_REQUIRED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["routine.out-cursor"],
+  },
+  {
+    code: "BRAID_CALL_OUT_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["routine.out", "routine.inout"],
+  },
+  {
+    code: "BRAID_CALL_RETURN_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["routine.call", "routine.return-value"],
+  },
+  {
+    code: "BRAID_CALL_CURSOR_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["routine.out-cursor"],
+  },
+  {
+    code: "BRAID_RESOURCE_CLEANUP",
+    category: "adapter",
+    owner: "adapter cleanup error with code",
+    features: ["resource.cleanup", "resource.discard"],
+  },
+  {
+    code: "BRAID_BIND_HINT_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["statement.bind-hint"],
+  },
   { code: "BRAID_BIND_VALUE_UNSUPPORTED", category: "adapter", owner: "AdapterError" },
-  { code: "BRAID_INTEGER_MODE_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["result.exact-integer"] },
-  { code: "BRAID_CALL_LOB_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["routine.out"] },
-  { code: "BRAID_BULK_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.bulk"] },
-  { code: "BRAID_PREPARE_UNSUPPORTED", category: "adapter", owner: "UnsupportedFeatureError", features: ["statement.prepare"] },
+  {
+    code: "BRAID_INTEGER_MODE_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["result.exact-integer"],
+  },
+  {
+    code: "BRAID_CALL_LOB_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["routine.out"],
+  },
+  {
+    code: "BRAID_BULK_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["statement.bulk"],
+  },
+  {
+    code: "BRAID_PREPARE_UNSUPPORTED",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["statement.prepare"],
+  },
   { code: "BRAID_DIALECT_MISMATCH", category: "adapter", owner: "UnsupportedFeatureError", features: ["dialect"] },
-  { code: "BRAID_RESULT_KIND_AMBIGUOUS", category: "adapter", owner: "UnsupportedFeatureError", features: ["result.rows", "result.command"] },
+  {
+    code: "BRAID_RESULT_KIND_AMBIGUOUS",
+    category: "adapter",
+    owner: "UnsupportedFeatureError",
+    features: ["result.rows", "result.command"],
+  },
   { code: "BRAID_PREPARED_NAME", category: "runtime", owner: "prepared query validation" },
   { code: "BRAID_PREPARED_SHAPE", category: "runtime", owner: "prepared query validation" },
   { code: "BRAID_BIND_TYPE_REQUIRED", category: "adapter", owner: "AdapterError" },
@@ -166,9 +255,9 @@ export function decodeExactInteger(value: unknown, range?: ExactIntegerRange): b
 
   if (range !== undefined) {
     if (
-      (range.min !== undefined && typeof range.min !== "bigint")
-      || (range.max !== undefined && typeof range.max !== "bigint")
-      || (range.min !== undefined && range.max !== undefined && range.min > range.max)
+      (range.min !== undefined && typeof range.min !== "bigint") ||
+      (range.max !== undefined && typeof range.max !== "bigint") ||
+      (range.min !== undefined && range.max !== undefined && range.min > range.max)
     ) {
       throw new TypeError("Exact integer range bounds must be ordered bigint values.");
     }
@@ -307,21 +396,37 @@ function validHintInteger(value: unknown): value is number {
 
 function isParameterTypeHint(value: unknown): value is ParameterTypeHint {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const candidate = value as { readonly databaseType?: unknown; readonly length?: unknown; readonly precision?: unknown; readonly scale?: unknown };
-  return typeof candidate.databaseType === "string"
-    && candidate.databaseType.trim().length > 0
-    && (candidate.length === undefined || candidate.length === "max" || validHintNumber(candidate.length))
-    && (candidate.precision === undefined || validHintNumber(candidate.precision))
-    && (candidate.scale === undefined || validHintInteger(candidate.scale));
+  const candidate = value as {
+    readonly databaseType?: unknown;
+    readonly length?: unknown;
+    readonly precision?: unknown;
+    readonly scale?: unknown;
+  };
+  return (
+    typeof candidate.databaseType === "string" &&
+    candidate.databaseType.trim().length > 0 &&
+    (candidate.length === undefined || candidate.length === "max" || validHintNumber(candidate.length)) &&
+    (candidate.precision === undefined || validHintNumber(candidate.precision)) &&
+    (candidate.scale === undefined || validHintInteger(candidate.scale))
+  );
 }
 
 export function createParameterTypeHint<Input = unknown>(hint: ParameterTypeHint<Input>): ParameterTypeHint<Input> {
   if (!isParameterTypeHint(hint)) throw new TypeError("sql.bind hint must be an object with valid structural fields.");
-  const candidate = hint as { readonly databaseType?: unknown; readonly length?: unknown; readonly precision?: unknown; readonly scale?: unknown };
-  if (typeof candidate.databaseType !== "string" || !candidate.databaseType.trim()) throw new TypeError("sql.bind hint databaseType must be a non-empty string.");
-  if (candidate.length !== undefined && candidate.length !== "max" && !validHintNumber(candidate.length)) throw new TypeError("sql.bind hint length must be a non-negative integer or \"max\".");
-  if (candidate.precision !== undefined && !validHintNumber(candidate.precision)) throw new TypeError("sql.bind hint precision must be a non-negative integer.");
-  if (candidate.scale !== undefined && !validHintInteger(candidate.scale)) throw new TypeError("sql.bind hint scale must be an integer.");
+  const candidate = hint as {
+    readonly databaseType?: unknown;
+    readonly length?: unknown;
+    readonly precision?: unknown;
+    readonly scale?: unknown;
+  };
+  if (typeof candidate.databaseType !== "string" || !candidate.databaseType.trim())
+    throw new TypeError("sql.bind hint databaseType must be a non-empty string.");
+  if (candidate.length !== undefined && candidate.length !== "max" && !validHintNumber(candidate.length))
+    throw new TypeError('sql.bind hint length must be a non-negative integer or "max".');
+  if (candidate.precision !== undefined && !validHintNumber(candidate.precision))
+    throw new TypeError("sql.bind hint precision must be a non-negative integer.");
+  if (candidate.scale !== undefined && !validHintInteger(candidate.scale))
+    throw new TypeError("sql.bind hint scale must be an integer.");
   const normalized = {
     databaseType: candidate.databaseType,
     ...(candidate.length === undefined ? {} : { length: candidate.length }),
@@ -342,11 +447,21 @@ export function createBoundParameter<Input>(
 }
 
 export function isBoundParameter(value: unknown): value is BoundParameter {
-  if (typeof value !== "object" || value === null || !knownBoundParameters.has(value) || !Object.hasOwn(value, SQL_BOUND_PARAMETER)) return false;
-  const candidate = value as { readonly value?: unknown; readonly hint?: unknown; readonly [SQL_BOUND_PARAMETER]?: unknown };
-  return candidate[SQL_BOUND_PARAMETER] === true
-    && Object.hasOwn(candidate, "value")
-    && isParameterTypeHint(candidate.hint);
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !knownBoundParameters.has(value) ||
+    !Object.hasOwn(value, SQL_BOUND_PARAMETER)
+  )
+    return false;
+  const candidate = value as {
+    readonly value?: unknown;
+    readonly hint?: unknown;
+    readonly [SQL_BOUND_PARAMETER]?: unknown;
+  };
+  return (
+    candidate[SQL_BOUND_PARAMETER] === true && Object.hasOwn(candidate, "value") && isParameterTypeHint(candidate.hint)
+  );
 }
 
 function normalizeOutputName(name: unknown): string {
@@ -354,10 +469,7 @@ function normalizeOutputName(name: unknown): string {
   return name;
 }
 
-export function createRoutineOutParameter(
-  name: string,
-  hint?: ParameterTypeHint,
-): RoutineParameter<null> {
+export function createRoutineOutParameter(name: string, hint?: ParameterTypeHint): RoutineParameter<null> {
   const normalizedHint = hint === undefined ? undefined : createParameterTypeHint(hint);
   const parameter = Object.freeze({
     value: null,
@@ -388,7 +500,8 @@ export function createRoutineInOutParameter<Input>(
 }
 
 export function isRoutineParameter(value: unknown): value is RoutineParameter {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || !knownRoutineParameters.has(value)) return false;
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !knownRoutineParameters.has(value))
+    return false;
   const candidate = value as {
     readonly value?: unknown;
     readonly direction?: unknown;
@@ -396,19 +509,17 @@ export function isRoutineParameter(value: unknown): value is RoutineParameter {
     readonly hint?: unknown;
     readonly [SQL_ROUTINE_PARAMETER]?: unknown;
   };
-  return candidate[SQL_ROUTINE_PARAMETER] === true
-    && Object.hasOwn(candidate, "value")
-    && (candidate.direction === "out" || candidate.direction === "inout")
-    && typeof candidate.outputName === "string"
-    && Boolean(candidate.outputName.trim())
-    && (candidate.hint === undefined || isParameterTypeHint(candidate.hint));
+  return (
+    candidate[SQL_ROUTINE_PARAMETER] === true &&
+    Object.hasOwn(candidate, "value") &&
+    (candidate.direction === "out" || candidate.direction === "inout") &&
+    typeof candidate.outputName === "string" &&
+    Boolean(candidate.outputName.trim()) &&
+    (candidate.hint === undefined || isParameterTypeHint(candidate.hint))
+  );
 }
 
-export type ParameterTransportKind =
-  | "native-value-template"
-  | "text-positional"
-  | "text-named"
-  | "typed-request";
+export type ParameterTransportKind = "native-value-template" | "text-positional" | "text-named" | "typed-request";
 
 export type RequestedReuse = "auto" | "simple" | "reuse";
 export type EffectiveReuse = "simple" | "reuse";
@@ -480,7 +591,11 @@ export interface StatementBindingDescriptionOptions {
     readonly owner: ReuseOwner;
     readonly capacity?: number;
   };
-  readonly formatLiteral?: (parameter: RenderedParameter, index: number, options: LiteralizeOptions) => string | undefined;
+  readonly formatLiteral?: (
+    parameter: RenderedParameter,
+    index: number,
+    options: LiteralizeOptions,
+  ) => string | undefined;
 }
 
 export interface RenderedBulk {
@@ -512,20 +627,22 @@ export function createRenderedBulk(bulk: RenderedBulk): RenderedBulk {
     throw new TypeError("RenderedBulk parameterSets must be an array.");
   }
   const parameterCount = statement.parameters.length;
-  const parameterSets = Object.freeze(bulk.parameterSets.map((values) => {
-    if (!Array.isArray(values) || values.length !== parameterCount) {
-      throw new TypeError("RenderedBulk parameter sets must match the rendered parameter count.");
-    }
-    for (let index = 0; index < values.length; index += 1) {
-      if (values[index] === undefined && statement.parameters[index]?.direction !== "out") {
-        throw new SqlRenderError(
-          "BRAID_BIND_VALUE_UNSUPPORTED",
-          "Undefined bind values are unsupported; use null for SQL NULL.",
-        );
+  const parameterSets = Object.freeze(
+    bulk.parameterSets.map((values) => {
+      if (!Array.isArray(values) || values.length !== parameterCount) {
+        throw new TypeError("RenderedBulk parameter sets must match the rendered parameter count.");
       }
-    }
-    return Object.isFrozen(values) ? values : Object.freeze([...values]);
-  }));
+      for (let index = 0; index < values.length; index += 1) {
+        if (values[index] === undefined && statement.parameters[index]?.direction !== "out") {
+          throw new SqlRenderError(
+            "BRAID_BIND_VALUE_UNSUPPORTED",
+            "Undefined bind values are unsupported; use null for SQL NULL.",
+          );
+        }
+      }
+      return Object.isFrozen(values) ? values : Object.freeze([...values]);
+    }),
+  );
   return Object.freeze({ statement, parameterSets });
 }
 
@@ -579,15 +696,23 @@ function copyRenderedParameter(parameter: RenderedParameter): RenderedParameter 
 
 function copyRoutineProcedure(procedure: RoutineProcedure | undefined): RoutineProcedure | undefined {
   if (procedure === undefined) return undefined;
-  if (typeof procedure !== "object" || procedure === null || typeof procedure.name !== "string" || !procedure.name.trim()) {
+  if (
+    typeof procedure !== "object" ||
+    procedure === null ||
+    typeof procedure.name !== "string" ||
+    !procedure.name.trim()
+  ) {
     throw new TypeError("Routine procedure name must be a non-empty string.");
   }
-  if (!Array.isArray(procedure.parameterNames)) throw new TypeError("Routine procedure parameterNames must be an array.");
+  if (!Array.isArray(procedure.parameterNames))
+    throw new TypeError("Routine procedure parameterNames must be an array.");
   const parameterNames = procedure.parameterNames.map((name) => {
-    if (typeof name !== "string" || !name.trim()) throw new TypeError("Routine procedure parameterNames must contain non-empty strings.");
+    if (typeof name !== "string" || !name.trim())
+      throw new TypeError("Routine procedure parameterNames must contain non-empty strings.");
     return name;
   });
-  if (new Set(parameterNames).size !== parameterNames.length) throw new TypeError("Routine procedure parameterNames must be unique.");
+  if (new Set(parameterNames).size !== parameterNames.length)
+    throw new TypeError("Routine procedure parameterNames must be unique.");
   return Object.freeze({ name: procedure.name, parameterNames: Object.freeze(parameterNames) });
 }
 
@@ -639,25 +764,30 @@ export function createRenderedStatement(statement: {
   if (statement.resultKind !== "call" && statement.routineProcedure !== undefined) {
     throw new TypeError("Routine procedure metadata is only valid for call statements.");
   }
-  if (typeof statement.dialectId !== "string" || !statement.dialectId) throw new TypeError("RenderedStatement dialectId must be a non-empty string.");
+  if (typeof statement.dialectId !== "string" || !statement.dialectId)
+    throw new TypeError("RenderedStatement dialectId must be a non-empty string.");
   const segments = Object.freeze([...statement.segments]);
-  if (segments.some((segment) => typeof segment !== "string")) throw new TypeError("RenderedStatement segments must be an array of strings.");
-  const nativeTemplate = statement.nativeTemplate === undefined
-    ? undefined
-    : copyNativeTemplate(statement.nativeTemplate, segments);
+  if (segments.some((segment) => typeof segment !== "string"))
+    throw new TypeError("RenderedStatement segments must be an array of strings.");
+  const nativeTemplate =
+    statement.nativeTemplate === undefined ? undefined : copyNativeTemplate(statement.nativeTemplate, segments);
   const parameters = Object.freeze(Array.from(statement.parameters, copyRenderedParameter));
   if (parameters.some((parameter) => parameter.direction === "inout" && statement.resultKind !== "call")) {
     throw new TypeError("INOUT parameters are only valid for call statements.");
   }
-  if (parameters.some((parameter) => parameter.direction === "out"
-    && statement.resultKind !== "call"
-    && statement.resultKind !== "rows")) {
+  if (
+    parameters.some(
+      (parameter) =>
+        parameter.direction === "out" && statement.resultKind !== "call" && statement.resultKind !== "rows",
+    )
+  ) {
     throw new TypeError("OUT parameters are only valid for call and rows statements.");
   }
   const outputNames = new Set<string>();
   for (const parameter of parameters) {
     if (parameter.outputName !== undefined) {
-      if (outputNames.has(parameter.outputName)) throw new TypeError(`Duplicate routine outputName: ${parameter.outputName}`);
+      if (outputNames.has(parameter.outputName))
+        throw new TypeError(`Duplicate routine outputName: ${parameter.outputName}`);
       outputNames.add(parameter.outputName);
     }
   }
@@ -693,7 +823,8 @@ function genericLiteral(parameter: RenderedParameter, dialectId: string, binary:
   if (value === undefined) return "[undefined]";
   if (typeof value === "string") return `'${value.replaceAll("'", "''")}'`;
   if (typeof value === "boolean") {
-    if (/^(?:mysql|sqlite)/i.test(dialectId) || /^(?:oracle|mssql|sqlserver)/i.test(dialectId)) return value ? "1" : "0";
+    if (/^(?:mysql|sqlite)/i.test(dialectId) || /^(?:oracle|mssql|sqlserver)/i.test(dialectId))
+      return value ? "1" : "0";
     if (/^(?:postgres|postgresql|cockroach|redshift)/i.test(dialectId)) return value ? "TRUE" : "FALSE";
     return `[boolean ${value ? "true" : "false"}]`;
   }
@@ -732,13 +863,16 @@ function literalized(
   const resolved: LiteralizeOptions = options ?? {};
   const valuesMode = resolved.values ?? "redacted";
   const maxLength = resolved.maxValueLength;
-  if (valuesMode !== "inline" && valuesMode !== "redacted") throw new TypeError("literalizedSql values must be \"inline\" or \"redacted\".");
+  if (valuesMode !== "inline" && valuesMode !== "redacted")
+    throw new TypeError('literalizedSql values must be "inline" or "redacted".');
   if (maxLength !== undefined && (!Number.isSafeInteger(maxLength) || maxLength < 0)) {
     throw new TypeError("literalizedSql maxValueLength must be a non-negative integer.");
   }
   const binary = resolved.binary ?? "summary";
-  if (binary !== "summary" && binary !== "full") throw new TypeError("literalizedSql binary must be \"summary\" or \"full\".");
-  if (resolved.redact !== undefined && typeof resolved.redact !== "function") throw new TypeError("literalizedSql redact must be a function.");
+  if (binary !== "summary" && binary !== "full")
+    throw new TypeError('literalizedSql binary must be "summary" or "full".');
+  if (resolved.redact !== undefined && typeof resolved.redact !== "function")
+    throw new TypeError("literalizedSql redact must be a function.");
   const parts: string[] = [statement.segments[0] ?? ""];
   let redactedParameters = 0;
   let truncatedParameters = 0;
@@ -782,17 +916,22 @@ export function createStatementBindingDescription(
   const dialectId = context.dialectId;
   const requestedReuse = context.requestedReuse;
   if (logical.dialectId !== dialectId) {
-    throw new TypeError(`BRAID_DIALECT: statement binding dialect ${dialectId} does not match rendered statement dialect ${logical.dialectId}.`);
+    throw new TypeError(
+      `BRAID_DIALECT: statement binding dialect ${dialectId} does not match rendered statement dialect ${logical.dialectId}.`,
+    );
   }
-  if (typeof adapterId !== "string" || !adapterId) throw new TypeError("Statement binding adapterId must be a non-empty string.");
-  if (typeof dialectId !== "string" || !dialectId) throw new TypeError("Statement binding dialectId must be a non-empty string.");
+  if (typeof adapterId !== "string" || !adapterId)
+    throw new TypeError("Statement binding adapterId must be a non-empty string.");
+  if (typeof dialectId !== "string" || !dialectId)
+    throw new TypeError("Statement binding dialectId must be a non-empty string.");
   if (!["native-value-template", "text-positional", "text-named", "typed-request"].includes(transport)) {
     throw new TypeError("Statement binding transport is unsupported.");
   }
   if (transport !== "native-value-template" && placeholder === undefined) {
     throw new TypeError("Text and typed statement transports require a placeholder function.");
   }
-  if (!["auto", "simple", "reuse"].includes(requestedReuse)) throw new TypeError("Statement binding requestedReuse is unsupported.");
+  if (!["auto", "simple", "reuse"].includes(requestedReuse))
+    throw new TypeError("Statement binding requestedReuse is unsupported.");
   if (!["simple", "reuse"].includes(effective) || !["sqlbraid", "driver", "server"].includes(owner)) {
     throw new TypeError("Statement binding reuse policy is unsupported.");
   }
@@ -802,13 +941,17 @@ export function createStatementBindingDescription(
   if (placeholder !== undefined && typeof placeholder !== "function") {
     throw new TypeError("Statement binding placeholder must be a function.");
   }
-  const bindings = Object.freeze(logical.parameters.map((parameter, offset) => Object.freeze({
-    index: offset + 1,
-    ...(parameter.outputName === undefined ? {} : { name: parameter.outputName, outputName: parameter.outputName }),
-    ...(parameter.interpolation === undefined ? {} : { interpolation: parameter.interpolation }),
-    ...(parameter.hint === undefined ? {} : { hint: createParameterTypeHint(parameter.hint) }),
-    ...(parameter.direction === undefined ? {} : { direction: parameter.direction }),
-  })));
+  const bindings = Object.freeze(
+    logical.parameters.map((parameter, offset) =>
+      Object.freeze({
+        index: offset + 1,
+        ...(parameter.outputName === undefined ? {} : { name: parameter.outputName, outputName: parameter.outputName }),
+        ...(parameter.interpolation === undefined ? {} : { interpolation: parameter.interpolation }),
+        ...(parameter.hint === undefined ? {} : { hint: createParameterTypeHint(parameter.hint) }),
+        ...(parameter.direction === undefined ? {} : { direction: parameter.direction }),
+      }),
+    ),
+  );
   const reuse = Object.freeze({
     requested: requestedReuse,
     effective,
@@ -827,10 +970,12 @@ export function createStatementBindingDescription(
     reuse,
     literalizedSql: (literalOptions?: LiteralizeOptions): LiteralizedSqlResult => {
       if (literalOptions === undefined) {
-        if (defaultLiteralized === undefined) defaultLiteralized = literalized(logical, dialectId, formatLiteral, undefined);
+        if (defaultLiteralized === undefined)
+          defaultLiteralized = literalized(logical, dialectId, formatLiteral, undefined);
         return defaultLiteralized;
       }
-      if (typeof literalOptions !== "object" || literalOptions === null) throw new TypeError("literalizedSql options must be an object.");
+      if (typeof literalOptions !== "object" || literalOptions === null)
+        throw new TypeError("literalizedSql options must be an object.");
       const values = literalOptions.values;
       const binary = literalOptions.binary;
       const maxValueLength = literalOptions.maxValueLength;
@@ -841,9 +986,8 @@ export function createStatementBindingDescription(
         ...(maxValueLength === undefined ? {} : { maxValueLength }),
         ...(redact === undefined ? {} : { redact }),
       });
-      const cacheKey = redact === undefined
-        ? `${values ?? ""}\u0000${binary ?? ""}\u0000${maxValueLength ?? ""}`
-        : undefined;
+      const cacheKey =
+        redact === undefined ? `${values ?? ""}\u0000${binary ?? ""}\u0000${maxValueLength ?? ""}` : undefined;
       if (cacheKey !== undefined) {
         const cached = literalCache.get(cacheKey);
         if (cached) return cached;
@@ -891,12 +1035,15 @@ export function createBulkBindingDescription(
   };
   const literalizedSqlFor = (index: number, literalOptions?: LiteralizeOptions): LiteralizedSqlResult => {
     const values = valuesAt(index);
-    const optionsSnapshot = literalOptions === undefined ? undefined : {
-      ...(literalOptions.values === undefined ? {} : { values: literalOptions.values }),
-      ...(literalOptions.binary === undefined ? {} : { binary: literalOptions.binary }),
-      ...(literalOptions.maxValueLength === undefined ? {} : { maxValueLength: literalOptions.maxValueLength }),
-      ...(literalOptions.redact === undefined ? {} : { redact: literalOptions.redact }),
-    };
+    const optionsSnapshot =
+      literalOptions === undefined
+        ? undefined
+        : {
+            ...(literalOptions.values === undefined ? {} : { values: literalOptions.values }),
+            ...(literalOptions.binary === undefined ? {} : { binary: literalOptions.binary }),
+            ...(literalOptions.maxValueLength === undefined ? {} : { maxValueLength: literalOptions.maxValueLength }),
+            ...(literalOptions.redact === undefined ? {} : { redact: literalOptions.redact }),
+          };
     const statement = {
       ...logical.statement,
       parameters: logical.statement.parameters.map((parameter, parameterIndex) => ({
@@ -904,11 +1051,7 @@ export function createBulkBindingDescription(
         value: values[parameterIndex],
       })),
     };
-    const result = createStatementBindingDescription(
-      statement,
-      context,
-      options,
-    ).literalizedSql(optionsSnapshot);
+    const result = createStatementBindingDescription(statement, context, options).literalizedSql(optionsSnapshot);
     return result;
   };
   const description = {
@@ -1098,9 +1241,7 @@ export interface CommandExecutionResult {
   readonly command: CommandResult;
 }
 
-export type QueryExecutionResult<Row = unknown> =
-  | RowsExecutionResult<Row>
-  | CommandExecutionResult;
+export type QueryExecutionResult<Row = unknown> = RowsExecutionResult<Row> | CommandExecutionResult;
 
 export interface ExecutionOptions {
   readonly signal?: AbortSignal;
@@ -1114,11 +1255,7 @@ export interface RowValidationOptions<Row> extends ExecutionOptions {
 
 export interface StreamOptions<Row> extends RowValidationOptions<Row> {}
 
-export type TransactionIsolation =
-  | "read-uncommitted"
-  | "read-committed"
-  | "repeatable-read"
-  | "serializable";
+export type TransactionIsolation = "read-uncommitted" | "read-committed" | "repeatable-read" | "serializable";
 
 export interface TransactionOptions {
   readonly isolation?: TransactionIsolation;
@@ -1192,9 +1329,10 @@ export type RoutineResultFromContract<Contract extends RoutineContract> = Routin
     ? RoutineRowsFromSchemas<Schemas>
     : readonly unknown[],
   Contract["returnValue"] extends RoutineSchema ? RoutineSchemaOutput<Contract["returnValue"]> : unknown
-> & (Contract extends { readonly returnValue: RoutineSchema }
-  ? { readonly returnValue: RoutineSchemaOutput<Contract["returnValue"]> }
-  : {});
+> &
+  (Contract extends { readonly returnValue: RoutineSchema }
+    ? { readonly returnValue: RoutineSchemaOutput<Contract["returnValue"]> }
+    : {});
 
 export type RoutineResultSource =
   | {
@@ -1266,10 +1404,26 @@ export interface QueryExecutor {
   readonly ownershipKey?: object;
   readonly statementBinding: StatementBindingAdapter;
   readonly environment?: DriverEnvironment;
-  query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<QueryExecutionResult<Row>>;
-  stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): AsyncIterable<Row>;
-  call(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Awaitable<DriverRoutineResult>;
-  bulk?(bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Awaitable<BulkExecutionResult>;
+  query<Row>(
+    rendered: RenderedStatement,
+    binding?: StatementBindingDescription,
+    options?: ExecutionOptions,
+  ): Awaitable<QueryExecutionResult<Row>>;
+  stream<Row>(
+    rendered: RenderedStatement,
+    binding?: StatementBindingDescription,
+    options?: ExecutionOptions,
+  ): AsyncIterable<Row>;
+  call(
+    rendered: RenderedStatement,
+    binding?: StatementBindingDescription,
+    options?: ExecutionOptions,
+  ): Awaitable<DriverRoutineResult>;
+  bulk?(
+    bulk: RenderedBulk,
+    binding: BulkBindingDescription,
+    options?: ExecutionOptions,
+  ): Awaitable<BulkExecutionResult>;
   validateTransactionOptions?(options: TransactionOptions): void;
   begin?(options?: TransactionOptions): Awaitable<void>;
   commit?(): Awaitable<void>;
@@ -1531,29 +1685,28 @@ export interface DatabaseOptions {
 
 export type PreparableQuery = ExecutableQuery | CallQuery;
 
-export type PreparedFactoryOptions =
-  | { readonly input: "none" }
-  | { readonly input: "required" };
+export type PreparedFactoryOptions = { readonly input: "none" } | { readonly input: "required" };
 
-export type PreparedArguments<Input, Options> =
-  [Input] extends [never] ? [options?: Options] : [input: Input, options?: Options];
+export type PreparedArguments<Input, Options> = [Input] extends [never]
+  ? [options?: Options]
+  : [input: Input, options?: Options];
 
 export type PreparedQuery<Input, Q extends PreparableQuery> = {
   readonly name: string;
 } & (Q extends CallQuery<infer Result>
   ? { call(...args: PreparedArguments<Input, ExecutionOptions>): Promise<Result> }
-  : { execute(...args: PreparedArguments<Input, ExecutionOptions>): Promise<ExecutionResultOf<Q>> }
-    & (Q extends RowQuery<infer Row> ? {
-      all(...args: PreparedArguments<Input, RowValidationOptions<Row>>): Promise<readonly Row[]>;
-      one(...args: PreparedArguments<Input, RowValidationOptions<Row>>): Promise<Row>;
-      maybeOne(...args: PreparedArguments<Input, RowValidationOptions<Row>>): Promise<Row | undefined>;
-      stream(...args: PreparedArguments<Input, StreamOptions<Row>>): AsyncIterable<Row>;
-    } : {}));
+  : {
+      execute(...args: PreparedArguments<Input, ExecutionOptions>): Promise<ExecutionResultOf<Q>>;
+    } & (Q extends RowQuery<infer Row>
+      ? {
+          all(...args: PreparedArguments<Input, RowValidationOptions<Row>>): Promise<readonly Row[]>;
+          one(...args: PreparedArguments<Input, RowValidationOptions<Row>>): Promise<Row>;
+          maybeOne(...args: PreparedArguments<Input, RowValidationOptions<Row>>): Promise<Row | undefined>;
+          stream(...args: PreparedArguments<Input, StreamOptions<Row>>): AsyncIterable<Row>;
+        }
+      : {}));
 
-export type ExecutableQuery =
-  | RowQuery<unknown>
-  | Query<unknown, "command">
-  | Query<unknown, "unknown">;
+export type ExecutableQuery = RowQuery<unknown> | Query<unknown, "command"> | Query<unknown, "unknown">;
 
 export type ExecutionResultOf<Q> =
   Q extends RowQuery<infer Row>
@@ -1571,8 +1724,15 @@ export interface Database {
   maybeOne<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row | undefined>;
   execute<Q extends ExecutableQuery>(query: Q, options?: ExecutionOptions): Promise<ExecutionResultOf<Q>>;
   call<Result extends RoutineCallResult>(query: CallQuery<Result>, options?: ExecutionOptions): Promise<Result>;
-  batch<const Queries extends readonly ExecutableQuery[]>(queries: Queries, options?: ExecutionOptions): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }>;
-  bulk<Input>(inputs: readonly Input[], factory: (input: Input, index: number) => CommandQuery, options?: ExecutionOptions): Promise<BulkResult>;
+  batch<const Queries extends readonly ExecutableQuery[]>(
+    queries: Queries,
+    options?: ExecutionOptions,
+  ): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }>;
+  bulk<Input>(
+    inputs: readonly Input[],
+    factory: (input: Input, index: number) => CommandQuery,
+    options?: ExecutionOptions,
+  ): Promise<BulkResult>;
   prepare<Factory extends () => PreparableQuery>(
     name: string,
     factory: Factory & (Parameters<Factory> extends [] ? unknown : never),
@@ -1584,13 +1744,12 @@ export interface Database {
   ): PreparedQuery<Parameters<Factory>[0], ReturnType<Factory>>;
   prepare<Factory extends (input: never) => PreparableQuery>(
     name: string,
-    factory: Factory & (
-      number extends Parameters<Factory>["length"]
+    factory: Factory &
+      (number extends Parameters<Factory>["length"]
         ? unknown
         : Parameters<Factory>["length"] extends 0 | 1
           ? unknown
-          : never
-    ),
+          : never),
     options: { readonly input: "required" },
   ): PreparedQuery<Parameters<Factory>[0], ReturnType<Factory>>;
   stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row>;
@@ -1624,7 +1783,10 @@ export interface SqlTag extends SqlTagLike<"unknown"> {
   rows: RowsTag;
   command: (strings: TemplateStringsArray, ...values: readonly unknown[]) => CommandQuery;
   call: {
-    <Result extends RoutineCallResult = RoutineCallResult>(strings: TemplateStringsArray, ...values: readonly unknown[]): CallQuery<Result>;
+    <Result extends RoutineCallResult = RoutineCallResult>(
+      strings: TemplateStringsArray,
+      ...values: readonly unknown[]
+    ): CallQuery<Result>;
     <Contract extends RoutineContract>(contract: Contract): RoutineContractTag<Contract>;
   };
   bind<Input>(value: NoInfer<Input>, hint: ParameterTypeHint<Input>): BoundParameter<Input>;

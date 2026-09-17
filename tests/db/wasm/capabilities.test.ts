@@ -73,7 +73,14 @@ interface WasmReport {
         readonly preparedRow: { readonly value: string };
         readonly markers: readonly { readonly value: string }[];
       };
-      readonly inserted: { readonly id: string; readonly name: string; readonly payload: { readonly active: boolean }; readonly bytes: readonly number[]; readonly stamp: string; readonly uuid: string };
+      readonly inserted: {
+        readonly id: string;
+        readonly name: string;
+        readonly payload: { readonly active: boolean };
+        readonly bytes: readonly number[];
+        readonly stamp: string;
+        readonly uuid: string;
+      };
       readonly updated: { readonly id: string; readonly name: string };
       readonly deleted: { readonly id: string };
       readonly remaining: readonly unknown[];
@@ -85,10 +92,21 @@ const root = resolve(import.meta.dirname, "../../..");
 let report: WasmReport;
 
 function parseReport(value: unknown): WasmReport {
-  if (value === null || typeof value !== "object" || !("runtime" in value) || !("sqliteVersion" in value) || !("cases" in value)) {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    !("runtime" in value) ||
+    !("sqliteVersion" in value) ||
+    !("cases" in value)
+  ) {
     throw new Error("Browser smoke report has an invalid top-level shape.");
   }
-  if (value.runtime !== "browser-wasm" || typeof value.sqliteVersion !== "string" || value.cases === null || typeof value.cases !== "object") {
+  if (
+    value.runtime !== "browser-wasm" ||
+    typeof value.sqliteVersion !== "string" ||
+    value.cases === null ||
+    typeof value.cases !== "object"
+  ) {
     throw new Error("Browser smoke report does not identify a browser WASM run.");
   }
   const ids = [
@@ -114,8 +132,12 @@ function runBrowserSmoke(): Promise<WasmReport> {
   });
   let stdout = "";
   let stderr = "";
-  child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
-  child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+  child.stdout.on("data", (chunk: Buffer) => {
+    stdout += chunk.toString();
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
   child.once("error", reject);
   child.once("close", (code: number | null) => {
     const line = stdout.split("\n").find((entry) => entry.startsWith("SQLBRAID_BROWSER_REPORT="));
@@ -142,7 +164,9 @@ beforeAll(async () => {
   assert.equal(report.runtime, "browser-wasm");
   assert.match(report.sqliteVersion, /^\d+\.\d+\.\d+$/u);
   assert.match(report.browserVersion, /^\d+\.\d+\.\d+\.\d+$/u);
-  const driverPackage = JSON.parse(readFileSync(resolve(root, "node_modules/@sqlite.org/sqlite-wasm/package.json"), "utf8"));
+  const driverPackage = JSON.parse(
+    readFileSync(resolve(root, "node_modules/@sqlite.org/sqlite-wasm/package.json"), "utf8"),
+  );
   stampSupportEnvironment("sqlite-wasm", {
     database: { product: "sqlite", version: report.sqliteVersion, edition: "official SQLite WASM OO1" },
     driver: { id: "sqlite-wasm", version: driverPackage.version, profile: "sqlite-wasm-exact-string" },
@@ -158,7 +182,10 @@ test("wasm.sql.native-transparency", () => {
     ", '$.enabled') AS enabled,\n             ",
     " AS actual\n    ",
   ]);
-  assert.equal(evidence.parameterizedSql, "\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract(?1, '$.enabled') AS enabled,\n             ?2 AS actual\n    ");
+  assert.equal(
+    evidence.parameterizedSql,
+    "\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract(?1, '$.enabled') AS enabled,\n             ?2 AS actual\n    ",
+  );
   assert.deepEqual(evidence.observedValues, ['{"enabled":true}', 7]);
   assert.deepEqual(evidence.rows, [{ marker: "literal $1 :1 @p1 ?", enabled: "1", actual: "7" }]);
 });
@@ -177,8 +204,8 @@ test("wasm.capabilities.report physical execution boundaries", () => {
 
 test("wasm.sql.generated-structure", () => {
   const evidence = report.cases["wasm.sql.generated-structure"];
-  assert.deepEqual(evidence.logicalSegments, ["INSERT INTO \"generated_table\" (\"name\") VALUES (", ")"]);
-  assert.equal(evidence.parameterizedSql, "INSERT INTO \"generated_table\" (\"name\") VALUES (?1)");
+  assert.deepEqual(evidence.logicalSegments, ['INSERT INTO "generated_table" ("name") VALUES (', ")"]);
+  assert.equal(evidence.parameterizedSql, 'INSERT INTO "generated_table" ("name") VALUES (?1)');
   assert.deepEqual(evidence.rows, [{ name: "Ada" }]);
 });
 
@@ -190,7 +217,10 @@ test("wasm.numeric.exact-integer", () => {
     minimum: { type: "string", value: "-9223372036854775808" },
     maximum: { type: "string", value: "9223372036854775807" },
   });
-  assert.deepEqual(evidence.realValues, [{ type: "number", value: 1 }, { type: "number", value: 1e20 }]);
+  assert.deepEqual(evidence.realValues, [
+    { type: "number", value: 1 },
+    { type: "number", value: 1e20 },
+  ]);
 });
 
 test("wasm.data.json-text", () => {
@@ -222,8 +252,12 @@ test("wasm.execution.mapped-transaction", () => {
     markers: [{ value: "nested" }],
   });
   assert.deepEqual(evidence.inserted, {
-    id: "1", name: "ADA", payload: { active: true }, bytes: [0, 128, 255],
-    stamp: "2026-09-14T00:00:00.123456Z", uuid: "123e4567-e89b-12d3-a456-426614174000",
+    id: "1",
+    name: "ADA",
+    payload: { active: true },
+    bytes: [0, 128, 255],
+    stamp: "2026-09-14T00:00:00.123456Z",
+    uuid: "123e4567-e89b-12d3-a456-426614174000",
   });
   assert.deepEqual(evidence.updated, { id: "1", name: "Grace" });
   assert.deepEqual(evidence.deleted, { id: "1" });

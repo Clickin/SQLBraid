@@ -1,9 +1,4 @@
-import {
-  normalizeExactInteger,
-  ResultExactnessError,
-  type ParameterTypeHint,
-  type TypePolicy,
-} from "@sqlbraid/core";
+import { normalizeExactInteger, ResultExactnessError, type ParameterTypeHint, type TypePolicy } from "@sqlbraid/core";
 
 const mappingDefinitions = [
   {
@@ -92,10 +87,14 @@ const mappingDefinitions = [
   { databaseType: "datetimeoffset", inputType: "Date", outputType: "Date", nullable: true },
 ] as const;
 
-const mappings = Object.freeze(mappingDefinitions.map((mapping) => Object.freeze({
-  ...mapping,
-  ...("numeric" in mapping ? { numeric: Object.freeze(mapping.numeric) } : {}),
-})));
+const mappings = Object.freeze(
+  mappingDefinitions.map((mapping) =>
+    Object.freeze({
+      ...mapping,
+      ...("numeric" in mapping ? { numeric: Object.freeze(mapping.numeric) } : {}),
+    }),
+  ),
+);
 
 function canonical(databaseType: string): string {
   return databaseType.trim().toLowerCase().replace(/\s+/gu, "");
@@ -126,14 +125,23 @@ function encode(databaseType: string, value: unknown): unknown {
   if (type === "bigint" && typeof value === "bigint") return value.toString();
   if (type === "decimal" || type === "numeric" || type === "money" || type === "smallmoney") {
     if (typeof value !== "number" || !Number.isFinite(value) || !/^-?\d+(?:\.\d+)?$/u.test(String(value))) {
-      throw new TypeError(`SQL Server ${databaseType} compatibility inputs require a finite plain JavaScript number; use a character bind with authored CAST/CONVERT for exact text.`);
+      throw new TypeError(
+        `SQL Server ${databaseType} compatibility inputs require a finite plain JavaScript number; use a character bind with authored CAST/CONVERT for exact text.`,
+      );
     }
-    const digits = String(value).replace(/^-?/u, "").replace(/\./gu, "").replace(/^0+(?=\d)/u, "");
+    const digits = String(value)
+      .replace(/^-?/u, "")
+      .replace(/\./gu, "")
+      .replace(/^0+(?=\d)/u, "");
     if (digits.length > 15) {
-      throw new TypeError(`SQL Server ${databaseType} compatibility inputs are limited to 15 significant decimal digits; use a character bind with authored CAST/CONVERT for larger values.`);
+      throw new TypeError(
+        `SQL Server ${databaseType} compatibility inputs are limited to 15 significant decimal digits; use a character bind with authored CAST/CONVERT for larger values.`,
+      );
     }
     if ((type === "money" || type === "smallmoney") && (String(value).split(".")[1]?.length ?? 0) > 4) {
-      throw new TypeError(`SQL Server ${databaseType} compatibility inputs support at most four fractional decimal digits; use a character bind with authored CAST/CONVERT for exact text.`);
+      throw new TypeError(
+        `SQL Server ${databaseType} compatibility inputs support at most four fractional decimal digits; use a character bind with authored CAST/CONVERT for exact text.`,
+      );
     }
   }
   return value;
@@ -149,7 +157,10 @@ export const typePolicy: TypePolicy = Object.freeze({
 
 type Hint<Input = unknown> = Readonly<ParameterTypeHint<Input>>;
 
-function hint<Input>(databaseType: string, extras: Omit<ParameterTypeHint<Input>, "databaseType" | "__input"> = {}): Hint<Input> {
+function hint<Input>(
+  databaseType: string,
+  extras: Omit<ParameterTypeHint<Input>, "databaseType" | "__input"> = {},
+): Hint<Input> {
   return Object.freeze({ databaseType, ...extras }) as Hint<Input>;
 }
 
@@ -192,7 +203,8 @@ export const mssqlParameter = Object.freeze({
   float: (): Hint<number | null> => hint<number | null>("float"),
   nvarchar: (length: number | "max"): Hint<string | null> => hint("nvarchar", { length: lengthValue(length, 4000) }),
   varchar: (length: number | "max"): Hint<string | null> => hint("varchar", { length: lengthValue(length, 8000) }),
-  varbinary: (length: number | "max"): Hint<Uint8Array | null> => hint("varbinary", { length: lengthValue(length, 8000) }),
+  varbinary: (length: number | "max"): Hint<Uint8Array | null> =>
+    hint("varbinary", { length: lengthValue(length, 8000) }),
   bit: (): Hint<boolean | null> => hint<boolean | null>("bit"),
   uniqueidentifier: (): Hint<string | null> => hint<string | null>("uniqueidentifier"),
   date: (): Hint<Date | null> => hint<Date | null>("date"),

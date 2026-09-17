@@ -19,15 +19,22 @@ interface MssqlSettings {
   readonly database: string;
 }
 
-const tediousVersion = (JSON.parse(readFileSync(new URL("../../../node_modules/tedious/package.json", import.meta.url), "utf8")) as { readonly version: string }).version;
+const tediousVersion = (
+  JSON.parse(readFileSync(new URL("../../../node_modules/tedious/package.json", import.meta.url), "utf8")) as {
+    readonly version: string;
+  }
+).version;
 
 function rawRow(connection: Connection, text: string): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     let row: Record<string, unknown> = {};
-    const request = new Request(text, (error) => error ? reject(error) : resolve(row));
-    request.on("row", (columns: readonly { readonly metadata: { readonly colName: string }; readonly value: unknown }[]) => {
-      row = Object.fromEntries(columns.map((column) => [column.metadata.colName, column.value]));
-    });
+    const request = new Request(text, (error) => (error ? reject(error) : resolve(row)));
+    request.on(
+      "row",
+      (columns: readonly { readonly metadata: { readonly colName: string }; readonly value: unknown }[]) => {
+        row = Object.fromEntries(columns.map((column) => [column.metadata.colName, column.value]));
+      },
+    );
     connection.execSql(request);
   });
 }
@@ -47,7 +54,7 @@ function connect(settings: MssqlSettings): Promise<Connection> {
     authentication: { type: "default", options: { userName: settings.userName, password: settings.password } },
   });
   return new Promise<Connection>((resolve, reject) => {
-    connection.once("connect", (error) => error ? reject(error) : resolve(connection));
+    connection.once("connect", (error) => (error ? reject(error) : resolve(connection)));
     connection.connect();
   });
 }
@@ -69,12 +76,16 @@ async function stampMssqlEnvironment(db: ReturnType<typeof createTediousDatabase
   const major = probe.major_version === "16" ? "2022" : probe.major_version;
   const databaseVersion = probe.update_level ? `${major}-${probe.update_level}` : probe.version;
   const edition = /^(Developer|Enterprise|Standard|Express)/u.exec(probe.edition)?.[1] ?? probe.edition;
-  stampSupportEnvironment("mssql", {
-    ...environment,
-    database: { product: "mssql", version: databaseVersion, edition },
-    driver: { ...environment.driver, version: tediousVersion },
-    runtime: { id: "node", version: process.versions.node },
-  }, testId);
+  stampSupportEnvironment(
+    "mssql",
+    {
+      ...environment,
+      database: { product: "mssql", version: databaseVersion, edition },
+      driver: { ...environment.driver, version: tediousVersion },
+      runtime: { id: "node", version: process.versions.node },
+    },
+    testId,
+  );
 }
 
 async function close(connection: Connection): Promise<void> {
@@ -88,7 +99,15 @@ async function close(connection: Connection): Promise<void> {
 test("mssql.sql.native-transparency", { timeout: 30_000 }, async () => {
   const connection = await connect(inject("mssql") as MssqlSettings);
   const events: ExecutionEvent[] = [];
-  const db = createTediousDatabase(connection, { observers: [{ onEvent(event) { events.push(event); } }] });
+  const db = createTediousDatabase(connection, {
+    observers: [
+      {
+        onEvent(event) {
+          events.push(event);
+        },
+      },
+    ],
+  });
   try {
     const query = sql.rows`
       SELECT N'literal @p1 ? :1 $1' AS [marker],
@@ -102,7 +121,8 @@ test("mssql.sql.native-transparency", { timeout: 30_000 }, async () => {
         "\n      SELECT N'literal @p1 ? :1 $1' AS [marker],\n             JSON_VALUE(N'{\"enabled\":true}', '$.enabled') AS [enabled],\n             CAST(",
         " AS int) AS [actual]\n    ",
       ],
-      expectedParameterizedSql: "\n      SELECT N'literal @p1 ? :1 $1' AS [marker],\n             JSON_VALUE(N'{\"enabled\":true}', '$.enabled') AS [enabled],\n             CAST(@p1 AS int) AS [actual]\n    ",
+      expectedParameterizedSql:
+        "\n      SELECT N'literal @p1 ? :1 $1' AS [marker],\n             JSON_VALUE(N'{\"enabled\":true}', '$.enabled') AS [enabled],\n             CAST(@p1 AS int) AS [actual]\n    ",
       events,
       execute: () => db.all(query),
       expectedResult: [{ marker: "literal @p1 ? :1 $1", enabled: "true", actual: "7" }],
@@ -129,7 +149,10 @@ test("mssql.numeric.exact-integer", { timeout: 30_000 }, async () => {
   const db = createTediousDatabase(connection);
   try {
     assert.equal((await db.environment()).capabilities["numeric.exact-integer"]?.canonical, "string");
-    const raw = await rawRow(connection, "SELECT CAST('2147483647' AS int) AS standard, CAST('9223372036854775807' AS bigint) AS max");
+    const raw = await rawRow(
+      connection,
+      "SELECT CAST('2147483647' AS int) AS standard, CAST('9223372036854775807' AS bigint) AS max",
+    );
     assert.deepEqual(raw, { standard: 2147483647, max: "9223372036854775807" });
     const row = await db.one(sql.rows<{
       readonly tiny: string;
@@ -170,7 +193,8 @@ test("mssql.numeric.exact-decimal", { timeout: 30_000 }, async () => {
     assert.equal((await db.environment()).capabilities["numeric.exact-decimal"]?.status, "unsupported");
     const exact = "1234567890123456789012345678.1234567890";
     await assert.rejects(
-      () => db.one(sql.rows`
+      () =>
+        db.one(sql.rows`
         SELECT CAST(${sql.bind(exact, mssqlParameter.nvarchar(80))} AS decimal(38, 10)) AS decimal_value,
                CAST('123.4500' AS numeric(19, 4)) AS numeric_value,
                CAST('12.3456' AS money) AS money_value,
@@ -179,7 +203,10 @@ test("mssql.numeric.exact-decimal", { timeout: 30_000 }, async () => {
       (error: unknown) => error instanceof ResultExactnessError && error.code === "BRAID_RESULT_EXACTNESS",
     );
     await assert.rejects(
-      () => db.one(sql.rows`SELECT SUM(CAST(${sql.bind(exact, mssqlParameter.nvarchar(80))} AS decimal(38, 10))) AS aggregate_value`),
+      () =>
+        db.one(
+          sql.rows`SELECT SUM(CAST(${sql.bind(exact, mssqlParameter.nvarchar(80))} AS decimal(38, 10))) AS aggregate_value`,
+        ),
       (error: unknown) => error instanceof ResultExactnessError && error.code === "BRAID_RESULT_EXACTNESS",
     );
     await assert.rejects(
@@ -203,7 +230,11 @@ test("mssql.numeric.approximate-float", { timeout: 30_000 }, async () => {
     for (const expected of binary32Finite) {
       const normalized = Math.fround(expected);
       if (!Number.isFinite(normalized)) continue;
-      const row = await db.one(sql.rows<{ readonly value: number }>`SELECT CAST(${sql.bind(expected, { databaseType: "real" })} AS real) AS value`);
+      const row = await db.one(
+        sql.rows<{
+          readonly value: number;
+        }>`SELECT CAST(${sql.bind(expected, { databaseType: "real" })} AS real) AS value`,
+      );
       if (Object.is(expected, -0)) {
         assert.equal(Object.is(row.value, -0), false, "SQL Server normalizes -0 to +0");
         assertFloatBits(row.value, 0, 32);
@@ -212,7 +243,11 @@ test("mssql.numeric.approximate-float", { timeout: 30_000 }, async () => {
       }
     }
     for (const expected of binary64Finite) {
-      const row = await db.one(sql.rows<{ readonly value: number }>`SELECT CAST(${sql.bind(expected, { databaseType: "float" })} AS float) AS value`);
+      const row = await db.one(
+        sql.rows<{
+          readonly value: number;
+        }>`SELECT CAST(${sql.bind(expected, { databaseType: "float" })} AS float) AS value`,
+      );
       if (Object.is(expected, -0)) {
         assert.equal(Object.is(row.value, -0), false, "SQL Server normalizes -0 to +0");
         assertFloatBits(row.value, 0, 64);
@@ -241,18 +276,26 @@ test("mssql.numeric.exact-bind-character", { timeout: 30_000 }, async () => {
 
     await db.execute(sql`DROP TABLE IF EXISTS dbo.braid_pv17_exact_bind`);
     await db.execute(sql`CREATE TABLE dbo.braid_pv17_exact_bind (value decimal(38, 10) NOT NULL)`);
-    await db.bulk([exact, second], (value) => sql.command`
+    await db.bulk(
+      [exact, second],
+      (value) => sql.command`
       INSERT INTO dbo.braid_pv17_exact_bind (value)
       VALUES (CAST(${sql.bind(value, mssqlParameter.nvarchar(80))} AS decimal(38, 10)))
-    `);
+    `,
+    );
     const rows = await db.all(sql.rows<{ readonly value: string }>`
       SELECT CONVERT(varchar(64), value) AS value
       FROM dbo.braid_pv17_exact_bind
       ORDER BY value
     `);
-    assert.deepEqual(rows.map((row) => row.value), [second, exact]);
+    assert.deepEqual(
+      rows.map((row) => row.value),
+      [second, exact],
+    );
   } finally {
-    await createTediousDatabase(connection).execute(sql`DROP TABLE IF EXISTS dbo.braid_pv17_exact_bind`).catch(() => undefined);
+    await createTediousDatabase(connection)
+      .execute(sql`DROP TABLE IF EXISTS dbo.braid_pv17_exact_bind`)
+      .catch(() => undefined);
     await close(connection);
   }
 });
@@ -281,7 +324,8 @@ test("mssql.data.sql-variant-unclassified", { timeout: 30_000 }, async () => {
     await stampMssqlEnvironment(db, "mssql.data.sql-variant-unclassified");
     assert.equal(environment.capabilities["data.sql-variant"]?.status, "unsupported");
     assert.deepEqual(environment.capabilities["data.sql-variant"]?.rawRepresentations, ["driver-native"]);
-    const text = "SELECT CAST(CAST('9007199254740993' AS bigint) AS sql_variant) AS variantBigint, CAST('payload' AS sql_variant) AS variantText, CAST(CAST('12.34' AS decimal(10, 2)) AS sql_variant) AS variantDecimal";
+    const text =
+      "SELECT CAST(CAST('9007199254740993' AS bigint) AS sql_variant) AS variantBigint, CAST('payload' AS sql_variant) AS variantText, CAST(CAST('12.34' AS decimal(10, 2)) AS sql_variant) AS variantDecimal";
     const raw = await rawRow(connection, text);
     const row = await db.one(sql.rows<Record<string, unknown>>`${sql.raw(text)}`);
     assert.deepEqual(row, raw);
@@ -331,7 +375,9 @@ test("mssql.data.uuid", { timeout: 30_000 }, async () => {
   const connection = await connect(inject("mssql") as MssqlSettings);
   const db = createTediousDatabase(connection);
   try {
-    const row = await db.one(sql.rows<{ readonly id: string }>`SELECT CAST('550e8400-e29b-41d4-a716-446655440000' AS uniqueidentifier) AS id`);
+    const row = await db.one(
+      sql.rows<{ readonly id: string }>`SELECT CAST('550e8400-e29b-41d4-a716-446655440000' AS uniqueidentifier) AS id`,
+    );
     assert.equal(row.id.toLowerCase(), "550e8400-e29b-41d4-a716-446655440000");
   } finally {
     await close(connection);
@@ -341,10 +387,20 @@ test("mssql.data.uuid", { timeout: 30_000 }, async () => {
 test("mssql.dml.insert-returning", { timeout: 30_000 }, async () => {
   const connection = await connect(inject("mssql") as MssqlSettings);
   const events: ExecutionEvent[] = [];
-  const db = createTediousDatabase(connection, { observers: [{ onEvent(event) { events.push(event); } }] });
+  const db = createTediousDatabase(connection, {
+    observers: [
+      {
+        onEvent(event) {
+          events.push(event);
+        },
+      },
+    ],
+  });
   try {
     await db.execute(sql`DROP TABLE IF EXISTS dbo.braid_pv16_capability`);
-    await db.execute(sql`CREATE TABLE dbo.braid_pv16_capability (id int NOT NULL PRIMARY KEY, name nvarchar(100) NOT NULL, amount int NOT NULL)`);
+    await db.execute(
+      sql`CREATE TABLE dbo.braid_pv16_capability (id int NOT NULL PRIMARY KEY, name nvarchar(100) NOT NULL, amount int NOT NULL)`,
+    );
     events.length = 0;
     const bulkReport = await verifyBulkConformance({
       db,
@@ -355,8 +411,13 @@ test("mssql.dml.insert-returning", { timeout: 30_000 }, async () => {
     });
     assert.equal(bulkReport.executionMode, "prepared-loop");
     assert.deepEqual(
-      await db.bulk([{ id: 10, name: "Bulk-A", amount: 30 }, { id: 11, name: "Bulk-B", amount: 40 }], (input) =>
-        sql.command`INSERT INTO dbo.braid_pv16_capability (id, name, amount) VALUES (${input.id}, ${input.name}, ${input.amount})`,
+      await db.bulk(
+        [
+          { id: 10, name: "Bulk-A", amount: 30 },
+          { id: 11, name: "Bulk-B", amount: 40 },
+        ],
+        (input) =>
+          sql.command`INSERT INTO dbo.braid_pv16_capability (id, name, amount) VALUES (${input.id}, ${input.name}, ${input.amount})`,
       ),
       { inputCount: 2, affectedRows: 2 },
     );
@@ -390,10 +451,7 @@ test("mssql.dml.insert-returning", { timeout: 30_000 }, async () => {
         },
       },
     };
-    assert.deepEqual(
-      await db.all(sql.rows<{ readonly id: string }>`SELECT ${2} AS id`, { schema }),
-      [{ id: "12" }],
-    );
+    assert.deepEqual(await db.all(sql.rows<{ readonly id: string }>`SELECT ${2} AS id`, { schema }), [{ id: "12" }]);
 
     await db.execute(sql`INSERT INTO dbo.braid_pv16_capability (id, name, amount) VALUES (${2}, ${"Bob"}, ${30})`);
     const merged = await db.all(sql.rows`
@@ -410,23 +468,27 @@ test("mssql.dml.insert-returning", { timeout: 30_000 }, async () => {
     ]);
 
     await assert.rejects(
-      () => db.bulk([{ id: 2, name: "Duplicate", amount: 99 }, { id: 99, name: "Later", amount: 100 }], (input) =>
-        sql.command`INSERT INTO dbo.braid_pv16_capability (id, name, amount) VALUES (${input.id}, ${input.name}, ${input.amount})`,
-      ),
+      () =>
+        db.bulk(
+          [
+            { id: 2, name: "Duplicate", amount: 99 },
+            { id: 99, name: "Later", amount: 100 },
+          ],
+          (input) =>
+            sql.command`INSERT INTO dbo.braid_pv16_capability (id, name, amount) VALUES (${input.id}, ${input.name}, ${input.amount})`,
+        ),
       /duplicate|primary key/iu,
     );
-    assert.deepEqual(
-      await db.all(sql.rows`SELECT id FROM dbo.braid_pv16_capability WHERE id = ${99}`),
-      [],
+    assert.deepEqual(await db.all(sql.rows`SELECT id FROM dbo.braid_pv16_capability WHERE id = ${99}`), []);
+    assert.equal(
+      (await db.one(sql.rows<{ readonly count: string }>`SELECT COUNT(*) AS count FROM dbo.braid_pv16_capability`))
+        .count,
+      "4",
     );
-    assert.equal((await db.one(sql.rows<{ readonly count: string }>`SELECT COUNT(*) AS count FROM dbo.braid_pv16_capability`)).count, "4");
 
-    await assert.rejects(
-      () => db.execute(sql.rows`SELECT 1 AS duplicate, 2 AS duplicate`),
-      /BRAID_RESULT_COLUMNS/u,
-    );
-    await assert.rejects(
-      () => db.execute(sql.rows`
+    await assert.rejects(() => db.execute(sql.rows`SELECT 1 AS duplicate, 2 AS duplicate`), /BRAID_RESULT_COLUMNS/u);
+    await assert.rejects(() =>
+      db.execute(sql.rows`
         SET XACT_ABORT ON;
         BEGIN TRANSACTION;
         INSERT INTO dbo.braid_pv16_capability (id, name, amount)
@@ -435,7 +497,11 @@ test("mssql.dml.insert-returning", { timeout: 30_000 }, async () => {
         THROW 50000, 'late batch failure', 1;
       `),
     );
-    assert.equal((await db.one(sql.rows<{ readonly count: string }>`SELECT COUNT(*) AS count FROM dbo.braid_pv16_capability`)).count, "4");
+    assert.equal(
+      (await db.one(sql.rows<{ readonly count: string }>`SELECT COUNT(*) AS count FROM dbo.braid_pv16_capability`))
+        .count,
+      "4",
+    );
   } finally {
     await db.execute(sql`DROP TABLE IF EXISTS dbo.braid_pv16_capability`).catch(() => undefined);
     await close(connection);
@@ -463,7 +529,8 @@ test("rc.mssql.session", { timeout: 30_000 }, async () => {
       "routine.return-value",
       "routine.result-sets",
       "routine.out-cursor",
-    ]) assert.ok(environment.capabilities[capability]);
+    ])
+      assert.ok(environment.capabilities[capability]);
     await db.session(async (session) => {
       scoped = session;
       const first = await session.one(sql.rows<{ readonly spid: string }>`SELECT @@SPID AS spid`);
@@ -520,7 +587,9 @@ test("rc.mssql.prepare", { timeout: 30_000 }, async () => {
 
     const call = db.prepare(
       "rc-mssql-call",
-      (value: number) => sql.call({ procedure: { name: "dbo.braid_rc_mssql_call", parameterNames: ["value", "answer"] } })`
+      (value: number) => sql.call({
+        procedure: { name: "dbo.braid_rc_mssql_call", parameterNames: ["value", "answer"] },
+      })`
         ${value}, ${sql.inOut("answer", 1, mssqlParameter.int())}
       `,
     );

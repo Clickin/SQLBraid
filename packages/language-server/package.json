@@ -2,30 +2,29 @@
   "name": "@sqlbraid/language-server",
   "version": "1.0.0-rc.2",
   "description": "SQLBraid language server for SQL-aware TypeScript tooling",
+  "keywords": [
+    "database",
+    "lsp",
+    "sql",
+    "typescript"
+  ],
+  "homepage": "https://github.com/Clickin/SQLBraid#readme",
+  "bugs": {
+    "url": "https://github.com/Clickin/SQLBraid/issues"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Clickin/SQLBraid.git",
     "directory": "packages/language-server"
   },
-  "homepage": "https://github.com/Clickin/SQLBraid#readme",
-  "bugs": {
-    "url": "https://github.com/Clickin/SQLBraid/issues"
+  "bin": {
+    "sqlbraid-language-server": "./dist/cli.js"
   },
-  "keywords": ["sql", "typescript", "database", "lsp"],
+  "files": [
+    "dist"
+  ],
   "type": "module",
-  "files": ["dist"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=22.18.0" },
-  "bin": { "sqlbraid-language-server": "./dist/cli.js" },
-  "dependencies": {
-    "@sqlbraid/compiler": "workspace:*",
-    "@sqlbraid/core": "workspace:*",
-    "@sqlbraid/metadata": "workspace:*",
-    "@sqlbraid/tooling": "workspace:*",
-    "vscode-languageserver": "9.0.1",
-    "vscode-languageserver-textdocument": "1.0.12"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -35,5 +34,19 @@
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sqlbraid/compiler": "workspace:*",
+    "@sqlbraid/core": "workspace:*",
+    "@sqlbraid/metadata": "workspace:*",
+    "@sqlbraid/tooling": "workspace:*",
+    "vscode-languageserver": "9.0.1",
+    "vscode-languageserver-textdocument": "1.0.12"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

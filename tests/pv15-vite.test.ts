@@ -47,7 +47,12 @@ function lineAndColumn(source: string, offset: number): { readonly line: number;
   return { line: lines.length, column: lines.at(-1)?.length ?? 0 };
 }
 
-async function invokePlugin(plugin: ReturnType<typeof sqlbraid>, context: unknown, source: string, id: string): Promise<unknown> {
+async function invokePlugin(
+  plugin: ReturnType<typeof sqlbraid>,
+  context: unknown,
+  source: string,
+  id: string,
+): Promise<unknown> {
   const hook = plugin.transform;
   if (typeof hook !== "function") throw new Error("sqlbraid transform hook missing");
   return hook.call(context as never, source, id);
@@ -120,7 +125,7 @@ export { evaluations, schema };`;
 test("runtime lowering emits executable JavaScript for JS and preserves TS/JSX syntax", async () => {
   const guarded = [
     'import { sql } from "@sqlbraid/template";',
-    'export const query = sql`SELECT 1 /*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;',
+    "export const query = sql`SELECT 1 /*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;",
   ].join("\n");
   const unguarded = 'import { sql } from "@sqlbraid/template"; export const query = sql`SELECT 1`;';
   const directory = mkdtempSync(join(tmpdir(), "sqlbraid-compiler-output-"));
@@ -142,15 +147,17 @@ test("runtime lowering emits executable JavaScript for JS and preserves TS/JSX s
     assertParses("probe.jsx", jsx.code);
 
     for (const extension of ["js", "jsx", "ts", "tsx"]) {
-      const source = extension.endsWith("x")
-        ? `${unguarded}\nexport const view = <section />;`
-        : unguarded;
+      const source = extension.endsWith("x") ? `${unguarded}\nexport const view = <section />;` : unguarded;
       const result = transformSource(source, `plain.${extension}`);
       assert.equal(result.code, source, `unguarded ${extension} must not insert helpers`);
       assert.deepEqual(result.diagnostics, []);
     }
 
-    for (const [fileName, source] of [["probe.ts", guarded], ["probe.tsx", `${guarded}\nexport const view = <section data-query={query} />;`], ["plain.ts", unguarded]] as const) {
+    for (const [fileName, source] of [
+      ["probe.ts", guarded],
+      ["probe.tsx", `${guarded}\nexport const view = <section data-query={query} />;`],
+      ["plain.ts", unguarded],
+    ] as const) {
       const result = transformSource(source, fileName);
       assert.deepEqual(result.diagnostics, []);
       assertParses(fileName, result.code);
@@ -176,7 +183,7 @@ test("runtime helper insertion keeps hashbangs and directive prologues first", a
       const source = [
         ...prologue,
         'import { sql } from "@sqlbraid/template";',
-        'export const query = sql`SELECT 1 /*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;',
+        "export const query = sql`SELECT 1 /*@braid if ${true}*/ WHERE id = ${1} /*@braid end*/`;",
       ].join("\n");
       const result = transformSource(source, "probe.js");
       assert.deepEqual(result.diagnostics, []);
@@ -189,7 +196,10 @@ test("runtime helper insertion keeps hashbangs and directive prologues first", a
       assert.ok(result.map);
       const generatedQuery = result.code.indexOf("__sqlbraidCapture(sql");
       assert.ok(generatedQuery >= 0);
-      const mappedQuery = originalPositionFor(new TraceMap(result.map as SourceMap), lineAndColumn(result.code, generatedQuery));
+      const mappedQuery = originalPositionFor(
+        new TraceMap(result.map as SourceMap),
+        lineAndColumn(result.code, generatedQuery),
+      );
       const expectedQuery = lineAndColumn(source, source.indexOf("sql`"));
       assert.equal(mappedQuery.line, expectedQuery.line);
       assert.equal(mappedQuery.column, expectedQuery.column);
@@ -214,11 +224,12 @@ test("lowers guarded templates without transpiling TypeScript or TSX", () => {
   assert.ok(result.map);
   const map = new TraceMap(result.map as SourceMap);
   const parsed = ts.createSourceFile("component.tsx", result.code, ts.ScriptTarget.Latest, true);
-  const generatedPrefix = parsed.statements.find((statement) => (
-    ts.isImportDeclaration(statement)
-    && ts.isStringLiteral(statement.moduleSpecifier)
-    && statement.moduleSpecifier.text === "@sqlbraid/template"
-  ));
+  const generatedPrefix = parsed.statements.find(
+    (statement) =>
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === "@sqlbraid/template",
+  );
   assert.ok(generatedPrefix);
   const prefixStart = generatedPrefix.getStart(parsed);
   const prefixLine = result.code.indexOf("\n", prefixStart) + 1;
@@ -315,11 +326,12 @@ test("Vite forwards transform maps for downstream composition", async () => {
   assert.ok(result.map);
   const map = new TraceMap(result.map);
   const parsed = ts.createSourceFile("query.ts", result.code, ts.ScriptTarget.Latest, true);
-  const generatedQuery = parsed.statements
-    .filter(ts.isVariableStatement)
-    .flatMap((statement) => statement.declarationList.declarations)
-    .find((declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === "query")
-    ?.initializer?.getStart(parsed) ?? -1;
+  const generatedQuery =
+    parsed.statements
+      .filter(ts.isVariableStatement)
+      .flatMap((statement) => statement.declarationList.declarations)
+      .find((declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === "query")
+      ?.initializer?.getStart(parsed) ?? -1;
   assert.ok(generatedQuery >= 0);
   const mappedQuery = originalPositionFor(map, lineAndColumn(result.code, generatedQuery));
   const expectedQuery = lineAndColumn(source, source.indexOf("sql`"));
@@ -356,7 +368,8 @@ test("Vite plugin filters generated modules and reports original diagnostics", a
   await assert.rejects(() => invokePlugin(plugin, context, source, "/workspace/src/query.ts"));
   assert.match(String((reported as { readonly message?: unknown })?.message), /BRAID_STRUCTURE/u);
   assert.deepEqual((reported as { readonly loc?: unknown })?.loc, {
-    file: "/workspace/src/query.ts", line: 2, column: 13,
+    file: "/workspace/src/query.ts",
+    line: 2,
+    column: 13,
   });
 });
-

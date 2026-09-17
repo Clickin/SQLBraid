@@ -15,9 +15,7 @@
     "stream": "OO1 step",
     "routine": "unsupported by SQLite",
     "bulk": "prepared-loop with stepReset",
-    "exclusions": [
-      "This browser target does not certify Node database drivers"
-    ],
+    "exclusions": ["This browser target does not certify Node database drivers"],
     "requiredOptions": {},
     "driverRawRepresentations": {
       "integer": "bigint",
@@ -79,9 +77,7 @@
   "capabilities": {
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"]
     },
     "transaction.read-only": {
       "status": "unsupported",
@@ -101,9 +97,7 @@
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"]
     },
     "statement.cancel": {
       "status": "unsupported",
@@ -115,27 +109,19 @@
     },
     "sql.native-transparency": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.sql.native-transparency"
-      ]
+      "testIds": ["wasm.sql.native-transparency"]
     },
     "sql.generated-structure": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.sql.generated-structure"
-      ]
+      "testIds": ["wasm.sql.generated-structure"]
     },
     "numeric.exact-integer": {
       "status": "guaranteed",
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "lossless",
-      "testIds": [
-        "wasm.numeric.exact-integer"
-      ],
-      "driverRawRepresentations": [
-        "bigint"
-      ]
+      "testIds": ["wasm.numeric.exact-integer"],
+      "driverRawRepresentations": ["bigint"]
     },
     "numeric.exact-decimal": {
       "status": "unsupported",
@@ -146,24 +132,16 @@
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.data.json-lossless-text"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["wasm.data.json-lossless-text"],
+      "driverRawRepresentations": ["string"]
     },
     "result.rows": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.sql.native-transparency"
-      ]
+      "testIds": ["wasm.sql.native-transparency"]
     },
     "result.command": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.bulk"
-      ]
+      "testIds": ["wasm.execution.bulk"]
     },
     "result.multiple-sets": {
       "status": "unsupported",
@@ -171,39 +149,27 @@
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.bulk"
-      ]
+      "testIds": ["wasm.execution.bulk"]
     },
     "statement.stream": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.stream"
-      ]
+      "testIds": ["wasm.execution.stream"]
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"]
     },
     "routine.out": {
       "status": "unsupported",
@@ -243,48 +209,30 @@
     },
     "data.binary": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ],
-      "driverRawRepresentations": [
-        "Uint8Array"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"],
+      "driverRawRepresentations": ["Uint8Array"]
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.data.temporal-lossless"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["wasm.data.temporal-lossless"],
+      "driverRawRepresentations": ["string"]
     },
     "data.uuid": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"],
+      "driverRawRepresentations": ["string"]
     },
     "dml.insert-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"]
     },
     "dml.update-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"]
     },
     "dml.delete-returning": {
       "status": "guaranteed",
-      "testIds": [
-        "wasm.execution.mapped-transaction"
-      ]
+      "testIds": ["wasm.execution.mapped-transaction"]
     }
   },
   "evidence": {

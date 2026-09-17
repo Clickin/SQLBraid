@@ -50,7 +50,20 @@
     "target": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "status", "database", "driver", "runtime", "reproducibility", "ci", "numeric", "containers", "capabilities", "typePolicy", "evidence"],
+      "required": [
+        "id",
+        "status",
+        "database",
+        "driver",
+        "runtime",
+        "reproducibility",
+        "ci",
+        "numeric",
+        "containers",
+        "capabilities",
+        "typePolicy",
+        "evidence"
+      ],
       "properties": {
         "id": { "$ref": "#/$defs/targetId" },
         "status": { "enum": ["official", "conditional", "compatible", "historical", "unsupported"] },
@@ -68,7 +81,20 @@
         "driver": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "version", "profile", "package", "transport", "stream", "routine", "bulk", "requiredOptions", "driverRawRepresentations", "sqlbraidRepresentations", "exclusions"],
+          "required": [
+            "id",
+            "version",
+            "profile",
+            "package",
+            "transport",
+            "stream",
+            "routine",
+            "bulk",
+            "requiredOptions",
+            "driverRawRepresentations",
+            "sqlbraidRepresentations",
+            "exclusions"
+          ],
           "properties": {
             "id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$" },
             "version": { "$ref": "#/$defs/exactVersion" },
@@ -119,7 +145,16 @@
         "containers": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["postgres-arrays", "postgres-domains", "postgres-ranges", "postgres-composites", "oracle-objects", "sql-server-variant", "json-nested", "vector"],
+          "required": [
+            "postgres-arrays",
+            "postgres-domains",
+            "postgres-ranges",
+            "postgres-composites",
+            "oracle-objects",
+            "sql-server-variant",
+            "json-nested",
+            "vector"
+          ],
           "properties": {
             "postgres-arrays": { "$ref": "#/$defs/containerStatus" },
             "postgres-domains": { "$ref": "#/$defs/containerStatus" },
@@ -151,7 +186,11 @@
         "representation": { "$ref": "#/$defs/numericRepresentation" },
         "fidelity": { "$ref": "#/$defs/transportFidelity" },
         "binaryPrecision": { "enum": [32, 64] },
-        "driverRawRepresentations": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+        "driverRawRepresentations": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
       }
     },
     "numericProfile": {
@@ -204,7 +243,17 @@
     "profile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "driverId", "json", "temporal", "requiredOptions", "driverRawRepresentations", "sqlbraidRepresentations", "typePolicy", "fixtureTestIds"],
+      "required": [
+        "id",
+        "driverId",
+        "json",
+        "temporal",
+        "requiredOptions",
+        "driverRawRepresentations",
+        "sqlbraidRepresentations",
+        "typePolicy",
+        "fixtureTestIds"
+      ],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "driverId": { "type": "string", "minLength": 1 },
@@ -309,7 +358,10 @@
     },
     "capabilityId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)*$" },
     "conditionCode": { "type": "string", "pattern": "^[a-z0-9-]+\\.[a-z0-9-]+$" },
-    "testId": { "type": "string", "pattern": "^[a-z0-9-]+\\.(?:sql|result|numeric|data|dml|execution|routine|metadata|binary|command)\\.[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "testId": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+\\.(?:sql|result|numeric|data|dml|execution|routine|metadata|binary|command)\\.[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
     "targetId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
     "exactVersion": {
       "type": "string",

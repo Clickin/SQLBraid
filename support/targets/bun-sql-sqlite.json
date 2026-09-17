@@ -85,35 +85,23 @@
   "capabilities": {
     "result.rows": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ],
+      "testIds": ["bun-sql-sqlite.data.profile"],
       "conditionCode": "bun-sql.sqlite-result-parser"
     },
     "result.command": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ],
+      "testIds": ["bun-sql-sqlite.data.profile"],
       "conditionCode": "bun-sql.sqlite-result-parser"
     },
     "result.standard-schema": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"]
     },
     "numeric.exact-integer": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ],
+      "testIds": ["bun-sql-sqlite.data.profile"],
       "conditionCode": "bun-sql.integer-width-profile",
-      "driverRawRepresentations": [
-        "number",
-        "bigint",
-        "string"
-      ],
+      "driverRawRepresentations": ["number", "bigint", "string"],
       "semantics": "exact-integer",
       "representation": "string",
       "fidelity": "guarded"
@@ -121,22 +109,16 @@
     "numeric.exact-decimal": {
       "status": "unsupported",
       "testIds": [],
-      "driverRawRepresentations": [
-        "string"
-      ],
+      "driverRawRepresentations": ["string"],
       "semantics": "exact-decimal",
       "representation": "string",
       "fidelity": "unsupported"
     },
     "numeric.approximate-float": {
       "status": "guarded",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ],
+      "testIds": ["bun-sql-sqlite.data.profile"],
       "conditionCode": "bun-sql.float-profile",
-      "driverRawRepresentations": [
-        "number"
-      ],
+      "driverRawRepresentations": ["number"],
       "semantics": "approximate-binary",
       "representation": "number",
       "fidelity": "guarded",
@@ -148,12 +130,8 @@
     },
     "data.json-lossless-text": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "data.temporal-native": {
       "status": "unsupported",
@@ -161,30 +139,20 @@
     },
     "data.temporal-lossless": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ],
-      "driverRawRepresentations": [
-        "string"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"],
+      "driverRawRepresentations": ["string"]
     },
     "session.pinned": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"]
     },
     "statement.prepare": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"]
     },
     "statement.bulk": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"]
     },
     "statement.stream": {
       "status": "unsupported",
@@ -196,15 +164,11 @@
     },
     "transaction": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"]
     },
     "transaction.savepoint": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"]
     },
     "transaction.read-only": {
       "status": "unsupported",
@@ -224,9 +188,7 @@
     },
     "transaction.isolation.serializable": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"]
     },
     "routine.call": {
       "status": "unsupported",
@@ -254,9 +216,7 @@
     },
     "data.binary": {
       "status": "guaranteed",
-      "testIds": [
-        "bun-sql-sqlite.data.profile"
-      ]
+      "testIds": ["bun-sql-sqlite.data.profile"]
     }
   },
   "evidence": {

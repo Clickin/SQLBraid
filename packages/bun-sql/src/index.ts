@@ -8,7 +8,6 @@ import {
   ResultExactnessError,
   safeDatabaseCount,
   UnsupportedFeatureError,
-
   type BulkExecutionResult,
   type BulkBindingDescription,
   type CommandResult,
@@ -81,53 +80,105 @@ function capabilitiesFor(dialect: BunSqlDialect): Readonly<Record<string, Enviro
   const result: Record<string, EnvironmentCapability> = {
     "sql.native-transparency": capability("guaranteed"),
     "sql.generated-structure": capability("guaranteed"),
-    "result.rows": dialect === "mysql" || dialect === "mariadb"
-      ? capability("guarded", undefined, undefined, "bun-sql.result-kind-metadata")
-      : dialect === "sqlite" ? capability("guarded", undefined, undefined, "bun-sql.sqlite-result-parser") : capability("guaranteed"),
-    "result.command": dialect === "mysql" || dialect === "mariadb"
-      ? capability("guarded", undefined, undefined, "bun-sql.result-kind-metadata")
-      : dialect === "sqlite" ? capability("guarded", undefined, undefined, "bun-sql.sqlite-result-parser") : capability("guaranteed"),
+    "result.rows":
+      dialect === "mysql" || dialect === "mariadb"
+        ? capability("guarded", undefined, undefined, "bun-sql.result-kind-metadata")
+        : dialect === "sqlite"
+          ? capability("guarded", undefined, undefined, "bun-sql.sqlite-result-parser")
+          : capability("guaranteed"),
+    "result.command":
+      dialect === "mysql" || dialect === "mariadb"
+        ? capability("guarded", undefined, undefined, "bun-sql.result-kind-metadata")
+        : dialect === "sqlite"
+          ? capability("guarded", undefined, undefined, "bun-sql.sqlite-result-parser")
+          : capability("guaranteed"),
     "result.multiple-sets": capability("unsupported"),
     "result.standard-schema": capability("guaranteed"),
-    "numeric.exact-integer": capability("guarded", "string", ["number", "string", "bigint"], "bun-sql.integer-width-profile"),
-    "numeric.exact-decimal": dialect === "postgres"
-      ? capability("guaranteed", "string", ["string"])
-      : capability("unsupported", "string", mysqlTransport ? ["Uint8Array"] : ["number"]),
+    "numeric.exact-integer": capability(
+      "guarded",
+      "string",
+      ["number", "string", "bigint"],
+      "bun-sql.integer-width-profile",
+    ),
+    "numeric.exact-decimal":
+      dialect === "postgres"
+        ? capability("guaranteed", "string", ["string"])
+        : capability("unsupported", "string", mysqlTransport ? ["Uint8Array"] : ["number"]),
     "numeric.approximate-float": capability("guarded", "number", ["number"], "bun-sql.float-profile"),
     "numeric.approximate-special": mysqlTransport
       ? capability("unsupported", "number", ["null", "number"])
       : capability("guarded", "number", ["number"], "bun-sql.special-float-profile"),
-    "numeric.bind-exact": capability("guarded", "string", ["string", "number", "bigint"], "bun-sql.numeric-bind-profile"),
+    "numeric.bind-exact": capability(
+      "guarded",
+      "string",
+      ["string", "number", "bigint"],
+      "bun-sql.numeric-bind-profile",
+    ),
     "numeric.command-metadata": capability("guarded", "number", ["number", "bigint"], "bun-sql.command-count-profile"),
     "data.json-parsed": json,
-    "data.json-lossless-text": capability(jsonText ? "guaranteed" : "unsupported", jsonText ? "string" : undefined, jsonText ? ["string"] : undefined),
+    "data.json-lossless-text": capability(
+      jsonText ? "guaranteed" : "unsupported",
+      jsonText ? "string" : undefined,
+      jsonText ? ["string"] : undefined,
+    ),
     "data.binary": capability(mysqlTransport ? "unsupported" : "guaranteed", "Uint8Array", ["Uint8Array"]),
-    "data.temporal-native": dialect === "sqlite"
-      ? capability("unsupported", undefined, ["string"])
-      : capability("guarded", undefined, ["Date", "string"], "bun-sql.temporal-profile"),
-    "data.temporal-lossless": capability(dialect === "sqlite" ? "guaranteed" : "unsupported", dialect === "sqlite" ? "string" : undefined, dialect === "sqlite" ? ["string"] : undefined),
-    "data.timezone": dialect === "sqlite"
-      ? capability("unsupported", undefined, ["string"])
-      : capability("guarded", undefined, ["Date"], "bun-sql.timezone-profile"),
+    "data.temporal-native":
+      dialect === "sqlite"
+        ? capability("unsupported", undefined, ["string"])
+        : capability("guarded", undefined, ["Date", "string"], "bun-sql.temporal-profile"),
+    "data.temporal-lossless": capability(
+      dialect === "sqlite" ? "guaranteed" : "unsupported",
+      dialect === "sqlite" ? "string" : undefined,
+      dialect === "sqlite" ? ["string"] : undefined,
+    ),
+    "data.timezone":
+      dialect === "sqlite"
+        ? capability("unsupported", undefined, ["string"])
+        : capability("guarded", undefined, ["Date"], "bun-sql.timezone-profile"),
     "metadata.command-safe": capability("guarded", "number", ["number", "bigint"], "bun-sql.command-count-profile"),
-    "dml.insert-returning": capability(dialect === "postgres" || dialect === "sqlite" || dialect === "mariadb" ? "guaranteed" : "unsupported"),
+    "dml.insert-returning": capability(
+      dialect === "postgres" || dialect === "sqlite" || dialect === "mariadb" ? "guaranteed" : "unsupported",
+    ),
     "dml.update-returning": capability(dialect === "postgres" || dialect === "sqlite" ? "guaranteed" : "unsupported"),
-    "dml.delete-returning": capability(dialect === "postgres" || dialect === "sqlite" || dialect === "mariadb" ? "guaranteed" : "unsupported"),
+    "dml.delete-returning": capability(
+      dialect === "postgres" || dialect === "sqlite" || dialect === "mariadb" ? "guaranteed" : "unsupported",
+    ),
     "session.pinned": capability("guaranteed"),
     "statement.prepare": capability("guaranteed"),
     "statement.cancel": capability("unsupported", undefined, ["Query.cancel"]),
     "statement.stream": capability("unsupported"),
     "statement.bulk": capability("guaranteed", undefined, ["prepared-loop"]),
     "execution.bulk-fidelity": capability("guarded", undefined, ["prepared-loop"], "bun-sql.bulk-profile"),
-    "transaction": capability("guaranteed"),
+    transaction: capability("guaranteed"),
     "transaction.savepoint": capability("guaranteed"),
-    "transaction.read-only": capability(dialect === "sqlite" ? "unsupported" : "guarded", undefined, undefined, dialect === "sqlite" ? undefined : "bun-sql.transaction-options"),
-    "transaction.isolation.read-uncommitted": capability(dialect === "sqlite" ? "unsupported" : "guarded", undefined, undefined, dialect === "sqlite" ? undefined : "bun-sql.transaction-options"),
-    "transaction.isolation.read-committed": capability(dialect === "sqlite" ? "unsupported" : "guarded", undefined, undefined, dialect === "sqlite" ? undefined : "bun-sql.transaction-options"),
-    "transaction.isolation.repeatable-read": capability(dialect === "sqlite" ? "unsupported" : "guarded", undefined, undefined, dialect === "sqlite" ? undefined : "bun-sql.transaction-options"),
-    "transaction.isolation.serializable": dialect === "sqlite"
-      ? capability("guaranteed")
-      : capability("guarded", undefined, undefined, "bun-sql.transaction-options"),
+    "transaction.read-only": capability(
+      dialect === "sqlite" ? "unsupported" : "guarded",
+      undefined,
+      undefined,
+      dialect === "sqlite" ? undefined : "bun-sql.transaction-options",
+    ),
+    "transaction.isolation.read-uncommitted": capability(
+      dialect === "sqlite" ? "unsupported" : "guarded",
+      undefined,
+      undefined,
+      dialect === "sqlite" ? undefined : "bun-sql.transaction-options",
+    ),
+    "transaction.isolation.read-committed": capability(
+      dialect === "sqlite" ? "unsupported" : "guarded",
+      undefined,
+      undefined,
+      dialect === "sqlite" ? undefined : "bun-sql.transaction-options",
+    ),
+    "transaction.isolation.repeatable-read": capability(
+      dialect === "sqlite" ? "unsupported" : "guarded",
+      undefined,
+      undefined,
+      dialect === "sqlite" ? undefined : "bun-sql.transaction-options",
+    ),
+    "transaction.isolation.serializable":
+      dialect === "sqlite"
+        ? capability("guaranteed")
+        : capability("guarded", undefined, undefined, "bun-sql.transaction-options"),
     "routine.call": capability("unsupported"),
     "routine.out": capability("unsupported"),
     "routine.inout": capability("unsupported"),
@@ -144,13 +195,18 @@ function unsupported(feature: string, code: `BRAID_${string}`, message: string):
 
 function assertDialect(statement: RenderedStatement, dialect: BunSqlDialect): void {
   if (statement.dialectId !== dialect) {
-    unsupported("dialect", "BRAID_DIALECT_MISMATCH", `Rendered dialect ${JSON.stringify(statement.dialectId)} does not match Bun.SQL dialect ${JSON.stringify(dialect)}.`);
+    unsupported(
+      "dialect",
+      "BRAID_DIALECT_MISMATCH",
+      `Rendered dialect ${JSON.stringify(statement.dialectId)} does not match Bun.SQL dialect ${JSON.stringify(dialect)}.`,
+    );
   }
 }
 
 function assertValues(values: readonly unknown[]): void {
   for (let index = 0; index < values.length; index += 1) {
-    if (values[index] === undefined) throw new TypeError(`BRAID_BIND_UNDEFINED: parameter ${index + 1} is undefined; use null for SQL NULL.`);
+    if (values[index] === undefined)
+      throw new TypeError(`BRAID_BIND_UNDEFINED: parameter ${index + 1} is undefined; use null for SQL NULL.`);
   }
 }
 
@@ -182,11 +238,22 @@ const DML_COMMANDS = new Set(["INSERT", "UPDATE", "DELETE", "MERGE"]);
 
 function assertNativeValue(value: unknown, index: number): void {
   if (Array.isArray(value)) {
-    throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is an ambiguous Bun.SQL array value; SQLBraid parameters must be value-only.`);
+    throw new AdapterError(
+      "BRAID_BIND_VALUE_UNSUPPORTED",
+      `parameter ${index + 1} is an ambiguous Bun.SQL array value; SQLBraid parameters must be value-only.`,
+    );
   }
-  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") return;
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  )
+    return;
   if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is an invalid Date.`);
+    if (Number.isNaN(value.getTime()))
+      throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is an invalid Date.`);
     return;
   }
   if (value instanceof Uint8Array) return;
@@ -199,25 +266,34 @@ function assertNativeValue(value: unknown, index: number): void {
     readonly serializedValues?: unknown;
     readonly arrayType?: unknown;
   };
-  const helper = Object.hasOwn(candidate, "value")
-    && Object.hasOwn(candidate, "columns")
-    && Array.isArray(candidate.columns);
-  const arrayHelper = Object.hasOwn(candidate, "serializedValues")
-    && Object.hasOwn(candidate, "arrayType")
-    && typeof candidate.serializedValues === "string"
-    && (typeof candidate.arrayType === "string" || typeof candidate.arrayType === "number");
+  const helper =
+    Object.hasOwn(candidate, "value") && Object.hasOwn(candidate, "columns") && Array.isArray(candidate.columns);
+  const arrayHelper =
+    Object.hasOwn(candidate, "serializedValues") &&
+    Object.hasOwn(candidate, "arrayType") &&
+    typeof candidate.serializedValues === "string" &&
+    (typeof candidate.arrayType === "string" || typeof candidate.arrayType === "number");
   if (helper || arrayHelper) {
-    throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is a Bun.SQL structural helper; SQLBraid parameters must be value-only.`);
+    throw new AdapterError(
+      "BRAID_BIND_VALUE_UNSUPPORTED",
+      `parameter ${index + 1} is a Bun.SQL structural helper; SQLBraid parameters must be value-only.`,
+    );
   }
   let prototype: object | null = value;
   while (prototype !== null) {
     const then = Object.getOwnPropertyDescriptor(prototype, "then");
     if (then !== undefined && typeof then.value === "function") {
-      throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is a Bun.SQL query or fragment; SQLBraid parameters must be value-only.`);
+      throw new AdapterError(
+        "BRAID_BIND_VALUE_UNSUPPORTED",
+        `parameter ${index + 1} is a Bun.SQL query or fragment; SQLBraid parameters must be value-only.`,
+      );
     }
     prototype = Object.getPrototypeOf(prototype);
   }
-  throw new AdapterError("BRAID_BIND_VALUE_UNSUPPORTED", `parameter ${index + 1} is an ambiguous Bun.SQL object value; bind a scalar, Date, Uint8Array, or explicit text instead.`);
+  throw new AdapterError(
+    "BRAID_BIND_VALUE_UNSUPPORTED",
+    `parameter ${index + 1} is an ambiguous Bun.SQL object value; bind a scalar, Date, Uint8Array, or explicit text instead.`,
+  );
 }
 
 function assertNativeValues(values: readonly unknown[]): void {
@@ -248,7 +324,15 @@ function nativeTemplate(rendered: RenderedStatement): TemplateStringsArray {
 
 function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): StatementBindingAdapter {
   const id = `bun-sql:${dialect}`;
-  const describe = (statement: RenderedStatement, context: { readonly dialectId: string; readonly requestedReuse: "auto" | "simple" | "reuse"; readonly preparedName?: string; readonly transactionScoped?: boolean }): StatementBindingDescription => {
+  const describe = (
+    statement: RenderedStatement,
+    context: {
+      readonly dialectId: string;
+      readonly requestedReuse: "auto" | "simple" | "reuse";
+      readonly preparedName?: string;
+      readonly transactionScoped?: boolean;
+    },
+  ): StatementBindingDescription => {
     const logical = createRenderedStatement(statement);
     assertDialect(logical, dialect);
     assertStatementSupported(logical, dialect);
@@ -270,7 +354,15 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
   return Object.freeze({
     id,
     describe,
-    describeBulk: (bulk: RenderedBulk, context: { readonly dialectId: string; readonly requestedReuse: "auto" | "simple" | "reuse"; readonly preparedName?: string; readonly transactionScoped?: boolean }) => {
+    describeBulk: (
+      bulk: RenderedBulk,
+      context: {
+        readonly dialectId: string;
+        readonly requestedReuse: "auto" | "simple" | "reuse";
+        readonly preparedName?: string;
+        readonly transactionScoped?: boolean;
+      },
+    ) => {
       const logical = createRenderedBulk(bulk);
       assertDialect(logical.statement, dialect);
       assertStatementSupported(logical.statement, dialect);
@@ -278,7 +370,8 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
         throw new Error("BRAID_BULK_SHAPE: Bun.SQL bulk requires command queries.");
       }
       for (const values of logical.parameterSets) {
-        if (values.length !== logical.statement.parameters.length) throw new Error("BRAID_BULK_SHAPE: Bun.SQL bulk parameter cardinality changed.");
+        if (values.length !== logical.statement.parameters.length)
+          throw new Error("BRAID_BULK_SHAPE: Bun.SQL bulk parameter cardinality changed.");
         assertValues(values);
         assertNativeValues(values);
       }
@@ -296,13 +389,21 @@ function bindingAdapter(dialect: BunSqlDialect, client: BunSqlClient): Statement
 
 function assertStatementSupported(rendered: RenderedStatement, dialect: BunSqlDialect): void {
   if (rendered.resultKind === "call" || rendered.routineProcedure !== undefined) {
-    unsupported("routine.call", "BRAID_CALL_UNSUPPORTED", dialect === "mysql" || dialect === "mariadb"
-      ? "Bun.SQL requires MySQL OUT parameters to use user-authored session variables and a second SELECT; its public result has no direction or result-set carrier for SQLBraid call normalization."
-      : "Bun.SQL exposes no documented routine output carrier or routine result-set metadata for this dialect.");
+    unsupported(
+      "routine.call",
+      "BRAID_CALL_UNSUPPORTED",
+      dialect === "mysql" || dialect === "mariadb"
+        ? "Bun.SQL requires MySQL OUT parameters to use user-authored session variables and a second SELECT; its public result has no direction or result-set carrier for SQLBraid call normalization."
+        : "Bun.SQL exposes no documented routine output carrier or routine result-set metadata for this dialect.",
+    );
   }
   for (const parameter of rendered.parameters) {
     if (parameter.hint !== undefined) {
-      throw new UnsupportedFeatureError("statement.bind-hint", "BRAID_BIND_HINT_UNSUPPORTED", "Bun.SQL does not support explicit bind type hints.");
+      throw new UnsupportedFeatureError(
+        "statement.bind-hint",
+        "BRAID_BIND_HINT_UNSUPPORTED",
+        "Bun.SQL does not support explicit bind type hints.",
+      );
     }
     if (parameter.direction !== undefined && parameter.direction !== "in") {
       unsupported(
@@ -312,7 +413,11 @@ function assertStatementSupported(rendered: RenderedStatement, dialect: BunSqlDi
       );
     }
     if (parameter.outputName !== undefined) {
-      unsupported("routine.out", "BRAID_CALL_OUT_UNSUPPORTED", "Bun.SQL does not expose a proven output parameter carrier.");
+      unsupported(
+        "routine.out",
+        "BRAID_CALL_OUT_UNSUPPORTED",
+        "Bun.SQL does not expose a proven output parameter carrier.",
+      );
     }
   }
 }
@@ -321,7 +426,11 @@ function assertExecutionSignal(options: ExecutionOptions | undefined): void {
   const signal = options?.signal;
   if (signal?.aborted) throw signal.reason;
   if (signal !== undefined) {
-    unsupported("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "Bun.SQL Query.cancel is not a verified active cancellation primitive for this adapter; cancellation would otherwise race query completion.");
+    unsupported(
+      "statement.cancel",
+      "BRAID_CANCEL_UNSUPPORTED",
+      "Bun.SQL Query.cancel is not a verified active cancellation primitive for this adapter; cancellation would otherwise race query completion.",
+    );
   }
 }
 
@@ -338,23 +447,19 @@ function assertStatementBinding(
   dialect: BunSqlDialect,
 ): void {
   if (
-    binding.adapterId !== `bun-sql:${dialect}`
-    || binding.dialectId !== dialect
-    || describedStatements.get(binding) !== rendered
+    binding.adapterId !== `bun-sql:${dialect}` ||
+    binding.dialectId !== dialect ||
+    describedStatements.get(binding) !== rendered
   ) {
     throw new TypeError("BRAID_BINDING_IDENTITY: Bun.SQL statement binding belongs to another statement or adapter.");
   }
 }
 
-function assertBulkBinding(
-  bulk: RenderedBulk,
-  binding: BulkBindingDescription,
-  dialect: BunSqlDialect,
-): void {
+function assertBulkBinding(bulk: RenderedBulk, binding: BulkBindingDescription, dialect: BunSqlDialect): void {
   if (
-    binding.adapterId !== `bun-sql:${dialect}`
-    || binding.dialectId !== dialect
-    || describedBulks.get(binding) !== bulk
+    binding.adapterId !== `bun-sql:${dialect}` ||
+    binding.dialectId !== dialect ||
+    describedBulks.get(binding) !== bulk
   ) {
     throw new TypeError("BRAID_BINDING_IDENTITY: Bun.SQL bulk binding belongs to another bulk or adapter.");
   }
@@ -399,7 +504,7 @@ function hasSqlKeyword(text: string, target: string): boolean {
         continue;
       }
     }
-    if (character === "'" || character === "\"" || character === "`") {
+    if (character === "'" || character === '"' || character === "`") {
       const quote = character;
       index += 1;
       while (index < text.length) {
@@ -435,32 +540,51 @@ function hasSqlKeyword(text: string, target: string): boolean {
 
 function returnsRows(value: unknown, text: string): value is readonly unknown[] {
   if (!Array.isArray(value)) return false;
-  const command = typeof (value as { readonly command?: unknown }).command === "string"
-    ? String((value as { readonly command?: unknown }).command).toUpperCase()
-    : undefined;
+  const command =
+    typeof (value as { readonly command?: unknown }).command === "string"
+      ? String((value as { readonly command?: unknown }).command).toUpperCase()
+      : undefined;
   if (command === undefined) {
     const affectedRows = (value as { readonly affectedRows?: unknown }).affectedRows;
     const insertId = (value as { readonly lastInsertRowid?: unknown }).lastInsertRowid;
     if (value.length > 0) return true;
-    if ((typeof affectedRows === "number" && affectedRows > 0)
-      || (typeof affectedRows === "bigint" && affectedRows > 0n)
-      || (typeof insertId === "number" && insertId > 0)
-      || (typeof insertId === "bigint" && insertId > 0n)) return false;
+    if (
+      (typeof affectedRows === "number" && affectedRows > 0) ||
+      (typeof affectedRows === "bigint" && affectedRows > 0n) ||
+      (typeof insertId === "number" && insertId > 0) ||
+      (typeof insertId === "bigint" && insertId > 0n)
+    )
+      return false;
     const count = (value as { readonly count?: unknown }).count;
-    if ((typeof count === "number" && Number.isSafeInteger(count) && count > 0)
-      || (typeof count === "bigint" && count > 0n && count <= BigInt(Number.MAX_SAFE_INTEGER))) return true;
-    unsupported("result.rows", "BRAID_RESULT_KIND_AMBIGUOUS", "Bun.SQL returned an array without command metadata or a public row/command result carrier.");
+    if (
+      (typeof count === "number" && Number.isSafeInteger(count) && count > 0) ||
+      (typeof count === "bigint" && count > 0n && count <= BigInt(Number.MAX_SAFE_INTEGER))
+    )
+      return true;
+    unsupported(
+      "result.rows",
+      "BRAID_RESULT_KIND_AMBIGUOUS",
+      "Bun.SQL returned an array without command metadata or a public row/command result carrier.",
+    );
   }
   if (ROW_COMMANDS.has(command)) return true;
   if (DML_COMMANDS.has(command)) {
     if (value.length > 0) return true;
     if (hasSqlKeyword(text, "RETURNING")) {
-      unsupported("result.rows", "BRAID_RESULT_KIND_AMBIGUOUS", "Bun.SQL returned zero rows for a DML RETURNING statement without a public row-kind discriminator.");
+      unsupported(
+        "result.rows",
+        "BRAID_RESULT_KIND_AMBIGUOUS",
+        "Bun.SQL returned zero rows for a DML RETURNING statement without a public row-kind discriminator.",
+      );
     }
   }
   if (!ROW_COMMANDS.has(command) && !DML_COMMANDS.has(command)) {
     if (value.length === 0) return false;
-    unsupported("result.rows", "BRAID_RESULT_KIND_AMBIGUOUS", `Bun.SQL returned an unknown command metadata marker ${JSON.stringify(command)} with rows.`);
+    unsupported(
+      "result.rows",
+      "BRAID_RESULT_KIND_AMBIGUOUS",
+      `Bun.SQL returned an unknown command metadata marker ${JSON.stringify(command)} with rows.`,
+    );
   }
   return false;
 }
@@ -468,10 +592,14 @@ function returnsRows(value: unknown, text: string): value is readonly unknown[] 
 function normalizeRowValue(value: unknown, dialect: BunSqlDialect): unknown {
   if (typeof value === "bigint") return value.toString(10);
   if (typeof value === "number" && Number.isInteger(value)) {
-    throw new ResultExactnessError("Bun.SQL returned an integral Number without public column type metadata; cast exact values to text.");
+    throw new ResultExactnessError(
+      "Bun.SQL returned an integral Number without public column type metadata; cast exact values to text.",
+    );
   }
   if ((dialect === "mysql" || dialect === "mariadb") && value instanceof Uint8Array) {
-    throw new ResultExactnessError("Bun.SQL exposes DECIMAL and binary values as indistinguishable byte arrays; use explicit SQL text or hexadecimal conversion.");
+    throw new ResultExactnessError(
+      "Bun.SQL exposes DECIMAL and binary values as indistinguishable byte arrays; use explicit SQL text or hexadecimal conversion.",
+    );
   }
   return value;
 }
@@ -511,9 +639,14 @@ function createExecutor(
     ownershipKey: client as object,
     statementBinding,
     environment: descriptor,
-    async query<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions): Promise<QueryExecutionResult<Row>> {
+    async query<Row>(
+      rendered: RenderedStatement,
+      binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<QueryExecutionResult<Row>> {
       assertExecutionSignal(options);
-      const effectiveBinding = binding ?? statementBinding.describe(rendered, { dialectId: dialect, requestedReuse: "auto" });
+      const effectiveBinding =
+        binding ?? statementBinding.describe(rendered, { dialectId: dialect, requestedReuse: "auto" });
       const raw = await run<unknown>(rendered, effectiveBinding);
       if (returnsRows(raw, rendered.segments.join(""))) {
         const rows = Object.freeze(raw.map((row) => normalizeRow(row, dialect)) as readonly Row[]);
@@ -528,7 +661,11 @@ function createExecutor(
       assertStatementSupported(rendered, dialect);
       if (binding !== undefined) assertStatementBinding(rendered, binding, dialect);
       return (async function* (): AsyncGenerator<Row> {
-        unsupported("statement.stream", "BRAID_STREAM_UNSUPPORTED", "Bun.SQL has no public streaming cursor; SQLResultArray is fully materialized.");
+        unsupported(
+          "statement.stream",
+          "BRAID_STREAM_UNSUPPORTED",
+          "Bun.SQL has no public streaming cursor; SQLResultArray is fully materialized.",
+        );
       })();
     },
     call: async (rendered: RenderedStatement, binding?: StatementBindingDescription, options?: ExecutionOptions) => {
@@ -536,11 +673,19 @@ function createExecutor(
       assertExecutionSignal(options);
       assertStatementSupported(rendered, dialect);
       if (binding !== undefined) assertStatementBinding(rendered, binding, dialect);
-      unsupported("routine.call", "BRAID_CALL_UNSUPPORTED", dialect === "mysql" || dialect === "mariadb"
-        ? "Bun.SQL requires MySQL OUT parameters to use user-authored session variables and a second SELECT; its public result has no direction or result-set carrier for SQLBraid call normalization."
-        : "Bun.SQL exposes no documented routine output carrier or routine result-set metadata for this dialect.");
+      unsupported(
+        "routine.call",
+        "BRAID_CALL_UNSUPPORTED",
+        dialect === "mysql" || dialect === "mariadb"
+          ? "Bun.SQL requires MySQL OUT parameters to use user-authored session variables and a second SELECT; its public result has no direction or result-set carrier for SQLBraid call normalization."
+          : "Bun.SQL exposes no documented routine output carrier or routine result-set metadata for this dialect.",
+      );
     },
-    bulk: async (bulk: RenderedBulk, binding: BulkBindingDescription, options?: ExecutionOptions): Promise<BulkExecutionResult> => {
+    bulk: async (
+      bulk: RenderedBulk,
+      binding: BulkBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<BulkExecutionResult> => {
       assertDialect(bulk.statement, dialect);
       assertExecutionSignal(options);
       assertStatementSupported(bulk.statement, dialect);
@@ -558,18 +703,32 @@ function createExecutor(
         if (command.affectedRows === undefined) hasCount = false;
         else affectedRows += command.affectedRows;
       }
-      return Object.freeze({ inputCount: binding.itemCount, ...(hasCount ? { affectedRows } : {}), executionMode: "prepared-loop" });
+      return Object.freeze({
+        inputCount: binding.itemCount,
+        ...(hasCount ? { affectedRows } : {}),
+        executionMode: "prepared-loop",
+      });
     },
     begin: async (options?: TransactionOptions): Promise<void> => {
       for (const beginText of transactionBegin(dialect, options)) {
         await client.unsafe(beginText, []);
       }
     },
-    commit: async (): Promise<void> => { await client.unsafe("COMMIT", []); },
-    rollback: async (): Promise<void> => { await client.unsafe("ROLLBACK", []); },
-    savepoint: async (name: string): Promise<void> => { await client.unsafe(`SAVEPOINT ${assertSavepointName(name)}`, []); },
-    rollbackTo: async (name: string): Promise<void> => { await client.unsafe(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`, []); },
-    releaseSavepoint: async (name: string): Promise<void> => { await client.unsafe(`RELEASE SAVEPOINT ${assertSavepointName(name)}`, []); },
+    commit: async (): Promise<void> => {
+      await client.unsafe("COMMIT", []);
+    },
+    rollback: async (): Promise<void> => {
+      await client.unsafe("ROLLBACK", []);
+    },
+    savepoint: async (name: string): Promise<void> => {
+      await client.unsafe(`SAVEPOINT ${assertSavepointName(name)}`, []);
+    },
+    rollbackTo: async (name: string): Promise<void> => {
+      await client.unsafe(`ROLLBACK TO SAVEPOINT ${assertSavepointName(name)}`, []);
+    },
+    releaseSavepoint: async (name: string): Promise<void> => {
+      await client.unsafe(`RELEASE SAVEPOINT ${assertSavepointName(name)}`, []);
+    },
   };
   return executor;
 }
@@ -577,9 +736,18 @@ function createExecutor(
 function transactionBegin(dialect: BunSqlDialect, options?: TransactionOptions): readonly string[] {
   validateTransactionOptions(options);
   if (dialect === "sqlite") {
-    if (options?.readOnly === true) unsupported("transaction.read-only", "BRAID_TX_OPTION_UNSUPPORTED", "Bun.SQL SQLite does not expose read-only transaction options.");
+    if (options?.readOnly === true)
+      unsupported(
+        "transaction.read-only",
+        "BRAID_TX_OPTION_UNSUPPORTED",
+        "Bun.SQL SQLite does not expose read-only transaction options.",
+      );
     if (options?.isolation !== undefined && options.isolation !== "serializable") {
-      unsupported(`transaction.isolation.${options.isolation}`, "BRAID_TX_OPTION_UNSUPPORTED", "Bun.SQL SQLite only supports the standard serializable isolation contract, which is its ordinary BEGIN behavior.");
+      unsupported(
+        `transaction.isolation.${options.isolation}`,
+        "BRAID_TX_OPTION_UNSUPPORTED",
+        "Bun.SQL SQLite only supports the standard serializable isolation contract, which is its ordinary BEGIN behavior.",
+      );
     }
     return ["BEGIN"];
   }
@@ -596,7 +764,8 @@ function transactionBegin(dialect: BunSqlDialect, options?: TransactionOptions):
     return [clauses.join(" ")];
   }
   const statements: string[] = [];
-  if (options?.isolation !== undefined) statements.push(`SET TRANSACTION ISOLATION LEVEL ${isolation[options.isolation]}`);
+  if (options?.isolation !== undefined)
+    statements.push(`SET TRANSACTION ISOLATION LEVEL ${isolation[options.isolation]}`);
   statements.push(`START TRANSACTION${options?.readOnly === true ? " READ ONLY" : ""}`);
   return statements;
 }
@@ -616,11 +785,11 @@ function validateTransactionOptions(options: TransactionOptions | undefined): vo
     }
   }
   if (
-    options.isolation !== undefined
-    && options.isolation !== "read-uncommitted"
-    && options.isolation !== "read-committed"
-    && options.isolation !== "repeatable-read"
-    && options.isolation !== "serializable"
+    options.isolation !== undefined &&
+    options.isolation !== "read-uncommitted" &&
+    options.isolation !== "read-committed" &&
+    options.isolation !== "repeatable-read" &&
+    options.isolation !== "serializable"
   ) {
     const error = new TypeError("Transaction isolation must be one of the standard SQLBraid isolation levels.");
     Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
@@ -666,7 +835,12 @@ function createProvider(client: BunSqlClient, dialect: BunSqlDialect): Connectio
             if (discard) await reserved.close!({ timeout: 0 });
             else await reserved.release();
           } catch (error) {
-            terminalFailure = new UnsupportedFeatureError("resource.cleanup", "BRAID_RESOURCE_CLEANUP", "Bun.SQL reserved connection cleanup failed.", { cause: error });
+            terminalFailure = new UnsupportedFeatureError(
+              "resource.cleanup",
+              "BRAID_RESOURCE_CLEANUP",
+              "Bun.SQL reserved connection cleanup failed.",
+              { cause: error },
+            );
             throw terminalFailure;
           }
         },

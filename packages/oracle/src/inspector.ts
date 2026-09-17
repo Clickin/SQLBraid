@@ -1,6 +1,19 @@
-import { qualifiedIdentity, qualifiedIdentitySegments, qualifiedIdentitySegmentsWithSuffix, QUALIFIED_IDENTITY_ENCODING } from "../../metadata/src/qualified-identity.js";
+import {
+  qualifiedIdentity,
+  qualifiedIdentitySegments,
+  qualifiedIdentitySegmentsWithSuffix,
+  QUALIFIED_IDENTITY_ENCODING,
+} from "../../metadata/src/qualified-identity.js";
 import { defineResultProperty } from "@sqlbraid/core/driver";
-import type { MetadataInspector, MetadataSnapshot, NamespaceSnapshot, RelationSnapshot, RoutineArgument, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
+import type {
+  MetadataInspector,
+  MetadataSnapshot,
+  NamespaceSnapshot,
+  RelationSnapshot,
+  RoutineArgument,
+  RoutineSnapshot,
+  TypeSnapshot,
+} from "@sqlbraid/metadata";
 
 interface CatalogRow {
   readonly [key: string]: unknown;
@@ -24,7 +37,8 @@ function objectRow(value: unknown, fields: readonly { readonly name?: string }[]
     }
     return row;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("ORACLE_INSPECT_ROW: catalog row is not an object.");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("ORACLE_INSPECT_ROW: catalog row is not an object.");
   return Object.fromEntries(Object.entries(value));
 }
 
@@ -59,21 +73,26 @@ function groupBy<T, K>(values: readonly T[], keyOf: (value: T, index: number) =>
 
 async function rows(connection: OracleInspectorConnectionLike, sql: string): Promise<readonly CatalogRow[]> {
   const value = await connection.execute(sql, []);
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("ORACLE_INSPECT_RESULT: metadata query returned a malformed result.");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("ORACLE_INSPECT_RESULT: metadata query returned a malformed result.");
   const result = value as OracleCatalogResultLike;
   if (!Array.isArray(result.rows)) throw new Error("ORACLE_INSPECT_RESULT: metadata query did not return rows.");
   const fields = Array.isArray(result.metaData) ? result.metaData : [];
   return result.rows.map((row) => objectRow(row, fields));
 }
 
-function typeEvidence(row: CatalogRow): { readonly identity: string; readonly name: string; readonly kind: TypeSnapshot["kind"] } | undefined {
+function typeEvidence(
+  row: CatalogRow,
+): { readonly identity: string; readonly name: string; readonly kind: TypeSnapshot["kind"] } | undefined {
   const domainOwner = text(row, "domain_owner");
   const domainName = text(row, "domain_name");
-  if (domainOwner && domainName) return { identity: qualifiedIdentity(domainOwner, domainName), name: domainName, kind: "domain" };
+  if (domainOwner && domainName)
+    return { identity: qualifiedIdentity(domainOwner, domainName), name: domainName, kind: "domain" };
   const owner = text(row, "data_type_owner", "type_owner");
   const raw = text(row, "data_type", "pls_type") ?? "UNKNOWN";
-  const name = text(row, "data_type_name", "type_name")
-    ?? (text(row, "data_type_owner") && !["OBJECT", "UNKNOWN"].includes(raw.trim().toUpperCase()) ? raw : undefined);
+  const name =
+    text(row, "data_type_name", "type_name") ??
+    (text(row, "data_type_owner") && !["OBJECT", "UNKNOWN"].includes(raw.trim().toUpperCase()) ? raw : undefined);
   if (owner && name) return { identity: qualifiedIdentity(owner, name), name, kind: "composite" };
   return undefined;
 }
@@ -104,7 +123,15 @@ function relationColumn(row: CatalogRow) {
   };
 }
 
-function routineParts(row: CatalogRow): { readonly owner: string; readonly object: string; readonly packageName?: string; readonly procedure: string; readonly overload: string } | undefined {
+function routineParts(row: CatalogRow):
+  | {
+      readonly owner: string;
+      readonly object: string;
+      readonly packageName?: string;
+      readonly procedure: string;
+      readonly overload: string;
+    }
+  | undefined {
   const owner = text(row, "owner");
   const object = text(row, "object_name");
   const packageName = text(row, "package_name") ?? (text(row, "procedure_name") === undefined ? undefined : object);
@@ -113,19 +140,38 @@ function routineParts(row: CatalogRow): { readonly owner: string; readonly objec
   return { owner, object, packageName, procedure, overload: text(row, "overload") ?? "" };
 }
 
-function routineName(row: CatalogRow): { readonly name: string; readonly identity: string; readonly schema: string } | undefined {
+function routineName(
+  row: CatalogRow,
+): { readonly name: string; readonly identity: string; readonly schema: string } | undefined {
   const parts = routineParts(row);
   if (!parts) return undefined;
-  const segments = parts.packageName ? [parts.owner, parts.packageName, parts.procedure] : [parts.owner, parts.procedure];
+  const segments = parts.packageName
+    ? [parts.owner, parts.packageName, parts.procedure]
+    : [parts.owner, parts.procedure];
   const base = qualifiedIdentitySegments(segments);
-  return { name: parts.procedure, identity: parts.overload ? qualifiedIdentitySegmentsWithSuffix(segments, parts.overload) : base, schema: parts.owner };
+  return {
+    name: parts.procedure,
+    identity: parts.overload ? qualifiedIdentitySegmentsWithSuffix(segments, parts.overload) : base,
+    schema: parts.owner,
+  };
 }
 
 function routineKey(row: CatalogRow, argument: boolean): string {
   const member = text(row, "procedure_name");
-  const packageName = argument ? text(row, "package_name") : member === undefined ? undefined : text(row, "object_name");
-  const name = argument ? text(row, "object_name") : member ?? text(row, "object_name");
-  return JSON.stringify([text(row, "owner"), packageName, name, numberValue(row, "object_id"), numberValue(row, "subprogram_id"), text(row, "overload")]);
+  const packageName = argument
+    ? text(row, "package_name")
+    : member === undefined
+      ? undefined
+      : text(row, "object_name");
+  const name = argument ? text(row, "object_name") : (member ?? text(row, "object_name"));
+  return JSON.stringify([
+    text(row, "owner"),
+    packageName,
+    name,
+    numberValue(row, "object_id"),
+    numberValue(row, "subprogram_id"),
+    text(row, "overload"),
+  ]);
 }
 
 function argumentMode(value: string | undefined): RoutineArgument["mode"] {
@@ -138,7 +184,10 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
   return {
     dialect: "oracle",
     async inspect(): Promise<MetadataSnapshot> {
-      const versionRows = await rows(connection, "SELECT banner AS version FROM v$version WHERE banner LIKE 'Oracle Database%'");
+      const versionRows = await rows(
+        connection,
+        "SELECT banner AS version FROM v$version WHERE banner LIKE 'Oracle Database%'",
+      );
       const versionBanner = text(versionRows[0], "version") ?? "unknown";
       const version = /\b\d+(?:\.\d+)*(?:[A-Za-z]+\d*)?\b/u.exec(versionBanner)?.[0] ?? versionBanner;
       const namespaceRows = await rows(connection, "SELECT username FROM all_users ORDER BY username");
@@ -147,9 +196,17 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
         const name = text(row, "username");
         if (name) namespaces[name] = { name, kind: "schema" };
       }
-      const relationRows = await rows(connection, "SELECT owner, table_name AS relation_name, 'TABLE' AS relation_kind FROM all_tables UNION ALL SELECT owner, view_name AS relation_name, 'VIEW' AS relation_kind FROM all_views ORDER BY owner, relation_name");
-      const columnRows = await rows(connection, "SELECT owner, table_name, column_name, internal_column_id AS column_id, data_type, data_type_owner, data_precision, data_scale, nullable, data_default, identity_column, virtual_column, char_used, domain_owner, domain_name FROM all_tab_cols WHERE user_generated = 'YES' ORDER BY owner, table_name, internal_column_id");
-      const columnsByRelation = groupBy(columnRows, (column) => JSON.stringify([text(column, "owner"), text(column, "table_name")]));
+      const relationRows = await rows(
+        connection,
+        "SELECT owner, table_name AS relation_name, 'TABLE' AS relation_kind FROM all_tables UNION ALL SELECT owner, view_name AS relation_name, 'VIEW' AS relation_kind FROM all_views ORDER BY owner, relation_name",
+      );
+      const columnRows = await rows(
+        connection,
+        "SELECT owner, table_name, column_name, internal_column_id AS column_id, data_type, data_type_owner, data_precision, data_scale, nullable, data_default, identity_column, virtual_column, char_used, domain_owner, domain_name FROM all_tab_cols WHERE user_generated = 'YES' ORDER BY owner, table_name, internal_column_id",
+      );
+      const columnsByRelation = groupBy(columnRows, (column) =>
+        JSON.stringify([text(column, "owner"), text(column, "table_name")]),
+      );
       const relations: Record<string, RelationSnapshot> = Object.create(null);
       for (const relation of relationRows) {
         const schema = text(relation, "owner");
@@ -169,8 +226,14 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
         const evidence = typeEvidence(column);
         if (evidence && !types[evidence.identity]) types[evidence.identity] = evidence;
       }
-      const procedureRows = await rows(connection, "SELECT owner, object_name, procedure_name, object_type, object_id, overload, subprogram_id FROM all_procedures WHERE object_type IN ('FUNCTION', 'PROCEDURE') OR procedure_name IS NOT NULL ORDER BY owner, object_name, procedure_name, overload, object_id");
-      const argumentRows = await rows(connection, "SELECT owner, object_name, package_name, object_id, overload, subprogram_id, argument_name, position, sequence, in_out, data_type, type_owner, type_name, defaulted FROM all_arguments WHERE data_level = 0 ORDER BY owner, object_name, package_name, overload, sequence");
+      const procedureRows = await rows(
+        connection,
+        "SELECT owner, object_name, procedure_name, object_type, object_id, overload, subprogram_id FROM all_procedures WHERE object_type IN ('FUNCTION', 'PROCEDURE') OR procedure_name IS NOT NULL ORDER BY owner, object_name, procedure_name, overload, object_id",
+      );
+      const argumentRows = await rows(
+        connection,
+        "SELECT owner, object_name, package_name, object_id, overload, subprogram_id, argument_name, position, sequence, in_out, data_type, type_owner, type_name, defaulted FROM all_arguments WHERE data_level = 0 ORDER BY owner, object_name, package_name, overload, sequence",
+      );
       const argumentsByRoutine = groupBy(argumentRows, (argument) => routineKey(argument, true));
       const proceduresByIdentity = groupBy(procedureRows, (procedure) => routineName(procedure)?.identity);
       const routines: Record<string, RoutineSnapshot[]> = Object.create(null);
@@ -183,11 +246,11 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
         if (duplicateIdentity && objectId === undefined) continue;
         const identity = duplicateIdentity
           ? qualifiedIdentitySegmentsWithSuffix(
-            procedureParts.packageName
-              ? [procedureParts.owner, procedureParts.packageName, procedureParts.procedure]
-              : [procedureParts.owner, procedureParts.procedure],
-            `${procedureParts.overload}\u0000${objectId}`,
-          )
+              procedureParts.packageName
+                ? [procedureParts.owner, procedureParts.packageName, procedureParts.procedure]
+                : [procedureParts.owner, procedureParts.procedure],
+              `${procedureParts.overload}\u0000${objectId}`,
+            )
           : named.identity;
         const routineArguments: RoutineArgument[] = [];
         let result: RoutineSnapshot["result"] = { kind: "void" };
@@ -205,7 +268,8 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
             ...(text(argument, "defaulted") === undefined ? {} : { hasDefault: text(argument, "defaulted") === "Y" }),
           });
         }
-        const kind = text(procedure, "object_type") === "FUNCTION" || result.kind === "scalar" ? "function" : "procedure";
+        const kind =
+          text(procedure, "object_type") === "FUNCTION" || result.kind === "scalar" ? "function" : "procedure";
         const routine: RoutineSnapshot = {
           name: named.name,
           schema: named.schema,
@@ -217,7 +281,7 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
           result,
         };
         const current = Object.hasOwn(routines, named.name) ? routines[named.name] : undefined;
-        routines[named.name] = [...current ?? [], routine];
+        routines[named.name] = [...(current ?? []), routine];
       }
       const majorVersion = /^\d+/u.exec(version)?.[0];
       return {
@@ -230,7 +294,12 @@ export function createOracleInspector(connection: OracleInspectorConnectionLike)
         types,
         relations,
         routines,
-        metadata: { source: "Oracle ALL_* catalog views", introspectionScope: "objects visible to the inspecting session", completeness: "partial", identityEncoding: QUALIFIED_IDENTITY_ENCODING },
+        metadata: {
+          source: "Oracle ALL_* catalog views",
+          introspectionScope: "objects visible to the inspecting session",
+          completeness: "partial",
+          identityEncoding: QUALIFIED_IDENTITY_ENCODING,
+        },
       };
     },
   };

@@ -70,11 +70,11 @@ dispatch defaults to validation-only and requires `deploy=true` for deployment.
 **A version tag identifies an immutable candidate. Tag push does not publish.**
 The normal Release workflow choices are:
 
-| Mode | Purpose | External mutation |
-| --- | --- | --- |
-| `certify` (default) | Complete release DAG, immutable candidate validation, and pnpm stage-publication dry-run | None |
-| `pack-only` | Pack and inspect a candidate without publication rehearsal; not full certification | None |
-| `stage` | Publish the validated immutable `.tgz` files to npm's staging area | Staged package records only |
+| Mode                | Purpose                                                                                  | External mutation           |
+| ------------------- | ---------------------------------------------------------------------------------------- | --------------------------- |
+| `certify` (default) | Complete release DAG, immutable candidate validation, and pnpm stage-publication dry-run | None                        |
+| `pack-only`         | Pack and inspect a candidate without publication rehearsal; not full certification       | None                        |
+| `stage`             | Publish the validated immutable `.tgz` files to npm's staging area                       | Staged package records only |
 
 The one-time RC0 bootstrap is complete and is not a normal or repeatable mode.
 The former direct `publish` mode is removed: direct live publication is
@@ -317,6 +317,7 @@ The following are maintainer actions, **not** actions performed by certification
    current dist-tags and stop if `next` has advanced past this prerelease.
    Approval applies the tag selected at staging time; certification cannot lock
    registry channels during a later human approval session.
+
 5. Verify the approved publication without the original workflow or tarballs:
 
    ```sh
@@ -331,6 +332,7 @@ The following are maintainer actions, **not** actions performed by certification
    all public packages using an earlier partial report as the immutable baseline.
    It never approves anything. For this RC, `next` must point to the approved packages
    and `latest` must remain unchanged.
+
 6. For a stable version, stage under `release-<version>`. After every stage is
    approved and verification passes, execute the helper's reported manual
    `latest` promotion commands, then optionally rerun verification with

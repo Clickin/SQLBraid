@@ -6,7 +6,11 @@ import { dirname, resolve } from "node:path";
 import { SQL } from "bun";
 import { certifyTarget } from "../tests/certification/execute.ts";
 import { REQUIRED_CASE_IDS } from "../tests/certification/types.ts";
-import { expectedCapabilities, expectedGuardedCases, expectedTransactionOptions } from "../tests/certification/targets/bun-sql.ts";
+import {
+  expectedCapabilities,
+  expectedGuardedCases,
+  expectedTransactionOptions,
+} from "../tests/certification/targets/bun-sql.ts";
 import { validateCertificationArtifact } from "../tests/certification/runner.ts";
 
 const dialects = ["postgres", "mysql", "mariadb", "sqlite"];
@@ -45,14 +49,28 @@ async function createTarget(dialect, sourceSha) {
 }
 
 function assertCheckedOutSourceSha(value) {
-  assert.match(value ?? "", /^[0-9a-f]{40}$/iu, "Pass a full 40-character source SHA with --source-sha or SQLBRAID_CERT_SOURCE_SHA.");
+  assert.match(
+    value ?? "",
+    /^[0-9a-f]{40}$/iu,
+    "Pass a full 40-character source SHA with --source-sha or SQLBRAID_CERT_SOURCE_SHA.",
+  );
   let head;
   try {
-    head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    head = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
   } catch (error) {
-    throw new Error("Certification source SHA cannot be verified because the checkout has no readable git HEAD.", { cause: error });
+    throw new Error("Certification source SHA cannot be verified because the checkout has no readable git HEAD.", {
+      cause: error,
+    });
   }
-  assert.equal(value.toLowerCase(), head.toLowerCase(), `Certification source SHA ${value} does not match checked-out HEAD ${head}.`);
+  assert.equal(
+    value.toLowerCase(),
+    head.toLowerCase(),
+    `Certification source SHA ${value} does not match checked-out HEAD ${head}.`,
+  );
 }
 
 function errorRecord(error) {
@@ -72,12 +90,14 @@ const sourceSha = sourceShaIndex >= 0 ? args[sourceShaIndex + 1] : process.env.S
 const artifactIndex = args.indexOf("--artifact");
 const artifactPath = artifactIndex >= 0 ? args[artifactIndex + 1] : process.env.SQLBRAID_CERT_ARTIFACT;
 const stressValue = process.env.SQLBRAID_CERT_STRESS;
-if (stressValue !== undefined && !["0", "1", "false", "true"].includes(stressValue)) throw new Error("SQLBRAID_CERT_STRESS must be 0, 1, false, or true.");
+if (stressValue !== undefined && !["0", "1", "false", "true"].includes(stressValue))
+  throw new Error("SQLBRAID_CERT_STRESS must be 0, 1, false, or true.");
 const stress = args.includes("--stress") || stressValue === "1" || stressValue === "true";
-const selected = args.filter((value, index) =>
-  !value.startsWith("--")
-  && (sourceShaIndex < 0 || index !== sourceShaIndex + 1)
-  && (artifactIndex < 0 || index !== artifactIndex + 1),
+const selected = args.filter(
+  (value, index) =>
+    !value.startsWith("--") &&
+    (sourceShaIndex < 0 || index !== sourceShaIndex + 1) &&
+    (artifactIndex < 0 || index !== artifactIndex + 1),
 );
 assertCheckedOutSourceSha(sourceSha);
 const selectedDialects = selected.length === 0 ? dialects : selected;
@@ -100,9 +120,10 @@ for (const dialect of selectedDialects) {
     if (failures.length > 0) failed = true;
     results.push(artifact);
     if (artifactPath) {
-      const output = selectedDialects.length === 1 && artifactPath.endsWith(".json")
-        ? artifactPath
-        : `${artifactPath.replace(/[\\/]$/u, "")}/${artifact.target}.json`;
+      const output =
+        selectedDialects.length === 1 && artifactPath.endsWith(".json")
+          ? artifactPath
+          : `${artifactPath.replace(/[\\/]$/u, "")}/${artifact.target}.json`;
       await mkdir(dirname(output), { recursive: true });
       await writeFile(output, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
     }

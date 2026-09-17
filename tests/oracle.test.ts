@@ -8,10 +8,13 @@ import { createOracleInspector } from "@sqlbraid/oracle/inspector";
 test("Oracle renders positional binds and doubled quoted identifiers", () => {
   const rendered = sql`SELECT ${1}, ${2}`.render();
   assert.deepEqual(rendered.segments, ["SELECT ", ", ", ""]);
-  assert.deepEqual(rendered.parameters, [{ value: 1, interpolation: 0 }, { value: 2, interpolation: 1 }]);
+  assert.deepEqual(rendered.parameters, [
+    { value: 1, interpolation: 0 },
+    { value: 2, interpolation: 1 },
+  ]);
   const binding = oracledbStatementBinding.describe(rendered, { dialectId: "oracle", requestedReuse: "auto" });
   assert.equal(binding.parameterizedSql, "SELECT :1, :2");
-  assert.equal(sql`SELECT ${sql.ident("A\"B")}`.render().segments[0], 'SELECT "A""B"');
+  assert.equal(sql`SELECT ${sql.ident('A"B')}`.render().segments[0], 'SELECT "A""B"');
 });
 
 test("Oracle lexical scanner preserves q literals, comments, and quoted text", () => {
@@ -30,46 +33,94 @@ test("Oracle inspector keeps catalog-qualified object and domain type evidence",
       statements.push(statement);
       if (statement.includes("v$version")) return { rows: [{ VERSION: "Oracle Database 23c" }] };
       if (statement.includes("all_users")) return { rows: [{ USERNAME: "APP" }] };
-      if (statement.includes("all_tables")) return { rows: [{ OWNER: "APP", RELATION_NAME: "UDT_TABLE", RELATION_KIND: "TABLE" }] };
-      if (statement.includes("all_tab_cols")) return {
-        rows: [
-          { OWNER: "APP", TABLE_NAME: "UDT_TABLE", COLUMN_NAME: "PAYLOAD", COLUMN_ID: 1, DATA_TYPE: "UDT_OBJECT", DATA_TYPE_OWNER: "TYPES", NULLABLE: "Y" },
-          { OWNER: "APP", TABLE_NAME: "UDT_TABLE", COLUMN_NAME: "DOMAIN_VALUE", COLUMN_ID: 2, DATA_TYPE: "VARCHAR2", DOMAIN_OWNER: "APP", DOMAIN_NAME: "CUSTOM_DOMAIN", NULLABLE: "Y" },
-          { OWNER: "APP", TABLE_NAME: "UDT_TABLE", COLUMN_NAME: "COUNT_VALUE", COLUMN_ID: 3, DATA_TYPE: "NUMBER", NULLABLE: "Y" },
-          { OWNER: "APP", TABLE_NAME: "UDT_TABLE", COLUMN_NAME: "UNKNOWN_VALUE", COLUMN_ID: 4, DATA_TYPE: null, NULLABLE: "Y" },
-        ],
-      };
-      if (statement.includes("all_procedures")) return {
-        rows: [
-          { OWNER: "APP", OBJECT_NAME: "USE_UDT", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 1 },
-          { OWNER: "APP", OBJECT_NAME: "constructor", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 2 },
-          { OWNER: "APP", OBJECT_NAME: "toString", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 3 },
-          { OWNER: "APP", OBJECT_NAME: "__proto__", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 4 },
-        ],
-      };
-      if (statement.includes("all_arguments")) return {
-        rows: [{
-          OWNER: "APP",
-          OBJECT_NAME: "USE_UDT",
-          SUBPROGRAM_ID: 1,
-          ARGUMENT_NAME: "VALUE",
-          POSITION: 1,
-          SEQUENCE: 1,
-          IN_OUT: "IN",
-          DATA_TYPE: "OBJECT",
-          TYPE_OWNER: "TYPES",
-          TYPE_NAME: "UDT_OBJECT",
-        }],
-      };
+      if (statement.includes("all_tables"))
+        return { rows: [{ OWNER: "APP", RELATION_NAME: "UDT_TABLE", RELATION_KIND: "TABLE" }] };
+      if (statement.includes("all_tab_cols"))
+        return {
+          rows: [
+            {
+              OWNER: "APP",
+              TABLE_NAME: "UDT_TABLE",
+              COLUMN_NAME: "PAYLOAD",
+              COLUMN_ID: 1,
+              DATA_TYPE: "UDT_OBJECT",
+              DATA_TYPE_OWNER: "TYPES",
+              NULLABLE: "Y",
+            },
+            {
+              OWNER: "APP",
+              TABLE_NAME: "UDT_TABLE",
+              COLUMN_NAME: "DOMAIN_VALUE",
+              COLUMN_ID: 2,
+              DATA_TYPE: "VARCHAR2",
+              DOMAIN_OWNER: "APP",
+              DOMAIN_NAME: "CUSTOM_DOMAIN",
+              NULLABLE: "Y",
+            },
+            {
+              OWNER: "APP",
+              TABLE_NAME: "UDT_TABLE",
+              COLUMN_NAME: "COUNT_VALUE",
+              COLUMN_ID: 3,
+              DATA_TYPE: "NUMBER",
+              NULLABLE: "Y",
+            },
+            {
+              OWNER: "APP",
+              TABLE_NAME: "UDT_TABLE",
+              COLUMN_NAME: "UNKNOWN_VALUE",
+              COLUMN_ID: 4,
+              DATA_TYPE: null,
+              NULLABLE: "Y",
+            },
+          ],
+        };
+      if (statement.includes("all_procedures"))
+        return {
+          rows: [
+            { OWNER: "APP", OBJECT_NAME: "USE_UDT", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 1 },
+            { OWNER: "APP", OBJECT_NAME: "constructor", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 2 },
+            { OWNER: "APP", OBJECT_NAME: "toString", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 3 },
+            { OWNER: "APP", OBJECT_NAME: "__proto__", OBJECT_TYPE: "PROCEDURE", SUBPROGRAM_ID: 4 },
+          ],
+        };
+      if (statement.includes("all_arguments"))
+        return {
+          rows: [
+            {
+              OWNER: "APP",
+              OBJECT_NAME: "USE_UDT",
+              SUBPROGRAM_ID: 1,
+              ARGUMENT_NAME: "VALUE",
+              POSITION: 1,
+              SEQUENCE: 1,
+              IN_OUT: "IN",
+              DATA_TYPE: "OBJECT",
+              TYPE_OWNER: "TYPES",
+              TYPE_NAME: "UDT_OBJECT",
+            },
+          ],
+        };
       throw new Error(`Unexpected Oracle catalog query: ${statement}`);
     },
   };
   const snapshot = await createOracleInspector(connection).inspect();
   const relation = snapshot.relations["APP.UDT_TABLE"];
   assert.ok(relation);
-  assert.deepEqual(relation.columns.map((column) => column.type), ["TYPES.UDT_OBJECT", "APP.CUSTOM_DOMAIN", "NUMBER", "UNKNOWN"]);
-  assert.deepEqual(snapshot.types["TYPES.UDT_OBJECT"], { identity: "TYPES.UDT_OBJECT", name: "UDT_OBJECT", kind: "composite" });
-  assert.deepEqual(snapshot.types["APP.CUSTOM_DOMAIN"], { identity: "APP.CUSTOM_DOMAIN", name: "CUSTOM_DOMAIN", kind: "domain" });
+  assert.deepEqual(
+    relation.columns.map((column) => column.type),
+    ["TYPES.UDT_OBJECT", "APP.CUSTOM_DOMAIN", "NUMBER", "UNKNOWN"],
+  );
+  assert.deepEqual(snapshot.types["TYPES.UDT_OBJECT"], {
+    identity: "TYPES.UDT_OBJECT",
+    name: "UDT_OBJECT",
+    kind: "composite",
+  });
+  assert.deepEqual(snapshot.types["APP.CUSTOM_DOMAIN"], {
+    identity: "APP.CUSTOM_DOMAIN",
+    name: "CUSTOM_DOMAIN",
+    kind: "domain",
+  });
   assert.equal(Object.hasOwn(snapshot.types, "SYS.NUMBER"), false);
   const routine = snapshot.routines.USE_UDT?.[0];
   assert.equal(routine?.arguments[0]?.type, "TYPES.UDT_OBJECT");
@@ -86,12 +137,27 @@ test("Oracle inspector keeps package and procedure identity segments distinct", 
       if (statement.includes("all_users")) return { rows: [] };
       if (statement.includes("all_tables")) return { rows: [] };
       if (statement.includes("all_tab_cols")) return { rows: [] };
-      if (statement.includes("all_procedures")) return {
-        rows: [
-          { OWNER: "APP", OBJECT_NAME: "A.B", PROCEDURE_NAME: "C", OBJECT_TYPE: "FUNCTION", OBJECT_ID: 1, SUBPROGRAM_ID: 1 },
-          { OWNER: "APP", OBJECT_NAME: "A", PROCEDURE_NAME: "B.C", OBJECT_TYPE: "FUNCTION", OBJECT_ID: 2, SUBPROGRAM_ID: 1 },
-        ],
-      };
+      if (statement.includes("all_procedures"))
+        return {
+          rows: [
+            {
+              OWNER: "APP",
+              OBJECT_NAME: "A.B",
+              PROCEDURE_NAME: "C",
+              OBJECT_TYPE: "FUNCTION",
+              OBJECT_ID: 1,
+              SUBPROGRAM_ID: 1,
+            },
+            {
+              OWNER: "APP",
+              OBJECT_NAME: "A",
+              PROCEDURE_NAME: "B.C",
+              OBJECT_TYPE: "FUNCTION",
+              OBJECT_ID: 2,
+              SUBPROGRAM_ID: 1,
+            },
+          ],
+        };
       if (statement.includes("all_arguments")) return { rows: [] };
       throw new Error(`Unexpected Oracle catalog query: ${statement}`);
     },
@@ -107,11 +173,17 @@ test("Oracle inspector keeps package and procedure identity segments distinct", 
 test("Oracle parameter hints are aligned and NUMBER policy stays exact", () => {
   const query = sql`SELECT ${sql.bind(null, oracleParameter.number(38, -2))}, ${sql.bind("Ada", oracleParameter.nvarchar2(40))}`;
   const rendered = query.render();
-  assert.deepEqual(rendered.parameters.map((parameter) => parameter.value), [null, "Ada"]);
-  assert.deepEqual(rendered.parameters.map((parameter) => parameter.hint), [
-    { databaseType: "NUMBER", precision: 38, scale: -2 },
-    { databaseType: "NVARCHAR2", length: 40 },
-  ]);
+  assert.deepEqual(
+    rendered.parameters.map((parameter) => parameter.value),
+    [null, "Ada"],
+  );
+  assert.deepEqual(
+    rendered.parameters.map((parameter) => parameter.hint),
+    [
+      { databaseType: "NUMBER", precision: 38, scale: -2 },
+      { databaseType: "NVARCHAR2", length: 40 },
+    ],
+  );
   assert.equal(typePolicy.decode("NUMBER", "123456789012345678901234567890.12"), "123456789012345678901234567890.12");
   assert.throws(() => typePolicy.encode("NUMBER", Number.NaN), /finite/u);
 });
@@ -134,9 +206,10 @@ test("Oracle rejects custom exact-number decimal text for IN binds before execut
   });
   await assert.rejects(
     async () => executor.query(sql`SELECT ${sql.bind(1, oracleParameter.number())}`.render()),
-    (error: unknown) => error instanceof UnsupportedFeatureError
-      && error.feature === "statement.bind-hint"
-      && error.code === "BRAID_BIND_HINT_UNSUPPORTED",
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.feature === "statement.bind-hint" &&
+      error.code === "BRAID_BIND_HINT_UNSUPPORTED",
   );
   assert.equal(executions, 0);
 });
@@ -155,19 +228,24 @@ test("Oracle adapter honors hints, rejects untyped null, and closes an aborted R
   const connection = {
     async execute(text: string, binds?: readonly unknown[], options?: { readonly resultSet?: boolean }) {
       calls.push({ sql: text, binds });
-      if (text === "SELECT :1" && options?.resultSet !== true) return { rows: [{ VALUE: "7" }], metaData: [{ name: "VALUE", dbTypeName: "NUMBER" }] };
+      if (text === "SELECT :1" && options?.resultSet !== true)
+        return { rows: [{ VALUE: "7" }], metaData: [{ name: "VALUE", dbTypeName: "NUMBER" }] };
       return {
         resultSet: {
           async getRow() {
             rowIndex += 1;
             return rowIndex === 1 ? { VALUE: "1" } : null;
           },
-          async close() { closed += 1; },
+          async close() {
+            closed += 1;
+          },
         },
         metaData: [{ name: "VALUE", dbTypeName: "NUMBER" }],
       };
     },
-    async break() { breaks += 1; },
+    async break() {
+      breaks += 1;
+    },
     async commit() {},
     async rollback() {},
   };
@@ -184,7 +262,9 @@ test("Oracle adapter honors hints, rejects untyped null, and closes an aborted R
   );
   assert.equal(calls.length, callsBeforeUnsupportedFacet);
   const controller = new AbortController();
-  const iterator = executor.stream!(sql`SELECT ${1}`.render(), undefined, { signal: controller.signal })[Symbol.asyncIterator]();
+  const iterator = executor.stream!(sql`SELECT ${1}`.render(), undefined, { signal: controller.signal })[
+    Symbol.asyncIterator
+  ]();
   assert.deepEqual(await iterator.next(), { done: false, value: { VALUE: "1" } });
   controller.abort();
   await assert.rejects(() => iterator.next());
@@ -210,8 +290,12 @@ test("Oracle streaming closes async iterators before result sets on abort", asyn
     async execute() {
       return {
         resultSet: {
-          [Symbol.asyncIterator]() { return resultIterator; },
-          async close() { order.push("result-set-close"); },
+          [Symbol.asyncIterator]() {
+            return resultIterator;
+          },
+          async close() {
+            order.push("result-set-close");
+          },
         },
         metaData: [{ name: "VALUE", dbTypeName: "VARCHAR2" }],
       };
@@ -223,10 +307,15 @@ test("Oracle streaming closes async iterators before result sets on abort", asyn
   const executor = createOracledbExecutor(connection);
   const controller = new AbortController();
   const reason = new Error("oracle async iterator abort");
-  const iterator = executor.stream!(sql`SELECT 1`.render(), undefined, { signal: controller.signal })[Symbol.asyncIterator]();
+  const iterator = executor.stream!(sql`SELECT 1`.render(), undefined, { signal: controller.signal })[
+    Symbol.asyncIterator
+  ]();
   assert.deepEqual(await iterator.next(), { done: false, value: { VALUE: "1" } });
   controller.abort(reason);
-  await assert.rejects(() => iterator.next(), (error: unknown) => error === reason);
+  await assert.rejects(
+    () => iterator.next(),
+    (error: unknown) => error === reason,
+  );
   assert.deepEqual(order, ["iterator-return", "result-set-close"]);
 });
 
@@ -241,9 +330,13 @@ test("Oracle streaming breaks an active native row fetch", async () => {
         resultSet: {
           async getRow() {
             started.resolve();
-            return new Promise((resolve) => { releaseRow = resolve; });
+            return new Promise((resolve) => {
+              releaseRow = resolve;
+            });
           },
-          async close() { closed += 1; },
+          async close() {
+            closed += 1;
+          },
         },
         metaData: [{ name: "VALUE", dbTypeName: "VARCHAR2" }],
       };
@@ -258,7 +351,9 @@ test("Oracle streaming breaks an active native row fetch", async () => {
   const executor = createOracledbExecutor(connection);
   const controller = new AbortController();
   const reason = new Error("oracle active row abort");
-  const pending = executor.stream!(sql`SELECT 1`.render(), undefined, { signal: controller.signal })[Symbol.asyncIterator]().next();
+  const pending = executor.stream!(sql`SELECT 1`.render(), undefined, { signal: controller.signal })
+    [Symbol.asyncIterator]()
+    .next();
   await started.promise;
   assert.ok(releaseRow);
   controller.abort(reason);
@@ -304,10 +399,26 @@ test("Oracle numeric result transport keeps NUMBER exact and BINARY_FLOAT approx
 });
 
 test("Oracle NUMBER-family metadata treats FLOAT and ANSI aliases as exact strings", async () => {
-  const exactTypes = new Map(typePolicy.mappings.filter((mapping) => mapping.numeric?.semantics === "exact-decimal").map((mapping) => [mapping.databaseType, mapping.numeric]));
-  assert.deepEqual(exactTypes.get("NUMBER"), { semantics: "exact-decimal", representation: "string", fidelity: "lossless" });
-  assert.deepEqual(exactTypes.get("FLOAT"), { semantics: "exact-decimal", representation: "string", fidelity: "lossless" });
-  assert.deepEqual(exactTypes.get("DOUBLE PRECISION"), { semantics: "exact-decimal", representation: "string", fidelity: "lossless" });
+  const exactTypes = new Map(
+    typePolicy.mappings
+      .filter((mapping) => mapping.numeric?.semantics === "exact-decimal")
+      .map((mapping) => [mapping.databaseType, mapping.numeric]),
+  );
+  assert.deepEqual(exactTypes.get("NUMBER"), {
+    semantics: "exact-decimal",
+    representation: "string",
+    fidelity: "lossless",
+  });
+  assert.deepEqual(exactTypes.get("FLOAT"), {
+    semantics: "exact-decimal",
+    representation: "string",
+    fidelity: "lossless",
+  });
+  assert.deepEqual(exactTypes.get("DOUBLE PRECISION"), {
+    semantics: "exact-decimal",
+    representation: "string",
+    fidelity: "lossless",
+  });
   assert.deepEqual(typePolicy.mappings.find((mapping) => mapping.databaseType === "INTEGER")?.numeric, {
     semantics: "exact-integer",
     representation: "string",
@@ -382,9 +493,10 @@ test("Oracle rejects narrowed command counts and exact numeric OUT values", asyn
     DB_TYPE_NUMBER: "number",
   };
   await assert.rejects(
-    async () => createOracledbExecutor(outConnection, { driver }).call(
-      sql.call`BEGIN answer(${sql.out("answer", oracleParameter.number())}); END;`.render(),
-    ),
+    async () =>
+      createOracledbExecutor(outConnection, { driver }).call(
+        sql.call`BEGIN answer(${sql.out("answer", oracleParameter.number())}); END;`.render(),
+      ),
     { code: "BRAID_RESULT_EXACTNESS" },
   );
 });
@@ -402,15 +514,18 @@ test("Oracle validates transaction options before control SQL", async () => {
   const executor = createOracledbExecutor(connection);
   await assert.rejects(
     async () => executor.begin!({ isolation: "invalid" as never }),
-    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+    (error: unknown) =>
+      error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   await assert.rejects(
     async () => executor.begin!({ readOnly: "yes" as never }),
-    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+    (error: unknown) =>
+      error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   await assert.rejects(
     async () => executor.begin!({ unsupported: true } as never),
-    (error: unknown) => error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
+    (error: unknown) =>
+      error instanceof TypeError && (error as { readonly code?: string }).code === "BRAID_TX_OPTIONS_INVALID",
   );
   assert.equal(executions, 0);
 });
@@ -428,16 +543,22 @@ test("Oracle rejects isolation/readOnly combinations before control SQL", async 
   const executor = createOracledbExecutor(connection);
   for (const isolation of ["read-uncommitted", "read-committed", "repeatable-read", "serializable"] as const) {
     await assert.rejects(
-      async () => { await executor.begin!({ isolation, readOnly: true }); },
-      (error: unknown) => error instanceof Error
-        && (error as { readonly code?: string }).code === "BRAID_TX_OPTION_UNSUPPORTED"
-        && (error as { readonly feature?: string }).feature === `transaction.isolation.${isolation}`,
+      async () => {
+        await executor.begin!({ isolation, readOnly: true });
+      },
+      (error: unknown) =>
+        error instanceof Error &&
+        (error as { readonly code?: string }).code === "BRAID_TX_OPTION_UNSUPPORTED" &&
+        (error as { readonly feature?: string }).feature === `transaction.isolation.${isolation}`,
     );
     await assert.rejects(
-      async () => { await executor.begin!({ isolation, readOnly: false }); },
-      (error: unknown) => error instanceof Error
-        && (error as { readonly code?: string }).code === "BRAID_TX_OPTION_UNSUPPORTED"
-        && (error as { readonly feature?: string }).feature === `transaction.isolation.${isolation}`,
+      async () => {
+        await executor.begin!({ isolation, readOnly: false });
+      },
+      (error: unknown) =>
+        error instanceof Error &&
+        (error as { readonly code?: string }).code === "BRAID_TX_OPTION_UNSUPPORTED" &&
+        (error as { readonly feature?: string }).feature === `transaction.isolation.${isolation}`,
     );
   }
   assert.equal(executions, 0);
@@ -453,7 +574,10 @@ test("Oracle query rows preserve hostile labels as own data properties", async (
     async commit() {},
     async rollback() {},
   };
-  const row = (await createOracledbExecutor(connection).query(sql.rows`SELECT 1 FROM dual`.render())).rows[0] as Record<string, unknown>;
+  const row = (await createOracledbExecutor(connection).query(sql.rows`SELECT 1 FROM dual`.render())).rows[0] as Record<
+    string,
+    unknown
+  >;
   assert.equal(Object.getPrototypeOf(row), Object.prototype);
   for (const [index, label] of labels.entries()) {
     assert.equal(Object.hasOwn(row, label), true);
@@ -509,7 +633,9 @@ test("Oracle custom type profiles retain raw break cancellation", async () => {
         started.resolve();
       });
     },
-    async break() { breaks += 1; },
+    async break() {
+      breaks += 1;
+    },
     async commit() {},
     async rollback() {},
   };
@@ -535,15 +661,23 @@ test("Oracle cancellation remains active while reading an OUT cursor", async () 
   const connection = {
     async execute() {
       return {
-        outBinds: [{
-          async getRow() {
-            return new Promise((resolve) => { releaseRead = resolve; });
+        outBinds: [
+          {
+            async getRow() {
+              return new Promise((resolve) => {
+                releaseRead = resolve;
+              });
+            },
+            async close() {
+              closed += 1;
+            },
           },
-          async close() { closed += 1; },
-        }],
+        ],
       };
     },
-    async break() { breaks += 1; },
+    async break() {
+      breaks += 1;
+    },
     async commit() {},
     async rollback() {},
   };
@@ -551,11 +685,13 @@ test("Oracle cancellation remains active while reading an OUT cursor", async () 
   const controller = new AbortController();
   let settled = false;
   const reason = new Error("oracle cursor cancelled");
-  const pending = Promise.resolve(executor.call(
-    sql.call`BEGIN read_cursor(${sql.out("cursor", oracleParameter.refCursor())}); END;`.render(),
-    undefined,
-    { signal: controller.signal },
-  )).finally(() => {
+  const pending = Promise.resolve(
+    executor.call(
+      sql.call`BEGIN read_cursor(${sql.out("cursor", oracleParameter.refCursor())}); END;`.render(),
+      undefined,
+      { signal: controller.signal },
+    ),
+  ).finally(() => {
     settled = true;
   });
   await Promise.resolve();
@@ -576,7 +712,9 @@ test("Oracle cancellation remains active while materializing an OUT LOB", async 
   let closed = 0;
   const lob = {
     async getData() {
-      return new Promise((resolve) => { releaseData = resolve; });
+      return new Promise((resolve) => {
+        releaseData = resolve;
+      });
     },
     destroy() {
       closed += 1;
@@ -594,7 +732,9 @@ test("Oracle cancellation remains active while materializing an OUT LOB", async 
     async execute() {
       return { outBinds: [lob] };
     },
-    async break() { breaks += 1; },
+    async break() {
+      breaks += 1;
+    },
     async commit() {},
     async rollback() {},
   };
@@ -602,11 +742,11 @@ test("Oracle cancellation remains active while materializing an OUT LOB", async 
   const controller = new AbortController();
   const reason = new Error("oracle lob cancelled");
   let settled = false;
-  const pending = Promise.resolve(executor.call(
-    sql.call`BEGIN read_lob(${sql.out("body", oracleParameter.clob())}); END;`.render(),
-    undefined,
-    { signal: controller.signal },
-  )).finally(() => {
+  const pending = Promise.resolve(
+    executor.call(sql.call`BEGIN read_lob(${sql.out("body", oracleParameter.clob())}); END;`.render(), undefined, {
+      signal: controller.signal,
+    }),
+  ).finally(() => {
     settled = true;
   });
   await Promise.resolve();

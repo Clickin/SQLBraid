@@ -9,11 +9,7 @@ import {
   type Span,
   type Tracer,
 } from "@opentelemetry/api";
-import type {
-  ExecutionEvent,
-  ExecutionObserver,
-  QueryReadyEvent,
-} from "@sqlbraid/core";
+import type { ExecutionEvent, ExecutionObserver, QueryReadyEvent } from "@sqlbraid/core";
 import { PUBLIC_ERROR_DEFINITIONS } from "@sqlbraid/core";
 
 const INSTRUMENTATION_NAME = "@sqlbraid/opentelemetry";
@@ -96,12 +92,13 @@ function nonEmptyString(value: unknown): string | undefined {
 
 function normalizeDatabaseOptions(value: OpenTelemetryObserverOptions["database"]): DatabaseOptions {
   if (value === undefined || value === null || typeof value !== "object") return {};
-  const serverPort = typeof value.serverPort === "number"
-    && Number.isInteger(value.serverPort)
-    && value.serverPort >= 0
-    && value.serverPort <= 65_535
-    ? value.serverPort
-    : undefined;
+  const serverPort =
+    typeof value.serverPort === "number" &&
+    Number.isInteger(value.serverPort) &&
+    value.serverPort >= 0 &&
+    value.serverPort <= 65_535
+      ? value.serverPort
+      : undefined;
   return Object.freeze({
     ...(nonEmptyString(value.namespace) === undefined ? {} : { namespace: value.namespace }),
     ...(nonEmptyString(value.serverAddress) === undefined ? {} : { serverAddress: value.serverAddress }),
@@ -148,10 +145,7 @@ function safeErrorType(error: unknown): string {
   try {
     if (typeof error === "object" && error !== null) {
       const code = (error as { readonly code?: unknown }).code;
-      if (
-        typeof code === "string"
-        && (PUBLIC_ERROR_CODES.has(code) || STABLE_INTERNAL_ERROR_CODES.has(code))
-      ) {
+      if (typeof code === "string" && (PUBLIC_ERROR_CODES.has(code) || STABLE_INTERNAL_ERROR_CODES.has(code))) {
         return code;
       }
     }
@@ -167,9 +161,10 @@ function safeErrorType(error: unknown): string {
 }
 
 function durationSeconds(startedAt: ClockReading, endedAt: ClockReading): number {
-  const durationMs = startedAt.source === "performance" && endedAt.source === "performance"
-    ? endedAt.monotonicMs - startedAt.monotonicMs
-    : endedAt.wallMs - startedAt.wallMs;
+  const durationMs =
+    startedAt.source === "performance" && endedAt.source === "performance"
+      ? endedAt.monotonicMs - startedAt.monotonicMs
+      : endedAt.wallMs - startedAt.wallMs;
   return Number.isFinite(durationMs) && durationMs > 0 ? durationMs / 1_000 : 0;
 }
 
@@ -181,9 +176,7 @@ function noopObserver(): ExecutionObserver {
   return Object.freeze({ onEvent() {} });
 }
 
-export function createOpenTelemetryObserver(
-  options: OpenTelemetryObserverOptions = {},
-): ExecutionObserver {
+export function createOpenTelemetryObserver(options: OpenTelemetryObserverOptions = {}): ExecutionObserver {
   const tracesEnabled = options.traces !== false;
   const metricsEnabled = options.metrics !== false;
   if (!tracesEnabled && !metricsEnabled) return noopObserver();
@@ -234,8 +227,12 @@ export function createOpenTelemetryObserver(
 
     if (state.span !== undefined) {
       if (outcome === "error") {
-        try { state.span.setStatus({ code: SpanStatusCode.ERROR }); } catch {}
-        try { state.span.setAttributes(errorAttributes(errorType!)); } catch {}
+        try {
+          state.span.setStatus({ code: SpanStatusCode.ERROR });
+        } catch {}
+        try {
+          state.span.setAttributes(errorAttributes(errorType!));
+        } catch {}
       }
       try {
         const durationMs = seconds * 1_000;
@@ -274,11 +271,14 @@ export function createOpenTelemetryObserver(
         });
       } catch {}
     }
-    operations.set(operationId, Object.freeze({
-      startedAt,
-      ...(span === undefined ? {} : { span }),
-      metricAttributes,
-    }));
+    operations.set(
+      operationId,
+      Object.freeze({
+        startedAt,
+        ...(span === undefined ? {} : { span }),
+        metricAttributes,
+      }),
+    );
   }
 
   function observe(event: ExecutionEvent): void {
@@ -306,7 +306,9 @@ export function createOpenTelemetryObserver(
         case "query:result": {
           const state = operations.get(event.operationId);
           if (state?.span !== undefined) {
-            try { state.span.setAttribute("sqlbraid.result.kind", event.actualKind); } catch {}
+            try {
+              state.span.setAttribute("sqlbraid.result.kind", event.actualKind);
+            } catch {}
           }
           return;
         }
@@ -339,7 +341,9 @@ export function createOpenTelemetryObserver(
           const existing = operations.get(event.operationId);
           if (existing !== undefined) {
             if (existing.span !== undefined) {
-              try { existing.span.setAttribute("sqlbraid.result.kind", event.declaredKind); } catch {}
+              try {
+                existing.span.setAttribute("sqlbraid.result.kind", event.declaredKind);
+              } catch {}
             }
             return;
           }

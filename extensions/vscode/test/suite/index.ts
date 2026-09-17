@@ -26,12 +26,16 @@ function hoverText(hover: vscode.Hover): string {
     .join("\n");
 }
 
-function completionItems(value: vscode.CompletionList | readonly vscode.CompletionItem[] | undefined): readonly vscode.CompletionItem[] {
-  return value && "items" in value ? value.items : value ?? [];
+function completionItems(
+  value: vscode.CompletionList | readonly vscode.CompletionItem[] | undefined,
+): readonly vscode.CompletionItem[] {
+  return value && "items" in value ? value.items : (value ?? []);
 }
 
-function completionLabels(value: vscode.CompletionList | readonly vscode.CompletionItem[] | undefined): readonly string[] {
-  return completionItems(value).map((item) => typeof item.label === "string" ? item.label : item.label.label);
+function completionLabels(
+  value: vscode.CompletionList | readonly vscode.CompletionItem[] | undefined,
+): readonly string[] {
+  return completionItems(value).map((item) => (typeof item.label === "string" ? item.label : item.label.label));
 }
 
 export async function run(): Promise<void> {
@@ -46,12 +50,16 @@ export async function run(): Promise<void> {
     await vscode.window.showTextDocument(document);
     const position = document.positionAt(document.getText().indexOf("nativeObject.") + "nativeObject.".length);
     await waitFor(async () => {
-      const result = await vscode.commands.executeCommand<vscode.CompletionList | readonly vscode.CompletionItem[]>("vscode.executeCompletionItemProvider", document.uri, position);
+      const result = await vscode.commands.executeCommand<vscode.CompletionList | readonly vscode.CompletionItem[]>(
+        "vscode.executeCompletionItemProvider",
+        document.uri,
+        position,
+      );
       return completionLabels(result).includes("nativeField") ? true : undefined;
     }, "native TypeScript in unrelated workspace");
     return;
   }
-  await waitFor(async () => extension.isActive ? extension : undefined, "SQLBraid project-scoped activation");
+  await waitFor(async () => (extension.isActive ? extension : undefined), "SQLBraid project-scoped activation");
 
   const workspace = vscode.workspace.workspaceFolders?.[0];
   assert.ok(workspace, "Host test must open the SQLBraid fixture workspace");
@@ -60,12 +68,16 @@ export async function run(): Promise<void> {
   assert.equal(queryDocument.languageId, "typescript");
   await vscode.window.showTextDocument(queryDocument);
 
-  const scopeDocumentSelector: typeof import("../../src/extension")["scopeDocumentSelector"] =
-    require(join(extension.extensionPath, "dist/extension.js")).scopeDocumentSelector;
-  const windowsSelector = scopeDocumentSelector([
-    { scheme: "file", language: "typescript" },
-    { scheme: "file", language: "typescriptreact" },
-  ], vscode.Uri.parse("file:///c:/workspace/app"));
+  const scopeDocumentSelector: (typeof import("../../src/extension"))["scopeDocumentSelector"] = require(
+    join(extension.extensionPath, "dist/extension.js"),
+  ).scopeDocumentSelector;
+  const windowsSelector = scopeDocumentSelector(
+    [
+      { scheme: "file", language: "typescript" },
+      { scheme: "file", language: "typescriptreact" },
+    ],
+    vscode.Uri.parse("file:///c:/workspace/app"),
+  );
   for (const [path, languageId, matches] of [
     ["file:///c:/workspace/app/src/query.ts", "typescript", true],
     ["file:///c:/workspace/app/src/query.tsx", "typescriptreact", true],
@@ -82,7 +94,11 @@ export async function run(): Promise<void> {
   const usersPosition = queryDocument.positionAt(usersOffset);
   const relationHover = await waitFor(async () => {
     try {
-      const hovers = await vscode.commands.executeCommand<readonly vscode.Hover[]>("vscode.executeHoverProvider", queryDocument.uri, usersPosition);
+      const hovers = await vscode.commands.executeCommand<readonly vscode.Hover[]>(
+        "vscode.executeHoverProvider",
+        queryDocument.uri,
+        usersPosition,
+      );
       return hovers?.find((hover) => hoverText(hover).includes("Relation public.users"));
     } catch {
       return undefined;
@@ -110,9 +126,13 @@ export async function run(): Promise<void> {
 
   const definition = await waitFor(async () => {
     try {
-      const locations = await vscode.commands.executeCommand<readonly vscode.Location[]>("vscode.executeDefinitionProvider", queryDocument.uri, usersPosition);
+      const locations = await vscode.commands.executeCommand<readonly vscode.Location[]>(
+        "vscode.executeDefinitionProvider",
+        queryDocument.uri,
+        usersPosition,
+      );
       for (const location of locations ?? []) {
-        if (await realpath(location.uri.fsPath) === generatedRealPath) return location;
+        if ((await realpath(location.uri.fsPath)) === generatedRealPath) return location;
       }
       return undefined;
     } catch {
@@ -129,7 +149,11 @@ export async function run(): Promise<void> {
   await vscode.commands.executeCommand("sqlbraid.reloadProject");
   await waitFor(async () => {
     try {
-      const hovers = await vscode.commands.executeCommand<readonly vscode.Hover[]>("vscode.executeHoverProvider", queryDocument.uri, usersPosition);
+      const hovers = await vscode.commands.executeCommand<readonly vscode.Hover[]>(
+        "vscode.executeHoverProvider",
+        queryDocument.uri,
+        usersPosition,
+      );
       return hovers?.find((hover) => hoverText(hover).includes("Relation public.users"));
     } catch {
       return undefined;
@@ -137,14 +161,19 @@ export async function run(): Promise<void> {
   }, "SQLBraid hover after project reload");
 
   const coexistPath = join(workspace.uri.fsPath, "coexist.ts");
-  await writeFile(coexistPath, [
-    "const nativeObject = { nativeField: 1 };",
-    "nativeObject.nativeField;",
-    "const invalidNumber: number = \"native TypeScript diagnostics remain visible\";",
-  ].join("\n"));
+  await writeFile(
+    coexistPath,
+    [
+      "const nativeObject = { nativeField: 1 };",
+      "nativeObject.nativeField;",
+      'const invalidNumber: number = "native TypeScript diagnostics remain visible";',
+    ].join("\n"),
+  );
   const coexistDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(coexistPath));
   await vscode.window.showTextDocument(coexistDocument);
-  const nativeCompletionPosition = coexistDocument.positionAt(coexistDocument.getText().indexOf("nativeObject.") + "nativeObject.".length);
+  const nativeCompletionPosition = coexistDocument.positionAt(
+    coexistDocument.getText().indexOf("nativeObject.") + "nativeObject.".length,
+  );
   const nativeCompletion = await waitFor(async () => {
     const value = await vscode.commands.executeCommand<vscode.CompletionList | readonly vscode.CompletionItem[]>(
       "vscode.executeCompletionItemProvider",
@@ -168,7 +197,9 @@ export async function run(): Promise<void> {
   ].join("\n");
   await writeFile(sqlCompletionPath, sqlCompletionSource);
   const sqlCompletionDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(sqlCompletionPath));
-  const sqlCompletionPosition = sqlCompletionDocument.positionAt(sqlCompletionSource.indexOf("public.") + "public.".length);
+  const sqlCompletionPosition = sqlCompletionDocument.positionAt(
+    sqlCompletionSource.indexOf("public.") + "public.".length,
+  );
   const isUsersRelation = (item: vscode.CompletionItem): boolean =>
     item.label === "users" && item.kind === vscode.CompletionItemKind.Class && item.detail === "table";
   const sqlCompletion = await waitFor(async () => {
@@ -186,10 +217,15 @@ export async function run(): Promise<void> {
   await mkdir(unrelatedPath, { recursive: true });
   await writeFile(join(unrelatedPath, "plain.ts"), sqlCompletionSource);
   const unrelatedDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(join(unrelatedPath, "plain.ts")));
-  const unrelatedCompletion = await vscode.commands.executeCommand<vscode.CompletionList | readonly vscode.CompletionItem[]>(
+  const unrelatedCompletion = await vscode.commands.executeCommand<
+    vscode.CompletionList | readonly vscode.CompletionItem[]
+  >(
     "vscode.executeCompletionItemProvider",
     unrelatedDocument.uri,
     unrelatedDocument.positionAt(sqlCompletionSource.indexOf("public.") + "public.".length),
   );
-  assert.ok(!completionItems(unrelatedCompletion).some(isUsersRelation), "SQLBraid must not provide workspace evidence to an outside document");
+  assert.ok(
+    !completionItems(unrelatedCompletion).some(isUsersRelation),
+    "SQLBraid must not provide workspace evidence to an outside document",
+  );
 }

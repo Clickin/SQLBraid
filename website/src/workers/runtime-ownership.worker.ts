@@ -32,8 +32,19 @@ function hasCode(error: unknown, code: string): boolean {
 async function createDatabase(events: ExecutionEvent[]) {
   const sqlite3 = await sqlite3InitModule();
   const native = new sqlite3.oo1.DB(":memory:");
-  native.exec("CREATE TABLE ownership (id INTEGER PRIMARY KEY, value TEXT NOT NULL); INSERT INTO ownership VALUES (1, 'one'), (2, 'two'), (3, 'three');");
-  return createSqliteWasmDatabase(native, { sqlite3, observers: [{ onEvent(event) { events.push(event); } }] });
+  native.exec(
+    "CREATE TABLE ownership (id INTEGER PRIMARY KEY, value TEXT NOT NULL); INSERT INTO ownership VALUES (1, 'one'), (2, 'two'), (3, 'three');",
+  );
+  return createSqliteWasmDatabase(native, {
+    sqlite3,
+    observers: [
+      {
+        onEvent(event) {
+          events.push(event);
+        },
+      },
+    ],
+  });
 }
 
 async function run(): Promise<OwnershipSuccess> {
@@ -56,16 +67,17 @@ async function run(): Promise<OwnershipSuccess> {
   checks.push("nested-tx");
 
   await db.tx(async () => {
-    await Promise.all([
-      db.execute(sql.command`UPDATE ownership SET value = ${"escape"} WHERE id = ${1}`),
-      Promise.resolve(),
-    ].map(async (operation) => {
-      try {
-        await operation;
-      } catch (error) {
-        if (!hasCode(error, "BRAID_TX_SCOPE")) throw error;
-      }
-    }));
+    await Promise.all(
+      [db.execute(sql.command`UPDATE ownership SET value = ${"escape"} WHERE id = ${1}`), Promise.resolve()].map(
+        async (operation) => {
+          try {
+            await operation;
+          } catch (error) {
+            if (!hasCode(error, "BRAID_TX_SCOPE")) throw error;
+          }
+        },
+      ),
+    );
   });
   checks.push("root-escape");
 
@@ -102,7 +114,8 @@ async function run(): Promise<OwnershipSuccess> {
             },
           },
         },
-      })) void _row;
+      }))
+        void _row;
       throw mapperFailure;
     } catch (error) {
       if (error !== mapperFailure && !hasCode(error, "BRAID_STREAM_SCOPE")) throw error;
@@ -122,10 +135,13 @@ async function run(): Promise<OwnershipSuccess> {
           "~standard": {
             version: 1,
             vendor: "SQLBraid browser ownership",
-            validate() { throw streamFailure; },
+            validate() {
+              throw streamFailure;
+            },
           },
         },
-      })) void _row;
+      }))
+        void _row;
     } catch (error) {
       if (error !== streamFailure) throw error;
     }
@@ -152,6 +168,10 @@ self.addEventListener("message", (event: MessageEvent<OwnershipRequest>) => {
   void run()
     .then((response) => self.postMessage(response))
     .catch((error: unknown) => {
-      self.postMessage({ type: "error", code: errorCode(error), message: error instanceof Error ? error.message : String(error) } satisfies OwnershipFailure);
+      self.postMessage({
+        type: "error",
+        code: errorCode(error),
+        message: error instanceof Error ? error.message : String(error),
+      } satisfies OwnershipFailure);
     });
 });

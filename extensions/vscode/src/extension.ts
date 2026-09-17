@@ -61,7 +61,9 @@ function resolveMatchingDependencies(): { readonly serverPath: string; readonly 
   const server = dependencyEntry("@sqlbraid/language-server", "cli.js");
   const cli = dependencyEntry("@sqlbraid/cli", "index.js");
   if (dependencyVersion(server.packageRoot) !== LANGUAGE_SERVER_VERSION) {
-    throw new Error(`SQLBraid language server ${LANGUAGE_SERVER_VERSION} is required; found ${dependencyVersion(server.packageRoot)}.`);
+    throw new Error(
+      `SQLBraid language server ${LANGUAGE_SERVER_VERSION} is required; found ${dependencyVersion(server.packageRoot)}.`,
+    );
   }
   if (dependencyVersion(cli.packageRoot) !== CLI_VERSION) {
     throw new Error(`SQLBraid CLI ${CLI_VERSION} is required; found ${dependencyVersion(cli.packageRoot)}.`);
@@ -76,15 +78,29 @@ function projectWatchers(folder: vscode.WorkspaceFolder): vscode.FileSystemWatch
     "**/package.json",
     "**/*.{ts,tsx,mts,cts,js,jsx}",
   ];
-  return patterns.map((pattern) => vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, pattern)));
+  return patterns.map((pattern) =>
+    vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, pattern)),
+  );
 }
 
-function executeCli(cliPath: string, args: readonly string[], cwd: string): Promise<{ readonly code: number; readonly output: string }> {
+function executeCli(
+  cliPath: string,
+  args: readonly string[],
+  cwd: string,
+): Promise<{ readonly code: number; readonly output: string }> {
   const { promise, resolve, reject } = Promise.withResolvers<{ readonly code: number; readonly output: string }>();
-  const child = spawn(process.execPath, [cliPath, ...args], { cwd, env: nodeEnvironment(), stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, [cliPath, ...args], {
+    cwd,
+    env: nodeEnvironment(),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   let output = "";
-  child.stdout?.on("data", (chunk: Buffer | string) => { output += chunk.toString(); });
-  child.stderr?.on("data", (chunk: Buffer | string) => { output += chunk.toString(); });
+  child.stdout?.on("data", (chunk: Buffer | string) => {
+    output += chunk.toString();
+  });
+  child.stderr?.on("data", (chunk: Buffer | string) => {
+    output += chunk.toString();
+  });
   child.once("error", reject);
   child.once("close", (code) => resolve({ code: code ?? 1, output }));
   return promise;
@@ -115,7 +131,9 @@ class SqlBraidProjects implements vscode.Disposable {
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.scheduleRefresh()),
       vscode.workspace.onDidCreateFiles((event) => this.handleProjectFileEvents(event.files)),
       vscode.workspace.onDidDeleteFiles((event) => this.handleProjectFileEvents(event.files)),
-      vscode.workspace.onDidRenameFiles((event) => this.handleProjectFileEvents(event.files.flatMap((file) => [file.oldUri, file.newUri]))),
+      vscode.workspace.onDidRenameFiles((event) =>
+        this.handleProjectFileEvents(event.files.flatMap((file) => [file.oldUri, file.newUri])),
+      ),
       vscode.workspace.onDidSaveTextDocument((document) => this.handleProjectFileEvents([document.uri])),
       vscode.commands.registerCommand("sqlbraid.generateModels", () => this.runCodegen(false)),
       vscode.commands.registerCommand("sqlbraid.checkGeneratedModels", () => this.runCodegen(true)),
@@ -144,16 +162,19 @@ class SqlBraidProjects implements vscode.Disposable {
   }
 
   private scheduleRefresh(): void {
-    this.refreshQueue = this.refreshQueue.then(() => this.refresh()).catch((error: unknown) => {
-      console.error("[SQLBraid] project refresh failed:", error);
-      this.output.appendLine(String(error));
-      void vscode.window.showErrorMessage(`SQLBraid could not refresh the project: ${String(error)}`);
-    });
+    this.refreshQueue = this.refreshQueue
+      .then(() => this.refresh())
+      .catch((error: unknown) => {
+        console.error("[SQLBraid] project refresh failed:", error);
+        this.output.appendLine(String(error));
+        void vscode.window.showErrorMessage(`SQLBraid could not refresh the project: ${String(error)}`);
+      });
   }
 
   private handleProjectFileEvents(uris: readonly vscode.Uri[]): void {
     const folders = vscode.workspace.workspaceFolders ?? [];
-    if (uris.some((uri) => folders.some((folder) => isProjectEvidencePath(uri.fsPath, folder.uri.fsPath)))) this.scheduleRefresh();
+    if (uris.some((uri) => folders.some((folder) => isProjectEvidencePath(uri.fsPath, folder.uri.fsPath))))
+      this.scheduleRefresh();
   }
 
   private async refresh(): Promise<void> {
@@ -180,8 +201,16 @@ class SqlBraidProjects implements vscode.Disposable {
     const { serverPath } = resolveMatchingDependencies();
     const watchers = projectWatchers(folder);
     const serverOptions: ServerOptions = {
-      run: { command: process.execPath, args: [serverPath], options: { cwd: folder.uri.fsPath, env: nodeEnvironment() } },
-      debug: { command: process.execPath, args: [serverPath], options: { cwd: folder.uri.fsPath, env: nodeEnvironment() } },
+      run: {
+        command: process.execPath,
+        args: [serverPath],
+        options: { cwd: folder.uri.fsPath, env: nodeEnvironment() },
+      },
+      debug: {
+        command: process.execPath,
+        args: [serverPath],
+        options: { cwd: folder.uri.fsPath, env: nodeEnvironment() },
+      },
     };
     const clientOptions: LanguageClientOptions = {
       documentSelector: [
@@ -202,7 +231,9 @@ class SqlBraidProjects implements vscode.Disposable {
     this.projects.set(folder.uri.toString(), project);
     try {
       await client.start();
-      this.output.appendLine(`Started SQLBraid ${EXTENSION_VERSION} for ${folder.uri.fsPath} (${evidence.kind} evidence).`);
+      this.output.appendLine(
+        `Started SQLBraid ${EXTENSION_VERSION} for ${folder.uri.fsPath} (${evidence.kind} evidence).`,
+      );
     } catch (error) {
       console.error(`[SQLBraid] language server failed for ${folder.uri.fsPath}:`, error);
       this.projects.delete(folder.uri.toString());
@@ -225,7 +256,9 @@ class SqlBraidProjects implements vscode.Disposable {
   }
 
   private async runCodegen(check: boolean): Promise<void> {
-    const folder = vscode.window.activeTextEditor ? workspaceFolderForDocument(vscode.window.activeTextEditor.document) : vscode.workspace.workspaceFolders?.[0];
+    const folder = vscode.window.activeTextEditor
+      ? workspaceFolderForDocument(vscode.window.activeTextEditor.document)
+      : vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
       void vscode.window.showWarningMessage("SQLBraid needs an open workspace folder.");
       return;
@@ -251,7 +284,9 @@ class SqlBraidProjects implements vscode.Disposable {
   }
 
   private async reloadProject(): Promise<void> {
-    const folder = vscode.window.activeTextEditor ? workspaceFolderForDocument(vscode.window.activeTextEditor.document) : vscode.workspace.workspaceFolders?.[0];
+    const folder = vscode.window.activeTextEditor
+      ? workspaceFolderForDocument(vscode.window.activeTextEditor.document)
+      : vscode.workspace.workspaceFolders?.[0];
     if (!folder) {
       void vscode.window.showWarningMessage("SQLBraid needs an open workspace folder.");
       return;
@@ -269,9 +304,7 @@ let activeProjects: SqlBraidProjects | undefined;
 export function scopeDocumentSelector(selector: vscode.DocumentSelector, folder: vscode.Uri): vscode.DocumentSelector {
   const pattern = new vscode.RelativePattern(folder, SQLBRAID_DOCUMENT_GLOB);
   const filters = typeof selector === "string" ? [selector] : Array.isArray(selector) ? selector : [selector];
-  return filters.map((filter) => typeof filter === "string"
-    ? { language: filter, pattern }
-    : { ...filter, pattern });
+  return filters.map((filter) => (typeof filter === "string" ? { language: filter, pattern } : { ...filter, pattern }));
 }
 
 export function activate(context: vscode.ExtensionContext): void {

@@ -10,10 +10,12 @@ if (!connectionUri) throw new Error("SQLBRAID_POSTGRES_URL is required for the D
 const measuredDriverVersion = await loadDenoDriverVersion("pg");
 
 const targetIds: readonly PostgresTargetId[] = ["postgres-pg-node-16-4", "postgres-current", "postgres-pg-deno-2-9-3"];
-const descriptorFor = (targetId: PostgresTargetId) => async (sourceSha: string): Promise<DenoCertificationDescriptor> => ({
-  target: createPostgresTarget(targetId, connectionUri, sourceSha, measuredDriverVersion),
-  dispose: () => disposePostgresTarget(targetId),
-});
+const descriptorFor =
+  (targetId: PostgresTargetId) =>
+  async (sourceSha: string): Promise<DenoCertificationDescriptor> => ({
+    target: createPostgresTarget(targetId, connectionUri, sourceSha, measuredDriverVersion),
+    dispose: () => disposePostgresTarget(targetId),
+  });
 
 await runDenoCertification(
   Object.fromEntries(targetIds.map((targetId) => [targetId, descriptorFor(targetId)])),

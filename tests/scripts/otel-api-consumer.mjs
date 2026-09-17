@@ -6,28 +6,54 @@ import { join, resolve } from "node:path";
 
 const root = resolve(new URL("../..", import.meta.url).pathname);
 const packageDir = resolve(process.env.SQLBRAID_PACK_INPUT_DIR ?? join(root, ".compatibility-packages"));
-const consumer = mkdtempSync(join(tmpdir(), "sqlbraid-otel-api-") );
+const consumer = mkdtempSync(join(tmpdir(), "sqlbraid-otel-api-"));
 const tarballs = new Map();
-for (const file of readdirSync(packageDir)) if (file.endsWith(".tgz")) {
-  const path = join(packageDir, file);
-  const manifest = JSON.parse(execFileSync("tar", ["-xOf", path, "package/package.json"], { encoding: "utf8" }));
-  tarballs.set(manifest.name, `file:${path}`);
-}
-for (const name of ["@sqlbraid/opentelemetry", "@sqlbraid/core"]) if (!tarballs.has(name)) throw new Error(`Missing candidate tarball: ${name}`);
-writeFileSync(join(consumer, "package.json"), JSON.stringify({
-  name: "sqlbraid-otel-api-consumer", private: true, type: "module",
-  dependencies: { "@sqlbraid/opentelemetry": tarballs.get("@sqlbraid/opentelemetry"), "@sqlbraid/core": tarballs.get("@sqlbraid/core"), "@opentelemetry/api": "1.9.1" },
-}, null, 2));
+for (const file of readdirSync(packageDir))
+  if (file.endsWith(".tgz")) {
+    const path = join(packageDir, file);
+    const manifest = JSON.parse(execFileSync("tar", ["-xOf", path, "package/package.json"], { encoding: "utf8" }));
+    tarballs.set(manifest.name, `file:${path}`);
+  }
+for (const name of ["@sqlbraid/opentelemetry", "@sqlbraid/core"])
+  if (!tarballs.has(name)) throw new Error(`Missing candidate tarball: ${name}`);
+writeFileSync(
+  join(consumer, "package.json"),
+  JSON.stringify(
+    {
+      name: "sqlbraid-otel-api-consumer",
+      private: true,
+      type: "module",
+      dependencies: {
+        "@sqlbraid/opentelemetry": tarballs.get("@sqlbraid/opentelemetry"),
+        "@sqlbraid/core": tarballs.get("@sqlbraid/core"),
+        "@opentelemetry/api": "1.9.1",
+      },
+    },
+    null,
+    2,
+  ),
+);
 const installer = process.env.SQLBRAID_INSTALLER ?? "npm";
 if (installer === "pnpm") {
   const overrides = Object.fromEntries([...tarballs.entries()].filter(([name]) => name.startsWith("@sqlbraid/")));
-  writeFileSync(join(consumer, "pnpm-workspace.yaml"), `packages: []\noverrides:\n${Object.entries(overrides).map(([name, value]) => `  ${JSON.stringify(name)}: ${JSON.stringify(value)}`).join("\n")}\n`);
+  writeFileSync(
+    join(consumer, "pnpm-workspace.yaml"),
+    `packages: []\noverrides:\n${Object.entries(overrides)
+      .map(([name, value]) => `  ${JSON.stringify(name)}: ${JSON.stringify(value)}`)
+      .join("\n")}\n`,
+  );
   writeFileSync(join(consumer, ".npmrc"), "node-linker=isolated\nshamefully-hoist=false\npublic-hoist-pattern[]=\n");
 }
-execFileSync(installer, installer === "pnpm"
-  ? ["install", "--engine-strict", "--ignore-scripts", "--no-frozen-lockfile"]
-  : ["install", "--engine-strict", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: consumer, stdio: "inherit", env: { ...process.env, npm_config_engine_strict: "true" } });
-writeFileSync(join(consumer, "probe.mjs"), `import assert from "node:assert/strict";
+execFileSync(
+  installer,
+  installer === "pnpm"
+    ? ["install", "--engine-strict", "--ignore-scripts", "--no-frozen-lockfile"]
+    : ["install", "--engine-strict", "--ignore-scripts", "--no-audit", "--no-fund"],
+  { cwd: consumer, stdio: "inherit", env: { ...process.env, npm_config_engine_strict: "true" } },
+);
+writeFileSync(
+  join(consumer, "probe.mjs"),
+  `import assert from "node:assert/strict";
 import { metrics, SpanStatusCode, trace } from "@opentelemetry/api";
 import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
 const spans = [], measurements = [];
@@ -58,6 +84,7 @@ assert.deepEqual(spans.map((span) => span.endCount), [1, 1]);
 assert.equal(spans[1].statuses[0].code, SpanStatusCode.ERROR);
 assert.equal(measurements.length, 2);
 console.log("PASS no-SDK OTel API lifecycle");
-`);
+`,
+);
 execFileSync(process.execPath, ["probe.mjs"], { cwd: consumer, stdio: "inherit" });
 console.info(`PASS packed OTel API-only consumer at Node ${process.versions.node}: ${consumer}`);

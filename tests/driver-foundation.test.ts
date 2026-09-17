@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import {
-  assertSavepointName,
-  createCleanupScope,
-  defineResultProperty,
-} from "@sqlbraid/core/driver";
+import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
 
 test("cleanup scope is a no-op without registered actions", () => {
   const scope = createCleanupScope();
@@ -15,8 +11,12 @@ test("cleanup scope is a no-op without registered actions", () => {
 test("cleanup scope runs actions exactly once in LIFO order", () => {
   const events: string[] = [];
   const scope = createCleanupScope();
-  scope.add(() => { events.push("first"); });
-  scope.add(() => { events.push("second"); });
+  scope.add(() => {
+    events.push("first");
+  });
+  scope.add(() => {
+    events.push("second");
+  });
 
   scope.run();
   scope.run();
@@ -27,7 +27,9 @@ test("cleanup scope runs actions exactly once in LIFO order", () => {
 test("cleanup scope disarm transfers ownership without running actions", () => {
   let count = 0;
   const scope = createCleanupScope();
-  scope.add(() => { count += 1; });
+  scope.add(() => {
+    count += 1;
+  });
   scope.disarm();
   scope.run();
   assert.equal(count, 0);
@@ -37,21 +39,27 @@ test("cleanup scope preserves a primary failure when cleanup succeeds", () => {
   const primary = new Error("primary");
   const scope = createCleanupScope();
   scope.add(() => undefined);
-  assert.throws(() => scope.run(primary), (error: unknown) => error === primary);
+  assert.throws(
+    () => scope.run(primary),
+    (error: unknown) => error === primary,
+  );
 });
 
 test("cleanup scope wraps a cleanup-only failure with the canonical code", () => {
   const cleanup = new Error("cleanup");
   const scope = createCleanupScope();
-  scope.add(() => { throw cleanup; });
+  scope.add(() => {
+    throw cleanup;
+  });
 
   assert.throws(
     () => scope.run(),
-    (error: unknown) => error instanceof Error
-      && error !== cleanup
-      && "code" in error
-      && error.code === "BRAID_RESOURCE_CLEANUP"
-      && error.cause === cleanup,
+    (error: unknown) =>
+      error instanceof Error &&
+      error !== cleanup &&
+      "code" in error &&
+      error.code === "BRAID_RESOURCE_CLEANUP" &&
+      error.cause === cleanup,
   );
 });
 
@@ -59,16 +67,19 @@ test("cleanup scope aggregates one cleanup failure with the primary failure", ()
   const primary = new Error("primary");
   const cleanup = new Error("cleanup");
   const scope = createCleanupScope();
-  scope.add(() => { throw cleanup; });
+  scope.add(() => {
+    throw cleanup;
+  });
 
   assert.throws(
     () => scope.run(primary),
-    (error: unknown) => error instanceof AggregateError
-      && "code" in error
-      && error.code === "BRAID_RESOURCE_CLEANUP"
-      && error.errors.length === 2
-      && error.errors[0] === primary
-      && error.errors[1] === cleanup,
+    (error: unknown) =>
+      error instanceof AggregateError &&
+      "code" in error &&
+      error.code === "BRAID_RESOURCE_CLEANUP" &&
+      error.errors.length === 2 &&
+      error.errors[0] === primary &&
+      error.errors[1] === cleanup,
   );
 });
 
@@ -77,17 +88,24 @@ test("cleanup scope aggregates primary and all cleanup failures in LIFO order", 
   const first = new Error("first");
   const second = new Error("second");
   const scope = createCleanupScope();
-  scope.add(() => { throw first; });
-  scope.add(async () => { throw second; });
+  scope.add(() => {
+    throw first;
+  });
+  scope.add(async () => {
+    throw second;
+  });
 
   await assert.rejects(
-    async () => { await scope.run(primary); },
-    (error: unknown) => error instanceof AggregateError
-      && "code" in error
-      && error.code === "BRAID_RESOURCE_CLEANUP"
-      && error.errors[0] === primary
-      && error.errors[1] === second
-      && error.errors[2] === first,
+    async () => {
+      await scope.run(primary);
+    },
+    (error: unknown) =>
+      error instanceof AggregateError &&
+      "code" in error &&
+      error.code === "BRAID_RESOURCE_CLEANUP" &&
+      error.errors[0] === primary &&
+      error.errors[1] === second &&
+      error.errors[2] === first,
   );
 });
 
@@ -96,20 +114,26 @@ test("cleanup scope treats a thenable inspection throw as cleanup failure and co
   const inspected = new Error("then getter");
   const events: string[] = [];
   const scope = createCleanupScope();
-  scope.add(() => { events.push("oldest"); });
-  scope.add(() => ({
-    get then(): never {
-      throw inspected;
-    },
-  }) as PromiseLike<void>);
+  scope.add(() => {
+    events.push("oldest");
+  });
+  scope.add(
+    () =>
+      ({
+        get then(): never {
+          throw inspected;
+        },
+      }) as PromiseLike<void>,
+  );
 
   assert.throws(
     () => scope.run(primary),
-    (error: unknown) => error instanceof AggregateError
-      && "code" in error
-      && error.code === "BRAID_RESOURCE_CLEANUP"
-      && error.errors[0] === primary
-      && error.errors[1] === inspected,
+    (error: unknown) =>
+      error instanceof AggregateError &&
+      "code" in error &&
+      error.code === "BRAID_RESOURCE_CLEANUP" &&
+      error.errors[0] === primary &&
+      error.errors[1] === inspected,
   );
   assert.deepEqual(events, ["oldest"]);
 });
@@ -122,14 +146,18 @@ test("cleanup scope cannot rerun after an asynchronous failure path", async () =
     throw new Error("cleanup");
   });
 
-  await assert.rejects(async () => { await scope.run(); });
+  await assert.rejects(async () => {
+    await scope.run();
+  });
   assert.doesNotThrow(() => scope.run());
   assert.equal(count, 1);
 });
 
 test("repeated run calls share the in-flight cleanup completion", async () => {
   let release!: () => void;
-  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   let count = 0;
   const scope = createCleanupScope();
   scope.add(async () => {
@@ -164,7 +192,7 @@ test("savepoint names accept runtime-generated grammar and reject SQL syntax", (
   for (const name of ["braid_sp_1", "braid_sp_abc_2", "_savepoint", "A1"]) {
     assert.equal(assertSavepointName(name), name);
   }
-  for (const name of ["", " ", "a;b", "a'b", "a\"b", "-- comment", "/* comment */", "a\nb", "a\tb"]) {
+  for (const name of ["", " ", "a;b", "a'b", 'a"b', "-- comment", "/* comment */", "a\nb", "a\tb"]) {
     assert.throws(() => assertSavepointName(name), TypeError);
   }
 });

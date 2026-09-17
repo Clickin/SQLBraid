@@ -8,7 +8,20 @@ const floorConfig = {
   target: "ES2021",
   lib: new Set(["ES2022"]),
 };
-const runtimePackages = ["core", "template", "runtime", "operations", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mssql", "opentelemetry", "sqlbraid"];
+const runtimePackages = [
+  "core",
+  "template",
+  "runtime",
+  "operations",
+  "postgres",
+  "mysql",
+  "mariadb",
+  "sqlite",
+  "oracle",
+  "mssql",
+  "opentelemetry",
+  "sqlbraid",
+];
 const forbiddenRuntimeSyntax = [
   [/\bPromise\.withResolvers\b/u, "Promise.withResolvers (Node 22+)"],
   [/\bPromise\.try\b/u, "Promise.try (Node 23+)"],
@@ -24,15 +37,20 @@ function fail(code, detail) {
 
 async function validateRuntimeFloor({ root = scriptRoot, checkDist = true } = {}) {
   const config = JSON.parse(await readFile(join(root, "tsconfig.runtime-floor.json"), "utf8"));
-  if (config.compilerOptions?.target !== floorConfig.target) fail("RUNTIME_FLOOR_CONFIG", "runtime-floor target must remain ES2021.");
-  if (!Array.isArray(config.compilerOptions?.lib) || ![...floorConfig.lib].every((entry) => config.compilerOptions.lib.includes(entry))) {
+  if (config.compilerOptions?.target !== floorConfig.target)
+    fail("RUNTIME_FLOOR_CONFIG", "runtime-floor target must remain ES2021.");
+  if (
+    !Array.isArray(config.compilerOptions?.lib) ||
+    ![...floorConfig.lib].every((entry) => config.compilerOptions.lib.includes(entry))
+  ) {
     fail("RUNTIME_FLOOR_CONFIG", "runtime-floor lib must include ES2022.");
   }
   const files = [];
   for (const packageName of runtimePackages) {
     const packageRoot = join(root, "packages", packageName);
     const sourceManifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
-    if (sourceManifest.engines?.node !== ">=16.20.2") fail("RUNTIME_FLOOR_ENGINE", `${sourceManifest.name} is not a Node 16.20.2 runtime package.`);
+    if (sourceManifest.engines?.node !== ">=16.20.2")
+      fail("RUNTIME_FLOOR_ENGINE", `${sourceManifest.name} is not a Node 16.20.2 runtime package.`);
     if (!checkDist) continue;
     const dist = join(packageRoot, "dist");
     let entries;
@@ -49,9 +67,10 @@ async function validateRuntimeFloor({ root = scriptRoot, checkDist = true } = {}
   }
   for (const file of files) {
     const text = await readFile(file, "utf8");
-    for (const [pattern, api] of forbiddenRuntimeSyntax) if (pattern.test(text)) {
-      fail("RUNTIME_FLOOR_API", `${file} contains ${api}.`);
-    }
+    for (const [pattern, api] of forbiddenRuntimeSyntax)
+      if (pattern.test(text)) {
+        fail("RUNTIME_FLOOR_API", `${file} contains ${api}.`);
+      }
   }
   return { target: floorConfig.target, packages: runtimePackages, files: files.length };
 }
@@ -59,7 +78,9 @@ async function validateRuntimeFloor({ root = scriptRoot, checkDist = true } = {}
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     const result = await validateRuntimeFloor({ checkDist: process.argv.includes("--dist") });
-    console.info(`Runtime floor guard valid: ${result.target}, ${result.packages.length} packages${process.argv.includes("--dist") ? `, ${result.files} emitted files` : ""}.`);
+    console.info(
+      `Runtime floor guard valid: ${result.target}, ${result.packages.length} packages${process.argv.includes("--dist") ? `, ${result.files} emitted files` : ""}.`,
+    );
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

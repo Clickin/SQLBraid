@@ -19,7 +19,9 @@ if (process.versions.node !== cell.runtime.version) {
 }
 
 const packageDirectory = resolve(process.env.SQLBRAID_COMPAT_PACKAGE_DIR ?? join(root, ".compatibility-packages"));
-const consumer = resolve(process.env.SQLBRAID_COMPAT_CONSUMER ?? mkdtempSync(join(tmpdir(), "sqlbraid-runtime-compat-")));
+const consumer = resolve(
+  process.env.SQLBRAID_COMPAT_CONSUMER ?? mkdtempSync(join(tmpdir(), "sqlbraid-runtime-compat-")),
+);
 const tarballs = new Map();
 for (const file of readdirSync(packageDirectory)) {
   if (!file.endsWith(".tgz")) continue;
@@ -35,22 +37,31 @@ for (const packageName of cell.packages) {
   dependencies[packageName] = `file:${tarball}`;
 }
 if (cell.driver) dependencies[cell.driver.package] = cell.driver.version;
-writeFileSync(join(consumer, "package.json"), JSON.stringify({
-  name: `sqlbraid-runtime-compat-${cell.id}`,
-  private: true,
-  type: "module",
-  dependencies,
-}, null, 2));
+writeFileSync(
+  join(consumer, "package.json"),
+  JSON.stringify(
+    {
+      name: `sqlbraid-runtime-compat-${cell.id}`,
+      private: true,
+      type: "module",
+      dependencies,
+    },
+    null,
+    2,
+  ),
+);
 const npm = process.env.SQLBRAID_NPM ?? "npm";
 execFileSync(npm, ["install", "--engine-strict", "--no-audit", "--no-fund"], {
   cwd: consumer,
   stdio: "inherit",
   env: { ...process.env, npm_config_engine_strict: "true" },
 });
-const smokeScript = cell.smoke.entrypoint === "scripts/runtime-compatibility-smoke.mjs"
-  ? "runtime-compatibility-consumer.mjs"
-  : cell.smoke.entrypoint.slice("tests/scripts/".length);
-if (smokeScript === "runtime-compatibility-consumer.mjs") copyFileSync(join(root, "tests/scripts/runtime-compatibility-consumer.mjs"), join(consumer, smokeScript));
+const smokeScript =
+  cell.smoke.entrypoint === "scripts/runtime-compatibility-smoke.mjs"
+    ? "runtime-compatibility-consumer.mjs"
+    : cell.smoke.entrypoint.slice("tests/scripts/".length);
+if (smokeScript === "runtime-compatibility-consumer.mjs")
+  copyFileSync(join(root, "tests/scripts/runtime-compatibility-consumer.mjs"), join(consumer, smokeScript));
 else copyFileSync(join(root, "tests/scripts", smokeScript), join(consumer, smokeScript));
 const smokeArgs = Array.isArray(cell.smoke.args) ? cell.smoke.args : [];
 execFileSync(process.execPath, [smokeScript, ...smokeArgs], {

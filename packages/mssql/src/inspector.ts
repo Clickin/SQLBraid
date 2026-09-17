@@ -1,5 +1,12 @@
 import { qualifiedIdentity, QUALIFIED_IDENTITY_ENCODING } from "../../metadata/src/qualified-identity.js";
-import type { MetadataInspector, MetadataSnapshot, RelationSnapshot, RoutineArgument, RoutineSnapshot, TypeSnapshot } from "@sqlbraid/metadata";
+import type {
+  MetadataInspector,
+  MetadataSnapshot,
+  RelationSnapshot,
+  RoutineArgument,
+  RoutineSnapshot,
+  TypeSnapshot,
+} from "@sqlbraid/metadata";
 import type { TediousConnectionLike } from "./tedious.js";
 import { createTediousExecutor } from "./tedious.js";
 
@@ -8,7 +15,8 @@ interface CatalogRow {
 }
 
 function objectRow(value: unknown): CatalogRow {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("MSSQL_INSPECT_ROW: catalog row is not an object.");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("MSSQL_INSPECT_ROW: catalog row is not an object.");
   return Object.fromEntries(Object.entries(value));
 }
 
@@ -43,7 +51,8 @@ function typeSnapshot(types: Record<string, TypeSnapshot>, name: string | undefi
 function typeReference(row: CatalogRow | undefined): { readonly name: string; readonly identity: string } {
   const name = text(row, "data_type") ?? "unknown";
   const schema = text(row, "type_schema_name") ?? "sys";
-  const userDefined = row?.is_user_defined === true || row?.is_user_defined === 1 || text(row, "is_user_defined") === "1";
+  const userDefined =
+    row?.is_user_defined === true || row?.is_user_defined === 1 || text(row, "is_user_defined") === "1";
   return { name, identity: userDefined ? qualifiedIdentity(schema, name) : name };
 }
 
@@ -55,26 +64,36 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
   return {
     dialect: "mssql",
     async inspect(): Promise<MetadataSnapshot> {
-      const server = (await rows(connection, `
+      const server = (
+        await rows(
+          connection,
+          `
         SELECT
           CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version,
           CAST(SERVERPROPERTY('ProductLevel') AS nvarchar(128)) AS productLevel,
           CAST(SERVERPROPERTY('Edition') AS nvarchar(256)) AS edition,
           CAST(SERVERPROPERTY('EngineEdition') AS int) AS engineEdition
-      `))[0];
+      `,
+        )
+      )[0];
       const version = text(server, "version") ?? "unknown";
-      const schemas = await rows(connection, `
+      const schemas = await rows(
+        connection,
+        `
         SELECT name AS schema_name
         FROM sys.schemas
         WHERE name NOT IN (N'sys', N'INFORMATION_SCHEMA')
         ORDER BY name
-      `);
+      `,
+      );
       const namespaces: Record<string, { readonly name: string; readonly kind: "schema" }> = Object.create(null);
       for (const entry of schemas) {
         const name = text(entry, "schema_name");
         if (name) namespaces[name] = { name, kind: "schema" };
       }
-      const relationRows = await rows(connection, `
+      const relationRows = await rows(
+        connection,
+        `
         SELECT
           s.name AS schema_name,
           o.name AS relation_name,
@@ -84,8 +103,11 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
         WHERE o.type IN ('U', 'V')
           AND s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
         ORDER BY s.name, o.name
-      `);
-      const columnRows = await rows(connection, `
+      `,
+      );
+      const columnRows = await rows(
+        connection,
+        `
         SELECT
           s.name AS schema_name,
           o.name AS relation_name,
@@ -114,7 +136,8 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
         WHERE o.type IN ('U', 'V')
           AND s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
         ORDER BY s.name, o.name, c.column_id
-      `);
+      `,
+      );
       const relations: Record<string, RelationSnapshot> = Object.create(null);
       const types: Record<string, TypeSnapshot> = Object.create(null);
       for (const relation of relationRows) {
@@ -128,7 +151,7 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
             const type = typeReference(column);
             typeSnapshot(types, type.name, text(column, "type_schema_name") ?? "sys");
             const generatedAlways = integer(column, "generated_always_type");
-            const computed = Boolean(column.is_computed) || generatedAlways !== undefined && generatedAlways !== 0;
+            const computed = Boolean(column.is_computed) || (generatedAlways !== undefined && generatedAlways !== 0);
             const maxLength = integer(column, "max_length");
             const precision = integer(column, "numeric_precision");
             const scale = integer(column, "numeric_scale");
@@ -138,10 +161,14 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
               type: type.identity,
               nullable: nullable(column),
               ...(column.is_nullable !== undefined ? { nullabilityEvidence: String(column.is_nullable) } : {}),
-              ...(text(column, "default_expression") === undefined ? {} : { defaultExpression: text(column, "default_expression") }),
+              ...(text(column, "default_expression") === undefined
+                ? {}
+                : { defaultExpression: text(column, "default_expression") }),
               ...(column.is_identity === true || text(column, "is_identity") === "1" ? { identity: true } : {}),
               ...(computed ? { generated: true, insertable: false, updatable: false } : {}),
-              ...(text(column, "computed_definition") ? { generationExpression: text(column, "computed_definition") } : {}),
+              ...(text(column, "computed_definition")
+                ? { generationExpression: text(column, "computed_definition") }
+                : {}),
               ...(maxLength !== undefined ? { length: maxLength } : {}),
               ...(precision !== undefined ? { precision } : {}),
               ...(scale !== undefined ? { scale } : {}),
@@ -156,7 +183,9 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
           columns,
         };
       }
-      const routineRows = await rows(connection, `
+      const routineRows = await rows(
+        connection,
+        `
         SELECT
           s.name AS schema_name,
           o.name AS routine_name,
@@ -180,8 +209,11 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
         WHERE o.type IN ('P', 'FN', 'IF', 'TF')
           AND s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
         ORDER BY s.name, o.name, p.parameter_id
-      `);
-      const routineColumnRows = await rows(connection, `
+      `,
+      );
+      const routineColumnRows = await rows(
+        connection,
+        `
         SELECT
           s.name AS schema_name,
           o.name AS routine_name,
@@ -203,7 +235,8 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
         WHERE o.type IN ('IF', 'TF')
           AND s.name NOT IN (N'sys', N'INFORMATION_SCHEMA')
         ORDER BY s.name, o.name, c.column_id
-      `);
+      `,
+      );
       const routines: Record<string, readonly RoutineSnapshot[]> = Object.create(null);
       for (const entry of routineRows) {
         const schema = text(entry, "schema_name");
@@ -212,11 +245,12 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
         const identity = qualifiedIdentity(schema, name);
         const kindCode = text(entry, "routine_type");
         const kind = kindCode === "P" ? "procedure" : "function";
-        const argumentRows = routineRows.filter((candidate) =>
-          text(candidate, "schema_name") === schema
-          && text(candidate, "routine_name") === name
-          && integer(candidate, "parameter_id") !== 0
-          && integer(candidate, "parameter_id") !== undefined,
+        const argumentRows = routineRows.filter(
+          (candidate) =>
+            text(candidate, "schema_name") === schema &&
+            text(candidate, "routine_name") === name &&
+            integer(candidate, "parameter_id") !== 0 &&
+            integer(candidate, "parameter_id") !== undefined,
         );
         const routineArguments: RoutineArgument[] = argumentRows.map((argument) => {
           const type = typeReference(argument);
@@ -225,16 +259,21 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
             name: text(argument, "parameter_name")?.replace(/^@/u, ""),
             mode: argument.is_output === true || text(argument, "is_output") === "1" ? "out" : "in",
             type: type.identity,
-            ...(argument.has_default_value === true || text(argument, "has_default_value") === "1" ? { hasDefault: true } : {}),
+            ...(argument.has_default_value === true || text(argument, "has_default_value") === "1"
+              ? { hasDefault: true }
+              : {}),
             ...(integer(argument, "max_length") !== undefined ? { length: integer(argument, "max_length") } : {}),
-            ...(integer(argument, "numeric_precision") !== undefined ? { precision: integer(argument, "numeric_precision") } : {}),
+            ...(integer(argument, "numeric_precision") !== undefined
+              ? { precision: integer(argument, "numeric_precision") }
+              : {}),
             ...(integer(argument, "numeric_scale") !== undefined ? { scale: integer(argument, "numeric_scale") } : {}),
           };
         });
-        const returnRow = routineRows.find((candidate) =>
-          text(candidate, "schema_name") === schema
-          && text(candidate, "routine_name") === name
-          && integer(candidate, "parameter_id") === 0,
+        const returnRow = routineRows.find(
+          (candidate) =>
+            text(candidate, "schema_name") === schema &&
+            text(candidate, "routine_name") === name &&
+            integer(candidate, "parameter_id") === 0,
         );
         const returnType = returnRow ? typeReference(returnRow) : undefined;
         if (returnType) typeSnapshot(types, returnType.name, text(returnRow, "type_schema_name") ?? "sys");
@@ -250,7 +289,9 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
               nullable: nullable(column),
               ...(column.is_nullable !== undefined ? { nullabilityEvidence: String(column.is_nullable) } : {}),
               ...(integer(column, "max_length") !== undefined ? { length: integer(column, "max_length") } : {}),
-              ...(integer(column, "numeric_precision") !== undefined ? { precision: integer(column, "numeric_precision") } : {}),
+              ...(integer(column, "numeric_precision") !== undefined
+                ? { precision: integer(column, "numeric_precision") }
+                : {}),
               ...(integer(column, "numeric_scale") !== undefined ? { scale: integer(column, "numeric_scale") } : {}),
               ...(text(column, "collation_name") ? { collation: text(column, "collation_name") } : {}),
             };
@@ -262,11 +303,14 @@ export function createMssqlInspector(connection: TediousConnectionLike): Metadat
           kind,
           arguments: routineArguments,
           argumentsComplete: true,
-          result: kind === "procedure"
-            ? { kind: "unknown" }
-            : kindCode === "FN"
-              ? { kind: "scalar", type: returnType?.identity ?? "unknown", nullable: true }
-              : tableColumns.length > 0 ? { kind: "table", columns: tableColumns } : { kind: "unknown" },
+          result:
+            kind === "procedure"
+              ? { kind: "unknown" }
+              : kindCode === "FN"
+                ? { kind: "scalar", type: returnType?.identity ?? "unknown", nullable: true }
+                : tableColumns.length > 0
+                  ? { kind: "table", columns: tableColumns }
+                  : { kind: "unknown" },
         };
         const current = Object.hasOwn(routines, name) ? routines[name] : [];
         if (!current.some((candidate) => candidate.identity === identity)) routines[name] = [...current, routine];

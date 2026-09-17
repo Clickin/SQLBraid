@@ -9,32 +9,137 @@ import type {
 } from "@sqlbraid/core";
 
 export const REQUIRED_CASE_IDS = [
-  "QRY001", "QRY002", "QRY010", "QRY011", "QRY012", "QRY020", "QRY021", "QRY022", "QRY030", "QRY031", "QRY032",
-  "RES001", "RES002", "RES003", "RES004", "RES005", "RES006", "RES007", "RES008", "RES009", "RES010", "RES011",
-  "VAL001", "VAL002", "VAL003", "VAL004",
-  "SES001", "SES002", "SES003", "SES004", "SES005",
-  "SES006", "SES007", "SES008",
-  "TX001", "TX002", "TX003", "TX004", "TX005", "TX010", "TX011", "TX012", "TX013", "TX020", "TX021", "TX022", "TX023", "TX024", "TX025", "TX026", "TX027", "TX028", "TX029", "TX030", "TX031", "TX032", "TX033",
-  "TX006", "TX007", "TX008", "TX009",
-  "PRE001", "PRE002", "PRE003", "PRE004", "PRE005", "PRE006", "PRE007", "PRE008", "PRE009", "PRE010", "PRE011",
-  "STR001", "STR002", "STR003", "STR004", "STR005", "STR006", "STR007", "STR008", "STR009",
-  "STR010", "STR011",
-  "CALL001", "CALL002", "CALL003", "CALL004", "CALL005", "CALL006",
+  "QRY001",
+  "QRY002",
+  "QRY010",
+  "QRY011",
+  "QRY012",
+  "QRY020",
+  "QRY021",
+  "QRY022",
+  "QRY030",
+  "QRY031",
+  "QRY032",
+  "RES001",
+  "RES002",
+  "RES003",
+  "RES004",
+  "RES005",
+  "RES006",
+  "RES007",
+  "RES008",
+  "RES009",
+  "RES010",
+  "RES011",
+  "VAL001",
+  "VAL002",
+  "VAL003",
+  "VAL004",
+  "SES001",
+  "SES002",
+  "SES003",
+  "SES004",
+  "SES005",
+  "SES006",
+  "SES007",
+  "SES008",
+  "TX001",
+  "TX002",
+  "TX003",
+  "TX004",
+  "TX005",
+  "TX010",
+  "TX011",
+  "TX012",
+  "TX013",
+  "TX020",
+  "TX021",
+  "TX022",
+  "TX023",
+  "TX024",
+  "TX025",
+  "TX026",
+  "TX027",
+  "TX028",
+  "TX029",
+  "TX030",
+  "TX031",
+  "TX032",
+  "TX033",
+  "TX006",
+  "TX007",
+  "TX008",
+  "TX009",
+  "PRE001",
+  "PRE002",
+  "PRE003",
+  "PRE004",
+  "PRE005",
+  "PRE006",
+  "PRE007",
+  "PRE008",
+  "PRE009",
+  "PRE010",
+  "PRE011",
+  "STR001",
+  "STR002",
+  "STR003",
+  "STR004",
+  "STR005",
+  "STR006",
+  "STR007",
+  "STR008",
+  "STR009",
+  "STR010",
+  "STR011",
+  "CALL001",
+  "CALL002",
+  "CALL003",
+  "CALL004",
+  "CALL005",
+  "CALL006",
   "CALL007",
-  "BULK001", "BULK002", "BULK003", "BULK004", "BAT001", "BAT002", "BAT003",
-  "CAP001", "CAP002", "ERR001",
-  "STRESS001", "STRESS002", "STRESS003", "STRESS004", "STRESS005", "STRESS006", "STRESS007",
+  "BULK001",
+  "BULK002",
+  "BULK003",
+  "BULK004",
+  "BAT001",
+  "BAT002",
+  "BAT003",
+  "CAP001",
+  "CAP002",
+  "ERR001",
+  "STRESS001",
+  "STRESS002",
+  "STRESS003",
+  "STRESS004",
+  "STRESS005",
+  "STRESS006",
+  "STRESS007",
 ] as const;
 
 export type CertificationCaseId = (typeof REQUIRED_CASE_IDS)[number];
 export type CapabilityStatus = EnvironmentCapability["status"];
 
 export const REQUIRED_API_CAPABILITY_IDS = [
-  "session.pinned", "transaction", "transaction.savepoint", "transaction.read-only",
-  "transaction.isolation.read-uncommitted", "transaction.isolation.read-committed",
-  "transaction.isolation.repeatable-read", "transaction.isolation.serializable",
-  "statement.prepare", "statement.stream", "statement.cancel", "statement.bulk",
-  "routine.call", "routine.out", "routine.inout", "routine.result-sets", "routine.out-cursor", "routine.return-value",
+  "session.pinned",
+  "transaction",
+  "transaction.savepoint",
+  "transaction.read-only",
+  "transaction.isolation.read-uncommitted",
+  "transaction.isolation.read-committed",
+  "transaction.isolation.repeatable-read",
+  "transaction.isolation.serializable",
+  "statement.prepare",
+  "statement.stream",
+  "statement.cancel",
+  "statement.bulk",
+  "routine.call",
+  "routine.out",
+  "routine.inout",
+  "routine.result-sets",
+  "routine.out-cursor",
+  "routine.return-value",
 ] as const;
 
 export interface ExpectedCapability extends EnvironmentCapability {
@@ -44,8 +149,18 @@ export interface ExpectedCapability extends EnvironmentCapability {
 export type ExpectedCapabilityContract = Readonly<Record<string, ExpectedCapability>>;
 
 export interface CertificationTuple {
-  readonly database: { readonly product: string; readonly version?: string; readonly edition: string; readonly versionStatus: "measured" | "unknown" };
-  readonly driver: { readonly id: string; readonly package: string; readonly version: string; readonly profile: string };
+  readonly database: {
+    readonly product: string;
+    readonly version?: string;
+    readonly edition: string;
+    readonly versionStatus: "measured" | "unknown";
+  };
+  readonly driver: {
+    readonly id: string;
+    readonly package: string;
+    readonly version: string;
+    readonly profile: string;
+  };
   readonly runtime: { readonly id: string; readonly version: string };
 }
 
@@ -99,7 +214,24 @@ export interface CertificationQueries {
       readonly injection: unknown;
     };
   };
-  readonly special: Readonly<Partial<Record<"RES001" | "RES002" | "RES003" | "RES004" | "RES005" | "RES006" | "RES007" | "RES008" | "RES009" | "RES010" | "RES011", RowQuery<unknown>>>>;
+  readonly special: Readonly<
+    Partial<
+      Record<
+        | "RES001"
+        | "RES002"
+        | "RES003"
+        | "RES004"
+        | "RES005"
+        | "RES006"
+        | "RES007"
+        | "RES008"
+        | "RES009"
+        | "RES010"
+        | "RES011",
+        RowQuery<unknown>
+      >
+    >
+  >;
   readonly transaction?: {
     readonly insert: CommandQuery;
     readonly visible: RowQuery<unknown>;
@@ -127,7 +259,9 @@ export interface CertificationQueries {
     readonly one: unknown;
     readonly many: readonly unknown[];
     readonly special: Readonly<Partial<Record<CertificationCaseId, unknown>>>;
-    readonly specialErrors?: Readonly<Partial<Record<CertificationCaseId, { readonly code: string; readonly feature?: string }>>>;
+    readonly specialErrors?: Readonly<
+      Partial<Record<CertificationCaseId, { readonly code: string; readonly feature?: string }>>
+    >;
     readonly commandAffectedRows?: number;
     readonly failureCode?: string;
     readonly emptyResultError?: {
@@ -247,7 +381,9 @@ export interface CertificationAggregateOptions {
   readonly sourceSha: string;
   readonly requiredTargets: readonly string[];
   readonly requiredTargetContracts: Readonly<Record<string, ExpectedCapabilityContract>>;
-  readonly requiredTargetOptionContracts: Readonly<Record<string, Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">>>>;
+  readonly requiredTargetOptionContracts: Readonly<
+    Record<string, Readonly<Record<TransactionOptionKey, "guaranteed" | "unsupported">>>
+  >;
   readonly requiredTargetGuardedCaseContracts?: Readonly<Record<string, ExpectedGuardedCaseContract | undefined>>;
   readonly requiredTargetTuples?: Readonly<Record<string, CertificationTuple>>;
   readonly requiredCandidate?: CertificationCandidateIdentity;
@@ -267,6 +403,8 @@ export function isCapabilitySupported(capability: ExpectedCapability | undefined
   return capability?.status === "guaranteed" || capability?.status === "guarded";
 }
 
-export function capabilityDeclaration(environment: DatabaseEnvironment): Readonly<Record<string, EnvironmentCapability>> {
+export function capabilityDeclaration(
+  environment: DatabaseEnvironment,
+): Readonly<Record<string, EnvironmentCapability>> {
   return environment.capabilities;
 }

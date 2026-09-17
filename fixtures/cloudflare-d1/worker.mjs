@@ -4,7 +4,8 @@ import { verifyBulkConformance } from "../bulk-conformance.mjs";
 import { assertCertificationCasesPass, certifyTarget } from "../../tests/certification/execute.js";
 import { createD1Target } from "../../tests/certification/targets/d1.js";
 
-const jsonText = '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
+const jsonText =
+  '{"small":42,"largeInteger":9223372036854775807,"highPrecision":12345678901234567890.12345678901234567890,"nested":{"array":[9007199254740993,0.1000000000000000000001]}}';
 
 export default {
   async fetch(request, env) {
@@ -14,7 +15,8 @@ export default {
       const stress = requestUrl.searchParams.get("stress") === "1";
       const measuredDriverVersion = requestUrl.searchParams.get("driverVersion");
       const measuredRuntimeVersion = requestUrl.searchParams.get("runtimeVersion");
-      if (measuredDriverVersion === null || measuredRuntimeVersion === null) throw new Error("D1 certification requires measured driver and workerd versions.");
+      if (measuredDriverVersion === null || measuredRuntimeVersion === null)
+        throw new Error("D1 certification requires measured driver and workerd versions.");
       const target = createD1Target(env.DB, sourceSha, { measuredDriverVersion, measuredRuntimeVersion });
       const artifact = await certifyTarget(target, { stress });
       assertCertificationCasesPass(artifact.cases);
@@ -33,7 +35,15 @@ export default {
       },
     };
     const events = [];
-    const db = createD1Database(binding, { observers: [{ onEvent(event) { events.push(event); } }] });
+    const db = createD1Database(binding, {
+      observers: [
+        {
+          onEvent(event) {
+            events.push(event);
+          },
+        },
+      ],
+    });
     const conformanceReport = await verifyBulkConformance({
       db,
       sql,
@@ -44,13 +54,20 @@ export default {
     });
     const bulkOperationCount = events.filter((event) => event.type === "bulk:ready").length;
     if (nativeBatchCalls !== bulkOperationCount) {
-      throw new Error(`D1 bulk conformance expected one native batch call per bulk operation (${bulkOperationCount}), received ${nativeBatchCalls}.`);
+      throw new Error(
+        `D1 bulk conformance expected one native batch call per bulk operation (${bulkOperationCount}), received ${nativeBatchCalls}.`,
+      );
     }
     const bulkConformance = { ...conformanceReport, nativeBatchCalls, bulkOperationCount };
     const beforeUsersBulk = nativeBatchCalls;
-    await db.execute(sql.command`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, payload BLOB)`);
-    const inserted = await db.execute(sql.rows`INSERT INTO users (name, payload) VALUES (${"Ada"}, ${new Uint8Array([1, 2, 3])}) RETURNING id, name, payload`);
-    if (typeof inserted.rows[0]?.id !== "string") throw new Error("D1 INTEGER RETURNING values must remain canonical text.");
+    await db.execute(
+      sql.command`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, payload BLOB)`,
+    );
+    const inserted = await db.execute(
+      sql.rows`INSERT INTO users (name, payload) VALUES (${"Ada"}, ${new Uint8Array([1, 2, 3])}) RETURNING id, name, payload`,
+    );
+    if (typeof inserted.rows[0]?.id !== "string")
+      throw new Error("D1 INTEGER RETURNING values must remain canonical text.");
     const bulk = await db.bulk(["Grace", "Lin"], (name) => sql.command`INSERT INTO users (name) VALUES (${name})`);
     if (nativeBatchCalls !== beforeUsersBulk + 1) throw new Error("D1 users bulk did not use one native batch call.");
     const rows = await db.all(sql.rows`SELECT id, name, payload FROM users ORDER BY id`);
@@ -73,8 +90,12 @@ export default {
     const integralReal = await db.one(sql.rows`SELECT CAST(1 AS REAL) AS value`);
     if (integralReal.value !== "1") throw new Error("D1 integral REAL must follow its guarded numeric profile.");
     let unsafeCode;
-    try { await db.one(sql.rows`SELECT CAST('9007199254740992' AS INTEGER) AS unsafe`); }
-    catch (error) { unsafeCode = error?.code ?? (/BRAID_INTEGER_UNSAFE/u.test(error?.message ?? "") ? "BRAID_INTEGER_UNSAFE" : undefined); }
+    try {
+      await db.one(sql.rows`SELECT CAST('9007199254740992' AS INTEGER) AS unsafe`);
+    } catch (error) {
+      unsafeCode =
+        error?.code ?? (/BRAID_INTEGER_UNSAFE/u.test(error?.message ?? "") ? "BRAID_INTEGER_UNSAFE" : undefined);
+    }
     if (unsafeCode !== "BRAID_INTEGER_UNSAFE") throw new Error("D1 out-of-range INTEGER must fail closed.");
     const json = await db.one(sql.rows`
       SELECT ${jsonText} AS payload,
@@ -105,15 +126,20 @@ export default {
       "~standard": {
         version: 1,
         vendor: "sqlbraid-d1-fixture",
-        validate: (row) => ({ value: { ...row, name: row.name.toUpperCase(), profile: JSON.parse(row.profile), payload: [...row.payload] } }),
+        validate: (row) => ({
+          value: { ...row, name: row.name.toUpperCase(), profile: JSON.parse(row.profile), payload: [...row.payload] },
+        }),
       },
     };
-    const mappedQuery = db.prepare("mapped-user", () => sql.rows(schema)`
+    const mappedQuery = db.prepare(
+      "mapped-user",
+      () => sql.rows(schema)`
       SELECT id, name, payload, '{"active":true}' AS profile,
              '2026-09-14T00:00:00.123456Z' AS stamp,
              '123e4567-e89b-12d3-a456-426614174000' AS uuid
       FROM users WHERE id = ${1}
-    `);
+    `,
+    );
     const mapped = (await mappedQuery.execute()).rows;
     const updated = await db.all(sql.rows`UPDATE users SET name = ${"Updated"} WHERE id = 1 RETURNING id, name`);
     const deleted = await db.all(sql.rows`DELETE FROM users WHERE id = 1 RETURNING id`);

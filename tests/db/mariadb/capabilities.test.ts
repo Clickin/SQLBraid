@@ -37,7 +37,15 @@ async function connect(overrides: Partial<ConnectionConfig> = {}) {
 test("mariadb.sql.native-transparency", async () => {
   const connection = await connect();
   const events: ExecutionEvent[] = [];
-  const db = createMariaDbDatabase(connection, { observers: [{ onEvent(event) { events.push(event); } }] });
+  const db = createMariaDbDatabase(connection, {
+    observers: [
+      {
+        onEvent(event) {
+          events.push(event);
+        },
+      },
+    ],
+  });
   try {
     const query = sql.rows`
       SELECT 'literal $1 :1 @p1 ?' AS \`marker\`,
@@ -51,7 +59,8 @@ test("mariadb.sql.native-transparency", async () => {
         "\n      SELECT 'literal $1 :1 @p1 ?' AS `marker`,\n             CAST(JSON_VALUE(JSON_OBJECT('enabled', TRUE), '$.enabled') AS UNSIGNED) AS `enabled`,\n             ",
         " AS `actual`\n    ",
       ],
-      expectedParameterizedSql: "\n      SELECT 'literal $1 :1 @p1 ?' AS `marker`,\n             CAST(JSON_VALUE(JSON_OBJECT('enabled', TRUE), '$.enabled') AS UNSIGNED) AS `enabled`,\n             ? AS `actual`\n    ",
+      expectedParameterizedSql:
+        "\n      SELECT 'literal $1 :1 @p1 ?' AS `marker`,\n             CAST(JSON_VALUE(JSON_OBJECT('enabled', TRUE), '$.enabled') AS UNSIGNED) AS `enabled`,\n             ? AS `actual`\n    ",
       events,
       execute: () => db.all(query),
       expectedResult: [{ marker: "literal $1 :1 @p1 ?", enabled: "1", actual: "7" }],
@@ -104,21 +113,27 @@ test("mariadb.numeric.exact-integer", async () => {
         big_value BIGINT
       )
     `);
-    await connection.query("INSERT INTO braid_pv17_integer_types VALUES ('7', '32767', '8388607', '2147483647', '9223372036854775807')");
-    const rawRows = await connection.query("SELECT tiny_value, small_value, medium_value, int_value, big_value FROM braid_pv17_integer_types") as readonly Record<string, unknown>[];
+    await connection.query(
+      "INSERT INTO braid_pv17_integer_types VALUES ('7', '32767', '8388607', '2147483647', '9223372036854775807')",
+    );
+    const rawRows = (await connection.query(
+      "SELECT tiny_value, small_value, medium_value, int_value, big_value FROM braid_pv17_integer_types",
+    )) as readonly Record<string, unknown>[];
     assert.equal(typeof rawRows[0]?.tiny_value, "number");
     assert.equal(typeof rawRows[0]?.small_value, "number");
     assert.equal(typeof rawRows[0]?.medium_value, "number");
     assert.equal(typeof rawRows[0]?.int_value, "number");
     assert.equal(typeof rawRows[0]?.big_value, "bigint");
     assert.deepEqual(
-      await db.one(sql.rows<{
-        readonly tiny_value: string;
-        readonly small_value: string;
-        readonly medium_value: string;
-        readonly int_value: string;
-        readonly big_value: string;
-      }>`SELECT tiny_value, small_value, medium_value, int_value, big_value FROM braid_pv17_integer_types`),
+      await db.one(
+        sql.rows<{
+          readonly tiny_value: string;
+          readonly small_value: string;
+          readonly medium_value: string;
+          readonly int_value: string;
+          readonly big_value: string;
+        }>`SELECT tiny_value, small_value, medium_value, int_value, big_value FROM braid_pv17_integer_types`,
+      ),
       {
         tiny_value: "7",
         small_value: "32767",
@@ -136,20 +151,30 @@ test("mariadb.result.standard-schema", async () => {
   const connection = await connect();
   const db = createMariaDbDatabase(connection);
   try {
-    const mapper = v.pipe(v.object({ label: v.string() }), v.transform(({ label }) => label.toUpperCase()));
+    const mapper = v.pipe(
+      v.object({ label: v.string() }),
+      v.transform(({ label }) => label.toUpperCase()),
+    );
     const prepared = db.prepare("mariadb-mapped", () => sql.rows(mapper)`SELECT ${"Ada"} AS label`, { input: "none" });
     assert.deepEqual((await prepared.execute()).rows, ["ADA"]);
-  } finally { await connection.end(); }
+  } finally {
+    await connection.end();
+  }
 });
 
 test("mariadb.routine.resultsets", async () => {
   const connection = await connect();
   const db = createMariaDbDatabase(connection);
   try {
-    await connection.query("CREATE OR REPLACE PROCEDURE braid_pv16_sets(IN label VARCHAR(64)) BEGIN SELECT label AS label; SELECT CAST('12345678901234567890.1234' AS DECIMAL(24,4)) AS amount; END");
+    await connection.query(
+      "CREATE OR REPLACE PROCEDURE braid_pv16_sets(IN label VARCHAR(64)) BEGIN SELECT label AS label; SELECT CAST('12345678901234567890.1234' AS DECIMAL(24,4)) AS amount; END",
+    );
     const result = await db.call(sql.call`CALL braid_pv16_sets(${"Ada"})`);
     assert.deepEqual(result.output, {});
-    assert.deepEqual(result.resultSets, [{ rows: [{ label: "Ada" }] }, { rows: [{ amount: "12345678901234567890.1234" }] }]);
+    assert.deepEqual(result.resultSets, [
+      { rows: [{ label: "Ada" }] },
+      { rows: [{ amount: "12345678901234567890.1234" }] },
+    ]);
     await assert.rejects(() => db.all(sql.rows`CALL braid_pv16_sets(${"Ada"})`), /BRAID_RESULT_SETS_UNSUPPORTED/u);
     assert.deepEqual(await db.one(sql.rows`SELECT ${"reusable"} AS label`), { label: "reusable" });
   } finally {
@@ -179,11 +204,16 @@ test("rc.mariadb.session", async () => {
       "routine.return-value",
       "routine.result-sets",
       "routine.out-cursor",
-    ]) assert.ok(environment.capabilities[capability]);
+    ])
+      assert.ok(environment.capabilities[capability]);
     await db.session(async (session) => {
       scoped = session;
-      const first = await session.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
-      const second = await session.one(sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`);
+      const first = await session.one(
+        sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`,
+      );
+      const second = await session.one(
+        sql.rows<{ readonly connectionId: string }>`SELECT CONNECTION_ID() AS connectionId`,
+      );
       assert.equal(first.connectionId, second.connectionId);
     });
     await assert.rejects(
@@ -229,11 +259,11 @@ test("rc.mariadb.prepare", async () => {
       [{ value: "1" }, { value: "2" }],
     );
 
-    const call = db.prepare(
-      "rc-mariadb-call",
-      (value: string) => sql.call`CALL braid_rc_mariadb_call(${value})`,
+    const call = db.prepare("rc-mariadb-call", (value: string) => sql.call`CALL braid_rc_mariadb_call(${value})`);
+    assert.deepEqual(
+      (await call.call("called")).resultSets.map((set) => set.rows),
+      [[{ value: "called" }]],
     );
-    assert.deepEqual((await call.call("called")).resultSets.map((set) => set.rows), [[{ value: "called" }]]);
   } finally {
     await connection.query("DROP PROCEDURE IF EXISTS braid_rc_mariadb_call").catch(() => undefined);
     await connection.end();
@@ -277,8 +307,9 @@ test("rc.mariadb.cancel", async () => {
     controller.abort(new Error("rc.mariadb.cancelled"));
     await assert.rejects(
       pending,
-      (error: unknown) => (error as { readonly code?: string; readonly cause?: unknown }).code === "BRAID_RESOURCE_CLEANUP"
-        && (error as { readonly cause?: unknown }).cause === controller.signal.reason,
+      (error: unknown) =>
+        (error as { readonly code?: string; readonly cause?: unknown }).code === "BRAID_RESOURCE_CLEANUP" &&
+        (error as { readonly cause?: unknown }).cause === controller.signal.reason,
     );
     assert.equal((await db.one(sql.rows<{ readonly value: string }>`SELECT 1 AS value`)).value, "1");
   } finally {
@@ -289,7 +320,9 @@ test("rc.mariadb.cancel", async () => {
 test("mariadb.metadata.types", async () => {
   const connection = await connect();
   try {
-    await connection.query("CREATE TABLE braid_pv16_models (external_id INT PRIMARY KEY, identity_value BIGINT NOT NULL AUTO_INCREMENT UNIQUE, amount DECIMAL(40,10) NOT NULL, calculated INT GENERATED ALWAYS AS (external_id + 1) STORED)");
+    await connection.query(
+      "CREATE TABLE braid_pv16_models (external_id INT PRIMARY KEY, identity_value BIGINT NOT NULL AUTO_INCREMENT UNIQUE, amount DECIMAL(40,10) NOT NULL, calculated INT GENERATED ALWAYS AS (external_id + 1) STORED)",
+    );
     await connection.query("CREATE PROCEDURE braid_pv16_metadata(IN value INT) SELECT value");
     const snapshot = await createMariaDbInspector(connection).inspect();
     const relation = Object.values(snapshot.relations).find((entry) => entry.name === "braid_pv16_models");
@@ -299,7 +332,10 @@ test("mariadb.metadata.types", async () => {
     assert.equal(columns.get("identity_value")?.identity, true);
     assert.equal(columns.get("amount")?.precision, 40);
     assert.equal(columns.get("amount")?.scale, 10);
-    assert.deepEqual(relation.columns.map((column) => column.ordinal), [0, 1, 2, 3]);
+    assert.deepEqual(
+      relation.columns.map((column) => column.ordinal),
+      [0, 1, 2, 3],
+    );
     assert.equal(columns.get("calculated")?.generated, true);
     assert.equal(snapshot.routines?.braid_pv16_metadata?.[0]?.argumentsComplete, false);
     const generated = generateModels(snapshot, { typePolicy });
@@ -336,7 +372,9 @@ test("mariadb.numeric.bind-exact", async () => {
   const connection = await connect();
   const db = createMariaDbDatabase(connection);
   try {
-    await connection.query("CREATE TEMPORARY TABLE braid_pv17_exact_bind (integer_value BIGINT, decimal_value DECIMAL(40,20))");
+    await connection.query(
+      "CREATE TEMPORARY TABLE braid_pv17_exact_bind (integer_value BIGINT, decimal_value DECIMAL(40,20))",
+    );
     await db.execute(sql.command`
       INSERT INTO braid_pv17_exact_bind (integer_value, decimal_value)
       VALUES (${"9223372036854775807"}, ${"12345678901234567890.12345678901234567890"})
@@ -361,7 +399,10 @@ test("mariadb.data.json-lossless-text", async () => {
   try {
     await connection.query("CREATE TEMPORARY TABLE braid_pv16_json (payload JSON)");
     await db.execute(sql.command`INSERT INTO braid_pv16_json VALUES (${exactJsonText})`);
-    const rawRows = await connection.query("SELECT payload FROM braid_pv16_json") as readonly Record<string, unknown>[];
+    const rawRows = (await connection.query("SELECT payload FROM braid_pv16_json")) as readonly Record<
+      string,
+      unknown
+    >[];
     assert.equal(typeof rawRows[0]?.payload, "string");
     const row = await db.one(sql.rows<{ readonly payload: string; readonly largeInteger: string }>`
       SELECT CAST(payload AS CHAR) AS payload,
@@ -404,19 +445,25 @@ test("mariadb.data.temporal-lossless", async () => {
         timestamp_value TIMESTAMP(6)
       )
     `);
-    await connection.query("INSERT INTO braid_pv17_temporal VALUES ('2026-09-14', '12:34:56.123456', '2026-09-14 12:34:56.123456', '2026-09-14 12:34:56.123456')");
-    const rawRows = await connection.query("SELECT date_value, time_value, datetime_value, timestamp_value FROM braid_pv17_temporal") as readonly Record<string, unknown>[];
+    await connection.query(
+      "INSERT INTO braid_pv17_temporal VALUES ('2026-09-14', '12:34:56.123456', '2026-09-14 12:34:56.123456', '2026-09-14 12:34:56.123456')",
+    );
+    const rawRows = (await connection.query(
+      "SELECT date_value, time_value, datetime_value, timestamp_value FROM braid_pv17_temporal",
+    )) as readonly Record<string, unknown>[];
     assert.equal(typeof rawRows[0]?.date_value, "string");
     assert.equal(typeof rawRows[0]?.time_value, "string");
     assert.equal(typeof rawRows[0]?.datetime_value, "string");
     assert.equal(typeof rawRows[0]?.timestamp_value, "string");
     assert.deepEqual(
-      await db.one(sql.rows<{
-        readonly date_value: string;
-        readonly time_value: string;
-        readonly datetime_value: string;
-        readonly timestamp_value: string;
-      }>`SELECT date_value, time_value, datetime_value, timestamp_value FROM braid_pv17_temporal`),
+      await db.one(
+        sql.rows<{
+          readonly date_value: string;
+          readonly time_value: string;
+          readonly datetime_value: string;
+          readonly timestamp_value: string;
+        }>`SELECT date_value, time_value, datetime_value, timestamp_value FROM braid_pv17_temporal`,
+      ),
       {
         date_value: "2026-09-14",
         time_value: "12:34:56.123456",
@@ -496,7 +543,9 @@ test("mariadb.data.uuid", async () => {
   const connection = await connect();
   const db = createMariaDbDatabase(connection);
   try {
-    const row = await db.one(sql.rows<{ readonly id: string }>`SELECT CAST('550e8400-e29b-41d4-a716-446655440000' AS CHAR(36)) AS id`);
+    const row = await db.one(
+      sql.rows<{ readonly id: string }>`SELECT CAST('550e8400-e29b-41d4-a716-446655440000' AS CHAR(36)) AS id`,
+    );
     assert.equal(row.id, "550e8400-e29b-41d4-a716-446655440000");
   } finally {
     await connection.end();
@@ -506,7 +555,15 @@ test("mariadb.data.uuid", async () => {
 test("mariadb.result.rows", async () => {
   const connection = await connect();
   const events: ExecutionEvent[] = [];
-  const db = createMariaDbDatabase(connection, { observers: [{ onEvent(event) { events.push(event); } }] });
+  const db = createMariaDbDatabase(connection, {
+    observers: [
+      {
+        onEvent(event) {
+          events.push(event);
+        },
+      },
+    ],
+  });
   try {
     await connection.query("DROP TABLE IF EXISTS braid_mariadb_capability");
     await connection.query(`

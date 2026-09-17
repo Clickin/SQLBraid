@@ -15,8 +15,18 @@ type D1Payload = {
   readonly generated: readonly { readonly value: string }[];
   readonly generatedSql: string;
   readonly generatedSegments: readonly string[];
-  readonly inserted: { readonly kind: string; readonly rows: readonly { readonly id: string; readonly name: string; readonly payload: readonly number[] }[] };
-  readonly mapped: readonly { readonly id: string; readonly name: string; readonly payload: readonly number[]; readonly profile: { readonly active: boolean }; readonly stamp: string; readonly uuid: string }[];
+  readonly inserted: {
+    readonly kind: string;
+    readonly rows: readonly { readonly id: string; readonly name: string; readonly payload: readonly number[] }[];
+  };
+  readonly mapped: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly payload: readonly number[];
+    readonly profile: { readonly active: boolean };
+    readonly stamp: string;
+    readonly uuid: string;
+  }[];
   readonly updated: readonly { readonly id: string; readonly name: string }[];
   readonly deleted: readonly { readonly id: string }[];
   readonly environment: {
@@ -25,7 +35,11 @@ type D1Payload = {
     readonly runtime: { readonly id: string };
     readonly capabilities: Readonly<Record<string, { readonly status: string }>>;
   };
-  readonly numeric: { readonly safe: string; readonly integralReal: { readonly value: string }; readonly unsafeCode: string };
+  readonly numeric: {
+    readonly safe: string;
+    readonly integralReal: { readonly value: string };
+    readonly unsafeCode: string;
+  };
   readonly json: { readonly payload: string; readonly enabled: string };
   readonly sessionCode: string;
   readonly cancelCode: string;
@@ -54,13 +68,15 @@ async function runFixture(): Promise<D1Payload> {
       logLevel: "silent",
     });
     worker = new Miniflare({
-      workers: [{
-        compatibilityDate: "2026-07-30",
-        compatibilityFlags: ["nodejs_compat"],
-        modulesRoot: outputDirectory,
-        modules: [{ type: "ESModule", path: join(outputDirectory, "worker.mjs") }],
-        d1Databases: ["DB"],
-      }],
+      workers: [
+        {
+          compatibilityDate: "2026-07-30",
+          compatibilityFlags: ["nodejs_compat"],
+          modulesRoot: outputDirectory,
+          modules: [{ type: "ESModule", path: join(outputDirectory, "worker.mjs") }],
+          d1Databases: ["DB"],
+        },
+      ],
     });
     const response = await worker.dispatchFetch("http://sqlbraid.test/capabilities");
     const body = await response.text();
@@ -75,7 +91,7 @@ async function runFixture(): Promise<D1Payload> {
 }
 
 function fixture(): Promise<D1Payload> {
-  return payloadPromise ??= runFixture();
+  return (payloadPromise ??= runFixture());
 }
 
 test("d1.sql.native-transparency", async () => {
@@ -88,8 +104,14 @@ test("d1.sql.native-transparency", async () => {
   assert.equal(payload.environment.capabilities["statement.cancel"]?.status, "unsupported");
   assert.equal(payload.environment.capabilities["statement.stream"]?.status, "unsupported");
   assert.equal(payload.environment.capabilities["statement.bulk"]?.status, "guaranteed");
-  assert.deepEqual(payload.transparencySegments, ["\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract('{\"enabled\":true}', '$.enabled') AS enabled,\n             ", " AS actual\n    "]);
-  assert.equal(payload.transparencySql, "\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract('{\"enabled\":true}', '$.enabled') AS enabled,\n             ?1 AS actual\n    ");
+  assert.deepEqual(payload.transparencySegments, [
+    "\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract('{\"enabled\":true}', '$.enabled') AS enabled,\n             ",
+    " AS actual\n    ",
+  ]);
+  assert.equal(
+    payload.transparencySql,
+    "\n      SELECT 'literal $1 :1 @p1 ?' AS marker,\n             json_extract('{\"enabled\":true}', '$.enabled') AS enabled,\n             ?1 AS actual\n    ",
+  );
   assert.deepEqual(payload.transparency, [{ marker: "literal $1 :1 @p1 ?", enabled: "1", actual: "7" }]);
 });
 
@@ -125,10 +147,16 @@ test("d1.execution.bulk", async () => {
 test("d1.data.mapping-returning", async () => {
   const payload = await fixture();
   assert.deepEqual(payload.inserted, { kind: "rows", rows: [{ id: "1", name: "Ada", payload: [1, 2, 3] }] });
-  assert.deepEqual(payload.mapped, [{
-    id: "1", name: "ADA", payload: [1, 2, 3], profile: { active: true },
-    stamp: "2026-09-14T00:00:00.123456Z", uuid: "123e4567-e89b-12d3-a456-426614174000",
-  }]);
+  assert.deepEqual(payload.mapped, [
+    {
+      id: "1",
+      name: "ADA",
+      payload: [1, 2, 3],
+      profile: { active: true },
+      stamp: "2026-09-14T00:00:00.123456Z",
+      uuid: "123e4567-e89b-12d3-a456-426614174000",
+    },
+  ]);
   assert.deepEqual(payload.updated, [{ id: "1", name: "Updated" }]);
   assert.deepEqual(payload.deleted, [{ id: "1" }]);
 });

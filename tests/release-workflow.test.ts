@@ -5,45 +5,103 @@ import { parse } from "yaml";
 import { allPlan, planChanges } from "../scripts/ci-plan.mjs";
 import { releasePrereleaseArg } from "../scripts/release.mjs";
 
-interface Step { name?: string; if?: string; run?: string; uses?: string; env?: Record<string, string>; with?: Record<string, unknown> }
-interface Job { name?: string; if?: string; needs?: string | string[]; permissions?: Record<string, string>; env?: Record<string, string>; outputs?: Record<string, unknown>; concurrency?: Record<string, unknown>; steps: Step[] }
+interface Step {
+  name?: string;
+  if?: string;
+  run?: string;
+  uses?: string;
+  env?: Record<string, string>;
+  with?: Record<string, unknown>;
+}
+interface Job {
+  name?: string;
+  if?: string;
+  needs?: string | string[];
+  permissions?: Record<string, string>;
+  env?: Record<string, string>;
+  outputs?: Record<string, unknown>;
+  concurrency?: Record<string, unknown>;
+  steps: Step[];
+}
 interface Workflow {
-  on: Record<string, { tags?: string[]; paths?: string[]; inputs?: Record<string, { default?: unknown; options?: string[]; description?: string; type?: string }> } | null>;
+  on: Record<
+    string,
+    {
+      tags?: string[];
+      paths?: string[];
+      inputs?: Record<string, { default?: unknown; options?: string[]; description?: string; type?: string }>;
+    } | null
+  >;
   permissions: Record<string, string>;
   env?: Record<string, string>;
   concurrency?: Record<string, unknown>;
   jobs: Record<string, Job>;
 }
-const load = (name: string): Workflow => parse(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
+const load = (name: string): Workflow =>
+  parse(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
 const release = load("release");
 const vscode = load("vscode-release");
 const runtime = load("runtime-portability");
 const docs = load("docs-pages");
-const dependencies = (job: Job) => typeof job.needs === "string" ? [job.needs] : job.needs ?? [];
+const dependencies = (job: Job) => (typeof job.needs === "string" ? [job.needs] : (job.needs ?? []));
 
-function evaluate(expression: string | undefined, github: object, inputs: object, needs: object, env: object, success: boolean) {
+function evaluate(
+  expression: string | undefined,
+  github: object,
+  inputs: object,
+  needs: object,
+  env: object,
+  success: boolean,
+) {
   if (!expression) return success;
-  const body = expression.replace(/^\$\{\{\s*|\s*\}\}$/gu, "")
+  const body = expression
+    .replace(/^\$\{\{\s*|\s*\}\}$/gu, "")
     .replace(/needs\.([\w-]+)/gu, (_, name: string) => `needs[${JSON.stringify(name)}]`);
   // These are repository-owned workflow expressions, not untrusted input. Match GitHub's implicit success gate.
   if (!/\b(?:always|success|failure|cancelled)\(/u.test(body) && !success) return false;
-  return Boolean(Function("github", "inputs", "needs", "env", "success", "always", `return (${body});`)(github, inputs, needs, env, () => success, () => true));
+  return Boolean(
+    Function(
+      "github",
+      "inputs",
+      "needs",
+      "env",
+      "success",
+      "always",
+      `return (${body});`,
+    )(
+      github,
+      inputs,
+      needs,
+      env,
+      () => success,
+      () => true,
+    ),
+  );
 }
 
-function graph(workflow: Workflow, event: string, mode = "certify", ref = "refs/heads/main", failed?: string, deploy = false) {
+function graph(
+  workflow: Workflow,
+  event: string,
+  mode = "certify",
+  ref = "refs/heads/main",
+  failed?: string,
+  deploy = false,
+) {
   const results: Record<string, { result: string }> = {};
   const github = { event_name: event, ref, ref_type: ref.startsWith("refs/tags/") ? "tag" : "branch" };
   const inputs = { release_mode: event === "workflow_dispatch" ? mode : undefined, deploy };
   const env = { SQLBRAID_RELEASE_MODE: event === "workflow_dispatch" ? mode : "certify" };
   const pending = new Set(Object.keys(workflow.jobs));
   while (pending.size) {
-    const available = [...pending].filter((name) => dependencies(workflow.jobs[name]).every((dependency) => dependency in results));
+    const available = [...pending].filter((name) =>
+      dependencies(workflow.jobs[name]).every((dependency) => dependency in results),
+    );
     assert.ok(available.length, "workflow DAG contains a cycle or unknown dependency");
     for (const name of available) {
       const job = workflow.jobs[name];
       const success = dependencies(job).every((dependency) => results[dependency].result === "success");
       const runs = evaluate(job.if, github, inputs, results, env, success);
-      results[name] = { result: runs ? name === failed ? "failure" : "success" : "skipped" };
+      results[name] = { result: runs ? (name === failed ? "failure" : "success") : "skipped" };
       pending.delete(name);
     }
   }
@@ -65,8 +123,10 @@ test("dispatch defaults to certification and version tags trigger all three vali
 
 test("main, PR, manual certification, and every version tag cannot reach a release mutation", () => {
   for (const [event, mode, ref] of [
-    ["push", "certify", "refs/heads/main"], ["pull_request", "certify", "refs/pull/1/merge"],
-    ["workflow_dispatch", "certify", "refs/heads/main"], ["workflow_dispatch", "pack-only", "refs/heads/main"],
+    ["push", "certify", "refs/heads/main"],
+    ["pull_request", "certify", "refs/pull/1/merge"],
+    ["workflow_dispatch", "certify", "refs/heads/main"],
+    ["workflow_dispatch", "pack-only", "refs/heads/main"],
     ...["v0.1.0-rc.0", "v0.1.0-rc.1", "v0.1.0"].map((tag) => ["push", "certify", `refs/tags/${tag}`]),
   ]) {
     const { results } = graph(release, event, mode, ref);
@@ -83,7 +143,10 @@ test("explicit staging reaches only the staging job and a successful stage autho
   const { results } = graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0");
   assert.equal(results["release-stage"].result, "success");
   assert.equal(results["release-draft"].result, "success");
-  assert.equal(graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0", "release-stage").results["release-draft"].result, "skipped");
+  assert.equal(
+    graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0", "release-stage").results["release-draft"].result,
+    "skipped",
+  );
   for (const lane of dependencies(release.jobs["release-final"])) {
     const failed = graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0", lane).results;
     assert.equal(failed["release-stage"].result, "skipped", `staging escaped failed ${lane}`);
@@ -93,11 +156,28 @@ test("explicit staging reaches only the staging job and a successful stage autho
 
 test("full certification and mutation prerequisites include every npm release lane and pnpm stage dry-run", () => {
   const lanes = dependencies(release.jobs["release-final"]);
-  for (const name of ["release-prep", "release-common", "release-db", "release-node24", "release-browser", "release-pack", "release-docs", "release-examples", "release-benchmark-smoke", "release-runtime", "release-compatibility", "release-bun-sql", "release-support-evidence", "release-target-evidence"]) assert.ok(lanes.includes(name), `missing ${name}`);
+  for (const name of [
+    "release-prep",
+    "release-common",
+    "release-db",
+    "release-node24",
+    "release-browser",
+    "release-pack",
+    "release-docs",
+    "release-examples",
+    "release-benchmark-smoke",
+    "release-runtime",
+    "release-compatibility",
+    "release-bun-sql",
+    "release-support-evidence",
+    "release-target-evidence",
+  ])
+    assert.ok(lanes.includes(name), `missing ${name}`);
   assert.equal(release.jobs["release-vscode"], undefined);
   const dryRun = release.jobs["release-final"].steps.find((step) => step.run?.includes("--mode stage-dry-run"));
   assert.ok(dryRun);
-  for (const mode of ["certify", "stage"]) assert.equal(graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0").stepRuns(dryRun), true);
+  for (const mode of ["certify", "stage"])
+    assert.equal(graph(release, "workflow_dispatch", mode, "refs/tags/v0.1.0-rc.0").stepRuns(dryRun), true);
   assert.equal(graph(release, "push", "certify", "refs/tags/v0.1.0-rc.0").stepRuns(dryRun), true);
   assert.equal(graph(release, "workflow_dispatch", "pack-only").stepRuns(dryRun), false);
   assert.ok(release.jobs["release-final"].steps.some((step) => step.run?.includes("--mode preflight")));
@@ -107,7 +187,10 @@ test("npm release preparation and evidence exclude VS Code artifacts", () => {
   const prep = release.jobs["release-prep"];
   assert.equal(prep.steps.find((step) => step.name === "Typecheck packages")?.run, "pnpm run typecheck:packages");
   assert.equal(prep.steps.find((step) => step.name === "Build packages once")?.run, "pnpm run build:packages");
-  assert.doesNotMatch(prep.steps.find((step) => step.name === "Archive candidate and prepared build")?.run ?? "", /extensions\/vscode/u);
+  assert.doesNotMatch(
+    prep.steps.find((step) => step.name === "Archive candidate and prepared build")?.run ?? "",
+    /extensions\/vscode/u,
+  );
   const packCheck = release.jobs["release-pack"].steps.find((step) => step.name === "Validate candidate package bytes");
   assert.equal(packCheck?.env?.SQLBRAID_SKIP_VSIX, "true");
   assert.equal(packCheck?.env?.SQLBRAID_VSIX_INPUT, undefined);
@@ -152,17 +235,27 @@ test("runtime workflows execute every exact packed compatibility cell", () => {
   assert.ok(runtimeCompatibility);
   assert.deepEqual(runtimeCompatibility.needs, ["plan", "prepare"]);
   assert.match(runtimeCompatibility.if ?? "", /needs\.plan\.outputs\.compatibility/u);
-  assert.equal(runtimeCompatibility.steps.find((step) => step.name === "Run packed consumer smoke")?.run, "node scripts/runtime-compatibility-smoke.mjs");
+  assert.equal(
+    runtimeCompatibility.steps.find((step) => step.name === "Run packed consumer smoke")?.run,
+    "node scripts/runtime-compatibility-smoke.mjs",
+  );
   const releaseCompatibility = release.jobs["release-compatibility"];
   assert.ok(releaseCompatibility);
   assert.equal(releaseCompatibility.needs, "release-prep");
-  assert.match(releaseCompatibility.steps.find((step) => step.name === "Run packed consumer smoke")?.run ?? "", /runtime-compatibility-smoke\.mjs/u);
+  assert.match(
+    releaseCompatibility.steps.find((step) => step.name === "Run packed consumer smoke")?.run ?? "",
+    /runtime-compatibility-smoke\.mjs/u,
+  );
   assert.match(String(release.jobs["release-prep"].outputs?.compatibility_matrix), /compatibility-matrix/u);
 });
 
 test("job capabilities isolate OIDC and release writes", () => {
   assert.deepEqual(release.permissions, { contents: "read" });
-  assert.deepEqual(release.jobs["release-stage"].permissions, { contents: "read", actions: "read", "id-token": "write" });
+  assert.deepEqual(release.jobs["release-stage"].permissions, {
+    contents: "read",
+    actions: "read",
+    "id-token": "write",
+  });
   assert.deepEqual(release.jobs["release-draft"].permissions, { contents: "write" });
   for (const [name, job] of Object.entries(release.jobs)) {
     const permissions: Record<string, string> = job.permissions ?? release.permissions;
@@ -176,10 +269,17 @@ test("job capabilities isolate OIDC and release writes", () => {
     }
   }
   const stage = release.jobs["release-stage"];
-  assert.ok(stage.steps.every((step) => step.with?.["registry-url"] === undefined), "setup-node must not inject fallback token configuration");
+  assert.ok(
+    stage.steps.every((step) => step.with?.["registry-url"] === undefined),
+    "setup-node must not inject fallback token configuration",
+  );
   for (const job of Object.values(release.jobs)) {
     for (const step of job.steps) {
-      assert.doesNotMatch(step.run ?? "", /\bnpm\s+(?:publish|install|i)\b/u, "release job must not publish or upgrade npm CLI");
+      assert.doesNotMatch(
+        step.run ?? "",
+        /\bnpm\s+(?:publish|install|i)\b/u,
+        "release job must not publish or upgrade npm CLI",
+      );
     }
   }
 });
@@ -272,7 +372,10 @@ test("documentation pushes publish latest and tagged docs while manual deploymen
   assert.equal(authorized.build.result, "success");
   assert.equal(authorized["publish-history"].result, "success");
   assert.equal(authorized.deploy.result, "success");
-  assert.equal(graph(docs, "workflow_dispatch", "certify", "refs/heads/main", "build", true).results.deploy.result, "skipped");
+  assert.equal(
+    graph(docs, "workflow_dispatch", "certify", "refs/heads/main", "build", true).results.deploy.result,
+    "skipped",
+  );
   assert.deepEqual(docs.jobs.build.permissions, { contents: "read" });
 });
 

@@ -48,14 +48,14 @@ operation ID, fingerprint, SQL text와 bind 값은 metric attribute가 아닙니
 
 SQLBraid dialect는 다음처럼 `db.system.name`으로 매핑됩니다.
 
-| SQLBraid dialect | `db.system.name` |
-| --- | --- |
-| `postgres` | `postgresql` |
-| `mysql` | `mysql` |
-| `mariadb` | `mariadb` |
-| `sqlite` | `sqlite` |
-| `oracle` | `oracle.db` |
-| `mssql` | `microsoft.sql_server` |
+| SQLBraid dialect | `db.system.name`       |
+| ---------------- | ---------------------- |
+| `postgres`       | `postgresql`           |
+| `mysql`          | `mysql`                |
+| `mariadb`        | `mariadb`              |
+| `sqlite`         | `sqlite`               |
+| `oracle`         | `oracle.db`            |
+| `mssql`          | `microsoft.sql_server` |
 
 알 수 없는 dialect는 `database.systemName`이 지정되지 않은 경우
 `other_sql`을 사용합니다. span name은 설정된

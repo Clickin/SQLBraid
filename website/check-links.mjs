@@ -17,7 +17,10 @@ assert.ok(pages.has("index.html"), "Documentation build must produce the homepag
 assert.ok(pages.has("404.html"), "Documentation build must produce a 404 page.");
 assert.ok(await stat(join(output, "llms.txt")).catch(() => undefined), "Documentation build must produce llms.txt.");
 const llms = await readFile(join(output, "llms.txt"), "utf8");
-assert.ok(llms.includes(`https://clickin.github.io${basePath}`), "llms.txt must target its own documentation snapshot.");
+assert.ok(
+  llms.includes(`https://clickin.github.io${basePath}`),
+  "llms.txt must target its own documentation snapshot.",
+);
 
 const targetDirectory = fileURLToPath(new URL("../support/targets/", import.meta.url));
 const targets = [];
@@ -26,12 +29,21 @@ for (const file of (await readdir(targetDirectory)).filter((file) => file.endsWi
 }
 for (const locale of ["", "ko/"]) {
   const rawSupport = await readFile(join(output, `${locale}reference/support.md`), "utf8");
-  assert.ok(!rawSupport.includes("<SupportMatrix") && !rawSupport.includes("import SupportMatrix"), `${locale || "en"} raw support must not expose unevaluated MDX.`);
+  assert.ok(
+    !rawSupport.includes("<SupportMatrix") && !rawSupport.includes("import SupportMatrix"),
+    `${locale || "en"} raw support must not expose unevaluated MDX.`,
+  );
   for (const target of targets) {
     const section = rawSupport.split(/^### /mu).find((candidate) => candidate.startsWith(`${target.id}\n`));
     assert.ok(section, `${locale || "en"} raw support omits target ${target.id}.`);
-    assert.ok(section.includes(`- Status: **${target.status}**`), `${locale || "en"} raw support status mismatch for ${target.id}.`);
-    assert.ok(section.includes(`- Evidence: ${target.evidence?.status ?? "—"}`), `${locale || "en"} raw support evidence mismatch for ${target.id}.`);
+    assert.ok(
+      section.includes(`- Status: **${target.status}**`),
+      `${locale || "en"} raw support status mismatch for ${target.id}.`,
+    );
+    assert.ok(
+      section.includes(`- Evidence: ${target.evidence?.status ?? "—"}`),
+      `${locale || "en"} raw support evidence mismatch for ${target.id}.`,
+    );
   }
 }
 const postgres = targets.find((target) => target.id === "postgres-pg-node-16-4");
@@ -42,33 +54,50 @@ for (const locale of ["", "ko/"]) {
   const exactInteger = postgres.capabilities["numeric.exact-integer"];
   const exactIntegerRaw = exactInteger.driverRawRepresentations?.join(", ");
   const exactIntegerLine = section?.split("\n").find((line) => line.startsWith("| `numeric.exact-integer` |"));
-  assert.ok(exactIntegerRaw && exactIntegerLine?.includes(`raw=${exactIntegerRaw}`),
-    `${locale || "en"} PostgreSQL exact integer raw evidence mismatch.`);
+  assert.ok(
+    exactIntegerRaw && exactIntegerLine?.includes(`raw=${exactIntegerRaw}`),
+    `${locale || "en"} PostgreSQL exact integer raw evidence mismatch.`,
+  );
   const approximateFloat = postgres.capabilities["numeric.approximate-float"];
   const approximateFloatRaw = approximateFloat.driverRawRepresentations?.join(", ");
   const approximateFloatLine = section?.split("\n").find((line) => line.startsWith("| `numeric.approximate-float` |"));
-  assert.ok(approximateFloatRaw && approximateFloatLine?.includes(`raw=${approximateFloatRaw}`),
-    `${locale || "en"} PostgreSQL approximate float raw evidence mismatch.`);
+  assert.ok(
+    approximateFloatRaw && approximateFloatLine?.includes(`raw=${approximateFloatRaw}`),
+    `${locale || "en"} PostgreSQL approximate float raw evidence mismatch.`,
+  );
 }
 const interactiveRaw = await readFile(join(output, "interactive-preview.md"), "utf8");
 const interactiveRawKo = await readFile(join(output, "ko/interactive-preview.md"), "utf8");
 const renderedInteractiveUrl = new URL("interactive-preview/", base).href;
 const renderedInteractiveKoUrl = new URL("ko/interactive-preview/", base).href;
-assert.ok(!interactiveRaw.includes("InteractivePreview") && !interactiveRaw.includes("import ") &&
-  interactiveRaw.includes(renderedInteractiveUrl),
-  "English interactive preview raw Markdown must link to the rendered HTML page.");
-assert.ok(!interactiveRawKo.includes("InteractivePreview") && !interactiveRawKo.includes("import ") &&
-  interactiveRawKo.includes(renderedInteractiveKoUrl),
-  "Korean interactive preview raw Markdown must link to the localized rendered HTML page.");
-assert.ok(pages.get("interactive-preview/index.html")?.text.includes("data-sqlbraid-preview") &&
-  pages.get("ko/interactive-preview/index.html")?.text.includes("data-sqlbraid-preview"),
-  "Interactive preview rendered pages must contain the preview component marker for both locales.");
+assert.ok(
+  !interactiveRaw.includes("InteractivePreview") &&
+    !interactiveRaw.includes("import ") &&
+    interactiveRaw.includes(renderedInteractiveUrl),
+  "English interactive preview raw Markdown must link to the rendered HTML page.",
+);
+assert.ok(
+  !interactiveRawKo.includes("InteractivePreview") &&
+    !interactiveRawKo.includes("import ") &&
+    interactiveRawKo.includes(renderedInteractiveKoUrl),
+  "Korean interactive preview raw Markdown must link to the localized rendered HTML page.",
+);
+assert.ok(
+  pages.get("interactive-preview/index.html")?.text.includes("data-sqlbraid-preview") &&
+    pages.get("ko/interactive-preview/index.html")?.text.includes("data-sqlbraid-preview"),
+  "Interactive preview rendered pages must contain the preview component marker for both locales.",
+);
 
 const source = fileURLToPath(new URL("./src/content/docs/", import.meta.url));
 for (const file of await readdir(source, { recursive: true })) {
   if (!/\.mdx?$/u.test(file)) continue;
   const route = file.replace(/\.mdx?$/u, "");
-  const page = route === "index" || route.endsWith("/index") ? `${route}.html` : route === "404" ? "404.html" : `${route}/index.html`;
+  const page =
+    route === "index" || route.endsWith("/index")
+      ? `${route}.html`
+      : route === "404"
+        ? "404.html"
+        : `${route}/index.html`;
   assert.ok(pages.has(page), `Missing built documentation page: ${file}`);
   // docsLoader collapses nested index pages (for example ko/index.md) to the
   // directory content ID, while the root index remains the "index" ID.
@@ -86,8 +115,11 @@ for (const [file, { text }] of pages) {
     assert.ok(target.pathname.startsWith(basePath), `${file}: link escapes Pages base: ${target.href}`);
     const relative = decodeURIComponent(target.pathname.slice(basePath.length));
     const destination = relative.endsWith("/") || relative === "" ? `${relative}index.html` : relative;
-    const targetFile = await stat(join(output, destination)).catch(() => undefined)
-      ?? (!destination.endsWith(".html") ? await stat(join(output, `${destination}/index.html`)).catch(() => undefined) : undefined);
+    const targetFile =
+      (await stat(join(output, destination)).catch(() => undefined)) ??
+      (!destination.endsWith(".html")
+        ? await stat(join(output, `${destination}/index.html`)).catch(() => undefined)
+        : undefined);
     assert.ok(targetFile, `${file}: missing link ${target.href}`);
     const hash = decodeURIComponent(target.hash.slice(1));
     if (hash && pages.has(destination)) {
@@ -96,4 +128,6 @@ for (const [file, { text }] of pages) {
     checked += 1;
   }
 }
-console.info(`PASS ${pages.size} built documentation pages, raw Markdown, llms.txt, and ${checked} local links/anchors`);
+console.info(
+  `PASS ${pages.size} built documentation pages, raw Markdown, llms.txt, and ${checked} local links/anchors`,
+);
