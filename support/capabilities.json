@@ -619,6 +619,13 @@
       }
     },
     {
+      "code": "bun-sql.special-float-profile",
+      "labels": {
+        "en": "PostgreSQL bound NaN and infinities plus SQLite literal infinities survive; MySQL/MariaDB reject or coerce them",
+        "ko": "PostgreSQL 바인드 NaN·무한대와 SQLite 리터럴 무한대는 유지되며 MySQL/MariaDB는 거부 또는 강제 변환"
+      }
+    },
+    {
       "code": "bun-sql.json-parser-profile",
       "labels": {
         "en": "Native parsed JSON is not a lossless numeric representation",

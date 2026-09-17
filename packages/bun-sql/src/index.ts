@@ -94,7 +94,9 @@ function capabilitiesFor(dialect: BunSqlDialect): Readonly<Record<string, Enviro
       ? capability("guaranteed", "string", ["string"])
       : capability("unsupported", "string", mysqlTransport ? ["Uint8Array"] : ["number"]),
     "numeric.approximate-float": capability("guarded", "number", ["number"], "bun-sql.float-profile"),
-    "numeric.approximate-special": capability("guarded", "number", ["number"], "bun-sql.float-profile"),
+    "numeric.approximate-special": mysqlTransport
+      ? capability("unsupported", "number", ["null", "number"])
+      : capability("guarded", "number", ["number"], "bun-sql.special-float-profile"),
     "numeric.bind-exact": capability("guarded", "string", ["string", "number", "bigint"], "bun-sql.numeric-bind-profile"),
     "numeric.command-metadata": capability("guarded", "number", ["number", "bigint"], "bun-sql.command-count-profile"),
     "data.json-parsed": json,
@@ -108,9 +110,9 @@ function capabilitiesFor(dialect: BunSqlDialect): Readonly<Record<string, Enviro
       ? capability("unsupported", undefined, ["string"])
       : capability("guarded", undefined, ["Date"], "bun-sql.timezone-profile"),
     "metadata.command-safe": capability("guarded", "number", ["number", "bigint"], "bun-sql.command-count-profile"),
-    "dml.insert-returning": capability(dialect === "postgres" || dialect === "sqlite" ? "guaranteed" : "unsupported"),
+    "dml.insert-returning": capability(dialect === "postgres" || dialect === "sqlite" || dialect === "mariadb" ? "guaranteed" : "unsupported"),
     "dml.update-returning": capability(dialect === "postgres" || dialect === "sqlite" ? "guaranteed" : "unsupported"),
-    "dml.delete-returning": capability(dialect === "postgres" || dialect === "sqlite" ? "guaranteed" : "unsupported"),
+    "dml.delete-returning": capability(dialect === "postgres" || dialect === "sqlite" || dialect === "mariadb" ? "guaranteed" : "unsupported"),
     "session.pinned": capability("guaranteed"),
     "statement.prepare": capability("guaranteed"),
     "statement.cancel": capability("unsupported", undefined, ["Query.cancel"]),

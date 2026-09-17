@@ -2,6 +2,9 @@ import { Buffer } from "node:buffer";
 import type {
   CommandQuery,
   CallQuery,
+  EnvironmentCapability,
+  ExecutionEvent,
+  ExecutionObserver,
   RowQuery,
   SqlTag,
   TransactionOptions,
@@ -26,9 +29,9 @@ export interface BunCertificationTargetOptions {
 
 interface Counters {
   borrowed: number;
-  acquires: number;
   cleanupBalance: number;
   sideEffects: number;
+  failRollbackObserver: boolean;
 }
 
 /** Independent contract: this is intentionally not read from environment(). */
@@ -56,7 +59,6 @@ function instrument(client: BunSqlClient, counters: Counters): BunSqlClient {
   if (client.reserve !== undefined) {
     wrapped.reserve = async () => {
       counters.borrowed += 1;
-      counters.acquires += 1;
       counters.cleanupBalance += 1;
       try {
         const reserved = await client.reserve!();
@@ -100,6 +102,77 @@ function nativeFailureCode(dialect: BunSqlDialect): string {
   return "SQLITE_ERROR";
 }
 
+function exactIntegerSql(dialect: BunSqlDialect): string {
+  if (dialect === "postgres") return "SELECT CAST(9007199254740993 AS BIGINT) AS value";
+  if (dialect === "mysql" || dialect === "mariadb") return "SELECT CAST(9007199254740993 AS SIGNED) AS value";
+  return "SELECT CAST(9007199254740993 AS INTEGER) AS value";
+}
+
+function exactIntegerBindSql(dialect: BunSqlDialect): string {
+  if (dialect === "postgres") return "SELECT CAST($1 AS BIGINT) AS value";
+  if (dialect === "mysql" || dialect === "mariadb") return "SELECT CAST(? AS SIGNED) AS value";
+  return "SELECT CAST(? AS INTEGER) AS value";
+}
+
+function exactIntegerQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
+  if (dialect === "postgres") return tag.rows`SELECT CAST(9007199254740993 AS BIGINT) AS value`;
+  if (dialect === "mysql" || dialect === "mariadb") return tag.rows`SELECT CAST(9007199254740993 AS SIGNED) AS value`;
+  return tag.rows`SELECT CAST(9007199254740993 AS INTEGER) AS value`;
+}
+
+function exactIntegerBindQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
+  if (dialect === "postgres") return tag.rows`SELECT CAST(${"9007199254740993"} AS BIGINT) AS value`;
+  if (dialect === "mysql" || dialect === "mariadb") return tag.rows`SELECT CAST(${"9007199254740993"} AS SIGNED) AS value`;
+  return tag.rows`SELECT CAST(${"9007199254740993"} AS INTEGER) AS value`;
+}
+
+function approximateFloatQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
+  if (dialect === "postgres") return tag.rows`SELECT CAST(1.5 AS DOUBLE PRECISION) AS value`;
+  if (dialect === "mysql" || dialect === "mariadb") return tag.rows`SELECT CAST(1.5 AS DOUBLE) AS value`;
+  return tag.rows`SELECT CAST(1.5 AS REAL) AS value`;
+}
+
+function approximateSpecialQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
+  if (dialect === "postgres") {
+    return tag.rows`SELECT CAST(${Number.NaN} AS DOUBLE PRECISION) AS nan, CAST(${Number.POSITIVE_INFINITY} AS DOUBLE PRECISION) AS pos_inf, CAST(${Number.NEGATIVE_INFINITY} AS DOUBLE PRECISION) AS neg_inf`;
+  }
+  if (dialect === "sqlite") return tag.rows`SELECT 1e999 AS pos_inf, -1e999 AS neg_inf`;
+  return tag.rows`SELECT CAST(${Number.NaN} AS DOUBLE) AS nan, CAST(${Number.POSITIVE_INFINITY} AS DOUBLE) AS pos_inf, CAST(${Number.NEGATIVE_INFINITY} AS DOUBLE) AS neg_inf`;
+}
+
+function temporalQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
+  if (dialect === "postgres") return tag.rows`SELECT TIMESTAMP '2026-09-14 12:34:56.789' AS value`;
+  return tag.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`;
+}
+
+function timezoneQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
+  if (dialect === "postgres") return tag.rows`SELECT TIMESTAMPTZ '2026-09-14 12:34:56.789+05:30' AS value`;
+  return tag.rows`SELECT TIMESTAMP '2026-09-14 12:34:56.789' AS value`;
+}
+
+function exactDecimalQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
+  if (dialect === "mysql" || dialect === "mariadb") return tag.rows`SELECT CAST('12345678901234567890.123456789' AS DECIMAL(30, 9)) AS value`;
+  return tag.rows`SELECT CAST('12345678901234567890.123456789' AS NUMERIC) AS value`;
+}
+
+function jsonQuery(tag: SqlTag, dialect: BunSqlDialect): RowQuery<unknown> {
+  if (dialect === "postgres") return tag.rows`SELECT '{"value": 1}'::jsonb AS value`;
+  if (dialect === "mysql" || dialect === "mariadb") return tag.rows`SELECT JSON_OBJECT('value', 1) AS value`;
+  return tag.rows`SELECT json_object('value', 1) AS value`;
+}
+
+async function nativeRow(client: BunSqlClient, sql: string, values: readonly unknown[] = []): Promise<Record<string, unknown>> {
+  const rows = await client.unsafe<readonly Record<string, unknown>[]>(sql, values);
+  if (!Array.isArray(rows) || rows.length !== 1 || rows[0] === undefined) throw new Error("Bun.SQL native proof did not return exactly one row.");
+  return rows[0];
+}
+
+function resourceCleanupError(): Error {
+  const error = new Error("cert-transaction-cleanup");
+  Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
+  return error;
+}
+
 function optionKey(options: TransactionOptions): TransactionOptionKey {
   if (options.isolation !== undefined && options.readOnly !== undefined) return `combination:${options.isolation}+${options.readOnly ? "readOnly" : "readWrite"}` as TransactionOptionKey;
   if (options.isolation !== undefined) return `isolation:${options.isolation}` as TransactionOptionKey;
@@ -127,10 +200,13 @@ async function proveTransactionOption(db: CertificationFixture["db"], tag: SqlTa
 
 async function createFixture(options: BunCertificationTargetOptions): Promise<CertificationFixture> {
   const { dialect, tag } = options;
-  const counters: Counters = { borrowed: 0, acquires: 0, cleanupBalance: 0, sideEffects: 0 };
+  const counters: Counters = { borrowed: 0, cleanupBalance: 0, sideEffects: 0, failRollbackObserver: false };
   const client = instrument(options.createClient(), counters);
   const table = `braid_cert_${dialect}_${process.pid}_${Math.random().toString(36).slice(2, 10)}`;
+  const sentinelTable = `${table}_sentinel`;
+  const sentinelValue = `sentinel-${table}`;
   assertSavepointName(table);
+  assertSavepointName(sentinelTable);
   const tableSql = tag.raw(quoteIdentifier(dialect, table));
   const missingSql = tag.raw(quoteIdentifier(dialect, `${table}_missing`));
   const idColumn = dialect === "postgres"
@@ -138,9 +214,24 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     : dialect === "mysql" || dialect === "mariadb"
       ? "id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY"
       : "id INTEGER PRIMARY KEY";
-  await client.unsafe(`CREATE TABLE ${quoteIdentifier(dialect, table)} (${idColumn}, value TEXT)`, []);
+  await client.unsafe(`CREATE TABLE ${quoteIdentifier(dialect, table)} (${idColumn}, value TEXT CHECK (value <> 'middle-failure'))`, []);
+  await client.unsafe(`CREATE TABLE ${quoteIdentifier(dialect, sentinelTable)} (id INTEGER PRIMARY KEY, value TEXT)`, []);
+  await client.unsafe(`INSERT INTO ${quoteIdentifier(dialect, sentinelTable)} (id, value) VALUES (1, '${sentinelValue.replaceAll("'", "''")}')`, []);
   counters.sideEffects = 0;
-  const rawDb = createBunSqlDatabase(client, { dialect });
+  const cleanupObserver: ExecutionObserver = {
+    onEvent(event: ExecutionEvent): void {
+      if (
+        counters.failRollbackObserver
+        && event.type === "transaction"
+        && event.phase === "rollback"
+        && event.status === "completed"
+      ) {
+        counters.failRollbackObserver = false;
+        throw resourceCleanupError();
+      }
+    },
+  };
+  const rawDb = createBunSqlDatabase(client, { dialect, observers: [cleanupObserver] });
   let bulkExecutions = 0;
   const db = new Proxy(rawDb, {
     get(target, property, receiver) {
@@ -249,6 +340,8 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     ["CALL001", "routine.call", queries.routines.call], ["CALL002", "routine.out", queries.routines.out], ["CALL003", "routine.inout", queries.routines.inout], ["CALL004", "routine.result-sets", queries.routines.resultSets], ["CALL005", "routine.out-cursor", queries.routines.cursor], ["CALL006", "routine.return-value", queries.routines.returnValue],
   ];
   for (const [id, feature, query] of routineCases) unsupported[id] = makeProbe(feature, () => db.call(query), () => counters.sideEffects, "BRAID_CALL_UNSUPPORTED", "routine.call");
+  unsupported.PRE008 = makeProbe("routine.call", () => db.call(queries.routines.call), () => counters.sideEffects, "BRAID_CALL_UNSUPPORTED", "routine.call");
+  unsupported.CALL007 = makeProbe("routine.call", () => db.call(queries.routines.call), () => counters.sideEffects, "BRAID_CALL_UNSUPPORTED", "routine.call");
   if (dialect === "sqlite") {
     const optionCases: readonly CertificationCaseId[] = ["TX020", "TX021", "TX022", "TX023", "TX024", "TX026", "TX027", "TX028", "TX029", "TX030", "TX031", "TX032", "TX033"];
     for (const id of optionCases) {
@@ -259,24 +352,50 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       unsupported[id] = makeProbe(rejectionFeature, () => db.tx(transactionOptions, async (tx) => { await tx.one(queries.identity); }), () => counters.sideEffects, "BRAID_TX_OPTION_UNSUPPORTED");
     }
   }
-  let bulkValues: unknown[][] = [];
+  const bulkValues: unknown[][] = [];
+  const approximateSpecialProof = async (): Promise<void> => {
+    if (dialect === "postgres") {
+      const value = await db.one(approximateSpecialQuery(tag, dialect));
+      const row = value as { readonly nan?: unknown; readonly pos_inf?: unknown; readonly neg_inf?: unknown };
+      if (!Number.isNaN(row.nan) || row.pos_inf !== Infinity || row.neg_inf !== -Infinity) throw new Error("Bun.SQL PostgreSQL special-float guard failed.");
+      return;
+    }
+    if (dialect === "sqlite") {
+      const value = await db.one(approximateSpecialQuery(tag, dialect));
+      const row = value as { readonly pos_inf?: unknown; readonly neg_inf?: unknown };
+      if (row.pos_inf !== Infinity || row.neg_inf !== -Infinity) throw new Error("Bun.SQL SQLite special-float guard failed.");
+      return;
+    }
+    let value: Record<string, unknown>;
+    try {
+      value = await nativeRow(client, "SELECT CAST(? AS DOUBLE) AS nan, CAST(? AS DOUBLE) AS pos_inf, CAST(? AS DOUBLE) AS neg_inf", [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]);
+    } catch (error) {
+      if (dialect !== "mysql" || !(error instanceof Error) || (error as { readonly code?: unknown }).code !== "ERR_MYSQL_SERVER_ERROR") throw error;
+      return;
+    }
+    if (value.nan !== null || typeof value.pos_inf !== "number" || typeof value.neg_inf !== "number"
+      || !Number.isFinite(value.pos_inf) || !Number.isFinite(value.neg_inf)) {
+      throw new Error(`Bun.SQL ${dialect} special-float lossiness profile changed.`);
+    }
+  };
   const guarded: NonNullable<CertificationFixture["guarded"]> = {
     "numeric.exact-integer": { prove: async () => {
-      const value = await db.one(tag.rows`SELECT ${"9007199254740991"} AS value`);
-      if ((value as { readonly value?: unknown }).value !== "9007199254740991") throw new Error("Bun.SQL exact-integer guard failed.");
+      const raw = await nativeRow(client, exactIntegerSql(dialect));
+      if (raw.value !== 9007199254740993n) throw new Error("Bun.SQL exact-integer native width guard failed.");
+      const value = await db.one(exactIntegerQuery(tag, dialect));
+      if ((value as { readonly value?: unknown }).value !== "9007199254740993") throw new Error("Bun.SQL exact-integer canonical guard failed.");
     } },
     "numeric.approximate-float": { prove: async () => {
-      const value = await db.one(tag.rows`SELECT ${1.5} AS value`);
-      if (typeof (value as { readonly value?: unknown }).value !== "number") throw new Error("Bun.SQL float guard failed.");
+      const value = await db.one(approximateFloatQuery(tag, dialect));
+      if (!Object.is((value as { readonly value?: unknown }).value, 1.5)) throw new Error("Bun.SQL float guard failed.");
     } },
     "numeric.bind-exact": { prove: async () => {
-      const value = await db.one(tag.rows`SELECT ${"9007199254740991"} AS value`);
-      if ((value as { readonly value?: unknown }).value !== "9007199254740991") throw new Error("Bun.SQL exact bind guard failed.");
+      const raw = await nativeRow(client, exactIntegerBindSql(dialect), ["9007199254740993"]);
+      if (raw.value !== 9007199254740993n) throw new Error("Bun.SQL exact bind native width guard failed.");
+      const value = await db.one(exactIntegerBindQuery(tag, dialect));
+      if ((value as { readonly value?: unknown }).value !== "9007199254740993") throw new Error("Bun.SQL exact bind canonical guard failed.");
     } },
-    "numeric.approximate-special": { prove: async () => {
-      const value = await db.one(tag.rows`SELECT ${1.5} AS value`);
-      if (typeof (value as { readonly value?: unknown }).value !== "number") throw new Error("Bun.SQL special-float guard failed.");
-    } },
+    ...(dialect === "postgres" || dialect === "sqlite" ? { "numeric.approximate-special": { prove: approximateSpecialProof } } : {}),
     "numeric.command-metadata": { prove: async () => {
       const result = await db.execute(queries.command);
       if (!Number.isSafeInteger(result.command.affectedRows)) throw new Error("Bun.SQL command-count guard failed.");
@@ -295,12 +414,97 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       if (row === null || typeof (row as { readonly value?: unknown }).value !== "object") throw new Error("Bun.SQL JSON parser guard failed.");
     } };
   }
+  const representationUnsupported: NonNullable<CertificationFixture["representationUnsupported"]> = {};
+  if (dialect === "mysql" || dialect === "mariadb" || dialect === "sqlite") {
+    representationUnsupported["numeric.exact-decimal"] = { prove: async () => {
+      let value: unknown;
+      try {
+        value = (await db.one(exactDecimalQuery(tag, dialect))) as { readonly value?: unknown };
+      } catch (error) {
+        if (!(error instanceof Error) || (error as { readonly code?: unknown }).code !== "BRAID_RESULT_EXACTNESS") throw error;
+        return;
+      }
+      if (dialect === "sqlite") {
+        if (typeof (value as { readonly value?: unknown }).value !== "number") throw new Error("Bun.SQL SQLite decimal representation changed.");
+        return;
+      }
+      throw new Error("Bun.SQL decimal representation unexpectedly normalized.");
+    } };
+  }
+  if (dialect === "mysql" || dialect === "mariadb" || dialect === "sqlite") {
+    representationUnsupported["data.json-parsed"] = { prove: async () => {
+      const row = await db.one(jsonQuery(tag, dialect));
+      if (typeof (row as { readonly value?: unknown }).value !== "string") throw new Error(`Bun.SQL ${dialect} JSON representation changed.`);
+    } };
+  }
+  if (dialect === "postgres" || dialect === "mysql" || dialect === "mariadb") {
+    representationUnsupported["data.json-lossless-text"] = { prove: async () => {
+      const row = await db.one(jsonQuery(tag, dialect));
+      if ((row as { readonly value?: unknown }).value === null || typeof (row as { readonly value?: unknown }).value !== "object") {
+        throw new Error(`Bun.SQL ${dialect} JSON parser representation changed.`);
+      }
+    } };
+    representationUnsupported["data.temporal-lossless"] = { prove: async () => {
+      const row = await db.one(temporalQuery(tag, dialect));
+      if (!((row as { readonly value?: unknown }).value instanceof Date)) throw new Error(`Bun.SQL ${dialect} temporal representation changed.`);
+    } };
+  }
+  if (dialect === "mysql" || dialect === "mariadb") {
+    representationUnsupported["data.binary"] = { prove: async () => {
+      try {
+        await db.one(queries.special.RES010!);
+      } catch (error) {
+        if (error instanceof Error && (error as { readonly code?: unknown }).code === "BRAID_RESULT_EXACTNESS") return;
+        throw error;
+      }
+      throw new Error(`Bun.SQL ${dialect} binary representation unexpectedly normalized.`);
+    } };
+    representationUnsupported["numeric.approximate-special"] = { prove: approximateSpecialProof };
+  }
+  const nativeReturningUnsupported = async (operation: "insert" | "update" | "delete"): Promise<void> => {
+    const statements = {
+      insert: `INSERT INTO ${quoteIdentifier(dialect, table)} (value) VALUES (?) RETURNING id`,
+      update: `UPDATE ${quoteIdentifier(dialect, table)} SET value = ? WHERE id = 1 RETURNING id`,
+      delete: `DELETE FROM ${quoteIdentifier(dialect, table)} WHERE id = 1 RETURNING id`,
+    };
+    try {
+      await client.unsafe(statements[operation], [`native-${operation}`]);
+    } catch (error) {
+      if (error instanceof Error && (error as { readonly code?: unknown }).code === "ERR_MYSQL_SYNTAX_ERROR") return;
+      throw error;
+    }
+    throw new Error(`Bun.SQL ${dialect} unexpectedly accepted ${operation.toUpperCase()} RETURNING.`);
+  };
+  if (dialect === "mysql") {
+    representationUnsupported["dml.insert-returning"] = { prove: () => nativeReturningUnsupported("insert") };
+    representationUnsupported["dml.update-returning"] = { prove: () => nativeReturningUnsupported("update") };
+    representationUnsupported["dml.delete-returning"] = { prove: () => nativeReturningUnsupported("delete") };
+  } else if (dialect === "mariadb") {
+    representationUnsupported["dml.update-returning"] = { prove: () => nativeReturningUnsupported("update") };
+  }
+  if (dialect === "sqlite") {
+    representationUnsupported["data.temporal-native"] = { prove: async () => {
+      const row = await db.one(tag.rows`SELECT datetime('2026-09-14 12:34:56.789') AS value`);
+      if (typeof (row as { readonly value?: unknown }).value !== "string") throw new Error("Bun.SQL SQLite temporal representation changed.");
+    } };
+    representationUnsupported["data.timezone"] = { prove: async () => {
+      const row = await db.one(tag.rows`SELECT '2026-09-14 12:34:56.789+05:30' AS value`);
+      if (typeof (row as { readonly value?: unknown }).value !== "string") throw new Error("Bun.SQL SQLite timezone representation changed.");
+    } };
+  }
   if (dialect !== "sqlite") {
     guarded["data.temporal-native"] = { prove: async () => {
-      const row = await db.one(tag.rows`SELECT CURRENT_TIMESTAMP AS value`);
+      const row = await db.one(temporalQuery(tag, dialect));
       if (!((row as { readonly value?: unknown }).value instanceof Date || typeof (row as { readonly value?: unknown }).value === "string")) throw new Error("Bun.SQL temporal guard failed.");
     } };
-    guarded["data.timezone"] = guarded["data.temporal-native"];
+    guarded["data.timezone"] = { prove: async () => {
+      const row = await db.one(timezoneQuery(tag, dialect));
+      const value = (row as { readonly value?: unknown }).value;
+      if (!(value instanceof Date) || !Number.isFinite(value.getTime())) throw new Error("Bun.SQL timezone guard did not return a valid Date.");
+      if (dialect === "postgres" && value.toISOString() !== "2026-09-14T07:04:56.789Z") {
+        throw new Error("Bun.SQL PostgreSQL timezone guard changed the UTC instant.");
+      }
+    } };
   }
   if (dialect === "postgres" || dialect === "mysql" || dialect === "mariadb") {
     for (const isolation of ["read-uncommitted", "read-committed", "repeatable-read", "serializable"] as const) {
@@ -312,10 +516,64 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       if (!rejected) throw new Error("Bun.SQL read-only transaction accepted a write.");
     } };
   }
+  const mutationSentinel = async (): Promise<unknown> => {
+    const rows = await client.unsafe<readonly Record<string, unknown>[]>(`SELECT id, value FROM ${quoteIdentifier(dialect, sentinelTable)} ORDER BY id`, []);
+    if (!Array.isArray(rows) || rows.length !== 1 || String(rows[0]?.id) !== "1" || rows[0]?.value !== sentinelValue) {
+      throw new Error("Bun.SQL injection mutation sentinel changed.");
+    }
+    return { id: "1", value: sentinelValue };
+  };
+  const transactionCleanup = async (): Promise<void> => {
+    const primary = new Error("cert-transaction-primary");
+    counters.failRollbackObserver = true;
+    let caught: unknown;
+    try {
+      await db.tx(async () => { throw primary; });
+    } catch (error) {
+      caught = error;
+    }
+    if (!(caught instanceof AggregateError) || caught.errors[0] !== primary
+      || !caught.errors.some((error) => error instanceof Error && (error as { readonly code?: unknown }).code === "BRAID_RESOURCE_CLEANUP")) {
+      throw new Error("Bun.SQL transaction cleanup did not preserve primary and cleanup errors.");
+    }
+    await db.one(queries.identity);
+  };
+  const readOnlyWrite = async (): Promise<void> => {
+    if (!queries.transaction) throw new Error("Bun.SQL read-only proof requires transaction queries.");
+    await reset();
+    await db.tx(async (tx) => { await tx.execute(queries.transaction!.insert); });
+    const committed = await db.all(queries.transaction.visible);
+    if (committed.length !== 1) throw new Error("Bun.SQL read-write transaction did not commit its write.");
+    let caught: unknown;
+    try {
+      await db.tx({ readOnly: true }, async (tx) => { await tx.execute(queries.transaction!.insert); });
+    } catch (error) {
+      caught = error;
+    }
+    if (dialect === "sqlite") {
+      if ((caught as { readonly code?: unknown }).code !== "BRAID_TX_OPTION_UNSUPPORTED"
+        || (caught as { readonly feature?: unknown }).feature !== "transaction.read-only") {
+        throw new Error("Bun.SQL SQLite read-only transaction did not reject with its public unsupported contract.");
+      }
+    } else if (!(caught instanceof Error)) {
+      throw new Error("Bun.SQL read-only transaction accepted a write.");
+    }
+    const visible = await db.all(queries.transaction.visible);
+    if (visible.length !== 1) throw new Error("Bun.SQL read-only transaction changed committed state.");
+    await reset();
+  };
+  const metrics = {
+    snapshot: () => ({ borrowedLeases: counters.borrowed, cleanupBalance: counters.cleanupBalance }),
+    sideEffects: () => counters.sideEffects,
+    mutationSentinel,
+    transactionCleanup,
+    readOnlyWrite,
+  } as CertificationFixture["metrics"];
   const fixture: CertificationFixture = {
     db,
     queries,
-    metrics: { snapshot: () => ({ borrowedLeases: counters.borrowed, cleanupBalance: counters.cleanupBalance }), sideEffects: () => counters.sideEffects },
+    metrics,
+    representationUnsupported,
     reset,
     unsupported,
     guarded,
@@ -330,17 +588,29 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       acquireCount: () => bulkExecutions,
       executeCount: () => bulkExecutions,
       middleFailure: async () => {
-        let index = 0;
-        await db.bulk(["middle-one", "middle-failure", "middle-three"], (input) => {
-          if (index++ === 1) throw new Error("cert-bulk-middle-failure");
-          return tag.command`INSERT INTO ${tableSql} (value) VALUES (${input})`;
-        });
+        await reset();
+        let error: unknown;
+        try {
+          await db.bulk(["middle-one", "middle-failure", "middle-three"], (input) => {
+            return tag.command`INSERT INTO ${tableSql} (value) VALUES (${input})`;
+          });
+        } catch (caught) {
+          error = caught;
+        }
+        if (error === undefined) throw new Error("Bun.SQL bulk middle-item failure did not reject.");
+        const observedRows = (await db.all(queries.transaction!.visible)).map((row) => (row as { readonly value?: unknown }).value);
+        const expectedRows = ["middle-one"];
+        if (JSON.stringify(observedRows) !== JSON.stringify(expectedRows)) throw new Error("Bun.SQL bulk middle-item durability changed.");
+        return { error, observedRows, expectedRows, durability: "prefix" as const };
       },
       values: () => bulkValues,
     } as BulkConformanceFixture<unknown>,
     close: async () => {
       try { await client.unsafe(`DROP TABLE ${quoteIdentifier(dialect, table)}`, []); }
-      finally { await client.close?.(); }
+      finally {
+        try { await client.unsafe(`DROP TABLE ${quoteIdentifier(dialect, sentinelTable)}`, []); }
+        finally { await client.close?.(); }
+      }
     },
   };
   return fixture;
