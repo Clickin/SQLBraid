@@ -849,28 +849,6 @@ function closeLob(lob: OracleLobLike): Promise<void> {
   });
 }
 
-async function runOracleCleanup(
-  scope: ReturnType<typeof createCleanupScope>,
-  primary: unknown,
-  hasPrimary: boolean,
-): Promise<void> {
-  try {
-    if (hasPrimary) await scope.run(primary);
-    else await scope.run();
-  } catch (error) {
-    if (hasPrimary || error instanceof AggregateError) throw error;
-    const cause = error instanceof Error && "cause" in error ? error.cause : error;
-    const aggregate = new AggregateError([cause], "BRAID_RESOURCE_CLEANUP: resource cleanup failed.", { cause });
-    Object.defineProperty(aggregate, "code", {
-      configurable: false,
-      enumerable: true,
-      value: "BRAID_RESOURCE_CLEANUP",
-      writable: false,
-    });
-    throw aggregate;
-  }
-}
-
 function oracleLob(value: unknown, name: string): OracleLobLike | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value) || typeof (value as OracleLobLike).getData !== "function") return undefined;
   const lob = value as OracleLobLike;
@@ -1002,11 +980,6 @@ async function normalizeDmlReturning(
   }
 
   const cleanupScope = createCleanupScope();
-  let cleanupRegistered = false;
-  const registerCleanup = (action: () => void | PromiseLike<void>): void => {
-    cleanupRegistered = true;
-    cleanupScope.add(action);
-  };
   let failure: unknown;
   let rows: readonly Record<string, unknown>[] | undefined;
   try {
@@ -1022,7 +995,7 @@ async function normalizeDmlReturning(
         if (hintType !== undefined && materializedLobType(hintType) && value !== null && value !== undefined && !isMaterializedLobValue(hintType, value)) {
           const lob = oracleLob(value, name);
           if (lob === undefined) throw new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name} did not return a Lob.`);
-          registerCleanup(() => closeLob(lob));
+          cleanupScope.add(() => closeLob(lob));
           value = await materializeLob(lob, hintType, name);
         }
         assertOracleNumericValue(hintType, value);
@@ -1034,9 +1007,57 @@ async function normalizeDmlReturning(
   } catch (error) {
     failure = error;
   }
-  if (failure === undefined && !cleanupRegistered) await cleanupScope.run();
-  else await runOracleCleanup(cleanupScope, failure, failure !== undefined);
+  if (failure === undefined) await cleanupScope.run();
+  else await cleanupScope.run(failure);
   return { rows: rows!, rowCount, kind: "rows" };
+}
+
+function validateOracleTransactionOptions(transactionOptions?: TransactionOptions): void {
+  if (
+    transactionOptions !== undefined
+    && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
+  ) {
+    const error = new TypeError("BRAID_TX_OPTIONS_INVALID: Oracle transaction options must be an object.");
+    Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+    throw error;
+  }
+  if (transactionOptions !== undefined) {
+    const unexpected = Object.keys(transactionOptions).find((key) => key !== "isolation" && key !== "readOnly");
+    if (unexpected !== undefined) {
+      const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: Unknown Oracle transaction option: ${unexpected}.`);
+      Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+      throw error;
+    }
+  }
+  const isolation = transactionOptions?.isolation;
+  if (isolation !== undefined
+    && isolation !== "read-uncommitted"
+    && isolation !== "read-committed"
+    && isolation !== "repeatable-read"
+    && isolation !== "serializable") {
+    const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: Oracle does not recognize transaction isolation ${String(isolation)}.`);
+    Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+    throw error;
+  }
+  if (transactionOptions?.readOnly !== undefined && typeof transactionOptions.readOnly !== "boolean") {
+    const error = new TypeError("BRAID_TX_OPTIONS_INVALID: Oracle readOnly must be a boolean.");
+    Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
+    throw error;
+  }
+  if (isolation !== undefined && transactionOptions?.readOnly !== undefined) {
+    throw new UnsupportedFeatureError(
+      `transaction.isolation.${isolation}`,
+      "BRAID_TX_OPTION_UNSUPPORTED",
+      "Oracle does not support combining isolation and readOnly transaction options.",
+    );
+  }
+  if (isolation === "read-uncommitted" || isolation === "repeatable-read") {
+    throw new UnsupportedFeatureError(
+      `transaction.isolation.${isolation}`,
+      "BRAID_TX_OPTION_UNSUPPORTED",
+      `Oracle does not support transaction isolation ${isolation}.`,
+    );
+  }
 }
 
 function makeOracledbExecutor(
@@ -1049,51 +1070,8 @@ function makeOracledbExecutor(
   const fetchSize = streamFetchSize(options);
   const control = async (text: string): Promise<void> => { await connection.execute(text, [], executeOptions(options, driver)); };
   const begin = async (transactionOptions?: TransactionOptions): Promise<void> => {
-    if (
-      transactionOptions !== undefined
-      && (transactionOptions === null || typeof transactionOptions !== "object" || Array.isArray(transactionOptions))
-    ) {
-      const error = new TypeError("BRAID_TX_OPTIONS_INVALID: Oracle transaction options must be an object.");
-      Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
-      throw error;
-    }
-    if (transactionOptions !== undefined) {
-      const unexpected = Object.keys(transactionOptions).find((key) => key !== "isolation" && key !== "readOnly");
-      if (unexpected !== undefined) {
-        const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: Unknown Oracle transaction option: ${unexpected}.`);
-        Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
-        throw error;
-      }
-    }
+    validateOracleTransactionOptions(transactionOptions);
     const isolation = transactionOptions?.isolation;
-    if (isolation !== undefined
-      && isolation !== "read-uncommitted"
-      && isolation !== "read-committed"
-      && isolation !== "repeatable-read"
-      && isolation !== "serializable") {
-      const error = new TypeError(`BRAID_TX_OPTIONS_INVALID: Oracle does not recognize transaction isolation ${String(isolation)}.`);
-      Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
-      throw error;
-    }
-    if (transactionOptions?.readOnly !== undefined && typeof transactionOptions.readOnly !== "boolean") {
-      const error = new TypeError("BRAID_TX_OPTIONS_INVALID: Oracle readOnly must be a boolean.");
-      Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
-      throw error;
-    }
-    if (isolation !== undefined && transactionOptions?.readOnly !== undefined) {
-      throw new UnsupportedFeatureError(
-        `transaction.isolation.${isolation}`,
-        "BRAID_TX_OPTION_UNSUPPORTED",
-        "Oracle does not support combining isolation and readOnly transaction options.",
-      );
-    }
-    if (isolation === "read-uncommitted" || isolation === "repeatable-read") {
-      throw new UnsupportedFeatureError(
-        `transaction.isolation.${isolation}`,
-        "BRAID_TX_OPTION_UNSUPPORTED",
-        `Oracle does not support transaction isolation ${isolation}.`,
-      );
-    }
     if (isolation === "read-committed") await control("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     else if (isolation === "serializable") await control("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
     else if (transactionOptions?.readOnly === true) await control("SET TRANSACTION READ ONLY");
@@ -1105,6 +1083,7 @@ function makeOracledbExecutor(
     environment: policy === defaultTypePolicy && driver === defaultDriver && oracledb.thin
       ? oracleEnvironment
       : customOracleEnvironment(policy, typeof connection.break === "function"),
+    validateTransactionOptions: validateOracleTransactionOptions,
     async bulk(bulk: RenderedBulk, binding: BulkBindingDescription, executionOptions?: ExecutionOptions): Promise<BulkExecutionResult> {
       assertExecutionOptions(connection, executionOptions);
       if (typeof connection.executeMany !== "function") {
@@ -1182,11 +1161,6 @@ function makeOracledbExecutor(
       const ordinals = oracleOutputOrdinals(rendered);
       const resultSets: DriverRoutineResult["resultSets"][number][] = [];
       const cleanupScope = createCleanupScope();
-      let cleanupRegistered = false;
-      const registerCleanup = (action: () => void | PromiseLike<void>): void => {
-        cleanupRegistered = true;
-        cleanupScope.add(action);
-      };
       let failure: unknown;
       let value: DriverRoutineResult | undefined;
       try {
@@ -1197,8 +1171,8 @@ function makeOracledbExecutor(
             executeOptions(options, driver, true),
           ));
           const implicit = Array.isArray(result.implicitResults) ? result.implicitResults : [];
-          for (const resource of implicit) registerCleanup(() => resource.close());
-          if (result.resultSet) registerCleanup(() => result.resultSet!.close());
+          for (const resource of implicit) cleanupScope.add(() => resource.close());
+          if (result.resultSet) cleanupScope.add(() => result.resultSet!.close());
           const explicit = parameters
             .map((parameter, index) => ({ parameter, index, ordinal: ordinals[index], value: ordinals[index] === undefined ? undefined : outBindValue(result.outBinds, ordinals[index]!, parameter.outputName) }))
             .filter(({ ordinal }) => ordinal !== undefined);
@@ -1226,10 +1200,10 @@ function makeOracledbExecutor(
               } else {
                 const resultSet = value as OracleResultSetLike;
                 explicitCursors.push({ name, index, resultSet });
-                registerCleanup(() => resultSet.close());
+                cleanupScope.add(() => resultSet.close());
               }
               if (!name && value && typeof value === "object" && typeof (value as OracleResultSetLike).close === "function") {
-                registerCleanup(() => (value as OracleResultSetLike).close());
+                cleanupScope.add(() => (value as OracleResultSetLike).close());
               }
               continue;
             }
@@ -1241,7 +1215,7 @@ function makeOracledbExecutor(
                 recordExplicitResourceFailure(new UnsupportedFeatureError("routine.out", "BRAID_CALL_LOB_UNSUPPORTED", `Oracle output ${name ?? `parameter ${index + 1}`} did not return a Lob.`), index);
               } else {
                 (explicitLobs ??= new Map()).set(index, lob);
-                registerCleanup(() => closeLob(lob));
+                cleanupScope.add(() => closeLob(lob));
               }
             } catch (error) {
               recordExplicitResourceFailure(error, index);
@@ -1290,8 +1264,8 @@ function makeOracledbExecutor(
       } catch (error) {
         failure = error;
       }
-      if (failure === undefined && !cleanupRegistered) await cleanupScope.run();
-      else await runOracleCleanup(cleanupScope, failure, failure !== undefined);
+      if (failure === undefined) await cleanupScope.run();
+      else await cleanupScope.run(failure);
       return value!;
     },
     async *stream<Row>(rendered: RenderedStatement, binding?: StatementBindingDescription, executionOptions?: ExecutionOptions): AsyncGenerator<Row> {
@@ -1369,7 +1343,8 @@ function makeOracledbExecutor(
         if (breakPromise !== undefined) await breakPromise;
         if (breakFailure !== undefined) cleanupScope.add(() => { throw breakFailure; });
         const primary = signal?.aborted ? signal.reason : failure;
-        await runOracleCleanup(cleanupScope, primary, primary !== undefined);
+        if (primary === undefined) await cleanupScope.run();
+        else await cleanupScope.run(primary);
       }
     },
     begin,
@@ -1405,6 +1380,7 @@ export function createOracledbPoolProvider(pool: OraclePoolLike, options: Omit<O
     environment: (options.typePolicy === undefined || options.typePolicy === defaultTypePolicy) && (options.driver === undefined || options.driver === defaultDriver) && oracledb.thin
       ? oracleEnvironment
       : customOracleEnvironment(options.typePolicy ?? defaultTypePolicy, true),
+    validateTransactionOptions: validateOracleTransactionOptions,
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
       assertPoolConnection(connection);

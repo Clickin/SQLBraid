@@ -206,11 +206,14 @@ test("Oracle routine LOB read failure destroys unread sibling Lobs and preserves
   const query = oracleSql.call`BEGIN braid_lob(${oracleSql.out("text", oracleParameter.clob())}, ${oracleSql.out("bytes", oracleParameter.blob())}); END;`;
   await assert.rejects(
     async () => executor.call(query.render()),
-    (error: unknown) => error instanceof AggregateError
-      && "code" in error
-      && error.code === "BRAID_RESOURCE_CLEANUP"
-      && error.errors[0] === primary
-      && error.errors.some((entry) => entry === cleanup),
+    (error: unknown) => {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "BRAID_RESOURCE_CLEANUP") return false;
+      const details = error as Error & { readonly cause?: unknown; readonly errors?: readonly unknown[] };
+      return details.cause === primary
+        && Array.isArray(details.errors)
+        && details.errors.includes(primary)
+        && details.errors.includes(cleanup);
+    },
   );
   assert.deepEqual(events, ["text-destroy", "bytes-destroy"]);
   assert.equal(text.closed, true);
@@ -237,10 +240,11 @@ test("Oracle pooled routine discards a lease after Lob cleanup failure", async (
     { driver: oracleDriver() },
   );
   const query = oracleSql.call`BEGIN braid_lob(${oracleSql.out("bytes", oracleParameter.blob())}); END;`;
-  await assert.rejects(() => db.call(query), (error: unknown) => error instanceof AggregateError
-    && "code" in error
-    && error.code === "BRAID_RESOURCE_CLEANUP"
-    && error.errors.some((entry) => entry === cleanup));
+  await assert.rejects(() => db.call(query), (error: unknown) => {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "BRAID_RESOURCE_CLEANUP") return false;
+    const details = error as Error & { readonly cause?: unknown };
+    return details.cause === cleanup;
+  });
   assert.deepEqual(events, ["execute", "bytes-destroy", "discard"]);
 });
 
