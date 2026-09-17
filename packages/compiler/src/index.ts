@@ -253,16 +253,100 @@ function dialectForModule(moduleSpecifier: string | undefined, options: OverlayO
   return postgresDialect;
 }
 
+interface LexicalScope {
+  readonly parent?: LexicalScope;
+  readonly bindings: Map<string, ts.Identifier>;
+  readonly variableScope: boolean;
+}
+
+function lexicalBindingOwner(sourceFile: ts.SourceFile): (identifier: ts.Identifier) => ts.Identifier | undefined {
+  const scopes = new Map<ts.Node, LexicalScope>();
+  const root: LexicalScope = { bindings: new Map(), variableScope: true };
+  scopes.set(sourceFile, root);
+  function bind(name: ts.BindingName, scope: LexicalScope): void {
+    if (ts.isIdentifier(name)) scope.bindings.set(name.text, name);
+    else for (const element of name.elements) if (ts.isBindingElement(element)) bind(element.name, scope);
+  }
+  function visit(node: ts.Node, scope: LexicalScope): void {
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) &&
+      node.name
+    )
+      bind(node.name, scope);
+    if (ts.isModuleDeclaration(node) && ts.isIdentifier(node.name)) bind(node.name, scope);
+    if (ts.isFunctionLike(node)) {
+      const parameters: LexicalScope = { parent: scope, bindings: new Map(), variableScope: true };
+      scopes.set(node, parameters);
+      if (ts.isFunctionExpression(node) && node.name) bind(node.name, parameters);
+      // Defaults see parameters and the enclosing scope, never declarations in the body.
+      ts.forEachChild(node, (child) => {
+        const owner = ts.isParameter(child) || ("body" in node && child === node.body) ? parameters : scope;
+        scopes.set(child, owner);
+        visit(child, owner);
+      });
+      return;
+    }
+    if (
+      ts.isBlock(node) ||
+      ts.isCaseBlock(node) ||
+      ts.isCatchClause(node) ||
+      ts.isForStatement(node) ||
+      ts.isForOfStatement(node) ||
+      ts.isForInStatement(node) ||
+      ts.isClassLike(node) ||
+      ts.isModuleDeclaration(node) ||
+      ts.isModuleBlock(node)
+    ) {
+      scope = {
+        parent: scope,
+        bindings: new Map(),
+        variableScope:
+          ts.isModuleBlock(node) ||
+          (ts.isBlock(node) && (ts.isFunctionLike(node.parent) || ts.isClassStaticBlockDeclaration(node.parent))),
+      };
+      scopes.set(node, scope);
+      if (ts.isClassLike(node) && node.name) bind(node.name, scope);
+    }
+    if (ts.isVariableDeclaration(node)) {
+      let owner = scope;
+      if (ts.isVariableDeclarationList(node.parent) && !(node.parent.flags & ts.NodeFlags.BlockScoped))
+        while (!owner.variableScope && owner.parent) owner = owner.parent;
+      bind(node.name, owner);
+    } else if (ts.isParameter(node)) bind(node.name, scope);
+    else if (ts.isImportClause(node) && !node.isTypeOnly && node.name) bind(node.name, scope);
+    else if (ts.isNamespaceImport(node) && !node.parent.isTypeOnly) bind(node.name, scope);
+    else if (ts.isImportSpecifier(node) && !node.isTypeOnly && !node.parent.parent.isTypeOnly) bind(node.name, scope);
+    else if (ts.isImportEqualsDeclaration(node) && !node.isTypeOnly) bind(node.name, scope);
+    ts.forEachChild(node, (child) => visit(child, scope));
+  }
+  visit(sourceFile, root);
+  return (identifier) => {
+    let node: ts.Node | undefined = identifier;
+    while (node && !scopes.has(node)) node = node.parent;
+    for (let scope = node && scopes.get(node); scope; scope = scope.parent) {
+      const binding = scope.bindings.get(identifier.text);
+      if (binding) return binding;
+    }
+    return undefined;
+  };
+}
+
+interface ImportedBinding {
+  readonly name: ts.Identifier;
+  readonly moduleSpecifier: string;
+}
+
 interface ImportBindings {
-  readonly named: ReadonlyMap<string, string>;
-  readonly namespaces: ReadonlyMap<string, string>;
-  readonly defaults: ReadonlyMap<string, string>;
+  readonly named: ReadonlyMap<string, ImportedBinding>;
+  readonly namespaces: ReadonlyMap<string, ImportedBinding>;
+  readonly defaults: ReadonlyMap<string, ImportedBinding>;
+  readonly owns: (identifier: ts.Identifier, binding: ImportedBinding) => boolean;
 }
 
 function importBindings(sourceFile: ts.SourceFile, options: OverlayOptions): ImportBindings {
-  const named = new Map<string, string>();
-  const namespaces = new Map<string, string>();
-  const defaults = new Map<string, string>();
+  const named = new Map<string, ImportedBinding>();
+  const namespaces = new Map<string, ImportedBinding>();
+  const defaults = new Map<string, ImportedBinding>();
   const tagExport = options.tagExport ?? "sql";
   const modules = new Set(configuredModules(options));
   for (const statement of sourceFile.statements) {
@@ -274,49 +358,33 @@ function importBindings(sourceFile: ts.SourceFile, options: OverlayOptions): Imp
       continue;
     const clause = statement.importClause;
     if (!clause || clause.isTypeOnly) continue;
-    if (clause.name && tagExport === "default") defaults.set(clause.name.text, statement.moduleSpecifier.text);
+    const moduleSpecifier = statement.moduleSpecifier.text;
+    if (clause.name && tagExport === "default")
+      defaults.set(clause.name.text, { name: clause.name, moduleSpecifier });
     const bindings = clause.namedBindings;
     if (!bindings) continue;
     if (ts.isNamespaceImport(bindings)) {
-      namespaces.set(bindings.name.text, statement.moduleSpecifier.text);
+      namespaces.set(bindings.name.text, { name: bindings.name, moduleSpecifier });
       continue;
     }
     for (const element of bindings.elements) {
       if (element.isTypeOnly) continue;
       const imported = element.propertyName?.text ?? element.name.text;
-      if (imported === tagExport) named.set(element.name.text, statement.moduleSpecifier.text);
+      if (imported === tagExport) named.set(element.name.text, { name: element.name, moduleSpecifier });
     }
   }
-  return { named, namespaces, defaults };
-}
-
-function isShadowed(identifier: ts.Identifier): boolean {
-  let current: ts.Node | undefined = identifier.parent;
-  while (current) {
-    if (
-      ts.isFunctionLike(current) &&
-      current.parameters.some((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === identifier.text)
-    )
-      return true;
-    if (
-      ts.isCatchClause(current) &&
-      current.variableDeclaration &&
-      ts.isIdentifier(current.variableDeclaration.name) &&
-      current.variableDeclaration.name.text === identifier.text
-    )
-      return true;
-    if (ts.isBlock(current) || ts.isSourceFile(current)) {
-      for (const statement of current.statements) {
-        if (ts.isVariableStatement(statement))
-          for (const declaration of statement.declarationList.declarations)
-            if (ts.isIdentifier(declaration.name) && declaration.name.text === identifier.text) return true;
-        if (ts.isClassDeclaration(statement) && statement.name?.text === identifier.text) return true;
-        if (ts.isFunctionDeclaration(statement) && statement.name?.text === identifier.text) return true;
-      }
-    }
-    current = current.parent;
-  }
-  return false;
+  const checker = options.typeChecker;
+  const owner = checker ? undefined : lexicalBindingOwner(sourceFile);
+  return {
+    named,
+    namespaces,
+    defaults,
+    owns: (identifier, binding) => {
+      if (!checker) return owner?.(identifier) === binding.name;
+      const symbol = checker.getSymbolAtLocation(identifier);
+      return symbol !== undefined && symbol === checker.getSymbolAtLocation(binding.name);
+    },
+  };
 }
 
 function explicitResultKind(expression: ts.Expression): "rows" | "command" | "call" | undefined {
@@ -345,25 +413,28 @@ function tagExpression(expression: ts.Expression): ts.Expression {
 }
 
 function importedTagModule(expression: ts.Expression, bindings: ImportBindings, tagExport: string): string | undefined {
-  if (ts.isIdentifier(expression)) return bindings.named.get(expression.text) ?? bindings.defaults.get(expression.text);
+  if (ts.isIdentifier(expression)) {
+    const binding = bindings.named.get(expression.text) ?? bindings.defaults.get(expression.text);
+    return binding && bindings.owns(expression, binding) ? binding.moduleSpecifier : undefined;
+  }
   if (ts.isCallExpression(expression) && explicitResultKind(expression) === "call")
     return importedTagModule(expression.expression, bindings, tagExport);
   if (!ts.isPropertyAccessExpression(expression)) return undefined;
-  if (expression.name.text === tagExport && ts.isIdentifier(expression.expression))
-    return bindings.namespaces.get(expression.expression.text);
+  if (expression.name.text === tagExport && ts.isIdentifier(expression.expression)) {
+    const binding = bindings.namespaces.get(expression.expression.text);
+    return binding && bindings.owns(expression.expression, binding) ? binding.moduleSpecifier : undefined;
+  }
   if (explicitResultKind(expression)) return importedTagModule(expression.expression, bindings, tagExport);
   return undefined;
 }
 
-function tagRoot(expression: ts.Expression): ts.Identifier | undefined {
+function tagOwner(expression: ts.Expression): ts.Expression {
   expression = tagExpression(expression);
-  if (ts.isIdentifier(expression)) return expression;
   if (ts.isCallExpression(expression) && explicitResultKind(expression) === "call")
-    return tagRoot(expression.expression);
+    return tagOwner(expression.expression);
   if (ts.isPropertyAccessExpression(expression) && explicitResultKind(expression))
-    return tagRoot(expression.expression);
-  if (ts.isPropertyAccessExpression(expression) && ts.isIdentifier(expression.expression)) return expression.expression;
-  return undefined;
+    return tagOwner(expression.expression);
+  return expression;
 }
 
 function resolvedModulePath(
@@ -379,84 +450,75 @@ function resolvedModulePath(
   ).resolvedModule?.resolvedFileName;
 }
 
-function catalogModuleFromDeclaration(declaration: ts.Declaration): string | undefined {
-  let owner: ts.Node | undefined = declaration;
-  while (owner) {
-    if (
-      (ts.isImportDeclaration(owner) || ts.isExportDeclaration(owner)) &&
-      owner.moduleSpecifier &&
-      ts.isStringLiteral(owner.moduleSpecifier)
-    )
-      return owner.moduleSpecifier.text;
-    owner = owner.parent;
-  }
-  return undefined;
-}
-
-function catalogReexportFromDeclaration(
-  declaration: ts.Declaration,
-  sourceFile: ts.SourceFile,
-  options: OverlayOptions,
-  _checker: ts.TypeChecker,
-): string | undefined {
-  let owner: ts.Node | undefined = declaration;
-  while (owner && !ts.isImportDeclaration(owner)) owner = owner.parent;
-  if (!owner || !owner.moduleSpecifier || !ts.isStringLiteral(owner.moduleSpecifier)) return undefined;
-  const imported = owner.moduleSpecifier.text;
-  if (AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === imported)) return imported;
-  const resolved = resolvedModulePath(imported, sourceFile, options);
-  const importedText = resolved ? ts.sys.readFile(resolved) : undefined;
-  const importedFile =
-    resolved && importedText !== undefined
-      ? ts.createSourceFile(resolved, importedText, ts.ScriptTarget.Latest, true, scriptKindForFileName(resolved))
-      : undefined;
-  for (const statement of importedFile?.statements ?? []) {
-    if (
-      ts.isExportDeclaration(statement) &&
-      statement.moduleSpecifier &&
-      ts.isStringLiteral(statement.moduleSpecifier)
-    ) {
-      const candidate = statement.moduleSpecifier.text;
-      if (AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === candidate)) return candidate;
-    }
-  }
-  return undefined;
-}
-
 function checkerTagModule(
   expression: ts.Expression,
   sourceFile: ts.SourceFile,
   options: OverlayOptions,
+  checker: ts.TypeChecker,
 ): string | undefined {
-  const checker = options.typeChecker;
-  if (!checker) return undefined;
-  const symbolNode = ts.isPropertyAccessExpression(expression) ? expression.name : expression;
-  let symbol = checker.getSymbolAtLocation(symbolNode);
-  if (!symbol && ts.isPropertyAccessExpression(expression))
-    symbol = checker.getTypeAtLocation(expression.expression).getProperty(expression.name.text);
-  if (!symbol) return undefined;
-  while ((symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+  const modules = configuredModules(options);
+  const tagExport = options.tagExport ?? "sql";
+  const visited = new Set<ts.Symbol>();
+  function unalias(symbol: ts.Symbol): ts.Symbol {
+    return symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+  }
+  function exportedTag(moduleSpecifier: ts.Expression, name: string): string | undefined {
+    if (!ts.isStringLiteral(moduleSpecifier)) return undefined;
+    if (name === tagExport && modules.includes(moduleSpecifier.text)) return moduleSpecifier.text;
+    const moduleSymbol = checker.getSymbolAtLocation(moduleSpecifier);
+    const exported = moduleSymbol && checker.getExportsOfModule(moduleSymbol).find((symbol) => symbol.name === name);
+    return exported && symbolTag(exported);
+  }
+  function symbolTag(symbol: ts.Symbol): string | undefined {
+    if (visited.has(symbol)) return undefined;
+    visited.add(symbol);
     for (const declaration of symbol.declarations ?? []) {
-      const moduleSpecifier = catalogModuleFromDeclaration(declaration);
-      if (moduleSpecifier && AUTHORING_MODULE_CATALOG.some((entry) => entry.moduleSpecifier === moduleSpecifier))
-        return moduleSpecifier;
-      const reexport = catalogReexportFromDeclaration(declaration, sourceFile, options, checker);
-      if (reexport) return reexport;
+      if (ts.isImportSpecifier(declaration)) {
+        const clause = declaration.parent.parent;
+        if (declaration.isTypeOnly || clause.isTypeOnly) return undefined;
+        return exportedTag(clause.parent.moduleSpecifier, (declaration.propertyName ?? declaration.name).text);
+      }
+      if (ts.isImportClause(declaration)) {
+        if (declaration.isTypeOnly) return undefined;
+        return exportedTag(declaration.parent.moduleSpecifier, "default");
+      }
+      if (ts.isExportSpecifier(declaration)) {
+        const owner = declaration.parent.parent;
+        if (declaration.isTypeOnly || owner.isTypeOnly) return undefined;
+        if (owner.moduleSpecifier)
+          return exportedTag(owner.moduleSpecifier, (declaration.propertyName ?? declaration.name).text);
+        const local = checker.getExportSpecifierLocalTargetSymbol(declaration);
+        return local && symbolTag(local);
+      }
     }
-    const aliased = checker.getAliasedSymbol(symbol);
-    if (aliased === symbol) break;
-    symbol = aliased;
+    const target = unalias(symbol);
+    if (target !== symbol) return symbolTag(target);
+    for (const moduleSpecifier of modules) {
+      const resolved = resolvedModulePath(moduleSpecifier, sourceFile, options);
+      if (!resolved) continue;
+      const declaration = symbol.declarations?.find(
+        (entry) => ts.sys.resolvePath(entry.getSourceFile().fileName) === ts.sys.resolvePath(resolved),
+      );
+      if (!declaration) continue;
+      const moduleSymbol = checker.getSymbolAtLocation(declaration.getSourceFile());
+      const exported =
+        moduleSymbol && checker.getExportsOfModule(moduleSymbol).find((entry) => entry.name === tagExport);
+      if (exported && unalias(exported) === symbol) return moduleSpecifier;
+    }
+    return undefined;
   }
-  const declarations = symbol.declarations ?? [];
-  for (const moduleSpecifier of configuredModules(options)) {
-    const resolved = resolvedModulePath(moduleSpecifier, sourceFile, options);
-    if (!resolved) continue;
-    const canonical = ts.sys.resolvePath(resolved);
-    if (declarations.some((declaration) => ts.sys.resolvePath(declaration.getSourceFile().fileName) === canonical))
-      return moduleSpecifier;
+  const owner = tagOwner(expression);
+  if (ts.isIdentifier(owner)) {
+    const symbol = checker.getSymbolAtLocation(owner);
+    return symbol && symbolTag(symbol);
   }
-  if (ts.isCallExpression(expression)) return checkerTagModule(expression.expression, sourceFile, options);
-  if (ts.isPropertyAccessExpression(expression)) return checkerTagModule(expression.expression, sourceFile, options);
+  if (ts.isPropertyAccessExpression(owner) && ts.isIdentifier(owner.expression)) {
+    const namespace = checker.getSymbolAtLocation(owner.expression);
+    for (const declaration of namespace?.declarations ?? []) {
+      if (!ts.isNamespaceImport(declaration) || declaration.parent.isTypeOnly) continue;
+      return exportedTag(declaration.parent.parent.moduleSpecifier, owner.name.text);
+    }
+  }
   return undefined;
 }
 
@@ -469,12 +531,9 @@ function tagIdentity(
 ): { readonly name?: string; readonly moduleSpecifier?: string; readonly declaredResultKind: QueryResultKind } {
   const tag = tagExpression(expression);
   const kind = explicitResultKind(tag);
-  const root = tagRoot(tag);
-  const moduleSpecifier = root && !isShadowed(root) ? importedTagModule(tag, bindings, tagExport) : undefined;
   const checkedModule =
-    moduleSpecifier ??
-    (kind && root ? checkerTagModule(root, sourceFile, options) : undefined) ??
-    checkerTagModule(expression, sourceFile, options);
+    importedTagModule(tag, bindings, tagExport) ??
+    (options.typeChecker ? checkerTagModule(expression, sourceFile, options, options.typeChecker) : undefined);
   return {
     ...(checkedModule ? { name: expression.getText(sourceFile), moduleSpecifier: checkedModule } : {}),
     declaredResultKind: kind ?? "unknown",
