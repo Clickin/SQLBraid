@@ -13,3 +13,8 @@ approximate floating-point values are numbers, and binary values are
 SQLBraid does not rewrite SQL.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+
+If the Tedious connection does not expose the prepared-statement protocol
+(`prepare`, `execute`, or `unprepare`), the adapter rejects with
+`UnsupportedFeatureError` using feature `statement.prepare` and code
+`BRAID_PREPARE_UNSUPPORTED`.
