@@ -23,29 +23,17 @@ interface NativeStats {
   finalizeByStatement: number[];
 }
 
+interface NativeFaults {
+  readonly initFailure: unknown;
+  readonly firstNextFailure: unknown;
+  readonly midStreamFailure: unknown;
+  readonly cleanupFailure: unknown;
+}
+
 function expectedObject(key: string, value: unknown): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   defineResultProperty(result, key, value);
   return result;
-}
-
-function expectedSqliteFailure(message: string): Error & { readonly code: string } {
-  const error = new Error(message) as Error & { readonly code: string };
-  Object.defineProperty(error, "code", { value: "SQLITE_ERROR", enumerable: true });
-  return error;
-}
-
-function cleanupFailureError(): Error & { readonly code: string } {
-  const error = new Error("certification cleanup failure") as Error & { readonly code: string };
-  Object.defineProperty(error, "code", { value: "SQLITE_CERT_CLEANUP", enumerable: true });
-  return error;
-}
-
-function annotateSqliteError(error: unknown): unknown {
-  if (error && typeof error === "object" && !("code" in error)) {
-    Object.defineProperty(error, "code", { value: "SQLITE_ERROR", enumerable: true });
-  }
-  return error;
 }
 
 function targetCapabilities(): ExpectedCapabilityContract {
@@ -91,30 +79,32 @@ const expectedTransactionOptions: Readonly<Record<TransactionOptionKey, "guarant
   "combination:serializable+readWrite": "unsupported",
 };
 
-function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats): SqliteWasmDatabaseLike & { close(): void } {
+function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats, faults: NativeFaults): SqliteWasmDatabaseLike & { close(): void } {
   const database = native as SqliteWasmDatabaseLike & { close(): void };
   return {
     prepare(sqlText: string) {
       stats.prepares += 1;
-      stats.active += 1;
-      let statement: SqliteWasmStatementLike;
-      try {
-        statement = database.prepare(sqlText);
-      } catch (error) {
-        throw annotateSqliteError(error);
+      const statement = database.prepare(sqlText);
+      if (sqlText.includes("__cert_init_failure__")) {
+        statement.finalize();
+        throw faults.initFailure;
       }
+      stats.active += 1;
       let finalized = false;
       stats.finalizeByStatement.push(0);
       const statementIndex = stats.finalizeByStatement.length - 1;
+      let stepCalls = 0;
       const exposed: SqliteWasmStatementLike = {
         get columnCount() { return statement.columnCount; },
         get pointer() { return statement.pointer; },
         bind(...values) { statement.bind(...values); return exposed; },
         step() {
-          try { return statement.step(); }
-          catch (error) { throw annotateSqliteError(error); }
+          stepCalls += 1;
+          if (sqlText.includes("__cert_first_next_failure__") && stepCalls === 1) throw faults.firstNextFailure;
+          if (sqlText.includes("__cert_mid_stream_failure__") && stepCalls === 2) throw faults.midStreamFailure;
+          return statement.step();
         },
-        stepReset() { return statement.stepReset?.() === undefined ? exposed : exposed; },
+        stepReset() { statement.stepReset?.(); return exposed; },
         reset(alsoClearBinds) { statement.reset(alsoClearBinds); return exposed; },
         get(index) { return statement.get(index); },
         getColumnName(index) { return statement.getColumnName(index); },
@@ -125,7 +115,7 @@ function wrapNative(native: SqliteWasmDatabaseLike, stats: NativeStats): SqliteW
           stats.finalizeCalls += 1;
           stats.active -= 1;
           statement.finalize();
-          if (sqlText.includes("__cert_cleanup_failure__")) throw cleanupFailureError();
+          if (sqlText.includes("__cert_cleanup_failure__")) throw faults.cleanupFailure;
         },
       };
       return exposed;
@@ -149,12 +139,12 @@ function buildQueries(stats: NativeStats): CertificationFixture["queries"] {
     RES008: sql.rows`SELECT NULL AS value`,
     RES009: sql.rows`SELECT '안녕하세요' AS value`,
     RES010: sql.rows`SELECT ${new Uint8Array([0, 255, 16])} AS value`,
-    RES011: sql.rows`SELECT 'second' AS value`,
+    RES011: sql.rows`SELECT 'left' AS duplicate, 'right' AS duplicate`,
   };
   const many = sql.rows`SELECT 'one' AS value UNION ALL SELECT 'two' AS value`;
   const stream = sql.rows`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 3) SELECT value FROM n ORDER BY value`;
   const command = sql.command`INSERT INTO cert_values (value) VALUES (${"command"})`;
-  const identity = sql.rows`SELECT 'sqlite-wasm-browser' AS id` as RowQuery<{ readonly id: string }>;
+  const identity = sql.rows`SELECT id FROM temp.cert_identity` as RowQuery<{ readonly id: string }>;
   const failure = sql.rows`SELECT * FROM cert_missing_table`;
   const preparedRows = (_input: unknown) => {
     preparedCalls += 1;
@@ -205,10 +195,10 @@ function buildQueries(stats: NativeStats): CertificationFixture["queries"] {
         RES008: { value: null },
         RES009: { value: "안녕하세요" },
         RES010: { value: new Uint8Array([0, 255, 16]) },
-        RES011: { value: "second" },
+        RES011: { value: "left" },
       },
       commandAffectedRows: 1,
-      failureCode: "SQLITE_ERROR",
+      specialErrors: { RES011: { code: "BRAID_RESULT_COLUMNS" } },
     },
   };
 }
@@ -238,8 +228,15 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
     createFixture: async (): Promise<CertificationFixture> => {
       const native = new sqlite3.oo1.DB(":memory:");
       const stats: NativeStats = { prepares: 0, active: 0, finalizeCalls: 0, finalizeByStatement: [] };
-      const observed = wrapNative(native, stats);
+      const faults: NativeFaults = {
+        initFailure: new Error("certification stream initialization failure"),
+        firstNextFailure: new Error("certification stream first-next failure"),
+        midStreamFailure: new Error("certification stream mid-stream failure"),
+        cleanupFailure: new Error("certification cleanup failure"),
+      };
+      const observed = wrapNative(native, stats, faults);
       observed.exec("CREATE TABLE cert_values (value TEXT NOT NULL)");
+      observed.exec("CREATE TEMP TABLE cert_identity (id TEXT NOT NULL); INSERT INTO temp.cert_identity (id) VALUES ('sqlite-wasm-browser')");
       const db = createSqliteWasmDatabase(observed, { sqlite3 });
       const queries = buildQueries(stats);
       const unsupported: NonNullable<CertificationFixture["unsupported"]> = {
@@ -276,12 +273,9 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         },
       } as const;
       const mappingQuery = sql.rows(mappingSchema)`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 3) SELECT value FROM n ORDER BY value`;
-      const initFailureQuery = sql.rows`SELECT FROM`;
-      const firstNextFailureQuery = sql.rows`SELECT json('not-json') AS value`;
-      const midStreamFailureQuery = sql.rows`SELECT value FROM (SELECT 1 AS value UNION ALL SELECT json('not-json') AS value)`;
-      const initFailure = expectedSqliteFailure('near "FROM": syntax error');
-      const firstNextFailure = expectedSqliteFailure("malformed JSON");
-      const midStreamFailure = expectedSqliteFailure("malformed JSON");
+      const initFailureQuery = sql.rows`SELECT 1 AS value /* __cert_init_failure__ */`;
+      const firstNextFailureQuery = sql.rows`SELECT 1 AS value /* __cert_first_next_failure__ */`;
+      const midStreamFailureQuery = sql.rows`SELECT value FROM (SELECT 1 AS value UNION ALL SELECT 2 AS value) /* __cert_mid_stream_failure__ */`;
       const largeResultQuery = sql.rows`WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n WHERE value < 10000) SELECT value FROM n`;
       const streamFixture: StreamingConformanceFixture<unknown> & Record<string, unknown> = {
         db,
@@ -290,14 +284,14 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
         mappingQuery,
         mappingFailure,
         executionSchemaFailure,
-        initFailure,
-        firstNextFailure,
-        midStreamFailure,
+        initFailure: faults.initFailure,
+        firstNextFailure: faults.firstNextFailure,
+        midStreamFailure: faults.midStreamFailure,
         initFailureQuery,
         firstNextFailureQuery,
         midStreamFailureQuery,
         cleanupFailureQuery: sql.rows`SELECT 1 AS value /* __cert_cleanup_failure__ */`,
-        cleanupFailure: cleanupFailureError(),
+        cleanupFailure: faults.cleanupFailure,
         largeResultQuery,
         largeResultCount: 10000,
       };
