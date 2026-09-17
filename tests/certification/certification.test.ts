@@ -3,6 +3,7 @@ import { describe, test } from "vitest";
 import { aggregateCertificationArtifacts, certifyTarget, validateCertificationArtifact } from "./runner.js";
 import { createSyntheticTarget } from "./targets/synthetic.js";
 import { REQUIRED_CERTIFICATION_TARGETS } from "./targets/inventory.js";
+import { runStreamingConformanceCase } from "../streaming-conformance.js";
 
 describe("A4 certification harness", () => {
   test("runs every required public API case against a deterministic synthetic target", async () => {
@@ -13,6 +14,22 @@ describe("A4 certification harness", () => {
     assert.equal(artifact.cases.CAP002.status, "pass");
     assert.equal(artifact.cases.STR006.status, "pass-unsupported");
     assert.equal(artifact.cases.STR006.code, "BRAID_CANCEL_UNSUPPORTED");
+  });
+
+  test("rejects incomplete or mismatched strict streaming evidence", async () => {
+    const fixture = await createSyntheticTarget("candidate-a4-negative").createFixture();
+    const stream = fixture.stream!;
+    const run = (overrides: Partial<typeof stream>, id: "STR004" | "STR009") => runStreamingConformanceCase(
+      id,
+      () => ({ ...stream, ...overrides, close: undefined }),
+    );
+    await assert.rejects(() => run({ mappingQuery: undefined }, "STR004"), /mappingQuery/u);
+    await assert.rejects(
+      () => run({ mappingFailure: new Error("wrong mapping failure") }, "STR004"),
+      (error: unknown) => error instanceof Error && error.name === "CertificationAssertionError",
+    );
+    await assert.rejects(() => run({ largeResultQuery: undefined }, "STR009"), /largeResultQuery/u);
+    await assert.rejects(() => run({ largeResultCount: undefined }, "STR009"), /largeResultCount/u);
   });
 
   test("proves exact SHA, target, case, and skip/declaration aggregation gates", async () => {

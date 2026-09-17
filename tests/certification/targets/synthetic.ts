@@ -13,6 +13,7 @@ import {
   type RenderedBulk,
   type RenderedStatement,
   type RowQuery,
+  type StandardSchemaV1,
   type StatementBindingContext,
   type StatementBindingDescription,
 } from "@sqlbraid/core";
@@ -23,7 +24,7 @@ import type { StreamingConformanceFixture } from "../../streaming-conformance.js
 import type { CertificationFixture, CertificationTarget, ExpectedCapabilityContract, ResourceSnapshot } from "../types.js";
 
 type Marker = "zero" | "one" | "many" | "command" | "identity" | "failure" | "stream" | "stream-init" | "stream-first" | "stream-mid" | "stream-cleanup" | "large" | "special" | "insert" | "savepoint-insert" | "transaction-visible" | "call";
-type Definition = { readonly marker: Marker; readonly rows?: readonly unknown[]; readonly value?: unknown; readonly cleanup?: Error };
+type Definition = { readonly marker: Marker; readonly rows?: readonly unknown[]; readonly value?: unknown; readonly failure?: unknown; readonly cleanup?: Error };
 
 interface SyntheticState {
   committedRows: number;
@@ -81,10 +82,15 @@ function markerOf(rendered: RenderedStatement): string {
   return rendered.segments.join("").replace(/^CERT:/u, "");
 }
 
-function rowQuery(marker: Marker, definitions: Map<string, Definition>, rows: readonly unknown[]): RowQuery<unknown> {
+function rowQuery(
+  marker: Marker,
+  definitions: Map<string, Definition>,
+  rows: readonly unknown[],
+  options: { readonly resultSchema?: StandardSchemaV1<unknown, unknown>; readonly failure?: unknown; readonly cleanup?: Error } = {},
+): RowQuery<unknown> {
   const key = `row-${marker}-${definitions.size}`;
-  definitions.set(key, { marker, rows });
-  return sql.rows`SELECT ${key}`;
+  definitions.set(key, { marker, rows, failure: options.failure, cleanup: options.cleanup });
+  return options.resultSchema === undefined ? sql.rows`SELECT ${key}` : sql.rows(options.resultSchema)`SELECT ${key}`;
 }
 
 function commandQuery(marker: Marker, definitions: Map<string, Definition>): CommandQuery {
@@ -152,12 +158,12 @@ function createExecutor(state: SyntheticState, definitions: Map<string, Definiti
       return {
         async *[Symbol.asyncIterator]() {
           if (options?.signal?.aborted) throw options.signal.reason;
-          if (definition.marker === "stream-init") throw new Error("synthetic iterator init failure");
+          if (definition.marker === "stream-init") throw definition.failure ?? new Error("synthetic iterator init failure");
           try {
             for (let index = 0; index < values.length; index += 1) {
               if (options?.signal?.aborted) throw options.signal.reason;
-              if (definition.marker === "stream-first" && index === 0) throw new Error("synthetic first next failure");
-              if (definition.marker === "stream-mid" && index === 1) throw new Error("synthetic mid-stream failure");
+              if (definition.marker === "stream-first" && index === 0) throw definition.failure ?? new Error("synthetic first next failure");
+              if (definition.marker === "stream-mid" && index === 1) throw definition.failure ?? new Error("synthetic mid-stream failure");
               yield values[index] as Row;
             }
           } finally {
@@ -244,8 +250,35 @@ export function createSyntheticTarget(sourceSha = "synthetic-source-sha", cancel
       const pooled = createPooledDatabase({ statementBinding, environment, async acquire() { state.borrowed += 1; return { ...executor, release() { state.borrowed -= 1; } }; } });
       const queries = makeQueries(definitions) as CertificationFixture["queries"] & { prepared?: CertificationFixture["queries"]["prepared"] };
       queries.prepared = { command: () => { state.preparedCalls += 1; return commandQuery("command", definitions); }, rows: () => { state.preparedCalls += 1; return rowQuery("many", definitions, [{ value: 1 }, { value: 2 }]); }, input: "input", factoryCalls: () => state.preparedCalls, resources: () => 0 };
+      const mappingFailure = new Error("synthetic query-bound mapping failure");
+      const executionSchemaFailure = new Error("synthetic execution schema failure");
+      const initFailure = new Error("synthetic iterator init failure");
+      const firstNextFailure = new Error("synthetic first next failure");
+      const midStreamFailure = new Error("synthetic mid-stream failure");
       const cleanupFailure = new Error("synthetic cleanup failure");
-      const stream = { db, query: queries.stream!, expected: [{ value: 1 }, { value: 2 }], mappingQuery: queries.stream, initFailureQuery: rowQuery("stream-init", definitions, []), firstNextFailureQuery: rowQuery("stream-first", definitions, [{ value: 1 }]), midStreamFailureQuery: rowQuery("stream-mid", definitions, [{ value: 1 }, { value: 2 }]), cleanupFailureQuery: rowQuery("stream-cleanup", definitions, []), cleanupFailure, largeResultQuery: rowQuery("large", definitions, [{ value: 1 }, { value: 2 }, { value: 3 }]), iteratorReturns: () => state.streamReturns, released: () => state.streamReturns } as StreamingConformanceFixture<unknown>;
+      const mappingQuery = rowQuery("stream", definitions, [{ value: 1 }, { value: 2 }], {
+        resultSchema: { "~standard": { version: 1, vendor: "certification", validate() { throw mappingFailure; } } },
+      });
+      const stream = {
+        db,
+        query: queries.stream!,
+        expected: [{ value: 1 }, { value: 2 }],
+        mappingQuery,
+        mappingFailure,
+        executionSchemaFailure,
+        initFailureQuery: rowQuery("stream-init", definitions, [], { failure: initFailure }),
+        initFailure,
+        firstNextFailureQuery: rowQuery("stream-first", definitions, [{ value: 1 }], { failure: firstNextFailure }),
+        firstNextFailure,
+        midStreamFailureQuery: rowQuery("stream-mid", definitions, [{ value: 1 }, { value: 2 }], { failure: midStreamFailure }),
+        midStreamFailure,
+        cleanupFailureQuery: rowQuery("stream-cleanup", definitions, [], { cleanup: cleanupFailure }),
+        cleanupFailure,
+        largeResultQuery: rowQuery("large", definitions, [{ value: 1 }, { value: 2 }, { value: 3 }]),
+        largeResultCount: 3,
+        iteratorReturns: () => state.streamReturns,
+        released: () => state.streamReturns,
+      } as StreamingConformanceFixture<unknown>;
       const bulk: BulkConformanceFixture<unknown> = { db, inputs: [1, 2], factory: () => commandQuery("command", definitions), expected: { inputCount: 2, affectedRows: 2 }, acquireCount: () => state.bulkCalls, executeCount: () => state.bulkExec, values: () => [[1], [2]], middleFailure: async () => { throw new Error("synthetic middle failure"); } };
       const fixture: CertificationFixture = { db, pooled, queries, stream, bulk, metrics: { snapshot: (): ResourceSnapshot => ({ borrowedLeases: state.borrowed, cleanupBalance: state.cleanupBalance, openCursors: 0, openPrepared: 0 }), sideEffects: () => state.sideEffects, physicalSessionIds: () => [state.identity] }, reset: async () => { state.committedRows = 0; state.sideEffects = 0; state.bulkCalls = 0; state.bulkExec = 0; state.streamReturns = 0; state.preparedCalls = 0; state.pending.length = 0; state.savepoints.clear(); }, unsupported: { TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("transaction.isolation.serializable", "BRAID_TX_OPTION_UNSUPPORTED", "synthetic option combination unsupported"); }, sideEffects: () => state.sideEffects }, ...(cancelUnsupported ? { STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects } } : {}) }, close: async () => { if (state.borrowed !== 0) throw new Error("synthetic pooled lease leaked"); } };
       return fixture;

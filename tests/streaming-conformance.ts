@@ -1,4 +1,4 @@
-import { UnsupportedFeatureError, type Database, type RowQuery } from "@sqlbraid/core";
+import { UnsupportedFeatureError, type Database, type RowQuery, type StandardSchemaV1 } from "@sqlbraid/core";
 import { assert } from "./certification/assert.js";
 
 export interface StreamingConformanceFixture<Row> {
@@ -6,11 +6,17 @@ export interface StreamingConformanceFixture<Row> {
   readonly query: RowQuery<Row>;
   readonly expected: readonly Row[];
   readonly mappingQuery?: RowQuery<unknown>;
+  readonly mappingFailure?: unknown;
+  readonly executionSchemaFailure?: unknown;
   readonly cleanupFailureQuery?: RowQuery<Row>;
   readonly initFailureQuery?: RowQuery<Row>;
+  readonly initFailure?: unknown;
   readonly firstNextFailureQuery?: RowQuery<Row>;
+  readonly firstNextFailure?: unknown;
   readonly midStreamFailureQuery?: RowQuery<Row>;
+  readonly midStreamFailure?: unknown;
   readonly largeResultQuery?: RowQuery<Row>;
+  readonly largeResultCount?: number;
   readonly cleanupFailure?: unknown;
   readonly released?: () => number;
   readonly iteratorReturns?: () => number;
@@ -29,18 +35,23 @@ async function withFixture<Row>(
   }
 }
 
-function containsError(error: unknown, expected: unknown): boolean {
+function errorCode(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object" || !("code" in value)) return undefined;
+  const code = (value as { readonly code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function containsExpectedError(error: unknown, expected: unknown): boolean {
   if (error === expected) return true;
-  if (error instanceof AggregateError && error.errors.some((nested) => containsError(nested, expected))) return true;
-  if (error instanceof Error && "cause" in error && containsError(error.cause, expected)) return true;
-  if (error && typeof error === "object") {
-    const candidate = error as { readonly error?: unknown; readonly reason?: unknown; readonly message?: unknown; readonly issues?: readonly { readonly message?: unknown }[] };
-    if (expected instanceof Error && candidate.message === expected.message) return true;
-    if (candidate.error !== undefined && containsError(candidate.error, expected)) return true;
-    if (candidate.reason !== undefined && containsError(candidate.reason, expected)) return true;
-    if (expected instanceof Error && candidate.issues?.some((issue) => issue.message === expected.message)) return true;
-  }
+  const expectedErrorCode = errorCode(expected);
+  if (expectedErrorCode !== undefined && errorCode(error) === expectedErrorCode) return true;
+  if (error instanceof AggregateError && error.errors.some((nested) => containsExpectedError(nested, expected))) return true;
+  if (error instanceof Error && "cause" in error && containsExpectedError(error.cause, expected)) return true;
   return false;
+}
+
+function throwingSchema(failure: unknown): StandardSchemaV1<unknown, unknown> {
+  return { "~standard": { version: 1, vendor: "stream-conformance", validate() { throw failure; } } };
 }
 
 export interface StreamingConformanceOptions {
@@ -93,19 +104,24 @@ export async function runStreamingConformanceCase(
           await assert.rejects(async () => { for await (const row of fixture.db.stream(mapping)) void row; });
           return;
         }
-        const error = new Error("cert-mapper-failure");
+        if (mapping.resultSchema === undefined) throw new Error("STR004 requires mappingQuery.resultSchema fixture evidence.");
+        const mappingFailure = requireField(fixture.mappingFailure, "mappingFailure");
         await assert.rejects(async () => {
-          for await (const row of fixture.db.stream(mapping, { schema: { "~standard": { version: 1, vendor: "certification", validate() { throw error; } } } })) void row;
-        }, (caught: unknown) => containsError(caught, error));
+          for await (const row of fixture.db.stream(mapping)) void row;
+        }, (caught: unknown) => containsExpectedError(caught, mappingFailure));
+        const executionSchemaFailure = requireField(fixture.executionSchemaFailure, "executionSchemaFailure");
+        await assert.rejects(async () => {
+          for await (const row of fixture.db.stream(fixture.query, { schema: throwingSchema(executionSchemaFailure) })) void row;
+        }, (caught: unknown) => containsExpectedError(caught, executionSchemaFailure));
         return;
       }
       case "STR004_SCHEMA": {
-        const error = new Error("execution schema failed");
+        if (strict) throw new Error("STR004_SCHEMA is only a legacy compatibility case.");
         await assert.rejects(async () => {
           for await (const row of fixture.db.stream(fixture.query, {
-            schema: { "~standard": { version: 1, vendor: "conformance", validate() { throw error; } } },
+            schema: throwingSchema(new Error("execution schema failed")),
           })) void row;
-        }, (caught: unknown) => containsError(caught, error));
+        });
         return;
       }
       case "STR005": {
@@ -114,7 +130,7 @@ export async function runStreamingConformanceCase(
         controller.abort(abortError);
         await assert.rejects(async () => {
           for await (const row of fixture.db.stream(fixture.query, { signal: controller.signal })) void row;
-        }, (caught: unknown) => containsError(caught, abortError));
+        }, (caught: unknown) => containsExpectedError(caught, abortError));
         if (fixture.iteratorReturns) assert.equal(fixture.iteratorReturns(), 0);
         return;
       }
@@ -128,31 +144,41 @@ export async function runStreamingConformanceCase(
           }
         }, (caught: unknown) => options.cancellation === "unsupported"
           ? caught instanceof UnsupportedFeatureError && caught.feature === "statement.cancel"
-          : containsError(caught, abortError));
+          : containsExpectedError(caught, abortError));
         return;
       }
       case "STR007": {
         const init = requireField(fixture.initFailureQuery, "initFailureQuery");
-        await assert.rejects(async () => { for await (const row of fixture.db.stream(init)) void row; });
+        const initFailure = requireField(fixture.initFailure, "initFailure");
+        if (init === undefined) return;
+        await assert.rejects(async () => { for await (const row of fixture.db.stream(init)) void row; }, (caught: unknown) => containsExpectedError(caught, initFailure));
         const first = requireField(fixture.firstNextFailureQuery, "firstNextFailureQuery");
-        await assert.rejects(async () => { for await (const row of fixture.db.stream(first)) void row; });
+        const firstFailure = requireField(fixture.firstNextFailure, "firstNextFailure");
+        if (first === undefined) return;
+        await assert.rejects(async () => { for await (const row of fixture.db.stream(first)) void row; }, (caught: unknown) => containsExpectedError(caught, firstFailure));
         const mid = requireField(fixture.midStreamFailureQuery, "midStreamFailureQuery");
-        await assert.rejects(async () => { for await (const row of fixture.db.stream(mid)) void row; });
+        const midFailure = requireField(fixture.midStreamFailure, "midStreamFailure");
+        if (mid === undefined) return;
+        await assert.rejects(async () => { for await (const row of fixture.db.stream(mid)) void row; }, (caught: unknown) => containsExpectedError(caught, midFailure));
         return;
       }
       case "STR008": {
         const query = requireField(fixture.cleanupFailureQuery, "cleanupFailureQuery");
+        const cleanupFailure = requireField(fixture.cleanupFailure, "cleanupFailure");
         if (query === undefined) return;
-        await assert.rejects(async () => { for await (const row of fixture.db.stream(query)) void row; }, (caught: unknown) => fixture.cleanupFailure === undefined || containsError(caught, fixture.cleanupFailure));
+        await assert.rejects(async () => { for await (const row of fixture.db.stream(query)) void row; }, (caught: unknown) => containsExpectedError(caught, cleanupFailure));
         if (fixture.iteratorReturns) assert.equal(fixture.iteratorReturns(), 1);
         if (fixture.released) assert.equal(fixture.released(), 1);
         return;
       }
       case "STR009": {
-        const query = fixture.largeResultQuery ?? fixture.query;
-        const actual: unknown[] = [];
-        for await (const row of fixture.db.stream(query)) actual.push(row);
-        assert.ok(actual.length >= fixture.expected.length);
+        const query = requireField(fixture.largeResultQuery, "largeResultQuery");
+        const expectedCount = requireField(fixture.largeResultCount, "largeResultCount");
+        if (query === undefined || expectedCount === undefined) return;
+        assert.ok(expectedCount > fixture.expected.length);
+        let actualCount = 0;
+        for await (const row of fixture.db.stream(query)) { void row; actualCount += 1; }
+        assert.equal(actualCount, expectedCount);
         return;
       }
       default:
