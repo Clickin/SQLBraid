@@ -1338,6 +1338,7 @@ function makeOracledbExecutor(
       const cleanupScope = createCleanupScope();
       cleanupScope.add(() => resultSet!.close());
       for (const resource of Array.isArray(result.implicitResults) ? result.implicitResults : []) cleanupScope.add(() => resource.close());
+      let resultIterator: AsyncIterator<unknown> | undefined;
       let breakFailure: unknown;
       let hasBreakFailure = false;
       let breakPromise: Promise<void> | undefined;
@@ -1395,7 +1396,8 @@ function makeOracledbExecutor(
             if (batch.length < fetchSize) break;
           }
         } else if (resultSet[Symbol.asyncIterator]) {
-          const resultIterator = resultSet[Symbol.asyncIterator]();
+          resultIterator = resultSet[Symbol.asyncIterator]();
+          cleanupScope.add(async () => { await resultIterator?.return?.(); });
           while (true) {
             signal?.throwIfAborted();
             nativeOperationActive = true;
@@ -1465,11 +1467,11 @@ export function createOracledbPoolProvider(pool: OraclePoolLike, options: Omit<O
       let cancellationRequested = false;
       const nativeBreak = nativeConnection.break?.bind(nativeConnection);
       const connection: OraclePoolConnectionLike = {
-        ...nativeConnection,
         execute: nativeConnection.execute.bind(nativeConnection),
         ...(nativeConnection.executeMany === undefined ? {} : { executeMany: nativeConnection.executeMany.bind(nativeConnection) }),
         commit: nativeConnection.commit.bind(nativeConnection),
         rollback: nativeConnection.rollback.bind(nativeConnection),
+        ...(nativeConnection.stmtCacheSize === undefined ? {} : { stmtCacheSize: nativeConnection.stmtCacheSize }),
         ...(nativeBreak === undefined ? {} : {
           break: async (): Promise<void> => {
             cancellationRequested = true;

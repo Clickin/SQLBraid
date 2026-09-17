@@ -192,6 +192,81 @@ test("Oracle adapter honors hints, rejects untyped null, and closes an aborted R
   assert.equal(breaks, 0);
 });
 
+test("Oracle streaming closes async iterators before result sets on abort", async () => {
+  const order: string[] = [];
+  let yielded = false;
+  const resultIterator: AsyncIterator<{ readonly VALUE: string }> = {
+    async next() {
+      if (yielded) return { done: true, value: undefined };
+      yielded = true;
+      return { done: false, value: { VALUE: "1" } };
+    },
+    async return() {
+      order.push("iterator-return");
+      return { done: true, value: undefined };
+    },
+  };
+  const connection = {
+    async execute() {
+      return {
+        resultSet: {
+          [Symbol.asyncIterator]() { return resultIterator; },
+          async close() { order.push("result-set-close"); },
+        },
+        metaData: [{ name: "VALUE", dbTypeName: "VARCHAR2" }],
+      };
+    },
+    async break() {},
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection);
+  const controller = new AbortController();
+  const reason = new Error("oracle async iterator abort");
+  const iterator = executor.stream!(sql`SELECT 1`.render(), undefined, { signal: controller.signal })[Symbol.asyncIterator]();
+  assert.deepEqual(await iterator.next(), { done: false, value: { VALUE: "1" } });
+  controller.abort(reason);
+  await assert.rejects(() => iterator.next(), (error: unknown) => error === reason);
+  assert.deepEqual(order, ["iterator-return", "result-set-close"]);
+});
+
+test("Oracle streaming breaks an active native row fetch", async () => {
+  let releaseRow: ((value: unknown) => void) | undefined;
+  let breaks = 0;
+  let closed = 0;
+  const started = Promise.withResolvers<void>();
+  const connection = {
+    async execute() {
+      return {
+        resultSet: {
+          async getRow() {
+            started.resolve();
+            return new Promise((resolve) => { releaseRow = resolve; });
+          },
+          async close() { closed += 1; },
+        },
+        metaData: [{ name: "VALUE", dbTypeName: "VARCHAR2" }],
+      };
+    },
+    async break() {
+      breaks += 1;
+      releaseRow?.(null);
+    },
+    async commit() {},
+    async rollback() {},
+  };
+  const executor = createOracledbExecutor(connection);
+  const controller = new AbortController();
+  const reason = new Error("oracle active row abort");
+  const pending = executor.stream!(sql`SELECT 1`.render(), undefined, { signal: controller.signal })[Symbol.asyncIterator]().next();
+  await started.promise;
+  assert.ok(releaseRow);
+  controller.abort(reason);
+  assert.equal(breaks, 1);
+  await assert.rejects(pending, (error: unknown) => error === reason);
+  assert.equal(closed, 1);
+});
+
 test("Oracle numeric result transport keeps NUMBER exact and BINARY_FLOAT approximate", async () => {
   let mode: "number" | "float" = "number";
   const connection = {
