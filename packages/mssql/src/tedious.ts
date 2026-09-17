@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { ISOLATION_LEVEL, Request, TYPES } from "tedious";
 import { AdapterError, ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
+import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
 import type {
   ConnectionLease,
   ConnectionProvider,
@@ -407,7 +408,7 @@ function mapRow(value: unknown, columns: readonly TediousColumnMetadataLike[], p
       const metadata = columns[index] ?? {};
       const type = columnType(metadata);
       const entry = cellValue(value[index]);
-      row[columnName(metadata, index)] = type ? policy.decode(type, entry) : entry;
+      defineResultProperty(row, columnName(metadata, index), type ? policy.decode(type, entry) : entry);
     }
     return row;
   }
@@ -418,7 +419,7 @@ function mapRow(value: unknown, columns: readonly TediousColumnMetadataLike[], p
       const metadata = index < 0 ? undefined : columns[index];
       const type = metadata === undefined ? undefined : columnType(metadata);
       const entry = cellValue(raw);
-      row[key] = type ? policy.decode(type, entry) : entry;
+      defineResultProperty(row, key, type ? policy.decode(type, entry) : entry);
     }
     return row;
   }
@@ -1175,7 +1176,7 @@ function prepareRequest(
 ): Promise<TediousPreparedRequest> {
   assertExecutionOptions(options);
   if (typeof connection.prepare !== "function" || typeof connection.execute !== "function" || typeof connection.unprepare !== "function") {
-    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_BULK_UNSUPPORTED", "Tedious connection does not expose prepare/execute/unprepare()."));
+    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_PREPARE_UNSUPPORTED", "Tedious connection does not expose prepare/execute/unprepare()."));
   }
   const prepare = connection.prepare;
   return new Promise((resolve, reject) => {
@@ -1292,7 +1293,7 @@ function executePrepared(
 ): Promise<number | undefined> {
   assertExecutionOptions(options);
   if (typeof connection.execute !== "function") {
-    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_BULK_UNSUPPORTED", "Tedious connection does not expose execute()."));
+    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_PREPARE_UNSUPPORTED", "Tedious connection does not expose execute()."));
   }
   const signal = options?.signal;
   if (signal !== undefined && typeof prepared.request.cancel !== "function") {
@@ -1408,7 +1409,7 @@ function executePrepared(
 
 function unprepareRequest(connection: TediousConnectionLike, prepared: TediousPreparedRequest): Promise<void> {
   if (typeof connection.unprepare !== "function") {
-    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_BULK_UNSUPPORTED", "Tedious connection does not expose unprepare()."));
+    return Promise.reject(new UnsupportedFeatureError("statement.prepare", "BRAID_PREPARE_UNSUPPORTED", "Tedious connection does not expose unprepare()."));
   }
   const unprepare = connection.unprepare;
   return new Promise((resolve, reject) => {
@@ -1511,7 +1512,10 @@ function makeTediousExecutor(
       }
       if (binding.parameterizedSql === undefined) throw new Error("BRAID_BIND_TRANSPORT: SQL Server bulk binding did not provide parameterized SQL.");
       const prepared = await prepareRequest(connection, binding.parameterizedSql, parameters[0] ?? [], executionOptions);
+      const cleanup = createCleanupScope();
+      cleanup.add(() => unprepareRequest(connection, prepared));
       let failure: unknown;
+      let failed = false;
       let affectedRows = 0;
       let affectedKnown = true;
       try {
@@ -1524,13 +1528,10 @@ function makeTediousExecutor(
         }
       } catch (error) {
         failure = error;
+        failed = true;
       }
-      try {
-        await unprepareRequest(connection, prepared);
-      } catch (error) {
-        failure = resourceCleanupError(failure, [error]);
-      }
-      if (failure !== undefined) throw failure;
+      if (failed) await cleanup.run(failure);
+      else await cleanup.run();
       return {
         inputCount: parameters.length,
         ...(affectedKnown ? { affectedRows } : {}),
@@ -1558,8 +1559,8 @@ function makeTediousExecutor(
     begin,
     commit: () => control(connection, "commitTransaction"),
     rollback: () => control(connection, "rollbackTransaction"),
-    savepoint: (name) => control(connection, "saveTransaction", name),
-    rollbackTo: (name) => rollbackTo(connection, name),
+    savepoint: (name) => control(connection, "saveTransaction", assertSavepointName(name)),
+    rollbackTo: (name) => rollbackTo(connection, assertSavepointName(name)),
     releaseSavepoint: async () => undefined,
   };
 }

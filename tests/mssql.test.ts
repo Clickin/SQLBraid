@@ -184,6 +184,102 @@ test("MSSQL query rejects actual output return values instead of discarding them
   );
 });
 
+test("MSSQL result labels remain own properties on ordinary rows", async () => {
+  const executor = createTediousExecutor(mockConnection((request) => {
+    emit(request, "columnMetadata", [
+      { colName: "__proto__", type: "NVarChar" },
+      { colName: "constructor", type: "NVarChar" },
+      { colName: "prototype", type: "NVarChar" },
+      { colName: "toString", type: "NVarChar" },
+      { colName: "hasOwnProperty", type: "NVarChar" },
+    ]);
+    emit(request, "row", [
+      { value: "proto" },
+      { value: "constructor" },
+      { value: "prototype" },
+      { value: "toString" },
+      { value: "hasOwnProperty" },
+    ]);
+    emit(request, "doneInProc", 1);
+    emit(request, "requestCompleted");
+  }));
+  const row = (await executor.query(sql`SELECT 1`.render())).rows[0] as Record<string, unknown>;
+  assert.equal(Object.getPrototypeOf(row), Object.prototype);
+  for (const key of ["__proto__", "constructor", "prototype", "toString", "hasOwnProperty"]) {
+    assert.equal(Object.hasOwn(row, key), true);
+    assert.equal(row[key], key === "__proto__" ? "proto" : key);
+  }
+});
+
+test("MSSQL prepared protocol failures use the canonical prepare error", async () => {
+  const statement = sql.command`INSERT INTO account (id) VALUES (${1})`.render();
+  const bulk: RenderedBulk = { statement, parameterSets: [[1]] };
+  const cases: readonly [string, TediousConnectionLike][] = [
+    ["prepare", {
+      execSql() {},
+      execute() {},
+      unprepare() {},
+      beginTransaction() {},
+      commitTransaction() {},
+      rollbackTransaction() {},
+      saveTransaction() {},
+    }],
+    ["execute", {
+      execSql() {},
+      prepare() {},
+      unprepare() {},
+      beginTransaction() {},
+      commitTransaction() {},
+      rollbackTransaction() {},
+      saveTransaction() {},
+    }],
+    ["unprepare", {
+      execSql() {},
+      prepare() {},
+      execute() {},
+      beginTransaction() {},
+      commitTransaction() {},
+      rollbackTransaction() {},
+      saveTransaction() {},
+    }],
+  ];
+  for (const [, connection] of cases) {
+    const executor = createTediousExecutor(connection);
+    const binding = executor.statementBinding.describeBulk!(bulk, { dialectId: "mssql", requestedReuse: "auto" });
+    await assert.rejects(
+      async () => await executor.bulk!(bulk, binding),
+      (error: unknown) => error instanceof UnsupportedFeatureError
+        && error.feature === "statement.prepare"
+        && error.code === "BRAID_PREPARE_UNSUPPORTED",
+    );
+  }
+  const lateUnprepare = {
+    execSql() {},
+    prepare(request: TediousRequestLike) {
+      delete (lateUnprepare as unknown as { unprepare?: unknown }).unprepare;
+      completeRequest(request);
+    },
+    execute(request: TediousRequestLike) { completeRequest(request, undefined, 1); },
+    unprepare() {},
+    beginTransaction() {},
+    commitTransaction() {},
+    rollbackTransaction() {},
+    saveTransaction() {},
+  } as TediousConnectionLike;
+  const executor = createTediousExecutor(lateUnprepare);
+  const binding = executor.statementBinding.describeBulk!(bulk, { dialectId: "mssql", requestedReuse: "auto" });
+  await assert.rejects(
+    async () => await executor.bulk!(bulk, binding),
+    (error: unknown) => {
+      const cause = error instanceof AggregateError ? error.errors[0] : (error as { readonly cause?: unknown }).cause;
+      return (error as { readonly code?: string }).code === "BRAID_RESOURCE_CLEANUP"
+        && cause instanceof UnsupportedFeatureError
+        && cause.feature === "statement.prepare"
+        && cause.code === "BRAID_PREPARE_UNSUPPORTED";
+    },
+  );
+});
+
 test("MSSQL pre-aborted executions preserve a null AbortSignal reason", async () => {
   let executed = false;
   const executor = createTediousExecutor(mockConnection(() => {
