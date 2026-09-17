@@ -139,7 +139,7 @@ export declare function readReleaseManifest(
     allowCurrentAttemptMismatch?: boolean;
   },
 ): Promise<ReleaseManifest>;
-export declare function releaseTag(): string;
+export declare function releaseTag(version?: string): string;
 export declare function setReleaseCommand(
   command: (file: string, args: readonly string[], cwd?: string, options?: { quiet?: boolean }) => Promise<string>,
 ): void;
