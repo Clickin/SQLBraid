@@ -119,7 +119,10 @@ jobs:
               echo "Release staging requires an exact package/version tag ref."
               exit 1
             fi
-            if [[ "$selector" == "all" || "$selector" == "*" ]]; then
+            if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+              package="sqlbraid"
+              release_version="$(node -p "JSON.parse(require('node:fs').readFileSync('packages/sqlbraid/package.json', 'utf8')).version")"
+            elif [[ "$selector" == "all" || "$selector" == "*" ]]; then
               package="*"
               release_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
             else
