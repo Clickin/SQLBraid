@@ -571,6 +571,16 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     CALL005: { feature: "routine.out-cursor", expectedErrorFeature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await db.call(routines.cursor); }, sideEffects: () => acquired.value + nativeExecutes.value },
     CALL006: { feature: "routine.return-value", expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED" as const, run: async () => { await db.call(routines.returnValue); }, sideEffects: () => acquired.value + nativeExecutes.value },
   };
+  const representationUnsupported = {
+    "data.json-parsed": {
+      prove: async () => {
+        const row = await directDb.one(sql.rows`SELECT JSON_OBJECT('large', CAST(${largeInteger} AS DECIMAL(19, 0))) AS value`);
+        const value = (row as { readonly value?: unknown }).value;
+        assert.equal(typeof value, "string");
+        assert.ok(value.includes(largeInteger), "mysql2 JSON text proof must preserve the exact numeric lexeme.");
+      },
+    },
+  };
   const fixture: CertificationFixture = {
     db: directDb,
     pooled: db,
@@ -594,6 +604,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       physicalIds.add(identityResult.id);
     },
     unsupported,
+    representationUnsupported,
     guarded: {
       "statement.cancel": {
         prove: async () => {
