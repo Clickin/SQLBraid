@@ -1,7 +1,8 @@
 import { Client, Pool } from "pg";
-import { createPgDatabase, createPgPoolDatabase, type PgClientLike, type PgCursorFactory, type PgPoolClientLike, type PgPoolLike, type PgResultLike } from "@sqlbraid/postgres/pg";
+import { createPgDatabase, createPgPoolDatabase, createPgPoolProvider, type PgClientLike, type PgCursorFactory, type PgPoolClientLike, type PgPoolLike, type PgResultLike } from "@sqlbraid/postgres/pg";
 import { postgresParameter, sql } from "@sqlbraid/postgres";
 import type { CallQuery, CommandQuery, Database, ExecutionEvent, RowQuery } from "@sqlbraid/core";
+import { createPooledDatabase } from "@sqlbraid/runtime";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
 import type {
@@ -80,6 +81,7 @@ interface Shared {
   readonly sideEffects: { value: number };
   readonly openCursors: { value: number };
   readonly cursorCloses: { value: number };
+  readonly iteratorReturns: { value: number };
   readonly streamErrors: {
     readonly init: Error;
     readonly first: Error;
@@ -88,6 +90,7 @@ interface Shared {
   };
   releaseBefore: number;
   cursorCloseBefore: number;
+  iteratorReturnBefore: number;
   setup: () => Promise<void>;
   dispose: () => Promise<void>;
 }
@@ -99,6 +102,7 @@ interface Metrics {
   readonly sideEffects: { value: number };
   readonly openCursors: { value: number };
   readonly cursorCloses: { value: number };
+  readonly iteratorReturns: { value: number };
   readonly streamErrors: {
     readonly init: Error;
     readonly first: Error;
@@ -215,6 +219,35 @@ function makeRoutineCleanupFaultClient(raw: PgClientLike, state: Metrics): PgCli
   };
 }
 
+function instrumentProviderStream(provider: ReturnType<typeof createPgPoolProvider>, state: Shared): ReturnType<typeof createPgPoolProvider> {
+  return {
+    ...provider,
+    async acquire() {
+      const lease = await provider.acquire();
+      const stream = lease.stream.bind(lease);
+      return {
+        ...lease,
+        stream: (...args: Parameters<typeof lease.stream>) => {
+          const source = stream(...args);
+          return {
+            [Symbol.asyncIterator]() {
+              const iterator = source[Symbol.asyncIterator]();
+              return {
+                next: iterator.next.bind(iterator),
+                return: async (value?: unknown) => {
+                  state.iteratorReturns.value += 1;
+                  return iterator.return ? iterator.return(value) : { done: true, value };
+                },
+                ...(iterator.throw ? { throw: iterator.throw.bind(iterator) } : {}),
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
 async function loadCursor(): Promise<PgCursorFactory> {
   const loaded = await import("pg-cursor") as unknown as { readonly default?: unknown };
   return (loaded.default ?? loaded) as PgCursorFactory;
@@ -298,13 +331,23 @@ async function createShared(targetId: string, connectionUri: string): Promise<Sh
   const sideEffects = { value: 0 };
   const openCursors = { value: 0 };
   const cursorCloses = { value: 0 };
+  const iteratorReturns = { value: 0 };
   const streamErrors = {
     init: new Error("cert-stream-init-failure"),
     first: new Error("cert-stream-first-failure"),
     mid: new Error("cert-stream-mid-failure"),
     cleanup: new Error("cert-cleanup-failure"),
   };
-  const metrics: Metrics = { activeLeases, acquireCount, releaseCount, sideEffects, openCursors, cursorCloses, streamErrors };
+  const metrics: Metrics = {
+    activeLeases,
+    acquireCount,
+    releaseCount,
+    sideEffects,
+    openCursors,
+    cursorCloses,
+    iteratorReturns,
+    streamErrors,
+  };
   const cancelReadyState = Promise.withResolvers<void>();
   const baseCursor = await loadCursor();
   const cancelBaseCursor = await loadCursor();
@@ -378,9 +421,11 @@ async function createShared(targetId: string, connectionUri: string): Promise<Sh
     sideEffects,
     openCursors,
     cursorCloses,
+    iteratorReturns,
     streamErrors,
     releaseBefore: 0,
     cursorCloseBefore: 0,
+    iteratorReturnBefore: 0,
     setup,
     dispose,
   };
@@ -519,7 +564,11 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       }
     },
   };
-  const pooled = createPgPoolDatabase(state.poolLike, { cursor: state.cursor, streamBatchSize: 2, observers: [bulkObserver] });
+  const provider = instrumentProviderStream(
+    createPgPoolProvider(state.poolLike, { cursor: state.cursor, streamBatchSize: 2 }),
+    state,
+  );
+  const pooled = createPooledDatabase(provider, { observers: [bulkObserver] });
   const direct = createPgDatabase(state.direct, { cursor: state.cursor, streamBatchSize: 2 });
   const bulkDb: Pick<Database, "bulk"> = {
     bulk: async (inputs, factory, options) => {
@@ -571,8 +620,12 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     cleanupFailureQuery: sql.rows`/* CERT_STREAM_CLEANUP */ SELECT id, value FROM ${sql.ident(state.table)}`,
     largeResultQuery: sql.rows`SELECT value::text AS id FROM generate_series(1, 100000) AS value`,
     cleanupFailure: state.streamErrors.cleanup,
-    released: () => state.releaseCount.value - state.releaseBefore,
-    iteratorReturns: () => state.cursorCloses.value - state.cursorCloseBefore,
+    released: () => {
+      return state.releaseCount.value - state.releaseBefore;
+    },
+    iteratorReturns: () => {
+      return state.iteratorReturns.value - state.iteratorReturnBefore;
+    },
     reuseAfterBreak: async () => {
       await pooled.one(queries.identity);
       if (state.activeLeases.value !== 0) throw new Error("STR011 did not release the pooled resource after reuse.");
@@ -581,6 +634,7 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
     mappingFailure,
     executionSchemaFailure,
     initFailure: state.streamErrors.init,
+    initFailureCleanup: { iteratorReturns: 1, released: 1 },
     firstNextFailure: state.streamErrors.first,
     midStreamFailure: state.streamErrors.mid,
     largeResultCount: 100000,
@@ -713,10 +767,25 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       state.sideEffects.value = 0;
       state.releaseBefore = state.releaseCount.value;
       state.cursorCloseBefore = state.cursorCloses.value;
+      state.iteratorReturnBefore = state.iteratorReturns.value;
       bulkValues = [];
       bulkExec = 0;
     },
     unsupported,
+    representationUnsupported: {
+      "data.json-parsed": {
+        prove: async () => {
+          const observed = await pooled.one(sql.rows<{ readonly value: unknown }>`SELECT '{"value": 1}'::jsonb AS value`);
+          if (typeof observed.value !== "string") throw new Error(`PostgreSQL JSON parser unexpectedly returned ${typeof observed.value}.`);
+        },
+      },
+      "data.temporal-native": {
+        prove: async () => {
+          const observed = await pooled.one(sql.rows<{ readonly value: unknown }>`SELECT TIMESTAMP '2026-09-14 12:34:56.789' AS value`);
+          if (typeof observed.value !== "string") throw new Error(`PostgreSQL temporal parser unexpectedly returned ${typeof observed.value}.`);
+        },
+      },
+    },
     guarded,
     close: async () => undefined,
   };
