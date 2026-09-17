@@ -836,6 +836,13 @@ function postgresBeginSql(options: TransactionOptions | undefined): string {
   return clauses.length === 0 ? "BEGIN" : `BEGIN ${clauses.join(" ")}`;
 }
 
+function streamBatchSize(value: number | undefined): number {
+  const size = value ?? 100;
+  if (!Number.isSafeInteger(size) || size < 1)
+    throw new RangeError("PostgreSQL streamBatchSize must be a positive safe integer.");
+  return size;
+}
+
 export function createPgExecutor(client: PgClientLike, options: PgExecutorOptions = {}): QueryExecutor {
   assertPgClient(client);
   const profile = parserProfile(options.parserProfile, options.profile);
@@ -844,9 +851,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
   const firstPartyProfile =
     options.profile === undefined || representationProfiles.some((entry) => entry === options.profile);
   const types = queryTypeOverrides(client, profile);
-  const batchSize = options.streamBatchSize ?? 100;
-  if (!Number.isSafeInteger(batchSize) || batchSize < 1)
-    throw new RangeError("PostgreSQL streamBatchSize must be a positive safe integer.");
+  const batchSize = streamBatchSize(options.streamBatchSize);
   const runControl = async (text: string): Promise<void> => {
     await client.query({ text, values: [] });
   };
@@ -1134,6 +1139,7 @@ export function createPgDatabase(client: PgClientLike, options: PgDatabaseOption
 }
 
 export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOptions = {}): ConnectionProvider {
+  streamBatchSize(options.streamBatchSize);
   const profile = parserProfile(options.parserProfile, options.profile);
   const profilePolicy = options.profile?.typePolicy ?? typePolicyForProfile(profile);
   const policy = options.typePolicy ?? profilePolicy;
@@ -1152,17 +1158,26 @@ export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOption
           },
     async acquire(): Promise<ConnectionLease> {
       const client = await pool.connect();
-      const executor = createPgExecutor(client, options);
-      let released = false;
-      return {
-        ...executor,
-        async release(releaseOptions = {}): Promise<void> {
-          if (released) return;
-          released = true;
-          if (releaseOptions.discard === true) await client.release(true);
-          else await client.release();
-        },
-      };
+      try {
+        const executor = createPgExecutor(client, options);
+        let released = false;
+        return {
+          ...executor,
+          async release(releaseOptions = {}): Promise<void> {
+            if (released) return;
+            released = true;
+            if (releaseOptions.discard === true) await client.release(true);
+            else await client.release();
+          },
+        };
+      } catch (error) {
+        try {
+          await client.release();
+        } catch (cleanup) {
+          throw cleanupAggregate([error, cleanup], "PostgreSQL pool initialization cleanup failed.", error);
+        }
+        throw error;
+      }
     },
   };
 }

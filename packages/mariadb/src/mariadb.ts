@@ -995,32 +995,41 @@ export function createMariaDbPoolProvider(
     environment: mariaDbEnvironment(options.profile, options.typePolicy ?? mariaDbProfile(options.profile).typePolicy),
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
-      const executor = createMariaDbExecutor(connection, options);
-      let released = false;
-      return {
-        ...executor,
-        async release(releaseOptions = {}): Promise<void> {
-          if (released) return;
-          released = true;
-          if (releaseOptions.discard === true) {
-            try {
-              if (typeof connection.destroy === "function") {
-                connection.destroy();
-                return;
+      try {
+        const executor = createMariaDbExecutor(connection, options);
+        let released = false;
+        return {
+          ...executor,
+          async release(releaseOptions = {}): Promise<void> {
+            if (released) return;
+            released = true;
+            if (releaseOptions.discard === true) {
+              try {
+                if (typeof connection.destroy === "function") {
+                  connection.destroy();
+                  return;
+                }
+                if (typeof connection.end === "function") {
+                  await connection.end();
+                  return;
+                }
+                throw cleanupError("MariaDB pool connection cannot be discarded safely.");
+              } catch (error) {
+                if ((error as { readonly code?: unknown }).code === "BRAID_RESOURCE_CLEANUP") throw error;
+                throw cleanupError("MariaDB pool discard failed.", error);
               }
-              if (typeof connection.end === "function") {
-                await connection.end();
-                return;
-              }
-              throw cleanupError("MariaDB pool connection cannot be discarded safely.");
-            } catch (error) {
-              if ((error as { readonly code?: unknown }).code === "BRAID_RESOURCE_CLEANUP") throw error;
-              throw cleanupError("MariaDB pool discard failed.", error);
             }
-          }
+            await connection.release();
+          },
+        };
+      } catch (error) {
+        try {
           await connection.release();
-        },
-      };
+        } catch (cleanup) {
+          throw cleanupAggregate([error, cleanup], "MariaDB pool initialization cleanup failed.", error);
+        }
+        throw error;
+      }
     },
   };
 }

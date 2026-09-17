@@ -1983,33 +1983,42 @@ export function createTediousPoolProvider(
       const connection = await acquireConnection();
       if (!connection || typeof connection.release !== "function")
         throw new TypeError("SQL Server pool returned a connection without explicit release ownership.");
-      const executor = makeTediousExecutor(connection, options, bindingAdapter);
-      let released = false;
-      return {
-        ...executor,
-        async release(releaseOptions = {}): Promise<void> {
-          if (released) return;
-          released = true;
-          if (releaseOptions.discard === true) {
-            try {
-              if (typeof connection.destroy === "function") await connection.destroy();
-              else if (typeof connection.close === "function") await connection.close();
-              else {
-                const error = new Error(
-                  "BRAID_RESOURCE_CLEANUP: SQL Server pool connection cannot be discarded safely.",
-                );
-                Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
-                throw error;
+      try {
+        const executor = makeTediousExecutor(connection, options, bindingAdapter);
+        let released = false;
+        return {
+          ...executor,
+          async release(releaseOptions = {}): Promise<void> {
+            if (released) return;
+            released = true;
+            if (releaseOptions.discard === true) {
+              try {
+                if (typeof connection.destroy === "function") await connection.destroy();
+                else if (typeof connection.close === "function") await connection.close();
+                else {
+                  const error = new Error(
+                    "BRAID_RESOURCE_CLEANUP: SQL Server pool connection cannot be discarded safely.",
+                  );
+                  Object.defineProperty(error, "code", { value: "BRAID_RESOURCE_CLEANUP", enumerable: true });
+                  throw error;
+                }
+              } catch (error) {
+                if ((error as { readonly code?: unknown }).code === "BRAID_RESOURCE_CLEANUP") throw error;
+                throw resourceCleanupError(undefined, [error]);
               }
-            } catch (error) {
-              if ((error as { readonly code?: unknown }).code === "BRAID_RESOURCE_CLEANUP") throw error;
-              throw resourceCleanupError(undefined, [error]);
+            } else {
+              await connection.release();
             }
-          } else {
-            await connection.release();
-          }
-        },
-      };
+          },
+        };
+      } catch (error) {
+        try {
+          await connection.release();
+        } catch (cleanup) {
+          throw resourceCleanupError(error, [cleanup]);
+        }
+        throw error;
+      }
     },
   };
 }

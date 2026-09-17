@@ -840,6 +840,13 @@ async function beginMysqlTransaction(
   }
 }
 
+function streamHighWaterMark(value: number | undefined): number {
+  const size = value ?? 16;
+  if (!Number.isSafeInteger(size) || size < 1)
+    throw new RangeError("MySQL streamHighWaterMark must be a positive safe integer.");
+  return size;
+}
+
 export function createMysql2Executor(
   connection: Mysql2ConnectionLike,
   options: Mysql2ExecutorOptions = {},
@@ -849,9 +856,7 @@ export function createMysql2Executor(
   const policy =
     options.typePolicy ??
     (isRepresentationProfile(options.profile) ? options.profile.typePolicy : representationProfile.typePolicy);
-  const highWaterMark = options.streamHighWaterMark ?? 16;
-  if (!Number.isSafeInteger(highWaterMark) || highWaterMark < 1)
-    throw new RangeError("MySQL streamHighWaterMark must be a positive safe integer.");
+  const highWaterMark = streamHighWaterMark(options.streamHighWaterMark);
   const control = async (sql: string): Promise<void> => {
     await (connection.query ?? connection.execute).call(connection, sql);
   };
@@ -1150,6 +1155,7 @@ export function createMysql2PoolProvider(
   pool: Mysql2PoolLike,
   options: Mysql2ExecutorOptions = {},
 ): ConnectionProvider {
+  streamHighWaterMark(options.streamHighWaterMark);
   const representationProfile = mysql2RepresentationProfile({} as Mysql2ConnectionLike, options.profile);
   const policy = options.typePolicy ?? representationProfile.typePolicy;
   const environment = mysql2Environment({} as Mysql2ConnectionLike, options.profile, policy);
@@ -1162,17 +1168,26 @@ export function createMysql2PoolProvider(
         : environment,
     async acquire(): Promise<ConnectionLease> {
       const connection = await pool.getConnection();
-      const executor = createMysql2Executor(connection, options);
-      let released = false;
-      return {
-        ...executor,
-        async release(releaseOptions = {}): Promise<void> {
-          if (released) return;
-          released = true;
-          if (releaseOptions.discard === true) connection.destroy();
-          else await connection.release();
-        },
-      };
+      try {
+        const executor = createMysql2Executor(connection, options);
+        let released = false;
+        return {
+          ...executor,
+          async release(releaseOptions = {}): Promise<void> {
+            if (released) return;
+            released = true;
+            if (releaseOptions.discard === true) connection.destroy();
+            else await connection.release();
+          },
+        };
+      } catch (error) {
+        try {
+          await connection.release();
+        } catch (cleanup) {
+          throw cleanupAggregate([error, cleanup], "MySQL pool initialization cleanup failed.", error);
+        }
+        throw error;
+      }
     },
   };
 }
