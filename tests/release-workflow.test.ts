@@ -89,8 +89,15 @@ function graph(
 ) {
   const results: Record<string, { result: string }> = {};
   const github = { event_name: event, ref, ref_type: ref.startsWith("refs/tags/") ? "tag" : "branch" };
-  const inputs = { release_mode: event === "workflow_dispatch" ? mode : undefined, deploy };
-  const env = { SQLBRAID_RELEASE_MODE: event === "workflow_dispatch" ? mode : "certify" };
+  const inputs = {
+    release_mode: event === "workflow_dispatch" ? mode : undefined,
+    release_package: event === "workflow_dispatch" ? "all" : undefined,
+    deploy,
+  };
+  const env = {
+    SQLBRAID_RELEASE_MODE: event === "workflow_dispatch" ? mode : "certify",
+    SQLBRAID_RELEASE_PACKAGE: "*",
+  };
   const pending = new Set(Object.keys(workflow.jobs));
   while (pending.size) {
     const available = [...pending].filter((name) =>
@@ -113,9 +120,13 @@ const mutationJobs = ["release-stage", "release-draft"];
 test("dispatch defaults to certification and version tags trigger all three validation workflows", () => {
   assert.deepEqual(release.on.workflow_dispatch?.inputs?.release_mode.options, ["certify", "pack-only", "stage"]);
   assert.equal(release.on.workflow_dispatch?.inputs?.release_mode.default, "certify");
+  assert.equal(release.on.workflow_dispatch?.inputs?.release_package?.default, "all");
+  assert.equal(release.on.workflow_dispatch?.inputs?.release_package?.type, "string");
   assert.equal(release.on.workflow_dispatch?.inputs?.prior_run_id?.default, "");
   assert.equal(release.on.workflow_dispatch?.inputs?.prior_run_id?.type, "string");
   for (const workflow of [release, runtime, docs]) assert.ok(workflow.on.push?.tags?.includes("v*"));
+  for (const workflow of [release, runtime]) assert.ok(workflow.on.push?.tags?.includes("*-v*"));
+  assert.ok(!docs.on.push?.tags?.includes("*-v*"));
   assert.equal(release.jobs["release-bootstrap"], undefined);
   assert.equal(release.jobs["release-publish"], undefined);
   assert.match(release.on.workflow_dispatch?.inputs?.release_mode.description ?? "", /\bstage\b/u);
@@ -127,7 +138,11 @@ test("main, PR, manual certification, and every version tag cannot reach a relea
     ["pull_request", "certify", "refs/pull/1/merge"],
     ["workflow_dispatch", "certify", "refs/heads/main"],
     ["workflow_dispatch", "pack-only", "refs/heads/main"],
-    ...["v0.1.0-rc.0", "v0.1.0-rc.1", "v0.1.0"].map((tag) => ["push", "certify", `refs/tags/${tag}`]),
+    ...["v0.1.0-rc.0", "v0.1.0-rc.1", "v0.1.0", "postgres-v1.0.1"].map((tag) => [
+      "push",
+      "certify",
+      `refs/tags/${tag}`,
+    ]),
   ]) {
     const { results } = graph(release, event, mode, ref);
     for (const name of mutationJobs) assert.equal(results[name].result, "skipped", `${event}/${mode}/${ref}: ${name}`);
@@ -357,12 +372,14 @@ test("staging distinguishes fresh and explicit cross-run reconciliation", () => 
   assert.match(String(release.env?.SQLBRAID_TAG_BEFORE), /github\.event\.before/u);
 });
 
-test("preparation enforces an exact version tag for staging", () => {
-  const determine = release.jobs["release-prep"].steps.find((step) => step.name === "Determine release version");
+test("preparation resolves coordinated and package-specific release targets", () => {
+  const determine = release.jobs["release-prep"].steps.find((step) => step.name === "Determine release target");
   assert.ok(determine);
-  assert.match(determine.run ?? "", /GITHUB_EVENT_NAME.*workflow_dispatch.*SQLBRAID_RELEASE_MODE.*stage/isu);
-  assert.match(determine.run ?? "", /GITHUB_REF_TYPE.*tag/u);
-  assert.match(determine.run ?? "", /tag_version.*manifest_version/u);
+  assert.match(determine.run ?? "", /GITHUB_REF_TYPE.*tag/isu);
+  assert.match(determine.run ?? "", /\^v\(\.\+\)\$/u);
+  assert.match(determine.run ?? "", /-v\(\.\+\)\$/u);
+  assert.match(determine.run ?? "", /SQLBRAID_RELEASE_PACKAGE/u);
+  assert.match(determine.run ?? "", /GITHUB_OUTPUT/u);
 });
 
 test("documentation pushes publish latest and tagged docs while manual deployment remains opt-in", () => {
