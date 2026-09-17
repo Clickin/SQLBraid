@@ -1,7 +1,6 @@
 import { Buffer } from "node:buffer";
 import assert from "node:assert/strict";
 import { createConnection, createPool, type Connection } from "mysql2/promise";
-import { createRequire } from "node:module";
 import type { Database, RowQuery, StreamOptions } from "@sqlbraid/core";
 import { createMysql2Database, createMysql2PoolProvider, MYSQL2_LOSSLESS_TEXT, type Mysql2ConnectionLike, type Mysql2PoolLike, type Mysql2RawCommandLike, type Mysql2RawConnectionLike, type Mysql2RawStreamLike } from "@sqlbraid/mysql/mysql2";
 import { sql } from "@sqlbraid/mysql";
@@ -68,15 +67,6 @@ type MysqlPool = Mysql2PoolLike & {
 };
 
 let fixtureSerial = 0;
-
-function allowReservedMysqlFields(): void {
-  const require = createRequire(import.meta.url);
-  const packageRoot = require.resolve("mysql2").replace(/[/\\]index\.js$/u, "");
-  const helpers = require(`${packageRoot}/lib/helpers.js`) as { readonly privateObjectProps?: Set<string> };
-  for (const name of ["__proto__", "constructor", "prototype", "toString", "hasOwnProperty"]) {
-    helpers.privateObjectProps?.delete(name);
-  }
-}
 
 function connectionOptions(connectionUri: string): Record<string, unknown> {
   const uri = new URL(connectionUri);
@@ -184,7 +174,6 @@ async function end(connection: Pick<MysqlConnection, "end">): Promise<void> {
 }
 
 async function createFixture(connectionUri: string): Promise<CertificationFixture> {
-  allowReservedMysqlFields();
   const options = connectionOptions(connectionUri);
   const pool = createPool({ ...options, connectionLimit: 4, idleTimeout: 0 }) as unknown as MysqlPool;
   const direct = await createConnection(options) as unknown as MysqlConnection;

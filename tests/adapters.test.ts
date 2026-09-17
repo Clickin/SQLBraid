@@ -20,6 +20,30 @@ test('mysql2 adapter uses positional placeholders', async () => {
   assert.deepEqual(request, { text: 'SELECT ?', values: [1] });
 });
 
+test('mysql2 keeps materialized queries on native execute with hostile bound text', async () => {
+  let executeCalls = 0;
+  let queryCalls = 0;
+  const hostile = "x'); DROP TABLE braid_rc3_bind; --";
+  const db = createMysql2Database({
+    async execute(text, values) {
+      executeCalls += 1;
+      assert.equal(text, 'SELECT ? AS marker');
+      assert.deepEqual(values, [hostile]);
+      return [[{ marker: hostile }], [{ name: 'marker', type: 'VAR_STRING' }]];
+    },
+    async query() {
+      queryCalls += 1;
+      throw new Error('query transport must not be used');
+    },
+    async beginTransaction() {},
+    async commit() {},
+    async rollback() {},
+  });
+  assert.deepEqual(await db.one(mysqlSql.rows`SELECT ${hostile} AS marker`), { marker: hostile });
+  assert.equal(executeCalls, 1);
+  assert.equal(queryCalls, 0);
+});
+
 test('pool providers release healthy leases once and discard poisoned leases', async () => {
   const pgReleases: boolean[] = [];
   const pgClient = {

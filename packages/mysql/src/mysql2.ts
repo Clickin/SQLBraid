@@ -286,10 +286,19 @@ function plainRow(value: unknown, fields: readonly Mysql2FieldLike[], policy: Ty
     throw new Error("BRAID_RESULT_COLUMNS: mysql2 must return object or array rows.");
   }
   const row: Record<string, unknown> = {};
-  const entries = Array.isArray(value)
-    ? fields.flatMap((field, index) => field.name === undefined ? [] : [[field.name, value[index]] as const])
-    : Object.entries(value);
-  for (const [key, entry] of entries) {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < fields.length; index += 1) {
+      const field = fields[index];
+      const key = field?.name;
+      if (key === undefined) continue;
+      const entry = value[index];
+      const databaseType = mysqlDatabaseType(field);
+      assertMysqlNumericValue(databaseType, entry);
+      defineResultProperty(row, key, databaseType ? policy.decode(databaseType, entry) : entry);
+    }
+    return row;
+  }
+  for (const [key, entry] of Object.entries(value)) {
     const field = fields.find((candidate) => candidate.name === key);
     const databaseType = mysqlDatabaseType(field);
     assertMysqlNumericValue(databaseType, entry);
@@ -764,7 +773,7 @@ export function createMysql2Executor(connection: Mysql2ConnectionLike, options: 
       const [payload, rawFields] = await withMysqlCancellation(
         connection,
         executionOptions?.signal,
-        () => (connection.query ?? connection.execute).call(connection, prepared.text, prepared.values as unknown as Mysql2Parameter[]),
+        () => connection.execute(prepared.text, prepared.values as unknown as Mysql2Parameter[]),
       );
       if (isMultipleResultPayload(payload, rawFields)) {
         throw unsupported(
