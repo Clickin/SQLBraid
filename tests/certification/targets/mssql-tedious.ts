@@ -369,12 +369,11 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
         const rows = await database.all<{ readonly id: unknown; readonly value: unknown }>(sql.rows`SELECT id, value FROM ${sql.raw(TABLE)} WHERE id = 12 ORDER BY id`);
         await database.execute(sql`DELETE FROM ${sql.raw(TABLE)} WHERE id = 12`);
         const observedRows = rows.map((row) => ({ id: Number(row.id), value: row.value }));
-        const durability = observedRows.length > 0 ? "prefix" as const : "atomic" as const;
         return {
           error,
           observedRows,
-          expectedRows: durability === "prefix" ? [{ id: 12, value: "first" }] : [],
-          durability,
+          expectedRows: [{ id: 12, value: "first" }],
+          durability: "prefix" as const,
         };
       },
     };
