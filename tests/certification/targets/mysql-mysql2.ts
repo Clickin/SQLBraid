@@ -580,6 +580,12 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
         assert.ok(value.includes(largeInteger), "mysql2 JSON text proof must preserve the exact numeric lexeme.");
       },
     },
+    "data.temporal-native": {
+      prove: async () => {
+        const row = await directDb.one(sql.rows`SELECT CAST(${exactTemporal} AS DATETIME(3)) AS value`);
+        assert.equal(typeof (row as { readonly value?: unknown }).value, "string");
+      },
+    },
   };
   const fixture: CertificationFixture = {
     db: directDb,
