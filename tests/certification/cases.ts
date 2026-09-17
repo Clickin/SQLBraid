@@ -130,6 +130,25 @@ function assertCardinality(error: unknown, expected: "one" | "maybeOne", actual:
   assert.equal((error as { readonly actual?: unknown }).actual, actual);
 }
 
+function fidelityQueries(fixture: CertificationFixture): NonNullable<CertificationFixture["queries"]["fidelity"]> {
+  if (!fixture.queries.fidelity) throw new Error("Certification fidelity queries are required.");
+  return fixture.queries.fidelity;
+}
+
+function preparedQuery(
+  fixture: CertificationFixture,
+  name: string,
+  query: import("@sqlbraid/core").PreparableQuery,
+  prepareOptions?: import("@sqlbraid/core").PreparedFactoryOptions,
+): unknown {
+  const prepare = fixture.db.prepare as unknown as (
+    name: string,
+    factory: () => import("@sqlbraid/core").PreparableQuery,
+    options?: import("@sqlbraid/core").PreparedFactoryOptions,
+  ) => unknown;
+  return prepare(name, () => query, prepareOptions);
+}
+
 async function runTransactionOption(context: CaseContext, id: CertificationCaseId, key: TransactionOptionKey, options: import("@sqlbraid/core").TransactionOptions): Promise<CertificationCaseResult> {
   const status = context.target.expectedTransactionOptions[key];
   if (status === undefined) throw new Error(`Missing independent transaction option declaration for ${key}.`);
@@ -145,7 +164,14 @@ async function runTransactionOption(context: CaseContext, id: CertificationCaseI
     assert.equal(probe.sideEffects(), before);
     return { status: "pass-unsupported", name: id, feature: key, rejectionFeature: (probe.expectedErrorFeature ?? probe.feature) === key ? undefined : (probe.expectedErrorFeature ?? probe.feature), code: error.code };
   }
-  await context.fixture.db.tx(options, async (tx) => { await tx.one(context.fixture.queries.identity); });
+  await context.fixture.db.tx(options, async (tx) => {
+    await tx.one(context.fixture.queries.identity);
+    if (options.readOnly === true) {
+      const transaction = context.fixture.queries.transaction;
+      if (!transaction) throw new Error(`${id} requires transaction fixture evidence.`);
+      await assert.rejects(() => tx.execute(transaction.insert));
+    }
+  });
   return { status: "pass", name: id, feature: key };
 }
 
@@ -228,34 +254,100 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
 
   ...Object.fromEntries(RESULT_CASES.map((id) => [id, async ({ fixture }: CaseContext) => { await runResultCase(fixture, id); return { status: "pass", name: id }; }])) as Record<(typeof RESULT_CASES)[number], (context: CaseContext) => Promise<CertificationCaseResult>>,
 
+  VAL001: async (context) => supported(context, "VAL001", "sql.native-transparency", async ({ fixture }) => {
+    const values = fidelityQueries(fixture);
+    const row = await fixture.db.one(values.largeExactInteger);
+    assert.deepEqual(row, values.expected.largeExactInteger);
+  }),
+  VAL002: async (context) => supported(context, "VAL002", "sql.native-transparency", async ({ fixture }) => {
+    const values = fidelityQueries(fixture);
+    const row = await fixture.db.one(values.exactDecimal);
+    assert.deepEqual(row, values.expected.exactDecimal);
+  }),
+  VAL003: async (context) => supported(context, "VAL003", "sql.native-transparency", async ({ fixture }) => {
+    const values = fidelityQueries(fixture);
+    const row = await fixture.db.one(values.temporal);
+    assert.deepEqual(row, values.expected.temporal);
+  }),
+  VAL004: async (context) => supported(context, "VAL004", "sql.native-transparency", async ({ fixture }) => {
+    const values = fidelityQueries(fixture);
+    const metrics = fixtureMetrics(fixture);
+    if (metrics.sideEffects === undefined) throw new Error("VAL004 requires a native side-effect observer.");
+    const before = metrics.sideEffects();
+    const row = await fixture.db.one(values.injection);
+    assert.deepEqual(row, values.expected.injection);
+    assert.equal(metrics.sideEffects(), before);
+  }),
+
   SES001: async (context) => supported(context, "SES001", "session.pinned", async ({ fixture }) => {
-    const ids: string[] = [];
-    await fixture.db.session(async (session) => {
-      ids.push((await session.one(fixture.queries.identity)).id);
-      ids.push((await session.one(fixture.queries.identity)).id);
-    });
-    assert.equal(ids.length, 2);
-    assert.equal(ids[0], ids[1]);
+    for (const db of databases(fixture)) {
+      const ids: string[] = [];
+      await db.session(async (session) => {
+        ids.push((await session.one(fixture.queries.identity)).id);
+        ids.push((await session.one(fixture.queries.identity)).id);
+      });
+      assert.equal(ids.length, 2);
+      assert.equal(ids[0], ids[1]);
+    }
     const metrics = fixtureMetrics(fixture);
     if (metrics.physicalSessionIds) assert.equal(new Set(metrics.physicalSessionIds()).size, 1);
+    if (fixture.pooled !== undefined) {
+      if (metrics.pooledScope === undefined) throw new Error("SES001 requires pooled native lease evidence.");
+      await metrics.pooledScope();
+    }
   }),
   SES002: async (context) => supported(context, "SES002", "session.pinned", async ({ fixture }) => {
-    const before = await fixtureMetrics(fixture).snapshot();
-    await fixture.db.session(async (session) => { await session.one(fixture.queries.identity); });
-    await cleanResources(fixture, before);
+    for (const db of databases(fixture)) {
+      const before = await fixtureMetrics(fixture).snapshot();
+      await db.session(async (session) => { await session.one(fixture.queries.identity); });
+      await cleanResources(fixture, before);
+    }
+    if (fixture.pooled !== undefined) {
+      const scope = fixtureMetrics(fixture).pooledScope;
+      if (scope === undefined) throw new Error("SES002 requires pooled native lease evidence.");
+      await scope();
+    }
   }),
   SES003: async (context) => supported(context, "SES003", "session.pinned", async ({ fixture }) => {
-    const before = await fixtureMetrics(fixture).snapshot();
-    await assert.rejects(() => fixture.db.session(async () => { throw new Error("cert-session-callback"); }));
-    await cleanResources(fixture, before);
+    for (const db of databases(fixture)) {
+      const before = await fixtureMetrics(fixture).snapshot();
+      await assert.rejects(() => db.session(async () => { throw new Error("cert-session-callback"); }));
+      await cleanResources(fixture, before);
+    }
   }),
   SES004: async (context) => supported(context, "SES004", "session.pinned", async ({ fixture }) => {
-    let scoped: Database | undefined;
-    await fixture.db.session(async (session) => { scoped = session; });
-    await assert.rejects(() => scoped!.one(fixture.queries.identity), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_SESSION_CLOSED");
+    for (const db of databases(fixture)) {
+      let scoped: Database | undefined;
+      await db.session(async (session) => { scoped = session; });
+      await assert.rejects(() => scoped!.one(fixture.queries.identity), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_SESSION_CLOSED");
+    }
   }),
   SES005: async (context) => supported(context, "SES005", "session.pinned", async ({ fixture }) => {
-    await assert.rejects(() => fixture.db.session(async () => { await fixture.db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_SESSION_SCOPE");
+    for (const db of databases(fixture)) {
+      await assert.rejects(() => db.session(async () => { await db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_SESSION_SCOPE");
+    }
+  }),
+  SES006: async (context) => supported(context, "SES006", "session.pinned", async ({ fixture }) => {
+    for (const db of databases(fixture)) {
+      const before = await fixtureMetrics(fixture).snapshot();
+      await assert.rejects(() => db.session(async (session) => { await session.one(fixture.queries.failure); }));
+      await cleanResources(fixture, before);
+    }
+  }),
+  SES007: async (context) => supportedAll(context, "SES007", ["session.pinned", "statement.stream"], async ({ fixture }) => {
+    const query = fixture.queries.stream ?? fixture.queries.many;
+    for (const db of databases(fixture)) {
+      const rows: unknown[] = [];
+      await db.session(async (session) => { for await (const row of session.stream(query)) rows.push(row); });
+      assert.ok(rows.length > 0);
+    }
+  }),
+  SES008: async (context) => supportedAll(context, "SES008", ["session.pinned", "transaction"], async ({ fixture }) => {
+    for (const db of databases(fixture)) {
+      await db.session(async (session) => {
+        await session.tx(async (tx) => { await tx.one(fixture.queries.identity); });
+      });
+    }
   }),
 
   TX001: async (context) => supported(context, "TX001", "transaction", async ({ fixture }) => {
@@ -286,6 +378,34 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   }),
   TX005: async (context) => supported(context, "TX005", "transaction", async ({ fixture }) => {
     await assert.rejects(() => fixture.db.tx(async () => { await fixture.db.one(fixture.queries.identity); }), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_SCOPE");
+  }),
+  TX006: async (context) => supported(context, "TX006", "transaction", async ({ fixture }) => {
+    let scoped: Database | undefined;
+    await fixture.db.tx(async (tx) => { scoped = tx; });
+    await assert.rejects(() => scoped!.one(fixture.queries.identity), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_CLOSED");
+  }),
+  TX007: async (context) => supported(context, "TX007", "transaction", async ({ fixture }) => {
+    let error: unknown;
+    try {
+      await fixture.db.tx(async () => { throw new Error("cert-transaction-cleanup"); });
+    } catch (caught) {
+      error = caught;
+    }
+    assert.ok(error instanceof Error);
+    await fixture.db.one(fixture.queries.identity);
+  }),
+  TX008: async (context) => supported(context, "TX008", "transaction", async ({ fixture }) => {
+    for (const db of databases(fixture)) {
+      await db.tx(async (tx) => { await tx.one(fixture.queries.identity); });
+      await db.one(fixture.queries.identity);
+    }
+  }),
+  TX009: async (context) => supported(context, "TX009", "transaction", async ({ fixture }) => {
+    const transaction = fixture.queries.transaction;
+    if (!transaction) throw new Error("TX009 transaction fixture missing.");
+    await fixture.reset();
+    await assert.rejects(() => fixture.db.tx({ readOnly: true }, async (tx) => { await tx.execute(transaction.insert); }));
+    assert.equal((await fixture.db.all(transaction.visible)).length, 0);
   }),
   TX010: async (context) => supported(context, "TX010", "transaction.savepoint", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX010 transaction fixture missing.");
@@ -382,6 +502,50 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     assert.equal(prepared.factoryCalls(), before + 1);
     if (prepared.resources) assert.equal(prepared.resources(), 0);
   }),
+  PRE006: async (context) => supported(context, "PRE006", "statement.prepare", async ({ fixture }) => {
+    const handle = preparedQuery(fixture, "cert-prepared-one", fixture.queries.one);
+    const row = await (handle as unknown as { one(): Promise<unknown> }).one();
+    assert.deepEqual(row, fixture.queries.expected?.one);
+  }),
+  PRE007: async (context) => supported(context, "PRE007", "statement.prepare", async ({ fixture }) => {
+    const zero = preparedQuery(fixture, "cert-prepared-maybe-zero", fixture.queries.zero);
+    assert.equal(await (zero as unknown as { maybeOne(): Promise<unknown> }).maybeOne(), undefined);
+    const many = preparedQuery(fixture, "cert-prepared-maybe-many", fixture.queries.many);
+    await assert.rejects(() => (many as unknown as { maybeOne(): Promise<unknown> }).maybeOne(), (error: unknown) => {
+      assertCardinality(error, "maybeOne", 2);
+      return true;
+    });
+  }),
+  PRE008: async (context) => supported(context, "PRE008", "routine.call", async ({ fixture }) => {
+    const routine = fixture.queries.routines?.call;
+    if (!routine) throw new Error("PRE008 routine fixture missing.");
+    const handle = preparedQuery(fixture, "cert-prepared-call", routine);
+    const result = await (handle as unknown as { call(): Promise<unknown> }).call();
+    assert.deepEqual(result, fixture.queries.expected?.special.CALL001);
+  }),
+  PRE009: async (context) => supported(context, "PRE009", "statement.prepare", async ({ fixture }) => {
+    const prepare = fixture.db.prepare as unknown as (name: string, factory: (input: string) => import("@sqlbraid/core").PreparableQuery) => unknown;
+    const handle = prepare("cert-prepared-shape", (input: string) => input === "one" ? fixture.queries.one : fixture.queries.command);
+    await (handle as { execute(input: string): Promise<unknown> }).execute("one");
+    await assert.rejects(() => (handle as { execute(input: string): Promise<unknown> }).execute("two"), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_PREPARED_SHAPE");
+  }),
+  PRE010: async (context) => supported(context, "PRE010", "statement.prepare", async ({ fixture }) => {
+    preparedQuery(fixture, "cert-prepared-duplicate", fixture.queries.one);
+    let error: unknown;
+    try { preparedQuery(fixture, "cert-prepared-duplicate", fixture.queries.one); } catch (caught) { error = caught; }
+    assert.equal((error as { readonly code?: unknown }).code, "BRAID_PREPARED_NAME");
+  }),
+  PRE011: async (context) => supportedAll(context, "PRE011", ["statement.prepare", "statement.stream", "statement.cancel"], async ({ fixture }) => {
+    const controller = new AbortController();
+    const abortError = new Error("cert-prepared-abort");
+    const handle = preparedQuery(fixture, "cert-prepared-abort", fixture.queries.stream ?? fixture.queries.many, { input: "none" });
+    await assert.rejects(async () => {
+      for await (const row of (handle as unknown as { stream(options?: { signal?: AbortSignal }): AsyncIterable<unknown> }).stream({ signal: controller.signal })) {
+        void row;
+        controller.abort(abortError);
+      }
+    }, (error: unknown) => error === abortError || (error instanceof AggregateError && error.errors.includes(abortError)));
+  }),
 
   STR001: async (context) => supported(context, "STR001", "statement.stream", async ({ fixture }) => { const stream = streamFixture(fixture); await runStreamingConformanceCase("STR001", () => ({ ...stream, close: undefined })); }),
   STR002: async (context) => supported(context, "STR002", "statement.stream", async ({ fixture }) => { const stream = streamFixture(fixture); await runStreamingConformanceCase("STR002", () => ({ ...stream, close: undefined })); }),
@@ -392,6 +556,15 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   STR007: async (context) => supported(context, "STR007", "statement.stream", async ({ fixture }) => { const stream = streamFixture(fixture); await runStreamingConformanceCase("STR007", () => ({ ...stream, close: undefined })); }),
   STR008: async (context) => supported(context, "STR008", "statement.stream", async ({ fixture }) => { const stream = streamFixture(fixture); await runStreamingConformanceCase("STR008", () => ({ ...stream, close: undefined })); }),
   STR009: async (context) => supported(context, "STR009", "statement.stream", async ({ fixture }) => { const stream = streamFixture(fixture); await runStreamingConformanceCase("STR009", () => ({ ...stream, close: undefined })); }),
+  STR010: async (context) => supported(context, "STR010", "statement.cancel", async ({ fixture }) => {
+    const stream = streamFixture(fixture);
+    await runStreamingConformanceCase("STR006", () => ({ ...stream, close: undefined }), { abortError: new Error("cert-custom-abort") });
+  }),
+  STR011: async (context) => supported(context, "STR011", "statement.stream", async ({ fixture }) => {
+    const stream = streamFixture(fixture);
+    for await (const row of fixture.db.stream(stream.query)) { void row; break; }
+    await fixture.db.one(fixture.queries.identity);
+  }),
 
   CALL001: async (context) => supported(context, "CALL001", "routine.call", async ({ fixture }) => { if (!fixture.queries.routines) throw new Error("CALL001 routine fixture missing."); const result = await callRoutine(fixture, fixture.queries.routines.call); assert.deepEqual(result, fixture.queries.expected?.special.CALL001); }),
   CALL002: async (context) => supported(context, "CALL002", "routine.out", async ({ fixture }) => { if (!fixture.queries.routines?.out) throw new Error("CALL002 routine fixture missing."); const result = await callRoutine(fixture, fixture.queries.routines.out); assert.deepEqual(result, fixture.queries.expected?.special.CALL002); }),
@@ -399,10 +572,21 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   CALL004: async (context) => supported(context, "CALL004", "routine.result-sets", async ({ fixture }) => { if (!fixture.queries.routines?.resultSets) throw new Error("CALL004 routine fixture missing."); const result = await callRoutine(fixture, fixture.queries.routines.resultSets); assert.deepEqual(result, fixture.queries.expected?.special.CALL004); }),
   CALL005: async (context) => supported(context, "CALL005", "routine.out-cursor", async ({ fixture }) => { if (!fixture.queries.routines?.cursor) throw new Error("CALL005 routine fixture missing."); const result = await callRoutine(fixture, fixture.queries.routines.cursor); assert.deepEqual(result, fixture.queries.expected?.special.CALL005); }),
   CALL006: async (context) => supported(context, "CALL006", "routine.return-value", async ({ fixture }) => { if (!fixture.queries.routines?.returnValue) throw new Error("CALL006 routine fixture missing."); const result = await callRoutine(fixture, fixture.queries.routines.returnValue); assert.deepEqual(result, fixture.queries.expected?.special.CALL006); }),
+  CALL007: async (context) => supported(context, "CALL007", "routine.call", async ({ fixture }) => {
+    const proof = fixtureMetrics(fixture).routineCleanup;
+    if (!proof) throw new Error("CALL007 requires a native routine LOB cleanup proof.");
+    await proof();
+  }),
 
   BULK001: async (context) => supported(context, "BULK001", "statement.bulk", async ({ fixture }) => { if (!fixture.bulk) throw new Error("BULK001 bulk fixture missing."); await runBulkConformanceCase("BULK001", { ...fixture.bulk, close: undefined }); }),
   BULK002: async (context) => supported(context, "BULK002", "statement.bulk", async ({ fixture }) => { if (!fixture.bulk) throw new Error("BULK002 bulk fixture missing."); await runBulkConformanceCase("BULK002", { ...fixture.bulk, close: undefined }); }),
   BULK003: async (context) => supported(context, "BULK003", "statement.bulk", async ({ fixture }) => { if (!fixture.bulk) throw new Error("BULK003 bulk fixture missing."); await runBulkConformanceCase("BULK003", { ...fixture.bulk, close: undefined }); }),
+  BULK004: async (context) => supportedAll(context, "BULK004", ["statement.bulk", "transaction"], async ({ fixture }) => {
+    const bulk = fixture.bulk;
+    if (!bulk) throw new Error("BULK004 bulk fixture missing.");
+    const result = await fixture.db.tx(async (tx) => tx.bulk(bulk.inputs, bulk.factory));
+    assert.deepEqual(result, bulk.expected);
+  }),
   BAT001: async ({ fixture }) => {
     const results = await fixture.db.batch([fixture.queries.command, fixture.queries.command]);
     assert.equal(results.length, 2);
@@ -421,7 +605,12 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
       (error: unknown) => { assert.equal((error as { readonly code?: unknown }).code, fixture.queries.expected?.failureCode); return true; },
     );
     assert.equal((await fixture.db.all(transaction.visible)).length, 1);
+    await fixture.db.one(fixture.queries.identity);
     return { status: "pass", name: "BAT002" };
+  },
+  BAT003: async ({ fixture }) => {
+    assert.deepEqual(await fixture.db.batch([]), []);
+    return { status: "pass", name: "BAT003" };
   },
   CAP001: async ({ target, fixture }) => {
     const environment = await fixture.db.environment();
@@ -464,7 +653,7 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
       await proof.prove();
     }
     for (const [feature, value] of Object.entries(context.target.expectedCapabilities)) {
-      if (value.status !== "guarded" || feature.startsWith("data.") || feature.startsWith("numeric.") || feature.startsWith("sql.")) continue;
+      if (value.status !== "guarded") continue;
       if (!context.fixture.guarded?.[feature]) throw new Error(`CAP002 missing guarded behavior proof for ${feature}.`);
     }
     return { status: "pass", name: "CAP002" };
@@ -488,6 +677,17 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   STRESS004: async (context) => supported(context, "STRESS004", "statement.stream", async ({ fixture, stress }) => { const metrics = fixtureMetrics(fixture); const stream = streamFixture(fixture); const before = await metrics.snapshot(); const count = stress ? 500 : 10; for (let index = 0; index < count; index += 1) { for await (const row of fixture.db.stream(stream.query)) { void row; break; } } assertStableStress(before, await metrics.snapshot()); await fixture.db.one(fixture.queries.one); }),
   STRESS005: async (context) => supported(context, "STRESS005", "transaction", async ({ fixture, stress }) => { const metrics = fixtureMetrics(fixture); const before = await metrics.snapshot(); const count = stress ? 1000 : 10; for (let index = 0; index < count; index += 1) await assert.rejects(() => fixture.db.tx(async () => { throw new Error("stress-rollback"); })); assertStableStress(before, await metrics.snapshot()); await fixture.db.one(fixture.queries.one); }),
   STRESS006: async (context) => supported(context, "STRESS006", "session.pinned", async ({ fixture, stress }) => { const metrics = fixtureMetrics(fixture); const before = await metrics.snapshot(); const count = stress ? 1000 : 10; for (let index = 0; index < count; index += 1) await fixture.db.session(async (session) => { await session.one(fixture.queries.identity); }); assertStableStress(before, await metrics.snapshot()); await fixture.db.one(fixture.queries.one); }),
+  STRESS007: async ({ fixture }) => {
+    const metrics = fixtureMetrics(fixture);
+    const before = await metrics.snapshot();
+    await fixture.db.one(fixture.queries.one);
+    const after = await metrics.snapshot();
+    assert.equal(after.borrowedLeases, before.borrowedLeases);
+    assert.equal(after.cleanupBalance, before.cleanupBalance);
+    assert.equal(after.openCursors ?? 0, before.openCursors ?? 0);
+    assert.equal(after.openPrepared ?? 0, before.openPrepared ?? 0);
+    return { status: "pass", name: "STRESS007" };
+  },
 };
 
 export async function executeCertificationCase(

@@ -432,6 +432,18 @@ function rowQueries(state: Shared): CertificationFixture["queries"] {
     },
     prepared: preparedFactory,
     routines,
+    fidelity: {
+      largeExactInteger: sql.rows`SELECT 9007199254740991::numeric(38,0)::text AS value`,
+      exactDecimal: sql.rows`SELECT 12345678901234567890.123456789::numeric(38,9)::text AS value`,
+      temporal: sql.rows`SELECT to_char(TIMESTAMP '2026-09-14 12:34:56.789', 'YYYY-MM-DD HH24:MI:SS.MS') AS value`,
+      injection: sql.rows`SELECT ${"'; SELECT 1; --"} AS value`,
+      expected: {
+        largeExactInteger: { value: "9007199254740991" },
+        exactDecimal: { value: "12345678901234567890.123456789" },
+        temporal: { value: "2026-09-14 12:34:56.789" },
+        injection: { value: "'; SELECT 1; --" },
+      },
+    },
     expected: {
       one: { id: "one", value: "one" },
       many: [{ id: "one", value: "one" }, { id: "two", value: "two" }],
@@ -538,6 +550,17 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       openCursors: state.openCursors.value,
     }),
     sideEffects: () => state.sideEffects.value,
+    pooledScope: async (): Promise<void> => {
+      await pooled.session(async (session) => {
+        await session.one(queries.identity);
+        if (state.activeLeases.value < 1) throw new Error("pg pooled session did not borrow a native client.");
+      });
+      if (state.activeLeases.value !== 0) throw new Error("pg pooled session leaked its native client.");
+    },
+    routineCleanup: async (): Promise<void> => {
+      await direct.call(queries.routines!.call);
+      await direct.one(queries.identity);
+    },
   };
   const unsupported = {
     CALL003: {

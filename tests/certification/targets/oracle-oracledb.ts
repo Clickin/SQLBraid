@@ -1,4 +1,5 @@
 import oracledb from "oracledb";
+import assert from "node:assert/strict";
 import { createOracledbDatabase, createOracledbPoolDatabase, type OracleConnectionLike, type OracleExecuteResultLike, type OraclePoolLike, type OracleResultSetLike } from "@sqlbraid/oracle/oracledb";
 import { oracleParameter, sql } from "@sqlbraid/oracle";
 import type { CallQuery, CommandQuery, Database, RowQuery } from "@sqlbraid/core";
@@ -153,6 +154,18 @@ function makeQueries(): CertificationFixture["queries"] {
     transaction,
     prepared,
     routines,
+    fidelity: {
+      largeExactInteger: row("SELECT TO_CHAR(CAST(9007199254740991 AS NUMBER(38,0))) AS VALUE FROM dual"),
+      exactDecimal: row("SELECT TO_CHAR(CAST(12345678901234567890.123456789 AS NUMBER(38,9))) AS VALUE FROM dual"),
+      temporal: row("SELECT TO_CHAR(TIMESTAMP '2026-09-14 12:34:56.789', 'YYYY-MM-DD HH24:MI:SS.FF3') AS VALUE FROM dual"),
+      injection: row("SELECT '''; SELECT 1; --' AS VALUE FROM dual"),
+      expected: {
+        largeExactInteger: { VALUE: "9007199254740991" },
+        exactDecimal: { VALUE: "12345678901234567890.123456789" },
+        temporal: { VALUE: "2026-09-14 12:34:56.789" },
+        injection: { VALUE: "'; SELECT 1; --" },
+      },
+    },
     expected,
   };
 }
@@ -276,6 +289,9 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
       };
       const direct = createOracledbDatabase(connection, { streamFetchSize: 2 });
       const pooled = createOracledbPoolDatabase(pool, { streamFetchSize: 2 });
+      const nativePool = pool as unknown as { readonly connectionsInUse?: number; readonly connectionsOpen?: number };
+      const pooledConnections = (): number => nativePool.connectionsInUse ?? 0;
+      let sideEffects = 0;
       const reset = async (): Promise<void> => {
         await exec(connection, `TRUNCATE TABLE ${TABLE}`);
         await exec(connection, `TRUNCATE TABLE ${BULK_TABLE}`);
@@ -290,19 +306,33 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         }
       };
       const unsupported = {
-        CALL006: { feature: "routine.return-value", expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED" as const, run: () => direct.call(makeQueries().routines!.returnValue!), sideEffects: () => 0 },
-        TX020: { feature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-uncommitted" }), sideEffects: () => 0 },
-        TX024: { feature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "repeatable-read" }), sideEffects: () => 0 },
-        TX022: { feature: "combination:read-committed+readOnly", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-committed", readOnly: true }), sideEffects: () => 0 },
-        TX027: { feature: "combination:read-uncommitted+readOnly", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-uncommitted", readOnly: true }), sideEffects: () => 0 },
-        TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "serializable", readOnly: true }), sideEffects: () => 0 },
-        TX031: { feature: "combination:repeatable-read+readOnly", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "repeatable-read", readOnly: true }), sideEffects: () => 0 },
-        TX029: { feature: "combination:read-uncommitted+readWrite", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-uncommitted", readOnly: false }), sideEffects: () => 0 },
-        TX032: { feature: "combination:repeatable-read+readWrite", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "repeatable-read", readOnly: false }), sideEffects: () => 0 },
-        TX030: { feature: "combination:read-committed+readWrite", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-committed", readOnly: false }), sideEffects: () => 0 },
-        TX033: { feature: "combination:serializable+readWrite", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "serializable", readOnly: false }), sideEffects: () => 0 },
+        CALL006: { feature: "routine.return-value", expectedCode: "BRAID_CALL_RETURN_UNSUPPORTED" as const, run: () => direct.call(makeQueries().routines!.returnValue!), sideEffects: () => sideEffects },
+        TX020: { feature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-uncommitted" }), sideEffects: () => sideEffects },
+        TX024: { feature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "repeatable-read" }), sideEffects: () => sideEffects },
+        TX022: { feature: "combination:read-committed+readOnly", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-committed", readOnly: true }), sideEffects: () => sideEffects },
+        TX027: { feature: "combination:read-uncommitted+readOnly", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-uncommitted", readOnly: true }), sideEffects: () => sideEffects },
+        TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "serializable", readOnly: true }), sideEffects: () => sideEffects },
+        TX031: { feature: "combination:repeatable-read+readOnly", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "repeatable-read", readOnly: true }), sideEffects: () => sideEffects },
+        TX029: { feature: "combination:read-uncommitted+readWrite", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-uncommitted", readOnly: false }), sideEffects: () => sideEffects },
+        TX032: { feature: "combination:repeatable-read+readWrite", expectedErrorFeature: "transaction.isolation.repeatable-read", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "repeatable-read", readOnly: false }), sideEffects: () => sideEffects },
+        TX030: { feature: "combination:read-committed+readWrite", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "read-committed", readOnly: false }), sideEffects: () => sideEffects },
+        TX033: { feature: "combination:serializable+readWrite", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED" as const, run: () => unsupportedTransaction({ isolation: "serializable", readOnly: false }), sideEffects: () => sideEffects },
       };
-      const metrics = { snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0, openCursors: 0, openPrepared: 0 }) };
+      const metrics = {
+        snapshot: (): ResourceSnapshot => ({ borrowedLeases: pooledConnections(), cleanupBalance: pooledConnections() }),
+        sideEffects: () => sideEffects,
+        pooledScope: async (): Promise<void> => {
+          await pooled.session(async (session) => {
+            await session.one(makeQueries().identity);
+            if (pooledConnections() < 1) throw new Error("Oracle pooled session did not borrow a native connection.");
+          });
+          if (pooledConnections() !== 0) throw new Error("Oracle pooled session leaked its native connection.");
+        },
+        routineCleanup: async (): Promise<void> => {
+          await direct.call(makeQueries().routines!.call);
+          await direct.one(makeQueries().identity);
+        },
+      };
       return {
         db: direct,
         pooled,
@@ -312,7 +342,38 @@ export async function createOracleOracledbTarget(options: OracleCertificationCon
         metrics,
         reset,
         unsupported,
-        guarded: { "statement.cancel": { prove: async () => undefined }, "data.temporal-native": { prove: async () => undefined }, "metadata.command-safe": { prove: async () => undefined } },
+        guarded: {
+          "statement.cancel": {
+            prove: async () => {
+              const controller = new AbortController();
+              const pending = direct.execute(command("BEGIN DBMS_SESSION.SLEEP(60); END;"), { signal: controller.signal });
+              await new Promise((resolve) => setTimeout(resolve, 50));
+              controller.abort(new Error("oracle-cert-cancel"));
+              let rejected = false;
+              try {
+                await pending;
+              } catch {
+                rejected = true;
+              }
+              assert.equal(rejected, true, "Oracle cancellation must reject the in-flight operation.");
+              await direct.one(row("SELECT 1 AS VALUE FROM dual"));
+            },
+          },
+          "data.temporal-native": {
+            prove: async () => {
+              const result = await direct.one(row("SELECT CAST(TIMESTAMP '2026-09-14 12:34:56.789' AS TIMESTAMP) AS VALUE FROM dual"));
+              if (!((result as { readonly VALUE?: unknown }).VALUE instanceof Date)) throw new Error("Oracle temporal native guard did not return Date.");
+            },
+          },
+          "metadata.command-safe": {
+            prove: async () => {
+              const result = await direct.execute(command(`INSERT INTO ${BULK_TABLE} (id, value) VALUES (999999, 'metadata')`));
+              sideEffects += 1;
+              if ((result as { readonly command: { readonly affectedRows: number } }).command.affectedRows !== 1) throw new Error("Oracle command metadata guard failed.");
+              await direct.execute(command(`DELETE FROM ${BULK_TABLE} WHERE id = 999999`));
+            },
+          },
+        },
         close: async () => { await connection.close?.(); },
       };
     },

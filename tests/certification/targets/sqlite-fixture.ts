@@ -159,6 +159,18 @@ function queryFixtures(failureCode: string): CertificationQueries {
       savepointInsert,
       savepointVisible: sql.rows`SELECT value FROM cert_items ORDER BY rowid`,
     },
+    fidelity: {
+      largeExactInteger: sql.rows`SELECT '9007199254740991' AS value`,
+      exactDecimal: sql.rows`SELECT '12345678901234567890.123456789' AS value`,
+      temporal: sql.rows`SELECT '2026-09-14T12:34:56.789Z' AS value`,
+      injection: sql.rows`SELECT "'; SELECT 1; --" AS value`,
+      expected: {
+        largeExactInteger: { value: "9007199254740991" },
+        exactDecimal: { value: "12345678901234567890.123456789" },
+        temporal: { value: "2026-09-14T12:34:56.789Z" },
+        injection: { value: "'; SELECT 1; --" },
+      },
+    },
     expected: {
       one: { value: "one" },
       many: [{ value: "1" }, { value: "2" }],
@@ -199,10 +211,15 @@ function makeUnsupported(db: Database, queries: CertificationQueries, targetKind
       SES003: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
       SES004: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
       SES005: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
+      SES006: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
+      SES007: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
+      SES008: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
       STRESS006: { feature: "session.pinned", expectedCode: "BRAID_SESSION_UNSUPPORTED", run: () => db.session(async () => undefined), sideEffects: noSideEffects },
+
       PRE003: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
       PRE004: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
       PRE005: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
+      PRE011: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
       STR001: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
       STR002: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
       STR003: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
@@ -211,9 +228,12 @@ function makeUnsupported(db: Database, queries: CertificationQueries, targetKind
       STR007: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
       STR008: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
       STR009: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
+      STR011: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
       STRESS004: { feature: "statement.stream", expectedCode: "BRAID_STREAM_UNSUPPORTED", run: runStream, sideEffects: noSideEffects },
     } : {}),
     STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects: noSideEffects },
+    STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects: noSideEffects },
+    ...(targetKind === "sqlite" ? { PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: () => db.execute(queries.one, { signal: new AbortController().signal }), sideEffects: noSideEffects } } : {}),
     TX020: { feature: "transaction.isolation.read-uncommitted", expectedErrorFeature: "transaction.isolation.read-uncommitted", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-uncommitted" }, async () => undefined), sideEffects: noSideEffects },
     TX021: { feature: "transaction.read-only", expectedErrorFeature: "transaction.read-only", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ readOnly: true }, async () => undefined), sideEffects: noSideEffects },
     TX022: { feature: "combination:read-committed+readOnly", expectedErrorFeature: "transaction.isolation.read-committed", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: () => db.tx({ isolation: "read-committed", readOnly: true }, async () => undefined), sideEffects: noSideEffects },
@@ -313,7 +333,8 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
     factoryCalls: () => preparedCalls.count,
   };
   const metrics = {
-    snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0, openCursors: 0, openPrepared: 0 }),
+    snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0 }),
+    sideEffects: () => options.stats.result,
     ...(options.sessionSupported ? { physicalSessionIds: () => [options.physicalSessionId] } : {}),
   };
   const unsupported = makeUnsupported(options.db, queries, options.localReadOnly ? "libsql" : "sqlite");

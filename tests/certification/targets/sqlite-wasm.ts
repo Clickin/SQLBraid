@@ -58,7 +58,7 @@ function targetCapabilities(): ExpectedCapabilityContract {
     "routine.inout": { status: "unsupported", unsupportedCode: "BRAID_CALL_OUT_UNSUPPORTED" },
     "routine.result-sets": { status: "unsupported", unsupportedCode: "BRAID_CALL_RESULT_SETS" },
     "routine.out-cursor": { status: "unsupported", unsupportedCode: "BRAID_CALL_CURSOR_UNSUPPORTED" },
-    "routine.return-value": { status: "unsupported", unsupportedCode: "BRAID_CALL_RETURN_UNSUPPORTED" },
+    "routine.return-value": { status: "unsupported", unsupportedCode: "BRAID_CALL_UNSUPPORTED" },
   };
 }
 
@@ -181,6 +181,18 @@ function buildQueries(stats: NativeStats): CertificationFixture["queries"] {
       resources: () => stats.active,
     },
     routines: { call, out, inout, resultSets: call, cursor: call, returnValue: call },
+    fidelity: {
+      largeExactInteger: sql.rows`SELECT '9007199254740991' AS value`,
+      exactDecimal: sql.rows`SELECT '12345678901234567890.123456789' AS value`,
+      temporal: sql.rows`SELECT '2026-09-14T12:34:56.789Z' AS value`,
+      injection: sql.rows`SELECT "'; SELECT 1; --" AS value`,
+      expected: {
+        largeExactInteger: { value: "9007199254740991" },
+        exactDecimal: { value: "12345678901234567890.123456789" },
+        temporal: { value: "2026-09-14T12:34:56.789Z" },
+        injection: { value: "'; SELECT 1; --" },
+      },
+    },
     expected: {
       one: { value: "one" },
       many: [{ value: "one" }, { value: "two" }],
@@ -241,6 +253,8 @@ export function createSqliteWasmTarget(sqlite3: Sqlite3Like, sourceSha: string):
       const queries = buildQueries(stats);
       const unsupported: NonNullable<CertificationFixture["unsupported"]> = {
         STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
+        STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
+        PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { const controller = new AbortController(); for await (const row of db.stream(queries.stream!, { signal: controller.signal })) { void row; controller.abort(new Error("cancel")); } }, sideEffects: () => stats.prepares },
         CALL001: { feature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.call), sideEffects: () => stats.prepares },
         CALL002: { feature: "routine.out", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.out!), sideEffects: () => stats.prepares },
         CALL003: { feature: "routine.inout", expectedErrorFeature: "routine.call", expectedCode: "BRAID_CALL_UNSUPPORTED", run: () => db.call(queries.routines!.inout!), sideEffects: () => stats.prepares },

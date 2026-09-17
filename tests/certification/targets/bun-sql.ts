@@ -291,6 +291,18 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
       cursor: tag.call`CALL braid_cert_missing()`,
       returnValue: tag.call`CALL braid_cert_missing()`,
     },
+    fidelity: {
+      largeExactInteger: tag.rows`SELECT ${"9007199254740991"} AS value`,
+      exactDecimal: tag.rows`SELECT ${"12345678901234567890.123456789"} AS value`,
+      temporal: tag.rows`SELECT ${"2026-09-14T12:34:56.789Z"} AS value`,
+      injection: tag.rows`SELECT ${"'; SELECT 1; --"} AS value`,
+      expected: {
+        largeExactInteger: { value: "9007199254740991" },
+        exactDecimal: { value: "12345678901234567890.123456789" },
+        temporal: { value: "2026-09-14T12:34:56.789Z" },
+        injection: { value: "'; SELECT 1; --" },
+      },
+    },
     expected: {
       one: expectedOne,
       many: expectedMany,
@@ -302,7 +314,7 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     },
   };
   const unsupported: Partial<Record<CertificationCaseId, UnsupportedProbe>> = {};
-  const streamIds: readonly CertificationCaseId[] = ["PRE003", "PRE004", "PRE005", "STR001", "STR002", "STR003", "STR004", "STR005", "STR007", "STR008", "STR009", "STRESS004"];
+  const streamIds: readonly CertificationCaseId[] = ["PRE003", "PRE004", "PRE005", "PRE011", "SES007", "STR001", "STR002", "STR003", "STR004", "STR005", "STR007", "STR008", "STR009", "STR011", "STRESS004"];
   for (const id of streamIds) {
     unsupported[id] = makeProbe("statement.stream", async () => {
       const stream = db.stream(queries.stream);
@@ -310,6 +322,7 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     }, () => counters.sideEffects, "BRAID_STREAM_UNSUPPORTED");
   }
   unsupported.STR006 = makeProbe("statement.cancel", () => db.execute(queries.one, { signal: new AbortController().signal }), () => counters.sideEffects, "BRAID_CANCEL_UNSUPPORTED");
+  unsupported.STR010 = makeProbe("statement.cancel", () => db.execute(queries.one, { signal: new AbortController().signal }), () => counters.sideEffects, "BRAID_CANCEL_UNSUPPORTED");
   const routineCases: readonly [CertificationCaseId, string, CallQuery][] = [
     ["CALL001", "routine.call", queries.routines.call], ["CALL002", "routine.out", queries.routines.out], ["CALL003", "routine.inout", queries.routines.inout], ["CALL004", "routine.result-sets", queries.routines.resultSets], ["CALL005", "routine.out-cursor", queries.routines.cursor], ["CALL006", "routine.return-value", queries.routines.returnValue],
   ];
@@ -326,6 +339,27 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
   }
   let bulkValues: unknown[][] = [];
   const guarded: NonNullable<CertificationFixture["guarded"]> = {
+    "numeric.exact-integer": { prove: async () => {
+      const value = await db.one(tag.rows`SELECT ${"9007199254740991"} AS value`);
+      if ((value as { readonly value?: unknown }).value !== "9007199254740991") throw new Error("Bun.SQL exact-integer guard failed.");
+    } },
+    "numeric.approximate-float": { prove: async () => {
+      const value = await db.one(tag.rows`SELECT ${1.5} AS value`);
+      if (typeof (value as { readonly value?: unknown }).value !== "number") throw new Error("Bun.SQL float guard failed.");
+    } },
+    "numeric.bind-exact": { prove: async () => {
+      const value = await db.one(tag.rows`SELECT ${"9007199254740991"} AS value`);
+      if ((value as { readonly value?: unknown }).value !== "9007199254740991") throw new Error("Bun.SQL exact bind guard failed.");
+    } },
+    "numeric.approximate-special": { prove: async () => {
+      const value = await db.one(tag.rows`SELECT ${1.5} AS value`);
+      if (typeof (value as { readonly value?: unknown }).value !== "number") throw new Error("Bun.SQL special-float guard failed.");
+    } },
+    "numeric.command-metadata": { prove: async () => {
+      const result = await db.execute(queries.command);
+      if (!Number.isSafeInteger(result.command.affectedRows)) throw new Error("Bun.SQL command-count guard failed.");
+      await reset();
+    } },
     ...(dialect !== "postgres" ? {
       "result.rows": { prove: async () => { const result = await db.all(queries.one); if (result.length !== 1) throw new Error("Bun.SQL row-kind proof did not return one row."); } },
       "result.command": { prove: async () => { const result = await db.execute(queries.command); if (result.kind !== "command" || result.command.affectedRows !== 1) throw new Error("Bun.SQL command-kind proof did not return one affected row."); await reset(); } },
@@ -333,6 +367,19 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     "metadata.command-safe": { prove: async () => { const result = await db.execute(queries.command); if (!Number.isSafeInteger(result.command.affectedRows)) throw new Error("Bun.SQL command metadata was not safe."); await reset(); } },
     "execution.bulk-fidelity": { prove: async () => { const result = await db.bulk(["proof-one", "proof-two"], (input) => tag.command`INSERT INTO ${tableSql} (value) VALUES (${input})`); if (result.inputCount !== 2 || result.affectedRows !== 2) throw new Error("Bun.SQL bulk fidelity proof failed."); await reset(); } },
   };
+  if (dialect === "postgres" || dialect === "mysql") {
+    guarded["data.json-parsed"] = { prove: async () => {
+      const row = await db.one(tag.rows`SELECT ${tag.raw(dialect === "postgres" ? "'{\"value\": 1}'::jsonb" : "JSON_OBJECT('value', 1)")} AS value`);
+      if (row === null || typeof (row as { readonly value?: unknown }).value !== "object") throw new Error("Bun.SQL JSON parser guard failed.");
+    } };
+  }
+  if (dialect !== "sqlite") {
+    guarded["data.temporal-native"] = { prove: async () => {
+      const row = await db.one(tag.rows`SELECT CURRENT_TIMESTAMP AS value`);
+      if (!((row as { readonly value?: unknown }).value instanceof Date || typeof (row as { readonly value?: unknown }).value === "string")) throw new Error("Bun.SQL temporal guard failed.");
+    } };
+    guarded["data.timezone"] = guarded["data.temporal-native"];
+  }
   if (dialect === "postgres" || dialect === "mysql" || dialect === "mariadb") {
     for (const isolation of ["read-uncommitted", "read-committed", "repeatable-read", "serializable"] as const) {
       guarded[`transaction.isolation.${isolation}`] = { prove: () => proveTransactionOption(db, tag, dialect, { isolation }) };

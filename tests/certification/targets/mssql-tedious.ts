@@ -157,6 +157,18 @@ function queries(): CertificationFixture["queries"] {
     transaction,
     prepared,
     routines,
+    fidelity: {
+      largeExactInteger: sql.rows`SELECT CONVERT(varchar(64), CAST(9007199254740991 AS decimal(38,0))) AS value`,
+      exactDecimal: sql.rows`SELECT CONVERT(varchar(64), CAST(12345678901234567890.123456789 AS decimal(38,9))) AS value`,
+      temporal: sql.rows`SELECT CONVERT(varchar(33), DATETIME2FROMPARTS(2026, 9, 14, 12, 34, 56, 7890000, 7), 126) AS value`,
+      injection: sql.rows`SELECT ${"'; SELECT 1; --"} AS value`,
+      expected: {
+        largeExactInteger: { value: "9007199254740991" },
+        exactDecimal: { value: "12345678901234567890.123456789" },
+        temporal: { value: "2026-09-14T12:34:56.7890000" },
+        injection: { value: "'; SELECT 1; --" },
+      },
+    },
     expected: {
       one: { value: "one" },
       many: [{ value: "one" }, { value: "two" }],
@@ -324,6 +336,10 @@ export function createMssqlTediousTarget(sourceSha: string): CertificationTarget
     const metrics = {
       snapshot: (): ResourceSnapshot => ({ borrowedLeases: stats.leased ? 1 : 0, cleanupBalance: stats.leased ? 1 : 0 }),
       sideEffects: () => stats.requests,
+      routineCleanup: async (): Promise<void> => {
+        await database.call(fixtureQueries.routines!.call);
+        await database.execute(fixtureQueries.identity);
+      },
     };
     return {
       db: database,

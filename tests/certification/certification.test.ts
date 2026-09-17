@@ -3,6 +3,7 @@ import { describe, test } from "vitest";
 import { aggregateCertificationArtifacts, certifyTarget, validateCertificationArtifact } from "./runner.js";
 import { createSyntheticTarget } from "./targets/synthetic.js";
 import { REQUIRED_CERTIFICATION_TARGETS } from "./targets/inventory.js";
+import { REQUIRED_CASE_IDS } from "./types.js";
 import { runStreamingConformanceCase } from "../streaming-conformance.js";
 
 describe("A4 certification harness", () => {
@@ -10,7 +11,7 @@ describe("A4 certification harness", () => {
     const artifact = await certifyTarget(createSyntheticTarget("candidate-a4"));
 
     validateCertificationArtifact(artifact, { sourceSha: "candidate-a4" });
-    assert.equal(Object.keys(artifact.cases).length, 84);
+    assert.equal(Object.keys(artifact.cases).length, REQUIRED_CASE_IDS.length);
     assert.equal(artifact.cases.CAP002.status, "pass");
     assert.equal(artifact.cases.STR006.status, "pass-unsupported");
     assert.equal(artifact.cases.STR006.code, "BRAID_CANCEL_UNSUPPORTED");

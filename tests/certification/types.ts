@@ -11,14 +11,19 @@ import type {
 export const REQUIRED_CASE_IDS = [
   "QRY001", "QRY002", "QRY010", "QRY011", "QRY012", "QRY020", "QRY021", "QRY022", "QRY030", "QRY031", "QRY032",
   "RES001", "RES002", "RES003", "RES004", "RES005", "RES006", "RES007", "RES008", "RES009", "RES010", "RES011",
+  "VAL001", "VAL002", "VAL003", "VAL004",
   "SES001", "SES002", "SES003", "SES004", "SES005",
+  "SES006", "SES007", "SES008",
   "TX001", "TX002", "TX003", "TX004", "TX005", "TX010", "TX011", "TX012", "TX013", "TX020", "TX021", "TX022", "TX023", "TX024", "TX025", "TX026", "TX027", "TX028", "TX029", "TX030", "TX031", "TX032", "TX033",
-  "PRE001", "PRE002", "PRE003", "PRE004", "PRE005",
+  "TX006", "TX007", "TX008", "TX009",
+  "PRE001", "PRE002", "PRE003", "PRE004", "PRE005", "PRE006", "PRE007", "PRE008", "PRE009", "PRE010", "PRE011",
   "STR001", "STR002", "STR003", "STR004", "STR005", "STR006", "STR007", "STR008", "STR009",
+  "STR010", "STR011",
   "CALL001", "CALL002", "CALL003", "CALL004", "CALL005", "CALL006",
-  "BULK001", "BULK002", "BULK003", "BAT001", "BAT002",
+  "CALL007",
+  "BULK001", "BULK002", "BULK003", "BULK004", "BAT001", "BAT002", "BAT003",
   "CAP001", "CAP002", "ERR001",
-  "STRESS001", "STRESS002", "STRESS003", "STRESS004", "STRESS005", "STRESS006",
+  "STRESS001", "STRESS002", "STRESS003", "STRESS004", "STRESS005", "STRESS006", "STRESS007",
 ] as const;
 
 export type CertificationCaseId = (typeof REQUIRED_CASE_IDS)[number];
@@ -46,6 +51,18 @@ export interface CertificationQueries {
   readonly identity: RowQuery<{ readonly id: string }>;
   readonly failure: RowQuery<unknown>;
   readonly stream?: RowQuery<unknown>;
+  readonly fidelity?: {
+    readonly largeExactInteger: RowQuery<unknown>;
+    readonly exactDecimal: RowQuery<unknown>;
+    readonly temporal: RowQuery<unknown>;
+    readonly injection: RowQuery<unknown>;
+    readonly expected: {
+      readonly largeExactInteger: unknown;
+      readonly exactDecimal: unknown;
+      readonly temporal: unknown;
+      readonly injection: unknown;
+    };
+  };
   readonly special: Readonly<Partial<Record<"RES001" | "RES002" | "RES003" | "RES004" | "RES005" | "RES006" | "RES007" | "RES008" | "RES009" | "RES010" | "RES011", RowQuery<unknown>>>>;
   readonly transaction?: {
     readonly insert: CommandQuery;
@@ -68,6 +85,7 @@ export interface CertificationQueries {
     readonly resultSets?: CallQuery;
     readonly cursor?: CallQuery;
     readonly returnValue?: CallQuery;
+    readonly lob?: CallQuery;
   };
   readonly expected?: {
     readonly one: unknown;
@@ -101,6 +119,10 @@ export interface CertificationMetrics {
   readonly snapshot: () => Promise<ResourceSnapshot> | ResourceSnapshot;
   readonly sideEffects?: () => number;
   readonly physicalSessionIds?: () => readonly string[];
+  readonly transactionCleanup?: () => Promise<void>;
+  readonly batchAbort?: () => Promise<void>;
+  readonly routineCleanup?: () => Promise<void>;
+  readonly pooledScope?: () => Promise<void>;
 }
 
 export interface UnsupportedProbe {

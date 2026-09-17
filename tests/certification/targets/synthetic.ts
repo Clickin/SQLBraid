@@ -37,8 +37,10 @@ interface SyntheticState {
   streamReturns: number;
   preparedCalls: number;
   pending: number[];
+  readOnly: boolean[];
   savepoints: Map<string, number>;
   borrowed: number;
+  rollbackFault: boolean;
 }
 
 export interface SyntheticTargetOptions {
@@ -47,6 +49,7 @@ export interface SyntheticTargetOptions {
 }
 
 const CAPABILITY_KEYS = [
+  "sql.native-transparency",
   "session.pinned", "transaction", "transaction.savepoint", "transaction.read-only",
   "transaction.isolation.read-uncommitted", "transaction.isolation.read-committed",
   "transaction.isolation.repeatable-read", "transaction.isolation.serializable",
@@ -137,6 +140,7 @@ function createExecutor(state: SyntheticState, definitions: Map<string, Definiti
   };
   const command = (definition: Definition): { readonly kind: "command"; readonly rows: readonly unknown[]; readonly rowCount: number; readonly command: { readonly affectedRows: number } } => {
     if (definition.marker === "insert" || definition.marker === "savepoint-insert") {
+      if (state.readOnly.at(-1)) throw new Error("synthetic read-only transaction rejected write");
       const pending = state.pending.at(-1);
       if (pending === undefined) state.committedRows += 1;
       else state.pending[state.pending.length - 1] = pending + 1;
@@ -195,13 +199,22 @@ function createExecutor(state: SyntheticState, definitions: Map<string, Definiti
     async begin(options) {
       if (options && optionKey(options) === "combination:serializable+readOnly") throw new UnsupportedFeatureError("transaction.isolation.serializable", "BRAID_TX_OPTION_UNSUPPORTED", "synthetic option combination unsupported");
       state.pending.push(0);
+      state.readOnly.push(options?.readOnly === true);
     },
     async commit() {
       const value = state.pending.pop() ?? 0;
+      state.readOnly.pop();
       if (state.pending.length === 0) state.committedRows += value;
       else state.pending[state.pending.length - 1] += value;
     },
-    async rollback() { state.pending.pop(); },
+    async rollback() {
+      state.pending.pop();
+      state.readOnly.pop();
+      if (state.rollbackFault) {
+        state.rollbackFault = false;
+        throw new Error("synthetic transaction rollback cleanup failure");
+      }
+    },
     async savepoint(name: string) { state.savepoints.set(name, state.pending.at(-1) ?? 0); },
     async rollbackTo(name: string) { const value = state.savepoints.get(name); if (value !== undefined && state.pending.length > 0) state.pending[state.pending.length - 1] = value; },
     async releaseSavepoint(name: string) { state.savepoints.delete(name); },
@@ -228,8 +241,21 @@ function makeQueries(definitions: Map<string, Definition>, options: SyntheticTar
     RES005: expectedSpecialRow("hasOwnProperty", specialValues.RES005),
     RES011: { value: specialValues.RES011 },
   };
+  const fidelityExpected = {
+    largeExactInteger: { value: "9007199254740991" },
+    exactDecimal: { value: "12345678901234567890.123456789" },
+    temporal: { value: "2026-09-14T12:34:56.789Z" },
+    injection: { value: "'; SELECT 1; --" },
+  };
   return {
     zero: rowQuery("zero", definitions, []), one: rowQuery("one", definitions, [{ value: "one" }]), many: rowQuery("many", definitions, [{ value: 1 }, { value: 2 }]), command: commandQuery("command", definitions), identity: rowQuery("identity", definitions, [{ id: "synthetic-session-1" }]), failure: rowQuery("failure", definitions, []), stream: rowQuery("stream", definitions, [{ value: 1 }, { value: 2 }]), special,
+    fidelity: {
+      largeExactInteger: rowQuery("special", definitions, [fidelityExpected.largeExactInteger]),
+      exactDecimal: rowQuery("special", definitions, [fidelityExpected.exactDecimal]),
+      temporal: rowQuery("special", definitions, [fidelityExpected.temporal]),
+      injection: rowQuery("special", definitions, [fidelityExpected.injection]),
+      expected: fidelityExpected,
+    },
     transaction: { insert: commandQuery("insert", definitions), visible: rowQuery("transaction-visible", definitions, []), savepointInsert: commandQuery("savepoint-insert", definitions), savepointVisible: rowQuery("transaction-visible", definitions, []) },
     routines: { call: callQuery(definitions, { output: { answer: 42 } }), out: callQuery(definitions, { output: { answer: 42 } }), inout: callQuery(definitions, { output: { answer: 43 } }), resultSets: callQuery(definitions, { resultSets: [[{ value: 1 }], [{ value: 2 }]] }), cursor: callQuery(definitions, { resultSets: [[{ value: 1 }]] }), returnValue: callQuery(definitions, { returnValue: 7 }) },
     expected: { one: { value: "one" }, many: [{ value: 1 }, { value: 2 }], special: { ...expectedSpecial, CALL001: { output: { answer: 42 }, resultSets: [] }, CALL002: { output: { answer: 42 }, resultSets: [] }, CALL003: { output: { answer: 43 }, resultSets: [] }, CALL004: { output: {}, resultSets: [{ rows: [{ value: 1 }] }, { rows: [{ value: 2 }] }] }, CALL005: { output: {}, resultSets: [{ rows: [{ value: 1 }] }] }, CALL006: { returnValue: 7, output: {}, resultSets: [] } }, commandAffectedRows: 1, failureCode: "SYNTHETIC_QUERY_FAILURE", ...(options.resultRowsGuarded ? { emptyResultError: { feature: "result.rows", code: "BRAID_RESULT_KIND_AMBIGUOUS" as const } } : {}) },
@@ -256,7 +282,7 @@ export function createSyntheticTarget(sourceSha = "synthetic-source-sha", cancel
     expectedTransactionOptions,
     ...(options.resultRowsGuarded ? { expectedGuardedCases: { emptyResultError: { feature: "result.rows", code: "BRAID_RESULT_KIND_AMBIGUOUS" as const } } } : {}),
     createFixture: async () => {
-      const state: SyntheticState = { committedRows: 0, sideEffects: 0, cleanupBalance: 0, identity: "synthetic-session-1", bulkCalls: 0, bulkExec: 0, streamReturns: 0, preparedCalls: 0, pending: [], savepoints: new Map(), borrowed: 0 };
+      const state: SyntheticState = { committedRows: 0, sideEffects: 0, cleanupBalance: 0, identity: "synthetic-session-1", bulkCalls: 0, bulkExec: 0, streamReturns: 0, preparedCalls: 0, pending: [], readOnly: [], savepoints: new Map(), borrowed: 0, rollbackFault: false };
       const definitions = new Map<string, Definition>();
       const executor = createExecutor(state, definitions, cancelUnsupported, environment, options);
       const db = createDatabase(executor);
@@ -294,7 +320,27 @@ export function createSyntheticTarget(sourceSha = "synthetic-source-sha", cancel
         released: () => state.streamReturns,
       } as StreamingConformanceFixture<unknown>;
       const bulk: BulkConformanceFixture<unknown> = { db, inputs: [1, 2], factory: () => commandQuery("command", definitions), expected: { inputCount: 2, affectedRows: 2 }, acquireCount: () => state.bulkCalls, executeCount: () => state.bulkExec, values: () => [[1], [2]], middleFailure: async () => { throw new Error("synthetic middle failure"); } };
-      const fixture: CertificationFixture = { db, pooled, queries, stream, bulk, metrics: { snapshot: (): ResourceSnapshot => ({ borrowedLeases: state.borrowed, cleanupBalance: state.cleanupBalance, openCursors: 0, openPrepared: 0 }), sideEffects: () => state.sideEffects, physicalSessionIds: () => [state.identity] }, reset: async () => { state.committedRows = 0; state.sideEffects = 0; state.bulkCalls = 0; state.bulkExec = 0; state.streamReturns = 0; state.preparedCalls = 0; state.pending.length = 0; state.savepoints.clear(); }, ...(guarded === undefined ? {} : { guarded }), unsupported: { TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("transaction.isolation.serializable", "BRAID_TX_OPTION_UNSUPPORTED", "synthetic option combination unsupported"); }, sideEffects: () => state.sideEffects }, ...(cancelUnsupported ? { STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects } } : {}), ...(options.resultSetsUnsupported ? { CALL004: { feature: "routine.result-sets", expectedCode: "BRAID_RESULT_SETS_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "synthetic multiple result sets unsupported"); }, sideEffects: () => state.sideEffects } } : {}) }, close: async () => { if (state.borrowed !== 0) throw new Error("synthetic pooled lease leaked"); } };
+      const transactionCleanup = async (): Promise<void> => {
+        state.rollbackFault = true;
+        await assert.rejects(
+          () => db.tx(async () => { throw new Error("synthetic transaction primary failure"); }),
+          (error: unknown) => error instanceof AggregateError && error.errors.some((entry) => entry instanceof Error && entry.message.includes("synthetic transaction primary failure")) && error.errors.some((entry) => entry instanceof Error && entry.message.includes("cleanup failure")),
+        );
+        await pooled.one(queries.identity);
+      };
+      const routineCleanup = async (): Promise<void> => {
+        if (!queries.routines?.call) throw new Error("synthetic routine query missing");
+        await db.call(queries.routines.call);
+        await pooled.one(queries.identity);
+      };
+      const pooledScope = async (): Promise<void> => {
+        await pooled.session(async (session) => {
+          await session.one(queries.identity);
+          if (state.borrowed < 1) throw new Error("synthetic pooled session did not borrow a native lease.");
+        });
+        if (state.borrowed !== 0) throw new Error("synthetic pooled session leaked a native lease.");
+      };
+      const fixture: CertificationFixture = { db, pooled, queries, stream, bulk, metrics: { snapshot: (): ResourceSnapshot => ({ borrowedLeases: state.borrowed, cleanupBalance: 0, openCursors: 0, openPrepared: 0 }), sideEffects: () => state.sideEffects, physicalSessionIds: () => [state.identity], transactionCleanup, routineCleanup, pooledScope }, reset: async () => { state.committedRows = 0; state.sideEffects = 0; state.bulkCalls = 0; state.bulkExec = 0; state.streamReturns = 0; state.preparedCalls = 0; state.pending.length = 0; state.readOnly.length = 0; state.savepoints.clear(); state.rollbackFault = false; }, ...(guarded === undefined ? {} : { guarded }), unsupported: { TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("transaction.isolation.serializable", "BRAID_TX_OPTION_UNSUPPORTED", "synthetic option combination unsupported"); }, sideEffects: () => state.sideEffects }, ...(cancelUnsupported ? { STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects }, STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects }, PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects } } : {}), ...(options.resultSetsUnsupported ? { CALL004: { feature: "routine.result-sets", expectedCode: "BRAID_RESULT_SETS_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "synthetic multiple result sets unsupported"); }, sideEffects: () => state.sideEffects } } : {}) }, close: async () => { if (state.borrowed !== 0) throw new Error("synthetic pooled lease leaked"); } };
       return fixture;
     },
   };

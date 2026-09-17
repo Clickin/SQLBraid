@@ -1,4 +1,5 @@
 import mariadb, { type ConnectionConfig, type Pool } from "mariadb";
+import assert from "node:assert/strict";
 import { inject } from "vitest";
 import { sql, MARIADB_LOSSLESS_TEXT } from "@sqlbraid/mariadb";
 import { createMariaDbDatabase, createMariaDbPoolDatabase } from "@sqlbraid/mariadb/mariadb";
@@ -144,6 +145,18 @@ function rowQueries(): CertificationFixture["queries"] {
     transaction,
     prepared,
     routines: { executionScope: "root", call, out, inout, resultSets, cursor, returnValue },
+    fidelity: {
+      largeExactInteger: sql.rows`SELECT CAST('9007199254740991' AS DECIMAL(38,0)) AS value`,
+      exactDecimal: sql.rows`SELECT CAST('12345678901234567890.123456789' AS DECIMAL(38,9)) AS value`,
+      temporal: sql.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`,
+      injection: sql.rows`SELECT ${"'; SELECT 1; --"} AS value`,
+      expected: {
+        largeExactInteger: { value: "9007199254740991" },
+        exactDecimal: { value: "12345678901234567890.123456789" },
+        temporal: { value: "2026-09-14 12:34:56.789" },
+        injection: { value: "'; SELECT 1; --" },
+      },
+    },
     expected: {
       one: { value: "one" },
       many: [{ value: "1" }, { value: "2" }],
@@ -239,7 +252,13 @@ async function createFixture(): Promise<CertificationFixture> {
   };
   const snapshot = (): ResourceSnapshot => {
     const active = pool.activeConnections();
-    return { borrowedLeases: active, cleanupBalance: active, openCursors: 0, openPrepared: 0 };
+    return { borrowedLeases: active, cleanupBalance: active };
+  };
+  const pooledScope = async (): Promise<void> => {
+    await pooled.session(async () => {
+      if (pool.activeConnections() < 1) throw new Error("MariaDB pooled session did not borrow a native connection.");
+    });
+    if (pool.activeConnections() !== 0) throw new Error("MariaDB pooled session leaked its native connection.");
   };
   const threadId = String((connection as unknown as { readonly threadId?: number }).threadId ?? "direct");
   const fixture: CertificationFixture = {
@@ -248,7 +267,16 @@ async function createFixture(): Promise<CertificationFixture> {
     queries,
     stream,
     bulk,
-    metrics: { snapshot, sideEffects: () => 0, physicalSessionIds: () => [threadId] },
+    metrics: {
+      snapshot,
+      sideEffects: () => acquisitions,
+      physicalSessionIds: () => [threadId],
+      pooledScope,
+      routineCleanup: async () => {
+        await db.call(queries.routines!.call);
+        await pooled.one(queries.identity);
+      },
+    },
     reset: async () => { await connection.query(`CREATE TABLE IF NOT EXISTS ${TABLE} (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, value VARCHAR(255) NULL)`); await connection.query(`DELETE FROM ${TABLE}`); },
     unsupported: {
       CALL002: {
@@ -265,13 +293,68 @@ async function createFixture(): Promise<CertificationFixture> {
       },
     },
     guarded: {
+      "numeric.exact-integer": {
+        prove: async () => {
+          const row = await db.one(sql.rows`SELECT CAST('9007199254740991' AS DECIMAL(38,0)) AS value`);
+          if ((row as { readonly value?: unknown }).value !== "9007199254740991") throw new Error("MariaDB exact integer guard failed.");
+        },
+      },
+      "numeric.exact-decimal": {
+        prove: async () => {
+          const row = await db.one(sql.rows`SELECT CAST('12345678901234567890.123456789' AS DECIMAL(38,9)) AS value`);
+          if ((row as { readonly value?: unknown }).value !== "12345678901234567890.123456789") throw new Error("MariaDB exact decimal guard failed.");
+        },
+      },
+      "data.json-lossless-text": {
+        prove: async () => {
+          const row = await db.one(sql.rows`SELECT JSON_OBJECT('value', 1) AS value`);
+          if (typeof (row as { readonly value?: unknown }).value !== "string") throw new Error("MariaDB JSON lossless guard failed.");
+        },
+      },
+      "data.json-parsed": {
+        prove: async () => {
+          const parsedConnection = await mariadb.createConnection(connectorOptions({ autoJsonMap: true }));
+          try {
+            const parsedDb = createMariaDbDatabase(parsedConnection, { profile: MARIADB_LOSSLESS_TEXT });
+            const row = await parsedDb.one(sql.rows`SELECT JSON_OBJECT('value', 1) AS value`);
+            const value = (row as { readonly value?: unknown }).value;
+            if (value === null || typeof value !== "object") throw new Error("MariaDB JSON parsed guard failed.");
+          } finally {
+            await parsedConnection.end();
+          }
+        },
+      },
+      "data.temporal-lossless": {
+        prove: async () => {
+          const row = await db.one(sql.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`);
+          if (typeof (row as { readonly value?: unknown }).value !== "string") throw new Error("MariaDB temporal text guard failed.");
+        },
+      },
+      "data.temporal-native": {
+        prove: async () => {
+          const nativeConnection = await mariadb.createConnection(connectorOptions({ dateStrings: false }));
+          try {
+            const nativeDb = createMariaDbDatabase(nativeConnection, { profile: MARIADB_LOSSLESS_TEXT });
+            const row = await nativeDb.one(sql.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`);
+            if (!((row as { readonly value?: unknown }).value instanceof Date)) throw new Error("MariaDB temporal native guard failed.");
+          } finally {
+            await nativeConnection.end();
+          }
+        },
+      },
       "statement.cancel": {
         prove: async () => {
           const controller = new AbortController();
           const pending = pooled.execute(sql.command`SELECT SLEEP(3)`, { signal: controller.signal });
           await new Promise((resolve) => setTimeout(resolve, 50));
           controller.abort(new Error("cert-cancel"));
-          await pending.catch(() => undefined);
+          let rejected = false;
+          try {
+            await pending;
+          } catch {
+            rejected = true;
+          }
+          assert.equal(rejected, true, "MariaDB cancellation must reject the in-flight operation.");
           await pooled.one(queries.one);
         },
       },

@@ -294,6 +294,18 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     transaction,
     prepared,
     routines,
+    fidelity: {
+      largeExactInteger: q(sql.rows`SELECT CAST('9007199254740991' AS DECIMAL(38,0)) AS value`),
+      exactDecimal: q(sql.rows`SELECT CAST('12345678901234567890.123456789' AS DECIMAL(38,9)) AS value`),
+      temporal: q(sql.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`),
+      injection: q(sql.rows`SELECT ${"'; SELECT 1; --"} AS value`),
+      expected: {
+        largeExactInteger: { value: "9007199254740991" },
+        exactDecimal: { value: "12345678901234567890.123456789" },
+        temporal: { value: "2026-09-14 12:34:56.789" },
+        injection: { value: "'; SELECT 1; --" },
+      },
+    },
     expected: {
       one: { value: "one" },
       many: [{ value: "1" }, { value: "2" }],
@@ -405,6 +417,17 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     snapshot: (): ResourceSnapshot => ({ borrowedLeases: borrowed.value, cleanupBalance: borrowed.value }),
     sideEffects: () => sideEffects.value,
     physicalSessionIds: () => [...physicalIds],
+    pooledScope: async (): Promise<void> => {
+      await db.session(async (session) => {
+        await session.one(identity);
+        if (borrowed.value < 1) throw new Error("mysql2 pooled session did not borrow a native connection.");
+      });
+      if (borrowed.value !== 0) throw new Error("mysql2 pooled session leaked its native connection.");
+    },
+    routineCleanup: async (): Promise<void> => {
+      await db.call(routines.call);
+      await directDb.one(identity);
+    },
   };
   const unsupported = {
     CALL002: { feature: "routine.out", expectedCode: "BRAID_CALL_OUT_UNSUPPORTED" as const, run: async () => { await db.call(routines.out); }, sideEffects: () => sideEffects.value },
@@ -433,16 +456,70 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
     },
     unsupported,
     guarded: {
+      "numeric.exact-integer": {
+        prove: async () => {
+          const row = await db.one(q(sql.rows`SELECT CAST('9007199254740991' AS DECIMAL(38,0)) AS value`));
+          if ((row as { readonly value?: unknown }).value !== "9007199254740991") throw new Error("mysql2 exact integer guard failed.");
+        },
+      },
+      "numeric.exact-decimal": {
+        prove: async () => {
+          const row = await db.one(q(sql.rows`SELECT CAST('12345678901234567890.123456789' AS DECIMAL(38,9)) AS value`));
+          if ((row as { readonly value?: unknown }).value !== "12345678901234567890.123456789") throw new Error("mysql2 exact decimal guard failed.");
+        },
+      },
+      "numeric.approximate-float": {
+        prove: async () => {
+          const row = await db.one(q(sql.rows`SELECT CAST(1.5 AS DOUBLE) AS value`));
+          if (typeof (row as { readonly value?: unknown }).value !== "number") throw new Error("mysql2 float guard failed.");
+        },
+      },
+      "data.json-lossless-text": {
+        prove: async () => {
+          const row = await db.one(q(sql.rows`SELECT JSON_OBJECT('value', 1) AS value`));
+          if (typeof (row as { readonly value?: unknown }).value !== "string") throw new Error("mysql2 JSON text guard failed.");
+        },
+      },
+      "data.json-parsed": {
+        prove: async () => {
+          const jsonConnection = await createConnection({ ...connectionOptions(connectionUri), jsonStrings: false });
+          try {
+            const jsonDb = createMysql2Database(jsonConnection as unknown as Mysql2ConnectionLike, { profile: MYSQL2_LOSSLESS_TEXT });
+            const row = await jsonDb.one(q(sql.rows`SELECT JSON_OBJECT('value', 1) AS value`));
+            const value = (row as { readonly value?: unknown }).value;
+            if (value === null || typeof value !== "object") throw new Error("mysql2 JSON parsed guard failed.");
+          } finally {
+            await end(jsonConnection as unknown as MysqlConnection);
+          }
+        },
+      },
+      "data.temporal-lossless": {
+        prove: async () => {
+          const row = await db.one(q(sql.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`));
+          if (typeof (row as { readonly value?: unknown }).value !== "string") throw new Error("mysql2 temporal text guard failed.");
+        },
+      },
+      "data.temporal-native": {
+        prove: async () => {
+          const nativeConnection = await createConnection({ ...connectionOptions(connectionUri), dateStrings: false });
+          try {
+            const nativeDb = createMysql2Database(nativeConnection as unknown as Mysql2ConnectionLike, { profile: MYSQL2_LOSSLESS_TEXT });
+            const row = await nativeDb.one(q(sql.rows`SELECT CAST('2026-09-14 12:34:56.789' AS DATETIME(3)) AS value`));
+            if (!((row as { readonly value?: unknown }).value instanceof Date)) throw new Error("mysql2 temporal native guard failed.");
+          } finally {
+            await end(nativeConnection as unknown as MysqlConnection);
+          }
+        },
+      },
       "statement.cancel": {
         prove: async () => {
           const controller = new AbortController();
           const abortError = new Error("mysql certification guarded cancellation");
-          const iterator = streamForFixture(stream, { signal: controller.signal })[Symbol.asyncIterator]();
-          await assert.rejects(async () => {
-            await iterator.next();
-            controller.abort(abortError);
-            await iterator.next();
-          });
+          const pending = db.execute(sql.rows`SELECT SLEEP(60) AS value`, { signal: controller.signal });
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          controller.abort(abortError);
+          await assert.rejects(() => pending);
+          await db.one(identity);
         },
       },
     },

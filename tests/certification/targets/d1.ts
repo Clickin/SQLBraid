@@ -74,6 +74,18 @@ function buildQueries(stats: D1Stats): CertificationFixture["queries"] {
     },
     prepared: { command: preparedCommand, rows: preparedRows, input: "prepared-input", factoryCalls: () => preparedCalls, resources: () => 0 },
     routines: { call, out: sql.call`SELECT ${sql.out("answer")}`, inout: sql.call`SELECT ${sql.inOut("answer", 1)}`, resultSets: call, cursor: call, returnValue: call },
+    fidelity: {
+      largeExactInteger: sql.rows`SELECT '9007199254740991' AS value`,
+      exactDecimal: sql.rows`SELECT '12345678901234567890.123456789' AS value`,
+      temporal: sql.rows`SELECT '2026-09-14T12:34:56.789Z' AS value`,
+      injection: sql.rows`SELECT "'; SELECT 1; --" AS value`,
+      expected: {
+        largeExactInteger: { value: "9007199254740991" },
+        exactDecimal: { value: "12345678901234567890.123456789" },
+        temporal: { value: "2026-09-14T12:34:56.789Z" },
+        injection: { value: "'; SELECT 1; --" },
+      },
+    },
     expected: {
       one: { value: "one" }, many: [{ value: "one" }, { value: "two" }],
       special: { RES001: expectedObject("__proto__", "safe"), RES002: expectedObject("constructor", "safe"), RES003: expectedObject("prototype", "safe"), RES004: expectedObject("toString", "safe"), RES005: expectedObject("hasOwnProperty", "safe"), RES006: { value: "hello" }, RES007: { value: "" }, RES008: { value: null }, RES009: { value: "안녕하세요" }, RES010: { value: new Uint8Array([0, 255, 16]) }, RES011: { value: "second" } },
@@ -102,13 +114,16 @@ export function createD1Target(database: D1DatabaseLike, sourceSha: string): Cer
       await db.execute(sql.command`CREATE TABLE IF NOT EXISTS cert_values (value TEXT NOT NULL)`);
       const queries = buildQueries(stats);
       const unsupported: NonNullable<CertificationFixture["unsupported"]> = {};
-      for (const id of ["SES001", "SES002", "SES003", "SES004", "SES005", "STRESS006"] as const) unsupported[id] = probe(() => db.session(async () => undefined), "session.pinned", "BRAID_SESSION_UNSUPPORTED", () => stats.prepares);
-      for (const id of ["TX001", "TX002", "TX003", "TX004", "TX005", "TX012", "STRESS002", "STRESS005"] as const) unsupported[id] = probe(() => db.tx(async () => undefined), "transaction", "BRAID_TX_UNSUPPORTED", () => stats.prepares);
-      for (const id of ["TX010", "TX011", "TX013"] as const) unsupported[id] = { ...probe(() => db.tx(async () => undefined), "transaction.savepoint", "BRAID_TX_UNSUPPORTED", () => stats.prepares, "transaction"), expectedErrorFeature: "transaction" };
       const streamQuery = sql.rows`SELECT value FROM cert_values`;
-      for (const id of ["STR001", "STR002", "STR003", "STR004", "STR005", "STR007", "STR008", "STR009", "STRESS004"] as const) unsupported[id] = probe(async () => { for await (const row of db.stream(streamQuery)) void row; }, "statement.stream", "BRAID_STREAM_UNSUPPORTED", () => stats.prepares);
+      for (const id of ["SES001", "SES002", "SES003", "SES004", "SES005", "SES006", "SES008", "STRESS006"] as const) unsupported[id] = probe(() => db.session(async () => undefined), "session.pinned", "BRAID_SESSION_UNSUPPORTED", () => stats.prepares);
+      unsupported.SES007 = probe(async () => { for await (const row of db.stream(streamQuery)) void row; }, "statement.stream", "BRAID_STREAM_UNSUPPORTED", () => stats.prepares);
+      for (const id of ["TX001", "TX002", "TX003", "TX004", "TX005", "TX008", "TX009", "TX012", "STRESS002", "STRESS005"] as const) unsupported[id] = probe(() => db.tx(async () => undefined), "transaction", "BRAID_TX_UNSUPPORTED", () => stats.prepares);
+      unsupported.BULK004 = probe(() => db.tx(async () => undefined), "transaction", "BRAID_TX_UNSUPPORTED", () => stats.prepares);
+      for (const id of ["TX010", "TX011", "TX013"] as const) unsupported[id] = { ...probe(() => db.tx(async () => undefined), "transaction.savepoint", "BRAID_TX_UNSUPPORTED", () => stats.prepares, "transaction"), expectedErrorFeature: "transaction" };
+      for (const id of ["STR001", "STR002", "STR003", "STR004", "STR005", "STR007", "STR008", "STR009", "STR011", "STRESS004"] as const) unsupported[id] = probe(async () => { for await (const row of db.stream(streamQuery)) void row; }, "statement.stream", "BRAID_STREAM_UNSUPPORTED", () => stats.prepares);
       unsupported.STR006 = probe(async () => { const controller = new AbortController(); for await (const row of db.stream(streamQuery, { signal: controller.signal })) void row; }, "statement.cancel", "BRAID_CANCEL_UNSUPPORTED", () => stats.prepares);
-      for (const id of ["PRE003", "PRE004", "PRE005"] as const) unsupported[id] = probe(async () => { for await (const row of db.stream(streamQuery)) void row; }, "statement.stream", "BRAID_STREAM_UNSUPPORTED", () => stats.prepares);
+      unsupported.STR010 = unsupported.STR006;
+      for (const id of ["PRE003", "PRE004", "PRE005", "PRE011"] as const) unsupported[id] = probe(async () => { for await (const row of db.stream(streamQuery)) void row; }, "statement.stream", "BRAID_STREAM_UNSUPPORTED", () => stats.prepares);
       unsupported.CALL001 = probe(() => db.call(queries.routines!.call), "routine.call", "BRAID_CALL_UNSUPPORTED", () => stats.prepares);
       unsupported.CALL002 = probe(() => db.call(queries.routines!.out!), "routine.out", "BRAID_CALL_UNSUPPORTED", () => stats.prepares, "routine.call");
       unsupported.CALL003 = probe(() => db.call(queries.routines!.inout!), "routine.inout", "BRAID_CALL_UNSUPPORTED", () => stats.prepares, "routine.call");
@@ -120,7 +135,7 @@ export function createD1Target(database: D1DatabaseLike, sourceSha: string): Cer
       };
       for (const [id, option] of Object.entries(options)) unsupported[id as CertificationCaseId] = probe(() => db.tx(option.value, async () => undefined), option.feature, "BRAID_TX_OPTION_UNSUPPORTED", () => stats.prepares);
       const bulk: BulkConformanceFixture<unknown> = { db, inputs: [1, 2], factory: (input) => sql.command`INSERT INTO cert_values (value) VALUES (${String(input)})`, expected: { inputCount: 2, affectedRows: 2 }, acquireCount: () => stats.batches, executeCount: () => stats.batches, middleFailure: async () => db.bulk([1, 2], (input) => input === 2 ? sql.command`INSERT INTO cert_missing_bulk (value) VALUES (${input})` : sql.command`INSERT INTO cert_values (value) VALUES (${input})`) };
-      const metrics = { snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0, openCursors: 0, openPrepared: 0 }), sideEffects: () => stats.prepares, physicalSessionIds: () => ["cloudflare-d1"] };
+      const metrics = { snapshot: (): ResourceSnapshot => ({ borrowedLeases: 0, cleanupBalance: 0 }), sideEffects: () => stats.prepares, physicalSessionIds: () => ["cloudflare-d1"] };
       return {
         db, queries, bulk, metrics, reset: async () => { await db.execute(sql.command`DELETE FROM cert_values`); }, unsupported,
         guarded: {
