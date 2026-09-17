@@ -272,11 +272,13 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   VAL004: async (context) => supported(context, "VAL004", "sql.native-transparency", async ({ fixture }) => {
     const values = fidelityQueries(fixture);
     const metrics = fixtureMetrics(fixture);
-    if (metrics.sideEffects === undefined) throw new Error("VAL004 requires a native side-effect observer.");
-    const before = metrics.sideEffects();
+    const expectedInjection = (values.expected.injection as { readonly value?: unknown }).value;
+    assert.ok(values.injection.render().parameters.some((parameter) => parameter.value === expectedInjection), "VAL004 requires the injection payload to be a rendered bind.");
+    if (metrics.mutationSentinel === undefined) throw new Error("VAL004 requires a native table-state sentinel.");
+    const before = await metrics.mutationSentinel();
     const row = await fixture.db.one(values.injection);
     assert.deepEqual(row, values.expected.injection);
-    assert.equal(metrics.sideEffects(), before);
+    assert.deepEqual(await metrics.mutationSentinel(), before);
   }),
 
   SES001: async (context) => supported(context, "SES001", "session.pinned", async ({ fixture }) => {
@@ -285,6 +287,17 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
       await db.session(async (session) => {
         ids.push((await session.one(fixture.queries.identity)).id);
         ids.push((await session.one(fixture.queries.identity)).id);
+        assert.deepEqual(await session.all(fixture.queries.zero), []);
+        assert.deepEqual(await session.all(fixture.queries.many), fixture.queries.expected?.many);
+        assert.deepEqual(await session.maybeOne(fixture.queries.zero), undefined);
+        assert.deepEqual(await session.maybeOne(fixture.queries.one), fixture.queries.expected?.one);
+        await assert.rejects(
+          () => session.maybeOne(fixture.queries.many),
+          (error: unknown) => {
+            assertCardinality(error, "maybeOne", fixture.queries.expected?.many.length ?? 2);
+            return true;
+          },
+        );
       });
       assert.equal(ids.length, 2);
       assert.equal(ids[0], ids[1]);
@@ -345,7 +358,15 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   SES008: async (context) => supportedAll(context, "SES008", ["session.pinned", "transaction"], async ({ fixture }) => {
     for (const db of databases(fixture)) {
       await db.session(async (session) => {
-        await session.tx(async (tx) => { await tx.one(fixture.queries.identity); });
+        const outer = await session.one(fixture.queries.identity);
+        await session.session(async (nestedSession) => {
+          const nested = await nestedSession.one(fixture.queries.identity);
+          assert.equal(nested.id, outer.id);
+          await nestedSession.tx(async (tx) => {
+            const transaction = await tx.one(fixture.queries.identity);
+            assert.equal(transaction.id, outer.id);
+          });
+        });
       });
     }
   }),
@@ -385,14 +406,9 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     await assert.rejects(() => scoped!.one(fixture.queries.identity), (error: unknown) => (error as { readonly code?: unknown }).code === "BRAID_TX_CLOSED");
   }),
   TX007: async (context) => supported(context, "TX007", "transaction", async ({ fixture }) => {
-    let error: unknown;
-    try {
-      await fixture.db.tx(async () => { throw new Error("cert-transaction-cleanup"); });
-    } catch (caught) {
-      error = caught;
-    }
-    assert.ok(error instanceof Error);
-    await fixture.db.one(fixture.queries.identity);
+    const proof = fixtureMetrics(fixture).transactionCleanup;
+    if (!proof) throw new Error("TX007 requires a native rollback/release fault proof.");
+    await proof();
   }),
   TX008: async (context) => supported(context, "TX008", "transaction", async ({ fixture }) => {
     for (const db of databases(fixture)) {
@@ -401,11 +417,10 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     }
   }),
   TX009: async (context) => supported(context, "TX009", "transaction", async ({ fixture }) => {
-    const transaction = fixture.queries.transaction;
-    if (!transaction) throw new Error("TX009 transaction fixture missing.");
-    await fixture.reset();
-    await assert.rejects(() => fixture.db.tx({ readOnly: true }, async (tx) => { await tx.execute(transaction.insert); }));
-    assert.equal((await fixture.db.all(transaction.visible)).length, 0);
+    if (!fixture.queries.transaction) throw new Error("TX009 transaction fixture missing.");
+    const proof = fixtureMetrics(fixture).readOnlyWrite;
+    if (!proof) throw new Error("TX009 requires a native read-only write proof.");
+    await proof();
   }),
   TX010: async (context) => supported(context, "TX010", "transaction.savepoint", async ({ fixture }) => {
     if (!fixture.queries.transaction) throw new Error("TX010 transaction fixture missing.");
@@ -574,8 +589,8 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
   CALL006: async (context) => supported(context, "CALL006", "routine.return-value", async ({ fixture }) => { if (!fixture.queries.routines?.returnValue) throw new Error("CALL006 routine fixture missing."); const result = await callRoutine(fixture, fixture.queries.routines.returnValue); assert.deepEqual(result, fixture.queries.expected?.special.CALL006); }),
   CALL007: async (context) => supported(context, "CALL007", "routine.call", async ({ fixture }) => {
     const proof = fixtureMetrics(fixture).routineCleanup;
-    if (!proof) throw new Error("CALL007 requires a native routine LOB cleanup proof.");
-    await proof();
+    if (!proof || !fixture.queries.routines?.lob) throw new Error("CALL007 requires a native routine LOB cleanup proof.");
+    await proof(fixture.queries.routines.lob);
   }),
 
   BULK001: async (context) => supported(context, "BULK001", "statement.bulk", async ({ fixture }) => { if (!fixture.bulk) throw new Error("BULK001 bulk fixture missing."); await runBulkConformanceCase("BULK001", { ...fixture.bulk, close: undefined }); }),
@@ -631,8 +646,15 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
       representedApiFeatures.add("result.multiple-sets");
     }
     for (const [feature] of apiUnsupported) {
+      if (representedApiFeatures.has(feature)) continue;
+      const proof = context.fixture.representationUnsupported?.[feature];
+      if (proof) {
+        await proof.prove();
+        representedApiFeatures.add(feature);
+        continue;
+      }
       if (!(REQUIRED_API_CAPABILITY_IDS as readonly string[]).includes(feature)) continue;
-      if (!representedApiFeatures.has(feature)) throw new Error(`CAP002 missing unsupported API probe for ${feature}.`);
+      throw new Error(`CAP002 missing unsupported API probe for ${feature}.`);
     }
     for (const probe of probes) {
       if (!probe) continue;

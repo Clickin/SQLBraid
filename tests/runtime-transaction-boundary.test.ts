@@ -68,6 +68,41 @@ test("begin observer failure rolls back but committed observer failure cannot ro
   }
 });
 
+test("rollback cleanup observer preserves the primary error and releases the pooled lease", async () => {
+  const primary = new Error("transaction primary failure");
+  const cleanup = new Error("transaction rollback cleanup failure");
+  const log: string[] = [];
+  let releases = 0;
+  const db = createPooledDatabase({
+    statementBinding,
+    async acquire() {
+      return {
+        ...physical(log),
+        release() { releases += 1; },
+      };
+    },
+  }, {
+    observers: [{
+      onEvent(event) {
+        if (event.type === "transaction" && event.phase === "rollback" && event.status === "completed") throw cleanup;
+      },
+    }],
+  });
+
+  await assert.rejects(
+    () => db.tx(async () => { throw primary; }),
+    (error: unknown) => {
+      assert.ok(error instanceof AggregateError);
+      assert.equal(error.errors[0], primary);
+      assert.ok(error.errors.some((entry) => entry === cleanup));
+      return true;
+    },
+  );
+  assert.equal(releases, 1);
+  await db.execute(sql`SELECT healthy_after_rollback_cleanup`);
+  assert.equal(log.at(-1), "SELECT healthy_after_rollback_cleanup");
+});
+
 test("nested observer failures clean savepoints and reject parent or sibling scope escape", async () => {
   for (const phase of ["savepoint", "release-savepoint"] as const) {
     const log: string[] = [];

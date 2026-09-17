@@ -9,8 +9,14 @@ export interface BulkConformanceFixture<Input> {
   readonly acquireCount?: () => number;
   readonly executeCount?: () => number;
   readonly values?: () => readonly (readonly unknown[])[];
-  readonly middleFailure?: () => Promise<unknown>;
+  readonly middleFailure?: () => Promise<BulkFailureEvidence | unknown>;
   readonly close?: () => void | Promise<void>;
+}
+
+export interface BulkFailureEvidence {
+  readonly error: unknown;
+  readonly observed: true;
+  readonly durability: "prefix" | "atomic";
 }
 
 export async function runBulkConformanceCase(
@@ -33,7 +39,12 @@ export async function runBulkConformanceCase(
   if (id === "BULK003") {
     const middleFailure = fixture.middleFailure;
     if (!middleFailure) throw new Error("BULK003 requires middleFailure fixture evidence.");
-    await assert.rejects(() => middleFailure());
+    const evidence = await middleFailure();
+    assert.ok(evidence !== null && typeof evidence === "object", "BULK003 must expose native middle-item evidence.");
+    const proof = evidence as Partial<BulkFailureEvidence>;
+    assert.equal(proof.observed, true);
+    assert.ok(proof.error !== undefined, "BULK003 must expose the native middle-item failure.");
+    assert.ok(proof.durability === "prefix" || proof.durability === "atomic", "BULK003 must classify observed durability.");
   }
 }
 

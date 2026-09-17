@@ -41,6 +41,7 @@ interface SyntheticState {
   savepoints: Map<string, number>;
   borrowed: number;
   rollbackFault: boolean;
+  bulkFailure: boolean;
 }
 
 export interface SyntheticTargetOptions {
@@ -194,6 +195,7 @@ function createExecutor(state: SyntheticState, definitions: Map<string, Definiti
     async bulk(bulk): Promise<{ readonly inputCount: number; readonly affectedRows: number; readonly executionMode: "native-bulk" }> {
       state.bulkCalls += 1;
       state.bulkExec += 1;
+      if (state.bulkFailure) { state.bulkFailure = false; throw new Error("synthetic middle failure"); }
       return { inputCount: bulk.parameterSets.length, affectedRows: bulk.parameterSets.length, executionMode: "native-bulk" };
     },
     async begin(options) {
@@ -247,17 +249,20 @@ function makeQueries(definitions: Map<string, Definition>, options: SyntheticTar
     temporal: { value: "2026-09-14T12:34:56.789Z" },
     injection: { value: "'; SELECT 1; --" },
   };
+  const injectionKey = `row-injection-${definitions.size}`;
+  definitions.set(injectionKey, { marker: "special", rows: [fidelityExpected.injection] });
+  const injection = sql.rows`SELECT ${injectionKey}, ${fidelityExpected.injection.value}`;
   return {
     zero: rowQuery("zero", definitions, []), one: rowQuery("one", definitions, [{ value: "one" }]), many: rowQuery("many", definitions, [{ value: 1 }, { value: 2 }]), command: commandQuery("command", definitions), identity: rowQuery("identity", definitions, [{ id: "synthetic-session-1" }]), failure: rowQuery("failure", definitions, []), stream: rowQuery("stream", definitions, [{ value: 1 }, { value: 2 }]), special,
     fidelity: {
       largeExactInteger: rowQuery("special", definitions, [fidelityExpected.largeExactInteger]),
       exactDecimal: rowQuery("special", definitions, [fidelityExpected.exactDecimal]),
       temporal: rowQuery("special", definitions, [fidelityExpected.temporal]),
-      injection: rowQuery("special", definitions, [fidelityExpected.injection]),
+      injection,
       expected: fidelityExpected,
     },
     transaction: { insert: commandQuery("insert", definitions), visible: rowQuery("transaction-visible", definitions, []), savepointInsert: commandQuery("savepoint-insert", definitions), savepointVisible: rowQuery("transaction-visible", definitions, []) },
-    routines: { call: callQuery(definitions, { output: { answer: 42 } }), out: callQuery(definitions, { output: { answer: 42 } }), inout: callQuery(definitions, { output: { answer: 43 } }), resultSets: callQuery(definitions, { resultSets: [[{ value: 1 }], [{ value: 2 }]] }), cursor: callQuery(definitions, { resultSets: [[{ value: 1 }]] }), returnValue: callQuery(definitions, { returnValue: 7 }) },
+    routines: { call: callQuery(definitions, { output: { answer: 42 } }), out: callQuery(definitions, { output: { answer: 42 } }), inout: callQuery(definitions, { output: { answer: 43 } }), resultSets: callQuery(definitions, { resultSets: [[{ value: 1 }], [{ value: 2 }]] }), cursor: callQuery(definitions, { resultSets: [[{ value: 1 }]] }), returnValue: callQuery(definitions, { returnValue: 7 }), lob: callQuery(definitions, { resultSets: [[{ value: new Uint8Array([0, 255, 16]) }]] }) },
     expected: { one: { value: "one" }, many: [{ value: 1 }, { value: 2 }], special: { ...expectedSpecial, CALL001: { output: { answer: 42 }, resultSets: [] }, CALL002: { output: { answer: 42 }, resultSets: [] }, CALL003: { output: { answer: 43 }, resultSets: [] }, CALL004: { output: {}, resultSets: [{ rows: [{ value: 1 }] }, { rows: [{ value: 2 }] }] }, CALL005: { output: {}, resultSets: [{ rows: [{ value: 1 }] }] }, CALL006: { returnValue: 7, output: {}, resultSets: [] } }, commandAffectedRows: 1, failureCode: "SYNTHETIC_QUERY_FAILURE", ...(options.resultRowsGuarded ? { emptyResultError: { feature: "result.rows", code: "BRAID_RESULT_KIND_AMBIGUOUS" as const } } : {}) },
   };
 }
@@ -282,7 +287,7 @@ export function createSyntheticTarget(sourceSha = "synthetic-source-sha", cancel
     expectedTransactionOptions,
     ...(options.resultRowsGuarded ? { expectedGuardedCases: { emptyResultError: { feature: "result.rows", code: "BRAID_RESULT_KIND_AMBIGUOUS" as const } } } : {}),
     createFixture: async () => {
-      const state: SyntheticState = { committedRows: 0, sideEffects: 0, cleanupBalance: 0, identity: "synthetic-session-1", bulkCalls: 0, bulkExec: 0, streamReturns: 0, preparedCalls: 0, pending: [], readOnly: [], savepoints: new Map(), borrowed: 0, rollbackFault: false };
+      const state: SyntheticState = { committedRows: 0, sideEffects: 0, cleanupBalance: 0, identity: "synthetic-session-1", bulkCalls: 0, bulkExec: 0, streamReturns: 0, preparedCalls: 0, pending: [], readOnly: [], savepoints: new Map(), borrowed: 0, rollbackFault: false, bulkFailure: false };
       const definitions = new Map<string, Definition>();
       const executor = createExecutor(state, definitions, cancelUnsupported, environment, options);
       const db = createDatabase(executor);
@@ -319,7 +324,13 @@ export function createSyntheticTarget(sourceSha = "synthetic-source-sha", cancel
         iteratorReturns: () => state.streamReturns,
         released: () => state.streamReturns,
       } as StreamingConformanceFixture<unknown>;
-      const bulk: BulkConformanceFixture<unknown> = { db, inputs: [1, 2], factory: () => commandQuery("command", definitions), expected: { inputCount: 2, affectedRows: 2 }, acquireCount: () => state.bulkCalls, executeCount: () => state.bulkExec, values: () => [[1], [2]], middleFailure: async () => { throw new Error("synthetic middle failure"); } };
+      const bulk: BulkConformanceFixture<unknown> = { db, inputs: [1, 2], factory: () => commandQuery("command", definitions), expected: { inputCount: 2, affectedRows: 2 }, acquireCount: () => state.bulkCalls, executeCount: () => state.bulkExec, values: () => [[1], [2]], middleFailure: async () => {
+        state.bulkFailure = true;
+        let error: unknown;
+        try { await db.bulk([1, 2], () => commandQuery("command", definitions)); } catch (caught) { error = caught; }
+        assert.ok(error instanceof Error);
+        return { error, observed: true as const, durability: "atomic" as const };
+      } };
       const transactionCleanup = async (): Promise<void> => {
         state.rollbackFault = true;
         await assert.rejects(
@@ -328,10 +339,21 @@ export function createSyntheticTarget(sourceSha = "synthetic-source-sha", cancel
         );
         await pooled.one(queries.identity);
       };
-      const routineCleanup = async (): Promise<void> => {
-        if (!queries.routines?.call) throw new Error("synthetic routine query missing");
-        await db.call(queries.routines.call);
+      const routineCleanup = async (query: import("@sqlbraid/core").CallQuery): Promise<void> => {
+        const result = await db.call(query);
+        const payload = (result as { readonly resultSets?: readonly { readonly rows?: readonly { readonly value?: unknown }[] }[] }).resultSets?.[0]?.rows?.[0]?.value;
+        if (!(payload instanceof Uint8Array) || payload.length !== 3) throw new Error("synthetic routine LOB payload was not materialized.");
         await pooled.one(queries.identity);
+      };
+      const readOnlyWrite = async (): Promise<void> => {
+        state.committedRows = 0;
+        await db.tx({ readOnly: false }, async (tx) => { await tx.execute(queries.transaction!.insert); });
+        assert.equal(state.committedRows, 1);
+        await assert.rejects(
+          () => db.tx({ readOnly: true }, async (tx) => { await tx.execute(queries.transaction!.insert); }),
+          (error: unknown) => error instanceof Error && error.message === "synthetic read-only transaction rejected write",
+        );
+        assert.equal(state.committedRows, 1);
       };
       const pooledScope = async (): Promise<void> => {
         await pooled.session(async (session) => {
@@ -340,7 +362,7 @@ export function createSyntheticTarget(sourceSha = "synthetic-source-sha", cancel
         });
         if (state.borrowed !== 0) throw new Error("synthetic pooled session leaked a native lease.");
       };
-      const fixture: CertificationFixture = { db, pooled, queries, stream, bulk, metrics: { snapshot: (): ResourceSnapshot => ({ borrowedLeases: state.borrowed, cleanupBalance: 0, openCursors: 0, openPrepared: 0 }), sideEffects: () => state.sideEffects, physicalSessionIds: () => [state.identity], transactionCleanup, routineCleanup, pooledScope }, reset: async () => { state.committedRows = 0; state.sideEffects = 0; state.bulkCalls = 0; state.bulkExec = 0; state.streamReturns = 0; state.preparedCalls = 0; state.pending.length = 0; state.readOnly.length = 0; state.savepoints.clear(); state.rollbackFault = false; }, ...(guarded === undefined ? {} : { guarded }), unsupported: { TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("transaction.isolation.serializable", "BRAID_TX_OPTION_UNSUPPORTED", "synthetic option combination unsupported"); }, sideEffects: () => state.sideEffects }, ...(cancelUnsupported ? { STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects }, STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects }, PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects } } : {}), ...(options.resultSetsUnsupported ? { CALL004: { feature: "routine.result-sets", expectedCode: "BRAID_RESULT_SETS_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "synthetic multiple result sets unsupported"); }, sideEffects: () => state.sideEffects } } : {}) }, close: async () => { if (state.borrowed !== 0) throw new Error("synthetic pooled lease leaked"); } };
+      const fixture: CertificationFixture = { db, pooled, queries, stream, bulk, metrics: { snapshot: (): ResourceSnapshot => ({ borrowedLeases: state.borrowed, cleanupBalance: 0, openCursors: 0, openPrepared: 0 }), sideEffects: () => state.sideEffects, mutationSentinel: () => state.committedRows, readOnlyWrite, physicalSessionIds: () => [state.identity], transactionCleanup, routineCleanup, pooledScope }, reset: async () => { state.committedRows = 0; state.sideEffects = 0; state.bulkCalls = 0; state.bulkExec = 0; state.streamReturns = 0; state.preparedCalls = 0; state.pending.length = 0; state.readOnly.length = 0; state.savepoints.clear(); state.rollbackFault = false; state.bulkFailure = false; }, ...(guarded === undefined ? {} : { guarded }), unsupported: { TX028: { feature: "combination:serializable+readOnly", expectedErrorFeature: "transaction.isolation.serializable", expectedCode: "BRAID_TX_OPTION_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("transaction.isolation.serializable", "BRAID_TX_OPTION_UNSUPPORTED", "synthetic option combination unsupported"); }, sideEffects: () => state.sideEffects }, ...(cancelUnsupported ? { STR006: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects }, STR010: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects }, PRE011: { feature: "statement.cancel", expectedCode: "BRAID_CANCEL_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("statement.cancel", "BRAID_CANCEL_UNSUPPORTED", "synthetic cancellation unsupported"); }, sideEffects: () => state.sideEffects } } : {}), ...(options.resultSetsUnsupported ? { CALL004: { feature: "routine.result-sets", expectedCode: "BRAID_RESULT_SETS_UNSUPPORTED", run: async () => { throw new UnsupportedFeatureError("routine.result-sets", "BRAID_RESULT_SETS_UNSUPPORTED", "synthetic multiple result sets unsupported"); }, sideEffects: () => state.sideEffects } } : {}) }, close: async () => { if (state.borrowed !== 0) throw new Error("synthetic pooled lease leaked"); } };
       return fixture;
     },
   };

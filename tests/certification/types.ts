@@ -118,10 +118,11 @@ export interface ResourceSnapshot {
 export interface CertificationMetrics {
   readonly snapshot: () => Promise<ResourceSnapshot> | ResourceSnapshot;
   readonly sideEffects?: () => number;
+  readonly mutationSentinel?: () => Promise<unknown> | unknown;
   readonly physicalSessionIds?: () => readonly string[];
   readonly transactionCleanup?: () => Promise<void>;
-  readonly batchAbort?: () => Promise<void>;
-  readonly routineCleanup?: () => Promise<void>;
+  readonly readOnlyWrite?: () => Promise<void>;
+  readonly routineCleanup?: (query: CallQuery) => Promise<void>;
   readonly pooledScope?: () => Promise<void>;
 }
 
@@ -133,6 +134,10 @@ export interface UnsupportedProbe {
   readonly sideEffects: () => number;
 }
 
+export interface RepresentationUnsupportedProof {
+  readonly prove: () => Promise<void>;
+}
+
 export interface CertificationFixture {
   readonly db: Database;
   readonly pooled?: Database;
@@ -142,6 +147,7 @@ export interface CertificationFixture {
   readonly metrics?: CertificationMetrics;
   readonly reset: () => Promise<void>;
   readonly unsupported?: Partial<Record<CertificationCaseId, UnsupportedProbe>>;
+  readonly representationUnsupported?: Partial<Record<string, RepresentationUnsupportedProof>>;
   readonly guarded?: Partial<Record<string, { readonly prove: () => Promise<void> }>>;
   readonly close?: () => Promise<void>;
 }

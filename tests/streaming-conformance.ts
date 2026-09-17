@@ -77,17 +77,21 @@ export async function runStreamingConformanceCase(
   await withFixture(create, async (fixture) => {
     switch (id) {
       case "STR001": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
         const actual: unknown[] = [];
         for await (const row of fixture.db.stream(fixture.query)) actual.push(row);
         assert.deepEqual(actual, fixture.expected);
-        if (fixture.iteratorReturns) assert.equal(fixture.iteratorReturns(), 1);
-        if (fixture.released) assert.equal(fixture.released(), 1);
+        assert.equal(iteratorReturns(), 1);
+        assert.equal(released(), 1);
         return;
       }
       case "STR002": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
         for await (const row of fixture.db.stream(fixture.query)) { void row; break; }
-        if (fixture.iteratorReturns) assert.equal(fixture.iteratorReturns(), 1);
-        if (fixture.released) assert.equal(fixture.released(), 1);
+        assert.equal(iteratorReturns(), 1);
+        assert.equal(released(), 1);
         return;
       }
       case "STR003": {
@@ -125,13 +129,14 @@ export async function runStreamingConformanceCase(
         return;
       }
       case "STR005": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
         const controller = new AbortController();
         const abortError = options.abortError ?? new Error("cert-abort-before");
         controller.abort(abortError);
         await assert.rejects(async () => {
           for await (const row of fixture.db.stream(fixture.query, { signal: controller.signal })) void row;
         }, (caught: unknown) => containsExpectedError(caught, abortError));
-        if (fixture.iteratorReturns) assert.equal(fixture.iteratorReturns(), 0);
+        assert.equal(iteratorReturns(), 0);
         return;
       }
       case "STR006": {
@@ -163,15 +168,19 @@ export async function runStreamingConformanceCase(
         return;
       }
       case "STR008": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
         const query = requireField(fixture.cleanupFailureQuery, "cleanupFailureQuery");
         const cleanupFailure = requireField(fixture.cleanupFailure, "cleanupFailure");
         if (query === undefined) return;
         await assert.rejects(async () => { for await (const row of fixture.db.stream(query)) void row; }, (caught: unknown) => containsExpectedError(caught, cleanupFailure));
-        if (fixture.iteratorReturns) assert.equal(fixture.iteratorReturns(), 1);
-        if (fixture.released) assert.equal(fixture.released(), 1);
+        assert.equal(iteratorReturns(), 1);
+        assert.equal(released(), 1);
         return;
       }
       case "STR009": {
+        const iteratorReturns = requireField(fixture.iteratorReturns, "iteratorReturns");
+        const released = requireField(fixture.released, "released");
         const query = requireField(fixture.largeResultQuery, "largeResultQuery");
         const expectedCount = requireField(fixture.largeResultCount, "largeResultCount");
         if (query === undefined || expectedCount === undefined) return;
@@ -179,6 +188,8 @@ export async function runStreamingConformanceCase(
         let actualCount = 0;
         for await (const row of fixture.db.stream(query)) { void row; actualCount += 1; }
         assert.equal(actualCount, expectedCount);
+        assert.equal(iteratorReturns(), 1);
+        assert.equal(released(), 1);
         return;
       }
       default:
