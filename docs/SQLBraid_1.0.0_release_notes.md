@@ -129,8 +129,7 @@ A PostgreSQL driver fix, for example, can release as `@sqlbraid/postgres@1.0.1` 
 Oracle, SQLite, CLI, or facade release. The `sqlbraid` facade depends on compatible `^1.0.0` first-party
 ranges and only needs a new version when its own public facade surface or compatibility contract changes.
 
-Package-specific release tags use names such as `postgres-v1.0.1`; the coordinated `v1.0.0` tag remains the
-identity of the initial GA release.
+The coordinated `v1.0.0` release remains the common starting point for the first stable package line.
 
 ## Links
 
@@ -140,4 +139,3 @@ identity of the initial GA release.
 - [npm: sqlbraid](https://www.npmjs.com/package/sqlbraid)
 - [Source](https://github.com/Clickin/SQLBraid)
 
-Thanks to everyone who tries the first stable release and reports rough edges.
