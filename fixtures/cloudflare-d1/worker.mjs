@@ -145,7 +145,7 @@ export default {
     const deleted = await db.all(sql.rows`DELETE FROM users WHERE id = 1 RETURNING id`);
     let streamCode;
     try {
-      for await (const _row of db.stream(sql.rows`SELECT id FROM users`)) void _row;
+      for await (const row of db.stream(sql.rows`SELECT id FROM users`)) void row;
     } catch (error) {
       streamCode = error?.code;
     }

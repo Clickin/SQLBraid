@@ -53,9 +53,11 @@ test("evidence manifest omits non-portable source paths", () => {
 });
 
 test("executable fingerprints include parameter hints without capturing values", () => {
+  // oxlint-disable-next-line consistent-function-scoping -- Keep this parameterized template site local to its fingerprint comparisons.
   const query = (value: string, length: number) => sql`SELECT ${sql.bind(value, { databaseType: "VARCHAR", length })}`;
   assert.equal(fingerprintQuery(query("secret-a", 50)), fingerprintQuery(query("secret-b", 50)));
   assert.notEqual(fingerprintQuery(query("secret-a", 50)), fingerprintQuery(query("secret-a", 200)));
+  // oxlint-disable-next-line consistent-function-scoping -- This list template is the paired hint-length fixture for this test only.
   const list = (length: number) =>
     sql`SELECT ${sql.list([1, sql.bind("secret", { databaseType: "VARCHAR", length })])}`;
   assert.notEqual(fingerprintQuery(list(50)), fingerprintQuery(list(200)));

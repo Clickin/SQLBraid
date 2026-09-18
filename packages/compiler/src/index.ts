@@ -259,14 +259,15 @@ interface LexicalScope {
   readonly variableScope: boolean;
 }
 
+function bind(name: ts.BindingName, scope: LexicalScope): void {
+  if (ts.isIdentifier(name)) scope.bindings.set(name.text, name);
+  else for (const element of name.elements) if (ts.isBindingElement(element)) bind(element.name, scope);
+}
+
 function lexicalBindingOwner(sourceFile: ts.SourceFile): (identifier: ts.Identifier) => ts.Identifier | undefined {
   const scopes = new Map<ts.Node, LexicalScope>();
   const root: LexicalScope = { bindings: new Map(), variableScope: true };
   scopes.set(sourceFile, root);
-  function bind(name: ts.BindingName, scope: LexicalScope): void {
-    if (ts.isIdentifier(name)) scope.bindings.set(name.text, name);
-    else for (const element of name.elements) if (ts.isBindingElement(element)) bind(element.name, scope);
-  }
   function visit(node: ts.Node, scope: LexicalScope): void {
     if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isEnumDeclaration(node)) && node.name)
       bind(node.name, scope);
@@ -1375,6 +1376,19 @@ function createLoweringPlan(
   return { transformer, diagnostics, loweredNodes, prefix };
 }
 
+function tokens(node: ts.Node): readonly ts.Node[] {
+  const outputTokens: ts.Node[] = [];
+  function visit(current: ts.Node): void {
+    if (ts.isToken(current)) {
+      outputTokens.push(current);
+      return;
+    }
+    ts.forEachChild(current, visit);
+  }
+  visit(node);
+  return outputTokens;
+}
+
 function lowerSourceFile(
   sourceFile: ts.SourceFile,
   discovered: SourceAnalysisResult,
@@ -1424,7 +1438,7 @@ function lowerSourceFile(
     }
     return undefined;
   }
-  for (const query of [...discovered.queries].sort((left, right) => left.range.start - right.range.start)) {
+  for (const query of discovered.queries.toSorted((left, right) => left.range.start - right.range.start)) {
     const node = plan.loweredNodes.get(queryKey(query.range));
     if (!node) continue;
     const text = printer.printNode(ts.EmitHint.Expression, node, transformedFile);
@@ -1439,18 +1453,6 @@ function lowerSourceFile(
   }
   const mappingOrigins = [...origins];
   let statementSearchStart = 0;
-  function tokens(node: ts.Node, _source: ts.SourceFile): readonly ts.Node[] {
-    const outputTokens: ts.Node[] = [];
-    function visit(current: ts.Node): void {
-      if (ts.isToken(current)) {
-        outputTokens.push(current);
-        return;
-      }
-      ts.forEachChild(current, visit);
-    }
-    visit(node);
-    return outputTokens;
-  }
   for (const statement of sourceFile.statements) {
     const transformedStatement = transformedFile.statements.find(
       (candidate) => ts.getOriginalNode(candidate) === statement,
@@ -1460,8 +1462,8 @@ function lowerSourceFile(
     const generatedStart = output.indexOf(statementText, statementSearchStart);
     if (generatedStart < 0) continue;
     statementSearchStart = generatedStart + statementText.length;
-    const sourceTokens = tokens(statement, sourceFile);
-    const generatedTokens = tokens(transformedStatement, transformedFile);
+    const sourceTokens = tokens(statement);
+    const generatedTokens = tokens(transformedStatement);
     const count = Math.min(sourceTokens.length, generatedTokens.length);
     for (let index = 0; index < count; index += 1) {
       const sourceToken = sourceTokens[index];
@@ -1694,7 +1696,7 @@ function lowerSourcePreserving(
     edits.push({ sourceStart: offset, sourceEnd: offset, generatedText });
   }
   if (!edits.length) return { code: sourceFile.text, diagnostics: plan.diagnostics, map: null };
-  const ordered = [...edits].sort(
+  const ordered = edits.toSorted(
     (left, right) => left.sourceStart - right.sourceStart || left.sourceEnd - right.sourceEnd,
   );
   const points: MappingPoint[] = [];

@@ -475,6 +475,7 @@ async function closeTransaction(transaction: LibsqlTransactionLike, original?: u
     await transaction.close();
   } catch (cause) {
     if (original !== undefined)
+      // oxlint-disable-next-line eslint/preserve-caught-error -- Both errors are in errors; the transaction remains the primary cause.
       throw new AggregateError([original, cause], "libSQL transaction and cleanup failed.", { cause: original });
     throw cause;
   }
@@ -487,9 +488,9 @@ function transactionStatement(
   return `${command} ${assertSavepointName(name)}`;
 }
 
-export function createLibsqlExecutor(client: LibsqlClientLike, options: LibsqlExecutorOptions): QueryExecutor {
+export function createLibsqlExecutor(client: LibsqlClientLike, executorOptions: LibsqlExecutorOptions): QueryExecutor {
   assertClient(client);
-  assertExactStringMode(options);
+  assertExactStringMode(executorOptions);
   // Native file clients round rowids through f64 even with safeIntegers enabled.
   // Only known Hrana transports preserve command IDs; caller-written RETURNING
   // remains exact on local clients because it uses the row-value path.

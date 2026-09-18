@@ -108,6 +108,7 @@ test("environment support matching requires exact verified evidence and never gu
       { ...target, database: { ...target.database, version: "0.0.0" } },
       { ...target, driver: { ...target.driver, profile: "custom" } },
     ])
+      // oxlint-disable-next-line no-await-in-loop -- Exercise support matching against the same database's cached environment in case order.
       assert.equal((await db.environment({ targets: [changed] })).supportMatch.status, "compatible");
     assert.equal((await db.environment({ targets: [target, target] })).supportMatch.reason, "ambiguous-exact-target");
   } finally {

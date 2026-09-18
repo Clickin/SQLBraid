@@ -24,6 +24,7 @@ export const GET: APIRoute = async () => {
   const base = docsBasePath();
   const docs = (await getCollection("docs"))
     .filter((entry) => entry.id !== "ko" && !entry.id.startsWith("ko/"))
+    // eslint-disable-next-line unicorn/no-array-sort -- filter() owns this array; sorting does not mutate the collection.
     .sort((left, right) => left.id.localeCompare(right.id));
   const byId = new Map(docs.map((entry) => [entry.id, entry]));
   const snapshot = base.includes("/v/") ? `release ${base.slice(base.lastIndexOf("/") + 1)}` : "latest documentation";

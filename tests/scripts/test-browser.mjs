@@ -54,12 +54,12 @@ function certificationOptions() {
 }
 
 function run(command, args, options = {}) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolveChild, reject) => {
     const child = spawn(command, args, { stdio: "inherit", ...options });
     children.push(child);
     child.once("error", reject);
     child.once("exit", (code, signal) => {
-      if (code === 0) resolve();
+      if (code === 0) resolveChild();
       else reject(new Error(`${command} ${args.join(" ")} exited with ${signal ?? code}.`));
     });
   });
@@ -74,7 +74,7 @@ async function waitForServer(url) {
     } catch {
       // The preview process may need a few seconds to start.
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
   }
   throw new Error(`Timed out waiting for ${url}.`);
 }
@@ -206,7 +206,9 @@ async function runWasmConformance(
         { timeout: 30_000 },
       );
     } catch (error) {
-      throw new Error(`Browser WASM fixture did not become ready: ${pageError?.message ?? String(error)}`);
+      throw new Error(`Browser WASM fixture did not become ready: ${pageError?.message ?? String(error)}`, {
+        cause: error,
+      });
     }
     await page.waitForFunction(() => window.__sqlbraidSqlite3 !== undefined, undefined, { timeout: 30_000 });
     const result = await page.evaluate(() => ({
@@ -586,6 +588,7 @@ async function main() {
     if (fixtureServer !== undefined) {
       await new Promise((resolveServer) => fixtureServer.server.close(resolveServer));
     }
+    // eslint-disable-next-line unicorn/no-array-reverse -- Consume the owned child list in reverse startup order during teardown.
     for (const child of children.reverse()) {
       if (!child.killed) child.kill("SIGTERM");
     }

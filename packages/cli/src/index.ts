@@ -201,6 +201,7 @@ async function runCodegen(argv: readonly string[], json: boolean): Promise<void>
     if (!targets.some((target) => target.name === name)) throw new CliError(`Unknown codegen target: ${name}.`, 2);
   const selected = targets
     .filter((target) => requestedSet.size === 0 || requestedSet.has(target.name))
+    // eslint-disable-next-line unicorn/no-array-sort -- Sort the owned filter result without allocating a second array.
     .sort((left, right) => compareNames(left.name, right.name));
   const check = argv.includes("--check");
   const prepared = await Promise.all(selected.map((target) => prepareCodegenTarget(target, loaded.directory)));
@@ -233,6 +234,7 @@ async function runCodegen(argv: readonly string[], json: boolean): Promise<void>
       if (item.result.status !== "stale" && item.result.status !== "missing") continue;
       if (item.source === undefined) continue;
       try {
+        // eslint-disable-next-line no-await-in-loop -- Stop writing subsequent targets after the first failed atomic write.
         await atomicWrite(item.outputPath, item.source);
         item.result.status = "written";
       } catch (error) {
@@ -249,6 +251,7 @@ async function runCodegen(argv: readonly string[], json: boolean): Promise<void>
       }
     }
   }
+  // eslint-disable-next-line unicorn/no-array-sort -- The mapped result array is owned by this report.
   const results = prepared.map((item) => item.result).sort((left, right) => compareNames(left.target, right.target));
   reportCodegen(results, json);
   if (configurationError) throw new CliError("Codegen output paths must be unique.", 2);
@@ -338,6 +341,7 @@ async function runInspect(argv: readonly string[], json: boolean): Promise<void>
     const service = await workspace.service();
     if (operation === "diagnostics") {
       const allDiagnostics = service.diagnostics(source, fileName as string);
+      // oxlint-disable-next-line no-map-spread -- Truncate presentation text without mutating the service's cached diagnostics.
       const diagnostics = allDiagnostics.slice(0, 100).map((diagnostic) => ({
         ...diagnostic,
         message: diagnostic.message.slice(0, 2000),
@@ -434,23 +438,24 @@ async function main(argv: readonly string[]): Promise<void> {
         "@sqlbraid/sqlite/d1": [resolve(sourcePackages, "sqlite/src/d1.ts")],
       }
     : undefined;
-  const options: TypeScriptCheckOptions = {
+  const checkOptions: TypeScriptCheckOptions = {
     compilerOptions: {
       baseUrl: process.cwd(),
       ...(existsSync(nodeTypes) ? { types: ["node"], typeRoots: [resolve(process.cwd(), "node_modules/@types")] } : {}),
       ...(sourcePaths ? { paths: sourcePaths } : {}),
     },
   };
-  const sourceContext = command === "manifest" && targetFile ? createSourceContext(source, file, options) : undefined;
+  const sourceContext =
+    command === "manifest" && targetFile ? createSourceContext(source, file, checkOptions) : undefined;
   const analysisOptions = sourceContext
-    ? { ...options, ...sourceContext, sourceFile: sourceContext.sourceFile, typeChecker: sourceContext.checker }
-    : options;
+    ? { ...checkOptions, ...sourceContext, sourceFile: sourceContext.sourceFile, typeChecker: sourceContext.checker }
+    : checkOptions;
   const discovered = targetFile ? discoverQueries(source, file, analysisOptions) : { queries: [], diagnostics: [] };
   const diagnostics =
     command === "check" && projectFile
-      ? checkProject(projectFile, options)
+      ? checkProject(projectFile, checkOptions)
       : command === "check" || command === "build"
-        ? checkSource(source, file, options)
+        ? checkSource(source, file, checkOptions)
         : createVirtualOverlay(source, file, analysisOptions).diagnostics;
   reportDiagnostics(diagnostics, json);
   if (command === "check") {
@@ -462,7 +467,7 @@ async function main(argv: readonly string[]): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    const emitted = emitSource(source, file, options);
+    const emitted = emitSource(source, file, checkOptions);
     reportDiagnostics(emitted.diagnostics, json);
     if (emitted.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
       process.exitCode = 1;
@@ -475,8 +480,8 @@ async function main(argv: readonly string[]): Promise<void> {
     if (emitted.sourceMapText) {
       const map: { file: string; sources: string[] } = JSON.parse(emitted.sourceMapText);
       map.file = basename(outputFile);
-      map.sources = map.sources.map((source) =>
-        relative(dirname(outputFile), resolve(dirname(file), source)).replaceAll("\\", "/"),
+      map.sources = map.sources.map((sourcePath) =>
+        relative(dirname(outputFile), resolve(dirname(file), sourcePath)).replaceAll("\\", "/"),
       );
       outputText = outputText.replace(
         /\/\/# sourceMappingURL=[^\r\n]*(?:\r?\n)?$/u,

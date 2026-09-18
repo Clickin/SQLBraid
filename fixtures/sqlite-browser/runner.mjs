@@ -197,6 +197,7 @@ async function streamCase(sqlite3) {
     expect(blockedCode === "BRAID_STREAM_SCOPE", "SQLite WASM stream did not retain its resource lease.");
     const rest = [];
     while (true) {
+      // eslint-disable-next-line no-await-in-loop -- Pull the same cursor sequentially while its lease is held.
       const next = await iterator.next();
       if (next.done) break;
       rest.push(next.value.value);
@@ -542,6 +543,8 @@ async function run() {
   window.__sqlbraidWasmConformance = report;
 }
 
+const write = (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`);
+
 async function transactionContracts(sqlite3) {
   // A named VFS file is shared by independent native handles; :memory: would not be an observer.
   // This proves transaction durability between connections, not persistence across browser reloads.
@@ -549,7 +552,6 @@ async function transactionContracts(sqlite3) {
   const observer = new sqlite3.oo1.DB("/braid-contract.db", "c");
   const db = createSqliteWasmDatabase(native, { sqlite3 });
   const other = createSqliteWasmDatabase(observer, { sqlite3 });
-  const write = (tx, id) => tx.execute(sql.command`INSERT INTO braid_contract_tx (id) VALUES (${id})`);
   const rows = async () =>
     (await other.all(sql.rows`SELECT id FROM braid_contract_tx ORDER BY id`)).map((row) => row.id);
   const equalRows = async (expected) =>
@@ -568,7 +570,7 @@ async function transactionContracts(sqlite3) {
     return failure;
   };
   const assertions = [];
-  const run = async (scenario, check) => {
+  const runScenario = async (scenario, check) => {
     native.exec("DELETE FROM braid_contract_tx");
     await equalRows([]);
     await check();
@@ -583,7 +585,7 @@ async function transactionContracts(sqlite3) {
       "WASM observer must use a separate native connection.",
     );
     native.exec("DROP TABLE IF EXISTS braid_contract_tx; CREATE TABLE braid_contract_tx (id TEXT PRIMARY KEY)");
-    await run("transaction.commit-confirmed", async () => {
+    await runScenario("transaction.commit-confirmed", async () => {
       const result = await db.tx(async (tx) => {
         await write(tx, "A");
         return "committed";
@@ -591,7 +593,7 @@ async function transactionContracts(sqlite3) {
       expect(result === "committed", "WASM lost the committed callback value.");
       await equalRows(["A"]);
     });
-    await run("transaction.callback-rollback", async () => {
+    await runScenario("transaction.callback-rollback", async () => {
       const failure = new Error("WASM callback rollback");
       expect(
         (await rejects(
@@ -604,7 +606,7 @@ async function transactionContracts(sqlite3) {
       );
       await equalRows([]);
     });
-    await run("transaction.statement-rollback", async () => {
+    await runScenario("transaction.statement-rollback", async () => {
       let firstWriteCompleted = false;
       await rejects(
         db.tx(async (tx) => {
@@ -616,7 +618,7 @@ async function transactionContracts(sqlite3) {
       expect(firstWriteCompleted, "WASM statement failure must follow a successful mutation.");
       await equalRows([]);
     });
-    await run("transaction.caught-error-terminal-outcome", async () => {
+    await runScenario("transaction.caught-error-terminal-outcome", async () => {
       const result = await db.tx(async (tx) => {
         await write(tx, "A");
         await rejects(write(tx, "A"));
@@ -625,7 +627,7 @@ async function transactionContracts(sqlite3) {
       expect(result === "committed", "WASM should commit after a caught constraint violation.");
       await equalRows(["A"]);
     });
-    await run("transaction.savepoint-recovery", async () => {
+    await runScenario("transaction.savepoint-recovery", async () => {
       const failure = new Error("WASM nested rollback");
       await db.tx(async (tx) => {
         await write(tx, "A");

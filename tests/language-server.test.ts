@@ -25,7 +25,7 @@ const metadata = {
   routines: {},
   metadata: {},
 } as const satisfies MetadataSnapshot;
-const source = `import { sql } from '@sqlbraid/template';
+const contractSource = `import { sql } from '@sqlbraid/template';
 import type { RoutineCallResult } from '@sqlbraid/core';
 type UserRow = { id: bigint };
 type CallResult = RoutineCallResult<{ ok: boolean }, readonly [{ id: bigint }]>;
@@ -36,18 +36,24 @@ const unknown = sql\`SELECT id FROM users\`;`;
 
 test("declared contract hover and diagnostics work without metadata", () => {
   const service = createLanguageService({ moduleSpecifier: "@sqlbraid/template" });
-  assert.equal(service.diagnostics(source, "fixture.ts").length, 0);
-  assert.match(service.hover(source, "fixture.ts", source.indexOf("SELECT"))?.contents ?? "", /RowQuery<UserRow>/);
+  assert.equal(service.diagnostics(contractSource, "fixture.ts").length, 0);
   assert.match(
-    service.hover(source, "fixture.ts", source.indexOf("proprietary_command"))?.contents ?? "",
+    service.hover(contractSource, "fixture.ts", contractSource.indexOf("SELECT"))?.contents ?? "",
+    /RowQuery<UserRow>/,
+  );
+  assert.match(
+    service.hover(contractSource, "fixture.ts", contractSource.indexOf("proprietary_command"))?.contents ?? "",
     /^CommandQuery/u,
   );
   assert.match(
-    service.hover(source, "fixture.ts", source.indexOf("proprietary_call"))?.contents ?? "",
+    service.hover(contractSource, "fixture.ts", contractSource.indexOf("proprietary_call"))?.contents ?? "",
     /CallQuery<CallResult>/,
   );
-  assert.match(service.hover(source, "fixture.ts", source.indexOf("SELECT id"))?.contents ?? "", /Query<unknown>/);
-  assert.deepEqual(service.complete(source, "fixture.ts", source.indexOf("SELECT")), []);
+  assert.match(
+    service.hover(contractSource, "fixture.ts", contractSource.indexOf("SELECT id"))?.contents ?? "",
+    /Query<unknown>/,
+  );
+  assert.deepEqual(service.complete(contractSource, "fixture.ts", contractSource.indexOf("SELECT")), []);
 });
 
 test("completion is metadata-backed and reload replaces metadata", () => {

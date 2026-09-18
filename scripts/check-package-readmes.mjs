@@ -91,7 +91,7 @@ async function discoverPackages() {
   const errors = [];
 
   for (const entry of entries
-    .filter((entry) => entry.isDirectory())
+    .filter((candidate) => candidate.isDirectory())
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
     const packageDir = join(packagesRoot, entry.name);
     const manifestPath = join(packageDir, "package.json");

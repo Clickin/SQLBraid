@@ -102,14 +102,15 @@ function은 result set을 내보낼 수 없습니다.
 descriptor는 아래 fidelity-first option을 사용하고 `mysql2-native`는 native
 descriptor를 선택해야 합니다. 이 프로필의 지원 여부는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)에서
 사용 중인 조합의 테스트 결과를 통해 확인하시기 바랍니다.
-| mysql2 옵션               | `mysql2-lossless-text` | 효과                                                                               |
-| ------------------------- | ---------------------- | ---------------------------------------------------------------------------------- |
-| `bigNumberStrings: true`  | 필수                   | 큰 숫자를 문자열로 반환해 애플리케이션이 정확하게 처리합니다.                      |
-| `decimalNumbers: false`   | 필수                   | `DECIMAL`을 JavaScript `number`로 변환하지 않습니다. `true`는 별도 프로필입니다.   |
-| `rowsAsArray: false`      | 필수                   | SQLBraid normalizer와 schema가 기대하는 객체 행을 유지합니다.                      |
-| `jsonStrings: true`       | 필수                   | `JSON.parse` 없이 JSON text를 반환하며 parsed JSON은 별도 프로필입니다.            |
-| `dateStrings: true`       | 필수                   | fractional precision이 보이는 temporal text를 반환하며 `Date`는 별도 프로필입니다. |
-| `typeCast` (기본값)       | 필수                   | custom 함수는 raw 표현을 바꾸므로 테스트 전까지 별도 프로필입니다.                 |
+
+| mysql2 옵션              | `mysql2-lossless-text` | 효과                                                                               |
+| ------------------------ | ---------------------- | ---------------------------------------------------------------------------------- |
+| `bigNumberStrings: true` | 필수                   | 큰 숫자를 문자열로 반환해 애플리케이션이 정확하게 처리합니다.                      |
+| `decimalNumbers: false`  | 필수                   | `DECIMAL`을 JavaScript `number`로 변환하지 않습니다. `true`는 별도 프로필입니다.   |
+| `rowsAsArray: false`     | 필수                   | SQLBraid normalizer와 schema가 기대하는 객체 행을 유지합니다.                      |
+| `jsonStrings: true`      | 필수                   | `JSON.parse` 없이 JSON text를 반환하며 parsed JSON은 별도 프로필입니다.            |
+| `dateStrings: true`      | 필수                   | fractional precision이 보이는 temporal text를 반환하며 `Date`는 별도 프로필입니다. |
+| `typeCast` (기본값)      | 필수                   | custom 함수는 raw 표현을 바꾸므로 테스트 전까지 별도 프로필입니다.                 |
 
 유효 프로필에는 mysql2 버전, MySQL server, Node 버전 및 위 option 전체를
 기록합니다. SQLBraid는 custom `typeCast` 함수의 출력을 검사하거나 추론하지

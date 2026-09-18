@@ -58,6 +58,7 @@ test(
 
 test("Oracle routine materializes CLOB and BLOB OUT and INOUT binds", { timeout: 60_000 }, async () => {
   const { connection } = await connect();
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- Keep this LOB writer with its OUT/INOUT test setup.
   const fill = async (
     lob: NodeJS.WritableStream & {
       once(event: string, listener: (...args: readonly unknown[]) => void): unknown;

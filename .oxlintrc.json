@@ -93,6 +93,132 @@
       "rules": {
         "eslint/no-unused-vars": "off"
       }
+    },
+    {
+      "files": [
+        "extensions/vscode/src/extension.ts",
+        "extensions/vscode/test/runTest.ts",
+        "packages/bun-sql/src/index.ts",
+        "packages/mssql/src/tedious.ts",
+        "packages/mysql/src/mysql2.ts",
+        "packages/oracle/src/oracledb.ts",
+        "packages/postgres/src/pg.ts",
+        "packages/runtime/src/index.ts",
+        "scripts/assert-release-workflows.mjs",
+        "scripts/certification.mjs",
+        "scripts/check-package-readmes.mjs",
+        "scripts/docs-history.mjs",
+        "scripts/merge-vitest-results.mjs",
+        "scripts/package-vscode.mjs",
+        "scripts/release.mjs",
+        "scripts/support-evidence.mjs",
+        "scripts/validate-contract-matrix.mjs",
+        "scripts/validate-dependency-ownership.mjs",
+        "scripts/validate-runtime-compatibility.mjs",
+        "scripts/validate-runtime-floor.mjs",
+        "scripts/validate-support.mjs",
+        "scripts/validate-translations.mjs",
+        "tests/certification/cases.ts",
+        "tests/certification/execute.ts",
+        "tests/contract-resources.test.ts",
+        "tests/contracts/transaction.integration.ts",
+        "tests/db/mariadb/profiles.test.ts",
+        "tests/db/mssql/capabilities.test.ts",
+        "tests/db/mysql/capabilities.test.ts",
+        "tests/db/mysql/profiles.test.ts",
+        "tests/db/oracle/capabilities.test.ts",
+        "tests/db/sqlite/w01.test.ts",
+        "tests/docs-transaction-examples.test.ts",
+        "tests/lexical-conformance.test.ts",
+        "tests/mssql.test.ts",
+        "tests/opentelemetry.test.ts",
+        "tests/oracle.test.ts",
+        "tests/pool-init-failure.test.ts",
+        "tests/pv14-adapters.test.ts",
+        "tests/pv14-binding.test.ts",
+        "tests/pv15-vite.test.ts",
+        "tests/rc-runtime.test.ts",
+        "tests/rc-spi-contracts.test.ts",
+        "tests/release.test.ts",
+        "tests/runtime-floor.test.ts",
+        "tests/runtime-observer.test.ts",
+        "tests/runtime-portability.test.ts",
+        "tests/runtime-transaction-boundary.test.ts",
+        "tests/scripts/audit-runtime.mjs",
+        "tests/scripts/bulk-execution-benchmark.mjs",
+        "tests/scripts/bun-sql-certification.mjs",
+        "tests/scripts/bun-sql-matrix.mjs",
+        "tests/scripts/bun-sql-readonly-repro.mjs",
+        "tests/scripts/runtime-portability.mjs",
+        "tests/scripts/sync-boundary-benchmark.mjs",
+        "tests/scripts/test-browser.mjs",
+        "tests/scripts/test-examples.mjs",
+        "tests/scripts/test-tanstack-start.mjs",
+        "tests/scripts/validate-packages.mjs",
+        "tests/scripts/value-fidelity-benchmark.mjs",
+        "tests/support-validation.test.ts",
+        "tests/tooling-workspace.test.ts",
+        "website/check-links.mjs",
+        "website/src/components/DocsVersionSelect.astro"
+      ],
+      "rules": {
+        "eslint/no-await-in-loop": "off"
+      }
+    },
+    {
+      "files": [
+        "fixtures/sqlite-browser/certification-entry.ts",
+        "fixtures/sqlite-browser/runner.mjs",
+        "tests/scripts/test-browser.mjs"
+      ],
+      "rules": {
+        "eslint/no-underscore-dangle": "off"
+      }
+    },
+    {
+      "files": [
+        "fixtures/cloudflare-d1/worker.mjs",
+        "packages/codegen/src/index.ts",
+        "packages/mssql/src/inspector.ts"
+      ],
+      "rules": {
+        "oxc/no-map-spread": "off"
+      }
+    },
+    {
+      "files": [
+        "packages/codegen/src/index.ts",
+        "packages/compiler/src/index.ts",
+        "packages/metadata/src/index.ts",
+        "scripts/certification.mjs",
+        "scripts/check-package-readmes.mjs",
+        "scripts/docs-history.mjs",
+        "scripts/release.mjs",
+        "scripts/support-evidence.mjs",
+        "scripts/type-policy-provenance.mjs",
+        "scripts/validate-contract-matrix.mjs",
+        "scripts/validate-dependency-ownership.mjs",
+        "scripts/validate-runtime-compatibility.mjs",
+        "scripts/validate-support.mjs",
+        "tests/certification/certification.test.ts",
+        "tests/certification/runner.ts",
+        "tests/scripts/test-examples.mjs",
+        "tests/scripts/validate-packages.mjs"
+      ],
+      "rules": {
+        "unicorn/no-array-sort": "off"
+      }
+    },
+    {
+      "files": [
+        "packages/tooling/src/config-worker.ts",
+        "website/src/components/InteractivePreview.astro",
+        "website/src/workers/preview.worker.ts",
+        "website/src/workers/runtime-ownership.worker.ts"
+      ],
+      "rules": {
+        "unicorn/require-post-message-target-origin": "off"
+      }
     }
   ]
 }

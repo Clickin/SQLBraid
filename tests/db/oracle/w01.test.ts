@@ -371,6 +371,7 @@ test("Oracle inspector exposes positive catalog evidence for codegen", { timeout
     const overloads = Object.values(snapshot.routines)
       .flat()
       .filter((entry) => entry.identity?.startsWith("SQLBRAID.BRAID_PV13_PKG.CALC"));
+    // eslint-disable-next-line unicorn/no-array-sort -- These mapped overload signatures are an owned assertion array.
     assert.deepEqual(overloads.map((entry) => entry.arguments.map((argument) => argument.type)).sort(), [
       ["NUMBER"],
       ["VARCHAR2"],
@@ -406,6 +407,7 @@ test("Oracle pool provider returns physical leases and supports nested savepoint
       db.one(sql.rows<{ readonly VALUE: string }>`SELECT 'pool-a' AS VALUE FROM dual`),
       db.one(sql.rows<{ readonly VALUE: string }>`SELECT 'pool-b' AS VALUE FROM dual`),
     ]);
+    // eslint-disable-next-line unicorn/no-array-sort -- These mapped pool results are an owned assertion array.
     assert.deepEqual(values.map((row) => row.VALUE).sort(), ["pool-a", "pool-b"]);
     const materialized = await db.one(
       sql.rows<{

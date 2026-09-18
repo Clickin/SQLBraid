@@ -427,6 +427,7 @@ test("postgres.dml.insert-returning", { timeout: 30_000 }, async () => {
       RETURNING target.id
     `);
     assert.deepEqual(
+      // eslint-disable-next-line unicorn/no-array-sort -- Sort the owned copy, preserving the database result array.
       [...using].sort((left, right) => Number(left.id) - Number(right.id)),
       [{ id: "1" }, { id: "4" }],
     );
@@ -456,6 +457,7 @@ test("postgres.dml.insert-returning", { timeout: 30_000 }, async () => {
         RETURNING merge_action() AS action, old.id AS old_id, new.id AS new_id
       `);
       assert.deepEqual(
+        // eslint-disable-next-line unicorn/no-array-sort -- Sort the owned copy, preserving the database result array.
         [...merge].sort((left, right) => Number(left.new_id ?? -1) - Number(right.new_id ?? -1)),
         [
           { action: "UPDATE", old_id: "2", new_id: "2" },
@@ -534,6 +536,7 @@ test(
         ["serializable", "serializable"],
       ] as const;
       for (const [isolation, expected] of levels) {
+        // eslint-disable-next-line no-await-in-loop -- Finish each transaction before probing the next isolation level.
         await db.tx({ isolation }, async (tx) => {
           const row = await tx.one(
             sql.rows<{ readonly isolation: string }>`SELECT current_setting('transaction_isolation') AS isolation`,
@@ -589,6 +592,7 @@ test("postgres.rc cancellation destroys an in-flight pooled connection before re
   const pool = new Pool({ connectionString: settings.connectionUri, max: 1, idleTimeoutMillis: 0 });
   const db = createPgPoolDatabase(pool);
   try {
+    // eslint-disable-next-line unicorn/consistent-function-scoping -- Keep cancellation timing beside its four probes.
     const cancel = async (operation: (signal: AbortSignal) => Promise<unknown>): Promise<void> => {
       const controller = new AbortController();
       const reason = new Error("cancel PostgreSQL sleep");

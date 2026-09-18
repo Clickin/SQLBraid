@@ -259,15 +259,14 @@ test("SQL Server row-event streaming supports early break and abort", async () =
     assert.equal((await db.one(sql.rows<{ readonly n: string }>`SELECT 7 AS n`)).n, "7");
 
     const controller = new AbortController();
-    const live = db
-      .stream(
-        sql.rows<{ readonly n: string }>`
+    const liveStream = db.stream(
+      sql.rows<{ readonly n: string }>`
       SELECT TOP (100) CAST(ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS int) AS n
       FROM sys.all_objects a CROSS JOIN sys.all_objects b
     `,
-        { signal: controller.signal },
-      )
-      [Symbol.asyncIterator]();
+      { signal: controller.signal },
+    );
+    const live = liveStream[Symbol.asyncIterator]();
     assert.equal((await live.next()).value?.n, "1");
     controller.abort(new Error("live stop"));
     await assert.rejects(() => live.next(), /live stop/u);
@@ -277,6 +276,7 @@ test("SQL Server row-event streaming supports early break and abort", async () =
     preAborted.abort(new Error("stop"));
     const aborted = db.stream(sql.rows`SELECT 1 AS n`, { signal: preAborted.signal });
     await assert.rejects(async () => {
+      // eslint-disable-next-line no-underscore-dangle -- The pre-aborted iterator must reject without consuming a row.
       for await (const _row of aborted) {
         /* pre-aborted */
       }

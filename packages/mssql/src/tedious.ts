@@ -466,6 +466,7 @@ function metadataColumns(columns: unknown): readonly TediousColumnMetadataLike[]
   if (Array.isArray(columns))
     return columns.map((value) => (value && typeof value === "object" ? value : {})) as TediousColumnMetadataLike[];
   if (columns && typeof columns === "object") {
+    // oxlint-disable-next-line oxc/no-map-spread -- Copy driver-owned metadata before adding the normalized column name.
     return Object.entries(columns).map(([name, value]) => {
       const metadata = value && typeof value === "object" ? (value as TediousColumnMetadataLike) : {};
       return { ...metadata, colName: metadata.colName ?? metadata.name ?? name };
@@ -1343,6 +1344,7 @@ function streamRows(
     void completion.catch(() => undefined);
     try {
       while (true) {
+        // oxlint-disable-next-line eslint/no-unmodified-loop-condition -- Request callbacks update done/failureSet and wake the waiting consumer.
         while (queue.length === 0 && !done && !failureSet) await waitForData();
         if (failureSet) throw failure;
         if (queue.length > 0) {
@@ -1675,8 +1677,8 @@ function executePrepared(
           resolve(
             counts.length > 0 ? counts.reduce((total, value) => safeDatabaseCount(total + value), 0) : callbackRowCount,
           );
-        } catch (error) {
-          reject(error);
+        } catch (countError) {
+          reject(countError);
         }
       }
     };

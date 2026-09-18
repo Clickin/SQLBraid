@@ -43,10 +43,11 @@ function hintedQuery(value: number, parameterHint: ParameterTypeHint = hint) {
   return {
     ...base,
     render() {
-      const rendered = base.render();
+      const statement = base.render();
       return createRenderedStatement({
-        ...rendered,
-        parameters: rendered.parameters.map((parameter) => ({ ...parameter, hint: parameterHint })),
+        ...statement,
+        // oxlint-disable-next-line no-map-spread -- Rendered parameters are immutable; hints belong only to this query fixture.
+        parameters: statement.parameters.map((parameter) => ({ ...parameter, hint: parameterHint })),
       });
     },
   };
@@ -168,7 +169,7 @@ test("legacy adapters reject explicit hints before driver I/O", async () => {
   await assert.rejects(async () => sqlite.query(rendered()), /BRAID_BIND_HINT_UNSUPPORTED/);
 
   await assert.rejects(async () => {
-    for await (const _row of sqlite.stream!(rendered())) void _row;
+    for await (const row of sqlite.stream!(rendered())) void row;
   }, /BRAID_BIND_HINT_UNSUPPORTED/);
   assert.equal(sqliteCalls, 0);
 });

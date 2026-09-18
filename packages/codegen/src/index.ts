@@ -678,7 +678,7 @@ function nameRelations(
   const modelGroups = groupByName(named);
   for (const [modelName, group] of modelGroups) {
     if (group.length < 2) continue;
-    const ordered = [...group].sort(
+    const ordered = group.toSorted(
       (left, right) =>
         Number(explicit[right.relation.identity] !== undefined) -
           Number(explicit[left.relation.identity] !== undefined) ||
@@ -780,7 +780,7 @@ function renderRelation(
   overrides: CodegenTypeOverrides | undefined,
   diagnostics: CodegenDiagnostic[],
 ): string {
-  const columns = [...relation.columns].sort(
+  const columns = relation.columns.toSorted(
     (left, right) => left.ordinal - right.ordinal || compareStrings(left.name, right.name),
   );
   const resolved = new Map<string, ResolvedType>();

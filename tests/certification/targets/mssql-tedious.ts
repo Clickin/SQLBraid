@@ -36,6 +36,9 @@ interface Stats {
   releaseFailure?: Error;
 }
 
+const nested = (value: unknown): readonly unknown[] =>
+  value instanceof AggregateError ? value.errors.flatMap((entry) => [entry, ...nested(entry)]) : [];
+
 const TABLE = "dbo.braid_cert_mssql";
 const PROCEDURES = [
   "dbo.braid_cert_mssql_out",
@@ -145,6 +148,7 @@ function trackedConnection(raw: Connection, stats: Stats): TediousPoolConnection
 
 async function executeSetup(connection: TediousConnectionLike): Promise<void> {
   const setup = createTediousDatabase(connection);
+  // eslint-disable-next-line no-await-in-loop -- Procedure teardown and schema setup share one Tedious connection.
   for (const procedure of PROCEDURES) await setup.execute(sql`DROP PROCEDURE IF EXISTS ${sql.raw(procedure)}`);
   await setup.execute(sql`DROP TABLE IF EXISTS ${sql.raw(TABLE)}`);
   await setup.execute(sql`CREATE TABLE ${sql.raw(TABLE)} (id int NOT NULL PRIMARY KEY, value nvarchar(100) NOT NULL)`);
@@ -630,8 +634,7 @@ export function createMssqlTediousTarget(sourceSha: string, measuredDriverVersio
             }
           }
           assert.ok(error instanceof AggregateError);
-          const nested = (value: unknown): readonly unknown[] =>
-            value instanceof AggregateError ? value.errors.flatMap((entry) => [entry, ...nested(entry)]) : [];
+          // eslint-disable-next-line unicorn/prefer-set-has -- Three one-off identity checks do not need a second error collection.
           const errors = [error, ...nested(error)];
           assert.ok(errors.includes(primary));
           assert.ok(errors.includes(rollbackFailure));

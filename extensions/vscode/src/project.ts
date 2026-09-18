@@ -47,6 +47,7 @@ export async function findProjectEvidence(rootPath: string): Promise<ProjectEvid
   for (const fileName of SQLBRAID_CONFIG_FILES) {
     const path = join(root, fileName);
     try {
+      // eslint-disable-next-line no-await-in-loop -- Config names have priority order; stop at the first accessible file.
       await access(path);
       return { kind: "config", path };
     } catch {

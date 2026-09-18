@@ -86,6 +86,7 @@ test("[contract:libsql:metadata.affected-rows:integration] local commands omit u
       observerDb.all(sql.rows<{ id: string; name: string }>`SELECT id, name FROM braid_contract_metadata ORDER BY id`);
     const id = "9007199254740993";
     const maximum = "9223372036854775807";
+    // eslint-disable-next-line unicorn/consistent-function-scoping -- This factory belongs to the metadata test table.
     const insert = (value: string) =>
       sql.command`INSERT INTO braid_contract_metadata (id, name) VALUES (${value}, ${"before"})`;
     const inserted = await db.execute(insert(id));

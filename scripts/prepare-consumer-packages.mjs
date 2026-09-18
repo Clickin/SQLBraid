@@ -10,6 +10,7 @@ const output = resolve(supplied ?? process.env.SQLBRAID_PACK_OUTPUT_DIR ?? join(
 const packageNames = (await readdir(packageRoot, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
+  // oxlint-disable-next-line unicorn/no-array-sort -- Sort the owned name list in place for deterministic pack order.
   .sort();
 
 if (supplied) {

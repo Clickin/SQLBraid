@@ -130,19 +130,19 @@ async function hashTree(directory, relative = "", output = []) {
 }
 async function distSha() {
   const packages = await readdir(join(root, "packages"), { withFileTypes: true });
-  const files = [];
+  const distFiles = [];
   for (const entry of packages) {
     if (!entry.isDirectory()) continue;
     const directory = join(root, "packages", entry.name, "dist");
     try {
-      await hashTree(directory, join(entry.name, "dist"), files);
+      await hashTree(directory, join(entry.name, "dist"), distFiles);
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
     }
   }
-  if (files.length === 0) throw new Error("Prepared build contains no package dist files.");
+  if (distFiles.length === 0) throw new Error("Prepared build contains no package dist files.");
   const hash = createHash("sha256");
-  for (const [name, content] of files.sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [name, content] of distFiles.sort(([left], [right]) => left.localeCompare(right))) {
     hash.update(name);
     hash.update("\0");
     hash.update(content);
@@ -150,9 +150,9 @@ async function distSha() {
   return hash.digest("hex");
 }
 async function directorySha(directory) {
-  const files = await hashTree(directory);
+  const directoryFiles = await hashTree(directory);
   const hash = createHash("sha256");
-  for (const [name, content] of files.sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [name, content] of directoryFiles.sort(([left], [right]) => left.localeCompare(right))) {
     hash.update(name);
     hash.update("\0");
     hash.update(content);

@@ -327,6 +327,7 @@ test("ambiguous SQL aliases and omitted sources never become positive column ref
     const source = `import { sql } from '@sqlbraid/${module}'; const q = sql\`${sqlText}\`;`;
     const offset = source.lastIndexOf(selected);
     assert.equal(service.definition(source, "ambiguous.ts", offset), undefined, sqlText);
+    // oxlint-disable-next-line no-await-in-loop -- Reuse the service and filename sequentially so each case observes its own cached analysis.
     assert.deepEqual(await service.references(source, "ambiguous.ts", offset), [], sqlText);
   }
 });

@@ -254,7 +254,7 @@ export function createOpenTelemetryObserver(options: OpenTelemetryObserverOption
     operationId: string,
     systemName: string,
     spanAttributes: Attributes,
-    metricAttributes: Attributes,
+    operationMetricAttributes: Attributes,
   ): void {
     if (operations.has(operationId)) {
       finishOperation(operationId, "error", { code: "ERR_OPERATION_REPLACED" });
@@ -276,7 +276,7 @@ export function createOpenTelemetryObserver(options: OpenTelemetryObserverOption
       Object.freeze({
         startedAt,
         ...(span === undefined ? {} : { span }),
-        metricAttributes,
+        metricAttributes: operationMetricAttributes,
       }),
     );
   }

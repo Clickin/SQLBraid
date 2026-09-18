@@ -80,7 +80,7 @@
     "sqlbraid": "node packages/cli/dist/index.js",
     "test:certification": "node scripts/certification.mjs",
     "test:certification:stress": "node scripts/certification.mjs --stress",
-    "lint": "oxlint .",
+    "lint": "oxlint . --deny-warnings",
     "lint:fix": "oxlint . --fix",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check .",

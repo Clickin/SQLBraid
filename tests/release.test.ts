@@ -89,7 +89,7 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"], relea
           code: "ERR_PNPM_PACKAGE_NOT_FOUND",
         });
       }
-      const name = names.find((name) => args[1] === name || args[1].startsWith(`${name}@`))!;
+      const name = names.find((packageName) => args[1] === packageName || args[1].startsWith(`${packageName}@`))!;
       if (args[2] === "dist-tags") return JSON.stringify(tags.get(name));
       if (args[2] === "versions") return JSON.stringify(["0.0.0-bootstrap.0"]);
       if (args[2] === "dist.integrity") return JSON.stringify(publicIntegrity.get(name) ?? null);
@@ -105,7 +105,7 @@ async function fixture(version = "0.1.0-rc.0", names = ["@sqlbraid/core"], relea
         );
     }
     if (args[0] === "stage" && args[1] === "publish") {
-      const entry = manifest.packages.find(({ file }) => args[2] === join(directory, file));
+      const entry = manifest.packages.find((candidate) => args[2] === join(directory, candidate.file));
       assert.ok(entry, "only immutable tarball paths may be staged");
       assert.deepEqual(await readFile(args[2]), bytes.get(entry.name));
       if (behavior.failBeforeUpload || behavior.failPackage === entry.name) throw new Error("upload interrupted");
@@ -552,6 +552,7 @@ test("pinned pnpm stages and downloads exact prebuilt tarball bytes through a lo
       const document = JSON.parse(Buffer.concat(chunks).toString());
       requestedTag = document["dist-tags"];
       const attachment =
+        // oxlint-disable-next-line no-underscore-dangle -- npm's publication document names its tarball map _attachments.
         document._attachments[Object.keys(document._attachments).find((name) => name.endsWith(".tgz"))!];
       uploaded = Buffer.from(attachment.data, "base64");
       response.end(JSON.stringify({ ok: true, stageId: uuid(1) }));

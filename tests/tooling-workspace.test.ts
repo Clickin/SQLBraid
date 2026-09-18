@@ -305,10 +305,10 @@ test("isolated config loading refreshes CJS dependencies", async () => {
   try {
     const dependency = join(directory, "config-dependency.cjs");
     const configFile = join(directory, "sqlbraid.config.cjs");
-    const target = (name: string) =>
-      `module.exports = { codegen: { targets: [{ name: require("./config-dependency.cjs").name, metadata: "./missing.json", outFile: "./generated.ts", typePolicy: { id: "${name}", hash: "${name}", mappings: [] } }] } };`;
+    const configSource =
+      'module.exports = { codegen: { targets: [{ name: require("./config-dependency.cjs").name, metadata: "./missing.json", outFile: "./generated.ts", typePolicy: { id: "policy", hash: "policy", mappings: [] } }] } };';
     await writeFile(dependency, 'exports.name = "first";\n');
-    await writeFile(configFile, target("policy"));
+    await writeFile(configFile, configSource);
     const first = await loadConfig(configFile, directory);
     assert.equal(first.config.codegen?.targets[0]?.name, "first");
     await writeFile(dependency, 'exports.name = "second";\n');

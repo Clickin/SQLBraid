@@ -132,6 +132,7 @@ test("Oracle DML RETURNING registers every LOB before validation or materializat
     async () => await executor.query(returned.render()),
     (error: unknown) => error === firstFailure,
   );
+  // oxlint-disable-next-line no-array-sort -- This test owns the cleanup log and compares membership before resetting it.
   assert.deepEqual(closed.sort(), ["first", "second"]);
 
   closed.length = 0;
@@ -143,6 +144,7 @@ test("Oracle DML RETURNING registers every LOB before validation or materializat
   });
   response = { outBinds: [[mismatchedFirst], [mismatchedSecond, "extra"]], rowsAffected: 1 };
   await assert.rejects(async () => await executor.query(returned.render()), /BRAID_RETURNING_LENGTH/u);
+  // oxlint-disable-next-line no-array-sort -- The cleanup log is local and is reset before the next failure scenario.
   assert.deepEqual(closed.sort(), ["mismatched-first", "mismatched-second"]);
 
   closed.length = 0;
@@ -154,6 +156,7 @@ test("Oracle DML RETURNING registers every LOB before validation or materializat
   });
   response = { outBinds: [[rowCountFirst], [rowCountSecond]], rowsAffected: 2 };
   await assert.rejects(async () => await executor.query(returned.render()), /BRAID_RETURNING_ROWCOUNT/u);
+  // oxlint-disable-next-line no-array-sort -- This final comparison consumes the test-owned cleanup log.
   assert.deepEqual(closed.sort(), ["rowcount-first", "rowcount-second"]);
 });
 

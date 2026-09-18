@@ -675,6 +675,7 @@ test("oracle.data.uuid", { timeout: 60_000 }, async () => {
 
 test("oracle.routine.scalar-out", { timeout: 60_000 }, async () => {
   const { connection } = await connect();
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- Keep this LOB writer with its ordinal OUT/INOUT setup.
   const fill = async (lob: oracledb.Lob, value: string | Uint8Array): Promise<void> => {
     await new Promise<void>((resolve, reject) => {
       lob.once("error", reject);
@@ -784,6 +785,7 @@ test("oracle.dml.insert-returning", { timeout: 60_000 }, async () => {
       }>`UPDATE braid_pv16_cap SET "Name" = "Name" || ${sql.bind("!", oracleParameter.varchar2())} WHERE "Name" IN (${sql.bind("Ada", oracleParameter.varchar2())}, ${sql.bind("Grace", oracleParameter.varchar2())}) RETURNING "Id", "Name" INTO ${sql.out("id", oracleParameter.number())}, ${sql.out("name", oracleParameter.varchar2(64))}`,
     );
     assert.equal(updated.length, 2);
+    // eslint-disable-next-line unicorn/no-array-sort -- The mapped names and expected literal are owned assertion arrays.
     assert.deepEqual(updated.map((row) => row.name).sort(), ["Ada!", "Grace!"].sort());
 
     const deleted = await db.all(

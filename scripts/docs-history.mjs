@@ -137,7 +137,7 @@ export async function readVersions(historyDirectory) {
   try {
     value = JSON.parse(await readFile(path, "utf8"));
   } catch (error) {
-    throw new Error(`Invalid documentation versions.json: ${error.message}`);
+    throw new Error(`Invalid documentation versions.json: ${error.message}`, { cause: error });
   }
   if (!value || typeof value !== "object" || !Array.isArray(value.versions)) {
     throw new Error("Documentation versions.json must contain a versions array.");
@@ -207,7 +207,7 @@ async function git(rootDirectory, args) {
     return result.stdout.trim();
   } catch (error) {
     const detail = error.stderr?.trim() || error.message;
-    throw new Error(`git ${args.join(" ")} failed: ${detail}`);
+    throw new Error(`git ${args.join(" ")} failed: ${detail}`, { cause: error });
   }
 }
 

@@ -361,9 +361,8 @@ test("Oracle streaming breaks an active native row fetch", async () => {
   const executor = createOracledbExecutor(connection);
   const controller = new AbortController();
   const reason = new Error("oracle active row abort");
-  const pending = executor.stream!(sql`SELECT 1`.render(), undefined, { signal: controller.signal })
-    [Symbol.asyncIterator]()
-    .next();
+  const stream = executor.stream!(sql`SELECT 1`.render(), undefined, { signal: controller.signal });
+  const pending = stream[Symbol.asyncIterator]().next();
   await started.promise;
   assert.ok(releaseRow);
   controller.abort(reason);
@@ -566,6 +565,7 @@ test("[contract:node-oracledb:transaction.autocommit-ownership:boundary] [owners
   };
   const executeOptions = Object.freeze({ autoCommit: true, keepInStmtCache: false });
   const db = createOracledbDatabase(connection, { executeOptions });
+  // oxlint-disable-next-line consistent-function-scoping -- This template factory is shared by the ordinary and bulk calls of one autocommit scenario.
   const insert = (id: number) => sql.command`INSERT INTO audit_test (id) VALUES (${id})`;
   const rollback = new Error("rollback requested");
 
@@ -634,6 +634,7 @@ test("[contract:node-oracledb:transaction.autocommit-ownership:boundary] [owners
     },
     { executeOptions: { autoCommit: true } },
   );
+  // oxlint-disable-next-line consistent-function-scoping -- Keep the pinned-session statement fixture and its template identity local to this scenario.
   const insert = (id: number) => sql.command`INSERT INTO audit_test (id) VALUES (${id})`;
   const nestedFailure = new Error("rollback nested");
   await db.session(async (session) => {
@@ -1052,6 +1053,7 @@ for (const ownership of ["direct", "pooled"] as const) {
                   return connection;
                 },
               });
+        // oxlint-disable-next-line consistent-function-scoping -- Each direct/pooled session scenario owns its command factory and template site.
         const insert = (id: number) => sql.command`INSERT INTO contract_auto (id) VALUES (${id})`;
         const failure = new Error("callback rollback");
         for (const fail of [true, false]) {

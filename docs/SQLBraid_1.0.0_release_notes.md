@@ -87,6 +87,7 @@ Support is based on specific database, driver, runtime, representation profile, 
 Convenience subpaths include `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
 `sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
 `sqlbraid/tedious`, and `sqlbraid/bun-sql`. Granular `@sqlbraid/*` packages are available for custom integrations.
+
 ## Important limits in 1.0
 
 The stable API does not mean every adapter implements every capability.

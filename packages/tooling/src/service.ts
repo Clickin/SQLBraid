@@ -205,9 +205,9 @@ function identifierSegments(value: string, fold = true): string[] {
   }
   parts.push(value.slice(start));
   return parts.map((part) => {
-    const quote = part[0];
-    const end = quote === "[" ? "]" : quote;
-    if ((quote === '"' || quote === "`" || quote === "[") && part.endsWith(end!))
+    const openingQuote = part[0];
+    const end = openingQuote === "[" ? "]" : openingQuote;
+    if ((openingQuote === '"' || openingQuote === "`" || openingQuote === "[") && part.endsWith(end!))
       return part.slice(1, -1).replaceAll(`${end}${end}`, end!);
     return fold ? lower(part) : part;
   });
@@ -641,6 +641,7 @@ function evidenceKey(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? String(value);
   if (Array.isArray(value)) return `[${value.map(evidenceKey).join(",")}]`;
   return `{${Object.entries(value)
+    // eslint-disable-next-line unicorn/no-array-sort -- Object.entries creates an owned array; keep canonicalization in place.
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([key, entry]) => `${JSON.stringify(key)}:${evidenceKey(entry)}`)
     .join(",")}}`;
@@ -889,7 +890,7 @@ function offsetInStatic(lexical: LexicalQuery, offset: number): boolean {
 function tokenAt(lexical: LexicalQuery, offset: number): LexToken | undefined {
   return (
     lexical.tokens.find((token) => offset >= token.sourceStart && offset < token.sourceEnd) ??
-    [...lexical.tokens].reverse().find((token) => token.sourceEnd === offset)
+    lexical.tokens.toReversed().find((token) => token.sourceEnd === offset)
   );
 }
 function queryAt(analysis: FileAnalysis, offset: number, staticOnly = false): LexicalQuery | undefined {
@@ -1267,6 +1268,7 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
     const detailed = checkSourceDetailed(sourceText, fileName, semanticOptions);
     const value: ToolingDiagnostic[] = [
       ...detailed.braidDiagnostics.map((diagnostic) => ({ ...diagnostic, provenance: "braid" as const })),
+      // oxlint-disable-next-line no-map-spread -- Attach provenance without mutating compiler-owned diagnostics.
       ...detailed.overlayOnlyDiagnostics.map((diagnostic) => ({ ...diagnostic, provenance: "overlay" as const })),
     ];
     cacheSet(diagnosticsCache, key, value, maxEntries);
@@ -1473,13 +1475,16 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
       return !cancellation?.isCancellationRequested;
     };
     for (const document of [{ fileName, sourceText }, ...(options.sources ?? [])]) {
+      // eslint-disable-next-line no-await-in-loop -- Visit in order and yield between files so cancellation stops further indexing.
       if (!(await visit(document))) return [];
     }
     const sourceLoader = internalOptions[SOURCE_FILE_LOADER];
     for (const sourcePath of internalOptions.sourceFiles ?? []) {
       if (seenFiles.has(sourcePath)) continue;
       if (cancellation?.isCancellationRequested) return [];
+      // eslint-disable-next-line no-await-in-loop -- Load only the next file after the prior visit's cancellation check.
       const document = sourceLoader ? await sourceLoader(sourcePath, cancellation) : undefined;
+      // eslint-disable-next-line no-await-in-loop -- Finish this visit before advancing the shared reference index.
       if (document && !(await visit(document))) return [];
     }
     return unique(
@@ -1556,8 +1561,8 @@ export function createLanguageService(options: LanguageServiceOptions): SqlBraid
     }
     return undefined;
   }
-  function reload(metadata: MetadataSnapshot): SqlBraidLanguageService {
-    return createLanguageService({ ...options, metadata });
+  function reload(snapshot: MetadataSnapshot): SqlBraidLanguageService {
+    return createLanguageService({ ...options, metadata: snapshot });
   }
   return {
     diagnostics,

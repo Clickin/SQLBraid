@@ -113,6 +113,7 @@ function nonNegativeInteger(name, fallback) {
   return parsed;
 }
 
+// eslint-disable-next-line typescript/no-extraneous-class -- The benchmark measures constructed application objects and checks their instanceof identity.
 class DecimalLike {
   constructor(text) {
     this.text = text;
@@ -368,7 +369,7 @@ function shuffledCases(cases, iteration, transportIndex) {
 }
 
 function median(values) {
-  const sorted = [...values].sort((left, right) => left - right);
+  const sorted = values.toSorted((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
@@ -412,7 +413,7 @@ function summarize(workloads) {
 async function allowGc() {
   if (typeof globalThis.gc !== "function") return false;
   globalThis.gc();
-  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolveGc) => setImmediate(resolveGc));
   return true;
 }
 
@@ -470,7 +471,7 @@ async function runMaterialized(db, transport, rawObserved, rows, width, transfor
   const verificationMs = performance.now() - verificationStarted;
   const after = memory();
   assert.equal(checksum, expectedChecksum(rows, width), "Materialized checksum changed.");
-  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolveGc) => setImmediate(resolveGc));
   const output = metric(
     before,
     after,
@@ -514,7 +515,7 @@ async function runStream(db, transport, rawObserved, rows, width, transform, gcE
   const executionMs = performance.now() - started;
   assert.equal(count, rows);
   assert.equal(checksum, expectedChecksum(rows, width), "Stream checksum changed.");
-  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolveGc) => setImmediate(resolveGc));
   const output = metric(
     before,
     after,
@@ -678,7 +679,7 @@ function emitResult(result) {
 }
 
 function runFamilyProcess(transport, transportIndex) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolveFamily, reject) => {
     const script = process.argv[1];
     if (script === undefined) {
       reject(new Error("Value-fidelity benchmark requires a script path for family isolation."));
@@ -716,7 +717,7 @@ function runFamilyProcess(transport, transportIndex) {
         return;
       }
       try {
-        resolve(JSON.parse(stdout));
+        resolveFamily(JSON.parse(stdout));
       } catch (error) {
         reject(new Error(`Value-fidelity benchmark child emitted invalid JSON for ${transport}: ${error.message}`));
       }
@@ -760,7 +761,7 @@ async function main() {
     for (const transport of ACTIVE_TRANSPORTS) families.push(await runFamily(transport, TRANSPORTS.indexOf(transport)));
   }
   const workloads = families.flatMap((family) => family.workloads);
-  const rawDriverProbe = Object.assign({}, ...families.map((family) => family.rawDriverProbe));
+  const rawDriverProbes = Object.assign({}, ...families.map((family) => family.rawDriverProbe));
   const sqlbraidRawRepresentation = Object.assign({}, ...families.map((family) => family.sqlbraidRawRepresentation));
   emitResult({
     benchmark: "value-fidelity",
@@ -776,9 +777,10 @@ async function main() {
       execArgv: [...process.execArgv],
     },
     forcedGc: typeof globalThis.gc === "function",
-    rawDriverProbe,
+    rawDriverProbe: rawDriverProbes,
     sqlbraidRawRepresentation,
     correctness: { wideExactInteger: "9007199254740993", checksum: "BigInt 64-bit modular sum" },
+    // eslint-disable-next-line oxc/no-map-spread -- Add transport to output records without mutating each family's invocation metadata.
     processes: families.map(({ transport, invocation }) => ({ transport, ...invocation })),
     workloads,
     summary: summarize(workloads),

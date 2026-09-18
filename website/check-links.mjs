@@ -9,7 +9,7 @@ const base = new URL(`https://clickin.github.io${configuredBase.replace(/\/+$/u,
 const basePath = base.pathname;
 const files = await readdir(output, { recursive: true });
 const pages = new Map();
-for (const file of files.filter((file) => file.endsWith(".html"))) {
+for (const file of files.filter((candidate) => candidate.endsWith(".html"))) {
   const text = await readFile(join(output, file), "utf8");
   pages.set(file, { text, ids: new Set([...text.matchAll(/\bid="([^"]*)"/gu)].map((match) => match[1])) });
 }
@@ -24,7 +24,7 @@ assert.ok(
 
 const targetDirectory = fileURLToPath(new URL("../support/targets/", import.meta.url));
 const targets = [];
-for (const file of (await readdir(targetDirectory)).filter((file) => file.endsWith(".json"))) {
+for (const file of (await readdir(targetDirectory)).filter((candidate) => candidate.endsWith(".json"))) {
   targets.push(JSON.parse(await readFile(join(targetDirectory, file))));
 }
 for (const locale of ["", "ko/"]) {

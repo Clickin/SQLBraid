@@ -840,7 +840,7 @@ async function beginMysqlTransaction(
   }
 }
 
-function streamHighWaterMark(value: number | undefined): number {
+function resolveStreamHighWaterMark(value: number | undefined): number {
   const size = value ?? 16;
   if (!Number.isSafeInteger(size) || size < 1)
     throw new RangeError("MySQL streamHighWaterMark must be a positive safe integer.");
@@ -856,7 +856,7 @@ export function createMysql2Executor(
   const policy =
     options.typePolicy ??
     (isRepresentationProfile(options.profile) ? options.profile.typePolicy : representationProfile.typePolicy);
-  const highWaterMark = streamHighWaterMark(options.streamHighWaterMark);
+  const highWaterMark = resolveStreamHighWaterMark(options.streamHighWaterMark);
   const control = async (sql: string): Promise<void> => {
     await (connection.query ?? connection.execute).call(connection, sql);
   };
@@ -1155,7 +1155,7 @@ export function createMysql2PoolProvider(
   pool: Mysql2PoolLike,
   options: Mysql2ExecutorOptions = {},
 ): ConnectionProvider {
-  streamHighWaterMark(options.streamHighWaterMark);
+  resolveStreamHighWaterMark(options.streamHighWaterMark);
   const representationProfile = mysql2RepresentationProfile({} as Mysql2ConnectionLike, options.profile);
   const policy = options.typePolicy ?? representationProfile.typePolicy;
   const environment = mysql2Environment({} as Mysql2ConnectionLike, options.profile, policy);

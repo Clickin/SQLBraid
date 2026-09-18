@@ -210,6 +210,7 @@ test.each(["mysql", "mariadb"] as const)(
     };
     const db = createBunSqlDatabase(client, { dialect });
     for (const readOnly of [true, false]) {
+      // oxlint-disable-next-line no-await-in-loop -- Both access modes probe the same pool and must finish before acquisition assertions.
       await assert.rejects(
         db.tx({ readOnly }, async () => assert.fail("unsupported callback must not run")),
         (error: unknown) =>
@@ -254,6 +255,7 @@ test.each(["query", "caught-query", "bulk", "control"] as const)(
     const db = createBunSqlDatabase(client, { dialect: "mysql" });
     await db.session(async (session) => {
       const transaction = session.tx(async (tx) => {
+        // oxlint-disable-next-line consistent-function-scoping -- The write template belongs to this transaction's contamination scenario.
         const write = (value: string) => mysql.command`INSERT INTO values_table VALUES (${value})`;
         if (path === "bulk") await tx.bulk(["A"], write);
         else if (path === "caught-query") await assert.rejects(tx.execute(write("A")), (error) => error === failure);
@@ -348,8 +350,8 @@ test("Bun.SQL exposes explicit unsupported streaming and routine paths", async (
   const stream = db.stream(mariadb.rows<{ value: number }>`SELECT 1`);
   await assert.rejects(
     async () => {
-      for await (const _row of stream) {
-        /* unreachable */
+      for await (const row of stream) {
+        void row;
       }
     },
     (error: unknown) => error instanceof UnsupportedFeatureError && error.code === "BRAID_STREAM_UNSUPPORTED",

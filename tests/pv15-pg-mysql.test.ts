@@ -68,6 +68,7 @@ test("Pooled MySQL OUT and INOUT parameters are rejected before lease acquisitio
     },
   });
   for (const parameter of [mysqlSql.out("value"), mysqlSql.inOut("value", 1)]) {
+    // oxlint-disable-next-line no-await-in-loop -- Check OUT then INOUT against the same untouched pool before inspecting acquisitions.
     await assert.rejects(
       () => db.call(mysqlSql.call`CALL routine(${parameter})`),
       (error: unknown) =>

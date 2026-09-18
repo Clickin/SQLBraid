@@ -437,7 +437,7 @@ test("MSSQL stream callback failures preserve public adapter error classes and c
     );
     await assert.rejects(
       async () => {
-        for await (const _row of executor.stream(sql.rows`SELECT 1`.render())) void _row;
+        for await (const row of executor.stream(sql.rows`SELECT 1`.render())) void row;
       },
       (error: unknown) => error instanceof UnsupportedFeatureError && error.code === code,
     );

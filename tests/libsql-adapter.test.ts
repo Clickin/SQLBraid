@@ -460,6 +460,7 @@ test("libSQL rejects hostile savepoint names before transaction I/O", async () =
     "line\nbreak",
     "tab\tbreak",
   ]) {
+    // oxlint-disable-next-line no-await-in-loop -- Reuse one live transaction while proving each hostile name performs no I/O.
     await assert.rejects(
       async () => await executor.savepoint!(name),
       (error: unknown) => error instanceof TypeError,
@@ -537,8 +538,8 @@ test("libSQL advertises unsupported session pinning, stream, call, and cancellat
   );
   await assert.rejects(
     async () => {
-      for await (const _row of executor.stream(sql.rows`SELECT 1`.render())) {
-        void _row;
+      for await (const row of executor.stream(sql.rows`SELECT 1`.render())) {
+        void row;
       }
     },
     (error: unknown) => error instanceof UnsupportedFeatureError && error.feature === "statement.stream",

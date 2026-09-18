@@ -22,6 +22,13 @@ const expectedCapabilities = POSTGRES_EXPECTED_CAPABILITIES;
 
 const expectedTransactionOptions = POSTGRES_EXPECTED_TRANSACTION_OPTIONS;
 
+const hasNativeCode = (error: unknown, code: string): boolean => {
+  if (error instanceof AggregateError) return error.errors.some((item) => hasNativeCode(item, code));
+  if (error === null || typeof error !== "object") return false;
+  const candidate = error as { readonly code?: unknown; readonly cause?: unknown };
+  return candidate.code === code || (candidate.cause !== undefined && hasNativeCode(candidate.cause, code));
+};
+
 interface Shared {
   readonly targetId: string;
   readonly table: string;
@@ -699,12 +706,6 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
       const count = sql.rows<{ readonly count: string }>`
         SELECT count(*)::text AS count FROM ${sql.ident(state.table)} WHERE id = ${proofId}
       `;
-      const hasNativeCode = (error: unknown, code: string): boolean => {
-        if (error instanceof AggregateError) return error.errors.some((item) => hasNativeCode(item, code));
-        if (error === null || typeof error !== "object") return false;
-        const candidate = error as { readonly code?: unknown; readonly cause?: unknown };
-        return candidate.code === code || (candidate.cause !== undefined && hasNativeCode(candidate.cause, code));
-      };
       let failed = false;
       let primary: unknown;
       try {
@@ -900,9 +901,8 @@ async function createFixture(state: Shared): Promise<CertificationFixture> {
         const db = createPgPoolDatabase(state.cancelPoolLike, { cursor });
         const before = await db.one(sql.rows<{ readonly id: string }>`SELECT pg_backend_pid()::text AS id`);
         const controller = new AbortController();
-        const iterator = db
-          .stream(sql.rows`SELECT pg_sleep(60)`, { signal: controller.signal })
-          [Symbol.asyncIterator]();
+        const cancellationStream = db.stream(sql.rows`SELECT pg_sleep(60)`, { signal: controller.signal });
+        const iterator = cancellationStream[Symbol.asyncIterator]();
         const next = iterator.next();
         await Promise.race([ready.promise, state.cancelReady()]);
         controller.abort(new Error("cert-statement-abort"));

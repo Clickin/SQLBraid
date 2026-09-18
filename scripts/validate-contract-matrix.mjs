@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const layers = ["integration", "boundary"];
-const statuses = ["guaranteed", "guarded", "unsupported"];
+const statuses = new Set(["guaranteed", "guarded", "unsupported"]);
 const shaPattern = /^[a-f0-9]{40}$/u;
 const markerPattern = /\[contract:([^:\]\s]+):([^:\]\s]+):(integration|boundary)\]/gu;
 const ownershipPattern = /\[ownership:(direct|pooled)\]/gu;
@@ -42,7 +42,7 @@ function supported(entry, target, requirement) {
   }
   requireThat(kind === "capability", `unknown requirement ${requirement}`);
   const claim = target.capabilities[key] ?? entry.capabilityEvidence?.[key];
-  requireThat(statuses.includes(claim?.status), `${target.id}: missing capability classification ${key}`);
+  requireThat(statuses.has(claim?.status), `${target.id}: missing capability classification ${key}`);
   return claim.status !== "unsupported";
 }
 function exclusionReason(entry, target, requirement) {
@@ -151,7 +151,7 @@ export function validateMatrix({ catalog, matrix, targets, profiles, registry, c
     sameKeys(entry.ownership, expectedOwnership, `${transport} ownership`);
     for (const [capability, fact] of Object.entries(entry.capabilityEvidence ?? {})) {
       requireThat(
-        capabilityIds.includes(capability) && statuses.includes(fact.status) && fact.reason?.trim() && fact.source,
+        capabilityIds.includes(capability) && statuses.has(fact.status) && fact.reason?.trim() && fact.source,
         `${transport}: invalid supplemental capability ${capability}`,
       );
       requireThat(

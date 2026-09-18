@@ -614,6 +614,7 @@ test(
     const db = createMysql2PoolDatabase(pool);
     try {
       await pool.query("CREATE TABLE IF NOT EXISTS braid_rc_mysql_cancel (value INT NOT NULL)");
+      // eslint-disable-next-line unicorn/consistent-function-scoping -- Keep cancellation timing beside its probes.
       const cancel = async (operation: (signal: AbortSignal) => Promise<unknown>): Promise<void> => {
         const controller = new AbortController();
         const reason = new Error("cancel MySQL sleep");

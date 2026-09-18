@@ -66,11 +66,12 @@ async function createFixture(): Promise<CertificationFixture> {
       version: versionRow.version,
       edition: "libSQL local SQLite",
     } as const;
+    // eslint-disable-next-line unicorn/consistent-function-scoping -- Keep this isolated destructive probe with its fixture.
     const transactionCleanup = async (): Promise<void> => {
       const probe = await makeLibsqlDirectory();
       const probeClient = createClient({ url: `file:${probe.directory}/database.db`, intMode: "string" });
       let nativeTransaction: Awaited<ReturnType<typeof probeClient.transaction>> | undefined;
-      const observedClient = {
+      const observedProbeClient = {
         protocol: probeClient.protocol,
         execute: (statement: Parameters<typeof probeClient.execute>[0]) => probeClient.execute(statement),
         batch: (statements: Parameters<typeof probeClient.batch>[0], mode?: "write" | "read" | "deferred") =>
@@ -80,7 +81,7 @@ async function createFixture(): Promise<CertificationFixture> {
           return nativeTransaction;
         },
       };
-      const probeDb = createLibsqlDatabase(observedClient, { intMode: "string" });
+      const probeDb = createLibsqlDatabase(observedProbeClient, { intMode: "string" });
       const primary = new Error("cert-transaction-cleanup");
       try {
         await probeDb.execute(sql.command`CREATE TABLE cert_probe (value TEXT NOT NULL)`);

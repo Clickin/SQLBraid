@@ -20,6 +20,7 @@ function normalize(value: unknown): unknown {
   if (value && typeof value === "object")
     return Object.fromEntries(
       Object.entries(value)
+        // eslint-disable-next-line unicorn/no-array-sort -- Object.entries owns this temporary key-normalization array.
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([key, item]) => [key, normalize(item)]),
     );

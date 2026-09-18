@@ -275,6 +275,7 @@ test("rc.mariadb.transaction-options", async () => {
   const db = createMariaDbDatabase(connection);
   try {
     for (const isolation of ["read-uncommitted", "read-committed", "repeatable-read", "serializable"] as const) {
+      // eslint-disable-next-line no-await-in-loop -- Finish each isolation probe on this connection before the next.
       await db.tx({ isolation }, async (tx) => {
         const row = await tx.one(sql.rows<{ readonly value: string }>`SELECT 1 AS value`);
         assert.equal(row.value, "1");

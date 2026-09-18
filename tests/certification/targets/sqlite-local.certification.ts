@@ -29,6 +29,7 @@ for (const target of [nodeSqliteCertificationTarget, betterSqlite3CertificationT
     async () => {
       const artifact = await certifyTarget(candidate, { stress });
       validateCertificationArtifact(artifact, { sourceSha });
+      // eslint-disable-next-line unicorn/no-array-sort -- Both key lists are owned copies, not the required case registry.
       assert.deepEqual(Object.keys(artifact.cases).sort(), [...REQUIRED_CASE_IDS].sort());
       assert.equal(artifact.cases.CAP001.status, "pass");
       assert.equal(artifact.cases.CAP002.status, "pass");

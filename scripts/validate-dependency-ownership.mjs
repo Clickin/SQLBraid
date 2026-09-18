@@ -211,12 +211,12 @@ for (const packageDirectory of (await readdir(join(root, "packages"), { withFile
     throw new Error(`${manifest.name} source imports undeclared packages: ${missing.sort().join(", ")}`);
 }
 
-for (const name of [...testImports].filter((name) => testsDependencies.has(name)).sort()) {
+for (const name of [...testImports].filter((dependency) => testsDependencies.has(dependency)).sort()) {
   const manifestPath = join(testsRoot, "node_modules", ...name.split("/"), "package.json");
   try {
     await readFile(manifestPath, "utf8");
   } catch (error) {
-    throw new Error(`Tests package cannot resolve ${name}: ${error.message}`);
+    throw new Error(`Tests package cannot resolve ${name}: ${error.message}`, { cause: error });
   }
 }
 console.info(

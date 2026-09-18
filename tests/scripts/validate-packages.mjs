@@ -326,7 +326,7 @@ try {
     if (manifest.name === "sqlbraid") {
       const dependencyNames = Object.keys(manifest.dependencies ?? {}).sort();
       if (
-        JSON.stringify(dependencyNames) !== JSON.stringify([...facadeRuntimeDependencies].sort()) ||
+        JSON.stringify(dependencyNames) !== JSON.stringify(facadeRuntimeDependencies.toSorted()) ||
         manifest.bin !== undefined ||
         Object.keys(manifest.peerDependencies ?? {}).length ||
         Object.keys(manifest.optionalDependencies ?? {}).length

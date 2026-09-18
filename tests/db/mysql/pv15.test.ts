@@ -120,6 +120,7 @@ test("MySQL transaction streaming pins its backend and keeps binds value-only", 
     assert.deepEqual(await db.one(sql.rows<{ readonly ok: string }>`SELECT 1 AS ok`), { ok: "1" });
     await assert.rejects(
       async () => {
+        // eslint-disable-next-line no-underscore-dangle -- Any emitted row must fail this result-kind assertion.
         for await (const _row of db.stream(sql.rows`SET @braid_pv15_stream_kind = 7`)) {
           assert.fail("a command header must not escape as a row");
         }

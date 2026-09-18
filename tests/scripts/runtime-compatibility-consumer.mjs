@@ -8,6 +8,7 @@ const facade = await import("sqlbraid");
 assert.equal(typeof facade.createDatabase, "function");
 const packageNames = JSON.parse(process.env.SQLBRAID_COMPAT_PACKAGES ?? "[]");
 for (const packageName of packageNames) {
+  // eslint-disable-next-line no-await-in-loop -- Import and assert each package in manifest order, stopping at the first incompatible root.
   const loaded = await import(packageName);
   assert.ok(loaded && typeof loaded === "object", `compatibility root did not import: ${packageName}`);
 }

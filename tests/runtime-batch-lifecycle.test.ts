@@ -139,6 +139,7 @@ test("driver failure at each batch item preserves one terminal event per announc
         ],
       },
     );
+    // oxlint-disable-next-line no-await-in-loop -- Settle and inspect each injected batch failure before the next lifecycle fixture.
     await assert.rejects(
       () => db.batch(rowQueries(3)),
       (error) => error === driverFailure,
@@ -449,6 +450,7 @@ test.each(
   const expectedIds = [...readyIds];
   assert.equal(readyIds.length, phase === "ready" ? index + 1 : 3);
   assert.equal(terminals.length, expectedIds.length);
+  // oxlint-disable-next-line no-array-sort -- Sort temporary set expansions without reordering the lifecycle event arrays.
   assert.deepEqual([...new Set(terminals.map((event) => event.operationId))].sort(), [...new Set(expectedIds)].sort());
   for (const operationId of expectedIds) {
     assert.equal(terminals.filter((event) => event.operationId === operationId).length, 1);

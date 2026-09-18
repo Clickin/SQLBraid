@@ -50,6 +50,13 @@ export const expectedCapabilities = BUN_EXPECTED_CAPABILITIES;
 export const expectedTransactionOptions = BUN_EXPECTED_TRANSACTION_OPTIONS;
 export const expectedGuardedCases = BUN_EXPECTED_GUARDED_CASES;
 
+const contains = (value: unknown, predicate: (candidate: unknown) => boolean): boolean => {
+  if (predicate(value)) return true;
+  if (value instanceof AggregateError) return value.errors.some((error) => contains(error, predicate));
+  if (value instanceof Error && "cause" in value) return contains(value.cause, predicate);
+  return false;
+};
+
 function instrument(
   client: BunSqlClient,
   counters: Counters,
@@ -1044,12 +1051,6 @@ async function createFixture(options: BunCertificationTargetOptions): Promise<Ce
     } finally {
       await peer?.release();
     }
-    const contains = (value: unknown, predicate: (candidate: unknown) => boolean): boolean => {
-      if (predicate(value)) return true;
-      if (value instanceof AggregateError) return value.errors.some((error) => contains(error, predicate));
-      if (value instanceof Error && "cause" in value) return contains(value.cause, predicate);
-      return false;
-    };
     if (
       !(caught instanceof AggregateError) ||
       !contains(caught, (error) => error === primary) ||

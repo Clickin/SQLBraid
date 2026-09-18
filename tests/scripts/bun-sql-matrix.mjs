@@ -704,8 +704,7 @@ async function runDialect(dialect) {
     progress(dialect, "START", "unsupported");
     const unsupported = {};
     try {
-      for await (const _row of db.stream(sqlTag.rows`SELECT 1`)) {
-      }
+      for await (const row of db.stream(sqlTag.rows`SELECT 1`)) void row;
     } catch (error) {
       unsupported.stream = { code: error?.code, feature: error?.feature };
     }

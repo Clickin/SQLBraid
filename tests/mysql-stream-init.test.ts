@@ -42,9 +42,8 @@ function fakeConnection(config: {
 }
 
 function firstNext(connection: Mysql2ConnectionLike): Promise<IteratorResult<unknown>> {
-  const iterator = createMysql2Executor(connection)
-    .stream(sql.rows`SELECT ${1}`.render())
-    [Symbol.asyncIterator]();
+  const stream = createMysql2Executor(connection).stream(sql.rows`SELECT ${1}`.render());
+  const iterator = stream[Symbol.asyncIterator]();
   return iterator.next();
 }
 

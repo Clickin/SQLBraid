@@ -21,6 +21,7 @@ test("canonical digest ignores runtime policy functions and ordering", async () 
   const policy = records[0]!.policy;
   const reordered = {
     id: policy.id,
+    // oxlint-disable-next-line no-array-reverse -- Reverse an owned copy, never the loaded policy's shared mappings.
     mappings: [...policy.mappings].reverse(),
     decode: () => "different runtime closure",
     encode: () => "different runtime closure",
@@ -64,6 +65,7 @@ test("valid mapping mutations cannot retain a stale provenance hash", async () =
   assert.throws(() => validateTypePolicy(fidelityMutation), /TYPE_POLICY_HASH_MISMATCH/u);
   const representationMutation = {
     ...policy,
+    // oxlint-disable-next-line no-map-spread -- Copy-on-write preserves the loaded policy and the unchanged mappings for provenance comparisons.
     mappings: policy.mappings.map((mapping, index): typeof mapping =>
       index === numericIndex
         ? {

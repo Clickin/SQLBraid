@@ -250,18 +250,18 @@ function createExecutor(
     stream<Row>(
       rendered: RenderedStatement,
       _binding?: StatementBindingDescription,
-      options?: ExecutionOptions,
+      executionOptions?: ExecutionOptions,
     ): AsyncIterable<Row> {
       const definition = definitionFor(rendered);
       const values = definition.rows ?? [];
       return {
         async *[Symbol.asyncIterator]() {
-          if (options?.signal?.aborted) throw options.signal.reason;
+          if (executionOptions?.signal?.aborted) throw executionOptions.signal.reason;
           if (definition.marker === "stream-init")
             throw definition.failure ?? new Error("synthetic iterator init failure");
           try {
             for (let index = 0; index < values.length; index += 1) {
-              if (options?.signal?.aborted) throw options.signal.reason;
+              if (executionOptions?.signal?.aborted) throw executionOptions.signal.reason;
               if (definition.marker === "stream-first" && index === 0)
                 throw definition.failure ?? new Error("synthetic first next failure");
               if (definition.marker === "stream-mid" && index === 1)
@@ -311,15 +311,15 @@ function createExecutor(
         executionMode: "native-bulk",
       };
     },
-    async begin(options) {
-      if (options && optionKey(options) === "combination:serializable+readOnly")
+    async begin(transactionOptions) {
+      if (transactionOptions && optionKey(transactionOptions) === "combination:serializable+readOnly")
         throw new UnsupportedFeatureError(
           "transaction.isolation.serializable",
           "BRAID_TX_OPTION_UNSUPPORTED",
           "synthetic option combination unsupported",
         );
       state.pending.push(0);
-      state.readOnly.push(options?.readOnly === true);
+      state.readOnly.push(transactionOptions?.readOnly === true);
     },
     async commit() {
       const value = state.pending.pop() ?? 0;

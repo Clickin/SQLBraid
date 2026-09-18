@@ -210,15 +210,15 @@ function faultSource(source: Mysql2RawStreamLike, mode: FaultMode, error: Error)
       return source.destroyed;
     },
     on(event, listener) {
-      source.on?.call(source, event, listener);
+      source.on?.(event, listener);
       return wrapped;
     },
     once(event, listener) {
-      source.once.call(source, event, listener);
+      source.once(event, listener);
       return wrapped;
     },
     destroy(reason) {
-      source.destroy?.call(source, reason);
+      source.destroy?.(reason);
       return wrapped;
     },
     [Symbol.asyncIterator]() {
@@ -257,9 +257,9 @@ function faultConnection(
       if (mode !== "stream" && mode !== "iterator" && mode !== "first" && mode !== "mid" && mode !== "cleanup")
         return command;
       return {
-        stream(options?: { readonly highWaterMark?: number }) {
+        stream(streamOptions?: { readonly highWaterMark?: number }) {
           if (mode === "stream") throw error;
-          return faultSource(command.stream(options), mode, error);
+          return faultSource(command.stream(streamOptions), mode, error);
         },
       } satisfies Mysql2RawCommandLike;
     },
@@ -537,15 +537,15 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
   await createFaultDatabase(firstNextFailureQuery, "first", firstFailure);
   await createFaultDatabase(midStreamFailureQuery, "mid", midFailure);
   await createFaultDatabase(cleanupFailureQuery, "cleanup", cleanupFailure);
-  const streamForFixture = <Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row> => {
+  const streamForFixture = <Row>(query: RowQuery<Row>, streamOptions?: StreamOptions<Row>): AsyncIterable<Row> => {
     const mode = streamFaults.get(query as object) ?? "normal";
     if (mode === "normal") {
       streamAcquirePending = true;
-      return db.stream(query, options);
+      return db.stream(query, streamOptions);
     }
     const faultDb = faultDatabases.get(query as object);
     if (faultDb === undefined) throw new Error(`mysql certification stream ${mode} fixture missing.`);
-    return faultDb.stream(query, options);
+    return faultDb.stream(query, streamOptions);
   };
   const streamFixture: StreamingConformanceFixture<unknown> = {
     db: { stream: streamForFixture },
@@ -1022,6 +1022,7 @@ async function createFixture(connectionUri: string): Promise<CertificationFixtur
       await pool.query(`DROP PROCEDURE IF EXISTS ${tableSql(outProcedure)}`).catch(() => undefined);
       await pool.query(`DROP TABLE IF EXISTS ${tableSql(table)}`).catch(() => undefined);
       for (const connection of faultConnections)
+        // eslint-disable-next-line no-await-in-loop -- Close fault connections in order before the direct connection and pool.
         await end(connection as unknown as MysqlConnection).catch(() => undefined);
       await end(direct);
       await end(pool);

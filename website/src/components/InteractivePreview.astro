@@ -181,10 +181,11 @@ ORDER BY account_id;</textarea>
     "`;",
   ].join("\n");
 
+  const createPreviewWorker = (): Worker =>
+    new Worker(new URL("../workers/preview.worker.ts", import.meta.url), { type: "module" });
+
   const roots = document.querySelectorAll<HTMLElement>("[data-sqlbraid-preview]");
   for (const root of roots) {
-    const createPreviewWorker = (): Worker =>
-      new Worker(new URL("../workers/preview.worker.ts", import.meta.url), { type: "module" });
     let worker = createPreviewWorker();
     const ownershipWorker = new Worker(new URL("../workers/runtime-ownership.worker.ts", import.meta.url), { type: "module" });
     const sqlInput = root.querySelector<HTMLTextAreaElement>("[data-preview-sql]");

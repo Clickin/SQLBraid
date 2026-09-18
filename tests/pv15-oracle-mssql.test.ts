@@ -341,7 +341,8 @@ test("Oracle stream uses configured fetch size and marks close failures", async 
   const stream = executor.stream(oracleSql`SELECT 1 FROM dual`.render());
   await assert.rejects(
     async () => {
-      for await (const _row of stream) {
+      for await (const row of stream) {
+        void row;
       }
     },
     (error: unknown) => error instanceof Error && "code" in error && error.code === "BRAID_RESOURCE_CLEANUP",
@@ -399,7 +400,8 @@ test("Oracle stream decodes with ResultSet metadata and rejects duplicate labels
     { driver: oracleDriver() },
   );
   await assert.rejects(async () => {
-    for await (const _row of duplicateExecutor.stream(oracleSql`SELECT 7 FROM dual`.render())) {
+    for await (const row of duplicateExecutor.stream(oracleSql`SELECT 7 FROM dual`.render())) {
+      void row;
     }
   }, /duplicate Oracle result label VALUE/u);
 });
@@ -428,7 +430,8 @@ test("Oracle stream closes the ResultSet after a driver read failure", async () 
   const executor = createOracledbExecutor(connection, { driver: oracleDriver() });
   await assert.rejects(
     async () => {
-      for await (const _row of executor.stream(oracleSql`SELECT 1 FROM dual`.render())) {
+      for await (const row of executor.stream(oracleSql`SELECT 1 FROM dual`.render())) {
+        void row;
       }
     },
     (error: unknown) => error === driverFailure,
@@ -469,7 +472,8 @@ test("Oracle pooled stream closes the ResultSet before releasing its lease", asy
     },
     { driver: oracleDriver() },
   );
-  for await (const _row of db.stream(oracleSql.rows`SELECT 1 FROM dual`)) {
+  for await (const row of db.stream(oracleSql.rows`SELECT 1 FROM dual`)) {
+    void row;
   }
   assert.deepEqual(events, ["execute", "read", "close", "release"]);
 });
@@ -662,7 +666,8 @@ test("Tedious stream bounds the queued rows and reports driver failures", async 
     },
   });
   const executor = createTediousExecutor(connection, { maxBufferedRows: 2 });
-  for await (const _row of executor.stream(mssqlSql`SELECT value FROM braid_stream`.render())) {
+  for await (const row of executor.stream(mssqlSql`SELECT value FROM braid_stream`.render())) {
+    void row;
     consumed += 1;
     await new Promise((resolve) => setImmediate(resolve));
   }
@@ -670,7 +675,8 @@ test("Tedious stream bounds the queued rows and reports driver failures", async 
 
   const failing = createTediousExecutor(mssqlStreamingConnection({ failAt: 0 }));
   await assert.rejects(async () => {
-    for await (const _row of failing.stream(mssqlSql`SELECT value FROM braid_stream`.render())) {
+    for await (const row of failing.stream(mssqlSql`SELECT value FROM braid_stream`.render())) {
+      void row;
     }
   }, /tedious driver failed/u);
 });
@@ -696,7 +702,8 @@ test("Tedious pooled stream waits for request completion before releasing its le
     },
     { maxBufferedRows: 2 },
   );
-  for await (const _row of db.stream(mssqlSql.rows`SELECT value FROM braid_stream`)) {
+  for await (const row of db.stream(mssqlSql.rows`SELECT value FROM braid_stream`)) {
+    void row;
   }
   assert.deepEqual(events, ["complete", "release"]);
 });

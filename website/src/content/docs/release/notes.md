@@ -41,6 +41,7 @@ the supported database, driver, profile, runtime, and capability combinations.
   thin editor integration;
 - exact database integers/decimals as canonical strings and approximate IEEE
   values as numbers, with independent JSON/temporal/container profiles.
+
 ## Explicit unsupported behavior
 
 `UnsupportedFeatureError(feature, code, message, options?)` carries stable

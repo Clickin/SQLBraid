@@ -35,7 +35,7 @@ function parseVersions(value) {
   try {
     parsed = JSON.parse(value);
   } catch (error) {
-    throw new Error(`SQLBRAID_DOCS_VERSIONS must be JSON: ${error.message}`);
+    throw new Error(`SQLBRAID_DOCS_VERSIONS must be JSON: ${error.message}`, { cause: error });
   }
   if (!Array.isArray(parsed) || parsed.some((entry) => typeof entry !== "string" || !semver.test(entry))) {
     throw new Error("SQLBRAID_DOCS_VERSIONS must be a JSON array of SemVer strings.");

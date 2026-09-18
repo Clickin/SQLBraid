@@ -240,6 +240,7 @@ async function loadSourceModule(packageName, root) {
 export async function loadFirstPartyPolicies({ root = scriptRoot, packages = FIRST_PARTY_PACKAGES } = {}) {
   const records = [];
   for (const packageName of packages) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Bound transpilation, module loading, and temporary-tree cleanup to one package at a time.
     const { module, sourcePath } = await loadSourceModule(packageName, root);
     for (const [exportName, value] of Object.entries(module)) {
       if (typeof value === "function" && /typePolicyFor(?:Profile|[A-Z].*Profile)$/u.test(exportName)) {

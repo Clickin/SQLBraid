@@ -78,6 +78,7 @@ async function mergeObservationDirectories(inputs, output) {
   for (const { name, path } of inputs) {
     const files = (await readdir(path, { withFileTypes: true }))
       .filter((entry) => entry.isFile() && (entry.name.endsWith(".json") || entry.name.endsWith(".jsonl")))
+      // oxlint-disable-next-line unicorn/no-array-sort -- Sort the owned filtered entries for deterministic observation-copy order.
       .sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of files) {
       const source = join(path, entry.name);

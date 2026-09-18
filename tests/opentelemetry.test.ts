@@ -89,9 +89,9 @@ function spanFor(
       state.attributes[key] = value;
       return span;
     },
-    setAttributes(attributes: Record<string, unknown>) {
+    setAttributes(updates: Record<string, unknown>) {
       if (recording.throwOnSpanMutation) throw new Error("telemetry span mutation failed");
-      Object.assign(state.attributes, attributes);
+      Object.assign(state.attributes, updates);
       return span;
     },
     addEvent() {
@@ -1101,7 +1101,7 @@ test("isolates provider and instrument failures from observer delivery", async (
     observer.onEvent(mapped("provider-failure"));
   });
   await assert.doesNotReject(async () => {
-    const result = await createDatabase(
+    const execution = await createDatabase(
       {
         statementBinding,
         async query<Row>() {
@@ -1114,7 +1114,7 @@ test("isolates provider and instrument failures from observer delivery", async (
       },
       { observers: [observer] },
     ).execute(sql.rows`SELECT 1`);
-    assert.deepEqual(result, { kind: "rows", rows: [{ value: 1 }] });
+    assert.deepEqual(execution, { kind: "rows", rows: [{ value: 1 }] });
   });
 
   trace.disable();

@@ -358,6 +358,7 @@ export async function runStreamingConformance<Row>(
 ): Promise<void> {
   const ids = ["STR001", "STR003", "STR004", "STR004_SCHEMA", "STR005", "STR006", "STR002", "STR008"] as const;
   for (const id of ids) {
+    // oxlint-disable-next-line no-await-in-loop -- Each conformance case must close its fixture before the factory is reused by the next case.
     await runStreamingConformanceCase(
       id,
       create as () => StreamingConformanceFixture<unknown> | Promise<StreamingConformanceFixture<unknown>>,

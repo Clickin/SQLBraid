@@ -276,6 +276,7 @@ test("Routine return schemas reject before pooled acquisition, including prepare
   });
   const query = postgres.call({ returnValue: returnSchema() })`CALL routine()`;
   const prepared = db.prepare("return-value", () => query, { input: "none" });
+  // oxlint-disable-next-line consistent-function-scoping -- This predicate states the shared failure contract of the adjacent direct and prepared calls.
   const matches = (error: unknown) =>
     error instanceof UnsupportedFeatureError &&
     error.feature === "routine.return-value" &&

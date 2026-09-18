@@ -33,4 +33,5 @@ declare module "vitest" {
   }
 }
 
+// eslint-disable-next-line unicorn/require-module-specifiers -- Mark this as a Vitest augmentation, not a replacement.
 export {};

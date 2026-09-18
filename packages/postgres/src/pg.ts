@@ -174,7 +174,7 @@ const defaultParserProfile: Required<Pick<PgParserProfile, "json" | "temporal">>
   temporal: "text",
 });
 
-function parserProfile(
+function resolveParserProfile(
   options: PgParserProfile | undefined,
   descriptor?: PgRepresentationProfile,
 ): { readonly json: PgJsonProfile; readonly temporal: PgTemporalProfile } {
@@ -837,7 +837,7 @@ function postgresBeginSql(options: TransactionOptions | undefined): string {
   return clauses.length === 0 ? "BEGIN" : `BEGIN ${clauses.join(" ")}`;
 }
 
-function streamBatchSize(value: number | undefined): number {
+function resolveStreamBatchSize(value: number | undefined): number {
   const size = value ?? 100;
   if (!Number.isSafeInteger(size) || size < 1)
     throw new RangeError("PostgreSQL streamBatchSize must be a positive safe integer.");
@@ -846,13 +846,13 @@ function streamBatchSize(value: number | undefined): number {
 
 export function createPgExecutor(client: PgClientLike, options: PgExecutorOptions = {}): QueryExecutor {
   assertPgClient(client);
-  const profile = parserProfile(options.parserProfile, options.profile);
+  const profile = resolveParserProfile(options.parserProfile, options.profile);
   const profilePolicy = options.profile?.typePolicy ?? typePolicyForProfile(profile);
   const policy = options.typePolicy ?? profilePolicy;
   const firstPartyProfile =
     options.profile === undefined || representationProfiles.some((entry) => entry === options.profile);
   const types = queryTypeOverrides(client, profile);
-  const batchSize = streamBatchSize(options.streamBatchSize);
+  const batchSize = resolveStreamBatchSize(options.streamBatchSize);
   const runControl = async (text: string): Promise<void> => {
     const result = await client.query({ text, values: [] });
     if (text === "COMMIT" && result.command !== undefined && result.command !== "COMMIT") {
@@ -1146,8 +1146,8 @@ export function createPgDatabase(client: PgClientLike, options: PgDatabaseOption
 }
 
 export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOptions = {}): ConnectionProvider {
-  streamBatchSize(options.streamBatchSize);
-  const profile = parserProfile(options.parserProfile, options.profile);
+  resolveStreamBatchSize(options.streamBatchSize);
+  const profile = resolveParserProfile(options.parserProfile, options.profile);
   const profilePolicy = options.profile?.typePolicy ?? typePolicyForProfile(profile);
   const policy = options.typePolicy ?? profilePolicy;
   const firstPartyProfile =

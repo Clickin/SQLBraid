@@ -477,6 +477,13 @@ function conditionOf(directive: DirectiveToken): number {
   return directive.holes[0];
 }
 
+function splitTrimOverrides(value: string | undefined): readonly string[] {
+  return (value ?? "")
+    .split("|")
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean);
+}
+
 function parseAttributes(text: string): TrimAttributes {
   const attributes: Record<string, string> = {};
   const pattern = /(prefix|prefixOverrides|suffix|suffixOverrides)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/g;
@@ -490,16 +497,11 @@ function parseAttributes(text: string): TrimAttributes {
   }
   const unknown = text.replace(pattern, "").trim();
   if (unknown) throw new SqlRenderError("BRAID_ATTRIBUTES", `Unsupported trim attributes: ${unknown}`);
-  const split = (value: string | undefined): readonly string[] =>
-    (value ?? "")
-      .split("|")
-      .map((item) => item.trim().toUpperCase())
-      .filter(Boolean);
   return {
     prefix: attributes.prefix ?? "",
-    prefixOverrides: split(attributes.prefixOverrides),
+    prefixOverrides: splitTrimOverrides(attributes.prefixOverrides),
     suffix: attributes.suffix ?? "",
-    suffixOverrides: split(attributes.suffixOverrides),
+    suffixOverrides: splitTrimOverrides(attributes.suffixOverrides),
   };
 }
 
@@ -900,6 +902,7 @@ function removeLeadingOverride(text: string, overrides: readonly string[], profi
 function removeTrailingOverride(text: string, overrides: readonly string[], profile: DialectLexicalProfile): string {
   if (!overrides.length) return text;
   const tokens = trimTokens(text, profile);
+  // oxlint-disable-next-line unicorn/no-array-reverse -- Reverse only this owned copy; Node 16 lacks toReversed.
   const candidate = [...tokens].reverse().find((token) => token.kind !== "comment" && token.depth === 0);
   if (!candidate || !overrides.includes(candidate.text.toUpperCase())) return text;
   return `${text.slice(0, candidate.start)}${text.slice(candidate.end)}`;
@@ -1086,8 +1089,8 @@ function renderNodes(
   state.depth += 1;
   if (state.depth > state.limits.maxNestingDepth)
     throw new SqlRenderError("BRAID_DEPTH", "Render nesting limit exceeded.");
-  for (const [index, node] of nodes.entries()) {
-    const rawNode = rawNodes[index] ?? node;
+  for (const [nodeIndex, node] of nodes.entries()) {
+    const rawNode = rawNodes[nodeIndex] ?? node;
     if (node.kind === "text") {
       addText(state, node.text, rawNode.kind === "text" ? rawNode.text : node.text);
       continue;
@@ -1430,8 +1433,9 @@ function localClauseNodes(nodes: readonly TemplateNode[], prefix: string): boole
     if (node.kind === "trim") return false;
   }
   const text = staticText(nodes);
-  const tokens = trimTokens(text).filter((token) => token.kind !== "comment");
-  const first = tokens[0]?.text.toUpperCase();
+  const first = trimTokens(text)
+    .find((token) => token.kind !== "comment")
+    ?.text.toUpperCase();
   if (prefix === "WHERE ") return first === "AND" || first === "OR";
   if (prefix === "SET ") return first !== undefined && text.includes("=");
   return false;

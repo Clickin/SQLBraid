@@ -151,6 +151,7 @@ test("bulk rejects guarded, list-cardinality, and hint shape changes before leas
         return { ...resource, release() {} };
       },
     });
+    // oxlint-disable-next-line no-await-in-loop -- Settle each shape failure and inspect its lease counters before the next fixture.
     await assert.rejects(
       () =>
         db.bulk([1, 2], (id) => {

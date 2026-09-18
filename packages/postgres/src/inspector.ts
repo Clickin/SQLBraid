@@ -60,8 +60,8 @@ const builtinArrayElements: Readonly<Record<string, string>> = Object.freeze({
   _xml: "xml",
 });
 
-async function rows(client: PgClientLike, text: string): Promise<readonly CatalogRow[]> {
-  const result = await client.query({ text, values: [] });
+async function rows(client: PgClientLike, sql: string): Promise<readonly CatalogRow[]> {
+  const result = await client.query({ text: sql, values: [] });
   return result.rows.map(objectRow);
 }
 
@@ -87,6 +87,7 @@ export function createPostgresInspector(client: PgClientLike): MetadataInspector
         const identity = qualifiedIdentity(schema, name);
         const columns = columnRows
           .filter((column) => text(column, "table_schema") === schema && text(column, "table_name") === name)
+          // oxlint-disable-next-line oxc/no-map-spread -- These spreads build optional snapshot fields, not copies of catalog rows.
           .map((column) => {
             const dataType = text(column, "data_type") ?? "unknown";
             const domainName = text(column, "domain_name");

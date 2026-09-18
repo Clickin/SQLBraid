@@ -147,6 +147,7 @@ test("postgres.pv18.profiles.runtime-codegen", { timeout: 30_000 }, async () => 
     await assertCompilesGeneratedSource(nativeGenerated.source, "postgres-pv18-native");
     for (const selected of representationProfiles.filter((entry) => entry.json !== entry.temporal)) {
       const mixed = createPgDatabase(client, { profile: selected });
+      // eslint-disable-next-line no-await-in-loop -- Mixed representation profiles share one physical client.
       const row = await mixed.one(sql.rows<{ payload: unknown; stamped: unknown }>`
         SELECT '{"n":1}'::jsonb AS payload, TIMESTAMP '2026-09-14 12:34:56.123456' AS stamped
       `);

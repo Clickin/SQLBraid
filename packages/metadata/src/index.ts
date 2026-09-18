@@ -408,7 +408,9 @@ function normalizeSnapshot(snapshot: MetadataSnapshot, includeVolatile: boolean)
   const metadata: Record<string, unknown> = Object.create(null);
   for (const [key, value] of (includeVolatile
     ? Object.entries(snapshot.metadata)
-    : Object.entries(snapshot.metadata).filter(([key]) => !["generatedAt", "observedAt", "capturedAt"].includes(key))
+    : Object.entries(snapshot.metadata).filter(
+        ([metadataKey]) => !["generatedAt", "observedAt", "capturedAt"].includes(metadataKey),
+      )
   ).sort(([left], [right]) => compareKeys(left, right)))
     metadata[key] = value;
   return {

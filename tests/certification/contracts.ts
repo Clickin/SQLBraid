@@ -461,6 +461,7 @@ function sqliteUnsupportedCapabilities(
   session: boolean,
   localReadOnly: boolean,
 ): ExpectedCapabilityContract {
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- Keep this shorthand beside its SQLite capability map.
   const unsupported = (
     unsupportedCode: `BRAID_${string}`,
   ): { status: "unsupported"; unsupportedCode: `BRAID_${string}` } => ({ status: "unsupported", unsupportedCode });

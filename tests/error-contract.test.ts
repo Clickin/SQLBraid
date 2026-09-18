@@ -49,6 +49,7 @@ test("the public registry links to exported owner classes and both error referen
     const registryCodesForOwner = PUBLIC_ERROR_DEFINITIONS.filter((definition) => definition.owner === owner).map(
       (definition) => definition.code,
     );
+    // oxlint-disable-next-line no-array-sort -- These copied lists normalize comparison order without mutating the public registry.
     assert.deepEqual([...registryCodesForOwner].sort(), [...codes].sort(), `${owner} registry linkage changed`);
   }
   const dynamicOwners = [UnsupportedFeatureError.name, AdapterError.name, SqlRenderError.name];
@@ -60,8 +61,10 @@ test("the public registry links to exported owner classes and both error referen
     "runtime batch lifecycle/synthetic observer error",
   ]);
   const knownOwners = new Set([...fixedClassCodes.keys(), ...dynamicOwners, ...nonClassOwners]);
+  // oxlint-disable-next-line no-array-sort -- Both arrays are temporary set expansions used only for this comparison.
   assert.deepEqual([...new Set(PUBLIC_ERROR_DEFINITIONS.map(({ owner }) => owner))].sort(), [...knownOwners].sort());
   for (const url of docs) {
+    // oxlint-disable-next-line no-array-sort -- Sort owned copies so documentation comparison cannot reorder the registry fixture.
     assert.deepEqual([...documentedCodes(url)].sort(), [...registryCodes].sort(), String(url));
   }
 });

@@ -22,6 +22,7 @@ const execFileAsync = promisify(execFile);
 test("archive version validation rejects paths and malformed prereleases", async () => {
   for (const version of ["../escape", "/tmp/archive", "not-a-version", "0.1.0-rc.01"]) {
     assert.equal(isSemVer(version), false);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Check each rejection in order so the first invalid case remains the reported failure.
     await assert.rejects(archiveRelease({ version, verifySource: false }), /SemVer/u);
   }
 });

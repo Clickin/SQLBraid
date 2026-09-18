@@ -123,7 +123,9 @@ async function json(path) {
 async function packageManifests() {
   const entries = await readdir(join(root, "packages"), { withFileTypes: true });
   const manifests = [];
-  for (const entry of entries.filter((entry) => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const entry of entries
+    .filter((candidate) => candidate.isDirectory())
+    .sort((a, b) => a.name.localeCompare(b.name))) {
     const path = join(root, "packages", entry.name, "package.json");
     try {
       manifests.push({ directory: dirname(path), path, manifest: await json(path) });
@@ -386,7 +388,7 @@ async function readReleaseManifest(
   }
   const files = new Set();
   const packageNames = new Set(manifest.packages.map(({ name }) => name));
-  const packageVersions = new Map(manifest.packages.map(({ name, version }) => [name, version]));
+  const packageVersions = new Map(manifest.packages.map(({ name, version: packageVersion }) => [name, packageVersion]));
   for (const entry of manifest.packages) {
     if (typeof entry.file !== "string" || basename(entry.file) !== entry.file || files.has(entry.file)) {
       throw new Error("Invalid release-manifest.json package entries.");
@@ -561,13 +563,15 @@ async function createReleaseEvidence(
       manifestSha256: manifestDigest(manifest),
       runId: manifest.runId ?? null,
       runAttempt: manifest.runAttempt ?? null,
-      packages: manifest.packages.map(({ name, version, file, sha256, integrity }) => ({
-        name,
-        version,
-        file,
-        sha256,
-        integrity,
-      })),
+      packages: manifest.packages.map(
+        ({ name, version: packageVersion, file, sha256, integrity: packageIntegrity }) => ({
+          name,
+          version: packageVersion,
+          file,
+          sha256,
+          integrity: packageIntegrity,
+        }),
+      ),
     },
     certification: {
       support: {
@@ -593,15 +597,17 @@ async function createReleaseEvidence(
       complete: staged.complete,
       approval: "human-interactive-after-staging",
       latestBefore: staged.latestBefore,
-      packages: staged.packages.map(({ name, version, state, stageId, candidateSha256, candidateIntegrity, tag }) => ({
-        name,
-        version,
-        state,
-        stageId: stageId ?? null,
-        candidateSha256,
-        candidateIntegrity,
-        tag,
-      })),
+      packages: staged.packages.map(
+        ({ name, version: packageVersion, state, stageId, candidateSha256, candidateIntegrity, tag }) => ({
+          name,
+          version: packageVersion,
+          state,
+          stageId: stageId ?? null,
+          candidateSha256,
+          candidateIntegrity,
+          tag,
+        }),
+      ),
     },
   };
   await writeFile(join(directory, "release-evidence.json"), `${JSON.stringify(durable, null, 2)}\n`);
@@ -654,8 +660,8 @@ async function stagingSummary(evidence) {
       "",
       "After reviewing metadata and current dist-tags, approve each dependency layer interactively with 2FA. Approval is sequential, not atomic; stop on failure.",
     );
-    for (const { layer, command } of evidence.approvalCommands)
-      lines.push("", `Layer ${layer}:`, "\n```sh", command, "```");
+    for (const { layer, command: approvalCommand } of evidence.approvalCommands)
+      lines.push("", `Layer ${layer}:`, "\n```sh", approvalCommand, "```");
   }
   await writeFile(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`, { flag: "a" });
 }

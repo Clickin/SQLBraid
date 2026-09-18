@@ -359,9 +359,9 @@ function sqliteWasmEnvironment(rowReadsSupported: boolean): DriverEnvironment {
         dialectId: "sqlite",
       }),
       read: (rows) => {
-        const row = rows[0];
-        if (!row || typeof row !== "object" || Array.isArray(row)) return {};
-        const version = (row as Record<string, unknown>).version;
+        const versionRow = rows[0];
+        if (!versionRow || typeof versionRow !== "object" || Array.isArray(versionRow)) return {};
+        const version = (versionRow as Record<string, unknown>).version;
         return typeof version === "string" ? { version } : {};
       },
     },
@@ -370,9 +370,9 @@ function sqliteWasmEnvironment(rowReadsSupported: boolean): DriverEnvironment {
 
 export function createSqliteWasmExecutor(
   database: SqliteWasmDatabaseLike,
-  options: SqliteWasmExecutorOptions = {},
+  executorOptions: SqliteWasmExecutorOptions = {},
 ): QueryExecutor {
-  const capi = options.sqlite3?.capi;
+  const capi = executorOptions.sqlite3?.capi;
   // Select a supported exact count transport before any statement can mutate data.
   database.changes?.(false, true);
   return {

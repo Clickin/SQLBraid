@@ -358,9 +358,9 @@ function plainRow(value: unknown, fields: readonly MariaDbFieldLike[], policy: T
   return row;
 }
 
-function assertMariaDbNumericValue(databaseType: string | undefined, value: unknown): void {
-  if (value === null || value === undefined || databaseType === undefined) return;
-  const type = databaseType.toUpperCase();
+function assertMariaDbNumericValue(databaseTypeName: string | undefined, value: unknown): void {
+  if (value === null || value === undefined || databaseTypeName === undefined) return;
+  const type = databaseTypeName.toUpperCase();
   if (type === "TINYINT" || type === "SMALLINT" || type === "MEDIUMINT" || type === "INT") {
     if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
       throw new ResultExactnessError(`MariaDB ${type} result has an unsupported representation.`);
@@ -899,6 +899,7 @@ export function createMariaDbExecutor(
         if (signal?.aborted) abort();
         while (true) {
           signal?.throwIfAborted();
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Consume one cursor row at a time to preserve backpressure and cancellation.
           const next = await iterator.next();
           exhausted = next.done === true;
           if (pendingError !== undefined) throw pendingError;

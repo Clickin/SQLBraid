@@ -39,6 +39,7 @@ async function run(command, args, cwd = root, env = process.env) {
     if (result.stderr.trim()) console.error(redact(result.stderr.trim()));
     return result;
   } catch (error) {
+    // eslint-disable-next-line preserve-caught-error -- The child error retains database credentials in its command/output; only the redacted diagnostic may escape.
     throw new Error(
       redact(`${command} failed (${error.code ?? error.signal}):\n${error.stdout ?? ""}\n${error.stderr ?? ""}`),
     );

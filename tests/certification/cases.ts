@@ -311,6 +311,9 @@ async function callRoutine(fixture: CertificationFixture, query: import("@sqlbra
   return fixture.db.call(query);
 }
 
+const representationFeature = (feature: string): boolean =>
+  ["data.", "numeric.", "sql.", "dml.", "metadata.", "execution."].some((prefix) => feature.startsWith(prefix));
+
 const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) => Promise<CertificationCaseResult>>> = {
   QRY001: async ({ fixture }) => {
     for (const db of databases(fixture)) {
@@ -1133,8 +1136,6 @@ const operations: Readonly<Record<CertificationCaseId, (context: CaseContext) =>
     return { status: "pass", name: "CAP001" };
   },
   CAP002: async (context) => {
-    const representationFeature = (feature: string): boolean =>
-      ["data.", "numeric.", "sql.", "dml.", "metadata.", "execution."].some((prefix) => feature.startsWith(prefix));
     const probes = Object.values(context.fixture.unsupported ?? {});
     const apiUnsupported = Object.entries(context.target.expectedCapabilities).filter(
       ([, value]) => value.status === "unsupported",

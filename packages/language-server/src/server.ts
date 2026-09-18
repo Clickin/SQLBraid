@@ -505,6 +505,7 @@ export function startStdioLanguageServer(
     );
     return {
       isIncomplete: false,
+      // oxlint-disable-next-line no-map-spread -- Construct LSP completion items; the conditional spread is not a copy of the source entry.
       items: (result ?? []).map((entry) => ({
         label: entry.label,
         kind: completionKind(entry.kind),
@@ -549,16 +550,19 @@ export function startStdioLanguageServer(
     for (const slot of workspaces.values()) {
       let service: SqlBraidLanguageService;
       try {
+        // eslint-disable-next-line no-await-in-loop -- Preserve workspace order, cancellation, and the global result cap.
         service = await slot.workspace.service(token);
       } catch (error) {
         if (token.isCancellationRequested || revision !== workspaceRevision) return [];
         throw error;
       }
+      // eslint-disable-next-line no-await-in-loop -- Yield between workspaces so cancellation can stop further indexing.
       await yieldToEventLoop();
       if (token.isCancellationRequested || revision !== workspaceRevision) return [];
       symbols.push(...service.workspaceSymbols(params.query).slice(0, MAX_WORKSPACE_SYMBOLS - symbols.length));
       if (symbols.length >= MAX_WORKSPACE_SYMBOLS) break;
     }
+    // oxlint-disable-next-line no-map-spread -- Construct LSP symbols without changing the service's symbol records.
     return symbols.map((entry) => ({
       name: entry.name,
       kind: symbolKind(entry.kind),

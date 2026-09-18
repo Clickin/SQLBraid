@@ -304,6 +304,7 @@ let activeProjects: SqlBraidProjects | undefined;
 export function scopeDocumentSelector(selector: vscode.DocumentSelector, folder: vscode.Uri): vscode.DocumentSelector {
   const pattern = new vscode.RelativePattern(folder, SQLBRAID_DOCUMENT_GLOB);
   const filters = typeof selector === "string" ? [selector] : Array.isArray(selector) ? selector : [selector];
+  // eslint-disable-next-line oxc/no-map-spread -- Scope a copy without mutating caller-owned VS Code document filters.
   return filters.map((filter) => (typeof filter === "string" ? { language: filter, pattern } : { ...filter, pattern }));
 }
 

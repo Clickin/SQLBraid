@@ -164,6 +164,7 @@ test("sqlite.numeric.approximate-float preserves SQLite REAL binary64 values", a
   const db = createNodeSqliteDatabase(native);
   try {
     for (const expected of binary64Finite.filter((value) => value !== 0 && !Object.is(value, -0))) {
+      // eslint-disable-next-line no-await-in-loop -- All floating-point probes use the same SQLite connection.
       const row = await db.one(sql.rows<{ readonly value: number }>`SELECT CAST(${expected} AS REAL) AS value`);
       assertFloatBits(row.value, expected, 64);
     }

@@ -51,9 +51,9 @@ function validateEvidence(evidence, sha) {
   )
     throw new Error("Global evidence does not name the required concrete suites.");
   const suites = Array.isArray(evidence.testSuites)
-    ? evidence.testSuites.slice().sort((left, right) => left.name.localeCompare(right.name))
+    ? evidence.testSuites.toSorted((left, right) => left.name.localeCompare(right.name))
     : [];
-  const names = expectedSuites.slice().sort();
+  const names = expectedSuites.toSorted();
   if (
     suites.length !== names.length ||
     suites.some((suite, index) => suite.name !== names[index] || suite.status !== "passed")

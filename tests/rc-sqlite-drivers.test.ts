@@ -179,6 +179,7 @@ test("SQLite adapters preserve a null AbortSignal reason before I/O", async () =
     batch: async () => [],
   });
   for (const executor of [node, wasm, d1]) {
+    // oxlint-disable-next-line no-await-in-loop -- Preserve adapter-case evaluation order and fail before exercising later adapters.
     await assert.rejects(
       async () => executor.query(query, undefined, { signal }),
       (error: unknown) => error === null,
@@ -301,8 +302,7 @@ test("SQLite stream guards expose DatabaseResultKindError for non-row statements
     const node = createNodeSqliteExecutor(native);
     await assert.rejects(
       async () => {
-        for await (const _row of node.stream(sql.rows`CREATE TABLE braid_stream_guard (value TEXT)`.render()))
-          void _row;
+        for await (const row of node.stream(sql.rows`CREATE TABLE braid_stream_guard (value TEXT)`.render())) void row;
       },
       (error: unknown) =>
         error instanceof DatabaseResultKindError &&
@@ -338,8 +338,8 @@ test("SQLite stream guards expose DatabaseResultKindError for non-row statements
     });
     await assert.rejects(
       async () => {
-        for await (const _row of wasm.stream(sql.rows`CREATE TABLE braid_stream_guard_wasm (value TEXT)`.render()))
-          void _row;
+        for await (const row of wasm.stream(sql.rows`CREATE TABLE braid_stream_guard_wasm (value TEXT)`.render()))
+          void row;
       },
       (error: unknown) =>
         error instanceof DatabaseResultKindError &&

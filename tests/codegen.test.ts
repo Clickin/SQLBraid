@@ -263,6 +263,7 @@ test("uses unknown plus a stable diagnostic for conflicting normalized mappings"
   assert.match(diagnostic?.message ?? "", /INT4.*int4/u);
   assert.deepEqual(
     generateModels(snapshot({}), { typePolicy: conflicting }).diagnostics,
+    // oxlint-disable-next-line no-array-reverse -- Reverse a fresh copy so the shared conflicting policy remains unchanged.
     generateModels(snapshot({}), { typePolicy: { ...conflicting, mappings: [...conflicting.mappings].reverse() } })
       .diagnostics,
   );
@@ -760,6 +761,7 @@ test("reordered metadata maps and capture timestamps preserve bytes without muta
   const first = generateModels(metadata, { typePolicy: policy });
   const reordered = {
     ...metadata,
+    // oxlint-disable-next-line no-array-reverse -- Object.entries returns an owned array; the source metadata must stay untouched.
     types: Object.fromEntries(Object.entries(types).reverse()),
     metadata: { generatedAt: "later" },
   };

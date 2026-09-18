@@ -298,6 +298,7 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
     const diskFiles = [...(context?.fileNames ?? [])]
       .map((fileName) => canonicalPath(fileName, rootPath))
       .filter((fileName) => isSourceFile(fileName))
+      // eslint-disable-next-line unicorn/no-array-sort -- The filtered path array is owned by this load.
       .sort();
     checkCancellation(cancellation);
     // Generated declarations are evidence only when they match pure in-memory output.
@@ -352,21 +353,24 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
     const configuredTargets: ToolingTarget[] = [];
     if (loaded?.config.codegen?.targets) {
       for (const target of loaded.config.codegen.targets) {
+        // eslint-disable-next-line no-await-in-loop -- Targets share bounded caches; preserve load order and stop on failure or cancellation.
         const evidence = await loadTarget(target, loaded.directory, cancellation);
         if (evidence) configuredTargets.push(evidence);
       }
     }
     const targets: readonly ToolingTarget[] = (
       configuredTargets.length ? configuredTargets : [...(options.targets ?? [])]
-    ).map((target): ToolingTarget => {
-      if (!target.outFile) return target;
-      const outputDocument = documents.get(canonicalPath(target.outFile, rootPath));
-      if (!outputDocument) return target;
-      if (target.generation?.source === outputDocument.sourceText)
-        return { ...target, generatedSource: outputDocument.sourceText };
-      const { generatedSource: _generatedSource, ...withoutStaleEvidence } = target;
-      return withoutStaleEvidence;
-    });
+    )
+      // oxlint-disable-next-line no-map-spread -- Override open-document evidence without mutating caller-owned fallback targets.
+      .map((target): ToolingTarget => {
+        if (!target.outFile) return target;
+        const outputDocument = documents.get(canonicalPath(target.outFile, rootPath));
+        if (!outputDocument) return target;
+        if (target.generation?.source === outputDocument.sourceText)
+          return { ...target, generatedSource: outputDocument.sourceText };
+        const { generatedSource: _generatedSource, ...withoutStaleEvidence } = target;
+        return withoutStaleEvidence;
+      });
     const { sources, sourceFiles } = await loadSources(context, targets, cancellation);
     const metadata = options.metadata;
     checkCancellation(cancellation);
@@ -419,7 +423,7 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
 
   function waitForRefresh(pending: Promise<WorkspaceState>, cancellation?: Cancellation): Promise<WorkspaceState> {
     if (!cancellation) return pending;
-    return new Promise((resolve, reject) => {
+    return new Promise((resolveRefresh, reject) => {
       const timer = setInterval(() => {
         if (cancellation.isCancellationRequested || disposed) {
           clearInterval(timer);
@@ -429,7 +433,7 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
       pending.then(
         (value) => {
           clearInterval(timer);
-          resolve(value);
+          resolveRefresh(value);
         },
         (error: unknown) => {
           clearInterval(timer);
@@ -449,6 +453,7 @@ export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
         const currentRevision = revision;
         let refreshed: WorkspaceState;
         try {
+          // eslint-disable-next-line no-await-in-loop -- Retry only after the prior refresh completes or is invalidated.
           refreshed = await waitForRefresh(refresh(), cancellation);
         } catch (error) {
           if (disposed || cancellation?.isCancellationRequested) throw new WorkspaceCancellationError();

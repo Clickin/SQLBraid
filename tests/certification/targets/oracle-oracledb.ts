@@ -11,7 +11,7 @@ import {
 } from "@sqlbraid/oracle/oracledb";
 import { oracleParameter, sql } from "@sqlbraid/oracle";
 import { createPooledDatabase } from "@sqlbraid/runtime";
-import type { CallQuery, CommandQuery, Database, RowQuery } from "@sqlbraid/core";
+import type { CallQuery, CommandQuery, Database, RowQuery, TransactionOptions } from "@sqlbraid/core";
 import type { BulkConformanceFixture } from "../../bulk-conformance.js";
 import type { StreamingConformanceFixture } from "../../streaming-conformance.js";
 import type { CertificationFixture, CertificationTarget, ResourceSnapshot } from "../types.js";
@@ -22,6 +22,24 @@ const SEQUENCE = "BRAID_RC3_CERT_SEQ";
 const HOSTILE = ["__proto__", "constructor", "prototype", "toString", "hasOwnProperty"] as const;
 
 import { ORACLE_EXPECTED_CAPABILITIES, ORACLE_EXPECTED_TRANSACTION_OPTIONS } from "../contracts.js";
+
+const nested = (value: unknown): readonly unknown[] =>
+  value instanceof AggregateError ? value.errors.flatMap((entry) => [entry, ...nested(entry)]) : [];
+
+const hasNativeReadOnlyError = (error: unknown): boolean => {
+  if (error instanceof AggregateError) return error.errors.some(hasNativeReadOnlyError);
+  if (error === null || typeof error !== "object") return false;
+  const candidate = error as {
+    readonly code?: unknown;
+    readonly errorNum?: unknown;
+    readonly cause?: unknown;
+  };
+  return (
+    candidate.code === "ORA-01456" ||
+    candidate.errorNum === 1456 ||
+    (candidate.cause !== undefined && hasNativeReadOnlyError(candidate.cause))
+  );
+};
 
 async function exec(connection: OracleConnectionLike, statement: string): Promise<void> {
   await connection.execute(statement, []);
@@ -35,12 +53,12 @@ async function measureOracleDatabase(
     [],
     { outFormat: oracledb.OUT_FORMAT_OBJECT },
   )) as OracleExecuteResultLike;
-  const row = result.rows?.[0];
-  if (row === undefined || typeof row !== "object" || row === null)
+  const versionRow = result.rows?.[0];
+  if (versionRow === undefined || typeof versionRow !== "object" || versionRow === null)
     throw new Error("Oracle version probe did not return a row.");
   const banner = String(
-    (row as { readonly BANNER_FULL?: unknown; readonly banner_full?: unknown }).BANNER_FULL ??
-      (row as { readonly banner_full?: unknown }).banner_full ??
+    ("BANNER_FULL" in versionRow ? versionRow.BANNER_FULL : undefined) ??
+      ("banner_full" in versionRow ? versionRow.banner_full : undefined) ??
       "",
   );
   const release = /\bVersion\s+(\d+)\.(\d+)\.\d+(?:\.\d+){0,2}\b/u.exec(banner);
@@ -292,7 +310,7 @@ function bulkFixture(
         sql.rows`SELECT id AS "id", value AS "value" FROM ${sql.ident(BULK_TABLE)} WHERE id IN (${sql.bind(3, oracleParameter.number())}, ${sql.bind(4, oracleParameter.number())}) ORDER BY id`,
       );
       await db.execute(sql`DELETE FROM ${sql.ident(BULK_TABLE)} WHERE id = ${sql.bind(3, oracleParameter.number())}`);
-      const observedRows = rows.map((row) => ({ id: Number(row.id), value: row.value }));
+      const observedRows = rows.map((bulkRow) => ({ id: Number(bulkRow.id), value: bulkRow.value }));
       return {
         error,
         observedRows,
@@ -490,9 +508,9 @@ export async function createOracleOracledbTarget(
             stream<Row>(
               rendered: Parameters<NonNullable<typeof lease.stream>>[0],
               binding: Parameters<NonNullable<typeof lease.stream>>[1],
-              options: Parameters<NonNullable<typeof lease.stream>>[2],
+              streamOptions: Parameters<NonNullable<typeof lease.stream>>[2],
             ) {
-              const source = stream(rendered, binding, options);
+              const source = stream(rendered, binding, streamOptions);
               const iterator = source[Symbol.asyncIterator]() as AsyncIterator<Row>;
               const wrapped: AsyncIterator<Row> & AsyncIterable<Row> = {
                 [Symbol.asyncIterator]() {
@@ -667,8 +685,7 @@ export async function createOracleOracledbTarget(
             }
           }
           assert.ok(error instanceof AggregateError);
-          const nested = (value: unknown): readonly unknown[] =>
-            value instanceof AggregateError ? value.errors.flatMap((entry) => [entry, ...nested(entry)]) : [];
+          // eslint-disable-next-line unicorn/prefer-set-has -- Three one-off identity checks do not need a second error collection.
           const errors = [error, ...nested(error)];
           assert.ok(errors.includes(primary));
           assert.ok(errors.includes(rollbackError));
@@ -694,30 +711,13 @@ export async function createOracleOracledbTarget(
           assert.equal(Number((rejected as { readonly VALUE: number | string }).VALUE), 0);
           await direct.execute(command(`DELETE FROM ${TABLE} WHERE id IN (999998, 999997)`));
         },
-        transactionOption: async (
-          db: Database,
-          options: import("@sqlbraid/core").TransactionOptions,
-        ): Promise<void> => {
+        transactionOption: async (db: Database, transactionOptions: TransactionOptions): Promise<void> => {
           const proofId = 999997;
           const insert = command(`INSERT INTO ${TABLE} (id, value) VALUES (${proofId}, 'transaction-option')`);
           const remove = command(`DELETE FROM ${TABLE} WHERE id = ${proofId}`);
           const count = row<{ readonly VALUE: number | string }>(
             `SELECT COUNT(*) AS VALUE FROM ${TABLE} WHERE id = ${proofId}`,
           );
-          const hasNativeReadOnlyError = (error: unknown): boolean => {
-            if (error instanceof AggregateError) return error.errors.some(hasNativeReadOnlyError);
-            if (error === null || typeof error !== "object") return false;
-            const candidate = error as {
-              readonly code?: unknown;
-              readonly errorNum?: unknown;
-              readonly cause?: unknown;
-            };
-            return (
-              candidate.code === "ORA-01456" ||
-              candidate.errorNum === 1456 ||
-              (candidate.cause !== undefined && hasNativeReadOnlyError(candidate.cause))
-            );
-          };
           let failed = false;
           let primary: unknown;
           let witness: OracleConnectionLike | undefined;
@@ -726,9 +726,9 @@ export async function createOracleOracledbTarget(
             let transactionError: unknown;
             let transactionFailed = false;
             try {
-              if (options.isolation !== undefined) witness = await pool.getConnection();
-              await db.tx(options, async (tx) => {
-                if (options.isolation !== undefined) {
+              if (transactionOptions.isolation !== undefined) witness = await pool.getConnection();
+              await db.tx(transactionOptions, async (tx) => {
+                if (transactionOptions.isolation !== undefined) {
                   assert.equal(Number((await tx.one(count)).VALUE), 0);
                   await witness!.execute(
                     `INSERT INTO ${TABLE} (id, value) VALUES (${proofId}, 'isolation-witness')`,
@@ -737,21 +737,21 @@ export async function createOracleOracledbTarget(
                   );
                   assert.equal(
                     Number((await tx.one(count)).VALUE),
-                    options.isolation === "read-committed" ? 1 : 0,
-                    `Oracle ${options.isolation} did not enforce its native concurrent-commit visibility.`,
+                    transactionOptions.isolation === "read-committed" ? 1 : 0,
+                    `Oracle ${transactionOptions.isolation} did not enforce its native concurrent-commit visibility.`,
                   );
                 }
-                if (options.readOnly === true) {
+                if (transactionOptions.readOnly === true) {
                   await tx.execute(insert);
                   throw new Error("Oracle read-only transaction accepted a write.");
                 }
-                if (options.readOnly === false) await tx.execute(insert);
+                if (transactionOptions.readOnly === false) await tx.execute(insert);
               });
             } catch (error) {
               transactionFailed = true;
               transactionError = error;
             }
-            if (options.readOnly === true) {
+            if (transactionOptions.readOnly === true) {
               if (!transactionFailed || !hasNativeReadOnlyError(transactionError)) {
                 throw transactionError ?? new Error("Oracle read-only transaction did not reject a write.");
               }
@@ -759,7 +759,7 @@ export async function createOracleOracledbTarget(
               if (Number(durable.VALUE) !== 0) throw new Error("Oracle read-only transaction changed durable state.");
             } else {
               if (transactionFailed) throw transactionError;
-              if (options.readOnly === false) {
+              if (transactionOptions.readOnly === false) {
                 const durable = await db.one(count);
                 if (Number(durable.VALUE) !== 1)
                   throw new Error("Oracle read-write transaction did not commit its write.");
@@ -931,8 +931,6 @@ export async function createOracleOracledbTarget(
               assert.ok(executeStarts > beforeStarts, "Oracle cancellation query did not start.");
               controller.abort(reason);
               await assert.rejects(pending, (error: unknown) => {
-                const nested = (value: unknown): readonly unknown[] =>
-                  value instanceof AggregateError ? value.errors.flatMap((entry) => [entry, ...nested(entry)]) : [];
                 return (
                   error === reason ||
                   (error instanceof AggregateError && [error, ...nested(error)].includes(reason)) ||

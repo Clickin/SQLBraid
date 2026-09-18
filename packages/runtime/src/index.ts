@@ -1118,6 +1118,22 @@ async function notifyError(
   });
 }
 
+function batchFailure(original: unknown, failures: readonly unknown[]): unknown {
+  return failures.length === 0
+    ? original
+    : new AggregateError([original, ...failures], "Batch execution failed and error observers also failed.", {
+        cause: original,
+      });
+}
+
+function transactionFailure(original: unknown, errors: readonly unknown[]): unknown {
+  return errors.length === 0
+    ? original
+    : new AggregateError([original, ...errors], "Transaction failed and cleanup also failed.", {
+        cause: original,
+      });
+}
+
 function metadata(
   options: RuntimeOptions,
   operationId: string,
@@ -1549,6 +1565,7 @@ function createScopedDatabase(
       try {
         await lease.release({ discard: true });
       } catch (releaseError) {
+        // oxlint-disable-next-line preserve-caught-error -- Both errors are retained; the poisoned lease remains the primary cause.
         throw new AggregateError([error, releaseError], "Poisoned lease cleanup failed.", { cause: error });
       }
       throw error;
@@ -1615,6 +1632,7 @@ function createScopedDatabase(
       try {
         await lease.release({ discard: true });
       } catch (releaseError) {
+        // oxlint-disable-next-line preserve-caught-error -- Both errors are retained; the capability failure remains the primary cause.
         throw new AggregateError([error, releaseError], "Session capability check and lease cleanup failed.", {
           cause: error,
         });
@@ -1628,6 +1646,7 @@ function createScopedDatabase(
       try {
         await lease.release({ discard: true });
       } catch (releaseError) {
+        // oxlint-disable-next-line preserve-caught-error -- Both errors are retained; the poisoned lease remains the primary cause.
         throw new AggregateError([error, releaseError], "Poisoned lease cleanup failed.", { cause: error });
       }
       throw error;
@@ -2766,12 +2785,6 @@ function createScopedDatabase(
           errorEvent(entry.operation, error, stage, executionStarted, executionCompleted, durationMs),
         );
       };
-      const batchFailure = (original: unknown, failures: readonly unknown[]): unknown =>
-        failures.length === 0
-          ? original
-          : new AggregateError([original, ...failures], "Batch execution failed and error observers also failed.", {
-              cause: original,
-            });
       const abortEntries = async (
         original: unknown,
         stage: QueryErrorEventStage,
@@ -2831,6 +2844,7 @@ function createScopedDatabase(
       const firstFailure = driverFailure;
       if (firstFailure !== undefined || batchReleaseFailed) {
         const target =
+          // oxlint-disable-next-line unicorn/no-array-reverse -- Reverse only this owned copy; Node 16 lacks toReversed.
           firstFailure?.entry ?? [...entries].reverse().find((entry) => entry.raw !== undefined) ?? entries[0];
         if (target === undefined) {
           throw batchFailure(firstFailure?.error ?? batchReleaseError, []);
@@ -3430,12 +3444,6 @@ function createScopedDatabase(
       const activity = { active: true };
       const parent = transactionContext.getStore();
       const observers = options.observers ?? [];
-      const combine = (original: unknown, errors: readonly unknown[]): unknown =>
-        errors.length === 0
-          ? original
-          : new AggregateError([original, ...errors], "Transaction failed and cleanup also failed.", {
-              cause: original,
-            });
       try {
         if (nested) {
           const lease = options.lease!;
@@ -3464,7 +3472,7 @@ function createScopedDatabase(
             try {
               await transactionEvent(observers, transactionId, "begin", "failed", depth, undefined, undefined, error);
             } catch (reporting) {
-              throw combine(error, [reporting]);
+              throw transactionFailure(error, [reporting]);
             }
             throw error;
           }
@@ -3554,7 +3562,7 @@ function createScopedDatabase(
             } catch (error) {
               errors.push(error);
             }
-            if (errors.length > 0) throw combine(errors[0], errors.slice(1));
+            if (errors.length > 0) throw transactionFailure(errors[0], errors.slice(1));
           };
           try {
             await control(
@@ -3601,7 +3609,7 @@ function createScopedDatabase(
                 }
               }
             }
-            const combined = combine(error, cleanup);
+            const combined = transactionFailure(error, cleanup);
             if (isPoisoned(physicalState)) physicalState.poisoned = combined;
             throw combined;
           }
@@ -3619,7 +3627,7 @@ function createScopedDatabase(
             await use.release(isPoisoned(physicalState));
           } catch (error) {
             poison(physicalState, error);
-            failure = failed ? combine(failure, [error]) : error;
+            failure = failed ? transactionFailure(failure, [error]) : error;
             failed = true;
           }
         }

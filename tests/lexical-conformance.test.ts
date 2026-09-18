@@ -182,7 +182,7 @@ for (const { id, sql } of dialects) {
   });
 }
 
-for (const { id, sql } of dialects.filter(({ id }) => id === "mysql" || id === "mariadb")) {
+for (const { id, sql } of dialects.filter((dialect) => dialect.id === "mysql" || dialect.id === "mariadb")) {
   test(`dialect lexical trim ${id}: WHERE and SET preserve arithmetic and native comments`, () => {
     assert.equal(
       parameterizedSql(

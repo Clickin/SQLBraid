@@ -126,6 +126,7 @@ class SupportMatrixElement extends HTMLElement {
                   .filter((value): value is string => Boolean(value)),
               ),
             ];
+      // eslint-disable-next-line unicorn/no-array-sort -- Both branches create an owned array for these options.
       for (const value of values.sort()) {
         const label = key === "capability" ? supportMatrixCapabilityLabel(this.data, value, this.locale) : value;
         select.add(new Option(label, value));
@@ -196,6 +197,7 @@ class SupportMatrixElement extends HTMLElement {
         : [...new Set(this.data.targets.map((target) => target.status))];
     const allowed = new Set(values);
     while (select.options.length > 1) select.remove(1);
+    // eslint-disable-next-line unicorn/no-array-sort -- This temporary option list is not shared with the support data.
     for (const value of values.sort()) select.add(new Option(supportMatrixStatus(value, this.locale), value));
     select.value = allowed.has(selected) ? selected : "";
   }

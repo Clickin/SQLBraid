@@ -16,14 +16,14 @@ import {
   transformSource,
 } from "@sqlbraid/compiler";
 
-const source = `import { sql as dbSql } from '@sqlbraid/template';\nconst name: string | null = 'Ada';\ntype UserRow = { id: bigint };\nconst query = dbSql.rows<UserRow>\`SELECT custom_company_function(id) AS id FROM vendor_table /*@braid where*/ /*@braid if \${name != null}*/ AND name = \${name} /*@braid end*/ /*@braid end*/\`;`;
-const options = {
+const aliasedTagSource = `import { sql as dbSql } from '@sqlbraid/template';\nconst name: string | null = 'Ada';\ntype UserRow = { id: bigint };\nconst query = dbSql.rows<UserRow>\`SELECT custom_company_function(id) AS id FROM vendor_table /*@braid where*/ /*@braid if \${name != null}*/ AND name = \${name} /*@braid end*/ /*@braid end*/\`;`;
+const checkOptions = {
   moduleSpecifier: "@sqlbraid/template",
   compilerOptions: { baseUrl: process.cwd(), paths: { "@sqlbraid/*": ["packages/*/src/index.ts"] } },
 };
 
 test("discovers aliased SQL tags by import identity", () => {
-  const result = discoverQueries(source, "fixture.ts", { moduleSpecifier: "@sqlbraid/template" });
+  const result = discoverQueries(aliasedTagSource, "fixture.ts", { moduleSpecifier: "@sqlbraid/template" });
   assert.equal(result.queries.length, 1);
   assert.equal(result.queries[0].bindings.length, 2);
   assert.equal(result.queries[0].bindings[1].expression, "name");
@@ -388,10 +388,10 @@ test("MariaDB tags preserve native hash comments while finding active directives
 });
 
 test("virtual overlay preserves source and attaches declared query contract", () => {
-  const overlay = createVirtualOverlay(source, "fixture.ts", {
+  const overlay = createVirtualOverlay(aliasedTagSource, "fixture.ts", {
     moduleSpecifier: "@sqlbraid/template",
   });
-  assert.equal(overlay.sourceText, source);
+  assert.equal(overlay.sourceText, aliasedTagSource);
   assert.deepEqual(overlay.queryTypes[0], {
     range: overlay.queryTypes[0].range,
     rowType: "UserRow",
@@ -433,7 +433,7 @@ test("detailed checking separates native, Braid, and lowering-only diagnostics",
 test("detailed checking matches mapped diagnostics by source range, not repeated snippets", () => {
   const source =
     "import { sql } from '@sqlbraid/template'; /* string */ const comment = 'string'; const first: string = 1; const q=sql`SELECT 1 /*@braid if ${true}*/ WHERE value = ${1} /*@braid end*/`; const second: string = 2; class Base { x = 1; } class Child extends Base { query = sql`SELECT 1 /*@braid if ${true}*/ WHERE value = ${super.x} /*@braid end*/`; }";
-  const result = checkSourceDetailed(source, join(tmpdir(), "sqlbraid-repeated-diagnostic.ts"), options);
+  const result = checkSourceDetailed(source, join(tmpdir(), "sqlbraid-repeated-diagnostic.ts"), checkOptions);
   const native = result.nativeTypeScriptDiagnostics.filter((diagnostic) => diagnostic.code === "TS2322");
   const overlay = result.overlayTypeScriptDiagnostics.filter((diagnostic) => diagnostic.code === "TS2322");
   assert.equal(native.length, 2);
@@ -581,7 +581,7 @@ test("mapped rows use the Standard Schema output type for downstream checking", 
       return rows[0].missing;
     }
   `;
-  const diagnostics = checkSource(mapped, join(tmpdir(), "sqlbraid-mapped-output.ts"), options);
+  const diagnostics = checkSource(mapped, join(tmpdir(), "sqlbraid-mapped-output.ts"), checkOptions);
   assert.deepEqual(
     diagnostics.map((diagnostic) => diagnostic.code),
     ["TS2339"],
@@ -641,14 +641,14 @@ test("capture and guarded preserve tag contracts and reject cross-kind arguments
     const unknown: Query<unknown, 'unknown'> = guarded(sql, ['opaque'], []);
     const inferredRows: RowQuery = capture(sql.rows, ['opaque'], () => {});
   `;
-  assert.deepEqual(checkSource(declarations, join(tmpdir(), "sqlbraid-capture-contracts.ts"), options), []);
+  assert.deepEqual(checkSource(declarations, join(tmpdir(), "sqlbraid-capture-contracts.ts"), checkOptions), []);
   const invalid = `${declarations}
     capture<Row, 'rows'>(sql.command, ['opaque'], () => {});
     capture<Row, 'call'>(sql.rows, ['opaque'], () => {});
     guarded<Row, 'rows'>(sql.call, ['opaque'], []);
     guarded<Row, 'command'>(sql, ['opaque'], []);
   `;
-  const diagnostics = checkSource(invalid, join(tmpdir(), "sqlbraid-capture-mismatches.ts"), options);
+  const diagnostics = checkSource(invalid, join(tmpdir(), "sqlbraid-capture-mismatches.ts"), checkOptions);
   assert.deepEqual(
     diagnostics.map((diagnostic) => diagnostic.code),
     ["TS2345", "TS2345", "TS2345", "TS2345"],
@@ -658,7 +658,7 @@ test("capture and guarded preserve tag contracts and reject cross-kind arguments
 test("bare sql rejects generic row shorthand with or without guards", () => {
   const invalid =
     "import {sql} from '@sqlbraid/template'; type Row = {id:number}; const plain=sql<Row>`SELECT 1`; const dynamic=sql<Row>`SELECT 1 /*@braid if ${true}*/ WHERE id=${1} /*@braid end*/`;";
-  const diagnostics = checkSource(invalid, join(tmpdir(), "sqlbraid-no-shorthand.ts"), options);
+  const diagnostics = checkSource(invalid, join(tmpdir(), "sqlbraid-no-shorthand.ts"), checkOptions);
   assert.ok(diagnostics.some((diagnostic) => diagnostic.code === "TS2558"));
   assert.ok(diagnostics.some((diagnostic) => diagnostic.code === "TS2635"));
 });
@@ -678,8 +678,8 @@ test("opaque SQL needs no schema or local SQL grammar and keeps declared contrac
   const kinds =
     "const command:CommandQuery = sql.command`opaque /*@braid if ${true}*/ vendor_command() /*@braid end*/`; const call:CallQuery<CallResult> = sql.call<CallResult>`opaque /*@braid if ${true}*/ vendor_call() /*@braid end*/`; const unknown:Query<unknown,'unknown'> = sql`SELECT id FROM users`;";
   const input = [declarations, ...queries, guarded, kinds].join("\n");
-  assert.deepEqual(checkSource(input, join(tmpdir(), "sqlbraid-opaque.ts"), options), []);
-  const overlay = createVirtualOverlay(input, "sqlbraid-opaque.ts", options);
+  assert.deepEqual(checkSource(input, join(tmpdir(), "sqlbraid-opaque.ts"), checkOptions), []);
+  const overlay = createVirtualOverlay(input, "sqlbraid-opaque.ts", checkOptions);
   assert.deepEqual(
     overlay.queryTypes.map(({ rowType, resultKind }) => [rowType, resultKind]),
     [

@@ -38,6 +38,7 @@ test("release evidence accepts completed successful exact tag revision only", ()
   ])
     assert.equal(successfulExactRun([{ ...exact, ...change }], context), undefined);
   assert.equal(successfulExactRun([], context), undefined);
+  // oxlint-disable-next-line no-map-spread -- Each historical run must be a separate object without changing the shared exact-match fixture.
   const history = ["b", "c", "d"].map((character) => ({ ...exact, head_sha: character.repeat(40) }));
   assert.equal(successfulExactRun(history, context), undefined);
   assert.equal(successfulExactRun([...history, { ...exact, conclusion: "failure" }, exact], context), exact);
@@ -47,6 +48,7 @@ const env = { GITHUB_SHA: sha, GITHUB_REF: ref, GITHUB_REPOSITORY: "Clickin/SQLB
 
 test("publication requires both exact workflow successes, not one or incomplete evidence", async () => {
   for (const missing of requiredReleaseWorkflows) {
+    // oxlint-disable-next-line no-await-in-loop -- Complete each missing-workflow failure before exercising the next evidence case.
     await assert.rejects(
       assertReleaseWorkflows(env, async (url) => {
         const path = requiredReleaseWorkflows.find((value) => url.pathname.includes(value.split("/").at(-1)!))!;

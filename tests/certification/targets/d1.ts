@@ -321,7 +321,7 @@ export function createD1Target(
         "BRAID_CALL_UNSUPPORTED",
         () => stats.prepares,
       );
-      const options: Readonly<
+      const transactionOptions: Readonly<
         Record<
           string,
           { readonly value: Parameters<NonNullable<CertificationFixture["db"]["tx"]>>[0]; readonly feature: string }
@@ -360,7 +360,7 @@ export function createD1Target(
         },
         TX033: { value: { isolation: "serializable", readOnly: false }, feature: "transaction.isolation.serializable" },
       };
-      for (const [id, option] of Object.entries(options))
+      for (const [id, option] of Object.entries(transactionOptions))
         unsupported[id as CertificationCaseId] = probe(
           () => db.tx(option.value, async () => undefined),
           option.feature,

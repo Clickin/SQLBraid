@@ -1050,6 +1050,7 @@ export function createBulkBindingDescription(
           };
     const statement = {
       ...logical.statement,
+      // oxlint-disable-next-line oxc/no-map-spread -- Each bulk item needs its own values without mutating shared readonly parameters.
       parameters: logical.statement.parameters.map((parameter, parameterIndex) => ({
         ...parameter,
         value: values[parameterIndex],

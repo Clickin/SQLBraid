@@ -60,6 +60,7 @@ async function finishAsync(
   }
   for (let index = nextIndex; index < pending.length; index += 1) {
     try {
+      // oxlint-disable-next-line no-await-in-loop -- Cleanup must complete sequentially in LIFO order.
       await pending[index]!();
     } catch (error) {
       failures.push(error);
@@ -90,6 +91,7 @@ export function createCleanupScope(): CleanupScope {
       if (inFlight !== undefined) return inFlight;
       if (state !== "open") return;
       state = "running";
+      // oxlint-disable-next-line unicorn/no-array-reverse -- Consume this owned action array in LIFO order without copying.
       const pending = actions.reverse();
       actions = [];
       const failures: unknown[] = [];

@@ -318,6 +318,7 @@ const targetModules = (
 /** Read the build-time manifest shared by CI and the documentation UI. */
 export function loadSupportMatrix(): SupportMatrixData {
   const targets = Object.keys(targetModules)
+    // eslint-disable-next-line unicorn/no-array-sort -- Object.keys() produces an owned temporary array.
     .sort()
     .map((name) => targetModules[name]!);
   return { ...manifest, targets };

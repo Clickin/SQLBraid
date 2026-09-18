@@ -325,7 +325,7 @@ export async function validateSupport({ root = scriptRoot } = {}) {
     }
     const numericContracts = Object.values(target.numeric);
     const numericProfiles = [
-      ...new Set(numericContracts.map((contract) => contract.profile).filter((profile) => profile !== undefined)),
+      ...new Set(numericContracts.map((contract) => contract.profile).filter((profileId) => profileId !== undefined)),
     ];
     if (
       numericProfiles.length === 1 &&

@@ -580,10 +580,8 @@ test("a pending stream is tracked before observers and cannot acquire after sess
   await assert.rejects(
     () =>
       db.session(async (session) => {
-        pending = session
-          .stream(sql.rows`SELECT pending`)
-          [Symbol.asyncIterator]()
-          .next();
+        const stream = session.stream(sql.rows`SELECT pending`);
+        pending = stream[Symbol.asyncIterator]().next();
         await observerStarted.promise;
         setImmediate(observerGate.resolve);
       }),

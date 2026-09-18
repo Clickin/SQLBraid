@@ -549,16 +549,21 @@ async function createFixture(): Promise<CertificationFixture> {
     const writeOptionState = sql.command`UPDATE ${sql.ident(TABLE)} SET value = 'written' ORDER BY id LIMIT 1`;
     const dirtyOptionState = sql.command`UPDATE ${sql.ident(TABLE)} SET value = 'dirty' ORDER BY id LIMIT 1`;
     const openWitness = async (): Promise<{ readonly connection: MariaDbConnectionLike; readonly db: Database }> => {
-      const connection = (await mariadb.createConnection(connectorOptions())) as unknown as MariaDbConnectionLike;
+      const witnessConnection = (await mariadb.createConnection(
+        connectorOptions(),
+      )) as unknown as MariaDbConnectionLike;
       try {
-        await (connection.query ?? connection.execute).call(connection, "SET SESSION innodb_lock_wait_timeout = 1");
+        await (witnessConnection.query ?? witnessConnection.execute).call(
+          witnessConnection,
+          "SET SESSION innodb_lock_wait_timeout = 1",
+        );
       } catch (error) {
-        await connection.end?.();
+        await witnessConnection.end?.();
         throw error;
       }
       return {
-        connection,
-        db: createMariaDbDatabase(connection, { profile: MARIADB_LOSSLESS_TEXT }),
+        connection: witnessConnection,
+        db: createMariaDbDatabase(witnessConnection, { profile: MARIADB_LOSSLESS_TEXT }),
       };
     };
     const runProof = async (proof: () => Promise<void>): Promise<void> => {
@@ -939,14 +944,14 @@ async function createFixture(): Promise<CertificationFixture> {
       },
       "data.temporal-native": {
         prove: async () => {
-          const nativeConnection = await mariadb.createConnection(connectorOptions({ dateStrings: false }));
+          const temporalConnection = await mariadb.createConnection(connectorOptions({ dateStrings: false }));
           try {
-            const nativeDb = createMariaDbDatabase(nativeConnection, { profile: MARIADB_NATIVE });
+            const nativeDb = createMariaDbDatabase(temporalConnection, { profile: MARIADB_NATIVE });
             const row = await nativeDb.one(queries.fidelity!.temporal);
             if (!((row as { readonly value?: unknown }).value instanceof Date))
               throw new Error("MariaDB temporal native guard failed.");
           } finally {
-            await nativeConnection.end();
+            await temporalConnection.end();
           }
         },
       },
@@ -978,6 +983,7 @@ async function createFixture(): Promise<CertificationFixture> {
     close: async () => {
       await nativeQuery("DROP PROCEDURE IF EXISTS braid_rc3_mariadb_lob").catch(() => undefined);
       await pool.query(`DROP TABLE IF EXISTS ${JSON_TABLE}`);
+      // eslint-disable-next-line no-await-in-loop -- Close fault connections in order before the shared connection and pool.
       for (const fault of faultConnections) await Promise.resolve(fault.end?.()).catch(() => undefined);
       await nativeConnection.end?.();
       await pool.end();

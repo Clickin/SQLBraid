@@ -203,8 +203,8 @@ test("MariaDB stream cleanup closes exactly once after iterator initialization f
   const executor = createMariaDbExecutor(connection);
   await assert.rejects(
     async () => {
-      for await (const _row of executor.stream(sql.rows`SELECT id FROM t`.render())) {
-        void _row;
+      for await (const row of executor.stream(sql.rows`SELECT id FROM t`.render())) {
+        void row;
       }
     },
     (error: unknown) => {
@@ -247,11 +247,11 @@ test("MariaDB stream abort destroys the connection exactly once", async () => {
   const executor = createMariaDbExecutor(connection);
   await assert.rejects(
     async () => {
-      for await (const _row of executor.stream(sql.rows`SELECT id FROM t`.render(), undefined, {
+      for await (const row of executor.stream(sql.rows`SELECT id FROM t`.render(), undefined, {
         signal: controller.signal,
       })) {
         controller.abort(abortError);
-        void _row;
+        void row;
       }
     },
     (error: unknown) =>

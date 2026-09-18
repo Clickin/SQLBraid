@@ -462,6 +462,7 @@ test("built stdio server routes workspace symbols across multiple roots", async 
   const alphaRoot = join(root, "alpha");
   const betaRoot = join(root, "beta");
   await Promise.all([mkdir(alphaRoot), mkdir(betaRoot)]);
+  // oxlint-disable-next-line consistent-function-scoping -- This metadata builder belongs to the two-root routing fixture, not the shared protocol harness.
   const snapshot = (name: string): MetadataSnapshot => ({
     format: "sqlbraid-metadata",
     formatVersion: 1,

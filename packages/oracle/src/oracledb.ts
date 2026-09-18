@@ -1040,7 +1040,7 @@ function executionBinding(
   return { description: binding, binds };
 }
 
-function executeOptions(
+function resolveExecuteOptions(
   options: OracleDatabaseOptions,
   driver: OracleDriverLike,
   resultSet = false,
@@ -1064,7 +1064,7 @@ function executeOptions(
   };
 }
 
-function streamFetchSize(options: OracleDatabaseOptions): number {
+function resolveStreamFetchSize(options: OracleDatabaseOptions): number {
   const value = options.streamFetchSize;
   if (value === undefined) return 100;
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -1427,7 +1427,7 @@ function makeOracledbExecutor(
   const driver = options.driver ?? defaultDriver;
   let transactionActive = false;
   const control = async (text: string): Promise<void> => {
-    await connection.execute(text, [], executeOptions(options, driver, false, true));
+    await connection.execute(text, [], resolveExecuteOptions(options, driver, false, true));
   };
   const begin = async (transactionOptions?: TransactionOptions): Promise<void> => {
     validateOracleTransactionOptions(transactionOptions);
@@ -1513,7 +1513,7 @@ function makeOracledbExecutor(
             await connection.execute(
               execution.description.parameterizedSql!,
               execution.binds,
-              executeOptions(options, driver, false, transactionActive),
+              resolveExecuteOptions(options, driver, false, transactionActive),
             ),
           );
           const returning = await normalizeDmlReturning(rendered, result, policy, executionOptions?.signal);
@@ -1554,7 +1554,7 @@ function makeOracledbExecutor(
       const cleanupScope = createCleanupScope();
       let failure: unknown;
       let hasFailure = false;
-      let value: DriverRoutineResult | undefined;
+      let routineResult: DriverRoutineResult | undefined;
       try {
         await executeWithCancellation(
           connection,
@@ -1563,7 +1563,7 @@ function makeOracledbExecutor(
               await connection.execute(
                 execution.description.parameterizedSql!,
                 execution.binds,
-                executeOptions(options, driver, true, transactionActive),
+                resolveExecuteOptions(options, driver, true, transactionActive),
               ),
             );
             const implicit = Array.isArray(result.implicitResults) ? result.implicitResults : [];
@@ -1717,7 +1717,7 @@ function makeOracledbExecutor(
                 source: { kind: "emitted", index: 0 },
               });
             }
-            value = { output, resultSets };
+            routineResult = { output, resultSets };
           },
           executionOptions,
         );
@@ -1727,7 +1727,7 @@ function makeOracledbExecutor(
       }
       if (!hasFailure) await cleanupScope.run();
       else await cleanupScope.run(failure);
-      return value!;
+      return routineResult!;
     },
     async *stream<Row>(
       rendered: RenderedStatement,
@@ -1747,7 +1747,7 @@ function makeOracledbExecutor(
               await connection.execute(
                 execution.description.parameterizedSql!,
                 execution.binds,
-                executeOptions(options, driver, true, transactionActive),
+                resolveExecuteOptions(options, driver, true, transactionActive),
               ),
             );
             if (created.resultSet) cleanupScope.add(() => created.resultSet!.close());
@@ -1905,7 +1905,7 @@ export function createOracledbExecutor(
       ...options,
       stmtCacheSize: connection.stmtCacheSize,
     }),
-    streamFetchSize(options),
+    resolveStreamFetchSize(options),
   );
 }
 
@@ -1921,7 +1921,7 @@ export function createOracledbPoolProvider(
   pool: OraclePoolLike,
   options: Omit<OracleDatabaseOptions, "observers"> = {},
 ): ConnectionProvider {
-  const fetchSize = streamFetchSize(options);
+  const fetchSize = resolveStreamFetchSize(options);
   const bindingAdapter = createBinding({
     ...options,
     stmtCacheSize: pool.stmtCacheSize,

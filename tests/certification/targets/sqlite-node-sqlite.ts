@@ -90,6 +90,7 @@ function createFixture(streamSupported = true): Promise<CertificationFixture> {
       },
     ],
   });
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- Keep this isolated destructive probe with its fixture.
   const transactionCleanup = async (): Promise<void> => {
     const probeNative = new DatabaseSync(":memory:");
     probeNative.exec("CREATE TABLE cert_probe (value TEXT NOT NULL)");

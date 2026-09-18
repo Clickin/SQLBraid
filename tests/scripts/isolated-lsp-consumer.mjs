@@ -72,6 +72,7 @@ const waitFor = async (id) => {
   while (Date.now() < deadline) {
     const found = messages.find((message) => message.id === id);
     if (found) return found;
+    // eslint-disable-next-line no-await-in-loop -- Poll the asynchronously filled response queue without busy-waiting.
     await new Promise((resolveWait) => setTimeout(resolveWait, 10));
   }
   throw new Error(`Timed out waiting for isolated LSP response ${id}`);

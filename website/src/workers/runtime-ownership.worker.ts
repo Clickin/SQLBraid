@@ -98,7 +98,7 @@ async function run(): Promise<OwnershipSuccess> {
   const mapperFailure = new Error("mapper re-entry was accepted");
   await (async () => {
     try {
-      for await (const _row of db.stream(sql.rows`SELECT id FROM ownership ORDER BY id`, {
+      for await (const row of db.stream(sql.rows`SELECT id FROM ownership ORDER BY id`, {
         schema: {
           "~standard": {
             version: 1,
@@ -115,7 +115,7 @@ async function run(): Promise<OwnershipSuccess> {
           },
         },
       }))
-        void _row;
+        void row;
       throw mapperFailure;
     } catch (error) {
       if (error !== mapperFailure && !hasCode(error, "BRAID_STREAM_SCOPE")) throw error;
@@ -123,6 +123,7 @@ async function run(): Promise<OwnershipSuccess> {
   })();
   checks.push("mapper-reentry");
 
+  // eslint-disable-next-line no-underscore-dangle -- The unused row intentionally tests cleanup on the first yield.
   for await (const _row of db.stream(sql.rows`SELECT id FROM ownership ORDER BY id`)) break;
   await db.execute(sql.command`UPDATE ownership SET value = ${"after-break"} WHERE id = ${2}`);
   checks.push("break-cleanup");
@@ -130,7 +131,7 @@ async function run(): Promise<OwnershipSuccess> {
   const streamFailure = new Error("stream failure");
   await (async () => {
     try {
-      for await (const _row of db.stream(sql.rows`SELECT id FROM ownership ORDER BY id`, {
+      for await (const row of db.stream(sql.rows`SELECT id FROM ownership ORDER BY id`, {
         schema: {
           "~standard": {
             version: 1,
@@ -141,7 +142,7 @@ async function run(): Promise<OwnershipSuccess> {
           },
         },
       }))
-        void _row;
+        void row;
     } catch (error) {
       if (error !== streamFailure) throw error;
     }

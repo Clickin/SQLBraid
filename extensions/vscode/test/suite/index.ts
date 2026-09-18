@@ -6,10 +6,12 @@ import * as vscode from "vscode";
 async function waitFor<T>(read: () => Promise<T | undefined>, description: string): Promise<T> {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop -- Poll only after the preceding read has completed.
     const value = await read();
     if (value !== undefined) return value;
     const { promise, resolve } = Promise.withResolvers<void>();
     setTimeout(resolve, 100);
+    // eslint-disable-next-line no-await-in-loop -- Keep the polling interval between completed attempts.
     await promise;
   }
   throw new Error(`Timed out waiting for ${description}`);
@@ -37,6 +39,9 @@ function completionLabels(
 ): readonly string[] {
   return completionItems(value).map((item) => (typeof item.label === "string" ? item.label : item.label.label));
 }
+
+const isUsersRelation = (item: vscode.CompletionItem): boolean =>
+  item.label === "users" && item.kind === vscode.CompletionItemKind.Class && item.detail === "table";
 
 export async function run(): Promise<void> {
   const extension = vscode.extensions.getExtension("sqlbraid.sqlbraid-vscode");
@@ -132,6 +137,7 @@ export async function run(): Promise<void> {
         usersPosition,
       );
       for (const location of locations ?? []) {
+        // eslint-disable-next-line no-await-in-loop -- Return the first matching location without reading later paths.
         if ((await realpath(location.uri.fsPath)) === generatedRealPath) return location;
       }
       return undefined;
@@ -200,8 +206,6 @@ export async function run(): Promise<void> {
   const sqlCompletionPosition = sqlCompletionDocument.positionAt(
     sqlCompletionSource.indexOf("public.") + "public.".length,
   );
-  const isUsersRelation = (item: vscode.CompletionItem): boolean =>
-    item.label === "users" && item.kind === vscode.CompletionItemKind.Class && item.detail === "table";
   const sqlCompletion = await waitFor(async () => {
     const value = await vscode.commands.executeCommand<vscode.CompletionList | readonly vscode.CompletionItem[]>(
       "vscode.executeCompletionItemProvider",

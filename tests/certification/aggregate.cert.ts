@@ -10,6 +10,7 @@ async function files(directory: string): Promise<string[]> {
   const result: string[] = [];
   for (const entry of entries) {
     const path = join(directory, entry.name);
+    // eslint-disable-next-line no-await-in-loop -- Depth-first traversal bounds directory reads to one in flight.
     if (entry.isDirectory()) result.push(...(await files(path)));
     else if (entry.name.endsWith(".json") && entry.name !== "aggregate.json") result.push(path);
   }

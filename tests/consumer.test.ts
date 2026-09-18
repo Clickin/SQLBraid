@@ -78,6 +78,7 @@ test("public package exports resolve in an external consumer directory", async (
 test("packed consumer types require explicit prepared factory modes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "sqlbraid-prepared-consumer-"));
   await mkdir(join(directory, "node_modules", "@sqlbraid"), { recursive: true });
+  // oxlint-disable-next-line no-await-in-loop -- Link the consumer fixture serially so setup failures stop before later package work.
   for (const name of ["core", "template"]) await linkPackage(directory, name);
   await writeFile(join(directory, "package.json"), '{"type":"module"}\n');
   await writeFile(

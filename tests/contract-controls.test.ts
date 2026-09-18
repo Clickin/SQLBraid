@@ -321,7 +321,7 @@ function sqliteFixture(kind: "node-sqlite" | "better-sqlite3" | "sqlite-wasm"): 
       : kind === "better-sqlite3"
         ? createBetterSqlite3Database(native)
         : createSqliteWasmDatabase(native);
-  return fixture(state, db, false, (db) => db.execute(sqlite.command`UPDATE contract_rows SET value = 1`));
+  return fixture(state, db, false, (scope) => scope.execute(sqlite.command`UPDATE contract_rows SET value = 1`));
 }
 
 function libsqlFixture(): TransactionFaultHarness {
@@ -414,6 +414,7 @@ for (const transport of ["pg", "mysql2", "mariadb"] as const) {
               ? mysqlFixture(pooled, state)
               : mariaFixture(pooled, state);
         const options = readOnly === undefined ? {} : { readOnly };
+        // oxlint-disable-next-line no-await-in-loop -- Finish and inspect each access-mode transaction before starting the next case.
         assert.equal(await harness.db.tx(options, async () => "committed"), "committed");
         const mode = readOnly === true ? "READ ONLY" : readOnly === false ? "READ WRITE" : undefined;
         assert.deepEqual(

@@ -451,6 +451,7 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
             code: "BRAID_RESOURCE_CLEANUP",
           });
           if (failed)
+            // oxlint-disable-next-line eslint/preserve-caught-error -- Cleanup retains cause; the read failure remains the aggregate's primary cause.
             throw new AggregateError([readError, cleanup], "SQLite read and cleanup failed.", { cause: readError });
           throw cleanup;
         }

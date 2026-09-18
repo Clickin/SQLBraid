@@ -82,6 +82,7 @@ async function assertSessionPrepareAndOptions(db, tag, identityQuery, prefix) {
       const options = capabilitySupported(environment, "transaction.read-only")
         ? { isolation, readOnly: true }
         : { isolation };
+      // eslint-disable-next-line no-await-in-loop -- Isolation scenarios reuse one pinned session and must finish each transaction before starting another.
       await session.tx(options, async (tx) => {
         ids.push(await tx.one(identityQuery));
       });

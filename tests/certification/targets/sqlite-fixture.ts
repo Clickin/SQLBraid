@@ -515,6 +515,8 @@ export interface SqliteFixtureOptions {
   readonly transactionCleanup?: () => Promise<void>;
 }
 
+const bulkFactory = (input: unknown): CommandQuery => sql.command`INSERT INTO cert_items (value) VALUES (${input})`;
+
 export function createSqliteFixture(options: SqliteFixtureOptions): CertificationFixture {
   type MutableQueries = Omit<CertificationQueries, "prepared"> & {
     prepared: NonNullable<CertificationQueries["prepared"]>;
@@ -559,7 +561,6 @@ export function createSqliteFixture(options: SqliteFixtureOptions): Certificatio
         largeResultCount: 20,
       }
     : undefined;
-  const bulkFactory = (input: unknown): CommandQuery => sql.command`INSERT INTO cert_items (value) VALUES (${input})`;
   const bulk: BulkConformanceFixture<unknown> = {
     db: options.db,
     inputs: [1, 2],

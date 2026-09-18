@@ -82,6 +82,7 @@ test("command metadata keeps non-negative safe count checks", async () => {
     [{}, Number.MAX_SAFE_INTEGER + 1],
   ] as const) {
     const db = createDatabase(commandExecutor(command, undefined, rowCount));
+    // oxlint-disable-next-line no-await-in-loop -- Finish each invalid-count case before creating the next database fixture.
     await assert.rejects(
       () => db.execute(sql.command`UPDATE records SET active = TRUE`),
       (error: unknown) => error instanceof ResultExactnessError && error.code === "BRAID_RESULT_EXACTNESS",

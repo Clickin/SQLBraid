@@ -85,6 +85,7 @@ export function createMariaDbInspector(connection: MariaDbConnectionLike): Metad
         const identity = qualifiedIdentity(schema, name);
         const columns = columnRows
           .filter((column) => text(column, "table_schema") === schema && text(column, "table_name") === name)
+          // oxlint-disable-next-line oxc/no-map-spread -- These spreads build optional snapshot fields, not copies of catalog rows.
           .map((column) => {
             const dataType = text(column, "data_type") ?? "unknown";
             const extra = text(column, "extra");
@@ -122,6 +123,7 @@ export function createMariaDbInspector(connection: MariaDbConnectionLike): Metad
         if (longTextColumns.length > 0) {
           const selection = longTextColumns.map((column) => dialect.quoteIdentifier(column.name)).join(", ");
           const qualifiedName = `${dialect.quoteIdentifier(schema)}.${dialect.quoteIdentifier(name)}`;
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Probe tables sequentially on the same physical connection.
           const result = await connection.execute(`SELECT ${selection} FROM ${qualifiedName} LIMIT 0`, []);
           if (!Array.isArray(result))
             throw new Error("MARIADB_INSPECT_RESULT: column metadata query did not return rows.");
