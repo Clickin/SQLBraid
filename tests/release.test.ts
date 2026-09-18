@@ -197,7 +197,7 @@ test("package-specific staging validates the full candidate but uploads only the
   );
   assert.equal(f.uploads().length, 1);
   assert.match(f.uploads()[0][2], /package-1\.tgz$/u);
-  assert.equal(result?.packages[0].tag, "release-1.0.1");
+  assert.equal(result?.packages[0].tag, "latest");
 });
 
 test("package-specific staging permits unrelated workspace packages at different versions", async () => {
@@ -424,17 +424,20 @@ test("post-approval verification needs no tarballs and rejects missing packages,
   assert.equal(f.uploads().length, 1);
 });
 
-test("stable post-approval verification reports but never executes latest promotion", async () => {
+test("stable staging requests latest and post-approval verification requires it", async () => {
   const f = await fixture("0.1.0");
-  await f.run();
+  const staged = await f.run();
+  assert.equal(staged?.packages[0].tag, "latest");
+  const [args] = f.uploads();
+  assert.equal(args[args.indexOf("--tag") + 1], "latest");
+
   const evidence = await f.evidence();
   const [entry] = f.manifest.packages;
   f.publicIntegrity.set(entry.name, entry.integrity);
-  f.tags.get(entry.name)!["release-0.1.0"] = "0.1.0";
-  await verifyPublished(f.manifest, evidence);
-  await assert.rejects(verifyPublished(f.manifest, evidence, { requireLatest: true }), /Registry latest/);
+  await assert.rejects(verifyPublished(f.manifest, evidence), /Registry tag .*:latest/);
+
   f.tags.get(entry.name)!.latest = "0.1.0";
-  await verifyPublished(f.manifest, evidence, { requireLatest: true });
+  await verifyPublished(f.manifest, evidence);
   assert.equal(
     f.calls.some(([command]) => command === "dist-tag"),
     false,
