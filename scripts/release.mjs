@@ -1028,6 +1028,7 @@ async function main() {
       "pack",
       "pack-only",
       "stage-dry-run",
+      "stage-preflight",
       "stage",
       "verify-published",
       "durable-evidence",
@@ -1037,9 +1038,9 @@ async function main() {
     throw new Error(`Unknown release script mode ${mode}; full certify is a workflow mode.`);
   const priorEvidencePath = option("--prior-staged-publication");
   const priorCandidateRunId = option("--prior-candidate-run-id");
-  if (priorEvidencePath && mode !== "stage")
+  if (priorEvidencePath && !["stage-preflight", "stage"].includes(mode))
     throw new Error("Prior staged evidence is accepted only for explicit staging reconciliation.");
-  if (priorCandidateRunId && !["stage", "stage-dry-run"].includes(mode))
+  if (priorCandidateRunId && !["stage-preflight", "stage", "stage-dry-run"].includes(mode))
     throw new Error("Prior candidate identity is accepted only for staging or staging certification.");
   if (mode === "durable-evidence") {
     const manifestPath = resolve(option("--manifest", join(artifactDir, "release-manifest.json")));
@@ -1088,25 +1089,31 @@ async function main() {
     await pack(packages, order, sha, releaseNames);
     return;
   }
-  if (mode === "stage") {
-    assertMutationAuthorization(mode);
-    assertPublicationCredentials(mode);
+  if (mode === "stage-preflight" || mode === "stage") {
+    assertMutationAuthorization("stage");
     if (!artifactArgument) throw new Error("Staging requires --artifact-dir pointing at validated release artifacts.");
   }
+  if (mode === "stage") {
+    assertPublicationCredentials(mode);
+    if (process.env.SQLBRAID_STAGE_PREFLIGHT_VERIFIED !== "true")
+      throw new Error("stage requires a successful stage-preflight step in the same official workflow job.");
+  }
   await assertCleanTree();
-  const sha = mode === "stage" ? await assertTaggedSha() : await currentSha();
+  const sha = mode === "stage-preflight" || mode === "stage" ? await assertTaggedSha() : await currentSha();
   const manifest = await readReleaseManifest(artifactDir, {
     priorCandidateRunId,
-    allowCurrentAttemptMismatch: mode === "stage" || mode === "stage-dry-run",
+    allowCurrentAttemptMismatch: mode === "stage-preflight" || mode === "stage" || mode === "stage-dry-run",
   });
   if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate commit.");
   assertManifestOrder(manifest, order);
   if (JSON.stringify(manifest.releasePackages) !== JSON.stringify(releaseNames))
     throw new Error("Validated release artifacts do not match the selected release package.");
   const priorEvidence = priorEvidencePath ? await json(resolve(priorEvidencePath)) : undefined;
-  if (mode === "stage") {
+  if (mode === "stage-preflight") {
     await assertReleaseWorkflows();
     await assertNoPriorStageAttempt(process.env, fetch, { allowReconciliation: Boolean(priorEvidence) });
+    process.stdout.write("Verified exact-tag workflow evidence and prior staging history; npm mutation remains untouched.\n");
+    return;
   }
   await stageCandidates(manifest, {
     dryRun: mode === "stage-dry-run",
