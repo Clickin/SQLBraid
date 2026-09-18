@@ -66,7 +66,7 @@ function releaseCandidateTag(packageName = releasePackage, releaseVersion = vers
 }
 
 function releaseTag(releaseVersion = version) {
-  return parseSemver(releaseVersion).isPrerelease ? "next" : `release-${releaseVersion}`;
+  return parseSemver(releaseVersion).isPrerelease ? "next" : "latest";
 }
 
 function selectReleasePackages(packages, selector = releasePackage) {
@@ -992,7 +992,7 @@ function assertStagingEvidence(
   }
 }
 
-async function verifyPublished(manifest, evidence, { requireLatest = false } = {}) {
+async function verifyPublished(manifest, evidence) {
   assertManifestIdentity(manifest);
   assertStagingEvidence(manifest, evidence, { expectedRunId: evidence.runId, expectedRunAttempt: evidence.runAttempt });
   await assertPnpmVersion();
@@ -1004,10 +1004,11 @@ async function verifyPublished(manifest, evidence, { requireLatest = false } = {
     const entrySemver = parseSemver(entry.version);
     if (tags[requestedTag] !== entry.version)
       throw new Error(`Registry tag ${entry.name}:${requestedTag} does not point at ${entry.version}.`);
-    if (!entrySemver.isPrerelease && requireLatest) {
-      if (tags.latest !== entry.version)
-        throw new Error(`Registry latest for ${entry.name} does not point at ${entry.version}.`);
-    } else assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
+    if (entrySemver.isPrerelease) {
+      assertLatestUnchanged(evidence.latestBefore[entry.name], tags, entry.name);
+    } else if (tags.latest !== entry.version) {
+      throw new Error(`Registry latest for ${entry.name} does not point at ${entry.version}.`);
+    }
     const attestations = await pnpmView(`${entry.name}@${entry.version}`, "dist.attestations");
     if (typeof attestations?.url !== "string" || !attestations.provenance?.predicateType)
       throw new Error(`Public provenance metadata missing for ${entry.name}@${entry.version}.`);
@@ -1015,15 +1016,6 @@ async function verifyPublished(manifest, evidence, { requireLatest = false } = {
   process.stdout.write(
     `Verified ${releaseEntries.length} release package(s) publicly: candidate integrity, requested tags, provenance metadata, and latest policy.\n`,
   );
-  const stableEntries = releaseEntries.filter((entry) => !parseSemver(entry.version).isPrerelease);
-  if (stableEntries.length > 0 && !requireLatest) {
-    process.stdout.write(
-      "Stable release packages are public. Immediately recheck latest for concurrent releases before these manual promotions:\n",
-    );
-    for (const entry of stableEntries)
-      process.stdout.write(`pnpm dist-tag add ${entry.name}@${entry.version} latest --registry ${registry}\n`);
-    process.stdout.write("Then rerun verify-published --require-latest. No dist-tag was changed by this helper.\n");
-  }
 }
 
 async function main() {
@@ -1071,7 +1063,7 @@ async function main() {
     const manifest = await json(resolve(option("--manifest", join(artifactDir, "release-manifest.json"))));
     const evidence = await json(resolve(option("--staged-publication", join(artifactDir, "staged-publication.json"))));
     setReleaseVersion(manifest.version);
-    await verifyPublished(manifest, evidence, { requireLatest: process.argv.includes("--require-latest") });
+    await verifyPublished(manifest, evidence);
     return;
   }
   const packages = await packageManifests();
