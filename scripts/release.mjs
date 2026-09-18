@@ -1099,12 +1099,10 @@ async function main() {
       throw new Error("stage requires a successful stage-preflight step in the same official workflow job.");
   }
   await assertCleanTree();
-  const sha =
-    mode === "stage-preflight" || mode === "stage" ? await assertTaggedSha() : await currentSha();
+  const sha = mode === "stage-preflight" || mode === "stage" ? await assertTaggedSha() : await currentSha();
   const manifest = await readReleaseManifest(artifactDir, {
     priorCandidateRunId,
-    allowCurrentAttemptMismatch:
-      mode === "stage-preflight" || mode === "stage" || mode === "stage-dry-run",
+    allowCurrentAttemptMismatch: mode === "stage-preflight" || mode === "stage" || mode === "stage-dry-run",
   });
   if (manifest.commit !== sha) throw new Error("Validated release artifacts do not match this candidate commit.");
   assertManifestOrder(manifest, order);
