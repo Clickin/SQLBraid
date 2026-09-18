@@ -901,15 +901,27 @@ jobs:
           run-id: ${{ inputs.prior_run_id }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-      - name: Stage validated tarballs with pnpm provenance
+      - name: Verify npm staging preconditions
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
         shell: bash
         run: |
-          args=(node scripts/release.mjs --mode stage --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
+          args=(node scripts/release.mjs --mode stage-preflight --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
           if [[ -n "$PRIOR_RUN_ID" ]]; then
             [[ "$PRIOR_RUN_ID" =~ ^[0-9]+$ ]] || { echo "prior_run_id must be numeric."; exit 1; }
+            args+=(--prior-candidate-run-id "$PRIOR_RUN_ID"
+              --prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json")
+          fi
+          "${args[@]}"
+      - name: Mutate npm staging with pnpm OIDC
+        env:
+          SQLBRAID_STAGE_PREFLIGHT_VERIFIED: "true"
+          PRIOR_RUN_ID: ${{ inputs.prior_run_id }}
+        shell: bash
+        run: |
+          args=(node scripts/release.mjs --mode stage --artifact-dir "$RUNNER_TEMP/sqlbraid-release-artifacts")
+          if [[ -n "$PRIOR_RUN_ID" ]]; then
             args+=(--prior-candidate-run-id "$PRIOR_RUN_ID"
               --prior-staged-publication "$RUNNER_TEMP/prior-staged-evidence/staged-publication.json")
           fi
