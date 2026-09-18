@@ -8,21 +8,16 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 
 ## 1.0.0
 
-- Establish the GA contract: SQL-first authoring, safe value binds, explicit
+- Released 1.0.0 GA: SQL-first authoring, safe value binds, explicit
   row/command/call result kinds, and Standard Schema result mapping. Stable
   contracts do not imply universal capabilities across drivers.
-- Preserve physical session and transaction ownership, nested savepoints,
+- Standardized physical session and transaction ownership, nested savepoints,
   expiring scoped handles, and once-only prepared rendering with logical
   shape checks before I/O.
-- Preserve exact integer/decimal strings and approximate IEEE numbers;
-  JSON, temporal, and container fidelity remain separate evidence boundaries.
-- Require semantic integration and native-fault contract evidence alongside
-  exact database/driver/profile/runtime/capability tuples. Historical
-  certification does not cover a changed final revision, including
-  documentation-only or evidence-only commits.
-- Keep routine limits explicit: mysql2 emitted `CALL` sets are supported,
-  OUT/INOUT descriptor carriers are not; SQLite `db.call` / `routine.call`
-  is unsupported, and `callStream` remains reserved and unimplemented.
+- Standardized exact integer/decimal strings and approximate IEEE numbers;
+  JSON, temporal, and container fidelity are handled by separate profiles.
+- Support is based on exact database/driver/profile/runtime/capability tuples.
+- Routine limits: mysql2 emitted `CALL` sets are supported, but OUT/INOUT descriptor carriers are not; SQLite `db.call` / `routine.call` is unsupported, and `callStream` remains reserved and unimplemented.
 - Bun 1.3.14 MySQL/MariaDB reject both explicit `readOnly` booleans before
   I/O; omission preserves the native default. Bun PostgreSQL access modes
   remain separate. PostgreSQL and Bun PostgreSQL reject `COMMIT` outcomes
@@ -30,10 +25,6 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 - Retain Oracle auto-commit outside managed transactions and propagate
   Tedious savepoint rollback failures without returning uncertain resources
   as healthy.
-- Keep immutable npm tarball validation/staging separate from VSIX validation
-  and publication. Stable staging uses temporary `release-1.0.0`; human
-  approval, integrity/provenance verification, and `latest` promotion remain
-  separate release steps.
 
 ## 1.0.0-rc.2 (historical candidate)
 

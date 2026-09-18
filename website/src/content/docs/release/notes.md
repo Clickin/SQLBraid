@@ -4,14 +4,10 @@ description: The SQLBraid 1.0.0 GA contract and its capability and evidence boun
 ---
 
 This is SQLBraid 1.0.0 GA documentation. GA stabilizes the public contracts, not
-every capability on every driver. It does not authorize npm, GitHub, VS Code
-Marketplace, or Pages publication.
+every capability on every driver.
 
-The [runtime and driver support matrix](/SQLBraid/reference/support/) records
-support labels for the exact database/driver/profile/runtime/capability tuple
-and its revision and workflow evidence. A neighboring version or package
-installation is not certification. Final exact-SHA Runtime, Docs, and Release
-gates and explicit release authorization remain separate requirements.
+The [runtime and driver support matrix](/SQLBraid/reference/support/) lists
+the supported database, driver, profile, runtime, and capability combinations.
 
 ## Included contract
 
@@ -45,7 +41,6 @@ gates and explicit release authorization remain separate requirements.
   thin editor integration;
 - exact database integers/decimals as canonical strings and approximate IEEE
   values as numbers, with independent JSON/temporal/container profiles.
-
 ## Explicit unsupported behavior
 
 `UnsupportedFeatureError(feature, code, message, options?)` carries stable
@@ -82,34 +77,4 @@ models or hydrate object graphs. DML `RETURNING`/`OUTPUT` is materialized unless
 the selected adapter's exact evidence says otherwise. Metadata is open-world
 positive evidence.
 
-A release requires one clean exact revision, executable tuple/capability
-coverage, bilingual documentation freshness, package/export checks, and an
-immutable release dry-run. User acceptance and explicit release authorization
-are separate gates.
-
-## npm and VS Code artifact guarantees
-
-The **Release** workflow packs and validates npm tarballs. Its
-`release-manifest.json` records package filenames, SHA-256 and SHA-512
-integrity; `pack-check-success.json` binds package names and SHA-256 values to
-the version and source commit. It sets `SQLBRAID_SKIP_VSIX=true`.
-Prior-run recovery restores the original npm candidate, manifest, stamp and
-prepared build, not a VSIX. The npm draft GitHub Release attaches the manifest,
-staged-publication report and durable release-evidence summary, not an extension.
-
-The separately dispatched **VS Code Release** workflow builds and validates
-an exact VSIX, including extension identity, matching bundled CLI/language-server
-versions and a clean editor-profile check. Packaging prints its SHA-256.
-The `sqlbraid-vscode-<version>` artifact is retained for 14 days. Open VSX
-trusted publishing consumes that artifact without rebuilding; Microsoft
-Marketplace upload is a manual handoff of the same VSIX. Keep the VSIX and
-its workflow identity separately: npm manifests, pack-check stamps and prior-run
-recovery do not attest or recover it.
-
-## Translation freshness
-
-English pages are the source content and every tracked page has a Korean pair.
-Change the English and Korean files in the same revision, preserve code/API
-meaning in both languages, and run `node scripts/validate-translations.mjs`.
-The translation registry records the English source digest; stale or missing
-entries block the docs gate. Do not add an opt-out for an ordinary API change.
+Support and release artifacts are validated before publication.

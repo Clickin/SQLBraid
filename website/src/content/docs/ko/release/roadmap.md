@@ -15,9 +15,7 @@ client span 및 duration metric이 포함됩니다.
 
 지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가
 기록한 정확한 database, driver, profile, runtime, capability tuple과 revision별
-실행 workflow에만 적용됩니다. 인접한 버전·runtime·profile·로컬 binding 또는
-package 설치로 인증을 추론하지 마세요. 최종 exact-SHA Runtime, Docs, Release
-gate와 명시적인 release 승인은 별도 요구사항입니다.
+테스트 버전에만 적용됩니다.
 
 Profile descriptor는 driver option, raw/canonical representation, TypePolicy
 provenance를 묶으며 runtime과 codegen은 동일 descriptor를 재사용해야 합니다.
@@ -39,6 +37,3 @@ Cancellation, session, transaction option, prepared input factory, bulk/stream
 숨겨진 fallback이 아니라 명시적인 `UnsupportedFeatureError`로 실패합니다.
 후보가 Official support claim이 되려면 dialect/driver/runtime 의미, 실행 범위,
 package metadata, translation, exact release evidence를 완료해야 합니다.
-
-Pages 배포와 release history에는 명시적인 승인이 필요합니다. 이 로드맵은
-tag, npm 발행 또는 Pages 배포를 의미하지 않습니다.

@@ -139,7 +139,7 @@
       "source": "website/src/content/docs/index.md",
       "translation": "website/src/content/docs/ko/index.md",
       "translationOf": "website/src/content/docs/index.md",
-      "sourceDigest": "a7d293347c1f3c59407dd9e98d1a479c9581e3c2f0b53fb7309df3d87af97228"
+      "sourceDigest": "0b569bb7b6454f29b5d4a68618751e52a677b520db2ce4204c89adc0642c0b99"
     },
     {
       "source": "website/src/content/docs/interactive-preview.mdx",
@@ -199,7 +199,7 @@
       "source": "website/src/content/docs/reference/support.mdx",
       "translation": "website/src/content/docs/ko/reference/support.mdx",
       "translationOf": "website/src/content/docs/reference/support.mdx",
-      "sourceDigest": "19616beb471b526e3ac3940d96453db923f2fb39cc51ecdd92dfa68f48712672"
+      "sourceDigest": "647b520543afb2d884d3da996f3fd0c60f17ab4a63665a70a9847ab3a99b12c9"
     },
     {
       "source": "website/src/content/docs/reference/troubleshooting.md",
@@ -211,19 +211,19 @@
       "source": "website/src/content/docs/release/limitations.md",
       "translation": "website/src/content/docs/ko/release/limitations.md",
       "translationOf": "website/src/content/docs/release/limitations.md",
-      "sourceDigest": "b1342488bfedd6298a4689c228e7df7aeca2623144d5c6ace1da818ad5b39cb4"
+      "sourceDigest": "cff3f58af3572423c51f89bf7aa38f72b59e72ac56dbe6558d154c0fd4bade44"
     },
     {
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "d3f550b53983a7bbb9eaf5fe9cb3635b6533422e5747d3b84d01df1176f6d816"
+      "sourceDigest": "d7fbe2a9af5f4e716ac4d928ca40c0534822c7fa2d60ec6c9950920d6b28f083"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",
       "translation": "website/src/content/docs/ko/release/roadmap.md",
       "translationOf": "website/src/content/docs/release/roadmap.md",
-      "sourceDigest": "2faeb1ca85a58acc8adbe0a133d630a0666fd80ed9a3645a483b42f787769a58"
+      "sourceDigest": "ffdcd8ea34674e674bbac43d676dc5b0b9e4a19ad5181784d32ec3cab6c2e66c"
     },
     {
       "source": "website/src/content/docs/runtime/direct-pools.md",

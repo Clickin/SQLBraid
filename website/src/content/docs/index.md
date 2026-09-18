@@ -37,14 +37,8 @@ runtime can actually receive.
 
 ## Launch documentation
 
-This is the SQLBraid 1.0.0 GA documentation. GA stabilizes the public contracts;
-it does not promise every capability on every driver. The current tree includes
-session/lease ownership, fixed transaction options, prepared input factories,
-capability-driven cancellation, and explicit unsupported errors. Targets
-are documented by the [runtime and driver support matrix](/SQLBraid/reference/support/),
-which records support labels for exact database/driver/profile/runtime/capability
-tuples and their revision and workflow evidence. A neighboring version or
-package installation is not certification. Final exact-SHA Runtime, Docs, and
-Release gates and explicit release authorization remain separate requirements.
-See [release notes and limitations](/SQLBraid/release/notes/) before choosing an
-integration.
+1.0.0 GA stabilizes the public API. Because driver capabilities vary, check the
+[runtime and driver support matrix](/SQLBraid/reference/support/) for the exact
+feature set of your database, driver, and runtime tuple.
+
+See [release notes and limitations](/SQLBraid/release/notes/) for details.

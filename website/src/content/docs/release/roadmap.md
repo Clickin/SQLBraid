@@ -16,9 +16,7 @@ and duration metrics.
 
 The [runtime and driver support matrix](/SQLBraid/reference/support/) records
 support labels for the exact database/driver/profile/runtime/capability tuple
-and its revision and workflow evidence. A neighboring version or package
-installation is not certification. Final exact-SHA Runtime, Docs, and Release
-gates and explicit release authorization remain separate requirements.
+and its tested versions.
 
 Profile descriptors pair driver options, raw/canonical representation, and
 TypePolicy provenance; runtime and codegen must reuse the same descriptor.
@@ -41,7 +39,4 @@ bulk/stream support are current contracts; they are not roadmap candidates.
 Missing capabilities remain explicit `UnsupportedFeatureError` failures rather
 than hidden fallback. A candidate becomes an Official support claim only after
 its dialect/driver/runtime semantics, executable coverage, package metadata,
-translations, and exact release evidence are complete.
-
-Pages deployment and release history require explicit authorization. No tag,
-npm publication, or Pages deployment is implied by this roadmap.
+translations, and integration tests are complete.

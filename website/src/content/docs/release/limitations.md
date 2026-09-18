@@ -3,7 +3,7 @@ title: Current limitations
 description: Know what the 1.0.0 GA contract deliberately does not promise.
 ---
 
-- **Certification is tuple-, revision-, and evidence-specific.** The [runtime and driver support matrix](/SQLBraid/reference/support/) is the canonical evidence source and records the exact database/driver/profile/runtime/capability tuple with its revision and workflow evidence. A neighboring version or package installation is not certification. Final exact-SHA Runtime, Docs, and Release gates and explicit release authorization remain separate requirements. Passing CI does not authorize publication.
+- **Support is based on specific database, driver, and runtime combinations.** The [runtime and driver support matrix](/SQLBraid/reference/support/) is the authoritative source and records the exact database/driver/profile/runtime/capability tuple and its tested versions.
 - **`db.all()` is materialized.** It returns a readonly array and uses O(row-count) application memory. Use `db.stream()` when bounded application memory matters.
 - **Routine streaming is not included.** `callStream()` is reserved and unimplemented, not a callable 1.0.0 API. Materialized `db.call()` consumes and closes routine resources before mapping; raw cursors, portals, requests, and carrier rows never escape.
 - **MySQL and MariaDB prepared CALL OUT/INOUT descriptors are unsupported.** Emitted heterogeneous `CALL` result sets are supported. Neither mysql2 3.x nor MariaDB Connector/Node.js exposes a proven public discriminator for prepared call OUT carriers, so SQLBraid does not guess a carrier row.

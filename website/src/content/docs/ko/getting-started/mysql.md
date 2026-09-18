@@ -100,17 +100,10 @@ function은 result set을 내보낼 수 없습니다.
 `@sqlbraid/mysql`은 `typePolicyForProfile({ json, temporal })`와 immutable
 `representationProfiles`를 내보냅니다. 기본 `mysql2-lossless-text`
 descriptor는 아래 fidelity-first option을 사용하고 `mysql2-native`는 native
-JSON/temporal 결과를 위한 별도 편의 프로필입니다. Runtime과 codegen은 같은
-descriptor를 선택해야 합니다. 이 프로필의 지원 label과 증거는 [런타임/드라이버
-지원 매트릭스](/SQLBraid/reference/support/)가 기록한 정확한 database,
-driver, profile, runtime, capability tuple과 revision별 실행 workflow에만
-적용됩니다. Package 설치나 인접한 버전·runtime은 이 프로필을 인증하지
-않습니다. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인 release
-승인은 별도 요구사항입니다.
-
+descriptor를 선택해야 합니다. 이 프로필의 지원 여부는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)에서
+사용 중인 조합의 테스트 결과를 통해 확인하시기 바랍니다.
 | mysql2 옵션               | `mysql2-lossless-text` | 효과                                                                               |
 | ------------------------- | ---------------------- | ---------------------------------------------------------------------------------- |
-| `supportBigNumbers: true` | 필수                   | 큰 정수/10진수가 lossy한 `number` 추론으로 가지 않게 합니다.                       |
 | `bigNumberStrings: true`  | 필수                   | 큰 숫자를 문자열로 반환해 애플리케이션이 정확하게 처리합니다.                      |
 | `decimalNumbers: false`   | 필수                   | `DECIMAL`을 JavaScript `number`로 변환하지 않습니다. `true`는 별도 프로필입니다.   |
 | `rowsAsArray: false`      | 필수                   | SQLBraid normalizer와 schema가 기대하는 객체 행을 유지합니다.                      |

@@ -6,8 +6,8 @@ SQLBraid is a SQL-first data-access toolkit for TypeScript. You write ordinary S
 binding, explicit result contracts, result mapping, connection and transaction ownership, and driver adapters
 without introducing a query-builder language between your application and the database.
 
-1.0.0 is the first stable release. The public contracts are now GA; individual driver capabilities remain
-explicit and may differ by database and transport.
+1.0.0 is the first stable release. The public API is now GA; driver capabilities
+vary by database and transport; see the support matrix for details.
 
 ## Install
 
@@ -48,10 +48,10 @@ runtime and driver combinations.
 
 ## What is in 1.0
 
-- **SQL-first tagged templates.** Ordinary `${value}` interpolation is always a value bind. Structural SQL uses
+- **SQL-first tagged templates.** Ordinary `${value}` interpolation is always a value bind. Structural SQL requires
   explicit helpers such as `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, and deliberately unsafe
   `sql.raw`.
-- **Explicit result contracts.** Queries declare row, command, call, or unknown result kinds. `all`, `one`,
+- **Result contracts.** Queries declare row, command, call, or unknown result kinds. `all`, `one`,
   `maybeOne`, `execute`, and `call` enforce those contracts.
 - **Standard Schema result mapping.** Schemas can be attached to row queries or supplied per execution without
   turning SQLBraid into an ORM or relation-hydration layer.
@@ -62,9 +62,9 @@ runtime and driver combinations.
 - **Exact-value policy.** Exact integers and decimals are represented as strings; approximate IEEE values remain
   numbers. JSON, temporal values, binary values, containers, and driver-specific types have separate fidelity
   contracts.
-- **Metadata and tooling.** The repository includes database inspection, deterministic model generation, CLI
+- **Metadata and tooling.** Includes database inspection, deterministic model generation, CLI
   tooling, a stdio language server, Vite lowering, and an optional OpenTelemetry observer integration.
-- **Capability-driven failures.** Unsupported behavior raises an explicit SQLBraid error instead of being silently
+- **Direct failure for unsupported features.** Unsupported behavior raises a SQLBraid error instead of being silently
   buffered, emulated, downgraded, or ignored.
 
 SQLBraid deliberately does not provide ORM graph hydration, a query-builder-first DSL, automatic routing or
@@ -81,15 +81,12 @@ retries, a universal prepared-statement cache, or a complete SQL semantic engine
 - **Oracle Database** — `oracledb`
 - **SQL Server** — `tedious`
 
-Application code can use the convenience subpaths `sqlbraid/pg`, `sqlbraid/mysql2`,
-`sqlbraid/mariadb`, `sqlbraid/node-sqlite`, `sqlbraid/better-sqlite3`, `sqlbraid/libsql`,
-`sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`, `sqlbraid/tedious`, and
-`sqlbraid/bun-sql`. Granular `@sqlbraid/*` packages remain available for custom integrations and tooling.
-
-Support is certified per database, driver, runtime, representation profile, and capability rather than inferred
-from a database family name. See the
+Support is based on specific database, driver, runtime, representation profile, and capability combinations. See the
 [versioned support records](https://github.com/Clickin/SQLBraid/tree/v1.0.0/support/targets) for the exact matrix.
 
+Convenience subpaths include `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
+`sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
+`sqlbraid/tedious`, and `sqlbraid/bun-sql`. Granular `@sqlbraid/*` packages are available for custom integrations.
 ## Important limits in 1.0
 
 The stable API does not mean every adapter implements every capability.
