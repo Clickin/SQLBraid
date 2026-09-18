@@ -5,8 +5,9 @@ repository. It contains no credentials or registry tokens.
 
 The GA target is stable public contracts, not universal driver capabilities.
 This preparation neither claims fresh final certification nor authorizes
-tagging, staging, approval, or publication. Stable `release-1.0.0` staging and
-later `latest` promotion remain separately authorized maintainer actions.
+tagging, staging, approval, or publication. Prereleases stage under `next`;
+stable releases stage under `latest`. Human stage approval remains a separate
+maintainer action.
 
 ## Current evidence boundary
 
@@ -225,14 +226,14 @@ npm prior-run recovery, the npm manifest and npm pack-check stamp do not
 recover or attest the extension.
 
 Prereleases stage under `next` and must leave `latest` unchanged. Stable
-releases stage first under temporary `release-<version>`; after every package
-is approved and integrity/provenance checks pass, a human may safely promote
-`latest`. The script does not mutate `latest` or any other dist-tag. If a
-network outcome is uncertain, an already-existing package/version is accepted
-only when registry integrity exactly matches the validated candidate and its
-requested release tag is correct. Missing or stale tags on an exact public
-version require maintainer reconciliation; the workflow never repairs them
-automatically. Different bytes fail immediately.
+releases stage directly under `latest`. The requested dist-tag is part of the
+staged publication and is applied by npm when a maintainer approves the stage;
+there is no separate post-approval dist-tag promotion step. If a network outcome
+is uncertain, an already-existing package/version is accepted only when registry
+integrity exactly matches the validated candidate and its requested release tag
+is correct. Missing or stale tags on an exact public version require maintainer
+reconciliation; the workflow never repairs them automatically. Different bytes
+fail immediately.
 
 ## Publication credentials and permissions
 
@@ -283,9 +284,9 @@ The pnpm 12.3.4 implementation, not npm CLI parity, defines the release client:
   invocation; batch/workspace publishing is not used.
 - [`dist-tag`](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/cli/src/cli_args/dist_tag.rs)
   supports registry tag updates but only configured authentication, not native
-  OIDC exchange. The release flow does not invoke it: stable `latest`
-  promotion is a human action after verification, and package publication
-  itself remains pnpm-native.
+  OIDC exchange. The release flow does not invoke it: prerelease/stable channel
+  selection is supplied to `stage publish` as `next` or `latest` and is
+  applied when the human-approved stage becomes public.
 - [`whoami`](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/cli/src/cli_args/whoami.rs)
   natively resolves configured authentication and reads `/-/whoami`.
 
@@ -305,11 +306,10 @@ Trusted Publishing dependency. Release mutation jobs do not run those checks.
 
 `bootstrap-rc0` is historical: RC0 was bootstrapped once and must not be
 repeated. `publish` and `npm publish` are not aliases for `stage publish`;
-direct live publication is disabled. There is no automated `dist-tag` promotion,
-and no Actions approval job. The only supported mutation is staged publication,
-followed by human `pnpm stage approve` commands and verification. The
-`verify-published` helper reports manual stable-`latest` promotion commands; it
-does not execute them.
+direct live publication is disabled. There is no separate automated `dist-tag` mutation and no Actions approval
+job. The only supported mutation is staged publication with its requested
+`next` or `latest` channel, followed by human `pnpm stage approve` commands
+and verification.
 
 ## Maintainer sequence: 1.0.0 and later releases
 
@@ -347,9 +347,9 @@ The following are maintainer actions, **not** actions performed by certification
    boundary.
 
 4. Review `staged-publication.json` and each registry stage record. Confirm
-   candidate identity, exact tarball hashes, stage IDs, provenance, the
-   temporary `release-1.0.0` tag, and unchanged `latest` snapshots.
-   Prereleases instead use `next`. Run each generated `approvalCommands`
+   candidate identity, exact tarball hashes, stage IDs, provenance, and the
+   requested dist-tag: `next` for prereleases and `latest` for stable releases.
+   Run each generated `approvalCommands`
    dependency layer in order from a human interactive terminal, for example:
 
    ```sh
@@ -373,18 +373,14 @@ The following are maintainer actions, **not** actions performed by certification
    ```
 
    The helper uses the candidate manifest and stage evidence to check exact
-   integrity, tags, public provenance metadata, and `latest`. It proves current
-   public state, not approval history: after human reconciliation it can verify
-   all public packages using an earlier partial report as the immutable baseline.
-   It never approves anything. For 1.0.0, `release-1.0.0` must point to the
-   approved packages and `latest` must remain unchanged until the separate
-   stable promotion. Prereleases require `next` instead and never move `latest`.
+   integrity, tags, public provenance metadata, and channel policy. It proves
+   current public state, not approval history: after human reconciliation it can
+   verify all public packages using an earlier partial report as the immutable
+   baseline. It never approves anything. Stable releases require `latest` to
+   point to the approved version; prereleases require `next` and verify that
+   `latest` remained unchanged.
 
-6. For a stable version, stage under `release-<version>`. After every stage is
-   approved and verification passes, execute the helper's reported manual
-   `latest` promotion commands, then optionally rerun verification with
-   `--require-latest`. The helper never performs this promotion.
-7. A draft GitHub Release created after staging is explicitly
+6. A draft GitHub Release created after staging is explicitly
    **approval-pending**. Review it separately; it is not a public-release
    authorization and never causes automatic stage approval or `latest`
    promotion. Its body is the versioned release notes, and an RC version is
