@@ -319,14 +319,13 @@ test(
   },
 );
 
-test("capability references enumerate the complete machine-readable vocabulary", async () => {
+test("support reference pages enumerate the complete machine-readable vocabulary", async () => {
   const catalog = JSON.parse(await readFile(join(root, "support/capabilities.json"), "utf8")) as {
     capabilities: readonly { id: string }[];
   };
   const documents = [
     "website/src/content/docs/reference/support.mdx",
     "website/src/content/docs/ko/reference/support.mdx",
-    "docs/SQLBraid_1.0.0_release_notes.md",
   ];
   for (const document of documents) {
     const source = await readFile(join(root, document), "utf8");
@@ -334,4 +333,9 @@ test("capability references enumerate the complete machine-readable vocabulary",
     for (const capability of catalog.capabilities)
       assert.ok(vocabulary.includes(capability.id), `${document} omits ${capability.id}`);
   }
+});
+
+test("GA release notes link to the versioned support matrix instead of duplicating its vocabulary", async () => {
+  const source = await readFile(join(root, "docs/SQLBraid_1.0.0_release_notes.md"), "utf8");
+  assert.match(source, /https:\/\/github\.com\/Clickin\/SQLBraid\/tree\/v1\.0\.0\/support\/targets/u);
 });
