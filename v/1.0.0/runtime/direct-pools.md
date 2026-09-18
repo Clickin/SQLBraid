@@ -1,0 +1,54 @@
+# Direct connections and pools
+
+> Choose the factory that matches your physical database resource.
+
+SQLBraid makes ownership explicit instead of detecting pools by duck typing.
+
+## Direct resources
+
+`createDatabase(executor)` in `@sqlbraid/runtime` and adapter-specific direct factories wrap one physical execution resource. PostgreSQL accepts a connected `pg.Client` or `pg.PoolClient`; MySQL accepts a resolved `Connection` or `PoolConnection` object from `mysql2/promise`; SQLite accepts a `DatabaseSync`-compatible resource.
+
+```ts
+const db = createPgDatabase(client);
+const db = createMysql2Database(connection);
+const db = createNodeSqliteDatabase(native);
+```
+
+Direct wrappers that share an ownership key serialize physical operations. The application closes the direct resource.
+
+## Pools
+
+Use an explicit pool factory:
+
+```ts
+const pgDb = createPgPoolDatabase(pgPool);
+const mysqlDb = createMysql2PoolDatabase(mysqlPool);
+const mariadbDb = createMariaDbPoolDatabase(mariadbPool);
+const customDb = createPooledDatabase(connectionProvider);
+```
+
+A provider's `acquire()` returns one `ConnectionLease` with an executor and `release({ discard })`. Each independent pooled root operation acquires one lease, performs DB I/O, releases it, and then maps materialized results. The application owns pool shutdown.
+
+Providers expose an immutable `statementBinding` adapter. Binding description and
+hint validation happen before `acquire()`, and every lease must use that exact
+adapter object; a lease cannot silently switch transport or dialect identity.
+
+A pool is not a fake executor. If `BEGIN`, a query, and `COMMIT` can land on different physical connections, the transaction is not real; use `db.tx(...)` to pin the lease.
+
+`db.session(async (session) => ...)` pins one acquired lease for the callback;
+nested sessions reuse it, and `db.tx(...)` inside the session does not reacquire.
+The outer root database cannot be used to escape that scope. A stream keeps the
+lease until cursor/request cleanup. An unavailable provider/session primitive
+fails with `BRAID_SESSION_UNSUPPORTED`.
+
+An already-aborted signal preserves its `reason`. Active cancellation is a
+driver capability; without it, the operation fails before I/O with
+`UnsupportedFeatureError` / `BRAID_CANCEL_UNSUPPORTED`. Transaction options are
+validated before acquisition: malformed values use `TypeError` /
+`BRAID_TX_OPTIONS_INVALID`, valid-but-unsupported values use
+`BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit options use
+`BRAID_TX_OPTIONS_NESTED`.
+
+:::caution Factory boundary
+Passing `pg.Pool` to `createPgDatabase`, a mysql2 pool to `createMysql2Database`, or a mariadb pool to `createMariaDbDatabase` is unsupported. Use `createPgPoolDatabase`, `createMysql2PoolDatabase`, or `createMariaDbPoolDatabase`.
+:::
