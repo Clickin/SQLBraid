@@ -149,9 +149,14 @@ export async function assertNoPriorStageAttempt(
       if (stage || jobs.jobs.length < 100) break;
       if (page === 10) throw new Error("Unable to bound GitHub release job history; refusing an unverified upload.");
     }
-    if (stage && (stage.status !== "completed" || stage.conclusion !== "skipped")) {
+    if (!stage) continue;
+    const mutationStep = Array.isArray(stage.steps)
+      ? stage.steps.find((step) => step.name === "Mutate npm staging with pnpm OIDC")
+      : undefined;
+    if (!mutationStep || mutationStep.conclusion === "skipped") continue;
+    if (mutationStep.status !== "completed" || mutationStep.conclusion !== "skipped") {
       throw new Error(
-        `Prior staging attempt ${run.id} exists for ${ref}; supply its staged evidence for explicit reconciliation instead of uploading again.`,
+        `Prior npm staging mutation ${run.id} exists for ${ref}; supply its staged evidence for explicit reconciliation instead of uploading again.`,
       );
     }
   }
