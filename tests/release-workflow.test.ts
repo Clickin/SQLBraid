@@ -316,7 +316,9 @@ test("staging is serialized, reuses the validated candidate, and preserves parti
   const download = stage.steps.find((step) => step.uses?.startsWith("actions/download-artifact@"));
   assert.equal(download?.with?.name, "release-candidate-validated");
   assert.ok(stage.steps.some((step) => step.run?.includes("release-candidate-validated.tar.gz")));
+  assert.ok(stage.steps.some((step) => step.run?.includes("--mode stage-preflight")));
   assert.ok(stage.steps.some((step) => step.run?.includes("--mode stage")));
+  assert.ok(stage.steps.some((step) => step.name === "Mutate npm staging with pnpm OIDC"));
   assert.ok(stage.steps.every((step) => !/\bpnpm\s+(?:run\s+)?(?:build|pack)\b/u.test(step.run ?? "")));
   const evidence = stage.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
   assert.equal(evidence?.if, "always()");
@@ -327,6 +329,7 @@ test("staging is serialized, reuses the validated candidate, and preserves parti
 test("staging has no approval or direct publication path and draft release remains pending", () => {
   const stage = release.jobs["release-stage"];
   const stageRun = stage.steps.map((step) => step.run ?? "").join("\n");
+  assert.match(stageRun, /--mode stage-preflight\b/u);
   assert.match(stageRun, /--mode stage\b/u);
   assert.doesNotMatch(stageRun, /--mode (?:publish|bootstrap|publish-dry-run)\b/u);
   assert.doesNotMatch(stageRun, /\bnpm\s+publish\b/u);
@@ -365,9 +368,13 @@ test("staging distinguishes fresh and explicit cross-run reconciliation", () => 
   assert.equal(prior?.if, "inputs.prior_run_id != ''");
   assert.equal(prior?.uses, "actions/download-artifact@v8.0.1");
   assert.equal(prior?.with?.["run-id"], "${{ inputs.prior_run_id }}");
-  const run = stage.steps.find((step) => step.name?.includes("Stage validated"));
-  assert.match(run?.run ?? "", /--prior-staged-publication/u);
-  assert.match(run?.run ?? "", /--prior-candidate-run-id/u);
+  const preflight = stage.steps.find((step) => step.name === "Verify npm staging preconditions");
+  const mutate = stage.steps.find((step) => step.name === "Mutate npm staging with pnpm OIDC");
+  assert.match(preflight?.run ?? "", /--prior-staged-publication/u);
+  assert.match(preflight?.run ?? "", /--prior-candidate-run-id/u);
+  assert.match(mutate?.run ?? "", /--prior-staged-publication/u);
+  assert.match(mutate?.run ?? "", /--prior-candidate-run-id/u);
+  assert.equal(mutate?.env?.SQLBRAID_STAGE_PREFLIGHT_VERIFIED, "true");
   const dryRun = release.jobs["release-final"].steps.find((step) => step.run?.includes("--mode stage-dry-run"));
   assert.match(dryRun?.run ?? "", /--prior-candidate-run-id/u);
   assert.match(String(release.env?.SQLBRAID_TAG_BEFORE), /github\.event\.before/u);
