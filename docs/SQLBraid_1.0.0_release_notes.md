@@ -1,180 +1,143 @@
-# SQLBraid 1.0.0 — release notes
+# SQLBraid 1.0.0
 
-Write SQL. Keep TypeScript. Skip the query-builder translation layer.
+**Write SQL. Keep TypeScript. Skip the query-builder translation layer.**
 
-SQLBraid 1.0.0 establishes stable SQL-first public contracts, not universal
-driver capabilities. These GA notes are release preparation; they do not claim
-publication or authorize npm, GitHub, VS Code Marketplace, or Pages actions.
-Consult the [versioned support records](../support/targets/) for each exact tuple's
-certified implementation revision and workflow evidence. Changed revisions,
-including documentation-only and evidence-only commits, require fresh
-exact-final Runtime, Documentation, and Release gates.
+SQLBraid is a SQL-first data-access toolkit for TypeScript. You write ordinary SQL; SQLBraid adds safe value
+binding, explicit result contracts, result mapping, connection and transaction ownership, and driver adapters
+without introducing a query-builder language between your application and the database.
 
-## Included surface
+1.0.0 is the first stable release. The public contracts are now GA; individual driver capabilities remain
+explicit and may differ by database and transport.
 
-- SQL-first tagged templates, safe value binds, explicit `rows`, `command`,
-  `call`, and `unknown` result kinds;
-- bounded `@braid` directives and explicit structural fragments;
-- Standard Schema query-bound and per-execution row mapping;
-- direct physical executors and explicit provider/lease pool adapters;
-- `session(callback)` lease pinning, nested session reuse, and `tx` transaction
-  pinning/savepoints;
-- `TransactionOptions` (`isolation` and `readOnly`) with capability-driven
-  rejection and no silent nested option changes;
-- trailing `ExecutionOptions`/`RowValidationOptions`/`StreamOptions` with
-  capability-driven `AbortSignal` handling;
-- prepared zero-input and input factories, one-render logical shape locking,
-  kind-specific prepared operations, and no universal native prepared cache;
-- native driver streaming where the adapter provides it, with cleanup before
-  lease release; unsupported streaming is explicit rather than buffered;
-- heterogeneous routine `output`, ordered `resultSets`, and optional
-  `returnValue`, plus explicit OUT/INOUT/cursor boundaries;
-- homogeneous command-only bulk with complete pre-I/O shape validation and
-  driver-reported execution mode;
-- observe/fail-only execution observers with lazy redacted diagnostics;
-- PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL Server dialect roots,
-  with driver subpaths and capability-specific behavior;
-- one Bun SQL adapter family with user-selected `postgres`, `mysql`, `mariadb`,
-  or `sqlite` dialect; no connection-based dialect auto-detection;
-- first-party Deno use of existing driver adapters where their public APIs work,
-  without inventing a Deno dialect;
-- database-fact metadata, deterministic code generation, CLI JSON inspection,
-  standard stdio LSP, Vite lowering, and a thin editor client;
-- canonical exact numeric output (exact integer/decimal → `string`, approximate
-  IEEE binary → `number`) and explicit JSON/temporal/container evidence boundaries.
+## Install
 
-## Correctness retained for GA
-
-- PostgreSQL and Bun PostgreSQL reject with `BRAID_TX_NOT_COMMITTED` when a
-  server reports that `COMMIT` rolled back; a successful callback alone is not
-  transaction success.
-- Oracle keeps auto-commit outside managed transactions. Tedious propagates
-  savepoint rollback failures instead of returning uncertain connections as
-  healthy, and failed pooled adapter initialization releases its lease.
-- node:sqlite preserves exact command ROWIDs. Local and protocol-unknown
-  libSQL clients omit unreliable optional `command.insertId`; exact
-  `RETURNING` rows, affected-row counts, transactions, and bulk remain supported.
-- Stream completion reaches every observer even if an earlier observer
-  fails, preserving original execution/cleanup errors and observer failures.
-
-## Documentation and browser playground
-
-- Scoped package READMEs provide a short introduction, installation command,
-  and official documentation link; `sqlbraid` retains detailed usage examples.
-- Main-branch and version-tag pushes build and deploy documentation through the
-  Pages workflow. Manual dispatch can validate without deployment unless
-  `deploy=true` is selected. Missing tag archives are built from their tagged
-  sources, and the version selector preserves the current locale/page when that
-  page exists.
-- The browser playground accepts editable SQL against a seeded, disposable
-  SQLite WASM database. It exposes the table schema, actual query results and
-  errors, and database reset. Results are capped at 1,000 displayed rows;
-  a ten-second worker timeout resets the database without blocking the page.
-
-## Unsupported behavior is visible
-
-Adapters use `UnsupportedFeatureError(feature, code, message, options?)` with a
-`BRAID_*` code. Typical codes include `BRAID_STREAM_UNSUPPORTED`,
-`BRAID_CALL_UNSUPPORTED`, `BRAID_CANCEL_UNSUPPORTED`,
-`BRAID_TX_OPTION_UNSUPPORTED`, and `BRAID_BIND_HINT_UNSUPPORTED`. A missing
-capability never becomes a buffered fake, hidden transaction, guessed routine
-carrier, or silently ignored hint. The complete capability identifiers are:
-
-```text
-sql.native-transparency           sql.generated-structure
-result.rows                       result.command
-result.multiple-sets              result.standard-schema
-numeric.exact-integer             numeric.exact-decimal
-numeric.approximate-float         numeric.approximate-special
-numeric.bind-exact                numeric.aggregate
-numeric.command-metadata          numeric.special-values
-numeric.scale-greater-than-precision
-numeric.negative-scale
-data.json-parsed                  data.json-lossless-text
-data.sql-variant                  data.oracle-object
-data.oracle-collection            data.vector
-data.binary                       data.uuid
-data.temporal-native              data.temporal-lossless
-data.timezone
-metadata.command-safe
-dml.insert-returning              dml.update-returning
-dml.delete-returning              dml.merge-returning
-dml.upsert-returning
-session.pinned
-statement.prepare                statement.cancel
-statement.stream                 statement.bulk
-execution.bulk-fidelity
-transaction                      transaction.savepoint
-transaction.read-only
-transaction.isolation.read-uncommitted
-transaction.isolation.read-committed
-transaction.isolation.repeatable-read
-transaction.isolation.serializable
-routine.call                     routine.out
-routine.inout                    routine.result-sets
-routine.out-cursor               routine.return-value
-metadata.identity                metadata.generated
-metadata.routines                metadata.types
+```sh
+pnpm add sqlbraid
 ```
 
-### Routine and runtime limits
+The main `sqlbraid` package is a facade over the first-party runtime and driver packages. Import the subpath
+for the driver you use:
 
-- mysql2 supports emitted `CALL` result sets, but OUT/INOUT descriptor
-  carriers remain unsupported; SQLBraid does not guess a final carrier set or
-  rewrite calls through session variables.
-- SQLite adapters do not support `db.call` / `routine.call`. This is an API
-  capability limit, not a ban on authored SQLite SQL or SQL functions.
-- PostgreSQL refcursors require an existing `db.tx`. Direct SQL Server cursor
-  OUT is unsupported. `callStream` is reserved and unimplemented; it is not
-  an available method.
-- Bun 1.3.14 MySQL/MariaDB reject both explicit `readOnly: true` and
-  `readOnly: false` before I/O with `BRAID_TX_OPTION_UNSUPPORTED`
-  (`transaction.read-only`). Omitting the option preserves the native session
-  default, not a forced read-write mode. Bun PostgreSQL access modes differ
-  and are not restricted by this MySQL/MariaDB limit.
-- Bun 1.3.14 active cancellation, streaming, and routine carriers remain
-  unsupported. MySQL/MariaDB empty rows and zero-count commands can be
-  ambiguous after execution; the adapter rejects with
-  `BRAID_RESULT_KIND_AMBIGUOUS`, which cannot undo side effects.
-- libSQL does not support pinned ordinary sessions or streaming, and does not
-  buffer to emulate a stream. D1's managed SQLite version remains unreported.
-  Neither limitation is promoted to support by the GA label.
+```ts
+import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
+import { DatabaseSync } from "node:sqlite";
 
-## Deliberate nonfeatures
+interface UserRow {
+  id: string;
+  name: string;
+}
 
-There is no ORM graph hydration, query-builder-first language, complete SQL
-semantic engine, universal application input codec, SQL/bind/result rewriting,
-automatic retry/routing, universal prepared cache, or built-in audit store.
-DML `RETURNING`/`OUTPUT` remains authored SQL and materialized unless the
-selected adapter's evidence says otherwise. Metadata absence is not invalid SQL.
+const native = new DatabaseSync(":memory:");
+native.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");
+native.prepare("INSERT INTO users (name) VALUES (?)").run("Ada");
 
-## GA evidence and release discipline
+const db = createNodeSqliteDatabase(native);
 
-Support labels belong to exact executable evidence for a database, driver,
-profile, runtime, and capability tuple. Historical workflow success does not
-promote the current tree or neighboring versions. Semantic integration and
-native-driver fault evidence complement, not replace, that exact-tuple matrix.
-Before release, run the runtime, docs/translation, package/export, and immutable
-release gates on one exact final revision. User acceptance and explicit release
-authorization remain separate requirements; no new certification is claimed
-by these notes.
+const userId = 1;
+const users = await db.all(sql.rows<UserRow>`
+  SELECT id, name
+  FROM users
+  WHERE id = ${userId}
+`);
 
-The immutable npm release manifest records package tarball filenames, SHA-256,
-and SHA-512 integrity. Its pack-check stamp and prior-run recovery attest and
-restore npm candidates only, not a VSIX. `release-evidence.json` is the compact
-durable summary for the GitHub Release: it retains the source commit, npm
-candidate hashes, support-evidence identities, staged package IDs, requested
-tags, and fresh/reconciled workflow identity after Actions artifacts expire.
-The independently dispatched VS Code Release workflow validates its own VSIX
-identity, bundled CLI/language-server versions, and exact extension artifact;
-Open VSX and the manual Marketplace handoff use those validated bytes.
+// [{ id: "1", name: "Ada" }]
+```
 
-Stable 1.0.0 staging, if separately authorized later, uses temporary
-`release-1.0.0`, not `next` or `latest`. Staging is not public publication:
-human dependency-ordered approval is required after OIDC staging, followed by
-exact integrity, provenance, and tag verification before manual `latest`
-promotion. A stable GitHub Release is not marked prerelease; its approval-pending
-draft does not authorize publication. This preparation performs no staging,
-approval, tag movement, or publication. The
-[release-readiness policy](SQLBraid_release_readiness.md) governs these separate
-maintainer actions and immutable candidate recovery.
+The built-in `node:sqlite` quickstart uses Node.js 22.18 or newer. Other adapters have their own certified
+runtime and driver combinations.
+
+## What is in 1.0
+
+- **SQL-first tagged templates.** Ordinary `${value}` interpolation is always a value bind. Structural SQL uses
+  explicit helpers such as `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, and deliberately unsafe
+  `sql.raw`.
+- **Explicit result contracts.** Queries declare row, command, call, or unknown result kinds. `all`, `one`,
+  `maybeOne`, `execute`, and `call` enforce those contracts.
+- **Standard Schema result mapping.** Schemas can be attached to row queries or supplied per execution without
+  turning SQLBraid into an ORM or relation-hydration layer.
+- **Physical connection ownership.** Direct executors and provider/lease pools share the same runtime contract.
+  `session()` pins a lease; `tx()` pins a transaction and uses savepoints for supported nested transactions.
+- **Prepared queries, streaming, bulk execution, cancellation, and routines.** These are exposed through one
+  runtime API and enabled only where the selected adapter can provide the required semantics.
+- **Exact-value policy.** Exact integers and decimals are represented as strings; approximate IEEE values remain
+  numbers. JSON, temporal values, binary values, containers, and driver-specific types have separate fidelity
+  contracts.
+- **Metadata and tooling.** The repository includes database inspection, deterministic model generation, CLI
+  tooling, a stdio language server, Vite lowering, and an optional OpenTelemetry observer integration.
+- **Capability-driven failures.** Unsupported behavior raises an explicit SQLBraid error instead of being silently
+  buffered, emulated, downgraded, or ignored.
+
+SQLBraid deliberately does not provide ORM graph hydration, a query-builder-first DSL, automatic routing or
+retries, a universal prepared-statement cache, or a complete SQL semantic engine.
+
+## Databases and adapters
+
+1.0 ships first-party support for:
+
+- **PostgreSQL** — `pg`, plus PostgreSQL through Bun.SQL
+- **MySQL** — `mysql2`, plus MySQL through Bun.SQL
+- **MariaDB** — `mariadb`, plus MariaDB through Bun.SQL
+- **SQLite** — `node:sqlite`, `better-sqlite3`, libSQL, SQLite WASM, Cloudflare D1, and Bun.SQL SQLite
+- **Oracle Database** — `oracledb`
+- **SQL Server** — `tedious`
+
+Application code can use the convenience subpaths `sqlbraid/pg`, `sqlbraid/mysql2`,
+`sqlbraid/mariadb`, `sqlbraid/node-sqlite`, `sqlbraid/better-sqlite3`, `sqlbraid/libsql`,
+`sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`, `sqlbraid/tedious`, and
+`sqlbraid/bun-sql`. Granular `@sqlbraid/*` packages remain available for custom integrations and tooling.
+
+Support is certified per database, driver, runtime, representation profile, and capability rather than inferred
+from a database family name. See the
+[versioned support records](https://github.com/Clickin/SQLBraid/tree/v1.0.0/support/targets) for the exact matrix.
+
+## Important limits in 1.0
+
+The stable API does not mean every adapter implements every capability.
+
+- mysql2 supports emitted `CALL` result sets, but SQLBraid OUT/INOUT descriptor carriers are not supported.
+- SQLite adapters do not implement `db.call` / `routine.call`.
+- `callStream` is reserved but not implemented.
+- PostgreSQL refcursors require an existing transaction; direct SQL Server cursor OUT parameters are unsupported.
+- Bun 1.3.14 MySQL/MariaDB reject both explicit `readOnly: true` and `readOnly: false`; omitting the option
+  preserves the native session default.
+- Bun 1.3.14 does not provide SQLBraid active cancellation, streaming, or routine carriers.
+- libSQL does not provide pinned ordinary sessions or streaming; SQLBraid does not buffer results to emulate a
+  stream.
+
+The full capability matrix is maintained in the support records rather than duplicated in release notes.
+
+## Transaction and resource correctness
+
+A major part of the 1.0 work was making connection ownership and failure semantics explicit across drivers.
+
+- PostgreSQL and Bun PostgreSQL reject with `BRAID_TX_NOT_COMMITTED` if the server reports that a requested
+  `COMMIT` actually rolled back.
+- Oracle keeps auto-commit outside SQLBraid-managed transactions.
+- Tedious savepoint rollback failures propagate instead of returning an uncertain connection as healthy.
+- Failed pooled adapter initialization releases or discards its lease correctly.
+- Streams finish cleanup before lease release, and observer failures do not replace the original execution or
+  cleanup error.
+- node:sqlite preserves exact command ROWIDs; libSQL does not advertise an `insertId` where its native result
+  cannot guarantee exactness.
+
+## Package versioning after 1.0
+
+The initial 1.0.0 release is coordinated across the first-party packages. After 1.0, packages can version and
+release independently.
+
+A PostgreSQL driver fix, for example, can release as `@sqlbraid/postgres@1.0.1` without forcing an unrelated
+Oracle, SQLite, CLI, or facade release. The `sqlbraid` facade depends on compatible `^1.0.0` first-party
+ranges and only needs a new version when its own public facade surface or compatibility contract changes.
+
+Package-specific release tags use names such as `postgres-v1.0.1`; the coordinated `v1.0.0` tag remains the
+identity of the initial GA release.
+
+## Links
+
+- [Documentation](https://clickin.github.io/SQLBraid/v/1.0.0/)
+- [Getting started](https://clickin.github.io/SQLBraid/v/1.0.0/getting-started/sqlite/)
+- [Support matrix](https://github.com/Clickin/SQLBraid/tree/v1.0.0/support/targets)
+- [npm: sqlbraid](https://www.npmjs.com/package/sqlbraid)
+- [Source](https://github.com/Clickin/SQLBraid)
+
+Thanks to everyone who tries the first stable release and reports rough edges.
