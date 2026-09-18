@@ -124,11 +124,7 @@ export declare function stageCandidates(
     currentRunAttempt?: string | null;
   },
 ): Promise<StagedPublication | undefined>;
-export declare function verifyPublished(
-  manifest: ReleaseManifest,
-  evidence: StagedPublication,
-  options?: { requireLatest?: boolean },
-): Promise<void>;
+export declare function verifyPublished(manifest: ReleaseManifest, evidence: StagedPublication): Promise<void>;
 export declare function parseSemver(value: string): ReleaseSemver;
 export declare function releaseCandidateTag(packageName?: string, version?: string): string;
 export declare function releasePrereleaseArg(value: string): "--prerelease" | undefined;
