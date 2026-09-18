@@ -120,25 +120,48 @@ const stageHistoryEnv = {
   GITHUB_RUN_ATTEMPT: "1",
 };
 
-test("staging rejects any prior same-candidate stage attempt unless explicit evidence is supplied", async () => {
+test("staging rejects a prior npm mutation but ignores a preflight-only failure", async () => {
   const priorRun = { id: 111, head_sha: sha, head_branch: "v0.1.0-rc.0", event: "workflow_dispatch" };
+  const mutationJob = {
+    name: "Stage validated packages with pnpm OIDC",
+    status: "completed",
+    conclusion: "failure",
+    steps: [
+      { name: "Verify npm staging preconditions", status: "completed", conclusion: "success" },
+      { name: "Mutate npm staging with pnpm OIDC", status: "completed", conclusion: "failure" },
+    ],
+  };
   const calls: string[] = [];
   const request = async (url: URL) => {
     calls.push(url.pathname);
     if (url.pathname.endsWith("/runs")) return Response.json({ workflow_runs: [priorRun] });
-    if (url.pathname.endsWith("/jobs"))
-      return Response.json({
-        jobs: [{ name: "Stage validated packages with pnpm OIDC", status: "completed", conclusion: "failure" }],
-      });
+    if (url.pathname.endsWith("/jobs")) return Response.json({ jobs: [mutationJob] });
     throw new Error(`Unexpected URL ${url}`);
   };
-  await assert.rejects(assertNoPriorStageAttempt(stageHistoryEnv, request), /Prior staging attempt/);
+  await assert.rejects(assertNoPriorStageAttempt(stageHistoryEnv, request), /Prior npm staging mutation/);
   assert.deepEqual(calls, [
     "/repos/Clickin/SQLBraid/actions/workflows/release.yml/runs",
     "/repos/Clickin/SQLBraid/actions/runs/111/jobs",
   ]);
   await assert.doesNotReject(
     assertNoPriorStageAttempt({ ...stageHistoryEnv, GITHUB_RUN_ATTEMPT: "2" }, request, { allowReconciliation: true }),
+  );
+
+  await assert.doesNotReject(
+    assertNoPriorStageAttempt(stageHistoryEnv, async (url) => {
+      if (url.pathname.endsWith("/runs")) return Response.json({ workflow_runs: [priorRun] });
+      return Response.json({
+        jobs: [
+          {
+            ...mutationJob,
+            steps: [
+              { name: "Verify npm staging preconditions", status: "completed", conclusion: "failure" },
+              { name: "Mutate npm staging with pnpm OIDC", status: "completed", conclusion: "skipped" },
+            ],
+          },
+        ],
+      });
+    }),
   );
 });
 
@@ -163,7 +186,14 @@ test("staging history fails closed on API errors and treats skipped stage jobs a
           workflow_runs: [{ id: 111, head_sha: sha, head_branch: "v0.1.0-rc.0", event: "workflow_dispatch" }],
         });
       return Response.json({
-        jobs: [{ name: "Stage validated packages with pnpm OIDC", status: "completed", conclusion: "skipped" }],
+        jobs: [
+          {
+            name: "Stage validated packages with pnpm OIDC",
+            status: "completed",
+            conclusion: "skipped",
+            steps: [{ name: "Mutate npm staging with pnpm OIDC", status: "completed", conclusion: "skipped" }],
+          },
+        ],
       });
     }),
   );
