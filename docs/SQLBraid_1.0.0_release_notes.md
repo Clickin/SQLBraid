@@ -138,4 +138,3 @@ The coordinated `v1.0.0` release remains the common starting point for the first
 - [Support matrix](https://github.com/Clickin/SQLBraid/tree/v1.0.0/support/targets)
 - [npm: sqlbraid](https://www.npmjs.com/package/sqlbraid)
 - [Source](https://github.com/Clickin/SQLBraid)
-
