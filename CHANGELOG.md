@@ -32,8 +32,8 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
   as healthy.
 - Keep immutable npm tarball validation/staging separate from VSIX validation
   and publication. Stable staging uses temporary `release-1.0.0`; human
-  approval, integrity/provenance verification, and `latest` promotion require
-  later authorization. This preparation does not publish or certify a release.
+  approval, integrity/provenance verification, and `latest` promotion remain
+  separate release steps.
 
 ## 1.0.0-rc.2 (historical candidate)
 
