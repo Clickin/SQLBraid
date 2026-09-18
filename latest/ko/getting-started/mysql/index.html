@@ -106,13 +106,8 @@ function은 result set을 내보낼 수 없습니다.</p>
 <code dir="auto">@sqlbraid/mysql</code>은 <code dir="auto">typePolicyForProfile({ json, temporal })</code>와 immutable
 <code dir="auto">representationProfiles</code>를 내보냅니다. 기본 <code dir="auto">mysql2-lossless-text</code>
 descriptor는 아래 fidelity-first option을 사용하고 <code dir="auto">mysql2-native</code>는 native
-JSON/temporal 결과를 위한 별도 편의 프로필입니다. Runtime과 codegen은 같은
-descriptor를 선택해야 합니다. 이 프로필의 지원 label과 증거는 <a href="/SQLBraid/latest/ko/reference/support/">런타임/드라이버
-지원 매트릭스</a>가 기록한 정확한 database,
-driver, profile, runtime, capability tuple과 revision별 실행 workflow에만
-적용됩니다. Package 설치나 인접한 버전·runtime은 이 프로필을 인증하지
-않습니다. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인 release
-승인은 별도 요구사항입니다.</p>
+descriptor를 선택해야 합니다. 이 프로필의 지원 여부는 <a href="/SQLBraid/latest/ko/reference/support/">런타임/드라이버 지원 매트릭스</a>에서
+사용 중인 조합의 테스트 결과를 통해 확인하시기 바랍니다.</p>
 <table>
 <thead>
 <tr>
@@ -122,11 +117,6 @@ driver, profile, runtime, capability tuple과 revision별 실행 workflow에만
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code dir="auto">supportBigNumbers: true</code></td>
-<td>필수</td>
-<td>큰 정수/10진수가 lossy한 <code dir="auto">number</code> 추론으로 가지 않게 합니다.</td>
-</tr>
 <tr>
 <td><code dir="auto">bigNumberStrings: true</code></td>
 <td>필수</td>

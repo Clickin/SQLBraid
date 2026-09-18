@@ -4,11 +4,9 @@
 
 ## Current status
 
-This matrix is the canonical evidence authority. Support labels are scoped to
+This matrix is the authoritative source. Support labels are scoped to
 the exact database/driver/profile/runtime/capability tuple recorded here,
-including its revision and workflow evidence. A neighboring version or package
-installation is not certification. Final exact-SHA Runtime, Docs, and Release
-gates and explicit release authorization remain separate requirements.
+including its tested versions.
 
 ## Evidence labels
 
@@ -1163,7 +1161,7 @@ output metadata; physical placeholder spelling never changes shape.
 
 `db.session(callback)` pins one physical provider lease and nested sessions reuse
 it. `db.tx(callback)` uses that lease, or acquires one root lease; nested
-transactions use savepoints when advertised. Explicit transaction options use
+transactions use savepoints when supported. Explicit transaction options use
 only the fixed isolation literals `read-uncommitted`, `read-committed`,
 `repeatable-read`, and `serializable`, plus `readOnly`. Malformed runtime options
 fail before acquisition with `TypeError` / `BRAID_TX_OPTIONS_INVALID`; a valid
@@ -1186,7 +1184,7 @@ the physical lease through settlement.
 First-party roots cover PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL
 Server. Driver subpaths own the protocol and cleanup behavior: `pg`, `mysql2`,
 MariaDB Connector/Node.js, `node:sqlite`, SQLite WASM, D1, node-oracledb Thin,
-and Tedious. Bun uses one SQL adapter family with an explicit user-selected
+and Tedious. Bun uses one SQL adapter family with a user-selected
 `dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`; it does not infer
 SQL semantics from the connection. Bun 1.3.14 has active cancellation
 unsupported (`BRAID_CANCEL_UNSUPPORTED`) and stream/routine carriers
@@ -1194,8 +1192,7 @@ unsupported. Its `result.rows`/`result.command` metadata is guarded by
 `bun-sql.result-kind-metadata`; for MySQL/MariaDB, empty `SELECT` and
 zero-affected DML/DDL fail with `BRAID_RESULT_KIND_AMBIGUOUS` only after
 execution, because `command` is null and `affectedRows` is zero. Deno reuses
-existing first-party adapters where their public driver API works; it does not
-create a Deno dialect.
+existing first-party adapters where their public driver API is compatible.
 
 Missing stream, routine, output, hint, bulk, transaction, or cancellation support
 must be explicit `UnsupportedFeatureError` failures. SQLBraid does not paginate
@@ -1219,8 +1216,7 @@ misclassified by Bun; bind JSON values instead. SQLBraid does not rewrite SQL.
 
 ## Adding evidence
 
-A support addition needs an exact version/profile tuple, executable real-engine
-coverage, machine-readable target conditions, and a fresh clean revision. The
-release decision also requires translation freshness, package/export checks,
-and an immutable release dry-run. Historical links and prose alone cannot
+A support addition requires an exact version/profile tuple, real-engine
+coverage, and machine-readable target conditions. Historical links and prose
+alone cannot
 promote a label. No npm/tag/Pages publication follows from this page.
