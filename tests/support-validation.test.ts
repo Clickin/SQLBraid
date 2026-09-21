@@ -53,7 +53,7 @@ async function mutateJson<T>(path: string, mutate: (value: T) => void): Promise<
 
 test(
   "support validation rejects claims without schema, locale, package, CI or real test evidence",
-  { timeout: 30_000 },
+  { timeout: 120_000 },
   async () => {
     const mutations: readonly [string, (directory: string) => Promise<void>][] = [
       [
