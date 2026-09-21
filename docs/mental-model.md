@@ -397,18 +397,16 @@ Before changing architecture, check whether the change preserves these rules:
 
 ## 20. Where to put a change
 
-| Change | Primary home |
-| --- | --- |
-| public contracts / SPI | `@sqlbraid/core` |
-| tagged-template structure/rendering | `@sqlbraid/template` |
-| leases/scopes/transactions/streams/mapping | `@sqlbraid/runtime` |
-| placeholder/native protocol/result normalization | driver adapter |
-| database primitive representation | dialect/driver TypePolicy |
-| schema facts | `@sqlbraid/metadata` + inspector |
-| generated TS models | `@sqlbraid/codegen` |
-| source lowering/type overlay | `@sqlbraid/compiler` |
-| hover/completion/workspace/LSP evidence | tooling/language-server |
-| tracing/metrics | observer extension such as `@sqlbraid/opentelemetry` |
+- public contracts / SPI → `@sqlbraid/core`
+- tagged-template structure/rendering → `@sqlbraid/template`
+- leases/scopes/transactions/streams/mapping → `@sqlbraid/runtime`
+- placeholder/native protocol/result normalization → driver adapter
+- database primitive representation → dialect/driver TypePolicy
+- schema facts → `@sqlbraid/metadata` + inspector
+- generated TS models → `@sqlbraid/codegen`
+- source lowering/type overlay → `@sqlbraid/compiler`
+- hover/completion/workspace/LSP evidence → tooling/language-server
+- tracing/metrics → observer extension such as `@sqlbraid/opentelemetry`
 
 When a change seems to require crossing several of these boundaries, first check whether the requirement can be expressed as a smaller explicit contract. SQLBraid deliberately prefers explicit boundaries over hidden semantic machinery.
 

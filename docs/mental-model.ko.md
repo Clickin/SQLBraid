@@ -397,18 +397,16 @@ architecture를 바꾸기 전에 다음 규칙이 유지되는지 확인합니�
 
 ## 20. 변경사항을 어디에 둘 것인가
 
-| 변경 | 주 책임 위치 |
-| --- | --- |
-| public contract / SPI | `@sqlbraid/core` |
-| tagged-template 구조/rendering | `@sqlbraid/template` |
-| lease/scope/transaction/stream/mapping | `@sqlbraid/runtime` |
-| placeholder/native protocol/result normalization | driver adapter |
-| DB primitive representation | dialect/driver TypePolicy |
-| schema fact | `@sqlbraid/metadata` + inspector |
-| 생성 TypeScript model | `@sqlbraid/codegen` |
-| source lowering/type overlay | `@sqlbraid/compiler` |
-| hover/completion/workspace/LSP evidence | tooling/language-server |
-| tracing/metric | `@sqlbraid/opentelemetry` 같은 observer extension |
+- public contract / SPI → `@sqlbraid/core`
+- tagged-template 구조/rendering → `@sqlbraid/template`
+- lease/scope/transaction/stream/mapping → `@sqlbraid/runtime`
+- placeholder/native protocol/result normalization → driver adapter
+- DB primitive representation → dialect/driver TypePolicy
+- schema fact → `@sqlbraid/metadata` + inspector
+- 생성 TypeScript model → `@sqlbraid/codegen`
+- source lowering/type overlay → `@sqlbraid/compiler`
+- hover/completion/workspace/LSP evidence → tooling/language-server
+- tracing/metric → `@sqlbraid/opentelemetry` 같은 observer extension
 
 한 요구사항 때문에 여러 경계를 동시에 넘나들어야 한다면 먼저 더 작은 explicit contract로 표현할 수 있는지 확인합니다. SQLBraid는 숨겨진 semantic machinery보다 명시적인 경계를 우선합니다.
 
