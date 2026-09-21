@@ -18,7 +18,9 @@ SQLBraid is easiest to understand as a pipeline with deliberately narrow boundar
 ### The invariant to remember
 
 ```text
-segments.length === parameters.length + 1
+segments.length
+===
+parameters.length + 1
 ```
 
 Ordinary `${value}` interpolation is a bind value. It does not become SQL structure. Structural SQL requires an explicit helper such as `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, or the deliberate `sql.raw` escape hatch.

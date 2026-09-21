@@ -18,7 +18,9 @@ SQLBraid는 의도적으로 경계를 좁게 나눈 파이프라인 구조로 �
 ### 반드시 기억할 invariant
 
 ```text
-segments.length === parameters.length + 1
+segments.length
+===
+parameters.length + 1
 ```
 
 일반 `${value}` interpolation은 bind value입니다. SQL 구조가 되지 않습니다. 구조적 SQL은 `sql.ident`, `sql.fragment`, `sql.list`, `sql.join` 같은 명시적 helper 또는 의도적인 `sql.raw` escape hatch를 사용해야 합니다.
