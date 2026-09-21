@@ -2,7 +2,7 @@
 
 > SQLBraid를 특정 스키마 라이브러리에 결합하지 않고 행을 검증하고 변환합니다.
 
-SQLBraid는 특정 validator가 아니라 Standard Schema 프로토콜에 의존합니다. 스키마를 쿼리에 연결할 수 있습니다.
+SQLBraid는 특정 validator에 종속되지 않고 Standard Schema 프로토콜을 통해 동작합니다. 스키마를 쿼리에 연결할 수 있습니다.
 
 ```ts
 import * as v from "valibot";

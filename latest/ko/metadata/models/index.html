@@ -81,8 +81,7 @@
 <li><strong>Update</strong>는 <code dir="auto">inputType</code>을 사용합니다. 포함된 속성은 optional이며, 업데이트할 수 없거나 생성된 것으로 입증된 열은 제외됩니다. identity만으로 금지하지는 않습니다.</li>
 </ul>
 <p>정확한 정수와 10진수의 output type은 canonical <code dir="auto">string</code>이고, 근사 이진
-타입은 <code dir="auto">number</code>입니다. 생성된 모델은 exact string을 <code dir="auto">bigint</code>나 decimal
-객체로 조용히 decode하지 않습니다.</p>
+생성된 모델은 exact string을 <code dir="auto">bigint</code>나 decimal 객체로 자동으로 디코드하지 않습니다.</p>
 <p>View, materialized view, foreign, virtual 관계에는 Row 모델만 부여됩니다. 열이 있는 알 수 없는 관계 종류에는 경고와 함께 Row 모델이 부여됩니다. 지원되지 않거나 입증되지 않은 타입은 <code dir="auto">any</code>가 아니라 계속 <code dir="auto">unknown</code>입니다. 생성된 소스를 사용하기 전에 진단을 확인하세요.</p>
 <p>Native parsed JSON root는 선택한 profile이 더 좁은 root 형태를 증명하지
 않는 한 <code dir="auto">unknown</code>입니다. Scalar mapping도 array, range, composite, object,

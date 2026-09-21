@@ -82,7 +82,7 @@
 표현식에는 자체 결과 타입이 있으므로 원본 열만 보고 추론하지 마세요. 집계,
 cast, 산술식은 그 표현식에 대한 metadata와 프로필 증거가 필요합니다.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="표준-숫자-경계">표준 숫자 경계</h2><a class="sl-anchor-link" href="#표준-숫자-경계"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>섹션 제목: “표준 숫자 경계”</span></a></div>
-<p>이식 가능한 규칙은 간단합니다.</p>
+<p>이식 가능한 규칙은 다음과 같습니다.</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">정확한 정수 또는 정확한 10진수 → string</span></div></div><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">IEEE-754 근사 이진수             → number</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="클립보드로 복사" data-copied="복사 완료!" data-code="정확한 정수 또는 정확한 10진수 → stringIEEE-754 근사 이진수             → number"><div></div></button></div></figure></div>
 <p>현재 값에 따라 JavaScript 타입을 바꾸지 않습니다. 정확한 <code dir="auto">BIGINT</code>의 <code dir="auto">42</code>도
 <code dir="auto">"42"</code>이며, 큰 값일 때만 string이 되지 않습니다. 정수 별칭, <code dir="auto">BIGINT</code>,

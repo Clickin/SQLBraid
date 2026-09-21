@@ -10,7 +10,7 @@ dialect, 드라이버, 선택적인 메타데이터 패키지를 명시적으로
 npm install @sqlbraid/postgres pg @sqlbraid/metadata
 ```
 
-Inspector는 별도 패키지가 아니라 dialect 패키지의 **subpath export**입니다. 이미 연결된 물리 클라이언트를 검사하세요.
+Inspector는 별도의 패키지가 아니며, dialect 패키지의 **subpath export**를 통해 제공됩니다. 이미 연결된 물리 클라이언트를 검사하세요.
 
 ```ts
 import { hashSnapshot, validateSnapshot } from "@sqlbraid/metadata";

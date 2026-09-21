@@ -3,7 +3,7 @@
 > 드라이버 capability를 숨기지 않고 하나의 command shape에 여러 value set을 적용합니다.
 
 `db.bulk(inputs, factory)`는 동종 DML을 위한 SQLBraid throughput primitive입니다.
-서로 다른 query 목록을 실행하는 `db.batch(queries)`와 다릅니다.
+`db.batch(queries)`가 서로 다른 쿼리 목록을 실행하는 것과 달리, `db.bulk`는 동일한 쿼리 구조에 여러 값 세트를 적용합니다.
 
 ```ts
 const result = await db.bulk(

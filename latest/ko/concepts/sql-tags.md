@@ -2,7 +2,7 @@
 
 > SQL을 숨기지 않고 SQLBraid 문장이 반환하는 것을 선언합니다.
 
-SQLBraid의 태그는 일반 TypeScript와 SQL입니다. dialect 패키지는 구성된 `sql` 태그를 내보냅니다.
+SQLBraid의 태그는 표준 TypeScript와 SQL 문법을 따릅니다. dialect 패키지는 구성된 `sql` 태그를 내보냅니다.
 
 ```ts
 import { sql } from "sqlbraid/postgres";

@@ -58,7 +58,7 @@ try {
 명시적으로 설정하세요. 원격 또는 운영 서버에서는 이 우회 옵션을 사용하지 말고
 신뢰할 수 있는 인증서를 구성하세요.
 
-Tedious는 `@p1`, `@p2` 같은 결정적인 파라미터 이름을 받습니다. `sql.bind`는 데이터베이스 타입을 선택할 뿐 값을 SQL 텍스트로 바꾸지 않습니다. scalar OUTPUT/INOUT 루틴 파라미터에는 명시적인 hint가 필요합니다. T-SQL integer RETURN status에는 `sql.call` 계약의 `procedure: { name, parameterNames }` metadata가 필요하며 SQLBraid는 임의 `EXEC` 텍스트에서 identity를 추측하지 않습니다.
+Tedious는 `@p1`, `@p2`와 같이 정해진 파라미터 이름을 받습니다. `sql.bind`는 데이터베이스 타입을 선택할 뿐 값을 SQL 텍스트로 바꾸지 않습니다. scalar OUTPUT/INOUT 루틴 파라미터에는 명시적인 hint가 필요합니다. T-SQL integer RETURN status에는 `sql.call` 계약의 `procedure: { name, parameterNames }` metadata가 필요하며 SQLBraid는 임의 `EXEC` 텍스트에서 identity를 추측하지 않습니다.
 
 Tedious 바인딩 어댑터는 논리 문장을 typed request로 구체화합니다. 결정적인
 `@p1`, `@p2`, … 이름, `TYPES.*` 매핑, 인코딩된 값과 facet을 구성합니다.
