@@ -5,9 +5,7 @@ import { assertSavepointName, createCleanupScope, defineResultProperty } from "@
 import type {
   ConnectionLease,
   ConnectionProvider,
-  DatabaseOptions,
   DriverRoutineResult,
-  DriverEnvironment,
   ExecutionOptions,
   BulkBindingDescription,
   BulkExecutionResult,
@@ -30,149 +28,32 @@ import {
 } from "@sqlbraid/core";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { typePolicy as defaultTypePolicy } from "./type-policy.js";
-
-export interface TediousColumnMetadataLike {
-  readonly colName?: string;
-  readonly name?: string;
-  readonly type?: { readonly name?: string } | string;
-  readonly precision?: number;
-  readonly scale?: number;
-  readonly dataLength?: number;
-}
-
-export interface TediousColumnLike {
-  readonly value?: unknown;
-  readonly metadata?: TediousColumnMetadataLike;
-}
-
-export interface TediousRequestLike {
-  on(event: string, listener: (...args: any[]) => void): this;
-  once?(event: string, listener: (...args: any[]) => void): this;
-  removeListener?(event: string, listener: (...args: any[]) => void): this;
-  addParameter(
-    name: string,
-    type: unknown,
-    value?: unknown,
-    options?: { readonly length?: number; readonly precision?: number; readonly scale?: number },
-  ): void;
-  addOutputParameter?(
-    name: string,
-    type: unknown,
-    value?: unknown,
-    options?: { readonly length?: number; readonly precision?: number; readonly scale?: number },
-  ): void;
-  cancel?(): void;
-  pause?(): void;
-  resume?(): void;
-}
-
-export interface TediousConnectionLike {
-  execSql(request: TediousRequestLike): void;
-  prepare?(request: TediousRequestLike): void;
-  execute?(request: TediousRequestLike, parameters: Record<string, unknown>): void;
-  unprepare?(request: TediousRequestLike): void;
-  callProcedure?(request: TediousRequestLike): void;
-  readonly beginTransaction: (...args: any[]) => void;
-  readonly commitTransaction: (...args: any[]) => void;
-  readonly rollbackTransaction: (...args: any[]) => void;
-  readonly saveTransaction: (...args: any[]) => void;
-  cancel?(): void;
-  close?(): void | Promise<void>;
-}
-
-export interface TediousPoolConnectionLike extends TediousConnectionLike {
-  release(): void | Promise<void>;
-  destroy?(): void | Promise<void>;
-}
-
-export interface TediousPoolLike {
-  acquire?(): Promise<TediousPoolConnectionLike>;
-  connect?(): Promise<TediousPoolConnectionLike>;
-  getConnection?(): Promise<TediousPoolConnectionLike>;
-}
-
-/** SQL Server database options; exact numeric output is text and native `OUTPUT` owns write-returning semantics. */
-export type TediousDatabaseOptions = DatabaseOptions & {
-  readonly typePolicy?: TypePolicy;
-  readonly maxBufferedRows?: number;
-};
-
-/** Tedious executor policy, including the optional custom TypePolicy. */
-export type TediousExecutorOptions = {
-  readonly typePolicy?: TypePolicy;
-  readonly maxBufferedRows?: number;
-};
-
-interface TediousMaterializedParameter {
-  readonly name: string;
-  readonly databaseType: DatabaseType;
-  readonly type: unknown;
-  readonly value: unknown;
-  readonly options?: { readonly length?: number; readonly precision?: number; readonly scale?: number };
-  readonly direction: "in" | "out" | "inout";
-  readonly outputName?: string;
-}
-
-interface TediousStatementBindingAdapter extends StatementBindingAdapter {
-  readonly materializedParameters: (
-    statement: RenderedStatement,
-    description: StatementBindingDescription,
-  ) => readonly TediousMaterializedParameter[] | undefined;
-  readonly materializedBulkParameters: (
-    bulk: RenderedBulk,
-    description: BulkBindingDescription,
-  ) => readonly (readonly TediousMaterializedParameter[])[] | undefined;
-}
-
-/** Binding options for SQL Server type hints and representation policy. */
-export interface TediousStatementBindingOptions {
-  readonly typePolicy?: TypePolicy;
-}
-
-type DatabaseType =
-  | "tinyint"
-  | "smallint"
-  | "int"
-  | "bigint"
-  | "decimal"
-  | "numeric"
-  | "money"
-  | "smallmoney"
-  | "real"
-  | "float"
-  | "bit"
-  | "nvarchar"
-  | "varchar"
-  | "char"
-  | "varbinary"
-  | "binary"
-  | "uniqueidentifier"
-  | "date"
-  | "datetime2"
-  | "datetimeoffset";
-
-const typeNames: Readonly<Record<DatabaseType, string>> = {
-  tinyint: "TinyInt",
-  smallint: "SmallInt",
-  int: "Int",
-  bigint: "BigInt",
-  decimal: "Decimal",
-  numeric: "Numeric",
-  money: "Money",
-  smallmoney: "SmallMoney",
-  real: "Real",
-  float: "Float",
-  bit: "Bit",
-  nvarchar: "NVarChar",
-  varchar: "VarChar",
-  char: "Char",
-  varbinary: "VarBinary",
-  binary: "Binary",
-  uniqueidentifier: "UniqueIdentifier",
-  date: "Date",
-  datetime2: "DateTime2",
-  datetimeoffset: "DateTimeOffset",
-};
+import { tediousEnvironment } from "./tedious/environment.js";
+import {
+  typeNames,
+  type DatabaseType,
+  type TediousColumnMetadataLike,
+  type TediousColumnLike,
+  type TediousConnectionLike,
+  type TediousDatabaseOptions,
+  type TediousExecutorOptions,
+  type TediousMaterializedParameter,
+  type TediousPoolLike,
+  type TediousRequestLike,
+  type TediousStatementBindingAdapter,
+  type TediousStatementBindingOptions,
+} from "./tedious/types.js";
+export type {
+  TediousColumnMetadataLike,
+  TediousColumnLike,
+  TediousRequestLike,
+  TediousConnectionLike,
+  TediousPoolConnectionLike,
+  TediousPoolLike,
+  TediousDatabaseOptions,
+  TediousExecutorOptions,
+  TediousStatementBindingOptions,
+} from "./tedious/types.js";
 
 function canonicalType(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_]/gu, "");
@@ -1386,87 +1267,6 @@ interface TediousPreparedRequest {
 }
 
 type TediousRequestCompletionCallback = (error: unknown, rowCount?: number) => void;
-
-const tediousEnvironment = Object.freeze<DriverEnvironment>({
-  database: { product: "mssql" },
-  driver: { id: "tedious", profile: "mssql-tedious" },
-  typePolicy: { id: defaultTypePolicy.id, hash: defaultTypePolicy.hash },
-  capabilities: {
-    "sql.native-transparency": { status: "guaranteed" },
-    "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["number", "string"] },
-    "numeric.exact-decimal": { status: "unsupported", canonical: "string", rawRepresentations: ["number"] },
-    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-    "numeric.bind-exact": {
-      status: "guarded",
-      canonical: "string",
-      rawRepresentations: ["string"],
-      conditionCode: "mssql.character-cast-required",
-    },
-    "numeric.aggregate": {
-      status: "unsupported",
-      canonical: "string",
-      rawRepresentations: ["number"],
-      conditionCode: "mssql.exact-decimal-text-cast-required",
-    },
-    "metadata.command-safe": {
-      status: "guarded",
-      rawRepresentations: ["number"],
-      conditionCode: "mssql.safe-count",
-    },
-    "data.json-lossless-text": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-    "data.json-parsed": { status: "unsupported" },
-    "data.sql-variant": {
-      status: "unsupported",
-      rawRepresentations: ["driver-native"],
-      conditionCode: "mssql.sql-variant-unclassified",
-    },
-    "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Buffer"] },
-    "data.uuid": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-    "data.temporal-lossless": { status: "unsupported", conditionCode: "mssql.temporal-text-cast-required" },
-    "data.temporal-native": {
-      status: "guarded",
-      rawRepresentations: ["Date", "string"],
-      conditionCode: "mssql.temporal-text-cast-required",
-    },
-    "session.pinned": { status: "guaranteed" },
-    transaction: { status: "guaranteed" },
-    "transaction.savepoint": { status: "guaranteed" },
-    "transaction.read-only": { status: "unsupported" },
-    "transaction.isolation.read-uncommitted": { status: "guaranteed" },
-    "transaction.isolation.read-committed": { status: "guaranteed" },
-    "transaction.isolation.repeatable-read": { status: "guaranteed" },
-    "transaction.isolation.serializable": { status: "guaranteed" },
-    "statement.prepare": { status: "guaranteed" },
-    "statement.cancel": { status: "guaranteed" },
-    "statement.stream": { status: "guaranteed" },
-    "statement.bulk": { status: "guaranteed" },
-    "routine.call": { status: "guaranteed" },
-    "routine.out": { status: "guaranteed" },
-    "routine.inout": { status: "guaranteed" },
-    "routine.return-value": { status: "guaranteed" },
-    "routine.result-sets": { status: "guaranteed" },
-    "routine.out-cursor": { status: "unsupported" },
-  },
-  probe: {
-    statement: createRenderedStatement({
-      segments: [
-        "SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version, CAST(SERVERPROPERTY('Edition') AS nvarchar(128)) AS edition",
-      ],
-      parameters: [],
-      resultKind: "rows",
-      dialectId: "mssql",
-    }),
-    read: (rows) => {
-      const row = rows[0];
-      if (!row || typeof row !== "object" || Array.isArray(row)) return {};
-      const record = row as Record<string, unknown>;
-      return {
-        ...(typeof record.version === "string" ? { version: record.version } : {}),
-        ...(typeof record.edition === "string" ? { edition: record.edition } : {}),
-      };
-    },
-  },
-});
 
 function prepareRequest(
   connection: TediousConnectionLike,
