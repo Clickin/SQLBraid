@@ -22,22 +22,21 @@ import type {
   QueryExecutionResult,
   QueryExecutor,
   QueryResultKind,
-  QueryRow,
   DriverRoutineResult,
-  StatementBindingAdapter,
   StatementBindingDescription,
   RenderedBulk,
   RenderedStatement,
   RoutineCallResult,
   RowQuery,
   RowValidationOptions,
-  StandardSchemaV1,
   StreamOptions,
   TransactionOptions,
 } from "@sqlbraid/core";
 import { preparedShape } from "./prepared-shape.js";
+import { createLeaseOperations } from "./operations/lease.js";
+import { createMaterializedOperations } from "./operations/materialized.js";
+import { streamOperation } from "./operations/stream.js";
 import {
-  acquireDirectRoot,
   acquireTransactionTurn,
   assertHealthy,
   assertRootAllowed,
@@ -54,7 +53,6 @@ import {
   type RuntimeOptions,
   type ScopeState,
   type Use,
-  type PhysicalContext,
   PreparationFailure,
   BatchAbortedError,
   now,
@@ -62,7 +60,6 @@ import {
 import { environmentQueries, runtimeEnvironment } from "./environment.js";
 import {
   assertExecutionOptions,
-  assertSessionCapability,
   assertFeatureCapability,
   assertTransactionOptions,
   validateTransactionOptionSupport,
@@ -71,7 +68,6 @@ import {
   assertBindingDescription,
   assertBulkBindingDescription,
   bindingAdapterFor,
-  bindingIdentityMismatch,
   bulkShape,
   isBindingIdentityMismatch,
 } from "./binding.js";
@@ -80,9 +76,6 @@ import {
   assertBulkExecutionResult,
   assertExecutableQuery,
   assertRowsQuery,
-  assertExecutionResult,
-  standardSchemaFor,
-  validateRow,
   malformedExecutionResult,
   resourceCleanupFailure,
 } from "./validation.js";
@@ -105,8 +98,6 @@ import {
   notifyTerminalObservers,
   queryMappedEvent,
   queryReadyEvent,
-  queryResultEvent,
-  streamStartEvent,
   transactionEvent,
   transactionFailure,
   type QueryErrorEventStage,
@@ -214,260 +205,13 @@ function createScopedDatabase(
       );
     }
   };
-  const leaseForUse = async (
-    stream: boolean,
-    expectedBinding: StatementBindingAdapter,
-    executionOptions?: ExecutionOptions,
-    reservedRootScope?: symbol,
-  ): Promise<Use> => {
-    assertOpen();
-    assertHealthy(state);
-    assertExecutionOptions(executor, executionOptions, options.capabilities);
-    if (options.pinned) {
-      const pinned = options.pinned;
-      assertHealthy(pinned.physicalState);
-      const active = physicalContext.getStore();
-      const hasStream =
-        pinned.physicalState.streamUsers > 0 || (pinned.physicalState.pendingStreams ?? 0) > (stream ? 1 : 0);
-      if (hasStream || (active?.rootState === options.rootState && active.direct)) {
-        if (hasStream) {
-          throw new DatabaseScopeError(
-            "BRAID_STREAM_SCOPE",
-            "A pinned stream cannot re-enter its physical execution resource.",
-          );
-        }
-        throw new DatabaseScopeError(
-          "BRAID_REENTRY",
-          "A pinned execution resource cannot execute concurrent physical work.",
-        );
-      }
-      const releaseTurn = await acquireTransactionTurn(pinned.physicalState);
-      try {
-        assertOpen();
-        assertHealthy(pinned.physicalState);
-      } catch (error) {
-        releaseTurn();
-        throw error;
-      }
-      if (pinned.executor.statementBinding !== expectedBinding) {
-        releaseTurn();
-        throw bindingIdentityMismatch();
-      }
-      return {
-        executor: pinned.executor,
-        physicalState: pinned.physicalState,
-        direct: pinned.direct,
-        ownsLease: false,
-        release: async () => {
-          releaseTurn();
-        },
-      };
-    }
-    if (options.transaction) {
-      const lease = options.lease;
-      if (!lease || !options.leaseState)
-        throw new DatabaseScopeError("BRAID_TX_CLOSED", "Transaction database is no longer usable.");
-      const active = physicalContext.getStore();
-      const hasStream =
-        options.leaseState.streamUsers > 0 || (options.leaseState.pendingStreams ?? 0) > (stream ? 1 : 0);
-      if (hasStream || (active?.rootState === options.rootState && active.direct)) {
-        if (hasStream) {
-          throw new DatabaseScopeError(
-            "BRAID_STREAM_SCOPE",
-            "A transaction stream cannot re-enter its pinned physical execution resource.",
-          );
-        }
-        throw new DatabaseScopeError(
-          "BRAID_REENTRY",
-          "A transaction connection cannot execute concurrent physical work.",
-        );
-      }
-      assertHealthy(options.leaseState);
-      const releaseTurn = await acquireTransactionTurn(options.leaseState);
-      try {
-        assertOpen();
-        assertHealthy(options.leaseState);
-      } catch (error) {
-        releaseTurn();
-        throw error;
-      }
-      if (lease.statementBinding !== expectedBinding) {
-        releaseTurn();
-        throw bindingIdentityMismatch();
-      }
-      return {
-        executor: lease,
-        physicalState: options.leaseState,
-        direct: true,
-        ownsLease: false,
-        release: async () => {
-          releaseTurn();
-        },
-      };
-    }
-    if (reservedRootScope === undefined) assertRootAllowed(options.rootState, stream);
-    else if (
-      options.rootState.activeScope !== reservedRootScope &&
-      options.rootState.activeSession !== reservedRootScope
-    ) {
-      throw new DatabaseScopeError(
-        "BRAID_TX_SCOPE",
-        "The root database handle cannot acquire its reserved physical resource.",
-      );
-    }
-    if (!options.pooled) {
-      const release = await acquireDirectRoot(state, stream, reservedRootScope);
-      return {
-        executor: executor as QueryExecutor,
-        physicalState: state,
-        direct: true,
-        ownsLease: false,
-        release: async () => {
-          release();
-        },
-      };
-    }
-    const lease = await (executor as ConnectionProvider).acquire();
-    if (
-      !lease ||
-      typeof lease !== "object" ||
-      typeof lease.release !== "function" ||
-      typeof lease.query !== "function"
-    ) {
-      throw new TypeError("Connection provider returned an invalid lease.");
-    }
-    if (lease.statementBinding !== expectedBinding) {
-      let releaseError: unknown;
-      let releaseFailed = false;
-      try {
-        await lease.release({ discard: true });
-      } catch (error) {
-        releaseFailed = true;
-        releaseError = error;
-      }
-      const mismatch = bindingIdentityMismatch();
-      if (releaseFailed)
-        throw new AggregateError([mismatch, releaseError], "Binding identity mismatch and lease cleanup failed.", {
-          cause: mismatch,
-        });
-      throw mismatch;
-    }
-    const leaseState = scopeStateFor(lease);
-    try {
-      assertHealthy(leaseState);
-    } catch (error) {
-      try {
-        await lease.release({ discard: true });
-      } catch (releaseError) {
-        // oxlint-disable-next-line preserve-caught-error -- Both errors are retained; the poisoned lease remains the primary cause.
-        throw new AggregateError([error, releaseError], "Poisoned lease cleanup failed.", { cause: error });
-      }
-      throw error;
-    }
-    return {
-      executor: lease,
-      physicalState: leaseState,
-      direct: false,
-      ownsLease: true,
-      release: async (discard = false) => {
-        await lease.release(discard ? { discard: true } : undefined);
-      },
-    };
-  };
-  const acquireSessionResource = async (reservedRootSession?: symbol): Promise<Use> => {
-    assertOpen();
-    assertHealthy(state);
-    if (reservedRootSession === undefined) assertRootAllowed(options.rootState, false);
-    else if (options.rootState.activeSession !== reservedRootSession) {
-      throw new DatabaseScopeError(
-        "BRAID_SESSION_SCOPE",
-        "The root database handle cannot acquire its reserved session resource.",
-      );
-    }
-    assertSessionCapability(executor, options.capabilities);
-    if (!options.pooled) {
-      const release = await acquireDirectRoot(state, false, reservedRootSession);
-      return {
-        executor: executor as QueryExecutor,
-        physicalState: state,
-        direct: true,
-        ownsLease: true,
-        release: async () => {
-          release();
-        },
-      };
-    }
-    const lease = await (executor as ConnectionProvider).acquire();
-    if (
-      !lease ||
-      typeof lease !== "object" ||
-      typeof lease.release !== "function" ||
-      typeof lease.query !== "function"
-    ) {
-      throw new TypeError("Connection provider returned an invalid lease.");
-    }
-    if (lease.statementBinding !== statementBinding) {
-      let releaseError: unknown;
-      try {
-        await lease.release({ discard: true });
-      } catch (error) {
-        releaseError = error;
-      }
-      const mismatch = bindingIdentityMismatch();
-      if (releaseError !== undefined)
-        throw new AggregateError([mismatch, releaseError], "Binding identity mismatch and lease cleanup failed.", {
-          cause: mismatch,
-        });
-      throw mismatch;
-    }
-    try {
-      assertSessionCapability(lease, options.capabilities);
-    } catch (error) {
-      try {
-        await lease.release({ discard: true });
-      } catch (releaseError) {
-        // oxlint-disable-next-line preserve-caught-error -- Both errors are retained; the capability failure remains the primary cause.
-        throw new AggregateError([error, releaseError], "Session capability check and lease cleanup failed.", {
-          cause: error,
-        });
-      }
-      throw error;
-    }
-    const leaseState = scopeStateFor(lease);
-    try {
-      assertHealthy(leaseState);
-    } catch (error) {
-      try {
-        await lease.release({ discard: true });
-      } catch (releaseError) {
-        // oxlint-disable-next-line preserve-caught-error -- Both errors are retained; the poisoned lease remains the primary cause.
-        throw new AggregateError([error, releaseError], "Poisoned lease cleanup failed.", { cause: error });
-      }
-      throw error;
-    }
-    return {
-      executor: lease,
-      physicalState: leaseState,
-      direct: false,
-      ownsLease: true,
-      release: async (discard = false) => {
-        await lease.release(discard ? { discard: true } : undefined);
-      },
-    };
-  };
-  const pinnedResource = (): Use | undefined => {
-    if (options.pinned) return options.pinned;
-    if (options.transaction && options.lease && options.leaseState) {
-      return {
-        executor: options.lease,
-        physicalState: options.leaseState,
-        direct: true,
-        ownsLease: false,
-        release: async () => {},
-      };
-    }
-    return undefined;
-  };
+  const { leaseForUse, acquireSessionResource, pinnedResource } = createLeaseOperations({
+    executor,
+    state,
+    options,
+    statementBinding,
+    assertOpen,
+  });
   const prepare = <Q extends Query<unknown, QueryResultKind>>(
     query: Q,
     preparedName?: string,
@@ -616,364 +360,23 @@ function createScopedDatabase(
     await observePrepared(operation);
     return operation;
   };
-  const physical = async <Q extends ExecutableQuery>(
-    operation: PreparedOperation<Q>,
-    use: Use,
-    executionOptions?: ExecutionOptions,
-  ): Promise<RawOperation<Q>> => {
-    const started = now();
-    try {
-      const result = await physicalContext.run(
-        { rootState: options.rootState, direct: use.direct, stream: false },
-        () => use.executor.query<unknown>(operation.rendered, operation.binding, executionOptions),
-      );
-      return { ...operation, result, durationMs: now() - started, driverFailed: false };
-    } catch (driverError) {
-      if (resourceCleanupFailure(driverError)) poison(use.physicalState, driverError);
-      return { ...operation, driverError, driverFailed: true, durationMs: now() - started };
-    }
-  };
-  const finalizePhysical = async <Q extends ExecutableQuery>(
-    operation: RawOperation<Q>,
-  ): Promise<QueryExecutionResult<unknown>> => {
-    if (operation.driverFailed) {
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(
-          operation as RawOperation<ExecutableQuery>,
-          operation.driverError,
-          "driver",
-          true,
-          false,
-          operation.durationMs,
-        ),
-        operation.driverError,
-      );
-    }
-    let result: QueryExecutionResult<unknown>;
-    try {
-      result = assertExecutionResult(operation.query, operation.result as QueryExecutionResult<unknown>);
-    } catch (error) {
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(operation as RawOperation<ExecutableQuery>, error, "result-kind", true, true, operation.durationMs),
-        error,
-      );
-    }
-    try {
-      await notify(options.observers ?? [], queryResultEvent(operation as RawOperation<ExecutableQuery>, result!));
-    } catch (error) {
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(
-          operation as RawOperation<ExecutableQuery>,
-          error,
-          "observer-after",
-          true,
-          true,
-          operation.durationMs,
-        ),
-        error,
-      );
-    }
-    return result!;
-  };
-  const processRows = async <Q extends ExecutableQuery>(
-    operation: RawOperation<Q>,
-    result: QueryExecutionResult<unknown>,
-    executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>,
-  ): Promise<QueryExecutionResult<unknown>> => {
-    const queryMapped = operation.query.resultSchema !== undefined;
-    const executionMapped = executionSchema !== undefined;
-    if (result.kind !== "rows" || (!queryMapped && !executionMapped)) {
-      try {
-        await notify(
-          options.observers ?? [],
-          queryMappedEvent(
-            operation as RawOperation<ExecutableQuery>,
-            result.kind === "rows" ? result.rows.length : (result.rowCount ?? 0),
-            queryMapped,
-            executionMapped,
-            0,
-          ),
-        );
-      } catch (error) {
-        await notifyError(
-          options.observers ?? [],
-          errorEvent(
-            operation as RawOperation<ExecutableQuery>,
-            error,
-            "observer-after",
-            true,
-            true,
-            operation.durationMs,
-          ),
-          error,
-        );
-      }
-      return result;
-    }
-    const mappingStarted = now();
-    const rows: unknown[] = [];
-    let queryStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
-    let executionStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
-    try {
-      queryStandard = standardSchemaFor(operation.query.resultSchema) as
-        | StandardSchemaV1.Props<unknown, unknown>
-        | undefined;
-    } catch (error) {
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(operation as RawOperation<ExecutableQuery>, error, "query-map", true, true, operation.durationMs),
-        error,
-      );
-    }
-    try {
-      executionStandard = standardSchemaFor(executionSchema) as StandardSchemaV1.Props<unknown, unknown> | undefined;
-    } catch (error) {
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(
-          operation as RawOperation<ExecutableQuery>,
-          error,
-          "execution-map",
-          true,
-          true,
-          operation.durationMs,
-        ),
-        error,
-      );
-    }
-    for (let rowIndex = 0; rowIndex < result.rows.length; rowIndex += 1) {
-      let mapped: unknown = result.rows[rowIndex];
-      if (queryStandard !== undefined) {
-        try {
-          mapped = await validateRow(queryStandard, mapped, rowIndex, "query");
-        } catch (error) {
-          await notifyError(
-            options.observers ?? [],
-            errorEvent(
-              operation as RawOperation<ExecutableQuery>,
-              error,
-              "query-map",
-              true,
-              true,
-              operation.durationMs,
-            ),
-            error,
-          );
-        }
-      }
-      if (executionStandard !== undefined) {
-        try {
-          mapped = await validateRow(executionStandard, mapped, rowIndex, "execution");
-        } catch (error) {
-          await notifyError(
-            options.observers ?? [],
-            errorEvent(
-              operation as RawOperation<ExecutableQuery>,
-              error,
-              "execution-map",
-              true,
-              true,
-              operation.durationMs,
-            ),
-            error,
-          );
-        }
-      }
-      rows.push(mapped);
-    }
-    try {
-      await notify(
-        options.observers ?? [],
-        queryMappedEvent(
-          operation as RawOperation<ExecutableQuery>,
-          result.rows.length,
-          queryMapped,
-          executionMapped,
-          now() - mappingStarted,
-        ),
-      );
-    } catch (error) {
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(
-          operation as RawOperation<ExecutableQuery>,
-          error,
-          "observer-after",
-          true,
-          true,
-          operation.durationMs,
-        ),
-        error,
-      );
-    }
-    return { ...result, rows: rows! };
-  };
-  const processOne = async <Q extends ExecutableQuery>(
-    operation: RawOperation<Q>,
-    result: QueryExecutionResult<unknown>,
-    executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>,
-  ): Promise<unknown> => {
-    if (result.kind !== "rows") return result;
-    const mapped = await processRows(operation, result, executionSchema);
-    return mapped.rows[0];
-  };
-  const runPrepared = async <Q extends ExecutableQuery>(
-    operation: PreparedOperation<Q>,
-    executionOptions?: ExecutionOptions,
-  ): Promise<RawOperation<Q>> => {
-    let use: Use;
-    try {
-      use = await leaseForUse(false, statementBinding, executionOptions);
-    } catch (error) {
-      const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
-      await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
-      throw error;
-    }
-    // Materialize and release before Standard Schema mapping so pooled connections are not held during application code.
-    const raw = await physical(operation, use!, executionOptions);
-    let releaseError: unknown;
-    let releaseFailed = false;
-    try {
-      await use!.release(isPoisoned(use!.physicalState));
-    } catch (error) {
-      releaseError = error;
-      releaseFailed = true;
-      poison(use!.physicalState, error);
-    }
-    if (raw.driverFailed) {
-      const original = releaseFailed
-        ? new AggregateError([raw.driverError, releaseError], "Execution and lease release failed.", {
-            cause: raw.driverError,
-          })
-        : raw.driverError;
-      const stage = releaseFailed ? "release" : "driver";
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(raw as RawOperation<ExecutableQuery>, original, stage, true, false, raw.durationMs),
-        original,
-      );
-    }
-    if (releaseFailed) {
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(raw as RawOperation<ExecutableQuery>, releaseError, "release", true, true, raw.durationMs),
-        releaseError,
-      );
-    }
-    return raw;
-  };
-  const runMaterialized = async <Q extends ExecutableQuery>(
-    query: Q,
-    preparedName?: string,
-    batchId?: string,
-    executionOptions?: ExecutionOptions,
-  ): Promise<RawOperation<Q>> => {
-    assertExecutableQuery(query);
-    return runPrepared(await prepareObserved(query, preparedName, batchId), executionOptions);
-  };
-  const materializedPreparedResult = async <Q extends ExecutableQuery>(
-    operation: PreparedOperation<Q>,
-    executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>,
-    executionOptions?: ExecutionOptions,
-  ): Promise<QueryExecutionResult<unknown>> => {
-    const raw = await runPrepared(operation, executionOptions);
-    const result = await finalizePhysical(raw);
-    return processRows(raw, result, executionSchema);
-  };
-  const materializedResult = async <Q extends ExecutableQuery>(
-    query: Q,
-    preparedName?: string,
-    executionSchema?: StandardSchemaV1<unknown, QueryRow<Q>>,
-    batchId?: string,
-    executionOptions?: ExecutionOptions,
-  ): Promise<QueryExecutionResult<unknown>> => {
-    return materializedPreparedResult(
-      await prepareObserved(query, preparedName, batchId),
-      executionSchema,
-      executionOptions,
-    );
-  };
-  const executeNamed = async <Q extends ExecutableQuery>(
-    query: Q,
-    preparedName?: string,
-    executionOptions?: ExecutionOptions,
-  ): Promise<ExecutionResultOf<Q>> =>
-    (await materializedResult(query, preparedName, undefined, undefined, executionOptions)) as ExecutionResultOf<Q>;
-  const allNamed = async <Row>(
-    query: RowQuery<Row>,
-    validationOptions?: RowValidationOptions<Row>,
-    preparedName?: string,
-  ): Promise<readonly Row[]> => {
-    const result = await materializedResult(
-      query,
-      preparedName,
-      validationOptions?.schema,
-      undefined,
-      validationOptions,
-    );
-    if (result.kind !== "rows") malformedExecutionResult();
-    return result.rows as readonly Row[];
-  };
-  const oneNamed = async <Row>(
-    query: RowQuery<Row>,
-    validationOptions?: RowValidationOptions<Row>,
-    preparedName?: string,
-  ): Promise<Row> => {
-    const raw = await runMaterialized(query, preparedName, undefined, validationOptions);
-    const result = await finalizePhysical(raw);
-    if (result.kind !== "rows") malformedExecutionResult();
-    if (result.rows.length !== 1) {
-      const error = new DatabaseCardinalityError("one", result.rows.length);
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(raw as RawOperation<ExecutableQuery>, error, "cardinality", true, true, raw.durationMs),
-        error,
-      );
-    }
-    return (await processOne(raw, result, validationOptions?.schema)) as Row;
-  };
-  const maybeOneNamed = async <Row>(
-    query: RowQuery<Row>,
-    validationOptions?: RowValidationOptions<Row>,
-    preparedName?: string,
-  ): Promise<Row | undefined> => {
-    const raw = await runMaterialized(query, preparedName, undefined, validationOptions);
-    const result = await finalizePhysical(raw);
-    if (result.kind !== "rows") malformedExecutionResult();
-    if (result.rows.length > 1) {
-      const error = new DatabaseCardinalityError("maybeOne", result.rows.length);
-      await notifyError(
-        options.observers ?? [],
-        errorEvent(raw as RawOperation<ExecutableQuery>, error, "cardinality", true, true, raw.durationMs),
-        error,
-      );
-    }
-    if (result.rows.length === 0) {
-      try {
-        await notify(
-          options.observers ?? [],
-          queryMappedEvent(
-            raw as RawOperation<ExecutableQuery>,
-            0,
-            query.resultSchema !== undefined,
-            validationOptions?.schema !== undefined,
-            0,
-          ),
-        );
-      } catch (error) {
-        await notifyError(
-          options.observers ?? [],
-          errorEvent(raw as RawOperation<ExecutableQuery>, error, "observer-after", true, true, raw.durationMs),
-          error,
-        );
-      }
-      return undefined;
-    }
-    return (await processOne(raw, result, validationOptions?.schema)) as Row;
-  };
+  const {
+    physical,
+    finalizePhysical,
+    processRows,
+    processOne,
+    runPrepared,
+    materializedPreparedResult,
+    executeNamed,
+    allNamed,
+    oneNamed,
+    maybeOneNamed,
+  } = createMaterializedOperations({
+    options,
+    statementBinding,
+    leaseForUse,
+    prepareObserved,
+  });
   const database: InternalDatabase = {
     async environment(environmentOptions = {}): Promise<DatabaseEnvironment> {
       assertOpen();
@@ -1846,253 +1249,16 @@ function createScopedDatabase(
       streamOptions: StreamOptions<Row> = {},
       preparedOperation?: PreparedOperation<RowQuery<Row>>,
     ): AsyncIterable<Row> {
-      assertOpen();
-      assertHealthy(state);
-      assertRowsQuery(query);
-      const operationId = preparedOperation?.meta.operationId ?? nextOperationId();
-      let stream!: AsyncGenerator<Row>;
-      stream = (async function* (): AsyncGenerator<Row> {
-        assertOpen();
-        openStreams.add(stream);
-        let operation: PreparedOperation<ExecutableQuery>;
-        try {
-          operation =
-            preparedOperation === undefined
-              ? (prepare(query, undefined, undefined, undefined, operationId) as PreparedOperation<ExecutableQuery>)
-              : (preparedOperation as PreparedOperation<ExecutableQuery>);
-        } catch (error) {
-          openStreams.delete(stream);
-          const failure = error instanceof PreparationFailure ? error : undefined;
-          const reported = failure === undefined ? error : failure.cause;
-          const fallback = {
-            query,
-            rendered: { segments: [""], parameters: [], resultKind: query.resultKind, dialectId: "" },
-            binding: undefined,
-            meta: metadata(options, operationId),
-          } as unknown as PreparedOperation<ExecutableQuery>;
-          await notifyError(
-            options.observers ?? [],
-            errorEvent(fallback, reported, failure?.stage ?? "render", false, false),
-            reported,
-          );
-          throw reported;
-        }
-        try {
-          assertExecutionOptions(executor, streamOptions, options.capabilities);
-        } catch (error) {
-          openStreams.delete(stream);
-          await notifyError(options.observers ?? [], errorEvent(operation, error, "stream", false, false), error);
-        }
-        try {
-          assertFeatureCapability(
-            executor,
-            "statement.stream",
-            "BRAID_STREAM_UNSUPPORTED",
-            "The selected execution resource does not expose a streaming protocol.",
-            options.capabilities,
-          );
-        } catch (error) {
-          openStreams.delete(stream);
-          await notifyError(options.observers ?? [], errorEvent(operation, error, "materialize", false, false), error);
-        }
-        const admissionState =
-          options.pinned?.physicalState ?? (options.transaction || !options.pooled ? state : undefined);
-        if (admissionState) admissionState.pendingStreams = (admissionState.pendingStreams ?? 0) + 1;
-        let use: Use;
-        try {
-          try {
-            await notify(options.observers ?? [], streamStartEvent(operation));
-          } catch (error) {
-            openStreams.delete(stream);
-            await notifyError(
-              options.observers ?? [],
-              errorEvent(operation, error, "observer-before", false, false),
-              error,
-            );
-          }
-          try {
-            use = await leaseForUse(true, statementBinding, streamOptions);
-          } catch (error) {
-            openStreams.delete(stream);
-            const stage = isBindingIdentityMismatch(error) ? "materialize" : "acquire";
-            await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
-          }
-          use!.physicalState.streamUsers += 1;
-        } finally {
-          if (admissionState) admissionState.pendingStreams! -= 1;
-        }
-        const started = now();
-        let count = 0;
-        let streamError: unknown;
-        let streamFailed = false;
-        let errorAlreadyReported = false;
-        let iterator: AsyncIterator<unknown> | undefined;
-        const activeContext: PhysicalContext = { rootState: options.rootState, direct: use!.direct, stream: true };
-        try {
-          if (!use!.executor.stream) {
-            throw new UnsupportedFeatureError(
-              "statement.stream",
-              "BRAID_STREAM_UNSUPPORTED",
-              "The selected execution resource does not expose a streaming protocol.",
-            );
-          }
-          const source = physicalContext.run(activeContext, () =>
-            use!.executor.stream!(operation.rendered, operation.binding, streamOptions),
-          );
-          iterator = source[Symbol.asyncIterator]();
-          let queryStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
-          let executionStandard: StandardSchemaV1.Props<unknown, unknown> | undefined;
-          try {
-            queryStandard = standardSchemaFor(query.resultSchema) as
-              | StandardSchemaV1.Props<unknown, unknown>
-              | undefined;
-          } catch (error) {
-            errorAlreadyReported = true;
-            await notifyError(
-              options.observers ?? [],
-              errorEvent(operation, error, "query-map", true, true, now() - started),
-              error,
-            );
-          }
-          try {
-            executionStandard = standardSchemaFor(streamOptions.schema) as
-              | StandardSchemaV1.Props<unknown, unknown>
-              | undefined;
-          } catch (error) {
-            errorAlreadyReported = true;
-            await notifyError(
-              options.observers ?? [],
-              errorEvent(operation, error, "execution-map", true, true, now() - started),
-              error,
-            );
-          }
-          while (true) {
-            const next = await physicalContext.run(activeContext, () => iterator!.next());
-            if (next.done) {
-              if (streamOptions.signal?.aborted) throw streamOptions.signal.reason;
-              break;
-            }
-            const row = next.value;
-            if (streamOptions.signal?.aborted) throw streamOptions.signal.reason;
-            let mapped: unknown = row;
-            if (queryStandard !== undefined) {
-              try {
-                mapped = await physicalContext.run(activeContext, () =>
-                  validateRow(queryStandard!, row, count, "query"),
-                );
-              } catch (error) {
-                errorAlreadyReported = true;
-                await notifyError(
-                  options.observers ?? [],
-                  errorEvent(operation, error, "query-map", true, true, now() - started),
-                  error,
-                );
-              }
-            }
-            if (executionStandard !== undefined) {
-              try {
-                mapped = await physicalContext.run(activeContext, () =>
-                  validateRow(executionStandard!, mapped, count, "execution"),
-                );
-              } catch (error) {
-                errorAlreadyReported = true;
-                await notifyError(
-                  options.observers ?? [],
-                  errorEvent(operation, error, "execution-map", true, true, now() - started),
-                  error,
-                );
-              }
-            }
-            if (streamOptions.signal?.aborted) throw streamOptions.signal.reason;
-            count = addSafeCount(count, 1);
-            yield mapped as Row;
-          }
-        } catch (error) {
-          streamError = error;
-          streamFailed = true;
-          if (resourceCleanupFailure(error)) poison(use!.physicalState, error);
-          // A failed iterator or release poisons the physical resource and forces discard on release.
-          if (!errorAlreadyReported) {
-            try {
-              await notifyError(
-                options.observers ?? [],
-                errorEvent(operation, error, "stream", true, false, now() - started),
-                error,
-              );
-            } catch (reported) {
-              streamError = reported;
-            }
-          }
-        } finally {
-          // Iterator cleanup runs before lease release so driver cursors/portals still have their owning connection.
-          if (iterator?.return) {
-            try {
-              await physicalContext.run(activeContext, () => iterator!.return!());
-            } catch (error) {
-              streamError = streamFailed
-                ? new AggregateError([streamError, error], "Stream iterator cleanup failed.", { cause: streamError })
-                : error;
-              streamFailed = true;
-              poison(use!.physicalState, streamError);
-            }
-          }
-          let releaseError: unknown;
-          let releaseFailed = false;
-          try {
-            await use!.release(isPoisoned(use!.physicalState));
-          } catch (error) {
-            releaseError = error;
-            releaseFailed = true;
-            poison(use!.physicalState, error);
-          }
-          // A failed iterator or release poisons the physical resource and forces discard on release.
-          if (releaseFailed) {
-            try {
-              await notifyError(
-                options.observers ?? [],
-                errorEvent(operation, releaseError, "release", true, streamError === undefined, now() - started),
-                releaseError,
-              );
-            } catch (reported) {
-              releaseError = reported;
-            }
-          }
-          if (releaseFailed) {
-            streamError = streamFailed
-              ? new AggregateError([streamError, releaseError], "Stream and lease release failed.", {
-                  cause: streamError,
-                })
-              : releaseError;
-            streamFailed = true;
-          }
-          use!.physicalState.streamUsers -= 1;
-          openStreams.delete(stream);
-          const endEvent: ExecutionEvent = {
-            type: "stream:end",
-            operationId: operation.meta.operationId,
-            status: streamFailed ? "error" : "completed",
-            durationMs: now() - started,
-            rowCount: count,
-            error: streamError,
-            transactionDepth: options.depth,
-            transactionScoped: options.transaction,
-          };
-          // Terminal delivery must close every observer's state, even when an earlier observer fails.
-          const observerFailures = await notifyTerminalObservers(options.observers ?? [], endEvent);
-          if (observerFailures.length > 0) {
-            streamError = streamFailed
-              ? new AggregateError([streamError, ...observerFailures], "Stream and observers failed.", {
-                  cause: streamError,
-                })
-              : observerFailures.length === 1
-                ? observerFailures[0]
-                : new AggregateError(observerFailures, "Stream end observers failed.", { cause: observerFailures[0] });
-            streamFailed = true;
-          }
-          if (streamFailed) throw streamError;
-        }
-      })();
-      return stream;
+      return streamOperation(query, streamOptions, preparedOperation, {
+        executor,
+        state,
+        options,
+        statementBinding,
+        openStreams,
+        assertOpen,
+        prepare,
+        leaseForUse,
+      });
     },
     async session<T>(callback: (database: Database) => Promise<T>): Promise<T> {
       assertOpen();
@@ -2116,7 +1282,7 @@ function createScopedDatabase(
         throw error;
       }
       if (!use) throw new DatabaseScopeError("BRAID_SESSION_CLOSED", "Session database is no longer usable.");
-      const physicalState = use.physicalState;
+      const physicalState = use!.physicalState;
       const previousSession = physicalState.activeSession;
       physicalState.activeSession = scope;
       if (!nested) options.rootState.activeSession = scope;
@@ -2265,7 +1431,7 @@ function createScopedDatabase(
               };
             } else {
               use = await leaseForUse(false, statementBinding, undefined, reservedRootTransaction);
-              if (!options.pooled) use = { ...use, ownsLease: true };
+              if (!options.pooled) use = { ...use!, ownsLease: true };
             }
           } catch (error) {
             try {
@@ -2275,11 +1441,11 @@ function createScopedDatabase(
             }
             throw error;
           }
-          physicalState = use.physicalState;
+          physicalState = use!.physicalState;
           physicalState.activeScope = scope;
           if (options.scopeKind === "root") options.rootState.activeScope = scope;
         }
-        const resource = use.executor;
+        const resource = use!.executor;
         assertFeatureCapability(
           resource,
           nested ? "transaction.savepoint" : "transaction",
