@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "SQLBraid command-line tools for inspecting projects and generating typed models",
   "keywords": [
     "cli",

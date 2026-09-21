@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/runtime",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Execute typed SQLBraid queries with connection-safe transactions and result mapping",
   "keywords": [
     "database",

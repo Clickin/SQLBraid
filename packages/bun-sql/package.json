@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/bun-sql",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "SQLBraid Bun.SQL multi-dialect driver adapter",
   "keywords": [
     "bun",

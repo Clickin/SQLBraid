@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/sqlite",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "SQLBraid SQLite dialect adapters for node:sqlite, better-sqlite3, libSQL, SQLite WASM, and Cloudflare D1, plus metadata inspection",
   "keywords": [
     "database",
