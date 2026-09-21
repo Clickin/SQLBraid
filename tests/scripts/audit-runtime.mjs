@@ -52,20 +52,20 @@ export async function auditRuntime(
       );
     }
     const excluded = excludedSubpaths.get(name) ?? new Set();
+    function isExcludedPath(relativePath) {
+      const withoutExtension = relativePath.replace(/\.(?:d\.)?(?:ts|js|mjs)$/u, "");
+      return [...excluded].some(
+        (subpath) =>
+          withoutExtension === subpath ||
+          withoutExtension.startsWith(`${subpath}/`) ||
+          withoutExtension.startsWith(`${subpath}-`),
+      );
+    }
     for (const entry of await readdir(folder, { recursive: true, withFileTypes: true })) {
       if (!entry.isFile() || !/\.(?:ts|js|mjs)$/.test(entry.name)) continue;
       const path = join(entry.parentPath, entry.name);
       const relativePath = path.slice(folder.length + 1).replaceAll("\\", "/");
-      if (
-        [...excluded].some(
-          (subpath) =>
-            relativePath === `${subpath}.ts` ||
-            relativePath === `${subpath}.js` ||
-            relativePath === `${subpath}.mjs` ||
-            relativePath === `${subpath}.d.ts`,
-        )
-      )
-        continue;
+      if (isExcludedPath(relativePath)) continue;
       const text = await readFile(path, "utf8");
       const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
       const bufferImport = source.statements.some(
@@ -97,9 +97,7 @@ export async function auditRuntime(
           const specifier = node.moduleSpecifier.text;
           if (specifier.startsWith("./")) {
             const relativeImport = specifier.slice(2).replace(/\.(?:[cm]?js|ts)$/u, "");
-            if (
-              [...excluded].some((subpath) => relativeImport === subpath || relativeImport.startsWith(`${subpath}/`))
-            ) {
+            if (isExcludedPath(relativeImport)) {
               fail(node, `Portable ${name} root dependency graph reaches excluded Node-only subpath ${relativeImport}`);
             }
           }
