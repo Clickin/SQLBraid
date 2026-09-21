@@ -3,9 +3,7 @@ import type {
   CommandResult,
   ConnectionLease,
   ConnectionProvider,
-  DatabaseOptions,
   DriverRoutineResult,
-  DriverEnvironment,
   ExecutionOptions,
   BulkBindingDescription,
   BulkExecutionResult,
@@ -32,13 +30,39 @@ import {
 } from "@sqlbraid/core";
 import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
-import {
-  typePolicyForProfile,
-  type Mysql2JsonProfile,
-  type Mysql2ProfileOptions,
-  type Mysql2RepresentationProfile,
-  type Mysql2TemporalProfile,
-} from "./type-policy.js";
+import { mysql2Environment, mysql2RepresentationProfile, isRepresentationProfile } from "./mysql2/environment.js";
+import { mysqlTypes } from "./mysql2/types.js";
+import type {
+  Mysql2ConnectionLike,
+  Mysql2DatabaseOptions,
+  Mysql2ExecuteOptionsLike,
+  Mysql2ExecutorOptions,
+  Mysql2FieldLike,
+  Mysql2FieldPayload,
+  Mysql2Parameter,
+  Mysql2PoolLike,
+  Mysql2RawCommandLike,
+  Mysql2RawConnectionLike,
+  Mysql2RawStreamLike,
+  Mysql2ResultHeader,
+} from "./mysql2/types.js";
+
+export type {
+  Mysql2ConnectionLike,
+  Mysql2DatabaseOptions,
+  Mysql2ExecuteOptionsLike,
+  Mysql2ExecutorOptions,
+  Mysql2FieldLike,
+  Mysql2FieldPayload,
+  Mysql2Parameter,
+  Mysql2PoolConnectionLike,
+  Mysql2PoolLike,
+  Mysql2PreparedStatementLike,
+  Mysql2RawCommandLike,
+  Mysql2RawConnectionLike,
+  Mysql2RawStreamLike,
+  Mysql2ResultHeader,
+} from "./mysql2/types.js";
 
 export type {
   Mysql2ConnectionOptions,
@@ -56,84 +80,6 @@ export {
   typePolicyForProfile,
 } from "./type-policy.js";
 
-export interface Mysql2FieldLike {
-  readonly name?: string;
-  readonly type?: string | number;
-}
-export type Mysql2FieldPayload = readonly Mysql2FieldLike[] | readonly (readonly Mysql2FieldLike[])[];
-
-export type Mysql2ResultHeader = Omit<CommandResult, "affectedRows" | "insertId"> & {
-  readonly affectedRows?: unknown;
-  readonly insertId?: unknown;
-  readonly warningStatus?: unknown;
-};
-
-type Mysql2TypedParameter = { readonly type: number; readonly value: unknown; readonly unsigned: boolean };
-export type Mysql2Parameter =
-  | string
-  | number
-  | bigint
-  | boolean
-  | Date
-  | null
-  | Blob
-  | Uint8Array
-  | Mysql2TypedParameter
-  | Mysql2Parameter[]
-  | { [key: string]: Mysql2Parameter };
-
-/**
- * mysql2 execute request shape used by prepared and streaming paths.
- * `rowsAsArray` keeps field metadata authoritative for column-name/type normalization.
- */
-export interface Mysql2ExecuteOptionsLike {
-  readonly sql: string;
-  readonly values?: Mysql2Parameter[];
-  readonly rowsAsArray?: boolean;
-  readonly disableEval?: boolean;
-}
-
-export interface Mysql2RawStreamLike extends AsyncIterable<unknown> {
-  readonly readableEnded?: boolean;
-  readonly destroyed?: boolean;
-  destroy?(error?: Error): this;
-  resume?(): this;
-  on?(event: string, listener: (...args: readonly unknown[]) => void): this;
-  once(event: string, listener: (...args: readonly unknown[]) => void): this;
-}
-
-export interface Mysql2RawCommandLike {
-  stream(options?: { readonly highWaterMark?: number }): Mysql2RawStreamLike;
-}
-
-export interface Mysql2RawConnectionLike {
-  execute(sqlOrOptions: string | Mysql2ExecuteOptionsLike, values?: Mysql2Parameter[]): Mysql2RawCommandLike;
-  destroy(): void;
-  readonly stream?: {
-    readonly destroyed?: boolean;
-    destroy(error?: Error): void;
-  };
-}
-
-export interface Mysql2PreparedStatementLike {
-  execute(values?: Mysql2Parameter[]): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
-  close(): Promise<void>;
-}
-
-export interface Mysql2ConnectionLike {
-  execute(
-    sqlOrOptions: string | Mysql2ExecuteOptionsLike,
-    values?: Mysql2Parameter[],
-  ): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
-  prepare?(sql: string): Promise<Mysql2PreparedStatementLike>;
-  unprepare?(sql: string): void | Promise<void>;
-  query?(sql: string): Promise<readonly [unknown, Mysql2FieldPayload | undefined]>;
-  beginTransaction(): Promise<void>;
-  commit(): Promise<void>;
-  rollback(): Promise<void>;
-  getConnection?: never;
-}
-
 function unsupported(
   feature: string,
   code: `BRAID_${string}`,
@@ -148,62 +94,6 @@ function invalidTransactionOptions(message: string): TypeError & { readonly code
   Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
   return error;
 }
-
-export interface Mysql2PoolConnectionLike extends Mysql2ConnectionLike {
-  release(): void | Promise<void>;
-  destroy(): void;
-}
-
-export interface Mysql2PoolLike {
-  getConnection(): Promise<Mysql2PoolConnectionLike>;
-}
-
-/**
- * mysql2 connection/profile policy. Exact numeric fidelity depends on the selected representation profile;
- * active cancellation destroys the physical connection when the driver cannot safely interrupt it.
- */
-export interface Mysql2ExecutorOptions {
-  readonly typePolicy?: TypePolicy;
-  readonly streamHighWaterMark?: number;
-  /**
-   * Optional evidence for connection options that mysql2 does not expose
-   * consistently across PromiseConnection and PoolConnection wrappers.
-   * Detected physical connection settings always take precedence.
-   */
-  readonly profile?: Mysql2ProfileOptions | Mysql2RepresentationProfile;
-}
-
-export type Mysql2DatabaseOptions = DatabaseOptions & Mysql2ExecutorOptions;
-
-const mysqlTypes: Readonly<Record<number, string>> = {
-  0: "DECIMAL",
-  1: "TINYINT",
-  2: "SMALLINT",
-  3: "INT",
-  4: "FLOAT",
-  5: "DOUBLE",
-  7: "TIMESTAMP",
-  8: "BIGINT",
-  9: "MEDIUMINT",
-  10: "DATE",
-  11: "TIME",
-  12: "DATETIME",
-  13: "YEAR",
-  14: "DATE",
-  15: "VARCHAR",
-  16: "BIT",
-  245: "JSON",
-  246: "DECIMAL",
-  247: "ENUM",
-  248: "SET",
-  249: "BLOB",
-  250: "BLOB",
-  251: "BLOB",
-  252: "BLOB",
-  253: "VARCHAR",
-  254: "VARCHAR",
-  255: "GEOMETRY",
-};
 
 function assertMysql2Connection(connection: Mysql2ConnectionLike): void {
   const candidate = connection as unknown as { readonly getConnection?: unknown };
@@ -533,214 +423,6 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   dialectId: "mysql",
   requestedReuse: "auto",
 });
-
-function isRepresentationProfile(
-  value: Mysql2ProfileOptions | Mysql2RepresentationProfile | undefined,
-): value is Mysql2RepresentationProfile {
-  return Boolean(value && "json" in value && "temporal" in value && "typePolicy" in value);
-}
-
-function suppliedProfileOptions(
-  supplied: Mysql2ProfileOptions | Mysql2RepresentationProfile | undefined,
-): Mysql2ProfileOptions | undefined {
-  return isRepresentationProfile(supplied) ? supplied.connectionOptions : supplied;
-}
-
-function mysql2Profile(
-  connection: Mysql2ConnectionLike,
-  supplied: Mysql2ProfileOptions | Mysql2RepresentationProfile | undefined,
-): Mysql2ProfileOptions {
-  const candidate = connection as unknown as {
-    readonly config?: unknown;
-    readonly connection?: { readonly config?: unknown };
-  };
-  const suppliedOptions = suppliedProfileOptions(supplied);
-  const sources = [candidate.config, candidate.connection?.config];
-  const candidates = sources.filter((value): value is Record<string, unknown> =>
-    Boolean(value && typeof value === "object" && !Array.isArray(value)),
-  );
-  const detected =
-    candidates.find((value) =>
-      [
-        "supportBigNumbers",
-        "bigNumberStrings",
-        "decimalNumbers",
-        "rowsAsArray",
-        "jsonStrings",
-        "dateStrings",
-        "typeCast",
-      ].some((key) => key in value),
-    ) ?? candidates[0];
-  if (!detected) return suppliedOptions ?? {};
-  const value = (key: string): boolean | undefined =>
-    typeof detected[key] === "boolean" ? (detected[key] as boolean) : undefined;
-  return {
-    ...suppliedOptions,
-    supportBigNumbers: value("supportBigNumbers") ?? suppliedOptions?.supportBigNumbers,
-    bigNumberStrings: value("bigNumberStrings") ?? suppliedOptions?.bigNumberStrings,
-    decimalNumbers: value("decimalNumbers") ?? suppliedOptions?.decimalNumbers,
-    rowsAsArray: value("rowsAsArray") ?? suppliedOptions?.rowsAsArray,
-    jsonStrings: value("jsonStrings") ?? suppliedOptions?.jsonStrings,
-    dateStrings: value("dateStrings") ?? suppliedOptions?.dateStrings,
-    typeCast:
-      typeof detected.typeCast === "function"
-        ? "custom"
-        : detected.typeCast === false
-          ? "custom"
-          : detected.typeCast === true
-            ? "default"
-            : suppliedOptions?.typeCast,
-  };
-}
-
-function mysql2RepresentationProfile(
-  connection: Mysql2ConnectionLike,
-  supplied: Mysql2ProfileOptions | Mysql2RepresentationProfile | undefined,
-): Mysql2RepresentationProfile {
-  const profile = mysql2Profile(connection, supplied);
-  const json: Mysql2JsonProfile =
-    profile.jsonStrings === undefined
-      ? isRepresentationProfile(supplied)
-        ? supplied.json
-        : "text"
-      : profile.jsonStrings
-        ? "text"
-        : "native";
-  const temporal: Mysql2TemporalProfile =
-    profile.dateStrings === undefined
-      ? isRepresentationProfile(supplied)
-        ? supplied.temporal
-        : "text"
-      : profile.dateStrings
-        ? "text"
-        : "native";
-  return {
-    id: `${json === "text" && temporal === "text" ? "mysql2-lossless-text" : json === "native" && temporal === "native" ? "mysql2-native" : json === "text" ? "mysql2-json-text" : "mysql2-date-text"}`,
-    json,
-    temporal,
-    typePolicy: typePolicyForProfile({ json, temporal }),
-  };
-}
-
-function mysql2Environment(
-  connection: Mysql2ConnectionLike,
-  supplied: Mysql2ProfileOptions | Mysql2RepresentationProfile | undefined,
-  policy: TypePolicy,
-): DriverEnvironment {
-  const profile = mysql2Profile(connection, undefined);
-  const representationProfile = mysql2RepresentationProfile(connection, supplied);
-  const policyMatchesProfile = policy === representationProfile.typePolicy;
-  const exactNumeric =
-    profile.supportBigNumbers === true &&
-    profile.bigNumberStrings === true &&
-    profile.decimalNumbers === false &&
-    (profile.rowsAsArray === false || profile.rowsAsArray === true) &&
-    profile.typeCast === "default";
-  const rowObjects = (profile.rowsAsArray === false || profile.rowsAsArray === true) && profile.typeCast === "default";
-  const jsonText = profile.jsonStrings === true && rowObjects;
-  const jsonNative = profile.jsonStrings === false && rowObjects;
-  const temporalText = profile.dateStrings === true && rowObjects;
-  const temporalNative = profile.dateStrings === false && rowObjects;
-  const profileDimensionsKnown = profile.jsonStrings !== undefined && profile.dateStrings !== undefined;
-  const profileName =
-    exactNumeric && rowObjects && profileDimensionsKnown ? representationProfile.id : "mysql2-custom-profile";
-  const capabilities: DriverEnvironment["capabilities"] = {
-    "session.pinned": { status: "guaranteed" },
-    transaction: { status: "guaranteed" },
-    "transaction.savepoint": { status: "guaranteed" },
-    "transaction.read-only": { status: "guaranteed" },
-    "transaction.isolation.read-uncommitted": { status: "guaranteed" },
-    "transaction.isolation.read-committed": { status: "guaranteed" },
-    "transaction.isolation.repeatable-read": { status: "guaranteed" },
-    "transaction.isolation.serializable": { status: "guaranteed" },
-    "statement.prepare": { status: "guaranteed" },
-    "statement.cancel": { status: "guarded", conditionCode: "mysql2.physical-connection-destroy" },
-    "statement.stream": { status: "guaranteed" },
-    "statement.bulk": { status: "guaranteed" },
-    "routine.call": { status: "guaranteed" },
-    "routine.out": { status: "unsupported" },
-    "routine.inout": { status: "unsupported" },
-    "routine.return-value": { status: "unsupported" },
-    "routine.result-sets": { status: "guaranteed" },
-    "routine.out-cursor": { status: "unsupported" },
-    ...(policyMatchesProfile
-      ? {
-          "sql.native-transparency": { status: "guaranteed" as const },
-          "numeric.exact-integer": {
-            status: exactNumeric ? ("guaranteed" as const) : ("guarded" as const),
-            canonical: "string" as const,
-            rawRepresentations: ["number", "string"],
-            ...(exactNumeric ? {} : { conditionCode: "mysql2.exact-numeric-profile" }),
-          },
-          "numeric.exact-decimal": {
-            status: exactNumeric ? ("guaranteed" as const) : ("guarded" as const),
-            canonical: "string" as const,
-            rawRepresentations: ["string"],
-            ...(exactNumeric ? {} : { conditionCode: "mysql2.exact-numeric-profile" }),
-          },
-          "numeric.approximate-float": {
-            status: rowObjects ? ("guaranteed" as const) : ("guarded" as const),
-            canonical: "number" as const,
-            rawRepresentations: ["number"],
-          },
-          "data.json-parsed": {
-            status: jsonNative
-              ? ("guaranteed" as const)
-              : profile.jsonStrings === true
-                ? ("unsupported" as const)
-                : ("guarded" as const),
-            rawRepresentations: ["object", "array", "string", "number", "boolean", "null"],
-            ...(jsonNative ? {} : { conditionCode: "mysql2.json-strings" }),
-          },
-          "data.json-lossless-text": {
-            status: jsonText
-              ? ("guaranteed" as const)
-              : profile.jsonStrings === false
-                ? ("unsupported" as const)
-                : ("guarded" as const),
-            canonical: "string" as const,
-            rawRepresentations: ["string"],
-            ...(jsonText ? {} : { conditionCode: "mysql2.json-strings" }),
-          },
-          "data.temporal-lossless": {
-            status: temporalText ? ("guaranteed" as const) : ("guarded" as const),
-            canonical: "string" as const,
-            rawRepresentations: ["string"],
-            ...(temporalText ? {} : { conditionCode: "mysql2.date-strings" }),
-          },
-          "data.temporal-native": {
-            status: temporalNative
-              ? ("guaranteed" as const)
-              : temporalText
-                ? ("unsupported" as const)
-                : ("guarded" as const),
-            rawRepresentations: ["Date", "string"],
-            ...(temporalText || profile.dateStrings === undefined ? { conditionCode: "mysql2.date-strings" } : {}),
-          },
-        }
-      : {}),
-  };
-  return Object.freeze<DriverEnvironment>({
-    database: { product: "mysql" },
-    driver: { id: "mysql2", profile: policyMatchesProfile ? profileName : "custom-type-policy" },
-    typePolicy: { id: policy.id, hash: policy.hash },
-    capabilities,
-    probe: {
-      statement: createRenderedStatement({
-        segments: ["SELECT VERSION() AS version"],
-        parameters: [],
-        resultKind: "rows",
-        dialectId: "mysql",
-      }),
-      read: (rows) => {
-        const row = rows[0];
-        if (!row || typeof row !== "object" || Array.isArray(row)) return {};
-        const version = (row as Record<string, unknown>).version;
-        return typeof version === "string" ? { version } : {};
-      },
-    },
-  });
-}
 
 function materialize(
   statement: RenderedStatement,

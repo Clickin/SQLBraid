@@ -1,9 +1,7 @@
 import type {
   ConnectionLease,
   ConnectionProvider,
-  DatabaseOptions,
   DriverRoutineResult,
-  DriverEnvironment,
   ExecutionOptions,
   BulkBindingDescription,
   BulkExecutionResult,
@@ -36,42 +34,35 @@ import {
   type PgRepresentationProfile,
   type PgTemporalProfile,
 } from "./type-policy.js";
+import { pgEnvironmentFor, pgExecutionCapabilities } from "./pg/environment.js";
+import { pgOidTypes } from "./pg/types.js";
+import type {
+  PgClientLike,
+  PgCursorFactory,
+  PgCursorLike,
+  PgDatabaseOptions,
+  PgExecutorOptions,
+  PgFieldLike,
+  PgParserProfile,
+  PgPoolLike,
+  PgResultLike,
+  PgTypeOverrides,
+} from "./pg/types.js";
 
-export interface PgFieldLike {
-  readonly name: string;
-  readonly dataTypeID?: number;
-  readonly dataType?: string;
-}
-
-export interface PgTypeOverrides {
-  getTypeParser(oid: number, format?: string): (value: string) => unknown;
-}
-
-export interface PgResultLike {
-  readonly rows: readonly unknown[];
-  readonly rowCount?: number | null;
-  readonly fields?: readonly PgFieldLike[];
-  readonly command?: string;
-}
-
-export interface PgClientLike {
-  query(config: {
-    readonly text: string;
-    readonly values: readonly unknown[];
-    readonly name?: string;
-    readonly types?: PgTypeOverrides;
-  }): Promise<PgResultLike>;
-  query(text: string, values?: readonly unknown[]): Promise<PgResultLike>;
-  /**
-   * Physical node-postgres clients expose these helpers; pools do not.
-   * They are the public discriminator that keeps pool usage on the lease API.
-   */
-  escapeIdentifier(value: string): string;
-  escapeLiteral(value: string): string;
-  getTypeParser?(oid: number, format?: string): (value: string) => unknown;
-  /** Required when streaming with an AbortSignal; ends the physical connection. */
-  end?(): Promise<void>;
-}
+export { pgOidTypes };
+export type {
+  PgClientLike,
+  PgCursorFactory,
+  PgCursorLike,
+  PgDatabaseOptions,
+  PgExecutorOptions,
+  PgFieldLike,
+  PgParserProfile,
+  PgPoolClientLike,
+  PgPoolLike,
+  PgResultLike,
+  PgTypeOverrides,
+} from "./pg/types.js";
 
 function unsupported(
   feature: string,
@@ -87,93 +78,6 @@ function invalidTransactionOptions(message: string): TypeError & { readonly code
   Object.defineProperty(error, "code", { value: "BRAID_TX_OPTIONS_INVALID", enumerable: true });
   return error;
 }
-
-export interface PgPoolClientLike extends PgClientLike {
-  release(destroy?: boolean): void | Promise<void>;
-}
-
-export interface PgPoolLike {
-  connect(): Promise<PgPoolClientLike>;
-}
-
-export interface PgCursorLike {
-  read(rowCount: number, callback: (error: unknown, rows?: readonly unknown[], result?: PgResultLike) => void): void;
-  close(callback: (error?: unknown) => void): void;
-}
-
-/** Native cursor constructor used to implement `db.stream()`; the optional peer keeps materialized queries usable without it. */
-export interface PgCursorFactory {
-  new (text: string, values: readonly unknown[], config?: { readonly types?: PgTypeOverrides }): PgCursorLike;
-}
-
-/** Parser overrides must agree with the selected representation profile when both are supplied. */
-export interface PgParserProfile {
-  readonly json?: PgJsonProfile;
-  readonly temporal?: PgTemporalProfile;
-}
-
-/**
- * PostgreSQL executor policy. Exact numerics remain text by default; `cursor` is required for native streaming.
- * `parserProfile` changes pg type parsers and is rejected when it contradicts `profile`.
- */
-export interface PgExecutorOptions {
-  readonly typePolicy?: TypePolicy;
-  readonly profile?: PgRepresentationProfile;
-  readonly streamBatchSize?: number;
-  readonly cursor?: PgCursorFactory;
-  readonly parserProfile?: PgParserProfile;
-}
-
-export type PgDatabaseOptions = DatabaseOptions & PgExecutorOptions;
-
-export const pgOidTypes: Readonly<Record<number, string>> = Object.freeze({
-  16: "bool",
-  17: "bytea",
-  18: "char",
-  19: "name",
-  20: "int8",
-  21: "int2",
-  23: "int4",
-  25: "text",
-  26: "oid",
-  114: "json",
-  790: "money",
-  1082: "date",
-  1083: "time",
-  1114: "timestamp",
-  1184: "timestamp with time zone",
-  1186: "interval",
-  1266: "time with time zone",
-  1700: "numeric",
-  2950: "uuid",
-  3802: "jsonb",
-  700: "float4",
-  701: "float8",
-  791: "money[]",
-  1000: "bool[]",
-  1001: "bytea[]",
-  1002: "char[]",
-  1003: "name[]",
-  1005: "int2[]",
-  1007: "int4[]",
-  1009: "text[]",
-  1014: "bpchar[]",
-  1015: "varchar[]",
-  1016: "int8[]",
-  1021: "float4[]",
-  1022: "float8[]",
-  1028: "oid[]",
-  1182: "date[]",
-  1183: "time[]",
-  1185: "timestamp with time zone[]",
-  1187: "interval[]",
-  1231: "numeric[]",
-  1270: "time with time zone[]",
-  199: "json[]",
-  2951: "uuid[]",
-  3807: "jsonb[]",
-  143: "xml[]",
-});
 
 const defaultParserProfile: Required<Pick<PgParserProfile, "json" | "temporal">> = Object.freeze({
   json: "text",
@@ -500,117 +404,6 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   dialectId: "postgres",
   requestedReuse: "auto",
 });
-
-const pgExecutionCapabilities: DriverEnvironment["capabilities"] = Object.freeze({
-  "session.pinned": { status: "guaranteed" },
-  transaction: { status: "guaranteed" },
-  "transaction.savepoint": { status: "guaranteed" },
-  "transaction.read-only": { status: "guaranteed" },
-  "transaction.isolation.read-uncommitted": {
-    status: "guarded",
-    conditionCode: "pg.read-uncommitted-maps-to-read-committed",
-  },
-  "transaction.isolation.read-committed": { status: "guaranteed" },
-  "transaction.isolation.repeatable-read": { status: "guaranteed" },
-  "transaction.isolation.serializable": { status: "guaranteed" },
-  "statement.prepare": { status: "guaranteed" },
-  "statement.cancel": {
-    status: "guarded",
-    conditionCode: "pg.physical-connection-destroy",
-  },
-  "statement.stream": { status: "guaranteed" },
-  "statement.bulk": { status: "guaranteed" },
-  "routine.call": { status: "guaranteed" },
-  "routine.out": { status: "guaranteed" },
-  "routine.inout": { status: "unsupported" },
-  "routine.return-value": { status: "unsupported" },
-  "routine.result-sets": { status: "guaranteed" },
-  "routine.out-cursor": { status: "guaranteed" },
-});
-
-function pgEnvironmentFor(
-  profile: { readonly json: PgJsonProfile; readonly temporal: PgTemporalProfile },
-  policy: TypePolicy = typePolicyForProfile(profile),
-): DriverEnvironment {
-  const profileId =
-    profile.json === "text" && profile.temporal === "text"
-      ? "pg-lossless-text"
-      : profile.json === "native" && profile.temporal === "native"
-        ? "pg-native"
-        : profile.json === "native"
-          ? "pg-json-native-temporal-text"
-          : "pg-json-text-temporal-native";
-  return Object.freeze<DriverEnvironment>({
-    database: { product: "postgres" },
-    driver: { id: "pg", profile: profileId },
-    typePolicy: { id: policy.id, hash: policy.hash },
-    capabilities: {
-      ...pgExecutionCapabilities,
-      "sql.native-transparency": { status: "guaranteed" },
-      "numeric.exact-integer": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-      "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-      "numeric.approximate-float": {
-        status: "guarded",
-        canonical: "number",
-        rawRepresentations: ["number"],
-        conditionCode: "pg.extra-float-digits",
-      },
-      "data.json-lossless-text": {
-        status: profile.json === "text" ? "guaranteed" : "unsupported",
-        canonical: "string",
-        rawRepresentations: ["string"],
-        ...(profile.json === "text" ? {} : { conditionCode: "pg.json-parser-profile" }),
-      },
-      "data.json-parsed": {
-        status: profile.json === "native" ? "guarded" : "unsupported",
-        rawRepresentations: ["unknown"],
-        conditionCode: "pg.json-parser-profile",
-      },
-      "data.temporal-lossless": {
-        status: profile.temporal === "text" ? "guaranteed" : "unsupported",
-        canonical: "string",
-        rawRepresentations: ["string"],
-        ...(profile.temporal === "text" ? {} : { conditionCode: "pg.temporal-parser-profile" }),
-      },
-      "data.temporal-native": {
-        status: profile.temporal === "native" ? "guarded" : "unsupported",
-        rawRepresentations: ["Date", "string", "unknown"],
-        conditionCode: "pg.temporal-parser-profile",
-      },
-    },
-    probe: {
-      statement: createRenderedStatement({
-        segments: [
-          "SELECT current_setting('server_version') AS server_version, current_setting('extra_float_digits') AS extra_float_digits, current_setting('TimeZone') AS timezone",
-        ],
-        parameters: [],
-        resultKind: "rows",
-        dialectId: "postgres",
-      }),
-      read: (rows) => {
-        const row = rows[0];
-        if (!row || typeof row !== "object" || Array.isArray(row)) return {};
-        const record = row as Record<string, unknown>;
-        const version = typeof record.server_version === "string" ? record.server_version : undefined;
-        const extraFloatDigits =
-          typeof record.extra_float_digits === "string" ? Number(record.extra_float_digits) : undefined;
-        const approximateFloat =
-          extraFloatDigits !== undefined && extraFloatDigits > 0
-            ? { status: "guaranteed" as const, canonical: "number" as const, rawRepresentations: ["number"] as const }
-            : {
-                status: "guarded" as const,
-                canonical: "number" as const,
-                rawRepresentations: ["number"] as const,
-                conditionCode: "pg.extra-float-digits",
-              };
-        return {
-          ...(version === undefined ? {} : { version }),
-          capabilities: { "numeric.approximate-float": approximateFloat },
-        };
-      },
-    },
-  });
-}
 
 function materialize(
   statement: RenderedStatement,

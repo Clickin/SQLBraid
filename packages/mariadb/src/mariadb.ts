@@ -1,11 +1,8 @@
 import type {
   BulkBindingDescription,
-  CommandResult,
   ConnectionLease,
   ConnectionProvider,
-  DatabaseOptions,
   DriverRoutineResult,
-  DriverEnvironment,
   ExecutionOptions,
   QueryExecutor,
   QueryExecutionResult,
@@ -28,7 +25,32 @@ import {
 } from "@sqlbraid/core";
 import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
-import { typePolicyForProfile, type MariaDbProfileOptions, type MariaDbRepresentationProfile } from "./type-policy.js";
+import { mariaDbEnvironment, mariaDbProfile } from "./mariadb/environment.js";
+import { fieldTypes } from "./mariadb/types.js";
+import type {
+  MariaDbCommandResult,
+  MariaDbConnectionLike,
+  MariaDbDatabaseOptions,
+  MariaDbExecutorOptions,
+  MariaDbFieldLike,
+  MariaDbPoolLike,
+  MariaDbRowSet,
+  MariaDbStreamLike,
+} from "./mariadb/types.js";
+
+export type {
+  MariaDbCommandResult,
+  MariaDbConnectionLike,
+  MariaDbDatabaseOptions,
+  MariaDbExecutorOptions,
+  MariaDbFieldLike,
+  MariaDbParameter,
+  MariaDbPoolConnectionLike,
+  MariaDbPoolLike,
+  MariaDbQueryOptions,
+  MariaDbRowSet,
+  MariaDbStreamLike,
+} from "./mariadb/types.js";
 
 export type {
   MariaDbConnectionOptions,
@@ -45,101 +67,6 @@ export {
   representationProfiles,
   typePolicyForProfile,
 } from "./type-policy.js";
-
-export interface MariaDbFieldLike {
-  readonly name?: string | (() => string);
-  readonly type?: string;
-  readonly columnType?: number;
-  readonly columnLength?: number;
-  readonly scale?: number;
-  readonly isDataTypeFormatJson?: () => boolean;
-}
-
-export interface MariaDbRowSet extends ReadonlyArray<unknown> {
-  readonly meta?: readonly MariaDbFieldLike[];
-}
-
-export interface MariaDbCommandResult extends CommandResult {
-  readonly warningStatus?: number;
-}
-
-export interface MariaDbStreamLike extends AsyncIterable<unknown> {
-  close?(): void | Promise<void>;
-  on?(event: string, listener: (...args: readonly unknown[]) => void): this;
-  once?(event: string, listener: (...args: readonly unknown[]) => void): this;
-}
-
-export type MariaDbParameter = unknown;
-
-/** Connector/Node.js query options required by the adapter's row/metadata normalization. */
-export interface MariaDbQueryOptions {
-  readonly sql: string;
-  readonly rowsAsArray?: boolean;
-  readonly metaAsArray?: boolean;
-  readonly insertIdAsNumber?: boolean;
-}
-
-export interface MariaDbConnectionLike {
-  execute(sql: string | MariaDbQueryOptions, values?: readonly MariaDbParameter[]): Promise<unknown>;
-  query?(sql: string | MariaDbQueryOptions, values?: readonly MariaDbParameter[]): Promise<unknown>;
-  queryStream?(sql: string | MariaDbQueryOptions, values?: readonly MariaDbParameter[]): MariaDbStreamLike;
-  batch?(sql: string | MariaDbQueryOptions, values: readonly (readonly MariaDbParameter[])[]): Promise<unknown>;
-  beginTransaction(): Promise<void>;
-  commit(): Promise<void>;
-  rollback(): Promise<void>;
-  getConnection?: never;
-  destroy?(): void;
-  end?(): void | Promise<void>;
-}
-
-export interface MariaDbPoolConnectionLike extends MariaDbConnectionLike {
-  release(): void | Promise<void>;
-}
-
-export interface MariaDbPoolLike {
-  getConnection(): Promise<MariaDbPoolConnectionLike>;
-}
-
-/** MariaDB executor policy. Exact numerics stay textual in the lossless profile; streaming uses native connector APIs. */
-export interface MariaDbExecutorOptions {
-  readonly typePolicy?: TypePolicy;
-  /**
-   * Declarative evidence for the Connector/Node.js result-shaping options.
-   * The connector does not expose effective options on physical connections.
-   */
-  readonly profile?: MariaDbProfileOptions | MariaDbRepresentationProfile;
-}
-
-export type MariaDbDatabaseOptions = DatabaseOptions & MariaDbExecutorOptions;
-
-const fieldTypes: Readonly<Record<number, string>> = {
-  0: "DECIMAL",
-  1: "TINYINT",
-  2: "SMALLINT",
-  3: "INT",
-  4: "FLOAT",
-  5: "DOUBLE",
-  7: "TIMESTAMP",
-  8: "BIGINT",
-  9: "MEDIUMINT",
-  10: "DATE",
-  11: "TIME",
-  12: "DATETIME",
-  13: "YEAR",
-  15: "VARCHAR",
-  16: "BIT",
-  245: "JSON",
-  246: "DECIMAL",
-  247: "ENUM",
-  248: "SET",
-  249: "TINYTEXT",
-  250: "TEXT",
-  251: "MEDIUMTEXT",
-  252: "BLOB",
-  253: "VARCHAR",
-  254: "CHAR",
-  255: "GEOMETRY",
-};
 
 function assertMariaDbConnection(connection: MariaDbConnectionLike): void {
   const candidate = connection as unknown as {
@@ -522,126 +449,6 @@ const defaultBindingContext: StatementBindingContext = Object.freeze({
   dialectId: "mariadb",
   requestedReuse: "auto",
 });
-
-function isRepresentationProfile(
-  value: MariaDbProfileOptions | MariaDbRepresentationProfile | undefined,
-): value is MariaDbRepresentationProfile {
-  return Boolean(value && "json" in value && "temporal" in value && "typePolicy" in value);
-}
-
-function mariaDbProfile(
-  value: MariaDbProfileOptions | MariaDbRepresentationProfile | undefined,
-): MariaDbRepresentationProfile {
-  const options = isRepresentationProfile(value) ? value.connectionOptions : value;
-  const json = options?.autoJsonMap === true ? "native" : "text";
-  const temporal = options?.dateStrings === false ? "native" : "text";
-  return isRepresentationProfile(value)
-    ? value
-    : {
-        id: `mariadb-${json === "text" && temporal === "text" ? "lossless-text" : json === "native" && temporal === "native" ? "native" : json === "text" ? "json-text" : "date-text"}`,
-        json,
-        temporal,
-        typePolicy: typePolicyForProfile({ json, temporal }),
-      };
-}
-
-function mariaDbEnvironment(
-  supplied: MariaDbProfileOptions | MariaDbRepresentationProfile | undefined,
-  policy: TypePolicy,
-): DriverEnvironment {
-  const profile = mariaDbProfile(supplied);
-  const policyMatchesProfile = policy === profile.typePolicy;
-  return Object.freeze<DriverEnvironment>({
-    database: { product: "mariadb" },
-    driver: {
-      id: "mariadb",
-      profile: !policyMatchesProfile
-        ? "custom-type-policy"
-        : isRepresentationProfile(supplied)
-          ? profile.id
-          : "mariadb-custom-profile",
-    },
-    typePolicy: { id: policy.id, hash: policy.hash },
-    capabilities: policyMatchesProfile
-      ? {
-          "sql.native-transparency": { status: "guaranteed" },
-          "numeric.exact-integer": {
-            status: "guarded",
-            canonical: "string",
-            rawRepresentations: ["number", "string", "bigint"],
-            conditionCode: "mariadb.exact-numeric-profile",
-          },
-          "numeric.exact-decimal": {
-            status: "guarded",
-            canonical: "string",
-            rawRepresentations: ["string"],
-            conditionCode: "mariadb.exact-numeric-profile",
-          },
-          "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-          "data.json-lossless-text": {
-            status: "guarded",
-            canonical: "string",
-            rawRepresentations: ["string"],
-            conditionCode: "mariadb.auto-json-map-false",
-          },
-          "data.json-parsed": {
-            status: "guarded",
-            rawRepresentations: ["object", "array", "string", "number", "boolean", "null"],
-            conditionCode: "mariadb.auto-json-map-true",
-          },
-          "data.temporal-lossless": {
-            status: "guarded",
-            canonical: "string",
-            rawRepresentations: ["string"],
-            conditionCode: "mariadb.date-strings-true",
-          },
-          "data.temporal-native": {
-            status: "guarded",
-            rawRepresentations: ["Date"],
-            conditionCode: "mariadb.date-strings-false",
-          },
-          "metadata.command-safe": {
-            status: "guarded",
-            canonical: "number",
-            rawRepresentations: ["number", "bigint", "string"],
-            conditionCode: "mariadb.safe-command-count",
-          },
-          "session.pinned": { status: "guaranteed" },
-          transaction: { status: "guaranteed" },
-          "transaction.savepoint": { status: "guaranteed" },
-          "transaction.read-only": { status: "guaranteed" },
-          "transaction.isolation.read-uncommitted": { status: "guaranteed" },
-          "transaction.isolation.read-committed": { status: "guaranteed" },
-          "transaction.isolation.repeatable-read": { status: "guaranteed" },
-          "transaction.isolation.serializable": { status: "guaranteed" },
-          "statement.prepare": { status: "guaranteed" },
-          "statement.cancel": { status: "guarded", conditionCode: "mariadb.connection-destroy" },
-          "statement.stream": { status: "guaranteed" },
-          "statement.bulk": { status: "guaranteed" },
-          "routine.call": { status: "guaranteed" },
-          "routine.out": { status: "unsupported" },
-          "routine.inout": { status: "unsupported" },
-          "routine.return-value": { status: "unsupported" },
-          "routine.result-sets": { status: "guaranteed" },
-          "routine.out-cursor": { status: "unsupported" },
-        }
-      : {},
-    probe: {
-      statement: createRenderedStatement({
-        segments: ["SELECT VERSION() AS version"],
-        parameters: [],
-        resultKind: "rows",
-        dialectId: "mariadb",
-      }),
-      read: (rows) => {
-        const row = rows[0];
-        if (!row || typeof row !== "object" || Array.isArray(row)) return {};
-        const version = (row as Record<string, unknown>).version;
-        return typeof version === "string" ? { version } : {};
-      },
-    },
-  });
-}
 
 function materialize(
   statement: RenderedStatement,
