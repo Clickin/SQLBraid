@@ -7,16 +7,8 @@ import {
   sqliteMetadataInteger,
   sqliteMetadataText,
 } from "./internal/sqlite-metadata.js";
-
-/** Minimal metadata-only surface required by the SQLite inspector. */
-export interface SqliteMetadataStatementLike {
-  all(...values: readonly unknown[]): readonly unknown[];
-}
-
-/** A structural metadata query surface shared by SQLite-compatible drivers. */
-export interface SqliteMetadataDatabaseLike {
-  prepare(sql: string): SqliteMetadataStatementLike;
-}
+import type { SqliteMetadataDatabaseLike } from "./internal/sqlite-metadata.js";
+export type { SqliteMetadataDatabaseLike, SqliteMetadataStatementLike } from "./internal/sqlite-metadata.js";
 
 export function createSqliteInspector(database: SqliteMetadataDatabaseLike): MetadataInspector {
   return {

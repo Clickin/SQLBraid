@@ -1,4 +1,10 @@
-import type { SqliteMetadataDatabaseLike } from "../inspector.js";
+export interface SqliteMetadataStatementLike {
+  all(...values: readonly unknown[]): readonly unknown[];
+}
+
+export interface SqliteMetadataDatabaseLike {
+  prepare(sql: string): SqliteMetadataStatementLike;
+}
 
 export interface SqliteMetadataRow {
   readonly [key: string]: unknown;

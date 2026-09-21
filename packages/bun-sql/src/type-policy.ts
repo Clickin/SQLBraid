@@ -1,5 +1,5 @@
 import { normalizeExactInteger, ResultExactnessError, type TypePolicy } from "@sqlbraid/core";
-import type { BunSqlDialect } from "./index.js";
+import type { BunSqlDialect } from "./types.js";
 
 export interface BunSqlRepresentationProfile {
   readonly id: string;
