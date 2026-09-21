@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -198,31 +198,18 @@ async function loadSourceModule(packageName, root) {
   const source = await readFile(sourcePath, "utf8");
   const temp = await mkdtemp(join(root, ".sqlbraid-policy-source-"));
   try {
-    const corePath = join(root, "packages", "core", "src", "index.ts");
-    const coreSource = await readFile(corePath, "utf8");
-    const authoringPath = join(root, "packages", "core", "src", "authoring-modules.ts");
-    const authoringSource = await readFile(authoringPath, "utf8");
-    const capabilitiesPath = join(root, "packages", "core", "src", "capabilities.ts");
-    const capabilitiesSource = await readFile(capabilitiesPath, "utf8");
+    const coreSourceDir = join(root, "packages", "core", "src");
+    const coreFiles = (await readdir(coreSourceDir)).filter((file) => file.endsWith(".ts"));
     const compilerOptions = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, sourceMap: false };
-    const coreOut = join(temp, "core.mjs");
-    const authoringOut = join(temp, "authoring-modules.mjs");
-    const capabilitiesOut = join(temp, "capabilities.mjs");
-    await writeFile(
-      authoringOut,
-      ts.transpileModule(authoringSource, { compilerOptions, fileName: authoringPath }).outputText,
+    await Promise.all(
+      coreFiles.map(async (file) => {
+        const filePath = join(coreSourceDir, file);
+        const sourceText = await readFile(filePath, "utf8");
+        const outputPath = join(temp, file.replace(/\.ts$/u, ".js"));
+        await writeFile(outputPath, ts.transpileModule(sourceText, { compilerOptions, fileName: filePath }).outputText);
+      }),
     );
-    await writeFile(
-      capabilitiesOut,
-      ts.transpileModule(capabilitiesSource, { compilerOptions, fileName: capabilitiesPath }).outputText,
-    );
-    let coreJavaScript = ts.transpileModule(coreSource, { compilerOptions, fileName: corePath }).outputText;
-    coreJavaScript = coreJavaScript
-      .replaceAll('"./authoring-modules.js"', JSON.stringify(pathToFileURL(authoringOut).href))
-      .replaceAll("'./authoring-modules.js'", JSON.stringify(pathToFileURL(authoringOut).href))
-      .replaceAll('"./capabilities.js"', JSON.stringify(pathToFileURL(capabilitiesOut).href))
-      .replaceAll("'./capabilities.js'", JSON.stringify(pathToFileURL(capabilitiesOut).href));
-    await writeFile(coreOut, coreJavaScript);
+    const coreOut = join(temp, "index.js");
     const policyOut = join(temp, `${packageName}.mjs`);
     let policyJavaScript = ts.transpileModule(source, { compilerOptions, fileName: sourcePath }).outputText;
     policyJavaScript = policyJavaScript
