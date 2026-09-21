@@ -34,6 +34,12 @@
       "sourceDigest": "2cc12ee642cc5da6805b58b6555a67c6b788f9e2dc61f798b8437fb09614ae9d"
     },
     {
+      "source": "website/src/content/docs/concepts/architecture.mdx",
+      "translation": "website/src/content/docs/ko/concepts/architecture.mdx",
+      "translationOf": "website/src/content/docs/concepts/architecture.mdx",
+      "sourceDigest": "4ff46c4b7007435a8e6322b2341fb09dd5087a3f7c64a77768ae1533c941da78"
+    },
+    {
       "source": "website/src/content/docs/concepts/bulk.md",
       "translation": "website/src/content/docs/ko/concepts/bulk.md",
       "translationOf": "website/src/content/docs/concepts/bulk.md",

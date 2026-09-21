@@ -51,7 +51,7 @@ default dialect; its root exports only common runtime contracts. The granular
 > certification. No tag, npm publication, Pages deployment, or release
 > authorization is implied.
 
-[Get started](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [Documentation](https://clickin.github.io/SQLBraid/latest/) · [Data representations](https://clickin.github.io/SQLBraid/latest/concepts/data-representation/) · [Public API audit](./docs/public-api-audit.md) · [Driver-author guide](./docs/driver-author-guide.md)
+[Get started](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [Documentation](https://clickin.github.io/SQLBraid/latest/) · [Architecture mental model](./docs/mental-model.md) · [Data representations](https://clickin.github.io/SQLBraid/latest/concepts/data-representation/) · [Public API audit](./docs/public-api-audit.md) · [Driver-author guide](./docs/driver-author-guide.md)
 
 ## The core boundary
 

@@ -1330,9 +1330,10 @@ export interface RowValidationOptions<Row> extends ExecutionOptions {
 
 export interface StreamOptions<Row> extends RowValidationOptions<Row> {}
 
-/** Portable transaction options; nested `db.tx()` calls use savepoints and do not accept a second option set. */
+/** Portable transaction isolation vocabulary; adapters reject levels they cannot provide. */
 export type TransactionIsolation = "read-uncommitted" | "read-committed" | "repeatable-read" | "serializable";
 
+/** Options for the outer physical transaction. Nested `db.tx()` calls are savepoints and accept no second option set. */
 export interface TransactionOptions {
   readonly isolation?: TransactionIsolation;
   readonly readOnly?: boolean;
@@ -1492,32 +1493,43 @@ export interface QueryExecutor {
   readonly ownershipKey?: object;
   readonly statementBinding: StatementBindingAdapter;
   readonly environment?: DriverEnvironment;
+  /** Execute one materialized statement on this physical resource. */
   query<Row>(
     rendered: RenderedStatement,
     binding?: StatementBindingDescription,
     options?: ExecutionOptions,
   ): Awaitable<QueryExecutionResult<Row>>;
+  /** Open a true driver stream; the physical resource remains owned until iteration closes. */
   stream<Row>(
     rendered: RenderedStatement,
     binding?: StatementBindingDescription,
     options?: ExecutionOptions,
   ): AsyncIterable<Row>;
+  /** Execute a routine call and return normalized scalar/result-set channels. */
   call(
     rendered: RenderedStatement,
     binding?: StatementBindingDescription,
     options?: ExecutionOptions,
   ): Awaitable<DriverRoutineResult>;
+  /** Optional homogeneous bulk protocol. The reported execution mode does not imply atomicity. */
   bulk?(
     bulk: RenderedBulk,
     binding: BulkBindingDescription,
     options?: ExecutionOptions,
   ): Awaitable<BulkExecutionResult>;
+  /** Pure pre-acquire validation for adapter-specific transaction option support. */
   validateTransactionOptions?(options: TransactionOptions): void;
+  /** Begin the outer transaction on this physical resource. */
   begin?(options?: TransactionOptions): Awaitable<void>;
+  /** Commit the outer transaction on this physical resource. */
   commit?(): Awaitable<void>;
+  /** Roll back the outer transaction on this physical resource. */
   rollback?(): Awaitable<void>;
+  /** Create a nested transaction boundary on the current resource. */
   savepoint?(name: string): Awaitable<void>;
+  /** Roll back the current resource to a previously created savepoint. */
   rollbackTo?(name: string): Awaitable<void>;
+  /** End the logical savepoint boundary; adapters may implement this as a no-op when the database releases implicitly. */
   releaseSavepoint?(name: string): Awaitable<void>;
 }
 
@@ -1827,21 +1839,30 @@ export type ExecutionResultOf<Q> =
  * Scoped handles expire when their callback returns, and streams must close before a scope can finish.
  */
 export interface Database {
+  /** Observe database/driver/runtime evidence and optionally match it against exact support targets. */
   environment(options?: EnvironmentOptions): Promise<DatabaseEnvironment>;
+  /** Materialize every row and apply query/execution mapping after the root lease is released. */
   all<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<readonly Row[]>;
+  /** Require exactly one row; cardinality is checked before application mapping. */
   one<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row>;
+  /** Return `undefined` for zero rows and reject when more than one row is returned. */
   maybeOne<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<Row | undefined>;
+  /** Execute a row, command, or unknown query and preserve its normalized result kind. */
   execute<Q extends ExecutableQuery>(query: Q, options?: ExecutionOptions): Promise<ExecutionResultOf<Q>>;
+  /** Execute a routine query and materialize all normalized routine channels before mapping. */
   call<Result extends RoutineCallResult>(query: CallQuery<Result>, options?: ExecutionOptions): Promise<Result>;
+  /** Execute different queries sequentially on one physical use/lease. This is not an implicit transaction. */
   batch<const Queries extends readonly ExecutableQuery[]>(
     queries: Queries,
     options?: ExecutionOptions,
   ): Promise<{ readonly [K in keyof Queries]: ExecutionResultOf<Queries[K]> }>;
+  /** Execute one homogeneous command shape for many inputs using the adapter's bulk strategy. */
   bulk<Input>(
     inputs: readonly Input[],
     factory: (input: Input, index: number) => CommandQuery,
     options?: ExecutionOptions,
   ): Promise<BulkResult>;
+  /** Create a prepared handle whose first successful execution locks the logical SQLBraid shape. */
   prepare<Factory extends () => PreparableQuery>(
     name: string,
     factory: Factory & (Parameters<Factory> extends [] ? unknown : never),
@@ -1861,8 +1882,11 @@ export interface Database {
           : never),
     options: { readonly input: "required" },
   ): PreparedQuery<Parameters<Factory>[0], ReturnType<Factory>>;
+  /** Stream rows without full buffering; the physical resource remains pinned until iteration closes. */
   stream<Row>(query: RowQuery<Row>, options?: StreamOptions<Row>): AsyncIterable<Row>;
+  /** Pin one physical resource for the callback without implicitly starting a transaction. */
   session<T>(callback: (database: Database) => Promise<T>): Promise<T>;
+  /** Run the callback in one physical transaction; nested calls use savepoints on the same resource. */
   tx<T>(callback: (database: Database) => Promise<T>): Promise<T>;
   tx<T>(options: TransactionOptions, callback: (database: Database) => Promise<T>): Promise<T>;
 }
@@ -1895,8 +1919,11 @@ export interface RowsTag {
  * SQL authoring surface. Values are bound by default; `ident`, `fragment`, `list`, `join`, and `raw` are explicit structure.
  */
 export interface SqlTag extends SqlTagLike<"unknown"> {
+  /** Declare a row-producing query, optionally with query-bound Standard Schema mapping. */
   rows: RowsTag;
+  /** Declare a command query that must normalize to command metadata. */
   command: (strings: TemplateStringsArray, ...values: readonly unknown[]) => CommandQuery;
+  /** Declare a routine query, optionally with explicit output/result-set/return mapping contracts. */
   call: {
     <Result extends RoutineCallResult = RoutineCallResult>(
       strings: TemplateStringsArray,
@@ -1904,14 +1931,23 @@ export interface SqlTag extends SqlTagLike<"unknown"> {
     ): CallQuery<Result>;
     <Contract extends RoutineContract>(contract: Contract): RoutineContractTag<Contract>;
   };
+  /** Attach explicit database parameter metadata without turning the value into SQL structure. */
   bind<Input>(value: NoInfer<Input>, hint: ParameterTypeHint<Input>): BoundParameter<Input>;
+  /** Declare a routine OUT parameter owned by the adapter. */
   out(name: string, hint?: ParameterTypeHint): RoutineParameter<null>;
+  /** Declare a routine INOUT parameter owned by the adapter. */
   inOut<Input>(name: string, value: NoInfer<Input>, hint?: ParameterTypeHint<Input>): RoutineParameter<Input>;
+  /** Create explicit SQL structure while preserving ordinary interpolations as values. */
   fragment: (strings: TemplateStringsArray, ...values: readonly unknown[]) => SqlFragment;
+  /** Empty structural fragment for conditional composition. */
   empty: SqlFragment;
+  /** Create a dialect-quoted identifier or qualified identifier path. */
   ident: (identifier: string | readonly string[]) => SqlFragment;
+  /** Insert verbatim SQL structure. Never pass user-controlled or otherwise untrusted text. */
   raw: (text: string) => SqlFragment;
+  /** Join already-structural fragments with a structural separator. */
   join: (items: readonly SqlFragment[], separator?: SqlFragment) => SqlFragment;
+  /** Expand an array as a structural comma-separated list of value binds. */
   list: (values: readonly unknown[]) => SqlFragment;
 }
 

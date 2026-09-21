@@ -2,6 +2,12 @@
 
 SQLBraid is a SQL-first toolkit. Contributions should preserve user-authored SQL as opaque text, keep driver boundaries thin, and prefer explicit result and transport contracts over SQL grammar emulation.
 
+Before changing execution, driver, compiler, or package boundaries, read the
+[contributor mental model](./docs/mental-model.md). It explains the intended
+`core → template → runtime → adapter` flow, physical resource ownership, and the
+separate static-tooling plane. The Korean version is available at
+[`docs/mental-model.ko.md`](./docs/mental-model.ko.md).
+
 ## Requesting or adding database support
 
 A support request does not create a maintainer obligation to purchase, host, or operate the requested database environment. Maintainers may classify a target as **Compatible**, **Historical**, or **Unsupported** when an Official gate is not practical or evidence has expired.

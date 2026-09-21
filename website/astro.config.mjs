@@ -109,6 +109,11 @@ export default defineConfig({
           translations: { ko: "핵심 개념" },
           items: [
             {
+              label: "Architecture mental model",
+              translations: { ko: "아키텍처 멘탈 모델" },
+              link: "/concepts/architecture/",
+            },
+            {
               label: "SQL tags and result kinds",
               translations: { ko: "SQL 태그와 결과 종류" },
               link: "/concepts/sql-tags/",

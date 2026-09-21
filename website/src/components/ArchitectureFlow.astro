@@ -1,0 +1,267 @@
+---
+interface Props { locale?: "en" | "ko" }
+
+const { locale = "en" } = Astro.props;
+const copy =
+  locale === "ko"
+    ? {
+        overview: "실행 경로",
+        overviewHelp: "사용자가 작성한 SQL이 애플리케이션 값으로 돌아오기까지의 주요 경계입니다.",
+        packages: "패키지 경계",
+        packagesHelp: "실행 코어와 정적 tooling은 계약을 공유하지만 dependency 방향은 분리됩니다.",
+        authoring: "SQL 작성",
+        authoringDetail: "TypeScript + sql tag",
+        query: "논리 Query",
+        queryDetail: "IR + values + result kind",
+        render: "RenderedStatement",
+        renderDetail: "segments + parameters",
+        binding: "Binding",
+        bindingDetail: "placeholder / transport / reuse",
+        runtime: "Runtime",
+        runtimeDetail: "lease / scope / tx / stream",
+        driver: "Driver adapter",
+        driverDetail: "native API + result normalization",
+        result: "Application value",
+        resultDetail: "canonical result + mapping",
+        core: "계약과 invariant",
+        template: "작성과 rendering",
+        runtimePkg: "물리 lifecycle",
+        adapters: "DB/driver bridge",
+        compiler: "source discovery / lowering",
+        metadata: "database evidence",
+        codegen: "model generation",
+        tooling: "workspace / semantic tooling",
+        clients: "LSP / CLI / VS Code / Vite",
+      }
+    : {
+        overview: "Execution path",
+        overviewHelp: "The major boundaries from authored SQL to application values.",
+        packages: "Package boundaries",
+        packagesHelp: "The execution core and static tooling share contracts while keeping dependency direction separate.",
+        authoring: "SQL authoring",
+        authoringDetail: "TypeScript + sql tag",
+        query: "Logical Query",
+        queryDetail: "IR + values + result kind",
+        render: "RenderedStatement",
+        renderDetail: "segments + parameters",
+        binding: "Binding",
+        bindingDetail: "placeholder / transport / reuse",
+        runtime: "Runtime",
+        runtimeDetail: "lease / scope / tx / stream",
+        driver: "Driver adapter",
+        driverDetail: "native API + result normalization",
+        result: "Application value",
+        resultDetail: "canonical result + mapping",
+        core: "contracts + invariants",
+        template: "authoring + rendering",
+        runtimePkg: "physical lifecycle",
+        adapters: "DB/driver bridge",
+        compiler: "source discovery / lowering",
+        metadata: "database evidence",
+        codegen: "model generation",
+        tooling: "workspace / semantic tooling",
+        clients: "LSP / CLI / VS Code / Vite",
+      };
+
+const execution = [
+  ["01", copy.authoring, copy.authoringDetail],
+  ["02", copy.query, copy.queryDetail],
+  ["03", copy.render, copy.renderDetail],
+  ["04", copy.binding, copy.bindingDetail],
+  ["05", copy.runtime, copy.runtimeDetail],
+  ["06", copy.driver, copy.driverDetail],
+  ["07", copy.result, copy.resultDetail],
+] as const;
+---
+
+<div class="architecture-overview">
+  <section aria-labelledby="execution-flow-title">
+    <div class="diagram-heading">
+      <h2 id="execution-flow-title">{copy.overview}</h2>
+      <p>{copy.overviewHelp}</p>
+    </div>
+    <div class="execution-flow" role="img" aria-label={copy.overviewHelp}>
+      {
+        execution.map(([index, title, detail], position) => (
+          <div class="flow-item">
+            <article class="flow-card">
+              <span class="flow-index">{index}</span>
+              <strong>{title}</strong>
+              <small>{detail}</small>
+            </article>
+            {position < execution.length - 1 && <span class="flow-arrow" aria-hidden="true">→</span>}
+          </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <section aria-labelledby="package-flow-title">
+    <div class="diagram-heading">
+      <h2 id="package-flow-title">{copy.packages}</h2>
+      <p>{copy.packagesHelp}</p>
+    </div>
+    <div class="package-map" role="img" aria-label={copy.packagesHelp}>
+      <div class="lane runtime-lane">
+        <div class="lane-label">runtime plane</div>
+        <div class="package-card"><code>@sqlbraid/core</code><span>{copy.core}</span></div>
+        <span class="lane-arrow" aria-hidden="true">→</span>
+        <div class="package-card"><code>@sqlbraid/template</code><span>{copy.template}</span></div>
+        <span class="lane-arrow" aria-hidden="true">→</span>
+        <div class="package-card"><code>@sqlbraid/runtime</code><span>{copy.runtimePkg}</span></div>
+        <span class="lane-arrow" aria-hidden="true">→</span>
+        <div class="package-card wide"><code>driver adapters</code><span>{copy.adapters}</span></div>
+      </div>
+      <div class="lane tooling-lane">
+        <div class="lane-label">tooling plane</div>
+        <div class="package-card"><code>@sqlbraid/compiler</code><span>{copy.compiler}</span></div>
+        <span class="lane-arrow" aria-hidden="true">→</span>
+        <div class="tooling-stack">
+          <div class="package-card"><code>@sqlbraid/metadata</code><span>{copy.metadata}</span></div>
+          <div class="package-card"><code>@sqlbraid/codegen</code><span>{copy.codegen}</span></div>
+        </div>
+        <span class="lane-arrow" aria-hidden="true">→</span>
+        <div class="package-card"><code>@sqlbraid/tooling</code><span>{copy.tooling}</span></div>
+        <span class="lane-arrow" aria-hidden="true">→</span>
+        <div class="package-card wide"><code>consumers</code><span>{copy.clients}</span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<style>
+  .architecture-overview {
+    display: grid;
+    gap: 2.25rem;
+    margin: 1.5rem 0 2.5rem;
+  }
+  .diagram-heading {
+    margin-bottom: 1rem;
+  }
+  .diagram-heading h2 {
+    margin-bottom: 0.25rem;
+  }
+  .diagram-heading p {
+    margin: 0;
+    color: var(--sl-color-gray-3);
+  }
+  .execution-flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0.35rem;
+    overflow-x: auto;
+    padding: 0.4rem 0.2rem 0.9rem;
+  }
+  .flow-item {
+    display: flex;
+    align-items: center;
+    flex: 1 0 9.5rem;
+    min-width: 0;
+  }
+  .flow-card, .package-card {
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.75rem;
+    background: color-mix(in srgb, var(--sl-color-bg) 92%, var(--sl-color-accent-low));
+    box-shadow: 0 0.35rem 1.4rem color-mix(in srgb, var(--sl-color-black) 8%, transparent);
+  }
+  .flow-card {
+    display: grid;
+    gap: 0.18rem;
+    min-height: 7.2rem;
+    width: 100%;
+    padding: 0.85rem;
+  }
+  .flow-index {
+    width: max-content;
+    border-radius: 999px;
+    padding: 0.08rem 0.45rem;
+    background: var(--sl-color-accent-low);
+    color: var(--sl-color-accent-high);
+    font: 700 0.72rem/1.4 var(--sl-font-system-mono);
+  }
+  .flow-card strong {
+    margin-top: 0.25rem;
+  }
+  .flow-card small, .package-card span {
+    color: var(--sl-color-gray-3);
+    line-height: 1.35;
+  }
+  .flow-arrow, .lane-arrow {
+    flex: 0 0 auto;
+    padding: 0 0.25rem;
+    color: var(--sl-color-accent-high);
+    font-size: 1.35rem;
+    font-weight: 700;
+  }
+  .package-map {
+    display: grid;
+    gap: 1rem;
+  }
+  .lane {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(8rem, 1fr) auto minmax(8rem, 1fr) auto minmax(8rem, 1fr) auto minmax(9rem, 1.15fr);
+    align-items: center;
+    gap: 0.35rem;
+    padding: 2.15rem 0.75rem 0.8rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.85rem;
+    background: color-mix(in srgb, var(--sl-color-bg-nav) 65%, transparent);
+    overflow-x: auto;
+  }
+  .lane-label {
+    position: absolute;
+    top: 0.55rem;
+    left: 0.75rem;
+    color: var(--sl-color-gray-3);
+    font: 700 0.7rem/1.2 var(--sl-font-system-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .package-card {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 8rem;
+    padding: 0.75rem;
+  }
+  .package-card code {
+    color: var(--sl-color-white);
+    background: transparent;
+    padding: 0;
+    font-weight: 700;
+  }
+  .tooling-stack {
+    display: grid;
+    gap: 0.45rem;
+  }
+  @media (max-width: 50rem) {
+    .execution-flow {
+      display: grid;
+      overflow: visible;
+      gap: 0;
+    }
+    .flow-item {
+      display: grid;
+      flex: none;
+    }
+    .flow-card {
+      min-height: 0;
+    }
+    .flow-arrow {
+      justify-self: center;
+      transform: rotate(90deg);
+      padding: 0.15rem;
+    }
+    .lane {
+      grid-template-columns: 1fr;
+      overflow: visible;
+    }
+    .lane > .lane-arrow {
+      justify-self: center;
+      transform: rotate(90deg);
+    }
+    .tooling-stack {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>

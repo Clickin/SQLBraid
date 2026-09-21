@@ -1,7 +1,10 @@
 # SQLBraid public API audit
 
-This inventory records the RC authoring-remediation public boundary. It is an API classification,
-not a publication or support claim. The last exact-SHA verification was revision
+This inventory records the stable SQLBraid 1.x public boundary. It is an API
+classification and compatibility reference, not a publication or support claim.
+SQLBraid 1.0.0 is GA; the exact-SHA records below are retained as pre-GA audit
+provenance and do not by themselves certify later revisions. The last recorded
+pre-GA exact-SHA verification was revision
 `8da8167e027320fcc9bb2aac16b0903c64147940` (Runtime
 [34856051046](https://github.com/Clickin/SQLBraid/actions/runs/34856051046), Docs
 [34856051102](https://github.com/Clickin/SQLBraid/actions/runs/34856051102),

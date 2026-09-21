@@ -1,0 +1,62 @@
+---
+title: 아키텍처 멘탈 모델
+description: 구현을 읽기 전에 SQLBraid의 실행 계층, 리소스 소유권, 기여자 책임 경계를 이해합니다.
+---
+
+import ArchitectureFlow from "../../../../components/ArchitectureFlow.astro";
+
+SQLBraid는 의도적으로 경계를 좁게 나눈 pipeline으로 보면 가장 이해하기 쉽습니다. SQL text는 그대로 보이고, value는 value로 유지되며, adapter는 물리 transport를, runtime은 connection과 scope correctness를 소유합니다.
+
+<ArchitectureFlow locale="ko" />
+
+## 네 개의 실행 계층
+
+1. **`@sqlbraid/core`**는 logical statement, binding SPI, executor/provider SPI, runtime API, representation policy, observer, capability, routine, public error 계약을 정의합니다.
+2. **`@sqlbraid/template`**은 tagged template을 frozen `Query`로 만들고 명시적인 SQL structure를 transport-neutral `RenderedStatement`로 rendering합니다.
+3. **`@sqlbraid/runtime`**은 lease, pinned scope, transaction/savepoint continuity, stream lifetime, cancellation boundary, result-kind check, application mapping을 소유합니다.
+4. **Driver adapter**는 logical statement/binding description을 native driver 호출로 바꾸고 native result를 SQLBraid 계약으로 normalize합니다.
+
+### 반드시 기억할 invariant
+
+```text
+segments.length === parameters.length + 1
+```
+
+일반 `${value}` interpolation은 bind value입니다. SQL 구조가 되지 않습니다. 구조적 SQL은 `sql.ident`, `sql.fragment`, `sql.list`, `sql.join` 같은 명시적 helper 또는 의도적인 `sql.raw` escape hatch를 사용해야 합니다.
+
+placeholder 문법은 binding/adapter 경계에서 처음 생깁니다. PostgreSQL은 `$1`, MySQL은 `?`, Oracle은 `:1`, SQL Server는 `@p1`을 사용할 수 있고 native-template transport는 또 다른 물리 표현을 유지할 수 있습니다.
+
+## Runtime의 핵심 업무는 resource ownership입니다
+
+pooled materialized query는 lease를 acquire하고 physical I/O를 수행한 뒤 lease를 먼저 release하고 그 다음 비동기 Standard Schema mapping을 수행합니다. stream은 다릅니다. cursor/result set이 살아 있는 동안 resource를 유지하고 iterator cleanup이 끝난 뒤 반환합니다.
+
+`db.session()`은 transaction 없이 하나의 resource를 pin합니다. `db.tx()`는 pinned resource에서 하나의 physical transaction을 시작합니다. nested transaction은 별도 transaction이 아니라 동일 resource의 savepoint입니다.
+
+다른 connection으로 빠져나갈 수 있는 root/parent handle 사용은 조용히 reroute하지 않고 거부합니다. transaction control이나 cleanup 때문에 connection 상태가 불확실해지면 낙관적으로 재사용하지 않고 resource를 poison/discard합니다.
+
+## Prepared, batch, bulk는 서로 다른 계약입니다
+
+- `db.prepare()`는 **SQLBraid logical shape**을 고정합니다. universal server-side prepared cache를 약속하지 않습니다.
+- `db.batch()`는 서로 다른 여러 operation을 하나의 physical use/lease에서 실행하지만 **implicit transaction은 아닙니다**.
+- `db.bulk()`는 하나의 homogeneous command shape을 여러 input에 적용하며 실제 bulk 전략은 adapter가 선택합니다.
+
+## TypePolicy는 application mapping이 아닙니다
+
+`TypePolicy`는 database/native driver value를 SQLBraid의 canonical JavaScript representation으로 normalize합니다. Standard Schema는 그 canonical representation을 application/domain value로 매핑합니다. 이 경계를 분리했기 때문에 runtime에 universal codec framework가 필요하지 않습니다.
+
+## Tooling은 별도의 plane입니다
+
+runtime package는 metadata, codegen, compiler, CLI, editor, Vite에 의존하지 않습니다. `@sqlbraid/compiler`는 source discovery/lowering, `@sqlbraid/metadata`는 database evidence, `@sqlbraid/codegen`은 metadata + TypePolicy 기반 model generation, `@sqlbraid/tooling`은 LSP/CLI/editor용 positive evidence 결합을 담당합니다.
+
+metadata에 사실이 없다는 것은 unresolved evidence일 뿐 사용자 SQL이 invalid라는 뜻이 아닙니다.
+
+## 소스는 이 순서로 읽는 것이 좋습니다
+
+1. `packages/core/src/index.ts`: `RenderedStatement`, `Query`, `StatementBindingAdapter`, `QueryExecutor`, `ConnectionProvider`, `Database`, `SqlTag`.
+2. `packages/template/src/index.ts`: `createSqlTag()`과 rendering path.
+3. `packages/runtime/src/index.ts`: `createScopedDatabase()` → `prepare()` → `leaseForUse()` → `physical()` → `runPrepared()` → `finalizePhysical()` → `processRows()`.
+4. runtime의 `stream()`, 그 다음 `session()`과 `tx()`.
+5. 첫 reference adapter로 PostgreSQL의 `pgStatementBinding` / `createPgExecutor()`, 다음으로 resource lifecycle이 복잡한 Oracle.
+6. static tooling 작업을 할 때 compiler → metadata → codegen → tooling.
+
+더 자세한 contributor용 walkthrough와 invariant는 저장소의 [한국어 mental model](https://github.com/Clickin/SQLBraid/blob/main/docs/mental-model.ko.md)을 참고하세요. Driver 구현자는 [드라이버 작성 가이드](/SQLBraid/ko/agents/driver-author/)도 함께 읽는 것이 좋습니다.

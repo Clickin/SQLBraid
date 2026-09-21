@@ -2,9 +2,10 @@
 
 This file defines repository-wide rules for AI coding agents and human contributors making architectural changes to SQLBraid.
 
-Durable authority is split by boundary: application compatibility is recorded in
-`docs/public-api-audit.md`, driver implementation rules in
-`docs/driver-author-guide.md`, release mechanics in
+Architecture orientation is captured in `docs/mental-model.md` (with the Korean
+translation in `docs/mental-model.ko.md`). Durable authority is split by boundary:
+application compatibility is recorded in `docs/public-api-audit.md`, driver
+implementation rules in `docs/driver-author-guide.md`, release mechanics in
 `docs/SQLBraid_release_readiness.md` and the release workflows, and user-facing
 behavior in the README/website. Historical planning artifacts are context, not
 authority.
@@ -95,9 +96,9 @@ Use `@standard-schema/spec`. Do not maintain a private protocol clone and do not
 
 Result mapping may validate, transform, parse JSON/text and create temporal/domain values. It must not introduce ORM graph assembly, identity maps, relation hydration or entity lifecycle.
 
-### 4.4 Input mapping is deferred
+### 4.4 Input mapping remains outside the runtime contract
 
-Before pre-release, do not implement an application input-codec framework unless the user explicitly changes the roadmap.
+Do not implement an application input-codec framework unless the user explicitly changes the roadmap.
 
 Ordinary `${value}` remains a driver-bound value.
 
@@ -340,7 +341,7 @@ Required coverage includes:
 - savepoint lifecycle;
 - durations/result kind/row count/error stage.
 
-### 9.1 Pre-release observers are observe/fail only
+### 9.1 Observers are observe/fail only
 
 Observer contracts are readonly.
 
@@ -431,9 +432,10 @@ Tooling can remain Node-first while runtime libraries become portable.
 
 ## 11. Oracle, SQL Server and explicit parameter types
 
-PV13 brings Oracle/node-oracledb Thin and SQL Server/Tedious into the RC scope.
-Driver subpaths remain separate from portable dialect roots. Official support
-requires same-revision real-database CI evidence, not unit mocks or host inference.
+Oracle/node-oracledb Thin and SQL Server/Tedious are established first-party
+adapter surfaces. Driver subpaths remain separate from portable dialect roots.
+Official support requires same-revision real-database CI evidence, not unit mocks
+or host inference.
 
 `sql.bind(value, hint)` describes an explicitly selected database parameter type;
 it is not an input codec or Standard Schema validation. JavaScript/TypeScript
@@ -445,11 +447,11 @@ Oracle NUMBER/LOB/temporal and SQL Server precision/scale semantics require
 driver-specific handling. Unsupported call/OUT or streaming capabilities must
 remain explicit rather than simulated.
 
-PV16 certifications in `support/targets/` name the tested revision and CI run.
-Require fresh Runtime, Docs and Release dry-run evidence for a changed revision;
-implementation progress alone does not establish new support labels.
-RC publication remains deferred until user acceptance and explicit release
-authorization.
+Certifications in `support/targets/` name the tested revision and CI run. Require
+fresh Runtime, Docs and Release dry-run evidence for a changed revision;
+implementation progress alone does not establish new support labels. SQLBraid is
+GA, but publishing, tagging, support promotion, and release actions remain
+separately authorized operations.
 
 ---
 
@@ -520,7 +522,7 @@ Runtime-only packed installs must exclude metadata/codegen/tooling/CLI/LSP/edito
 Preserve the independent dialect, driver, transaction-profile and execution
 runtime concerns documented in the public API audit and release-readiness
 records. Node/Bun/Deno host compatibility is separate deployment evidence.
-The frozen RC API supports standard transaction isolation and read-only options;
+The stable 1.x API supports standard transaction isolation and read-only options;
 omitted options preserve the actual DB/session default. Richer transaction
 profiles and vendor-specific modes remain outside this API.
 
