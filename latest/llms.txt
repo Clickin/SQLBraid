@@ -25,6 +25,7 @@ Assume ordinary SQL knowledge. Use these documents for SQLBraid-specific APIs, g
 - [Vite integration](https://clickin.github.io/SQLBraid/latest/getting-started/vite.md): Lower SQLBraid guarded templates in Vite 8 without taking over TypeScript or TSX transforms.
 
 ## Core concepts
+- [Architecture mental model](https://clickin.github.io/SQLBraid/latest/concepts/architecture.md): Understand SQLBraid's execution layers, resource ownership, and contributor boundaries before reading the implementation.
 - [Homogeneous bulk DML](https://clickin.github.io/SQLBraid/latest/concepts/bulk.md): Execute one command shape with many value sets without hiding driver capabilities.
 - [Data representations and value fidelity](https://clickin.github.io/SQLBraid/latest/concepts/data-representation.md): Preserve database value semantics at the driver boundary, then choose application types with Standard Schema.
 - [Dynamic @braid directives](https://clickin.github.io/SQLBraid/latest/concepts/dynamic-braid.md): Keep conditional SQL next to the statement while preserving lazy evaluation.
