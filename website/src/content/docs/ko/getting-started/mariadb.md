@@ -29,7 +29,7 @@ const users = await db.all(sql.rows<{ id: string; name: string }>`
 `);
 ```
 
-Dialect는 `mysql`이 아닌 `mariadb`입니다. MariaDB 전용 문법은 SQL로
+Dialect는 `mariadb`를 사용합니다. MariaDB 전용 문법은 SQL로
 그대로 작성합니다. 현재 capability fixture는 문서화된
 `INSERT ... RETURNING`, `DELETE ... RETURNING`, `REPLACE ... RETURNING`,
 sequence, CTE, JSON function을 다룹니다. `UPDATE ... RETURNING`은 주장하지
@@ -41,8 +41,7 @@ sequence, CTE, JSON function을 다룹니다. `UPDATE ... RETURNING`은 주장�
 transaction이 되지 않고 portable auto-chunking 약속이 없습니다. 원자성이
 필요하면 `db.tx()`를 사용하세요.
 
-MariaDB에서 `mysql2` connection이 동작할 수 있지만 best-effort 호환일 뿐
-MariaDB protocol 증거가 아닙니다. 공식 인증 프로필은 MariaDB 11.8.9 /
+MariaDB에서 `mysql2` connection을 사용할 수 있으나, 이는 최선을 다한(best-effort) 호환성 제공일 뿐 MariaDB 프로토콜을 완전히 지원한다는 증거는 아닙니다. 공식 인증 프로필은 MariaDB 11.8.9 /
 Connector 3.5.4 / Node 22.18.0입니다. 이 프로필의 지원 label과 증거는
 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가 기록한 정확한
 database, driver, profile, runtime, capability tuple과 revision별 실행

@@ -3,7 +3,7 @@
 This file separates repository evidence from maintainer actions outside the
 repository. It contains no credentials or registry tokens.
 
-The GA target is stable public contracts, not universal driver capabilities.
+The GA target focuses on stable public contracts rather than universal driver capabilities.
 This preparation neither claims fresh final certification nor authorizes
 tagging, staging, approval, or publication. Prereleases stage under `next`;
 stable releases stage under `latest`. Human stage approval remains a separate

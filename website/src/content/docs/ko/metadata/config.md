@@ -39,7 +39,7 @@ sqlbraid codegen --json
 
 설정은 신뢰된 실행 가능한 Node 코드이며 sandbox가 아닙니다. 프로젝트에서 검토 가능한 스키마 변경이 필요하다면 메타데이터와 생성 출력을 버전 관리에 포함하세요.
 
-선택한 TypePolicy는 꾸밈용 codegen option이 아니라 representation profile입니다.
+선택한 TypePolicy는 단순한 codegen 옵션이 아니라, 데이터 표현 방식(representation profile)을 정의하는 설정입니다.
 같은 PostgreSQL/mysql2/MariaDB profile descriptor를 runtime과 이 설정에서
 재사용하세요. Native JSON root는 driver 계약이 좁히지 않는 한 의도적으로
 `unknown`이며, 수동 output override는 TypeScript 출력만 바꾸고 runtime

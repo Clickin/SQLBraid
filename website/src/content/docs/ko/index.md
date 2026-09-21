@@ -26,9 +26,9 @@ SQLBraid는 SQL 우선 TypeScript 데이터 액세스 도구입니다. 쿼리 �
 외부 서버 없이 실행되는 [5분 SQLite 빠른 시작](/SQLBraid/getting-started/sqlite/)으로 시작하세요. 브라우저 및 Worker 환경은 [SQLite WASM과 D1](/SQLBraid/getting-started/sqlite-browser/)을 참고하세요. 서비스 데이터베이스가 필요하면 [PostgreSQL](/SQLBraid/getting-started/postgres/), [MySQL](/SQLBraid/getting-started/mysql/), 또는 [MariaDB](/SQLBraid/getting-started/mariadb/)로 이동하세요.
 :::
 
-## SQLBraid가 아닌 것
+## 설계 원칙 및 제한 사항
 
-SQLBraid는 임의의 SELECT 결과 타입을 추론하거나, 객체 그래프를 생성하거나, 모델 DSL 뒤에 SQL을 숨기지 않습니다. 작성한 SQL과 선언한 행 타입이 계약입니다. 행에 검증이나 변환이 필요할 때는 Standard Schema 매핑을 사용할 수 있습니다.
+SQLBraid는 SELECT 결과 타입을 자동으로 추론하거나 객체 그래프를 생성하지 않으며, 모델 DSL 뒤로 SQL을 숨기지 않습니다. 사용자가 작성한 SQL과 선언한 행 타입이 곧 계약이 됩니다.
 
 데이터베이스에서 애플리케이션으로 값이 이동하는 경계는 [데이터 표현과
 숫자 정확도](/SQLBraid/concepts/data-representation/)를 참고하세요. 각

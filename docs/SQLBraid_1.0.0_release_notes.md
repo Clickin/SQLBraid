@@ -1,6 +1,6 @@
 # SQLBraid 1.0.0
 
-**Write SQL. Keep TypeScript. Skip the query-builder translation layer.**
+**Write SQL and keep TypeScript, without a query-builder translation layer.**
 
 SQLBraid is a SQL-first data-access toolkit for TypeScript. You write ordinary SQL; SQLBraid adds safe value
 binding, explicit result contracts, result mapping, connection and transaction ownership, and driver adapters

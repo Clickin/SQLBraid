@@ -2,7 +2,7 @@
 
 [English](./mental-model.md)
 
-이 문서는 SQLBraid 내부 구조를 빠르게 이해하기 위한 읽기 지도이자 설계 모델입니다. Public API audit, driver-author guide, support record, 테스트를 대체하는 규범 문서가 아니라, 기여자가 코드의 책임 경계를 먼저 이해하도록 돕는 문서입니다.
+이 문서는 기여자가 코드의 책임 경계를 먼저 이해하도록 돕는 설계 모델입니다. Public API audit, driver-author guide, support record 또는 테스트를 대체하는 규범 문서가 아닙니다.
 
 ## 1. 전체 구조 한눈에 보기
 

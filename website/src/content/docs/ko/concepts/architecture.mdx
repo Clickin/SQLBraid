@@ -5,7 +5,7 @@ description: 구현을 읽기 전에 SQLBraid의 실행 계층, 리소스 소유
 
 import ArchitectureFlow from "../../../../components/ArchitectureFlow.astro";
 
-SQLBraid는 의도적으로 경계를 좁게 나눈 pipeline으로 보면 가장 이해하기 쉽습니다. SQL text는 그대로 보이고, value는 value로 유지되며, adapter는 물리 transport를, runtime은 connection과 scope correctness를 소유합니다.
+SQLBraid는 의도적으로 경계를 좁게 나눈 파이프라인 구조로 설계되었습니다. SQL text는 그대로 보이고, value는 value로 유지되며, adapter는 물리 transport를, runtime은 connection과 scope correctness를 소유합니다.
 
 <ArchitectureFlow locale="ko" />
 

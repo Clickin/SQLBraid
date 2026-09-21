@@ -2,7 +2,7 @@
 
 [한국어](./mental-model.ko.md)
 
-This guide is the shortest path to understanding SQLBraid's internal architecture before changing it. It is a reading map and design model, not a replacement for the public API audit, driver-author guide, support records, or tests.
+This guide provides a concise overview of SQLBraid's internal architecture for contributors. It is a reading map and design model, not a replacement for the public API audit, driver-author guide, support records, or tests.
 
 ## 1. The architecture at a glance
 
