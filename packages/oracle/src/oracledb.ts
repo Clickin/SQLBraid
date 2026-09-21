@@ -2,7 +2,6 @@ import oracledb from "oracledb";
 import {
   AdapterError,
   createBulkBindingDescription,
-  createRenderedStatement,
   createStatementBindingDescription,
   ResultExactnessError,
   safeDatabaseCount,
@@ -30,259 +29,43 @@ import { assertSavepointName, createCleanupScope, defineResultProperty } from "@
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { utf8ByteLength } from "@sqlbraid/template";
 import { isOracleBinaryNumericType, isOracleExactNumericType, typePolicy as defaultTypePolicy } from "./type-policy.js";
-
-/** node-oracledb metadata surface used for type-policy decoding and duplicate-column checks. */
-export interface OracleMetaDataLike {
-  readonly name?: string;
-  readonly dbType?: unknown;
-  readonly dbTypeName?: string;
-  readonly type?: unknown;
-}
-
-export interface OracleResultSetLike {
-  readonly metaData?: readonly OracleMetaDataLike[];
-  getRow?(): Promise<unknown | null | undefined>;
-  getRows?(numRows?: number): Promise<readonly unknown[]>;
-  close(): Promise<void> | void;
-  [Symbol.asyncIterator]?(): AsyncIterator<unknown>;
-}
-
-interface OracleLobLike {
-  getData(): Promise<unknown>;
-  destroy(error?: Error): unknown;
-  once(event: string, listener: (...args: readonly unknown[]) => void): unknown;
-  removeListener?(event: string, listener: (...args: readonly unknown[]) => void): unknown;
-  readonly destroyed?: boolean;
-  readonly closed?: boolean;
-}
-
-/** Materialized Oracle execution result; LOBs/result sets are consumed before lease release. */
-export interface OracleExecuteResultLike {
-  readonly rows?: readonly unknown[];
-  readonly rowsAffected?: number;
-  readonly metaData?: readonly OracleMetaDataLike[];
-  readonly resultSet?: OracleResultSetLike;
-  readonly outBinds?: unknown;
-  readonly implicitResults?: readonly OracleResultSetLike[];
-}
-
-export interface OracleBindLike {
-  readonly dir?: unknown;
-  readonly val?: unknown;
-  readonly type?: unknown;
-  readonly maxSize?: number;
-}
-
-export interface OracleExecuteOptionsLike {
-  readonly outFormat?: unknown;
-  readonly fetchTypeHandler?: (
-    metadata: OracleMetaDataLike,
-  ) => { readonly type?: unknown; readonly converter?: (value: unknown) => unknown } | undefined;
-  readonly resultSet?: boolean;
-  readonly [key: string]: unknown;
-}
-
-export interface OracleConnectionLike {
-  execute(sql: string, bindParams?: any, options?: any): Promise<unknown>;
-  executeMany?(sql: string, binds: any, options?: any): Promise<unknown>;
-  commit(): Promise<void>;
-  rollback(): Promise<void>;
-  readonly stmtCacheSize?: number;
-  break?(): Promise<void> | void;
-  close?(options?: { readonly drop?: boolean }): Promise<void> | void;
-}
-
-export interface OraclePoolConnectionLike extends OracleConnectionLike {
-  close(options?: { readonly drop?: boolean }): Promise<void> | void;
-}
-
-export interface OraclePoolLike {
-  getConnection(): Promise<OraclePoolConnectionLike>;
-  readonly stmtCacheSize?: number;
-}
-
-export interface OracleDriverLike {
-  readonly BIND_IN?: unknown;
-  readonly BIND_OUT?: unknown;
-  readonly BIND_INOUT?: unknown;
-  readonly OUT_FORMAT_OBJECT?: unknown;
-  readonly OUT_FORMAT_ARRAY?: unknown;
-  readonly STRING?: unknown;
-  readonly NUMBER?: unknown;
-  readonly DATE?: unknown;
-  readonly BUFFER?: unknown;
-  readonly BINARY_FLOAT?: unknown;
-  readonly BINARY_DOUBLE?: unknown;
-  readonly DB_TYPE_VARCHAR?: unknown;
-  readonly DB_TYPE_CHAR?: unknown;
-  readonly DB_TYPE_NVARCHAR?: unknown;
-  readonly DB_TYPE_NCHAR?: unknown;
-  readonly DB_TYPE_NUMBER?: unknown;
-  readonly DB_TYPE_BINARY_FLOAT?: unknown;
-  readonly DB_TYPE_BINARY_DOUBLE?: unknown;
-  readonly DB_TYPE_DATE?: unknown;
-  readonly DB_TYPE_TIMESTAMP?: unknown;
-  readonly DB_TYPE_TIMESTAMP_TZ?: unknown;
-  readonly DB_TYPE_TIMESTAMP_LTZ?: unknown;
-  readonly DB_TYPE_RAW?: unknown;
-  readonly DB_TYPE_BLOB?: unknown;
-  readonly DB_TYPE_CLOB?: unknown;
-  readonly DB_TYPE_NCLOB?: unknown;
-  readonly DB_TYPE_ROWID?: unknown;
-  readonly DB_TYPE_UROWID?: unknown;
-  readonly DB_TYPE_JSON?: unknown;
-  readonly DB_TYPE_OBJECT?: unknown;
-  readonly DB_TYPE_VECTOR?: unknown;
-  readonly BLOB?: unknown;
-  readonly NCLOB?: unknown;
-  readonly CURSOR?: unknown;
-  readonly [key: string]: unknown;
-}
-
-/** Oracle adapter options, including Thin-mode type policy and native cancellation/stream settings. */
-export interface OracleDatabaseOptions extends DatabaseOptions {
-  readonly typePolicy?: TypePolicy;
-  readonly driver?: OracleDriverLike;
-  readonly executeOptions?: OracleExecuteOptionsLike;
-  readonly streamFetchSize?: number;
-}
+import type {
+  OracleBindLike,
+  OracleConnectionLike,
+  OracleDatabaseOptions,
+  OracleDriverLike,
+  OracleExecuteOptionsLike,
+  OracleExecuteResultLike,
+  OracleLobLike,
+  OracleMetaDataLike,
+  OraclePoolConnectionLike,
+  OraclePoolLike,
+  OracleResultSetLike,
+  OracleStatementBindingAdapter,
+  OracleRoutineParameter,
+  OracledbStatementBindingOptions,
+  OracleExecuteManyOptionsLike,
+} from "./oracledb/types.js";
+export type {
+  OracleMetaDataLike,
+  OracleResultSetLike,
+  OracleExecuteResultLike,
+  OracleBindLike,
+  OracleExecuteOptionsLike,
+  OracleConnectionLike,
+  OraclePoolConnectionLike,
+  OraclePoolLike,
+  OracleDriverLike,
+  OracleDatabaseOptions,
+  OracledbStatementBindingOptions,
+  OracleExecuteManyOptionsLike,
+} from "./oracledb/types.js";
 
 const defaultDriver = oracledb as unknown as OracleDriverLike;
 // node-oracledb's stable OUT_FORMAT_ARRAY constant; arrays preserve __proto__ labels.
 const oracleOutFormatArray = 4001;
 
-const oracleEnvironment = Object.freeze<DriverEnvironment>({
-  database: { product: "oracle" },
-  driver: { id: "node-oracledb", profile: "oracle-thin" },
-  typePolicy: { id: defaultTypePolicy.id, hash: defaultTypePolicy.hash },
-  capabilities: {
-    "sql.native-transparency": { status: "guaranteed" },
-    "numeric.exact-integer": { status: "unsupported", canonical: "string", rawRepresentations: ["string"] },
-    "numeric.exact-decimal": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-    "numeric.approximate-float": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-    "numeric.approximate-special": { status: "guaranteed", canonical: "number", rawRepresentations: ["number"] },
-    "numeric.bind-exact": { status: "unsupported", conditionCode: "oracle.bind-nls-sensitive" },
-    "data.json-parsed": {
-      status: "guaranteed",
-      rawRepresentations: ["object", "array", "string", "number", "boolean", "null"],
-    },
-    "data.json-lossless-text": {
-      status: "unsupported",
-      canonical: "string",
-      rawRepresentations: ["string"],
-      conditionCode: "oracle.json-serialize-required",
-    },
-    "data.oracle-object": {
-      status: "unsupported",
-      rawRepresentations: ["object"],
-      conditionCode: "oracle.object-nested-numeric-unclassified",
-    },
-    "data.oracle-collection": {
-      status: "unsupported",
-      rawRepresentations: ["object", "array"],
-      conditionCode: "oracle.collection-nested-numeric-unclassified",
-    },
-    "data.vector": {
-      status: "unsupported",
-      rawRepresentations: ["object", "array"],
-      conditionCode: "oracle.vector-unclassified",
-    },
-    "data.binary": { status: "guaranteed", canonical: "Uint8Array", rawRepresentations: ["Buffer"] },
-    "data.uuid": { status: "guaranteed", canonical: "string", rawRepresentations: ["string"] },
-    "data.temporal-native": {
-      status: "guarded",
-      rawRepresentations: ["Date"],
-      conditionCode: "oracle.date-millisecond-precision",
-    },
-    "data.temporal-lossless": {
-      status: "unsupported",
-      canonical: "string",
-      rawRepresentations: ["string"],
-      conditionCode: "oracle.temporal-text-cast-required",
-    },
-    "metadata.command-safe": {
-      status: "guarded",
-      rawRepresentations: ["number"],
-      conditionCode: "oracle.count-safe-integer",
-    },
-    "session.pinned": { status: "guaranteed" },
-    transaction: { status: "guaranteed" },
-    "transaction.savepoint": { status: "guaranteed" },
-    "transaction.read-only": { status: "guaranteed" },
-    "transaction.isolation.read-uncommitted": { status: "unsupported" },
-    "transaction.isolation.read-committed": { status: "guaranteed" },
-    "transaction.isolation.repeatable-read": { status: "unsupported" },
-    "transaction.isolation.serializable": { status: "guaranteed" },
-    "statement.prepare": { status: "guaranteed" },
-    "statement.cancel": { status: "guarded", conditionCode: "oracle.connection-break" },
-    "statement.stream": { status: "guaranteed" },
-    "statement.bulk": { status: "guaranteed" },
-    "routine.call": { status: "guaranteed" },
-    "routine.out": { status: "guaranteed" },
-    "routine.inout": { status: "guaranteed" },
-    "routine.return-value": { status: "unsupported" },
-    "routine.result-sets": { status: "guaranteed" },
-    "routine.out-cursor": { status: "guaranteed" },
-  },
-  probe: {
-    statement: createRenderedStatement({
-      segments: ["SELECT banner AS version FROM v$version WHERE ROWNUM = 1"],
-      parameters: [],
-      resultKind: "rows",
-      dialectId: "oracle",
-    }),
-    read: (rows) => {
-      const row = rows[0];
-      if (!row || typeof row !== "object" || Array.isArray(row)) return {};
-      const version = (row as Record<string, unknown>).VERSION ?? (row as Record<string, unknown>).version;
-      return typeof version === "string" ? { version } : {};
-    },
-  },
-});
-
-function customOracleEnvironment(policy: TypePolicy, cancellationSupported: boolean): DriverEnvironment {
-  return {
-    ...oracleEnvironment,
-    driver: { id: "node-oracledb", profile: "custom" },
-    typePolicy: { id: policy.id, hash: policy.hash },
-    capabilities: cancellationSupported
-      ? { "statement.cancel": oracleEnvironment.capabilities["statement.cancel"]! }
-      : {},
-  };
-}
-
-interface OracleStatementBindingAdapter extends StatementBindingAdapter {
-  readonly materializedBinds: (
-    statement: RenderedStatement,
-    description: StatementBindingDescription,
-  ) => readonly unknown[] | undefined;
-  readonly materializedBulk: (
-    bulk: RenderedBulk,
-    description: BulkBindingDescription,
-  ) => { readonly binds: readonly (readonly unknown[])[]; readonly bindDefs: readonly OracleBindLike[] } | undefined;
-}
-
-/** Binding options for Oracle typed binds and explicit reuse policy. */
-export interface OracledbStatementBindingOptions {
-  readonly typePolicy?: TypePolicy;
-  readonly driver?: OracleDriverLike;
-  readonly executeOptions?: OracleExecuteOptionsLike;
-  readonly stmtCacheSize?: number;
-}
-
-export interface OracleExecuteManyOptionsLike {
-  readonly bindDefs?: readonly OracleBindLike[];
-  readonly batchErrors?: boolean;
-  readonly dmlRowCounts?: boolean;
-  readonly [key: string]: unknown;
-}
-
-interface OracleRoutineParameter {
-  readonly value: unknown;
-  readonly hint?: ParameterTypeHint;
-  readonly direction?: "in" | "out" | "inout";
-  readonly outputName?: string;
-}
+import { customOracleEnvironment, oracleEnvironment } from "./oracledb/environment.js";
 
 function assertConnection(connection: OracleConnectionLike): void {
   if (
