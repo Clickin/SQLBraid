@@ -28,11 +28,13 @@ import {
   type WorkspaceSymbol,
 } from "@sqlbraid/tooling";
 
+/** Stdio endpoints supplied by an embedding host or defaulted to process stdin/stdout. */
 export interface LspStreams {
   readonly input: Readable;
   readonly output: Writable;
 }
 
+/** Language-server configuration; workspace/config reloads remain server-owned. */
 export interface StdioLanguageServerOptions extends LanguageServiceOptions {
   readonly configPath?: string;
 }
@@ -145,6 +147,10 @@ function normalizedPath(path: string): string {
   return resolve(path);
 }
 
+/**
+ * Start the standard stdio LSP transport and return an idempotent stop function.
+ * The server owns workspace/cache cleanup but never owns the caller's database or metadata source.
+ */
 export function startStdioLanguageServer(
   options: StdioLanguageServerOptions = { moduleSpecifiers: [...DEFAULT_MODULE_SPECIFIERS] },
   streams: LspStreams = { input: process.stdin, output: process.stdout },

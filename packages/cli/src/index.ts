@@ -508,6 +508,7 @@ async function main(argv: readonly string[]): Promise<void> {
   if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) process.exitCode = 1;
 }
 
+/** Run the `sqlbraid` CLI with argv excluding the Node executable/script path. */
 export function runCli(argv: readonly string[]): void {
   void main(argv).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));

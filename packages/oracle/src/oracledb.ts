@@ -31,6 +31,7 @@ import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { utf8ByteLength } from "@sqlbraid/template";
 import { isOracleBinaryNumericType, isOracleExactNumericType, typePolicy as defaultTypePolicy } from "./type-policy.js";
 
+/** node-oracledb metadata surface used for type-policy decoding and duplicate-column checks. */
 export interface OracleMetaDataLike {
   readonly name?: string;
   readonly dbType?: unknown;
@@ -55,6 +56,7 @@ interface OracleLobLike {
   readonly closed?: boolean;
 }
 
+/** Materialized Oracle execution result; LOBs/result sets are consumed before lease release. */
 export interface OracleExecuteResultLike {
   readonly rows?: readonly unknown[];
   readonly rowsAffected?: number;
@@ -137,6 +139,7 @@ export interface OracleDriverLike {
   readonly [key: string]: unknown;
 }
 
+/** Oracle adapter options, including Thin-mode type policy and native cancellation/stream settings. */
 export interface OracleDatabaseOptions extends DatabaseOptions {
   readonly typePolicy?: TypePolicy;
   readonly driver?: OracleDriverLike;
@@ -259,6 +262,7 @@ interface OracleStatementBindingAdapter extends StatementBindingAdapter {
   ) => { readonly binds: readonly (readonly unknown[])[]; readonly bindDefs: readonly OracleBindLike[] } | undefined;
 }
 
+/** Binding options for Oracle typed binds and explicit reuse policy. */
 export interface OracledbStatementBindingOptions {
   readonly typePolicy?: TypePolicy;
   readonly driver?: OracleDriverLike;
@@ -1012,6 +1016,7 @@ function createBinding(options: OracledbStatementBindingOptions = {}): OracleSta
   return Object.freeze(adapter);
 }
 
+/** Create an Oracle binding adapter; OUT ordinals remain independent of intervening IN parameters. */
 export function createOracledbStatementBinding(options: OracledbStatementBindingOptions = {}): StatementBindingAdapter {
   return createBinding(options);
 }
@@ -1145,9 +1150,7 @@ function routineParameter(parameter: unknown): OracleRoutineParameter {
 
 /**
  * Map rendered parameter indexes to node-oracledb's physical OUT ordinal.
- *
- * Positional outBinds omit IN parameters, so indexing outBinds by the
- * rendered parameter index is incorrect for mixed IN/OUT calls.
+ * Positional outBinds omit IN parameters, so output ordinals are not rendered parameter indexes.
  */
 export function oracleOutputOrdinals(rendered: RenderedStatement): readonly (number | undefined)[] {
   let ordinal = 0;
@@ -1893,6 +1896,7 @@ function makeOracledbExecutor(
   };
 }
 
+/** Wrap one connected node-oracledb connection; LOBs and result sets are closed before return. */
 export function createOracledbExecutor(
   connection: OracleConnectionLike,
   options: Omit<OracleDatabaseOptions, "observers"> = {},
@@ -1909,6 +1913,7 @@ export function createOracledbExecutor(
   );
 }
 
+/** Wrap one connected Oracle connection as an application database. */
 export function createOracledbDatabase(connection: OracleConnectionLike, options: OracleDatabaseOptions = {}) {
   const { typePolicy, driver, executeOptions, streamFetchSize, ...databaseOptions } = options;
   return createDatabase(
@@ -1917,6 +1922,7 @@ export function createOracledbDatabase(connection: OracleConnectionLike, options
   );
 }
 
+/** Create a lease provider from an Oracle pool; discarded connections use the driver's drop path. */
 export function createOracledbPoolProvider(
   pool: OraclePoolLike,
   options: Omit<OracleDatabaseOptions, "observers"> = {},
@@ -1981,7 +1987,7 @@ export function createOracledbPoolProvider(
     },
   };
 }
-
+/** Wrap an Oracle pool as a pooled application database with one lease per root operation. */
 export function createOracledbPoolDatabase(pool: OraclePoolLike, options: OracleDatabaseOptions = {}) {
   const { typePolicy, driver, executeOptions, streamFetchSize, ...databaseOptions } = options;
   return createPooledDatabase(

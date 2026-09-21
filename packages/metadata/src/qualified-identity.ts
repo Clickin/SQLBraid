@@ -12,25 +12,29 @@ function encodeQualifiedIdentity(segments: readonly string[]): string {
   return segments.map(escapeQualifiedPart).join(".");
 }
 
+/** Encode namespace-qualified object segments with escaping that preserves dots, colons, hashes, and backslashes. */
 export function qualifiedIdentity(namespace: string, name: string, ...segments: readonly string[]): string {
   return encodeQualifiedIdentity([namespace, name, ...segments]);
 }
 
+/** Encode an already separated qualified-identity segment list. */
 export function qualifiedIdentitySegments(segments: readonly string[]): string {
   return encodeQualifiedIdentity(segments);
 }
 
+/** Encode one qualified identity with an escaped suffix. */
 export function qualifiedIdentityWithSuffix(namespace: string, name: string, suffix: string): string {
   return `${qualifiedIdentity(namespace, name)}:${escapeQualifiedPart(suffix)}`;
 }
 
+/** Encode a qualified segment list with an escaped suffix. */
 export function qualifiedIdentitySegmentsWithSuffix(segments: readonly string[], suffix: string): string {
   return `${qualifiedIdentitySegments(segments)}:${escapeQualifiedPart(suffix)}`;
 }
 
 /**
- * Checks the escaped-qualified-v1 wire representation without interpreting
- * database names. Legacy unmarked identities are intentionally not checked.
+ * Validate only the marked `escaped-qualified-v1` wire grammar.
+ * Legacy unmarked identities are intentionally not accepted.
  */
 export function isQualifiedIdentity(value: string): boolean {
   if (!value) return false;

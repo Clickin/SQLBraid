@@ -1,6 +1,7 @@
 import { createSqlTag } from "@sqlbraid/template";
 import type { Dialect, SqlTag } from "@sqlbraid/core";
 
+/** MariaDB identifier quoting and Connector/Node.js lexical profile. */
 export const dialect: Dialect = {
   id: "mariadb",
   quoteIdentifier: (identifier) => `\`${identifier.replaceAll("`", "``")}\``,
@@ -14,6 +15,7 @@ export const dialect: Dialect = {
   },
 };
 
+/** Default MariaDB SQL tag; SQLBraid does not rewrite MySQL-family writes. */
 export const sql: SqlTag = createSqlTag({ dialect });
 export {
   MARIADB_DATE_TEXT,

@@ -1,5 +1,12 @@
+/** Cleanup callback owned by a driver resource; synchronous actions stay synchronous. */
 export type CleanupAction = () => void | PromiseLike<void>;
 
+/**
+ * LIFO cleanup scope for driver-owned resources.
+ * Cleanup continues after individual failures so every owned handle is attempted; the primary operation error remains first.
+ *
+ * @throws {Error} With code `BRAID_RESOURCE_CLEANUP` when cleanup fails.
+ */
 export interface CleanupScope {
   add(action: CleanupAction): void;
   disarm(): void;
@@ -54,6 +61,7 @@ async function finishAsync(
   failures: unknown[],
 ): Promise<void> {
   try {
+    // Continue cleanup after an async action fails; releasing later resources is required even when the primary cleanup fails.
     await current;
   } catch (error) {
     failures.push(error);
@@ -69,6 +77,7 @@ async function finishAsync(
   finish(primary, failures);
 }
 
+/** Create a one-shot LIFO cleanup scope with explicit ownership transfer via `disarm()`. */
 export function createCleanupScope(): CleanupScope {
   let actions: CleanupAction[] = [];
   let state: "open" | "running" | "closed" | "disarmed" = "open";
@@ -115,6 +124,7 @@ export function createCleanupScope(): CleanupScope {
   };
 }
 
+/** Define an enumerable own result property without invoking driver-specific row prototypes. */
 export function defineResultProperty(row: Record<string, unknown>, key: string, value: unknown): void {
   Object.defineProperty(row, key, {
     configurable: true,
@@ -124,6 +134,7 @@ export function defineResultProperty(row: Record<string, unknown>, key: string, 
   });
 }
 
+/** Validate a generated savepoint name before embedding it in transaction-control SQL. */
 export function assertSavepointName(name: string): string {
   if (typeof name !== "string" || !SAVEPOINT_NAME.test(name)) {
     throw new TypeError("Invalid SQLBraid savepoint name.");

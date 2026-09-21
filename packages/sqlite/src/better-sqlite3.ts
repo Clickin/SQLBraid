@@ -28,6 +28,7 @@ import { assertSavepointName, defineResultProperty } from "@sqlbraid/core/driver
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
+/** better-sqlite3 column metadata used for exact names and type-policy decoding. */
 export interface BetterSqlite3ColumnLike {
   readonly name?: string | null;
   readonly column?: string | null;
@@ -63,6 +64,7 @@ export interface BetterSqlite3DatabaseLike {
   exec(sql: string): unknown;
 }
 
+/** Options forwarded to the async facade; the underlying better-sqlite3 calls remain event-loop blocking. */
 export interface BetterSqlite3DatabaseOptions extends DatabaseOptions {}
 
 function normalizeValue(value: unknown): unknown {
@@ -353,6 +355,7 @@ function betterSqlite3Environment(): DriverEnvironment {
   });
 }
 
+/** Wrap a better-sqlite3 database; SQLBraid does not make its synchronous calls non-blocking. */
 export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike): QueryExecutor {
   const control = (sql: string): void => {
     database.exec(sql);
@@ -505,6 +508,7 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
   return executor;
 }
 
+/** Wrap a better-sqlite3 database as an application database. */
 export function createBetterSqlite3Database(
   database: BetterSqlite3DatabaseLike,
   options: BetterSqlite3DatabaseOptions = {},

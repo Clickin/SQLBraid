@@ -10,11 +10,13 @@ declare const boundParameterBrand: unique symbol;
 const SQL_ROUTINE_PARAMETER = Symbol.for("sqlbraid.routine-parameter");
 const knownRoutineParameters = new WeakSet<object>();
 
+/** Half-open source range in the cooked template text, used for diagnostics and source mapping. */
 export interface SourceRange {
   readonly start: number;
   readonly end: number;
 }
 
+/** Safety bounds applied while parsing and rendering dynamic SQL. */
 export interface RenderLimits {
   readonly maxSqlBytes?: number;
   readonly maxBindCount?: number;
@@ -22,6 +24,7 @@ export interface RenderLimits {
   readonly maxNestingDepth?: number;
 }
 
+/** Declared logical result channel; runtime checks the driver's actual result kind against it. */
 export type QueryResultKind = "rows" | "command" | "call" | "unknown";
 export { AUTHORING_MODULE_CATALOG, type AuthoringModuleCatalogEntry } from "./authoring-modules.js";
 export {
@@ -39,6 +42,7 @@ export type NumericRepresentation = "string" | "number";
 
 export type TransportFidelity = "lossless" | "guarded" | "lossy" | "unsupported";
 
+/** Database type semantics, JavaScript representation, and transport-fidelity claim for one mapping. */
 export interface NumericTypeContract {
   readonly semantics: NumericSemantics;
   readonly representation: NumericRepresentation;
@@ -51,6 +55,7 @@ export interface ExactIntegerRange {
   readonly max?: bigint;
 }
 
+/** Thrown when a driver value cannot be represented without losing database information. */
 export class ResultExactnessError extends Error {
   static readonly code = "BRAID_RESULT_EXACTNESS" as const;
   readonly code = ResultExactnessError.code;
@@ -63,6 +68,7 @@ export class ResultExactnessError extends Error {
 
 export type PublicErrorCategory = "runtime" | "adapter" | "compiler";
 
+/** One deliberately public SQLBraid error code; an arbitrary `BRAID_` message is not automatically public. */
 export interface PublicErrorDefinition {
   readonly code: string;
   readonly category: PublicErrorCategory;
@@ -237,6 +243,11 @@ function exactnessFailure(message: string): never {
   throw new ResultExactnessError(message);
 }
 
+/**
+ * Decode an exact integer from driver output, optionally enforcing bigint bounds.
+ *
+ * @throws {ResultExactnessError} When the value is not an exact integer or violates the requested range.
+ */
 export function decodeExactInteger(value: unknown, range?: ExactIntegerRange): bigint {
   let result: bigint;
   if (typeof value === "bigint") {
@@ -310,6 +321,11 @@ export function safeDatabaseCount(value: unknown): number {
   return exactnessFailure("Database count is not a safe non-negative integer.");
 }
 
+/**
+ * Preserve an exact decimal as text; numeric JavaScript values are rejected because they may already be rounded.
+ *
+ * @throws {ResultExactnessError} When the value cannot prove exact decimal fidelity.
+ */
 export function decodeExactDecimal(value: unknown, options?: { readonly allowBigInt?: boolean }): string {
   if (typeof value === "string") return value;
   if (typeof value === "bigint" && options?.allowBigInt === true) return value.toString();
@@ -318,6 +334,7 @@ export function decodeExactDecimal(value: unknown, options?: { readonly allowBig
 
 export type RoutineParameterDirection = "in" | "out" | "inout";
 
+/** Optional routine identity metadata used by procedure-aware adapters and prepared-shape checks. */
 export interface RoutineProcedure {
   readonly name: string;
   readonly parameterNames: readonly string[];
@@ -325,6 +342,10 @@ export interface RoutineProcedure {
 
 export type RoutineSchema = StandardSchemaV1<any, any>;
 
+/**
+ * Application mapping contracts for routine OUT values, result sets, and return values.
+ * Each channel is independent; an OUT cursor is represented as a result set, not as scalar output.
+ */
 export interface RoutineContract<
   Output extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>,
   Sets extends readonly RoutineSchema[] = readonly RoutineSchema[],
@@ -349,6 +370,10 @@ export interface RenderedParameter {
   readonly outputName?: string;
 }
 
+/**
+ * Immutable logical statement before driver materialization.
+ * `segments.length` is always `parameters.length + 1`; structural SQL lives in segments and parameters remain values.
+ */
 export interface RenderedStatement {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
@@ -365,6 +390,7 @@ export interface RenderedStatement {
   readonly variantFingerprint?: string;
 }
 
+/** Explicit database-type metadata for one bound value; this is not application validation or an input codec. */
 export interface ParameterTypeHint<Input = unknown> {
   readonly databaseType: string;
   readonly length?: number | "max";
@@ -373,12 +399,14 @@ export interface ParameterTypeHint<Input = unknown> {
   readonly __input?: Input;
 }
 
+/** Value plus an explicit database type hint, created by `sql.bind()`. */
 export interface BoundParameter<Input = unknown> {
   readonly value: Input;
   readonly hint: ParameterTypeHint<Input>;
   readonly [boundParameterBrand]: true;
 }
 
+/** Value-only routine OUT/INOUT marker; the direction and output name are interpreted by the adapter. */
 export interface RoutineParameter<Input = unknown> {
   readonly value: Input;
   readonly hint?: ParameterTypeHint;
@@ -411,6 +439,7 @@ function isParameterTypeHint(value: unknown): value is ParameterTypeHint {
   );
 }
 
+/** Validate and freeze an explicit database parameter-type hint. */
 export function createParameterTypeHint<Input = unknown>(hint: ParameterTypeHint<Input>): ParameterTypeHint<Input> {
   if (!isParameterTypeHint(hint)) throw new TypeError("sql.bind hint must be an object with valid structural fields.");
   const candidate = hint as {
@@ -436,6 +465,7 @@ export function createParameterTypeHint<Input = unknown>(hint: ParameterTypeHint
   return Object.freeze(normalized);
 }
 
+/** Create the value-only marker consumed by adapter binding for an explicitly typed input. */
 export function createBoundParameter<Input>(
   value: NoInfer<Input>,
   hint: ParameterTypeHint<Input>,
@@ -446,6 +476,7 @@ export function createBoundParameter<Input>(
   return bound as unknown as BoundParameter<Input>;
 }
 
+/** Recognize only bound-parameter objects created by SQLBraid's own constructor. */
 export function isBoundParameter(value: unknown): value is BoundParameter {
   if (
     typeof value !== "object" ||
@@ -469,6 +500,7 @@ function normalizeOutputName(name: unknown): string {
   return name;
 }
 
+/** Create a value-only OUT parameter descriptor; the adapter supplies the native carrier. */
 export function createRoutineOutParameter(name: string, hint?: ParameterTypeHint): RoutineParameter<null> {
   const normalizedHint = hint === undefined ? undefined : createParameterTypeHint(hint);
   const parameter = Object.freeze({
@@ -482,6 +514,7 @@ export function createRoutineOutParameter(name: string, hint?: ParameterTypeHint
   return parameter;
 }
 
+/** Create a value-only INOUT parameter descriptor; input value and output channel stay distinct. */
 export function createRoutineInOutParameter<Input>(
   name: string,
   value: NoInfer<Input>,
@@ -499,6 +532,7 @@ export function createRoutineInOutParameter<Input>(
   return parameter as RoutineParameter<Input>;
 }
 
+/** Recognize only routine OUT/INOUT descriptors created by SQLBraid's own constructor. */
 export function isRoutineParameter(value: unknown): value is RoutineParameter {
   if (typeof value !== "object" || value === null || Array.isArray(value) || !knownRoutineParameters.has(value))
     return false;
@@ -525,6 +559,7 @@ export type RequestedReuse = "auto" | "simple" | "reuse";
 export type EffectiveReuse = "simple" | "reuse";
 export type ReuseOwner = "sqlbraid" | "driver" | "server";
 
+/** Inputs to pure binding description. Placeholder syntax and prepared reuse remain adapter-owned. */
 export interface StatementBindingContext {
   readonly dialectId: string;
   readonly requestedReuse: RequestedReuse;
@@ -541,6 +576,7 @@ export interface BindingDescription {
   readonly outputName?: string;
 }
 
+/** Diagnostic-only literalization controls; the result must never be sent to a database. */
 export interface LiteralizeOptions {
   readonly values?: "inline" | "redacted";
   readonly maxValueLength?: number;
@@ -548,6 +584,7 @@ export interface LiteralizeOptions {
   readonly redact?: (parameter: RenderedParameter, index: number) => boolean;
 }
 
+/** Diagnostic SQL reconstruction with explicit redaction/truncation evidence. */
 export interface LiteralizedSqlResult {
   readonly text: string;
   /**
@@ -560,6 +597,10 @@ export interface LiteralizedSqlResult {
   readonly truncatedParameters: number;
 }
 
+/**
+ * Immutable transport description derived from one logical statement.
+ * `literalizedSql()` reconstructs diagnostics from segments and values; it is never execution input.
+ */
 export interface StatementBindingDescription {
   readonly adapterId: string;
   readonly dialectId: string;
@@ -576,6 +617,10 @@ export interface StatementBindingDescription {
   readonly literalizedSql: (options?: LiteralizeOptions) => LiteralizedSqlResult;
 }
 
+/**
+ * Driver-owned binding policy. Implementations choose transport, placeholders, type encoding, and reuse ownership.
+ * `describe` must be pure and safe to run before connection acquisition.
+ */
 export interface StatementBindingAdapter {
   readonly id: string;
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription;
@@ -598,11 +643,13 @@ export interface StatementBindingDescriptionOptions {
   ) => string | undefined;
 }
 
+/** One logical command shape plus its value matrix; all rows must remain homogeneous. */
 export interface RenderedBulk {
   readonly statement: RenderedStatement;
   readonly parameterSets: readonly (readonly unknown[])[];
 }
 
+/** Binding metadata for a homogeneous bulk operation; values are fetched by item index. */
 export interface BulkBindingDescription {
   readonly adapterId: string;
   readonly dialectId: string;
@@ -742,6 +789,8 @@ function copyNativeTemplate(value: unknown, segments: readonly string[]): Templa
   return Object.freeze(cooked) as unknown as TemplateStringsArray;
 }
 
+/** Validate and freeze one logical statement without creating a second mutable SQL/value source of truth. */
+/** @throws {TypeError|SqlRenderError} For broken segment/parameter invariants or unsupported bind values. */
 export function createRenderedStatement(statement: {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
@@ -809,6 +858,7 @@ export function createRenderedStatement(statement: {
   return rendered;
 }
 
+/** Materialize placeholder text as a derived view; this helper does not own reuse or driver transport policy. */
 export function parameterizedSql(statement: RenderedStatement, placeholder: (index: number) => string): string {
   const parts: string[] = [statement.segments[0] ?? ""];
   for (let index = 0; index < statement.parameters.length; index += 1) {
@@ -904,6 +954,7 @@ function literalized(
   });
 }
 
+/** Build an immutable binding description before I/O, including adapter reuse policy and diagnostic literalization. */
 export function createStatementBindingDescription(
   statement: RenderedStatement,
   context: StatementBindingContext,
@@ -1018,9 +1069,8 @@ export function createStatementBindingDescription(
 }
 
 /**
- * Build one binding description for a logical bulk statement. The statement
- * metadata is shared by every parameter set; values and diagnostics are
- * addressed only when requested for a particular item.
+ * Build one binding description for a homogeneous bulk statement without cloning application-owned values.
+ * Statement metadata is shared by every parameter set; values and diagnostics are addressed by item index.
  */
 export function createBulkBindingDescription(
   bulk: RenderedBulk,
@@ -1078,6 +1128,7 @@ export function createBulkBindingDescription(
   return Object.freeze(description);
 }
 
+/** Lexical features the template parser must know to avoid treating SQL text inside comments/quotes as directives. */
 export interface DialectLexicalProfile {
   readonly lineCommentPrefixes: readonly string[];
   /** Require whitespace/control after -- (MySQL/MariaDB). Defaults to false. */
@@ -1092,12 +1143,14 @@ export interface DialectLexicalProfile {
   readonly backslashEscapes?: boolean;
 }
 
+/** SQL dialect boundary: identifier quoting plus lexical behavior used by template parsing and trimming. */
 export interface Dialect {
   readonly id: string;
   quoteIdentifier(identifier: string): string;
   readonly lexicalProfile?: DialectLexicalProfile;
 }
 
+/** One database type's input/output representation and numeric fidelity claim. */
 export interface TypeMapping {
   readonly databaseType: string;
   readonly inputType: string;
@@ -1106,6 +1159,7 @@ export interface TypeMapping {
   readonly numeric?: NumericTypeContract;
 }
 
+/** Adapter type policy; it normalizes driver values and encodes inputs without becoming a schema validator. */
 export interface TypePolicy {
   readonly id: string;
   readonly hash: string;
@@ -1195,6 +1249,7 @@ export type TemplateNode =
   | ChooseNode
   | TrimNode;
 
+/** Frozen template intermediate representation with source ranges and optional raw-text parallel nodes. */
 export interface TemplateIr {
   readonly version: 1;
   readonly nodes: readonly TemplateNode[];
@@ -1206,6 +1261,7 @@ export interface TemplateIr {
   readonly rawNodes?: readonly TemplateNode[];
 }
 
+/** Explicit structural SQL fragment. Ordinary interpolations are values; fragments opt into SQL structure. */
 export interface SqlFragment {
   readonly [SQL_FRAGMENT]: true;
   readonly ir: TemplateIr;
@@ -1213,6 +1269,10 @@ export interface SqlFragment {
   readonly dialectId: string;
 }
 
+/**
+ * SQLBraid query value. It retains template IR and application mapping metadata until runtime rendering.
+ * `resultSchema` is applied after driver materialization and is never forwarded to the driver.
+ */
 export interface Query<Row = unknown, Kind extends QueryResultKind = "unknown"> {
   readonly ir: TemplateIr;
   readonly values: readonly unknown[];
@@ -1230,12 +1290,14 @@ export type RowQuery<Row = unknown> = Query<Row, "rows">;
 export type CommandQuery = Query<CommandResult, "command">;
 export type CallQuery<Result extends RoutineCallResult = RoutineCallResult> = Query<Result, "call">;
 
+/** Driver-normalized command metadata; adapters may expose additional native fields without changing the kind. */
 export interface CommandResult {
   readonly affectedRows?: number;
   readonly insertId?: string;
   readonly [key: string]: unknown;
 }
 
+/** Materialized row result. Runtime validates that it matches a rows query declaration. */
 export interface RowsExecutionResult<Row = unknown> {
   readonly kind: "rows";
   readonly rows: readonly Row[];
@@ -1243,6 +1305,7 @@ export interface RowsExecutionResult<Row = unknown> {
   readonly command?: never;
 }
 
+/** Materialized command result. Command executions intentionally expose no row payload. */
 export interface CommandExecutionResult {
   readonly kind: "command";
   readonly rows: readonly [];
@@ -1252,18 +1315,22 @@ export interface CommandExecutionResult {
 
 export type QueryExecutionResult<Row = unknown> = RowsExecutionResult<Row> | CommandExecutionResult;
 
+/** Execution controls shared by materialized, routine, batch, and stream operations. */
 export interface ExecutionOptions {
   readonly signal?: AbortSignal;
 }
 
+/** Physical SPI may complete synchronously; the public database surface remains asynchronous. */
 export type Awaitable<T> = T | PromiseLike<T>;
 
+/** Optional Standard Schema mapping applied after query-bound mapping and driver materialization. */
 export interface RowValidationOptions<Row> extends ExecutionOptions {
   readonly schema?: StandardSchemaV1<unknown, NoInfer<Row>>;
 }
 
 export interface StreamOptions<Row> extends RowValidationOptions<Row> {}
 
+/** Portable transaction options; nested `db.tx()` calls use savepoints and do not accept a second option set. */
 export type TransactionIsolation = "read-uncommitted" | "read-committed" | "repeatable-read" | "serializable";
 
 export interface TransactionOptions {
@@ -1271,6 +1338,7 @@ export interface TransactionOptions {
   readonly readOnly?: boolean;
 }
 
+/** Public adapter capability failure. Unsupported features reject explicitly rather than being buffered or simulated. */
 export class UnsupportedFeatureError extends Error {
   constructor(
     readonly feature: string,
@@ -1304,6 +1372,7 @@ export class AdapterError extends TypeError {
   }
 }
 
+/** One materialized routine result set, kept separate from scalar OUT and return-value channels. */
 export interface RoutineResultSet<Row = unknown> {
   readonly rows: readonly Row[];
 }
@@ -1312,6 +1381,7 @@ export type RoutineResultSetTuple<Sets extends readonly unknown[]> = {
   readonly [K in keyof Sets]: RoutineResultSet<Sets[K]>;
 };
 
+/** Application-facing routine result with independent output, result-set, and return-value channels. */
 export interface RoutineCallResult<
   Output extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>,
   Sets extends readonly unknown[] = readonly unknown[],
@@ -1358,11 +1428,13 @@ export type RoutineResultSource =
       readonly index: number;
     };
 
+/** Driver result-set payload with provenance for OUT cursors and emitted/implicit sets. */
 export interface DriverRoutineResultSet {
   readonly rows: readonly unknown[];
   readonly source: RoutineResultSource;
 }
 
+/** Fully materialized routine result; native cursors, requests, and LOB handles must not escape this boundary. */
 export interface DriverRoutineResult {
   readonly output: Readonly<Record<string, unknown>>;
   readonly returnValue?: unknown;
@@ -1388,6 +1460,7 @@ export type DriverCapabilityErrorCode =
   | "BRAID_CALL_CURSOR_UNSUPPORTED"
   | "BRAID_RESOURCE_CLEANUP";
 
+/** Identifies which routine channel or row failed during Standard Schema mapping. */
 export class RoutineMappingError extends Error {
   static readonly code = "BRAID_CALL_MAP" as const;
   readonly code = RoutineMappingError.code;
@@ -1400,14 +1473,20 @@ export class RoutineMappingError extends Error {
   }
 }
 
+/** Native or adapter execution strategy reported for a bulk operation; the label does not imply atomicity. */
 export type BulkExecutionMode = "native-bulk" | "pipeline" | "prepared-loop" | "remote-batch";
 
+/** Driver bulk result normalized for runtime accounting and observer events. */
 export interface BulkExecutionResult {
   readonly inputCount: number;
   readonly affectedRows?: number;
   readonly executionMode: BulkExecutionMode;
 }
 
+/**
+ * Physical execution SPI for one serialized resource.
+ * Query/call/control methods may be synchronous at this boundary; streams remain async iterables and retain ownership until closed.
+ */
 export interface QueryExecutor {
   /** Stable identity for the physical execution resource shared by wrappers; pools must use a leased resource. */
   readonly ownershipKey?: object;
@@ -1442,10 +1521,12 @@ export interface QueryExecutor {
   releaseSavepoint?(name: string): Awaitable<void>;
 }
 
+/** Acquired physical resource. The lease owns release/discard, while runtime owns operation serialization. */
 export interface ConnectionLease extends QueryExecutor {
   release(options?: { readonly discard?: boolean }): void | Promise<void>;
 }
 
+/** Lease factory for pools; acquiring one lease is the boundary that establishes physical connection ownership. */
 export interface ConnectionProvider {
   readonly statementBinding: StatementBindingAdapter;
   readonly environment?: DriverEnvironment;
@@ -1453,6 +1534,7 @@ export interface ConnectionProvider {
   acquire(): Promise<ConnectionLease>;
 }
 
+/** Immutable observer projection of adapter transport and reuse decisions. */
 export interface QueryExecutionPlan {
   readonly adapterId: string;
   readonly dialectId: string;
@@ -1460,6 +1542,7 @@ export interface QueryExecutionPlan {
   readonly reuse: StatementBindingDescription["reuse"];
 }
 
+/** Observer event emitted after rendering and binding, before physical execution. */
 export interface QueryReadyEvent {
   readonly type: "query:ready";
   readonly purpose?: "environment";
@@ -1484,6 +1567,7 @@ export interface QueryReadyEvent {
   readonly transactionScoped: boolean;
 }
 
+/** Observer event emitted after driver materialization and result-kind validation, before mapping. */
 export interface QueryResultEvent {
   readonly type: "query:result";
   readonly purpose?: "environment";
@@ -1501,6 +1585,7 @@ export interface QueryResultEvent {
   readonly transactionScoped: boolean;
 }
 
+/** Observer event emitted after query-bound and execution-level mapping completes. */
 export interface QueryMappedEvent {
   readonly type: "query:mapped";
   readonly purpose?: "environment";
@@ -1515,6 +1600,7 @@ export interface QueryMappedEvent {
   readonly transactionScoped: boolean;
 }
 
+/** Observer event emitted after the complete homogeneous bulk is prepared, before physical execution. */
 export interface BulkReadyEvent {
   readonly type: "bulk:ready";
   readonly operationId: string;
@@ -1526,6 +1612,7 @@ export interface BulkReadyEvent {
   readonly literalizedSql: (index: number, options?: LiteralizeOptions) => LiteralizedSqlResult;
 }
 
+/** Observer event emitted after bulk execution and result normalization. */
 export interface BulkResultEvent {
   readonly type: "bulk:result";
   readonly operationId: string;
@@ -1553,6 +1640,7 @@ export type QueryErrorStage =
   | "stream"
   | "transaction";
 
+/** Observer event describing the stage and truthful execution flags for a failed operation. */
 export interface QueryErrorEvent {
   readonly type: "query:error";
   readonly purpose?: "environment";
@@ -1568,6 +1656,7 @@ export interface QueryErrorEvent {
   readonly transactionScoped: boolean;
 }
 
+/** Observer event emitted when a stream is admitted and its lease is about to be retained. */
 export interface StreamStartEvent {
   readonly type: "stream:start";
   readonly operationId: string;
@@ -1589,6 +1678,7 @@ export interface StreamStartEvent {
   readonly transactionScoped: boolean;
 }
 
+/** Terminal stream event; delivery is attempted for every observer even if one observer fails. */
 export interface StreamEndEvent {
   readonly type: "stream:end";
   readonly operationId: string;
@@ -1608,6 +1698,7 @@ export type TransactionEventPhase =
   | "rollback-to-savepoint"
   | "release-savepoint";
 
+/** Transaction-control lifecycle event for outer transactions and nested savepoints. */
 export interface TransactionEvent {
   readonly type: "transaction";
   readonly transactionId: string;
@@ -1630,6 +1721,7 @@ export type ExecutionEvent =
   | StreamEndEvent
   | TransactionEvent;
 
+/** Readonly observer hook. Observers may fail execution, but cannot rewrite SQL, binds, routing, or results. */
 export interface ExecutionObserver {
   onEvent(event: ExecutionEvent): void | Promise<void>;
 }
@@ -1641,6 +1733,7 @@ export interface EnvironmentCapability {
   readonly conditionCode?: string;
 }
 
+/** Observed database/driver/runtime evidence plus exact support-target matching. */
 export interface DatabaseEnvironment {
   readonly database: { readonly product: string; readonly version?: string; readonly edition?: string };
   readonly driver: { readonly id: string; readonly version?: string; readonly profile?: string };
@@ -1687,6 +1780,7 @@ export interface EnvironmentOptions {
   readonly refresh?: boolean;
 }
 
+/** Root database behavior: observers and default prepared-reuse preference. */
 export interface DatabaseOptions {
   readonly observers?: readonly ExecutionObserver[];
   readonly reuse?: RequestedReuse;
@@ -1700,6 +1794,7 @@ export type PreparedArguments<Input, Options> = [Input] extends [never]
   ? [options?: Options]
   : [input: Input, options?: Options];
 
+/** Prepared handle whose input arity and result helpers are fixed by the factory's query kind. */
 export type PreparedQuery<Input, Q extends PreparableQuery> = {
   readonly name: string;
 } & (Q extends CallQuery<infer Result>
@@ -1726,6 +1821,11 @@ export type ExecutionResultOf<Q> =
         ? QueryExecutionResult<Row>
         : never;
 
+/**
+ * Async application database surface.
+ * Root pooled operations acquire/release per operation; `session()` and `tx()` callbacks pin a scoped resource.
+ * Scoped handles expire when their callback returns, and streams must close before a scope can finish.
+ */
 export interface Database {
   environment(options?: EnvironmentOptions): Promise<DatabaseEnvironment>;
   all<Row>(query: RowQuery<Row>, options?: RowValidationOptions<Row>): Promise<readonly Row[]>;
@@ -1767,6 +1867,7 @@ export interface Database {
   tx<T>(options: TransactionOptions, callback: (database: Database) => Promise<T>): Promise<T>;
 }
 
+/** Normalized bulk accounting; root bulk is not implicitly transactional. */
 export interface BulkResult {
   readonly inputCount: number;
   readonly affectedRows?: number;
@@ -1774,6 +1875,7 @@ export interface BulkResult {
 
 export type QueryRow<Q> = Q extends Query<infer Row, QueryResultKind> ? Row : never;
 
+/** Generic SQL tag shape used by configured dialect/query-kind specializations. */
 export interface SqlTagLike<Kind extends QueryResultKind = QueryResultKind, Row = unknown> {
   (strings: TemplateStringsArray, ...values: readonly unknown[]): Query<Row, Kind>;
 }
@@ -1782,12 +1884,16 @@ export interface RoutineContractTag<Contract extends RoutineContract> {
   (strings: TemplateStringsArray, ...values: readonly unknown[]): CallQuery<RoutineResultFromContract<Contract>>;
 }
 
+/** Row-specialized tag supporting either a TypeScript row type or a Standard Schema mapper. */
 export interface RowsTag {
   // Two type parameters keep this overload out of the sql.rows<Row> instantiation expression.
   <Input, Output>(schema: StandardSchemaV1<Input, Output>): SqlTagLike<"rows", Output>;
   <Row = unknown>(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
 }
 
+/**
+ * SQL authoring surface. Values are bound by default; `ident`, `fragment`, `list`, `join`, and `raw` are explicit structure.
+ */
 export interface SqlTag extends SqlTagLike<"unknown"> {
   rows: RowsTag;
   command: (strings: TemplateStringsArray, ...values: readonly unknown[]) => CommandQuery;
@@ -1809,6 +1915,7 @@ export interface SqlTag extends SqlTagLike<"unknown"> {
   list: (values: readonly unknown[]) => SqlFragment;
 }
 
+/** Rendering/authoring failure with a stable diagnostic code, raised before driver execution. */
 export class SqlRenderError extends Error {
   readonly code: string;
 

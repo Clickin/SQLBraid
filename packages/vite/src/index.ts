@@ -7,6 +7,7 @@ import {
   type TransformSourceResult,
 } from "@sqlbraid/compiler";
 
+/** Vite pre-transform options; include/exclude filtering applies before compiler work. */
 export interface SqlBraidViteOptions extends TransformSourceOptions {
   readonly include?: FilterPattern;
   readonly exclude?: FilterPattern;
@@ -49,6 +50,9 @@ function diagnosticMessage(
   };
 }
 
+/**
+ * Vite pre-plugin for SQLBraid lowering. It preserves compiler diagnostics/maps and leaves TypeScript/JSX transpilation to Vite.
+ */
 export default function sqlbraid(options: SqlBraidViteOptions = {}): Plugin {
   const filter = createFilter(options.include, options.exclude);
   return {

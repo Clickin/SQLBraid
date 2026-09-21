@@ -27,6 +27,7 @@ const MAX_METADATA_CACHE = 64;
 const MAX_GENERATED_CACHE = 64;
 const MAX_SOURCE_CACHE = 256;
 
+/** Raised when a workspace operation observes caller-requested cancellation. */
 export class WorkspaceCancellationError extends Error {
   constructor() {
     super("Workspace operation cancelled.");
@@ -178,6 +179,7 @@ function currentProgram(
   return ts.createProgram(roots, context.compilerOptions, host);
 }
 
+/** Create a bounded workspace that owns source/config/metadata caches and invalidates semantic services by revision. */
 export function createWorkspace(options: WorkspaceOptions): ToolingWorkspace {
   const rootPath = canonicalPath(options.rootPath, process.cwd());
   const maxEntries = boundedLimit(options.maxEntries);

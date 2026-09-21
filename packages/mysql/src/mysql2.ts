@@ -82,6 +82,10 @@ export type Mysql2Parameter =
   | Mysql2Parameter[]
   | { [key: string]: Mysql2Parameter };
 
+/**
+ * mysql2 execute request shape used by prepared and streaming paths.
+ * `rowsAsArray` keeps field metadata authoritative for column-name/type normalization.
+ */
 export interface Mysql2ExecuteOptionsLike {
   readonly sql: string;
   readonly values?: Mysql2Parameter[];
@@ -154,6 +158,10 @@ export interface Mysql2PoolLike {
   getConnection(): Promise<Mysql2PoolConnectionLike>;
 }
 
+/**
+ * mysql2 connection/profile policy. Exact numeric fidelity depends on the selected representation profile;
+ * active cancellation destroys the physical connection when the driver cannot safely interrupt it.
+ */
 export interface Mysql2ExecutorOptions {
   readonly typePolicy?: TypePolicy;
   readonly streamHighWaterMark?: number;
@@ -847,6 +855,7 @@ function resolveStreamHighWaterMark(value: number | undefined): number {
   return size;
 }
 
+/** Wrap one connected mysql2 connection; SQLBraid does not close caller-owned connections. */
 export function createMysql2Executor(
   connection: Mysql2ConnectionLike,
   options: Mysql2ExecutorOptions = {},
@@ -1143,6 +1152,7 @@ export function createMysql2Executor(
   };
 }
 
+/** Wrap one connected mysql2 connection as an application database. */
 export function createMysql2Database(connection: Mysql2ConnectionLike, options: Mysql2DatabaseOptions = {}) {
   const { typePolicy, streamHighWaterMark, profile, ...databaseOptions } = options;
   return createDatabase(
@@ -1151,6 +1161,7 @@ export function createMysql2Database(connection: Mysql2ConnectionLike, options: 
   );
 }
 
+/** Create a lease provider from a mysql2 pool; failed/cancelled leases are destroyed rather than reused. */
 export function createMysql2PoolProvider(
   pool: Mysql2PoolLike,
   options: Mysql2ExecutorOptions = {},
@@ -1192,6 +1203,7 @@ export function createMysql2PoolProvider(
   };
 }
 
+/** Wrap a mysql2 pool as a pooled application database with one lease per root operation. */
 export function createMysql2PoolDatabase(pool: Mysql2PoolLike, options: Mysql2DatabaseOptions = {}) {
   const { typePolicy, streamHighWaterMark, profile, ...databaseOptions } = options;
   return createPooledDatabase(

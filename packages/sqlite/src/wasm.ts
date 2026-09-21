@@ -28,7 +28,7 @@ import { assertSavepointName, createCleanupScope, defineResultProperty } from "@
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
-/** The subset of the official @sqlite.org/sqlite-wasm OO1 DB used by SQLBraid. */
+/** The subset of the official SQLite WASM OO1 used by SQLBraid; synchronous OO1 calls are adapted to async iteration. */
 export interface SqliteWasmStatementLike {
   readonly columnCount: number;
   readonly pointer?: number;
@@ -47,6 +47,7 @@ export interface SqliteWasmDatabaseLike {
   exec(sql: string): unknown;
   changes?(total?: boolean, sixtyFour?: boolean): number | bigint;
 }
+/** WASM adapter options, including the sqlite3 module used for exact-integer reads. */
 
 export interface SqliteWasmExecutorOptions {
   /** Initialized module required for row reads; command-only usage may omit it. */
@@ -368,6 +369,7 @@ function sqliteWasmEnvironment(rowReadsSupported: boolean): DriverEnvironment {
   });
 }
 
+/** Wrap an official SQLite WASM OO1 database; stream cleanup finalizes the native statement before release. */
 export function createSqliteWasmExecutor(
   database: SqliteWasmDatabaseLike,
   executorOptions: SqliteWasmExecutorOptions = {},
@@ -511,6 +513,7 @@ export function createSqliteWasmExecutor(
   };
 }
 
+/** Wrap a SQLite WASM OO1 database as an application database. */
 export function createSqliteWasmDatabase(database: SqliteWasmDatabaseLike, options: SqliteWasmDatabaseOptions = {}) {
   const { sqlite3, ...databaseOptions } = options;
   return createDatabase(createSqliteWasmExecutor(database, { sqlite3 }), databaseOptions);

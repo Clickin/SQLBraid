@@ -27,6 +27,7 @@ import { assertSavepointName } from "@sqlbraid/core/driver";
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
+/** Native node:sqlite column metadata used to preserve exact names and type-policy decoding. */
 export interface SqliteColumnLike {
   readonly name?: string | null;
   readonly column?: string | null;
@@ -52,6 +53,7 @@ export interface SqliteDatabaseLike {
   exec?(sql: string): void;
 }
 
+/** Options forwarded to the async SQLBraid facade; physical node:sqlite calls remain synchronous. */
 export interface SqliteDatabaseOptions extends DatabaseOptions {}
 
 function plainRow(value: unknown): Record<string, unknown> {
@@ -320,6 +322,7 @@ function nodeSqliteEnvironment(transactionSupported: boolean, streamSupported: b
   });
 }
 
+/** Wrap a Node `DatabaseSync`-compatible object; SQLBraid exposes async methods over synchronous native calls. */
 export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExecutor {
   // Deno's node:sqlite iterator turns SQLite step errors into normal EOF.
   // Enable only after a native error-propagation certification proves it fixed.
@@ -475,6 +478,7 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
   };
 }
 
+/** Wrap a Node `DatabaseSync`-compatible object as an application database. */
 export function createNodeSqliteDatabase(database: SqliteDatabaseLike, options: SqliteDatabaseOptions = {}) {
   return createDatabase(createNodeSqliteExecutor(database), options);
 }

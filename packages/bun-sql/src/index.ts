@@ -32,7 +32,7 @@ import { assertSavepointName, createCleanupScope } from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { representationProfileFor } from "./type-policy.js";
 
-/** The physical dialect selected by the application, not inferred by this adapter. */
+/** Physical dialect selected by the application; Bun.SQL does not infer PostgreSQL/MySQL/MariaDB/SQLite. */
 export type BunSqlDialect = "postgres" | "mysql" | "mariadb" | "sqlite";
 
 export interface BunSqlClient {
@@ -47,6 +47,7 @@ export interface BunSqlReservedClient extends BunSqlClient {
   release(): void | Promise<void>;
 }
 
+/** Bun.SQL database options. `dialect` is mandatory because the same client shape serves multiple databases. */
 export interface BunSqlDatabaseOptions extends DatabaseOptions {
   readonly dialect: BunSqlDialect;
 }
@@ -963,10 +964,12 @@ function createProvider(client: BunSqlClient, dialect: BunSqlDialect): Connectio
   });
 }
 
+/** Create a lease provider around Bun.SQL; poisoned reservations are closed/discarded, never returned. */
 export function createBunSqlProvider(client: BunSqlClient, options: BunSqlDatabaseOptions): ConnectionProvider {
   return createProvider(client, options.dialect);
 }
 
+/** Wrap Bun.SQL as an application database using the explicitly selected dialect. */
 export function createBunSqlDatabase(client: BunSqlClient, options: BunSqlDatabaseOptions): Database {
   if (options.dialect === "sqlite") return createDatabase(createExecutor(client, options.dialect), options);
   return createPooledDatabase(createProvider(client, options.dialect), options);

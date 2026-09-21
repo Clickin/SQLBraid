@@ -50,6 +50,7 @@ import type {
   TransactionOptions,
 } from "@sqlbraid/core";
 
+/** Raised when `one()` or `maybeOne()` observes too many or too few rows. */
 export class DatabaseCardinalityError extends Error {
   readonly expected: "one" | "maybeOne";
   readonly actual: number;
@@ -62,6 +63,10 @@ export class DatabaseCardinalityError extends Error {
   }
 }
 
+/**
+ * Raised when a scoped handle escapes, overlaps its physical resource, or uses a poisoned/closed scope.
+ * The code identifies the lifecycle invariant that rejected the operation.
+ */
 export class DatabaseScopeError extends Error {
   static readonly codes = [
     "BRAID_TX_SCOPE",
@@ -83,6 +88,7 @@ export class DatabaseScopeError extends Error {
   }
 }
 
+/** Raised after execution when the driver result kind disagrees with the query declaration. */
 export class DatabaseResultKindError extends Error {
   static readonly code = "BRAID_RESULT_KIND" as const;
   readonly code = DatabaseResultKindError.code;
@@ -97,6 +103,7 @@ export class DatabaseResultKindError extends Error {
   }
 }
 
+/** Raised when a Standard Schema mapper rejects a row, command channel, or routine result channel. */
 export class DatabaseResultValidationError extends Error {
   static readonly code = "BRAID_RESULT_VALIDATION" as const;
   readonly code = DatabaseResultValidationError.code;
@@ -120,6 +127,9 @@ export class DatabaseResultValidationError extends Error {
   }
 }
 
+// `tail` serializes ordinary physical work; `transactionTail` also gates transaction-control transitions.
+// Scope/session markers reject callback escape and synchronous nested-scope races before async setup completes.
+// A poisoned resource is never reused: cleanup failure can make the underlying connection unsafe to return.
 interface ScopeState {
   tail: Promise<void>;
   transactionTail: Promise<void>;
@@ -283,6 +293,7 @@ function nextTransactionId(): string {
   return `braid_tx_${transactionSequence}`;
 }
 
+// Share lifecycle state by physical ownership, not by wrapper identity; pooled providers create fresh state per lease.
 function scopeStateFor(executor: QueryExecutor): ScopeState {
   const key = executor.ownershipKey ?? executor;
   let state = scopeStates.get(key);
@@ -293,6 +304,7 @@ function scopeStateFor(executor: QueryExecutor): ScopeState {
   return state;
 }
 
+// Transaction-control turns use a separate queue so begin/commit/savepoint transitions cannot overtake scoped work.
 function acquireTransactionTurn(state: ScopeState): Promise<() => void> {
   assertHealthy(state);
   const { promise: turn, resolve: release } = deferred<void>();
@@ -319,6 +331,7 @@ function assertHealthy(state: ScopeState): void {
   }
 }
 
+// Root escape checks run before acquisition: a callback must use its scoped handle, and an open stream owns the resource.
 function assertRootAllowed(rootState: ScopeState, stream: boolean): void {
   if (transactionContext.conservative && rootState.activeScope !== undefined) {
     throw new DatabaseScopeError(
@@ -369,6 +382,7 @@ function assertRootAllowed(rootState: ScopeState, stream: boolean): void {
   }
 }
 
+// Direct executors are serialized here; browser-style conservative resources reject overlap instead of queueing it.
 function acquireDirectRoot(rootState: ScopeState, stream: boolean, reservedRootScope?: symbol): Promise<() => void> {
   assertHealthy(rootState);
   if (reservedRootScope === undefined) assertRootAllowed(rootState, stream);
@@ -391,6 +405,7 @@ function acquireDirectRoot(rootState: ScopeState, stream: boolean, reservedRootS
     });
   }
   const { promise: turn, resolve: release } = deferred<void>();
+  // Release the tail only after the physical operation has completed so later work cannot overlap it.
   const previous = rootState.tail;
   rootState.tail = previous.then(() => turn);
   return previous.then(() => {
@@ -1345,6 +1360,10 @@ async function transactionEvent(
   });
 }
 
+/**
+ * Wrap one direct executor as an async SQLBraid database.
+ * The executor owns one physical resource; runtime serializes access and never releases it.
+ */
 export function createDatabase(executor: QueryExecutor, options: DatabaseOptions = {}): Database {
   bindingAdapterFor(executor);
   const rootState = scopeStateFor(executor);
@@ -1361,6 +1380,10 @@ export function createDatabase(executor: QueryExecutor, options: DatabaseOptions
   });
 }
 
+/**
+ * Wrap a lease-producing pool/provider as an async SQLBraid database.
+ * Root materialized operations acquire and release one lease; `tx()` and `session()` retain one lease for the callback.
+ */
 export function createPooledDatabase(provider: ConnectionProvider, options: DatabaseOptions = {}): Database {
   bindingAdapterFor(provider);
   const rootState: ScopeState = { tail: Promise.resolve(), transactionTail: Promise.resolve(), streamUsers: 0 };
@@ -2038,6 +2061,7 @@ function createScopedDatabase(
       await notifyError(options.observers ?? [], errorEvent(operation, error, stage, false, false), error);
       throw error;
     }
+    // Materialize and release before Standard Schema mapping so pooled connections are not held during application code.
     const raw = await physical(operation, use!, executionOptions);
     let releaseError: unknown;
     let releaseFailed = false;
@@ -3045,6 +3069,7 @@ function createScopedDatabase(
         ReturnType<Factory>
       >;
     },
+    // The generator owns the lease until iterator.return()/completion; materialized streams must not release early.
     stream<Row>(
       query: RowQuery<Row>,
       streamOptions: StreamOptions<Row> = {},
@@ -3215,6 +3240,7 @@ function createScopedDatabase(
           streamError = error;
           streamFailed = true;
           if (resourceCleanupFailure(error)) poison(use!.physicalState, error);
+          // A failed iterator or release poisons the physical resource and forces discard on release.
           if (!errorAlreadyReported) {
             try {
               await notifyError(
@@ -3227,6 +3253,7 @@ function createScopedDatabase(
             }
           }
         } finally {
+          // Iterator cleanup runs before lease release so driver cursors/portals still have their owning connection.
           if (iterator?.return) {
             try {
               await physicalContext.run(activeContext, () => iterator!.return!());
@@ -3247,6 +3274,7 @@ function createScopedDatabase(
             releaseFailed = true;
             poison(use!.physicalState, error);
           }
+          // A failed iterator or release poisons the physical resource and forces discard on release.
           if (releaseFailed) {
             try {
               await notifyError(
@@ -3511,6 +3539,7 @@ function createScopedDatabase(
           scope,
         });
         await transactionContext.run({ rootState: options.rootState, activity, parent }, async () => {
+          // Serialize control statements with ordinary work on the pinned resource.
           const control = async (
             phase: Extract<ExecutionEvent, { type: "transaction" }>["phase"],
             action: () => Awaitable<void>,
@@ -3591,6 +3620,7 @@ function createScopedDatabase(
             } catch (closing) {
               if (closing !== error) cleanup.push(closing);
             }
+            // Roll back before releasing a nested savepoint; release is skipped after poisoning because the resource is unsafe.
             if (started && !completed && !isPoisoned(physicalState)) {
               try {
                 await control(

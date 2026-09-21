@@ -1,6 +1,7 @@
 import { createSqlTag } from "@sqlbraid/template";
 import type { Dialect, SqlTag } from "@sqlbraid/core";
 
+/** SQLite identifier quoting and lexical profile shared by native, WASM, libSQL, and D1 adapters. */
 export const dialect: Dialect = {
   id: "sqlite",
   quoteIdentifier: (identifier) => `"${identifier.replaceAll('"', '""')}"`,
@@ -15,6 +16,7 @@ export const dialect: Dialect = {
   },
 };
 
+/** Default SQLite SQL tag; adapter subpaths decide physical execution semantics. */
 export const sql: SqlTag = createSqlTag({ dialect });
 export { typePolicy } from "./type-policy.js";
 export type { SqliteDatabaseOptions } from "./node-sqlite.js";

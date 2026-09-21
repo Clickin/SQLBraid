@@ -71,6 +71,7 @@ export interface MariaDbStreamLike extends AsyncIterable<unknown> {
 
 export type MariaDbParameter = unknown;
 
+/** Connector/Node.js query options required by the adapter's row/metadata normalization. */
 export interface MariaDbQueryOptions {
   readonly sql: string;
   readonly rowsAsArray?: boolean;
@@ -99,6 +100,7 @@ export interface MariaDbPoolLike {
   getConnection(): Promise<MariaDbPoolConnectionLike>;
 }
 
+/** MariaDB executor policy. Exact numerics stay textual in the lossless profile; streaming uses native connector APIs. */
 export interface MariaDbExecutorOptions {
   readonly typePolicy?: TypePolicy;
   /**
@@ -719,6 +721,7 @@ function invalidTransactionOptions(message: string): never {
   throw error;
 }
 
+/** Wrap one connected MariaDB Connector/Node.js connection; caller owns connection shutdown. */
 export function createMariaDbExecutor(
   connection: MariaDbConnectionLike,
   options: MariaDbExecutorOptions = {},
@@ -988,11 +991,13 @@ export function createMariaDbExecutor(
   };
 }
 
+/** Wrap one connected MariaDB connection as an application database. */
 export function createMariaDbDatabase(connection: MariaDbConnectionLike, options: MariaDbDatabaseOptions = {}) {
   const { typePolicy, profile, ...databaseOptions } = options;
   return createDatabase(createMariaDbExecutor(connection, { typePolicy, profile }), databaseOptions);
 }
 
+/** Create a lease provider from a MariaDB pool; lease release returns the native connection. */
 export function createMariaDbPoolProvider(
   pool: MariaDbPoolLike,
   options: MariaDbExecutorOptions = {},
@@ -1044,6 +1049,7 @@ export function createMariaDbPoolProvider(
   };
 }
 
+/** Wrap a MariaDB pool as a pooled application database with one lease per root operation. */
 export function createMariaDbPoolDatabase(pool: MariaDbPoolLike, options: MariaDbDatabaseOptions = {}) {
   const { typePolicy, profile, ...databaseOptions } = options;
   return createPooledDatabase(createMariaDbPoolProvider(pool, { typePolicy, profile }), databaseOptions);

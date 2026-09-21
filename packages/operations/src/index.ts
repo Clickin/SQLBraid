@@ -8,6 +8,7 @@ import {
   type TemplateNode,
 } from "@sqlbraid/core";
 
+/** Stable manifest for one query shape plus optional source/result-type metadata. */
 export interface QueryManifest {
   readonly fingerprint: string;
   readonly templateFamilyFingerprint: string;
@@ -17,6 +18,7 @@ export interface QueryManifest {
   readonly resultType?: string;
 }
 
+/** Evidence form used when a compiler/tooling pipeline already computed fingerprints. */
 export interface QueryManifestEvidence {
   readonly fingerprint: string;
   readonly templateFamilyFingerprint: string;
@@ -82,18 +84,22 @@ function valueFragment(fragment: FragmentLike): string {
   return `${fragment.dialectId}:${canonicalIr(fragment.ir, fragment.values)}`;
 }
 
+/** Fingerprint template structure without captured values; changes only when SQL shape changes. */
 export function templateFamilyFingerprint(query: Query<unknown, QueryResultKind>): string {
   return createHash("sha256").update(canonicalIr(query.ir)).digest("hex");
 }
 
+/** Fingerprint an IR family without captured values. */
 export function templateFamilyFingerprintOf(ir: TemplateIr): string {
   return createHash("sha256").update(canonicalIr(ir)).digest("hex");
 }
 
+/** Fingerprint one query including bind/structural value shape and parameter hints. */
 export function fingerprintQuery(query: Query<unknown, QueryResultKind>): string {
   return createHash("sha256").update(canonicalIr(query.ir, query.values)).digest("hex");
 }
 
+/** Fingerprint one IR/value pair without rendering or database access. */
 export function fingerprintTemplate(ir: TemplateIr, values: readonly unknown[]): string {
   return createHash("sha256").update(canonicalIr(ir, values)).digest("hex");
 }
@@ -103,6 +109,7 @@ function portableSource(source: string | undefined): string | undefined {
   return source;
 }
 
+/** Create a portable manifest; absolute source paths are omitted to keep output reproducible. */
 export function createManifest(
   query: Query<unknown, QueryResultKind>,
   options: { readonly source?: string; readonly resultType?: string } = {},
@@ -118,6 +125,7 @@ export function createManifest(
   };
 }
 
+/** Normalize previously collected evidence into the public manifest shape. */
 export function createManifestFromEvidence(evidence: QueryManifestEvidence): QueryManifest {
   return {
     fingerprint: evidence.fingerprint,

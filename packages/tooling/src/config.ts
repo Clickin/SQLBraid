@@ -11,6 +11,7 @@ import type {
 } from "@sqlbraid/codegen";
 import type { Cancellation } from "./types.js";
 
+/** One offline codegen target loaded from project configuration. */
 export interface CodegenTargetConfig {
   readonly name: string;
   readonly metadata: string;
@@ -21,6 +22,7 @@ export interface CodegenTargetConfig {
   readonly typeOverrides?: CodegenTypeOverrides;
 }
 
+/** Project configuration consumed by CLI/tooling; config files execute as Node modules. */
 export interface SqlBraidConfig {
   readonly codegen?: {
     readonly targets: readonly CodegenTargetConfig[];
@@ -37,6 +39,7 @@ export class ConfigurationError extends Error {
   }
 }
 
+/** Raised when configuration loading is cancelled before worker completion. */
 export class ConfigurationCancellationError extends Error {
   constructor() {
     super("Configuration load cancelled.");
@@ -44,6 +47,7 @@ export class ConfigurationCancellationError extends Error {
   }
 }
 
+/** Identity helper for typed config files; it performs no loading or validation. */
 export function defineConfig(config: SqlBraidConfig): SqlBraidConfig {
   return config;
 }
@@ -156,6 +160,7 @@ function validateConfigOptions(target: Record<string, unknown>): void {
   }
 }
 
+/** Validate config shape and target uniqueness before codegen or filesystem writes. */
 export function validateConfig(value: unknown): asserts value is SqlBraidConfig {
   if (!isRecord(value)) throw new ConfigurationError("Configuration default export must be an object.");
   const codegen = value.codegen;
@@ -177,6 +182,7 @@ export function validateConfig(value: unknown): asserts value is SqlBraidConfig 
   }
 }
 
+/** Loaded config plus the resolved file path and directory used for relative targets. */
 export interface LoadedConfig {
   readonly config: SqlBraidConfig;
   readonly directory: string;

@@ -91,11 +91,13 @@ export interface TediousPoolLike {
   getConnection?(): Promise<TediousPoolConnectionLike>;
 }
 
+/** SQL Server database options; exact numeric output is text and native `OUTPUT` owns write-returning semantics. */
 export type TediousDatabaseOptions = DatabaseOptions & {
   readonly typePolicy?: TypePolicy;
   readonly maxBufferedRows?: number;
 };
 
+/** Tedious executor policy, including the optional custom TypePolicy. */
 export type TediousExecutorOptions = {
   readonly typePolicy?: TypePolicy;
   readonly maxBufferedRows?: number;
@@ -122,6 +124,7 @@ interface TediousStatementBindingAdapter extends StatementBindingAdapter {
   ) => readonly (readonly TediousMaterializedParameter[])[] | undefined;
 }
 
+/** Binding options for SQL Server type hints and representation policy. */
 export interface TediousStatementBindingOptions {
   readonly typePolicy?: TypePolicy;
 }
@@ -850,6 +853,7 @@ function createBinding(options: TediousStatementBindingOptions = {}): TediousSta
   return Object.freeze(adapter);
 }
 
+/** Create a Tedious binding adapter; unsupported prepared protocols reject before I/O. */
 export function createTediousStatementBinding(options: TediousStatementBindingOptions = {}): StatementBindingAdapter {
   return createBinding(options);
 }
@@ -1943,6 +1947,7 @@ function makeTediousExecutor(
   };
 }
 
+/** Wrap one connected Tedious connection; native request/cursor cleanup remains adapter-owned. */
 export function createTediousExecutor(
   connection: TediousConnectionLike,
   options: TediousExecutorOptions = {},
@@ -1951,11 +1956,13 @@ export function createTediousExecutor(
   return makeTediousExecutor(connection, options, createBinding(options));
 }
 
+/** Wrap one Tedious connection as an application database. */
 export function createTediousDatabase(connection: TediousConnectionLike, options: TediousDatabaseOptions = {}) {
   const { typePolicy, maxBufferedRows, ...databaseOptions } = options;
   return createDatabase(createTediousExecutor(connection, { typePolicy, maxBufferedRows }), databaseOptions);
 }
 
+/** Create a lease provider from a Tedious pool; failed resources are discarded, not returned. */
 export function createTediousPoolProvider(
   pool: TediousPoolLike,
   options: TediousExecutorOptions = {},
@@ -2031,6 +2038,7 @@ export function createTediousPoolProvider(
   };
 }
 
+/** Wrap a Tedious pool as a pooled application database with one lease per root operation. */
 export function createTediousPoolDatabase(pool: TediousPoolLike, options: TediousDatabaseOptions = {}) {
   const { typePolicy, maxBufferedRows, ...databaseOptions } = options;
   return createPooledDatabase(createTediousPoolProvider(pool, { typePolicy, maxBufferedRows }), databaseOptions);

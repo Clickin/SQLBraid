@@ -10,17 +10,22 @@ import {
   type TemplateNode,
 } from "@sqlbraid/core";
 
+/** Half-open source range in the original file, preserved through diagnostics and source maps. */
 export interface SourceRange {
   readonly start: number;
   readonly end: number;
 }
 
+/** One interpolation expression discovered inside a tagged template. */
 export interface BindingSite {
   readonly interpolation: number;
   readonly range: SourceRange;
   readonly expression: string;
 }
 
+/**
+ * Compiler view of one SQLBraid query. The IR is logical/cooked; raw strings are retained only for native-template mapping.
+ */
 export interface DiscoveredQuery {
   readonly tagName: string;
   readonly moduleSpecifier: string;
@@ -37,6 +42,7 @@ export interface DiscoveredQuery {
   readonly declaredResultKind: QueryResultKind;
 }
 
+/** Compiler diagnostic mapped back to original source; native TypeScript diagnostics are kept separate. */
 export interface CompileDiagnostic {
   readonly code: string;
   readonly message: string;
@@ -44,11 +50,13 @@ export interface CompileDiagnostic {
   readonly range: SourceRange;
 }
 
+/** Query discovery plus Braid/template diagnostics for one source file. */
 export interface SourceAnalysisResult {
   readonly queries: readonly DiscoveredQuery[];
   readonly diagnostics: readonly CompileDiagnostic[];
 }
 
+/** Compiler inputs for module/tag discovery, dialect lexical parsing, and optional TypeScript context. */
 export interface OverlayOptions {
   readonly moduleSpecifier?: string;
   readonly moduleSpecifiers?: readonly string[];
@@ -62,6 +70,7 @@ export interface OverlayOptions {
 
 export interface TypeScriptCheckOptions extends OverlayOptions {}
 
+/** Diagnostic partitions returned by detailed checking; overlay-only diagnostics are not native duplicates. */
 export interface DetailedCheckResult {
   readonly braidDiagnostics: readonly CompileDiagnostic[];
   readonly nativeTypeScriptDiagnostics: readonly CompileDiagnostic[];
@@ -69,6 +78,7 @@ export interface DetailedCheckResult {
   readonly overlayOnlyDiagnostics: readonly CompileDiagnostic[];
 }
 
+/** Reusable TypeScript program/checker context for project-aware compiler operations. */
 export interface TypeScriptProjectContext {
   readonly projectFile: string;
   readonly compilerOptions: ts.CompilerOptions;
@@ -77,6 +87,7 @@ export interface TypeScriptProjectContext {
   readonly checker: ts.TypeChecker;
 }
 
+/** Reusable TypeScript program/checker context for one in-memory source file. */
 export interface TypeScriptSourceContext {
   readonly compilerOptions: ts.CompilerOptions;
   readonly program: ts.Program;
@@ -84,6 +95,7 @@ export interface TypeScriptSourceContext {
   readonly checker: ts.TypeChecker;
 }
 
+/** Original/generated range correspondence retained in SQLBraid's source-map extension. */
 export interface SourceMapOrigin {
   readonly generatedStart: number;
   readonly generatedEnd: number;
@@ -91,6 +103,7 @@ export interface SourceMapOrigin {
   readonly sourceEnd: number;
 }
 
+/** Standard source map plus optional SQLBraid origin records for generated template lowering. */
 export interface SourceMap {
   readonly version: 3;
   readonly file?: string | null;
@@ -103,6 +116,7 @@ export interface SourceMap {
 
 export interface TransformSourceOptions extends OverlayOptions {}
 
+/** Output of `transformSource`; the compiler lowers directives but does not transpile TypeScript/JSX. */
 export interface TransformSourceResult {
   readonly code: string;
   readonly map: SourceMap | null;
@@ -584,6 +598,7 @@ function hasGuard(nodes: readonly TemplateNode[]): boolean {
   );
 }
 
+/** Discover supported SQLBraid tags and parse their templates without executing application expressions. */
 export function discoverQueries(sourceText: string, fileName: string, options: OverlayOptions): SourceAnalysisResult {
   const sourceFile = sourceFileFor(sourceText, fileName, options);
   const bindings = importBindings(sourceFile, options);
@@ -1506,6 +1521,7 @@ function lowerSourceFile(
   return { sourceText: output, diagnostics: plan.diagnostics, origins, mappingOrigins, transformer: plan.transformer };
 }
 
+/** Build a checker/runtime overlay with inferred row types and lowered virtual source. */
 export function createVirtualOverlay(
   sourceText: string,
   fileName: string,
@@ -1751,6 +1767,7 @@ function lowerSourcePreserving(
   return { code, diagnostics: plan.diagnostics, map };
 }
 
+/** Lower guarded templates while preserving original code when no Braid directives are present. */
 export function transformSource(
   sourceText: string,
   fileName: string,
@@ -2008,6 +2025,7 @@ function compilerOptionsFor(options: TypeScriptCheckOptions): ts.CompilerOptions
   return { ...defaultCompilerOptions(), ...options.compilerOptions };
 }
 
+/** Create an in-memory TypeScript program for one source file and its mapped diagnostics. */
 export function createSourceContext(
   sourceText: string,
   fileName: string,
@@ -2020,6 +2038,7 @@ export function createSourceContext(
   return { compilerOptions, program, sourceFile, checker: program.getTypeChecker() };
 }
 
+/** Check one source file using both native TypeScript and the lowered overlay. */
 export function checkSource(
   sourceText: string,
   fileName: string,
@@ -2041,6 +2060,7 @@ export function checkSource(
   return checkVirtualRecords(records, virtualProgram);
 }
 
+/** Return separated native, overlay, Braid, and overlay-only diagnostics for one source file. */
 export function checkSourceDetailed(
   sourceText: string,
   fileName: string,
@@ -2098,6 +2118,7 @@ function readProject(
   return { compilerOptions: parsed.options, fileNames: parsed.fileNames };
 }
 
+/** Load a tsconfig-backed project context; project files are read through TypeScript's normal config rules. */
 export function createProjectContext(
   projectFile: string,
   options: Pick<TypeScriptCheckOptions, "compilerOptions"> = {},
@@ -2114,6 +2135,7 @@ export function createProjectContext(
   };
 }
 
+/** Check every project source through the lowered virtual program; config failures become diagnostics. */
 export function checkProject(projectFile: string, options: TypeScriptCheckOptions = {}): readonly CompileDiagnostic[] {
   try {
     const context = createProjectContext(projectFile, options);
@@ -2174,6 +2196,7 @@ function emitCompilerOptions(options: OverlayOptions): ts.CompilerOptions {
   return compilerOptions;
 }
 
+/** Emit transpiled JavaScript after SQLBraid lowering; Vite users should let Vite own this transpilation step. */
 export function emitSource(
   sourceText: string,
   fileName: string,
@@ -2235,6 +2258,7 @@ export function emitSource(
   return { outputText, ...(sourceMapText ? { sourceMapText } : {}), diagnostics };
 }
 
+/** Convert a source offset to zero-based line/character coordinates, clamping out-of-range offsets. */
 export function sourcePosition(
   sourceText: string,
   offset: number,

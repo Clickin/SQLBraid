@@ -101,15 +101,21 @@ export interface PgCursorLike {
   close(callback: (error?: unknown) => void): void;
 }
 
+/** Native cursor constructor used to implement `db.stream()`; the optional peer keeps materialized queries usable without it. */
 export interface PgCursorFactory {
   new (text: string, values: readonly unknown[], config?: { readonly types?: PgTypeOverrides }): PgCursorLike;
 }
 
+/** Parser overrides must agree with the selected representation profile when both are supplied. */
 export interface PgParserProfile {
   readonly json?: PgJsonProfile;
   readonly temporal?: PgTemporalProfile;
 }
 
+/**
+ * PostgreSQL executor policy. Exact numerics remain text by default; `cursor` is required for native streaming.
+ * `parserProfile` changes pg type parsers and is rejected when it contradicts `profile`.
+ */
 export interface PgExecutorOptions {
   readonly typePolicy?: TypePolicy;
   readonly profile?: PgRepresentationProfile;
@@ -844,6 +850,7 @@ function resolveStreamBatchSize(value: number | undefined): number {
   return size;
 }
 
+/** Wrap one connected `pg` client. SQLBraid owns query serialization but not client shutdown. */
 export function createPgExecutor(client: PgClientLike, options: PgExecutorOptions = {}): QueryExecutor {
   assertPgClient(client);
   const profile = resolveParserProfile(options.parserProfile, options.profile);
@@ -1137,6 +1144,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
   };
 }
 
+/** Wrap one connected `pg` client as an application database. */
 export function createPgDatabase(client: PgClientLike, options: PgDatabaseOptions = {}) {
   const { typePolicy, profile, cursor, streamBatchSize, parserProfile, ...databaseOptions } = options;
   return createDatabase(
@@ -1145,6 +1153,7 @@ export function createPgDatabase(client: PgClientLike, options: PgDatabaseOption
   );
 }
 
+/** Create a lease provider from a `pg` pool; discarded leases call `client.release(true)`. */
 export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOptions = {}): ConnectionProvider {
   resolveStreamBatchSize(options.streamBatchSize);
   const profile = resolveParserProfile(options.parserProfile, options.profile);
@@ -1189,6 +1198,7 @@ export function createPgPoolProvider(pool: PgPoolLike, options: PgExecutorOption
   };
 }
 
+/** Wrap a `pg` pool as a pooled application database with one lease per root operation. */
 export function createPgPoolDatabase(pool: PgPoolLike, options: PgDatabaseOptions = {}) {
   const { typePolicy, profile, cursor, streamBatchSize, parserProfile, ...databaseOptions } = options;
   return createPooledDatabase(

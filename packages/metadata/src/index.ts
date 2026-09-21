@@ -9,8 +9,10 @@ export {
 } from "./qualified-identity.js";
 import { isQualifiedIdentity, qualifiedIdentity, QUALIFIED_IDENTITY_ENCODING } from "./qualified-identity.js";
 
+/** Current on-disk metadata snapshot schema version. Discriminator-less legacy snapshots are rejected. */
 export const CURRENT_FORMAT_VERSION = 1 as const;
 
+/** Database/server evidence retained by inspectors without guessing TypeScript types. */
 export interface ServerEvidence {
   readonly version?: string;
   readonly majorVersion?: number;
@@ -19,6 +21,7 @@ export interface ServerEvidence {
   readonly [key: string]: unknown;
 }
 
+/** Snapshot provenance and identity-encoding metadata. */
 export interface SnapshotMetadata {
   readonly generatedAt?: string;
   readonly source?: string;
@@ -29,6 +32,7 @@ export interface SnapshotMetadata {
   readonly [key: string]: unknown;
 }
 
+/** Namespace/catalog evidence; absence is not proof that an attached or hidden namespace does not exist. */
 export interface NamespaceSnapshot {
   readonly name: string;
   readonly catalog?: string;
@@ -47,6 +51,7 @@ export type TypeKind =
   | "opaque"
   | "unknown";
 
+/** Database type fact; `unknown`/`opaque` preserves unresolved open-world metadata. */
 export interface TypeSnapshot {
   readonly identity: string;
   readonly name: string;
@@ -57,6 +62,7 @@ export interface TypeSnapshot {
   readonly [key: string]: unknown;
 }
 
+/** Column fact. Generated/identity/write flags are positive evidence, not inferred defaults. */
 export interface ColumnSnapshot {
   readonly name: string;
   readonly ordinal: number;
@@ -93,6 +99,7 @@ export interface IndexSnapshot {
   readonly [key: string]: unknown;
 }
 
+/** Table/view relation facts used by codegen and tooling. */
 export interface RelationSnapshot {
   readonly identity: string;
   readonly name: string;
@@ -124,6 +131,7 @@ export type RoutineResult =
     }
   | { readonly kind: "void" | "command" | "unknown" | "opaque"; readonly [key: string]: unknown };
 
+/** Routine signature/result evidence; `argumentsComplete` is required before claiming exact signatures. */
 export interface RoutineSnapshot {
   readonly name: string;
   readonly schema?: string;
@@ -142,6 +150,7 @@ export interface RoutineSnapshot {
   readonly [key: string]: unknown;
 }
 
+/** Validated metadata snapshot consumed by offline tooling, never by runtime execution. */
 export interface MetadataSnapshot {
   readonly format: "sqlbraid-metadata";
   readonly formatVersion: typeof CURRENT_FORMAT_VERSION;
@@ -156,23 +165,27 @@ export interface MetadataSnapshot {
   readonly [key: string]: unknown;
 }
 
+/** One validation issue with a stable path into a metadata snapshot. */
 export interface SnapshotDiagnostic {
   readonly code: string;
   readonly message: string;
   readonly path?: string;
 }
 
+/** Canonicalized before/after difference between two validated snapshots. */
 export interface SnapshotDrift {
   readonly path: string;
   readonly before: unknown;
   readonly after: unknown;
 }
 
+/** Dialect-specific inspector contract; inspectors own database access and snapshot construction. */
 export interface MetadataInspector {
   readonly dialect: string;
   inspect(): Promise<MetadataSnapshot>;
 }
 
+/** Aggregated snapshot validation failure; callers can inspect every diagnostic before deciding how to recover. */
 export class SnapshotValidationError extends Error {
   readonly diagnostics: readonly SnapshotDiagnostic[];
 
@@ -439,6 +452,7 @@ function canonicalValue(value: unknown): string {
   throw new TypeError(`Snapshot contains unsupported value: ${typeof value}`);
 }
 
+/** Validate the full snapshot discriminator, identity evidence, and structural fields. */
 export function validateSnapshot(snapshot: unknown): asserts snapshot is MetadataSnapshot {
   const diagnostics: SnapshotDiagnostic[] = [];
   if (!isRecord(snapshot))
@@ -571,15 +585,18 @@ export function validateSnapshot(snapshot: unknown): asserts snapshot is Metadat
   if (diagnostics.length) throw new SnapshotValidationError(diagnostics);
 }
 
+/** Produce deterministic canonical JSON after validation; volatile metadata is excluded. */
 export function canonicalizeSnapshot(snapshot: MetadataSnapshot): string {
   validateSnapshot(snapshot);
   return canonicalValue(normalizeSnapshot(snapshot, false));
 }
 
+/** Hash the canonical snapshot for drift and generated-output provenance. */
 export function hashSnapshot(snapshot: MetadataSnapshot): string {
   return createHash("sha256").update(canonicalizeSnapshot(snapshot)).digest("hex");
 }
 
+/** Return the stable identity tuple used by tooling to compare snapshot provenance. */
 export function snapshotIdentity(snapshot: MetadataSnapshot): {
   readonly hash: string;
   readonly formatVersion: number;
@@ -595,6 +612,7 @@ export function snapshotIdentity(snapshot: MetadataSnapshot): {
   };
 }
 
+/** Parse and validate a serialized metadata snapshot. */
 export function parseSnapshotJson(text: string): MetadataSnapshot {
   let value: unknown;
   try {
@@ -625,6 +643,7 @@ function collectDrift(before: unknown, after: unknown, path: string, output: Sna
   output.push({ path, before, after });
 }
 
+/** Compare two validated snapshots by canonical structural paths. */
 export function diffSnapshots(before: MetadataSnapshot, after: MetadataSnapshot): readonly SnapshotDrift[] {
   validateSnapshot(before);
   validateSnapshot(after);

@@ -8,6 +8,7 @@ import {
   type RelationSnapshot,
 } from "@sqlbraid/metadata";
 
+/** Offline generator inputs. The selected TypePolicy is evidence for input/output representations, not metadata. */
 export interface CodegenOptions {
   readonly typePolicy: Pick<TypePolicy, "id" | "hash" | "mappings">;
   readonly filters?: CodegenRelationFilter;
@@ -15,6 +16,7 @@ export interface CodegenOptions {
   readonly typeOverrides?: CodegenTypeOverrides;
 }
 
+/** Exact metadata selectors; misses become diagnostics rather than broad fuzzy matches. */
 export interface CodegenRelationFilter {
   readonly includeNamespaces?: readonly string[];
   readonly excludeNamespaces?: readonly string[];
@@ -23,6 +25,7 @@ export interface CodegenRelationFilter {
   readonly kinds?: readonly RelationSnapshot["kind"][];
 }
 
+/** Deterministic relation/model naming overrides and suffixes. */
 export interface CodegenNamingOptions {
   readonly relations?: Readonly<Record<string, string>>;
   readonly suffixes?: {
@@ -32,16 +35,19 @@ export interface CodegenNamingOptions {
   };
 }
 
+/** Explicit input/output type override for one database type or column. */
 export interface CodegenTypeOverride {
   readonly inputType?: string;
   readonly outputType?: string;
 }
 
+/** Independent override maps; column rules take precedence over database-type rules. */
 export interface CodegenTypeOverrides {
   readonly databaseTypes?: Readonly<Record<string, CodegenTypeOverride>>;
   readonly columns?: Readonly<Record<string, Readonly<Record<string, CodegenTypeOverride>>>>;
 }
 
+/** Non-fatal or fatal generator evidence attached to a relation/column. */
 export interface CodegenDiagnostic {
   readonly code: string;
   readonly severity: "warning" | "error";
@@ -51,6 +57,7 @@ export interface CodegenDiagnostic {
   readonly databaseType?: string;
 }
 
+/** Names emitted for one relation's generated row/write models. */
 export interface GeneratedRelationModel {
   readonly relationIdentity: string;
   readonly modelName: string;
@@ -59,6 +66,7 @@ export interface GeneratedRelationModel {
   readonly updateName?: string;
 }
 
+/** Deterministic generated source plus hashes/provenance for the exact inputs used. */
 export interface CodegenResult {
   readonly source: string;
   readonly models: readonly GeneratedRelationModel[];
@@ -827,6 +835,7 @@ function diagnosticSort(left: CodegenDiagnostic, right: CodegenDiagnostic): numb
   );
 }
 
+/** Generate deterministic relation-oriented TypeScript models without filesystem or database access. */
 export function generateModels(metadata: MetadataSnapshot, options: CodegenOptions): CodegenResult {
   validateSnapshot(metadata);
   validateOptions(options);

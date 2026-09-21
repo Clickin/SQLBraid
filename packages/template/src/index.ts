@@ -696,6 +696,12 @@ const DEFAULT_LEXICAL_PROFILE: DialectLexicalProfile = {
   backslashEscapes: true,
 };
 
+/**
+ * Parse one tagged template using the supplied dialect lexical profile.
+ * The returned IR is frozen and source-ranged.
+ *
+ * @throws {SqlRenderError} For unterminated directives, lexical violations, or nesting-limit breaches.
+ */
 export function parseTemplate(
   strings: TemplateStringsArray,
   profile: DialectLexicalProfile = DEFAULT_LEXICAL_PROFILE,
@@ -970,6 +976,7 @@ function addStructural(state: RenderState, count = 1): void {
     throw new SqlRenderError("BRAID_STRUCTURE_LIMIT", "Rendered structural item count exceeds maxStructuralItems.");
 }
 
+/** Convert a guarded directive condition to boolean; typed bind hints are invalid in control-flow positions. */
 export function assertDirectiveCondition(value: unknown): boolean {
   if (isBoundParameter(value))
     throw new SqlRenderError("BRAID_BIND_HINT_CONTEXT", "sql.bind(...) cannot be used as a directive condition.");
@@ -1080,6 +1087,7 @@ function applyTrimToSegments(
   return trimmed;
 }
 
+// Rendering mutates only local state; captured values are read, never re-evaluated, and inactive guards are skipped.
 function renderNodes(
   nodes: readonly TemplateNode[],
   captured: readonly unknown[],
@@ -1134,6 +1142,7 @@ function renderNodes(
       continue;
     }
     if (node.kind === "trim") {
+      // Trim renders into an isolated segment/parameter buffer so prefix/suffix surgery cannot reorder outer binds.
       const nested: RenderState = {
         ...state,
         resultKind: state.resultKind,
@@ -1191,6 +1200,7 @@ function renderNodes(
   state.depth -= 1;
 }
 
+// Fragments are structural and dialect-bound; crossing dialects is rejected instead of silently requoting text.
 function renderFragment(fragment: SqlFragment, state: RenderState): void {
   if (fragment.dialectId !== state.dialect.id)
     throw new SqlRenderError(
@@ -1381,6 +1391,7 @@ function renderPlainTemplate(
     resultKind,
   });
 }
+/** Render frozen IR into the logical value-only statement boundary consumed by adapters. */
 export function renderTemplateIr(
   ir: TemplateIr,
   captured: readonly unknown[],
@@ -1454,6 +1465,7 @@ function staticText(nodes: readonly TemplateNode[]): string {
   return parts.join("");
 }
 
+/** Static estimate of guarded structural shapes; local WHERE/SET guards are treated as linear. */
 export interface StructuralAnalysis {
   readonly conditionCount: number;
   readonly estimatedVariants: number | "overflow" | "linear";
@@ -1461,6 +1473,7 @@ export interface StructuralAnalysis {
   readonly diagnostics: readonly string[];
 }
 
+/** Analyze structural guards without executing captured application expressions. */
 export function analyzeStructuralVariants(ir: TemplateIr, maxVariants = 256): StructuralAnalysis {
   const conditions = new Set<number>();
   const local = { value: true, seen: false };
@@ -1476,11 +1489,13 @@ export function analyzeStructuralVariants(ir: TemplateIr, maxVariants = 256): St
   return { conditionCount, estimatedVariants, localClauseAnalysis: false, diagnostics };
 }
 
+/** One bounded structural variant: captured values plus its independently rendered statement. */
 export interface StructuralVariant {
   readonly values: readonly unknown[];
   readonly rendered: RenderedStatement;
 }
 
+/** Render all structural variants up to `maxVariants`; throws rather than silently truncating expansion. */
 export function renderVariants(
   ir: TemplateIr,
   values: readonly unknown[],
@@ -1539,6 +1554,7 @@ function makeStaticFragment(nodes: readonly TemplateNode[], sourceLength: number
   return Object.freeze(fragment);
 }
 
+/** Configuration captured by a SQL tag; dialect and limits become immutable tag-local policy. */
 export interface SqlTagOptions {
   readonly dialect?: Dialect;
   readonly limits?: RenderLimits;
@@ -1615,6 +1631,7 @@ type PreparedQueryFactory = (
 ) => Query<unknown, QueryResultKind>;
 const preparedQueryFactories = new WeakMap<object, PreparedQueryFactory>();
 
+/** Create a dialect-bound SQL tag whose structural policy and limits remain stable for its lifetime. */
 export function createSqlTag(options: SqlTagOptions = {}): SqlTag {
   const dialect = options.dialect ?? postgresDialect;
   const limits = validateLimits(options.limits ?? {});
@@ -1773,6 +1790,7 @@ function hasGuard(nodes: readonly TemplateNode[]): boolean {
   );
 }
 
+// Compiler-lowered thunks are evaluated only along the selected branch and memoized by interpolation index.
 function captureActive(
   nodes: readonly TemplateNode[],
   thunks: readonly (() => unknown)[],
@@ -1818,6 +1836,10 @@ function captureActive(
   }
 }
 
+/**
+ * Build a query from compiler-lowered guarded captures.
+ * Only conditions and bindings in the selected branch are evaluated, once each; inactive branches stay lazy.
+ */
 export function guarded<Row = unknown, Kind extends QueryResultKind = QueryResultKind>(
   tag: SqlTagLike<Kind, Row>,
   strings: readonly string[],
@@ -1831,6 +1853,7 @@ export function guarded<Row = unknown, Kind extends QueryResultKind = QueryResul
   return tag(templateStrings, ...values);
 }
 
+/** Build a query from compiler-lowered capture assignments without changing the tag's rendering semantics. */
 export function capture<Row = unknown, Kind extends QueryResultKind = QueryResultKind>(
   tag: SqlTagLike<Kind, Row>,
   strings: readonly string[],
@@ -1845,5 +1868,6 @@ export function capture<Row = unknown, Kind extends QueryResultKind = QueryResul
   return tag(templateStrings, ...captured);
 }
 
+/** Default PostgreSQL-profile SQL tag. Use `createSqlTag()` for another dialect or limit set. */
 export const sql = createSqlTag();
 export { SqlRenderError };

@@ -168,6 +168,7 @@ const SQL_KEYWORDS = new Set([
   "return",
 ]);
 
+/** Normalize unquoted metadata/source identifiers using the active dialect's folding convention. */
 export function normalizeIdentifier(value: string): string {
   return value.toLowerCase();
 }
@@ -1192,6 +1193,7 @@ function querySymbols(analysis: FileAnalysis): readonly QuerySymbol[] {
   });
 }
 
+/** Create a bounded SQL-aware service with per-source/metadata caches and native TypeScript delegation. */
 export function createLanguageService(options: LanguageServiceOptions): SqlBraidLanguageService {
   const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
   const internalOptions = options as InternalLanguageServiceOptions;

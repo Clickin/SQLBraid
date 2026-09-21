@@ -488,6 +488,7 @@ function transactionStatement(
   return `${command} ${assertSavepointName(name)}`;
 }
 
+/** Wrap a libSQL client after the caller has explicitly asserted `intMode: "string"`. */
 export function createLibsqlExecutor(client: LibsqlClientLike, executorOptions: LibsqlExecutorOptions): QueryExecutor {
   assertClient(client);
   assertExactStringMode(executorOptions);
@@ -644,6 +645,7 @@ export function createLibsqlExecutor(client: LibsqlClientLike, executorOptions: 
   return executor;
 }
 
+/** Wrap a libSQL client as an application database; ordinary client calls do not claim a pinned session. */
 export function createLibsqlDatabase(client: LibsqlClientLike, options: LibsqlDatabaseOptions): Database {
   const { intMode, ...databaseOptions } = options;
   return createDatabase(createLibsqlExecutor(client, { intMode }), databaseOptions);

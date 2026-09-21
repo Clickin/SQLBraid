@@ -37,6 +37,10 @@ const DIALECT_SYSTEMS: Readonly<Record<string, string>> = Object.freeze({
   mssql: "microsoft.sql_server",
 });
 
+/**
+ * Readonly OpenTelemetry observer policy.
+ * Traces/metrics default on; query text is opt-in and bind values/literalized SQL are never exported.
+ */
 export interface OpenTelemetryObserverOptions {
   readonly traces?: boolean;
   readonly metrics?: boolean;
@@ -176,6 +180,10 @@ function noopObserver(): ExecutionObserver {
   return Object.freeze({ onEvent() {} });
 }
 
+/**
+ * Create an observer backed only by `@opentelemetry/api`.
+ * SDK/provider/exporter failures are isolated so telemetry cannot rewrite or block SQLBraid execution.
+ */
 export function createOpenTelemetryObserver(options: OpenTelemetryObserverOptions = {}): ExecutionObserver {
   const tracesEnabled = options.traces !== false;
   const metricsEnabled = options.metrics !== false;

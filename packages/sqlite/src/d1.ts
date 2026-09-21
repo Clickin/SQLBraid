@@ -26,6 +26,7 @@ import { defineResultProperty } from "@sqlbraid/core/driver";
 import { createDatabase } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
+/** D1 metadata subset; `last_row_id` is transport-limited and not treated as exact int64 evidence. */
 export interface D1ResultMetaLike {
   readonly changes?: number;
   readonly last_row_id?: number;
@@ -49,6 +50,7 @@ export interface D1DatabaseLike {
   batch<Row = unknown>(statements: readonly D1PreparedStatementLike[]): Promise<readonly D1ResultLike<Row>[]>;
 }
 
+/** Options forwarded to the async D1 facade; D1 does not expose streaming or callback transactions. */
 export interface D1DatabaseOptions extends DatabaseOptions {}
 
 function assertRoutineUnsupported(rendered: RenderedStatement): void {
@@ -279,6 +281,7 @@ const d1Environment = Object.freeze<DriverEnvironment>({
   // D1 denies sqlite_version(); unknown server versions stay unreported.
 });
 
+/** Wrap a Cloudflare D1 binding; unsupported streaming and transaction features reject explicitly. */
 export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
   return {
     ownershipKey: database,
@@ -367,6 +370,7 @@ export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
   };
 }
 
+/** Wrap a Cloudflare D1 binding as an application database. */
 export function createD1Database(database: D1DatabaseLike, options: D1DatabaseOptions = {}) {
   return createDatabase(createD1Executor(database), options);
 }
