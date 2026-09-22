@@ -39,8 +39,8 @@
     "test:host": "pnpm run build && pnpm run compile-tests && node dist-test/test/runTest.js"
   },
   "dependencies": {
-    "@sqlbraid/cli": "workspace:1.0.0",
-    "@sqlbraid/language-server": "workspace:1.0.0",
+    "@sqlbraid/cli": "workspace:1.0.2",
+    "@sqlbraid/language-server": "workspace:1.0.2",
     "vscode-languageclient": "9.0.1"
   },
   "devDependencies": {

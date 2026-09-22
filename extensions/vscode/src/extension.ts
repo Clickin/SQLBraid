@@ -17,8 +17,8 @@ import {
 } from "./project.js";
 
 const EXTENSION_VERSION = "0.1.0";
-const LANGUAGE_SERVER_VERSION = "1.0.0";
-const CLI_VERSION = "1.0.0";
+const LANGUAGE_SERVER_VERSION = "1.0.2";
+const CLI_VERSION = "1.0.2";
 const SERVER_ID = "sqlbraid-language-server";
 
 function nodeEnvironment(): NodeJS.ProcessEnv {
