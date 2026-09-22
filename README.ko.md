@@ -21,11 +21,14 @@ import { DatabaseSync } from "node:sqlite";
 interface UserRow {
   id: string;
   name: string;
+  teamId?: string;
 }
 
 const native = new DatabaseSync(":memory:");
 try {
   const db = createNodeSqliteDatabase(native);
+  
+  await db.execute(sql.command`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, team_id TEXT)`);
   const name = "Ada";
   await db.execute(sql.command`INSERT INTO users (name) VALUES (${name})`);
 
@@ -72,12 +75,13 @@ const query = sql.rows<UserRow>`
 
 ```ts
 // 단순 타입 캐스팅
-const rows = await db.all(sql.rows<UserRow>`SELECT ...`);
+const rows = await db.all(sql.rows<UserRow>`SELECT id, name, team_id FROM users`);
 
 // Standard Schema를 이용한 런타임 검증
-const eventQuery = sql.rows(EventSchema)`SELECT created_at, payload FROM events`;
-const event = await db.one(eventQuery, { schema: EventSchema });
+const userQuery = sql.rows(UserSchema)`SELECT id, name, team_id FROM users`;
+const user = await db.one(userQuery, { schema: UserSchema });
 ```
+
 
 ## 런타임 API
 
@@ -98,29 +102,19 @@ await db.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
 });
 ```
 
-### 준비된 쿼리 (Prepared Queries)
-
-쿼리의 구조를 고정하여 재사용성과 성능을 높일 수 있습니다:
-
-```ts
-const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`);
-
-await byId.all("u_1");
-```
-
 ## 패키지 구성
 
 SQLBraid는 모듈형 구조를 가집니다. `sqlbraid` 파사드를 설치하고, 사용하는 DB에 맞는 드라이버 서브패스(예: `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/node-sqlite`)를 임포트하여 사용합니다.
 
-| 패키지               | 역할                             |
-| :------------------- | :------------------------------- |
-| `sqlbraid`           | 메인 파사드 및 드라이버 서브패스 |
-| `@sqlbraid/core`     | 공통 계약 및 옵저버              |
-| `@sqlbraid/template` | SQL 태그 및 지시어               |
-| `@sqlbraid/runtime`  | 실행, 트랜잭션, 스트리밍         |
-| `@sqlbraid/metadata` | DB 스키마 스냅샷                 |
-| `@sqlbraid/codegen`  | TypeScript 모델 생성             |
-| `@sqlbraid/cli`      | 모델 생성 및 조사를 위한 CLI     |
+| 패키지               | 역할                                |
+| :------------------- | :---------------------------------- |
+| `sqlbraid`           | 메인 파사드 및 드라이버 서브패스    |
+| `@sqlbraid/core`     | 공통 계약 및 옵저버                 |
+| `@sqlbraid/template` | SQL 태그 및 지시어                  |
+| `@sqlbraid/runtime`  | 실행, 트랜잭션, 스트리밍            |
+| `@sqlbraid/metadata` | DB 스키마 스냅샷                    |
+| `@sqlbraid/codegen`  | TypeScript 모델 생성                |
+| `@sqlbraid/cli`      | 모델 생성 및 스키마 조사를 위한 CLI |
 
 ## SQLBraid가 제공하지 않는 것
 

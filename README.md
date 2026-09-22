@@ -15,20 +15,20 @@ pnpm add sqlbraid
 On Node.js 22.18+, save this as `quickstart.mts` and run `node quickstart.mts`:
 
 ```ts
-import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
-import { DatabaseSync } from "node:sqlite";
-
 interface UserRow {
   id: string;
   name: string;
+  teamId?: string;
 }
 
 const native = new DatabaseSync(":memory:");
 try {
   const db = createNodeSqliteDatabase(native);
-
+  
+  await db.execute(sql.command`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, team_id TEXT)`);
   const name = "Ada";
   await db.execute(sql.command`INSERT INTO users (name) VALUES (${name})`);
+
 
   const userId = 1;
   const users = await db.all(sql.rows<UserRow>`
@@ -73,11 +73,11 @@ You can define result types via generics or use [Standard Schema](https://standa
 
 ```ts
 // Simple type casting
-const rows = await db.all(sql.rows<UserRow>`SELECT ...`);
+const rows = await db.all(sql.rows<UserRow>`SELECT id, name, team_id FROM users`);
 
 // Runtime validation with Standard Schema
-const eventQuery = sql.rows(EventSchema)`SELECT created_at, payload FROM events`;
-const event = await db.one(eventQuery, { schema: EventSchema });
+const userQuery = sql.rows(UserSchema)`SELECT id, name, team_id FROM users`;
+const user = await db.one(userQuery, { schema: UserSchema });
 ```
 
 ## Runtime API
@@ -99,16 +99,6 @@ await db.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
 });
 ```
 
-### Prepared Queries
-
-Lock a query's shape for reuse and performance:
-
-```ts
-const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`);
-
-await byId.all("u_1");
-```
-
 ## Package Map
 
 SQLBraid uses a modular architecture. You install the `sqlbraid` facade and the specific driver you need (e.g., `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/node-sqlite`).
@@ -121,7 +111,7 @@ SQLBraid uses a modular architecture. You install the `sqlbraid` facade and the 
 | `@sqlbraid/runtime`  | Execution, transactions, and streaming |
 | `@sqlbraid/metadata` | Database schema snapshots              |
 | `@sqlbraid/codegen`  | TypeScript model generation            |
-| `@sqlbraid/cli`      | CLI for codegen and inspection         |
+| `@sqlbraid/cli`      | CLI for codegen and schema inspection  |
 
 ## What SQLBraid is NOT
 
