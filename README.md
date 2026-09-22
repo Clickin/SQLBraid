@@ -16,6 +16,7 @@ Unlike ORMs or query builders, SQLBraid does not abstract SQL away. To keep the 
 📖 [Documentation](https://clickin.github.io/SQLBraid/latest/) · [Get Started](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/)
 
 
+
 ```sh
 pnpm add sqlbraid
 ```
@@ -25,10 +26,13 @@ pnpm add sqlbraid
 On Node.js 22.18+, save this as `quickstart.mts` and run `node quickstart.mts`:
 
 ```ts
+import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
+import { DatabaseSync } from "node:sqlite";
+
 interface UserRow {
   id: string;
   name: string;
-  teamId?: string;
+  team_id: string | null;
 }
 
 const native = new DatabaseSync(":memory:");
@@ -38,7 +42,6 @@ try {
   await db.execute(sql.command`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, team_id TEXT)`);
   const name = "Ada";
   await db.execute(sql.command`INSERT INTO users (name) VALUES (${name})`);
-
 
   const userId = 1;
   const users = await db.all(sql.rows<UserRow>`
@@ -87,7 +90,7 @@ const rows = await db.all(sql.rows<UserRow>`SELECT id, name, team_id FROM users`
 
 // Runtime validation with Standard Schema
 const userQuery = sql.rows(UserSchema)`SELECT id, name, team_id FROM users`;
-const user = await db.one(userQuery, { schema: UserSchema });
+const user = await db.one(userQuery);
 ```
 
 ## Runtime API
