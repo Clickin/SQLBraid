@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/tooling",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "SQLBraid Node-first semantic tooling shared by the CLI and language server",
   "keywords": [
     "database",

@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/codegen",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Generate TypeScript models from SQLBraid database metadata snapshots",
   "keywords": [
     "codegen",

@@ -1,6 +1,6 @@
 {
   "name": "sqlbraid",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "SQLBraid's canonical SQL-first runtime package",
   "keywords": [
     "database",

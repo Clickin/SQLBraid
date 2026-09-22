@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/postgres",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "SQLBraid PostgreSQL dialect, pg adapter, and metadata inspector",
   "keywords": [
     "database",

@@ -1,6 +1,6 @@
 {
   "name": "@sqlbraid/mssql",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "SQLBraid Microsoft SQL Server dialect, Tedious adapter, and metadata inspector",
   "keywords": [
     "database",
