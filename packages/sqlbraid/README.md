@@ -22,6 +22,7 @@ await client.end();
 ```
 
 ### Driver Entry Points
+
 Import the combined driver and dialect for your database:
 `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`, `sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`, and `sqlbraid/tedious`.
 
@@ -29,4 +30,3 @@ For custom adapters, use the dialect-only entry points:
 `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle`, and `sqlbraid/mssql`.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.
-

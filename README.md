@@ -1,9 +1,8 @@
- [한국어](README.ko.md)
-
+[한국어](README.ko.md)
 
 # SQLBraid
 
-**Write SQL. Keep TypeScript.** 
+**Write SQL. Keep TypeScript.**
 
 SQLBraid is a SQL-first data-access toolkit for TypeScript. It lets you write ordinary SQL while providing safe value binding, readable dynamic SQL, and explicit result mapping.
 
@@ -27,10 +26,10 @@ interface UserRow {
 const native = new DatabaseSync(":memory:");
 try {
   const db = createNodeSqliteDatabase(native);
-  
+
   const name = "Ada";
   await db.execute(sql.command`INSERT INTO users (name) VALUES (${name})`);
-  
+
   const userId = 1;
   const users = await db.all(sql.rows<UserRow>`
     SELECT id, name FROM users WHERE id = ${userId}
@@ -41,16 +40,17 @@ try {
 }
 ```
 
-
 ## Key Concepts
 
 ### 1. Safe by Default
+
 Every `${value}` interpolation is automatically treated as a bound parameter. You never have to worry about SQL injection for ordinary values.
 
 For structural SQL (like table or column names), use explicit helpers:
 `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, and `sql.raw`.
 
 ### 2. Readable Dynamic SQL
+
 Use `/*@braid ...*/` directives to handle conditional logic directly in your SQL without breaking the string's readability.
 
 ```ts
@@ -64,9 +64,11 @@ const query = sql.rows<UserRow>`
   /*@braid end*/
 `;
 ```
+
 Supported directives: `if`, `choose`, `when`, `otherwise`, `where`, `set`, `trim`.
 
 ### 3. Result Mapping
+
 You can define result types via generics or use [Standard Schema](https://standard-schema.dev/) for runtime validation and transformation.
 
 ```ts
@@ -89,6 +91,7 @@ SQLBraid provides a lean API for common database operations:
 - **Resources**: `db.tx()` (transactions), `db.session()` (pinned connections)
 
 ### Transactions & Sessions
+
 ```ts
 await db.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
   await tx.all(sql.rows<{ id: string }>`SELECT id FROM accounts`);
@@ -96,11 +99,11 @@ await db.tx({ isolation: "serializable", readOnly: true }, async (tx) => {
 ```
 
 ### Prepared Queries
+
 Lock a query's shape for reuse and performance:
+
 ```ts
-const byId = db.prepare("user-by-id", (id: string) => 
-  sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`
-);
+const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`);
 
 await byId.all("u_1");
 ```
@@ -109,18 +112,20 @@ await byId.all("u_1");
 
 SQLBraid uses a modular architecture. You install the `sqlbraid` facade and the specific driver you need (e.g., `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/node-sqlite`).
 
-| Package | Responsibility |
-| :--- | :--- |
-| `sqlbraid` | Main facade and driver subpaths |
-| `@sqlbraid/core` | Shared contracts and observers |
-| `@sqlbraid/template` | SQL tags and directives |
-| `@sqlbraid/runtime` | Execution, transactions, and streaming |
-| `@sqlbraid/metadata` | Database schema snapshots |
-| `@sqlbraid/codegen` | TypeScript model generation |
-| `@sqlbraid/cli` | CLI for codegen and inspection |
+| Package              | Responsibility                         |
+| :------------------- | :------------------------------------- |
+| `sqlbraid`           | Main facade and driver subpaths        |
+| `@sqlbraid/core`     | Shared contracts and observers         |
+| `@sqlbraid/template` | SQL tags and directives                |
+| `@sqlbraid/runtime`  | Execution, transactions, and streaming |
+| `@sqlbraid/metadata` | Database schema snapshots              |
+| `@sqlbraid/codegen`  | TypeScript model generation            |
+| `@sqlbraid/cli`      | CLI for codegen and inspection         |
 
 ## What SQLBraid is NOT
+
 To keep the core lean, SQLBraid is **not**:
+
 - An ORM or a query builder.
 - A complete SQL parser or compiler.
 - A connection pool implementation (it wraps existing ones).
@@ -129,4 +134,3 @@ To keep the core lean, SQLBraid is **not**:
 ---
 
 [Get started](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [Documentation](https://clickin.github.io/SQLBraid/latest/) · [Architecture](./docs/mental-model.md)
-

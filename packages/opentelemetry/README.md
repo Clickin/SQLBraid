@@ -18,9 +18,9 @@ const db = createPgDatabase(client, {
 ```
 
 ### Key Details
+
 - **Privacy**: Bind values and literalized SQL are never exported.
 - **Setup**: Requires a configured OpenTelemetry SDK and exporter in your application.
 - **Integration**: Register this observer last in your list to ensure correct span lifecycle.
 
 See the [OpenTelemetry integration guide](https://clickin.github.io/SQLBraid/runtime/opentelemetry/) and [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
-
