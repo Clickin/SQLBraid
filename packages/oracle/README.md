@@ -1,15 +1,16 @@
 # @sqlbraid/oracle
 
-Oracle SQL dialect and node-oracledb adapters for SQLBraid.
+Oracle SQL dialect and `node-oracledb` adapters for SQLBraid.
 
 ```sh
 npm install @sqlbraid/oracle oracledb
 ```
 
-The application supplies a connected node-oracledb connection or pool and
-uses `@sqlbraid/oracle/oracledb`. Thin mode is the documented target; configure
-Thick mode separately when needed. The default policy exposes exact Oracle
-`NUMBER` values as decimal strings, approximate binary floats as numbers, and
-binary data as `Uint8Array`.
+Use this package with a connected `node-oracledb` connection or pool via the `@sqlbraid/oracle/oracledb` adapter.
 
-See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+### Key Details
+- **Mode**: Optimized for Thin mode; Thick mode is supported via separate configuration.
+- **Numerics**: Exact `NUMBER` values are decimal strings; binary floats are numbers.
+
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.
+

@@ -1,14 +1,12 @@
 # @sqlbraid/tooling
 
-Node-first project tooling shared by the SQLBraid CLI and language server.
-It analyzes TypeScript source and metadata; it does not execute queries.
+Shared Node-first utilities for the SQLBraid CLI and language server.
 
 ```sh
 npm install @sqlbraid/tooling
 ```
 
-Use it for workspace tracking, configuration, diagnostics, and SQL-aware
-language features such as hover, completion, definitions, references, and
-symbols.
+Provides workspace tracking, configuration management, and SQL-aware language features (hover, completion, etc.) for tooling. It does not execute queries.
 
-See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.
+

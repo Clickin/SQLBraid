@@ -1,14 +1,12 @@
 # @sqlbraid/template
 
-SQL tagged-template primitives for custom SQLBraid dialects and adapters.
+Tagged-template primitives for building custom SQLBraid dialects and adapters.
 
 ```sh
 npm install @sqlbraid/template
 ```
 
-Use `createSqlTag` with a dialect from `@sqlbraid/core`, or use the default
-PostgreSQL lexical profile. Ordinary interpolations are bound values; use the
-explicit structural helpers (`ident`, `fragment`, `list`, `join`, and `raw`)
-when SQL structure is intentional. `raw` is trusted/unsafe input.
+Provides `createSqlTag` and structural helpers (`ident`, `fragment`, `list`, `join`, and `raw`) to build safe, bindable SQL templates. Ordinary interpolations are treated as value binds by default.
 
-See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.
+

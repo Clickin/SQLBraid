@@ -1,20 +1,12 @@
 # @sqlbraid/core
 
-Public TypeScript contracts for SQLBraid templates, rendered statements,
-execution boundaries, result mapping, and adapter capabilities.
+Low-level TypeScript contracts for SQLBraid. Defines types for templates, rendered statements, and adapter capabilities.
 
 ```sh
 npm install @sqlbraid/core
 ```
 
-Use this low-level package when authoring an adapter or integration. It defines
-contracts only and does not connect to a database or execute queries; use
-`@sqlbraid/runtime` for application execution.
+This package contains only type definitions and contracts. It does not connect to databases or execute queries. Use this when authoring a new driver adapter or building a deep integration.
 
-Driver authors can import `@sqlbraid/core/driver` for explicit cleanup scopes,
-safe result-property definition, and savepoint-name validation. Cleanup scopes
-run registered actions in LIFO order exactly once, preserve the primary failure,
-aggregate cleanup failures under `BRAID_RESOURCE_CLEANUP`, and support disarm
-after ownership transfer without forcing synchronous actions through Promises.
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.
 
-See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).

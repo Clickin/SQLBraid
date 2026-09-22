@@ -1,15 +1,12 @@
 # @sqlbraid/vite
 
-Vite plugin that lowers SQLBraid guarded SQL templates before Vite's normal
-transforms.
+Vite plugin that lowers SQLBraid guarded SQL templates during the build process.
 
 ```sh
 npm install @sqlbraid/vite vite
 ```
 
-`vite` is a peer dependency (`>=8.0.0`). Add `sqlbraid()` to the Vite plugins
-list. The plugin supports TypeScript and JavaScript source and preserves
-compiler diagnostics and source maps.
+Add `sqlbraid()` to your Vite plugins list. It supports TypeScript and JavaScript and preserves compiler diagnostics and source maps.
 
-See the [Vite integration guide](https://clickin.github.io/SQLBraid/getting-started/vite/)
-and the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [Vite integration guide](https://clickin.github.io/SQLBraid/getting-started/vite/) and the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+

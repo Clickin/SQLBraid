@@ -1,14 +1,12 @@
 # @sqlbraid/compiler
 
-Compiler APIs for analyzing, checking, lowering, and emitting TypeScript that
-contains SQLBraid tagged templates.
+Compiler APIs for analyzing and lowering SQLBraid tagged templates.
 
 ```sh
 npm install @sqlbraid/compiler
 ```
 
-Use it from build tools, editor integrations, or custom pipelines. It lowers
-SQLBraid structural directives and returns diagnostics and source maps; it does
-not execute SQL. Vite users can use `@sqlbraid/vite` instead.
+Use this for build tools or custom pipelines to lower structural directives and generate diagnostics and source maps. Vite users should use `@sqlbraid/vite`.
 
-See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.
+

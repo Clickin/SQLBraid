@@ -1,25 +1,18 @@
 # @sqlbraid/runtime
 
-Runtime execution for SQLBraid queries, including materialized results,
-transactions, sessions, prepared queries, streams, and result mapping.
+Core execution engine for SQLBraid. Handles result materialization, transactions, sessions, prepared queries, and result mapping.
 
 ```sh
-npm install @sqlbraid/runtime @sqlbraid/postgres
+npm install @sqlbraid/runtime
 ```
 
-A driver adapter supplies the executor or pool; the runtime does not create
-connections. `db.tx()` pins one connection for its callback, and unsupported
-driver capabilities (such as streaming or routine calls) are rejected rather
-than simulated. Use a database-specific package for dialects and adapters.
+This package provides the execution logic. It does not manage connections itself but uses an executor or pool supplied by a driver adapter.
 
-`db.batch()` preflights every item, acquires one lease, and executes homogeneous
-items fail-fast. Every item that emitted `query:ready` eventually emits exactly
-one terminal `query:mapped` or `query:error`; abandoned siblings use the
-existing error event with `BRAID_BATCH_ABORTED` and truthful execution flags.
-No abandoned item is sent to the driver or mapper, and error observers are
-still given the remaining terminal events when another observer throws. For a
-synthetic sibling error, `stage` names the logical batch phase at which that
-sibling was abandoned; it does not claim to be the native or observer failure
-stage that caused the batch to stop.
+Key features:
+- **Transaction Management**: Pins connections for `db.tx()` callbacks.
+- **Result Mapping**: Transforms raw driver rows into application values.
+- **Prepared Statements**: Optimizes repetitive query shapes.
+- **Batch Execution**: Efficiently executes multiple queries in one go.
 
-See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.
+

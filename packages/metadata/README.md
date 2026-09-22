@@ -1,14 +1,12 @@
 # @sqlbraid/metadata
 
-Types and utilities for SQLBraid database metadata snapshots: validation,
-canonicalization, hashing, identity, and drift comparison.
+Utilities for managing SQLBraid database metadata snapshots.
 
 ```sh
 npm install @sqlbraid/metadata
 ```
 
-Parse and validate snapshots supplied by database-specific inspectors, then
-compare or hash them for tooling and code generation. This package does not
-connect to databases.
+Use this package to validate, canonicalize, and compare database snapshots for tooling or code generation. It does not connect to databases.
 
-See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/).
+See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.
+
