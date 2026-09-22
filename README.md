@@ -4,7 +4,7 @@
 
 **Write SQL. Keep TypeScript.**
 
-SQLBraid is a SQL-first data-access toolkit for TypeScript. It lets you write ordinary SQL while providing safe value binding, readable dynamic SQL, and explicit result mapping.
+SQLBraid is a SQL-first data-access toolkit for TypeScript. It lets you write ordinary SQL—including DDL, DML, and complex queries—while providing safe value binding, readable dynamic SQL, and explicit result mapping.
 
 ```sh
 pnpm add sqlbraid
@@ -85,7 +85,8 @@ const event = await db.one(eventQuery, { schema: EventSchema });
 SQLBraid provides a lean API for common database operations:
 
 - **Queries**: `db.all()`, `db.one()`, `db.maybeOne()`, `db.stream()`
-- **Commands**: `db.execute()`
+- **Commands (DDL/DML)**: `db.execute()`
+
 - **Procedures**: `db.call()`
 - **Batching**: `db.batch()`, `db.bulk()`
 - **Resources**: `db.tx()` (transactions), `db.session()` (pinned connections)

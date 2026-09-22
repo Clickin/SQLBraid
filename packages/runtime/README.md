@@ -1,6 +1,6 @@
 # @sqlbraid/runtime
 
-Core execution engine for SQLBraid. Handles result materialization, transactions, sessions, prepared queries, and result mapping.
+Core execution engine for SQLBraid. Handles DDL/DML execution, result materialization, transactions, sessions, prepared queries, and result mapping.
 
 ```sh
 npm install @sqlbraid/runtime

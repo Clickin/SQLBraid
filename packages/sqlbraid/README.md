@@ -1,6 +1,6 @@
 # sqlbraid
 
-The main entry point for SQLBraid. Use this package to choose a driver, write typed SQL, and execute queries.
+The main entry point for SQLBraid. Use this package to choose a driver, write typed SQL, and execute any valid SQL (including DDL and DML).
 
 ```sh
 npm install sqlbraid pg
