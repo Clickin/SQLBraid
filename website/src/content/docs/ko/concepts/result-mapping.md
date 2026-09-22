@@ -42,7 +42,7 @@ const Account = v.object({
 선택 parser를 사용하고, fractional/offset temporal 정확도에는 테스트된 text
 프로필이나 사용자가 작성한 SQL 변환을 사용하세요.
 
-루틴 계약은 각 채널을 독립적으로 매핑합니다. `sql.call({ output,
+루틴 명세는 각 채널을 독립적으로 매핑합니다. `sql.call({ output,
 resultSets: [UserSchema, PaymentSchema] as const, returnValue })`는 scalar
 객체에 output schema를, 각 tuple schema를 대응하는 result set의 행에,
 return schema를 실제 return/status 값에 적용합니다. `returnValue` schema를
@@ -50,7 +50,7 @@ return schema를 실제 return/status 값에 적용합니다. `returnValue` sche
 필수 속성입니다. driver 채널이 없으면 `BRAID_CALL_RETURN_UNSUPPORTED`로
 실패합니다. 선택한 target이 `routine.return-value`를 명시적으로 지원하지
 않으면 같은 오류가 lease를 얻기 전에 발생합니다. bare 및 return schema가 없는
-계약은 선택적 속성을 유지합니다. Cursor output은 scalar
+명세는 선택적 속성을 유지합니다. Cursor output은 scalar
 `output`에서 제거되며 어댑터는 async 매핑 전에 리소스를 소비하고 닫습니다.
 result-set 개수가 다르면 `BRAID_CALL_RESULT_SETS`, 특정 루틴 위치의 매핑
 실패는 `BRAID_CALL_MAP`으로 보고됩니다.

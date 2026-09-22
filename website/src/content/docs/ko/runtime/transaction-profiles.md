@@ -54,4 +54,4 @@ option은 바뀌지 않습니다. 이 제한은 Bun.SQL MySQL/MariaDB transport�
 않습니다.
 
 Provider/lease identity, savepoint, 불확실한 cleanup은 execution runtime의
-계약입니다. [트랜잭션](/SQLBraid/runtime/transactions/), [풀](/SQLBraid/runtime/direct-pools/), [지원 증거](/SQLBraid/reference/support/)를 참고하세요.
+명세입니다. [트랜잭션](/SQLBraid/runtime/transactions/), [풀](/SQLBraid/runtime/direct-pools/), [지원 증거](/SQLBraid/reference/support/)를 참고하세요.

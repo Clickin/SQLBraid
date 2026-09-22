@@ -11,10 +11,10 @@ SQLBraid는 의도적으로 경계를 좁게 나눈 파이프라인 구조로 �
 
 ## 네 개의 실행 계층
 
-1. **`@sqlbraid/core`**는 logical statement, binding SPI, executor/provider SPI, runtime API, representation policy, observer, capability, routine, public error 계약을 정의합니다.
+1. **`@sqlbraid/core`**는 logical statement, binding SPI, executor/provider SPI, runtime API, representation policy, observer, capability, routine, public error 명세를 정의합니다.
 2. **`@sqlbraid/template`**은 tagged template을 frozen `Query`로 만들고 명시적인 SQL structure를 transport-neutral `RenderedStatement`로 rendering합니다.
 3. **`@sqlbraid/runtime`**은 lease, pinned scope, transaction/savepoint continuity, stream lifetime, cancellation boundary, result-kind check, application mapping을 소유합니다.
-4. **Driver adapter**는 logical statement/binding description을 native driver 호출로 바꾸고 native result를 SQLBraid 계약으로 normalize합니다.
+4. **Driver adapter**는 logical statement/binding description을 native driver 호출로 바꾸고 native result를 SQLBraid 명세로 normalize합니다.
 
 ### 반드시 기억할 invariant
 
@@ -36,7 +36,7 @@ pooled materialized query는 lease를 acquire하고 physical I/O를 수행한 �
 
 다른 connection으로 빠져나갈 수 있는 root/parent handle 사용은 조용히 reroute하지 않고 거부합니다. transaction control이나 cleanup 때문에 connection 상태가 불확실해지면 낙관적으로 재사용하지 않고 resource를 poison/discard합니다.
 
-## Prepared, batch, bulk는 서로 다른 계약입니다
+## Prepared, batch, bulk는 서로 다른 명세입니다
 
 - `db.prepare()`는 **SQLBraid logical shape**을 고정합니다. universal server-side prepared cache를 약속하지 않습니다.
 - `db.batch()`는 서로 다른 여러 operation을 하나의 physical use/lease에서 실행하지만 **implicit transaction은 아닙니다**.

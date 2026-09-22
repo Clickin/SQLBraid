@@ -1,6 +1,6 @@
 ---
 title: 루틴 호출
-description: 명시적인 output, return, 이질적인 result-set 계약으로 저장 프로시저 호출을 작성합니다.
+description: 명시적인 output, return, 이질적인 result-set 명세로 저장 프로시저 호출을 작성합니다.
 ---
 
 일반 행 쿼리 이외의 채널이 있는 데이터베이스 루틴에는 `sql.call`을 사용하세요. 호출 결과에는 서로 독립적인 세 채널이 있습니다.
@@ -14,7 +14,7 @@ description: 명시적인 output, return, 이질적인 result-set 계약으로 �
 `db.call`은 명시적인 다중 result-set 경계이며 순서가 있는 여러 루틴 result
 set을 반환합니다.
 
-## 애플리케이션 계약 선언
+## 애플리케이션 명세 선언
 
 쿼리 경계에 Standard Schema 검증기를 연결하세요.
 
@@ -40,9 +40,9 @@ result.resultSets[1].rows[0]; // PaymentSchema 결과
 result.returnValue;
 ```
 
-`resultSets`는 tuple 계약입니다. 실제 개수는 선언한 개수와 같아야 하며 각 행은 대응하는 schema로 매핑됩니다. 쿼리 경계 schema가 필요하지 않으면 bare `sql.call\`...\``도 사용할 수 있습니다. 런타임 매핑은 어댑터가 materialized 루틴 리소스를 모두 소비하고 닫은 뒤 실행되므로 async schema mapper가 데이터베이스 lease를 붙잡지 않습니다.
+`resultSets`는 tuple 명세입니다. 실제 개수는 선언한 개수와 같아야 하며 각 행은 대응하는 schema로 매핑됩니다. 쿼리 경계 schema가 필요하지 않으면 bare `sql.call\`...\``도 사용할 수 있습니다. 런타임 매핑은 어댑터가 materialized 루틴 리소스를 모두 소비하고 닫은 뒤 실행되므로 async schema mapper가 데이터베이스 lease를 붙잡지 않습니다.
 
-result-set 계약이 없어도 루틴 호출은 `resultSets`를 반환합니다. 단일 행 generic이 아닙니다. cursor scalar 값은 `output`에 남지 않습니다.
+result-set 명세가 없어도 루틴 호출은 `resultSets`를 반환합니다. 단일 행 generic이 아닙니다. cursor scalar 값은 `output`에 남지 않습니다.
 
 ## 파라미터 방향 표시
 
@@ -89,7 +89,7 @@ Oracle CLOB/NCLOB output은 문자열, BLOB output은 바이트 값이 됩니다
 | MySQL / `mysql2`              | emitted 이질적 SELECT result set을 지원합니다. prepared CALL OUT/INOUT은 `BRAID_CALL_OUT_UNSUPPORTED`로 거부합니다. mysql2 3.x에는 protocol의 추가 OUT carrier를 구분하는 검증된 public API가 없으므로 SQLBraid는 carrier 행을 추측하지 않습니다. Stored function은 result set을 내보낼 수 없습니다.                                                                |
 | MariaDB / Connector/Node.js   | emitted 이질적 SELECT result set을 지원합니다. prepared CALL OUT/INOUT은 `BRAID_CALL_OUT_UNSUPPORTED`로 거부합니다. Connector/Node.js에는 prepared call용 OUT 파라미터 carrier를 구분하는 공개 API가 없으므로 SQLBraid는 carrier 행을 추측하지 않습니다. Stored function은 result set을 내보낼 수 없습니다.                                                         |
 | Oracle / `node-oracledb` Thin | scalar OUT/IN OUT, `SYS_REFCURSOR`/REF CURSOR output, implicit result를 `output`과 `resultSets`로 정규화합니다. lease를 반환하기 전에 모든 `ResultSet`을 닫습니다. cursor output에는 `oracleParameter.refCursor()`를 사용하세요.                                                                                                                                    |
-| SQL Server / Tedious          | 일반 SELECT는 emitted result set이 되고 scalar OUTPUT은 `output`이 됩니다. T-SQL integer RETURN status는 `sql.call` 계약에 `procedure: { name, parameterNames }`를 명시해야 합니다. 임의 `EXEC` 텍스트를 파싱해 procedure identity를 추측하지 않습니다. `CURSOR VARYING OUTPUT`은 애플리케이션 cursor로 노출하지 않고 `BRAID_CALL_CURSOR_UNSUPPORTED`로 거부합니다. |
+:| SQL Server / Tedious          | 일반 SELECT는 emitted result set이 되고 scalar OUTPUT은 `output`이 됩니다. T-SQL integer RETURN status는 `sql.call` 명세에 `procedure: { name, parameterNames }`를 명시해야 합니다. 임의 `EXEC` 텍스트를 파싱해 procedure identity를 추측하지 않습니다. `CURSOR VARYING OUTPUT`은 애플리케이션 cursor로 노출하지 않고 `BRAID_CALL_CURSOR_UNSUPPORTED`로 거부합니다. |
 | SQLite adapter                | `db.call()` / `routine.call`은 지원하지 않습니다. 이는 adapter API 경계이며 SQLite SQL의 제한이 아닙니다. SQLite function API로 등록한 scalar/aggregate/window function은 일반 SQL 안에서 사용하며 virtual-table/table-valued extension은 일반 `sql.rows(...)` 쿼리입니다.                                                                                          |
 
 명시적 SQL Server procedure metadata 예시입니다.

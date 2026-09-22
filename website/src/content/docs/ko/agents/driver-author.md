@@ -4,7 +4,7 @@ description: 값 전용 경계를 지키는 사용자 지정 SQLBraid adapter를
 ---
 
 이 문서는 custom `QueryExecutor`, `ConnectionProvider`, binding adapter를
-위한 현재 API 계약입니다. 지원 label이나 발행 증거를 부여하지 않습니다.
+위한 현재 API 명세입니다. 지원 label이나 발행 증거를 부여하지 않습니다.
 지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가
 기록한 정확한 database, driver, profile, runtime, capability tuple과
 revision별 실행 workflow에만 적용됩니다. 인접한 버전·runtime·profile·로컬
@@ -258,7 +258,7 @@ SQLite의 `node:sqlite`와 `better-sqlite3`는 `Awaitable`을 통해 물리 결�
 동기식으로 반환할 수 있지만 public database는 여전히 async이며
 better-sqlite3는 event loop를 block합니다. Exact INTEGER read에는
 statement-local `safeIntegers(true)`를 사용하고 native iteration을 직접
-노출하세요. libSQL adapter는 명시적인 `intMode: "string"` 계약과
+노출하세요. libSQL adapter는 명시적인 `intMode: "string"` 명세와
 interactive transaction handle을 사용하며 일반 pinned session을 주장하지
 않습니다. 선택한 client에 incremental cursor가 없으면 stream을 거부해야
 하며 buffering해서는 안 됩니다. Local libSQL evidence는 remote transport를

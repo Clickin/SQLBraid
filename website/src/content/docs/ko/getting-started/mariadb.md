@@ -38,7 +38,7 @@ sequence, CTE, JSON function을 다룹니다. `UPDATE ... RETURNING`은 주장�
 
 어댑터는 Connector/Node.js value-only 실행, native row stream, 그리고
 `db.bulk()`의 `connection.batch()` 1회를 사용합니다. Root bulk는 암묵적으로
-transaction이 되지 않고 portable auto-chunking 약속이 없습니다. 원자성이
+transaction이 되지 않고 portable auto-chunking 명세가 없습니다. 원자성이
 필요하면 `db.tx()`를 사용하세요.
 
 MariaDB에서 `mysql2` connection을 사용할 수 있으나, 이는 최선을 다한(best-effort) 호환성 제공일 뿐 MariaDB 프로토콜을 완전히 지원한다는 증거는 아닙니다. 공식 인증 프로필은 MariaDB 11.8.9 /
@@ -73,7 +73,7 @@ Connector/Node.js는 유효 option을 노출하지 않습니다. descriptor를 �
 
 어댑터는 value-only 실행, native `queryStream()`, 동종 bulk를 위한
 `connection.batch()` 1회를 사용합니다. Native `RETURNING`은 정확한 서버
-형태의 증거가 있는 경우에만 materialized row 계약입니다. `INSERT`,
+형태의 증거가 있는 경우에만 materialized row 명세입니다. `INSERT`,
 `DELETE`, `REPLACE`는 별도 capability이며 `UPDATE`는 주장하지 않습니다.
 SQL은 투명하게 전달되지만 MariaDB grammar 지원을 의미하지 않습니다.
 

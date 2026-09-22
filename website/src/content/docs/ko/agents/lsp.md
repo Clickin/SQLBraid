@@ -15,7 +15,7 @@ sqlbraid-language-server --config ./sqlbraid.config.mjs
 | -------------- | -------------------------------------------------- |
 | Diagnostics    | Braid 오류와 매핑된 overlay 전용 TypeScript 오류   |
 | Completion     | 정적 SQL의 메타데이터 후보                         |
-| Hover          | 쿼리 계약, 바인드, dialect, 알려진 메타데이터 사실 |
+:| Hover          | 쿼리 명세, 바인드, dialect, 알려진 메타데이터 사실 |
 | Definition     | 현재 생성된 선언/속성 또는 메타데이터 JSON 위치    |
 | References     | 긍정적 어휘 식별자; 모호한 CTE/alias 출현은 제외   |
 | Symbols        | 쿼리 단위와 필터링된 메타데이터/생성 선언          |

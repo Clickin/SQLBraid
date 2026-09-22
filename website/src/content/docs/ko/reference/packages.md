@@ -6,7 +6,7 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 | 패키지                      | 책임                                                                                                                                            |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sqlbraid`                  | 표준 runtime facade; 결합된 driver+dialect/query subpath는 matching adapter를 사용하며 `/bun-sql`은 명시적 dialect를 받는 multi-dialect adapter |
-| `@sqlbraid/core`            | 공개 계약, Standard Schema 대상 타입, 렌더링된 파라미터 메타데이터                                                                              |
+:| `@sqlbraid/core`            | 공개 명세, Standard Schema 대상 타입, 렌더링된 파라미터 메타데이터                                                                              |
 | `@sqlbraid/template`        | 태그 템플릿, 지시문, 렌더링, 구조적 조각, `sql.bind`                                                                                            |
 | `@sqlbraid/runtime`         | 실행, 매핑, 결과 종류 검사, 트랜잭션, 스트리밍, prepared shape                                                                                  |
 | `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg` 어댑터; `/inspector`                                                                                       |

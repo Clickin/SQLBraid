@@ -65,7 +65,7 @@ const id = decodeExactInteger(row.id, { min: 0n }); // 이 애플리케이션에
 
 ## Standard Schema로 애플리케이션 타입 선택
 
-도메인 계약이 텍스트라면 그대로 유지하세요.
+도메인 명세가 텍스트라면 그대로 유지하세요.
 
 ```ts
 const Row = v.object({ id: v.string(), amount: v.string() });
@@ -101,11 +101,11 @@ DB가 `NaN`, infinity, 음의 0을 정규화하는지 기록합니다. codegen �
 
 ## 드라이버 프로필
 
-아래는 SQLBraid의 데이터 표현 계약입니다. [지원 매트릭스](/SQLBraid/reference/support/)가
+아래는 SQLBraid의 데이터 표현 명세입니다. [지원 매트릭스](/SQLBraid/reference/support/)가
 각 데이터베이스 및 런타임의 인증 기준입니다. 드라이버 프로필은 결과 JavaScript 타입을
 결정하는 완전한 드라이버 설정이며, 사후에 붙이는 단순 설명용 라벨이 아닙니다.
 
-첫 번째 파티 프로필 helper는 runtime과 codegen이 같은 계약을 사용하게 합니다.
+첫 번째 파티 프로필 helper는 runtime과 codegen이 같은 명세를 사용하게 합니다.
 
 ```ts
 const profile = typePolicyForProfile({ json: "text", temporal: "text" });
@@ -162,8 +162,7 @@ SQL Server `sql_variant`, vector 및 기타 container는 scalar 보장을 상속
 - **parsed** — 드라이버가 object/value를 반환하며 중첩 숫자 정확도는 보장되지 않음.
 
 Parsed JSON은 object만을 뜻하지 않습니다. root는 string, number, boolean,
-`null`, array 또는 object일 수 있습니다. 따라서 native 프로필은 driver별
-root 계약과 codegen mapping이 증명되지 않는 한 `unknown`을 사용합니다.
+root 명세와 codegen mapping이 증명되지 않는 한 `unknown`을 사용합니다.
 schema는 애플리케이션 경계에서 값을 좁힐 수 있지만 JavaScript `number`로
 이미 변환된 숫자를 복구할 수는 없습니다.
 

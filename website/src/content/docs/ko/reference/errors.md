@@ -59,7 +59,7 @@ Runtime 소유 class에는 `DatabaseScopeError`, `DatabaseResultKindError`,
 | `BRAID_BIND_HINT_UNSUPPORTED`          | Adapter가 명시적 bind type/facet을 적용할 수 없습니다. I/O 전에 거부합니다.                                                                                                             |
 | `BRAID_BIND_VALUE_UNSUPPORTED`         | 선택한 binding transport로 값을 표현할 수 없습니다.                                                                                                                                     |
 | `BRAID_BIND_TYPE_REQUIRED`             | Driver inference가 모호합니다(Oracle/SQL Server untyped null 포함).                                                                                                                     |
-| `BRAID_INTEGER_MODE_UNSUPPORTED`       | Adapter가 계약에 필요한 exact integer read mode를 켤 수 없습니다.                                                                                                                       |
+`BRAID_INTEGER_MODE_UNSUPPORTED`       | Adapter가 명세에 필요한 exact integer read mode를 켤 수 없습니다.
 | `BRAID_BULK_UNSUPPORTED`               | Adapter가 필요한 native bulk capability를 제공하지 않습니다.                                                                                                                            |
 | `BRAID_DIALECT_MISMATCH`               | Rendered statement가 선택한 adapter dialect와 다릅니다.                                                                                                                                 |
 | `BRAID_RESULT_KIND_AMBIGUOUS`          | Adapter가 빈 row result와 command result를 구분할 수 없습니다.                                                                                                                          |

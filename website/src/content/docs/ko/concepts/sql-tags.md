@@ -32,7 +32,7 @@ const routine = sql.call({
 - `db.execute`는 행, command, unknown 쿼리를 처리하고 어댑터의 실제 결과 종류를 확인합니다.
 - `db.call`은 `sql.call`용입니다. output 방향, tuple result set, 정리, 데이터베이스별 제한은 [루틴 호출](/SQLBraid/concepts/routines/)을 참고하세요.
 
-한정되지 않은 `sql` 태그는 결과 종류가 `unknown`인 쿼리를 만듭니다. 드라이버별 문장이 행 또는 command 메타데이터 중 하나를 반환할 수 있을 때 유용하지만, 컴파일 타임 행 계약은 포기합니다.
+한정되지 않은 `sql` 태그는 결과 종류가 `unknown`인 쿼리를 만듭니다. 드라이버별 문장이 행 또는 command 메타데이터 중 하나를 반환할 수 있을 때 유용하지만, 컴파일 타임 행 명세는 포기합니다.
 
 ## 카디널리티를 명시적으로 지정하기
 
