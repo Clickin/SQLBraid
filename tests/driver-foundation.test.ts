@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
+import {
+  assertSavepointName,
+  createCleanupScope,
+  defineResultProperty,
+  prepareResultProjector,
+} from "@sqlbraid/core/driver";
 
 test("cleanup scope is a no-op without registered actions", () => {
   const scope = createCleanupScope();
@@ -186,6 +191,72 @@ test("result properties remain own enumerable properties on ordinary objects", (
     assert.equal(row[key], key);
     assert.equal(Object.getOwnPropertyDescriptor(row, key)?.enumerable, true);
   }
+});
+
+test("prepared result projectors keep a safe stable shape and overwrite duplicate slots", () => {
+  let reads = 0;
+  const projector = prepareResultProjector<readonly unknown[]>([
+    { name: "first", read: (values) => ((reads += 1), values[0]) },
+    { name: "constructor", read: (values) => ((reads += 1), values[1]) },
+    { name: "__proto__", read: (values) => ((reads += 1), values[2]) },
+    { name: "prototype", read: (values) => ((reads += 1), values[3]) },
+    { name: "2", read: (values) => ((reads += 1), values[4]) },
+    { name: "患者🩺", read: (values) => ((reads += 1), values[5]) },
+    { name: "duplicate", read: (values) => ((reads += 1), values[6]) },
+    { name: "duplicate", read: (values) => ((reads += 1), values[7]) },
+    { name: "nullable", read: (values) => ((reads += 1), values[8]) },
+  ]);
+
+  const first = projector([
+    "one",
+    "ctor-one",
+    "proto-one",
+    "prototype-one",
+    "numeric-one",
+    "환자",
+    "early",
+    "late",
+    null,
+  ]);
+  const second = projector([
+    "two",
+    "ctor-two",
+    "proto-two",
+    "prototype-two",
+    "numeric-two",
+    "患者",
+    "early-2",
+    "late-2",
+    null,
+  ]);
+
+  assert.equal(Object.getPrototypeOf(first), Object.prototype);
+  assert.deepEqual(Object.keys(first), [
+    "2",
+    "first",
+    "constructor",
+    "__proto__",
+    "prototype",
+    "患者🩺",
+    "duplicate",
+    "nullable",
+  ]);
+  assert.deepEqual(Object.keys(second), Object.keys(first));
+  assert.equal(first.first, "one");
+  assert.equal(first.constructor, "ctor-one");
+  assert.equal(first["__proto__"], "proto-one");
+  assert.equal(first.prototype, "prototype-one");
+  assert.equal(first["2"], "numeric-one");
+  assert.equal(first["患者🩺"], "환자");
+  assert.equal(first.duplicate, "late");
+  assert.equal(first.nullable, null);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(first, "__proto__"), {
+    configurable: true,
+    enumerable: true,
+    value: "proto-one",
+    writable: true,
+  });
+  assert.equal(reads, 18);
 });
 
 test("savepoint names accept runtime-generated grammar and reject SQL syntax", () => {

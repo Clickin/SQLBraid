@@ -134,6 +134,35 @@ export function defineResultProperty(row: Record<string, unknown>, key: string, 
   });
 }
 
+/** One column's prepared read operation for a result-row projector. */
+export interface ResultProjectorColumn<Row> {
+  readonly name: string;
+  readonly read: (row: Row) => unknown;
+}
+
+/**
+ * Prepare a result-set projector with a stable plain-object shape.
+ *
+ * The shape template is copied with object spread so aliases such as `__proto__`
+ * remain own data properties. Each row then overwrites those existing slots,
+ * avoiding per-row property definition and preserving ordinary object semantics.
+ * @internal
+ */
+export function prepareResultProjector<Row>(
+  columns: readonly ResultProjectorColumn<Row>[],
+): (row: Row) => Record<string, unknown> {
+  const template: Record<string, unknown> = {};
+  for (const column of columns) {
+    if (!Object.hasOwn(template, column.name)) defineResultProperty(template, column.name, undefined);
+  }
+  const prepared = columns.map((column) => ({ name: column.name, read: column.read }));
+  return (rawRow): Record<string, unknown> => {
+    const row = { ...template };
+    for (const column of prepared) row[column.name] = column.read(rawRow);
+    return row;
+  };
+}
+
 /** Validate a generated savepoint name before embedding it in transaction-control SQL. */
 export function assertSavepointName(name: string): string {
   if (typeof name !== "string" || !SAVEPOINT_NAME.test(name)) {
