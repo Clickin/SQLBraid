@@ -44,6 +44,7 @@ function createFixture(streamSupported = true): Promise<CertificationFixture> {
         columns: statement.columns.bind(statement),
         run: statement.run.bind(statement),
         setReadBigInts: statement.setReadBigInts?.bind(statement),
+        setReturnArrays: statement.setReturnArrays?.bind(statement),
         iterate(...values: readonly unknown[]) {
           const iterator = iterate(...values);
           let released = false;

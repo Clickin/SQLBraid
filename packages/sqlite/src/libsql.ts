@@ -25,7 +25,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { assertSavepointName, createCleanupScope } from "@sqlbraid/core/driver";
+import { assertSavepointName, createCleanupScope, preparePositionalResultProjector } from "@sqlbraid/core/driver";
 import { createDatabase } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -264,15 +264,20 @@ function normalizeValue(value: unknown): unknown {
   return normalized;
 }
 
-function valueAt(row: LibsqlRowLike, index: number, name: string): unknown {
-  if (row === null || typeof row !== "object")
-    throw new TypeError("BRAID_RESULT_ROW: libSQL returned a non-object row.");
-  if (index in row) return row[index];
-  return row[name];
-}
-
-function normalizeRow(row: LibsqlRowLike, columns: readonly string[]): Record<string, unknown> {
-  return Object.fromEntries(columns.map((name, index) => [name, normalizeValue(valueAt(row, index, name))]));
+function prepareLibsqlRowProjector(columns: readonly string[], rowCountHint?: number) {
+  const project = preparePositionalResultProjector<LibsqlRowLike>(
+    columns.map((name, index) => ({
+      name,
+      index,
+      decode: normalizeValue,
+    })),
+    rowCountHint,
+  );
+  return (row: LibsqlRowLike): Record<string, unknown> => {
+    if (row === null || typeof row !== "object")
+      throw new TypeError("BRAID_RESULT_ROW: libSQL returned a non-object row.");
+    return project(row);
+  };
 }
 
 function resultRows<Row>(result: LibsqlResultSetLike): readonly Row[] {
@@ -284,7 +289,9 @@ function resultRows<Row>(result: LibsqlResultSetLike): readonly Row[] {
     if (result.rows.length !== 0) throw new Error("BRAID_RESULT_KIND: libSQL returned rows without column metadata.");
     return [];
   }
-  return result.rows.map((row) => normalizeRow(row, result.columns)) as readonly Row[];
+  if (result.rows.length === 0) return [];
+  const projectRow = prepareLibsqlRowProjector(result.columns, result.rows.length);
+  return result.rows.map(projectRow) as readonly Row[];
 }
 
 function commandResult(result: LibsqlResultSetLike, exactInsertId: boolean): CommandExecutionResult {

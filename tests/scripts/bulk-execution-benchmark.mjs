@@ -29,6 +29,8 @@ const countedDatabase = {
       },
       setReadBigInts:
         statement.setReadBigInts === undefined ? undefined : (enabled) => statement.setReadBigInts(enabled),
+      setReturnArrays:
+        statement.setReturnArrays === undefined ? undefined : (enabled) => statement.setReturnArrays(enabled),
     };
   },
   exec(text) {

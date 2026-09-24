@@ -106,7 +106,8 @@ test("node sqlite adapter distinguishes row and command statements", async () =>
       return {
         columns: () => (text.startsWith("SELECT") ? [{ name: "id" }] : []),
         setReadBigInts() {},
-        all: () => [{ id: 1n }],
+        setReturnArrays() {},
+        all: () => [[1n]],
         run: () => ({ changes: 1 }),
       };
     },
@@ -228,7 +229,8 @@ test("node sqlite reports actual result kinds from columns metadata", async () =
       return {
         columns: () => (rows ? [{ name: "id" }] : []),
         setReadBigInts() {},
-        all: () => [{ id: 1n }],
+        setReturnArrays() {},
+        all: () => [[1n]],
         run: () => ({ changes: 1 }),
       };
     },

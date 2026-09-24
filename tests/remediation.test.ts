@@ -555,8 +555,9 @@ test("adapters preserve command and returning result kinds", async () => {
           text.includes("RETURNING") || text.includes("SELECT")
             ? [{ name: "id", column: "id", database: "main", table: "users", type: "INTEGER" }]
             : [],
-        all: () => [{ id: 1n }],
+        all: () => [[1n]],
         setReadBigInts() {},
+        setReturnArrays() {},
         run: () => ({ changes: 1, lastInsertRowid: 2 }),
       };
     },
