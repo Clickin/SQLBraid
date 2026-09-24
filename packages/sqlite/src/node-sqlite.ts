@@ -46,8 +46,6 @@ export interface SqliteStatementLike {
   columns(): readonly SqliteColumnLike[];
   /** Required for row-producing statements; command-only adapters may omit it. */
   setReadBigInts?(enabled: boolean): void;
-  /** Required for row-producing statements; command-only adapters may omit it. */
-  setReturnArrays?(enabled: boolean): void;
 }
 
 export interface SqliteDatabaseLike {
@@ -279,14 +277,16 @@ function configureExactIntegerReads(statement: SqliteStatementLike): void {
     );
   }
   statement.setReadBigInts(true);
-  if (typeof statement.setReturnArrays !== "function") {
+  const setReturnArrays = (statement as SqliteStatementLike & { readonly setReturnArrays?: (enabled: boolean) => void })
+    .setReturnArrays;
+  if (typeof setReturnArrays !== "function") {
     throw new UnsupportedFeatureError(
       "result.columns",
       "BRAID_ROW_ARRAYS_UNSUPPORTED",
       "SQLite row reads require StatementSync.setReturnArrays(true).",
     );
   }
-  statement.setReturnArrays(true);
+  setReturnArrays.call(statement, true);
 }
 
 function nodeSqliteEnvironment(transactionSupported: boolean, streamSupported: boolean): DriverEnvironment {

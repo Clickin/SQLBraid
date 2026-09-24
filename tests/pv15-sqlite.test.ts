@@ -339,7 +339,7 @@ test("SQLite streams 100k rows without materializing an application array", asyn
             return statement.iterate();
           },
           setReadBigInts: (enabled) => statement.setReadBigInts(enabled),
-          setReturnArrays: (enabled) => statement.setReturnArrays(enabled),
+          setReturnArrays: (enabled: boolean) => statement.setReturnArrays(enabled),
         };
       },
     });

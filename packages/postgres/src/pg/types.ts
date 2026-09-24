@@ -23,7 +23,6 @@ export interface PgClientLike {
     readonly text: string;
     readonly values: readonly unknown[];
     readonly name?: string;
-    readonly rowMode?: "array";
     readonly types?: PgTypeOverrides;
   }): Promise<PgResultLike>;
   query(text: string, values?: readonly unknown[]): Promise<PgResultLike>;
@@ -53,11 +52,7 @@ export interface PgCursorLike {
 
 /** Native cursor constructor used to implement `db.stream()`; the optional peer keeps materialized queries usable without it. */
 export interface PgCursorFactory {
-  new (
-    text: string,
-    values: readonly unknown[],
-    config?: { readonly rowMode?: "array"; readonly types?: PgTypeOverrides },
-  ): PgCursorLike;
+  new (text: string, values: readonly unknown[], config?: { readonly types?: PgTypeOverrides }): PgCursorLike;
 }
 
 /** Parser overrides must agree with the selected representation profile when both are supplied. */

@@ -279,6 +279,18 @@ function assertPgClient(client: PgClientLike): void {
   }
 }
 
+interface PgArrayQueryConfig {
+  readonly text: string;
+  readonly values: readonly unknown[];
+  readonly name?: string;
+  readonly rowMode: "array";
+  readonly types?: PgTypeOverrides;
+}
+
+function queryArrayRows(client: PgClientLike, config: PgArrayQueryConfig): Promise<PgResultLike> {
+  return (client.query as unknown as (config: PgArrayQueryConfig) => Promise<PgResultLike>)(config);
+}
+
 function pgDatabaseType(field: PgFieldLike | undefined): string | undefined {
   return field?.dataType ?? (field?.dataTypeID === undefined ? undefined : pgOidTypes[field.dataTypeID]);
 }
@@ -713,7 +725,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       executionOptions?.signal?.throwIfAborted();
       assertParameterHintsUnsupported(rendered);
       const result = await withPgCancellation(client, executionOptions?.signal, () =>
-        client.query(materialize(rendered, binding, types)),
+        queryArrayRows(client, materialize(rendered, binding, types)),
       );
       assertUniqueFields(result.fields ?? []);
       const rows = projectPgRows(result.rows, result.fields ?? [], policy);
@@ -762,10 +774,10 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
             result =
               name === undefined
                 ? await withPgCancellation(client, executionOptions?.signal, () =>
-                    client.query({ text: binding.parameterizedSql!, values, rowMode: "array" }),
+                    queryArrayRows(client, { text: binding.parameterizedSql!, values, rowMode: "array" }),
                   )
                 : await withPgCancellation(client, executionOptions?.signal, () =>
-                    client.query({ name, text: binding.parameterizedSql!, values, rowMode: "array" }),
+                    queryArrayRows(client, { name, text: binding.parameterizedSql!, values, rowMode: "array" }),
                   );
           } catch (error) {
             const registry = cache.registry;
@@ -811,7 +823,12 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       const prepared = materialize(rendered, binding);
       const Cursor = options.cursor ?? (await optionalCursorFactory());
       signal?.throwIfAborted();
-      const cursor = new Cursor(prepared.text, prepared.values, {
+      const ArrayCursor = Cursor as unknown as new (
+        text: string,
+        values: readonly unknown[],
+        config: { readonly rowMode: "array"; readonly types?: PgTypeOverrides },
+      ) => PgCursorLike;
+      const cursor = new ArrayCursor(prepared.text, prepared.values, {
         rowMode: "array",
         ...(types === undefined ? {} : { types }),
       });
@@ -889,7 +906,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
         );
       }
       const result = await withPgCancellation(client, executionOptions?.signal, () =>
-        client.query(materialize(rendered, binding, types)),
+        queryArrayRows(client, materialize(rendered, binding, types)),
       );
       assertUniqueFields(result.fields ?? []);
       const output = outputRow(result, rendered, policy);
@@ -925,7 +942,7 @@ export function createPgExecutor(client: PgClientLike, options: PgExecutorOption
       try {
         for (const entry of portals) {
           const fetched = await withPgCancellation(client, executionOptions?.signal, () =>
-            client.query({
+            queryArrayRows(client, {
               text: `FETCH ALL FROM ${quotePortal(entry.portal)}`,
               values: [],
               rowMode: "array",
