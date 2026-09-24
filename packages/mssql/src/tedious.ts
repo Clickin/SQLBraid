@@ -1,7 +1,12 @@
 import { Buffer } from "node:buffer";
 import { ISOLATION_LEVEL, Request, TYPES } from "tedious";
 import { AdapterError, ResultExactnessError, safeDatabaseCount } from "@sqlbraid/core";
-import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
+import {
+  assertSavepointName,
+  createCleanupScope,
+  defineResultProperty,
+  preparePositionalResultProjector,
+} from "@sqlbraid/core/driver";
 import type {
   ConnectionLease,
   ConnectionProvider,
@@ -334,6 +339,7 @@ function setOutputValue(output: Record<string, unknown>, name: string, value: un
 
 interface ResultSetState {
   readonly columns: readonly TediousColumnMetadataLike[];
+  projectRow?: (value: unknown) => Record<string, unknown>;
   readonly rows: Record<string, unknown>[];
 }
 
@@ -431,33 +437,42 @@ function cellValue(value: unknown): unknown {
   return (value as TediousColumnLike).value;
 }
 
-function mapRow(
-  value: unknown,
+function prepareTediousRowProjector(
   columns: readonly TediousColumnMetadataLike[],
   policy: TypePolicy,
-): Record<string, unknown> {
-  const row: Record<string, unknown> = {};
-  if (Array.isArray(value)) {
-    for (let index = 0; index < value.length; index += 1) {
-      const metadata = columns[index] ?? {};
-      const type = columnType(metadata);
-      const entry = cellValue(value[index]);
-      defineResultProperty(row, columnName(metadata, index), type ? policy.decode(type, entry) : entry);
+): (value: unknown) => Record<string, unknown> {
+  const prepared = columns.map((metadata, index) => {
+    const name = columnName(metadata, index);
+    const type = columnType(metadata);
+    const decode = type === undefined ? cellValue : (raw: unknown): unknown => policy.decode(type, cellValue(raw));
+    return { name, index, decode };
+  });
+  const projectArray = preparePositionalResultProjector(prepared);
+  let byName: Map<string, (raw: unknown) => unknown> | undefined;
+  return (value): Record<string, unknown> => {
+    if (Array.isArray(value)) {
+      if (value.length === prepared.length) return projectArray(value);
+      // Retain Tedious' prior fallback for a row event without matching metadata.
+      const row: Record<string, unknown> = {};
+      for (let index = 0; index < value.length; index += 1) {
+        const column = prepared[index];
+        const name = column?.name ?? `column${index + 1}`;
+        defineResultProperty(row, name, column === undefined ? cellValue(value[index]) : column.decode(value[index]));
+      }
+      return row;
     }
-    return row;
-  }
-  if (value && typeof value === "object") {
-    for (const [key, raw] of Object.entries(value)) {
-      if (Array.isArray(raw)) throw new Error(`BRAID_RESULT_COLUMNS: duplicate SQL Server result label ${key}.`);
-      const index = columns.findIndex((metadata, candidateIndex) => columnName(metadata, candidateIndex) === key);
-      const metadata = index < 0 ? undefined : columns[index];
-      const type = metadata === undefined ? undefined : columnType(metadata);
-      const entry = cellValue(raw);
-      defineResultProperty(row, key, type ? policy.decode(type, entry) : entry);
+    if (value && typeof value === "object") {
+      byName ??= new Map(prepared.map((column) => [column.name, column.decode] as const));
+      const row: Record<string, unknown> = {};
+      for (const [key, raw] of Object.entries(value)) {
+        if (Array.isArray(raw)) throw new Error(`BRAID_RESULT_COLUMNS: duplicate SQL Server result label ${key}.`);
+        const decode = byName.get(key);
+        defineResultProperty(row, key, decode ? decode(raw) : cellValue(raw));
+      }
+      return row;
     }
-    return row;
-  }
-  return { value };
+    return { value };
+  };
 }
 
 function materializeParameter(
@@ -888,10 +903,12 @@ function collect(
         if (eventError) return;
         try {
           if (!current) {
-            current = { columns: [], rows: [] };
+            const columns: readonly TediousColumnMetadataLike[] = [];
+            current = { columns, rows: [] };
             resultSets.push(current);
           }
-          current.rows.push(mapRow(row, current.columns, policy));
+          current.projectRow ??= prepareTediousRowProjector(current.columns, policy);
+          current.rows.push(current.projectRow(row));
         } catch (error) {
           fail(error);
         }
@@ -1125,6 +1142,7 @@ function streamRows(
         let doneCount = 0;
         let doneInProcCount = 0;
         let columns: readonly TediousColumnMetadataLike[] = [];
+        let projectRow: ((value: unknown) => Record<string, unknown>) | undefined;
         const observeCount = (rowCount: unknown): void => {
           if (rowCount === undefined || rowCount === null) return;
           try {
@@ -1153,6 +1171,7 @@ function streamRows(
             resultSetCount += 1;
             columns = metadataColumns(metadata);
             assertUniqueColumns(columns);
+            projectRow = undefined;
           } catch (error) {
             setFailure(error);
             cancel();
@@ -1161,7 +1180,8 @@ function streamRows(
         request.on("row", (row: unknown) => {
           if (failureSet) return;
           try {
-            queue.push(mapRow(row, columns, policy));
+            projectRow ??= prepareTediousRowProjector(columns, policy);
+            queue.push(projectRow(row));
             if (queue.length >= max && !paused) {
               request?.pause?.();
               paused = true;
