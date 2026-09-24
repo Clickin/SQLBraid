@@ -7,14 +7,13 @@
 SQLBraid는 TypeScript를 위한 SQL-first 데이터 액세스 툴킷입니다. DDL, DML, 복잡한 쿼리를 포함하여 익숙한 SQL 문법을 그대로 사용하면서 안전한 값 바인딩, 가독성 좋은 동적 SQL, 그리고 명확한 결과 매핑 기능을 제공합니다.
 
 ORM이나 쿼리 빌더와 달리, SQLBraid는 SQL을 추상화하지 않습니다. 핵심 기능을 가볍게 유지하기 위해, 다음과 같은 기능은 제공하지 않습니다:
+
 - ORM 또는 쿼리 빌더
 - 완전한 SQL 파서 또는 컴파일러
 - 커넥션 풀 구현 (기존 풀을 래핑하여 사용)
 - 리트라이(Retry) 또는 라우팅 프레임워크
 
-
 📖 [문서](https://clickin.github.io/SQLBraid/latest/) · [시작하기](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/)
-
 
 ```sh
 pnpm add sqlbraid
@@ -37,7 +36,7 @@ interface UserRow {
 const native = new DatabaseSync(":memory:");
 try {
   const db = createNodeSqliteDatabase(native);
-  
+
   await db.execute(sql.command`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, team_id TEXT)`);
   const name = "Ada";
   await db.execute(sql.command`INSERT INTO users (name) VALUES (${name})`);
@@ -91,7 +90,6 @@ const rows = await db.all(sql.rows<UserRow>`SELECT id, name, team_id FROM users`
 const userQuery = sql.rows(UserSchema)`SELECT id, name, team_id FROM users`;
 const user = await db.one(userQuery);
 ```
-
 
 ## 런타임 API
 

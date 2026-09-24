@@ -145,7 +145,7 @@
       "source": "website/src/content/docs/index.md",
       "translation": "website/src/content/docs/ko/index.md",
       "translationOf": "website/src/content/docs/index.md",
-      "sourceDigest": "0b569bb7b6454f29b5d4a68618751e52a677b520db2ce4204c89adc0642c0b99"
+      "sourceDigest": "606297ef44b9efbd99c0ab3179e5005d8ec060865587d8d5b72a980991b8e086"
     },
     {
       "source": "website/src/content/docs/interactive-preview.mdx",
@@ -205,7 +205,7 @@
       "source": "website/src/content/docs/reference/support.mdx",
       "translation": "website/src/content/docs/ko/reference/support.mdx",
       "translationOf": "website/src/content/docs/reference/support.mdx",
-      "sourceDigest": "647b520543afb2d884d3da996f3fd0c60f17ab4a63665a70a9847ab3a99b12c9"
+      "sourceDigest": "b6f557dcc3e1693b9b887fa54da930fdb00f64d9ec522854791e7999dce1c762"
     },
     {
       "source": "website/src/content/docs/reference/troubleshooting.md",

@@ -7,15 +7,13 @@
 SQLBraid is a SQL-first data-access toolkit for TypeScript. It lets you write ordinary SQL—including DDL, DML, and complex queries—while providing safe value binding, readable dynamic SQL, and explicit result mapping.
 
 Unlike ORMs or query builders, SQLBraid does not abstract SQL away. To keep the core lean, it is **not**:
+
 - An ORM or a query builder.
 - A complete SQL parser or compiler.
 - A connection pool implementation (it wraps existing ones).
 - A retry or routing framework.
 
-
 📖 [Documentation](https://clickin.github.io/SQLBraid/latest/) · [Get Started](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/)
-
-
 
 ```sh
 pnpm add sqlbraid
@@ -38,7 +36,7 @@ interface UserRow {
 const native = new DatabaseSync(":memory:");
 try {
   const db = createNodeSqliteDatabase(native);
-  
+
   await db.execute(sql.command`CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, team_id TEXT)`);
   const name = "Ada";
   await db.execute(sql.command`INSERT INTO users (name) VALUES (${name})`);
@@ -125,7 +123,6 @@ SQLBraid uses a modular architecture. You install the `sqlbraid` facade and the 
 | `@sqlbraid/metadata` | Database schema snapshots              |
 | `@sqlbraid/codegen`  | TypeScript model generation            |
 | `@sqlbraid/cli`      | CLI for codegen and schema inspection  |
-
 
 ---
 

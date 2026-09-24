@@ -353,6 +353,14 @@ test("positional result projectors preserve labels and property order for every 
   assert.equal(first.nullable, null);
 });
 
+test("single-row positional projection treats __proto__ as row data", () => {
+  const project = preparePositionalResultProjector([{ name: "__proto__", index: 0, decode: identityResultValue }], 1);
+  const row = project(["safe"]);
+  assert.equal(Object.getPrototypeOf(row), Object.prototype);
+  assert.equal(Object.hasOwn(row, "__proto__"), true);
+  assert.equal(row["__proto__"], "safe");
+});
+
 test("savepoint names accept runtime-generated grammar and reject SQL syntax", () => {
   for (const name of ["braid_sp_1", "braid_sp_abc_2", "_savepoint", "A1"]) {
     assert.equal(assertSavepointName(name), name);
