@@ -4,6 +4,8 @@ import {
   assertSavepointName,
   createCleanupScope,
   defineResultProperty,
+  identityResultValue,
+  preparePositionalResultProjector,
   prepareResultProjector,
 } from "@sqlbraid/core/driver";
 
@@ -229,8 +231,34 @@ test("prepared result projectors keep a safe stable shape and overwrite duplicat
     "late-2",
     null,
   ]);
+  const smallProjector = prepareResultProjector<readonly unknown[]>(
+    [
+      { name: "first", read: (values) => ((reads += 1), values[0]) },
+      { name: "constructor", read: (values) => ((reads += 1), values[1]) },
+      { name: "__proto__", read: (values) => ((reads += 1), values[2]) },
+      { name: "prototype", read: (values) => ((reads += 1), values[3]) },
+      { name: "2", read: (values) => ((reads += 1), values[4]) },
+      { name: "患者🩺", read: (values) => ((reads += 1), values[5]) },
+      { name: "duplicate", read: (values) => ((reads += 1), values[6]) },
+      { name: "duplicate", read: (values) => ((reads += 1), values[7]) },
+      { name: "nullable", read: (values) => ((reads += 1), values[8]) },
+    ],
+    1,
+  );
+  const small = smallProjector([
+    "one",
+    "ctor-one",
+    "proto-one",
+    "prototype-one",
+    "numeric-one",
+    "환자",
+    "early",
+    "late",
+    null,
+  ]);
 
   assert.equal(Object.getPrototypeOf(first), Object.prototype);
+  assert.equal(Object.getPrototypeOf(small), Object.prototype);
   assert.deepEqual(Object.keys(first), [
     "2",
     "first",
@@ -242,6 +270,10 @@ test("prepared result projectors keep a safe stable shape and overwrite duplicat
     "nullable",
   ]);
   assert.deepEqual(Object.keys(second), Object.keys(first));
+  assert.deepEqual(Object.keys(small), Object.keys(first));
+  assert.equal(small["__proto__"], "proto-one");
+  assert.equal(small.constructor, "ctor-one");
+  assert.equal(small["患者🩺"], "환자");
   assert.equal(first.first, "one");
   assert.equal(first.constructor, "ctor-one");
   assert.equal(first["__proto__"], "proto-one");
@@ -256,7 +288,69 @@ test("prepared result projectors keep a safe stable shape and overwrite duplicat
     value: "proto-one",
     writable: true,
   });
-  assert.equal(reads, 18);
+  assert.equal(reads, 27);
+});
+
+test("positional result projectors preserve labels and property order for every row", () => {
+  const projector = preparePositionalResultProjector(
+    [
+      { name: "__proto__", index: 0, decode: identityResultValue },
+      { name: "constructor", index: 1, decode: identityResultValue },
+      { name: "prototype", index: 2, decode: identityResultValue },
+      { name: "hasOwnProperty", index: 3, decode: identityResultValue },
+      { name: "toString", index: 4, decode: identityResultValue },
+      { name: "0", index: 5, decode: identityResultValue },
+      { name: "01", index: 6, decode: identityResultValue },
+      { name: "한글", index: 7, decode: identityResultValue },
+      { name: "😀", index: 8, decode: identityResultValue },
+      { name: "nullable", index: 9, decode: identityResultValue },
+    ],
+    2,
+  );
+  const first = projector([
+    "proto-1",
+    "ctor-1",
+    "prototype-1",
+    "own-1",
+    "string-1",
+    "zero-1",
+    "leading-1",
+    "한-1",
+    "emoji-1",
+    null,
+  ]);
+  const second = projector([
+    "proto-2",
+    "ctor-2",
+    "prototype-2",
+    "own-2",
+    "string-2",
+    "zero-2",
+    "leading-2",
+    "한-2",
+    "emoji-2",
+    null,
+  ]);
+
+  assert.equal(Object.getPrototypeOf(first), Object.prototype);
+  assert.deepEqual(Object.keys(second), Object.keys(first));
+  assert.deepEqual(Object.keys(first), [
+    "0",
+    "__proto__",
+    "constructor",
+    "prototype",
+    "hasOwnProperty",
+    "toString",
+    "01",
+    "한글",
+    "😀",
+    "nullable",
+  ]);
+  assert.equal(Object.getOwnPropertyDescriptor(first, "__proto__")?.value, "proto-1");
+  assert.equal(first.constructor, "ctor-1");
+  assert.equal(first.hasOwnProperty, "own-1");
+  assert.equal(first.toString, "string-1");
+  assert.equal(first.nullable, null);
 });
 
 test("savepoint names accept runtime-generated grammar and reject SQL syntax", () => {
