@@ -2,7 +2,7 @@
 
 > Write SQL. Keep TypeScript. Skip the query-builder translation layer.
 
-SQLBraid is a SQL-first TypeScript data-access toolkit. Keep the SQL you know, without a query-builder translation layer, while retaining the boundaries that matter in production.
+SQLBraid is a SQL-first TypeScript data-access toolkit. No query-builder translation layer. Production-ready boundaries.
 
 - **SQL stays visible.** Tagged templates preserve ordinary SQL and database-specific features.
 - **Values stay bound.** Ordinary value interpolation becomes a logical value parameter; the selected driver owns placeholder/materialization transport, while structural SQL requires an explicit helper.

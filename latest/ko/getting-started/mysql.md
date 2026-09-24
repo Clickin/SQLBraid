@@ -60,7 +60,7 @@ try {
 
 프로필이나 정책을 선택하지 않으면 각 lease가 관측한 연결에서 정책을 선택하며,
 풀은 연결 획득 전에 정책을 단정하지 않습니다. 명시한 descriptor는 유지됩니다.
-호환되지 않는 native 결과는 runtime 계약을 codegen과 다르게 바꾸는 대신 거부합니다.
+호환되지 않는 native 결과는 runtime 명세를 codegen과 다르게 바꾸는 대신 거부합니다.
 
 mysql2 바인딩 어댑터는 논리 문장을 text-positional `?` placeholder와 순서가
 있는 값 배열로 구체화합니다. 바인딩 설명과 힌트 검증은 연결을 얻기 전에

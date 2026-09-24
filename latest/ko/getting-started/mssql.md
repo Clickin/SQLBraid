@@ -58,7 +58,7 @@ try {
 명시적으로 설정하세요. 원격 또는 운영 서버에서는 이 우회 옵션을 사용하지 말고
 신뢰할 수 있는 인증서를 구성하세요.
 
-Tedious는 `@p1`, `@p2`와 같이 정해진 파라미터 이름을 받습니다. `sql.bind`는 데이터베이스 타입을 선택할 뿐 값을 SQL 텍스트로 바꾸지 않습니다. scalar OUTPUT/INOUT 루틴 파라미터에는 명시적인 hint가 필요합니다. T-SQL integer RETURN status에는 `sql.call` 계약의 `procedure: { name, parameterNames }` metadata가 필요하며 SQLBraid는 임의 `EXEC` 텍스트에서 identity를 추측하지 않습니다.
+Tedious는 `@p1`, `@p2`와 같이 정해진 파라미터 이름을 받습니다. `sql.bind`는 데이터베이스 타입을 선택할 뿐 값을 SQL 텍스트로 바꾸지 않습니다. scalar OUTPUT/INOUT 루틴 파라미터에는 명시적인 hint가 필요합니다. T-SQL integer RETURN status에는 `sql.call` 명세의 `procedure: { name, parameterNames }` metadata가 필요하며 SQLBraid는 임의 `EXEC` 텍스트에서 identity를 추측하지 않습니다.
 
 Tedious 바인딩 어댑터는 논리 문장을 typed request로 구체화합니다. 결정적인
 `@p1`, `@p2`, … 이름, `TYPES.*` 매핑, 인코딩된 값과 facet을 구성합니다.
@@ -85,7 +85,8 @@ Tedious는 `decimal`/`numeric`, `money`, `smallmoney`를 JavaScript
 `BRAID_RESULT_EXACTNESS`로 fail closed합니다. Tedious의 `BIGINT` text는
 canonical exact string으로 정규화됩니다. 정확한 decimal/money 결과에는
 `CONVERT(varchar(...), exact_column)` 같은 사용자가 작성한 text 표현식을
-선택하고 문자열 결과 계약을 선언하세요. 정확한 입력은
+`CONVERT(varchar(...), exact_column)` 같은 사용자가 작성한 text 표현식을
+선택하고 문자열 결과 명세를 선언하세요. 정확한 입력은
 `mssqlParameter.nvarchar(...)` character hint로 bind한 뒤
 `CAST(@nvarchar_parameter AS decimal(38, 18))`처럼 SQL에서 변환을 선택합니다.
 native typed DECIMAL/NUMERIC/MONEY 편의 경로는 JavaScript `number` 범위에
@@ -96,7 +97,7 @@ native typed DECIMAL/NUMERIC/MONEY 편의 경로는 JavaScript `number` 범위�
 
 증거 라벨과 현재 매트릭스는 [런타임 및 드라이버 지원](/SQLBraid/latest/reference/support.md)을 참고하세요.
 
-명시적 procedure metadata와 이질적인 `sql.call` result 계약은
+명시적 procedure metadata와 이질적인 `sql.call` result 명세는
 [루틴 호출](/SQLBraid/latest/concepts/routines.md)을 참고하세요.
 
 ## Tedious 표현 프로필

@@ -84,7 +84,7 @@ sequence, CTE, JSON function을 다룹니다. <code dir="auto">UPDATE ... RETURN
 있을 때만 지원 목록에 올립니다.</p>
 <p>어댑터는 Connector/Node.js value-only 실행, native row stream, 그리고
 <code dir="auto">db.bulk()</code>의 <code dir="auto">connection.batch()</code> 1회를 사용합니다. Root bulk는 암묵적으로
-transaction이 되지 않고 portable auto-chunking 약속이 없습니다. 원자성이
+transaction이 되지 않고 portable auto-chunking 명세가 없습니다. 원자성이
 필요하면 <code dir="auto">db.tx()</code>를 사용하세요.</p>
 <p>MariaDB에서 <code dir="auto">mysql2</code> connection을 사용할 수 있으나, 이는 최선을 다한(best-effort) 호환성 제공일 뿐 MariaDB 프로토콜을 완전히 지원한다는 증거는 아닙니다. 공식 인증 프로필은 MariaDB 11.8.9 /
 Connector 3.5.4 / Node 22.18.0입니다. 이 프로필의 지원 label과 증거는
@@ -146,7 +146,7 @@ connection도 별도의 best-effort 호환 프로필입니다.</p>
 </table>
 <p>어댑터는 value-only 실행, native <code dir="auto">queryStream()</code>, 동종 bulk를 위한
 <code dir="auto">connection.batch()</code> 1회를 사용합니다. Native <code dir="auto">RETURNING</code>은 정확한 서버
-형태의 증거가 있는 경우에만 materialized row 계약입니다. <code dir="auto">INSERT</code>,
+형태의 증거가 있는 경우에만 materialized row 명세입니다. <code dir="auto">INSERT</code>,
 <code dir="auto">DELETE</code>, <code dir="auto">REPLACE</code>는 별도 capability이며 <code dir="auto">UPDATE</code>는 주장하지 않습니다.
 SQL은 투명하게 전달되지만 MariaDB grammar 지원을 의미하지 않습니다.</p>
 <p><code dir="auto">db.call()</code>은 prepared <code dir="auto">CALL</code>이 내보내는 이종 결과 집합을 materialize합니다.

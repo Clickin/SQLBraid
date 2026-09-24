@@ -18,7 +18,7 @@ const result = await db.bulk(
 // { inputCount, affectedRows? }
 ```
 
-## 계약
+## 명세
 
 - `CommandQuery`만 받습니다. Row set을 반환하지 않으며 DML
   `RETURNING`/`OUTPUT`와 결합하지 않습니다.
@@ -45,7 +45,7 @@ await db.tx(async (tx) => {
 });
 ```
 
-Portable auto-chunking 계약은 없습니다. 드라이버가 더 강한 native batch
+Portable auto-chunking 명세는 없습니다. 드라이버가 더 강한 native batch
 semantics를 제공하더라도 선택한 어댑터 문서 밖에서 의존하지 마세요.
 
 ## 드라이버 모드

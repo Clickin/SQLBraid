@@ -102,7 +102,7 @@ OUT 및 IN OUT bind의 구체화와 정리를 검증합니다. target manifest�
 adapter unit coverage는 cleanup/error 경로만 검증하며 다른 database나
 driver target을 승격하지 않습니다.
 
-전체 `sql.out`/`sql.inOut` 및 이질적 result-set 계약은
+전체 `sql.out`/`sql.inOut` 및 이질적 result-set 명세는
 [루틴 호출](/SQLBraid/latest/concepts/routines.md)을 참고하세요.
 
 ## Oracle Thin 표현 프로필
@@ -127,7 +127,7 @@ server line은 일치하는 manifest 증거가 생길 때까지 별도의 미테
 implicit result는 추가 set이 됩니다. Native `RETURNING ... INTO`는
 `sql.out()`과 materialized row API를 사용합니다. Manifest가 증명한 경우
 `executeMany()`가 native bulk 전략입니다. `rowsAffected`는 safe-range 검사를
-하는 운영 count이고 `RETURNING INTO` 값은 동일한 exact string 계약을
+하는 운영 count이고 `RETURNING INTO` 값은 동일한 exact string 명세를
 따릅니다. 일반 `undefined` IN 값은 acquisition 전에
 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패하며 `null`은 SQL `NULL`입니다. Native
 Oracle SQL은 투명하게 전달되지만 SQLBraid가 Oracle grammar를 제공하거나

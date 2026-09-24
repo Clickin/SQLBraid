@@ -40,6 +40,6 @@ sqlbraid codegen --json
 
 선택한 TypePolicy는 단순한 codegen 옵션이 아니라, 데이터 표현 방식(representation profile)을 정의하는 설정입니다.
 같은 PostgreSQL/mysql2/MariaDB profile descriptor를 runtime과 이 설정에서
-재사용하세요. Native JSON root는 driver 계약이 좁히지 않는 한 의도적으로
+Native JSON root는 driver 명세가 좁히지 않는 한 의도적으로
 `unknown`이며, 수동 output override는 TypeScript 출력만 바꾸고 runtime
 decode를 바꾸지 않습니다.

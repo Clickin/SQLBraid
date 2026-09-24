@@ -82,7 +82,7 @@ stream 상태, 트랜잭션/savepoint 단계도 유지됩니다. call의 <code d
 protocol carrier 행은 기본적으로 기록하지 않습니다.
 <code dir="auto">event.sql</code>은 파생된 parameterized view이며 native-value-template 전송에서는
 없을 수 있습니다.</p>
-<p>Observer는 등록 순서대로 순차 실행됩니다. 이벤트를 검사하거나 throw하여 작업을 거부할 수 있지만 SQL, 바인드, 결과를 변경하면 observer 계약을 위반합니다. API는 retry, routing, rewriting 기능을 제공하지 않습니다. DB 실행 전에 실패하면 실행이 방지됩니다. 실행 후 실패는 루트 부작용을 되돌릴 수 없지만 <code dir="auto">db.tx</code> 내부로 전파되면 일반 rollback이 적용됩니다. 오류 observer도 실패하면 <code dir="auto">AggregateError</code>가 두 실패를 모두 보존합니다.</p>
+<p>Observer는 등록 순서대로 순차 실행됩니다. 이벤트를 검사하거나 throw하여 작업을 거부할 수 있지만 SQL, 바인드, 결과를 변경하면 observer 명세를 위반합니다. API는 retry, routing, rewriting 기능을 제공하지 않습니다. DB 실행 전에 실패하면 실행이 방지됩니다. 실행 후 실패는 루트 부작용을 되돌릴 수 없지만 <code dir="auto">db.tx</code> 내부로 전파되면 일반 rollback이 적용됩니다. 오류 observer도 실패하면 <code dir="auto">AggregateError</code>가 두 실패를 모두 보존합니다.</p>
 <p>이벤트 컨테이너는 구조적으로만 읽기 전용입니다. SQLBraid는 <code dir="auto">Uint8Array</code> 같은
 임의의 application/driver 값을 deep-copy하지 않으므로 observer는 참조된 값을
 변경하면 안 됩니다. 이는 API 경계이며 security sandbox나 deep immutability
@@ -116,7 +116,7 @@ redactor를 지원합니다. 결과는 <code dir="auto">complete</code>, <code d
 MySQL/MariaDB의 inline string은 SQL literal 대신 실행 불가능한
 <code dir="auto">[string &lt;JSON&gt;]</code> 진단 marker를 사용합니다. Backslash 해석이 session의
 SQL mode에 따라 달라지기 때문입니다. Bun.SQL adapter에도 같은 규칙을 적용하며
-bound execution은 변경하지 않습니다. 진단 출력은 실행 가능한 SQL 계약이
+bound execution은 변경하지 않습니다. 진단 출력은 실행 가능한 SQL 명세가
 아닙니다.</p>
 <p>바인딩 또는 typed-request 구성 실패는 DB I/O 없이 <code dir="auto">"materialize"</code> 단계로
 보고합니다. 드라이버·서버·네트워크 실패는 <code dir="auto">"driver"</code> 단계입니다. Observer는
