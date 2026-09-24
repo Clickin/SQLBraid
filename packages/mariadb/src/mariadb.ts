@@ -23,7 +23,13 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
+import {
+  assertSavepointName,
+  createCleanupScope,
+  defineResultProperty,
+  identityResultValue,
+  preparePositionalResultProjector,
+} from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { mariaDbEnvironment, mariaDbProfile } from "./mariadb/environment.js";
 import { fieldTypes } from "./mariadb/types.js";
@@ -244,10 +250,14 @@ function normalizeMetadataResult(value: unknown): unknown {
   return value;
 }
 
-function assertUniqueFields(fields: readonly MariaDbFieldLike[]): void {
+function assertUniqueFields(fields: readonly MariaDbFieldLike[]): readonly (string | undefined)[] {
   const names = new Set<string>();
-  for (const field of fields) {
+  const resolved: (string | undefined)[] = [];
+  resolved.length = fields.length;
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index]!;
     const name = typeof field.name === "function" ? field.name() : field.name;
+    resolved[index] = name;
     if (name === undefined) continue;
     if (names.has(name)) {
       const error = new Error(`BRAID_RESULT_COLUMNS: duplicate MariaDB result label ${name}.`);
@@ -256,69 +266,83 @@ function assertUniqueFields(fields: readonly MariaDbFieldLike[]): void {
     }
     names.add(name);
   }
+  return resolved;
 }
 
-function plainRow(value: unknown, fields: readonly MariaDbFieldLike[], policy: TypePolicy): Record<string, unknown> {
-  if (!value || typeof value !== "object") {
-    throw new Error("BRAID_RESULT_COLUMNS: MariaDB Connector must return result rows.");
-  }
-  const row: Record<string, unknown> = {};
-  if (Array.isArray(value)) {
-    for (let index = 0; index < fields.length; index += 1) {
-      const field = fields[index];
-      const key = typeof field.name === "function" ? field.name() : field.name;
-      if (key === undefined) continue;
-      const entry = value[index];
-      const type = databaseType(field);
-      assertMariaDbNumericValue(type, entry);
-      defineResultProperty(row, key, type === undefined ? entry : policy.decode(type, entry));
+function prepareMariaDbRowProjector(
+  fields: readonly MariaDbFieldLike[],
+  names: readonly (string | undefined)[],
+  policy: TypePolicy,
+  rowCountHint?: number,
+): (value: unknown) => Record<string, unknown> {
+  const columns = fields.flatMap((field, index) => {
+    const name = names[index];
+    if (name === undefined) return [];
+    const type = databaseType(field);
+    const validate = prepareMariaDbNumericValidator(type);
+    const decode =
+      type === undefined
+        ? identityResultValue
+        : (entry: unknown): unknown => {
+            validate(entry);
+            return policy.decode(type, entry);
+          };
+    return [{ name, index, decode }];
+  });
+  const projectArray = preparePositionalResultProjector(columns, rowCountHint);
+  let byName: Map<string, (entry: unknown) => unknown> | undefined;
+  return (value): Record<string, unknown> => {
+    if (!value || typeof value !== "object") {
+      throw new Error("BRAID_RESULT_COLUMNS: MariaDB Connector must return result rows.");
+    }
+    if (Array.isArray(value)) return projectArray(value);
+    byName ??= new Map(columns.map((column) => [column.name, column.decode] as const));
+    const row: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      defineResultProperty(row, key, (byName.get(key) ?? identityResultValue)(entry));
     }
     return row;
-  }
-  for (const [key, entry] of Object.entries(value)) {
-    if (key === undefined) continue;
-    const field = fields.find(
-      (candidate) => (typeof candidate.name === "function" ? candidate.name() : candidate.name) === key,
-    );
-    const type = databaseType(field);
-    assertMariaDbNumericValue(type, entry);
-    defineResultProperty(row, key, type === undefined ? entry : policy.decode(type, entry));
-  }
-  return row;
+  };
 }
 
-function assertMariaDbNumericValue(databaseTypeName: string | undefined, value: unknown): void {
-  if (value === null || value === undefined || databaseTypeName === undefined) return;
+function prepareMariaDbNumericValidator(databaseTypeName: string | undefined): (value: unknown) => void {
+  if (databaseTypeName === undefined) return () => undefined;
   const type = databaseTypeName.toUpperCase();
   if (type === "TINYINT" || type === "SMALLINT" || type === "MEDIUMINT" || type === "INT") {
-    if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
-      throw new ResultExactnessError(`MariaDB ${type} result has an unsupported representation.`);
-    }
-    if (typeof value === "number" && !Number.isSafeInteger(value)) {
-      throw new ResultExactnessError(`MariaDB ${type} result was an unsafe JavaScript number.`);
-    }
-    return;
+    return (value) => {
+      if (value === null || value === undefined) return;
+      if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
+        throw new ResultExactnessError(`MariaDB ${type} result has an unsupported representation.`);
+      }
+      if (typeof value === "number" && !Number.isSafeInteger(value)) {
+        throw new ResultExactnessError(`MariaDB ${type} result was an unsafe JavaScript number.`);
+      }
+    };
   }
   if (type === "DECIMAL" || type === "NEWDECIMAL") {
-    if (typeof value !== "string") {
+    return (value) => {
+      if (value === null || value === undefined || typeof value === "string") return;
       throw new ResultExactnessError("MariaDB DECIMAL results must remain strings.");
-    }
-    return;
+    };
   }
   if (type === "BIGINT" || type === "LONGLONG") {
-    if (typeof value === "number" && !Number.isSafeInteger(value)) {
-      throw new ResultExactnessError("MariaDB BIGINT result was an unsafe JavaScript number.");
-    }
-    if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
-      throw new ResultExactnessError("MariaDB BIGINT result has an unsupported representation.");
-    }
-    return;
+    return (value) => {
+      if (value === null || value === undefined) return;
+      if (typeof value === "number" && !Number.isSafeInteger(value)) {
+        throw new ResultExactnessError("MariaDB BIGINT result was an unsafe JavaScript number.");
+      }
+      if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
+        throw new ResultExactnessError("MariaDB BIGINT result has an unsupported representation.");
+      }
+    };
   }
   if (type === "FLOAT" || type === "DOUBLE") {
-    if (typeof value !== "number") {
+    return (value) => {
+      if (value === null || value === undefined || typeof value === "number") return;
       throw new ResultExactnessError(`MariaDB ${type} result must remain a JavaScript number.`);
-    }
+    };
   }
+  return () => undefined;
 }
 
 function assertParameterHintsUnsupported(rendered: RenderedStatement): void {
@@ -358,8 +382,8 @@ function resultRows(value: unknown, policy: TypePolicy): QueryExecutionResult<un
   }
   if (Array.isArray(value)) {
     const fields = fieldsFor(value);
-    assertUniqueFields(fields);
-    const rows = value.map((row) => plainRow(row, fields, policy));
+    const names = assertUniqueFields(fields);
+    const rows = value.length === 0 ? [] : value.map(prepareMariaDbRowProjector(fields, names, policy, value.length));
     return { rows, rowCount: rows.length, kind: "rows" };
   }
   if (!value || typeof value !== "object") {
@@ -625,7 +649,9 @@ export function createMariaDbExecutor(
       const noPrimary = Symbol("mariadb.stream.no-primary");
       let primary: unknown = noPrimary;
       let fields: readonly MariaDbFieldLike[] = [];
+      let names: readonly (string | undefined)[] = [];
       let fieldsChanged = false;
+      let projectRow: ((value: unknown) => Record<string, unknown>) | undefined;
       let fieldsSeen = 0;
       let pendingError: unknown;
       const onFields = (value: unknown): void => {
@@ -633,6 +659,7 @@ export function createMariaDbExecutor(
         if (fieldsSeen === 1) {
           fields = Array.isArray(value) ? (value as readonly MariaDbFieldLike[]) : [];
           fieldsChanged = true;
+          projectRow = undefined;
         } else {
           pendingError ??= new UnsupportedFeatureError(
             "routine.result-sets",
@@ -714,7 +741,7 @@ export function createMariaDbExecutor(
           exhausted = next.done === true;
           if (pendingError !== undefined) throw pendingError;
           if (fieldsChanged) {
-            assertUniqueFields(fields);
+            names = assertUniqueFields(fields);
             if (fields.length === 0) throw new DatabaseResultKindError("rows", "command");
             fieldsChanged = false;
           }
@@ -723,7 +750,8 @@ export function createMariaDbExecutor(
             break;
           }
           signal?.throwIfAborted();
-          yield plainRow(next.value, fields, policy) as Row;
+          projectRow ??= prepareMariaDbRowProjector(fields, names, policy);
+          yield projectRow!(next.value) as Row;
         }
       } catch (error) {
         primary = error;
@@ -761,9 +789,11 @@ export function createMariaDbExecutor(
         : [normalized as MariaDbRowSet];
       const resultSets = sets.map((rows, index) => {
         const fields = fieldsFor(rows);
-        assertUniqueFields(fields);
+        const names = assertUniqueFields(fields);
+        const projectRow =
+          rows.length === 0 ? undefined : prepareMariaDbRowProjector(fields, names, policy, rows.length);
         return {
-          rows: rows.map((row) => plainRow(row, fields, policy)),
+          rows: projectRow === undefined ? [] : rows.map(projectRow),
           source: { kind: "emitted" as const, index },
         };
       });

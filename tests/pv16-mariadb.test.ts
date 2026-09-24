@@ -76,6 +76,26 @@ test("MariaDB array rows preserve hostile labels and reject duplicate metadata",
   );
 });
 
+test("MariaDB resolves callable field labels once per result set", async () => {
+  let nameCalls = 0;
+  const fields = [
+    {
+      name() {
+        nameCalls += 1;
+        return "label";
+      },
+      type: "LONG",
+    },
+  ];
+  const rows = rowSet(
+    [[1], [2], [3]] as unknown as Record<string, unknown>[],
+    fields as unknown as readonly MariaDbFieldLike[],
+  );
+  const result = await createMariaDbExecutor(connectionFor(rows)).query(sql.rows`SELECT 1`.render());
+  assert.deepEqual(result.rows, [{ label: "1" }, { label: "2" }, { label: "3" }]);
+  assert.equal(nameCalls, 1);
+});
+
 test("MariaDB pool discard never releases a poisoned connection", async () => {
   let releases = 0;
   const connection = {
