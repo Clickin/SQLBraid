@@ -39,11 +39,12 @@ function createFixture(streamSupported = true): Promise<CertificationFixture> {
           ? undefined
           : (statement.iterate.bind(statement) as (...values: readonly unknown[]) => IterableIterator<unknown>);
       if (iterate === undefined) return statement;
-      return {
+      const wrapped: SqliteStatementLike & { readonly setReturnArrays?: (enabled: boolean) => void } = {
         all: statement.all.bind(statement),
         columns: statement.columns.bind(statement),
         run: statement.run.bind(statement),
         setReadBigInts: statement.setReadBigInts?.bind(statement),
+        setReturnArrays: statement.setReturnArrays?.bind(statement),
         iterate(...values: readonly unknown[]) {
           const iterator = iterate(...values);
           let released = false;
@@ -72,6 +73,7 @@ function createFixture(streamSupported = true): Promise<CertificationFixture> {
           };
         },
       };
+      return wrapped;
     },
     exec(sqlText: string) {
       stats.nativeOperations += 1;

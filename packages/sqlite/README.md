@@ -8,13 +8,13 @@ npm install @sqlbraid/sqlite
 
 Use the adapter subpath for your environment. The granular package paths and their `sqlbraid` facade equivalents are:
 
-| Adapter | `@sqlbraid/sqlite` import | `sqlbraid` facade import | Physical API and notes |
-| :--- | :--- | :--- | :--- |
-| Node SQLite | `@sqlbraid/sqlite/node-sqlite` | `sqlbraid/node-sqlite` | Node `DatabaseSync`; synchronous calls; exact INTEGER strings; native `iterate()` |
-| better-sqlite3 | `@sqlbraid/sqlite/better-sqlite3` | `sqlbraid/better-sqlite3` | Synchronous and event-loop blocking; `safeIntegers(true)`; native iteration |
-| libSQL | `@sqlbraid/sqlite/libsql` | `sqlbraid/libsql` | `@libsql/client`; requires `intMode: "string"`; no stream fallback |
-| SQLite WASM | `@sqlbraid/sqlite/wasm` | `sqlbraid/sqlite-wasm` | SQLite WASM OO1 |
-| Cloudflare D1 | `@sqlbraid/sqlite/d1` | `sqlbraid/d1` | Cloudflare Workers |
+| Adapter        | `@sqlbraid/sqlite` import         | `sqlbraid` facade import  | Physical API and notes                                                            |
+| :------------- | :-------------------------------- | :------------------------ | :-------------------------------------------------------------------------------- |
+| Node SQLite    | `@sqlbraid/sqlite/node-sqlite`    | `sqlbraid/node-sqlite`    | Node `DatabaseSync`; synchronous calls; exact INTEGER strings; native `iterate()` |
+| better-sqlite3 | `@sqlbraid/sqlite/better-sqlite3` | `sqlbraid/better-sqlite3` | Synchronous and event-loop blocking; `safeIntegers(true)`; native iteration       |
+| libSQL         | `@sqlbraid/sqlite/libsql`         | `sqlbraid/libsql`         | `@libsql/client`; requires `intMode: "string"`; no stream fallback                |
+| SQLite WASM    | `@sqlbraid/sqlite/wasm`           | `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                                                                   |
+| Cloudflare D1  | `@sqlbraid/sqlite/d1`             | `sqlbraid/d1`             | Cloudflare Workers                                                                |
 
 Install the selected external driver or client separately when required. Node's `node:sqlite` is built in; Cloudflare D1 is provided by the Worker runtime.
 

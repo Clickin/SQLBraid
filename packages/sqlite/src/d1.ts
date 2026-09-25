@@ -22,7 +22,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { defineResultProperty } from "@sqlbraid/core/driver";
+import { preparePositionalResultProjector } from "@sqlbraid/core/driver";
 import { createDatabase } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -162,10 +162,11 @@ function normalizeValue(value: unknown): unknown {
   return value;
 }
 
-function normalizeRow(row: readonly unknown[], names: readonly string[]): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [index, name] of names.entries()) defineResultProperty(result, name, normalizeValue(row[index]));
-  return result;
+function prepareD1RowProjector(names: readonly string[], rowCountHint?: number) {
+  return preparePositionalResultProjector(
+    names.map((name, index) => ({ name, index, decode: normalizeValue })),
+    rowCountHint,
+  );
 }
 
 function namesFromRaw(raw: readonly (readonly unknown[])[]): readonly string[] | undefined {
@@ -304,7 +305,10 @@ export function createD1Executor(database: D1DatabaseLike): QueryExecutor {
       const raw = await statement.raw({ columnNames: true });
       const names = namesFromRaw(raw);
       if (names === undefined) return { rows: [], kind: "command", command: {} };
-      const rows = raw.slice(1).map((entry) => normalizeRow(entry, names));
+      if (raw.length === 1) return { rows: [], rowCount: 0, kind: "rows" };
+      const projectRow = prepareD1RowProjector(names, raw.length - 1);
+      const rows: Record<string, unknown>[] = [];
+      for (let index = 1; index < raw.length; index += 1) rows.push(projectRow(raw[index]!));
       return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
     },
     async bulk(

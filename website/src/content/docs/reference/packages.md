@@ -12,7 +12,7 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg` adapter; `/inspector`                                                                                                   |
 | `@sqlbraid/mysql`           | MySQL dialect/TypePolicy; `/mysql2` adapter; `/inspector`                                                                                                    |
 | `@sqlbraid/sqlite`          | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, and `/d1` adapters; `/inspector`                                                      |
-| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` adapter; `/inspector`                                                                                                     |
+| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` adapter; `/inspector`                                                                                                 |
 | `@sqlbraid/bun-sql`         | Bun.SQL adapter family with required user-selected PostgreSQL/MySQL/MariaDB/SQLite dialect                                                                   |
 | `@sqlbraid/oracle`          | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; `/inspector`                                                                             |
 | `@sqlbraid/mssql`           | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; `/inspector`                                                                          |

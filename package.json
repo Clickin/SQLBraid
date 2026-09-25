@@ -47,6 +47,7 @@
     "test:browser": "node tests/scripts/test-browser.mjs",
     "test:d1": "node tests/scripts/test-d1.mjs",
     "benchmark:bulk-execution": "node tests/scripts/bulk-execution-benchmark.mjs",
+    "benchmark:row-materialization": "pnpm run build:packages && node --expose-gc tests/scripts/row-materialization-benchmark.mjs",
     "benchmark:sync-boundary": "node tests/scripts/sync-boundary-benchmark.mjs",
     "benchmark:value-fidelity": "node --expose-gc tests/scripts/value-fidelity-benchmark.mjs --profile full",
     "benchmark:value-fidelity:smoke": "node --expose-gc tests/scripts/value-fidelity-benchmark.mjs --profile smoke",

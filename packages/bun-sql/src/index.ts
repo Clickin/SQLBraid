@@ -25,7 +25,7 @@ import {
   type TransactionIsolation,
   type TransactionOptions,
 } from "@sqlbraid/core";
-import { assertSavepointName, createCleanupScope } from "@sqlbraid/core/driver";
+import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { representationProfileFor } from "./type-policy.js";
 import { PRODUCT, capabilitiesFor } from "./environment.js";
@@ -390,9 +390,11 @@ function normalizeRowValue(value: unknown, dialect: BunSqlDialect): unknown {
 function normalizeRow(row: unknown, dialect: BunSqlDialect): unknown {
   if (Array.isArray(row)) return Object.freeze(row.map((value) => normalizeRowValue(value, dialect)));
   if (row !== null && typeof row === "object" && !(row instanceof Date) && !(row instanceof Uint8Array)) {
-    const normalized = Object.fromEntries(
-      Object.entries(row as Record<string, unknown>).map(([key, value]) => [key, normalizeRowValue(value, dialect)]),
-    );
+    const normalized: Record<string, unknown> = {};
+    for (const key in row) {
+      if (Object.hasOwn(row, key))
+        defineResultProperty(normalized, key, normalizeRowValue((row as Record<string, unknown>)[key], dialect));
+    }
     return Object.freeze(normalized);
   }
   return normalizeRowValue(row, dialect);

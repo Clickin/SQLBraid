@@ -22,7 +22,13 @@ import {
   type TypePolicy,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
+import {
+  assertSavepointName,
+  createCleanupScope,
+  defineResultProperty,
+  identityResultValue,
+  preparePositionalResultProjector,
+} from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase } from "@sqlbraid/runtime";
 import { utf8ByteLength } from "@sqlbraid/template";
 import { isOracleBinaryNumericType, isOracleExactNumericType, typePolicy as defaultTypePolicy } from "./type-policy.js";
@@ -209,32 +215,48 @@ function metadataType(field: OracleMetaDataLike | undefined, driver: OracleDrive
   return undefined;
 }
 
-function decodeRow(
-  value: unknown,
+function prepareOracleRowProjector(
   fields: readonly OracleMetaDataLike[],
   policy: TypePolicy,
   driver: OracleDriverLike,
-): Record<string, unknown> {
-  if (Array.isArray(value)) {
+  rowCountHint?: number,
+): (value: unknown) => Record<string, unknown> {
+  const columns = fields.flatMap((field, index) => {
+    if (field.name === undefined) return [];
+    const type = metadataType(field, driver);
+    const normalizedType = type;
+    const exactNumeric = normalizedType !== undefined && isOracleExactNumericType(normalizedType);
+    const binaryNumeric = normalizedType !== undefined && isOracleBinaryNumericType(normalizedType);
+    const decode =
+      type === undefined
+        ? identityResultValue
+        : (entry: unknown): unknown => {
+            if (entry !== null && entry !== undefined) {
+              if (exactNumeric && typeof entry !== "string") {
+                throw new ResultExactnessError(`Oracle ${normalizedType} results must remain exact strings.`);
+              }
+              if (binaryNumeric && typeof entry !== "number") {
+                throw new ResultExactnessError(
+                  `Oracle ${normalizedType} results must remain JavaScript numbers, including native non-finite values.`,
+                );
+              }
+            }
+            return policy.decode(type, entry);
+          };
+    return [{ name: field.name, index, decode }];
+  });
+  const projectArray = preparePositionalResultProjector(columns, rowCountHint);
+  let byName: Map<string, (entry: unknown) => unknown> | undefined;
+  return (value): Record<string, unknown> => {
+    if (Array.isArray(value)) return projectArray(value);
+    if (!value || typeof value !== "object") return { value };
+    byName ??= new Map(columns.map((column) => [column.name, column.decode] as const));
     const row: Record<string, unknown> = {};
-    for (const [index, entry] of value.entries()) {
-      const key = fields[index]?.name;
-      if (key === undefined) continue;
-      const type = metadataType(fields[index], driver);
-      assertOracleNumericValue(type, entry);
-      defineResultProperty(row, key, type === undefined ? entry : policy.decode(type, entry));
+    for (const [key, entry] of Object.entries(value)) {
+      defineResultProperty(row, key, (byName.get(key) ?? identityResultValue)(entry));
     }
     return row;
-  }
-  if (!value || typeof value !== "object") return { value };
-  const row: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    const field = fields.find((candidate) => candidate.name === key);
-    const type = metadataType(field, driver);
-    assertOracleNumericValue(type, entry);
-    defineResultProperty(row, key, type === undefined ? entry : policy.decode(type, entry));
-  }
-  return row;
+  };
 }
 
 function assertOracleNumericValue(databaseType: string | undefined, value: unknown): void {
@@ -966,12 +988,14 @@ async function readResultSet(
 ): Promise<readonly Record<string, unknown>[]> {
   const fields = Array.isArray(resultSet.metaData) ? resultSet.metaData : [];
   assertUniqueFields(fields);
+  let projectRow: ((value: unknown) => Record<string, unknown>) | undefined;
   const rows: Record<string, unknown>[] = [];
   if (resultSet.getRows) {
     while (true) {
       const batch = await resultSet.getRows(100);
       if (batch.length === 0) break;
-      for (const row of batch) rows.push(decodeRow(row, fields, policy, driver));
+      projectRow ??= prepareOracleRowProjector(fields, policy, driver);
+      for (const row of batch) rows.push(projectRow(row));
       if (batch.length < 100) break;
     }
     return rows;
@@ -980,12 +1004,16 @@ async function readResultSet(
     while (true) {
       const row = await resultSet.getRow();
       if (row === null || row === undefined) break;
-      rows.push(decodeRow(row, fields, policy, driver));
+      projectRow ??= prepareOracleRowProjector(fields, policy, driver);
+      rows.push(projectRow(row));
     }
     return rows;
   }
   if (resultSet[Symbol.asyncIterator]) {
-    for await (const row of resultSet as AsyncIterable<unknown>) rows.push(decodeRow(row, fields, policy, driver));
+    for await (const row of resultSet as AsyncIterable<unknown>) {
+      projectRow ??= prepareOracleRowProjector(fields, policy, driver);
+      rows.push(projectRow(row));
+    }
     return rows;
   }
   throw new UnsupportedFeatureError(
@@ -1075,6 +1103,39 @@ async function normalizeDmlReturning(
     }
   }
   const rowCount = values[0]?.length ?? 0;
+  const returningPlans =
+    rowCount > 0 &&
+    outputs.every(({ parameter }) => parameter.outputName !== undefined && parameter.outputName.length > 0)
+      ? outputs.map(({ parameter }) => {
+          const name = parameter.outputName!;
+          const type = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
+          const exactNumeric = type !== undefined && isOracleExactNumericType(type);
+          const binaryNumeric = type !== undefined && isOracleBinaryNumericType(type);
+          const decode = (value: unknown): unknown => {
+            if (value !== null && value !== undefined) {
+              if (exactNumeric && typeof value !== "string") {
+                throw new ResultExactnessError(`Oracle ${type} results must remain exact strings.`);
+              }
+              if (binaryNumeric && typeof value !== "number") {
+                throw new ResultExactnessError(
+                  `Oracle ${type} results must remain JavaScript numbers, including native non-finite values.`,
+                );
+              }
+            }
+            return type === undefined ? value : policy.decode(type, value);
+          };
+          return { name, type, isLob: type !== undefined && materializedLobType(type), decode };
+        })
+      : undefined;
+  const useReturningTemplate = rowCount > 1 && !(outputs.length >= 32 && rowCount <= 10);
+  const returningTemplate: Record<string, unknown> | undefined =
+    returningPlans === undefined || !useReturningTemplate
+      ? undefined
+      : (() => {
+          const template: Record<string, unknown> = {};
+          for (const plan of returningPlans) defineResultProperty(template, plan.name, undefined);
+          return template;
+        })();
   if (!hasFailure) {
     for (const [index, value] of values.entries()) {
       if (value!.length !== rowCount) {
@@ -1106,21 +1167,24 @@ async function normalizeDmlReturning(
       signal?.throwIfAborted();
       const materialized: Record<string, unknown>[] = [];
       for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-        const row: Record<string, unknown> = {};
+        const row: Record<string, unknown> = returningTemplate === undefined ? {} : { ...returningTemplate };
         for (let outputIndex = 0; outputIndex < outputs.length; outputIndex += 1) {
           const { parameter, index } = outputs[outputIndex]!;
-          const name = parameter.outputName;
+          const plan = returningPlans?.[outputIndex];
+          const name = plan?.name ?? parameter.outputName;
           if (!name)
             throw new UnsupportedFeatureError(
               "routine.out",
               "BRAID_CALL_OUT_UNSUPPORTED",
               `Oracle output parameter ${index + 1} is missing outputName.`,
             );
-          const hintType = parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType);
+          const outputName = name;
+          const hintType =
+            plan?.type ?? (parameter.hint === undefined ? undefined : normalType(parameter.hint.databaseType));
           let value = values[outputIndex]![rowIndex];
           if (
             hintType !== undefined &&
-            materializedLobType(hintType) &&
+            (plan?.isLob ?? materializedLobType(hintType)) &&
             value !== null &&
             value !== undefined &&
             !isMaterializedLobValue(hintType, value)
@@ -1130,12 +1194,18 @@ async function normalizeDmlReturning(
               throw new UnsupportedFeatureError(
                 "routine.out",
                 "BRAID_CALL_LOB_UNSUPPORTED",
-                `Oracle output ${name} did not return a Lob.`,
+                `Oracle output ${outputName} did not return a Lob.`,
               );
-            value = await materializeLob(lob, hintType, name);
+            value = await materializeLob(lob, hintType, outputName);
           }
-          assertOracleNumericValue(hintType, value);
-          setOutputValue(row, name, hintType === undefined ? value : policy.decode(hintType, value));
+          if (plan) {
+            const decoded = plan.decode(value);
+            if (returningTemplate === undefined) defineResultProperty(row, plan.name, decoded);
+            else row[plan.name] = decoded;
+          } else {
+            assertOracleNumericValue(hintType, value);
+            setOutputValue(row, name, hintType === undefined ? value : policy.decode(hintType, value));
+          }
         }
         materialized.push(row);
       }
@@ -1304,7 +1374,10 @@ function makeOracledbExecutor(
           const fields = Array.isArray(result.metaData) ? result.metaData : [];
           assertUniqueFields(fields);
           if (Array.isArray(result.rows)) {
-            const rows = result.rows.map((row) => decodeRow(row, fields, policy, driver));
+            const rows =
+              result.rows.length === 0
+                ? []
+                : result.rows.map(prepareOracleRowProjector(fields, policy, driver, result.rows.length));
             return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
           }
           const affectedRows = result.rowsAffected === undefined ? undefined : safeDatabaseCount(result.rowsAffected);
@@ -1495,8 +1568,12 @@ function makeOracledbExecutor(
             } else if (Array.isArray(result.rows)) {
               const fields = Array.isArray(result.metaData) ? result.metaData : [];
               assertUniqueFields(fields);
+              const rows =
+                result.rows.length === 0
+                  ? []
+                  : result.rows.map(prepareOracleRowProjector(fields, policy, driver, result.rows.length));
               resultSets.push({
-                rows: result.rows.map((row) => decodeRow(row, fields, policy, driver)),
+                rows,
                 source: { kind: "emitted", index: 0 },
               });
             }
@@ -1583,6 +1660,7 @@ function makeOracledbExecutor(
             ? result.metaData
             : [];
         assertUniqueFields(fields);
+        let projectRow: ((value: unknown) => Record<string, unknown>) | undefined;
         const iterate = resultSet[Symbol.asyncIterator];
         if (resultSet.getRow) {
           while (true) {
@@ -1596,7 +1674,8 @@ function makeOracledbExecutor(
             }
             if (row === null || row === undefined) break;
             signal?.throwIfAborted();
-            yield decodeRow(row, fields, policy, driver) as Row;
+            projectRow ??= prepareOracleRowProjector(fields, policy, driver);
+            yield projectRow(row) as Row;
           }
         } else if (resultSet.getRows) {
           while (true) {
@@ -1609,9 +1688,10 @@ function makeOracledbExecutor(
               nativeOperationActive = false;
             }
             if (batch.length === 0) break;
+            projectRow ??= prepareOracleRowProjector(fields, policy, driver);
             for (const row of batch) {
               signal?.throwIfAborted();
-              yield decodeRow(row, fields, policy, driver) as Row;
+              yield projectRow(row) as Row;
             }
             if (batch.length < fetchSize) break;
           }
@@ -1631,7 +1711,8 @@ function makeOracledbExecutor(
             }
             if (next.done) break;
             signal?.throwIfAborted();
-            yield decodeRow(next.value, fields, policy, driver) as Row;
+            projectRow ??= prepareOracleRowProjector(fields, policy, driver);
+            yield projectRow(next.value) as Row;
           }
         } else {
           throw new UnsupportedFeatureError(

@@ -17,15 +17,19 @@ import type {
   PgPoolClientLike,
   PgResultLike,
 } from "@sqlbraid/postgres/pg";
-import { createPgExecutor, createPgPoolDatabase, pgStatementBinding } from "@sqlbraid/postgres/pg";
+import { createPgDatabase, createPgExecutor, createPgPoolDatabase, pgStatementBinding } from "@sqlbraid/postgres/pg";
 import { postgresParameter, sql as pgSql } from "@sqlbraid/postgres";
 import { sql as mysqlSql, typePolicy as mysqlTypePolicy } from "@sqlbraid/mysql";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { runStreamingConformance } from "./streaming-conformance.js";
 
 class Cursor implements PgCursorLike {
-  static rows: readonly unknown[] = [{ id: 1 }, { id: 2 }];
+  static rows: readonly unknown[] = [[1], [2]];
   static closes = 0;
+  static config: unknown;
+  constructor(_text: string, _values: readonly unknown[], config?: unknown) {
+    Cursor.config = config;
+  }
   read(_size: number, callback: (error: unknown, rows?: readonly unknown[], result?: PgResultLike) => void): void {
     callback(null, Cursor.rows, { rows: Cursor.rows, fields: [{ name: "id", dataTypeID: 20 }] });
     Cursor.rows = [];
@@ -127,7 +131,7 @@ test("PostgreSQL abort interrupts a pending read and waits for physical terminat
 });
 
 test("PostgreSQL cursor metadata preserves exact int8 values and closes on exhaustion", async () => {
-  Cursor.rows = [{ id: "9007199254740993" }, { id: "9007199254740994" }];
+  Cursor.rows = [["9007199254740993"], ["9007199254740994"]];
   Cursor.closes = 0;
   const client = {
     query(value: unknown) {
@@ -141,7 +145,52 @@ test("PostgreSQL cursor metadata preserves exact int8 values and closes on exhau
   const rows: unknown[] = [];
   for await (const row of executor.stream(pgSql.rows`SELECT 1 AS id`.render())) rows.push(row);
   assert.deepEqual(rows, [{ id: "9007199254740993" }, { id: "9007199254740994" }]);
+  assert.equal((Cursor.config as { rowMode?: string }).rowMode, "array");
+  assert.ok("types" in (Cursor.config as object));
   assert.equal(Cursor.closes, 1);
+});
+
+test("PostgreSQL materialized and prepared queries project positional rows using field metadata", async () => {
+  const fields = [
+    { name: "__proto__", dataTypeID: 20 },
+    { name: "constructor", dataTypeID: 1700 },
+    { name: "名", dataTypeID: 25 },
+    { name: "payload", dataTypeID: 17 },
+  ];
+  const binary = new Uint8Array([1, 2, 3]);
+  let rawRows: readonly unknown[] = [["9007199254740993", "12345678901234567890.125", null, binary]];
+  const configs: Array<{ readonly text: string; readonly rowMode?: string; readonly name?: string }> = [];
+  const client = {
+    async query(config: unknown) {
+      if (typeof config === "object" && config !== null && "text" in config) {
+        configs.push(config as (typeof configs)[number]);
+      }
+      return { rows: rawRows, fields };
+    },
+    escapeIdentifier: (value: string) => `"${value}"`,
+    escapeLiteral: (value: string) => `'${value}'`,
+  } as unknown as PgClientLike;
+  const db = createPgDatabase(client);
+  const query = pgSql.rows`SELECT result`.render();
+  const prepared = db.prepare("positional", () => pgSql.rows`SELECT result`, { input: "none" });
+  const materialized = await createPgExecutor(client).query(query);
+  const preparedRows = await prepared.all();
+  for (const rows of [materialized.rows, preparedRows]) {
+    assert.equal(rows.length, 1);
+    const row = rows[0] as Record<string, unknown>;
+    assert.deepEqual(Object.keys(row), ["__proto__", "constructor", "名", "payload"]);
+    assert.equal(Object.getOwnPropertyDescriptor(row, "__proto__")?.value, "9007199254740993");
+    assert.equal(row.constructor, "12345678901234567890.125");
+    assert.equal(row["名"], null);
+    assert.deepEqual(row.payload, binary);
+    assert.equal(Object.getPrototypeOf(row), Object.prototype);
+  }
+  assert.equal(configs.length, 2);
+  assert.ok(configs.every((config) => config.rowMode === "array"));
+  assert.ok(configs.every((config) => config.name === undefined || config.name === "positional"));
+
+  rawRows = [];
+  assert.deepEqual((await createPgExecutor(client).query(query)).rows, []);
 });
 
 test("PostgreSQL refcursor binding is rejected before root I/O", () => {
@@ -156,7 +205,7 @@ test("PostgreSQL logical output names cannot select a different physical carrier
   const client: PgClientLike = {
     async query() {
       return {
-        rows: [{ first: "9007199254740993", second: "text output" }],
+        rows: [["9007199254740993", "text output"]],
         fields: [
           { name: "first", dataTypeID: 20 },
           { name: "second", dataTypeID: 25 },

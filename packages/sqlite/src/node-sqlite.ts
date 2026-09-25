@@ -23,7 +23,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { assertSavepointName } from "@sqlbraid/core/driver";
+import { assertSavepointName, defineResultProperty, preparePositionalResultProjector } from "@sqlbraid/core/driver";
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -56,17 +56,29 @@ export interface SqliteDatabaseLike {
 /** Options forwarded to the async SQLBraid facade; physical node:sqlite calls remain synchronous. */
 export interface SqliteDatabaseOptions extends DatabaseOptions {}
 
-function plainRow(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { value };
-  // setReadBigInts() distinguishes INTEGER storage from integral REAL storage.
-  // Only native bigint values are normalized; numbers retain their SQLite
-  // storage-class semantics for dynamic columns.
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      typeof entry === "bigint" ? normalizeExactInteger(entry) : entry,
-    ]),
+function prepareNodeSqliteRowProjector(columns: readonly SqliteColumnLike[], rowCountHint?: number) {
+  const projectArray = preparePositionalResultProjector(
+    columns.map((column, index) => ({
+      name: column.name ?? column.column ?? String(index),
+      index,
+      // INTEGER storage arrives as bigint; dynamic REAL and other storage-class values retain their native representation.
+      decode: normalizeNodeSqliteValue,
+    })),
+    rowCountHint,
   );
+  return (value: unknown): Record<string, unknown> => {
+    if (Array.isArray(value)) return projectArray(value);
+    if (!value || typeof value !== "object") return { value };
+    const row: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      defineResultProperty(row, key, normalizeNodeSqliteValue(entry));
+    }
+    return row;
+  };
+}
+
+function normalizeNodeSqliteValue(value: unknown): unknown {
+  return typeof value === "bigint" ? normalizeExactInteger(value) : value;
 }
 
 function resultColumns(statement: SqliteStatementLike): readonly SqliteColumnLike[] {
@@ -265,6 +277,16 @@ function configureExactIntegerReads(statement: SqliteStatementLike): void {
     );
   }
   statement.setReadBigInts(true);
+  const setReturnArrays = (statement as SqliteStatementLike & { readonly setReturnArrays?: (enabled: boolean) => void })
+    .setReturnArrays;
+  if (typeof setReturnArrays !== "function") {
+    throw new UnsupportedFeatureError(
+      "result.columns",
+      "BRAID_ROW_ARRAYS_UNSUPPORTED",
+      "SQLite row reads require StatementSync.setReturnArrays(true).",
+    );
+  }
+  setReturnArrays.call(statement, true);
 }
 
 function nodeSqliteEnvironment(transactionSupported: boolean, streamSupported: boolean): DriverEnvironment {
@@ -350,7 +372,10 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
       const columns = resultColumns(statement);
       if (columns.length > 0) {
         configureExactIntegerReads(statement);
-        const rows = statement.all(...prepared.values).map(plainRow);
+        const nativeRows = statement.all(...prepared.values);
+        if (nativeRows.length === 0) return { rows: [], rowCount: 0, kind: "rows" };
+        const projectRow = prepareNodeSqliteRowProjector(columns, nativeRows.length);
+        const rows = nativeRows.map((row) => projectRow(row));
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
       statement.setReadBigInts?.(true);
@@ -429,18 +454,21 @@ export function createNodeSqliteExecutor(database: SqliteDatabaseLike): QueryExe
           "SQLite statement does not expose iteration.",
         );
       }
-      if (resultColumns(statement).length === 0) {
+      const columns = resultColumns(statement);
+      if (columns.length === 0) {
         throw new DatabaseResultKindError("rows", "command");
       }
       configureExactIntegerReads(statement);
       const iterator = statement.iterate(...prepared.values);
+      let projectRow: ((value: unknown) => Record<string, unknown>) | undefined;
       let failed = false;
       let readError: unknown;
       try {
         while (true) {
           const next = iterator.next();
           if (next.done) break;
-          yield plainRow(next.value) as Row;
+          projectRow ??= prepareNodeSqliteRowProjector(columns);
+          yield projectRow(next.value) as Row;
         }
       } catch (error) {
         failed = true;

@@ -28,7 +28,13 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
+import {
+  assertSavepointName,
+  createCleanupScope,
+  defineResultProperty,
+  identityResultValue,
+  preparePositionalResultProjector,
+} from "@sqlbraid/core/driver";
 import { createDatabase, createPooledDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { mysql2Environment, mysql2RepresentationProfile, isRepresentationProfile } from "./mysql2/environment.js";
 import { mysqlTypes } from "./mysql2/types.js";
@@ -231,30 +237,44 @@ async function withMysqlCancellation<T>(
   }
 }
 
-function plainRow(value: unknown, fields: readonly Mysql2FieldLike[], policy: TypePolicy): Record<string, unknown> {
-  if (!value || typeof value !== "object") {
-    throw new Error("BRAID_RESULT_COLUMNS: mysql2 must return object or array rows.");
-  }
-  const row: Record<string, unknown> = {};
-  if (Array.isArray(value)) {
-    for (let index = 0; index < fields.length; index += 1) {
-      const field = fields[index];
-      const key = field?.name;
-      if (key === undefined) continue;
-      const entry = value[index];
-      const databaseType = mysqlDatabaseType(field);
-      assertMysqlNumericValue(databaseType, entry);
-      defineResultProperty(row, key, databaseType ? policy.decode(databaseType, entry) : entry);
+function prepareMysqlRowProjector(
+  fields: readonly Mysql2FieldLike[],
+  policy: TypePolicy,
+  rowCountHint?: number,
+): (value: unknown) => Record<string, unknown> {
+  const columns = fields.flatMap((field, index) => {
+    if (field.name === undefined) return [];
+    const databaseType = mysqlDatabaseType(field);
+    const validate = prepareMysqlNumericValidator(databaseType);
+    const decode =
+      databaseType === undefined
+        ? identityResultValue
+        : (entry: unknown): unknown => {
+            validate(entry);
+            return policy.decode(databaseType, entry);
+          };
+    return [
+      {
+        name: field.name,
+        index,
+        decode,
+      },
+    ];
+  });
+  const projectArray = preparePositionalResultProjector(columns, rowCountHint);
+  let byName: Map<string, ((entry: unknown) => unknown) | undefined> | undefined;
+  return (value): Record<string, unknown> => {
+    if (!value || typeof value !== "object") {
+      throw new Error("BRAID_RESULT_COLUMNS: mysql2 must return object or array rows.");
+    }
+    if (Array.isArray(value)) return projectArray(value);
+    byName ??= new Map(columns.map((column) => [column.name, column.decode] as const));
+    const row: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      defineResultProperty(row, key, (byName.get(key) ?? identityResultValue)(entry));
     }
     return row;
-  }
-  for (const [key, entry] of Object.entries(value)) {
-    const field = fields.find((candidate) => candidate.name === key);
-    const databaseType = mysqlDatabaseType(field);
-    assertMysqlNumericValue(databaseType, entry);
-    defineResultProperty(row, key, databaseType ? policy.decode(databaseType, entry) : entry);
-  }
-  return row;
+  };
 }
 
 function mysqlDatabaseType(field: Mysql2FieldLike | undefined): string | undefined {
@@ -271,14 +291,14 @@ function mysqlDatabaseType(field: Mysql2FieldLike | undefined): string | undefin
   return type;
 }
 
-function assertMysqlNumericValue(databaseType: string | undefined, value: unknown): void {
-  if (value === null || value === undefined || databaseType === undefined) return;
+function prepareMysqlNumericValidator(databaseType: string | undefined): (value: unknown) => void {
+  if (databaseType === undefined) return () => undefined;
   const type = databaseType.toUpperCase();
   if (type === "DECIMAL" || type === "NEWDECIMAL") {
-    if (typeof value !== "string") {
+    return (value) => {
+      if (value === null || value === undefined || typeof value === "string") return;
       throw new ResultExactnessError("mysql2 DECIMAL results must remain strings; configure an exact numeric profile.");
-    }
-    return;
+    };
   }
   if (
     type === "BIGINT" ||
@@ -288,19 +308,25 @@ function assertMysqlNumericValue(databaseType: string | undefined, value: unknow
     type === "SMALLINT" ||
     type === "MEDIUMINT"
   ) {
-    if (typeof value === "number" && !Number.isSafeInteger(value)) {
-      throw new ResultExactnessError(`mysql2 ${type} result was an unsafe JavaScript number.`);
-    }
-    if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
-      throw new ResultExactnessError(`mysql2 ${type} result has an unsupported representation.`);
-    }
-    return;
+    return (value) => {
+      if (value === null || value === undefined) return;
+      if (typeof value === "number" && !Number.isSafeInteger(value)) {
+        throw new ResultExactnessError(`mysql2 ${type} result was an unsafe JavaScript number.`);
+      }
+      if (typeof value !== "number" && typeof value !== "string" && typeof value !== "bigint") {
+        throw new ResultExactnessError(`mysql2 ${type} result has an unsupported representation.`);
+      }
+    };
   }
   if (type === "FLOAT" || type === "DOUBLE") {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new ResultExactnessError(`mysql2 ${type} result is not a finite JavaScript number.`);
-    }
+    return (value) => {
+      if (value === null || value === undefined) return;
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new ResultExactnessError(`mysql2 ${type} result is not a finite JavaScript number.`);
+      }
+    };
   }
+  return () => undefined;
 }
 
 function assertUniqueFields(fields: readonly Mysql2FieldLike[]): void {
@@ -577,7 +603,8 @@ export function createMysql2Executor(
       const fields = resultSetFields(rawFields, 0);
       assertUniqueFields(fields);
       if (Array.isArray(payload)) {
-        const rows = payload.map((row) => plainRow(row, fields ?? [], policy));
+        const rows =
+          payload.length === 0 ? [] : payload.map(prepareMysqlRowProjector(fields ?? [], policy, payload.length));
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
       if (!payload || typeof payload !== "object") return { rows: [], rowCount: 0, kind: "command", command: {} };
@@ -688,6 +715,7 @@ export function createMysql2Executor(
       let fieldsChanged = false;
       let fieldsSeen = 0;
       let pendingError: Error | undefined;
+      let projectRow: ((value: unknown) => Record<string, unknown>) | undefined;
       try {
         command = streamPrepared(raw, prepared.text, prepared.values as Mysql2Parameter[]);
         nativeOwned = true;
@@ -756,7 +784,8 @@ export function createMysql2Executor(
             break;
           }
           signal?.throwIfAborted();
-          yield plainRow(next.value, fields, policy) as Row;
+          projectRow ??= prepareMysqlRowProjector(fields, policy);
+          yield projectRow!(next.value) as Row;
         }
       } catch (error) {
         streamError = error;
@@ -818,8 +847,9 @@ export function createMysql2Executor(
       const resultSets = sets.map((rows, index) => {
         const fields = resultSetFields(rawFields, index);
         assertUniqueFields(fields);
+        const projectRow = rows.length === 0 ? undefined : prepareMysqlRowProjector(fields, policy, rows.length);
         return {
-          rows: rows.map((row) => plainRow(row, fields, policy)),
+          rows: projectRow === undefined ? [] : rows.map(projectRow),
           source: { kind: "emitted" as const, index },
         };
       });

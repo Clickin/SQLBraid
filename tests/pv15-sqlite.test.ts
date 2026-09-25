@@ -77,6 +77,60 @@ test("SQLite satisfies shared streaming lifecycle and releases only after iterat
   );
 });
 
+test("Node SQLite positional rows preserve hostile labels, exact integers, binary values, and empty metadata sets", async () => {
+  const native = new DatabaseSync(":memory:");
+  const db = createNodeSqliteDatabase(native);
+  const query = sql.rows`SELECT
+    'proto' AS "__proto__",
+    'ctor' AS "constructor",
+    'prototype' AS "prototype",
+    'own' AS "hasOwnProperty",
+    'zero' AS "0",
+    'leading' AS "01",
+    '한국어' AS "한글",
+    'emoji' AS "😀",
+    NULL AS "null_value",
+    9007199254740993 AS "exact",
+    X'010203' AS "binary"
+  `;
+  try {
+    const rows = await db.all(query);
+    const row = rows[0] as Record<string, unknown>;
+    assert.deepEqual(Object.keys(row), [
+      "0",
+      "__proto__",
+      "constructor",
+      "prototype",
+      "hasOwnProperty",
+      "01",
+      "한글",
+      "😀",
+      "null_value",
+      "exact",
+      "binary",
+    ]);
+    assert.equal(Object.getPrototypeOf(row), Object.prototype);
+    assert.equal(Object.getOwnPropertyDescriptor(row, "__proto__")?.value, "proto");
+    assert.equal(row.constructor, "ctor");
+    assert.equal(row.prototype, "prototype");
+    assert.equal(row["hasOwnProperty"], "own");
+    assert.equal(row["0"], "zero");
+    assert.equal(row["01"], "leading");
+    assert.equal(row["한글"], "한국어");
+    assert.equal(row["😀"], "emoji");
+    assert.equal(row.null_value, null);
+    assert.equal(row.exact, "9007199254740993");
+    assert.deepEqual(row.binary, new Uint8Array([1, 2, 3]));
+
+    const streamed: unknown[] = [];
+    for await (const streamedRow of db.stream(query)) streamed.push(streamedRow);
+    assert.deepEqual(streamed, rows);
+    assert.deepEqual(await db.all(sql.rows`SELECT 1 AS value WHERE 0`), []);
+  } finally {
+    native.close();
+  }
+});
+
 test("SQLite preserves read and cleanup errors and discards an uncertain lease", async () => {
   const readFailure = new Error("native iterator read failed");
   const closeFailure = new Error("native iterator return failed");
@@ -92,6 +146,7 @@ test("SQLite preserves read and cleanup errors and discards an uncertain lease",
           throw new Error("must not execute a command");
         },
         setReadBigInts() {},
+        setReturnArrays() {},
         iterate() {
           return {
             [Symbol.iterator]() {
@@ -284,6 +339,7 @@ test("SQLite streams 100k rows without materializing an application array", asyn
             return statement.iterate();
           },
           setReadBigInts: (enabled) => statement.setReadBigInts(enabled),
+          setReturnArrays: (enabled: boolean) => statement.setReturnArrays(enabled),
         };
       },
     });

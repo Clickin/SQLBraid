@@ -134,6 +134,97 @@ export function defineResultProperty(row: Record<string, unknown>, key: string, 
   });
 }
 
+/** One column's prepared read operation for a result-row projector. */
+export interface ResultProjectorColumn<Row> {
+  readonly name: string;
+  readonly read: (row: Row) => unknown;
+}
+
+/** One prepared output column backed by a positional driver row. */
+export interface PositionalResultProjectorColumn {
+  readonly name: string;
+  readonly index: number;
+  readonly decode: (value: unknown) => unknown;
+}
+
+/** Identity decoder shared by columns that need no representation conversion. @internal */
+export function identityResultValue(value: unknown): unknown {
+  return value;
+}
+
+/**
+ * Prepare a result-set projector with a stable plain-object shape.
+ *
+ * The shape template is copied with object spread so aliases such as `__proto__`
+ * remain own data properties. Each row then overwrites those existing slots,
+ * avoiding per-row property definition and preserving ordinary object semantics.
+ * One-row results at any width, plus results with at least thirty-two columns
+ * and at most ten rows, use fixed-order safe insertion when template setup
+ * costs more than it saves.
+ * @internal
+ */
+export function prepareResultProjector<Row>(
+  columns: readonly ResultProjectorColumn<Row>[],
+  rowCountHint?: number,
+): (row: Row) => Record<string, unknown> {
+  const useTemplate =
+    rowCountHint === undefined || !(rowCountHint <= 1 || (columns.length >= 32 && rowCountHint <= 10));
+  let template: Record<string, unknown> | undefined;
+  if (useTemplate) {
+    template = {};
+    for (const column of columns) {
+      if (!Object.hasOwn(template, column.name)) defineResultProperty(template, column.name, undefined);
+    }
+  }
+  if (template === undefined) {
+    return (rawRow): Record<string, unknown> => {
+      const row: Record<string, unknown> = {};
+      for (const column of columns) {
+        const value = column.read(rawRow);
+        if (column.name === "__proto__") defineResultProperty(row, column.name, value);
+        else row[column.name] = value;
+      }
+      return row;
+    };
+  }
+  return (rawRow): Record<string, unknown> => {
+    const row: Record<string, unknown> = { ...template };
+    for (const column of columns) row[column.name] = column.read(rawRow);
+    return row;
+  };
+}
+
+/** Prepare a result-set projector for array rows without a per-column row-reader closure. @internal */
+export function preparePositionalResultProjector<
+  Row extends { readonly [index: number]: unknown } = readonly unknown[],
+>(columns: readonly PositionalResultProjectorColumn[], rowCountHint?: number): (row: Row) => Record<string, unknown> {
+  const useTemplate =
+    rowCountHint === undefined || !(rowCountHint <= 1 || (columns.length >= 32 && rowCountHint <= 10));
+  let template: Record<string, unknown> | undefined;
+  if (useTemplate) {
+    template = {};
+    for (const column of columns) {
+      if (!Object.hasOwn(template, column.name)) defineResultProperty(template, column.name, undefined);
+    }
+  }
+  if (template === undefined) {
+    return (rawRow: Row): Record<string, unknown> => {
+      const row: Record<string, unknown> = {};
+      for (const column of columns) {
+        const value = column.decode(rawRow[column.index]);
+        if (column.name === "__proto__") defineResultProperty(row, column.name, value);
+        else row[column.name] = value;
+      }
+      return row;
+    };
+  }
+  return (rawRow: Row): Record<string, unknown> => {
+    const row: Record<string, unknown> = { ...template };
+    for (const column of columns) row[column.name] = column.decode(rawRow[column.index]);
+    return row;
+  };
+}
+
 /** Validate a generated savepoint name before embedding it in transaction-control SQL. */
 export function assertSavepointName(name: string): string {
   if (typeof name !== "string" || !SAVEPOINT_NAME.test(name)) {

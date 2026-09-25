@@ -24,7 +24,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { assertSavepointName, defineResultProperty } from "@sqlbraid/core/driver";
+import { assertSavepointName, defineResultProperty, preparePositionalResultProjector } from "@sqlbraid/core/driver";
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -75,19 +75,24 @@ function normalizeValue(value: unknown): unknown {
   return value;
 }
 
-function plainRow(value: unknown, columns?: readonly BetterSqlite3ColumnLike[]): Record<string, unknown> {
-  if (Array.isArray(value) && columns !== undefined) {
-    const row: Record<string, unknown> = {};
-    for (let index = 0; index < columns.length; index += 1) {
-      const column = columns[index]!;
-      defineResultProperty(row, column.name ?? column.column ?? String(index), normalizeValue(value[index]));
+function prepareBetterSqlite3RowProjector(columns: readonly BetterSqlite3ColumnLike[], rowCountHint?: number) {
+  const projectArray = preparePositionalResultProjector(
+    columns.map((column, index) => ({
+      name: column.name ?? column.column ?? String(index),
+      index,
+      decode: normalizeValue,
+    })),
+    rowCountHint,
+  );
+  return (value: unknown): Record<string, unknown> => {
+    if (Array.isArray(value)) return projectArray(value);
+    if (!value || typeof value !== "object") {
+      throw new Error("BRAID_RESULT_COLUMNS: better-sqlite3 must return object result rows.");
     }
+    const row: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) defineResultProperty(row, key, normalizeValue(entry));
     return row;
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("BRAID_RESULT_COLUMNS: better-sqlite3 must return object result rows.");
-  }
-  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, normalizeValue(entry)]));
+  };
 }
 
 function resultColumns(statement: BetterSqlite3StatementLike): readonly BetterSqlite3ColumnLike[] {
@@ -379,7 +384,10 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
       configureExactIntegerReads(statement);
       if (columns.length > 0) {
         configureRawRows(statement);
-        const rows = statement.all(...prepared.values).map((row) => plainRow(row, columns));
+        const nativeRows = statement.all(...prepared.values);
+        if (nativeRows.length === 0) return { rows: [], rowCount: 0, kind: "rows" };
+        const projectRow = prepareBetterSqlite3RowProjector(columns, nativeRows.length);
+        const rows = nativeRows.map(projectRow);
         return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
       }
       const result = statement.run(...prepared.values);
@@ -455,13 +463,15 @@ export function createBetterSqlite3Executor(database: BetterSqlite3DatabaseLike)
       configureExactIntegerReads(statement);
       configureRawRows(statement);
       const iterator = statement.iterate(...prepared.values);
+      let projectRow: ((value: unknown) => Record<string, unknown>) | undefined;
       let failed = false;
       let readError: unknown;
       try {
         while (true) {
           const next = iterator.next();
           if (next.done) break;
-          yield plainRow(next.value, columns) as Row;
+          projectRow ??= prepareBetterSqlite3RowProjector(columns);
+          yield projectRow(next.value) as Row;
         }
       } catch (error) {
         failed = true;

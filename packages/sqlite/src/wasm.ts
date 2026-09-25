@@ -24,7 +24,7 @@ import {
   safeDatabaseCount,
   UnsupportedFeatureError,
 } from "@sqlbraid/core";
-import { assertSavepointName, createCleanupScope, defineResultProperty } from "@sqlbraid/core/driver";
+import { assertSavepointName, createCleanupScope, prepareResultProjector } from "@sqlbraid/core/driver";
 import { createDatabase, DatabaseResultKindError } from "@sqlbraid/runtime";
 import { typePolicy } from "./type-policy.js";
 
@@ -223,25 +223,24 @@ function assertExactIntegerReads(
   }
 }
 
-function row(
+function prepareWasmRowProjector(
   statement: SqliteWasmStatementLike,
   names: readonly string[],
   capi: SqliteWasmCapi,
-): Record<string, unknown> {
-  const value: Record<string, unknown> = {};
+): (statement: SqliteWasmStatementLike) => Record<string, unknown> {
   const pointer = statement.pointer;
   if (pointer === undefined)
     throw new ResultExactnessError("SQLite WASM exact INTEGER reads require an official OO1 statement pointer.");
-  for (const [index, name] of names.entries()) {
-    defineResultProperty(
-      value,
+  return prepareResultProjector<SqliteWasmStatementLike>(
+    names.map((name, index) => ({
       name,
-      capi.sqlite3_column_type(pointer, index) === capi.SQLITE_INTEGER
-        ? normalizeExactInteger(capi.sqlite3_column_int64(pointer, index))
-        : statement.get(index),
-    );
-  }
-  return value;
+      read: (currentStatement) => {
+        return capi.sqlite3_column_type(pointer, index) === capi.SQLITE_INTEGER
+          ? normalizeExactInteger(capi.sqlite3_column_int64(pointer, index))
+          : currentStatement.get(index);
+      },
+    })),
+  );
 }
 
 function statementFinalizer(statement: SqliteWasmStatementLike): (failed: boolean, failure: unknown) => void {
@@ -401,7 +400,14 @@ export function createSqliteWasmExecutor(
         if (names.length > 0) {
           assertExactIntegerReads(statement, capi);
           const rows: Record<string, unknown>[] = [];
-          while (statement.step()) rows.push(row(statement, names, capi));
+          let hasRow = statement.step();
+          if (hasRow) {
+            const projectRow = prepareWasmRowProjector(statement, names, capi);
+            while (hasRow) {
+              rows.push(projectRow(statement));
+              hasRow = statement.step();
+            }
+          }
           return { rows: rows as readonly Row[], rowCount: rows.length, kind: "rows" };
         }
         statement.step();
@@ -485,9 +491,11 @@ export function createSqliteWasmExecutor(
         const names = columnNames(statement);
         if (names.length === 0) throw new DatabaseResultKindError("rows", "command");
         assertExactIntegerReads(statement, capi);
+        let projectRow: ((statement: SqliteWasmStatementLike) => Record<string, unknown>) | undefined;
         while (true) {
           if (!statement.step()) break;
-          yield row(statement, names, capi) as Row;
+          projectRow ??= prepareWasmRowProjector(statement, names, capi);
+          yield projectRow(statement) as Row;
         }
       } catch (error) {
         failed = true;

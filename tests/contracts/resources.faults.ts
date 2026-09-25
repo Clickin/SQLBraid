@@ -119,6 +119,7 @@ export function resourceFixture(id: ResourceTransport, ownership: "direct" | "po
     state.onCreate?.();
   };
   const rows = [{ value: "one" }, { value: "two" }];
+  let arrayRows = false;
   const sql =
     id === "pg" || id === "bun-sql-postgres"
       ? postgres
@@ -497,13 +498,19 @@ export function resourceFixture(id: ResourceTransport, ownership: "direct" | "po
         let exact = false;
         return {
           columns: () => (text.startsWith("SELECT") ? [{ name: "value" }] : []),
+          setReturnArrays(value: boolean) {
+            arrayRows = value;
+          },
+          raw(value = true) {
+            arrayRows = value;
+          },
           setReadBigInts(value: boolean) {
             exact = value;
           },
           safeIntegers(value = true) {
             exact = value;
           },
-          all: () => rows,
+          all: () => (arrayRows ? rows.map((row) => [row.value]) : rows),
           run() {
             state.io++;
             if (state.executeFailure) throw state.executeFailure;
@@ -520,7 +527,10 @@ export function resourceFixture(id: ResourceTransport, ownership: "direct" | "po
                 state.io++;
                 if (state.readFailure) throw state.readFailure;
                 return index < rows.length
-                  ? { done: false as const, value: rows[index++] }
+                  ? {
+                      done: false as const,
+                      value: arrayRows ? [rows[index++]!.value] : rows[index++],
+                    }
                   : { done: true as const, value: undefined };
               },
               return() {
