@@ -11,7 +11,7 @@
 | `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg` adapter; `/inspector`                                                                                                   |
 | `@sqlbraid/mysql`           | MySQL dialect/TypePolicy; `/mysql2` adapter; `/inspector`                                                                                                    |
 | `@sqlbraid/sqlite`          | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, and `/d1` adapters; `/inspector`                                                      |
-| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` adapter                                                                                                               |
+| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` adapter; `/inspector`                                                                                                 |
 | `@sqlbraid/bun-sql`         | Bun.SQL adapter family with required user-selected PostgreSQL/MySQL/MariaDB/SQLite dialect                                                                   |
 | `@sqlbraid/oracle`          | Oracle dialect/TypePolicy and parameter hints; `/oracledb` adapter; `/inspector`                                                                             |
 | `@sqlbraid/mssql`           | SQL Server dialect/TypePolicy and parameter hints; `/tedious` adapter; `/inspector`                                                                          |
@@ -40,6 +40,8 @@ import { sql } from "sqlbraid/postgres";
 const client = new Bun.SQL(process.env.DATABASE_URL!);
 const db = createBunSqlDatabase(client, { dialect: "postgres" });
 ```
+
+Node's built-in `node:sqlite` adapter needs no separate driver package; install other external drivers used by your application.
 
 The root is database-neutral and does not export an implicit `sql` tag. The
 dialect-only subpaths `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`,
