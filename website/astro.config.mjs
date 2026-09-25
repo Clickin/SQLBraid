@@ -29,13 +29,15 @@ if (base !== expectedBase) {
   throw new Error(`SQLBRAID_DOCS_BASE must be ${expectedBase} for ${channel} builds, received ${configuredBase}.`);
 }
 
+/** @param {string | undefined} value */
 function parseVersions(value) {
   if (!value) return [];
   let parsed;
   try {
     parsed = JSON.parse(value);
   } catch (error) {
-    throw new Error(`SQLBRAID_DOCS_VERSIONS must be JSON: ${error.message}`, { cause: error });
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`SQLBRAID_DOCS_VERSIONS must be JSON: ${message}`, { cause: error });
   }
   if (!Array.isArray(parsed) || parsed.some((entry) => typeof entry !== "string" || !semver.test(entry))) {
     throw new Error("SQLBRAID_DOCS_VERSIONS must be a JSON array of SemVer strings.");
@@ -48,6 +50,7 @@ const stable = process.env.SQLBRAID_DOCS_STABLE?.trim() || "";
 if (stable && !semver.test(stable))
   throw new Error(`SQLBRAID_DOCS_STABLE must be SemVer, received ${JSON.stringify(stable)}.`);
 
+/** @type {import("astro").AstroIntegration} */
 const rewriteLinks = {
   name: "sqlbraid-versioned-links",
   hooks: {
@@ -70,6 +73,7 @@ export default defineConfig({
     rewriteLinks,
     starlight({
       title: "SQLBraid",
+      disable404Route: true,
       description: "Write SQL. Keep TypeScript. Skip the query-builder translation layer.",
       defaultLocale: "root",
       locales: {

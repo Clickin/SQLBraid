@@ -6,12 +6,12 @@ description: 각 관심사를 담당하는 SQLBraid 패키지를 찾습니다.
 | 패키지                      | 책임                                                                                                                                            |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sqlbraid`                  | 표준 runtime facade; 결합된 driver+dialect/query subpath는 matching adapter를 사용하며 `/bun-sql`은 명시적 dialect를 받는 multi-dialect adapter |
-:| `@sqlbraid/core`            | 공개 명세, Standard Schema 대상 타입, 렌더링된 파라미터 메타데이터                                                                              |
+| `@sqlbraid/core`            | 공개 명세, Standard Schema 대상 타입, 렌더링된 파라미터 메타데이터                                                                              |
 | `@sqlbraid/template`        | 태그 템플릿, 지시문, 렌더링, 구조적 조각, `sql.bind`                                                                                            |
 | `@sqlbraid/runtime`         | 실행, 매핑, 결과 종류 검사, 트랜잭션, 스트리밍, prepared shape                                                                                  |
 | `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg` 어댑터; `/inspector`                                                                                       |
 | `@sqlbraid/mysql`           | MySQL dialect/TypePolicy; `/mysql2` 어댑터; `/inspector`                                                                                        |
-| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` 어댑터                                                                                                   |
+| `@sqlbraid/mariadb`         | MariaDB dialect/TypePolicy; `/mariadb` 어댑터; `/inspector`                                                                                     |
 | `@sqlbraid/sqlite`          | SQLite dialect; `/node-sqlite`, `/better-sqlite3`, `/libsql`, `/wasm`, `/d1` 어댑터; `/inspector`                                               |
 | `@sqlbraid/oracle`          | Oracle dialect/TypePolicy 및 파라미터 힌트; `/oracledb` 어댑터; `/inspector`                                                                    |
 | `@sqlbraid/mssql`           | SQL Server dialect/TypePolicy 및 파라미터 힌트; `/tedious` 어댑터; `/inspector`                                                                 |
@@ -41,6 +41,8 @@ import { sql } from "sqlbraid/postgres";
 const client = new Bun.SQL(process.env.DATABASE_URL!);
 const db = createBunSqlDatabase(client, { dialect: "postgres" });
 ```
+
+Node에 내장된 `node:sqlite` adapter에는 별도 driver 패키지가 필요하지 않습니다. 다른 외부 드라이버는 사용하는 경우 애플리케이션에 설치하세요.
 
 루트는 database-neutral이며 암묵적인 `sql` tag를 내보내지 않습니다.
 `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`,
