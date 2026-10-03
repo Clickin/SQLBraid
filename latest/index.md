@@ -2,31 +2,31 @@
 
 > Write SQL. Keep TypeScript. Skip the query-builder translation layer.
 
-SQLBraid is a SQL-first TypeScript data-access toolkit. No query-builder translation layer. Production-ready boundaries.
+SQLBraid is a SQL-first data-access toolkit for TypeScript. It has no query-builder translation layer. Its boundaries are ready for production.
 
-- **SQL stays visible.** Tagged templates preserve ordinary SQL and database-specific features.
-- **Values stay bound.** Ordinary value interpolation becomes a logical value parameter; the selected driver owns placeholder/materialization transport, while structural SQL requires an explicit helper.
-- **Results stay explicit.** Declare `rows`, `command`, or `call`, then let runtime checks catch mismatches.
-- **Runtime semantics stay honest.** Direct connections and pools use different factories; transactions pin one physical connection.
-- **Tooling stays optional.** Metadata, deterministic code generation, LSP, CLI inspection, and VS Code support do not enter the runtime dependency path.
+- **SQL stays visible.** Tagged templates keep ordinary SQL and the features of each database.
+- **Values stay bound.** An ordinary value interpolation becomes a logical value parameter. The selected driver owns the placeholders and the materialization transport. Structural SQL requires an explicit helper.
+- **Results stay explicit.** Declare `rows`, `command` or `call`. Runtime checks then find mismatches.
+- **Runtime semantics stay honest.** Direct connections and pools use different factories. A transaction pins one physical connection.
+- **Tooling stays optional.** Metadata, deterministic code generation, LSP, CLI inspection and VS Code support are not runtime dependencies.
 
 :::tip Start with SQLite
-The [five-minute SQLite quickstart](/SQLBraid/latest/getting-started/sqlite.md) runs without an external server. For browser and Worker resources, see [SQLite WASM and D1](/SQLBraid/latest/getting-started/sqlite-browser.md). Move to [PostgreSQL](/SQLBraid/latest/getting-started/postgres.md), [MySQL](/SQLBraid/latest/getting-started/mysql.md), or [MariaDB](/SQLBraid/latest/getting-started/mariadb.md) when you need a service database.
+The [five-minute SQLite quickstart](/SQLBraid/latest/getting-started/sqlite.md) runs without an external server. For browsers and Workers, read [SQLite WASM and D1](/SQLBraid/latest/getting-started/sqlite-browser.md). When you need a service database, go to [PostgreSQL](/SQLBraid/latest/getting-started/postgres.md), [MySQL](/SQLBraid/latest/getting-started/mysql.md) or [MariaDB](/SQLBraid/latest/getting-started/mariadb.md).
 :::
 
 ## What SQLBraid is not
 
-SQLBraid does not infer arbitrary SELECT result types, hydrate object graphs, or hide SQL behind a model DSL. Your SQL and declared row type remain the contract. Standard Schema mapping is available when a row needs validation or transformation.
+SQLBraid does not infer the result types of arbitrary SELECT statements. It does not hydrate object graphs. It does not hide SQL behind a model DSL. Your SQL and your declared row type define the result. When a row needs validation or transformation, use Standard Schema mapping.
 
-For the database-to-application value boundary, see [data representations and
-numeric fidelity](/SQLBraid/latest/concepts/data-representation.md). Driver profiles
-document the raw integer, decimal, JSON, temporal, and binary values that the
-runtime can actually receive.
+For the boundary between database values and application values, read [data
+representations and numeric fidelity](/SQLBraid/latest/concepts/data-representation.md).
+The driver profiles document the raw integer, decimal, JSON, temporal and binary
+values that the runtime can actually receive.
 
 ## Launch documentation
 
-1.0.0 GA stabilizes the public API. Because driver capabilities vary, check the
-[runtime and driver support matrix](/SQLBraid/latest/reference/support.md) for the exact
-feature set of your database, driver, and runtime tuple.
+1.0.0 GA makes the public API stable. Driver capabilities are different for each
+driver. Thus, read the [runtime and driver support matrix](/SQLBraid/latest/reference/support.md)
+for the exact features of your tuple of database, driver and runtime.
 
-See [release notes and limitations](/SQLBraid/latest/release/notes.md) for details.
+For more information, read the [release notes and limitations](/SQLBraid/latest/release/notes.md).

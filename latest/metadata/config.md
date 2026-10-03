@@ -2,7 +2,7 @@
 
 > Generate deterministic TypeScript models from a metadata snapshot.
 
-Install `@sqlbraid/cli`, `@sqlbraid/codegen`, the selected dialect, and the driver in your tooling project. Create an executable Node config (`.mjs`, `.js`, or `.cjs`):
+Install `@sqlbraid/cli`, `@sqlbraid/codegen`, the selected dialect and the driver in your tooling project. Create an executable Node config (`.mjs`, `.js` or `.cjs`):
 
 ```js
 import { defineConfig } from "@sqlbraid/cli/config";
@@ -25,7 +25,7 @@ export default defineConfig({
 });
 ```
 
-Run from the project containing the config:
+Run this command from the project that contains the config:
 
 ```bash
 sqlbraid codegen
@@ -34,12 +34,17 @@ sqlbraid codegen --target main --check
 sqlbraid codegen --json
 ```
 
-Metadata and output paths are relative to the config file. Repeated `--target` selects targets. Validation completes for every selected target before output is written; unchanged generated files retain their mtime. The JSON result reports `written` only after successful I/O.
+The metadata and output paths are relative to the config file.
 
-The config is trusted executable Node code, not a sandbox. Keep metadata and generated output under version control when the project needs reviewable schema changes.
+- Repeat `--target` to select many targets.
+- Validation completes for each selected target before any output is written.
+- Generated files that do not change keep their mtime.
+- The JSON result reports `written` only after the I/O is successful.
 
-The selected TypePolicy is a representation profile, not a cosmetic codegen
-option. Reuse the same PostgreSQL/mysql2/MariaDB profile descriptor at runtime
-and in this config. Native JSON roots intentionally remain `unknown` unless a
-driver-specific contract narrows them; a manual output override changes emitted
-TypeScript only and does not change runtime decoding.
+The config is trusted Node code that the CLI executes. It is not a sandbox. If the project needs schema changes that people can review, keep the metadata and the generated output under version control.
+
+The selected TypePolicy is a representation profile. It is not a cosmetic
+codegen option. Use the same PostgreSQL, mysql2 or MariaDB profile descriptor at
+runtime and in this config. Native JSON roots stay `unknown` on purpose, unless a
+declaration for the driver narrows them. A manual output override changes only
+the emitted TypeScript. It does not change runtime decoding.

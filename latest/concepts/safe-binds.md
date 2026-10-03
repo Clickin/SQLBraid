@@ -2,7 +2,7 @@
 
 > Keep values as driver parameters and make structural SQL explicit.
 
-Every ordinary interpolation is a bind:
+Each ordinary interpolation is a bind:
 
 ```ts
 const query = sql.rows<UserRow>`
@@ -13,18 +13,22 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-Rendering first produces one immutable logical statement: `segments` contains
-resolved structural SQL and `parameters` contains ordered value records
-(`value`, optional `interpolation`, optional `hint`). The invariant is
-`segments.length === parameters.length + 1`. A value never becomes SQL source
-merely because it was interpolated.
+Rendering first produces one immutable logical statement:
 
-The selected driver materializes that statement only after pure binding
-description and hint validation. It owns the physical transport and may emit
-`$1`, `?`, `:1`, `@p1`, named bindings, or a native value-template request.
-Placeholder syntax is not a dialect or template-renderer responsibility.
+- `segments` contains the resolved structural SQL.
+- `parameters` contains the ordered value records: `value`, an optional
+  `interpolation` and an optional `hint`.
 
-When the database parameter type must be explicit, use `sql.bind(value, hint)`:
+The invariant is `segments.length === parameters.length + 1`. An interpolated
+value never becomes SQL source.
+
+The selected driver materializes that statement only after the pure binding
+description and the hint validation. The driver owns the physical transport. It
+can emit `$1`, `?`, `:1`, `@p1`, named bindings or a native value-template
+request. The dialect and the template renderer are not responsible for the
+placeholder syntax.
+
+If the database parameter type must be explicit, use `sql.bind(value, hint)`:
 
 ```ts
 import { mssqlParameter, sql } from "sqlbraid/mssql";
@@ -32,13 +36,13 @@ import { mssqlParameter, sql } from "sqlbraid/mssql";
 const query = sql.rows<UserRow>`
   SELECT id, display_name
   FROM users
-  WHERE display_name = ${sql.bind(name, mssqlParameter.nvarchar(200))}
+  WHERE display_name = ${sql.bind(displayName, mssqlParameter.nvarchar(200))}
 `;
 ```
 
-`${value}` uses the driver's normal inference. `${sql.bind(value, hint)}` requests an explicit database parameter type. SQLBraid does not infer a universal database type from a TypeScript `number`, `string`, or `Date`; this API is parameter typing, not application input validation or a codec framework. See [parameter type hints](/SQLBraid/latest/concepts/parameter-hints.md).
+`${value}` uses the normal inference of the driver. `${sql.bind(value, hint)}` requests an explicit database parameter type. SQLBraid does not infer a universal database type from a TypeScript `number`, `string` or `Date`. This API sets parameter types. It is not application input validation and not a codec framework. Read [parameter type hints](/SQLBraid/latest/concepts/parameter-hints.md).
 
-## Structural input is opt-in
+## You must ask for structural input explicitly
 
 Identifiers and SQL fragments are different from data. Use the explicit helpers in [structural SQL fragments](/SQLBraid/latest/concepts/structural-fragments.md):
 
@@ -49,7 +53,7 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-`sql.ident` quotes identifier parts. `sql.raw` is an escape hatch for SQL text that your application already trusts; it does not validate or sanitize input. Never feed user-controlled text to `sql.raw`.
+`sql.ident` quotes identifier parts. `sql.raw` is an escape hatch for SQL text that your application already trusts. It does not validate or sanitize input. Do not give text that a user controls to `sql.raw`.
 
 Lists are still binds:
 
@@ -60,12 +64,12 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-`sql.list([])` throws `BRAID_EMPTY_LIST`; choose an explicit empty-set strategy or guard the clause with `@braid if`.
+`sql.list([])` throws `BRAID_EMPTY_LIST`. Select an explicit strategy for an empty set, or guard the clause with `@braid if`.
 
-SQLBraid's render limits also bound SQL byte size, bind count, structural items, and nesting depth. Configure limits through `createSqlTag({ dialect, limits })` when an application needs stricter bounds.
+The render limits of SQLBraid also limit the SQL byte size, the bind count, the structural items and the nesting depth. If an application needs stricter limits, configure them with `createSqlTag({ dialect, limits })`.
 
-PostgreSQL, MySQL, and SQLite explicitly reject ordinary hints with
-`BRAID_BIND_HINT_UNSUPPORTED`; they never silently ignore one. PostgreSQL's
-routine-only `postgresParameter.refcursor()` classifies an OUT/INOUT portal.
-Use the matching first-party Oracle or SQL Server adapter when another database
-type API is required.
+PostgreSQL, MySQL and SQLite explicitly reject ordinary hints with
+`BRAID_BIND_HINT_UNSUPPORTED`. They never silently ignore a hint. The PostgreSQL
+`postgresParameter.refcursor()` is only for routines. It classifies an OUT or
+INOUT portal. If you need a different database type API, use the matching
+first-party Oracle or SQL Server adapter.

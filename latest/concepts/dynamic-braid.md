@@ -1,8 +1,8 @@
 # Dynamic @braid directives
 
-> Keep conditional SQL next to the statement while preserving lazy evaluation.
+> Keep conditional SQL next to the statement and keep lazy evaluation.
 
-The v1 directives are `if`, `choose`, `when`, `otherwise`, `where`, `set`, and `trim`.
+The v1 directives are `if`, `choose`, `when`, `otherwise`, `where`, `set` and `trim`.
 
 ```ts
 const query = sql.rows<UserRow>`
@@ -19,13 +19,19 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-`where` adds `WHERE` only when a child emits SQL and strips a leading `AND` or `OR`. `set` does the same for update assignments and throws `BRAID_EMPTY_SET` when no assignment remains. `trim` accepts explicit `prefix`, `prefixOverrides`, `suffix`, and `suffixOverrides` attributes.
+- `where` adds `WHERE` only when a child emits SQL. It removes a leading `AND` or `OR`.
+- `set` does the same for update assignments. If no assignment remains, it throws `BRAID_EMPTY_SET`.
+- `trim` accepts the explicit attributes `prefix`, `prefixOverrides`, `suffix` and `suffixOverrides`.
 
 ## Branches are lazy
 
-**This guarantee requires SQLBraid compiler lowering.** Plain JavaScript, `tsc`, and runtime tag calls evaluate every `${...}` before invoking the tag. Install `@sqlbraid/cli`, build guarded source with `npx sqlbraid build --file src/query.ts --out-file build/query.js`, then run the generated JavaScript.
+**This guarantee requires SQLBraid compiler lowering.** Plain JavaScript, `tsc` and runtime tag calls evaluate each `${...}` before they call the tag. To get lazy branches, do these steps:
 
-After lowering, a guarded interpolation is captured only when its branch is active. This matters when a branch reads a value that is expensive, stateful, or invalid in the current request:
+1. Install `@sqlbraid/cli`.
+2. Build the guarded source with `npx sqlbraid build --file src/query.ts --out-file build/query.js`.
+3. Run the generated JavaScript.
+
+After lowering, a guarded interpolation is captured only when its branch is active. This is important when a branch reads a value that is expensive, has state or is invalid in the current request:
 
 ```ts
 const query = sql.rows<UserRow>`
@@ -38,7 +44,7 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-The compiler lowers guarded templates to explicit capture statements. `loadPrivatePolicy()` is not evaluated when `includePrivate` is false. A guarded template cannot be lowered when a top-level `await` or `yield` appears in the guarded expression context; the compiler reports `BRAID_ASYNC_CONTEXT` instead of changing evaluation order.
+The compiler lowers guarded templates to explicit capture statements. When `includePrivate` is false, `loadPrivatePolicy()` is not evaluated. The compiler cannot lower a guarded template if a top-level `await` or `yield` occurs in the guarded expression context. In that case, the compiler reports `BRAID_ASYNC_CONTEXT`. It does not change the evaluation order.
 
 ## Choose branches
 
@@ -55,6 +61,6 @@ const query = sql.rows<UserRow>`
 
 Only the first true `when` renders. SQLBraid does not parse or semantically validate the database-specific SQL inside a branch.
 
-`sql.list([])` fails closed with `BRAID_EMPTY_LIST`. Choose the caller-authored
-branch (`if`, `choose`, or an explicit early return) for the empty case; SQLBraid
-does not rewrite an empty list to `IN (NULL)` or invent a strategy.
+`sql.list([])` fails closed with `BRAID_EMPTY_LIST`. For the empty case, write
+your own branch: `if`, `choose` or an explicit early return. SQLBraid does not
+rewrite an empty list to `IN (NULL)`. It does not invent a strategy.

@@ -84,7 +84,7 @@
 </tr>
 <tr>
 <td><code dir="auto">@sqlbraid/core</code></td>
-<td>Public contracts, Standard Schema-facing types, and rendered parameter metadata</td>
+<td>Public interfaces, Standard Schema-facing types, and rendered parameter metadata</td>
 </tr>
 <tr>
 <td><code dir="auto">@sqlbraid/template</code></td>
@@ -160,54 +160,71 @@
 </tr>
 </tbody>
 </table>
-<p>Install <code dir="auto">sqlbraid</code> in application code, then use a combined driver+dialect/query
-subpath:
+<p>Install <code dir="auto">sqlbraid</code> in application code. Then use a subpath that combines a driver
+and a dialect:
 <code dir="auto">sqlbraid/pg</code>, <code dir="auto">sqlbraid/mysql2</code>, <code dir="auto">sqlbraid/mariadb</code>, <code dir="auto">sqlbraid/node-sqlite</code>,
-<code dir="auto">sqlbraid/better-sqlite3</code>, <code dir="auto">sqlbraid/libsql</code>, <code dir="auto">sqlbraid/sqlite-wasm</code>, <code dir="auto">sqlbraid/d1</code>, <code dir="auto">sqlbraid/oracledb</code>,
-or <code dir="auto">sqlbraid/tedious</code>. For Bun.SQL, use the multi-dialect <code dir="auto">sqlbraid/bun-sql</code>
-adapter, import <code dir="auto">sql</code> from the selected dialect root, and pass that dialect
-explicitly:</p>
+<code dir="auto">sqlbraid/better-sqlite3</code>, <code dir="auto">sqlbraid/libsql</code>, <code dir="auto">sqlbraid/sqlite-wasm</code>, <code dir="auto">sqlbraid/d1</code>, <code dir="auto">sqlbraid/oracledb</code>
+or <code dir="auto">sqlbraid/tedious</code>. For Bun.SQL, use the <code dir="auto">sqlbraid/bun-sql</code> adapter, which
+supports many dialects. Import <code dir="auto">sql</code> from the root of the selected dialect, and
+give that dialect explicitly:</p>
 <div class="expressive-code"><link rel="stylesheet" href="/SQLBraid/latest/_astro/ec.w36nc.css"><script type="module" src="/SQLBraid/latest/_astro/ec.0vx5m.js"></script><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="ts"><code><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">import</span><span style="--0:#D6DEEB;--1:#403F53"> { createBunSqlDatabase } </span><span style="--0:#C792EA;--1:#8844AE">from</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#ECC48D;--1:#984E4D">sqlbraid/bun-sql</span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#D6DEEB;--1:#403F53">;</span></div></div><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">import</span><span style="--0:#D6DEEB;--1:#403F53"> { sql } </span><span style="--0:#C792EA;--1:#8844AE">from</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#ECC48D;--1:#984E4D">sqlbraid/postgres</span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#D6DEEB;--1:#403F53">;</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">const </span><span style="--0:#82AAFF;--1:#3B61B0">client</span><span style="--0:#C792EA;--1:#8844AE"> = </span><span style="--0:#7FDBCA;--1:#096E72">new</span><span style="--0:#C792EA;--1:#8844AE"> </span><span style="--0:#D6DEEB;--1:#403F53">Bun</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">SQL</span><span style="--0:#D6DEEB;--1:#403F53">(process</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#FAF39F;--1:#111111">env</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">DATABASE_URL</span><span style="--0:#C792EA;--1:#8844AE">!</span><span style="--0:#D6DEEB;--1:#403F53">);</span></div></div><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">const </span><span style="--0:#82AAFF;--1:#3B61B0">db</span><span style="--0:#C792EA;--1:#8844AE"> = </span><span style="--0:#82AAFF;--1:#3B61B0">createBunSqlDatabase</span><span style="--0:#D6DEEB;--1:#403F53">(client</span><span style="--0:#C792EA;--1:#8844AE">, { dialect: </span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#ECC48D;--1:#984E4D">postgres</span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#C792EA;--1:#8844AE"> }</span><span style="--0:#D6DEEB;--1:#403F53">);</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="import { createBunSqlDatabase } from &quot;sqlbraid/bun-sql&quot;;import { sql } from &quot;sqlbraid/postgres&quot;;const client = new Bun.SQL(process.env.DATABASE_URL!);const db = createBunSqlDatabase(client, { dialect: &quot;postgres&quot; });"><div></div></button></div></figure></div>
-<p>Node’s built-in <code dir="auto">node:sqlite</code> adapter needs no separate driver package; install other external drivers used by your application.</p>
-<p>The root is database-neutral and does not export an implicit <code dir="auto">sql</code> tag. The
+<p>The <code dir="auto">node:sqlite</code> adapter uses the module that is part of Node. It does not need a separate driver package. Install the other external drivers that your application uses.</p>
+<p>The root is database-neutral. It does not export an implicit <code dir="auto">sql</code> tag. The
 dialect-only subpaths <code dir="auto">sqlbraid/postgres</code>, <code dir="auto">sqlbraid/mysql</code>, <code dir="auto">sqlbraid/sqlite</code>,
-<code dir="auto">sqlbraid/oracle</code>, and <code dir="auto">sqlbraid/mssql</code> are for custom adapters. The granular
-<code dir="auto">@sqlbraid/*</code> packages remain supported for library authors and deliberately
-narrower dependencies.
-<code dir="auto">sqlbraid/compiled</code> is an advanced entrypoint for compiler-generated <code dir="auto">capture</code>
-and <code dir="auto">assertDirectiveCondition</code> helpers, not an application query-authoring API.
-It does not import the compiler; use matching compiler and runtime versions.
-<code dir="auto">@sqlbraid/bun-sql</code> has no static Bun import and requires an explicit <code dir="auto">dialect</code>;
-it does not auto-detect SQL semantics. Runtime packages do not acquire metadata,
-codegen, compiler, editor, or Vite dependencies. Install tooling packages only
-in development/build environments. The Oracle, SQL Server, MariaDB, and Bun
-dependencies are kept out of portable roots. <code dir="auto">@sqlbraid/vite</code> keeps Vite
-as a peer and does not import a framework.
-<code dir="auto">@sqlbraid/opentelemetry</code> keeps <code dir="auto">@opentelemetry/api</code> as a peer and does not
-install an SDK, exporter, logger, driver instrumentation, or database driver.</p>
-<p>The synchronous SQLite adapters use the <code dir="auto">Awaitable&lt;T&gt;</code> physical SPI while
-keeping public <code dir="auto">Database</code> methods async. <code dir="auto">better-sqlite3</code> remains event-loop
-blocking and uses statement-local exact-integer reads. libSQL requires
-<code dir="auto">{ intMode: "string" }</code>, uses an interactive transaction handle, does not
-claim <code dir="auto">session.pinned</code>, and reports <code dir="auto">BRAID_STREAM_UNSUPPORTED</code> instead of
-buffering. These are transport and capability boundaries, not broad support
+<code dir="auto">sqlbraid/oracle</code> and <code dir="auto">sqlbraid/mssql</code> are for custom adapters. The granular
+<code dir="auto">@sqlbraid/*</code> packages stay supported for library authors and for deliberately
+narrower dependencies.</p>
+<p><code dir="auto">sqlbraid/compiled</code> is an advanced entry point for the <code dir="auto">capture</code> and
+<code dir="auto">assertDirectiveCondition</code> helpers that the compiler generates. It is not an API
+for applications to write queries. It does not import the compiler. Use the same
+version for the compiler and the runtime.</p>
+<ul>
+<li><code dir="auto">@sqlbraid/bun-sql</code> has no static Bun import and requires an explicit
+<code dir="auto">dialect</code>. It does not detect SQL semantics automatically.</li>
+<li>Runtime packages do not get metadata, codegen, compiler, editor or Vite
+dependencies. Install tooling packages only in development and build
+environments.</li>
+<li>The Oracle, SQL Server, MariaDB and Bun dependencies stay out of the portable
+roots.</li>
+<li><code dir="auto">@sqlbraid/vite</code> keeps Vite as a peer and does not import a framework.</li>
+<li><code dir="auto">@sqlbraid/opentelemetry</code> keeps <code dir="auto">@opentelemetry/api</code> as a peer. It does not
+install an SDK, an exporter, a logger, driver instrumentation or a database
+driver.</li>
+</ul>
+<p>The synchronous SQLite adapters use the physical SPI <code dir="auto">Awaitable&lt;T&gt;</code>. The public
+<code dir="auto">Database</code> methods stay async.</p>
+<ul>
+<li><code dir="auto">better-sqlite3</code> still blocks the event loop. It reads exact integers with a
+setting on each statement.</li>
+<li>libSQL requires <code dir="auto">{ intMode: "string" }</code> and uses an interactive transaction
+handle. It does not claim <code dir="auto">session.pinned</code>. It reports
+<code dir="auto">BRAID_STREAM_UNSUPPORTED</code> and does not buffer.</li>
+</ul>
+<p>These are transport and capability boundaries. They are not broad support
 labels.</p>
-<p><code dir="auto">db.session()</code> pins one provider lease; <code dir="auto">db.tx()</code> reuses that lease and supports
-savepoints/options only where the selected adapter advertises them. Prepared
-queries lock logical shape, not physical placeholders. Active cancellation is
-capability-driven and otherwise fails with <code dir="auto">BRAID_CANCEL_UNSUPPORTED</code>. Bun 1.3.14
-uses <code dir="auto">{ bigint: true }</code> for PostgreSQL/MySQL/MariaDB and <code dir="auto">{ safeIntegers: true }</code>
-for SQLite; no column metadata means integral or integral-approximate <code dir="auto">Number</code>
-rows are rejected as ambiguous. PostgreSQL decimal is text; MySQL/MariaDB
-DECIMAL and binary byte carriers reject without authored SQL text/hex conversion.
-SQLite native decimal is unsupported. Bun MySQL/MariaDB empty <code dir="auto">SELECT</code> and zero-affected DML/DDL use
-guarded <code dir="auto">bun-sql.result-kind-metadata</code> and may fail after execution with
-<code dir="auto">BRAID_RESULT_KIND_AMBIGUOUS</code>.</p>
-<p>Bun.SQL MySQL/MariaDB also reject explicit <code dir="auto">readOnly: true</code> and
+<ul>
+<li><code dir="auto">db.session()</code> pins one provider lease. <code dir="auto">db.tx()</code> uses that lease again. It
+supports savepoints and options only where the selected adapter advertises
+them.</li>
+<li>Prepared queries lock the logical shape, not the physical placeholders.</li>
+<li>Active cancellation comes from capabilities. Without the capability, it fails
+with <code dir="auto">BRAID_CANCEL_UNSUPPORTED</code>.</li>
+<li>Bun 1.3.14 uses <code dir="auto">{ bigint: true }</code> for PostgreSQL, MySQL and MariaDB, and
+<code dir="auto">{ safeIntegers: true }</code> for SQLite. There is no column metadata. Thus, integral
+<code dir="auto">Number</code> rows, and integral approximate <code dir="auto">Number</code> rows, are rejected as
+ambiguous.</li>
+<li>PostgreSQL decimal is text. MySQL and MariaDB DECIMAL and binary byte carriers
+reject, unless your SQL converts them to text or hex.</li>
+<li>SQLite native decimal is unsupported.</li>
+<li>In Bun, an empty MySQL or MariaDB <code dir="auto">SELECT</code> and DML or DDL that affects zero
+rows use the guarded <code dir="auto">bun-sql.result-kind-metadata</code> condition. They can fail
+after execution with <code dir="auto">BRAID_RESULT_KIND_AMBIGUOUS</code>.</li>
+</ul>
+<p>Bun.SQL MySQL and MariaDB also reject explicit <code dir="auto">readOnly: true</code> and
 <code dir="auto">readOnly: false</code> before I/O (<code dir="auto">BRAID_TX_OPTION_UNSUPPORTED</code>,
-<code dir="auto">transaction.read-only</code>). Omission preserves the native session default;
-Bun.SQL PostgreSQL access modes are unchanged. See the
+<code dir="auto">transaction.read-only</code>). If you omit the option, the native session default
+stays. The access modes of Bun.SQL PostgreSQL do not change. Read the
 <a href="/SQLBraid/latest/runtime/transaction-profiles/">transaction option boundary</a>.</p>
 <p>The dependency direction is:</p>
 <div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#d6deeb;--1:#403f53">core / compiler / metadata / codegen</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">                 </span></span><span style="--0:#d6deeb;--1:#403f53">↓</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">          </span></span><span style="--0:#d6deeb;--1:#403f53">tooling / vite</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">             </span></span><span style="--0:#d6deeb;--1:#403f53">↙     ↘</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">           </span></span><span style="--0:#d6deeb;--1:#403f53">CLI      LSP</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">                      </span></span><span style="--0:#d6deeb;--1:#403f53">↑</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#d6deeb;--1:#403f53">                </span></span><span style="--0:#d6deeb;--1:#403f53">VS Code client</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="core / compiler / metadata / codegen                 ↓          tooling / vite             ↙     ↘           CLI      LSP                      ↑                VS Code client"><div></div></button></div></figure></div>

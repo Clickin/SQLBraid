@@ -77,69 +77,77 @@
 </div></div><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">interface</span><span style="--0:#D6DEEB;--1:#403F53"> UserRow {</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#D6DEEB;--1:#403F53">  </span></span><span style="--0:#D6DEEB;--1:#403F53">id</span><span style="--0:#7FDBCA;--1:#096E72">:</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#C5E478;--1:#3B61B0">string</span><span style="--0:#D6DEEB;--1:#403F53">;</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#D6DEEB;--1:#403F53">  </span></span><span style="--0:#D6DEEB;--1:#403F53">name</span><span style="--0:#7FDBCA;--1:#096E72">:</span><span style="--0:#D6DEEB;--1:#403F53"> </span><span style="--0:#C5E478;--1:#3B61B0">string</span><span style="--0:#D6DEEB;--1:#403F53">;</span></div></div><div class="ec-line"><div class="code"><span style="--0:#D6DEEB;--1:#403F53">}</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">const </span><span style="--0:#82AAFF;--1:#3B61B0">connection</span><span style="--0:#C792EA;--1:#8844AE"> = await </span><span style="--0:#D6DEEB;--1:#403F53">oracledb</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">getConnection</span><span style="--0:#D6DEEB;--1:#403F53">(</span><span style="--0:#C792EA;--1:#8844AE">{</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#C792EA;--1:#8844AE">  </span></span><span style="--0:#C792EA;--1:#8844AE">user: </span><span style="--0:#D6DEEB;--1:#403F53">process</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#FAF39F;--1:#111111">env</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">ORACLE_USER</span><span style="--0:#C792EA;--1:#8844AE"> ?? </span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#ECC48D;--1:#984E4D">app</span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#C792EA;--1:#8844AE">,</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#C792EA;--1:#8844AE">  </span></span><span style="--0:#C792EA;--1:#8844AE">password: </span><span style="--0:#D6DEEB;--1:#403F53">process</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#FAF39F;--1:#111111">env</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">ORACLE_PASSWORD</span><span style="--0:#C792EA;--1:#8844AE"> ?? </span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#ECC48D;--1:#984E4D">password</span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#C792EA;--1:#8844AE">,</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#C792EA;--1:#8844AE">  </span></span><span style="--0:#C792EA;--1:#8844AE">connectString: </span><span style="--0:#D6DEEB;--1:#403F53">process</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#FAF39F;--1:#111111">env</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">ORACLE_CONNECT_STRING</span><span style="--0:#C792EA;--1:#8844AE"> ?? </span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#ECC48D;--1:#984E4D">localhost/FREEPDB1</span><span style="--0:#D9F5DD;--1:#111111">"</span><span style="--0:#C792EA;--1:#8844AE">,</span></div></div><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">}</span><span style="--0:#D6DEEB;--1:#403F53">);</span></div></div><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">const </span><span style="--0:#82AAFF;--1:#3B61B0">db</span><span style="--0:#C792EA;--1:#8844AE"> = </span><span style="--0:#82AAFF;--1:#3B61B0">createOracledbDatabase</span><span style="--0:#D6DEEB;--1:#403F53">(connection);</span></div></div><div class="ec-line"><div class="code">
 </div></div><div class="ec-line"><div class="code"><span style="--0:#C792EA;--1:#8844AE">try</span><span style="--0:#D6DEEB;--1:#403F53"> {</span></div></div><div class="ec-line"><div class="code"><span class="indent">  </span><span style="--0:#C792EA;--1:#8844AE">const </span><span style="--0:#82AAFF;--1:#3B61B0">accountNumber</span><span style="--0:#C792EA;--1:#8844AE"> = </span><span style="--0:#F78C6C;--1:#AA0982">1001</span><span style="--0:#D6DEEB;--1:#403F53">;</span></div></div><div class="ec-line"><div class="code"><span class="indent">  </span><span style="--0:#C792EA;--1:#8844AE">const </span><span style="--0:#82AAFF;--1:#3B61B0">users</span><span style="--0:#C792EA;--1:#8844AE"> = await </span><span style="--0:#D6DEEB;--1:#403F53">db</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">all</span><span style="--0:#D6DEEB;--1:#403F53">(sql</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">rows</span><span style="--0:#C792EA;--1:#8844AE">&lt;</span><span style="--0:#FFCB8B;--1:#111111">UserRow</span><span style="--0:#C792EA;--1:#8844AE">&gt;</span><span style="--0:#D6DEEB;--1:#403F53">`</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#ECC48D;--1:#3B61B0">    </span></span><span style="--0:#ECC48D;--1:#3B61B0">SELECT id AS "id", name AS "name"</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#ECC48D;--1:#3B61B0">    </span></span><span style="--0:#ECC48D;--1:#3B61B0">FROM users</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#ECC48D;--1:#3B61B0">    </span></span><span style="--0:#ECC48D;--1:#3B61B0">WHERE account_number = </span><span style="--0:#E2817F;--1:#B23834">${</span><span style="--0:#D6DEEB;--1:#403F53">sql</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">bind</span><span style="--0:#D6DEEB;--1:#403F53">(accountNumber</span><span style="--0:#E2817F;--1:#B23834">, </span><span style="--0:#D6DEEB;--1:#403F53">oracleParameter</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">number</span><span style="--0:#D6DEEB;--1:#403F53">())</span><span style="--0:#E2817F;--1:#B23834">}</span></div></div><div class="ec-line"><div class="code"><span class="indent">  </span><span style="--0:#D6DEEB;--1:#403F53">`</span><span style="--0:#D6DEEB;--1:#403F53">);</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#D6DEEB;--1:#403F53">  </span></span><span style="--0:#D6DEEB;--1:#403F53">console</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">log</span><span style="--0:#D6DEEB;--1:#403F53">(users);</span></div></div><div class="ec-line"><div class="code"><span style="--0:#D6DEEB;--1:#403F53">} </span><span style="--0:#C792EA;--1:#8844AE">finally</span><span style="--0:#D6DEEB;--1:#403F53"> {</span></div></div><div class="ec-line"><div class="code"><span class="indent">  </span><span style="--0:#C792EA;--1:#8844AE">await</span><span style="--0:#D6DEEB;--1:#403F53"> connection</span><span style="--0:#C792EA;--1:#8844AE">.</span><span style="--0:#82AAFF;--1:#3B61B0">close</span><span style="--0:#D6DEEB;--1:#403F53">();</span></div></div><div class="ec-line"><div class="code"><span style="--0:#D6DEEB;--1:#403F53">}</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="import oracledb from &quot;oracledb&quot;;import { createOracledbDatabase, oracleParameter, sql } from &quot;sqlbraid/oracledb&quot;;interface UserRow {  id: string;  name: string;}const connection = await oracledb.getConnection({  user: process.env.ORACLE_USER ?? &quot;app&quot;,  password: process.env.ORACLE_PASSWORD ?? &quot;password&quot;,  connectString: process.env.ORACLE_CONNECT_STRING ?? &quot;localhost/FREEPDB1&quot;,});const db = createOracledbDatabase(connection);try {  const accountNumber = 1001;  const users = await db.all(sql.rows<UserRow>&#x60;    SELECT id AS &quot;id&quot;, name AS &quot;name&quot;    FROM users    WHERE account_number = ${sql.bind(accountNumber, oracleParameter.number())}  &#x60;);  console.log(users);} finally {  await connection.close();}"><div></div></button></div></figure></div>
-<p><code dir="auto">sql.bind</code> keeps the value separate from SQL text and supplies an Oracle database parameter type. Without a hint, the adapter uses its documented driver inference. SQLBraid never treats a TypeScript <code dir="auto">number</code>, <code dir="auto">string</code>, or <code dir="auto">Date</code> as universal evidence for an Oracle type.</p>
+<p><code dir="auto">sql.bind</code> keeps the value separate from the SQL text and supplies an Oracle database parameter type. Without a hint, the adapter uses its documented driver inference. SQLBraid never treats a TypeScript <code dir="auto">number</code>, <code dir="auto">string</code> or <code dir="auto">Date</code> as universal evidence for an Oracle type.</p>
 <p>The Thin binding adapter materializes the logical statement as text-positional
-<code dir="auto">:1</code>, <code dir="auto">:2</code>, … binds and maps supported hints to node-oracledb descriptors.
-Description, hint validation, and deterministic bind construction happen before
-lease acquisition. The adapter reports driver-owned effective reuse. Unsupported
-hint facets fail at the <code dir="auto">materialize</code> stage before database I/O.</p>
+<code dir="auto">:1</code>, <code dir="auto">:2</code>, … binds. It maps supported hints to node-oracledb descriptors. The
+description, the hint validation and the deterministic bind construction occur
+before lease acquisition. The adapter reports effective reuse that the driver
+owns. Unsupported hint facets fail at the <code dir="auto">materialize</code> stage, before database
+I/O.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="capability-boundaries">Capability boundaries</h2><a class="sl-anchor-link" href="#capability-boundaries"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>Section titled “Capability boundaries”</span></a></div>
 <ul>
 <li>The first-party target is <code dir="auto">node-oracledb</code> Thin mode. Thick mode is outside
-this guide’s verification scope.</li>
-<li><code dir="auto">sql.call</code> supports scalar OUT/IN OUT descriptors and <code dir="auto">SYS_REFCURSOR</code> OUT
-values with <code dir="auto">oracleParameter.refCursor()</code>. Cursor outputs become
-materialized <code dir="auto">resultSets</code> and are removed from scalar <code dir="auto">output</code>; implicit
-results are included and every <code dir="auto">ResultSet</code> is closed before lease release.</li>
-<li>Native <code dir="auto">procedure</code> metadata is not supported by this adapter; author the
-Oracle PL/SQL/SQL call text explicitly.</li>
-<li>Streaming uses the driver’s ResultSet protocol and closes the ResultSet on completion, abort, or early break.</li>
-<li>Cancellation uses the guarded <code dir="auto">connection.break()</code> path. It is cooperative,
-not a prompt or timeout guarantee: the documented <code dir="auto">DBMS_SESSION.SLEEP</code> raw
-probe can reject with <code dir="auto">ORA-01013</code> only when the sleep completes, and the
-adapter holds the physical lease through settlement. Without the documented
-break primitive, active cancellation fails before I/O with
+the verification scope of this guide.</li>
+<li><code dir="auto">sql.call</code> supports scalar OUT and IN OUT descriptors, and <code dir="auto">SYS_REFCURSOR</code> OUT
+values with <code dir="auto">oracleParameter.refCursor()</code>. Cursor outputs become materialized
+<code dir="auto">resultSets</code>. They are removed from the scalar <code dir="auto">output</code>. Implicit results are
+included. Each <code dir="auto">ResultSet</code> is closed before the lease release.</li>
+<li>This adapter does not support native <code dir="auto">procedure</code> metadata. Write the Oracle
+PL/SQL or SQL call text explicitly.</li>
+<li>Streaming uses the ResultSet protocol of the driver. It closes the ResultSet on completion, abort or early break.</li>
+<li>Cancellation uses the guarded <code dir="auto">connection.break()</code> path. It is cooperative.
+It does not guarantee a prompt stop or a timeout. The documented
+<code dir="auto">DBMS_SESSION.SLEEP</code> raw probe can reject with <code dir="auto">ORA-01013</code> only when the sleep
+completes. The adapter holds the physical lease until settlement. Without the
+documented break primitive, active cancellation fails before I/O with
 <code dir="auto">BRAID_CANCEL_UNSUPPORTED</code>.</li>
-<li>The target combination is Oracle Free 23.9 Thin on Node 22.18.0/Linux
-x64. Its current certification status and exact gate are recorded in
+<li>The target combination is Oracle Free 23.9 Thin on Node 22.18.0/Linux x64.
+Its current certification status and its exact gate are in
 <a href="/SQLBraid/latest/reference/support/">runtime and driver support</a>.</li>
 </ul>
-<p>Use an explicit hint for <code dir="auto">null</code> when the driver cannot infer a safe Oracle type. Do not silently turn an untyped null into <code dir="auto">VARCHAR2</code>.</p>
-<p>The default policy fetches the exact <code dir="auto">NUMBER</code> family (including Oracle’s
-<code dir="auto">FLOAT</code> and ANSI numeric aliases) as strings to preserve precision. Oracle
-<code dir="auto">NUMBER(p,0)</code> remains part of that exact-decimal family; the support taxonomy
-does not invent a separate native exact-integer transport category. <code dir="auto">NUMBER</code>
-decimal-string input is not a certified exact bind path: typed <code dir="auto">number</code>/<code dir="auto">bigint</code>
-inputs are bounded by their JavaScript representation and unhinted strings can
-depend on <code dir="auto">NLS_NUMERIC_CHARACTERS</code>. Keep this capability unsupported unless the
-session/profile proves it; use an ordinary character bind plus an explicit,
-controlled SQL conversion when needed.</p>
-<p>The Thin adapter rejects precision/scale facets and IN length constraints.
-VARCHAR2/NVARCHAR2 OUT/INOUT lengths select the driver’s <code dir="auto">maxSize</code>; other
-length facets are rejected. Put database constraints in SQL/schema.
-Materialized CLOB/NCLOB values are strings and BLOB/RAW values are buffers.
-<code dir="auto">oracleParameter.clob()</code>/<code dir="auto">blob()</code> accepts the driver’s LOB carrier for IN and
-IN OUT binds; OUT and IN OUT results are materialized before cleanup.
-Routine LOB outputs are read with <code dir="auto">getData()</code> and destroyed before lease
-release, including unvisited siblings after a read failure. Temporal values
-use <code dir="auto">Date</code> as a guarded convenience profile, not a preserved source timezone
-name or sub-millisecond precision. Use user-authored <code dir="auto">TO_CHAR</code>/format
-expressions for a lossless text path. Native JSON is a parsed convenience value;
-use a tested fetch handler or <code dir="auto">JSON_SERIALIZE(... RETURNING CLOB)</code> when
-serialized text is required.</p>
-<p>The executable LOB audit covers CLOB/BLOB OUT and IN OUT binds, materialization,
-and cleanup in the <code dir="auto">oracle.routine.inout</code> support fixture; the target manifest
-links that test and its exact Oracle Free evidence.
-The fixture is a real Oracle Free integration test; the separate adapter unit
-coverage for mocked LOB carriers verifies cleanup/error paths only and does not
-promote another database or driver target.</p>
-<p>Use <a href="/SQLBraid/latest/concepts/routines/">routine calls</a> for the complete
-<code dir="auto">sql.out</code>/<code dir="auto">sql.inOut</code> and heterogeneous result-set contract.</p>
+<p>If the driver cannot infer a safe Oracle type, use an explicit hint for <code dir="auto">null</code>. Do not silently turn an untyped null into <code dir="auto">VARCHAR2</code>.</p>
+<p>The default policy fetches the exact <code dir="auto">NUMBER</code> family as strings, to keep the
+precision. This includes Oracle <code dir="auto">FLOAT</code> and the ANSI numeric aliases. Oracle
+<code dir="auto">NUMBER(p,0)</code> stays part of that exact-decimal family. The support taxonomy does
+not invent a separate category for native exact-integer transport.</p>
+<p><code dir="auto">NUMBER</code> decimal-string input is not a certified exact bind path:</p>
+<ul>
+<li>Typed <code dir="auto">number</code> and <code dir="auto">bigint</code> inputs are limited by their JavaScript
+representation.</li>
+<li>Strings without a hint can depend on <code dir="auto">NLS_NUMERIC_CHARACTERS</code>.</li>
+</ul>
+<p>Keep this capability unsupported, unless the session or profile proves it. When
+necessary, use an ordinary character bind and an explicit, controlled SQL
+conversion.</p>
+<p>The Thin adapter rejects precision and scale facets and IN length constraints.
+VARCHAR2 and NVARCHAR2 OUT and INOUT lengths select the <code dir="auto">maxSize</code> of the driver.
+Other length facets are rejected. Put database constraints in SQL or in the
+schema.</p>
+<ul>
+<li>Materialized CLOB and NCLOB values are strings. BLOB and RAW values are buffers.</li>
+<li><code dir="auto">oracleParameter.clob()</code> and <code dir="auto">blob()</code> accept the LOB carrier of the driver for
+IN and IN OUT binds. OUT and IN OUT results are materialized before cleanup.</li>
+<li>Routine LOB outputs are read with <code dir="auto">getData()</code> and destroyed before the lease
+release. This includes the siblings that were not visited after a read failure.</li>
+<li>Temporal values use <code dir="auto">Date</code> as a guarded convenience profile. It does not keep
+the source timezone name or sub-millisecond precision. For a lossless text
+path, write <code dir="auto">TO_CHAR</code> or format expressions in your SQL.</li>
+<li>Native JSON is a parsed convenience value. When you need serialized text, use
+a tested fetch handler or <code dir="auto">JSON_SERIALIZE(... RETURNING CLOB)</code>.</li>
+</ul>
+<p>The executable LOB audit covers CLOB and BLOB OUT and IN OUT binds,
+materialization and cleanup in the <code dir="auto">oracle.routine.inout</code> support fixture. The
+target manifest links that test and its exact Oracle Free evidence. The fixture
+is a real Oracle Free integration test. The separate adapter unit tests for
+mocked LOB carriers verify only the cleanup and error paths. They do not promote
+a different database or driver target.</p>
+<p>For the complete <code dir="auto">sql.out</code>/<code dir="auto">sql.inOut</code> and heterogeneous result-set rules, read
+<a href="/SQLBraid/latest/concepts/routines/">routine calls</a>.</p>
 <div class="sl-heading-wrapper level-h2"><h2 id="oracle-thin-representation-profile">Oracle Thin representation profile</h2><a class="sl-anchor-link" href="#oracle-thin-representation-profile"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore>Section titled “Oracle Thin representation profile”</span></a></div>
 <p>The first-party profile is node-oracledb Thin mode. The free Oracle 23.9 target
-is the currently documented environment; it must not be presented as Oracle
-19c evidence. Thick mode and another server line are separate, untested
-profiles until their manifests contain matching evidence.</p>
+is the environment that is currently documented. Do not present it as Oracle 19c
+evidence. Thick mode and other server lines are separate, untested profiles,
+until their manifests contain matching evidence.</p>
 <table>
 <thead>
 <tr>
@@ -181,16 +189,21 @@ profiles until their manifests contain matching evidence.</p>
 </tr>
 </tbody>
 </table>
-<p>The binding transport is text-positional <code dir="auto">:1</code>, <code dir="auto">:2</code>, … with node-oracledb bind
-descriptors. OUT ordinals follow the SQL bind order, independently of
-intervening IN values. REF CURSOR outputs become ordered materialized
-<code dir="auto">resultSets</code>; implicit results are additional sets. Native
-<code dir="auto">RETURNING ... INTO</code> uses <code dir="auto">sql.out()</code> and materialized row APIs. <code dir="auto">executeMany()</code>
-is the supported native bulk strategy where the manifest proves
-it. <code dir="auto">rowsAffected</code> is an operational count with safe-range validation, while
-<code dir="auto">RETURNING INTO</code> values follow the same exact string contract. Ordinary
-<code dir="auto">undefined</code> IN values fail before acquisition with
-<code dir="auto">BRAID_BIND_VALUE_UNSUPPORTED</code>; <code dir="auto">null</code> is SQL <code dir="auto">NULL</code>. Native Oracle SQL passes
-through transparently; SQLBraid does not provide an Oracle grammar or infer
-procedure metadata.</p>
+<ul>
+<li>The binding transport is text-positional <code dir="auto">:1</code>, <code dir="auto">:2</code>, … with node-oracledb bind
+descriptors.</li>
+<li>OUT ordinals follow the SQL bind order. The IN values between them do not
+change them.</li>
+<li>REF CURSOR outputs become ordered materialized <code dir="auto">resultSets</code>. Implicit results
+are additional sets.</li>
+<li>Native <code dir="auto">RETURNING ... INTO</code> uses <code dir="auto">sql.out()</code> and the materialized row APIs.</li>
+<li><code dir="auto">executeMany()</code> is the supported native bulk strategy where the manifest
+proves it.</li>
+<li><code dir="auto">rowsAffected</code> is an operational count with safe-range validation.
+<code dir="auto">RETURNING INTO</code> values follow the same exact string rules.</li>
+<li>Ordinary <code dir="auto">undefined</code> IN values fail before acquisition with
+<code dir="auto">BRAID_BIND_VALUE_UNSUPPORTED</code>. <code dir="auto">null</code> is SQL <code dir="auto">NULL</code>.</li>
+<li>Native Oracle SQL passes through without change. SQLBraid does not give an
+Oracle grammar and does not infer procedure metadata.</li>
+</ul>
 </div><footer class="sl-flex astro-j2cc5yqm"><div class="meta sl-flex astro-j2cc5yqm"></div><div class="pagination-links print:hidden astro-ttiagmsw" dir="ltr"><a href="/SQLBraid/latest/getting-started/sqlite-browser/" rel="prev" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg><span class="astro-ttiagmsw">Previous<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">Browser SQLite and D1</span></span></a><a href="/SQLBraid/latest/getting-started/mssql/" rel="next" class="astro-ttiagmsw"><svg aria-hidden="true" class="astro-ttiagmsw astro-rkpxbbcd" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg><span class="astro-ttiagmsw">Next<br class="astro-ttiagmsw"><span class="link-title astro-ttiagmsw">SQL Server</span></span></a></div></footer></div></div></main></div></div></div></div></body></html>

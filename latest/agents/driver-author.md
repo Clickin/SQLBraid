@@ -2,25 +2,26 @@
 
 > Implement a custom SQLBraid adapter without crossing the value-only boundary.
 
-This guide covers custom `QueryExecutor`, `ConnectionProvider`, and binding
-adapters. It describes the current API contract; it does not grant a support
-label or publication evidence. Consult the [runtime and driver support
-matrix](/SQLBraid/latest/reference/support.md) for labels scoped to the exact
-database/driver/profile/runtime/capability tuple and its revision and workflow
-evidence. A neighboring version or package installation is not certification.
-Final exact-SHA Runtime, Docs, and Release gates and explicit release
-authorization remain separate requirements.
+This guide is about custom `QueryExecutor`, `ConnectionProvider` and binding
+adapters. It describes the current API. It does not give a support label or
+publication evidence.
 
-The physical SPI is sync-aware without creating a synchronous application API:
+For labels, read the [runtime and driver support matrix](/SQLBraid/latest/reference/support.md).
+Each label applies to one exact tuple of database, driver, profile, runtime and
+capability, with its revision and workflow evidence. A neighboring version or a
+package installation is not certification. The final exact-SHA Runtime, Docs and
+Release gates and an explicit release authorization stay separate requirements.
+
+The physical SPI accepts synchronous results. The application API stays asynchronous:
 
 ```ts
 type Awaitable<T> = T | PromiseLike<T>;
 ```
 
-`QueryExecutor.query`, `call`, optional `bulk`, and transaction-control methods
-may return `Awaitable`; `ConnectionProvider.acquire()` remains a `Promise`.
-`stream()` remains `AsyncIterable`, so a synchronous native iterator needs a
-thin async-generator adapter to preserve cleanup and scope behavior.
+`QueryExecutor.query`, `call`, the optional `bulk` and the transaction-control
+methods can return `Awaitable`. `ConnectionProvider.acquire()` stays a `Promise`.
+`stream()` stays `AsyncIterable`. Thus, a synchronous native iterator needs a
+thin async-generator adapter. This keeps the cleanup and scope behavior.
 
 ## Logical statement invariant
 
@@ -30,16 +31,20 @@ Core/template rendering returns one immutable `RenderedStatement`:
 interface RenderedStatement {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
-  readonly resultKind: "rows" | "command" | "call" | "unknown";
+  readonly nativeTemplate?: TemplateStringsArray;
   readonly dialectId: string;
+  readonly resultKind: "rows" | "command" | "call" | "unknown";
+  readonly routineProcedure?: RoutineProcedure;
+  readonly fingerprint?: string;
+  readonly variantFingerprint?: string;
 }
 ```
 
-`segments.length === parameters.length + 1`. Every parameter is a value. A
-custom driver must not reinterpret it as SQL, an identifier, nested SQL, or a
-native tagged-template command. Structural SQL is authored through explicit
-helpers (`sql.ident`, `sql.fragment`, `sql.raw`, `sql.list`, `sql.join`) and is
-already present in `segments`.
+`segments.length === parameters.length + 1`. Each parameter is a value. A custom
+driver must not read it as SQL, an identifier, nested SQL or a native
+tagged-template command. Users write structural SQL with explicit helpers
+(`sql.ident`, `sql.fragment`, `sql.raw`, `sql.list`, `sql.join`). It is already
+in `segments`.
 
 ## Binding and leases
 
@@ -47,6 +52,7 @@ already present in `segments`.
 interface StatementBindingAdapter {
   readonly id: string;
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription;
+  describeBulk?(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription;
 }
 interface StatementBindingContext {
   readonly dialectId: string;
@@ -56,28 +62,36 @@ interface StatementBindingContext {
 }
 interface ConnectionProvider {
   readonly statementBinding: StatementBindingAdapter;
+  readonly environment?: DriverEnvironment;
+  validateTransactionOptions?(options: TransactionOptions): void;
   acquire(): Promise<ConnectionLease>;
 }
 interface ConnectionLease extends QueryExecutor {
-  release(options?: { discard?: boolean }): void | Promise<void>;
+  release(options?: { readonly discard?: boolean }): void | Promise<void>;
 }
 ```
 
-`describe()` and `describeBulk()` are pure pre-acquire materialization. Validate
-hints, shape, and transport there; materialization failure has both execution
-flags false. Providers and leases must expose the exact same immutable binding
-adapter object. Keep opaque driver requests private, for example in a `WeakMap`
-keyed by `StatementBindingDescription`.
+`describe()` and `describeBulk()` are pure materialization before acquisition.
 
-Logical prepared shape is result kind, dialect, canonical segments, and ordered
-hint/direction/output metadata. `$1`, `?`, `:1`, and `@p1` are transport details,
-not shape identity. Values may change; structural shape may not.
+- Validate hints, shape and transport there.
+- A materialization failure has both execution flags set to false.
+- Providers and leases must expose the exact same immutable binding adapter
+  object.
+- Keep opaque driver requests private, for example in a `WeakMap` with
+  `StatementBindingDescription` keys.
+
+The logical prepared shape is the result kind, the dialect, the canonical
+segments and the ordered hint, direction and output metadata. `$1`, `?`, `:1`
+and `@p1` are transport details. They are not part of the shape identity. Values
+can change. The structural shape cannot change.
 
 ## Executor methods and cancellation
 
 ```ts
 interface QueryExecutor {
+  readonly ownershipKey?: object;
   readonly statementBinding: StatementBindingAdapter;
+  readonly environment?: DriverEnvironment;
   query<Row>(
     statement: RenderedStatement,
     binding?: StatementBindingDescription,
@@ -98,6 +112,7 @@ interface QueryExecutor {
     binding: BulkBindingDescription,
     options?: ExecutionOptions,
   ): Awaitable<BulkExecutionResult>;
+  validateTransactionOptions?(options: TransactionOptions): void;
   begin?(options?: TransactionOptions): Awaitable<void>;
   commit?(): Awaitable<void>;
   rollback?(): Awaitable<void>;
@@ -107,13 +122,15 @@ interface QueryExecutor {
 }
 ```
 
-An already-aborted signal rejects with its `reason`. An active signal requires a
-physical cancellation path. Without one, reject before I/O with
-`UnsupportedFeatureError`, feature `statement.cancel`, and
-`BRAID_CANCEL_UNSUPPORTED`; stopping iteration alone is not cancellation.
-`stream` must be a real driver path, and `call` must materialize/close every
-cursor, result set, request, and carrier before lease release. Never buffer to
-fake streaming or guess a routine carrier.
+- If the signal is already aborted, reject with its `reason`.
+- An active signal requires a physical cancellation path. If there is no path,
+  reject before I/O with `UnsupportedFeatureError`, the feature
+  `statement.cancel` and `BRAID_CANCEL_UNSUPPORTED`. To stop the iteration alone
+  is not cancellation.
+- `stream` must be a real driver path.
+- `call` must materialize and close each cursor, result set, request and carrier
+  before the lease release.
+- Never buffer to fake streaming. Never guess a routine carrier.
 
 ## Complete text-positional example
 
@@ -178,7 +195,11 @@ export function createAcmeExecutor(client: WireClient): QueryExecutor {
   return {
     ownershipKey: client,
     statementBinding: acmeBinding,
-    async query<Row>(statement, binding, options) {
+    async query<Row>(
+      statement: RenderedStatement,
+      binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<QueryExecutionResult<Row>> {
       assertSignal(options);
       statement = createRenderedStatement(statement);
       const description =
@@ -224,30 +245,40 @@ export function createAcmeProvider(acquireClient: () => Promise<WireClient>): Co
 
 ## Capabilities and evidence
 
-Use only the fixed transaction isolation literals and `readOnly`; malformed
-runtime values fail with `TypeError` / `BRAID_TX_OPTIONS_INVALID`, valid but
-unsupported options use `BRAID_TX_OPTION_UNSUPPORTED`, and nested explicit
-options use `BRAID_TX_OPTIONS_NESTED`. Canonical capability keys are
-`statement.prepare`, `statement.stream`, `statement.bulk`, `transaction`,
-`transaction.savepoint`, `routine.out`, `routine.result-sets`,
-`routine.out-cursor`, and `routine.return-value`.
+Use only the fixed transaction isolation literals and `readOnly`.
 
-Bun SQL uses one adapter family with required user-selected
-`dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`; it does not auto-detect.
-Bun.SQL MySQL/MariaDB reject both explicit `readOnly` values before I/O with
-`BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`; omission preserves
-the native session default. Bun 1.3.14 read-only failures can contaminate a
-connection beyond rollback, so contaminated reservations must be discarded.
-Bun.SQL PostgreSQL access modes and representation-profile options are unchanged.
-Deno may reuse an existing adapter where its public driver API works. Neither
-statement promotes an unverified database/runtime/profile tuple. For the full
-checklist, see the [repository driver-author guide](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md).
+- Malformed runtime values fail with `TypeError` / `BRAID_TX_OPTIONS_INVALID`.
+- Valid but unsupported options use `BRAID_TX_OPTION_UNSUPPORTED`.
+- Nested explicit options use `BRAID_TX_OPTIONS_NESTED`.
 
-For SQLite, `node:sqlite` and `better-sqlite3` may return synchronous physical
-results through `Awaitable`; the public database is still async and
-better-sqlite3 still blocks the event loop. Use statement-local
-`safeIntegers(true)` for exact INTEGER reads and expose native iteration
-directly. The libSQL adapter requires an explicit `intMode: "string"` contract,
-uses an interactive transaction handle, does not claim pinned ordinary
-sessions, and must reject streaming when the selected client has no incremental
-cursor. Local libSQL evidence does not certify remote transports.
+The canonical capability keys are `statement.prepare`, `statement.stream`,
+`statement.bulk`, `transaction`, `transaction.savepoint`, `routine.out`,
+`routine.result-sets`, `routine.out-cursor` and `routine.return-value`.
+
+Bun SQL uses one adapter family. The user must select
+`dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`. The adapter does not
+detect it automatically.
+
+- Bun.SQL MySQL and MariaDB reject both explicit `readOnly` values before I/O,
+  with `BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`. If you omit the
+  option, the native session default stays.
+- In Bun 1.3.14, a read-only failure can contaminate a connection after the
+  rollback. Thus, contaminated reservations must be discarded.
+- The access modes of Bun.SQL PostgreSQL and the representation-profile options
+  do not change.
+
+Deno can use an existing adapter where its public driver API works. Neither
+statement promotes an unverified tuple of database, runtime and profile. For the
+full checklist, read the [repository driver-author guide](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md).
+
+For SQLite:
+
+- `node:sqlite` and `better-sqlite3` can return synchronous physical results
+  through `Awaitable`. The public database is still async. better-sqlite3 still
+  blocks the event loop.
+- Use `safeIntegers(true)` on each statement for exact INTEGER reads. Expose
+  native iteration directly.
+- The libSQL adapter requires an explicit `intMode: "string"` setting. It uses an
+  interactive transaction handle. It does not claim pinned ordinary sessions. It
+  must reject streaming when the selected client has no incremental cursor.
+- Local libSQL evidence does not certify remote transports.

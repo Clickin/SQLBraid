@@ -1,8 +1,8 @@
 # 설정
 
-> 런타임 설정 의존성을 추가하지 않고 codegen 대상을 구성합니다.
+> 코드 생성 대상을 설정합니다. 런타임 설정 의존성은 추가되지 않습니다.
 
-SQLBraid는 다음 실행 가능한 설정 이름 중 하나를 찾습니다.
+SQLBraid는 다음 실행 가능한 설정 파일 이름 중 하나를 찾습니다.
 
 ```text
 sqlbraid.config.mjs
@@ -10,7 +10,7 @@ sqlbraid.config.js
 sqlbraid.config.cjs
 ```
 
-설정은 `defineConfig({ codegen: { targets } })`를 export합니다.
+설정 파일은 `defineConfig({ codegen: { targets } })`를 export합니다.
 
 ```js
 import { defineConfig } from "@sqlbraid/cli/config";
@@ -30,6 +30,10 @@ export default defineConfig({
 });
 ```
 
-경로는 설정 파일을 기준으로 합니다. TypeScript 설정은 지원되지 않습니다. 설정 코드는 일회성 worker에서 신뢰된 Node 애플리케이션 코드로 실행됩니다. 따라서 모듈 캐시 수명은 제한하지만 sandbox는 아닙니다.
+경로는 설정 파일 기준 상대 경로입니다. TypeScript 설정 파일은 지원하지 않습니다. 설정 코드는 일회용 워커 안에서 신뢰된 Node 애플리케이션 코드로 실행됩니다. 이렇게 하면 모듈 캐시의 수명이 제한되지만, 샌드박스는 아닙니다.
 
-tooling workspace는 `tsconfig.json`에서 TypeScript 프로젝트 컨텍스트를 찾습니다. VS Code는 SQLBraid 설정과 패키지 의존성 증거를 별도로 사용해 client를 시작할지 결정합니다. language server는 SQLBraid 설정 이름, `tsconfig*.json`, `package.json`, 지원되는 소스 확장을 감시하며 관련 없는 모든 파일을 감시하지 않습니다. workspace 요청이 새로 고쳐질 때 메타데이터와 생성된 증거의 stat을 다시 확인하지만 임의 메타데이터 JSON 파일에는 전용 file watcher가 없습니다. 런타임 패키지는 이 설정을 읽지 않습니다.
+- 도구 워크스페이스는 `tsconfig.json`에서 TypeScript 프로젝트 문맥을 찾습니다.
+- VS Code는 SQLBraid 설정 파일과 패키지 의존성을 각각 확인해 클라이언트를 시작할지 정합니다.
+- 언어 서버는 SQLBraid 설정 파일 이름, `tsconfig*.json`, `package.json`, 지원하는 소스 확장자를 감시합니다. 관련 없는 파일까지 모두 감시하지는 않습니다.
+- 워크스페이스 요청이 새로 고쳐질 때 메타데이터와 생성 근거를 `stat`으로 다시 확인합니다. 임의의 메타데이터 JSON 파일에는 전용 파일 감시자가 없습니다.
+- 런타임 패키지는 이 설정을 읽지 않습니다.

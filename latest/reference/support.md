@@ -1,26 +1,26 @@
 # Runtime and driver support
 
-> Exact evidence, capability boundaries, and revision-specific support labels.
+> Exact evidence, capability boundaries and support labels for each revision.
 
 ## Current status
 
-This matrix is the authoritative source. Support labels are scoped to
-the exact database/driver/profile/runtime/capability tuple recorded here,
-including its tested versions.
+This matrix is the authoritative source. Each support label applies only to the
+exact tuple of database, driver, profile, runtime and capability that is recorded
+here, with its tested versions.
 
 ## Evidence labels
 
-- **Official** — exact executable evidence covers the named database, driver,
-  profile, runtime, and capability tuple.
-- **Conditional** — evidence applies only under the named condition.
+- **Official** — exact executable evidence covers the named tuple of database,
+  driver, profile, runtime and capability.
+- **Conditional** — the evidence applies only under the named condition.
 - **Pending** — the candidate has no fresh successful gate for the current
   implementation revision.
-- **Historical** — an older exact revision exercised the combination; it does
-  not prove the current tree.
-- **Compatible** — public APIs may work, but no exact certified target is
+- **Historical** — an older exact revision tested the combination. It does not
+  prove the current tree.
+- **Compatible** — the public APIs can work, but no exact certified target is
   claimed.
-- **Custom** — user-provided `QueryExecutor` or `ConnectionProvider`.
-- **Unsupported** — the required SQLBraid capability is intentionally absent.
+- **Custom** — a `QueryExecutor` or `ConnectionProvider` that the user supplies.
+- **Unsupported** — the required SQLBraid capability is absent on purpose.
 
 ## Current matrix
 
@@ -1105,12 +1105,12 @@ Exclusions: SQLite call and routine APIs are unsupported Bun uses its earlier bu
 | `dml.delete-returning` | guaranteed |
 
 The matrix is generated from machine-readable support targets and capability
-conditions. It is the evidence rendering, not a promise that every adapter has
-every operation.
+conditions. It shows the evidence. It does not promise that each adapter has
+each operation.
 
 ## Capability vocabulary
 
-Dialect, driver, runtime, host, database version, representation profile, and
+Dialect, driver, runtime, host, database version, representation profile and
 capability are separate axes. The canonical capability identifiers are:
 
 ```text
@@ -1151,69 +1151,96 @@ metadata.routines                metadata.types
 ```
 
 Do not add obsolete aliases such as `execution.prepared`, `execution.stream`,
-`routine.resultsets`, or `routine.return-status`.
+`routine.resultsets` or `routine.return-status`.
 
 `statementBinding.describe()` and `describeBulk()` validate the logical
-`RenderedStatement`/`RenderedBulk` before lease acquisition. Providers and
-leases expose the same immutable binding adapter identity. Prepared shape means
-logical result kind, canonical segments, dialect, and ordered hint/direction/
-output metadata; physical placeholder spelling never changes shape.
+`RenderedStatement` or `RenderedBulk` before lease acquisition. Providers and
+leases expose the same immutable identity of the binding adapter. The prepared
+shape is the logical result kind, the canonical segments, the dialect and the
+ordered hint, direction and output metadata. The physical placeholder spelling
+never changes the shape.
 
-`db.session(callback)` pins one physical provider lease and nested sessions reuse
-it. `db.tx(callback)` uses that lease, or acquires one root lease; nested
-transactions use savepoints when supported. Explicit transaction options use
-only the fixed isolation literals `read-uncommitted`, `read-committed`,
-`repeatable-read`, and `serializable`, plus `readOnly`. Malformed runtime options
-fail before acquisition with `TypeError` / `BRAID_TX_OPTIONS_INVALID`; a valid
-but unsupported option uses `UnsupportedFeatureError` /
-`BRAID_TX_OPTION_UNSUPPORTED`; nested explicit options use
-`BRAID_TX_OPTIONS_NESTED`.
+`db.session(callback)` pins one physical provider lease. Nested sessions use the
+same lease. `db.tx(callback)` uses that lease, or acquires one root lease. When
+supported, nested transactions use savepoints.
 
-An already-aborted `AbortSignal` preserves its `reason`. An active signal needs
-a real adapter cancellation path; otherwise the operation rejects before I/O
-with `UnsupportedFeatureError`, feature `statement.cancel`, and
-`BRAID_CANCEL_UNSUPPORTED`. An unavailable session or transaction primitive
-uses `BRAID_SESSION_UNSUPPORTED` or `BRAID_TX_UNSUPPORTED` respectively.
-Oracle's guarded `oracle.connection-break` condition is cooperative rather than
-a prompt or timeout guarantee: its documented `DBMS_SESSION.SLEEP` raw probe
-can reject with `ORA-01013` only when the sleep completes, and the adapter holds
-the physical lease through settlement.
+Explicit transaction options use only the fixed isolation literals
+`read-uncommitted`, `read-committed`, `repeatable-read` and `serializable`, and
+`readOnly`.
+
+- Malformed runtime options fail before acquisition with `TypeError` /
+  `BRAID_TX_OPTIONS_INVALID`.
+- A valid but unsupported option uses `UnsupportedFeatureError` /
+  `BRAID_TX_OPTION_UNSUPPORTED`.
+- Nested explicit options use `BRAID_TX_OPTIONS_NESTED`.
+
+An already-aborted `AbortSignal` keeps its `reason`. An active signal needs a
+real cancellation path in the adapter. If not, the operation rejects before I/O
+with `UnsupportedFeatureError`, the feature `statement.cancel` and
+`BRAID_CANCEL_UNSUPPORTED`. An unavailable session primitive uses
+`BRAID_SESSION_UNSUPPORTED`. An unavailable transaction primitive uses
+`BRAID_TX_UNSUPPORTED`.
+
+The guarded Oracle condition `oracle.connection-break` is cooperative. It does
+not guarantee a prompt stop or a timeout. Its documented `DBMS_SESSION.SLEEP` raw
+probe can reject with `ORA-01013` only when the sleep completes. The adapter
+holds the physical lease until settlement.
 
 ## Driver/runtime boundaries
 
-First-party roots cover PostgreSQL, MySQL, MariaDB, SQLite, Oracle, and SQL
-Server. Driver subpaths own the protocol and cleanup behavior: `pg`, `mysql2`,
-MariaDB Connector/Node.js, `node:sqlite`, SQLite WASM, D1, node-oracledb Thin,
-and Tedious. Bun uses one SQL adapter family with a user-selected
-`dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`; it does not infer
-SQL semantics from the connection. Bun 1.3.14 has active cancellation
-unsupported (`BRAID_CANCEL_UNSUPPORTED`) and stream/routine carriers
-unsupported. Its `result.rows`/`result.command` metadata is guarded by
-`bun-sql.result-kind-metadata`; for MySQL/MariaDB, empty `SELECT` and
-zero-affected DML/DDL fail with `BRAID_RESULT_KIND_AMBIGUOUS` only after
-execution, because `command` is null and `affectedRows` is zero. Deno reuses
-existing first-party adapters where their public driver API is compatible.
+The first-party roots cover PostgreSQL, MySQL, MariaDB, SQLite, Oracle and SQL
+Server. The driver subpaths own the protocol and the cleanup behavior: `pg`,
+`mysql2`, MariaDB Connector/Node.js, `node:sqlite`, SQLite WASM, D1,
+node-oracledb Thin and Tedious.
 
-Missing stream, routine, output, hint, bulk, transaction, or cancellation support
-must be explicit `UnsupportedFeatureError` failures. SQLBraid does not paginate
-to fake streaming, guess routine carriers, ignore hints, create hidden
-transactions, or promote an unverified tuple. D1's managed SQLite version is
-unreported; a local Worker binding check is not a version certification.
+Bun uses one SQL adapter family with a user-selected
+`dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`. It does not infer SQL
+semantics from the connection.
 
-Numeric, JSON, temporal, and container behavior are defined per driver profile. Exact database integers and decimals are canonical strings; approximate IEEE values are numbers. Profile and codegen descriptors must match.
-Database metadata provides positive evidence; a missing metadata entry does not necessarily mean the SQL is invalid.
-Bun 1.3.14 uses `{ bigint: true }` for PostgreSQL/MySQL/MariaDB and
-`{ safeIntegers: true }` for SQLite. Because it exposes no column metadata,
-integral and integral-approximate `Number` rows are rejected as ambiguous;
-PostgreSQL decimals are strings. MySQL/MariaDB DECIMAL and binary outputs share
-an untyped byte carrier and reject; author `CAST(... AS CHAR)` or `HEX(...)`.
-SQLite native decimal is unsupported. MariaDB/SQLite JSON is text, while
-PostgreSQL/MySQL native JSON can round nested numbers. Bun SQLite's result kinds
-are guarded by `bun-sql.sqlite-result-parser`: mixed-quote SQL literals can be
-misclassified by Bun; bind JSON values instead. SQLBraid does not rewrite SQL.
+- In Bun 1.3.14, active cancellation is unsupported
+  (`BRAID_CANCEL_UNSUPPORTED`). Stream and routine carriers are unsupported.
+- Its `result.rows` and `result.command` metadata is guarded by
+  `bun-sql.result-kind-metadata`. For MySQL and MariaDB, an empty `SELECT` and
+  DML or DDL that affects zero rows fail with `BRAID_RESULT_KIND_AMBIGUOUS` only
+  after execution, because `command` is null and `affectedRows` is zero.
+
+Deno uses the existing first-party adapters where their public driver API is
+compatible.
+
+Missing stream, routine, output, hint, bulk, transaction or cancellation support
+must be an explicit `UnsupportedFeatureError` failure. SQLBraid does not do these
+things:
+
+- paginate to fake streaming;
+- guess routine carriers;
+- ignore hints;
+- create hidden transactions;
+- promote an unverified tuple.
+
+The managed SQLite version of D1 is not reported. A local Worker binding check is
+not a version certification.
+
+Each driver profile defines the numeric, JSON, temporal and container behavior. Exact database integers and decimals are canonical strings. Approximate IEEE values are numbers. The profile and codegen descriptors must match.
+
+Database metadata gives positive evidence. A missing metadata entry does not always mean that the SQL is invalid.
+
+Bun 1.3.14 uses `{ bigint: true }` for PostgreSQL, MySQL and MariaDB, and
+`{ safeIntegers: true }` for SQLite.
+
+- Bun exposes no column metadata. Thus, integral `Number` rows and integral
+  approximate `Number` rows are rejected as ambiguous.
+- PostgreSQL decimals are strings.
+- MySQL and MariaDB DECIMAL and binary outputs share an untyped byte carrier and
+  reject. Write `CAST(... AS CHAR)` or `HEX(...)` in your SQL.
+- SQLite native decimal is unsupported.
+- MariaDB and SQLite JSON is text. PostgreSQL and MySQL native JSON can round
+  nested numbers.
+- The result kinds of Bun SQLite are guarded by `bun-sql.sqlite-result-parser`.
+  Bun can misclassify SQL literals with mixed quotes. Bind JSON values instead.
+  SQLBraid does not rewrite SQL.
 
 ## Adding evidence
 
-A support addition requires an exact version/profile tuple, real-engine
-coverage, and machine-readable target conditions. Historical links and prose
-alone cannot prove the current tree.
+A support addition needs an exact version and profile tuple, coverage on a real
+engine and machine-readable target conditions. Historical links and prose alone
+cannot prove the current tree.

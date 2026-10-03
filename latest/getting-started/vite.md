@@ -2,7 +2,7 @@
 
 > Lower SQLBraid guarded templates in Vite 8 without taking over TypeScript or TSX transforms.
 
-Install the Vite plugin beside the SQLBraid dialect package used by your application:
+Install the Vite plugin together with the SQLBraid dialect package of your application:
 
 ```bash
 npm install sqlbraid @sqlbraid/vite
@@ -19,7 +19,7 @@ export default defineConfig({
 });
 ```
 
-`@sqlbraid/vite` targets Vite 8 and runs as a pre-transform. It recognizes SQLBraid tags imported from the granular `@sqlbraid/*` dialect roots and the matching `sqlbraid/*` facade subpaths. Configure custom tags when an application wraps a tag:
+`@sqlbraid/vite` targets Vite 8 and runs as a pre-transform. It recognizes SQLBraid tags that are imported from the granular `@sqlbraid/*` dialect roots and from the matching `sqlbraid/*` facade subpaths. If an application wraps a tag, configure custom tags:
 
 ```ts
 sqlbraid({
@@ -28,10 +28,23 @@ sqlbraid({
 });
 ```
 
-The plugin supports `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, and `.cts`; skips declarations, `node_modules`, generated files, and common build output; and reports malformed guarded SQL as Vite diagnostics with the original filename and line/column. It returns non-identity source maps for transformed queries so downstream Vite transforms can compose them. TSX/JSX, TypeScript syntax, decorators, module format, React, and TanStack transforms remain Vite/Oxc/Rolldown responsibilities—this plugin does not transpile them.
+The plugin has these behaviors:
+
+- It supports `.ts`, `.tsx`, `.js`, `.jsx`, `.mts` and `.cts`.
+- It skips declarations, `node_modules`, generated files and common build output.
+- It reports malformed guarded SQL as Vite diagnostics, with the original filename, line and column.
+- It returns non-identity source maps for transformed queries. Thus, the Vite transforms that follow can compose them.
+
+TSX/JSX, TypeScript syntax, decorators, module format, React and TanStack transforms stay the responsibility of Vite, Oxc and Rolldown. This plugin does not transpile them.
 
 ## Runtime is separate
 
-Vite transforms browser/application source. Database execution still needs a supported server runtime and adapter. For a TanStack Start finance consumer, keep the Vite 8 build and Node 24 application runtime as separate concerns: the plugin must preserve the source map and the server route must create the SQLBraid database with the appropriate Node adapter (for example `node:sqlite`). Do not import a Node-only database driver into a browser bundle.
+Vite transforms the source of the browser and the application. Database execution still needs a supported server runtime and adapter.
 
-For direct compiler integrations, `@sqlbraid/vite` re-exports `transformSource(source, filename, options?)`; use it only when another bundler owns the surrounding TypeScript transform. See [dynamic templates](/SQLBraid/latest/concepts/dynamic-braid.md), [SQL tags](/SQLBraid/latest/concepts/sql-tags.md), and [the Vite package README](https://github.com/Clickin/SQLBraid/tree/main/packages/vite).
+For a TanStack Start finance consumer, keep the Vite 8 build and the Node 24 application runtime as separate concerns:
+
+- The plugin must keep the source map.
+- The server route must create the SQLBraid database with the correct Node adapter, for example `node:sqlite`.
+- Do not import a database driver that is only for Node into a browser bundle.
+
+For direct compiler integrations, `@sqlbraid/vite` re-exports `transformSource(source, filename, options?)`. Use it only when a different bundler owns the TypeScript transform around it. Read [dynamic templates](/SQLBraid/latest/concepts/dynamic-braid.md), [SQL tags](/SQLBraid/latest/concepts/sql-tags.md) and [the Vite package README](https://github.com/Clickin/SQLBraid/tree/main/packages/vite).

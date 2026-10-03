@@ -2,7 +2,7 @@
 
 > Declare what a SQLBraid statement returns without hiding the SQL.
 
-SQLBraid's tag is ordinary TypeScript plus SQL. The dialect package exports a configured `sql` tag:
+A SQLBraid tag is ordinary TypeScript with SQL. The dialect package exports a configured `sql` tag:
 
 ```ts
 import { sql } from "sqlbraid/postgres";
@@ -20,18 +20,18 @@ const routine = sql.call({
 `;
 ```
 
-For the exact integer driver profiles documented here, the `id` field is
-canonical decimal text. Approximate floating-point columns are declared as
-`number`; use a Standard Schema transform when the application needs `bigint`
-or an arbitrary-precision decimal.
+For the exact integer driver profiles on this page, the `id` field is canonical
+decimal text. Approximate floating-point columns have the type `number`. If the
+application needs `bigint` or an arbitrary-precision decimal, use a Standard
+Schema transform.
 
 Use the matching runtime operation:
 
-- `db.all`, `db.one`, `db.maybeOne`, `db.stream`, and row prepared queries require `sql.rows`.
-- `db.execute` handles row, command, and unknown queries and checks the adapter's actual result kind.
-- `db.call` is for `sql.call`; see [routine calls](/SQLBraid/latest/concepts/routines.md) for output directions, tuple result sets, cleanup, and database-specific limits.
+- `db.all`, `db.one`, `db.maybeOne`, `db.stream` and row prepared queries require `sql.rows`.
+- `db.execute` accepts row, command and unknown queries. It checks the actual result kind from the adapter.
+- `db.call` is for `sql.call`. For output directions, tuple result sets, cleanup and the limits of each database, read [routine calls](/SQLBraid/latest/concepts/routines.md).
 
-The unqualified `sql` tag creates a query with result kind `unknown`. It is useful when a driver-specific statement can return either rows or command metadata, but it gives up the compile-time row contract.
+The plain `sql` tag creates a query with the result kind `unknown`. Use it when a driver-specific statement can return rows or command metadata. But it does not give a compile-time row type.
 
 ## Cardinality is explicit
 
@@ -41,18 +41,19 @@ const maybeUser = await db.maybeOne(sql.rows<UserRow>`SELECT id, name FROM users
 const users = await db.all(sql.rows<UserRow>`SELECT id, name FROM users`);
 ```
 
-`one` requires exactly one row. `maybeOne` permits zero or one. More than one row, or zero rows for `one`, throws a cardinality error rather than silently choosing a row.
+`one` requires exactly one row. `maybeOne` permits zero rows or one row. If there is more than one row, or zero rows for `one`, SQLBraid throws a cardinality error. It does not silently select a row.
 
-## Result-kind checks happen after execution
+## Result-kind checks occur after execution
 
-Adapters report whether a statement produced rows or command metadata. If a query declared `rows` but the driver reports a command, SQLBraid throws `BRAID_RESULT_KIND` after execution. Put a write in `db.tx(...)` when a wrong declaration must roll back the write; a result-kind check cannot undo an already-completed root operation.
+Adapters report if a statement produced rows or command metadata. If a query declared `rows` but the driver reports a command, SQLBraid throws `BRAID_RESULT_KIND` after execution. A result-kind check cannot undo a root operation that is already complete. Thus, if a wrong declaration must roll back a write, put the write in `db.tx(...)`.
 
-Bun 1.3.14 uses the guarded `bun-sql.result-kind-metadata` condition. For its
-MySQL/MariaDB paths, an empty `SELECT` and zero-affected DML/DDL can produce
-`BRAID_RESULT_KIND_AMBIGUOUS` only after execution because the driver reports
-`command: null` and `affectedRows: 0`; side effects may already have occurred.
+Bun 1.3.14 uses the guarded `bun-sql.result-kind-metadata` condition. On its
+MySQL and MariaDB paths, an empty `SELECT` and DML or DDL that affects zero rows
+can produce `BRAID_RESULT_KIND_AMBIGUOUS`. This occurs only after execution,
+because the driver reports `command: null` and `affectedRows: 0`. Side effects
+can already have occurred.
 
-SQLBraid does not infer a TypeScript row shape from arbitrary SQL. The developer owns the correspondence between selected columns and the declared row type.
+SQLBraid does not infer a TypeScript row shape from arbitrary SQL. The developer is responsible for the match between the selected columns and the declared row type.
 
-Set-returning functions and table-valued extensions remain ordinary row
-queries: use `sql.rows`, `db.all`, or `db.stream`, not `db.call`.
+Set-returning functions and table-valued extensions stay ordinary row queries.
+Use `sql.rows`, `db.all` or `db.stream`. Do not use `db.call`.

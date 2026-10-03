@@ -2,7 +2,7 @@
 
 > Reuse a stable SQLBraid query shape without promising native driver preparation.
 
-Register a named input factory (required input by default):
+Register a named input factory. By default, the input is required:
 
 ```ts
 const byId = db.prepare(
@@ -17,7 +17,7 @@ const all = await byId.all("u_1", { schema: UserSchema });
 for await (const row of byId.stream("u_1", { signal })) consume(row);
 ```
 
-You may make the required-input contract explicit:
+You can make the required input explicit:
 
 ```ts
 const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`SELECT id, name FROM users WHERE id = ${id}`, {
@@ -25,19 +25,21 @@ const byId = db.prepare("user-by-id", (id: string) => sql.rows<UserRow>`SELECT i
 });
 ```
 
-Declare a zero-input factory explicitly with `{ input: "none" }`:
+Declare a factory without input explicitly with `{ input: "none" }`:
 
 ```ts
 const users = db.prepare("users", () => sql.rows<UserRow>`SELECT id, name FROM users`, { input: "none" });
 await users.all({ signal });
 ```
 
-The input shape is an explicit public contract rather than a guess from
-`Function.length` or option-shaped input values. Optional, default, rest, and
-wrapped one-input factories may declare `{ input: "required" }`. A required
-input whose value is `undefined` is still an input; only the zero-input form
-uses `PreparedQuery<never, Q>`. Pass one object when a query needs multiple
-input fields:
+The input shape is an explicit public rule. SQLBraid does not guess it from
+`Function.length` or from input values that look like options.
+
+- Optional, default, rest and wrapped one-input factories can declare
+  `{ input: "required" }`.
+- A required input with the value `undefined` is still an input. Only the form
+  without input uses `PreparedQuery<never, Q>`.
+- If a query needs many input fields, pass one object:
 
 ```ts
 const byAccount = db.prepare(
@@ -52,25 +54,28 @@ await byAccount.all({ accountId: "a_1", includeClosed: false });
 ```
 
 The factory is evaluated for each execution and renders once. SQLBraid records
-the first logical shape—result kind, dialect, canonical `segments`, and ordered
-hint/direction/output metadata—as the shape lock. Values may change. A later
-shape change throws `BRAID_PREPARED_SHAPE` before driver I/O. Physical `$1`,
-`?`, `:1`, and `@p1` placeholder spelling is transport-specific and never
-changes shape identity. Names must be non-empty and unique (`BRAID_PREPARED_NAME`).
+the first logical shape as the shape lock: the result kind, the dialect, the
+canonical `segments` and the ordered hint, direction and output metadata.
 
-Prepared operations follow result kind:
+- Values can change.
+- A later change of shape throws `BRAID_PREPARED_SHAPE` before driver I/O.
+- The physical placeholder spelling `$1`, `?`, `:1` and `@p1` is specific to the
+  transport. It never changes the shape identity.
+- Names must not be empty and must be unique (`BRAID_PREPARED_NAME`).
+
+Prepared operations follow the result kind:
 
 - row queries expose `execute`, `all`, `one`, `maybeOne`, and `stream`;
 - command and unknown queries expose `execute`;
 - call queries expose `call`.
 
-All operations take trailing options. Row operations accept schema and signal;
-`stream` retains its physical lease through driver cleanup. An already-aborted
-signal rejects with its `reason`; an active signal needs adapter cancellation and
-otherwise fails before I/O with `UnsupportedFeatureError` /
-`BRAID_CANCEL_UNSUPPORTED`.
+All operations take trailing options. Row operations accept a schema and a
+signal. `stream` keeps its physical lease through the driver cleanup. If the
+signal is already aborted, the operation rejects with its `reason`. An active
+signal needs adapter cancellation. Without it, the operation fails before I/O
+with `UnsupportedFeatureError` / `BRAID_CANCEL_UNSUPPORTED`.
 
-Prepared means a stable SQLBraid application shape. The driver chooses whether
-`auto`, `simple`, or `reuse` is effective; runtime does not add a universal
-native prepared statement or server-plan cache. Prepared events expose the
-shape-lock name and effective binding plan to observers.
+Prepared means a stable SQLBraid application shape. The driver selects if
+`auto`, `simple` or `reuse` is effective. The runtime does not add a universal
+native prepared statement or a server-plan cache. Prepared events expose the
+name of the shape lock and the effective binding plan to observers.

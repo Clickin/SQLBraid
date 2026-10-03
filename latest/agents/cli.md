@@ -2,7 +2,7 @@
 
 > Use bounded JSON inspection when an agent harness has no LSP client.
 
-The CLI shares the tooling semantics used by the LSP server. Positions are 1-based in CLI commands.
+The CLI and the LSP server share the same tooling semantics. In CLI commands, positions start at 1.
 
 Install the optional CLI in the project that runs these commands:
 
@@ -16,14 +16,14 @@ sqlbraid inspect symbol UsersRow --json
 sqlbraid inspect diagnostics --file src/query.ts --json
 ```
 
-Use `--config ./sqlbraid.config.mjs` when repository discovery is ambiguous. JSON is focused and bounded. Unresolved query evidence is reported as `resolved: false`; it is not an invalid-SQL claim.
+If the discovery of the repository is ambiguous, use `--config ./sqlbraid.config.mjs`. The JSON output is focused and bounded. Unresolved query evidence has the value `resolved: false`. This does not claim that the SQL is invalid.
 
 A normal workflow is:
 
-1. Discover the project config and metadata evidence.
-2. Prefer LSP requests when available.
-3. Fall back to one of the JSON inspection commands above.
-4. If metadata or config changes, run `sqlbraid codegen` and then `sqlbraid codegen --check`.
-5. Treat generated files as derived; never hand-edit them.
+1. Find the project config and the metadata evidence.
+2. If LSP requests are available, use them first.
+3. If not, use one of the JSON inspection commands above.
+4. If the metadata or the config changes, run `sqlbraid codegen`. Then run `sqlbraid codegen --check`.
+5. Treat generated files as derived files. Do not edit them manually.
 
-`sqlbraid check` can add ordinary TypeScript diagnostics, while inspect operations focus on SQLBraid evidence.
+`sqlbraid check` can add ordinary TypeScript diagnostics. The inspect operations give only SQLBraid evidence.

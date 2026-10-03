@@ -2,7 +2,7 @@
 
 > Pin one physical connection and make transaction scope explicit.
 
-`db.tx` is the connection-pinning boundary:
+`db.tx` is the boundary that pins a connection:
 
 ```ts
 // canonical-example: serializable-write
@@ -16,8 +16,8 @@ await db.tx({ isolation: "serializable" }, async (tx) => {
 });
 ```
 
-For a read-only query, use a separate transaction with `readOnly: true` and
-only row-producing statements:
+For a read-only query, use a separate transaction with `readOnly: true`. Use
+only statements that produce rows:
 
 ```ts
 // canonical-example: read-only-query
@@ -29,12 +29,13 @@ await db.tx({ readOnly: true }, async (tx) => {
 });
 ```
 
-Every `tx.*` operation in the callback reuses one physical connection until
-commit or rollback. Use the callback handle—not the outer `db`—for all work
-inside the transaction. The callback handle closes after the callback returns.
+Each `tx.*` operation in the callback uses the same physical connection until
+the commit or the rollback. For all work inside the transaction, use the
+callback handle. Do not use the outer `db`. The callback handle closes after the
+callback returns.
 
-Nested `tx` calls use savepoints when the executor advertises
-`transaction.savepoint`:
+When the executor advertises `transaction.savepoint`, nested `tx` calls use
+savepoints:
 
 ```ts
 await db.tx(async (tx) => {
@@ -46,29 +47,33 @@ await db.tx(async (tx) => {
 });
 ```
 
-While a savepoint is active, use the innermost handle. Parent or sibling use is
-rejected with the runtime scope error. A transaction stream must close before
-opening a savepoint; overlapping pinned work fails instead of moving to another
-connection.
+While a savepoint is active, use the innermost handle. A use of a parent or a
+sibling handle is rejected with the runtime scope error. Close a transaction
+stream before you open a savepoint. Overlapping pinned work fails. It does not
+move to a different connection.
 
 ## Sessions and physical leases
 
-`db.session(async (session) => ...)` pins one provider lease for its entire
-callback. Nested sessions reuse that lease, and `session.tx(...)` inside a session
-uses it without reacquiring. The outer root database cannot escape the session.
-A provider is a lease source, not a physical connection; root pooled operations
-acquire, execute, release, then map materialized results. A stream holds its
-lease until cursor/request cleanup. An unavailable session primitive rejects
-with `BRAID_SESSION_UNSUPPORTED`.
+`db.session(async (session) => ...)` pins one provider lease for its complete
+callback.
 
-Close a session's stream before calling `session.tx(...)`. An overlapping
-transaction rejects with `BRAID_STREAM_SCOPE` before `BEGIN`, without waiting
-for the stream or acquiring another lease. Wrapping a transaction in
-`tx.session(...)` does not relax its innermost transaction/savepoint scope.
+- Nested sessions use the same lease.
+- `session.tx(...)` inside a session uses the lease without acquiring again.
+- The outer root database cannot escape the session.
+- A provider is a source of leases. It is not a physical connection. Root
+  pooled operations acquire, execute, release and then map materialized results.
+- A stream keeps its lease until the cursor or request cleanup.
+- If the session primitive is unavailable, the call rejects with
+  `BRAID_SESSION_UNSUPPORTED`.
+
+Close the stream of a session before you call `session.tx(...)`. An overlapping
+transaction rejects with `BRAID_STREAM_SCOPE` before `BEGIN`. It does not wait
+for the stream and does not acquire another lease. If you wrap a transaction in
+`tx.session(...)`, the innermost transaction or savepoint scope stays the same.
 
 ## Transaction options
 
-The portable options are deliberately fixed:
+The portable options are fixed. This is intentional:
 
 ```ts
 type TransactionIsolation = "read-uncommitted" | "read-committed" | "repeatable-read" | "serializable";
@@ -79,50 +84,54 @@ interface TransactionOptions {
 }
 ```
 
-The runtime maps these literals to adapter-owned transaction control. It never
-interpolates arbitrary JavaScript text into `BEGIN`/`SET TRANSACTION`, and it
-never silently changes an omitted option. Omitted options preserve the actual
-connection/session default. A malformed JavaScript value rejects before lease
-acquisition with `TypeError` / `BRAID_TX_OPTIONS_INVALID`. A valid but
-unsupported isolation or access mode rejects with `UnsupportedFeatureError` /
-`BRAID_TX_OPTION_UNSUPPORTED`, whose feature identifies
-`transaction.isolation.<level>` or `transaction.read-only`.
+The runtime maps these literals to transaction control that the adapter owns.
 
-When transactions are unavailable, `BRAID_TX_UNSUPPORTED` is used. Nested
-explicit options, including `{}`, reject with `BRAID_TX_OPTIONS_NESTED`; they
-cannot change an active transaction. Adapters may map PostgreSQL
-`read-uncommitted` to its documented `read-committed` behavior only when their
-capability evidence says so. SQLite, D1, and other drivers expose only the
-combinations their transport actually honors.
+- It never interpolates arbitrary JavaScript text into `BEGIN` or
+  `SET TRANSACTION`.
+- It never silently changes an omitted option. Omitted options keep the actual
+  connection or session default.
+- A malformed JavaScript value rejects before lease acquisition with
+  `TypeError` / `BRAID_TX_OPTIONS_INVALID`.
+- A valid but unsupported isolation or access mode rejects with
+  `UnsupportedFeatureError` / `BRAID_TX_OPTION_UNSUPPORTED`. Its feature
+  identifies `transaction.isolation.<level>` or `transaction.read-only`.
 
-Bun.SQL MySQL/MariaDB reject both explicit `readOnly` values before I/O with
-`BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`; omission preserves
-the native session default. This does not restrict Bun.SQL PostgreSQL.
-See [transaction option capabilities](/SQLBraid/latest/runtime/transaction-profiles.md)
-for the native Bun 1.3.14 connection-contamination boundary.
+If transactions are unavailable, the code is `BRAID_TX_UNSUPPORTED`. Nested
+explicit options, including `{}`, reject with `BRAID_TX_OPTIONS_NESTED`. They
+cannot change an active transaction. An adapter can map PostgreSQL
+`read-uncommitted` to its documented `read-committed` behavior only when its
+capability evidence says so. SQLite, D1 and other drivers expose only the
+combinations that their transport actually obeys.
 
-The libSQL adapter preserves transaction continuity through its interactive
-`Transaction` handle rather than issuing `BEGIN`/`COMMIT` on ordinary client
-calls. `readOnly: true` maps to libSQL's documented read mode; the portable
-isolation literals are rejected because libSQL transaction modes are not
-automatic equivalents. Ordinary libSQL calls do not guarantee a pinned
-session, so `session.pinned` remains unsupported.
+Bun.SQL MySQL and MariaDB reject both explicit `readOnly` values before I/O,
+with `BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`. If you omit the
+option, the native session default stays. This does not restrict Bun.SQL
+PostgreSQL. For the native connection-contamination boundary of Bun 1.3.14,
+read [transaction option capabilities](/SQLBraid/latest/runtime/transaction-profiles.md).
+
+The libSQL adapter keeps transaction continuity through its interactive
+`Transaction` handle. It does not send `BEGIN`/`COMMIT` on ordinary client
+calls. `readOnly: true` maps to the documented read mode of libSQL. The portable
+isolation literals are rejected, because libSQL transaction modes are not
+automatic equivalents. Ordinary libSQL calls do not guarantee a pinned session.
+Thus, `session.pinned` stays unsupported.
 
 ## Batch and bulk
 
-`batch` is not atomic. Earlier statements—and later statements when mapping
-fails—may already have executed. Wrap it in `db.tx(...)` when atomicity matters.
+`batch` is not atomic. Earlier statements can already have executed. If mapping
+fails, later statements can also have executed. When atomicity is important,
+wrap the batch in `db.tx(...)`.
 
-`batch([])` returns `[]` without acquiring or releasing a lease and emits no
-query lifecycle events. Execution-option checks still apply: an already-aborted
-signal rejects with its original reason before the no-op result.
+`batch([])` returns `[]`. It does not acquire or release a lease and emits no
+query lifecycle events. The execution-option checks still apply: an
+already-aborted signal rejects with its original reason before the no-op result.
 
-`db.bulk(inputs, factory)` is command-only homogeneous DML, not a transaction.
-Root bulk uses one lease but has no portable atomicity or auto-chunking promise.
-Use `tx.bulk(inputs, factory)` inside the callback when every item must share the
-transaction. Drivers report the actual mode (`native-bulk`, `pipeline`,
-`prepared-loop`, or `remote-batch`).
+`db.bulk(inputs, factory)` is homogeneous DML for commands only. It is not a
+transaction. Root bulk uses one lease, but it has no portable promise of
+atomicity or automatic chunking. If all items must share the transaction, use
+`tx.bulk(inputs, factory)` inside the callback. Drivers report the actual mode:
+`native-bulk`, `pipeline`, `prepared-loop` or `remote-batch`.
 
-An uncertain transaction-control failure poisons the physical resource. Pool
-cleanup discards it; a direct resource rejects further SQLBraid work. An
-abandoned live stream rolls back instead of committing over an active cursor.
+An uncertain failure of transaction control poisons the physical resource. Pool
+cleanup discards it. A direct resource rejects all further SQLBraid work. An
+abandoned live stream rolls back. It does not commit over an active cursor.

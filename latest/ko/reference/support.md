@@ -1,26 +1,20 @@
-# 런타임 및 드라이버 지원
+# 런타임·드라이버 지원
 
-> 정확한 증거, capability 경계와 revision별 지원 label을 설명합니다.
+> 리비전별 정확한 근거, 기능 경계, 지원 등급을 정리합니다.
 
 ## 현재 상태
 
-현재 지원 매트릭스는 지원 manifest에서 읽은 revision별 증거와 label을
-표시합니다. 각 label과 증거는 매트릭스가 기록한 정확한 database, driver,
-profile, runtime, capability tuple과 해당 revision의 실행 workflow에만
-적용됩니다. 인접한 서버 버전·runtime·profile·로컬 binding 또는 package
-설치로 인증을 추론하지 마세요. 정확한 tuple의 revision별 workflow evidence를
-확인해야 합니다. 최종 exact-SHA Runtime, Documentation, Release gate와
-명시적인 release 승인은 별도 요구사항입니다.
+이 매트릭스가 기준 자료입니다. 각 지원 등급은 여기에 기록된 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합과 테스트한 버전에만 적용됩니다.
 
-## 증거 label
+## 근거 등급
 
-- **Official** — 지정한 database, driver, profile, runtime, capability tuple을 정확한 실행 증거가 다룹니다.
-- **Conditional** — 이름을 지정한 조건에서만 증거가 적용됩니다.
-- **Pending** — 현재 구현 revision에 대한 새로운 성공 gate가 없습니다.
-- **Historical** — 과거 exact revision이 조합을 실행했지만 현재 tree를 증명하지 않습니다.
-- **Compatible** — public API가 동작할 수 있지만 정확한 인증 target을 주장하지 않습니다.
-- **Custom** — 사용자가 제공한 `QueryExecutor` 또는 `ConnectionProvider`입니다.
-- **Unsupported** — 필요한 SQLBraid capability가 의도적으로 없습니다.
+- **Official**: 정확한 실행 근거가 이름 붙은 데이터베이스·드라이버·프로필·런타임·기능 조합을 다룹니다.
+- **Conditional**: 명시한 조건에서만 근거가 적용됩니다.
+- **Pending**: 후보 조합에 현재 구현 리비전에 대한 새로 통과한 게이트가 없습니다.
+- **Historical**: 예전의 정확한 리비전에서 조합을 테스트했습니다. 현재 소스 트리를 증명하지는 않습니다.
+- **Compatible**: 공개 API로 동작할 수 있지만, 인증된 정확한 대상이라고 주장하지 않습니다.
+- **Custom**: 사용자가 직접 제공한 `QueryExecutor`나 `ConnectionProvider`입니다.
+- **Unsupported**: 필요한 SQLBraid 기능이 일부러 없습니다.
 
 ## 현재 매트릭스
 
@@ -1104,13 +1098,11 @@ Exclusions: SQLite call and routine APIs are unsupported Bun uses its earlier bu
 | `dml.update-returning` | guaranteed |
 | `dml.delete-returning` | guaranteed |
 
-매트릭스는 기계 판독 support target과 capability 조건에서 생성됩니다. 모든
-adapter가 모든 작업을 제공한다는 약속이 아니라 증거 표시입니다.
+매트릭스는 기계가 읽을 수 있는 지원 대상과 기능 조건에서 생성됩니다. 근거를 보여 줄 뿐, 모든 어댑터가 모든 작업을 지원한다고 약속하지 않습니다.
 
-## Capability 어휘
+## 기능 용어
 
-Dialect, driver, runtime, host, database version, representation profile,
-capability는 별도 축입니다. 정식 capability 식별자는 다음과 같습니다.
+방언, 드라이버, 런타임, 호스트, 데이터베이스 버전, 표현 방식 프로필, 기능은 서로 독립된 축입니다. 정규 기능 식별자는 다음과 같습니다.
 
 ```text
 sql.native-transparency           sql.generated-structure
@@ -1149,78 +1141,56 @@ metadata.identity                metadata.generated
 metadata.routines                metadata.types
 ```
 
-`execution.prepared`, `execution.stream`, `routine.resultsets`,
-`routine.return-status` 같은 폐기된 alias를 추가하지 마세요.
+`execution.prepared`, `execution.stream`, `routine.resultsets`, `routine.return-status` 같은 예전 별칭을 추가하지 마세요.
 
-`statementBinding.describe()`와 `describeBulk()`는 lease 획득 전에 논리
-`RenderedStatement`/`RenderedBulk`를 검증합니다. Provider와 lease는 동일한
-불변 binding adapter identity를 노출해야 합니다. Prepared shape는 논리
-result kind, canonical segments, dialect, 순서 있는 hint/direction/output
-metadata이며 물리 placeholder 표기는 shape를 바꾸지 않습니다.
+`statementBinding.describe()`와 `describeBulk()`는 리스를 획득하기 전에 논리적인 `RenderedStatement`나 `RenderedBulk`를 검증합니다. 프로바이더와 리스는 같은 불변 바인딩 어댑터 객체를 노출합니다. 준비된 쿼리의 형태는 논리적 결과 종류, 정규화된 세그먼트, 방언, 그리고 순서가 있는 힌트·방향·출력 메타데이터입니다. 물리 플레이스홀더 표기는 형태를 바꾸지 않습니다.
 
-`db.session(callback)`은 하나의 물리 provider lease를 고정하고 중첩 session은
-재사용합니다. `db.tx(callback)`은 그 lease를 사용하거나 root lease를 얻으며,
-중첩 transaction은 advertised savepoint를 사용합니다. 명시적 transaction
-option은 고정된 `read-uncommitted`, `read-committed`, `repeatable-read`,
-`serializable` isolation과 `readOnly`만 사용합니다. 잘못된 runtime option은
-획득 전에 `TypeError` / `BRAID_TX_OPTIONS_INVALID`로 실패하고, 유효하지만
-지원하지 않는 option은 `UnsupportedFeatureError` /
-`BRAID_TX_OPTION_UNSUPPORTED`를 사용하며, 중첩 명시 option은
-`BRAID_TX_OPTIONS_NESTED`를 사용합니다.
+`db.session(callback)`은 물리 프로바이더 리스 하나를 고정합니다. 중첩 세션은 같은 리스를 씁니다. `db.tx(callback)`은 그 리스를 쓰거나, 루트 리스 하나를 획득합니다. 지원하는 경우 중첩 트랜잭션은 세이브포인트를 씁니다.
 
-이미 abort된 `AbortSignal`은 자신의 `reason`을 보존합니다. 활성 signal에는
-실제 adapter cancellation 경로가 필요하며, 없으면 I/O 전에
-`UnsupportedFeatureError`, feature `statement.cancel`,
-`BRAID_CANCEL_UNSUPPORTED`로 실패합니다. 사용할 수 없는 session 또는
-transaction primitive는 각각 `BRAID_SESSION_UNSUPPORTED` 또는
-`BRAID_TX_UNSUPPORTED`를 사용합니다.
-Oracle의 guarded `oracle.connection-break` 조건은 즉시 중단이나 timeout을
-보장하지 않는 cooperative 동작입니다. 문서화된 `DBMS_SESSION.SLEEP` raw
-probe는 sleep이 끝날 때만 `ORA-01013`으로 거부될 수 있으며, 어댑터는
-settlement까지 물리 lease를 유지합니다.
+명시적인 트랜잭션 옵션에는 정해진 격리 수준 리터럴 `read-uncommitted`, `read-committed`, `repeatable-read`, `serializable`과 `readOnly`만 쓸 수 있습니다.
 
-## Driver/runtime 경계
+- 형식이 잘못된 런타임 옵션은 획득 전에 `TypeError` / `BRAID_TX_OPTIONS_INVALID`로 실패합니다.
+- 올바르지만 지원하지 않는 옵션은 `UnsupportedFeatureError` / `BRAID_TX_OPTION_UNSUPPORTED`를 씁니다.
+- 중첩 트랜잭션에 옵션을 명시하면 `BRAID_TX_OPTIONS_NESTED`를 씁니다.
 
-First-party root는 PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server입니다.
-Driver subpath가 protocol과 cleanup을 소유합니다: `pg`, `mysql2`, MariaDB
-Connector/Node.js, `node:sqlite`, SQLite WASM, D1, node-oracledb Thin,
-Tedious. Bun은 명시적으로 사용자가 선택하는
-`dialect: "postgres" | "mysql" | "mariadb" | "sqlite"` 하나의 SQL adapter
-family를 사용하며 connection에서 SQL 의미를 추론하지 않습니다. Bun 1.3.14는
-active cancellation을 지원하지 않아 `BRAID_CANCEL_UNSUPPORTED`를 사용하며
-stream/routine carrier도 지원하지 않습니다. `result.rows`/`result.command`
-metadata는 `bun-sql.result-kind-metadata` 조건에서만 guarded됩니다.
-MySQL/MariaDB에서는 `command`가 null이고 `affectedRows`가 0이므로 빈
-`SELECT`와 영향 행이 0인 DML/DDL은 실행 후에만
-`BRAID_RESULT_KIND_AMBIGUOUS`로 실패할 수 있습니다. Deno는 public driver
-API가 동작하는 기존 first-party adapter를 재사용하며 Deno 전용 dialect를
-만들지 않습니다.
+이미 중단된 `AbortSignal`은 원래 `reason`을 유지합니다. 활성 시그널을 쓰려면 어댑터에 실제 취소 경로가 있어야 합니다. 없으면 작업은 I/O 전에 `UnsupportedFeatureError`(기능 `statement.cancel`, 코드 `BRAID_CANCEL_UNSUPPORTED`)로 거부됩니다. 세션 기능이 없으면 `BRAID_SESSION_UNSUPPORTED`, 트랜잭션 기능이 없으면 `BRAID_TX_UNSUPPORTED`를 씁니다.
 
-stream, routine, output, hint, bulk, transaction, cancellation 지원이 없으면
-명시적인 `UnsupportedFeatureError`로 실패해야 합니다. SQLBraid는 streaming을
-흉내 내려고 paginate하거나 routine carrier를 추측하거나 hint를 무시하거나
-숨은 transaction을 만들거나 검증되지 않은 tuple을 승격하지 않습니다. D1의
-managed SQLite version은 공개되지 않았으므로 local Worker binding 검사는
-version 인증이 아닙니다.
+Oracle의 guarded 조건 `oracle.connection-break`는 협력적인 방식입니다. 즉시 멈추거나 시간 제한을 지킨다고 보장하지 않습니다. 문서화된 `DBMS_SESSION.SLEEP` 원시 점검은 sleep이 끝날 때만 `ORA-01013`으로 reject될 수 있습니다. 어댑터는 결과가 확정될 때까지 물리 리스를 붙잡고 있습니다.
 
-정확한 숫자, JSON/temporal, container 동작은 별도 증거 경계입니다. 정확한
-DB integer와 decimal은 canonical string이고 근사 IEEE 값은 number입니다.
-Profile과 codegen descriptor는 일치해야 합니다. Metadata는 positive open-world
-증거이므로 누락된 사실이 SQL invalid를 뜻하지 않습니다. Bun 1.3.14는
-PostgreSQL/MySQL/MariaDB에 `{ bigint: true }`, SQLite에
-`{ safeIntegers: true }`를 사용합니다. Column metadata가 없으므로
-integral 및 integral-approximate `Number` row는 ambiguous로 거부되고,
-PostgreSQL decimal은 string입니다. MySQL/MariaDB DECIMAL과 binary 출력은
-타입 정보 없는 같은 byte carrier라 거부하며 `CAST(... AS CHAR)` 또는
-`HEX(...)`를 직접 작성해야 합니다. SQLite native decimal은 지원하지 않습니다.
-MariaDB/SQLite JSON은 text이며 PostgreSQL/MySQL native JSON은 중첩 숫자가
-반올림될 수 있습니다. Bun SQLite의 결과 종류는 `bun-sql.sqlite-result-parser`
-조건에서 guarded입니다. Bun이 서로 다른 따옴표가 섞인 SQL literal을 잘못
-분류할 수 있으므로 JSON은 bind하세요. SQLBraid가 SQL을 재작성하지 않습니다.
+## 드라이버·런타임 경계
 
-## 증거 추가
+공식 루트는 PostgreSQL, MySQL, MariaDB, SQLite, Oracle, SQL Server를 다룹니다. 프로토콜과 정리 동작은 드라이버 하위 경로가 맡습니다. `pg`, `mysql2`, MariaDB Connector/Node.js, `node:sqlite`, SQLite WASM, D1, node-oracledb Thin, Tedious가 있습니다.
 
-지원 추가에는 정확한 version/profile tuple, 실제 engine 실행 범위, 기계 판독
-target 조건, 새 clean revision이 필요합니다. Release 결정에는 translation
-freshness, package/export 검사와 immutable release dry-run도 필요합니다.
-과거 실행 링크나 설명만으로는 현재 트리를 증명할 수 없습니다.
+Bun은 SQL 어댑터 계열 하나를 쓰며, 사용자가 `dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`를 고릅니다. 커넥션에서 SQL 의미를 추론하지 않습니다.
+
+- Bun 1.3.14에서는 활성 취소를 지원하지 않습니다(`BRAID_CANCEL_UNSUPPORTED`). 스트림과 루틴 출력 전달도 지원하지 않습니다.
+- `result.rows`와 `result.command` 메타데이터는 `bun-sql.result-kind-metadata` 조건으로 guarded입니다. MySQL과 MariaDB에서는 결과가 빈 `SELECT`와, 0행에 영향을 준 DML·DDL이 실행 후에야 `BRAID_RESULT_KIND_AMBIGUOUS`로 실패합니다. `command`가 null이고 `affectedRows`가 0이기 때문입니다.
+
+Deno는 공개 드라이버 API가 호환되는 곳에서 기존 공식 어댑터를 씁니다.
+
+스트림, 루틴, 출력, 힌트, 벌크, 트랜잭션, 취소 기능이 없으면 명시적인 `UnsupportedFeatureError`로 실패해야 합니다. SQLBraid는 다음을 하지 않습니다.
+
+- 스트리밍을 흉내 내려고 페이지 단위로 나눠 읽기
+- 루틴 출력 전달 방식 추측하기
+- 힌트 무시하기
+- 숨은 트랜잭션 만들기
+- 검증되지 않은 조합의 등급 올리기
+
+D1의 관리형 SQLite 버전은 보고되지 않습니다. 로컬 Worker 바인딩 점검은 버전 인증이 아닙니다.
+
+각 드라이버 프로필이 숫자, JSON, 날짜·시간, 컨테이너 동작을 정합니다. 정확한 데이터베이스 정수와 소수는 정규 문자열이고, 근사 IEEE 값은 숫자입니다. 프로필과 코드 생성 설명 객체는 서로 맞아야 합니다.
+
+데이터베이스 메타데이터는 긍정적 근거를 줍니다. 메타데이터에 항목이 없다고 해서 항상 SQL이 잘못되었다는 뜻은 아닙니다.
+
+Bun 1.3.14는 PostgreSQL, MySQL, MariaDB에 `{ bigint: true }`를, SQLite에 `{ safeIntegers: true }`를 씁니다.
+
+- Bun은 열 메타데이터를 제공하지 않습니다. 그래서 정수 값의 `Number` 행과 정수 값의 근사 `Number` 행은 모호하다는 이유로 거부합니다.
+- PostgreSQL decimal은 문자열입니다.
+- MySQL·MariaDB의 DECIMAL과 바이너리 출력은 타입 정보 없는 같은 바이트 형태로 전달되므로 거부합니다. SQL에 `CAST(... AS CHAR)`나 `HEX(...)`를 쓰세요.
+- SQLite 네이티브 decimal은 지원하지 않습니다.
+- MariaDB와 SQLite의 JSON은 텍스트입니다. PostgreSQL과 MySQL의 네이티브 JSON은 중첩된 숫자를 반올림할 수 있습니다.
+- Bun SQLite의 결과 종류는 `bun-sql.sqlite-result-parser` 조건으로 guarded입니다. Bun은 서로 다른 따옴표가 섞인 SQL 리터럴을 잘못 분류할 수 있습니다. JSON 값은 바인딩으로 넘기세요. SQLBraid는 SQL을 고쳐 쓰지 않습니다.
+
+## 근거 추가하기
+
+지원을 추가하려면 정확한 버전·프로필 조합, 실제 엔진에서의 검증, 기계가 읽을 수 있는 대상 조건이 필요합니다. 과거 링크나 설명만으로는 현재 소스 트리를 증명할 수 없습니다.
