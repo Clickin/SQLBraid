@@ -76,6 +76,21 @@ test("CI planner fails open for unknown changes and selects driver-local lanes",
   assert.equal(planChanges(["new/unknown-file.txt"], { eventName: "pull_request", baseKnown: true }).all, false);
   assert.equal(planChanges(["new/unknown-file.txt"], { eventName: "push", baseKnown: true }).all, true);
   assert.equal(planChanges([], { eventName: "pull_request", baseKnown: false }).all, true);
+  const postgresDocs = planChanges(["website/src/content/docs/ko/getting-started/postgres.md"], {
+    eventName: "pull_request",
+    baseKnown: true,
+  });
+  assert.deepEqual(postgresDocs.db_matrix, ["postgres"]);
+  assert.equal(postgresDocs.packages, false);
+  const bulkDocs = planChanges(["website/src/content/docs/concepts/bulk.md"], {
+    eventName: "pull_request",
+    baseKnown: true,
+  });
+  assert.ok(bulkDocs.db_matrix.includes("mariadb") && bulkDocs.db_matrix.includes("mssql"));
+  assert.deepEqual(
+    planChanges(["website/src/content/docs/index.md"], { eventName: "pull_request", baseKnown: true }).db_matrix,
+    [],
+  );
   const plan = planChanges(["website/index.md"], { eventName: "pull_request", baseKnown: true });
   verifyPlan(plan, {
     plan: "success",

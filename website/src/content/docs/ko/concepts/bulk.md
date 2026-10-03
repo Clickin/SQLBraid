@@ -27,7 +27,7 @@ const result = await db.bulk(
   구조, list cardinality, hint, bind direction을 유지해야 합니다.
 - Shape/materialization 오류는 DB I/O 전에 발생합니다. `sql.out()`과
   `sql.inOut()`은 bulk parameter로 사용할 수 없습니다.
-- 빈 입력은 `{ inputCount: 0 }`을 반환합니다. lease를 acquire하지 않습니다.
+- 빈 입력은 `{ inputCount: 0, affectedRows: 0 }`을 반환합니다. lease를 acquire하지 않습니다.
 - 작업은 physical lease 하나를 사용합니다. 드라이버는 실제 모드를 보고합니다:
   `native-bulk`, `pipeline`, `prepared-loop`, `remote-batch`.
 - Observer는 N개의 일반 query lifecycle이 아니라 하나의 bulk 작업을 봅니다.

@@ -756,7 +756,7 @@ If DB or runtime infrastructure is unavailable, report the gate as not run. Neve
   - tables that list adapters cover every first-party adapter.
 - When a change moves, renames or removes code, update the documentation that describes it in the same change. Search all Markdown, including the Korean pages, for the old name or path.
 - After `pnpm run build`, run `pnpm run docs:snippets`. It type-checks each TypeScript and JavaScript code block in the Markdown against the built packages. If a block is a signature sketch and not code, put `<!-- doc-snippet: skip -->` on the line before the fence. Give free variables in examples a real type in `tests/doc-snippets/globals.d.ts`; do not use `any` to hide an error.
-- When an example claims runtime behavior of a database (a value representation, an error code, a capability), verify it on the real database. The Testcontainers DB suites (`pnpm run test:db:*`) and a direct run of the example are both acceptable evidence. Report infrastructure that is unavailable as not run.
+- When a page claims runtime behavior of a database (a value representation, an error code, a capability, an adapter mode), prove it in `tests/db/<database>/docs-claims.test.ts` with `docsClaim("<page>", ...)` from `tests/db/docs-claims.ts`. These tests run on Testcontainers in the DB jobs. A change to a page reruns the DB jobs whose docs-claims tests name that page (`scripts/ci-plan.mjs`). Report infrastructure that is unavailable as not run.
 - Make sure that Mermaid diagrams parse. Quote node labels that contain `@`, `/` or other special characters. Use a top-to-bottom layout for chains of more than four nodes.
 
 ---

@@ -32,6 +32,27 @@ const databasePatterns = Object.fromEntries(
   ]),
 );
 
+// A documentation page reruns the DB jobs whose docs-claims tests verify it.
+const docClaimDatabases = new Map();
+for (const database of databases) {
+  let source = "";
+  try {
+    source = readFileSync(new URL(`../tests/db/${database}/docs-claims.test.ts`, import.meta.url), "utf8");
+  } catch {
+    continue;
+  }
+  for (const [page] of source.matchAll(/(?:getting-started|concepts|runtime|reference)\/[a-z-]+\.mdx?/gu)) {
+    const list = docClaimDatabases.get(page) ?? [];
+    if (!list.includes(database)) list.push(database);
+    docClaimDatabases.set(page, list);
+  }
+}
+
+function docsPageDatabases(file) {
+  const page = /^website\/src\/content\/docs\/(?:ko\/)?(.+\.mdx?)$/u.exec(file)?.[1];
+  return page === undefined ? [] : (docClaimDatabases.get(page) ?? []);
+}
+
 if (import.meta.main) main(process.argv.slice(2));
 
 function allPlan() {
@@ -127,6 +148,7 @@ function planChanges(files, { eventName = "pull_request", baseKnown = true } = {
     }
     if (/^(?:website\/|docs\/)/u.test(file)) {
       plan.common = true;
+      for (const database of docsPageDatabases(file)) plan[database] = true;
       continue;
     }
     plan.common = true;
@@ -215,4 +237,4 @@ function main(argv) {
   }
 }
 
-export { allPlan, emptyPlan, planChanges, verifyPlan };
+export { allPlan, docsPageDatabases, emptyPlan, planChanges, verifyPlan };

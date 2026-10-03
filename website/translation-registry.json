@@ -43,7 +43,7 @@
       "source": "website/src/content/docs/concepts/bulk.md",
       "translation": "website/src/content/docs/ko/concepts/bulk.md",
       "translationOf": "website/src/content/docs/concepts/bulk.md",
-      "sourceDigest": "e4b24ce335be13fecce000e44738a6eee81804eea2509bff450bbe8f70672394"
+      "sourceDigest": "7064cd18ee66b9ad27196ce0c76c43b1a6714b7539215370466e72547c55938b"
     },
     {
       "source": "website/src/content/docs/concepts/data-representation.md",
@@ -73,7 +73,7 @@
       "source": "website/src/content/docs/concepts/routines.md",
       "translation": "website/src/content/docs/ko/concepts/routines.md",
       "translationOf": "website/src/content/docs/concepts/routines.md",
-      "sourceDigest": "b11aa70f6a44f8ef72b52a7cccabb64a97597912423946691de743470d602205"
+      "sourceDigest": "7c4d9f309ec3f00ba6714c8973cd5d0c4f912b6c5a9cc2867c5fcb42a8bde737"
     },
     {
       "source": "website/src/content/docs/concepts/safe-binds.md",
@@ -193,7 +193,7 @@
       "source": "website/src/content/docs/reference/errors.md",
       "translation": "website/src/content/docs/ko/reference/errors.md",
       "translationOf": "website/src/content/docs/reference/errors.md",
-      "sourceDigest": "97216b851be0a3b10276e2dcf1c1daec76936d9f556a111a9150ec42c406d246"
+      "sourceDigest": "a40b9ab8302f8106bc0d1a5364ff86fc17630b85ddf5f3900d69f1cfe8fde44d"
     },
     {
       "source": "website/src/content/docs/reference/packages.md",

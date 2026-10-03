@@ -28,7 +28,7 @@ const result = await db.bulk(
   Braid structure, list cardinality, hints and bind directions.
 - Shape and materialization errors occur before database I/O. `sql.out()` and
   `sql.inOut()` are not valid bulk parameters.
-- Empty input returns `{ inputCount: 0 }`. It does not acquire a lease.
+- Empty input returns `{ inputCount: 0, affectedRows: 0 }`. It does not acquire a lease.
 - The operation uses one physical lease. Drivers report the actual mode:
   `native-bulk`, `pipeline`, `prepared-loop` or `remote-batch`.
 - Observers see one bulk operation, not N ordinary query lifecycles. The values
