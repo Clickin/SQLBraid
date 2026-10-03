@@ -9,7 +9,7 @@ This guide gives contributors a short overview of the internal architecture of S
 SQLBraid keeps the SQL that the user writes visible. It also separates concerns that database libraries often mix.
 
 ```mermaid
-flowchart LR
+flowchart TB
   A[TypeScript + authored SQL] --> Q[Query]
   Q --> R[RenderedStatement<br/>segments + parameters]
   R --> B[StatementBindingAdapter]

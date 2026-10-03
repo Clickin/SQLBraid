@@ -9,7 +9,7 @@
 SQLBraid는 사용자가 작성한 SQL을 그대로 보이게 유지합니다. 그리고 데이터 접근 라이브러리에서 흔히 섞이는 책임을 분리합니다.
 
 ```mermaid
-flowchart LR
+flowchart TB
   A[TypeScript + 작성한 SQL] --> Q[Query]
   Q --> R[RenderedStatement<br/>segments + parameters]
   R --> B[StatementBindingAdapter]
