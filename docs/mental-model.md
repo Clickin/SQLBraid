@@ -70,17 +70,18 @@ Because of this boundary, the adapter can own the placeholder syntax. The same S
 
 ## 3. `@sqlbraid/core`: the interface layer
 
-The most important source file is [`packages/core/src/index.ts`](../packages/core/src/index.ts). Treat it as the protocol that authoring, runtime and adapters share. It is not a normal implementation module.
+The core package is the protocol that authoring, runtime and adapters share. It is not a normal implementation module. [`packages/core/src/index.ts`](../packages/core/src/index.ts) only re-exports. Each group of types is in its own file:
 
-The main groups are:
-
-- query and result types: `Query`, `RowQuery`, `CommandQuery`, `CallQuery`, `QueryExecutionResult`;
-- logical statement types: `RenderedStatement`, `RenderedParameter`, `RenderedBulk`;
-- the binding SPI: `StatementBindingAdapter`, `StatementBindingDescription`, reuse and transport types;
-- the physical execution SPI: `QueryExecutor`, `ConnectionLease`, `ConnectionProvider`;
-- the application runtime surface: `Database`, prepared-query types, execution and transaction options;
-- representation types: `TypePolicy`, `TypeMapping`;
-- observer, capability, routine and public error types.
+| File                                                                                                                                                                                                           | Contents                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [`query.ts`](../packages/core/src/query.ts)                                                                                                                                                                    | query and result types: `Query`, `RowQuery`, `CommandQuery`, `CallQuery`, `QueryExecutionResult`     |
+| [`statement.ts`](../packages/core/src/statement.ts)                                                                                                                                                            | logical statement types: `RenderedStatement`, `RenderedParameter`, `RenderedBulk`                    |
+| [`binding.ts`](../packages/core/src/binding.ts)                                                                                                                                                                | the binding SPI: `StatementBindingAdapter`, `StatementBindingDescription`, reuse and transport types |
+| [`executor.ts`](../packages/core/src/executor.ts)                                                                                                                                                              | the physical execution SPI: `QueryExecutor`, `ConnectionLease`, `ConnectionProvider`                 |
+| [`database.ts`](../packages/core/src/database.ts)                                                                                                                                                              | the application runtime surface: `Database`, prepared-query types, execution and transaction options |
+| [`dialect.ts`](../packages/core/src/dialect.ts)                                                                                                                                                                | dialects and representation types: `TypePolicy`, `TypeMapping`                                       |
+| [`authoring.ts`](../packages/core/src/authoring.ts)                                                                                                                                                            | the authoring types: `SqlTag` and fragments                                                          |
+| [`observers.ts`](../packages/core/src/observers.ts), [`capabilities.ts`](../packages/core/src/capabilities.ts), [`routine.ts`](../packages/core/src/routine.ts), [`errors.ts`](../packages/core/src/errors.ts) | observer, capability, routine and public error types                                                 |
 
 The smaller file [`packages/core/src/driver.ts`](../packages/core/src/driver.ts) contains helpers for driver authors. They help with resource cleanup, safe result properties and generated savepoint names.
 
@@ -90,7 +91,7 @@ A `Query` keeps the template IR, the captured values, the declared result kind a
 
 ## 4. `@sqlbraid/template`: authoring and rendering
 
-After core, read [`packages/template/src/index.ts`](../packages/template/src/index.ts).
+After core, read the template package. [`packages/template/src/index.ts`](../packages/template/src/index.ts) only re-exports. `createSqlTag()` is in [`tag.ts`](../packages/template/src/tag.ts), the renderer is in [`render.ts`](../packages/template/src/render.ts) and the compiler targets are in [`compiled.ts`](../packages/template/src/compiled.ts).
 
 `createSqlTag()` builds a dialect-bound `sql` tag. The tag creates frozen `Query` objects. If the statement does not need structural processing, the tag delays the template parse.
 
@@ -129,24 +130,29 @@ Because of this separation, PostgreSQL, MySQL, Oracle, SQL Server and native-tem
 
 ## 6. `@sqlbraid/runtime`: the lifecycle is the difficult part
 
-The main runtime file is [`packages/runtime/src/index.ts`](../packages/runtime/src/index.ts). Most of its size comes from the ownership of physical resources, not from SQL parsing.
+Most of the runtime code is about the ownership of physical resources, not about SQL parsing. The runtime has these files:
+
+| File                                                                               | Contents                                                                                                                                          |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`index.ts`](../packages/runtime/src/index.ts)                                     | `createDatabase()`, `createPooledDatabase()`, `createScopedDatabase()`, `prepare()`, `prepareObserved()`, `batch`, `bulk`, `session()` and `tx()` |
+| [`operations/materialized.ts`](../packages/runtime/src/operations/materialized.ts) | the materialized path: `runPrepared()`, `physical()`, `finalizePhysical()`, `processRows()`                                                       |
+| [`operations/lease.ts`](../packages/runtime/src/operations/lease.ts)               | lease acquisition: `leaseForUse()`                                                                                                                |
+| [`operations/stream.ts`](../packages/runtime/src/operations/stream.ts)             | the stream path                                                                                                                                   |
+| [`state.ts`](../packages/runtime/src/state.ts)                                     | `ScopeState` and the root and transaction locks                                                                                                   |
 
 The central constructor is `createScopedDatabase()`. `createDatabase()` and `createPooledDatabase()` both use it.
 
-For a normal materialized query, read these functions in this sequence:
+For a normal materialized query, the functions run in this sequence:
 
 ```text
-prepareObserved()
-    ↓
-prepare()
-    ↓
+prepareObserved()          render, describe the binding, emit query:ready
+  └─ prepare()
 runPrepared()
-    ↓
-physical()
-    ↓
-finalizePhysical()
-    ↓
-processRows()
+  ├─ leaseForUse()         acquire or pin the resource
+  ├─ physical()            driver I/O
+  └─ use.release()         release before mapping
+finalizePhysical()         result-kind checks
+processRows()              Standard Schema mapping
 ```
 
 A typical `db.all(query)` goes through this lifecycle:
@@ -204,6 +210,7 @@ lease.release()
 The important fields are:
 
 - `tail`: serializes ordinary direct or root physical work;
+- `directBusy`: marks a direct resource that a root operation currently uses;
 - `transactionTail`: orders pinned physical work and the transitions of transaction control;
 - `streamUsers` / `pendingStreams`: track a stream that is live or that the runtime is admitting;
 - `activeScope`: identifies the transaction or savepoint handle that is currently valid;
@@ -373,13 +380,13 @@ Missing metadata stays unresolved evidence. It does not prove that user SQL is i
 
 Do not read the repository in alphabetical order. Use this sequence:
 
-1. the README sections about the core boundary, sessions and prepared queries;
-2. `packages/core/src/index.ts`: `RenderedStatement`, `Query`, `StatementBindingAdapter`, `QueryExecutor`, `ConnectionProvider`, `Database`, `SqlTag`;
-3. `packages/template/src/index.ts`: `createSqlTag()` → `renderTemplateIr()` / `renderNodes()`;
-4. `packages/runtime/src/index.ts`: `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepare` → `leaseForUse` → `physical` → `runPrepared` → `finalizePhysical` → `processRows`;
-5. the runtime `stream()`, separately;
-6. the runtime `session()` and `tx()`;
-7. PostgreSQL `pgStatementBinding` and `createPgExecutor()` as the first adapter;
+1. the README sections "Key Concepts" and "Runtime API";
+2. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`);
+3. `packages/template/src/`: `tag.ts` (`createSqlTag()`) → `render.ts` (`renderTemplateIr()` / `renderNodes()`);
+4. `packages/runtime/src/index.ts`: `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepareObserved` → `prepare`. Then `operations/materialized.ts`: `runPrepared` → `leaseForUse` (in `operations/lease.ts`) → `physical` → `finalizePhysical` → `processRows`;
+5. the runtime stream path in `operations/stream.ts`, separately;
+6. the runtime `session()` and `tx()` in `index.ts`;
+7. PostgreSQL `pgStatementBinding` and `createPgExecutor()` in `packages/postgres/src/pg.ts` as the first adapter;
 8. Oracle or a different adapter with many resources;
 9. compiler → metadata → codegen → tooling, only when you work on static tooling.
 

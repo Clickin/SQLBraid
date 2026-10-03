@@ -32,8 +32,12 @@ Core/template rendering returns one immutable `RenderedStatement`:
 interface RenderedStatement {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
-  readonly resultKind: "rows" | "command" | "call" | "unknown";
+  readonly nativeTemplate?: TemplateStringsArray;
   readonly dialectId: string;
+  readonly resultKind: "rows" | "command" | "call" | "unknown";
+  readonly routineProcedure?: RoutineProcedure;
+  readonly fingerprint?: string;
+  readonly variantFingerprint?: string;
 }
 ```
 
@@ -49,6 +53,7 @@ in `segments`.
 interface StatementBindingAdapter {
   readonly id: string;
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription;
+  describeBulk?(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription;
 }
 interface StatementBindingContext {
   readonly dialectId: string;
@@ -58,10 +63,12 @@ interface StatementBindingContext {
 }
 interface ConnectionProvider {
   readonly statementBinding: StatementBindingAdapter;
+  readonly environment?: DriverEnvironment;
+  validateTransactionOptions?(options: TransactionOptions): void;
   acquire(): Promise<ConnectionLease>;
 }
 interface ConnectionLease extends QueryExecutor {
-  release(options?: { discard?: boolean }): void | Promise<void>;
+  release(options?: { readonly discard?: boolean }): void | Promise<void>;
 }
 ```
 
@@ -83,7 +90,9 @@ can change. The structural shape cannot change.
 
 ```ts
 interface QueryExecutor {
+  readonly ownershipKey?: object;
   readonly statementBinding: StatementBindingAdapter;
+  readonly environment?: DriverEnvironment;
   query<Row>(
     statement: RenderedStatement,
     binding?: StatementBindingDescription,
@@ -104,6 +113,7 @@ interface QueryExecutor {
     binding: BulkBindingDescription,
     options?: ExecutionOptions,
   ): Awaitable<BulkExecutionResult>;
+  validateTransactionOptions?(options: TransactionOptions): void;
   begin?(options?: TransactionOptions): Awaitable<void>;
   commit?(): Awaitable<void>;
   rollback?(): Awaitable<void>;

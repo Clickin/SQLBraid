@@ -63,6 +63,7 @@ not cancellation.
 | Cloudflare D1               | none                                 | `BRAID_STREAM_UNSUPPORTED`; do not paginate to simulate streaming.                                                                                 |
 | Oracle Thin                 | `ResultSet`                          | Close every ResultSet; close failure discards the lease.                                                                                           |
 | SQL Server / Tedious        | request row events + bounded queue   | Request completion precedes lease release.                                                                                                         |
+| Bun.SQL                     | none                                 | `BRAID_STREAM_UNSUPPORTED`; do not buffer a complete result.                                                                                       |
 
 These are driver capabilities. They are not properties of the dialect. A custom
 executor must implement `QueryExecutor.stream` or fail deterministically with

@@ -151,8 +151,10 @@ Template and core rendering produce an immutable `RenderedStatement`:
 interface RenderedStatement {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
-  readonly resultKind: QueryResultKind;
+  readonly nativeTemplate?: TemplateStringsArray;
   readonly dialectId: string;
+  readonly resultKind: QueryResultKind;
+  readonly routineProcedure?: RoutineProcedure;
   readonly fingerprint?: string;
   readonly variantFingerprint?: string;
 }
@@ -460,8 +462,10 @@ Keep these Node policies separate:
 The repository toolchain can stay on a modern Node release. The published
 runtime tarballs are tested on older Node versions. If a driver raises its own
 minimum Node version, it must not raise the floors of unrelated `@sqlbraid/*`
-packages. The current floor investigation targets Node 16.20 as a candidate. Use
-only the oldest version that the packed consumer gate proves.
+packages. The published runtime packages currently declare `node >=16.20.2`. The
+tooling packages (CLI, compiler, codegen, metadata, tooling, language server and
+Vite) declare `node >=22.18.0`. Change a floor only to a version that the packed
+consumer gate proves.
 
 Compatibility tests must use this procedure:
 
@@ -625,8 +629,8 @@ Richer transaction profiles and vendor-specific modes stay outside this API.
 
 ## 13. Testing requirements
 
-PV15 adds `@sqlbraid/vite` as the seventeenth publishable package. It is
-tooling, not a runtime dependency.
+PV15 adds the publishable package `@sqlbraid/vite`. It is tooling, not a
+runtime dependency.
 
 - The compiler `transformSource` lowers guarded templates. It does not transpile
   TS or JSX. Vite owns transpilation.
@@ -636,7 +640,7 @@ tooling, not a runtime dependency.
 - Browser SQLite uses the separate WASM adapter. It does not use shims of Node
   drivers.
 
-PV16 adds MariaDB as the eighteenth publishable package, and the SQLite WASM and
+PV16 adds the publishable package `@sqlbraid/mariadb`, and the SQLite WASM and
 D1 subpaths.
 
 Use Vitest for fast tests. Use Testcontainers for PostgreSQL and MySQL. Use real
@@ -741,7 +745,15 @@ If DB or runtime infrastructure is unavailable, report the gate as not run. Neve
   - Never demote a rule globally. Never use a warning budget.
   - Runtime package imports must be declared in production, peer or optional dependencies. Type-only imports can use devDependencies.
   - Oxfmt checks are separate from formatting changes. Do not mass-format unrelated legacy files.
-- Write documentation in the style that `docs/writing-style.md` defines: Simplified Technical English at about 80% strictness.
+- Write documentation in the style that `docs/writing-style.md` defines: Simplified Technical English at about 80% strictness. This applies to all Markdown: READMEs, `docs/`, website pages in both languages, package READMEs, examples and skills.
+- Documentation must state facts that the current code proves. Before you write or change a page, check each claim against the source:
+  - file paths and links exist, and point to the file that actually contains the code;
+  - symbols, options, CLI commands and flags, error codes and capability IDs exist with the exact spelling;
+  - interface and type snippets match the current definitions in `packages/core/src/`;
+  - versions, support labels and capability statuses match `support/targets/` and the package manifests;
+  - tables that list adapters cover every first-party adapter.
+- When a change moves, renames or removes code, update the documentation that describes it in the same change. Search all Markdown, including the Korean pages, for the old name or path.
+- Make sure that Mermaid diagrams parse. Quote node labels that contain `@`, `/` or other special characters. Use a top-to-bottom layout for chains of more than four nodes.
 
 ---
 

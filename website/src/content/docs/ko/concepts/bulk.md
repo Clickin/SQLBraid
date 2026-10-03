@@ -52,15 +52,18 @@ semantics를 제공할 수 있습니다. 하지만 선택한 어댑터 문서가
 
 ## 드라이버 모드
 
-| 어댑터                 | 모드            | 구조적 증거 목표                                             |
-| ---------------------- | --------------- | ------------------------------------------------------------ |
-| PostgreSQL / `pg`      | `prepared-loop` | 순차 named 실행, client별 제한된 statement 재사용            |
-| MySQL / `mysql2`       | `prepared-loop` | prepare 1회, execute N회, `unprepare()`로 close와 cache 제거 |
-| MariaDB / Connector    | `native-bulk`   | `connection.batch()` 1회                                     |
-| SQLite / `node:sqlite` | `prepared-loop` | prepared statement 1개 재사용                                |
-| SQLite / WASM          | `prepared-loop` | OO1 statement 1개 반복 reset                                 |
-| Cloudflare D1          | `remote-batch`  | `D1Database.batch()` 1회                                     |
-| Oracle Thin            | `native-bulk`   | `executeMany()` 1회                                          |
-| SQL Server / Tedious   | `prepared-loop` | prepare/unprepare 1회씩, execute N회                         |
+| 어댑터                    | 모드            | 구조적 증거 목표                                             |
+| ------------------------- | --------------- | ------------------------------------------------------------ |
+| PostgreSQL / `pg`         | `prepared-loop` | 순차 named 실행, client별 제한된 statement 재사용            |
+| MySQL / `mysql2`          | `prepared-loop` | prepare 1회, execute N회, `unprepare()`로 close와 cache 제거 |
+| MariaDB / Connector       | `native-bulk`   | `connection.batch()` 1회                                     |
+| SQLite / `node:sqlite`    | `prepared-loop` | prepared statement 1개 재사용                                |
+| SQLite / `better-sqlite3` | `prepared-loop` | prepared statement 1개 재사용                                |
+| SQLite / libSQL           | `remote-batch`  | `client.batch()` 1회                                         |
+| SQLite / WASM             | `prepared-loop` | OO1 statement 1개 반복 reset                                 |
+| Cloudflare D1             | `remote-batch`  | `D1Database.batch()` 1회                                     |
+| Oracle Thin               | `native-bulk`   | `executeMany()` 1회                                          |
+| SQL Server / Tedious      | `prepared-loop` | prepare/unprepare 1회씩, execute N회                         |
+| Bun.SQL                   | `prepared-loop` | input마다 native 실행 1회                                    |
 
 revision별 프로필과 기능 조건은 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)을 참고하세요.

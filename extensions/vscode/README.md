@@ -11,7 +11,7 @@ If metadata is missing, the evidence is unresolved. This does not mean that the 
 
 ## Requirements and activation
 
-The extension requires VS Code 1.121.0 or later. The tested 1.121.0 host contains Node 22.22.1. This satisfies the Node 22.18.0 floor of SQLBraid tooling. The extension uses the Node executable of the editor. It bundles the matching SQLBraid 0.1.0 CLI and server packages. It does not select a global server.
+The extension requires VS Code 1.121.0 or later. The tested 1.121.0 host contains Node 22.22.1. This satisfies the Node 22.18.0 floor of SQLBraid tooling. The extension uses the Node executable of the editor. It bundles the `@sqlbraid/cli` and `@sqlbraid/language-server` packages at the exact version that its `package.json` pins. It does not select a global server.
 
 The server starts for TypeScript and TSX documents only in a project that has one of these:
 

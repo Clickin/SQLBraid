@@ -100,7 +100,7 @@ query-bound Standard Schema mapping. The optional `/inspector` subpath records
 identity, generated/write flags and numeric precision/scale for offline
 `generateModels()`; routine signatures remain incomplete positive evidence.
 
-The `mariadb-lossless-text` descriptor keeps `bigintAsNumber: false`,
+The `mariadb-lossless-text` descriptor keeps `bigIntAsNumber: false`,
 `decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`,
 `dateStrings: true` and `timezone: "Z"`.
 

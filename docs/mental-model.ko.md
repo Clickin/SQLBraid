@@ -70,17 +70,18 @@ SQL 구조는 명시적이어야 합니다. `sql.ident`, `sql.fragment`, `sql.li
 
 ## 3. `@sqlbraid/core`: 인터페이스 계층
 
-가장 중요한 소스 파일은 [`packages/core/src/index.ts`](../packages/core/src/index.ts)입니다. 이 파일을 authoring, runtime, adapter가 공유하는 protocol로 취급하세요. 일반 구현 모듈이 아닙니다.
+core 패키지는 authoring, runtime, adapter가 공유하는 protocol입니다. 일반 구현 모듈이 아닙니다. [`packages/core/src/index.ts`](../packages/core/src/index.ts)는 re-export만 합니다. 타입 그룹마다 파일이 따로 있습니다.
 
-주요 영역은 다음과 같습니다.
-
-- query/result 타입: `Query`, `RowQuery`, `CommandQuery`, `CallQuery`, `QueryExecutionResult`;
-- 논리 statement 타입: `RenderedStatement`, `RenderedParameter`, `RenderedBulk`;
-- binding SPI: `StatementBindingAdapter`, `StatementBindingDescription`, reuse/transport 타입;
-- 물리 실행 SPI: `QueryExecutor`, `ConnectionLease`, `ConnectionProvider`;
-- application runtime surface: `Database`, prepared query 타입, execution/transaction option;
-- 표현 타입: `TypePolicy`, `TypeMapping`;
-- observer, capability, routine, public error 타입.
+| 파일                                                                                                                                                                                                           | 내용                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [`query.ts`](../packages/core/src/query.ts)                                                                                                                                                                    | query/result 타입: `Query`, `RowQuery`, `CommandQuery`, `CallQuery`, `QueryExecutionResult` |
+| [`statement.ts`](../packages/core/src/statement.ts)                                                                                                                                                            | 논리 statement 타입: `RenderedStatement`, `RenderedParameter`, `RenderedBulk`               |
+| [`binding.ts`](../packages/core/src/binding.ts)                                                                                                                                                                | binding SPI: `StatementBindingAdapter`, `StatementBindingDescription`, reuse/transport 타입 |
+| [`executor.ts`](../packages/core/src/executor.ts)                                                                                                                                                              | 물리 실행 SPI: `QueryExecutor`, `ConnectionLease`, `ConnectionProvider`                     |
+| [`database.ts`](../packages/core/src/database.ts)                                                                                                                                                              | application runtime surface: `Database`, prepared query 타입, execution/transaction option  |
+| [`dialect.ts`](../packages/core/src/dialect.ts)                                                                                                                                                                | dialect와 표현 타입: `TypePolicy`, `TypeMapping`                                            |
+| [`authoring.ts`](../packages/core/src/authoring.ts)                                                                                                                                                            | authoring 타입: `SqlTag`와 fragment                                                         |
+| [`observers.ts`](../packages/core/src/observers.ts), [`capabilities.ts`](../packages/core/src/capabilities.ts), [`routine.ts`](../packages/core/src/routine.ts), [`errors.ts`](../packages/core/src/errors.ts) | observer, capability, routine, public error 타입                                            |
 
 더 작은 파일 [`packages/core/src/driver.ts`](../packages/core/src/driver.ts)에는 driver 작성자용 helper가 있습니다. resource cleanup, 안전한 result property, 생성된 savepoint 이름을 돕습니다.
 
@@ -90,7 +91,7 @@ SQL 구조는 명시적이어야 합니다. `sql.ident`, `sql.fragment`, `sql.li
 
 ## 4. `@sqlbraid/template`: SQL 작성과 rendering
 
-core 다음에는 [`packages/template/src/index.ts`](../packages/template/src/index.ts)를 읽습니다.
+core 다음에는 template 패키지를 읽으세요. [`packages/template/src/index.ts`](../packages/template/src/index.ts)는 re-export만 합니다. `createSqlTag()`는 [`tag.ts`](../packages/template/src/tag.ts), renderer는 [`render.ts`](../packages/template/src/render.ts), compiler target은 [`compiled.ts`](../packages/template/src/compiled.ts)에 있습니다.
 
 `createSqlTag()`는 dialect-bound `sql` tag를 만듭니다. 이 tag는 frozen `Query` 객체를 생성합니다. statement에 구조 처리가 필요 없으면 template parsing을 늦춥니다.
 
@@ -129,24 +130,29 @@ binding description은 pure operation입니다. connection acquisition 전에 �
 
 ## 6. `@sqlbraid/runtime`: 어려운 부분은 SQL이 아니라 lifecycle
 
-runtime의 중심 파일은 [`packages/runtime/src/index.ts`](../packages/runtime/src/index.ts)입니다. 파일이 큰 이유는 대부분 physical resource ownership 때문입니다. SQL parsing 때문이 아닙니다.
+runtime 코드의 대부분은 SQL parsing이 아니라 physical resource ownership을 다룹니다. runtime은 다음 파일로 구성됩니다.
+
+| 파일                                                                               | 내용                                                                                                                                           |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`index.ts`](../packages/runtime/src/index.ts)                                     | `createDatabase()`, `createPooledDatabase()`, `createScopedDatabase()`, `prepare()`, `prepareObserved()`, `batch`, `bulk`, `session()`, `tx()` |
+| [`operations/materialized.ts`](../packages/runtime/src/operations/materialized.ts) | materialized 경로: `runPrepared()`, `physical()`, `finalizePhysical()`, `processRows()`                                                        |
+| [`operations/lease.ts`](../packages/runtime/src/operations/lease.ts)               | lease 획득: `leaseForUse()`                                                                                                                    |
+| [`operations/stream.ts`](../packages/runtime/src/operations/stream.ts)             | stream 경로                                                                                                                                    |
+| [`state.ts`](../packages/runtime/src/state.ts)                                     | `ScopeState`와 root/transaction lock                                                                                                           |
 
 중심 생성 함수는 `createScopedDatabase()`입니다. `createDatabase()`와 `createPooledDatabase()` 모두 이 함수를 사용합니다.
 
-일반 materialized query는 다음 순서로 함수를 읽으세요.
+일반 materialized query에서 함수는 다음 순서로 실행됩니다.
 
 ```text
-prepareObserved()
-    ↓
-prepare()
-    ↓
+prepareObserved()          render, binding 설명, query:ready 발생
+  └─ prepare()
 runPrepared()
-    ↓
-physical()
-    ↓
-finalizePhysical()
-    ↓
-processRows()
+  ├─ leaseForUse()         resource 획득 또는 pin
+  ├─ physical()            driver I/O
+  └─ use.release()         mapping 전에 release
+finalizePhysical()         result-kind 검사
+processRows()              Standard Schema mapping
 ```
 
 `db.all(query)` 한 번은 대략 다음 lifecycle을 거칩니다.
@@ -204,6 +210,7 @@ lease.release()
 중요 필드는 다음과 같습니다.
 
 - `tail`: direct/root의 일반 physical work 직렬화;
+- `directBusy`: root 작업이 사용 중인 direct resource 표시;
 - `transactionTail`: pinned physical work와 transaction-control transition의 순서 보장;
 - `streamUsers` / `pendingStreams`: 살아 있거나 admission 중인 stream 추적;
 - `activeScope`: 현재 유효한 transaction/savepoint handle 식별;
@@ -373,13 +380,13 @@ metadata에 없는 사실은 unresolved evidence입니다. 사용자의 SQL이 i
 
 repository를 알파벳 순서로 읽지 마세요. 다음 순서를 사용하세요.
 
-1. README의 core boundary, session, prepared query;
-2. `packages/core/src/index.ts`에서 `RenderedStatement`, `Query`, `StatementBindingAdapter`, `QueryExecutor`, `ConnectionProvider`, `Database`, `SqlTag`;
-3. `packages/template/src/index.ts`의 `createSqlTag()` → `renderTemplateIr()` / `renderNodes()`;
-4. `packages/runtime/src/index.ts`의 `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepare` → `leaseForUse` → `physical` → `runPrepared` → `finalizePhysical` → `processRows`;
-5. runtime의 `stream()`을 별도로 읽기;
-6. runtime의 `session()`과 `tx()`;
-7. 첫 adapter로 PostgreSQL의 `pgStatementBinding`과 `createPgExecutor()`;
+1. README의 "Key Concepts"와 "Runtime API" 절;
+2. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`);
+3. `packages/template/src/`: `tag.ts` (`createSqlTag()`) → `render.ts` (`renderTemplateIr()` / `renderNodes()`);
+4. `packages/runtime/src/index.ts`의 `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepareObserved` → `prepare`. 그 다음 `operations/materialized.ts`의 `runPrepared` → `leaseForUse` (`operations/lease.ts`) → `physical` → `finalizePhysical` → `processRows`;
+5. `operations/stream.ts`의 runtime stream 경로를 별도로 읽기;
+6. `index.ts`의 runtime `session()`과 `tx()`;
+7. 첫 adapter로 `packages/postgres/src/pg.ts`의 `pgStatementBinding`과 `createPgExecutor()`;
 8. Oracle 또는 resource lifecycle이 복잡한 adapter;
 9. static tooling 작업을 할 때만 compiler → metadata → codegen → tooling.
 

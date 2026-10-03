@@ -34,12 +34,15 @@ interface RenderedParameter {
 interface RenderedStatement {
   readonly segments: readonly string[];
   readonly parameters: readonly RenderedParameter[];
-  readonly resultKind: "rows" | "command" | "call" | "unknown";
+  readonly nativeTemplate?: TemplateStringsArray;
   readonly dialectId: string;
+  readonly resultKind: "rows" | "command" | "call" | "unknown";
   readonly routineProcedure?: {
     readonly name: string;
     readonly parameterNames: readonly string[];
   };
+  readonly fingerprint?: string;
+  readonly variantFingerprint?: string;
 }
 ```
 
@@ -64,7 +67,7 @@ interface StatementBindingContext {
 interface StatementBindingAdapter {
   readonly id: string;
   describe(statement: RenderedStatement, context: StatementBindingContext): StatementBindingDescription;
-  readonly describeBulk?: (bulk: RenderedBulk, context: StatementBindingContext) => BulkBindingDescription;
+  describeBulk?(bulk: RenderedBulk, context: StatementBindingContext): BulkBindingDescription;
 }
 ```
 
@@ -78,6 +81,7 @@ The provider and each lease must expose the exact same `statementBinding` object
 ```ts
 interface ConnectionProvider {
   readonly statementBinding: StatementBindingAdapter;
+  readonly environment?: DriverEnvironment;
   validateTransactionOptions?(options: TransactionOptions): void;
   acquire(): Promise<ConnectionLease>;
 }
@@ -136,6 +140,7 @@ Each executor method uses the same convention for trailing options:
 interface QueryExecutor {
   readonly ownershipKey?: object;
   readonly statementBinding: StatementBindingAdapter;
+  readonly environment?: DriverEnvironment;
   query<Row>(
     statement: RenderedStatement,
     binding?: StatementBindingDescription,

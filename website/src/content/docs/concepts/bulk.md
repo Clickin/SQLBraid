@@ -59,9 +59,12 @@ unless the documentation of the selected adapter describes them.
 | MySQL / `mysql2`            | `prepared-loop` | one prepare, N execute calls, `unprepare()` closes and evicts the cached handle |
 | MariaDB / Connector/Node.js | `native-bulk`   | one `connection.batch()` call                                                   |
 | SQLite / `node:sqlite`      | `prepared-loop` | one prepared statement reused                                                   |
+| SQLite / `better-sqlite3`   | `prepared-loop` | one prepared statement reused                                                   |
+| SQLite / libSQL             | `remote-batch`  | one `client.batch()` call                                                       |
 | SQLite / WASM               | `prepared-loop` | one OO1 statement reset repeatedly                                              |
 | Cloudflare D1               | `remote-batch`  | one `D1Database.batch()` call                                                   |
 | Oracle Thin                 | `native-bulk`   | one `executeMany()` call                                                        |
 | SQL Server / Tedious        | `prepared-loop` | one prepare/unprepare around N executes                                         |
+| Bun.SQL                     | `prepared-loop` | one native execution for each input                                             |
 
 For the profile and capability conditions of each revision, read [Runtime and driver support](/SQLBraid/reference/support/).

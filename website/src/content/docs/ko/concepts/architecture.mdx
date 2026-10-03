@@ -71,9 +71,9 @@ metadata에 없는 사실은 unresolved evidence입니다. 사용자 SQL이 inva
 
 ## 소스는 이 순서로 읽으세요
 
-1. `packages/core/src/index.ts`: `RenderedStatement`, `Query`, `StatementBindingAdapter`, `QueryExecutor`, `ConnectionProvider`, `Database`, `SqlTag`.
-2. `packages/template/src/index.ts`: `createSqlTag()`과 rendering path.
-3. `packages/runtime/src/index.ts`: `createScopedDatabase()` → `prepare()` → `leaseForUse()` → `physical()` → `runPrepared()` → `finalizePhysical()` → `processRows()`.
+1. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`). `index.ts`는 re-export만 합니다.
+2. `packages/template/src/`: `tag.ts` (`createSqlTag()`)와 `render.ts` (rendering path).
+3. `packages/runtime/src/index.ts`: `createScopedDatabase()` → `prepareObserved()` → `prepare()`. 그 다음 `operations/materialized.ts`: `runPrepared()` → `leaseForUse()` → `physical()` → `finalizePhysical()` → `processRows()`.
 4. runtime의 `stream()`, 그 다음 `session()`과 `tx()`.
 5. 첫 reference adapter로 PostgreSQL의 `pgStatementBinding` / `createPgExecutor()`, 다음으로 resource lifecycle이 복잡한 Oracle.
 6. static tooling 작업을 할 때 compiler → metadata → codegen → tooling.

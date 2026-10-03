@@ -10,6 +10,7 @@ This adapter uses the native value-template transport of Bun. `Bun.SQL` does not
 
 ### Key Details
 
-- **Capabilities**: The adapter supports the native `Bun.SQL` features. Some advanced routine, streaming or cancellation capabilities can be unavailable in some Bun versions.
-- **Precision**: The representation of integers and decimals follows the defined representation profile (for example, `1.3.14`). The fidelity of exact decimals is different for each database: lossless in PostgreSQL, unsupported in others. This keeps the behavior the same across Bun versions.
+- **Tested version**: Bun 1.3.14.
+- **Capabilities**: Streams, routine calls and active cancellation are unsupported. They fail with explicit `BRAID_*` errors.
+- **Precision**: Exact integers are strings. Exact decimals are strings in PostgreSQL. In MySQL, MariaDB and SQLite, exact decimals are unsupported.
   See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) and the [Bun SQL guide](https://bun.com/docs/runtime/sql) for details.

@@ -13,7 +13,7 @@
       "source": "website/src/content/docs/agents/driver-author.md",
       "translation": "website/src/content/docs/ko/agents/driver-author.md",
       "translationOf": "website/src/content/docs/agents/driver-author.md",
-      "sourceDigest": "f8539ecd0a404d7e9b8229ebcc052ffe419db28d5195c835acde2e4962188467"
+      "sourceDigest": "e48f7bea630409b5dca9fbd8d9ed56531bc479dd5c6845133b174d27296e2746"
     },
     {
       "source": "website/src/content/docs/agents/lsp.md",
@@ -31,19 +31,19 @@
       "source": "website/src/content/docs/agents/vscode.md",
       "translation": "website/src/content/docs/ko/agents/vscode.md",
       "translationOf": "website/src/content/docs/agents/vscode.md",
-      "sourceDigest": "ee0a9daf02bd8906945d4c4323d4f9188a276f1629f198a2c6df3febb7e81ed8"
+      "sourceDigest": "7545ae17a3427bbdb47a8c2fdea150c98d48da4a39e4a277fb72f78e44746b48"
     },
     {
       "source": "website/src/content/docs/concepts/architecture.mdx",
       "translation": "website/src/content/docs/ko/concepts/architecture.mdx",
       "translationOf": "website/src/content/docs/concepts/architecture.mdx",
-      "sourceDigest": "6f1f120810dfa04ecc417b92df8fa24beb8f7c73a5e404131dd00bc46f600fee"
+      "sourceDigest": "5912a3d136078320526037e9b2f122824d66d2a4750a687b87075e91acbb49a2"
     },
     {
       "source": "website/src/content/docs/concepts/bulk.md",
       "translation": "website/src/content/docs/ko/concepts/bulk.md",
       "translationOf": "website/src/content/docs/concepts/bulk.md",
-      "sourceDigest": "1ec63f35b5d86a3839cea466a221e23dd975b8134ee71d12f99d8c6517f5820a"
+      "sourceDigest": "e4b24ce335be13fecce000e44738a6eee81804eea2509bff450bbe8f70672394"
     },
     {
       "source": "website/src/content/docs/concepts/data-representation.md",
@@ -97,7 +97,7 @@
       "source": "website/src/content/docs/getting-started/mariadb.md",
       "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
       "translationOf": "website/src/content/docs/getting-started/mariadb.md",
-      "sourceDigest": "5971ba57bac1ace58ffba6f47e841412640bb4bf321bcdd517290372b5b5b138"
+      "sourceDigest": "c7785f8476ac47dac8627eb55c0dbadbd041578fddba9dcffb7b7708686b8ad4"
     },
     {
       "source": "website/src/content/docs/getting-started/mssql.md",
@@ -259,7 +259,7 @@
       "source": "website/src/content/docs/runtime/streaming.md",
       "translation": "website/src/content/docs/ko/runtime/streaming.md",
       "translationOf": "website/src/content/docs/runtime/streaming.md",
-      "sourceDigest": "244a96b45367379f831b0dcb9285b3624da878df8fd273ad64f7cd7cddc58f14"
+      "sourceDigest": "05953db2feadc559c9db7268264b1c3dd3f17a46f310684bb9135eb625f29519"
     },
     {
       "source": "website/src/content/docs/runtime/transaction-profiles.md",

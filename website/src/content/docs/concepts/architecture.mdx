@@ -71,9 +71,9 @@ Missing metadata is unresolved evidence. It does not prove that user SQL is inva
 
 ## Read the source in this order
 
-1. `packages/core/src/index.ts`: `RenderedStatement`, `Query`, `StatementBindingAdapter`, `QueryExecutor`, `ConnectionProvider`, `Database`, `SqlTag`.
-2. `packages/template/src/index.ts`: `createSqlTag()` and the rendering path.
-3. `packages/runtime/src/index.ts`: `createScopedDatabase()` → `prepare()` → `leaseForUse()` → `physical()` → `runPrepared()` → `finalizePhysical()` → `processRows()`.
+1. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`). `index.ts` only re-exports.
+2. `packages/template/src/`: `tag.ts` (`createSqlTag()`) and `render.ts` (the rendering path).
+3. `packages/runtime/src/index.ts`: `createScopedDatabase()` → `prepareObserved()` → `prepare()`. Then `operations/materialized.ts`: `runPrepared()` → `leaseForUse()` → `physical()` → `finalizePhysical()` → `processRows()`.
 4. The runtime `stream()`, then `session()` and `tx()`.
 5. The PostgreSQL `pgStatementBinding` / `createPgExecutor()` as a reference adapter. Then Oracle, as an adapter with many resources.
 6. Compiler → metadata → codegen → tooling, when you work on static tooling.

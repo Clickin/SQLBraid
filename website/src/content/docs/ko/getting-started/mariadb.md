@@ -96,7 +96,7 @@ Standard Schema 매핑을 보존합니다. 선택적 `/inspector` subpath는 오
 `generateModels()`를 위한 identity, generated/write 플래그, 숫자 precision/scale을
 기록하며 루틴 signature는 불완전한 positive evidence로 유지합니다.
 
-`mariadb-lossless-text` descriptor는 `bigintAsNumber: false`,
+`mariadb-lossless-text` descriptor는 `bigIntAsNumber: false`,
 `decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`,
 `dateStrings: true`, `timezone: "Z"`를 사용합니다.
 

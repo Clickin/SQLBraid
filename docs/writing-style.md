@@ -80,6 +80,13 @@ Style edits must not change meaning. When you edit for style:
   "should", or "is unsupported" to "is not recommended".
 - Keep support labels exact: Official, Compatible, Custom and Unsupported.
 
+## Facts
+
+Simple text that is wrong is worse than complex text that is correct. Check
+each claim against the current code before you publish it. `AGENTS.md` lists
+the checks. Do not copy a path, a symbol name or a version from an older page
+without checking it.
+
 ## Examples
 
 | Before                                                                                                      | After                                                                                                     |

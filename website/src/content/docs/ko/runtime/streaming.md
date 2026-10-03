@@ -62,6 +62,7 @@ cancellation이 아닙니다.
 | Cloudflare D1               | 없음                              | `BRAID_STREAM_UNSUPPORTED`; streaming을 흉내 내려고 paginate하지 않습니다.                                                        |
 | Oracle Thin                 | `ResultSet`                       | 모든 ResultSet을 닫고 close 실패 시 lease를 폐기합니다.                                                                           |
 | SQL Server / Tedious        | request row event + bounded queue | Request 완료가 lease 반환보다 먼저입니다.                                                                                         |
+| Bun.SQL                     | 없음                              | `BRAID_STREAM_UNSUPPORTED`; 전체 result를 buffer하지 않습니다.                                                                    |
 
 이것은 driver capability입니다. dialect의 속성이 아닙니다. Custom executor는
 `QueryExecutor.stream`을 구현하거나 `BRAID_STREAM_UNSUPPORTED`로 결정적으로

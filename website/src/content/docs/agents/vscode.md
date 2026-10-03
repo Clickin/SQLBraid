@@ -12,8 +12,8 @@ The extension adds:
 - **Check Generated Models**;
 - **Reload Project**.
 
-The extension does not contain a semantic engine. The VSIX contains the matching
-`1.0.0` server and CLI dependencies, with version checks. It does not silently
+The extension does not contain a semantic engine. The VSIX contains the server and CLI
+packages at the exact version that the extension pins, with version checks. It does not silently
 select a global server or a workspace server.
 
 To test in a clean profile, do these steps:
