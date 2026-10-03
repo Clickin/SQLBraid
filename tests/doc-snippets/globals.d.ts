@@ -1,10 +1,15 @@
 // Ambient context for documentation snippets. Snippets are fragments, so the
-// names they use without a declaration get real SQLBraid types here. Use `any`
-// only for values whose type changes between snippets.
+// names they use without a declaration get concrete package or platform types.
+// Prefer imported driver and platform types over permissive placeholders.
 import type * as Core from "@sqlbraid/core";
 import type * as V from "valibot";
 import type * as Pg from "pg";
 import type * as Mysql from "mysql2/promise";
+import type { DatabaseSync } from "node:sqlite";
+import type { MetadataSnapshot } from "@sqlbraid/metadata";
+import type { Connection as MariaDbConnection, Pool as MariaDbPool } from "mariadb";
+import type { SqliteWasmDatabaseLike, SqliteWasmExecutorOptions } from "@sqlbraid/sqlite/wasm";
+import type { D1DatabaseLike } from "@sqlbraid/sqlite/d1";
 
 type S<T> = Core.StandardSchemaV1<unknown, T>;
 type InputRow = { id: string; amount: string };
@@ -37,7 +42,7 @@ declare global {
   type QueryExecutionResult<R> = Core.QueryExecutionResult<R>;
   type DriverRoutineResult = Core.DriverRoutineResult;
   type RoutineProcedure = Core.RoutineProcedure;
-  type RoutineCallResult<O = any, R = any, X = any> = Core.RoutineCallResult<O, R, X>;
+  type RoutineCallResult<O = unknown, R = unknown, X = unknown> = Core.RoutineCallResult<O, R, X>;
   type QueryResultKind = Core.QueryResultKind;
   type ExecutionObserver = Core.ExecutionObserver;
   type ExecutionEvent = Core.ExecutionEvent;
@@ -66,13 +71,15 @@ declare global {
   const inputs: readonly InputRow[];
   const accounts: readonly InputRow[];
   const factory: (input: InputRow) => Core.CommandQuery;
-  const pool: any, pgPool: Pg.Pool, mysqlPool: Mysql.Pool, mariadbPool: any;
-  const client: any, connection: any, native: any, wasmDatabase: any, env: any, sqlite3: any;
+  const pool: Pg.Pool, pgPool: Pg.Pool, mysqlPool: Mysql.Pool, mariadbPool: MariaDbPool;
+  const client: Pg.Client, connection: Mysql.Connection, native: DatabaseSync;
+  const wasmDatabase: SqliteWasmDatabaseLike, env: { DB: D1DatabaseLike };
+  const sqlite3: NonNullable<SqliteWasmExecutorOptions["sqlite3"]>;
   const connectionProvider: Core.ConnectionProvider;
-  const snapshot: any, metadata: any, typePolicy: Core.TypePolicy;
+  const snapshot: MetadataSnapshot, metadata: MetadataSnapshot, typePolicy: Core.TypePolicy;
   const logger: { debug(...args: unknown[]): void; info(...args: unknown[]): void; warn(...args: unknown[]): void };
   const slowQueryObserver: Core.ExecutionObserver, auditObserver: Core.ExecutionObserver;
-  const Bun: any;
+  const Bun: typeof import("bun");
 
   const createPgPoolDatabase: typeof import("@sqlbraid/postgres/pg").createPgPoolDatabase;
   const createPgDatabase: typeof import("@sqlbraid/postgres/pg").createPgDatabase;

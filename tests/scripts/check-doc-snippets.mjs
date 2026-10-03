@@ -32,7 +32,8 @@ try {
         skipped += 1;
         continue;
       }
-      const name = `s${String(snippets.length).padStart(4, "0")}.mts`;
+      const extension = match[1] === "tsx" ? "tsx" : "mts";
+      const name = `s${String(snippets.length).padStart(4, "0")}.${extension}`;
       const line = text.slice(0, match.index).split("\n").length;
       writeFileSync(join(workDir, name), `${match[2]}\nexport {};\n`);
       snippets.push({ name, file, line });
@@ -52,8 +53,9 @@ try {
         skipLibCheck: true,
         lib: ["ES2023", "DOM"],
         types: ["node"],
+        jsx: "react-jsx",
       },
-      include: ["*.mts", "globals.d.ts", "modules.d.ts"],
+      include: ["*.mts", "*.tsx", "globals.d.ts", "modules.d.ts"],
     }),
   );
   const tsc = createRequire(join(testsRoot, "package.json")).resolve("typescript/bin/tsc");
@@ -61,7 +63,7 @@ try {
   const byName = new Map(snippets.map((snippet) => [snippet.name, snippet]));
   const errors = [];
   for (const line of `${result.stdout}${result.stderr}`.split("\n")) {
-    const found = /(s\d+\.mts)\((\d+),(\d+)\): error (TS\d+): (.*)$/u.exec(line.trim());
+    const found = /(s\d+\.(?:mts|tsx))\((\d+),(\d+)\): error (TS\d+): (.*)$/u.exec(line.trim());
     if (!found) continue;
     const snippet = byName.get(found[1]);
     errors.push(`${snippet.file}:${snippet.line + Number(found[2])}:${found[3]} ${found[4]} ${found[5]}`);
