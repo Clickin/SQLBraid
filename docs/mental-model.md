@@ -23,17 +23,17 @@ The execution core has four layers:
 
 ```mermaid
 flowchart TB
-  CORE[@sqlbraid/core<br/>interfaces + invariants]
-  TEMPLATE[@sqlbraid/template<br/>tagged templates + rendering]
-  RUNTIME[@sqlbraid/runtime<br/>leases + scopes + tx + streams + mapping]
-  ADAPTERS[driver adapters<br/>pg / mysql2 / MariaDB / Oracle / Tedious / SQLite / Bun.SQL]
+  CORE["@sqlbraid/core<br/>interfaces + invariants"]
+  TEMPLATE["@sqlbraid/template<br/>tagged templates + rendering"]
+  RUNTIME["@sqlbraid/runtime<br/>leases + scopes + tx + streams + mapping"]
+  ADAPTERS["driver adapters<br/>pg / mysql2 / MariaDB / Oracle / Tedious / SQLite / Bun.SQL"]
   CORE --> TEMPLATE --> RUNTIME --> ADAPTERS
 
-  COMPILER[@sqlbraid/compiler]
-  METADATA[@sqlbraid/metadata]
-  CODEGEN[@sqlbraid/codegen]
-  TOOLING[@sqlbraid/tooling]
-  LSP[LSP / CLI / VS Code / Vite]
+  COMPILER["@sqlbraid/compiler"]
+  METADATA["@sqlbraid/metadata"]
+  CODEGEN["@sqlbraid/codegen"]
+  TOOLING["@sqlbraid/tooling"]
+  LSP["LSP / CLI / VS Code / Vite"]
   COMPILER --> TOOLING --> LSP
   METADATA --> CODEGEN --> TOOLING
   CORE -. interfaces .-> COMPILER

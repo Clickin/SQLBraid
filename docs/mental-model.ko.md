@@ -23,17 +23,17 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  CORE[@sqlbraid/core<br/>인터페이스 + invariant]
-  TEMPLATE[@sqlbraid/template<br/>tagged template + rendering]
-  RUNTIME[@sqlbraid/runtime<br/>lease + scope + tx + stream + mapping]
-  ADAPTERS[driver adapters<br/>pg / mysql2 / MariaDB / Oracle / Tedious / SQLite / Bun.SQL]
+  CORE["@sqlbraid/core<br/>인터페이스 + invariant"]
+  TEMPLATE["@sqlbraid/template<br/>tagged template + rendering"]
+  RUNTIME["@sqlbraid/runtime<br/>lease + scope + tx + stream + mapping"]
+  ADAPTERS["driver adapters<br/>pg / mysql2 / MariaDB / Oracle / Tedious / SQLite / Bun.SQL"]
   CORE --> TEMPLATE --> RUNTIME --> ADAPTERS
 
-  COMPILER[@sqlbraid/compiler]
-  METADATA[@sqlbraid/metadata]
-  CODEGEN[@sqlbraid/codegen]
-  TOOLING[@sqlbraid/tooling]
-  LSP[LSP / CLI / VS Code / Vite]
+  COMPILER["@sqlbraid/compiler"]
+  METADATA["@sqlbraid/metadata"]
+  CODEGEN["@sqlbraid/codegen"]
+  TOOLING["@sqlbraid/tooling"]
+  LSP["LSP / CLI / VS Code / Vite"]
   COMPILER --> TOOLING --> LSP
   METADATA --> CODEGEN --> TOOLING
   CORE -. interfaces .-> COMPILER
