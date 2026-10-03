@@ -105,3 +105,72 @@ its digest in `website/translation-registry.json`. Run
 
 Korean text uses the same principles: short sentences, one idea in each
 sentence, direct instructions and one term for one meaning.
+
+### Korean style
+
+Write natural Korean, not a word-for-word translation.
+
+- Use a Korean word when one is in common use. Keep English only for code
+  identifiers, package and product names, error codes, capability IDs, SQL
+  keywords and the support labels (Official, Compatible, Custom, Unsupported,
+  Conditional, Pending, Historical).
+- Do not stack English nouns ("materialized result set 경계"). Write the meaning
+  in Korean ("메모리로 모두 읽은 결과 집합").
+- Use the active voice when the actor is known: "런타임이 리스를 반환합니다",
+  not "리스가 반환됩니다".
+- End sentences with the polite "-니다" form. Write instructions as "-하세요".
+- Do not translate an English sentence structure literally. Change the word
+  order when Korean needs it.
+- Keep code blocks identical to the English page. Translate only diagram labels
+  and the text in plain-text figures.
+
+### Korean glossary
+
+Use these terms in all Korean pages. At the first use on a page, you can add
+the English term in parentheses.
+
+| English                           | Korean                         |
+| --------------------------------- | ------------------------------ |
+| query / statement                 | 쿼리 / SQL 문                  |
+| bind, bound value                 | 바인딩, 바인딩 값              |
+| parameter / placeholder           | 파라미터 / 플레이스홀더        |
+| interpolation                     | 보간                           |
+| identifier                        | 식별자                         |
+| fragment                          | 조각                           |
+| directive / lowering              | 지시어 / 변환                  |
+| tag / template                    | 태그 / 템플릿                  |
+| dialect                           | 방언                           |
+| driver / adapter                  | 드라이버 / 어댑터              |
+| runtime                           | 런타임                         |
+| connection / pool                 | 커넥션 / 풀                    |
+| lease, acquire, release           | 리스, 획득, 반환               |
+| pin                               | 고정                           |
+| discard / poison                  | 폐기 / 사용 불가로 표시        |
+| transaction / savepoint / session | 트랜잭션 / 세이브포인트 / 세션 |
+| isolation level / read-only       | 격리 수준 / 읽기 전용          |
+| commit / rollback                 | 커밋 / 롤백                    |
+| stream / cursor                   | 스트림 / 커서                  |
+| result set / row / column         | 결과 집합 / 행 / 열            |
+| materialize                       | 메모리로 모두 읽다             |
+| result kind / cardinality         | 결과 종류 / 행 개수 규칙       |
+| prepared query                    | 준비된 쿼리                    |
+| shape                             | 형태                           |
+| bulk / batch                      | 벌크 / 배치                    |
+| routine / procedure               | 루틴 / 프로시저                |
+| capability                        | 기능                           |
+| support label                     | 지원 등급                      |
+| evidence                          | 근거                           |
+| profile / representation          | 프로필 / 표현 방식             |
+| exact / approximate               | 정확한 / 근사                  |
+| lossless / lossy                  | 무손실 / 손실이 있는           |
+| fidelity                          | 정확도                         |
+| hint                              | 힌트                           |
+| observer / event                  | 옵저버 / 이벤트                |
+| cancellation / signal / abort     | 취소 / 시그널 / 중단           |
+| cleanup                           | 정리                           |
+| schema / mapping / validation     | 스키마 / 매핑 / 검증           |
+| metadata / snapshot / inspector   | 메타데이터 / 스냅샷 / 인스펙터 |
+| code generation                   | 코드 생성                      |
+| facade / subpath                  | 파사드 / 하위 경로             |
+| peer dependency                   | 피어 의존성                    |
+| release (a version)               | 릴리스                         |

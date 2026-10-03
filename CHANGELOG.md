@@ -6,16 +6,31 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 [release notes](docs/SQLBraid_1.0.0_release_notes.md), and
 [versioned support records](support/targets/).
 
-## Unreleased
+## 1.0.2 (unreleased)
+
+### Fixed
 
 - `@sqlbraid/mssql`: a native procedure template that contains SQL text, or
-  whose parameters do not match `parameterNames`, now fails before I/O with
-  `AdapterError` code `BRAID_CALL_PROCEDURE_INVALID`. It used
-  `BRAID_CALL_RETURN_UNSUPPORTED`, which describes a missing return/status
-  channel. A Tedious connection without `callProcedure()` now reports
-  `BRAID_CALL_UNSUPPORTED` (`routine.call`).
-- `@sqlbraid/core`: register `BRAID_CALL_PROCEDURE_INVALID`. The feature list
-  of `BRAID_CALL_RETURN_UNSUPPORTED` is now only `routine.return-value`.
+  whose parameters do not match `parameterNames`, reported
+  `BRAID_CALL_RETURN_UNSUPPORTED`. That code describes a missing return/status
+  channel, so it was wrong. The template now fails before I/O with
+  `AdapterError` code `BRAID_CALL_PROCEDURE_INVALID`.
+- `@sqlbraid/mssql`: a Tedious connection without `callProcedure()` reported
+  `BRAID_CALL_RETURN_UNSUPPORTED`. It now reports `BRAID_CALL_UNSUPPORTED`
+  (`routine.call`).
+- `@sqlbraid/core`: register `BRAID_CALL_PROCEDURE_INVALID` as a public error.
+  The feature list of `BRAID_CALL_RETURN_UNSUPPORTED` is now only
+  `routine.return-value`.
+
+If your code checks for `BRAID_CALL_RETURN_UNSUPPORTED` to detect an invalid
+procedure template, check for `BRAID_CALL_PROCEDURE_INVALID` instead.
+
+### Documentation
+
+- Rewrite the Korean README, mental model and website pages from the current
+  English sources in natural Korean, and add a Korean glossary to
+  `docs/writing-style.md`. Remove two duplicated paragraphs from the English
+  MariaDB quickstart.
 
 ## 1.0.0
 

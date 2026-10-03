@@ -1,32 +1,32 @@
-# SQLBraid 기여자용 멘탈 모델
+# SQLBraid 기여자를 위한 구조 안내
 
 [English](./mental-model.md)
 
-이 문서는 기여자에게 SQLBraid 내부 구조를 짧게 설명합니다. 읽기 지도이자 설계 모델입니다. Public API audit, driver-author guide, support record, 테스트를 대체하지 않습니다.
+이 문서는 기여자에게 SQLBraid의 내부 구조를 짧게 소개합니다. 코드를 읽는 순서와 설계의 큰 그림을 담았습니다. 공개 API 감사 문서, 드라이버 작성 가이드, 지원 기록, 테스트를 대신하지는 않습니다.
 
-## 1. 전체 구조 한눈에 보기
+## 1. 한눈에 보는 구조
 
-SQLBraid는 사용자가 작성한 SQL을 그대로 보이게 유지합니다. 그리고 데이터 접근 라이브러리에서 흔히 섞이는 책임을 분리합니다.
+SQLBraid는 사용자가 쓴 SQL을 감추지 않습니다. 그리고 데이터베이스 라이브러리가 흔히 한데 섞는 책임을 서로 나눕니다.
 
 ```mermaid
 flowchart TB
-  A[TypeScript + 작성한 SQL] --> Q[Query]
+  A[TypeScript와 직접 쓴 SQL] --> Q[Query]
   Q --> R[RenderedStatement<br/>segments + parameters]
   R --> B[StatementBindingAdapter]
-  B --> X[Runtime resource lifecycle]
-  X --> D[Driver adapter / native API]
-  D --> C[Canonical SQLBraid result]
-  C --> M[Standard Schema / application mapping]
+  B --> X[런타임의 리소스 수명 관리]
+  X --> D[드라이버 어댑터 / 네이티브 API]
+  D --> C[SQLBraid 표준 결과]
+  C --> M[Standard Schema / 애플리케이션 매핑]
 ```
 
-실행 코어는 4개 층으로 구성됩니다.
+실행 코어는 네 계층으로 되어 있습니다.
 
 ```mermaid
 flowchart TB
-  CORE["@sqlbraid/core<br/>인터페이스 + invariant"]
-  TEMPLATE["@sqlbraid/template<br/>tagged template + rendering"]
-  RUNTIME["@sqlbraid/runtime<br/>lease + scope + tx + stream + mapping"]
-  ADAPTERS["driver adapters<br/>pg / mysql2 / MariaDB / Oracle / Tedious / SQLite / Bun.SQL"]
+  CORE["@sqlbraid/core<br/>인터페이스와 불변 조건"]
+  TEMPLATE["@sqlbraid/template<br/>태그 템플릿과 렌더링"]
+  RUNTIME["@sqlbraid/runtime<br/>리스, 범위, 트랜잭션, 스트림, 매핑"]
+  ADAPTERS["드라이버 어댑터<br/>pg / mysql2 / MariaDB / Oracle / Tedious / SQLite / Bun.SQL"]
   CORE --> TEMPLATE --> RUNTIME --> ADAPTERS
 
   COMPILER["@sqlbraid/compiler"]
@@ -36,15 +36,15 @@ flowchart TB
   LSP["LSP / CLI / VS Code / Vite"]
   COMPILER --> TOOLING --> LSP
   METADATA --> CODEGEN --> TOOLING
-  CORE -. interfaces .-> COMPILER
+  CORE -. 인터페이스 .-> COMPILER
   CORE -. TypePolicy .-> CODEGEN
 ```
 
-`sqlbraid` 패키지는 주로 canonical facade입니다. 다른 패키지를 re-export합니다. 구현 코드를 읽을 때는 위 4개 실행 계층에서 시작하세요.
+`sqlbraid` 패키지는 주로 다른 패키지를 다시 내보내는 대표 파사드입니다. 구현 코드를 읽을 때는 위의 네 실행 계층부터 보세요.
 
-## 2. 가장 중요한 invariant: SQL 구조와 값은 끝까지 분리한다
+## 2. 가장 중요한 규칙: SQL 구조와 값은 끝까지 따로 다룹니다
 
-일반 interpolation은 항상 value bind입니다.
+일반 보간은 언제나 값 바인딩입니다.
 
 ```ts
 const query = sql.rows<User>`
@@ -54,108 +54,108 @@ const query = sql.rows<User>`
 `;
 ```
 
-이 시점의 논리 statement는 아직 `WHERE id = $1`, `WHERE id = ?`, `WHERE id = :1`이 아닙니다. SQL segment와 parameter의 조합으로 표현됩니다.
+이 시점의 논리 문은 아직 `WHERE id = $1`도, `WHERE id = ?`도, `WHERE id = :1`도 아닙니다. SQL 조각 목록과 파라미터 목록일 뿐입니다.
 
-`RenderedStatement`는 다음 invariant를 유지합니다.
+`RenderedStatement`는 다음 불변 조건을 지킵니다.
 
 ```text
 segments.length === parameters.length + 1
 ```
 
-rendered parameter는 값입니다. identifier, nested query, raw driver fragment, placeholder 문자열이 아닙니다.
+렌더링된 파라미터는 값입니다. 식별자, 중첩 쿼리, 드라이버용 SQL 조각, 플레이스홀더 문자열이 될 수 없습니다.
 
-SQL 구조는 명시적이어야 합니다. `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, `sql.empty` 같은 헬퍼를 사용하세요. `sql.raw`는 의도적인 escape hatch입니다.
+SQL 구조는 명시적으로 만들어야 합니다. `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, `sql.empty` 같은 헬퍼를 쓰세요. `sql.raw`는 일부러 열어 둔 탈출구입니다.
 
-이 경계 덕분에 adapter가 placeholder 문법을 소유합니다. 그래서 같은 SQL 모델을 서로 다른 driver로 보낼 수 있습니다.
+이 경계가 있어서 플레이스홀더 문법은 어댑터가 책임집니다. 그래서 같은 SQL 모델을 여러 드라이버에서 쓸 수 있습니다.
 
 ## 3. `@sqlbraid/core`: 인터페이스 계층
 
-core 패키지는 authoring, runtime, adapter가 공유하는 protocol입니다. 일반 구현 모듈이 아닙니다. [`packages/core/src/index.ts`](../packages/core/src/index.ts)는 re-export만 합니다. 타입 그룹마다 파일이 따로 있습니다.
+core 패키지는 작성, 런타임, 어댑터가 함께 쓰는 약속의 모음입니다. 일반적인 구현 모듈이 아닙니다. [`packages/core/src/index.ts`](../packages/core/src/index.ts)는 다시 내보내기만 합니다. 타입은 묶음별로 파일이 나뉘어 있습니다.
 
-| 파일                                                                                                                                                                                                           | 내용                                                                                        |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| [`query.ts`](../packages/core/src/query.ts)                                                                                                                                                                    | query/result 타입: `Query`, `RowQuery`, `CommandQuery`, `CallQuery`, `QueryExecutionResult` |
-| [`statement.ts`](../packages/core/src/statement.ts)                                                                                                                                                            | 논리 statement 타입: `RenderedStatement`, `RenderedParameter`, `RenderedBulk`               |
-| [`binding.ts`](../packages/core/src/binding.ts)                                                                                                                                                                | binding SPI: `StatementBindingAdapter`, `StatementBindingDescription`, reuse/transport 타입 |
-| [`executor.ts`](../packages/core/src/executor.ts)                                                                                                                                                              | 물리 실행 SPI: `QueryExecutor`, `ConnectionLease`, `ConnectionProvider`                     |
-| [`database.ts`](../packages/core/src/database.ts)                                                                                                                                                              | application runtime surface: `Database`, prepared query 타입, execution/transaction option  |
-| [`dialect.ts`](../packages/core/src/dialect.ts)                                                                                                                                                                | dialect와 표현 타입: `TypePolicy`, `TypeMapping`                                            |
-| [`authoring.ts`](../packages/core/src/authoring.ts)                                                                                                                                                            | authoring 타입: `SqlTag`와 fragment                                                         |
-| [`observers.ts`](../packages/core/src/observers.ts), [`capabilities.ts`](../packages/core/src/capabilities.ts), [`routine.ts`](../packages/core/src/routine.ts), [`errors.ts`](../packages/core/src/errors.ts) | observer, capability, routine, public error 타입                                            |
+| 파일                                                                                                                                                                                                           | 내용                                                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`query.ts`](../packages/core/src/query.ts)                                                                                                                                                                    | 쿼리와 결과 타입: `Query`, `RowQuery`, `CommandQuery`, `CallQuery`, `QueryExecutionResult` |
+| [`statement.ts`](../packages/core/src/statement.ts)                                                                                                                                                            | 논리 문 타입: `RenderedStatement`, `RenderedParameter`, `RenderedBulk`                     |
+| [`binding.ts`](../packages/core/src/binding.ts)                                                                                                                                                                | 바인딩 SPI: `StatementBindingAdapter`, `StatementBindingDescription`, 재사용·전송 타입     |
+| [`executor.ts`](../packages/core/src/executor.ts)                                                                                                                                                              | 물리 실행 SPI: `QueryExecutor`, `ConnectionLease`, `ConnectionProvider`                    |
+| [`database.ts`](../packages/core/src/database.ts)                                                                                                                                                              | 애플리케이션용 런타임 API: `Database`, 준비된 쿼리 타입, 실행·트랜잭션 옵션                |
+| [`dialect.ts`](../packages/core/src/dialect.ts)                                                                                                                                                                | 방언과 값 표현 타입: `TypePolicy`, `TypeMapping`                                           |
+| [`authoring.ts`](../packages/core/src/authoring.ts)                                                                                                                                                            | 작성용 타입: `SqlTag`와 조각                                                               |
+| [`observers.ts`](../packages/core/src/observers.ts), [`capabilities.ts`](../packages/core/src/capabilities.ts), [`routine.ts`](../packages/core/src/routine.ts), [`errors.ts`](../packages/core/src/errors.ts) | 옵저버, 기능, 루틴, 공개 오류 타입                                                         |
 
-더 작은 파일 [`packages/core/src/driver.ts`](../packages/core/src/driver.ts)에는 driver 작성자용 helper가 있습니다. resource cleanup, 안전한 result property, 생성된 savepoint 이름을 돕습니다.
+작은 파일인 [`packages/core/src/driver.ts`](../packages/core/src/driver.ts)에는 드라이버 작성자를 위한 헬퍼가 있습니다. 리소스 정리, 안전한 결과 속성 정의, 세이브포인트 이름 검사를 돕습니다.
 
-### Query는 물리 SQL이 아니다
+### Query는 실제 SQL이 아닙니다
 
-`Query`는 template IR, capture된 값, 선언된 result kind, 선택적 application mapping metadata를 보관합니다. `query.render()`는 `RenderedStatement`를 만듭니다. driver를 실행하지 않습니다. native placeholder 문법도 정하지 않습니다.
+`Query`는 템플릿 IR, 캡처한 값, 선언한 결과 종류, 애플리케이션 매핑용 메타데이터를 담습니다. `query.render()`는 `RenderedStatement`를 만들 뿐입니다. 드라이버를 실행하지 않고, 플레이스홀더 문법도 정하지 않습니다.
 
-## 4. `@sqlbraid/template`: SQL 작성과 rendering
+## 4. `@sqlbraid/template`: 작성과 렌더링
 
-core 다음에는 template 패키지를 읽으세요. [`packages/template/src/index.ts`](../packages/template/src/index.ts)는 re-export만 합니다. `createSqlTag()`는 [`tag.ts`](../packages/template/src/tag.ts), renderer는 [`render.ts`](../packages/template/src/render.ts), compiler target은 [`compiled.ts`](../packages/template/src/compiled.ts)에 있습니다.
+core 다음에는 template 패키지를 읽으세요. [`packages/template/src/index.ts`](../packages/template/src/index.ts)는 다시 내보내기만 합니다. `createSqlTag()`는 [`tag.ts`](../packages/template/src/tag.ts)에, 렌더러는 [`render.ts`](../packages/template/src/render.ts)에, 컴파일러가 호출하는 함수는 [`compiled.ts`](../packages/template/src/compiled.ts)에 있습니다.
 
-`createSqlTag()`는 dialect-bound `sql` tag를 만듭니다. 이 tag는 frozen `Query` 객체를 생성합니다. statement에 구조 처리가 필요 없으면 template parsing을 늦춥니다.
+`createSqlTag()`는 방언이 정해진 `sql` 태그를 만듭니다. 이 태그는 변경할 수 없는 `Query` 객체를 만듭니다. 구조 처리가 필요 없는 문이면 템플릿 파싱도 필요할 때까지 미룹니다.
 
-authoring surface는 값과 SQL 구조를 명확히 구분합니다.
+작성 API는 값과 SQL 구조를 구분합니다.
 
-- `${value}` → value bind;
-- `sql.ident(name)` → quoted identifier 구조;
-- `sql.fragment` → 명시적인 composable SQL 구조;
-- `sql.list(values)` → value bind를 포함하는 structural list;
-- `sql.join(fragments)` → structural composition;
-- `sql.raw(text)` → text를 그대로 SQL 구조로 사용; 신뢰할 수 없는 입력을 넘기면 안 됨;
-- `sql.bind(value, hint)` → 값 + 명시적인 DB parameter metadata.
+- `${value}` → 값 바인딩
+- `sql.ident(name)` → 따옴표로 감싼 식별자
+- `sql.fragment` → 조합할 수 있는 명시적 SQL 구조
+- `sql.list(values)` → 값 바인딩을 담은 구조적 목록
+- `sql.join(fragments)` → 구조 조합
+- `sql.raw(text)` → 텍스트를 그대로 SQL 구조로 사용. 신뢰할 수 없는 입력은 넘기지 마세요.
+- `sql.bind(value, hint)` → 데이터베이스 파라미터 정보를 명시한 값
 
-fragment는 dialect에 종속됩니다. SQLBraid는 다른 dialect의 fragment를 거부합니다. 임의로 다시 quote하거나 구조를 다르게 해석하지 않습니다.
+조각은 방언에 묶입니다. 다른 방언의 조각을 섞으면 SQLBraid가 거부합니다. 따옴표를 다시 붙이거나 구조를 다르게 해석하지 않습니다.
 
-### Guarded `@braid` directive
+### 조건부 `@braid` 지시어
 
-`@braid` directive는 local dynamic SQL을 제공합니다: `if`, `choose`, `when`, `otherwise`, `where`, `set`, `trim`. runtime renderer는 IR을 이해합니다. 하지만 JavaScript는 일반 template expression을 즉시 평가합니다.
+`@braid` 지시어로 동적 SQL을 그 자리에서 쓸 수 있습니다: `if`, `choose`, `when`, `otherwise`, `where`, `set`, `trim`. 런타임 렌더러도 IR을 이해합니다. 하지만 JavaScript는 템플릿 안의 식을 바로 평가합니다.
 
-따라서 compiler는 guarded capture를 lower합니다. 그러면 inactive branch 안의 expression은 평가되지 않습니다. `guarded()`와 `capture()`는 compiler의 target입니다. application용 두 번째 query language가 아닙니다.
+그래서 컴파일러가 조건부 캡처를 변환합니다. 변환하면 비활성 분기의 식은 평가되지 않습니다. `guarded()`와 `capture()` 같은 런타임 헬퍼는 컴파일러가 생성하는 코드가 호출하는 함수입니다. 애플리케이션용 두 번째 쿼리 언어가 아닙니다.
 
-## 5. Binding: `$1`, `?`, `:1`, `@p1`이 처음 등장하는 지점
+## 5. 바인딩: `$1`, `?`, `:1`, `@p1`이 생기는 곳
 
-`StatementBindingAdapter`가 논리 statement와 driver transport 사이의 경계입니다.
+`StatementBindingAdapter`는 논리 문과 드라이버 전송 방식 사이의 경계입니다.
 
 ```mermaid
 flowchart LR
   R[RenderedStatement<br/>segments + parameters] --> S[StatementBindingAdapter.describe]
-  S --> B[StatementBindingDescription<br/>transport + binding map + reuse]
-  B --> P[parameterized SQL or native template]
+  S --> B[StatementBindingDescription<br/>전송 방식, 바인딩 맵, 재사용]
+  B --> P[파라미터화된 SQL 또는 네이티브 템플릿]
 ```
 
-binding description은 pure operation입니다. connection acquisition 전에 수행됩니다. 따라서 잘못된 hint, transport 규칙, binding identity는 pool lease를 쓰기 전에 실패합니다.
+바인딩 설명은 부수 효과가 없는 순수 연산이고, 커넥션을 얻기 전에 실행됩니다. 그래서 잘못된 힌트나 전송 규칙, 바인딩 식별 문제는 풀의 리스를 쓰기 전에 실패합니다.
 
-이 분리 덕분에 PostgreSQL, MySQL, Oracle, SQL Server, native template transport는 같은 논리 shape을 서로 다른 방식으로 materialize할 수 있습니다. query identity는 바뀌지 않습니다.
+이렇게 나뉘어 있어서 PostgreSQL, MySQL, Oracle, SQL Server, 네이티브 템플릿 전송이 같은 논리 형태를 각자 다른 방식으로 실행할 수 있습니다. 쿼리의 정체성은 바뀌지 않습니다.
 
-## 6. `@sqlbraid/runtime`: 어려운 부분은 SQL이 아니라 lifecycle
+## 6. `@sqlbraid/runtime`: 어려운 부분은 수명 관리입니다
 
-runtime 코드의 대부분은 SQL parsing이 아니라 physical resource ownership을 다룹니다. runtime은 다음 파일로 구성됩니다.
+런타임 코드의 대부분은 SQL 파싱이 아니라 물리 리소스의 소유권을 다룹니다. 런타임은 다음 파일로 구성됩니다.
 
 | 파일                                                                               | 내용                                                                                                                                           |
 | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`index.ts`](../packages/runtime/src/index.ts)                                     | `createDatabase()`, `createPooledDatabase()`, `createScopedDatabase()`, `prepare()`, `prepareObserved()`, `batch`, `bulk`, `session()`, `tx()` |
-| [`operations/materialized.ts`](../packages/runtime/src/operations/materialized.ts) | materialized 경로: `runPrepared()`, `physical()`, `finalizePhysical()`, `processRows()`                                                        |
-| [`operations/lease.ts`](../packages/runtime/src/operations/lease.ts)               | lease 획득: `leaseForUse()`                                                                                                                    |
-| [`operations/stream.ts`](../packages/runtime/src/operations/stream.ts)             | stream 경로                                                                                                                                    |
-| [`state.ts`](../packages/runtime/src/state.ts)                                     | `ScopeState`와 root/transaction lock                                                                                                           |
+| [`operations/materialized.ts`](../packages/runtime/src/operations/materialized.ts) | 결과를 메모리로 모두 읽는 경로: `runPrepared()`, `physical()`, `finalizePhysical()`, `processRows()`                                           |
+| [`operations/lease.ts`](../packages/runtime/src/operations/lease.ts)               | 리스 획득: `leaseForUse()`                                                                                                                     |
+| [`operations/stream.ts`](../packages/runtime/src/operations/stream.ts)             | 스트림 경로                                                                                                                                    |
+| [`state.ts`](../packages/runtime/src/state.ts)                                     | `ScopeState`, 루트·트랜잭션 잠금                                                                                                               |
 
-중심 생성 함수는 `createScopedDatabase()`입니다. `createDatabase()`와 `createPooledDatabase()` 모두 이 함수를 사용합니다.
+중심이 되는 생성 함수는 `createScopedDatabase()`입니다. `createDatabase()`와 `createPooledDatabase()`가 모두 이 함수를 씁니다.
 
-일반 materialized query에서 함수는 다음 순서로 실행됩니다.
+결과를 메모리로 모두 읽는 일반 쿼리는 다음 순서로 실행됩니다.
 
 ```text
-prepareObserved()          render, binding 설명, query:ready 발생
+prepareObserved()          렌더링, 바인딩 설명, query:ready 발생
   └─ prepare()
 runPrepared()
-  ├─ leaseForUse()         resource 획득 또는 pin
-  ├─ physical()            driver I/O
-  └─ use.release()         mapping 전에 release
-finalizePhysical()         result-kind 검사
-processRows()              Standard Schema mapping
+  ├─ leaseForUse()         리소스 획득 또는 고정
+  ├─ physical()            드라이버 I/O
+  └─ use.release()         매핑 전에 반환
+finalizePhysical()         결과 종류 검사
+processRows()              Standard Schema 매핑
 ```
 
-`db.all(query)` 한 번은 대략 다음 lifecycle을 거칩니다.
+`db.all(query)` 한 번은 대략 다음 과정을 거칩니다.
 
 ```mermaid
 sequenceDiagram
@@ -167,83 +167,83 @@ sequenceDiagram
   App->>Template: sql.rows`...`
   Template-->>App: Query
   App->>Runtime: db.all(Query)
-  Runtime->>Runtime: render + binding.describe
-  Runtime->>Runtime: query:ready observer
-  Runtime->>Pool: acquire/use
+  Runtime->>Runtime: 렌더링 + binding.describe
+  Runtime->>Runtime: query:ready 옵저버
+  Runtime->>Pool: 획득 또는 사용
   Runtime->>Driver: executor.query(rendered, binding)
   Driver-->>Runtime: QueryExecutionResult
-  Runtime->>Pool: root lease release
-  Runtime->>Runtime: result-kind check + mapping
-  Runtime-->>App: rows
+  Runtime->>Pool: 루트 리스 반환
+  Runtime->>Runtime: 결과 종류 검사 + 매핑
+  Runtime-->>App: 행
 ```
 
-### application mapping 전에 lease를 먼저 반환한다
+### 매핑 전에 리스를 먼저 반환합니다
 
-pooled materialized operation에서 SQLBraid는 driver I/O와 result materialization 후에 lease를 반환합니다. 그 다음에 비동기 Standard Schema mapping을 수행합니다. application validation/transformation이 pool connection을 붙잡으면 안 됩니다. pool connection은 수가 제한되어 있기 때문입니다.
+풀을 쓰는 일반 작업에서 SQLBraid는 드라이버 I/O와 결과 읽기가 끝나면 리스를 먼저 반환합니다. 비동기 Standard Schema 매핑은 그 다음에 합니다. 풀 커넥션은 개수가 한정되어 있으므로, 애플리케이션의 검증이나 변환이 커넥션을 붙잡고 있으면 안 됩니다.
 
-stream은 의도적으로 다르게 처리합니다. native cursor/result set이 physical resource를 계속 필요로 하기 때문입니다.
+스트림은 일부러 다르게 동작합니다. 네이티브 커서나 결과 집합이 물리 리소스를 계속 써야 하기 때문입니다.
 
-## 7. Direct executor, provider, lease
+## 7. 직접 실행기, 프로바이더, 리스
 
-`createDatabase(executor)`는 이미 존재하는 physical execution resource 하나를 감쌉니다. SQLBraid는 접근을 직렬화합니다. client/database의 shutdown은 SQLBraid가 소유하지 않습니다.
+`createDatabase(executor)`는 이미 연결된 물리 실행 리소스 하나를 감쌉니다. SQLBraid는 이 리소스에 대한 접근을 순서대로 처리합니다. 클라이언트나 데이터베이스를 닫는 일은 SQLBraid의 책임이 아닙니다.
 
-`createPooledDatabase(provider)`는 `ConnectionProvider`를 감쌉니다. provider는 physical lease의 공급원입니다. 가짜 connection이 아닙니다.
+`createPooledDatabase(provider)`는 `ConnectionProvider`를 감쌉니다. 프로바이더는 물리 리스를 내주는 곳입니다. 가짜 커넥션이 아닙니다.
 
-pooled root materialized operation은 다음과 같습니다.
+풀을 쓰는 루트 작업은 다음과 같이 진행됩니다.
 
 ```text
 provider.acquire()
     ↓
 ConnectionLease
     ↓
-physical I/O
+물리 I/O
     ↓
 lease.release()
 ```
 
-`ConnectionLease`는 `QueryExecutor`를 확장합니다. release/discard ownership을 추가합니다. provider와 lease는 같은 statement-binding policy를 노출해야 합니다.
+`ConnectionLease`는 `QueryExecutor`를 확장하고, 반환과 폐기에 대한 책임을 더합니다. 프로바이더와 리스는 같은 바인딩 정책을 노출해야 합니다.
 
-## 8. Scope state와 physical ownership
+## 8. 범위 상태와 물리 리소스 소유권
 
-`ScopeState`는 runtime의 resource safety state machine입니다.
+`ScopeState`는 리소스를 안전하게 지키는 런타임 상태 기계입니다.
 
-중요 필드는 다음과 같습니다.
+주요 필드는 다음과 같습니다.
 
-- `tail`: direct/root의 일반 physical work 직렬화;
-- `directBusy`: root 작업이 사용 중인 direct resource 표시;
-- `transactionTail`: pinned physical work와 transaction-control transition의 순서 보장;
-- `streamUsers` / `pendingStreams`: 살아 있거나 admission 중인 stream 추적;
-- `activeScope`: 현재 유효한 transaction/savepoint handle 식별;
-- `activeSession`: 현재 유효한 session handle 식별;
-- `poisoned`: 해당 physical resource를 재사용할 수 없게 만든 failure 보존.
+- `tail`: 직접 실행이나 루트에서 하는 일반 물리 작업을 순서대로 처리
+- `directBusy`: 루트 작업이 지금 쓰고 있는 직접 리소스를 표시
+- `transactionTail`: 고정된 물리 작업과 트랜잭션 제어의 순서를 보장
+- `streamUsers` / `pendingStreams`: 살아 있거나 시작 중인 스트림을 추적
+- `activeScope`: 지금 유효한 트랜잭션·세이브포인트 핸들을 식별
+- `activeSession`: 지금 유효한 세션 핸들을 식별
+- `poisoned`: 물리 리소스를 다시 쓸 수 없게 만든 실패를 보관
 
-async context와 이 marker들은 작업이 조용히 다른 connection으로 빠져나가는 것을 막습니다.
+비동기 컨텍스트와 이 표시들이 함께 작업이 몰래 다른 커넥션으로 넘어가는 것을 막습니다.
 
-## 9. `session()`: transaction 없이 connection을 pin한다
+## 9. `session()`: 트랜잭션 없이 커넥션을 고정합니다
 
-`db.session(callback)`은 callback 동안 physical resource 하나를 고정합니다. transaction은 시작하지 않습니다.
+`db.session(callback)`은 콜백이 실행되는 동안 물리 리소스 하나를 고정합니다. 트랜잭션은 시작하지 않습니다.
 
-pool에서는:
+풀에서는 다음과 같이 동작합니다.
 
 ```text
-lease 하나 acquire
+리스 하나 획득
     ↓
-nested session operation 전체가 동일 lease 재사용
+중첩된 세션 작업이 모두 같은 리스를 사용
     ↓
-callback/scoped stream 종료 후 release
+콜백과 범위 안 스트림이 끝나면 반환
 ```
 
-nested session도 현재 pinned resource를 재사용합니다. `session.tx()`는 같은 resource에서 transaction을 시작합니다. 두 번째 lease를 가져오지 않습니다.
+중첩 세션도 지금 고정된 리소스를 그대로 씁니다. `session.tx()`는 같은 리소스에서 트랜잭션을 시작하고, 리스를 하나 더 얻지 않습니다.
 
-scoped `Database`는 callback 밖으로 escape하면 안 됩니다. root handle 사용이 physical affinity를 깨뜨린다면 SQLBraid는 그 사용을 거부합니다. 다른 connection으로 우회시키지 않습니다.
+범위가 정해진 `Database`를 콜백 밖으로 가지고 나가면 안 됩니다. 루트 핸들을 써서 커넥션 고정이 깨지는 경우, SQLBraid는 그 작업을 다른 커넥션으로 돌리지 않고 거부합니다.
 
-correctness가 connection-local state에 의존하지만 transaction은 꼭 필요하지 않을 때 session을 사용하세요.
+트랜잭션까지는 필요 없지만 커넥션에 묶인 상태가 중요하다면 세션을 쓰세요.
 
-## 10. `tx()`: 하나의 physical transaction, nested는 savepoint
+## 10. `tx()`: 물리 트랜잭션 하나, 중첩은 세이브포인트
 
-outer `db.tx(callback)`은 physical resource 하나를 acquire하거나 reuse합니다. transaction을 시작하고 callback을 실행합니다. 그 다음 같은 resource에서 commit 또는 rollback합니다.
+바깥쪽 `db.tx(callback)`은 물리 리소스 하나를 얻거나 다시 씁니다. 트랜잭션을 시작하고 콜백을 실행한 뒤, 같은 리소스에서 커밋하거나 롤백합니다.
 
-nested `tx.tx(callback)`은 독립 transaction이 아닙니다. 같은 physical resource의 savepoint입니다.
+중첩된 `tx.tx(callback)`은 독립된 트랜잭션이 아닙니다. 같은 물리 리소스의 세이브포인트입니다.
 
 ```text
 SAVEPOINT
@@ -251,185 +251,185 @@ callback
 RELEASE SAVEPOINT
 ```
 
-callback이 실패하면 SQLBraid는 savepoint까지 rollback합니다. resource가 정상이면 그 다음 savepoint를 release합니다.
+콜백이 실패하면 SQLBraid는 세이브포인트까지 롤백합니다. 리소스가 정상이면 이어서 세이브포인트를 해제합니다.
 
-SQLBraid는 nested `tx(options, callback)`을 거부합니다. isolation/access option은 outer physical transaction에 속합니다. SQLBraid는 활성 transaction 안에서 이 option을 바꾸는 의미를 만들지 않습니다.
+중첩된 `tx(options, callback)`은 거부됩니다. 격리 수준과 접근 모드는 바깥쪽 물리 트랜잭션에 속합니다. 이미 진행 중인 트랜잭션 안에서 이를 바꾸는 동작을 SQLBraid가 지어내지 않습니다.
 
-nested savepoint가 활성 상태이면 가장 안쪽 callback handle을 사용하세요. SQLBraid는 parent/root handle 사용을 거부합니다. 이것은 scope escape를 막습니다.
+중첩 세이브포인트가 활성 상태일 때는 가장 안쪽 콜백 핸들을 쓰세요. 바깥쪽이나 루트 핸들을 쓰면 범위를 벗어나는 것이므로 거부됩니다.
 
-## 11. Stream은 iteration이 끝날 때까지 lease를 소유한다
+## 11. 스트림은 순회가 끝날 때까지 리스를 소유합니다
 
-`db.stream()`은 `all()`을 buffer한 가짜 stream이 아닙니다. 살아 있는 native cursor, portal, result set, request, statement는 physical resource를 계속 점유합니다.
+`db.stream()`은 `all()`의 결과를 버퍼에 담아 흉내 내는 기능이 아닙니다. 살아 있는 네이티브 커서, 포털, 결과 집합, 요청, 문은 물리 리소스를 계속 씁니다.
 
 ```mermaid
 flowchart LR
-  A[resource acquire / pin] --> B[driver stream open]
-  B --> C[row yield]
-  C --> D[iterator.return / native cleanup]
-  D --> E[resource release / discard]
+  A[리소스 획득 / 고정] --> B[드라이버 스트림 열기]
+  B --> C[행 전달]
+  C --> D[iterator.return / 네이티브 정리]
+  D --> E[리소스 반환 또는 폐기]
 ```
 
-early `break`, exception, cancellation, mapping failure는 모두 cleanup을 시작합니다. driver iterator cleanup은 lease release보다 먼저 수행됩니다.
+조기 `break`, 예외, 취소, 매핑 실패는 모두 정리 단계로 이어집니다. 드라이버 반복자 정리는 리스 반환보다 먼저 일어납니다.
 
-살아 있는 pinned stream은 같은 resource에 대한 충돌하는 re-entry를 막습니다. transaction/savepoint transition도 막습니다. SQLBraid는 그 작업을 거부합니다. driver가 정의하지 않은 동작에 의존하지 않습니다.
+고정된 스트림이 살아 있는 동안에는 같은 리소스에 대한 충돌하는 재진입을 막습니다. 트랜잭션과 세이브포인트 전환도 막습니다. 드라이버가 정의하지 않은 동작에 기대지 않고 SQLBraid가 거부합니다.
 
-## 12. Prepared query, batch, bulk
+## 12. 준비된 쿼리, 배치, 벌크
 
-### Prepared query
+### 준비된 쿼리
 
-`db.prepare()`는 SQLBraid의 안정된 logical shape을 뜻합니다. DB server에 prepared statement cache entry가 생긴다는 약속이 아닙니다.
+`db.prepare()`가 보장하는 것은 SQLBraid 논리 형태의 안정성입니다. 데이터베이스 서버의 준비된 문 캐시에 항목이 생긴다는 약속은 아닙니다.
 
-첫 실행이 shape을 확정합니다: result kind, canonical segment, 순서가 있는 parameter metadata, dialect. 값은 바뀔 수 있습니다. 구조가 바뀌면 driver I/O 전에 `BRAID_PREPARED_SHAPE`로 실패합니다.
+첫 실행이 형태를 정합니다: 결과 종류, 정규화된 조각, 순서가 있는 파라미터 정보, 방언. 값은 바뀌어도 됩니다. 구조가 바뀌면 드라이버 I/O 전에 `BRAID_PREPARED_SHAPE`로 실패합니다.
 
-실제 native/server reuse 여부는 별도로 adapter가 결정합니다.
+네이티브 또는 서버 쪽 재사용 여부는 어댑터가 따로 정합니다.
 
-### Batch
+### 배치
 
-`db.batch()`는 다음 단계를 수행합니다.
+`db.batch()`는 다음 순서로 동작합니다.
 
-1. 여러 executable query를 prepare합니다. query는 서로 달라도 됩니다.
-2. physical use/lease 하나를 얻습니다.
-3. query를 순서대로 실행합니다.
-4. use/lease를 release합니다.
-5. result를 처리합니다.
+1. 실행할 쿼리 여러 개를 준비합니다. 쿼리는 서로 달라도 됩니다.
+2. 물리 리소스나 리스 하나를 얻습니다.
+3. 쿼리를 차례로 실행합니다.
+4. 리소스나 리스를 반환합니다.
+5. 결과를 처리합니다.
 
-batch는 transaction이 아닙니다. atomicity가 필요하면 `db.tx(tx => tx.batch(...))`를 사용하세요.
+배치는 트랜잭션이 아닙니다. 원자성이 필요하면 `db.tx(tx => tx.batch(...))`를 쓰세요.
 
-### Bulk
+### 벌크
 
-`db.bulk()`는 하나의 homogeneous command shape에 여러 input row를 적용합니다. adapter가 physical 전략을 선택합니다: `native-bulk`, `pipeline`, `prepared-loop`, `remote-batch`. 전략 이름은 transaction atomicity를 뜻하지 않습니다.
+`db.bulk()`는 같은 형태의 명령 하나를 여러 입력 행에 적용합니다. 물리 실행 방식은 어댑터가 고릅니다: `native-bulk`, `pipeline`, `prepared-loop`, `remote-batch`. 방식의 이름이 트랜잭션 원자성을 뜻하지는 않습니다.
 
-## 13. TypePolicy와 Standard Schema는 서로 다른 문제를 해결한다
+## 13. TypePolicy와 Standard Schema는 다른 문제를 풉니다
 
-`TypePolicy`는 driver boundary의 책임입니다.
+`TypePolicy`는 드라이버 경계에서 일합니다.
 
 ```text
-database/native driver value
+데이터베이스·네이티브 드라이버 값
     ↓
-SQLBraid canonical JavaScript representation
+SQLBraid 표준 JavaScript 표현
 ```
 
-exact integer/decimal의 문자열 표현, binary, temporal profile, JSON representation 같은 문제가 여기에 속합니다.
+정확한 정수와 소수를 문자열로 다루는 방식, 바이너리 값, 날짜·시간 프로필, JSON 표현 정책이 여기에 속합니다.
 
-Standard Schema는 application mapping boundary의 책임입니다.
+Standard Schema는 애플리케이션 매핑 경계에서 일합니다.
 
 ```text
-canonical JavaScript representation
+표준 JavaScript 표현
     ↓
-application/domain value
+애플리케이션·도메인 값
 ```
 
-예를 들어 exact decimal 문자열을 application의 Decimal/Money 객체로 바꾸는 것은 application mapping이지 driver transport policy가 아닙니다.
+예를 들어 정확한 소수 문자열을 애플리케이션의 Decimal이나 Money 타입으로 바꾸는 일은 애플리케이션 매핑입니다. 드라이버 전송 정책이 아닙니다.
 
-이 계층을 분리했기 때문에 runtime에 universal input/output codec framework를 넣을 필요가 없습니다.
+두 계층이 나뉘어 있어서 런타임에 범용 입출력 코덱이 필요하지 않습니다.
 
-## 14. Driver adapter: 얇은 physical bridge
+## 14. 드라이버 어댑터: 얇은 물리 연결층
 
-첫 reference adapter로 [`packages/postgres/src/pg.ts`](../packages/postgres/src/pg.ts)를 읽으세요. 그 다음 resource가 많은 Oracle adapter를 읽으세요.
+첫 참고 어댑터로 [`packages/postgres/src/pg.ts`](../packages/postgres/src/pg.ts)를 읽으세요. 그 다음 리소스를 많이 다루는 Oracle 어댑터를 읽으세요.
 
-driver adapter의 주요 책임은 네 가지입니다.
+드라이버 어댑터가 하는 주요 일은 네 가지입니다.
 
-1. `StatementBindingAdapter` 구현;
-2. `QueryExecutor` 및 필요한 pool/provider lease 구현;
-3. native result를 SQLBraid row/command/routine 타입으로 normalize;
-4. environment/capability/representation evidence를 정직하게 보고.
+1. `StatementBindingAdapter`를 구현합니다.
+2. `QueryExecutor`와, 필요하면 풀·프로바이더 리스를 구현합니다.
+3. 네이티브 결과를 SQLBraid의 행, 명령, 루틴 타입으로 정규화합니다.
+4. 실행 환경, 기능, 값 표현에 대한 근거를 정직하게 보고합니다.
 
-`PgClientLike` 같은 `*Like` interface는 native driver API 중 SQLBraid가 실제 사용하는 작은 structural subset입니다. 새로운 driver abstraction을 만들려는 것이 아닙니다.
+`PgClientLike` 같은 `*Like` 인터페이스는 네이티브 드라이버 API 중 SQLBraid가 실제로 쓰는 부분만 작게 정의한 것입니다. 드라이버를 대신하는 새 추상화가 아닙니다.
 
-### Dialect, driver, runtime은 서로 다른 축이다
+### 방언, 드라이버, 런타임은 서로 다릅니다
 
 ```text
-dialect  = SQL quoting, lexical/structural behavior
-driver   = protocol/API bridge, result normalization
-runtime  = Node, Bun, Deno, browser, Worker
+방언     = SQL 따옴표 규칙, 어휘·구조 동작
+드라이버 = 프로토콜·API 연결, 결과 정규화
+런타임   = Node, Bun, Deno, 브라우저, Worker
 ```
 
-따라서 PostgreSQL driver마다 PostgreSQL dialect 로직을 복제할 필요가 없습니다. 같은 이유로 SQLite에는 dialect 하나와 execution adapter 여러 개가 있습니다.
+그래서 PostgreSQL을 지원하는 드라이버가 늘어도 PostgreSQL 방언 로직을 복제할 필요가 없습니다. 같은 이유로 SQLite는 방언 하나에 실행 어댑터가 여러 개입니다.
 
-## 15. Error, cleanup, poisoned resource
+## 15. 오류, 정리, 사용 불가 리소스
 
-SQLBraid는 primary failure를 보존합니다. 그리고 자신이 소유한 resource의 cleanup을 끝까지 시도합니다. 필요한 곳에서 driver resource cleanup은 LIFO scope를 사용합니다. cleanup failure는 aggregate합니다. 원래 error를 가리지 않습니다.
+SQLBraid는 처음 발생한 실패를 보존합니다. 그러면서도 자신이 소유한 리소스는 끝까지 정리하려고 합니다. 필요한 곳에서는 드라이버 리소스를 LIFO 순서로 정리합니다. 정리 중 생긴 실패는 모아서 함께 알리고, 원래 오류를 가리지 않습니다.
 
-transaction control, stream cleanup, cancellation, lease cleanup 결과로 physical resource 상태를 신뢰할 수 없게 되면 resource를 poison합니다.
+트랜잭션 제어, 스트림 정리, 취소, 리스 정리 때문에 물리 리소스의 상태를 믿을 수 없게 되면 그 리소스를 사용 불가로 표시합니다.
 
-- pooled lease는 pool로 정상 반환하지 않고 discard;
-- direct poisoned resource는 이후 SQLBraid work를 거부.
+- 풀의 리스라면 다시 쓰도록 반환하지 않고 폐기합니다.
+- 직접 리소스라면 이후의 SQLBraid 작업을 모두 거부합니다.
 
-낙관적인 connection 재사용보다 correctness를 우선합니다.
+커넥션을 낙관적으로 재사용하는 것보다 정확성이 우선입니다.
 
-## 16. Observer와 capability
+## 16. 옵저버와 기능
 
-`ExecutionObserver`는 observe 또는 fail만 할 수 있습니다. lifecycle event를 볼 수 있고 throw할 수 있습니다. SQL, bind, result, routing, retry, transaction target은 rewrite할 수 없습니다.
+`ExecutionObserver`는 관찰하거나 실패시키는 일만 할 수 있습니다. 수명 주기 이벤트를 살펴보고 예외를 던질 수는 있지만, SQL, 바인딩, 결과, 라우팅, 재시도, 트랜잭션 대상을 바꿀 수는 없습니다.
 
-capability는 adapter/resource가 실제로 지원하는 일을 표현합니다. SQLBraid는 빠진 physical semantic을 조용히 흉내 내지 않습니다. 예를 들어 실제 streaming protocol이 없는 adapter는 `db.stream()`을 거부합니다. 전체 result를 buffer한 뒤 stream인 것처럼 내보내지 않습니다.
+기능(capability)은 어댑터나 리소스가 실제로 할 수 있는 일을 나타냅니다. 물리적으로 없는 동작을 SQLBraid가 몰래 흉내 내지 않습니다. 예를 들어 진짜 스트리밍 프로토콜이 없는 어댑터는 `db.stream()`을 거부합니다. 결과 전체를 버퍼에 담은 뒤 스트리밍한 것처럼 보이게 하지 않습니다.
 
-optional OpenTelemetry package도 runtime을 patch하지 않고 이 observer surface로 연결됩니다.
+선택 사항인 OpenTelemetry 패키지도 런타임을 고치지 않고 이 옵저버 API로 연결됩니다.
 
-## 17. Static/tooling subsystem은 실행 core와 분리되어 있다
+## 17. 정적 도구는 별도 영역입니다
 
-runtime core는 의도적으로 metadata, compiler, codegen, CLI, editor, Vite 패키지에 의존하지 않습니다.
+런타임 코어는 메타데이터, 컴파일러, 코드 생성, CLI, 에디터, Vite 패키지에 의존하지 않습니다. 의도한 설계입니다.
 
-- `@sqlbraid/metadata`는 DB evidence를 기록합니다.
-- `@sqlbraid/codegen`은 pure/offline 변환입니다: metadata + TypePolicy → TypeScript model.
-- `@sqlbraid/compiler`는 source discovery/lowering을 소유합니다.
-- `@sqlbraid/tooling`은 compiler/metadata/codegen의 positive evidence를 합쳐 CLI/LSP/editor에 제공합니다.
+- `@sqlbraid/metadata`는 데이터베이스에 대한 근거를 기록합니다.
+- `@sqlbraid/codegen`은 오프라인에서 동작하는 순수 변환입니다: 메타데이터 + TypePolicy → TypeScript 모델
+- `@sqlbraid/compiler`는 소스 탐색과 변환을 맡습니다.
+- `@sqlbraid/tooling`은 컴파일러, 메타데이터, 코드 생성에서 나온 근거를 모아 CLI, LSP, 에디터에 제공합니다.
 
-metadata에 없는 사실은 unresolved evidence입니다. 사용자의 SQL이 invalid라는 증거가 아닙니다.
+메타데이터에 정보가 없다는 것은 아직 확인하지 못했다는 뜻일 뿐입니다. 사용자의 SQL이 잘못되었다는 증거가 아닙니다.
 
 ## 18. 권장 소스 읽기 순서
 
-repository를 알파벳 순서로 읽지 마세요. 다음 순서를 사용하세요.
+저장소를 알파벳 순서로 읽지 마세요. 다음 순서를 권합니다.
 
-1. README의 "Key Concepts"와 "Runtime API" 절;
-2. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`);
-3. `packages/template/src/`: `tag.ts` (`createSqlTag()`) → `render.ts` (`renderTemplateIr()` / `renderNodes()`);
-4. `packages/runtime/src/index.ts`의 `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepareObserved` → `prepare`. 그 다음 `operations/materialized.ts`의 `runPrepared` → `leaseForUse` (`operations/lease.ts`) → `physical` → `finalizePhysical` → `processRows`;
-5. `operations/stream.ts`의 runtime stream 경로를 별도로 읽기;
-6. `index.ts`의 runtime `session()`과 `tx()`;
-7. 첫 adapter로 `packages/postgres/src/pg.ts`의 `pgStatementBinding`과 `createPgExecutor()`;
-8. Oracle 또는 resource lifecycle이 복잡한 adapter;
-9. static tooling 작업을 할 때만 compiler → metadata → codegen → tooling.
+1. README의 "Key Concepts"와 "Runtime API" 절
+2. `packages/core/src/`: `statement.ts` (`RenderedStatement`), `query.ts` (`Query`), `binding.ts` (`StatementBindingAdapter`), `executor.ts` (`QueryExecutor`, `ConnectionProvider`), `database.ts` (`Database`), `authoring.ts` (`SqlTag`)
+3. `packages/template/src/`: `tag.ts` (`createSqlTag()`) → `render.ts` (`renderTemplateIr()` / `renderNodes()`)
+4. `packages/runtime/src/index.ts`: `createDatabase` / `createPooledDatabase` → `createScopedDatabase` → `prepareObserved` → `prepare`. 이어서 `operations/materialized.ts`: `runPrepared` → `leaseForUse` (`operations/lease.ts`) → `physical` → `finalizePhysical` → `processRows`
+5. `operations/stream.ts`의 스트림 경로 (따로 읽기)
+6. `index.ts`의 `session()`과 `tx()`
+7. 첫 어댑터로 `packages/postgres/src/pg.ts`의 `pgStatementBinding`과 `createPgExecutor()`
+8. Oracle처럼 리소스를 많이 다루는 어댑터
+9. 정적 도구를 다룰 때만: 컴파일러 → 메타데이터 → 코드 생성 → 도구
 
-## 19. 기여자가 보호해야 할 invariant
+## 19. 기여자가 지켜야 할 불변 조건
 
-architecture를 바꾸기 전에 다음 규칙이 유지되는지 확인합니다.
+구조를 바꾸기 전에 다음 규칙이 그대로 유지되는지 확인하세요.
 
-- ordinary interpolation은 계속 value bind여야 함;
-- SQL structure는 명시적이어야 함;
-- logical statement shape은 transport-neutral이어야 함;
-- binding description은 pure/pre-acquire여야 함;
-- provider와 lease의 binding identity가 일치해야 함;
-- materialized pooled result는 application mapping 전에 lease를 반환해야 함;
-- stream은 native iterator cleanup까지 resource를 유지해야 함;
-- session은 transaction을 몰래 시작하지 않고 physical resource만 pin해야 함;
-- nested transaction은 같은 physical resource의 savepoint여야 함;
-- root/parent scope escape는 다른 connection으로 우회하지 말고 거부해야 함;
-- cleanup은 소유한 resource를 모두 시도하면서 primary failure를 보존해야 함;
-- 상태가 불확실한 physical resource는 poison/discard해야 함;
-- unsupported capability는 simulation하지 말고 명시적으로 실패해야 함;
-- TypePolicy는 transport representation, Standard Schema는 application mapping을 소유해야 함;
-- observer는 observe/fail이며 execution rewrite를 하지 않아야 함;
-- runtime은 compiler/metadata/codegen/tooling과 독립적이어야 함.
+- 일반 보간은 계속 값 바인딩입니다.
+- SQL 구조는 명시적입니다.
+- 논리 문의 형태는 전송 방식에 의존하지 않습니다.
+- 바인딩 설명은 순수 연산이며 리소스 획득 전에 실행됩니다.
+- 프로바이더와 리스의 바인딩 정체성은 같습니다.
+- 풀에서 메모리로 모두 읽는 결과는 애플리케이션 매핑 전에 리스를 반환합니다.
+- 스트림은 네이티브 반복자 정리가 끝날 때까지 리소스를 유지합니다.
+- 세션은 트랜잭션을 몰래 시작하지 않고 리소스만 고정합니다.
+- 중첩 트랜잭션은 같은 물리 리소스의 세이브포인트입니다.
+- 루트나 바깥쪽 범위로 벗어나는 작업은 다른 경로로 돌리지 않고 거부합니다.
+- 정리는 소유한 리소스를 모두 시도하고, 처음 실패를 보존합니다.
+- 상태를 믿을 수 없는 물리 리소스는 사용 불가로 표시하거나 폐기합니다.
+- 지원하지 않는 기능은 흉내 내지 않고 명시적으로 실패합니다.
+- 전송 표현은 TypePolicy가, 애플리케이션 매핑은 Standard Schema가 맡습니다.
+- 옵저버는 관찰하거나 실패시킬 뿐, 실행을 바꾸지 않습니다.
+- 런타임은 컴파일러, 메타데이터, 코드 생성, 도구에 의존하지 않습니다.
 
-## 20. 변경사항을 어디에 둘 것인가
+## 20. 변경 사항을 어디에 둘까요
 
-- public interface / SPI → `@sqlbraid/core`
-- tagged-template 구조/rendering → `@sqlbraid/template`
-- lease/scope/transaction/stream/mapping → `@sqlbraid/runtime`
-- placeholder/native protocol/result normalization → driver adapter
-- DB primitive representation → dialect/driver TypePolicy
-- schema fact → `@sqlbraid/metadata` + inspector
-- 생성 TypeScript model → `@sqlbraid/codegen`
-- source lowering/type overlay → `@sqlbraid/compiler`
-- hover/completion/workspace/LSP evidence → tooling/language-server
-- tracing/metric → `@sqlbraid/opentelemetry` 같은 observer extension
+- 공개 인터페이스 / SPI → `@sqlbraid/core`
+- 태그 템플릿 구조와 렌더링 → `@sqlbraid/template`
+- 리스, 범위, 트랜잭션, 스트림, 매핑 → `@sqlbraid/runtime`
+- 플레이스홀더, 네이티브 프로토콜, 결과 정규화 → 드라이버 어댑터
+- 데이터베이스 기본 타입의 값 표현 → 방언·드라이버의 TypePolicy
+- 스키마 정보 → `@sqlbraid/metadata`와 인스펙터
+- 생성되는 TypeScript 모델 → `@sqlbraid/codegen`
+- 소스 변환과 타입 오버레이 → `@sqlbraid/compiler`
+- 호버, 자동 완성, 워크스페이스, LSP 근거 → tooling / language-server
+- 추적과 지표 → `@sqlbraid/opentelemetry` 같은 옵저버 확장
 
-변경이 여러 경계를 넘는 것처럼 보이면, 먼저 더 작은 명시적 규칙으로 요구사항을 표현할 수 있는지 확인하세요. SQLBraid는 숨겨진 semantic machinery보다 명시적인 경계를 우선합니다. 이것은 의도적인 선택입니다.
+여러 경계를 한꺼번에 넘나들어야 할 것 같은 변경이라면, 먼저 더 작고 명시적인 규칙으로 표현할 수 있는지 살펴보세요. SQLBraid는 숨겨진 의미 처리 장치보다 명시적인 경계를 일부러 선택합니다.
 
-## 관련 architecture 문서
+## 관련 문서
 
-- [Public API audit](./public-api-audit.md)
-- [Driver-author guide](./driver-author-guide.md)
-- [Release readiness](./SQLBraid_release_readiness.md)
-- [Writing style](./writing-style.md)
-- [Repository rules](../AGENTS.md)
+- [공개 API 감사](./public-api-audit.md)
+- [드라이버 작성 가이드](./driver-author-guide.md)
+- [릴리스 준비 상태](./SQLBraid_release_readiness.md)
+- [글쓰기 스타일](./writing-style.md)
+- [저장소 규칙](../AGENTS.md)

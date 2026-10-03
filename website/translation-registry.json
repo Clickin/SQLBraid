@@ -97,7 +97,7 @@
       "source": "website/src/content/docs/getting-started/mariadb.md",
       "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
       "translationOf": "website/src/content/docs/getting-started/mariadb.md",
-      "sourceDigest": "c7785f8476ac47dac8627eb55c0dbadbd041578fddba9dcffb7b7708686b8ad4"
+      "sourceDigest": "b66bf77d94eeb1651be2b7518394c31640b4b999a0129ef38d056e1dc904ac6e"
     },
     {
       "source": "website/src/content/docs/getting-started/mssql.md",

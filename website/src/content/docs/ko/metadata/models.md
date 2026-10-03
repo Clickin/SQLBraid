@@ -1,11 +1,11 @@
 ---
 title: Row, Insert, Update 모델
-description: 생성된 선언과 보수적인 증거 규칙을 설명합니다.
+description: 생성되는 선언과 보수적인 근거 규칙을 알아봅니다.
 ---
 
-`generateModels(metadata, options)`는 순수한 offline 함수입니다. 독립 TypeScript 소스, 모델 이름, 진단, 메타데이터/정책 provenance, options hash를 반환합니다.
+`generateModels(metadata, options)`는 순수 함수이며 오프라인으로 동작합니다. 독립된 TypeScript 소스, 모델 이름, 진단, 메타데이터와 정책의 출처, 옵션 해시를 반환합니다.
 
-숫자 identity `id`, 필수 `email`이 있고, 생성 열이나 쓰기 불가 열의 증거가 없는 테이블을 예로 듭니다. 이 테이블에 대해 codegen은 다음을 출력합니다.
+숫자 identity `id`, 필수 `email`이 있고, 생성 열이나 쓰기 불가 열에 대한 근거가 없는 테이블을 예로 들어 봅시다. 이 테이블에 대해 codegen은 다음을 출력합니다.
 
 ```ts
 export interface UsersRow {
@@ -24,19 +24,14 @@ export interface UsersUpdate {
 }
 ```
 
-- **Row**는 TypePolicy의 `outputType`을 사용합니다. 데이터베이스 nullable은 `| null`을 추가합니다.
-- **Insert**는 `inputType`을 사용합니다. nullable/default/identity 열은 optional입니다. 삽입할 수 없거나 생성된 것으로 입증된 열은 제외됩니다.
-- **Update**는 `inputType`을 사용합니다. 포함된 속성은 optional입니다. 업데이트할 수 없거나 생성된 것으로 입증된 열은 제외됩니다. identity만으로는 열을 제외하지 않습니다.
+- **Row**는 TypePolicy의 `outputType`을 씁니다. 데이터베이스에서 nullable이면 `| null`이 붙습니다.
+- **Insert**는 `inputType`을 씁니다. nullable 열, 기본값이 있는 열, identity 열은 선택 사항입니다. 삽입할 수 없거나 생성되는 열이라고 증명된 열은 빠집니다.
+- **Update**는 `inputType`을 씁니다. 포함된 속성은 모두 선택 사항입니다. 수정할 수 없거나 생성되는 열이라고 증명된 열은 빠집니다. identity라는 이유만으로 빠지지는 않습니다.
 
-정확한 정수와 10진수의 output type은 canonical `string`입니다. 근사 이진
-타입은 `number`입니다. 생성된 모델은 exact string을 `bigint`나 decimal 객체로
-조용히 디코드하지 않습니다.
+정확한 정수·소수 출력 타입은 정규 `string`이고, 근사 이진 타입은 `number`입니다. 생성된 모델은 정확한 문자열을 몰래 `bigint`나 소수 객체로 바꾸지 않습니다.
 
-View, materialized view, foreign, virtual 관계는 Row 모델만 받습니다. 열이 있는 알 수 없는 관계 종류는 Row 모델과 경고를 받습니다. 지원되지 않거나 입증되지 않은 타입은 계속 `unknown`입니다. `any`가 되지 않습니다. 생성된 소스를 사용하기 전에 진단을 확인하세요.
+뷰, 구체화된 뷰, 외부 릴레이션, 가상 릴레이션에는 Row 모델만 생성됩니다. 열이 있는 알 수 없는 종류의 릴레이션은 Row 모델과 경고를 받습니다. 지원하지 않거나 증명되지 않은 타입은 `any`가 아니라 `unknown`으로 남습니다. 생성된 소스를 쓰기 전에 진단을 확인하세요.
 
-Native parsed JSON root는 `unknown`을 사용합니다. 선택한 profile이 더 좁은 root
-형태를 증명하면 예외입니다. Scalar mapping은 array, range, composite, object,
-`sql_variant`, vector, 기타 container를 재귀적으로 인증하지 않습니다. 중첩
-애플리케이션 타입을 생성하기 전에 그 container에 대한 증거가 필요합니다.
+선택한 프로필이 더 좁은 형태를 증명하지 않는 한, 네이티브로 파싱된 JSON 최상위 값은 `unknown`을 씁니다. 스칼라 매핑도 배열, 범위, 복합 타입, 객체, `sql_variant`, 벡터 같은 컨테이너를 재귀적으로 보장하지 않습니다. 중첩된 애플리케이션 타입을 생성하려면 먼저 그 컨테이너에 대한 근거가 필요합니다.
 
-열 이름은 정확한 데이터베이스 키로 남습니다. 필요하면 인용된 TypeScript 속성이 됩니다. namespace 증거와 안정적인 identity 접미사가 충돌을 막습니다. 결정적인 출력은 메타데이터 캡처 타임스탬프나 객체 삽입 순서에 의존하지 않습니다.
+열 이름은 데이터베이스 키 그대로 유지됩니다. 필요하면 따옴표로 감싼 TypeScript 속성이 됩니다. 네임스페이스 근거와 안정적인 식별 접미사가 이름 충돌을 막습니다. 결정적인 출력은 메타데이터의 수집 시각이나 객체 삽입 순서에 영향을 받지 않습니다.

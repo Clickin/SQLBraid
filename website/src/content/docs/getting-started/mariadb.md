@@ -68,10 +68,6 @@ omitted or the option declaration is partial, the adapter reports
 `mariadb-custom-profile`. This is not a certified profile. Explicit descriptors
 stay guarded declarations. They are not observations.
 
-Connector/Node.js does not expose effective options. An omitted descriptor or
-partial option declaration reports `mariadb-custom-profile`, not a certified
-profile. Explicit descriptors remain guarded declarations, not observations.
-
 | MariaDB value               | Driver raw / SQLBraid canonical representation | Caveat                                                                                               |
 | --------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | TINYINT/SMALLINT/INT/BIGINT | driver-dependent → `string`                    | Exact integer results are canonical text; `decodeExactInteger` is an application opt-in.             |
@@ -93,12 +89,6 @@ profile. Explicit descriptors remain guarded declarations, not observations.
 - The optional `/inspector` subpath records identity, generated and write flags
   and numeric precision and scale for offline `generateModels()`. Routine
   signatures stay incomplete positive evidence.
-
-`db.call()` materializes heterogeneous emitted sets from prepared `CALL`; OUT,
-INOUT and cursor descriptors remain unsupported. `db.prepare()` preserves
-query-bound Standard Schema mapping. The optional `/inspector` subpath records
-identity, generated/write flags and numeric precision/scale for offline
-`generateModels()`; routine signatures remain incomplete positive evidence.
 
 The `mariadb-lossless-text` descriptor keeps `bigIntAsNumber: false`,
 `decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`,

@@ -1,126 +1,29 @@
 ---
 title: 5분 SQLite 빠른 시작
-description: Node에 내장된 SQLite 드라이버로 첫 SQLBraid 쿼리를 실행합니다.
+description: Node 내장 SQLite 드라이버로 첫 SQLBraid 쿼리를 실행합니다.
 ---
 
-이 경로는 Node `>=22.18.0`과 `node:sqlite`를 사용합니다. 데이터베이스 서버는 필요하지 않습니다. 첫 번째 쿼리는 단순한 태그 템플릿입니다. SQLBraid 컴파일러가 필요하지 않습니다. 두 번째 쿼리는 동적 `@braid`를 추가하고 함께 제공되는 lowering 명령을 사용합니다.
+이 경로는 Node `>=22.18.0`과 `node:sqlite`를 씁니다. 데이터베이스 서버는 필요 없습니다. 첫 번째 쿼리는 평범한 태그 템플릿이라 SQLBraid 컴파일러가 필요 없습니다. 두 번째 쿼리는 동적 `@braid`를 추가하고, SQLBraid에 들어 있는 변환 명령을 씁니다.
 
-## SQLite adapter 선택
+## SQLite 어댑터 고르기
 
-모든 SQLite adapter는 SQLite dialect를 공유합니다. subpath가 물리적 adapter를 선택합니다.
+모든 SQLite 어댑터는 SQLite 방언을 공유합니다. 하위 경로가 물리 어댑터를 고릅니다.
 
-| Subpath                   | 물리적 경계                           | 중요한 제한                                                                                |
-| ------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `sqlbraid/node-sqlite`    | Node `DatabaseSync` / `StatementSync` | 물리 호출은 동기식이며 INTEGER는 exact string; stream은 native `iterate()`                 |
-| `sqlbraid/better-sqlite3` | better-sqlite3 statement              | 동기식이고 event loop를 block함; statement-local `safeIntegers(true)`와 native iteration   |
-| `sqlbraid/libsql`         | `@libsql/client`                      | `intMode: "string"` 필요; interactive transaction; pinned session이나 stream fallback 없음 |
-| `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                       | OO1 statement ownership; stream은 async generator로 변환                                   |
-| `sqlbraid/d1`             | Cloudflare D1                         | prepared bind; streaming과 callback transaction 없음                                       |
+| 하위 경로                 | 물리 경계                             | 주요 제한                                                                       |
+| ------------------------- | ------------------------------------- | ------------------------------------------------------------------------------- |
+| `sqlbraid/node-sqlite`    | Node `DatabaseSync` / `StatementSync` | 동기 물리 호출, 정확한 INTEGER 문자열, 네이티브 `iterate()` 스트림              |
+| `sqlbraid/better-sqlite3` | better-sqlite3 문장                   | 동기 호출이며 이벤트 루프를 막음, 문장 단위 `safeIntegers(true)`, 네이티브 반복 |
+| `sqlbraid/libsql`         | `@libsql/client`                      | `intMode: "string"` 필수, 대화형 트랜잭션, 세션 고정·스트림 대체 수단 없음      |
+| `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                       | OO1 문장 소유, 스트림은 async generator로 감쌈                                  |
+| `sqlbraid/d1`             | Cloudflare D1                         | 준비된 문장 바인딩, 스트리밍·콜백 트랜잭션 없음                                 |
 
-Deno 2.9.3의 `node:sqlite` iterator는 SQLite 실행 오류를 정상 EOF로
-처리합니다. 따라서 SQLBraid는 Deno의 streaming을 `BRAID_STREAM_UNSUPPORTED`로
-거부합니다. 조용히 잘린 행을 반환하지 않습니다. Materialized query와
-transaction은 계속 사용할 수 있습니다. Node의 native iterator는 영향을 받지 않습니다.
+Deno 2.9.3에서는 `node:sqlite` 이터레이터가 SQLite step 오류를 정상 EOF로 바꿉니다. 그래서 SQLBraid는 Deno에서 스트리밍을 `BRAID_STREAM_UNSUPPORTED`로 거부합니다. 몰래 잘린 행을 반환하지 않습니다. 메모리로 읽는 쿼리와 트랜잭션은 계속 쓸 수 있습니다. Node의 네이티브 이터레이터는 영향을 받지 않습니다.
 
-모든 adapter의 public `Database` API는 async로 유지됩니다. `Awaitable<T>`는
-물리 `QueryExecutor` SPI 타입일 뿐입니다. 동기식 adapter가 Promise wrapper
-없이 plain result를 반환하게 합니다. better-sqlite3를 non-blocking으로 만들지는
-않습니다.
+공개 `Database` API는 모든 어댑터에서 비동기입니다. `Awaitable<T>`는 물리 `QueryExecutor` SPI의 타입일 뿐입니다. 동기 어댑터가 Promise로 감싸지 않고 결과를 그대로 반환할 수 있게 해 줍니다. better-sqlite3를 논블로킹으로 만들지는 않습니다.
 
 :::note 검증 상태
-[런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)는 정확한
-database, driver, profile, runtime, capability tuple별 label을 그 revision 및
-workflow 증거와 함께 기록합니다. 인접한 버전이나 package 설치는 인증이
-아닙니다. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인 release 승인은
-별도 요구사항입니다. 이 문서는 npm 발행을 승인하지 않습니다.
+[런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)는 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합마다 등급을 기록하고, 해당 리비전과 워크플로 근거를 함께 남깁니다. 비슷한 버전이나 패키지 설치만으로는 인증이 되지 않습니다. 정확한 SHA에 대한 Runtime, Docs, Release 최종 게이트와 명시적인 릴리스 승인은 별도 요구 사항입니다. 이 페이지가 npm 배포를 승인하지는 않습니다.
 :::
-
-## SQLite 표현 프로필
-
-`node:sqlite`는 Node runtime API입니다. server version이 아닙니다. 프로필에는
-Node와 Node에 번들된 SQLite library를 기록합니다. INTEGER는 public 결과에서
-canonical `string`입니다. native `bigint`는 어댑터 내부 표현일 뿐입니다.
-
-| SQLite 표면              | 프로필 표현                        | 상태/주의                                                                 |
-| ------------------------ | ---------------------------------- | ------------------------------------------------------------------------- |
-| INTEGER                  | JavaScript `string`                | int64를 lossless하게 보존합니다. native `bigint`는 public API가 아닙니다. |
-| REAL                     | JavaScript `number`                | IEEE binary 부동소수점이며 decimal exactness를 주장하지 않습니다.         |
-| `STRICT` table           | SQLite native affinity enforcement | schema 기능이며 SQLBraid parser 보장이 아닙니다.                          |
-| non-STRICT table / `ANY` | SQLite dynamic value               | 저장된 값과 driver에 따라 반환 표현이 달라집니다.                         |
-| JSON1                    | text                               | Standard Schema로 JSON text를 파싱/검증합니다.                            |
-| BLOB                     | `Buffer`/bytes                     | binary로 유지하거나 명시적으로 encode합니다.                              |
-| `RETURNING`              | materialized rowset                | 전달 전에 output을 축적하며 DML-returning stream은 주장하지 않습니다.     |
-
-- Native binding은 `?` placeholder와 `StatementSync`를 사용합니다. `iterate()`가
-  stream primitive입니다. bulk 전략은 prepared loop입니다.
-- SQLite에는 stored-procedure transport가 없습니다. 따라서 등록 function과
-  table-valued extension은 일반 SQL row query입니다.
-- Native SQLite SQL은 grammar rewrite 없이 전달됩니다. 투명성은 grammar 지원이
-  아닙니다.
-
-### better-sqlite3
-
-```ts
-import Database from "better-sqlite3";
-import { createBetterSqlite3Database, sql } from "sqlbraid/better-sqlite3";
-
-const native = new Database(":memory:");
-const db = createBetterSqlite3Database(native);
-const rows = await db.all(sql.rows`SELECT 1 AS value`);
-```
-
-SQLBraid는 statement마다 `safeIntegers(true)`를 적용합니다. exact INTEGER를
-decimal string으로 노출합니다. `iterate()`가 실제 stream primitive입니다.
-bulk는 prepared loop를 사용합니다. Native 호출은 event loop를 block합니다.
-문제가 되면 worker를 사용하세요. Routine과 active cancellation은 지원하지
-않습니다.
-
-### libSQL
-
-```ts
-import { createClient } from "@libsql/client";
-import { createLibsqlDatabase, sql } from "sqlbraid/libsql";
-
-const client = createClient({ url: "file:app.db", intMode: "string" });
-const db = createLibsqlDatabase(client, { intMode: "string" });
-const rows = await db.all(sql.rows`SELECT 1 AS value`);
-```
-
-명시적인 `intMode: "string"` option이 필요합니다. SQLBraid는 opaque client의
-integer mode를 추론할 수 없습니다.
-
-- Transaction은 libSQL interactive transaction handle을 사용합니다. 일반 호출은
-  pinned session 하나를 주장하지 않습니다.
-- bulk에는 native `batch()`를 사용합니다.
-- `db.stream()`은 `BRAID_STREAM_UNSUPPORTED`로 거부합니다. 완전한 result를
-  buffering하지 않습니다.
-
-로컬 `file:` libSQL client와 protocol을 알 수 없는 libSQL client는 선택적
-`command.insertId`를 생략합니다. Native binding은 ROWID를 Number로 변환한 뒤
-bigint로 반환합니다. 이것은 `intMode`와 관계없이 발생합니다. 조회 행,
-transaction, bulk 실행, `affectedRows`는 계속 지원됩니다. 정확한 ID가 필요하면
-SQL에 `INSERT ... RETURNING id`를 작성하고 `sql.rows`를 사용하세요. SQLBraid는
-SQL을 재작성하거나 보정용 query를 보내지 않습니다.
-
-libSQL transaction option:
-
-- option을 생략하거나 빈 객체를 사용하면 mode 없이 `client.transaction()`을
-  호출합니다.
-- `readOnly: false`는 `"write"`를 선택합니다.
-- 로컬 `@libsql/client@0.18.0` file transport는 `BEGIN TRANSACTION READONLY`를
-  생성하지만 write를 막지 않습니다. 따라서 SQLBraid는 read-only를 guarded로
-  보고하고 `readOnly: true`를 begin 전에 거부합니다.
-- transport protocol이 없는 opaque client에도 같은 guard가 적용됩니다.
-- 문서화된 `"read"` mode를 노출하고 enforce하는 remote transport는 그 option을
-  유지합니다.
-
-better-sqlite3는 `Uint8Array` bind view를 받습니다. native 호출 직전에
-`Buffer`로 변환합니다.
-
-SQLite inspector는 기본으로 `introspectionScope: "main"`을 사용합니다. attached
-schema는 검사하지 않습니다. 누락된 필드는 index나 constraint가 없다는 증거가
-아닙니다. better-sqlite3와 libSQL target은 정확한 runtime/driver 증거가 생기기
-전까지 Compatible입니다. 유추로 인증되지 않습니다.
 
 ## 1. 프로젝트 만들기
 
@@ -162,21 +65,17 @@ try {
 }
 ```
 
-Node 22.18.0은 이 삭제 가능한 TypeScript를 직접 실행할 수 있습니다.
+Node 22.18.0은 타입만 지우면 되는 이 TypeScript를 바로 실행할 수 있습니다.
 
 ```bash
 node src/index.ts
 ```
 
-출력은 `[{ id: "1", name: "Ada" }]`와 같은 행 배열입니다. 요청한 ID는 드라이버가 바인드하는 값입니다. SQL 텍스트에 삽입되지 않습니다.
+출력은 `[{ id: "1", name: "Ada" }]` 같은 행 배열입니다. 요청한 ID는 드라이버가 바인딩하는 값이며, SQL 텍스트에 끼워 넣지 않습니다.
 
-node:sqlite 어댑터는 논리 문장을 `?` placeholder가 있는 텍스트로 렌더링합니다.
-그 다음 문서화된 `DatabaseSync.prepare(text)`와 `StatementSync` API를
-사용합니다. 구체화와 힌트 검증은 statement 실행 전에 끝납니다. reuse를
-구성하면 어댑터가 소유합니다. SQLBraid는 문서화되지 않은 `SQLTagStore` 호출
-경로를 사용하지 않습니다.
+node:sqlite 어댑터는 논리 문장을 `?` 플레이스홀더가 있는 텍스트로 렌더링한 뒤, 문서화된 `DatabaseSync.prepare(text)`와 `StatementSync` API를 씁니다. 변환과 힌트 검증은 문장 실행 전에 일어납니다. 재사용을 설정하면 어댑터가 맡습니다. SQLBraid는 문서화되지 않은 호출 경로로 `SQLTagStore`를 부르지 않습니다.
 
-## 3. 동적 @braid 추가 및 lowering
+## 3. 동적 @braid를 추가하고 변환하기
 
 `src/index.ts`에서 `requestedId` 선언과 쿼리 블록을 다음 코드로 바꾸세요.
 
@@ -194,7 +93,7 @@ const users = await db.all(sql.rows<UserRow>`
 console.log(users);
 ```
 
-SQLBraid 컴파일러의 lowering으로 TypeScript 소스를 빌드하세요. 그 다음 생성된 JavaScript를 실행하세요.
+SQLBraid 컴파일러로 TypeScript 소스를 변환해 빌드한 뒤, 출력된 JavaScript를 실행하세요.
 
 ```bash
 npm install --save-dev @sqlbraid/cli
@@ -202,32 +101,92 @@ npx sqlbraid build --file src/index.ts --out-file build/index.js
 node build/index.js
 ```
 
-컴파일러는 보호된 템플릿을 `build/index.js`로 lowering합니다.
+컴파일러는 조건부 템플릿을 `build/index.js`로 변환합니다.
 
-- `@braid where`는 자식이 SQL을 생성할 때만 `WHERE`를 내보냅니다. 앞에 오는 `AND`/`OR`를 제거합니다.
-- 조건은 보호된 값보다 먼저 평가됩니다. 비활성 분기의 표현식은 평가되지 않습니다.
-- 요청한 ID는 일반 SQLite 바인드로 남습니다.
+- `@braid where`는 하위 항목이 SQL을 출력할 때만 `WHERE`를 붙이고, 맨 앞의 `AND`나 `OR`를 지웁니다.
+- 조건이 조건부 값보다 먼저 평가됩니다. 비활성 분기의 식은 평가하지 않습니다.
+- 요청한 ID는 일반 SQLite 바인딩으로 남습니다.
 
-## 무슨 일이 일어났나요?
+## 무슨 일이 일어났나요
 
-1. `DatabaseSync`가 메모리 SQLite 리소스를 소유합니다.
-2. `createNodeSqliteDatabase(native)`가 그 물리적 리소스를 SQLBraid 런타임에 연결합니다.
-3. `sql.rows<UserRow>`는 이 문장이 `UserRow` 형태의 행을 반환한다고 선언합니다.
-4. 일반 값은 드라이버 바인드(SQLite에서는 `?`)가 됩니다. SQL 텍스트가 되지 않습니다.
-5. 컴파일러는 동적 템플릿의 지연된 보호 평가를 유지합니다.
+1. `DatabaseSync`가 메모리 SQLite 리소스를 가집니다.
+2. `createNodeSqliteDatabase(native)`가 그 물리 리소스를 SQLBraid 런타임에 연결합니다.
+3. `sql.rows<UserRow>`는 문장이 `UserRow` 형태의 행을 반환한다고 선언합니다.
+4. 일반 값은 드라이버 바인딩(SQLite에서는 `?`)이 됩니다. SQL 텍스트가 되지 않습니다.
+5. 컴파일러가 동적 템플릿의 조건부 지연 평가를 유지합니다.
 
-쓰기에는 `sql.command`와 `db.execute`를 사용하세요. 정확히 한 행에는 `db.one`을 사용하세요. 결과가 정확히 한 행이 아니면 카디널리티 오류가 발생합니다. [SQL 태그와 결과 종류](/SQLBraid/concepts/sql-tags/)를 참고하세요.
+쓰기 작업에는 `sql.command`와 `db.execute`를 쓰세요. 정확히 한 행이 필요하면 `db.one`을 쓰세요. 결과가 정확히 한 행이 아니면 행 개수 오류를 던집니다. [SQL 태그와 결과 종류](/SQLBraid/concepts/sql-tags/)를 보세요.
 
 :::caution Node SQLite 지원
-`node:sqlite`는 이 릴리스의 첫 번째 파티 SQLite 어댑터입니다.
+`node:sqlite`는 이번 릴리스의 공식 SQLite 어댑터입니다.
 
-- SQLite 어댑터는 루틴 호출을 지원하지 않습니다. 스트리밍에는
-  `StatementSync.iterate()`를 사용합니다.
-- INTEGER 결과는 public API에서 canonical string으로 반환됩니다. 정밀도가
-  필요한 REAL/JSON/temporal 값에는 `CAST(... AS TEXT)`나 lossless text
-  profile을 명시하세요.
-- `undefined` 일반 IN 값은 acquire 전에 거부됩니다. `null`은 SQL `NULL`입니다.
-- SQLite scalar/aggregate/window function은 일반 SQL 함수입니다.
-  virtual-table/table-valued extension도 일반 행 쿼리입니다. stored procedure가
-  아닙니다.
+- INTEGER 저장 값은 네이티브 int64 전송으로 읽고, 정규 십진 문자열로 노출합니다. 이 내부 전송 방식은 공개 정수 모드가 아닙니다.
+- REAL 저장 값은 JavaScript `number`로 남습니다.
+- 이 어댑터는 루틴 호출을 지원하지 않습니다. 스트리밍은 `StatementSync.iterate()`를 씁니다.
+- SQLite의 스칼라·집계·윈도 함수는 일반 SQL 함수입니다. 가상 테이블과 테이블 값 확장은 일반 SQL 쿼리이며, 저장 프로시저가 아닙니다.
   :::
+
+## SQLite 표현 방식 프로필
+
+`node:sqlite`는 서버 버전이 아니라 Node 런타임 API입니다. 프로필에는 Node 버전과 Node에 포함된 SQLite 라이브러리가 기록됩니다.
+
+| SQLite 항목                  | 프로필 표현               | 상태·주의 사항                                                                |
+| ---------------------------- | ------------------------- | ----------------------------------------------------------------------------- |
+| INTEGER 저장 값              | string                    | 정확한 정규 십진 텍스트입니다. 네이티브 bigint는 내부 전송에만 쓰입니다.      |
+| REAL 저장 값                 | JavaScript `number`       | SQLite binary64 근사 값입니다.                                                |
+| `STRICT` 테이블              | SQLite 자체의 친화도 강제 | 스키마 기능이며, SQLBraid 파서가 보장하는 것이 아닙니다.                      |
+| STRICT가 아닌 테이블 / `ANY` | SQLite 동적 값            | 반환되는 표현은 저장된 값과 드라이버를 따릅니다.                              |
+| JSON1                        | 텍스트                    | JSON 텍스트를 Standard Schema로 파싱·검증하세요.                              |
+| BLOB                         | `Buffer`/바이트           | 바이너리를 그대로 유지하거나 명시적으로 인코딩하세요.                         |
+| `RETURNING`                  | 메모리로 읽은 행 집합     | 출력은 전달 전에 모두 모읍니다. DML RETURNING의 스트리밍은 주장하지 않습니다. |
+
+- 네이티브 바인딩은 `?` 플레이스홀더와 `StatementSync`를 씁니다. 스트림 기능은 `iterate()`이고, 벌크 방식은 `prepared-loop`입니다.
+- SQLite에는 저장 프로시저 전송 방식이 없습니다. 그래서 등록한 함수와 테이블 값 확장은 일반 SQL 행 쿼리로 남습니다.
+- 네이티브 SQLite SQL은 문법 재작성 없이 그대로 전달됩니다. SQL을 그대로 전달한다고 해서 문법을 지원한다는 뜻은 아닙니다.
+- 정확한 정수 문자열과 검증된 bigint 전송은 바인딩 세부 사항입니다.
+- 일반 IN 값이 `undefined`이면 리스를 획득하기 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다.
+- 배열 같은 중첩·컨테이너 값은 저장 클래스에 대한 테스트가 증명하기 전까지 분류되지 않은 상태로 남습니다.
+
+### better-sqlite3
+
+```ts
+import Database from "better-sqlite3";
+import { createBetterSqlite3Database, sql } from "sqlbraid/better-sqlite3";
+
+const native = new Database(":memory:");
+const db = createBetterSqlite3Database(native);
+const rows = await db.all(sql.rows`SELECT 1 AS value`);
+```
+
+SQLBraid는 문장마다 `safeIntegers(true)`를 적용해 정확한 INTEGER 값을 십진 문자열로 노출합니다. `iterate()`가 실제 스트림 기능입니다. 벌크는 `prepared-loop`를 씁니다. 네이티브 호출은 이벤트 루프를 막습니다. 문제가 되면 워커를 쓰세요. 루틴과 활성 취소는 지원하지 않습니다.
+
+### libSQL
+
+```ts
+import { createClient } from "@libsql/client";
+import { createLibsqlDatabase, sql } from "sqlbraid/libsql";
+
+const client = createClient({ url: "file:app.db", intMode: "string" });
+const db = createLibsqlDatabase(client, { intMode: "string" });
+const rows = await db.all(sql.rows`SELECT 1 AS value`);
+```
+
+`intMode: "string"` 옵션을 반드시 명시해야 합니다. SQLBraid는 내부를 알 수 없는 클라이언트의 정수 모드를 추론할 수 없습니다.
+
+- 트랜잭션은 libSQL의 대화형 트랜잭션 핸들을 씁니다. 일반 호출이 세션 하나를 고정한다고 주장하지 않습니다.
+- 벌크에는 네이티브 `batch()`를 씁니다.
+- `db.stream()`은 `BRAID_STREAM_UNSUPPORTED`로 거부합니다. 전체 결과를 버퍼링하지 않습니다.
+
+로컬 `file:` libSQL 클라이언트와 프로토콜을 알 수 없는 libSQL 클라이언트는 선택 사항인 `command.insertId`를 생략합니다. 네이티브 바인딩이 bigint를 반환하기 전에 ROWID를 Number로 거치면서 반올림하기 때문입니다. 이것은 모든 `intMode`에서 일어납니다. 행 조회, 트랜잭션, 벌크 실행, `affectedRows`는 계속 지원합니다. 정확한 ID가 필요하면 SQL에 `INSERT ... RETURNING id`를 쓰고 `sql.rows`를 쓰세요. SQLBraid는 SQL을 고쳐 쓰거나 보완 쿼리를 보내지 않습니다.
+
+SQLite 인스펙터는 기본으로 `introspectionScope: "main"`을 씁니다. 메타데이터 수집은 연결(attach)된 스키마를 검사하지 않습니다. 필드가 없다고 인덱스나 제약이 없다는 증거가 되지는 않습니다. better-sqlite3와 libSQL 대상은 정확한 런타임·드라이버 근거가 생기기 전까지 Compatible입니다. 비슷하다는 이유로 인증되지 않습니다.
+
+libSQL 트랜잭션 옵션:
+
+- 트랜잭션 옵션을 생략하거나 비워 두면 어댑터는 모드 없이 `client.transaction()`을 호출합니다.
+- `readOnly: false`는 `"write"`를 고릅니다.
+- 로컬 `@libsql/client@0.18.0` 파일 전송은 `BEGIN TRANSACTION READONLY`를 보내지만 쓰기를 막지 않습니다. 그래서 SQLBraid는 읽기 전용을 guarded로 보고하고, `readOnly: true`는 트랜잭션 시작 전에 거부합니다.
+- 전송 프로토콜을 알 수 없는 클라이언트에도 같은 제한이 적용됩니다.
+- 문서화된 `"read"` 모드를 노출하고 실제로 강제하는 원격 전송은 이 옵션을 그대로 씁니다.
+
+better-sqlite3는 `Uint8Array` 바인딩 뷰를 받아 네이티브 호출 직전에 `Buffer`로 바꿉니다.

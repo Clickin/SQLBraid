@@ -1,16 +1,15 @@
 ---
 title: MariaDB 빠른 시작
-description: MariaDB Connector/Node.js에서 MariaDB SQL 문법을 명시적으로 유지합니다.
+description: MariaDB 문법을 명시적으로 쓰면서 SQLBraid를 MariaDB Connector/Node.js에 연결합니다.
 ---
 
-별도 MariaDB dialect와 공식 Connector/Node.js 드라이버를 설치하세요.
+SQLBraid 런타임 파사드와 공식 Connector/Node.js 드라이버를 설치하세요.
 
 ```bash
 npm install sqlbraid mariadb
 ```
 
-`/mariadb` 어댑터 subpath를 연결된 connection 또는 명시적 pool factory와
-함께 사용합니다.
+연결된 커넥션이나 명시적인 풀 팩토리와 함께 `/mariadb` 어댑터 하위 경로를 쓰세요.
 
 ```ts
 import mariadb from "mariadb";
@@ -29,82 +28,44 @@ const users = await db.all(sql.rows<{ id: string; name: string }>`
 `);
 ```
 
-Dialect는 `mariadb`입니다. `mysql`이 아닙니다. MariaDB 전용 문법은 SQL에 직접
-작성합니다. 현재 capability fixture는 문서화된 `INSERT ... RETURNING`,
-`DELETE ... RETURNING`, `REPLACE ... RETURNING`, sequence, CTE, JSON function을
-다룹니다.
+방언은 `mysql`이 아니라 `mariadb`입니다. MariaDB 전용 문법은 SQL에 직접 씁니다. 현재 기능 검증 픽스처는 문서에 나온 `INSERT ... RETURNING`, `DELETE ... RETURNING`, `REPLACE ... RETURNING`, 시퀀스, CTE, JSON 함수를 다룹니다.
 
-- `UPDATE ... RETURNING`은 주장하지 않습니다.
-- `INSERT ... ON DUPLICATE KEY UPDATE ... RETURNING`은 일치하는 서버 증거가
-  있을 때만 지원 목록에 올립니다.
+- `UPDATE ... RETURNING`은 지원한다고 주장하지 않습니다.
+- `INSERT ... ON DUPLICATE KEY UPDATE ... RETURNING` 형태는 해당 서버의 근거가 있어야 지원 목록에 오릅니다.
 
-어댑터는 Connector/Node.js value-only 실행, native row stream, 그리고
-`db.bulk()`를 위한 `connection.batch()` 1회 호출(`native-bulk`)을 사용합니다.
-Root bulk는 transaction이 아닙니다. portable 자동 chunking 약속도 없습니다.
-callback transaction의 원자성이 필요하면 `db.tx()`를 사용하세요.
+어댑터는 Connector/Node.js의 값 전용 실행, 네이티브 행 스트리밍, 그리고 `db.bulk()`를 위한 `connection.batch()` 호출 한 번(`native-bulk`)을 씁니다. 루트 벌크는 트랜잭션이 아니며, 자동 분할에 대한 공통 보장도 없습니다. 콜백 단위의 원자성이 필요하면 `db.tx()`를 쓰세요.
 
-`mysql2` connection은 best-effort 호환으로 MariaDB에서 동작할 수 있습니다.
-하지만 MariaDB 프로토콜의 증거는 아닙니다. 공식 인증 프로필은 MariaDB 11.8.9 /
-Connector 3.5.4 / Node 22.18.0입니다. [런타임/드라이버 지원
-매트릭스](/SQLBraid/reference/support/)는 정확한 database, driver, profile,
-runtime, capability tuple별 label을 그 revision 및 workflow 증거와 함께
-기록합니다. 인접한 버전이나 package 설치는 인증이 아닙니다. 최종 exact-SHA
-Runtime, Docs, Release gate와 명시적인 release 승인은 별도 요구사항입니다.
+`mysql2` 커넥션도 최선 노력 수준의 호환으로 MariaDB에서 동작할 수 있습니다. 하지만 MariaDB 프로토콜에 대한 근거는 되지 않습니다. 공식 인증 프로필은 MariaDB 11.8.9 / Connector 3.5.4 / Node 22.18.0입니다. [런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)는 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합마다 등급을 기록하고, 해당 리비전과 워크플로 근거를 함께 남깁니다. 비슷한 버전이나 패키지 설치만으로는 인증이 되지 않습니다. 정확한 SHA에 대한 Runtime, Docs, Release 최종 게이트와 명시적인 릴리스 승인은 별도 요구 사항입니다.
 
-## Connector/Node.js 표현 프로필
+## Connector/Node.js 표현 방식 프로필
 
-첫 번째 파티 MariaDB 프로필은 `mariadb-lossless-text`입니다. 공식
-Connector/Node.js adapter와 `representationProfiles` descriptor가 선택한 정확한
-option을 사용합니다.
+공식 MariaDB 프로필은 `mariadb-lossless-text`입니다. 공식 Connector/Node.js 어댑터에 `representationProfiles` 설명 객체가 고른 옵션을 정확히 적용한 구성입니다.
 
-- `@sqlbraid/mariadb`는 `typePolicyForProfile({ json, temporal })`를
-  내보냅니다. 따라서 runtime과 codegen이 하나의 immutable TypePolicy를
-  사용합니다.
+- `@sqlbraid/mariadb`는 `typePolicyForProfile({ json, temporal })`을 export합니다. 그래서 런타임과 코드 생성이 변경할 수 없는 TypePolicy 하나를 공유합니다.
 - `mariadb-native`는 별도의 편의 프로필입니다.
-- MariaDB에 대한 mysql2 connection은 별도의 best-effort 호환 프로필입니다.
+- MariaDB에 연결한 mysql2 커넥션은 별도의 최선 노력 호환 프로필입니다.
 
-Connector/Node.js는 유효 option을 노출하지 않습니다. descriptor를 생략하거나
-일부 option만 선언하면 adapter는 `mariadb-custom-profile`을 보고합니다. 이것은
-인증 프로필이 아닙니다. 명시한 descriptor도 guarded 선언입니다. 관측이
-아닙니다.
+Connector/Node.js는 실제 적용된 옵션을 노출하지 않습니다. 설명 객체를 생략하거나 옵션을 일부만 선언하면 어댑터는 `mariadb-custom-profile`을 보고합니다. 이것은 인증된 프로필이 아닙니다. 명시적인 설명 객체도 관찰 결과가 아니라 guarded 선언으로 남습니다.
 
-| MariaDB 값                  | Driver raw / SQLBraid canonical 표현 | 주의                                                                                             |
-| --------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| TINYINT/SMALLINT/INT/BIGINT | driver 의존 → `string`               | 정확한 정수 결과는 canonical text이며 `decodeExactInteger`는 애플리케이션 선택 사항입니다.       |
-| DECIMAL/NUMERIC             | text → `string`                      | 정확한 precision과 scale을 text로 유지하며 필요하면 애플리케이션 decimal transform을 사용합니다. |
-| FLOAT/DOUBLE                | number → `number`                    | 근사 이진 값은 JavaScript number로 유지합니다.                                                   |
-| JSON 별칭                   | `autoJsonMap:false` text → `string`  | `autoJsonMap:true` parsed는 별도 편의 프로필이며 중첩 숫자 정확도를 보장하지 않습니다.           |
-| DATE/TIME/DATETIME          | `dateStrings:true` text → `string`   | native `Date`는 별도 편의 프로필이며 fractional/zone 정보를 잃을 수 있습니다.                    |
-| BLOB                        | bytes/Buffer                         | byte로 유지하거나 명시적으로 encode합니다.                                                       |
+| MariaDB 값                  | 드라이버 원시 값 / SQLBraid 정규 표현      | 주의 사항                                                                                    |
+| --------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| TINYINT/SMALLINT/INT/BIGINT | 드라이버에 따라 다름 → `string`            | 정확한 정수 결과는 정규 텍스트입니다. `decodeExactInteger`는 애플리케이션이 선택해서 씁니다. |
+| DECIMAL/NUMERIC             | 텍스트 → `string`                          | 정확한 정밀도와 스케일이 텍스트로 유지됩니다. 필요하면 애플리케이션에서 소수 변환을 쓰세요.  |
+| FLOAT/DOUBLE                | number → `number`                          | 근사 이진 값은 JavaScript 숫자로 남습니다.                                                   |
+| JSON 별칭                   | `autoJsonMap:false`일 때 텍스트 → `string` | `autoJsonMap:true`는 별도의 편의 프로필이며 중첩된 숫자의 정확도를 보장하지 않습니다.        |
+| DATE/TIME/DATETIME          | `dateStrings:true`일 때 텍스트 → `string`  | 네이티브 `Date`는 별도의 편의 프로필이며 소수 초나 시간대 정보를 잃을 수 있습니다.           |
+| BLOB                        | 바이트/Buffer                              | 바이트를 그대로 유지하거나 명시적으로 인코딩하세요.                                          |
 
-- 어댑터는 value-only 실행, native `queryStream()`, 동종 bulk를 위한
-  `connection.batch()` 1회 호출을 사용합니다.
-- Native `RETURNING`은 정확한 서버 형태의 증거가 있는 경우에만 materialized row
-  선언입니다. `INSERT`, `DELETE`, `REPLACE`는 별도 capability입니다. `UPDATE`는
-  주장하지 않습니다.
-- SQL은 변경 없이 전달됩니다. MariaDB grammar 지원이 아닙니다.
-- `db.call()`은 prepared `CALL`이 내보내는 이종 결과 집합을 materialize합니다.
-  OUT, INOUT, cursor descriptor는 지원하지 않습니다.
-- `db.prepare()`는 query-bound Standard Schema 매핑을 유지합니다.
-- 선택적 `/inspector` subpath는 오프라인 `generateModels()`를 위해 identity,
-  generated/write 플래그, 숫자 precision/scale을 기록합니다. 루틴 signature는
-  불완전한 positive evidence로 남습니다.
+- 어댑터는 값 전용 실행, 네이티브 `queryStream()`, 그리고 같은 형태의 벌크를 위한 `connection.batch()` 호출 한 번을 씁니다.
+- 네이티브 `RETURNING`은 해당 서버 형태에 근거가 있을 때만 메모리로 읽는 행 선언으로 씁니다. `INSERT`, `DELETE`, `REPLACE`는 각각 별도의 기능입니다. `UPDATE`는 지원한다고 주장하지 않습니다.
+- SQL은 바뀌지 않고 그대로 전달됩니다. MariaDB 문법을 지원한다는 뜻은 아닙니다.
+- `db.call()`은 준비된 문장 `CALL`이 출력하는 서로 다른 결과 집합을 메모리로 읽습니다. OUT, INOUT, 커서 설명은 지원하지 않습니다.
+- `db.prepare()`는 쿼리에 연결한 Standard Schema 매핑을 유지합니다.
+- 선택 사항인 `/inspector` 하위 경로는 오프라인 `generateModels()`를 위해 identity, 생성 열·쓰기 플래그, 숫자 정밀도와 스케일을 기록합니다. 루틴 시그니처는 불완전한 긍정적 근거로 남습니다.
 
-`db.call()`은 prepared `CALL`이 내보내는 이종 결과 집합을 materialize합니다.
-OUT, INOUT, cursor descriptor는 지원하지 않습니다. `db.prepare()`는 query-bound
-Standard Schema 매핑을 보존합니다. 선택적 `/inspector` subpath는 오프라인
-`generateModels()`를 위한 identity, generated/write 플래그, 숫자 precision/scale을
-기록하며 루틴 signature는 불완전한 positive evidence로 유지합니다.
+`mariadb-lossless-text` 설명 객체는 `bigIntAsNumber: false`, `decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`, `dateStrings: true`, `timezone: "Z"`를 유지합니다.
 
-`mariadb-lossless-text` descriptor는 `bigIntAsNumber: false`,
-`decimalAsNumber: false`, `insertIdAsNumber: false`, `autoJsonMap: false`,
-`dateStrings: true`, `timezone: "Z"`를 사용합니다.
-
-- 정확한 정수/10진수 string은 execute, prepared, 증명된 bulk 전략에서 왕복
-  정확도를 위한 bind 경로입니다.
-- `affectedRows`는 safe-range 검사를 하는 운영 count입니다.
-- 일반 IN 값의 `undefined`는 acquisition 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로
-  실패합니다. `null`은 SQL `NULL`입니다.
-- Connector 3.5.4의 public typings에는 `jsonStrings` 옵션이 없습니다. 따라서
-  text에는 `autoJsonMap: false`를 사용하세요. mysql2 프로필이라고 설명하지
-  마세요.
+- 정확한 정수·소수 문자열은 execute, 준비된 쿼리, 검증된 벌크 방식에서 값을 정확하게 왕복시키는 바인딩 경로입니다.
+- `affectedRows`는 안전한 범위인지 검사한 작업 개수입니다.
+- 일반 IN 값이 `undefined`이면 리스를 획득하기 전에 `BRAID_BIND_VALUE_UNSUPPORTED`로 실패합니다. `null`은 SQL `NULL`입니다.
+- Connector 3.5.4의 공개 타입 정의에는 `jsonStrings` 옵션이 없습니다. 그래서 텍스트를 받으려면 `autoJsonMap: false`를 쓰세요. 이것을 mysql2 프로필이라고 설명하지 마세요.
