@@ -6,10 +6,10 @@ SQLBraid adapter for Bun's `Bun.SQL` client.
 bun add @sqlbraid/bun-sql @sqlbraid/postgres
 ```
 
-This adapter leverages Bun's native value-template transport. You must explicitly provide a dialect (e.g., `"postgres"`) as `Bun.SQL` does not infer it.
+This adapter uses the native value-template transport of Bun. `Bun.SQL` does not infer the dialect. You must give the dialect explicitly, for example `"postgres"`.
 
 ### Key Details
 
-- **Capabilities**: Supports native `Bun.SQL` features. Some advanced routine, streaming, or cancellation capabilities may be unavailable depending on the Bun version.
-- **Precision**: Integer and decimal representation follows the defined representation profile (e.g., `1.3.14`). Exact decimal fidelity varies by database (e.g., lossless in PostgreSQL, unsupported in others) to ensure consistent behavior across Bun versions.
+- **Capabilities**: The adapter supports the native `Bun.SQL` features. Some advanced routine, streaming or cancellation capabilities can be unavailable in some Bun versions.
+- **Precision**: The representation of integers and decimals follows the defined representation profile (for example, `1.3.14`). The fidelity of exact decimals is different for each database: lossless in PostgreSQL, unsupported in others. This keeps the behavior the same across Bun versions.
   See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) and the [Bun SQL guide](https://bun.com/docs/runtime/sql) for details.

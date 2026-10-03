@@ -4,7 +4,7 @@
 
 **Write SQL. Keep TypeScript.**
 
-SQLBraid is a SQL-first data-access toolkit for TypeScript. It keeps your SQL visible, binds ordinary values, supports readable dynamic SQL, and lets you attach runtime result validation and transformation.
+SQLBraid is a SQL-first data-access toolkit for TypeScript. You write the SQL. SQLBraid binds ordinary values as parameters. It also supports readable dynamic SQL and optional runtime validation and transformation of results.
 
 📖 [Documentation](https://clickin.github.io/SQLBraid/latest/) · [Get Started](https://clickin.github.io/SQLBraid/latest/getting-started/sqlite/) · [Driver support](https://clickin.github.io/SQLBraid/latest/reference/support/) · [Package map](https://clickin.github.io/SQLBraid/latest/reference/packages/)
 
@@ -14,7 +14,10 @@ npm install sqlbraid
 
 ## Quick Start
 
-This `node:sqlite` quickstart requires Node.js 22.18+. That requirement is specific to this adapter; other runtime and driver combinations have their own requirements and support evidence. Save the example as `quickstart.mts` and run `node quickstart.mts`:
+This `node:sqlite` quickstart requires Node.js 22.18 or later. Only this adapter has this requirement. Other runtime and driver combinations have their own requirements and support evidence.
+
+1. Save the example as `quickstart.mts`.
+2. Run `node quickstart.mts`.
 
 ```ts
 import { createNodeSqliteDatabase, sql } from "sqlbraid/node-sqlite";
@@ -47,14 +50,14 @@ try {
 
 ### 1. Safe by Default
 
-Ordinary `${value}` interpolations become bound parameters; their contents are not inserted as SQL text. Use explicit helpers for identifiers and other SQL structure:
-`sql.ident`, `sql.fragment`, `sql.list`, and `sql.join`.
+Each ordinary `${value}` interpolation becomes a bound parameter. SQLBraid does not put the value into the SQL text. For identifiers and other SQL structure, use these explicit helpers:
+`sql.ident`, `sql.fragment`, `sql.list` and `sql.join`.
 
-`sql.raw` inserts trusted SQL verbatim. Never pass it untrusted input.
+`sql.raw` puts trusted SQL into the statement without change. Do not give it untrusted input.
 
 ### 2. Readable Dynamic SQL
 
-Use `/*@braid ...*/` directives to handle conditional logic directly in your SQL without breaking the string's readability.
+Use `/*@braid ...*/` directives to write conditions directly in your SQL. The SQL stays readable.
 
 ```ts
 const nameFilter: string | undefined = "Ada";
@@ -69,15 +72,15 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-Without source transformation, JavaScript expressions inside template interpolations are evaluated when the tag is called. Use `@sqlbraid/compiler` to preserve lazy evaluation in inactive `@braid` branches.
+Without source transformation, JavaScript evaluates every interpolated expression when the tag runs. To skip the expressions in inactive `@braid` branches, use `@sqlbraid/compiler`.
 
 Supported directives: `if`, `choose`, `when`, `otherwise`, `where`, `set`, `trim`.
 
 ### 3. Result Mapping
 
-`sql.rows<UserRow>` declares a TypeScript result type; it does not validate rows at runtime. Pass a [Standard Schema](https://standard-schema.dev/) object to validate or transform returned rows.
+`sql.rows<UserRow>` declares a TypeScript result type. It does not validate rows at runtime. To validate or transform the returned rows, give a [Standard Schema](https://standard-schema.dev/) object.
 
-The following example uses Zod; install it separately with `npm install zod`.
+The example that follows uses Zod. Install it separately with `npm install zod`.
 
 ```ts
 import { z } from "zod";
@@ -88,7 +91,7 @@ const UserSchema = z.object({
 ```
 
 ```ts
-// Compile-time row contract only; no runtime validation
+// Compile-time row type only; no runtime validation
 const rows = await db.all(sql.rows<UserRow>`SELECT id, name FROM users`);
 
 // Runtime validation with Standard Schema
@@ -98,7 +101,7 @@ const user = await db.one(userQuery);
 
 ## Runtime API
 
-SQLBraid exposes a shared async API for common operations. Individual capabilities vary by adapter; consult the [support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/) before relying on an operation. Unsupported features fail explicitly rather than being buffered or emulated.
+SQLBraid gives one async API for common operations. Capabilities are different for each adapter. Before you use an operation, read the [support matrix](https://clickin.github.io/SQLBraid/latest/reference/support/). An unsupported feature fails with an explicit error. SQLBraid does not buffer or emulate it.
 
 - **Queries**: `db.all()`, `db.one()`, `db.maybeOne()`, `db.stream()`
 - **Commands (DDL/DML)**: `db.execute()`
@@ -116,11 +119,17 @@ await db.tx({ isolation: "serializable" }, async (tx) => {
 
 ## Scope
 
-SQLBraid is not an ORM or a query builder. It does not parse arbitrary SQL to infer result types, implement a connection pool, retry queries, or route them. The optional compiler lowers guarded `@braid` directives; it is not a general SQL compiler.
+SQLBraid is not an ORM and not a query builder. It does not do these things:
+
+- parse arbitrary SQL to infer result types;
+- implement a connection pool;
+- retry or route queries.
+
+The optional compiler lowers guarded `@braid` directives only. It is not a general SQL compiler.
 
 ## Package Map
 
-Most applications install `sqlbraid` and the selected external driver; `node:sqlite` is built into Node.js. Import the matching facade subpath:
+Most applications install `sqlbraid` and one external driver. `node:sqlite` is part of Node.js. Import the facade subpath for your driver:
 
 | Database        | Driver                    | Import                    |
 | :-------------- | :------------------------ | :------------------------ |
@@ -136,7 +145,7 @@ Most applications install `sqlbraid` and the selected external driver; `node:sql
 | SQL Server      | `tedious`                 | `sqlbraid/tedious`        |
 | Bun.SQL         | Bun `Bun.SQL`             | `sqlbraid/bun-sql`        |
 
-For Bun.SQL, choose the database dialect explicitly. Custom adapter authors can use the dialect-only subpaths `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle`, and `sqlbraid/mssql`. The [full package map](https://clickin.github.io/SQLBraid/latest/reference/packages/) covers granular `@sqlbraid/*` packages and tooling.
+For Bun.SQL, select the database dialect explicitly. Authors of custom adapters can use the dialect-only subpaths `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`, `sqlbraid/oracle` and `sqlbraid/mssql`. The [full package map](https://clickin.github.io/SQLBraid/latest/reference/packages/) shows the granular `@sqlbraid/*` packages and the tooling.
 
 ---
 

@@ -1,9 +1,9 @@
 ---
 title: Streaming
-description: Iterate rows without buffering while SQLBraid owns the physical lease and driver cleanup.
+description: Iterate rows without a buffer. SQLBraid owns the physical lease and the driver cleanup.
 ---
 
-Use `db.stream` for an ordinary row-producing query:
+Use `db.stream` for an ordinary query that produces rows:
 
 ```ts
 for await (const row of db.stream(sql.rows<UserRow>`
@@ -13,23 +13,29 @@ for await (const row of db.stream(sql.rows<UserRow>`
 }
 ```
 
-`db.stream()` is a real driver streaming path; it does not call `db.all()` and
-yield a buffered array. `db.all()` intentionally materializes a readonly array
-and uses O(row-count) application memory. Set-returning functions and
-table-valued extensions are ordinary `sql.rows` queries.
+`db.stream()` is a real streaming path of the driver. It does not call
+`db.all()` and yield a buffered array. `db.all()` materializes a readonly array
+on purpose. It uses application memory in proportion to the row count.
+Set-returning functions and table-valued extensions are ordinary `sql.rows`
+queries.
 
 ## Ownership and cleanup
 
-A pooled root stream retains its physical lease until the driver resource is
-terminal. Cleanup is ordered: stop delivery, close/drain/cancel the driver
-cursor/request/iterator, release or discard the lease, then emit the terminal
-stream event. This applies to exhaustion, consumer errors, mapper errors,
-`AbortSignal`, and `for await` early `break`.
+A pooled root stream keeps its physical lease until the driver resource is
+terminal. Cleanup occurs in this sequence:
 
-A direct stream cannot re-enter its own physical resource; SQLBraid rejects with
-`BRAID_STREAM_SCOPE` instead of deadlocking. Transaction streams stay on their
-pinned connection and prohibit overlapping work. Do not return a transaction
-callback while its stream is live.
+1. Stop the delivery of rows.
+2. Close, drain or cancel the driver cursor, request or iterator.
+3. Release or discard the lease.
+4. Emit the terminal stream event.
+
+This applies to exhaustion, consumer errors, mapper errors, `AbortSignal` and an
+early `break` in `for await`.
+
+A direct stream cannot re-enter its own physical resource. SQLBraid rejects with
+`BRAID_STREAM_SCOPE`. It does not deadlock. Transaction streams stay on their
+pinned connection and prohibit overlapping work. Do not return from a
+transaction callback while its stream is live.
 
 ```ts
 const controller = new AbortController();
@@ -37,10 +43,11 @@ const stream = db.stream(query, { signal: controller.signal });
 controller.abort();
 ```
 
-An already-aborted signal rejects with its `reason`. An active signal requires a
-physical cancellation capability. Without one, the adapter rejects before I/O
-with `UnsupportedFeatureError`, feature `statement.cancel`, and
-`BRAID_CANCEL_UNSUPPORTED`; stopping iteration alone is not cancellation.
+If the signal is already aborted, the operation rejects with its `reason`. An
+active signal requires a physical cancellation capability. Without one, the
+adapter rejects before I/O with `UnsupportedFeatureError`, the feature
+`statement.cancel` and `BRAID_CANCEL_UNSUPPORTED`. To stop the iteration alone is
+not cancellation.
 
 ## First-party primitives
 
@@ -57,12 +64,12 @@ with `UnsupportedFeatureError`, feature `statement.cancel`, and
 | Oracle Thin                 | `ResultSet`                          | Close every ResultSet; close failure discards the lease.                                                                                           |
 | SQL Server / Tedious        | request row events + bounded queue   | Request completion precedes lease release.                                                                                                         |
 
-These are driver capabilities, not dialect properties. A custom executor must
-implement `QueryExecutor.stream` or fail deterministically with
+These are driver capabilities. They are not properties of the dialect. A custom
+executor must implement `QueryExecutor.stream` or fail deterministically with
 `BRAID_STREAM_UNSUPPORTED`. Routine cursor streaming is not part of the
-materialized routine contract; use `db.call()` for normalized, closed,
-heterogeneous result sets.
+materialized routine rules. For normalized, closed, heterogeneous result sets,
+use `db.call()`.
 
-DML `RETURNING`/`OUTPUT` remains materialized. Do not infer that authored
-returning syntax is streamable across drivers. See the [support
-matrix](/SQLBraid/reference/support/) for verified driver capabilities.
+DML `RETURNING`/`OUTPUT` stays materialized. Do not infer that returning syntax
+in your SQL can stream on all drivers. For verified driver capabilities, read
+the [support matrix](/SQLBraid/reference/support/).

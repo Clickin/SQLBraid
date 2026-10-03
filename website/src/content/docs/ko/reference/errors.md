@@ -3,25 +3,28 @@ title: 진단 및 오류 코드
 description: 안정적인 SQLBraid 코드와 각 코드가 보호하는 경계를 확인합니다.
 ---
 
-SQLBraid runtime/compiler 오류는 오류 타입이 정의한 경우 `code`를
-노출합니다. Adapter capability 오류는 안정적인 `BRAID_*` code를 가진
-`UnsupportedFeatureError`를 사용하고 driver 오류는 원래 identity를
+SQLBraid runtime/compiler 오류는 오류 타입이 code를 정의하면 `code`를
+노출합니다. 얇은 adapter capability 오류는 안정적인 `BRAID_*` code를 가진
+`UnsupportedFeatureError`를 사용합니다. driver 오류는 원래 identity를
 유지합니다.
 
-Placeholder 생성, hint 매핑, typed request 구성, 지원하지 않는 transport
-선택 같은 binding 구성 실패는 lease 획득과 driver I/O 전 `materialize`
-단계에서 발생합니다. Driver/server/network 실패는 `driver` 단계입니다.
-Materialization 오류의 `executionStarted`와 `executionCompleted`는 모두
-`false`입니다.
+binding 구성 실패는 lease 획득과 driver I/O 전 `materialize` 단계에서
+발생합니다. placeholder 생성, hint 매핑, typed request 구성, 지원하지 않는
+transport 선택의 실패가 여기에 속합니다. Driver/server/network 실패는 `driver`
+단계로 남습니다. Materialization 오류의 `executionStarted`와
+`executionCompleted`는 모두 `false`입니다.
 
 내보낸 `PUBLIC_ERROR_DEFINITIONS` registry가 이 reference의 source of truth입니다.
-Runtime 소유 class에는 `DatabaseScopeError`, `DatabaseResultKindError`,
-`DatabaseResultValidationError`, `ResultExactnessError`, `RoutineMappingError`가
-있습니다. Adapter capability 실패는 `UnsupportedFeatureError`를 사용하며,
-`feature`는 capability를, `code`는 안정적인 오류 코드를 나타냅니다. Driver 오류는
-래핑하지 않고, 이미 abort된 `AbortSignal`은 원래 `reason`으로 거부합니다.
-안정적인 bind code를 노출하는 Adapter 입력/transport 실패는 `AdapterError`
-(`TypeError`) class를 사용합니다.
+
+- Runtime이 소유하는 class에는 `DatabaseScopeError`, `DatabaseResultKindError`,
+  `DatabaseResultValidationError`, `ResultExactnessError`, `RoutineMappingError`가
+  있습니다.
+- Adapter capability 실패는 `UnsupportedFeatureError`를 사용합니다. `feature`는
+  capability를 나타냅니다. `code`는 안정적입니다.
+- Driver 오류는 래핑하지 않습니다.
+- 이미 abort된 `AbortSignal`은 원래 `reason`으로 거부합니다.
+- 안정적인 bind code를 노출하는 adapter 입력/transport 실패는 `AdapterError`
+  (`TypeError`) class를 사용합니다.
 
 | Code                                   | 의미                                                                                                                                                                                    |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -59,7 +62,7 @@ Runtime 소유 class에는 `DatabaseScopeError`, `DatabaseResultKindError`,
 | `BRAID_BIND_HINT_UNSUPPORTED`          | Adapter가 명시적 bind type/facet을 적용할 수 없습니다. I/O 전에 거부합니다.                                                                                                             |
 | `BRAID_BIND_VALUE_UNSUPPORTED`         | 선택한 binding transport로 값을 표현할 수 없습니다.                                                                                                                                     |
 | `BRAID_BIND_TYPE_REQUIRED`             | Driver inference가 모호합니다(Oracle/SQL Server untyped null 포함).                                                                                                                     |
-| `BRAID_INTEGER_MODE_UNSUPPORTED`       | Adapter가 명세에 필요한 exact integer read mode를 켤 수 없습니다.                                                                                                                       |
+| `BRAID_INTEGER_MODE_UNSUPPORTED`       | Adapter가 프로필에 필요한 exact integer read mode를 켤 수 없습니다.                                                                                                                     |
 | `BRAID_BULK_UNSUPPORTED`               | Adapter가 필요한 native bulk capability를 제공하지 않습니다.                                                                                                                            |
 | `BRAID_DIALECT_MISMATCH`               | Rendered statement가 선택한 adapter dialect와 다릅니다.                                                                                                                                 |
 | `BRAID_RESULT_KIND_AMBIGUOUS`          | Adapter가 빈 row result와 command result를 구분할 수 없습니다.                                                                                                                          |
@@ -78,12 +81,12 @@ Runtime 소유 class에는 `DatabaseScopeError`, `DatabaseResultKindError`,
 | `BRAID_STRUCTURE_LIMIT`                | Rendered structural item이 `maxStructuralItems`를 초과했습니다.                                                                                                                         |
 | `BRAID_SQL_LIMIT` / `BRAID_BIND_LIMIT` | Rendered output이 설정 한도를 초과했습니다.                                                                                                                                             |
 
-`UnsupportedFeatureError` constructor는 `(feature, code, message, options?)`이고
-code는 `BRAID_${string}` 형태입니다. 이미 abort된 signal은
+`UnsupportedFeatureError` constructor는 `(feature, code, message, options?)`입니다.
+code는 `BRAID_${string}` 형태로 제한됩니다. 이미 abort된 signal은
 `BRAID_CANCEL_UNSUPPORTED`가 아니라 자신의 `reason`으로 거부됩니다.
-지원되지 않는 capability를 buffering, 숨은 transaction, 추측한 routine
+지원되지 않는 capability를 잡아서 buffering, 숨은 transaction, 추측한 routine
 metadata, 무시한 hint로 바꾸지 마세요.
 
-Compiler diagnostic에는 source range와 severity가 있습니다. CLI JSON은
-1-based 위치이고 LSP는 표준 0-based 위치입니다. 누락 metadata는 open-world
-증거이지 invalid SQL 오류가 아닙니다.
+Compiler diagnostic에는 source range와 severity가 있습니다. CLI JSON 위치는 1부터
+시작합니다. LSP는 0부터 시작하는 표준 위치를 사용합니다. 누락된 metadata는
+open-world 증거입니다. invalid SQL 오류가 아닙니다.

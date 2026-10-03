@@ -1,8 +1,8 @@
 # SQLite quickstart
 
-This example uses Node's built-in `node:sqlite` API and the packed
-`sqlbraid` package's `node:sqlite` adapter. It creates an in-memory database,
-so it never mutates a user database.
+This example uses the `node:sqlite` API of Node and the `node:sqlite` adapter
+of the packed `sqlbraid` package. It creates an in-memory database. It never
+changes a user database.
 
 From the repository root, run the packed release gate:
 
@@ -10,8 +10,8 @@ From the repository root, run the packed release gate:
 pnpm run test:examples
 ```
 
-The gate packs every SQLBraid package, installs tarballs into a clean temporary
-project, then runs the equivalent commands below:
+The gate packs each SQLBraid package and installs the tarballs into a clean
+temporary project. Then it runs the equivalent of these commands:
 
 ```bash
 npm install --save sqlbraid
@@ -20,5 +20,5 @@ npx sqlbraid build --file src/index.ts --out-file build/index.js
 node build/index.js
 ```
 
-The query includes a nullable dynamic guard. `sqlbraid build` lowers that
-guard before Node executes the generated JavaScript.
+The query has a nullable dynamic guard. `sqlbraid build` lowers that guard
+before Node executes the generated JavaScript.

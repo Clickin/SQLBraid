@@ -1,29 +1,33 @@
 ---
 title: 브라우저 인터랙티브 미리보기
-description: 브라우저에서 일회용 SQLite WASM 데이터베이스에 실제 SQL을 편집하고 실행합니다.
+description: 브라우저의 일회용 SQLite WASM 데이터베이스에서 실제 SQL을 편집하고 실행합니다.
 ---
 
 import InteractivePreview from "../../../components/InteractivePreview.astro";
 
-아래 미리보기는 애플리케이션 번들에서 사용할 수 있는 SQLBraid SQLite WASM
-어댑터와 같은 경로를 사용합니다. SQL을 직접 작성하거나 붙여 넣은 뒤
-브라우저 워커의 공식 SQLite WASM `:memory:` 데이터베이스에서 실행하세요.
-한국어와 다른 유니코드 계좌 이름을 포함한 결정적 금융 fixture를 사용합니다.
+아래 미리보기는 애플리케이션 번들이 사용할 수 있는 SQLBraid SQLite WASM
+어댑터와 같은 어댑터를 사용합니다. SQL 문을 작성하거나 붙여 넣으세요. 그 다음
+Web Worker의 공식 SQLite WASM `:memory:` 데이터베이스에서 실행하세요.
+fixture는 결정적 금융 데이터입니다. 일부 계좌 이름은 한국어나 다른 유니코드 문자를 사용합니다.
 
-다음 작업을 직접 해 볼 수 있습니다.
+다음 작업을 해 보세요.
 
-- 원하는 조건과 JOIN을 포함한 `SELECT` 문 실행
-- 일회용 데이터베이스에서 `INSERT`, `UPDATE` 등 한 문장 명령 실행
-- SQLite 문법/실행 오류를 확인한 뒤 SQL을 고쳐 다시 실행
-- **Inspect schema** 버튼으로 seed table 정의 확인
-- 변경 후 **Reset seeded database** 버튼으로 원래 데이터 복원
+- 원하는 조건과 JOIN을 포함한 `SELECT` 문
+- 일회용 데이터베이스에서 `INSERT`, `UPDATE` 등 한 문장 명령
+- SQLite 문법/실행 오류를 확인한 뒤 고친 쿼리 실행
+- **Inspect schema**로 seed 데이터의 테이블 정의 확인
+- 변경 후 **Reset seeded database**로 원래 행 복원
+
+결과 표는 처음 1,000행만 표시합니다. 이렇게 하면 탐색 쿼리의 반응이 빠르게 유지됩니다.
+워커가 10초 넘게 실행되면 미리보기는 워커를 교체하고 데이터베이스를 초기화합니다.
+
+SQL은 이 일회용 데이터베이스 안에서 사용자가 작성한 raw text입니다. 이것은
+의도한 동작입니다. 미리보기는 SQL을 서버 쿼리에 보간하지 않습니다. injection
+안전성을 주장하지 않습니다. 변경 사항을 저장하지 않습니다.
 
 <InteractivePreview />
 
-결과 표는 탐색 쿼리의 반응성을 위해 최대 1,000행까지만 표시합니다.
-쿼리가 10초를 넘기면 워커를 교체하고 데이터베이스를 초기화합니다.
-
-SQL은 일회용 브라우저 데이터베이스 안에서만 사용자 작성 raw text로
-실행합니다. 서버 쿼리에 삽입하거나 injection 안전성을 주장하지 않으며
-변경 사항도 저장하지 않습니다. OPFS, 영속성, `SharedArrayBuffer`,
-COOP/COEP 헤더는 필요하지 않습니다.
+기본 경로에는 OPFS, 영속성, `SharedArrayBuffer`, COOP/COEP 헤더가 필요하지 않습니다.
+이것은 의도한 설계입니다. 프로덕션 애플리케이션은 다른 SQLite WASM 저장 모드를
+별도로 선택할 수 있습니다. 이 문서 미리보기는 GitHub Pages 같은 정적 호스팅에서
+계속 이식 가능합니다.

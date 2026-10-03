@@ -1,20 +1,25 @@
 ---
 title: Architecture mental model
-description: Understand SQLBraid's execution layers, resource ownership, and contributor boundaries before reading the implementation.
+description: Learn the execution layers, resource ownership and contributor boundaries of SQLBraid before you read the implementation.
 ---
 
 import ArchitectureFlow from "../../../components/ArchitectureFlow.astro";
 
-SQLBraid is easiest to understand as a pipeline with deliberately narrow boundaries. The SQL text stays visible; values remain values; adapters own physical transport; runtime owns connection and scope correctness.
+SQLBraid is a pipeline with narrow boundaries. This is intentional.
+
+- The SQL text stays visible.
+- Values stay values.
+- Adapters own the physical transport.
+- The runtime owns the correctness of connections and scopes.
 
 <ArchitectureFlow />
 
 ## The four execution layers
 
-1. **`@sqlbraid/core`** defines the contracts: logical statements, binding SPI, executor/provider SPI, runtime API, representation policy, observers, capabilities, routines, and public errors.
-2. **`@sqlbraid/template`** turns tagged templates into frozen `Query` values and renders explicit SQL structure into transport-neutral `RenderedStatement` objects.
-3. **`@sqlbraid/runtime`** owns leases, pinned scopes, transaction/savepoint continuity, streaming lifetime, cancellation boundaries, result-kind checks, and application mapping.
-4. **Driver adapters** translate the logical statement/binding description into a native driver call and normalize native results back into SQLBraid contracts.
+1. **`@sqlbraid/core`** defines the interfaces: logical statements, the binding SPI, the executor and provider SPI, the runtime API, the representation policy, observers, capabilities, routines and public errors.
+2. **`@sqlbraid/template`** turns tagged templates into frozen `Query` values. It renders explicit SQL structure into `RenderedStatement` objects that do not depend on the transport.
+3. **`@sqlbraid/runtime`** owns leases, pinned scopes, the continuity of transactions and savepoints, the lifetime of streams, cancellation boundaries, result-kind checks and application mapping.
+4. **Driver adapters** translate the logical statement and binding description into a native driver call. They normalize the native results back into SQLBraid types.
 
 ### The invariant to remember
 
@@ -24,41 +29,53 @@ segments.length
 parameters.length + 1
 ```
 
-Ordinary `${value}` interpolation is a bind value. It does not become SQL structure. Structural SQL requires an explicit helper such as `sql.ident`, `sql.fragment`, `sql.list`, `sql.join`, or the deliberate `sql.raw` escape hatch.
+An ordinary `${value}` interpolation is a bind value. It does not become SQL structure. Structural SQL requires an explicit helper, such as `sql.ident`, `sql.fragment`, `sql.list` or `sql.join`. `sql.raw` is the deliberate escape hatch.
 
-Placeholder syntax appears only at the binding/adapter boundary: PostgreSQL may use `$1`, MySQL `?`, Oracle `:1`, SQL Server `@p1`, while native-template transports can keep a different physical representation.
+Placeholder syntax occurs only at the binding and adapter boundary. PostgreSQL can use `$1`, MySQL `?`, Oracle `:1` and SQL Server `@p1`. Native-template transports can keep a different physical representation.
 
-## Resource ownership is the runtime's main job
+## Resource ownership is the main job of the runtime
 
-A pooled materialized query acquires a lease, performs physical I/O, releases the lease, and only then performs asynchronous Standard Schema mapping. A stream is different: its cursor/result set retains the resource until iterator cleanup finishes.
+A pooled materialized query does these steps:
 
-`db.session()` pins one resource without beginning a transaction. `db.tx()` begins one physical transaction on a pinned resource. Nested transactions are savepoints on that same resource, not independent transactions.
+1. It acquires a lease.
+2. It does the physical I/O.
+3. It releases the lease.
+4. Only then does it do the asynchronous Standard Schema mapping.
 
-Using a root or parent handle in a way that could escape to another connection is rejected instead of silently rerouted. If transaction control or cleanup leaves a connection uncertain, SQLBraid poisons/discards the resource rather than optimistically reusing it.
+A stream is different. Its cursor or result set keeps the resource until the iterator cleanup is complete.
 
-## Prepared, batch, and bulk are different contracts
+`db.session()` pins one resource. It does not begin a transaction. `db.tx()` begins one physical transaction on a pinned resource. Nested transactions are savepoints on that same resource. They are not independent transactions.
 
-- `db.prepare()` locks the **logical SQLBraid shape**; it does not promise a universal server-side prepared cache.
-- `db.batch()` runs several possibly different operations on one physical use/lease but is **not implicitly transactional**.
-- `db.bulk()` applies one homogeneous command shape to many inputs; the adapter chooses the physical bulk strategy.
+If a use of a root or parent handle could escape to a different connection, SQLBraid rejects it. SQLBraid does not silently route it to a different connection. If transaction control or cleanup leaves a connection in an uncertain state, SQLBraid poisons or discards the resource. It does not reuse it optimistically.
+
+## Prepared, batch and bulk have different rules
+
+- `db.prepare()` locks the **logical SQLBraid shape**. It does not promise a universal server-side prepared cache.
+- `db.batch()` runs several operations on one physical use or lease. The operations can be different. A batch is **not a transaction**.
+- `db.bulk()` applies one homogeneous command shape to many inputs. The adapter selects the physical bulk strategy.
 
 ## TypePolicy is not application mapping
 
-`TypePolicy` normalizes database/native driver values into SQLBraid's canonical JavaScript representation. Standard Schema maps that canonical representation into application/domain values. Keeping these boundaries separate is what lets runtime stay free of a universal codec framework.
+`TypePolicy` normalizes database and native driver values into the canonical JavaScript representation of SQLBraid. Standard Schema maps that canonical representation into application and domain values. These boundaries stay separate. Thus, the runtime does not need a universal codec framework.
 
 ## Tooling is a separate plane
 
-The runtime packages do not depend on metadata, codegen, compiler, CLI, editor, or Vite packages. `@sqlbraid/compiler` owns source discovery/lowering; `@sqlbraid/metadata` records database evidence; `@sqlbraid/codegen` generates models from metadata plus TypePolicy; `@sqlbraid/tooling` combines positive evidence for LSP/CLI/editor features.
+The runtime packages do not depend on metadata, codegen, compiler, CLI, editor or Vite packages.
 
-Missing metadata is unresolved evidence, not proof that user SQL is invalid.
+- `@sqlbraid/compiler` owns source discovery and lowering.
+- `@sqlbraid/metadata` records database evidence.
+- `@sqlbraid/codegen` generates models from metadata and TypePolicy.
+- `@sqlbraid/tooling` combines positive evidence for LSP, CLI and editor features.
+
+Missing metadata is unresolved evidence. It does not prove that user SQL is invalid.
 
 ## Read the source in this order
 
 1. `packages/core/src/index.ts`: `RenderedStatement`, `Query`, `StatementBindingAdapter`, `QueryExecutor`, `ConnectionProvider`, `Database`, `SqlTag`.
 2. `packages/template/src/index.ts`: `createSqlTag()` and the rendering path.
 3. `packages/runtime/src/index.ts`: `createScopedDatabase()` → `prepare()` → `leaseForUse()` → `physical()` → `runPrepared()` → `finalizePhysical()` → `processRows()`.
-4. Runtime `stream()`, then `session()` and `tx()`.
-5. PostgreSQL's `pgStatementBinding` / `createPgExecutor()` as a reference adapter, then Oracle for a resource-heavy adapter.
-6. Compiler → metadata → codegen → tooling when working on static tooling.
+4. The runtime `stream()`, then `session()` and `tx()`.
+5. The PostgreSQL `pgStatementBinding` / `createPgExecutor()` as a reference adapter. Then Oracle, as an adapter with many resources.
+6. Compiler → metadata → codegen → tooling, when you work on static tooling.
 
-For the full contributor-oriented walkthrough and invariants, see the repository's [English mental model](https://github.com/Clickin/SQLBraid/blob/main/docs/mental-model.md). Driver implementers should also read the [driver-author guide](/SQLBraid/agents/driver-author/).
+For the full walkthrough and the invariants for contributors, read the [English mental model](https://github.com/Clickin/SQLBraid/blob/main/docs/mental-model.md) in the repository. Driver implementers must also read the [driver-author guide](/SQLBraid/agents/driver-author/).

@@ -14,16 +14,19 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-렌더링은 먼저 하나의 불변 논리 문장을 만듭니다. `segments`에는 해결된
-구조적 SQL이, `parameters`에는 순서가 있는 값 레코드(`value`, 선택적
-`interpolation`, 선택적 `hint`)가 들어갑니다. 불변식은
-`segments.length === parameters.length + 1`입니다. 값을 보간했다는 이유만으로
-SQL 소스가 되지는 않습니다.
+렌더링은 먼저 하나의 불변 논리 문장을 만듭니다.
 
-선택된 드라이버는 순수한 바인딩 설명과 힌트 검증이 끝난 뒤에 문장을
-구체화합니다. 물리적 전송과 placeholder(`$1`, `?`, `:1`, `@p1`, 이름 있는
-바인드 또는 native value-template 요청)는 드라이버가 소유하며, dialect나
-템플릿 렌더러의 책임이 아닙니다.
+- `segments`에는 해결된 구조적 SQL이 들어갑니다.
+- `parameters`에는 순서가 있는 값 레코드가 들어갑니다: `value`, 선택적
+  `interpolation`, 선택적 `hint`.
+
+불변식은 `segments.length === parameters.length + 1`입니다. 보간된 값은
+절대 SQL 소스가 되지 않습니다.
+
+선택된 드라이버는 순수한 바인딩 설명과 힌트 검증이 끝난 뒤에만 문장을
+구체화합니다. 물리적 전송은 드라이버가 소유합니다. 드라이버는 `$1`, `?`,
+`:1`, `@p1`, 이름 있는 바인드, native value-template 요청을 만들 수
+있습니다. placeholder 문법은 dialect나 템플릿 렌더러의 책임이 아닙니다.
 
 데이터베이스 파라미터 타입을 명시해야 할 때는 `sql.bind(value, hint)`를 사용하세요.
 
@@ -37,9 +40,9 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-`${value}`는 드라이버의 일반 추론을 사용합니다. `${sql.bind(value, hint)}`는 명시적인 데이터베이스 파라미터 타입을 요청합니다. SQLBraid는 TypeScript `number`, `string`, `Date`에서 보편적인 데이터베이스 타입을 추론하지 않습니다. 이 API는 애플리케이션 입력 검증이나 codec 프레임워크가 아닌 파라미터 타입 지정입니다. [파라미터 타입 힌트](/SQLBraid/concepts/parameter-hints/)를 참고하세요.
+`${value}`는 드라이버의 일반 추론을 사용합니다. `${sql.bind(value, hint)}`는 명시적인 데이터베이스 파라미터 타입을 요청합니다. SQLBraid는 TypeScript `number`, `string`, `Date`에서 보편적인 데이터베이스 타입을 추론하지 않습니다. 이 API는 파라미터 타입을 지정합니다. 애플리케이션 입력 검증이나 codec 프레임워크가 아닙니다. [파라미터 타입 힌트](/SQLBraid/concepts/parameter-hints/)를 참고하세요.
 
-## 구조적 입력은 선택 사항입니다
+## 구조적 입력은 명시적으로 요청해야 합니다
 
 식별자와 SQL 조각은 데이터와 다릅니다. [구조적 SQL 조각](/SQLBraid/concepts/structural-fragments/)의 명시적 헬퍼를 사용하세요.
 
@@ -50,7 +53,7 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-`sql.ident`는 식별자 부분을 인용합니다. `sql.raw`는 애플리케이션이 이미 신뢰하는 SQL 텍스트를 위한 탈출구이며 입력을 검증하거나 정제하지 않습니다. 사용자 제어 텍스트를 `sql.raw`에 절대 전달하지 마세요.
+`sql.ident`는 식별자 부분을 인용합니다. `sql.raw`는 애플리케이션이 이미 신뢰하는 SQL 텍스트를 위한 탈출구입니다. 입력을 검증하거나 정제하지 않습니다. 사용자가 제어하는 텍스트를 `sql.raw`에 전달하지 마세요.
 
 목록도 바인드입니다.
 
@@ -63,10 +66,10 @@ const query = sql.rows<UserRow>`
 
 `sql.list([])`는 `BRAID_EMPTY_LIST`를 발생시킵니다. 명시적인 빈 집합 전략을 선택하거나 `@braid if`로 절을 보호하세요.
 
-SQLBraid의 렌더링 제한은 SQL 바이트 크기, 바인드 수, 구조적 항목 수, 중첩 깊이도 제한합니다. 애플리케이션에 더 엄격한 범위가 필요하면 `createSqlTag({ dialect, limits })`를 통해 제한을 구성하세요.
+SQLBraid의 렌더링 제한은 SQL 바이트 크기, 바인드 수, 구조적 항목 수, 중첩 깊이도 제한합니다. 애플리케이션에 더 엄격한 제한이 필요하면 `createSqlTag({ dialect, limits })`로 구성하세요.
 
 PostgreSQL, MySQL, SQLite는 일반 힌트를 `BRAID_BIND_HINT_UNSUPPORTED`로
-명시적으로 거부하며 결코 조용히 무시하지 않습니다. PostgreSQL의
-루틴 전용 `postgresParameter.refcursor()`는 OUT/INOUT portal을 분류합니다.
+명시적으로 거부합니다. 힌트를 조용히 무시하지 않습니다. PostgreSQL의
+`postgresParameter.refcursor()`는 루틴 전용입니다. OUT/INOUT portal을 분류합니다.
 다른 데이터베이스 타입 API가 필요하면 해당하는 첫 번째 파티 Oracle 또는
 SQL Server 어댑터를 사용하세요.

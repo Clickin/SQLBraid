@@ -3,7 +3,7 @@ title: 파라미터 타입 힌트
 description: 드라이버 추론만으로 부족할 때 데이터베이스 파라미터 타입을 명시적으로 선택합니다.
 ---
 
-SQLBraid는 JavaScript 값과 데이터베이스 파라미터 타입을 분리합니다. 일반 보간은 드라이버의 기본 추론을 사용합니다.
+SQLBraid는 JavaScript 값과 데이터베이스 파라미터 타입을 분리합니다. 일반 보간은 드라이버의 기본 추론을 유지합니다.
 
 ```ts
 const id = 42;
@@ -22,13 +22,17 @@ const query = sql.rows<UserRow>`
 `;
 ```
 
-래퍼는 템플릿 안에서 값으로 남습니다. 구조적 SQL이 되거나 문장에 문자열로 삽입되지 않습니다.
+래퍼는 템플릿 안에서 값으로 남습니다. 구조적 SQL이 되지 않습니다. 문장 안에 문자열로 삽입되지 않습니다.
 
 ## TypeScript 타입은 데이터베이스 타입의 기준이 아닙니다
 
-SQLBraid는 TypeScript 타입에서 보편적인 데이터베이스 파라미터 타입을 추론하지 않습니다. `number`는 정수, 소수, 금액, 식별자 또는 데이터베이스별 숫자 타입일 수 있습니다. `string`은 텍스트, UUID, JSON 또는 길이가 제한된 문자 타입일 수 있습니다. `Date`도 데이터베이스의 date와 timestamp 변형 중 하나를 결정하지 않습니다.
+SQLBraid는 TypeScript 타입에서 보편적인 데이터베이스 파라미터 타입을 추론하지 않습니다.
 
-이는 데이터베이스 파라미터 타입을 지정하는 설정이며, 애플리케이션 입력 검증이나 결과 매핑, 또는 codec 프레임워크의 역할이 아닙니다.
+- `number`는 정수, 소수, 금액, 식별자, 데이터베이스별 숫자 타입일 수 있습니다.
+- `string`은 텍스트, UUID, JSON, 길이가 제한된 문자 타입일 수 있습니다.
+- `Date`는 데이터베이스의 date와 timestamp 변형 중 하나를 선택하지 않습니다.
+
+힌트가 없으면 어댑터는 문서화된 드라이버 추론을 사용할 수 있습니다. 힌트가 있으면 어댑터는 디스크립터를 따르거나 명시적으로 실패해야 합니다. 이것은 데이터베이스 파라미터 타입 지정입니다. 애플리케이션 입력 검증, 결과 매핑, codec 프레임워크가 아닙니다.
 
 ## SQL Server 힌트
 
@@ -51,26 +55,29 @@ const query = sql.rows<UserRow>`
 
 ## 렌더링 메타데이터와 prepared shape
 
-렌더링된 문장은 값, 보간 인덱스, 선택적 힌트를 하나의 불변
-`parameters` 레코드에 보관합니다. `segments.length === parameters.length + 1`이며,
-observer는 바인드 값의 redaction 정책을 바꾸지 않고 이 레코드에서 값·힌트·
-보간 맵을 파생합니다.
+렌더링된 문장은 값, 보간 인덱스, 선택적 힌트를 하나의 불변 `parameters`
+레코드에 보관합니다. `segments.length === parameters.length + 1`입니다.
+observer는 이 레코드에서 값, 힌트, 보간 맵을 얻습니다. 바인드 값의 redaction
+정책은 바뀌지 않습니다.
 
-Prepared query의 shape는 결과 종류, 정규화된 논리 `segments`, 순서가 있는
-힌트 시그니처로 정합니다. 값만 바꾸는 것은 허용되지만 힌트·길이·정밀도·
-스케일을 바꾸면 호환되지 않는 statement를 조용히 재사용하지 않고 실패합니다.
-물리적인 `$1`, `?`, `:1`, `@p1` 표기는 shape에 포함되지 않습니다.
+Prepared query의 shape는 결과 종류, 정규화된 논리 `segments`, 순서가 있는 힌트
+시그니처입니다.
+
+- 값만 바꾸는 것은 허용됩니다.
+- 힌트, 길이, 정밀도, 스케일을 바꾸면 shape가 바뀝니다. 이 경우 실패합니다.
+  호환되지 않는 prepared statement를 조용히 재사용하지 않습니다.
+- 물리적인 `$1`, `?`, `:1`, `@p1` 표기는 shape에 포함되지 않습니다.
 
 ## 어댑터 지원
 
 PostgreSQL, MySQL, MariaDB, SQLite 어댑터는 일반 파라미터 힌트를
-`BRAID_BIND_HINT_UNSUPPORTED`로 명시적으로 거부하며 힌트를 조용히 무시하지
-않습니다. PostgreSQL의 루틴 전용 `postgresParameter.refcursor()`는
-OUT/INOUT portal을 분류하는 좁은 예외입니다. 그 외에는 필요한 타입 API가
-있는 어댑터가 준비될 때까지 힌트 없는 바인드를 사용하세요.
+`BRAID_BIND_HINT_UNSUPPORTED`로 명시적으로 거부합니다. 힌트를 조용히 무시하지
+않습니다. PostgreSQL의 `postgresParameter.refcursor()`는 좁은 예외입니다.
+루틴 전용이며 OUT/INOUT portal을 분류합니다. 그 외의 파라미터에는 필요한
+타입 API를 가진 어댑터가 나올 때까지 힌트 없는 바인드를 사용하세요.
 
-Oracle 및 SQL Server portable root는 힌트 디스크립터를 내보냅니다. 두 Node
-어댑터는 지원되는 타입 매핑을 엄격히 검사합니다. 검증된 드라이버별 기능은
+Oracle과 SQL Server portable root는 힌트 디스크립터를 내보냅니다. 두 Node
+어댑터는 어댑터별 capability 검사를 수행합니다. 검증된 드라이버별 기능은
 [런타임 및 드라이버 지원](/SQLBraid/reference/support/)에서 확인할 수 있습니다.
 Oracle은 node-oracledb가 적용할 수 없는 IN 길이·precision·scale 속성을 거부합니다.
 두 어댑터 모두 지원하지 않는 속성을 조용히 무시하지 않습니다.
@@ -85,9 +92,13 @@ sql.inOut("name", value, hint?)     // INOUT, 초기값과 output
 ```
 
 이 helper는 `sql.call` 템플릿에서만 사용할 수 있습니다. output 이름은
-서로 달라야 합니다. Oracle OUT/INOUT에는 hint가 필요하고 SQL Server
-OUTPUT/INOUT에는 Tedious hint가 필요합니다. PostgreSQL refcursor output은
-`postgresParameter.refcursor()`로 분류해야 합니다. MySQL prepared CALL은
-public mysql2 3.x API로 추가 carrier를 증명할 수 없으므로 OUT/INOUT을
-거부합니다. result 순서, `output`에서 cursor 제거, 정리는
+서로 달라야 합니다.
+
+- Oracle OUT/INOUT에는 hint가 필요합니다.
+- SQL Server OUTPUT/INOUT에는 Tedious hint가 필요합니다.
+- PostgreSQL refcursor output은 `postgresParameter.refcursor()`로 분류해야 합니다.
+- MySQL prepared CALL은 OUT/INOUT을 거부합니다. public mysql2 3.x API는 어느
+  추가 결과가 carrier인지 증명하지 못합니다.
+
+result 순서, `output`에서 cursor 제거, 정리는
 [루틴 호출](/SQLBraid/concepts/routines/)을 참고하세요.

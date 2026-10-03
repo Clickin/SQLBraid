@@ -1,9 +1,9 @@
 ---
 title: 스트리밍
-description: SQLBraid가 물리 lease와 driver cleanup을 소유하는 동안 행을 버퍼링하지 않고 순회합니다.
+description: 버퍼 없이 행을 순회합니다. SQLBraid가 물리 lease와 driver cleanup을 소유합니다.
 ---
 
-일반적인 row-producing query에는 `db.stream`을 사용합니다.
+행을 만드는 일반 query에는 `db.stream`을 사용하세요.
 
 ```ts
 for await (const row of db.stream(sql.rows<UserRow>`
@@ -13,23 +13,28 @@ for await (const row of db.stream(sql.rows<UserRow>`
 }
 ```
 
-`db.stream()`은 실제 driver streaming 경로이며 `db.all()`을 호출해 버퍼 배열을
-다시 내보내지 않습니다. `db.all()`은 readonly array를 materialize하고
-O(row-count) application memory를 사용합니다. Set-returning function과
-table-valued extension은 일반 `sql.rows` query입니다.
+`db.stream()`은 실제 driver streaming 경로입니다. `db.all()`을 호출해 버퍼
+배열을 내보내지 않습니다. `db.all()`은 의도적으로 readonly array를
+materialize합니다. 행 수에 비례하는 application memory를 사용합니다.
+Set-returning function과 table-valued extension은 일반 `sql.rows` query입니다.
 
 ## 소유권과 cleanup
 
 Pooled root stream은 driver resource가 terminal이 될 때까지 물리 lease를
-유지합니다. Cleanup 순서는 행 전달 중지, driver cursor/request/iterator
-close/drain/cancel, lease 반환 또는 discard, terminal stream event입니다.
-Exhaustion, consumer/mapper 오류, `AbortSignal`, `for await` 조기 `break`에
-모두 적용됩니다.
+유지합니다. Cleanup은 다음 순서로 진행됩니다.
 
-Direct stream은 자신의 물리 resource에 재진입할 수 없으며 deadlock 대신
-`BRAID_STREAM_SCOPE`로 거부합니다. Transaction stream은 pinned connection을
-유지하고 겹치는 작업을 금지합니다. Stream이 살아 있는 동안 transaction
-callback을 반환하지 마세요.
+1. 행 전달을 멈춥니다.
+2. driver cursor/request/iterator를 close, drain, cancel합니다.
+3. lease를 반환하거나 폐기합니다.
+4. terminal stream event를 내보냅니다.
+
+이 순서는 exhaustion, consumer 오류, mapper 오류, `AbortSignal`, `for await`의
+조기 `break`에 모두 적용됩니다.
+
+Direct stream은 자신의 물리 resource에 재진입할 수 없습니다. SQLBraid는
+`BRAID_STREAM_SCOPE`로 거부합니다. deadlock되지 않습니다. Transaction stream은
+pinned connection에 남고 겹치는 작업을 금지합니다. stream이 살아 있는 동안
+transaction callback에서 반환하지 마세요.
 
 ```ts
 const controller = new AbortController();
@@ -40,7 +45,7 @@ controller.abort();
 이미 abort된 signal은 자신의 `reason`으로 거부됩니다. 활성 signal에는 물리
 cancellation capability가 필요합니다. 없으면 adapter가 I/O 전에
 `UnsupportedFeatureError`, feature `statement.cancel`,
-`BRAID_CANCEL_UNSUPPORTED`로 거부합니다. Iteration만 멈추는 것은
+`BRAID_CANCEL_UNSUPPORTED`로 거부합니다. iteration만 멈추는 것은
 cancellation이 아닙니다.
 
 ## First-party primitive
@@ -58,13 +63,11 @@ cancellation이 아닙니다.
 | Oracle Thin                 | `ResultSet`                       | 모든 ResultSet을 닫고 close 실패 시 lease를 폐기합니다.                                                                           |
 | SQL Server / Tedious        | request row event + bounded queue | Request 완료가 lease 반환보다 먼저입니다.                                                                                         |
 
-이는 dialect가 아닌 driver capability입니다. Custom executor는
+이것은 driver capability입니다. dialect의 속성이 아닙니다. Custom executor는
 `QueryExecutor.stream`을 구현하거나 `BRAID_STREAM_UNSUPPORTED`로 결정적으로
-실패해야 합니다. Routine cursor streaming은 materialized routine contract에
-포함되지 않으므로 정규화되고 닫힌 이질적 result set에는 `db.call()`을
-사용하세요.
+실패해야 합니다. Routine cursor streaming은 materialized routine 규칙에 포함되지
+않습니다. 정규화되고 닫힌 이질적 result set에는 `db.call()`을 사용하세요.
 
-DML `RETURNING`/`OUTPUT` 결과는 버퍼링되어 구체화(materialized)됩니다. 작성된
-returning 구문이 드라이버 전반에서 스트리밍 가능하다고 가정하지 마세요.
-검증된 드라이버별 세부 기능은 [지원 매트릭스](/SQLBraid/reference/support/)를
-참고하세요.
+DML `RETURNING`/`OUTPUT` 결과는 materialized 상태로 남습니다. SQL에 작성한
+returning 구문이 모든 드라이버에서 stream된다고 가정하지 마세요. 검증된
+드라이버별 기능은 [지원 매트릭스](/SQLBraid/reference/support/)를 참고하세요.

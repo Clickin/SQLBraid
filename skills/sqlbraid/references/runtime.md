@@ -1,6 +1,6 @@
 # Runtime scope and capabilities
 
-Use this reference when changing transactions, sessions, streaming, prepared execution, batch/bulk behavior, or adapter-dependent runtime semantics.
+Use this reference when you change transactions, sessions, streaming, prepared execution, batch or bulk behavior, or runtime semantics that depend on the adapter.
 
 ## Transactions
 
@@ -12,30 +12,30 @@ await db.tx({ isolation: "serializable" }, async (tx) => {
 });
 ```
 
-Inside the callback, use `tx`, not the outer `db`, for work that belongs to the transaction. The callback handle is scoped and must not escape.
+Inside the callback, use `tx` for work that belongs to the transaction. Do not use the outer `db`. The callback handle is scoped. It must not escape the callback.
 
-Nested `tx.tx(...)` uses a savepoint only when the executor advertises savepoint support. While a savepoint is active, use the innermost handle; do not perform scoped work through a parent or sibling handle.
+A nested `tx.tx(...)` uses a savepoint only when the executor advertises savepoint support. While a savepoint is active, use the innermost handle. Do not do scoped work through a parent handle or a sibling handle.
 
-Portable transaction options are the documented isolation literals and `readOnly`. Do not construct arbitrary transaction-control SQL from application values, and do not silently map an unsupported option unless the adapter explicitly documents that mapping.
+The portable transaction options are the documented isolation literals and `readOnly`. Do not build arbitrary transaction-control SQL from application values. Do not silently map an unsupported option, unless the adapter explicitly documents that mapping.
 
 ## Sessions
 
-`db.session(async (session) => ...)` pins one provider lease for the callback. Nested sessions reuse the lease, and `session.tx(...)` performs transaction work on that lease when supported.
+`db.session(async (session) => ...)` pins one provider lease for the callback. Nested sessions use the same lease. If the adapter supports it, `session.tx(...)` does transaction work on that lease.
 
-A provider is a lease source, not necessarily one physical connection. Root pooled operations may acquire and release independently, so do not escape a session or transaction through the root database.
+A provider is a source of leases. It is not always one physical connection. Root pooled operations can acquire and release leases independently. Thus, do not escape a session or a transaction through the root database.
 
 ## Streaming and overlapping work
 
-A stream retains its physical resource until cursor/request cleanup. Close a scoped stream before opening transaction/savepoint work that needs the same pinned resource. Do not "fix" scope errors by acquiring a second connection; that changes the guarantee.
+A stream keeps its physical resource until the cursor or request cleanup. Close a scoped stream before you start transaction or savepoint work that needs the same pinned resource. Do not correct a scope error with a second connection. A second connection changes the guarantee.
 
 ## Batch and bulk
 
-`batch` is not a portable atomicity boundary. If atomicity matters, execute it in `db.tx(...)`.
+`batch` is not a portable atomicity boundary. If atomicity is important, execute the batch in `db.tx(...)`.
 
-`bulk` is command-only homogeneous DML and is not itself a transaction. Use `tx.bulk(...)` when every item must share a transaction. Do not promise auto-chunking or a native bulk mechanism unless the selected adapter's capability evidence says so.
+`bulk` is homogeneous DML for commands only. It is not a transaction. If all items must share a transaction, use `tx.bulk(...)`. Do not promise auto-chunking or a native bulk mechanism, unless the capability evidence of the selected adapter shows it.
 
 ## Capability discipline
 
-Treat transactions, savepoints, pinned sessions, streaming, cancellation, prepared queries, bulk modes, routine support, and parameter hints as adapter capabilities.
+Treat these items as adapter capabilities: transactions, savepoints, pinned sessions, streaming, cancellation, prepared queries, bulk modes, routine support and parameter hints.
 
-When a capability is unavailable, preserve SQLBraid's explicit unsupported behavior. Do not add a fallback that silently weakens pinning, atomicity, cancellation, result-kind, or cleanup semantics.
+When a capability is unavailable, keep the explicit unsupported behavior of SQLBraid. Do not add a fallback that silently makes pinning, atomicity, cancellation, result-kind or cleanup semantics weaker.

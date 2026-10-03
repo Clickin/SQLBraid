@@ -1,8 +1,8 @@
 ## Summary
 
-<!-- What changed, and which SQLBraid responsibility layer does it affect? -->
+<!-- What changed? Which SQLBraid responsibility layer does the change affect? -->
 
-## Support expansion (complete when applicable)
+## Support expansion (complete if it applies)
 
 - Target ID(s):
 - Database product/version/edition:
@@ -14,15 +14,15 @@
 
 ### Required evidence
 
-- [ ] This request does not assume SQLBraid maintainers will purchase or operate a database environment.
-- [ ] `support/targets/*.json` records exact database, driver, and runtime versions.
-- [ ] The driver package/adapter, transport, stream, bulk strategy, raw representations, and exclusions are recorded.
-- [ ] New capability IDs use the common taxonomy, not database grammar feature names.
-- [ ] Capability tests are literal `<dialect>.<capability>` titles in `tests/db/<dialect>/capabilities.test.ts`.
-- [ ] `support/test-registry.json` links every claimed capability to its real test title/file.
-- [ ] English and Korean labels are present for every new capability or condition.
-- [ ] Official claims have zero-cost setup, release-blocking CI, and green same-commit evidence.
-- [ ] Local or historical evidence is marked pending/historical; no CI run or support label is inferred.
+- [ ] This request does not expect SQLBraid maintainers to buy or operate a database environment.
+- [ ] `support/targets/*.json` records the exact database, driver and runtime versions.
+- [ ] The manifest records the driver package or adapter, transport, stream, bulk strategy, raw representations and exclusions.
+- [ ] New capability IDs use the common taxonomy. They do not use feature names from a database grammar.
+- [ ] Capability tests have literal `<dialect>.<capability>` titles in `tests/db/<dialect>/capabilities.test.ts`.
+- [ ] `support/test-registry.json` links each claimed capability to its real test title and file.
+- [ ] Each new capability or condition has an English label and a Korean label.
+- [ ] Each Official claim has a setup at zero cost, release-blocking CI and green evidence from the same commit.
+- [ ] Local or historical evidence has the status pending or historical. I did not infer a CI run or a support label.
 
 ## Verification
 
@@ -30,9 +30,9 @@
 node scripts/validate-support.mjs
 ```
 
-- [ ] I ran the focused checks relevant to this change.
-- [ ] I did not publish packages, create tags, or modify CI without describing the reason above.
+- [ ] I ran the focused checks for this change.
+- [ ] I did not publish packages, create tags or change CI. If I did, I gave the reason above.
 
 ## Notes / limitations
 
-<!-- Include known profile constraints, unsupported combinations, or evidence gaps. -->
+<!-- Include known profile constraints, unsupported combinations and gaps in the evidence. -->

@@ -4,24 +4,25 @@ description: 값 전용 경계를 지키는 사용자 지정 SQLBraid adapter를
 ---
 
 이 문서는 custom `QueryExecutor`, `ConnectionProvider`, binding adapter를
-위한 현재 API 명세입니다. 지원 label이나 발행 증거를 부여하지 않습니다.
-지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가
-기록한 정확한 database, driver, profile, runtime, capability tuple과
-revision별 실행 workflow에만 적용됩니다. 인접한 버전·runtime·profile·로컬
-binding 또는 package 설치는 이 tuple을 인증하지 않습니다. 최종 exact-SHA
-Runtime, Docs, Release gate와 명시적인 release 승인은 별도 요구사항입니다.
+설명합니다. 현재 API를 다룹니다. 지원 label이나 발행 증거를 부여하지 않습니다.
 
-물리 SPI만 sync-aware이며 synchronous application API를 만들지는 않습니다.
+label은 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)를
+확인하세요. 각 label은 정확한 database, driver, profile, runtime, capability
+tuple 하나와 그 revision 및 workflow 증거에만 적용됩니다. 인접한 버전이나
+package 설치는 인증이 아닙니다. 최종 exact-SHA Runtime, Docs, Release gate와
+명시적인 release 승인은 별도 요구사항입니다.
+
+물리 SPI는 동기 결과를 받을 수 있습니다. application API는 계속 비동기입니다.
 
 ```ts
 type Awaitable<T> = T | PromiseLike<T>;
 ```
 
-`QueryExecutor.query`, `call`, 선택적 `bulk`와 transaction-control method는
-`Awaitable`을 반환할 수 있고 `ConnectionProvider.acquire()`는 계속
-`Promise`입니다. `stream()`은 `AsyncIterable`로 유지되므로 동기 native
-iterator는 cleanup과 scope 동작을 보존하는 얇은 async-generator adapter가
-필요합니다.
+`QueryExecutor.query`, `call`, 선택적 `bulk`, transaction-control method는
+`Awaitable`을 반환할 수 있습니다. `ConnectionProvider.acquire()`는 계속
+`Promise`입니다. `stream()`은 계속 `AsyncIterable`입니다. 따라서 동기 native
+iterator에는 얇은 async-generator adapter가 필요합니다. 이것이 cleanup과
+scope 동작을 유지합니다.
 
 ## 논리 statement 불변식
 
@@ -36,11 +37,11 @@ interface RenderedStatement {
 }
 ```
 
-`segments.length === parameters.length + 1`입니다. 모든 parameter는 값이며
-custom driver는 이를 SQL, identifier, nested SQL, native tagged-template
-command로 재해석하면 안 됩니다. 구조는 `sql.ident`, `sql.fragment`,
-`sql.raw`, `sql.list`, `sql.join` 같은 명시 helper로 작성되어 `segments`에
-이미 들어 있습니다.
+`segments.length === parameters.length + 1`입니다. 모든 parameter는 값입니다.
+custom driver는 parameter를 SQL, identifier, nested SQL, native
+tagged-template command로 해석하면 안 됩니다. 사용자는 구조적 SQL을 명시
+helper(`sql.ident`, `sql.fragment`, `sql.raw`, `sql.list`, `sql.join`)로
+작성합니다. 구조는 이미 `segments`에 들어 있습니다.
 
 ## Binding과 lease
 
@@ -64,16 +65,18 @@ interface ConnectionLease extends QueryExecutor {
 }
 ```
 
-`describe()`와 `describeBulk()`는 lease 획득 전 순수 materialization입니다.
-Hint, shape, transport를 그곳에서 검증하고, 실패 시 execution flag를 모두
-false로 유지합니다. Provider와 모든 lease는 정확히 같은 불변 binding adapter
-객체를 노출해야 합니다. 불투명 driver request는 `WeakMap` 등으로 내부에
-보관하세요.
+`describe()`와 `describeBulk()`는 lease 획득 전의 순수 materialization입니다.
+
+- hint, shape, transport를 그곳에서 검증하세요.
+- materialization이 실패하면 두 execution flag는 모두 false입니다.
+- provider와 모든 lease는 정확히 같은 불변 binding adapter 객체를 노출해야 합니다.
+- 불투명 driver request는 내부에 보관하세요. 예: `StatementBindingDescription`을
+  key로 쓰는 `WeakMap`.
 
 Prepared logical shape는 result kind, dialect, canonical segments, 순서 있는
-hint/direction/output metadata입니다. `$1`, `?`, `:1`, `@p1` 표기는 transport
-세부 사항이지 shape identity가 아닙니다. 값은 바뀔 수 있으나 shape는 바뀔 수
-없습니다.
+hint/direction/output metadata입니다. `$1`, `?`, `:1`, `@p1`은 transport
+세부 사항입니다. shape identity가 아닙니다. 값은 바뀔 수 있습니다. 구조적
+shape는 바뀔 수 없습니다.
 
 ## Executor와 cancellation
 
@@ -109,13 +112,15 @@ interface QueryExecutor {
 }
 ```
 
-이미 abort된 signal은 자신의 `reason`으로 거부합니다. 활성 signal에는 실제
-물리 cancellation 경로가 필요하며, 없으면 I/O 전에 `UnsupportedFeatureError`,
-feature `statement.cancel`, `BRAID_CANCEL_UNSUPPORTED`로 거부합니다.
-Iteration만 중단하는 것은 cancellation이 아닙니다. `stream`은 실제 driver
-경로여야 하며 `call`은 lease 반환 전에 모든 cursor, result set, request,
-carrier를 materialize하고 닫아야 합니다. Buffering으로 stream을 흉내 내거나
-routine carrier를 추측하지 마세요.
+- 이미 abort된 signal은 자신의 `reason`으로 거부합니다.
+- 활성 signal에는 실제 물리 cancellation 경로가 필요합니다. 경로가 없으면
+  I/O 전에 `UnsupportedFeatureError`, feature `statement.cancel`,
+  `BRAID_CANCEL_UNSUPPORTED`로 거부합니다. iteration만 멈추는 것은
+  cancellation이 아닙니다.
+- `stream`은 실제 driver 경로여야 합니다.
+- `call`은 lease 반환 전에 모든 cursor, result set, request, carrier를
+  materialize하고 닫아야 합니다.
+- buffering으로 stream을 흉내 내지 마세요. routine carrier를 추측하지 마세요.
 
 ## 완전한 text-positional 예시
 
@@ -234,32 +239,41 @@ export function createAcmeProvider(acquireClient: () => Promise<WireClient>): Co
 ## Capability와 evidence
 
 Transaction isolation은 고정된 `read-uncommitted`, `read-committed`,
-`repeatable-read`, `serializable` literal과 `readOnly`만 사용합니다. Malformed
-runtime 값은 `TypeError` / `BRAID_TX_OPTIONS_INVALID`, 유효하지만 지원하지
-않는 option은 `BRAID_TX_OPTION_UNSUPPORTED`, 중첩 명시 option은
-`BRAID_TX_OPTIONS_NESTED`입니다. Canonical capability key는
+`repeatable-read`, `serializable` literal과 `readOnly`만 사용합니다.
+
+- 잘못된 형식의 runtime 값은 `TypeError` / `BRAID_TX_OPTIONS_INVALID`로 실패합니다.
+- 유효하지만 지원하지 않는 option은 `BRAID_TX_OPTION_UNSUPPORTED`를 사용합니다.
+- 중첩된 명시 option은 `BRAID_TX_OPTIONS_NESTED`를 사용합니다.
+
+Canonical capability key는
 `statement.prepare`, `statement.stream`, `statement.bulk`, `transaction`,
 `transaction.savepoint`, `routine.out`, `routine.result-sets`,
 `routine.out-cursor`, `routine.return-value`입니다.
 
-Bun SQL은 사용자가 선택하는 `dialect: "postgres" | "mysql" | "mariadb" |
-"sqlite"`가 필요한 하나의 adapter family이며 auto-detect하지 않습니다.
-Bun.SQL MySQL/MariaDB는 명시적인 `readOnly`의 두 boolean 값을 모두 I/O 전에
-`BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`로 거부하고,
-생략하면 native session 기본값을 보존합니다. Bun 1.3.14의 read-only 실패는
-rollback 뒤에도 connection을 오염시킬 수 있으므로 해당 reservation을
-폐기해야 합니다. Bun.SQL PostgreSQL access mode와 representation profile
-option은 변경하지 않습니다.
-Deno는 public driver API가 동작하면 기존 adapter를 재사용할 수 있습니다.
+Bun SQL은 하나의 adapter family를 사용합니다. 사용자는
+`dialect: "postgres" | "mysql" | "mariadb" | "sqlite"`를 선택해야 합니다.
+adapter는 dialect를 자동으로 감지하지 않습니다.
+
+- Bun.SQL MySQL/MariaDB는 명시적인 `readOnly`의 두 boolean 값을 모두 I/O 전에
+  `BRAID_TX_OPTION_UNSUPPORTED` / `transaction.read-only`로 거부합니다.
+  option을 생략하면 native session 기본값이 유지됩니다.
+- Bun 1.3.14에서 read-only 실패는 rollback 뒤에도 connection을 오염시킬 수
+  있습니다. 따라서 오염된 reservation은 폐기해야 합니다.
+- Bun.SQL PostgreSQL access mode와 representation profile option은 바뀌지 않습니다.
+
+Deno는 public driver API가 동작하는 곳에서 기존 adapter를 재사용할 수 있습니다.
 어느 쪽도 검증되지 않은 database/runtime/profile tuple을 승격하지 않습니다.
 전체 checklist는 [repository driver-author guide](https://github.com/Clickin/SQLBraid/blob/main/docs/driver-author-guide.md)를 참고하세요.
 
-SQLite의 `node:sqlite`와 `better-sqlite3`는 `Awaitable`을 통해 물리 결과를
-동기식으로 반환할 수 있지만 public database는 여전히 async이며
-better-sqlite3는 event loop를 block합니다. Exact INTEGER read에는
-statement-local `safeIntegers(true)`를 사용하고 native iteration을 직접
-노출하세요. libSQL adapter는 명시적인 `intMode: "string"` 명세와
-interactive transaction handle을 사용하며 일반 pinned session을 주장하지
-않습니다. 선택한 client에 incremental cursor가 없으면 stream을 거부해야
-하며 buffering해서는 안 됩니다. Local libSQL evidence는 remote transport를
-인증하지 않습니다.
+SQLite:
+
+- `node:sqlite`와 `better-sqlite3`는 `Awaitable`을 통해 물리 결과를 동기식으로
+  반환할 수 있습니다. public database는 여전히 async입니다. better-sqlite3는
+  여전히 event loop를 block합니다.
+- exact INTEGER read에는 statement별 `safeIntegers(true)`를 사용하세요. native
+  iteration을 직접 노출하세요.
+- libSQL adapter는 명시적인 `intMode: "string"` 설정을 요구합니다. interactive
+  transaction handle을 사용합니다. 일반 pinned session을 주장하지 않습니다.
+  선택한 client에 incremental cursor가 없으면 stream을 거부해야 합니다.
+  buffering하면 안 됩니다.
+- local libSQL 증거는 remote transport를 인증하지 않습니다.

@@ -3,7 +3,7 @@ title: Standard Schema result mapping
 description: Validate and transform rows without coupling SQLBraid to one schema library.
 ---
 
-SQLBraid depends on the Standard Schema protocol, not on a particular validator. A schema can be bound to a query:
+SQLBraid depends on the Standard Schema protocol. It does not depend on one validator. You can bind a schema to a query:
 
 ```ts
 import * as v from "valibot";
@@ -20,14 +20,14 @@ const events = sql.rows(EventSchema)`
 const rows = await db.all(events);
 ```
 
-The schema output becomes the query row type. Mapping applies consistently to `all`, `one`, `maybeOne`, `batch`, prepared queries, streams, and transaction-scoped operations. An execution-level schema is additive:
+The output of the schema becomes the row type of the query. Mapping applies in the same way to `all`, `one`, `maybeOne`, `batch`, prepared queries, streams and operations in a transaction scope. A schema at the execution level is applied in addition:
 
 ```ts
 await db.all(events, { schema: ExtraSchema });
 ```
 
-Exact database numerics arrive as strings; approximate IEEE values arrive as
-numbers. Choose application semantics in the schema rather than changing the
+Exact database numerics arrive as strings. Approximate IEEE values arrive as
+numbers. Select the application semantics in the schema. Do not change the
 driver profile:
 
 ```ts
@@ -37,27 +37,34 @@ const Account = v.object({
 });
 ```
 
-`Decimal`/Money objects are application choices and are not SQLBraid
-dependencies. A schema cannot recover precision already lost by a parsed JSON
-number or a native temporal `Date`. For JSON nested numerics, use a
-lossless-text profile and an application-selected parser; for fractional or
-offset temporal fidelity, use a tested text profile or an authored SQL
-conversion.
+`Decimal` and Money objects are choices of the application. They are not
+SQLBraid dependencies. A schema cannot recover precision that a parsed JSON
+number or a native temporal `Date` already lost.
 
-Routine contracts map their channels independently. `sql.call({ output,
-resultSets: [UserSchema, PaymentSchema] as const, returnValue })` applies the
-output schema to the scalar object, each tuple schema to rows in its matching
-result set, and the return schema to the actual return/status value. When a
-`returnValue` schema is declared, successful `db.call()` results have a required
-`returnValue` property with that schema's output type; a missing driver channel
-fails with `BRAID_CALL_RETURN_UNSUPPORTED`. When the selected target explicitly
-marks `routine.return-value` unsupported, the same error is rejected before
-lease acquisition. Bare and no-return-schema contracts keep the property
-optional. Cursor
-outputs are removed from scalar `output`; adapters consume and close their
-resources before asynchronous mapping begins. A result-set count mismatch is
-`BRAID_CALL_RESULT_SETS`, and a failed routine location is reported by
-`BRAID_CALL_MAP`.
+- For numerics nested in JSON, use a lossless-text profile and a parser that the
+  application selects.
+- For fractional or offset temporal fidelity, use a tested text profile or a
+  conversion in your SQL.
+
+Routine declarations map their channels independently.
+`sql.call({ output, resultSets: [UserSchema, PaymentSchema] as const, returnValue })`
+applies:
+
+- the output schema to the scalar object;
+- each tuple schema to the rows in the matching result set;
+- the return schema to the actual return or status value.
+
+If a `returnValue` schema is declared, a successful `db.call()` result has a
+required `returnValue` property with the output type of that schema. If the
+driver channel is missing, the call fails with `BRAID_CALL_RETURN_UNSUPPORTED`.
+If the selected target explicitly marks `routine.return-value` unsupported, the
+same error occurs before lease acquisition. Bare declarations and declarations
+without a return schema keep the property optional.
+
+Cursor outputs are removed from the scalar `output`. Adapters read and close
+their resources before the asynchronous mapping starts. A mismatch of the
+result-set count is `BRAID_CALL_RESULT_SETS`. `BRAID_CALL_MAP` reports the
+location of a failed routine mapping.
 
 The pipeline is:
 
@@ -65,11 +72,12 @@ The pipeline is:
 driver row -> dialect TypePolicy normalization -> plain row -> query schema -> execution schema -> application model
 ```
 
-`DatabaseResultValidationError` uses code `BRAID_RESULT_VALIDATION`, reports the query or execution stage and row index, and does not dump raw rows or binds. Mapping is one row to one row: SQLBraid does not hydrate relations, maintain identity maps, or assemble object graphs.
+`DatabaseResultValidationError` uses the code `BRAID_RESULT_VALIDATION`. It reports the stage (query or execution) and the row index. It does not dump raw rows or binds. Mapping is one row to one row. SQLBraid does not hydrate relations, keep identity maps or assemble object graphs.
 
-The input side is deliberately smaller in 1.0.0. Ordinary value interpolation
-remains a driver-bound value; there is no universal application input codec
-framework yet. Exact numeric bind fidelity is a separate driver capability, and
-`undefined` ordinary IN values fail before acquisition while `null` means SQL
-`NULL`. Driver-specific JSON, temporal, and binary conventions remain the
-driver's responsibility.
+The input side is smaller in 1.0.0. This is intentional.
+
+- Ordinary value interpolation stays a value that the driver binds. There is no
+  universal input codec framework for applications yet.
+- The fidelity of exact numeric binds is a separate driver capability.
+- Ordinary `undefined` IN values fail before acquisition. `null` means SQL `NULL`.
+- The driver stays responsible for its own JSON, temporal and binary conventions.

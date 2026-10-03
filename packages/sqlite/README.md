@@ -1,12 +1,12 @@
 # @sqlbraid/sqlite
 
-SQLite dialect and adapters for various JavaScript environments.
+SQLite dialect and adapters for many JavaScript environments.
 
 ```sh
 npm install @sqlbraid/sqlite
 ```
 
-Use the adapter subpath for your environment. The granular package paths and their `sqlbraid` facade equivalents are:
+Use the adapter subpath for your environment. This table shows each granular package path and the equivalent `sqlbraid` facade path:
 
 | Adapter        | `@sqlbraid/sqlite` import         | `sqlbraid` facade import  | Physical API and notes                                                            |
 | :------------- | :-------------------------------- | :------------------------ | :-------------------------------------------------------------------------------- |
@@ -16,14 +16,14 @@ Use the adapter subpath for your environment. The granular package paths and the
 | SQLite WASM    | `@sqlbraid/sqlite/wasm`           | `sqlbraid/sqlite-wasm`    | SQLite WASM OO1                                                                   |
 | Cloudflare D1  | `@sqlbraid/sqlite/d1`             | `sqlbraid/d1`             | Cloudflare Workers                                                                |
 
-Install the selected external driver or client separately when required. Node's `node:sqlite` is built in; Cloudflare D1 is provided by the Worker runtime.
+If the adapter needs an external driver or client, install it separately. `node:sqlite` is part of Node. The Worker runtime supplies Cloudflare D1.
 
-The package root `@sqlbraid/sqlite` provides the SQLite dialect. Its optional `@sqlbraid/sqlite/inspector` subpath provides metadata inspection and requires the optional `@sqlbraid/metadata` peer; it is not a query adapter.
+The package root `@sqlbraid/sqlite` gives the SQLite dialect. The optional `@sqlbraid/sqlite/inspector` subpath gives metadata inspection. It requires the optional `@sqlbraid/metadata` peer. It is not a query adapter.
 
 ### Key Details
 
-- **Data Types**: Exact INTEGER values are exposed as decimal strings to avoid precision loss where supported by the selected adapter.
-- **Async API**: All adapters use the same async `Database` API, even when the underlying driver is synchronous.
+- **Data types**: Exact INTEGER values are decimal strings when the selected adapter supports this. This prevents loss of precision.
+- **Async API**: All adapters use the same async `Database` API. This is also true when the driver is synchronous.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.
 
