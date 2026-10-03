@@ -6,6 +6,6 @@ Tagged-template primitives for building custom SQLBraid dialects and adapters.
 npm install @sqlbraid/template
 ```
 
-Provides `createSqlTag` and structural helpers (`ident`, `fragment`, `list`, `join`, and `raw`). Ordinary interpolations are value binds; `raw` emits trusted SQL verbatim. Never pass untrusted input to `raw`.
+This package gives `createSqlTag` and the structural helpers `ident`, `fragment`, `list`, `join` and `raw`. Ordinary interpolations are value binds. `raw` puts trusted SQL into the statement without change. Do not give untrusted input to `raw`.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.

@@ -1,34 +1,34 @@
 ---
 title: Interactive browser preview
-description: Edit and run real SQL against a disposable SQLite WASM database in your browser.
+description: Edit and run real SQL on a disposable SQLite WASM database in your browser.
 ---
 
 import InteractivePreview from "../../components/InteractivePreview.astro";
 
 The preview below uses the same SQLBraid SQLite WASM adapter that an application
-bundle can use. Write or paste a SQL statement, then run it against an official
+bundle can use. Write or paste a SQL statement. Then run it on an official
 SQLite WASM `:memory:` database in a Web Worker. The fixture is deterministic
-finance data with Korean and other Unicode account names.
+finance data. Some account names are Korean or use other Unicode characters.
 
-Try:
+Try these things:
 
-- `SELECT` statements, including your own filters and joins;
-- `INSERT`, `UPDATE`, and other single-statement commands against the disposable database;
-- readable SQLite syntax/runtime errors, followed by a corrected query;
-- **Inspect schema** to see the seeded table definition; and
-- **Reset seeded database** to restore the original rows after a mutation.
+- `SELECT` statements, with your own filters and joins;
+- `INSERT`, `UPDATE` and other single-statement commands on the disposable database;
+- a SQLite syntax or runtime error, then a corrected query;
+- **Inspect schema**, to see the table definition of the seed data;
+- **Reset seeded database**, to restore the original rows after a change.
 
-The result table shows at most the first 1,000 rows so exploratory queries stay
-responsive. A worker that runs longer than ten seconds is replaced and its
-database is reset.
+The result table shows only the first 1,000 rows. This keeps exploratory queries
+responsive. If a worker runs for more than ten seconds, the preview replaces it
+and resets its database.
 
-The SQL is intentionally user-authored raw text inside this disposable database:
-the preview does not interpolate it into a server query, claim injection safety,
-or persist any changes.
+The SQL is raw text that you write, inside this disposable database. This is
+intentional. The preview does not interpolate it into a server query. It does not
+claim injection safety. It does not keep any changes.
 
 <InteractivePreview />
 
-The default path deliberately does not require OPFS, persistence,
-`SharedArrayBuffer`, or COOP/COEP headers. A production application can choose
-another SQLite WASM storage mode separately; this documentation preview stays
+The default path does not require OPFS, persistence, `SharedArrayBuffer` or
+COOP/COEP headers. This is intentional. A production application can select a
+different SQLite WASM storage mode separately. This documentation preview stays
 portable on static hosting such as GitHub Pages.

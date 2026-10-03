@@ -3,25 +3,28 @@ title: Diagnostics and error codes
 description: Stable SQLBraid codes and the boundary each one protects.
 ---
 
-SQLBraid runtime/compiler errors expose a `code` where their error type defines
-one. Thin adapter capability errors use `UnsupportedFeatureError` with a stable
-`BRAID_*` code. Driver errors retain their original identity.
+SQLBraid runtime and compiler errors expose a `code` where their error type
+defines one. Thin adapter capability errors use `UnsupportedFeatureError` with a
+stable `BRAID_*` code. Driver errors keep their original identity.
 
-Binding construction failures (placeholder generation, hint mapping, typed
-request construction, or unsupported transport selection) happen at
-`materialize`, before lease acquisition or driver I/O. Driver/server/network
-failures remain `driver`. Materialization errors have
+Binding construction failures occur at `materialize`, before lease acquisition
+or driver I/O. These are failures in placeholder generation, hint mapping, typed
+request construction or the selection of an unsupported transport. Driver,
+server and network failures stay `driver`. Materialization errors have
 `executionStarted === false` and `executionCompleted === false`.
 
 The exported `PUBLIC_ERROR_DEFINITIONS` registry is the source of truth for
-this reference. Runtime-owned classes include `DatabaseScopeError`,
-`DatabaseResultKindError`, `DatabaseResultValidationError`,
-`ResultExactnessError`, and `RoutineMappingError`. Adapter capability failures
-use `UnsupportedFeatureError`; its `feature` identifies the capability and its
-`code` is stable. Driver errors are not wrapped, and an already-aborted
-`AbortSignal` rejects with its original `reason`.
-Adapter input/transport failures use the `AdapterError` (`TypeError`) class
-when they expose a stable bind code.
+this reference.
+
+- The classes that the runtime owns include `DatabaseScopeError`,
+  `DatabaseResultKindError`, `DatabaseResultValidationError`,
+  `ResultExactnessError` and `RoutineMappingError`.
+- Adapter capability failures use `UnsupportedFeatureError`. Its `feature`
+  identifies the capability. Its `code` is stable.
+- Driver errors are not wrapped.
+- An already-aborted `AbortSignal` rejects with its original `reason`.
+- Adapter input and transport failures use the `AdapterError` (`TypeError`)
+  class when they expose a stable code.
 
 | Code                                   | Meaning                                                                                                                                                                                                               |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -50,6 +53,7 @@ when they expose a stable bind code.
 | `BRAID_CALL_CURSOR_TX_REQUIRED`        | A PostgreSQL refcursor call needs an existing transaction-scoped database.                                                                                                                                            |
 | `BRAID_CALL_CURSOR_UNSUPPORTED`        | The adapter cannot expose the requested cursor output as an application result set.                                                                                                                                   |
 | `BRAID_CALL_RETURN_UNSUPPORTED`        | A return/status schema was requested but no driver return/status channel exists.                                                                                                                                      |
+| `BRAID_CALL_PROCEDURE_INVALID`         | `AdapterError`. A native procedure template contains SQL text, or its parameters do not match `parameterNames`. The adapter rejects it before I/O.                                                                    |
 | `BRAID_CALL_OUT_UNSUPPORTED`           | The adapter cannot expose the requested OUT or INOUT parameter carrier.                                                                                                                                               |
 | `BRAID_CALL_LOB_UNSUPPORTED`           | Oracle output did not expose the documented LOB carrier.                                                                                                                                                              |
 | `BRAID_RESOURCE_CLEANUP`               | Driver close, drain, or cancel failed; the physical lease is not safely reusable.                                                                                                                                     |
@@ -59,7 +63,7 @@ when they expose a stable bind code.
 | `BRAID_BIND_HINT_UNSUPPORTED`          | The adapter cannot honor an explicit bind type/facet; rejection occurs before I/O.                                                                                                                                    |
 | `BRAID_BIND_VALUE_UNSUPPORTED`         | A value cannot be represented by the selected binding transport.                                                                                                                                                      |
 | `BRAID_BIND_TYPE_REQUIRED`             | Driver inference is ambiguous, including untyped null in Oracle or SQL Server.                                                                                                                                        |
-| `BRAID_INTEGER_MODE_UNSUPPORTED`       | The adapter cannot enable the exact integer read mode required by its contract.                                                                                                                                       |
+| `BRAID_INTEGER_MODE_UNSUPPORTED`       | The adapter cannot enable the exact integer read mode that its profile requires.                                                                                                                                      |
 | `BRAID_BULK_UNSUPPORTED`               | The adapter does not expose the required native bulk capability.                                                                                                                                                      |
 | `BRAID_DIALECT_MISMATCH`               | A rendered statement belongs to a different selected adapter dialect.                                                                                                                                                 |
 | `BRAID_RESULT_KIND_AMBIGUOUS`          | The adapter cannot distinguish an empty row result from a command result.                                                                                                                                             |
@@ -78,12 +82,12 @@ when they expose a stable bind code.
 | `BRAID_STRUCTURE_LIMIT`                | Rendered structural items exceed `maxStructuralItems`.                                                                                                                                                                |
 | `BRAID_SQL_LIMIT` / `BRAID_BIND_LIMIT` | Rendered output exceeds configured limits.                                                                                                                                                                            |
 
-`UnsupportedFeatureError` has `(feature, code, message, options?)`; its code is
-constrained to `BRAID_${string}`. An already-aborted signal rejects with its
+`UnsupportedFeatureError` has `(feature, code, message, options?)`. Its code is
+limited to `BRAID_${string}`. An already-aborted signal rejects with its
 `reason`, not with `BRAID_CANCEL_UNSUPPORTED`. Do not catch an unsupported
 capability and replace it with buffering, a hidden transaction, guessed routine
-metadata, or ignored hints.
+metadata or ignored hints.
 
-Compiler diagnostics include source range and severity. CLI JSON uses 1-based
-positions; LSP uses standard 0-based positions. Missing metadata is open-world
-evidence, not an invalid-SQL error.
+Compiler diagnostics include the source range and the severity. CLI JSON uses
+positions that start at 1. LSP uses standard positions that start at 0. Missing
+metadata is open-world evidence. It is not an invalid-SQL error.

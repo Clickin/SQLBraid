@@ -1,143 +1,180 @@
 # SQLBraid 1.0.0 release readiness
 
-This file separates repository evidence from maintainer actions outside the
-repository. It contains no credentials or registry tokens.
+This file separates the evidence in the repository from the maintainer actions
+outside the repository. It contains no credentials and no registry tokens.
 
-The GA target focuses on stable public contracts rather than universal driver capabilities.
-This preparation neither claims fresh final certification nor authorizes
-tagging, staging, approval, or publication. Prereleases stage under `next`;
-stable releases stage under `latest`. Human stage approval remains a separate
-maintainer action.
+The GA target is stable public interfaces. It is not universal driver
+capabilities. This preparation does not claim fresh final certification. It does
+not authorize tagging, staging, approval or publication.
+
+- Prereleases stage under `next`.
+- Stable releases stage under `latest`.
+- Stage approval by a human is a separate maintainer action.
 
 ## Current evidence boundary
 
-[Versioned support records](../support/targets/) identify the certified
-implementation revision and immutable workflow evidence for each exact tuple.
-A changed checkout does not inherit that revision's certification. Runtime,
-Documentation, and Release must also pass on the exact final delivery revision,
-including evidence-only changes; implementation progress alone is not proof.
+The [versioned support records](../support/targets/) identify, for each exact
+tuple, the certified implementation revision and the immutable workflow
+evidence. A changed checkout does not inherit the certification of that
+revision. Runtime, Documentation and Release must also pass on the exact final
+delivery revision. This includes changes to evidence only. Progress in the
+implementation alone is not proof.
 
-The support manifest and executable CI are the only support evidence sources.
-An Official label requires an exact database, driver, profile, runtime, and
-capability tuple. An unverified server line, runtime, profile option, or
-neighboring adapter remains Compatible, Pending, Conditional, Unknown, or
-Unsupported as appropriate. D1's managed SQLite version remains unreported;
-that fact must not be upgraded by prose. Free-only reproducible environments
-remain the release policy.
+The support manifest and the executable CI are the only sources of support
+evidence.
 
-## 1.0.0 stable contracts
+- An Official label requires an exact tuple of database, driver, profile,
+  runtime and capability.
+- An unverified server line, runtime, profile option or neighboring adapter
+  stays Compatible, Pending, Conditional, Unknown or Unsupported, as applicable.
+- The managed SQLite version of D1 stays unreported. Prose must not upgrade that
+  fact.
+- The release policy stays: only free reproducible environments.
 
-Before a release decision, review the following public contracts against the
-implementation and executable evidence:
+## 1.0.0 stable interfaces
 
-- `db.session(callback)` pins one provider lease; nested session work reuses it.
-- `db.tx(callback)` pins or reuses the physical lease, supports nested savepoints,
-  and `db.tx(options, callback)` accepts only supported
-  `read-uncommitted`, `read-committed`, `repeatable-read`, `serializable`, and
-  `readOnly` combinations. Nested explicit options are rejected.
-- `ExecutionOptions`, `RowValidationOptions`, and `StreamOptions` put
-  `AbortSignal` and schema options at the end of every operation. Active
-  cancellation is capability-driven; unsupported cancellation throws
+Before a release decision, compare these public interfaces with the
+implementation and the executable evidence:
+
+- `db.session(callback)` pins one provider lease. Nested session work uses the
+  same lease.
+- `db.tx(callback)` pins or reuses the physical lease and supports nested
+  savepoints. `db.tx(options, callback)` accepts only supported combinations of
+  `read-uncommitted`, `read-committed`, `repeatable-read`, `serializable` and
+  `readOnly`. Nested explicit options are rejected.
+- `ExecutionOptions`, `RowValidationOptions` and `StreamOptions` put the
+  `AbortSignal` and the schema options at the end of each operation. Active
+  cancellation comes from capabilities. Unsupported cancellation throws
   `UnsupportedFeatureError` with `BRAID_CANCEL_UNSUPPORTED` before I/O.
-- Prepared zero-input/input factories render per execution, lock logical result
-  kind and metadata shape, and expose only kind-appropriate operations. A shape
-  change fails before I/O.
-- `QueryExecutor` methods uniformly use `(statement, binding?, options?)`;
-  `bulk` and transaction controls are optional capabilities. Providers and
-  leases expose the same immutable binding adapter identity.
-- Missing stream, call, routine-channel, hint, or transaction capabilities use
-  `UnsupportedFeatureError` and stable `BRAID_*` codes rather than fake fallback.
-- mysql2 emitted `CALL` sets are supported, but OUT/INOUT descriptor carriers
-  are not. SQLite `db.call` / `routine.call` is unsupported, not a restriction
-  on authored SQLite SQL. `callStream` remains reserved and unimplemented,
-  not an available API.
-- Environment capability keys are canonical: `statement.prepare`,
+- Prepared factories, with input or without input, render on each execution.
+  They lock the logical result kind and the metadata shape. They expose only the
+  operations that fit the kind. A change of shape fails before I/O.
+- All `QueryExecutor` methods use `(statement, binding?, options?)`. `bulk` and
+  the transaction controls are optional capabilities. Providers and leases
+  expose the same immutable identity of the binding adapter.
+- Missing stream, call, routine-channel, hint or transaction capabilities use
+  `UnsupportedFeatureError` and stable `BRAID_*` codes. There is no fake
+  fallback.
+- The `CALL` sets that mysql2 emits are supported. OUT and INOUT descriptor
+  carriers are not supported. SQLite `db.call` / `routine.call` is unsupported.
+  This is not a restriction on the SQLite SQL that you write. `callStream` stays
+  reserved and not implemented. It is not an available API.
+- The environment capability keys are canonical: `statement.prepare`,
   `statement.stream`, `statement.bulk`, `transaction`,
   `transaction.savepoint`, `routine.out`, `routine.result-sets`,
-  `routine.out-cursor`, and `routine.return-value`.
-- Bun's adapter uses an explicit user-selected dialect; Deno reuses existing
-  adapters where their public APIs work. Neither statement promotes a new
-  tuple or invents a dialect.
+  `routine.out-cursor` and `routine.return-value`.
+- The Bun adapter uses a dialect that the user selects explicitly. Deno uses
+  the existing adapters where their public APIs work. Neither statement promotes
+  a new tuple or invents a dialect.
 
 ## Automated release gates
 
-Run the repository's current runtime, package/export, docs, translation, and
-immutable release workflows on one clean exact final revision. The docs gate
-must run `node scripts/validate-translations.mjs`; every English page has a
-Korean entry in `website/translation-registry.json`, and every tracked entry's
-`sourceDigest` matches the current English bytes. Update the Korean prose and
-registry digest together; do not add blanket opt-outs for ordinary changes.
+Run these current workflows of the repository on one clean exact final
+revision: runtime, package/export, docs, translation and the immutable release
+workflow.
 
-The docs gate must also build the bilingual site and check internal links and
-anchors. The release gate must inspect packed package contents, exports,
-dependencies, and hashes. A release validation job does not itself publish npm
-packages, mutate tags/dist-tags, or authorize a release. The separate
-Documentation workflow deploys Pages on `main` and `v*` pushes; its manual
-dispatch defaults to validation-only and requires `deploy=true` for deployment.
+The docs gate must run `node scripts/validate-translations.mjs`.
+
+- Each English page has a Korean entry in `website/translation-registry.json`.
+- The `sourceDigest` of each tracked entry matches the current English bytes.
+- Update the Korean prose and the registry digest together. Do not add blanket
+  opt-outs for ordinary changes.
+
+The docs gate must also build the site in both languages. It must check the
+internal links and anchors. The release gate must inspect the contents, exports,
+dependencies and hashes of the packed packages.
+
+A release validation job does not publish npm packages. It does not change tags
+or dist-tags. It does not authorize a release. The separate Documentation
+workflow deploys Pages on pushes to `main` and `v*`. Its manual dispatch only
+validates by default. It requires `deploy=true` to deploy.
 
 ## Candidate identity is not publication authorization
 
-**A version tag identifies an immutable candidate. Tag push does not publish.**
-The normal Release workflow choices are:
+**A version tag identifies an immutable candidate. A tag push does not publish.**
+The normal modes of the Release workflow are:
 
-| Mode                | Purpose                                                                                  | External mutation           |
-| ------------------- | ---------------------------------------------------------------------------------------- | --------------------------- |
-| `certify` (default) | Complete release DAG, immutable candidate validation, and pnpm stage-publication dry-run | None                        |
-| `pack-only`         | Pack and inspect a candidate without publication rehearsal; not full certification       | None                        |
-| `stage`             | Publish the validated immutable `.tgz` files to npm's staging area                       | Staged package records only |
+| Mode                | Purpose                                                                                       | External mutation           |
+| ------------------- | --------------------------------------------------------------------------------------------- | --------------------------- |
+| `certify` (default) | Complete release DAG, validation of the immutable candidate and a pnpm stage-publish dry-run  | None                        |
+| `pack-only`         | Pack and inspect a candidate without a publication rehearsal. This is not full certification. | None                        |
+| `stage`             | Publish the validated immutable `.tgz` files to the npm staging area                          | Staged package records only |
 
-The one-time RC0 bootstrap is complete and is not a normal or repeatable mode.
-The former direct `publish` mode is removed: direct live publication is
-disabled.
+The one-time RC0 bootstrap is complete. It is not a normal mode and it is not
+repeatable. The former direct `publish` mode is removed. Direct live publication
+is disabled.
 
-SQLBraid no longer requires lockstep npm package versions. A coordinated
-workspace tag such as `v1.0.0` selects every publishable package at that
-version. After GA, a package tag such as `postgres-v1.0.1`,
-`opentelemetry-v1.1.0`, or `sqlbraid-v1.1.0` selects only that package.
-The unscoped `sqlbraid` facade therefore needs a new version only when its own
-public facade surface or dependency contract changes; ordinary compatible
-driver releases are resolved through its semver dependency ranges.
+SQLBraid does not require lockstep npm package versions.
 
-A `v*` push runs Release certification, Runtime portability, and Documentation
-validation, while the separate Documentation workflow also deploys Pages for
-that coordinated tag. A package-specific `*-v*` tag runs Release certification
-and Runtime portability; the Release DAG still contains its own documentation
-gate, but package tags do not create documentation version archives. None of
-these tag pushes publish packages, approve staged packages, change registry
-dist-tags, or create a public GitHub Release.
+- A coordinated workspace tag such as `v1.0.0` selects each publishable package
+  at that version.
+- After GA, a package tag such as `postgres-v1.0.1`, `opentelemetry-v1.1.0` or
+  `sqlbraid-v1.1.0` selects only that package.
+- Thus, the unscoped `sqlbraid` facade needs a new version only when its own
+  public facade surface or its dependency rules change. Its semver dependency
+  ranges resolve ordinary compatible driver releases.
 
-The `stage` mutation requires `workflow_dispatch` from the exact coordinated
-or package/version tag, tag-target/checkout identity, a clean tree, and all
-current-run certification jobs. The selected package version must match the
-version encoded in the tag. Unselected internal workspace dependencies must
-already exist publicly at the exact workspace version used to build the
-candidate, or they must be included in a coordinated release. Before mutation,
-`scripts/assert-release-workflows.mjs` requires completed successful Runtime
-portability evidence for the exact SHA and same tag; coordinated `v*` releases
-also require the Documentation tag run. Only push-triggered runs qualify.
+A `v*` push runs Release certification, Runtime portability and Documentation
+validation. The separate Documentation workflow also deploys Pages for that
+coordinated tag. A package-specific `*-v*` tag runs Release certification and
+Runtime portability. The Release DAG still contains its own documentation gate.
+But package tags do not create documentation version archives.
+
+None of these tag pushes do these things:
+
+- publish packages;
+- approve staged packages;
+- change registry dist-tags;
+- create a public GitHub Release.
+
+The `stage` mutation has these requirements:
+
+- a `workflow_dispatch` from the exact coordinated tag or package/version tag;
+- the same identity for the tag target and the checkout;
+- a clean tree;
+- all certification jobs of the current run.
+
+The selected package version must match the version in the tag. Unselected
+internal workspace dependencies must already exist publicly, at the exact
+workspace version that built the candidate. If not, the coordinated release must
+include them.
+
+Before the mutation, `scripts/assert-release-workflows.mjs` requires completed
+successful Runtime portability evidence for the exact SHA and the same tag.
+Coordinated `v*` releases also require the Documentation tag run. Only runs that
+a push started are accepted.
 
 ## Pack once, validate once, stage those bytes
 
-Fresh release preparation creates one candidate set per workflow run. The
-candidate still packs and validates every first-party npm package so export,
-dependency, facade, runtime, and isolated-consumer checks remain cross-package.
-Its manifest additionally records `releasePackages`, the subset authorized
-for staging. Package-specific releases therefore do not weaken the package
-validation boundary; they only narrow the mutation boundary. The manifest
-records source SHA, package names/versions, tarball filenames, SHA-256,
-SHA-512 integrity, and candidate-producer identity. Validation checks the
-candidate, records a matching pack-check stamp, and preserves the
-`release-candidate-validated` artifact. An explicit recovery may instead
-restore that exact validated artifact from a prior run; it rechecks identity
-and hashes without repacking. The `stage` mutation downloads the resulting
-validated artifact, then invokes pnpm **12.3.4** stage publishing once for each
-exact `.tgz`. It never rebuilds or repacks package source, and it never approves
-a stage.
+A fresh release preparation creates one candidate set for each workflow run. The
+candidate still packs and validates each first-party npm package. Thus, the
+export, dependency, facade, runtime and isolated-consumer checks still cover all
+packages. Its manifest also records `releasePackages`: the subset that is
+authorized for staging. Package-specific releases do not make the package
+validation boundary weaker. They make only the mutation boundary smaller.
 
-The underlying command is pnpm's native stage publisher, with
+The manifest records these items:
+
+- the source SHA;
+- the package names and versions;
+- the tarball filenames;
+- SHA-256 and SHA-512 integrity;
+- the identity of the candidate producer.
+
+Validation checks the candidate. It records a matching pack-check stamp. It keeps
+the `release-candidate-validated` artifact. An explicit recovery can restore
+that exact validated artifact from a prior run. The recovery checks the identity
+and the hashes again. It does not pack again.
+
+The `stage` mutation downloads the validated artifact. Then it runs the pnpm
+**12.3.4** stage publisher once for each exact `.tgz`. It never builds or packs
+the package source again. It never approves a stage.
+
+The command is the native stage publisher of pnpm, with
 `--json --provenance --tag <tag> --access public --no-git-checks
---ignore-scripts` (and `--dry-run` for certification). The tarball path is the
-validated file, not a package directory. Its per-package shape is:
+--ignore-scripts`. Certification adds `--dry-run`. The tarball path is the
+validated file, not a package directory. The command for each package has this
+shape:
 
 ```sh
 pnpm stage publish <validated-package-version.tgz> \
@@ -146,225 +183,280 @@ pnpm stage publish <validated-package-version.tgz> \
   --registry https://registry.npmjs.org/
 ```
 
-The command's native staging endpoint keeps the package out of the public
+The native staging endpoint of the command keeps the package out of the public
 registry until a human approves it.
 
-Certification invokes `node scripts/release.mjs --mode stage-dry-run`; only the
-explicitly dispatched mutation invokes `node scripts/release.mjs --mode stage`.
+Certification runs `node scripts/release.mjs --mode stage-dry-run`. Only the
+explicitly dispatched mutation runs `node scripts/release.mjs --mode stage`.
 
-The script writes `staged-publication.json` in the artifact directory even when
-staging stops part-way through. It records candidate manifest identity, the
-before-publication `latest` snapshots, package stage IDs and registry records
-as they become available, and explicit `approvalCommands` grouped by dependency
-layer. Every report has `mode: "fresh"` or `mode: "reconcile"` and retains the
-current run ID/attempt. A partial report is evidence of partial staging, not
+### The staged publication report
+
+The script writes `staged-publication.json` in the artifact directory. It also
+writes this file when staging stops before it is complete. The report records:
+
+- the identity of the candidate manifest;
+- the `latest` snapshots from before publication;
+- the stage IDs and registry records of the packages, when they become available;
+- explicit `approvalCommands`, grouped by dependency layer.
+
+Each report has `mode: "fresh"` or `mode: "reconcile"`. It keeps the current run
+ID and attempt. A partial report is evidence of partial staging. It is not
 approval.
-The workflow always uploads that report alongside `release-manifest.json` as
-`release-staged-publication`; successful staging also attaches these files and
-the compact `release-evidence.json` to the approval-pending draft GitHub
-Release. Save the durable summary with them: post-approval verification needs
-neither the tarballs nor an unexpired Actions artifact.
 
-Before an upload, the script checks public package integrity and the requested
-dist-tags. It intentionally does not read npm's staged-package listing or
-download staged tarballs: those maintainer-authenticated reads are outside
-GitHub Actions' OIDC capability. A mismatch, unexpected tag movement, or
-unavailable registry read fails closed. pnpm obtains its own short-lived OIDC
-credential for each upload; no static token or in-memory registry credential is
-used.
+The workflow always uploads that report with `release-manifest.json` as
+`release-staged-publication`. When staging is successful, the workflow also
+attaches these files and the compact `release-evidence.json` to the draft GitHub
+Release that waits for approval. Save the durable summary with them. The
+verification after approval needs neither the tarballs nor an Actions artifact
+that has not expired.
 
-An upload intent and any returned stage ID are written before follow-up
-verification. A network failure retains `pending` evidence and never triggers
-an automatic second upload. On retry, an exact public version is reused; a
-retained unresolved intent or stage ID requires human authenticated
-reconciliation. Dispatches for the same tag serialize staging. Do not delete
-partial evidence or approve partial layers to work around an ambiguous result.
-The workflow does not claim to have tested real npm OIDC permissions through a
-dry-run or fake registry.
+### Registry checks and credentials
 
-Fresh staging is the default: the current run's candidate manifest and
-`runId`/`runAttempt` must match, and no prior publication report is imported.
-Before a fresh upload, the stage job checks bounded authenticated Actions
-run/job history for another non-skipped staging job for the exact tag and
-commit. A rerun (`runAttempt > 1`) also fails before upload when no prior
-evidence is supplied. This prevents a blank new artifact directory from
+Before an upload, the script checks the integrity of the public package and the
+requested dist-tags. It does not read the staged-package list of npm. It does not
+download staged tarballs. These reads need maintainer authentication, which the
+OIDC capability of GitHub Actions does not have. A mismatch, an unexpected tag
+movement or an unavailable registry read makes the step fail closed. pnpm gets
+its own short-lived OIDC credential for each upload. No static token or
+in-memory registry credential is used.
+
+The script writes an upload intent and each returned stage ID before the
+follow-up verification.
+
+- A network failure keeps `pending` evidence. It never starts a second upload
+  automatically.
+- On a retry, an exact public version is reused.
+- A kept unresolved intent or stage ID needs reconciliation by a human with
+  authentication.
+- Dispatches for the same tag serialize staging.
+
+Do not delete partial evidence. Do not approve partial layers to work around an
+ambiguous result. The workflow does not claim that a dry-run or a fake registry
+tested the real npm OIDC permissions.
+
+### Fresh staging and recovery
+
+Fresh staging is the default. The candidate manifest and the `runId`/`runAttempt`
+of the current run must match. No prior publication report is imported.
+
+Before a fresh upload, the stage job checks a bounded part of the authenticated
+Actions run and job history. It looks for another non-skipped staging job for the
+exact tag and commit. A rerun (`runAttempt > 1`) also fails before upload when no
+prior evidence is supplied. This prevents a blank new artifact directory from
 turning an earlier uncertain or failed attempt into a second upload.
-Cross-run recovery is an explicit workflow dispatch: provide the prior Release
-run ID in `prior_run_id`. The workflow downloads that run's staged report and
-validated npm candidate archive (including the original tarballs, manifest,
-and pack-check stamp), validates all hashes and identities, and passes the
-report with `--prior-staged-publication`. It also restores the prior prepared
-npm build and candidate archive. No npm candidate is repacked; no VSIX is
-included or recovered by this workflow.
-The original candidate run identity remains in the manifest; the new staged
-report records the current run and retains a digest/link to the prior report.
-`pending` or `staged` prior states are uncertain and fail closed without
-another upload. An `absent` state may be staged after the normal registry
-checks; an exact public state is reconciled without upload. If the prior
-artifact is unavailable, corrupt, or from another candidate, stop for explicit
-maintainer reconciliation rather than guessing absence. Actions never performs
-authenticated staged-list reads, approval, or tag promotion on a maintainer's
-behalf.
 
-The npm `release-manifest.json` records each package tarball's filename,
-SHA-256 and SHA-512 integrity. Its `pack-check-success.json` stamp records the
-package names and SHA-256 values alongside the version and source commit.
-The Release workflow sets `SQLBRAID_SKIP_VSIX=true`; neither record establishes
-a VSIX identity.
+Recovery across runs is an explicit workflow dispatch. Give the ID of the prior
+Release run in `prior_run_id`. The workflow then does these steps:
 
-The independently dispatched **VS Code Release** workflow builds its own VSIX
-with `scripts/package-vscode.mjs`. That script validates extension
-name/publisher/version, bundled `@sqlbraid/cli` and
-`@sqlbraid/language-server` versions, required files and license, and the exact
-VSIX in a clean editor profile; it prints the VSIX SHA-256 and identity.
-The workflow preserves `sqlbraid-vscode-<version>.vsix` as the
-`sqlbraid-vscode-<version>` artifact for 14 days. Open VSX publication downloads
-that same artifact and uses trusted publishing; Microsoft Marketplace upload
-is a separate manual handoff of those bytes. Neither path rebuilds the VSIX
-after validation. Preserve that artifact and its workflow identity separately:
-npm prior-run recovery, the npm manifest and npm pack-check stamp do not
-recover or attest the extension.
+1. It downloads the staged report of that run and the validated npm candidate
+   archive. The archive includes the original tarballs, manifest and pack-check
+   stamp.
+2. It validates all hashes and identities.
+3. It gives the report to the script with `--prior-staged-publication`.
+4. It restores the prior prepared npm build and the candidate archive.
 
-Prereleases stage under `next` and must leave `latest` unchanged. Stable
-releases stage directly under `latest`. The requested dist-tag is part of the
-staged publication and is applied by npm when a maintainer approves the stage;
-there is no separate post-approval dist-tag promotion step. If a network outcome
-is uncertain, an already-existing package/version is accepted only when registry
-integrity exactly matches the validated candidate and its requested release tag
-is correct. Missing or stale tags on an exact public version require maintainer
-reconciliation; the workflow never repairs them automatically. Different bytes
-fail immediately.
+No npm candidate is packed again. This workflow does not include or recover a
+VSIX.
+
+The original identity of the candidate run stays in the manifest. The new staged
+report records the current run. It keeps a digest of, and a link to, the prior
+report.
+
+- A prior state of `pending` or `staged` is uncertain. It fails closed without
+  another upload.
+- A prior state of `absent` can be staged after the normal registry checks.
+- An exact public state is reconciled without upload.
+- If the prior artifact is unavailable, corrupt or from another candidate, stop.
+  A maintainer must reconcile explicitly. Do not guess that the package is
+  absent.
+
+Actions never does authenticated staged-list reads, approval or tag promotion
+for a maintainer.
+
+### npm and VSIX identities
+
+The npm `release-manifest.json` records the filename, SHA-256 and SHA-512
+integrity of each package tarball. Its `pack-check-success.json` stamp records
+the package names and SHA-256 values, with the version and the source commit.
+The Release workflow sets `SQLBRAID_SKIP_VSIX=true`. Neither record sets a VSIX
+identity.
+
+The **VS Code Release** workflow is dispatched independently. It builds its own
+VSIX with `scripts/package-vscode.mjs`. That script validates these items:
+
+- the name, publisher and version of the extension;
+- the bundled `@sqlbraid/cli` and `@sqlbraid/language-server` versions;
+- the required files and the license;
+- the exact VSIX in a clean editor profile.
+
+The script prints the SHA-256 and the identity of the VSIX. The workflow keeps
+`sqlbraid-vscode-<version>.vsix` as the `sqlbraid-vscode-<version>` artifact for
+14 days. Open VSX publication downloads that same artifact and uses trusted
+publishing. The Microsoft Marketplace upload is a separate manual handoff of
+those bytes. Neither path builds the VSIX again after validation. Keep that
+artifact and its workflow identity separately. npm prior-run recovery, the npm
+manifest and the npm pack-check stamp do not recover or attest the extension.
+
+### Release channels
+
+Prereleases stage under `next` and must not change `latest`. Stable releases
+stage directly under `latest`. The requested dist-tag is part of the staged
+publication. npm applies it when a maintainer approves the stage. There is no
+separate dist-tag promotion step after approval.
+
+If a network outcome is uncertain, an existing package/version is accepted only
+in this condition: the registry integrity exactly matches the validated
+candidate, and its requested release tag is correct. If an exact public version
+has missing or stale tags, a maintainer must reconcile them. The workflow never
+repairs them automatically. Different bytes fail immediately.
 
 ## Publication credentials and permissions
 
 `package.json#packageManager` pins pnpm to 12.3.4. Staging and its dry-run use
-pnpm's native tarball publisher, not `npm publish`; no npm CLI upgrade is part
-of release. Configure npm Trusted Publisher for every package with:
+the native tarball publisher of pnpm, not `npm publish`. An upgrade of the npm
+CLI is not part of the release. Configure the npm Trusted Publisher for each
+package with these values:
 
 - organization/user: `Clickin`;
 - repository: `SQLBraid`;
 - workflow filename: `release.yml`;
-- environment: **empty** (the repository's `.github/workflows/release.yml`
-  has no `environment:` setting); and
+- environment: **empty** (the `.github/workflows/release.yml` file of the
+  repository has no `environment:` setting);
 - Allowed publishing action: staged publishing only (`npm stage publish`).
 
-Do not enable direct `npm publish`. The stage job receives only the OIDC
-`id-token: write` permission needed for the staged exchange and provenance; it
-receives no `NODE_AUTH_TOKEN`, `NPM_TOKEN`, or bootstrap token, and cannot fall
-back to a static credential. Approval is a separate human action in an
-interactive terminal and is never run by Actions. Pages requires its own
-manual `deploy=true` authorization; Marketplace publication is not part of
-this flow.
+Do not enable direct `npm publish`. The stage job gets only the OIDC
+`id-token: write` permission that the staged exchange and provenance need. It
+gets no `NODE_AUTH_TOKEN`, `NPM_TOKEN` or bootstrap token. It cannot fall back to
+a static credential.
+
+Approval is a separate human action in an interactive terminal. Actions never
+runs it. Pages requires its own manual `deploy=true` authorization. Marketplace
+publication is not part of this flow.
 
 ### Pinned pnpm capability evidence
 
-The pnpm 12.3.4 implementation, not npm CLI parity, defines the release client:
+The pnpm 12.3.4 implementation defines the release client. Parity with the npm
+CLI does not.
 
 - [`publish_tarball`](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/cli/src/cli_args/publish.rs)
-  reads the supplied tarball directly; native flags include `--dry-run`,
-  `--tag`, `--access`, and `--provenance`.
+  reads the supplied tarball directly. Its native flags include `--dry-run`,
+  `--tag`, `--access` and `--provenance`.
 - [`stage publish`](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/cli/src/cli_args/stage.rs)
-  delegates to that same tarball-aware publish pipeline with the staging
-  endpoint; `stage list`, `stage view`, and `stage download` read the
-  registry's `-/stage` API.
+  sends the work to the same tarball-aware publish pipeline, with the staging
+  endpoint. `stage list`, `stage view` and `stage download` read the `-/stage`
+  API of the registry.
 - [`stage approve`](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/cli/src/cli_args/stage/approve.rs)
-  downloads every selected tarball before approval, derives dependency order
-  from those manifests, and POSTs approvals sequentially through one OTP/web
-  authentication session. A multi-ID approval is therefore dependency-ordered
-  but **not atomic**: a registry-level error can skip one package and its
-  dependents, while transport or interactive web-auth errors that escape that
-  classification can abort the batch after prior approvals.
-  Use the generated dependency-layer commands explicitly rather than collapsing
-  all IDs into one command.
+  downloads each selected tarball before approval. It gets the dependency order
+  from those manifests. It sends the approvals one after the other through one
+  OTP/web authentication session. Thus, an approval with many IDs follows the
+  dependency order, but it is **not atomic**. A registry-level error can skip
+  one package and its dependents. Transport errors or interactive web-auth
+  errors outside that classification can stop the batch after earlier
+  approvals. Use the generated commands for each dependency layer explicitly. Do
+  not put all IDs into one command.
 - [The packed publisher](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/publish/src/publish_packed_pkg.rs)
-  returns before registry upload on dry-run. Real provenance generation uses
-  those tarball bytes.
-- [Native OIDC exchange](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/publish/src/oidc/auth_token.rs)
-  obtains a package-scoped registry token. Publication stays one tarball per
-  invocation; batch/workspace publishing is not used.
+  returns before the registry upload on a dry-run. Real provenance generation
+  uses those tarball bytes.
+- [The native OIDC exchange](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/publish/src/oidc/auth_token.rs)
+  gets a registry token for one package. Publication stays one tarball for each
+  invocation. Batch or workspace publishing is not used.
 - [`dist-tag`](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/cli/src/cli_args/dist_tag.rs)
-  supports registry tag updates but only configured authentication, not native
-  OIDC exchange. The release flow does not invoke it: prerelease/stable channel
-  selection is supplied to `stage publish` as `next` or `latest` and is
-  applied when the human-approved stage becomes public.
+  supports registry tag updates, but only with configured authentication. It
+  does not support the native OIDC exchange. The release flow does not use it.
+  The prerelease or stable channel is given to `stage publish` as `next` or
+  `latest`. npm applies it when the stage that a human approved becomes public.
 - [`whoami`](https://github.com/pnpm/pnpm/blob/v12.3.4/pnpm/crates/cli/src/cli_args/whoami.rs)
-  natively resolves configured authentication and reads `/-/whoami`.
+  resolves the configured authentication natively and reads `/-/whoami`.
 
 The [npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/)
-documents the repository/workflow/environment match and stage-only Allowed
-publishing action. The [staged publishing documentation](https://docs.npmjs.com/staged-publishing/)
-documents human approval and its 2FA/proof-of-presence
-boundary. A non-mutating dry-run proves command/tarball behavior, not that an
-unconfigured npm Trusted Publisher will authorize a future real staging run.
+describes the match of repository, workflow and environment, and the stage-only
+Allowed publishing action. The
+[staged publishing documentation](https://docs.npmjs.com/staged-publishing/)
+describes human approval and its 2FA/proof-of-presence boundary. A dry-run that
+changes nothing proves the behavior of the command and the tarball. It does not
+prove that an unconfigured npm Trusted Publisher will authorize a future real
+staging run.
 
-Packed-consumer compatibility checks may still use `npm install` in disposable
-consumer directories. Those checks deliberately exercise npm consumers of pnpm
-artifacts; they are not publication, registry administration, or an npm CLI
-Trusted Publishing dependency. Release mutation jobs do not run those checks.
+Packed-consumer compatibility checks can still use `npm install` in disposable
+consumer directories. These checks test npm consumers of pnpm artifacts on
+purpose. They are not publication, not registry administration and not a
+dependency on npm CLI Trusted Publishing. Release mutation jobs do not run these
+checks.
 
 ### Removed direct and bootstrap paths
 
-`bootstrap-rc0` is historical: RC0 was bootstrapped once and must not be
-repeated. `publish` and `npm publish` are not aliases for `stage publish`;
-direct live publication is disabled. There is no separate automated `dist-tag` mutation and no Actions approval
-job. The only supported mutation is staged publication with its requested
-`next` or `latest` channel, followed by human `pnpm stage approve` commands
-and verification.
+`bootstrap-rc0` is historical. RC0 was bootstrapped once. Do not repeat it.
+`publish` and `npm publish` are not aliases for `stage publish`. Direct live
+publication is disabled. There is no separate automated `dist-tag` mutation and
+no approval job in Actions. The only supported mutation is staged publication
+with its requested `next` or `latest` channel. Human `pnpm stage approve`
+commands and verification follow it.
 
 ## Maintainer sequence: 1.0.0 and later releases
 
-The following are maintainer actions, **not** actions performed by certification:
+These steps are maintainer actions. Certification does **not** do them.
 
-1. RC0 bootstrap is historical and complete. Do not create a token, rerun a
-   bootstrap, or treat older RC evidence as evidence for this candidate.
-2. For the initial GA candidate, prepare and freeze the exact source SHA and
-   create/push the coordinated **new** tag `v1.0.0`; every package selected by
-   that coordinated release must be at 1.0.0. After GA, release one package with
-   a tag such as `postgres-v1.0.1` after changing only that package's version
-   and any dependency ranges that actually need to change. Never reuse or move
-   a candidate tag after a post-tag fix.
-   This tag-triggered run is **certification-only**.
-   Wait for its Runtime, Documentation, and Release certification gates; this
-   page makes no promise of a new green SHA or substitute evidence.
-3. Verify the exact SHA before mutation: tag target, checked-out commit,
-   candidate manifest identity, and the matching certification
+1. The RC0 bootstrap is historical and complete. Do not create a token. Do not
+   run a bootstrap again. Do not use older RC evidence as evidence for this
+   candidate.
+2. Create the candidate tag.
+   - For the initial GA candidate, prepare and freeze the exact source SHA.
+     Create and push the coordinated **new** tag `v1.0.0`. Each package that the
+     coordinated release selects must be at 1.0.0.
+   - After GA, to release one package, change only the version of that package
+     and the dependency ranges that must change. Then use a tag such as
+     `postgres-v1.0.1`.
+   - Never reuse or move a candidate tag after a fix that follows the tag.
+
+   This run, which the tag starts, does **certification only**. Wait for its
+   Runtime, Documentation and Release certification gates. This page does not
+   promise a new green SHA or substitute evidence.
+
+3. Verify the exact SHA before the mutation. The tag target, the checked-out
+   commit, the identity of the candidate manifest and the matching certification
    artifacts must all agree. Then explicitly dispatch the stage mode from that
    exact new tag: **Actions → Release → Run workflow → ref `<new-candidate-tag>` →
-   release_mode `stage`**. CLI equivalent:
+   release_mode `stage`**. The CLI equivalent is:
 
    ```sh
    gh workflow run release.yml --ref <new-candidate-tag> -f release_mode=stage
    ```
 
-   This runs the complete current-run certification DAG, verifies the required
-   exact-tag-SHA evidence, verifies the complete candidate hashes, then stages
-   only the manifest's selected `releasePackages` using OIDC. A coordinated
-   release may contain multiple packages and preserves dependency ordering; a
-   package-specific release uploads only that package. It records the stage IDs
-   returned by `stage publish` but does **not** list, view, or download staged
-   packages with the OIDC credential, and does **not** approve them. Those
-   read/approval operations remain in the maintainer's authenticated review
-   boundary.
+   This run does these steps:
+   - It runs the complete certification DAG of the current run.
+   - It verifies the required evidence for the exact tag SHA.
+   - It verifies the complete candidate hashes.
+   - It stages, with OIDC, only the `releasePackages` that the manifest selects.
 
-4. Review `staged-publication.json` and each registry stage record. Confirm
-   candidate identity, exact tarball hashes, stage IDs, provenance, and the
-   requested dist-tag: `next` for prereleases and `latest` for stable releases.
-   Run each generated `approvalCommands`
-   dependency layer in order from a human interactive terminal, for example:
+   A coordinated release can contain many packages and keeps the dependency
+   order. A package-specific release uploads only that package. The run records
+   the stage IDs that `stage publish` returns. It does **not** list, view or
+   download staged packages with the OIDC credential. It does **not** approve
+   them. These read and approval operations stay inside the authenticated review
+   boundary of the maintainer.
+
+4. Review `staged-publication.json` and each registry stage record. Confirm the
+   candidate identity, the exact tarball hashes, the stage IDs, the provenance
+   and the requested dist-tag: `next` for prereleases and `latest` for stable
+   releases. Run each generated `approvalCommands` dependency layer in sequence,
+   from an interactive terminal, as a human. For example:
 
    ```sh
    pnpm stage approve <stage-id> [<stage-id> ...] --registry https://registry.npmjs.org/
    ```
 
-   Do not collapse dependency layers, and never run approval in Actions. A
-   partial/non-atomic approval must be stopped and reconciled from the report
-   and stage records before continuing. Immediately before approval, recheck
-   current dist-tags and stop on unexpected movement; for a prerelease, stop
-   if `next` has advanced past that candidate.
-   Approval applies the tag selected at staging time; certification cannot lock
-   registry channels during a later human approval session.
+   - Do not combine dependency layers. Never run approval in Actions.
+   - If an approval is partial or not atomic, stop. Reconcile it from the report
+     and the stage records before you continue.
+   - Immediately before approval, check the current dist-tags again. Stop on an
+     unexpected movement. For a prerelease, stop if `next` has moved past that
+     candidate.
 
-5. Verify the approved publication without the original workflow or tarballs:
+   Approval applies the tag that was selected at staging time. Certification
+   cannot lock registry channels during a later human approval session.
+
+5. Verify the approved publication. You do not need the original workflow or the
+   tarballs:
 
    ```sh
    node scripts/release.mjs --mode verify-published \
@@ -372,144 +464,166 @@ The following are maintainer actions, **not** actions performed by certification
      --staged-publication staged-publication.json
    ```
 
-   The helper uses the candidate manifest and stage evidence to check exact
-   integrity, tags, public provenance metadata, and channel policy. It proves
-   current public state, not approval history: after human reconciliation it can
-   verify all public packages using an earlier partial report as the immutable
-   baseline. It never approves anything. Stable releases require `latest` to
-   point to the approved version; prereleases require `next` and verify that
-   `latest` remained unchanged.
+   The helper uses the candidate manifest and the stage evidence. It checks the
+   exact integrity, the tags, the public provenance metadata and the channel
+   policy. It proves the current public state. It does not prove the approval
+   history. After a human reconciliation, it can verify all public packages with
+   an earlier partial report as the immutable baseline. It never approves
+   anything.
+   - Stable releases require that `latest` points to the approved version.
+   - Prereleases require `next`. The helper also verifies that `latest` did not
+     change.
 
-6. A draft GitHub Release created after staging is explicitly
-   **approval-pending**. Review it separately; it is not a public-release
-   authorization and never causes automatic stage approval or `latest`
-   promotion. Its body is the versioned release notes, and an RC version is
-   marked `prerelease`; stable versions are not. It carries the compact
-   `release-evidence.json` summary in addition to the npm candidate manifest
-   and staged report, not a VSIX. This summary retains the source commit, npm artifact
-   hashes, support-evidence file hashes/target IDs, stage IDs, requested tags,
-   and current/prior run identities after 14-day Actions artifacts expire.
-   Pages deploy automatically on the documented `main`/tag push path; use
-   manual `deploy=true` only when intentionally dispatching the Documentation
-   workflow. After all npm approvals and public verification succeed, finalize and publish the
-   GitHub Release manually as appropriate. Do not infer Marketplace
-   authorization.
+6. A draft GitHub Release that staging creates is explicitly
+   **approval-pending**. Review it separately. It does not authorize a public
+   release. It never causes an automatic stage approval or a `latest` promotion.
+   - Its body is the versioned release notes.
+   - An RC version is marked `prerelease`. Stable versions are not.
+   - It carries the compact `release-evidence.json` summary, the npm candidate
+     manifest and the staged report. It does not carry a VSIX.
+   - The summary keeps the source commit, the npm artifact hashes, the hashes and
+     target IDs of the support-evidence files, the stage IDs, the requested tags
+     and the identities of the current and prior runs. It stays after the
+     Actions artifacts expire at 14 days.
 
-Freeze the exact source commit before creating a candidate tag. A `v*` tag is
-an immutable operational identity and must be created once; do not move or
-delete it to incorporate a fix. If any fix is needed after tagging, select a
-new version (the next prerelease before GA, or a new patch version after GA),
-create a new tag, and rerun all exact-final gates. Configure a repository tag
-ruleset manually for `v*` with
-both **restrict updates** and **restrict deletions** enabled, allowing only
-the minimum maintainer/emergency bypass; do not add workflow credentials to
-mutate tags. Release preflight also rejects a tag-push event whose prior SHA
-differs from the checked-out candidate.
+   Pages deploys automatically on the documented `main`/tag push path. Use the
+   manual `deploy=true` only when you intentionally dispatch the Documentation
+   workflow. After all npm approvals and the public verification succeed,
+   finalize and publish the GitHub Release manually, as applicable. Do not infer
+   Marketplace authorization.
 
-Certification commands, docs updates, historical workflows, and support-matrix
+### Tag rules
+
+Freeze the exact source commit before you create a candidate tag. A `v*` tag is
+an immutable operational identity. Create it once. Do not move or delete it to
+add a fix. If a fix is necessary after tagging, select a new version: the next
+prerelease before GA, or a new patch version after GA. Create a new tag and run
+all exact-final gates again.
+
+Configure a repository tag ruleset for `v*` manually. Enable both **restrict
+updates** and **restrict deletions**. Permit only the minimum maintainer or
+emergency bypass. Do not add workflow credentials that can change tags. Release
+preflight also rejects a tag-push event whose prior SHA is different from the
+checked-out candidate.
+
+Certification commands, docs updates, historical workflows and support-matrix
 prose do not authorize staging or approval. Only the explicitly dispatched
-`stage` mutation and human-reviewed `pnpm stage approve` commands do so. Never
-publish a tuple or package that fresh exact-final evidence did not exercise.
-Use workflow run records and immutable artifacts, not moving “latest successful
-SHA” constants in this document.
+`stage` mutation and the `pnpm stage approve` commands that a human reviewed
+authorize them. Never publish a tuple or a package that fresh exact-final
+evidence did not test. Use workflow run records and immutable artifacts. Do not
+put constants such as a "latest successful SHA" in this document.
 
 ## Immutable-candidate certification gate
 
-Driver certification is a required, non-mutating gate on the exact checked-out
-commit. `driver-certification.yml` builds package `dist` once, preserves the
-prepared archive and its SHA-256 identity, then runs the complete catalog from
-`tests/certification/contracts.ts` across Node 22.18.0, Deno 2.9.3, Bun 1.3.14,
-D1/workerd, and browser WASM. Every target artifact records the measured
-environment tuple separately from the pinned expected tuple; aggregation rejects
-missing, duplicate, skipped, wrong-SHA, wrong-tuple, forged-contract, or
-forged-candidate artifacts. The required target and case counts are derived
-from the registries, not a fixed maximum.
+Driver certification is a required gate that does not change anything. It runs
+on the exact checked-out commit.
 
-The shared runtime, native-fault, and OpenTelemetry suites produce a same-SHA
-global evidence shard. The final aggregate requires that shard in addition to
-all target artifacts. Release certification downloads `release-prepared`,
-verifies the candidate manifest and archive hashes, restores only its prepared
-`dist`, runs the same full matrix, and is a direct dependency of
-`release-final`; it does not rebuild or publish. Release staging and registry
-approval remain separate human-authorized operations.
+- `driver-certification.yml` builds the package `dist` once. It keeps the
+  prepared archive and its SHA-256 identity.
+- It runs the complete catalog from `tests/certification/contracts.ts` on
+  Node 22.18.0, Deno 2.9.3, Bun 1.3.14, D1/workerd and browser WASM.
+- Each target artifact records the measured environment tuple separately from
+  the pinned expected tuple.
+- The aggregation rejects missing, duplicate, skipped, wrong-SHA, wrong-tuple,
+  forged-catalog and forged-candidate artifacts.
+- The registries supply the required target and case counts. There is no fixed
+  maximum.
 
-## Semantic contract coverage
+The shared runtime, native-fault and OpenTelemetry suites produce a global
+evidence shard for the same SHA. The final aggregate requires that shard and all
+target artifacts.
 
-The database/version matrix remains mandatory. It is complemented by
-`tests/contracts/catalog.json` and `tests/contracts/matrix.json`: named behavioral
-contracts, canonical transport/profile targets, and capability-checked exclusions.
-New transports and missing classifications fail `pnpm run contracts:validate`,
-which also runs through `support:validate`.
+Release certification downloads `release-prepared`. It verifies the candidate
+manifest and the archive hashes. It restores only the prepared `dist` and runs
+the same full matrix. It is a direct dependency of `release-final`. It does not
+build or publish. Release staging and registry approval stay separate operations
+that a human authorizes.
 
-Release has three complementary checks:
+## Semantic behavior coverage
 
-- existing DB, browser and Bun jobs run semantic integration scenarios;
-- the common job runs deterministic native-driver fault scenarios;
-- `release-semantic-contracts` requires passed evidence for every applicable
-  cell before `release-final` can run, even when all DB jobs are green.
+The database/version matrix stays mandatory. These files add to it:
+`tests/contracts/catalog.json` and `tests/contracts/matrix.json`. They contain
+named behavioral scenarios, canonical transport/profile targets and exclusions
+that capabilities check. New transports and missing classifications fail
+`pnpm run contracts:validate`. `support:validate` also runs that check.
 
-Evidence comes from individual passed assertions, not a test-count threshold or
-the mere presence of a test file. Titles identify transport, scenario and
-`integration`/`boundary` layer; ownership markers distinguish direct and pooled
-transactions. Report sidecars bind the report digest and source SHA to expected
-support targets. Expected bindings are not measured database/runtime evidence;
-the existing exact-tuple support and driver-certification gates remain required.
-Skipped tests, stale reports and unsupported exclusions cannot fill a required
-cell.
+Release has three checks that complement each other:
 
-For a fast local fault loop use `pnpm run test:contracts:boundary`. Real database
-scenarios remain in the existing `test:db:*` projects. Neither local execution
-nor a static matrix validation substitutes for Release `certify` on the exact
-final revision.
+- The existing DB, browser and Bun jobs run semantic integration scenarios.
+- The common job runs deterministic native-driver fault scenarios.
+- `release-semantic-contracts` requires passed evidence for each applicable cell
+  before `release-final` can run. This applies also when all DB jobs are green.
 
-### Native failures exposed by the semantic gate
+Evidence comes from individual passed assertions. It does not come from a
+threshold of test counts or from the presence of a test file.
 
-The Bun SQL lanes remain required. Native diagnostics distinguish adapter
-ownership fixes from capabilities the pinned transport cannot safely provide:
+- Titles identify the transport, the scenario and the `integration` or
+  `boundary` layer.
+- Ownership markers separate direct transactions from pooled transactions.
+- Report sidecars bind the report digest and the source SHA to the expected
+  support targets.
+- Expected bindings are not measured database/runtime evidence. The existing
+  exact-tuple support and driver-certification gates stay required.
+- Skipped tests, stale reports and unsupported exclusions cannot fill a required
+  cell.
 
-- Bun 1.3.14 PostgreSQL closes a discarded reserved connection, but its pool's
-  graceful `close()` can remain pending after an aborted transaction returns
-  `ROLLBACK` from `COMMIT`. Preserve that failed terminal outcome and discard
-  the reservation, not the owning pool. The caller-owned pool must remain
-  usable for fresh work; its final shutdown uses an explicit positive native
-  timeout (`client.close({ timeout: 1 })`) after those assertions. An unbounded
-  native pool close is not evidence that SQLBraid still owns a lease. A
-  Bun 1.4.2 comparison does not change the pinned certification tuple.
-- Bun 1.3.14 and 1.4.2 MySQL cache the failure from a first INSERT prepare in a
-  read-only transaction. Reusing that same statement after explicit
-  `START TRANSACTION READ WRITE` still rejects with error 1792. The pinned
-  MariaDB transport exposes the same failure. Prewarming the statement,
-  changing its SQL text, or reordering the access-mode contract would hide the
-  defect rather than establish support.
+For a fast local fault loop, use `pnpm run test:contracts:boundary`. Real
+database scenarios stay in the existing `test:db:*` projects. Local execution
+and static matrix validation do not replace Release `certify` on the exact final
+revision.
 
-The expanded native `tests/scripts/bun-sql-readonly-repro.mjs` diagnostics found
-no safe same-session recovery through public Bun 1.3.14 APIs; `prepare: false`
-is rejected by the native constructor. Bun.SQL MySQL/MariaDB therefore declare
-`transaction.read-only` unsupported under condition
-`bun-sql.mysql-read-only-cache`. Both explicit `readOnly: true` and
-`readOnly: false` reject before acquisition/I/O with
-`BRAID_TX_OPTION_UNSUPPORTED`. Omission preserves the actual session default,
-not a forced read-write mode. Ordinary transactions and isolation remain
-supported; Bun.SQL PostgreSQL access modes and representation-profile options
-are unchanged.
+### Native failures that the semantic gate found
+
+The Bun SQL lanes stay required. Native diagnostics separate fixes to adapter
+ownership from capabilities that the pinned transport cannot give safely:
+
+- Bun 1.3.14 PostgreSQL closes a discarded reserved connection. But the graceful
+  `close()` of its pool can stay pending after an aborted transaction returns
+  `ROLLBACK` from `COMMIT`. Keep that failed terminal outcome. Discard the
+  reservation, not the owning pool. The pool that the caller owns must stay
+  usable for fresh work. Its final shutdown uses an explicit positive native
+  timeout (`client.close({ timeout: 1 })`) after those assertions. A native pool
+  close without a limit is not evidence that SQLBraid still owns a lease. A
+  comparison with Bun 1.4.2 does not change the pinned certification tuple.
+- Bun 1.3.14 and 1.4.2 MySQL cache the failure of the first INSERT prepare in a
+  read-only transaction. If the same statement is used again after an explicit
+  `START TRANSACTION READ WRITE`, it still rejects with error 1792. The pinned
+  MariaDB transport has the same failure. To prewarm the statement, change its
+  SQL text or change the order of the access-mode scenario would hide the
+  defect. It would not prove support.
+
+The expanded native diagnostics in `tests/scripts/bun-sql-readonly-repro.mjs`
+found no safe recovery in the same session through the public Bun 1.3.14 APIs.
+The native constructor rejects `prepare: false`. Thus, Bun.SQL MySQL and MariaDB
+declare `transaction.read-only` unsupported under the condition
+`bun-sql.mysql-read-only-cache`.
+
+- Both explicit `readOnly: true` and `readOnly: false` reject before acquisition
+  and I/O, with `BRAID_TX_OPTION_UNSUPPORTED`.
+- If you omit the option, the actual session default stays. This is not a forced
+  read-write mode.
+- Ordinary transactions and isolation stay supported.
+- The access modes of Bun.SQL PostgreSQL and the representation-profile options
+  do not change.
 
 A native read-only rejection (errno 1792 / SQLSTATE 25006) can still occur under
 an inherited session default. Mark that reservation for disposal after the
-owning scope's normal terminal cleanup; do not release it healthy or switch
-physical connections during the session. This is a containment rule, not a
-claim to repair Bun's statement cache.
+normal terminal cleanup of the owning scope. Do not release it as healthy. Do not
+change the physical connection during the session. This is a containment rule.
+It does not claim to repair the statement cache of Bun.
 
-Keep the access-mode scenario ID and capability-checked applicability; test
-unsupported options before I/O and preserve all remaining real semantic cells.
-Source and packed checks in `tests/scripts/bun-sql-matrix.mjs` and `db-bun-sql`
-must exercise the resulting contract. A passing historical capability artifact
-cannot certify the changed revision. No new support label or passing final
-gate is claimed here; exact-final Runtime, Documentation and Release evidence
-is still required.
+Keep the access-mode scenario ID and the applicability that capabilities check.
+Test unsupported options before I/O. Keep all remaining real semantic cells. The
+source and packed checks in `tests/scripts/bun-sql-matrix.mjs` and `db-bun-sql`
+must test the resulting behavior. A passing historical capability artifact cannot
+certify the changed revision. This page claims no new support label and no
+passing final gate. Exact-final Runtime, Documentation and Release evidence is
+still required.
 
-Local libSQL has a different, explicit contract limitation: its native ROWID
-metadata is rounded before the client returns a bigint. The adapter therefore
-omits optional `command.insertId` for file and protocol-unknown clients, rather
-than inventing precision or failing after a successful mutation. Its checked
-metadata exclusions apply only to that unavailable channel; native tests still
-require exact `RETURNING` rows and successful large-ID mutations and bulk counts.
+Local libSQL has a different, explicit limitation. Its native ROWID metadata is
+rounded before the client returns a bigint. Thus, the adapter omits the optional
+`command.insertId` for file clients and clients with an unknown protocol. It
+does not invent precision. It does not fail after a successful mutation. Its
+checked metadata exclusions apply only to that unavailable channel. Native tests
+still require exact `RETURNING` rows, successful mutations with large IDs and
+correct bulk counts.

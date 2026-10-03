@@ -1,39 +1,37 @@
 ---
 title: 로드맵
-description: 현재 동작과 별도 설계 및 증거가 필요한 후보를 구분합니다.
+description: 현재 동작, 그리고 별도의 설계와 근거가 필요한 후보 기능입니다.
 ---
 
-## 현재 1.0.0 GA 표면
+## 현재 1.0.0 GA 범위
 
-현재 API에는 SQL 우선 template, 안전한 bind, 동적 `@braid`, result contract,
-Standard Schema 매핑, 물리 lease/session 소유권, transaction/savepoint 범위,
-capability 기반 cancellation, prepared input/zero-input factory, stream,
-observer, metadata, 결정적 codegen, 표준 LSP, CLI JSON 검사, 얇은 VS Code
-client, native DML-returning contract, 동종 command bulk, MariaDB, Browser
-SQLite WASM, D1, representation-profile contract와 선택적 OpenTelemetry DB
-client span 및 duration metric이 포함됩니다.
+현재 API에는 다음이 포함됩니다.
 
-지원 label과 증거는 [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)가
-기록한 정확한 database, driver, profile, runtime, capability tuple과 revision별
-테스트 버전에만 적용됩니다.
+- SQL 중심 템플릿, 안전한 바인딩, 동적 `@braid`
+- 결과 선언과 Standard Schema 매핑
+- 물리 리스와 세션의 소유권
+- 트랜잭션과 세이브포인트 범위
+- 기능 지원 여부에 따른 취소
+- 입력이 있는 준비된 쿼리 팩토리와 입력이 없는 팩토리
+- 스트림과 옵저버
+- 메타데이터, 결정적 코드 생성, 표준 LSP, CLI JSON 검사, 얇은 VS Code 클라이언트
+- 네이티브 DML RETURNING 선언과 같은 형태의 명령 벌크
+- MariaDB, 브라우저 SQLite WASM, D1
+- 표현 방식 프로필 규칙
+- 선택 사항인 OpenTelemetry DB 클라이언트 span과 실행 시간 지표
 
-Profile descriptor는 driver option, raw/canonical representation, TypePolicy
-provenance를 묶으며 runtime과 codegen은 동일 descriptor를 재사용해야 합니다.
-Container 동작은 재귀적으로 추론하지 않습니다. Support label은 revision별,
-capability별입니다.
+[런타임·드라이버 지원 매트릭스](/SQLBraid/reference/support/)는 데이터베이스, 드라이버, 프로필, 런타임, 기능의 정확한 조합마다 지원 등급과 테스트한 버전을 기록합니다.
+
+프로필 설명 객체는 드라이버 옵션, 원시·정규 표현, TypePolicy 출처를 한데 묶습니다. 런타임과 코드 생성은 같은 설명 객체를 써야 합니다. 컨테이너 동작은 재귀적으로 추론하지 않습니다. 지원 등급은 리비전마다 다르며, 기능 지원 여부에 따라 달라집니다.
 
 ## 향후 후보
 
-현재 API가 아니므로 지원되는 것처럼 production code에 복사하면 안 됩니다.
+아래 항목은 현재 API가 아닙니다. 지원되는 것처럼 운영 코드에 옮겨 쓰지 마세요.
 
-- 더 넓은 database/server-line 및 추가 first-party driver 증거
-- application input mapping과 명시적 codec contract
-- 선택적 database verification과 풍부한 SQL 진단
-- pipeline/COPY/LOAD DATA, query transformation, routing/retry
-- 더 풍부한 container/JSON/temporal representation 증거
+- 더 많은 데이터베이스·서버 버전에 대한 근거, 더 많은 공식 드라이버
+- 애플리케이션 입력 매핑과 명시적인 코덱 규칙
+- 선택 사항인 데이터베이스 검증과 더 풍부한 SQL 진단
+- 파이프라인, COPY·LOAD DATA 작업, 쿼리 변환, 경로 지정·재시도
+- 컨테이너, JSON, 날짜·시간 표현에 대한 더 풍부한 근거
 
-Cancellation, session, transaction option, prepared input factory, bulk/stream
-지원은 현재 contract이므로 roadmap 후보가 아닙니다. Missing capability는
-숨겨진 fallback이 아니라 명시적인 `UnsupportedFeatureError`로 실패합니다.
-후보가 Official support claim이 되려면 dialect/driver/runtime 의미, 실행 범위,
-package metadata, translation, exact release evidence를 완료해야 합니다.
+취소, 세션, 트랜잭션 옵션, 입력이 있는 준비된 쿼리 팩토리, 벌크·스트림 지원은 이미 있는 기능이며 로드맵 후보가 아닙니다. 없는 기능은 계속 명시적인 `UnsupportedFeatureError`로 실패하며, 숨은 대체 동작은 없습니다. 후보 기능은 방언·드라이버·런타임 의미, 실행 가능한 검증, 패키지 메타데이터, 번역, 통합 테스트가 모두 갖춰진 뒤에야 Official 지원이 됩니다.

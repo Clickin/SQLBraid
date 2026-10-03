@@ -6,11 +6,11 @@ PostgreSQL dialect and `pg` adapters for SQLBraid.
 npm install @sqlbraid/postgres pg
 ```
 
-Use this package with a connected `pg` client or pool via the `@sqlbraid/postgres/pg` adapter.
+Use this package through the `@sqlbraid/postgres/pg` adapter. Give it a connected `pg` client or pool.
 
 ### Key Details
 
-- **Numerics**: Exact integers and numeric results are returned as strings; floating-point values are numbers.
-- **Streaming**: Install the `pg-cursor` peer dependency to enable `db.stream()`.
+- **Numerics**: Exact integers and numeric results are strings. Floating-point values are numbers.
+- **Streaming**: To use `db.stream()`, install the `pg-cursor` peer dependency.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.

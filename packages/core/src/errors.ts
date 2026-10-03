@@ -110,8 +110,9 @@ export const PUBLIC_ERROR_DEFINITIONS: readonly PublicErrorDefinition[] = Object
     code: "BRAID_CALL_RETURN_UNSUPPORTED",
     category: "adapter",
     owner: "UnsupportedFeatureError",
-    features: ["routine.call", "routine.return-value"],
+    features: ["routine.return-value"],
   },
+  { code: "BRAID_CALL_PROCEDURE_INVALID", category: "adapter", owner: "AdapterError" },
   {
     code: "BRAID_CALL_CURSOR_UNSUPPORTED",
     category: "adapter",

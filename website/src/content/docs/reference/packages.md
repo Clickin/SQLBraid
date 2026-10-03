@@ -6,7 +6,7 @@ description: Find the SQLBraid package that owns each concern.
 | Package                     | Responsibility                                                                                                                                               |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `sqlbraid`                  | Canonical runtime facade; combined driver+dialect/query subpaths use matching adapters, while `/bun-sql` is a multi-dialect adapter with an explicit dialect |
-| `@sqlbraid/core`            | Public contracts, Standard Schema-facing types, and rendered parameter metadata                                                                              |
+| `@sqlbraid/core`            | Public interfaces, Standard Schema-facing types, and rendered parameter metadata                                                                             |
 | `@sqlbraid/template`        | Tagged templates, directives, rendering, structural fragments, and `sql.bind`                                                                                |
 | `@sqlbraid/runtime`         | Execution, mapping, result-kind checks, transactions, streaming, and prepared shapes                                                                         |
 | `@sqlbraid/postgres`        | PostgreSQL dialect/TypePolicy; `/pg` adapter; `/inspector`                                                                                                   |
@@ -26,13 +26,13 @@ description: Find the SQLBraid package that owns each concern.
 | `@sqlbraid/cli`             | Optional codegen, inspect, diagnostics, drift, and command-line tooling                                                                                      |
 | `@sqlbraid/language-server` | Standard stdio LSP integration                                                                                                                               |
 
-Install `sqlbraid` in application code, then use a combined driver+dialect/query
-subpath:
+Install `sqlbraid` in application code. Then use a subpath that combines a driver
+and a dialect:
 `sqlbraid/pg`, `sqlbraid/mysql2`, `sqlbraid/mariadb`, `sqlbraid/node-sqlite`,
-`sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`,
-or `sqlbraid/tedious`. For Bun.SQL, use the multi-dialect `sqlbraid/bun-sql`
-adapter, import `sql` from the selected dialect root, and pass that dialect
-explicitly:
+`sqlbraid/better-sqlite3`, `sqlbraid/libsql`, `sqlbraid/sqlite-wasm`, `sqlbraid/d1`, `sqlbraid/oracledb`
+or `sqlbraid/tedious`. For Bun.SQL, use the `sqlbraid/bun-sql` adapter, which
+supports many dialects. Import `sql` from the root of the selected dialect, and
+give that dialect explicitly:
 
 ```ts
 import { createBunSqlDatabase } from "sqlbraid/bun-sql";
@@ -42,49 +42,64 @@ const client = new Bun.SQL(process.env.DATABASE_URL!);
 const db = createBunSqlDatabase(client, { dialect: "postgres" });
 ```
 
-Node's built-in `node:sqlite` adapter needs no separate driver package; install other external drivers used by your application.
+The `node:sqlite` adapter uses the module that is part of Node. It does not need a separate driver package. Install the other external drivers that your application uses.
 
-The root is database-neutral and does not export an implicit `sql` tag. The
+The root is database-neutral. It does not export an implicit `sql` tag. The
 dialect-only subpaths `sqlbraid/postgres`, `sqlbraid/mysql`, `sqlbraid/sqlite`,
-`sqlbraid/oracle`, and `sqlbraid/mssql` are for custom adapters. The granular
-`@sqlbraid/*` packages remain supported for library authors and deliberately
+`sqlbraid/oracle` and `sqlbraid/mssql` are for custom adapters. The granular
+`@sqlbraid/*` packages stay supported for library authors and for deliberately
 narrower dependencies.
-`sqlbraid/compiled` is an advanced entrypoint for compiler-generated `capture`
-and `assertDirectiveCondition` helpers, not an application query-authoring API.
-It does not import the compiler; use matching compiler and runtime versions.
-`@sqlbraid/bun-sql` has no static Bun import and requires an explicit `dialect`;
-it does not auto-detect SQL semantics. Runtime packages do not acquire metadata,
-codegen, compiler, editor, or Vite dependencies. Install tooling packages only
-in development/build environments. The Oracle, SQL Server, MariaDB, and Bun
-dependencies are kept out of portable roots. `@sqlbraid/vite` keeps Vite
-as a peer and does not import a framework.
-`@sqlbraid/opentelemetry` keeps `@opentelemetry/api` as a peer and does not
-install an SDK, exporter, logger, driver instrumentation, or database driver.
 
-The synchronous SQLite adapters use the `Awaitable<T>` physical SPI while
-keeping public `Database` methods async. `better-sqlite3` remains event-loop
-blocking and uses statement-local exact-integer reads. libSQL requires
-`{ intMode: "string" }`, uses an interactive transaction handle, does not
-claim `session.pinned`, and reports `BRAID_STREAM_UNSUPPORTED` instead of
-buffering. These are transport and capability boundaries, not broad support
+`sqlbraid/compiled` is an advanced entry point for the `capture` and
+`assertDirectiveCondition` helpers that the compiler generates. It is not an API
+for applications to write queries. It does not import the compiler. Use the same
+version for the compiler and the runtime.
+
+- `@sqlbraid/bun-sql` has no static Bun import and requires an explicit
+  `dialect`. It does not detect SQL semantics automatically.
+- Runtime packages do not get metadata, codegen, compiler, editor or Vite
+  dependencies. Install tooling packages only in development and build
+  environments.
+- The Oracle, SQL Server, MariaDB and Bun dependencies stay out of the portable
+  roots.
+- `@sqlbraid/vite` keeps Vite as a peer and does not import a framework.
+- `@sqlbraid/opentelemetry` keeps `@opentelemetry/api` as a peer. It does not
+  install an SDK, an exporter, a logger, driver instrumentation or a database
+  driver.
+
+The synchronous SQLite adapters use the physical SPI `Awaitable<T>`. The public
+`Database` methods stay async.
+
+- `better-sqlite3` still blocks the event loop. It reads exact integers with a
+  setting on each statement.
+- libSQL requires `{ intMode: "string" }` and uses an interactive transaction
+  handle. It does not claim `session.pinned`. It reports
+  `BRAID_STREAM_UNSUPPORTED` and does not buffer.
+
+These are transport and capability boundaries. They are not broad support
 labels.
 
-`db.session()` pins one provider lease; `db.tx()` reuses that lease and supports
-savepoints/options only where the selected adapter advertises them. Prepared
-queries lock logical shape, not physical placeholders. Active cancellation is
-capability-driven and otherwise fails with `BRAID_CANCEL_UNSUPPORTED`. Bun 1.3.14
-uses `{ bigint: true }` for PostgreSQL/MySQL/MariaDB and `{ safeIntegers: true }`
-for SQLite; no column metadata means integral or integral-approximate `Number`
-rows are rejected as ambiguous. PostgreSQL decimal is text; MySQL/MariaDB
-DECIMAL and binary byte carriers reject without authored SQL text/hex conversion.
-SQLite native decimal is unsupported. Bun MySQL/MariaDB empty `SELECT` and zero-affected DML/DDL use
-guarded `bun-sql.result-kind-metadata` and may fail after execution with
-`BRAID_RESULT_KIND_AMBIGUOUS`.
+- `db.session()` pins one provider lease. `db.tx()` uses that lease again. It
+  supports savepoints and options only where the selected adapter advertises
+  them.
+- Prepared queries lock the logical shape, not the physical placeholders.
+- Active cancellation comes from capabilities. Without the capability, it fails
+  with `BRAID_CANCEL_UNSUPPORTED`.
+- Bun 1.3.14 uses `{ bigint: true }` for PostgreSQL, MySQL and MariaDB, and
+  `{ safeIntegers: true }` for SQLite. There is no column metadata. Thus, integral
+  `Number` rows, and integral approximate `Number` rows, are rejected as
+  ambiguous.
+- PostgreSQL decimal is text. MySQL and MariaDB DECIMAL and binary byte carriers
+  reject, unless your SQL converts them to text or hex.
+- SQLite native decimal is unsupported.
+- In Bun, an empty MySQL or MariaDB `SELECT` and DML or DDL that affects zero
+  rows use the guarded `bun-sql.result-kind-metadata` condition. They can fail
+  after execution with `BRAID_RESULT_KIND_AMBIGUOUS`.
 
-Bun.SQL MySQL/MariaDB also reject explicit `readOnly: true` and
+Bun.SQL MySQL and MariaDB also reject explicit `readOnly: true` and
 `readOnly: false` before I/O (`BRAID_TX_OPTION_UNSUPPORTED`,
-`transaction.read-only`). Omission preserves the native session default;
-Bun.SQL PostgreSQL access modes are unchanged. See the
+`transaction.read-only`). If you omit the option, the native session default
+stays. The access modes of Bun.SQL PostgreSQL do not change. Read the
 [transaction option boundary](/SQLBraid/runtime/transaction-profiles/).
 
 The dependency direction is:

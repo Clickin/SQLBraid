@@ -1,51 +1,102 @@
 # Contributing to SQLBraid
 
-SQLBraid is a SQL-first toolkit. Contributions should preserve user-authored SQL as opaque text, keep driver boundaries thin, and prefer explicit result and transport contracts over SQL grammar emulation.
+SQLBraid is a SQL-first toolkit. A contribution must obey these rules:
 
-Before changing execution, driver, compiler, or package boundaries, read the
-[contributor mental model](./docs/mental-model.md). It explains the intended
-`core → template → runtime → adapter` flow, physical resource ownership, and the
-separate static-tooling plane. The Korean version is available at
-[`docs/mental-model.ko.md`](./docs/mental-model.ko.md).
+- Keep user-authored SQL as opaque text.
+- Keep driver boundaries thin.
+- Use explicit result and transport rules. Do not emulate SQL grammar.
+
+Before you change execution, driver, compiler or package boundaries, read the
+[contributor mental model](./docs/mental-model.md). It explains these topics:
+
+- the `core → template → runtime → adapter` flow;
+- the ownership of physical resources;
+- the separate static-tooling plane.
+
+A Korean version is in [`docs/mental-model.ko.md`](./docs/mental-model.ko.md).
+
+Write documentation in the style that
+[`docs/writing-style.md`](./docs/writing-style.md) defines.
 
 ## Requesting or adding database support
 
-A support request does not create a maintainer obligation to purchase, host, or operate the requested database environment. Maintainers may classify a target as **Compatible**, **Historical**, or **Unsupported** when an Official gate is not practical or evidence has expired.
+A support request does not oblige maintainers to buy, host or operate the
+requested database environment. If an Official gate is not practical, or if the
+evidence has expired, maintainers can classify a target as **Compatible**,
+**Historical** or **Unsupported**.
 
-A pull request requesting a new **Official** target must include all of the following:
+A pull request that requests a new **Official** target must include all of these
+items:
 
-- a zero-cost reproducible setup (no paid license, paid cloud database, private runner, or maintainer-owned server);
-- the exact database product, version, and edition;
-- the exact driver package and version, including the selected profile/options;
-- a `support/targets/<target>.json` manifest with honest capability statuses and conditions;
-- structured numeric contracts in the target manifest (`semantics`, canonical `representation`, and transport `fidelity`), plus explicit parsed/lossless JSON and native/lossless temporal profiles where applicable;
-- capability tests in `tests/db/<dialect>/capabilities.test.ts` with stable literal IDs in the form `<dialect>.<capability>`; tests exercise the target's native SQL transport and returned values, not SQL grammar that SQLBraid does not own;
-- the matching `support/test-registry.json` entries and English/Korean labels in `support/capabilities.json`;
-- CI configuration that runs the same capability suite on the declared target and records the workflow/command;
-- driver profile constraints and known exclusions;
-- release-equivalent green evidence at the exact source commit.
+- A reproducible setup at zero cost. It must not need a paid license, a paid
+  cloud database, a private runner or a server that a maintainer owns.
+- The exact database product, version and edition.
+- The exact driver package and version, with the selected profile and options.
+- A `support/targets/<target>.json` manifest with honest capability statuses and
+  conditions.
+- Structured numeric rules in the target manifest: `semantics`, canonical
+  `representation` and transport `fidelity`. Where they apply, also include
+  explicit parsed/lossless JSON profiles and native/lossless temporal profiles.
+- Capability tests in `tests/db/<dialect>/capabilities.test.ts`. Each test has a
+  stable literal ID in the form `<dialect>.<capability>`. The tests examine the
+  native SQL transport and the returned values of the target. They do not test
+  SQL grammar that SQLBraid does not own.
+- The matching `support/test-registry.json` entries, and English and Korean
+  labels in `support/capabilities.json`.
+- A CI configuration that runs the same capability suite on the declared target.
+  It must record the workflow and the command.
+- The constraints of the driver profile and the known exclusions.
+- Green evidence, equivalent to a release, at the exact source commit.
 
-Adapter code alone is not enough for an Official support claim. If zero-cost reproducibility disappears, downgrade the target from Official to Compatible or Historical and keep the implementation separate from the certification claim.
+Adapter code alone does not make an Official support claim. If reproducibility
+at zero cost stops, downgrade the target from Official to Compatible or
+Historical. Keep the implementation separate from the certification claim.
 
-Do not add per-database SQL grammar feature IDs to the support taxonomy. SQLBraid does not certify a DBMS grammar it does not own. Use the common SQL transparency, generated-structure, result, numeric, data-representation, DML-returning, execution, routine, and metadata capability families. Keep native `MERGE` and native UPSERT/REPLACE/ON CONFLICT claims separate.
+Do not add SQL grammar feature IDs for one database to the support taxonomy.
+SQLBraid does not certify a DBMS grammar that it does not own. Use these common
+capability families:
+
+- SQL transparency;
+- generated structure;
+- result;
+- numeric;
+- data representation;
+- DML returning;
+- execution;
+- routine;
+- metadata.
+
+Keep native `MERGE` claims separate from native UPSERT/REPLACE/ON CONFLICT
+claims.
 
 ## Changes to support data
 
-Run the support validator from the repository root before requesting review:
+Before you request a review, run the support validator from the repository root:
 
 ```sh
 node scripts/validate-support.mjs
 ```
 
-Every target must have exact versions, a package/adapter name, bilingual labels, structured numeric semantics/representation/fidelity, container classifications, and machine-linked evidence. Conditional claims require a catalogued condition code. Keep evidence status `pending` until the matching final CI run exists; never infer an Official claim from a local run, a different revision, or a compatible driver.
+Each target must have these items:
+
+- exact versions;
+- a package or adapter name;
+- labels in two languages;
+- structured numeric semantics, representation and fidelity;
+- container classifications;
+- machine-linked evidence.
+
+A conditional claim requires a condition code from the catalog. Keep the
+evidence status `pending` until the matching final CI run exists. Do not infer
+an Official claim from a local run, a different revision or a compatible driver.
 
 ## Pull request checklist
 
-- [ ] I preserved opaque native SQL and did not add a grammar-specific public capability.
-- [ ] I updated the support manifest, capability catalog, and test registry when support data changed.
-- [ ] I used exact database, driver, and runtime versions (or downgraded the target instead of guessing).
-- [ ] I supplied zero-cost reproducibility and the exact CI command/workflow for any Official request.
-- [ ] I added capability tests with literal stable IDs and verified registry linkage.
-- [ ] I supplied both English and Korean labels for new capabilities or conditions.
-- [ ] I recorded evidence at the exact source commit and did not claim unavailable CI runs.
-- [ ] I ran the focused checks relevant to my change, including `node scripts/validate-support.mjs`.
+- [ ] I kept native SQL opaque. I did not add a grammar-specific public capability.
+- [ ] I updated the support manifest, capability catalog and test registry when support data changed.
+- [ ] I used exact database, driver and runtime versions. If I did not know a version, I downgraded the target.
+- [ ] For an Official request, I supplied reproducibility at zero cost and the exact CI command or workflow.
+- [ ] I added capability tests with stable literal IDs and checked the registry links.
+- [ ] I supplied English and Korean labels for new capabilities or conditions.
+- [ ] I recorded evidence at the exact source commit. I did not claim CI runs that do not exist.
+- [ ] I ran the focused checks for my change, including `node scripts/validate-support.mjs`.

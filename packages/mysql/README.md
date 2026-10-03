@@ -6,11 +6,11 @@ MySQL dialect and `mysql2` adapters for SQLBraid.
 npm install @sqlbraid/mysql mysql2
 ```
 
-Use this package with a connected `mysql2` connection or pool via the `@sqlbraid/mysql/mysql2` adapter.
+Use this package through the `@sqlbraid/mysql/mysql2` adapter. Give it a connected `mysql2` connection or pool.
 
 ### Key Details
 
-- **Numerics**: Use the lossless text profile if exact integer and decimal values must remain strings.
-- **Streaming**: Uses `mysql2` native stream support.
+- **Numerics**: If exact integer and decimal values must stay strings, use the lossless text profile.
+- **Streaming**: The adapter uses the native stream support of `mysql2`.
 
 See the [SQLBraid documentation](https://clickin.github.io/SQLBraid/) for details.

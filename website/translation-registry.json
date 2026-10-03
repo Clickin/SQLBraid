@@ -7,271 +7,271 @@
       "source": "website/src/content/docs/agents/cli.md",
       "translation": "website/src/content/docs/ko/agents/cli.md",
       "translationOf": "website/src/content/docs/agents/cli.md",
-      "sourceDigest": "8499dd762bbfbdf3b42bfcdf6c141ffb6128e791ea0f694fc7c26e9a3d0f4194"
+      "sourceDigest": "91af8767b48351e1626df5d569fd958c6fa27a1a4ff8f92ef0512d04ab2c548c"
     },
     {
       "source": "website/src/content/docs/agents/driver-author.md",
       "translation": "website/src/content/docs/ko/agents/driver-author.md",
       "translationOf": "website/src/content/docs/agents/driver-author.md",
-      "sourceDigest": "6bbcf89fd964bf979662638bcc8e4a4582a6f6b30dc9c22084c7958ff942aac6"
+      "sourceDigest": "31e43a1864608f871888c26983a97426c4b87d9d04cb83998c81791ab023aba5"
     },
     {
       "source": "website/src/content/docs/agents/lsp.md",
       "translation": "website/src/content/docs/ko/agents/lsp.md",
       "translationOf": "website/src/content/docs/agents/lsp.md",
-      "sourceDigest": "a26d667c264925b9b01dd93fff3e78f14625cda84aaf9e63986d8ce37f77e263"
+      "sourceDigest": "0a830e9cd1958f9a3ca423f02fa812e8b6d7ea7f3086800ca26476184066af4d"
     },
     {
       "source": "website/src/content/docs/agents/skill.md",
       "translation": "website/src/content/docs/ko/agents/skill.md",
       "translationOf": "website/src/content/docs/agents/skill.md",
-      "sourceDigest": "d275d5adb9ab55e74be6a092aad73bb1525903bbcdcf70ea6fcc1c6a02f650f2"
+      "sourceDigest": "7cddcf92ff58562aed6116f9dd41051559e12ee9bf27e0b6f2467fa126e148e3"
     },
     {
       "source": "website/src/content/docs/agents/vscode.md",
       "translation": "website/src/content/docs/ko/agents/vscode.md",
       "translationOf": "website/src/content/docs/agents/vscode.md",
-      "sourceDigest": "2cc12ee642cc5da6805b58b6555a67c6b788f9e2dc61f798b8437fb09614ae9d"
+      "sourceDigest": "7545ae17a3427bbdb47a8c2fdea150c98d48da4a39e4a277fb72f78e44746b48"
     },
     {
       "source": "website/src/content/docs/concepts/architecture.mdx",
       "translation": "website/src/content/docs/ko/concepts/architecture.mdx",
       "translationOf": "website/src/content/docs/concepts/architecture.mdx",
-      "sourceDigest": "61c062bd8479180dcc15e1ff241f97eeb4e4b94d4e98cd8c8e61bb09d4c33ca9"
+      "sourceDigest": "5912a3d136078320526037e9b2f122824d66d2a4750a687b87075e91acbb49a2"
     },
     {
       "source": "website/src/content/docs/concepts/bulk.md",
       "translation": "website/src/content/docs/ko/concepts/bulk.md",
       "translationOf": "website/src/content/docs/concepts/bulk.md",
-      "sourceDigest": "56b3a43aca964a7d62b1b46a2dd2980ebcbc8e6624969295418adb98555d8007"
+      "sourceDigest": "7064cd18ee66b9ad27196ce0c76c43b1a6714b7539215370466e72547c55938b"
     },
     {
       "source": "website/src/content/docs/concepts/data-representation.md",
       "translation": "website/src/content/docs/ko/concepts/data-representation.md",
       "translationOf": "website/src/content/docs/concepts/data-representation.md",
-      "sourceDigest": "af743686c2ab6352a49e4e2fb642062d530ca897e1cd85cdbeff307639c443fc"
+      "sourceDigest": "05ea0d0844555d496c22d53968bb5aa39ac1c3b757cfbdf609eb13ddfa4c9d02"
     },
     {
       "source": "website/src/content/docs/concepts/dynamic-braid.md",
       "translation": "website/src/content/docs/ko/concepts/dynamic-braid.md",
       "translationOf": "website/src/content/docs/concepts/dynamic-braid.md",
-      "sourceDigest": "3d1982942ceaef7fb2988e285d62093484651de0dd7f11101bc7559f978bc659"
+      "sourceDigest": "b07c9e2e6093bbd3728a5a3960d6e2081884da09c4b23c2ca5a537b265862ff2"
     },
     {
       "source": "website/src/content/docs/concepts/parameter-hints.md",
       "translation": "website/src/content/docs/ko/concepts/parameter-hints.md",
       "translationOf": "website/src/content/docs/concepts/parameter-hints.md",
-      "sourceDigest": "99261016d031be897d0dbd1d28be364dc14bba926142c023f5ab58cc53d039f6"
+      "sourceDigest": "8de6f629534d4675e5aab8705337bb2e73317862623ac20b592daf5a4b003a09"
     },
     {
       "source": "website/src/content/docs/concepts/result-mapping.md",
       "translation": "website/src/content/docs/ko/concepts/result-mapping.md",
       "translationOf": "website/src/content/docs/concepts/result-mapping.md",
-      "sourceDigest": "f171e780a4d6204792b27bd2e37602b8a0097e23be118568a14cabc9cc505ccf"
+      "sourceDigest": "227bfac8c5ee1548facab9b9fe2df038083d809f1e16363f3129c2833dc10331"
     },
     {
       "source": "website/src/content/docs/concepts/routines.md",
       "translation": "website/src/content/docs/ko/concepts/routines.md",
       "translationOf": "website/src/content/docs/concepts/routines.md",
-      "sourceDigest": "b62063da598afd04dc0c88a35277cb1fa5cbf17ee4069952f80d4cc0ee497e80"
+      "sourceDigest": "7c4d9f309ec3f00ba6714c8973cd5d0c4f912b6c5a9cc2867c5fcb42a8bde737"
     },
     {
       "source": "website/src/content/docs/concepts/safe-binds.md",
       "translation": "website/src/content/docs/ko/concepts/safe-binds.md",
       "translationOf": "website/src/content/docs/concepts/safe-binds.md",
-      "sourceDigest": "53567c198f507f4af478db131a42a8afbc8a5105ca3c45acdf9b9fc76dcaea18"
+      "sourceDigest": "3be8efd2a5193afae01b8aa2935d1d2347c836732474062239fe8b148a893d06"
     },
     {
       "source": "website/src/content/docs/concepts/sql-tags.md",
       "translation": "website/src/content/docs/ko/concepts/sql-tags.md",
       "translationOf": "website/src/content/docs/concepts/sql-tags.md",
-      "sourceDigest": "fb39697c73592a0bc9347c28e1faa6d9fb4298954dafd73c9403e36aeb1fb7be"
+      "sourceDigest": "834626448adaf9fbfaa7a3ce9024f5f5f6c63a271b6e7cb158464b94e472e280"
     },
     {
       "source": "website/src/content/docs/concepts/structural-fragments.md",
       "translation": "website/src/content/docs/ko/concepts/structural-fragments.md",
       "translationOf": "website/src/content/docs/concepts/structural-fragments.md",
-      "sourceDigest": "24291f975c39c52dbc11b63f3e0654f0533b3529c215eb80736e97cdfd8eaefe"
+      "sourceDigest": "1bdaf0915b24d17bf4fd585ddacc90de313b17cf0adfce85f6b2648dec8c8ea8"
     },
     {
       "source": "website/src/content/docs/getting-started/mariadb.md",
       "translation": "website/src/content/docs/ko/getting-started/mariadb.md",
       "translationOf": "website/src/content/docs/getting-started/mariadb.md",
-      "sourceDigest": "6b9e1468b2821dd2a976e05eee661eaeec788cd38859a75a3920bd1bec3d1950"
+      "sourceDigest": "b66bf77d94eeb1651be2b7518394c31640b4b999a0129ef38d056e1dc904ac6e"
     },
     {
       "source": "website/src/content/docs/getting-started/mssql.md",
       "translation": "website/src/content/docs/ko/getting-started/mssql.md",
       "translationOf": "website/src/content/docs/getting-started/mssql.md",
-      "sourceDigest": "cf22f81f02144f669edc6230fe0923f3d2cbafc3d8ff4c79e83c21fa1633e6fb"
+      "sourceDigest": "71ad3526f9a2cdffb0c7e829a714881e7f8a12afd975b49ee968ea7221a3c3b3"
     },
     {
       "source": "website/src/content/docs/getting-started/mysql.md",
       "translation": "website/src/content/docs/ko/getting-started/mysql.md",
       "translationOf": "website/src/content/docs/getting-started/mysql.md",
-      "sourceDigest": "7cb0d92df71be70af5ccd4bc52fa78e5298d9d19287814b0f0f6afce8e084388"
+      "sourceDigest": "e8ff1504987aa73ec484779adb5fd8ad4b8d311d31f6461044019525fa4ce50c"
     },
     {
       "source": "website/src/content/docs/getting-started/oracle.md",
       "translation": "website/src/content/docs/ko/getting-started/oracle.md",
       "translationOf": "website/src/content/docs/getting-started/oracle.md",
-      "sourceDigest": "63cb9eaee332aefa46905e16e1e7ae1c5ab5eec12a236109b9e7451be04df166"
+      "sourceDigest": "c027804f52e2eb7277465ea4eea24a15510f4aed1c0033319c10cb4acc7a49d1"
     },
     {
       "source": "website/src/content/docs/getting-started/postgres.md",
       "translation": "website/src/content/docs/ko/getting-started/postgres.md",
       "translationOf": "website/src/content/docs/getting-started/postgres.md",
-      "sourceDigest": "8a01e89cf1ed62f97aa0cc80ca16fba186d9307e74b487f48faa91405ef31fe6"
+      "sourceDigest": "99e45d24c5e76870bcf41df87d073fc8411aa9b5cece16c2c501c959c397c409"
     },
     {
       "source": "website/src/content/docs/getting-started/sqlite-browser.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite-browser.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite-browser.md",
-      "sourceDigest": "ca3ed1e4359617eb86ffefe8aa81c95d3b9ea8e102a53cd9241fbeb4b6321cb7"
+      "sourceDigest": "c3a61ef673b0edd337afe9141ff9f9e11bdb89426d5c454d1cc968a2b7e01f0b"
     },
     {
       "source": "website/src/content/docs/getting-started/sqlite.md",
       "translation": "website/src/content/docs/ko/getting-started/sqlite.md",
       "translationOf": "website/src/content/docs/getting-started/sqlite.md",
-      "sourceDigest": "11fa11410ced75465c25d00c1224af026982d01c4728d2572539d2901acd60fd"
+      "sourceDigest": "45918b6941ec723ae19d48088d3441b9c9d41c8149fc2d82bf9aec491efb7bc2"
     },
     {
       "source": "website/src/content/docs/getting-started/vite.md",
       "translation": "website/src/content/docs/ko/getting-started/vite.md",
       "translationOf": "website/src/content/docs/getting-started/vite.md",
-      "sourceDigest": "c439a84d2fcc43a91c7885c4b936319ff8b38ed28a7e2df1fddf7e878a7b30f3"
+      "sourceDigest": "db1e7419a627f8f4e42a1658462f29014dafa9bdb27d38147c5699c8f16c4f32"
     },
     {
       "source": "website/src/content/docs/index.md",
       "translation": "website/src/content/docs/ko/index.md",
       "translationOf": "website/src/content/docs/index.md",
-      "sourceDigest": "606297ef44b9efbd99c0ab3179e5005d8ec060865587d8d5b72a980991b8e086"
+      "sourceDigest": "e7059f5791d45e16d0546a1179e8afcdb2193cc1c3cd781180f2a9f4a448fd0e"
     },
     {
       "source": "website/src/content/docs/interactive-preview.mdx",
       "translation": "website/src/content/docs/ko/interactive-preview.mdx",
       "translationOf": "website/src/content/docs/interactive-preview.mdx",
-      "sourceDigest": "8ad30400c655d41045f108ce827a12645c3cfb8a1ec8d15375f016e8b5bed19b"
+      "sourceDigest": "908f7cf01d339444628a6b75a620fc7b9760471e0bfde447d90be820be1cde65"
     },
     {
       "source": "website/src/content/docs/metadata/ci.md",
       "translation": "website/src/content/docs/ko/metadata/ci.md",
       "translationOf": "website/src/content/docs/metadata/ci.md",
-      "sourceDigest": "2d8a013becacb8d7d91d10b4a57bad0fc9275b6c6e36e8e66aa367349c71704e"
+      "sourceDigest": "d373d936d5d961856f03ae359f37a5c8f979ee542737877abf64def6c8e112f1"
     },
     {
       "source": "website/src/content/docs/metadata/config.md",
       "translation": "website/src/content/docs/ko/metadata/config.md",
       "translationOf": "website/src/content/docs/metadata/config.md",
-      "sourceDigest": "9163bb835ecbd6ac1bca8a847006ed6ca7ac5af4911d28c87f1ed3b47b6e2742"
+      "sourceDigest": "389aaed6e560349a42d9b98fac67c3354b3286986c1af770aade381cceb9de32"
     },
     {
       "source": "website/src/content/docs/metadata/inspectors.md",
       "translation": "website/src/content/docs/ko/metadata/inspectors.md",
       "translationOf": "website/src/content/docs/metadata/inspectors.md",
-      "sourceDigest": "71d4c43e73da76321266ebe8df9ce7e7f4a9376c9f41ae9a7258e40a3a0057ab"
+      "sourceDigest": "e7aa497953e755bdab34efc891a031fe4fc1542e9733e3dfcba24a8413212d40"
     },
     {
       "source": "website/src/content/docs/metadata/models.md",
       "translation": "website/src/content/docs/ko/metadata/models.md",
       "translationOf": "website/src/content/docs/metadata/models.md",
-      "sourceDigest": "28bded7d926369d006d28558c5aea5ce83acee0c76f9412cd087ee16c7cc9de2"
+      "sourceDigest": "e593e6b819155460824d1595d018f9faab0eeae699a5e478b14034c4eb161f0c"
     },
     {
       "source": "website/src/content/docs/metadata/overrides.md",
       "translation": "website/src/content/docs/ko/metadata/overrides.md",
       "translationOf": "website/src/content/docs/metadata/overrides.md",
-      "sourceDigest": "7d59f719576cc6795ad007d9f1a97e5ddff3180e95bea2e5be799f60c3c29eb5"
+      "sourceDigest": "725cb0acb020763dd1d853d80728072019a2372e2f9131f7b27ee3ccdbcbbd14"
     },
     {
       "source": "website/src/content/docs/reference/configuration.md",
       "translation": "website/src/content/docs/ko/reference/configuration.md",
       "translationOf": "website/src/content/docs/reference/configuration.md",
-      "sourceDigest": "590b732f23e013f7335671ae91edbf7e48b2e1676757e5360cdc2be889e23516"
+      "sourceDigest": "6bae7205e8d7882f2c17c0a91d26e673b882eb5a39037983c6d6e294603498dc"
     },
     {
       "source": "website/src/content/docs/reference/errors.md",
       "translation": "website/src/content/docs/ko/reference/errors.md",
       "translationOf": "website/src/content/docs/reference/errors.md",
-      "sourceDigest": "9df18304cccd3cf39183cb8adc225f5b3650d6d12624354f91f4e383991aa45b"
+      "sourceDigest": "a40b9ab8302f8106bc0d1a5364ff86fc17630b85ddf5f3900d69f1cfe8fde44d"
     },
     {
       "source": "website/src/content/docs/reference/packages.md",
       "translation": "website/src/content/docs/ko/reference/packages.md",
       "translationOf": "website/src/content/docs/reference/packages.md",
-      "sourceDigest": "c324f5ca358b80ca4f23a09e7297e5089a970f887c456ce58384e4908cea1575"
+      "sourceDigest": "0e180f7493e374e0655522ce1eb2cab2387dba09bce2cb33b6080f5ea407b22b"
     },
     {
       "source": "website/src/content/docs/reference/support.mdx",
       "translation": "website/src/content/docs/ko/reference/support.mdx",
       "translationOf": "website/src/content/docs/reference/support.mdx",
-      "sourceDigest": "b6f557dcc3e1693b9b887fa54da930fdb00f64d9ec522854791e7999dce1c762"
+      "sourceDigest": "075918a4b49a4953a6a133e61577713f2fdb54df3d740cd7ee09e4263f683f12"
     },
     {
       "source": "website/src/content/docs/reference/troubleshooting.md",
       "translation": "website/src/content/docs/ko/reference/troubleshooting.md",
       "translationOf": "website/src/content/docs/reference/troubleshooting.md",
-      "sourceDigest": "82410a6c89479352307b4a58d16d083b52999ebf0b8e8013e8f4c7637d047806"
+      "sourceDigest": "98f68a91e88c7e759a1960de05eba00da06a888d7a3ec676ae203d4b803f3b84"
     },
     {
       "source": "website/src/content/docs/release/limitations.md",
       "translation": "website/src/content/docs/ko/release/limitations.md",
       "translationOf": "website/src/content/docs/release/limitations.md",
-      "sourceDigest": "cff3f58af3572423c51f89bf7aa38f72b59e72ac56dbe6558d154c0fd4bade44"
+      "sourceDigest": "2c3dc8b8b13d95ab94952528e119881d50c358322b9871c4e8393e8bb03c0a46"
     },
     {
       "source": "website/src/content/docs/release/notes.md",
       "translation": "website/src/content/docs/ko/release/notes.md",
       "translationOf": "website/src/content/docs/release/notes.md",
-      "sourceDigest": "43379c71e3132509c61c763bcd6f955725d0b90ab8a1af750344580632a04aec"
+      "sourceDigest": "e25954561a6cb9818b50e5f5ddc3634f11ee7621e25dfccf88318aca15bfbc8a"
     },
     {
       "source": "website/src/content/docs/release/roadmap.md",
       "translation": "website/src/content/docs/ko/release/roadmap.md",
       "translationOf": "website/src/content/docs/release/roadmap.md",
-      "sourceDigest": "ffdcd8ea34674e674bbac43d676dc5b0b9e4a19ad5181784d32ec3cab6c2e66c"
+      "sourceDigest": "73d7739a5ce68d77bdbec9be19d908a11ec42e676c7b0b26bc0a7cba6fd951c4"
     },
     {
       "source": "website/src/content/docs/runtime/direct-pools.md",
       "translation": "website/src/content/docs/ko/runtime/direct-pools.md",
       "translationOf": "website/src/content/docs/runtime/direct-pools.md",
-      "sourceDigest": "9dea45cde22239753563007eae513e4adf93ecec788e90477cffec95a42a0a00"
+      "sourceDigest": "a0b695a08f2b03b7737bd65f4f31798c11f2d9a4fe2047c559d777cf16e623fc"
     },
     {
       "source": "website/src/content/docs/runtime/observers.md",
       "translation": "website/src/content/docs/ko/runtime/observers.md",
       "translationOf": "website/src/content/docs/runtime/observers.md",
-      "sourceDigest": "72493ea3216c4d8110bd929a0f6b55d79d59af2c2746d8631f547c2597cb002f"
+      "sourceDigest": "2ed31ddea9e5f69cdb97d24bcfcbb907d2dfdf77294b4aab3b9e2814f2b294b8"
     },
     {
       "source": "website/src/content/docs/runtime/opentelemetry.md",
       "translation": "website/src/content/docs/ko/runtime/opentelemetry.md",
       "translationOf": "website/src/content/docs/runtime/opentelemetry.md",
-      "sourceDigest": "3cde8d447727d9621e8818a986d2233457916e54f41cdae38808529dcb8914bc"
+      "sourceDigest": "64b985a4fd0dfa9375e6fbac1750f2f7499032e235fc6047863312e95f96987f"
     },
     {
       "source": "website/src/content/docs/runtime/prepared.md",
       "translation": "website/src/content/docs/ko/runtime/prepared.md",
       "translationOf": "website/src/content/docs/runtime/prepared.md",
-      "sourceDigest": "4b103fa384c70b75b16fc808bd17e178ab11102e36b81393984cdbd8d9eb9bbe"
+      "sourceDigest": "6749985d6dcd1356fc555ab4c6b9794a1f0b99a0169c6470bc180a1bb07b84f8"
     },
     {
       "source": "website/src/content/docs/runtime/streaming.md",
       "translation": "website/src/content/docs/ko/runtime/streaming.md",
       "translationOf": "website/src/content/docs/runtime/streaming.md",
-      "sourceDigest": "90002ad051c6a84e98275e1be73ba29dee18b1bd42172cc6b781906b3937fb97"
+      "sourceDigest": "05953db2feadc559c9db7268264b1c3dd3f17a46f310684bb9135eb625f29519"
     },
     {
       "source": "website/src/content/docs/runtime/transaction-profiles.md",
       "translation": "website/src/content/docs/ko/runtime/transaction-profiles.md",
       "translationOf": "website/src/content/docs/runtime/transaction-profiles.md",
-      "sourceDigest": "c77de59ee6762f8ccdba27b8f772f78ec7df56bca97b6525753f584fa6c7e691"
+      "sourceDigest": "741df04dc6efea9a49333bd7093e2ffce49a798a707f7044e8ba4c9ef9e1e7aa"
     },
     {
       "source": "website/src/content/docs/runtime/transactions.md",
       "translation": "website/src/content/docs/ko/runtime/transactions.md",
       "translationOf": "website/src/content/docs/runtime/transactions.md",
-      "sourceDigest": "798bb70a52e3bbb47aa93089a59c4e9d26cae64053f4fdc4c271038c7e16c13b"
+      "sourceDigest": "3eb00013a0ac25eb0d6134ed9561bde8748f81dfc4f474e43f4aac2b129577b4"
     }
   ]
 }

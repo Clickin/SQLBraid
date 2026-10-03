@@ -3,7 +3,7 @@ title: Overrides and filters
 description: Narrow generated relations and resolve type evidence explicitly.
 ---
 
-Codegen options separate relation selection, naming, and type representation:
+Codegen options keep relation selection, naming and type representation separate:
 
 ```ts
 const generated = generateModels(metadata, {
@@ -31,9 +31,11 @@ const generated = generateModels(metadata, {
 ```
 
 Pass the TypePolicy from the same runtime representation profile. An override is
-an emitted-TypeScript decision only; it cannot make a parsed/native value
-lossless or certify a container.
+only a decision about the emitted TypeScript. It cannot make a parsed or native
+value lossless. It cannot certify a container.
 
-Available filters include namespace/relation inclusion and exclusion plus relation `kinds`. Naming supports relation model names and row/insert/update suffixes. Type overrides are independently resolved for input and output. Precedence is column override, database-type override, then TypePolicy.
+- The filters include namespace and relation inclusion and exclusion, and relation `kinds`.
+- Naming supports relation model names and row, insert and update suffixes.
+- Type overrides are resolved independently for input and output. The precedence is: column override, then database-type override, then TypePolicy.
 
-Invalid or colliding explicit names produce error diagnostics instead of silently changing the requested name. Conflicting normalized policy entries produce `CODEGEN_AMBIGUOUS_TYPE_MAPPING`, and the affected type remains `unknown`. Overrides affect generated TypeScript only; they do not transform values returned by a driver.
+Invalid or colliding explicit names produce error diagnostics. Codegen does not silently change the requested name. Conflicting normalized policy entries produce `CODEGEN_AMBIGUOUS_TYPE_MAPPING`, and the affected type stays `unknown`. Overrides affect only the generated TypeScript. They do not transform the values that a driver returns.

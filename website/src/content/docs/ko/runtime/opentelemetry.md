@@ -1,24 +1,22 @@
 ---
-title: OpenTelemetry 통합
-description: SDK를 런타임에 결합하지 않고 SQLBraid database operation trace와 duration metric을 내보냅니다.
+title: OpenTelemetry 연동
+description: SQLBraid 데이터베이스 작업의 트레이스와 실행 시간 지표를 내보냅니다. 런타임은 SDK에 의존하지 않습니다.
 ---
 
-`@sqlbraid/opentelemetry`는 선택적인 first-party observer 통합입니다.
-OpenTelemetry API와 함께 설치하세요.
+`@sqlbraid/opentelemetry`는 선택 사항인 공식 옵저버 연동입니다. OpenTelemetry API와 함께 설치하세요.
 
 ```sh
 npm install @sqlbraid/opentelemetry @opentelemetry/api
 ```
 
-OpenTelemetry SDK, provider, exporter, reader는 애플리케이션에서 구성합니다.
-SQLBraid는 API peer만 사용합니다.
+OpenTelemetry SDK, 프로바이더, 익스포터, 리더는 애플리케이션에서 설정하세요. SQLBraid는 피어 의존성인 API만 씁니다.
 
 ```ts
 import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
 import { createPgPoolDatabase } from "@sqlbraid/postgres/pg";
 
 const telemetry = createOpenTelemetryObserver({
-  // trace와 metric은 기본적으로 활성화됩니다.
+  // traces and metrics default to true
   queryText: false,
   database: {
     namespace: "billing",
@@ -30,65 +28,56 @@ const telemetry = createOpenTelemetryObserver({
 const db = createPgPoolDatabase(pool, { observers: [telemetry] });
 ```
 
-## Signal과 lifecycle
+## 신호와 수명 주기
 
-observer는 materialized row query, command, routine call, prepared 실행,
-`db.batch()`의 각 구성 operation, 하나의 논리적 `db.bulk()` operation에
-OpenTelemetry DB client span을 생성합니다. span은 `query:ready` 또는
-`bulk:ready`에서 시작해 대응하는 mapped/result 또는 error event에서
-종료합니다. transaction 내부 query도 일반 query span을 유지하지만 1.0.0은
-transaction/savepoint span을 만들지 않습니다.
+옵저버는 다음 작업에 대해 OpenTelemetry DB 클라이언트 span을 만듭니다.
 
-안정화된 `db.client.operation.duration` histogram은 초 단위를 사용하며
-권장 explicit boundary
-`0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10`을 사용합니다. attribute는
-안정적인 database identity 필드만 사용합니다. 실패 sample에는 제한된
-`error.type`도 포함하며 bulk의 `db.operation.batch.size`는 span 전용입니다.
-operation ID, fingerprint, SQL text와 bind 값은 metric attribute가 아닙니다.
+- 메모리로 읽는 행 쿼리
+- 명령
+- 루틴 호출
+- 준비된 쿼리 실행
+- `db.batch()` 안의 각 작업
+- 논리적 작업 하나인 `db.bulk()`
 
-SQLBraid dialect는 다음처럼 `db.system.name`으로 매핑됩니다.
+span은 `query:ready`나 `bulk:ready`에서 시작해, 짝이 맞는 mapped, result, error 이벤트에서 끝납니다. 트랜잭션 안의 쿼리도 일반 쿼리 span을 그대로 씁니다. 1.0.0은 트랜잭션이나 세이브포인트 span을 만들지 않습니다.
 
-| SQLBraid dialect | `db.system.name`       |
-| ---------------- | ---------------------- |
-| `postgres`       | `postgresql`           |
-| `mysql`          | `mysql`                |
-| `mariadb`        | `mariadb`              |
-| `sqlite`         | `sqlite`               |
-| `oracle`         | `oracle.db`            |
-| `mssql`          | `microsoft.sql_server` |
+안정 지표 `db.client.operation.duration` 히스토그램은 초 단위와 권장 명시 경계값 `0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10`을 씁니다.
 
-알 수 없는 dialect는 `database.systemName`이 지정되지 않은 경우
-`other_sql`을 사용합니다. span name은 설정된
-`database.namespace`, `database.serverAddress`, 마지막으로 system name
-순서를 사용합니다. SQL을 파싱해 operation name이나 target을 만들지
-않습니다.
+- 속성에는 안정적인 데이터베이스 식별 필드만 들어갑니다.
+- 실패한 샘플에는 범위가 제한된 `error.type`도 들어갑니다.
+- 벌크의 `db.operation.batch.size`는 span에만 있습니다.
+- 작업 ID, 지문(fingerprint), SQL 텍스트, 바인딩 값은 절대 지표 속성이 되지 않습니다.
 
-## Privacy와 error
+SQLBraid 방언은 다음과 같이 `db.system.name`에 매핑됩니다.
 
-bind 값과 `literalizedSql()`은 읽거나 export하지 않습니다. 기본적으로
-`db.query.text`는 생략됩니다. `queryText: true`인 경우에도 SQLBraid의
-parameterized SQL view만 export하며 placeholder와 값이 없는 상태를
-유지합니다. SQL에 author가 직접 적은 static literal은 민감할 수 있으므로
-보존 정책이 허용될 때만 query text를 켜세요.
+| SQLBraid 방언 | `db.system.name`       |
+| ------------- | ---------------------- |
+| `postgres`    | `postgresql`           |
+| `mysql`       | `mysql`                |
+| `mariadb`     | `mariadb`              |
+| `sqlite`      | `sqlite`               |
+| `oracle`      | `oracle.db`            |
+| `mssql`       | `microsoft.sql_server` |
 
-실패한 operation은 span status를 `ERROR`로 설정하고 좁은 `error.type`을
-포함합니다. exception message나 stack은 export하지 않으며 database response
-status code도 만들지 않습니다. provider 접근, span method 또는 metric
-recording 실패는 observer 내부에서 격리되어 SQLBraid query, transaction,
-lease 또는 result 동작을 바꾸지 않습니다.
+알 수 없는 방언은 `database.systemName`을 지정하지 않으면 `other_sql`을 씁니다. span 이름은 설정한 `database.namespace`를 먼저 쓰고, 없으면 `database.serverAddress`, 그다음 이 시스템 이름을 씁니다. 옵저버는 작업 이름이나 대상을 지어내려고 SQL을 파싱하지 않습니다.
 
-## 모드와 driver instrumentation
+## 개인 정보와 오류
 
-모드는 독립적으로 사용할 수 있습니다.
+바인딩 값과 `literalizedSql()`은 절대 읽거나 내보내지 않습니다. 기본적으로 `db.query.text`는 생략됩니다. `queryText: true`로 설정하면 SQLBraid의 파생된 파라미터화 SQL만 내보냅니다. 플레이스홀더는 그대로 있고 값은 여전히 빠집니다. 다만 SQL에 직접 쓴 정적 리터럴은 민감할 수 있습니다. 그래서 보관 정책이 허용하지 않는 한 쿼리 텍스트는 끈 상태로 두세요.
+
+실패한 작업은 span 상태를 `ERROR`로 설정하고, 범위가 좁은 `error.type`을 넣습니다. 옵저버는 예외 메시지나 스택을 내보내지 않으며, 데이터베이스 응답 상태 코드를 지어내지도 않습니다. 프로바이더 접근, span 메서드, 지표 기록의 실패는 옵저버 안에서 격리됩니다. SQLBraid의 쿼리, 트랜잭션, 리스, 결과 동작을 바꿀 수 없습니다.
+
+## 모드와 드라이버 계측
+
+각 모드는 따로 쓸 수 있습니다.
 
 ```ts
-createOpenTelemetryObserver({ traces: true, metrics: false }); // trace만
-createOpenTelemetryObserver({ traces: false, metrics: true }); // metric만
+createOpenTelemetryObserver({ traces: true, metrics: false }); // traces only
+createOpenTelemetryObserver({ traces: false, metrics: true }); // metrics only
 createOpenTelemetryObserver({ traces: false, metrics: false }); // no-op
 ```
 
-SQLBraid span과 driver auto-instrumentation은 겹칠 수 있습니다. 중복 span이
-필요하지 않다면 논리 operation에 하나의 trace source만 선택하세요.
+SQLBraid 수준의 span과 드라이버 자동 계측은 겹칠 수 있습니다. 중복 span을 원하지 않으면 논리 작업마다 트레이스 출처를 하나만 고르세요.
 
 ```text
 SQLBraid logical tracing:
@@ -100,13 +89,11 @@ Existing driver tracing:
   driver instrumentation remains enabled
 ```
 
-실제 통합 테스트가 없으면 `pg`, `mysql2` 또는 다른 driver auto-instrumentation과
-parent/child 관계를 주장하지 않습니다.
+SQLBraid는 실제 통합 테스트 없이 `pg`, `mysql2` 같은 드라이버와 부모·자식 관계를 이룬다고 주장하지 않습니다.
 
-## Observer 순서와 batch
+## 옵저버 순서와 배치
 
-observer는 등록 순서대로 순차 실행됩니다. 1.0.0에서 지원하는 구성에서는
-OpenTelemetry observer를 마지막에 등록하세요.
+옵저버는 등록한 순서대로 하나씩 실행됩니다. 1.0.0에서 지원하는 구성은 OpenTelemetry를 마지막에 등록하는 것입니다.
 
 ```ts
 const db = createPgPoolDatabase(pool, {
@@ -114,19 +101,13 @@ const db = createPgPoolDatabase(pool, {
 });
 ```
 
-OpenTelemetry 뒤에 등록한 observer가 `query:mapped` 또는 `bulk:result`에서
-실패하면 telemetry가 성공으로 span을 종료한 뒤이므로 나중의 error event가
-span을 다시 열 수 없습니다. OpenTelemetry를 먼저 등록하는 순서는
-지원하지 않습니다. `db.batch()`의 각 terminal event는 자신의 operation만
-종료하며 `batchId`로 sibling 실패를 추론하지 않습니다. bulk transport가
-dialect identity를 제공하지 않으면 `database.systemName`을 설정하고, 그렇지
-않으면 이전 query에서 identity를 추론하지 않고 `other_sql`을 사용합니다.
+OpenTelemetry 뒤에 등록한 옵저버는, 텔레메트리가 이미 성공 span을 끝낸 뒤에 `query:mapped`나 `bulk:result`를 거부할 수 있습니다. 이후의 오류 이벤트가 그 span을 다시 열 수는 없습니다. OpenTelemetry를 먼저 등록하는 구성은 지원하지 않습니다.
 
-## Slow-query 조사
+`db.batch()`의 각 종료 이벤트는 자기 작업만 닫습니다. 옵저버는 `batchId`로 다른 항목의 실패를 추론하지 않습니다. 벌크 작업에서 전송 방식이 방언 정보를 줄 수 없다면 `database.systemName`을 설정하세요. 설정하지 않으면 마지막 대체값은 `other_sql`이며, 이전 쿼리의 식별 정보를 가져다 쓰지 않습니다.
 
-OTel histogram으로 latency를 감지하고 일반 SQLBraid observer로 physical
-execution duration을 기록하세요. `query:result.durationMs`는 driver 실행
-구간이며 logical span 및 histogram 경계와 의도적으로 다릅니다.
+## 느린 쿼리 조사
+
+지연 시간은 OTel 히스토그램으로 찾으세요. 물리 실행 시간은 일반 SQLBraid 옵저버로 기록하세요. `query:result.durationMs`는 드라이버 실행 구간입니다. 논리 span과 히스토그램의 구간과는 일부러 다르게 잡았습니다.
 
 ```ts
 const slowQueries: ExecutionObserver = {
@@ -144,14 +125,8 @@ const db = createPgPoolDatabase(pool, {
 });
 ```
 
-packed
-[`examples/opentelemetry-slow-query`](https://github.com/Clickin/SQLBraid/tree/main/examples/opentelemetry-slow-query)
-example은 빠른 query와 결정적인 PostgreSQL `pg_sleep(...)`를 실행한 뒤
-warning과 SDK가 소유한 trace/metric exporter를 함께 확인합니다.
+패키징된 [`examples/opentelemetry-slow-query`](https://github.com/Clickin/SQLBraid/tree/main/examples/opentelemetry-slow-query) 예제는 빠른 쿼리 하나와 결정적인 PostgreSQL `pg_sleep(...)`을 실행합니다. 그런 다음 경고와, SDK가 소유한 트레이스·지표 익스포터를 확인합니다.
 
 ## 1.0.0의 명시적 한계
 
-이 통합은 stream span, transaction/savepoint span, pool metric 또는 OTel
-Logs를 emit하지 않습니다. stream에는 consumer iteration과 cleanup이
-포함되므로 올바른 span 경계는 별도 설계가 필요합니다. pool-level metric과
-Logs도 1.0.0 범위 밖입니다.
+이 연동은 스트림 span, 트랜잭션·세이브포인트 span, 풀 지표, OTel Logs를 만들지 않습니다. 스트림에는 소비자의 반복과 정리가 포함되므로, 올바른 span 경계를 정하려면 별도의 설계가 필요합니다. 풀 수준 지표와 Logs는 1.0.0 범위 밖입니다.

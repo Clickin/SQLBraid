@@ -1,6 +1,6 @@
 ---
 title: Execution observers
-description: Observe SQLBraid lifecycle events without coupling the runtime to a logger.
+description: Observe SQLBraid lifecycle events. The runtime does not depend on a logger.
 ---
 
 Configure observers on direct or pooled factories:
@@ -24,65 +24,88 @@ const db = createPgPoolDatabase(pool, {
 });
 ```
 
-Events include `query:ready`, `query:result`, `query:mapped`, `query:error`, `bulk:ready`, `bulk:result`, `stream:start`, `stream:end`, and `transaction`. `query:ready` is emitted after rendering and pure binding description but before lease acquisition. It carries an immutable effective execution plan:
+The events are `query:ready`, `query:result`, `query:mapped`, `query:error`, `bulk:ready`, `bulk:result`, `stream:start`, `stream:end` and `transaction`. `query:ready` is emitted after rendering and the pure binding description, but before lease acquisition. It carries an immutable effective execution plan:
 
 ```ts
-const {
-  adapterId,
-  dialectId,
-  transport, // native-value-template | text-positional | text-named | typed-request
-  reuse: { requested, effective, owner, capacity },
-} = event.execution;
+const planObserver: ExecutionObserver = {
+  onEvent(event) {
+    if (event.type !== "query:ready") return;
+    const {
+      adapterId,
+      dialectId,
+      transport, // native-value-template | text-positional | text-named | typed-request
+      reuse: { requested, effective, owner, capacity },
+    } = event.execution;
+  },
+};
 ```
 
-Events also retain derived readonly values, hints, interpolation map, declared/actual result kinds, operation IDs, duration (`durationMs`), row/command metadata, mapping completion, stream status, and transaction/savepoint phases. For calls, `query:result` reports `actualKind: "call"`, `resultSetCount`, total `rowCount`, `outputKeys`, and `hasReturnValue`; it does not log output values, cursor portal names, ResultSet objects, or protocol carrier rows by default. `event.sql` is a derived parameterized view and may be absent for a native-value-template transport.
+Events also keep these items: derived readonly values, hints, the interpolation map, the declared and actual result kinds, operation IDs, the duration (`durationMs`), row and command metadata, mapping completion, stream status and transaction and savepoint phases.
 
-Observers run sequentially in registration order. They can inspect events or throw to reject an operation; mutating SQL, binds, or results violates the observer contract. The API does not provide retry, routing, or rewriting. A failure before DB execution prevents execution. A failure after execution cannot undo a root side effect; if it propagates inside `db.tx`, normal rollback applies. If an error observer also fails, an `AggregateError` preserves both failures.
+For calls, `query:result` reports `actualKind: "call"`, `resultSetCount`, the total `rowCount`, `outputKeys` and `hasReturnValue`. By default, it does not log output values, cursor portal names, ResultSet objects or protocol carrier rows. `event.sql` is a derived parameterized view. It can be absent for a native-value-template transport.
 
-Event containers are structurally readonly. SQLBraid does not deep-copy arbitrary
-application or driver values such as `Uint8Array`; observers must not mutate a
-referenced value. This is an API boundary, not a security sandbox or a promise
-of deep immutability.
+Observers run one after the other, in registration order. They can inspect events, or they can throw to reject an operation.
 
-SQLBraid does not log bind values by default. Applications own redaction and retention policy.
+- Do not change SQL, binds or results in an observer. That breaks the observer rules.
+- The API does not give retry, routing or rewriting.
+- A failure before DB execution prevents the execution.
+- A failure after execution cannot undo a root side effect. If it propagates inside `db.tx`, the normal rollback applies.
+- If an error observer also fails, an `AggregateError` keeps both failures.
 
-For `db.batch()`, every item that emitted `query:ready` receives exactly one
-terminal `query:mapped` or `query:error`, including items abandoned after a
-preflight, acquisition, driver, release, or observer failure. Abandoned
-siblings use `BRAID_BATCH_ABORTED` in the existing error payload and report
-whether their own physical execution started and completed. They are not sent
-to the driver or mapper, and terminal error delivery continues if an error
-observer throws. For these synthetic sibling errors, `stage` identifies the
-logical phase where that sibling was abandoned; it is not the native or
-observer failure stage of the operation that stopped the batch.
+Event containers are structurally readonly. SQLBraid does not deep-copy
+arbitrary application or driver values such as `Uint8Array`. Observers must not
+change a referenced value. This is an API boundary. It is not a security sandbox
+and not a promise of deep immutability.
 
-For a stream, `stream:end` is emitted only after the adapter has closed,
-drained, or cancelled its driver resource and the runtime has released or
-discarded the physical lease. An observer may observe cleanup failures, but it
-cannot make an unsafe lease reusable.
-Every registered observer receives `stream:end` once in registration order,
-even when an earlier observer throws. After fanout, a single observer failure
-is rethrown unchanged; multiple failures are aggregated in order. If the stream
-or cleanup already failed, that original error remains the cause and first
-aggregate entry, followed by observer failures. Pre-I/O notification remains
-fail-fast.
+SQLBraid does not log bind values by default. Applications own the redaction and retention policy.
+
+For `db.batch()`, each item that emitted `query:ready` gets exactly one terminal
+`query:mapped` or `query:error`. This includes items that were abandoned after a
+preflight, acquisition, driver, release or observer failure.
+
+- Abandoned siblings use `BRAID_BATCH_ABORTED` in the existing error payload.
+  They report if their own physical execution started and completed.
+- They are not sent to the driver or the mapper.
+- If an error observer throws, the delivery of terminal errors continues.
+- For these synthetic sibling errors, `stage` identifies the logical phase where
+  the sibling was abandoned. It is not the native or observer failure stage of
+  the operation that stopped the batch.
+
+For a stream, `stream:end` is emitted only after two things: the adapter has
+closed, drained or cancelled its driver resource, and the runtime has released
+or discarded the physical lease. An observer can see cleanup failures. It cannot
+make an unsafe lease reusable.
+
+Each registered observer gets `stream:end` once, in registration order. This is
+also true when an earlier observer throws.
+
+- After the fanout, a single observer failure is thrown again without change.
+- Many failures are aggregated in order.
+- If the stream or the cleanup already failed, that original error stays the
+  cause and the first aggregate entry. The observer failures follow it.
+- Notification before I/O stays fail-fast.
 
 `event.literalizedSql(options?)` is lazy and cached. It reconstructs diagnostic
-text directly from logical segments and parameters; it never replaces
-placeholders in materialized SQL and must never be used as execution input. The
-default is redacted. Options support inline/redacted values, a maximum value
-length, binary summary/full output, and a custom redactor. The result reports
-`complete`, `redactedParameters`, and `truncatedParameters`. Unsupported custom
-objects receive a safe marker instead of accidental `toString()` execution.
-For MySQL/MariaDB, inline strings use non-executable `[string <JSON>]`
-diagnostic markers rather than SQL literals: backslash interpretation depends
-on session SQL mode. This includes the Bun.SQL adapters and does not change
-bound execution. Diagnostic output is never an executable SQL contract.
+text directly from the logical segments and parameters. It never replaces
+placeholders in materialized SQL. Never use it as execution input.
 
-Binding or typed-request construction failures are reported at stage
-`"materialize"` with no driver I/O. Driver, server, and network failures remain
-stage `"driver"`. Observers remain observe/fail-only and cannot rewrite the
-statement, binds, results, retry policy, or routing.
+- The default is redacted.
+- The options support inline or redacted values, a maximum value length, binary
+  summary or full output, and a custom redactor.
+- The result reports `complete`, `redactedParameters` and `truncatedParameters`.
+- Unsupported custom objects get a safe marker. This prevents an accidental
+  `toString()` execution.
+
+For MySQL and MariaDB, inline strings use non-executable `[string <JSON>]`
+diagnostic markers. They do not use SQL literals, because the interpretation of
+backslashes depends on the SQL mode of the session. This includes the Bun.SQL
+adapters. It does not change bound execution. Diagnostic output is never
+executable SQL.
+
+Failures in binding or typed-request construction have the stage
+`"materialize"`, with no driver I/O. Driver, server and network failures keep the
+stage `"driver"`. Observers can only observe or fail. They cannot rewrite the
+statement, binds, results, retry policy or routing.
 
 ## OpenTelemetry
 
@@ -90,7 +113,7 @@ Install the optional
 [`@sqlbraid/opentelemetry`](https://www.npmjs.com/package/@sqlbraid/opentelemetry)
 package to turn these lifecycle events into DB client spans and the stable
 `db.client.operation.duration` histogram. The application owns the
-OpenTelemetry SDK, provider, exporter, and retention policy:
+OpenTelemetry SDK, the provider, the exporter and the retention policy:
 
 ```ts
 import { createOpenTelemetryObserver } from "@sqlbraid/opentelemetry";
@@ -100,6 +123,6 @@ const db = createPgPoolDatabase(pool, {
 });
 ```
 
-See the [OpenTelemetry integration guide](/SQLBraid/runtime/opentelemetry/) for
-query-text privacy, traces-only/metrics-only modes, slow-query investigation,
-and driver-instrumentation coexistence.
+For query-text privacy, traces-only and metrics-only modes, slow-query
+investigation and coexistence with driver instrumentation, read the
+[OpenTelemetry integration guide](/SQLBraid/runtime/opentelemetry/).

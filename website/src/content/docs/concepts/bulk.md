@@ -4,8 +4,8 @@ description: Execute one command shape with many value sets without hiding drive
 ---
 
 `db.bulk(inputs, factory)` is the SQLBraid throughput primitive for homogeneous
-DML. It is deliberately different from `db.batch(queries)`, which executes a
-heterogeneous list of queries.
+DML. It is different from `db.batch(queries)` on purpose. `db.batch(queries)`
+executes a heterogeneous list of queries.
 
 ```ts
 const result = await db.bulk(
@@ -20,25 +20,26 @@ const result = await db.bulk(
 // { inputCount, affectedRows? }
 ```
 
-## Contract
+## Rules
 
-- Only `CommandQuery` values are accepted. Bulk does not return row sets and
-  does not combine with DML `RETURNING`/`OUTPUT`.
-- The first rendered statement establishes one logical shape. Later rows must
-  preserve its Braid structure, list/cardinality, hints, and bind directions.
-- Shape or materialization errors happen before database I/O. `sql.out()` and
+- Bulk accepts only `CommandQuery` values. It does not return row sets. It does
+  not work with DML `RETURNING`/`OUTPUT`.
+- The first rendered statement sets one logical shape. Later rows must keep its
+  Braid structure, list cardinality, hints and bind directions.
+- Shape and materialization errors occur before database I/O. `sql.out()` and
   `sql.inOut()` are not valid bulk parameters.
-- Empty input returns `{ inputCount: 0 }` without acquiring a lease.
-- One physical lease is used for the operation. Drivers report the actual mode:
-  `native-bulk`, `pipeline`, `prepared-loop`, or `remote-batch`.
-- Observers see one bulk operation, not N ordinary query lifecycles. Per-item
-  values and diagnostic SQL are available through the bulk description without
-  replicating statement metadata N times.
+- Empty input returns `{ inputCount: 0, affectedRows: 0 }`. It does not acquire a lease.
+- The operation uses one physical lease. Drivers report the actual mode:
+  `native-bulk`, `pipeline`, `prepared-loop` or `remote-batch`.
+- Observers see one bulk operation, not N ordinary query lifecycles. The values
+  of each item and the diagnostic SQL are available through the bulk
+  description. The statement metadata is not copied N times.
 
 ## Atomicity and chunking
 
-Root bulk has no portable transaction promise and is never implicitly wrapped in
-one. Use a transaction callback when all changes must share a transaction:
+Root bulk has no portable transaction promise. SQLBraid never wraps it in a
+transaction implicitly. If all changes must share a transaction, use a
+transaction callback:
 
 ```ts
 await db.tx(async (tx) => {
@@ -46,9 +47,9 @@ await db.tx(async (tx) => {
 });
 ```
 
-There is no portable auto-chunking contract. A driver may have stronger native
-batch semantics, but applications must not depend on those semantics outside the
-selected adapter's documentation.
+There is no portable rule for automatic chunking. A driver can have stronger
+native batch semantics. But applications must not depend on those semantics,
+unless the documentation of the selected adapter describes them.
 
 ## Driver modes
 
@@ -58,9 +59,12 @@ selected adapter's documentation.
 | MySQL / `mysql2`            | `prepared-loop` | one prepare, N execute calls, `unprepare()` closes and evicts the cached handle |
 | MariaDB / Connector/Node.js | `native-bulk`   | one `connection.batch()` call                                                   |
 | SQLite / `node:sqlite`      | `prepared-loop` | one prepared statement reused                                                   |
+| SQLite / `better-sqlite3`   | `prepared-loop` | one prepared statement reused                                                   |
+| SQLite / libSQL             | `remote-batch`  | one `client.batch()` call                                                       |
 | SQLite / WASM               | `prepared-loop` | one OO1 statement reset repeatedly                                              |
 | Cloudflare D1               | `remote-batch`  | one `D1Database.batch()` call                                                   |
 | Oracle Thin                 | `native-bulk`   | one `executeMany()` call                                                        |
 | SQL Server / Tedious        | `prepared-loop` | one prepare/unprepare around N executes                                         |
+| Bun.SQL                     | `prepared-loop` | one native execution for each input                                             |
 
-See [Runtime and driver support](/SQLBraid/reference/support/) for revision-specific profile and capability conditions.
+For the profile and capability conditions of each revision, read [Runtime and driver support](/SQLBraid/reference/support/).
