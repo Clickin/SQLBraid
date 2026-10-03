@@ -31,7 +31,10 @@ await db.all(events, { schema: ExtraSchema });
 
 ```ts
 const Account = v.object({
-  id: v.pipe(v.string(), v.transform(BigInt)),
+  id: v.pipe(
+    v.string(),
+    v.transform((value) => BigInt(value)),
+  ),
   amount: v.string(), // 또는 v.transform(value => new Decimal(value))
 });
 ```

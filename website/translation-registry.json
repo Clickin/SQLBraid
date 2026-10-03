@@ -13,7 +13,7 @@
       "source": "website/src/content/docs/agents/driver-author.md",
       "translation": "website/src/content/docs/ko/agents/driver-author.md",
       "translationOf": "website/src/content/docs/agents/driver-author.md",
-      "sourceDigest": "e48f7bea630409b5dca9fbd8d9ed56531bc479dd5c6845133b174d27296e2746"
+      "sourceDigest": "31e43a1864608f871888c26983a97426c4b87d9d04cb83998c81791ab023aba5"
     },
     {
       "source": "website/src/content/docs/agents/lsp.md",
@@ -49,7 +49,7 @@
       "source": "website/src/content/docs/concepts/data-representation.md",
       "translation": "website/src/content/docs/ko/concepts/data-representation.md",
       "translationOf": "website/src/content/docs/concepts/data-representation.md",
-      "sourceDigest": "20ab7ac17a153d2cbc9119191df1f648b57a6c6965541c5eb991379329403f70"
+      "sourceDigest": "05ea0d0844555d496c22d53968bb5aa39ac1c3b757cfbdf609eb13ddfa4c9d02"
     },
     {
       "source": "website/src/content/docs/concepts/dynamic-braid.md",
@@ -67,7 +67,7 @@
       "source": "website/src/content/docs/concepts/result-mapping.md",
       "translation": "website/src/content/docs/ko/concepts/result-mapping.md",
       "translationOf": "website/src/content/docs/concepts/result-mapping.md",
-      "sourceDigest": "cf262c29d6b5f0ee15db5126f0ad528b7f1ba4bc09c07fbfcd04a81cfa4d4758"
+      "sourceDigest": "227bfac8c5ee1548facab9b9fe2df038083d809f1e16363f3129c2833dc10331"
     },
     {
       "source": "website/src/content/docs/concepts/routines.md",

@@ -77,7 +77,10 @@ const Row = v.object({ id: v.string(), amount: v.string() });
 To use a BigInt identifier:
 
 ```ts
-const Id = v.pipe(v.string(), v.transform(BigInt));
+const Id = v.pipe(
+  v.string(),
+  v.transform((value) => BigInt(value)),
+);
 ```
 
 Or select an arbitrary-precision decimal library in application code. The

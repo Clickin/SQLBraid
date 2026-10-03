@@ -32,7 +32,10 @@ driver profile:
 
 ```ts
 const Account = v.object({
-  id: v.pipe(v.string(), v.transform(BigInt)),
+  id: v.pipe(
+    v.string(),
+    v.transform((value) => BigInt(value)),
+  ),
   amount: v.string(), // or v.transform(value => new Decimal(value))
 });
 ```

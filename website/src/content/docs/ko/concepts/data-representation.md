@@ -76,7 +76,10 @@ const Row = v.object({ id: v.string(), amount: v.string() });
 BigInt 식별자를 사용하려면:
 
 ```ts
-const Id = v.pipe(v.string(), v.transform(BigInt));
+const Id = v.pipe(
+  v.string(),
+  v.transform((value) => BigInt(value)),
+);
 ```
 
 또는 애플리케이션 코드에서 임의 정밀도 10진 라이브러리를 선택하세요. 라이브러리는

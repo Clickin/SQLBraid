@@ -196,7 +196,11 @@ export function createAcmeExecutor(client: WireClient): QueryExecutor {
   return {
     ownershipKey: client,
     statementBinding: acmeBinding,
-    async query<Row>(statement, binding, options) {
+    async query<Row>(
+      statement: RenderedStatement,
+      binding?: StatementBindingDescription,
+      options?: ExecutionOptions,
+    ): Promise<QueryExecutionResult<Row>> {
       assertSignal(options);
       statement = createRenderedStatement(statement);
       const description =
