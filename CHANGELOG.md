@@ -6,7 +6,10 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 [release notes](docs/SQLBraid_1.0.0_release_notes.md), and
 [versioned support records](support/targets/).
 
-## 1.0.2 (unreleased)
+## 1.0.2
+
+The `v1.0.1` tag was not published to npm. 1.0.2 contains its internal
+refactors and the fixes below.
 
 ### Fixed
 
@@ -31,6 +34,7 @@ procedure template, check for `BRAID_CALL_PROCEDURE_INVALID` instead.
   English sources in natural Korean, and add a Korean glossary to
   `docs/writing-style.md`. Remove two duplicated paragraphs from the English
   MariaDB quickstart.
+- Fill in the copyright line of the Apache-2.0 `LICENSE` files.
 
 ## 1.0.0
 
