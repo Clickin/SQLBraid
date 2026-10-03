@@ -135,9 +135,11 @@ temporal 타입이 `Date`가 된다는 뜻이 아닙니다. custom `pg-types` pa
 - 배열, domain, range/multirange, composite는 unclassified container입니다.
   scalar 원소 타입이 exact여도 마찬가지입니다.
 
-`db.environment()`는 가능한 경우 `extra_float_digits`, 선택한 JSON/temporal
-프로필, TypePolicy provenance를 기록합니다. 이것을 무조건적인 fidelity
-보장으로 읽지 마세요. [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)는
+`db.environment()`는 선택한 프로필(예: `pg-lossless-text`)과 TypePolicy의
+id와 hash를 보고합니다. 서버 설정 `extra_float_digits`를 읽지만 그 값을
+보고하지는 않습니다. 값이 0보다 크면 `numeric.approximate-float`는
+`guaranteed`입니다. 그렇지 않으면 `pg.extra-float-digits` 조건과 함께
+`guarded`입니다. 이 보고를 무조건적인 fidelity 보장으로 읽지 마세요. [런타임/드라이버 지원 매트릭스](/SQLBraid/reference/support/)는
 정확한 database, driver, profile, runtime, capability tuple별 label을 그
 revision 및 workflow 증거와 함께 기록합니다. 인접한 버전이나 package 설치는
 인증이 아닙니다. 최종 exact-SHA Runtime, Docs, Release gate와 명시적인 release

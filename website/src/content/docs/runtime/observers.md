@@ -27,12 +27,17 @@ const db = createPgPoolDatabase(pool, {
 The events are `query:ready`, `query:result`, `query:mapped`, `query:error`, `bulk:ready`, `bulk:result`, `stream:start`, `stream:end` and `transaction`. `query:ready` is emitted after rendering and the pure binding description, but before lease acquisition. It carries an immutable effective execution plan:
 
 ```ts
-const {
-  adapterId,
-  dialectId,
-  transport, // native-value-template | text-positional | text-named | typed-request
-  reuse: { requested, effective, owner, capacity },
-} = event.execution;
+const planObserver: ExecutionObserver = {
+  onEvent(event) {
+    if (event.type !== "query:ready") return;
+    const {
+      adapterId,
+      dialectId,
+      transport, // native-value-template | text-positional | text-named | typed-request
+      reuse: { requested, effective, owner, capacity },
+    } = event.execution;
+  },
+};
 ```
 
 Events also keep these items: derived readonly values, hints, the interpolation map, the declared and actual result kinds, operation IDs, the duration (`durationMs`), row and command metadata, mapping completion, stream status and transaction and savepoint phases.

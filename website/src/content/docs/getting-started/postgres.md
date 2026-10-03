@@ -135,9 +135,12 @@ node-postgres. It does not mean that each temporal type becomes `Date`. A custom
 - Arrays, domains, ranges, multiranges and composites are unclassified
   containers. This is also true when their scalar element types are exact.
 
-`db.environment()` records `extra_float_digits`, the selected JSON and temporal
-profile and the TypePolicy provenance, where they are available. Do not read it
-as an unconditional fidelity guarantee. The [runtime and driver support
+`db.environment()` reports the selected profile (for example,
+`pg-lossless-text`) and the id and hash of the TypePolicy. It reads the server
+setting `extra_float_digits`, but it does not report the value. If the value is
+greater than 0, `numeric.approximate-float` is `guaranteed`. If not, it is
+`guarded` with the condition `pg.extra-float-digits`. Do not read the report as
+an unconditional fidelity guarantee. The [runtime and driver support
 matrix](/SQLBraid/reference/support/) records labels for each exact tuple of
 database, driver, profile, runtime and capability, with its revision and
 workflow evidence. A neighboring version or a package installation is not

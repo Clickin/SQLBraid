@@ -14,9 +14,9 @@ SQLBraid makes ownership explicit. It does not detect pools by duck typing.
 - SQLite accepts a resource that is compatible with `DatabaseSync`.
 
 ```ts
-const db = createPgDatabase(client);
-const db = createMysql2Database(connection);
-const db = createNodeSqliteDatabase(native);
+const pgDb = createPgDatabase(client);
+const mysqlDb = createMysql2Database(connection);
+const sqliteDb = createNodeSqliteDatabase(native);
 ```
 
 Direct wrappers that share an ownership key serialize their physical operations. The application closes the direct resource.

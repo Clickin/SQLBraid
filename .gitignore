@@ -9,3 +9,6 @@ dist-test/
 npm-debug.log*
 pnpm-debug.log*
 .meta
+
+# Temporary documentation snippet type-check workspaces
+tests/.doc-snippets-*/

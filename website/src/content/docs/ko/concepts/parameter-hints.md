@@ -44,12 +44,12 @@ import { mssqlParameter, sql } from "sqlbraid/mssql";
 const query = sql.rows<UserRow>`
   SELECT id, display_name
   FROM users
-  WHERE display_name = ${sql.bind(name, mssqlParameter.nvarchar(200))}
+  WHERE display_name = ${sql.bind(displayName, mssqlParameter.nvarchar(200))}
     AND account_id = ${sql.bind(accountId, mssqlParameter.int())}
 `;
 ```
 
-사용 가능한 팩토리에는 `int()`, `bigint()`, `decimal(precision, scale)`, `numeric(precision, scale)`, `nvarchar(lengthOrMax)`, `varchar(lengthOrMax)`, `varbinary(lengthOrMax)`, `bit()`, `uniqueidentifier()`, `date()`, `datetime2()`, `datetimeoffset()`이 있습니다.
+사용 가능한 팩토리에는 `tinyint()`, `smallint()`, `int()`, `bigint()`, `decimal(precision, scale)`, `numeric(precision, scale)`, `money()`, `smallmoney()`, `real()`, `float()`, `nvarchar(lengthOrMax)`, `varchar(lengthOrMax)`, `varbinary(lengthOrMax)`, `bit()`, `uniqueidentifier()`, `date()`, `datetime2()`, `datetimeoffset()`이 있습니다.
 
 `null`이나 애플리케이션 전용 객체처럼 모호한 값에는 명시적인 힌트를 사용하세요. JavaScript 런타임 타입만으로 정밀도, 스케일, 길이 또는 SQL Server 전용 타입을 선택하지 마세요.
 
@@ -85,6 +85,8 @@ Oracle은 node-oracledb가 적용할 수 없는 IN 길이·precision·scale 속�
 ## 루틴 방향
 
 `sql.bind(value, hint)`는 IN 값입니다. 루틴 호출에는 다음 helper가 추가됩니다.
+
+<!-- doc-snippet: skip -->
 
 ```ts
 sql.out("name", hint?)              // OUT, 논리적 null placeholder

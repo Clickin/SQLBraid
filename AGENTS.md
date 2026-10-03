@@ -133,6 +133,8 @@ Ordinary interpolation is always bound.
 
 Structural SQL requires explicit APIs:
 
+<!-- doc-snippet: skip -->
+
 ```ts
 sql.ident(...)
 sql.fragment`...`
@@ -279,8 +281,8 @@ The canonical transaction boundary is the `db.tx(...)` closure. `transaction(...
 
 ```ts
 await db.tx(async (tx) => {
-  await tx.execute(...);
-  await tx.execute(...);
+  await tx.execute(first);
+  await tx.execute(second);
 });
 ```
 
@@ -753,6 +755,8 @@ If DB or runtime infrastructure is unavailable, report the gate as not run. Neve
   - versions, support labels and capability statuses match `support/targets/` and the package manifests;
   - tables that list adapters cover every first-party adapter.
 - When a change moves, renames or removes code, update the documentation that describes it in the same change. Search all Markdown, including the Korean pages, for the old name or path.
+- After `pnpm run build`, run `pnpm run docs:snippets`. It type-checks each TypeScript and JavaScript code block in the Markdown against the built packages. If a block is a signature sketch and not code, put `<!-- doc-snippet: skip -->` on the line before the fence. Give free variables in examples a real type in `tests/doc-snippets/globals.d.ts`; do not use `any` to hide an error.
+- When an example claims runtime behavior of a database (a value representation, an error code, a capability), verify it on the real database. The Testcontainers DB suites (`pnpm run test:db:*`) and a direct run of the example are both acceptable evidence. Report infrastructure that is unavailable as not run.
 - Make sure that Mermaid diagrams parse. Quote node labels that contain `@`, `/` or other special characters. Use a top-to-bottom layout for chains of more than four nodes.
 
 ---

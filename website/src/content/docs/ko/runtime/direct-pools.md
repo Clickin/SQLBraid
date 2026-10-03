@@ -14,9 +14,9 @@ SQLBraid는 소유권을 명시적으로 만듭니다. duck typing으로 풀을 
 - SQLite는 `DatabaseSync` 호환 리소스를 받습니다.
 
 ```ts
-const db = createPgDatabase(client);
-const db = createMysql2Database(connection);
-const db = createNodeSqliteDatabase(native);
+const pgDb = createPgDatabase(client);
+const mysqlDb = createMysql2Database(connection);
+const sqliteDb = createNodeSqliteDatabase(native);
 ```
 
 소유권 키를 공유하는 직접 wrapper는 물리 작업을 직렬화합니다. 직접 리소스 종료는 애플리케이션이 담당합니다.

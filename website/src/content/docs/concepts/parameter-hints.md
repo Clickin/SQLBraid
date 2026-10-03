@@ -44,12 +44,12 @@ import { mssqlParameter, sql } from "sqlbraid/mssql";
 const query = sql.rows<UserRow>`
   SELECT id, display_name
   FROM users
-  WHERE display_name = ${sql.bind(name, mssqlParameter.nvarchar(200))}
+  WHERE display_name = ${sql.bind(displayName, mssqlParameter.nvarchar(200))}
     AND account_id = ${sql.bind(accountId, mssqlParameter.int())}
 `;
 ```
 
-The available factories are `int()`, `bigint()`, `decimal(precision, scale)`, `numeric(precision, scale)`, `nvarchar(lengthOrMax)`, `varchar(lengthOrMax)`, `varbinary(lengthOrMax)`, `bit()`, `uniqueidentifier()`, `date()`, `datetime2()` and `datetimeoffset()`.
+The available factories are `tinyint()`, `smallint()`, `int()`, `bigint()`, `decimal(precision, scale)`, `numeric(precision, scale)`, `money()`, `smallmoney()`, `real()`, `float()`, `nvarchar(lengthOrMax)`, `varchar(lengthOrMax)`, `varbinary(lengthOrMax)`, `bit()`, `uniqueidentifier()`, `date()`, `datetime2()` and `datetimeoffset()`.
 
 Use an explicit hint for ambiguous values, such as `null` or an object of the application. Do not depend on a JavaScript runtime type to select a precision, scale, length or SQL Server-specific type.
 
@@ -86,6 +86,8 @@ cannot apply them. Neither adapter silently ignores unsupported facets.
 ## Routine directions
 
 `sql.bind(value, hint)` is an IN value. Routine calls also support:
+
+<!-- doc-snippet: skip -->
 
 ```ts
 sql.out("name", hint?)              // OUT, logical null placeholder

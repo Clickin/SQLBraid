@@ -27,12 +27,17 @@ const db = createPgPoolDatabase(pool, {
 이벤트는 `query:ready`, `query:result`, `query:mapped`, `query:error`, `bulk:ready`, `bulk:result`, `stream:start`, `stream:end`, `transaction`입니다. `query:ready`는 렌더링과 순수한 바인딩 설명 후, lease 획득 전에 발생합니다. 불변 실행 계획을 포함합니다.
 
 ```ts
-const {
-  adapterId,
-  dialectId,
-  transport, // native-value-template | text-positional | text-named | typed-request
-  reuse: { requested, effective, owner, capacity },
-} = event.execution;
+const planObserver: ExecutionObserver = {
+  onEvent(event) {
+    if (event.type !== "query:ready") return;
+    const {
+      adapterId,
+      dialectId,
+      transport, // native-value-template | text-positional | text-named | typed-request
+      reuse: { requested, effective, owner, capacity },
+    } = event.execution;
+  },
+};
 ```
 
 이벤트에는 다음 항목도 있습니다: 파생된 읽기 전용 값, 힌트, 보간 맵, 선언/실제

@@ -27,3 +27,23 @@ jobs:
         run: pnpm run fmt:check
       - name: Run lint
         run: pnpm run lint
+
+  docs:
+    name: Documentation examples and translations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: pnpm run build:packages
+      - name: Check translation registry
+        run: pnpm run docs:translations
+      - name: Type-check documentation code blocks
+        run: pnpm run docs:snippets

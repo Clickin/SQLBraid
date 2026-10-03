@@ -37,7 +37,7 @@ import { mssqlParameter, sql } from "sqlbraid/mssql";
 const query = sql.rows<UserRow>`
   SELECT id, display_name
   FROM users
-  WHERE display_name = ${sql.bind(name, mssqlParameter.nvarchar(200))}
+  WHERE display_name = ${sql.bind(displayName, mssqlParameter.nvarchar(200))}
 `;
 ```
 

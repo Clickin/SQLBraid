@@ -61,7 +61,7 @@
       "source": "website/src/content/docs/concepts/parameter-hints.md",
       "translation": "website/src/content/docs/ko/concepts/parameter-hints.md",
       "translationOf": "website/src/content/docs/concepts/parameter-hints.md",
-      "sourceDigest": "b1221bd15e2a4597dca1f5756fccfe6a289d202c8454e2690d9dbe57fdd6a1f4"
+      "sourceDigest": "8de6f629534d4675e5aab8705337bb2e73317862623ac20b592daf5a4b003a09"
     },
     {
       "source": "website/src/content/docs/concepts/result-mapping.md",
@@ -73,13 +73,13 @@
       "source": "website/src/content/docs/concepts/routines.md",
       "translation": "website/src/content/docs/ko/concepts/routines.md",
       "translationOf": "website/src/content/docs/concepts/routines.md",
-      "sourceDigest": "24eff65cad87292537925c9566dce7d4069f63b09219885752cabf639010e15d"
+      "sourceDigest": "b11aa70f6a44f8ef72b52a7cccabb64a97597912423946691de743470d602205"
     },
     {
       "source": "website/src/content/docs/concepts/safe-binds.md",
       "translation": "website/src/content/docs/ko/concepts/safe-binds.md",
       "translationOf": "website/src/content/docs/concepts/safe-binds.md",
-      "sourceDigest": "67bb27a2bcecb12e7f9839faf62446584a9eb9adcbaac19be30a027de26457ba"
+      "sourceDigest": "3be8efd2a5193afae01b8aa2935d1d2347c836732474062239fe8b148a893d06"
     },
     {
       "source": "website/src/content/docs/concepts/sql-tags.md",
@@ -121,7 +121,7 @@
       "source": "website/src/content/docs/getting-started/postgres.md",
       "translation": "website/src/content/docs/ko/getting-started/postgres.md",
       "translationOf": "website/src/content/docs/getting-started/postgres.md",
-      "sourceDigest": "01fc5f075b20c458b8932d21bda6a04c2b809fed955ea62f3da4035a3edb75c2"
+      "sourceDigest": "99e45d24c5e76870bcf41df87d073fc8411aa9b5cece16c2c501c959c397c409"
     },
     {
       "source": "website/src/content/docs/getting-started/sqlite-browser.md",
@@ -193,7 +193,7 @@
       "source": "website/src/content/docs/reference/errors.md",
       "translation": "website/src/content/docs/ko/reference/errors.md",
       "translationOf": "website/src/content/docs/reference/errors.md",
-      "sourceDigest": "049d482798e062eda409ecae88a8fc231337e23c1a28f7945d37a6d1c374c213"
+      "sourceDigest": "97216b851be0a3b10276e2dcf1c1daec76936d9f556a111a9150ec42c406d246"
     },
     {
       "source": "website/src/content/docs/reference/packages.md",
@@ -235,13 +235,13 @@
       "source": "website/src/content/docs/runtime/direct-pools.md",
       "translation": "website/src/content/docs/ko/runtime/direct-pools.md",
       "translationOf": "website/src/content/docs/runtime/direct-pools.md",
-      "sourceDigest": "95c8147095cc86dc63defe637d45f301837b54bd0a7ff9951e109344acb1c345"
+      "sourceDigest": "a0b695a08f2b03b7737bd65f4f31798c11f2d9a4fe2047c559d777cf16e623fc"
     },
     {
       "source": "website/src/content/docs/runtime/observers.md",
       "translation": "website/src/content/docs/ko/runtime/observers.md",
       "translationOf": "website/src/content/docs/runtime/observers.md",
-      "sourceDigest": "d18dda06251864f2a2864f6d8349c57750b156ecb8901cc9171fc896d5adc513"
+      "sourceDigest": "2ed31ddea9e5f69cdb97d24bcfcbb907d2dfdf77294b4aab3b9e2814f2b294b8"
     },
     {
       "source": "website/src/content/docs/runtime/opentelemetry.md",
