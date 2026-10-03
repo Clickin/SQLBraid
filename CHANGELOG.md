@@ -6,6 +6,17 @@ and support evidence live in the [public API audit](docs/public-api-audit.md),
 [release notes](docs/SQLBraid_1.0.0_release_notes.md), and
 [versioned support records](support/targets/).
 
+## Unreleased
+
+- `@sqlbraid/mssql`: a native procedure template that contains SQL text, or
+  whose parameters do not match `parameterNames`, now fails before I/O with
+  `AdapterError` code `BRAID_CALL_PROCEDURE_INVALID`. It used
+  `BRAID_CALL_RETURN_UNSUPPORTED`, which describes a missing return/status
+  channel. A Tedious connection without `callProcedure()` now reports
+  `BRAID_CALL_UNSUPPORTED` (`routine.call`).
+- `@sqlbraid/core`: register `BRAID_CALL_PROCEDURE_INVALID`. The feature list
+  of `BRAID_CALL_RETURN_UNSUPPORTED` is now only `routine.return-value`.
+
 ## 1.0.0
 
 - Released 1.0.0 GA: SQL-first authoring, safe value binds, explicit

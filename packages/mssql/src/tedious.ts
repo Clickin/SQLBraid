@@ -978,7 +978,7 @@ function collect(
         if (typeof connection.callProcedure !== "function") {
           throw new UnsupportedFeatureError(
             "routine.call",
-            "BRAID_CALL_RETURN_UNSUPPORTED",
+            "BRAID_CALL_UNSUPPORTED",
             "Tedious connection does not expose callProcedure().",
           );
         }
@@ -1054,16 +1054,14 @@ function rowResult(result: CollectedResult): QueryExecutionResult<Record<string,
 function assertNativeProcedureStatement(rendered: RenderedStatement): void {
   if (rendered.routineProcedure === undefined) return;
   if (rendered.routineProcedure.parameterNames.length !== rendered.parameters.length) {
-    throw new UnsupportedFeatureError(
-      "routine.call",
-      "BRAID_CALL_RETURN_UNSUPPORTED",
+    throw new AdapterError(
+      "BRAID_CALL_PROCEDURE_INVALID",
       "native procedure parameterNames must match the rendered parameter count.",
     );
   }
   if (rendered.segments.some((segment) => !/^[\s,]*$/u.test(segment))) {
-    throw new UnsupportedFeatureError(
-      "routine.call",
-      "BRAID_CALL_RETURN_UNSUPPORTED",
+    throw new AdapterError(
+      "BRAID_CALL_PROCEDURE_INVALID",
       "native procedure calls cannot include authored SQL text; use only argument placeholders separated by commas.",
     );
   }

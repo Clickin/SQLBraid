@@ -9,7 +9,7 @@ import {
   createOracledbStatementBinding,
   type OracleConnectionLike,
 } from "@sqlbraid/oracle/oracledb";
-import type { TypePolicy } from "@sqlbraid/core";
+import { AdapterError, UnsupportedFeatureError, type TypePolicy } from "@sqlbraid/core";
 import { mssqlParameter, sql as mssqlSql } from "@sqlbraid/mssql";
 import {
   createTediousDatabase,
@@ -872,6 +872,39 @@ test("Tedious native procedure calls preserve OUTPUT, RETURN status, and heterog
       { kind: "emitted", index: 0 },
       { kind: "emitted", index: 1 },
     ],
+  );
+});
+
+test("Tedious rejects SQL text in a native procedure template before I/O", async () => {
+  let procedureCalls = 0;
+  const connection = {
+    ...mssqlConnection(() => {}),
+    callProcedure() {
+      procedureCalls += 1;
+    },
+  };
+  const executor = createTediousExecutor(connection);
+  const withSqlText = mssqlSql.call({
+    procedure: { name: "dbo.braid_routine", parameterNames: ["minimum"] },
+  })`EXEC dbo.braid_routine ${1}`;
+  await assert.rejects(
+    async () => executor.call(withSqlText.render()),
+    (error: unknown) => error instanceof AdapterError && error.code === "BRAID_CALL_PROCEDURE_INVALID",
+  );
+  assert.equal(procedureCalls, 0);
+});
+
+test("Tedious reports a missing callProcedure() as an unsupported routine call", async () => {
+  const executor = createTediousExecutor(mssqlConnection(() => {}));
+  const query = mssqlSql.call({
+    procedure: { name: "dbo.braid_routine", parameterNames: ["minimum"] },
+  })`${1}`;
+  await assert.rejects(
+    async () => executor.call(query.render()),
+    (error: unknown) =>
+      error instanceof UnsupportedFeatureError &&
+      error.code === "BRAID_CALL_UNSUPPORTED" &&
+      error.feature === "routine.call",
   );
 });
 

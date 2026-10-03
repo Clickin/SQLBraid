@@ -109,7 +109,7 @@ const refresh = sql.call({
 })`${accountId}`;
 ```
 
-procedure metadata는 native driver로 이어지는 명시적 경계입니다. 일반 stored-procedure DSL이 아닙니다. 이름 순서는 호출 파라미터와 일치해야 합니다. native procedure metadata를 쓰면 template에는 파라미터 interpolation, 공백, 쉼표만 들어갑니다. 드라이버가 이름으로 procedure를 호출합니다. 따라서 `EXEC` 텍스트와 다른 SQL 텍스트는 `BRAID_CALL_RETURN_UNSUPPORTED`로 거부됩니다. 조용히 무시되지 않습니다.
+procedure metadata는 native driver로 이어지는 명시적 경계입니다. 일반 stored-procedure DSL이 아닙니다. 이름 순서는 호출 파라미터와 일치해야 합니다. native procedure metadata를 쓰면 template에는 파라미터 interpolation, 공백, 쉼표만 들어갑니다. 드라이버가 이름으로 procedure를 호출합니다. 따라서 `EXEC` 텍스트와 다른 SQL 텍스트는 I/O 전에 `BRAID_CALL_PROCEDURE_INVALID`로 거부됩니다. 조용히 무시되지 않습니다.
 
 ## 루틴 스트리밍
 

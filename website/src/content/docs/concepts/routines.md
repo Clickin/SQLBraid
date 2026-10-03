@@ -111,7 +111,7 @@ const refresh = sql.call({
 })`${accountId}`;
 ```
 
-The procedure metadata is an explicit seam to the native driver. It is not a general stored-procedure DSL. The ordered names must match the call parameters. With native procedure metadata, the template contains only parameter interpolations, whitespace and commas. The driver calls the named procedure. Thus, `EXEC` text and other SQL text are rejected with `BRAID_CALL_RETURN_UNSUPPORTED`. They are not silently ignored.
+The procedure metadata is an explicit seam to the native driver. It is not a general stored-procedure DSL. The ordered names must match the call parameters. With native procedure metadata, the template contains only parameter interpolations, whitespace and commas. The driver calls the named procedure. Thus, `EXEC` text and other SQL text are rejected before I/O with `BRAID_CALL_PROCEDURE_INVALID`. They are not silently ignored.
 
 ## Routine streaming
 
